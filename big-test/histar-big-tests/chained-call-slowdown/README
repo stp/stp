@@ -1,0 +1,24 @@
+Okay, compile and build the test C (just need to give include path to stp and lib dir).
+
+i.e.
+g++ -o test test.c -I/home/ddunbar/include -L/home/ddunbar/lib -lstp
+
+Now run with no arguments:
+./test
+output should be something like
+--
+ddunbar@ozzy:chained-call-slowdown$ ./test
+-- One query test --
+Q0: 0.09s (91)
+--
+
+Now run with one argument:
+--
+ddunbar@ozzy:chained-call-slowdown$ ./test x
+-- Two query test --
+Q0: 1.33s (67)
+Q1: 0.21s (91)
+--
+
+Now the critical thing here is that the last query is the same in both instances, but in
+the first one it takes .09s and in the second it takes .21s. If you look at the input to the BitBlaster you will see that something is going very wrong, which David Dill traced to the ReadOverWrite_NewName_Map not getting cleared.

@@ -1,0 +1,13 @@
+1. To install STP perform the following steps on your Unix/GNU-Linux/MacOS X commandline:
+
+./configure --with-prefix=$HOME (or another installation directory)
+make
+make install
+
+2. To test the system after installation:
+
+make regressall
+
+NB:
+* If you want to compile STP with the parser for the SMT-LIB format, use make -f Makefile.smt instead.
+* If you want to compile a statically linked version of STP, run ./liblinks.sh after the configure script, and then compile adding STATIC=true to the make commands.

@@ -1,0 +1,27 @@
+%% Regression level = 0
+%% Result = Valid
+%% Runtime = 1
+%% Language = presentation
+
+x0 : BITVECTOR(4);
+x1 : BITVECTOR(4);
+x2 : BITVECTOR(4);
+x3 : BITVECTOR(4);
+x4 : BITVECTOR(4);
+x5 : BITVECTOR(4);
+x6 : BITVECTOR(4);
+x7 : BITVECTOR(4);
+x8 : BITVECTOR(4);
+x9 : BITVECTOR(4);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex6), 0hex0, 0hex0, BVMULT(4,x3, 0hex7), BVMULT(4,x4, 0hex4), BVMULT(4,x5, 0hex6), BVMULT(4,x6, 0hex4), 0hex0, 0hex0, BVMULT(4,x9, 0hex8),0hex0) = 0hex7);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex3), BVMULT(4,x1, 0hex1), BVMULT(4,x2, 0hex8), BVMULT(4,x3, 0hex7), BVMULT(4,x4, 0hex0), BVMULT(4,x5, 0hex7), BVMULT(4,x6, 0hex5), 0hex0, 0hex0, BVMULT(4,x9, 0hex0),0hex0) = 0hex7);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex6), 0hex0, 0hex0, 0hex0, BVMULT(4,x4, 0hex5), 0hex0, 0hex0, 0hex0, 0hex0, BVMULT(4,x9, 0hex4),0hex0) = 0hex2);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex6), BVMULT(4,x1, 0hex4), BVMULT(4,x2, 0hex8), 0hex0, 0hex0, BVMULT(4,x5, 0hex5), 0hex0, BVMULT(4,x7, 0hex3), 0hex0, 0hex0,0hex0) = 0hex8);
+ASSERT (BVPLUS(4,0hex0, BVMULT(4,x1, 0hex0), BVMULT(4,x2, 0hex0), 0hex0, BVMULT(4,x4, 0hex6), BVMULT(4,x5, 0hex6), BVMULT(4,x6, 0hex1), BVMULT(4,x7, 0hex6), 0hex0, 0hex0,0hex0) = 0hex6);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex3), BVMULT(4,x1, 0hex1), 0hex0, BVMULT(4,x3, 0hex2), BVMULT(4,x4, 0hex5), BVMULT(4,x5, 0hex7), BVMULT(4,x6, 0hex4), 0hex0, 0hex0, 0hex0,0hex0) = 0hex2);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex5), BVMULT(4,x1, 0hex7), 0hex0, 0hex0, 0hex0, BVMULT(4,x5, 0hex7), BVMULT(4,x6, 0hex2), BVMULT(4,x7, 0hex3), BVMULT(4,x8, 0hex5), BVMULT(4,x9, 0hex4),0hex0) = 0hex4);
+ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex5), BVMULT(4,x1, 0hex4), BVMULT(4,x2, 0hex3), 0hex0, 0hex0, BVMULT(4,x5, 0hex4), BVMULT(4,x6, 0hex3), BVMULT(4,x7, 0hex1), BVMULT(4,x8, 0hex4), 0hex0,0hex0) = 0hex4);
+ASSERT (BVPLUS(4,0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, BVMULT(4,x6, 0hex2), BVMULT(4,x7, 0hex0), 0hex0, 0hex0,0hex0) = 0hex0);
+ASSERT (BVPLUS(4,0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, BVMULT(4,x7, 0hex2), BVMULT(4,x8, 0hex4), BVMULT(4,x9, 0hex8),0hex0) = 0hex6);
+
+QUERY FALSE;

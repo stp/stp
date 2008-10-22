@@ -1,0 +1,3599 @@
+*********************************************************
+Starting tests at Sat Jul 21 15:49:05 PDT 2007
+*********************************************************
+*********
+Regression level: 4
+Language: all
+Whether to produce / check proofs: depends on testcase
+Time limit per test: 300 sec
+PATH = stp/bin:/home/vganesh/bin:/home/vganesh/bin/bin:/home/vganesh/stp/bin:/home/vganesh/exe-ccs-06-final/figures:/home/vganesh/cvc3/bin:/usr/local/bin:/usr/bin:/bin:/usr/bin/X11:/usr/games
+*********
+===============================================
+bigarray-test/testcase13.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase13.stp.cvc
+***
+Invalid.
+
+real	0m7.308s
+user	0m6.048s
+sys	0m0.228s
+Runtime: 8 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase14.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase14.stp.cvc
+***
+Invalid.
+
+real	0m19.480s
+user	0m18.841s
+sys	0m0.440s
+Runtime: 19 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase15.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase15.stp.cvc
+***
+Invalid.
+
+real	0m57.804s
+user	0m56.656s
+sys	0m0.880s
+Runtime: 58 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase16.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase16.stp.cvc
+***
+Invalid.
+
+real	1m11.871s
+user	1m10.924s
+sys	0m0.856s
+Runtime: 72 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase17.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase17.stp.cvc
+***
+Invalid.
+
+real	0m26.162s
+user	0m25.246s
+sys	0m0.676s
+Runtime: 26 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase18.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase18.stp.cvc
+***
+Invalid.
+
+real	0m6.557s
+user	0m6.340s
+sys	0m0.068s
+Runtime: 7 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase1.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase1.stp.cvc
+***
+Invalid.
+
+real	0m3.533s
+user	0m3.472s
+sys	0m0.052s
+Runtime: 3 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase20.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase20.stp.cvc
+***
+Invalid.
+
+real	0m55.407s
+user	0m54.599s
+sys	0m0.692s
+Runtime: 56 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase21.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase21.stp.cvc
+***
+Invalid.
+
+real	0m43.191s
+user	0m42.387s
+sys	0m0.684s
+Runtime: 43 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase2.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase2.stp.cvc
+***
+Invalid.
+
+real	0m59.982s
+user	0m59.252s
+sys	0m0.600s
+Runtime: 60 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase3.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase3.stp.cvc
+***
+Invalid.
+
+real	1m18.454s
+user	1m17.193s
+sys	0m0.864s
+Runtime: 79 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase4.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase4.stp.cvc
+***
+Invalid.
+
+real	1m21.418s
+user	1m19.885s
+sys	0m0.812s
+Runtime: 81 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase6.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: valid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase6.stp.cvc
+***
+Valid.
+
+real	0m35.870s
+user	0m35.042s
+sys	0m0.588s
+Runtime: 36 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase7.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: valid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase7.stp.cvc
+***
+Valid.
+
+real	0m36.056s
+user	0m35.206s
+sys	0m0.512s
+Runtime: 36 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase8.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: valid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase8.stp.cvc
+***
+Valid.
+
+real	0m35.986s
+user	0m34.842s
+sys	0m0.620s
+Runtime: 36 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase9.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase9.stp.cvc
+***
+Invalid.
+
+real	1m21.042s
+user	1m19.613s
+sys	0m0.828s
+Runtime: 81 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/thumbnailout-spin1-2.11493.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/thumbnailout-spin1-2.11493.stp.cvc
+***
+
+real	5m0.963s
+user	4m57.811s
+sys	0m2.304s
+Runtime: 301 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/thumbnailout-spin1-concreteget.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/thumbnailout-spin1-concreteget.stp.cvc
+***
+Invalid.
+
+real	1m29.168s
+user	1m25.633s
+sys	0m2.148s
+Runtime: 89 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/cmu-model15.cvc:
+Language: all
+Checking proofs: no
+Expected runtime: 1 sec
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/cmu-model15.cvc
+***
+Invalid.
+
+real	0m5.857s
+user	0m5.716s
+sys	0m0.036s
+Runtime: 6 sec : LONGER than expected: 1 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/noregions-stpmem.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/noregions-stpmem.stp.cvc
+***
+
+real	5m0.115s
+user	4m59.147s
+sys	0m0.936s
+Runtime: 300 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster.stp.cvc
+***
+Valid.
+
+real	0m6.134s
+user	0m5.972s
+sys	0m0.128s
+Runtime: 7 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster-wp.ir.3.simplified4.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster-wp.ir.3.simplified4.stp.cvc
+***
+Valid.
+
+real	0m10.326s
+user	0m10.113s
+sys	0m0.196s
+Runtime: 10 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster-wp.ir.3.simplified8.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster-wp.ir.3.simplified8.stp.cvc
+***
+Valid.
+
+real	0m4.881s
+user	0m4.800s
+sys	0m0.080s
+Runtime: 5 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase11.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase11.stp.cvc
+***
+Invalid.
+
+real	0m16.966s
+user	0m16.397s
+sys	0m0.508s
+Runtime: 17 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase12.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase12.stp.cvc
+***
+Invalid.
+
+real	0m20.874s
+user	0m20.313s
+sys	0m0.512s
+Runtime: 21 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster-wp.ir.3.simplified13.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster-wp.ir.3.simplified13.stp.cvc
+***
+Valid.
+
+real	0m2.916s
+user	0m2.832s
+sys	0m0.060s
+Runtime: 3 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster-concrete.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster-concrete.stp.cvc
+***
+Valid.
+
+real	0m3.071s
+user	0m2.932s
+sys	0m0.116s
+Runtime: 3 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/blaster-small.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/blaster-small.stp.cvc
+***
+Invalid.
+ASSERT( INPUT_21903037_26  = 0hex00  );
+ASSERT( INPUT_21903037_16  = 0hex00  );
+ASSERT( INPUT_21903037_27  = 0hex00  );
+ASSERT( INPUT_21903037_17  = 0hex09  );
+ASSERT( INPUT_21903037_3  = 0hex00  );
+ASSERT( INPUT_21903037_18  = 0hex00  );
+ASSERT( INPUT_21903037_4  = 0hex10  );
+ASSERT( INPUT_21903037_19  = 0hex81  );
+ASSERT( INPUT_21903037_5  = 0hex00  );
+ASSERT( INPUT_21903037_0  = 0hex05  );
+ASSERT( INPUT_21903037_2  = 0hex0B  );
+ASSERT( INPUT_21903037_6  = 0hex00  );
+ASSERT( INPUT_21903037_20  = 0hex00  );
+ASSERT( INPUT_21903037_1  = 0hex00  );
+ASSERT( INPUT_21903037_7  = 0hex00  );
+ASSERT( INPUT_21903037_21  = 0hex00  );
+ASSERT( INPUT_21903037_10  = 0hex00  );
+ASSERT( INPUT_21903037_8  = 0hex48  );
+ASSERT( INPUT_21903037_22  = 0hex00  );
+ASSERT( INPUT_21903037_11  = 0hex00  );
+ASSERT( INPUT_21903037_9  = 0hex00  );
+ASSERT( INPUT_21903037_12  = 0hex00  );
+ASSERT( INPUT_21903037_23  = 0hex00  );
+ASSERT( INPUT_21903037_13  = 0hex00  );
+ASSERT( INPUT_21903037_24  = 0hex01  );
+ASSERT( INPUT_21903037_14  = 0hex00  );
+ASSERT( INPUT_21903037_25  = 0hex00  );
+ASSERT( INPUT_21903037_15  = 0hex00  );
+
+real	0m0.246s
+user	0m0.220s
+sys	0m0.004s
+Runtime: 0 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase19.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase19.stp.cvc
+***
+Invalid.
+
+real	0m3.734s
+user	0m3.684s
+sys	0m0.036s
+Runtime: 4 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/testcase5.stp.cvc:
+Language: all
+Checking proofs: no
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/testcase5.stp.cvc
+***
+Invalid.
+
+real	1m20.678s
+user	1m19.661s
+sys	0m0.876s
+Runtime: 80 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/thumbnailout-noarg.9872.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/thumbnailout-noarg.9872.stp.cvc
+***
+
+real	5m0.418s
+user	4m58.499s
+sys	0m1.580s
+Runtime: 301 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/cmu-model16.cvc:
+Language: all
+Checking proofs: no
+Expected runtime: 1 sec
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/cmu-model16.cvc
+***
+Invalid.
+
+real	0m5.111s
+user	0m4.960s
+sys	0m0.056s
+Runtime: 5 sec : LONGER than expected: 1 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/cmu-model17.cvc:
+Language: all
+Checking proofs: no
+Expected runtime: 1 sec
+Expected result: invalid
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/cmu-model17.cvc
+***
+Invalid.
+
+real	0m4.985s
+user	0m4.960s
+sys	0m0.024s
+Runtime: 5 sec : LONGER than expected: 1 sec
+Result is correct
+=============== End of testcase ===============
+===============================================
+bigarray-test/ff.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/ff.stp.cvc
+***
+
+real	5m0.145s
+user	4m59.247s
+sys	0m0.816s
+Runtime: 300 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0065.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0065.stp.cvc
+***
+Valid.
+
+real	0m3.994s
+user	0m3.816s
+sys	0m0.092s
+Runtime: 4 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0084.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0084.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hex0805671D]  = 0hex00  );
+ASSERT( memory_0[0hex00000004]  = 0hex00  );
+ASSERT( memory_0[0hex00059C07]  = 0hex00  );
+ASSERT( memory_0[0hex08056718]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE2]  = 0hex00  );
+ASSERT( memory_0[0hex08059C23]  = 0hex00  );
+ASSERT( memory_0[0hex0805671E]  = 0hex00  );
+ASSERT( memory_0[0hex00059C02]  = 0hex00  );
+ASSERT( memory_0[0hex00000005]  = 0hex00  );
+ASSERT( memory_0[0hex0805671F]  = 0hex00  );
+ASSERT( memory_0[0hex08056719]  = 0hex00  );
+ASSERT( memory_0[0hex08059CCF]  = 0hex0A  );
+ASSERT( memory_0[0hex00059C05]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0A]  = 0hex00  );
+ASSERT( memory_0[0hex08059C66]  = 0hex00  );
+ASSERT( memory_0[0hex08059CCE]  = 0hex04  );
+ASSERT( memory_0[0hex08059C65]  = 0hex00  );
+ASSERT( memory_0[0hex00059C03]  = 0hex00  );
+ASSERT( memory_0[0hex08059C64]  = 0hex00  );
+ASSERT( memory_0[0hex08059C29]  = 0hex00  );
+ASSERT( memory_0[0hex00000000]  = 0hex00  );
+ASSERT( memory_0[0hex08056B5C]  = 0hex00  );
+ASSERT( memory_0[0hex08059C2A]  = 0hex00  );
+ASSERT( memory_0[0hex00000001]  = 0hex00  );
+ASSERT( memory_0[0hex08054880]  = 0hex00  );
+ASSERT( memory_0[0hex08056B5D]  = 0hex00  );
+ASSERT( memory_0[0hex08054881]  = 0hex00  );
+ASSERT( memory_0[0hex08059C28]  = 0hex00  );
+ASSERT( memory_0[0hex00000002]  = 0hex00  );
+ASSERT( memory_0[0hex00000003]  = 0hex00  );
+ASSERT( memory_0[0hex08056B5E]  = 0hex00  );
+ASSERT( memory_0[0hex08054882]  = 0hex00  );
+ASSERT( memory_0[0hex080590DC]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE0]  = 0hex7F  );
+ASSERT( memory_0[0hex08059CD0]  = 0hex80  );
+ASSERT( memory_0[0hex08056B5F]  = 0hex00  );
+ASSERT( memory_0[0hex08059C21]  = 0hex00  );
+ASSERT( memory_0[0hex08059CDF]  = 0hex0B  );
+ASSERT( memory_0[0hex08054883]  = 0hex00  );
+ASSERT( memory_0[0hex080590DD]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD1]  = 0hexFF  );
+ASSERT( memory_0[0hex00000006]  = 0hex00  );
+ASSERT( memory_0[0hex08059C09]  = 0hex00  );
+ASSERT( memory_0[0hex00000007]  = 0hex00  );
+ASSERT( memory_0[0hex080590DE]  = 0hex00  );
+ASSERT( memory_0[0hex08059C22]  = 0hex00  );
+ASSERT( memory_0[0hex08059C24]  = 0hex00  );
+ASSERT( memory_0[0hex08056714]  = 0hex00  );
+ASSERT( memory_0[0hex08059C2B]  = 0hex00  );
+ASSERT( R_EBP  = 0hex00000000  );
+ASSERT( R_EBX  = 0hex00000000  );
+ASSERT( R_EDI  = 0hex00000000  );
+ASSERT( R_ESI  = 0hex00000000  );
+ASSERT( R_ESP  = 0hex08059CDB  );
+ASSERT( memory_0[0hex08059C25]  = 0hex00  );
+ASSERT( memory_0[0hex08059C26]  = 0hex00  );
+ASSERT( memory_0[0hex08059C27]  = 0hex00  );
+ASSERT( memory_0[0hex080590DF]  = 0hex00  );
+ASSERT( memory_0[0hex08059C20]  = 0hex00  );
+ASSERT( memory_0[0hex00059C04]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE6]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE5]  = 0hex05  );
+ASSERT( memory_0[0hex08059C63]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0B]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE3]  = 0hex00  );
+ASSERT( memory_0[0hex0805671A]  = 0hex00  );
+ASSERT( memory_0[0hex08056715]  = 0hex00  );
+ASSERT( memory_0[0hex00059C00]  = 0hex00  );
+ASSERT( memory_0[0hex08059C08]  = 0hex00  );
+ASSERT( memory_0[0hex0805671B]  = 0hex00  );
+ASSERT( memory_0[0hex08056716]  = 0hex00  );
+ASSERT( memory_0[0hex00059C01]  = 0hex00  );
+ASSERT( memory_0[0hex08059CE4]  = 0hex9C  );
+ASSERT( memory_0[0hex08059CE1]  = 0hex00  );
+ASSERT( memory_0[0hex0805671C]  = 0hex00  );
+ASSERT( memory_0[0hex08056717]  = 0hex00  );
+ASSERT( memory_0[0hex00059C06]  = 0hex00  );
+
+real	0m18.426s
+user	0m18.265s
+sys	0m0.164s
+Runtime: 18 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0095.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0095.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hex0805671E]  = 0hex4C  );
+ASSERT( memory_0[0hex0805671F]  = 0hex7E  );
+ASSERT( memory_0[0hex08059C80]  = 0hex00  );
+ASSERT( memory_0[0hex08059C85]  = 0hex00  );
+ASSERT( memory_0[0hex08059C81]  = 0hex00  );
+ASSERT( memory_0[0hex08059C86]  = 0hex20  );
+ASSERT( memory_0[0hex08059CD6]  = 0hexFD  );
+ASSERT( memory_0[0hex08059C89]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD5]  = 0hexC3  );
+ASSERT( memory_0[0hex08059C84]  = 0hex00  );
+ASSERT( memory_0[0hex08059C8B]  = 0hex00  );
+ASSERT( memory_0[0hex08059C08]  = 0hex4F  );
+ASSERT( memory_0[0hex08054880]  = 0hex00  );
+ASSERT( memory_0[0hex08054881]  = 0hexA0  );
+ASSERT( memory_0[0hex08054882]  = 0hex87  );
+ASSERT( memory_0[0hex08054883]  = 0hex87  );
+ASSERT( memory_0[0hex08059C09]  = 0hex4F  );
+ASSERT( memory_0[0hex08059C87]  = 0hex00  );
+ASSERT( memory_0[0hex08059C83]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0A]  = 0hex4F  );
+ASSERT( memory_0[0hex080590DC]  = 0hex00  );
+ASSERT( memory_0[0hex080590DD]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0B]  = 0hex4F  );
+ASSERT( memory_0[0hex080590DE]  = 0hex00  );
+ASSERT( memory_0[0hex080590DF]  = 0hex00  );
+ASSERT( memory_0[0hex08059C82]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD9]  = 0hex9C  );
+ASSERT( memory_0[0hex08059CD4]  = 0hexDE  );
+ASSERT( R_EBP  = 0hex00000000  );
+ASSERT( R_EBX  = 0hex00000000  );
+ASSERT( R_EDI  = 0hex00000000  );
+ASSERT( R_ESI  = 0hex00000000  );
+ASSERT( R_ESP  = 0hex08059CD0  );
+ASSERT( memory_0[0hex08059CDA]  = 0hex05  );
+ASSERT( memory_0[0hex08059CDB]  = 0hex08  );
+ASSERT( memory_0[0hex08059CD8]  = 0hex80  );
+ASSERT( memory_0[0hex00000000]  = 0hex7C  );
+ASSERT( memory_0[0hex00000001]  = 0hexB0  );
+ASSERT( memory_0[0hex00000002]  = 0hex08  );
+ASSERT( memory_0[0hex00000003]  = 0hex00  );
+ASSERT( memory_0[0hex08056B5C]  = 0hexB3  );
+ASSERT( memory_0[0hex08056B5D]  = 0hexB3  );
+ASSERT( memory_0[0hex08056B5E]  = 0hexB3  );
+ASSERT( memory_0[0hex08056B5F]  = 0hexB3  );
+ASSERT( memory_0[0hex08059C88]  = 0hex00  );
+ASSERT( memory_0[0hex08056714]  = 0hex7C  );
+ASSERT( memory_0[0hex08056715]  = 0hexB0  );
+ASSERT( memory_0[0hex08056716]  = 0hex08  );
+ASSERT( memory_0[0hex08056717]  = 0hex00  );
+ASSERT( memory_0[0hex00000004]  = 0hex4C  );
+ASSERT( memory_0[0hex08056718]  = 0hex4C  );
+ASSERT( memory_0[0hex00000005]  = 0hex7E  );
+ASSERT( memory_0[0hex08056719]  = 0hex7E  );
+ASSERT( memory_0[0hex08059C58]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C23]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C59]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C5A]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C21]  = 0hex81  );
+ASSERT( memory_0[0hex08059C20]  = 0hex81  );
+ASSERT( memory_0[0hex08059C2B]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C22]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C5B]  = 0hex4C  );
+ASSERT( memory_0[0hex8787A001]  = 0hex4B  );
+ASSERT( memory_0[0hex08059C29]  = 0hex81  );
+ASSERT( memory_0[0hex08059C2A]  = 0hex4C  );
+ASSERT( memory_0[0hex08059C28]  = 0hex81  );
+ASSERT( memory_0[0hex08059CD7]  = 0hex73  );
+ASSERT( memory_0[0hex08059C8A]  = 0hex00  );
+ASSERT( memory_0[0hex08059C24]  = 0hex4F  );
+ASSERT( memory_0[0hex08059C25]  = 0hex4F  );
+ASSERT( memory_0[0hex08059C26]  = 0hex4F  );
+ASSERT( memory_0[0hex08059C27]  = 0hex4F  );
+ASSERT( memory_0[0hex0805671A]  = 0hex7C  );
+ASSERT( memory_0[0hex0805671B]  = 0hexB0  );
+ASSERT( memory_0[0hex0805671C]  = 0hex08  );
+ASSERT( memory_0[0hex0805671D]  = 0hex00  );
+
+real	4m32.342s
+user	4m31.321s
+sys	0m1.012s
+Runtime: 272 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0106.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0106.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hex00000000]  = 0hex70  );
+ASSERT( memory_0[0hex00000001]  = 0hex3E  );
+ASSERT( memory_0[0hex00000002]  = 0hexC2  );
+ASSERT( memory_0[0hex00000003]  = 0hex7C  );
+ASSERT( memory_0[0hex08059C5C]  = 0hex00  );
+ASSERT( memory_0[0hex08059C2A]  = 0hex00  );
+ASSERT( memory_0[0hex08059C2B]  = 0hex00  );
+ASSERT( memory_0[0hex545AA101]  = 0hexDD  );
+ASSERT( memory_0[0hex08056714]  = 0hex70  );
+ASSERT( memory_0[0hex08056715]  = 0hex3E  );
+ASSERT( memory_0[0hex08056716]  = 0hexC2  );
+ASSERT( memory_0[0hex08056717]  = 0hex7C  );
+ASSERT( memory_0[0hex00000004]  = 0hex1D  );
+ASSERT( memory_0[0hex08056718]  = 0hex1D  );
+ASSERT( memory_0[0hex08059CDC]  = 0hexF7  );
+ASSERT( memory_0[0hex00000005]  = 0hex7F  );
+ASSERT( memory_0[0hex08056719]  = 0hex7F  );
+ASSERT( memory_0[0hex08056B5C]  = 0hex43  );
+ASSERT( memory_0[0hex08056B5D]  = 0hex80  );
+ASSERT( memory_0[0hex08056B5E]  = 0hex48  );
+ASSERT( memory_0[0hex08056B5F]  = 0hex5E  );
+ASSERT( memory_0[0hex08059C24]  = 0hex17  );
+ASSERT( memory_0[0hex08059C25]  = 0hex4A  );
+ASSERT( memory_0[0hex08059C26]  = 0hex93  );
+ASSERT( memory_0[0hex08059C27]  = 0hexA0  );
+ASSERT( memory_0[0hex08059CDB]  = 0hex05  );
+ASSERT( memory_0[0hex08059CD5]  = 0hexFC  );
+ASSERT( memory_0[0hex08059CD6]  = 0hexEF  );
+ASSERT( memory_0[0hex0805671A]  = 0hex70  );
+ASSERT( memory_0[0hex0805671B]  = 0hex3E  );
+ASSERT( memory_0[0hex0805671C]  = 0hexC2  );
+ASSERT( memory_0[0hex0805671D]  = 0hex7C  );
+ASSERT( memory_0[0hex0805671E]  = 0hex1D  );
+ASSERT( memory_0[0hex0805671F]  = 0hex7F  );
+ASSERT( memory_0[0hex08059CD9]  = 0hex36  );
+ASSERT( memory_0[0hex08059CDA]  = 0hex92  );
+ASSERT( memory_0[0hex08059C5B]  = 0hex00  );
+ASSERT( memory_0[0hex08059C21]  = 0hex00  );
+ASSERT( memory_0[0hex08059C20]  = 0hex00  );
+ASSERT( memory_0[0hex08059C5A]  = 0hex00  );
+ASSERT( memory_0[0hex08059C22]  = 0hex00  );
+ASSERT( memory_0[0hex08059C28]  = 0hex00  );
+ASSERT( memory_0[0hex08059C29]  = 0hex00  );
+ASSERT( memory_0[0hex08059C08]  = 0hex00  );
+ASSERT( R_EBP  = 0hex00000000  );
+ASSERT( R_EBX  = 0hex00000000  );
+ASSERT( R_EDI  = 0hex00000000  );
+ASSERT( R_ESI  = 0hex00000000  );
+ASSERT( R_ESP  = 0hex08059CD1  );
+ASSERT( memory_0[0hex08059C09]  = 0hex00  );
+ASSERT( memory_0[0hex08054880]  = 0hex00  );
+ASSERT( memory_0[0hex08054881]  = 0hexA1  );
+ASSERT( memory_0[0hex08059C0A]  = 0hex00  );
+ASSERT( memory_0[0hex08054882]  = 0hex5A  );
+ASSERT( memory_0[0hex08054883]  = 0hex54  );
+ASSERT( memory_0[0hex08059C0B]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD7]  = 0hex9D  );
+ASSERT( memory_0[0hexF7059236]  = 0hex00  );
+ASSERT( memory_0[0hexF705923C]  = 0hex81  );
+ASSERT( memory_0[0hexF7059243]  = 0hex00  );
+ASSERT( memory_0[0hex080590DC]  = 0hex00  );
+ASSERT( memory_0[0hexF7059242]  = 0hex00  );
+ASSERT( memory_0[0hex080590DD]  = 0hex00  );
+ASSERT( memory_0[0hexF705923B]  = 0hexE4  );
+ASSERT( memory_0[0hexF7059237]  = 0hex00  );
+ASSERT( memory_0[0hexF7059239]  = 0hex00  );
+ASSERT( memory_0[0hexF7059238]  = 0hex00  );
+ASSERT( memory_0[0hex080590DE]  = 0hex00  );
+ASSERT( memory_0[0hexF705923E]  = 0hex08  );
+ASSERT( memory_0[0hexF7059241]  = 0hex00  );
+ASSERT( memory_0[0hexF705923F]  = 0hex00  );
+ASSERT( memory_0[0hexF7059240]  = 0hex00  );
+ASSERT( memory_0[0hexF7059244]  = 0hex00  );
+ASSERT( memory_0[0hexF7059245]  = 0hex00  );
+ASSERT( memory_0[0hex080590DF]  = 0hex00  );
+ASSERT( memory_0[0hexF705923A]  = 0hex14  );
+ASSERT( memory_0[0hexF705923D]  = 0hexB7  );
+ASSERT( memory_0[0hex08059C23]  = 0hex00  );
+ASSERT( memory_0[0hex08059C59]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD8]  = 0hex7E  );
+
+real	3m47.044s
+user	3m46.214s
+sys	0m0.844s
+Runtime: 227 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0117.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0117.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hex08059CD4]  = 0hex7D  );
+ASSERT( memory_0[0hex080590DC]  = 0hex00  );
+ASSERT( memory_0[0hex080590DD]  = 0hex00  );
+ASSERT( memory_0[0hex080590DE]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0A]  = 0hex00  );
+ASSERT( memory_0[0hex080590DF]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD2]  = 0hex9A  );
+ASSERT( memory_0[0hex0010000D]  = 0hex00  );
+ASSERT( memory_0[0hex08059C0B]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD1]  = 0hexFA  );
+ASSERT( memory_0[0hex00100012]  = 0hex00  );
+ASSERT( memory_0[0hex08059C2B]  = 0hex00  );
+ASSERT( memory_0[0hex00000000]  = 0hex80  );
+ASSERT( memory_0[0hex00100013]  = 0hex00  );
+ASSERT( memory_0[0hex00000001]  = 0hex78  );
+ASSERT( memory_0[0hex00000002]  = 0hexE0  );
+ASSERT( memory_0[0hex00000003]  = 0hex7E  );
+ASSERT( memory_0[0hex00100011]  = 0hex00  );
+ASSERT( memory_0[0hex0010000B]  = 0hex34  );
+ASSERT( memory_0[0hex08056714]  = 0hex80  );
+ASSERT( memory_0[0hex08056715]  = 0hex78  );
+ASSERT( memory_0[0hex08056716]  = 0hexE0  );
+ASSERT( memory_0[0hex08056717]  = 0hex7E  );
+ASSERT( memory_0[0hex00000004]  = 0hexF8  );
+ASSERT( memory_0[0hex08056718]  = 0hexF8  );
+ASSERT( memory_0[0hex00000005]  = 0hex7D  );
+ASSERT( memory_0[0hex08056719]  = 0hex7D  );
+ASSERT( memory_0[0hex0010000A]  = 0hex09  );
+ASSERT( memory_0[0hex08059C2A]  = 0hex00  );
+ASSERT( memory_0[0hex00100008]  = 0hex47  );
+ASSERT( memory_0[0hex08059CD6]  = 0hex00  );
+ASSERT( memory_0[0hex08056B5C]  = 0hex94  );
+ASSERT( memory_0[0hex08056B5D]  = 0hexA8  );
+ASSERT( memory_0[0hex08056B5E]  = 0hex01  );
+ASSERT( memory_0[0hex08056B5F]  = 0hex91  );
+ASSERT( memory_0[0hex08059C24]  = 0hexA7  );
+ASSERT( memory_0[0hex08059C25]  = 0hex4E  );
+ASSERT( memory_0[0hex08059C26]  = 0hex31  );
+ASSERT( memory_0[0hex08059C27]  = 0hexFA  );
+ASSERT( memory_0[0hex08059CD7]  = 0hex10  );
+ASSERT( memory_0[0hex0805671A]  = 0hex80  );
+ASSERT( memory_0[0hex0805671B]  = 0hex78  );
+ASSERT( memory_0[0hex0805671C]  = 0hexE0  );
+ASSERT( memory_0[0hex0805671D]  = 0hex7E  );
+ASSERT( memory_0[0hex00100009]  = 0hexEF  );
+ASSERT( memory_0[0hex0805671E]  = 0hexF8  );
+ASSERT( memory_0[0hex0805671F]  = 0hex7D  );
+ASSERT( memory_0[0hex00100004]  = 0hex40  );
+ASSERT( memory_0[0hex08059C55]  = 0hex00  );
+ASSERT( memory_0[0hex08059C20]  = 0hex00  );
+ASSERT( memory_0[0hex00100006]  = 0hex00  );
+ASSERT( memory_0[0hex08059C22]  = 0hex00  );
+ASSERT( memory_0[0hex00100007]  = 0hex00  );
+ASSERT( memory_0[0hex08059C57]  = 0hex00  );
+ASSERT( memory_0[0hex08059C21]  = 0hex00  );
+ASSERT( memory_0[0hex00100002]  = 0hex00  );
+ASSERT( memory_0[0hex08059C56]  = 0hex00  );
+ASSERT( R_EBP  = 0hex00000000  );
+ASSERT( R_EBX  = 0hex00000000  );
+ASSERT( R_EDI  = 0hex00000000  );
+ASSERT( R_ESI  = 0hex00000000  );
+ASSERT( R_ESP  = 0hex08059CCD  );
+ASSERT( memory_0[0hex00100000]  = 0hex00  );
+ASSERT( memory_0[0hex00100001]  = 0hex00  );
+ASSERT( memory_0[0hex3D406D01]  = 0hex51  );
+ASSERT( memory_0[0hex08059C23]  = 0hex00  );
+ASSERT( memory_0[0hex00100005]  = 0hex00  );
+ASSERT( memory_0[0hex08059C28]  = 0hex00  );
+ASSERT( memory_0[0hex08059C58]  = 0hex00  );
+ASSERT( memory_0[0hex08059C29]  = 0hex00  );
+ASSERT( memory_0[0hex0010000F]  = 0hex00  );
+ASSERT( memory_0[0hex00100010]  = 0hex00  );
+ASSERT( memory_0[0hex0010000E]  = 0hex10  );
+ASSERT( memory_0[0hex08059CD8]  = 0hex00  );
+ASSERT( memory_0[0hex08059CD5]  = 0hex00  );
+ASSERT( memory_0[0hex0010000C]  = 0hex00  );
+ASSERT( memory_0[0hex08059C09]  = 0hex00  );
+ASSERT( memory_0[0hex08059C08]  = 0hex00  );
+ASSERT( memory_0[0hex08054880]  = 0hex00  );
+ASSERT( memory_0[0hex08054881]  = 0hex6D  );
+ASSERT( memory_0[0hex08054882]  = 0hex40  );
+ASSERT( memory_0[0hex08054883]  = 0hex3D  );
+ASSERT( memory_0[0hex08059CD3]  = 0hexFC  );
+ASSERT( memory_0[0hex00100003]  = 0hex00  );
+
+real	4m18.121s
+user	4m17.332s
+sys	0m0.780s
+Runtime: 258 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/grep0777.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/grep0777.stp.cvc
+***
+stp: Global.h:74: T* MINISAT::xrealloc(T*, size_t) [with T = MINISAT::Clause*]: Assertion `size == 0 || tmp != __null' failed.
+
+real	1m41.410s
+user	1m38.494s
+sys	0m2.568s
+Runtime: 101 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/610dd9dc.T.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/610dd9dc.T.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hex0044FA10]  = 0hexD5  );
+ASSERT( INPUT_104_502  = 0hex00  );
+ASSERT( INPUT_103_197  = 0hex00  );
+ASSERT( memory_0[0hex1FFFD3ED]  = 0hex7F  );
+ASSERT( INPUT_103_75  = 0hex00  );
+ASSERT( INPUT_103_51  = 0hex00  );
+ASSERT( INPUT_103_357  = 0hex00  );
+ASSERT( INPUT_103_685  = 0hex00  );
+ASSERT( INPUT_104_503  = 0hex00  );
+ASSERT( INPUT_103_198  = 0hex00  );
+ASSERT( INPUT_103_750  = 0hex00  );
+ASSERT( INPUT_103_510  = 0hex00  );
+ASSERT( INPUT_103_358  = 0hex00  );
+ASSERT( INPUT_103_686  = 0hex00  );
+ASSERT( memory_0[0hex1FDDC372]  = 0hex33  );
+ASSERT( INPUT_104_504  = 0hex00  );
+ASSERT( INPUT_103_199  = 0hex00  );
+ASSERT( INPUT_103_751  = 0hex00  );
+ASSERT( INPUT_103_511  = 0hex00  );
+ASSERT( INPUT_103_359  = 0hex00  );
+ASSERT( INPUT_103_687  = 0hex00  );
+ASSERT( INPUT_104_505  = 0hex00  );
+ASSERT( INPUT_103_20  = 0hex00  );
+ASSERT( INPUT_103_752  = 0hex00  );
+ASSERT( INPUT_103_512  = 0hex00  );
+ASSERT( INPUT_103_36  = 0hex00  );
+ASSERT( INPUT_103_688  = 0hexF0  );
+ASSERT( INPUT_104_506  = 0hex00  );
+ASSERT( INPUT_103_200  = 0hex00  );
+ASSERT( INPUT_103_753  = 0hex00  );
+ASSERT( INPUT_103_513  = 0hex00  );
+ASSERT( INPUT_103_360  = 0hex00  );
+ASSERT( INPUT_103_689  = 0hex93  );
+ASSERT( INPUT_104_507  = 0hex00  );
+ASSERT( memory_0[0hex0042AC8F]  = 0hexED  );
+ASSERT( INPUT_103_201  = 0hex00  );
+ASSERT( INPUT_103_754  = 0hex00  );
+ASSERT( INPUT_103_514  = 0hex00  );
+ASSERT( INPUT_103_361  = 0hex00  );
+ASSERT( INPUT_103_69  = 0hex00  );
+ASSERT( INPUT_104_508  = 0hex00  );
+ASSERT( INPUT_103_202  = 0hex00  );
+ASSERT( INPUT_103_755  = 0hex00  );
+ASSERT( INPUT_103_515  = 0hex00  );
+ASSERT( INPUT_103_362  = 0hex00  );
+ASSERT( memory_0[0hex0022ACB0]  = 0hexC6  );
+ASSERT( INPUT_103_690  = 0hex6D  );
+ASSERT( INPUT_104_509  = 0hex00  );
+ASSERT( INPUT_103_203  = 0hex00  );
+ASSERT( memory_0[0hex0042AC8C]  = 0hex04  );
+ASSERT( INPUT_103_756  = 0hex00  );
+ASSERT( INPUT_103_516  = 0hex00  );
+ASSERT( INPUT_103_363  = 0hex00  );
+ASSERT( INPUT_103_691  = 0hex81  );
+ASSERT( INPUT_104_51  = 0hex00  );
+ASSERT( INPUT_103_204  = 0hex00  );
+ASSERT( INPUT_103_757  = 0hex00  );
+ASSERT( INPUT_103_517  = 0hex00  );
+ASSERT( INPUT_103_364  = 0hex00  );
+ASSERT( INPUT_103_692  = 0hex60  );
+ASSERT( INPUT_104_510  = 0hex00  );
+ASSERT( INPUT_103_205  = 0hex00  );
+ASSERT( INPUT_103_758  = 0hex00  );
+ASSERT( INPUT_103_518  = 0hex00  );
+ASSERT( INPUT_103_365  = 0hex00  );
+ASSERT( INPUT_103_693  = 0hexE0  );
+ASSERT( memory_0[0hex0022BCDB]  = 0hex8A  );
+ASSERT( INPUT_104_511  = 0hex00  );
+ASSERT( INPUT_103_206  = 0hex00  );
+ASSERT( INPUT_103_759  = 0hex00  );
+ASSERT( INPUT_103_519  = 0hex00  );
+ASSERT( INPUT_103_366  = 0hex00  );
+ASSERT( INPUT_103_694  = 0hex52  );
+ASSERT( INPUT_104_512  = 0hex00  );
+ASSERT( INPUT_103_207  = 0hex00  );
+ASSERT( INPUT_103_76  = 0hex00  );
+ASSERT( INPUT_103_52  = 0hex00  );
+ASSERT( INPUT_103_367  = 0hex00  );
+ASSERT( INPUT_103_695  = 0hex81  );
+ASSERT( INPUT_104_513  = 0hex00  );
+ASSERT( memory_0[0hex104D08A6]  = 0hex53  );
+ASSERT( INPUT_103_208  = 0hex00  );
+ASSERT( INPUT_104_165  = 0hex00  );
+ASSERT( INPUT_103_760  = 0hex00  );
+ASSERT( INPUT_103_520  = 0hex00  );
+ASSERT( INPUT_103_368  = 0hex00  );
+ASSERT( INPUT_103_696  = 0hex00  );
+ASSERT( INPUT_104_166  = 0hex00  );
+ASSERT( INPUT_104_514  = 0hex00  );
+ASSERT( INPUT_103_209  = 0hex00  );
+ASSERT( INPUT_103_761  = 0hex00  );
+ASSERT( INPUT_103_521  = 0hex00  );
+ASSERT( INPUT_103_369  = 0hex00  );
+ASSERT( INPUT_103_697  = 0hex00  );
+ASSERT( INPUT_104_167  = 0hex00  );
+ASSERT( INPUT_104_515  = 0hex00  );
+ASSERT( INPUT_103_21  = 0hex00  );
+ASSERT( INPUT_103_762  = 0hex00  );
+ASSERT( INPUT_103_522  = 0hex00  );
+ASSERT( INPUT_103_37  = 0hex00  );
+ASSERT( INPUT_103_698  = 0hex00  );
+ASSERT( INPUT_104_168  = 0hex00  );
+ASSERT( INPUT_104_516  = 0hex00  );
+ASSERT( INPUT_103_210  = 0hex00  );
+ASSERT( memory_0[0hex1846DE92]  = 0hex9A  );
+ASSERT( INPUT_103_763  = 0hex00  );
+ASSERT( INPUT_103_523  = 0hex00  );
+ASSERT( INPUT_103_370  = 0hex00  );
+ASSERT( INPUT_103_699  = 0hex00  );
+ASSERT( INPUT_104_169  = 0hex00  );
+ASSERT( INPUT_104_517  = 0hex00  );
+ASSERT( INPUT_103_211  = 0hex00  );
+ASSERT( INPUT_103_7  = 0hex00  );
+ASSERT( INPUT_103_764  = 0hex00  );
+ASSERT( INPUT_103_524  = 0hex00  );
+ASSERT( INPUT_103_371  = 0hex00  );
+ASSERT( INPUT_104_17  = 0hex00  );
+ASSERT( INPUT_104_518  = 0hex00  );
+ASSERT( INPUT_103_212  = 0hex00  );
+ASSERT( INPUT_103_765  = 0hex00  );
+ASSERT( INPUT_103_70  = 0hex00  );
+ASSERT( INPUT_103_525  = 0hex00  );
+ASSERT( INPUT_103_372  = 0hex00  );
+ASSERT( INPUT_104_170  = 0hex00  );
+ASSERT( INPUT_104_519  = 0hex00  );
+ASSERT( INPUT_103_213  = 0hex00  );
+ASSERT( memory_0[0hex8A402F11]  = 0hex67  );
+ASSERT( memory_0[0hex1FFE53FA]  = 0hex1D  );
+ASSERT( INPUT_103_766  = 0hex00  );
+ASSERT( INPUT_103_700  = 0hex00  );
+ASSERT( INPUT_103_526  = 0hex00  );
+ASSERT( INPUT_103_373  = 0hex00  );
+ASSERT( INPUT_104_171  = 0hex00  );
+ASSERT( INPUT_104_52  = 0hex00  );
+ASSERT( INPUT_103_214  = 0hex00  );
+ASSERT( INPUT_103_767  = 0hex00  );
+ASSERT( memory_0[0hex1FDDC373]  = 0hexE1  );
+ASSERT( INPUT_103_701  = 0hex00  );
+ASSERT( INPUT_103_527  = 0hex00  );
+ASSERT( INPUT_103_374  = 0hex00  );
+ASSERT( INPUT_104_172  = 0hex00  );
+ASSERT( INPUT_104_53  = 0hex00  );
+ASSERT( INPUT_103_215  = 0hex00  );
+ASSERT( INPUT_103_768  = 0hex00  );
+ASSERT( INPUT_103_702  = 0hex00  );
+ASSERT( INPUT_103_528  = 0hex40000000  );
+ASSERT( INPUT_103_375  = 0hex00  );
+ASSERT( INPUT_104_173  = 0hex00  );
+ASSERT( INPUT_104_54  = 0hex00  );
+ASSERT( INPUT_103_216  = 0hex00  );
+ASSERT( INPUT_103_769  = 0hex00  );
+ASSERT( INPUT_103_703  = 0hex00  );
+ASSERT( INPUT_103_53  = 0hex00  );
+ASSERT( INPUT_103_376  = 0hex00  );
+ASSERT( memory_0[0hex07D17409]  = 0hexF9  );
+ASSERT( INPUT_104_174  = 0hex00  );
+ASSERT( INPUT_104_55  = 0hex00  );
+ASSERT( INPUT_103_336  = 0hex00  );
+ASSERT( INPUT_103_77  = 0hex00  );
+ASSERT( INPUT_103_704  = 0hex00  );
+ASSERT( INPUT_103_532  = 0hex00  );
+ASSERT( INPUT_103_377  = 0hex00  );
+ASSERT( memory_0[0hex104F786D]  = 0hex7F  );
+ASSERT( INPUT_104_175  = 0hex00  );
+ASSERT( INPUT_104_56  = 0hex00  );
+ASSERT( INPUT_103_337  = 0hex00  );
+ASSERT( INPUT_103_770  = 0hex00  );
+ASSERT( INPUT_103_705  = 0hex00  );
+ASSERT( INPUT_103_533  = 0hex00  );
+ASSERT( INPUT_103_378  = 0hex00  );
+ASSERT( INPUT_104_176  = 0hex00  );
+ASSERT( INPUT_104_57  = 0hex00  );
+ASSERT( INPUT_103_338  = 0hex00  );
+ASSERT( INPUT_103_771  = 0hex00  );
+ASSERT( INPUT_103_706  = 0hex00  );
+ASSERT( INPUT_103_534  = 0hex00  );
+ASSERT( INPUT_103_379  = 0hex00  );
+ASSERT( INPUT_104_177  = 0hex00  );
+ASSERT( INPUT_104_58  = 0hex00  );
+ASSERT( INPUT_103_339  = 0hex00  );
+ASSERT( INPUT_103_772  = 0hex00  );
+ASSERT( INPUT_103_707  = 0hex00  );
+ASSERT( INPUT_103_535  = 0hex00  );
+ASSERT( INPUT_103_38  = 0hex00  );
+ASSERT( INPUT_104_178  = 0hex00  );
+ASSERT( INPUT_104_59  = 0hex00  );
+ASSERT( INPUT_103_34  = 0hexA6  );
+ASSERT( INPUT_103_773  = 0hex00  );
+ASSERT( INPUT_103_708  = 0hex00  );
+ASSERT( INPUT_103_536  = 0hex00  );
+ASSERT( INPUT_103_380  = 0hex00  );
+ASSERT( INPUT_104_6  = 0hex00  );
+ASSERT( INPUT_104_179  = 0hex00  );
+ASSERT( INPUT_103_340  = 0hex00  );
+ASSERT( INPUT_103_774  = 0hex00  );
+ASSERT( INPUT_103_709  = 0hex00  );
+ASSERT( INPUT_103_537  = 0hex00  );
+ASSERT( INPUT_103_381  = 0hex00  );
+ASSERT( INPUT_104_18  = 0hex00  );
+ASSERT( INPUT_104_60  = 0hex00  );
+ASSERT( INPUT_103_341  = 0hex00  );
+ASSERT( INPUT_103_775  = 0hex00  );
+ASSERT( INPUT_103_71  = 0hex00  );
+ASSERT( INPUT_103_538  = 0hex00  );
+ASSERT( INPUT_103_382  = 0hex00  );
+ASSERT( INPUT_104_180  = 0hex00  );
+ASSERT( INPUT_104_61  = 0hex00  );
+ASSERT( INPUT_103_342  = 0hex00  );
+ASSERT( INPUT_103_776  = 0hex00  );
+ASSERT( memory_0[0hex0022ACB3]  = 0hex05  );
+ASSERT( INPUT_103_710  = 0hex00  );
+ASSERT( INPUT_103_539  = 0hex00  );
+ASSERT( INPUT_103_383  = 0hex00  );
+ASSERT( INPUT_104_181  = 0hex00  );
+ASSERT( INPUT_104_62  = 0hex00  );
+ASSERT( INPUT_103_343  = 0hex00  );
+ASSERT( INPUT_103_220  = 0hex00  );
+ASSERT( INPUT_103_777  = 0hex00  );
+ASSERT( INPUT_103_711  = 0hex00  );
+ASSERT( INPUT_103_54  = 0hex00  );
+ASSERT( INPUT_103_384  = 0hex00  );
+ASSERT( INPUT_104_182  = 0hex00  );
+ASSERT( INPUT_104_63  = 0hex00  );
+ASSERT( memory_0[0hex10040CA8]  = 0hex5A  );
+ASSERT( INPUT_103_221  = 0hex00  );
+ASSERT( INPUT_103_778  = 0hex00  );
+ASSERT( INPUT_103_712  = 0hex00  );
+ASSERT( INPUT_103_540  = 0hex00  );
+ASSERT( INPUT_103_385  = 0hex00  );
+ASSERT( INPUT_104_183  = 0hex00  );
+ASSERT( INPUT_104_64  = 0hex00  );
+ASSERT( INPUT_103_222  = 0hex00  );
+ASSERT( INPUT_103_779  = 0hex00  );
+ASSERT( INPUT_103_713  = 0hex00  );
+ASSERT( INPUT_103_541  = 0hex00  );
+ASSERT( INPUT_103_386  = 0hex00  );
+ASSERT( INPUT_104_184  = 0hex00  );
+ASSERT( INPUT_104_65  = 0hex00  );
+ASSERT( INPUT_103_223  = 0hex00  );
+ASSERT( INPUT_103_78  = 0hex00  );
+ASSERT( INPUT_103_542  = 0hex00  );
+ASSERT( INPUT_103_387  = 0hex00  );
+ASSERT( memory_0[0hex8A402F10]  = 0hexD7  );
+ASSERT( INPUT_104_185  = 0hex00  );
+ASSERT( INPUT_104_66  = 0hex00  );
+ASSERT( memory_0[0hex00409172]  = 0hex00  );
+ASSERT( INPUT_103_224  = 0hex00  );
+ASSERT( INPUT_103_780  = 0hex00  );
+ASSERT( INPUT_103_543  = 0hex00  );
+ASSERT( INPUT_103_388  = 0hex00  );
+ASSERT( INPUT_104_186  = 0hex00  );
+ASSERT( INPUT_104_67  = 0hex00  );
+ASSERT( INPUT_103_225  = 0hex00  );
+ASSERT( INPUT_103_781  = 0hex00  );
+ASSERT( INPUT_103_544  = 0hex00  );
+ASSERT( INPUT_103_389  = 0hex00  );
+ASSERT( INPUT_104_187  = 0hex00  );
+ASSERT( INPUT_104_68  = 0hex00  );
+ASSERT( memory_0[0hex2000000B]  = 0hex33  );
+ASSERT( INPUT_103_226  = 0hex00  );
+ASSERT( INPUT_103_782  = 0hex00  );
+ASSERT( INPUT_103_545  = 0hex00  );
+ASSERT( INPUT_103_39  = 0hex00  );
+ASSERT( INPUT_104_188  = 0hex00  );
+ASSERT( INPUT_104_69  = 0hex00  );
+ASSERT( INPUT_103_227  = 0hex00  );
+ASSERT( INPUT_103_783  = 0hex00  );
+ASSERT( INPUT_103_546  = 0hex00  );
+ASSERT( INPUT_103_390  = 0hex00  );
+ASSERT( INPUT_104_7  = 0hex00  );
+ASSERT( INPUT_104_189  = 0hex00  );
+ASSERT( memory_0[0hex10505F15]  = 0hex28  );
+ASSERT( INPUT_103_228  = 0hex00  );
+ASSERT( INPUT_103_784  = 0hex00  );
+ASSERT( INPUT_103_547  = 0hex00  );
+ASSERT( INPUT_103_391  = 0hex00  );
+ASSERT( INPUT_104_70  = 0hex00  );
+ASSERT( INPUT_104_19  = 0hex00  );
+ASSERT( INPUT_103_229  = 0hex00  );
+ASSERT( INPUT_103_785  = 0hex00  );
+ASSERT( INPUT_103_548  = 0hex00  );
+ASSERT( INPUT_103_392  = 0hex00  );
+ASSERT( memory_0[0hex0CC6CC1F]  = 0hexD8  );
+ASSERT( INPUT_104_71  = 0hex00  );
+ASSERT( INPUT_104_190  = 0hex00  );
+ASSERT( memory_0[0hex002454AF]  = 0hex00  );
+ASSERT( INPUT_103_23  = 0hex00  );
+ASSERT( INPUT_103_786  = 0hex00  );
+ASSERT( INPUT_103_549  = 0hex00  );
+ASSERT( INPUT_103_393  = 0hex00  );
+ASSERT( INPUT_104_72  = 0hex00  );
+ASSERT( INPUT_104_191  = 0hex00  );
+ASSERT( INPUT_103_230  = 0hex00  );
+ASSERT( INPUT_103_787  = 0hex00  );
+ASSERT( INPUT_103_55  = 0hex00  );
+ASSERT( INPUT_103_394  = 0hex00  );
+ASSERT( INPUT_104_73  = 0hex00  );
+ASSERT( INPUT_104_192  = 0hex00  );
+ASSERT( memory_0[0hex002454AE]  = 0hex00  );
+ASSERT( INPUT_103_231  = 0hex00  );
+ASSERT( INPUT_103_788  = 0hex00  );
+ASSERT( INPUT_103_550  = 0hex00  );
+ASSERT( INPUT_103_395  = 0hex00  );
+ASSERT( INPUT_104_74  = 0hex00  );
+ASSERT( INPUT_104_193  = 0hex00  );
+ASSERT( INPUT_103_232  = 0hex00  );
+ASSERT( INPUT_103_789  = 0hex00  );
+ASSERT( INPUT_103_551  = 0hex00  );
+ASSERT( INPUT_103_396  = 0hex00080000  );
+ASSERT( INPUT_104_75  = 0hex00  );
+ASSERT( INPUT_104_194  = 0hex00  );
+ASSERT( INPUT_103_233  = 0hex00  );
+ASSERT( INPUT_103_4  = 0hex00  );
+ASSERT( INPUT_103_79  = 0hex00  );
+ASSERT( INPUT_103_552  = 0hexB0  );
+ASSERT( INPUT_104_76  = 0hex00  );
+ASSERT( INPUT_104_195  = 0hex00  );
+ASSERT( memory_0[0hex1FFE53FB]  = 0hexB5  );
+ASSERT( INPUT_103_234  = 0hex00  );
+ASSERT( INPUT_103_40  = 0hex00  );
+ASSERT( INPUT_103_790  = 0hex00  );
+ASSERT( INPUT_103_553  = 0hexFF  );
+ASSERT( INPUT_104_77  = 0hex00  );
+ASSERT( INPUT_104_196  = 0hex00  );
+ASSERT( INPUT_103_235  = 0hex00  );
+ASSERT( INPUT_103_400  = 0hex00  );
+ASSERT( INPUT_103_791  = 0hex00  );
+ASSERT( INPUT_103_554  = 0hexFF  );
+ASSERT( INPUT_104_78  = 0hex00  );
+ASSERT( INPUT_104_197  = 0hex00  );
+ASSERT( INPUT_103_236  = 0hex00  );
+ASSERT( INPUT_103_8  = 0hex00  );
+ASSERT( INPUT_103_401  = 0hex00  );
+ASSERT( INPUT_103_555  = 0hex00  );
+ASSERT( INPUT_104_79  = 0hex00  );
+ASSERT( memory_0[0hex0044FA11]  = 0hex2D  );
+ASSERT( INPUT_104_198  = 0hex00  );
+ASSERT( memory_0[0hex104D08A5]  = 0hex25  );
+ASSERT( INPUT_103_237  = 0hex00  );
+ASSERT( INPUT_103_80  = 0hex00  );
+ASSERT( INPUT_103_402  = 0hex00  );
+ASSERT( INPUT_103_556  = 0hexA0  );
+ASSERT( INPUT_104_8  = 0hex00  );
+ASSERT( INPUT_104_199  = 0hex00  );
+ASSERT( INPUT_103_238  = 0hex00  );
+ASSERT( INPUT_103_81  = 0hex00  );
+ASSERT( INPUT_103_403  = 0hex00  );
+ASSERT( INPUT_103_557  = 0hex5E  );
+ASSERT( INPUT_104_80  = 0hex00  );
+ASSERT( INPUT_104_20  = 0hex00  );
+ASSERT( memory_0[0hex104F786F]  = 0hex2A  );
+ASSERT( INPUT_103_239  = 0hex00  );
+ASSERT( INPUT_103_82  = 0hex00  );
+ASSERT( INPUT_103_404  = 0hex00  );
+ASSERT( INPUT_103_558  = 0hex66  );
+ASSERT( INPUT_104_81  = 0hex00  );
+ASSERT( INPUT_104_200  = 0hex00  );
+ASSERT( INPUT_103_24  = 0hexC2  );
+ASSERT( INPUT_103_83  = 0hex00  );
+ASSERT( INPUT_103_405  = 0hex00  );
+ASSERT( INPUT_103_559  = 0hex81  );
+ASSERT( INPUT_104_82  = 0hex00  );
+ASSERT( INPUT_104_201  = 0hex00  );
+ASSERT( INPUT_103_240  = 0hex00  );
+ASSERT( INPUT_103_84  = 0hex00  );
+ASSERT( INPUT_103_406  = 0hex00  );
+ASSERT( INPUT_103_56  = 0hex00  );
+ASSERT( INPUT_104_83  = 0hex00  );
+ASSERT( INPUT_104_202  = 0hex00  );
+ASSERT( INPUT_103_241  = 0hex00  );
+ASSERT( INPUT_103_85  = 0hex00  );
+ASSERT( INPUT_103_407  = 0hex00  );
+ASSERT( INPUT_103_560  = 0hex08  );
+ASSERT( INPUT_104_84  = 0hex00  );
+ASSERT( INPUT_104_203  = 0hex00  );
+ASSERT( INPUT_104_364  = 0hex00  );
+ASSERT( INPUT_103_242  = 0hex00  );
+ASSERT( INPUT_103_86  = 0hex00  );
+ASSERT( INPUT_103_408  = 0hex00  );
+ASSERT( INPUT_103_561  = 0hex36  );
+ASSERT( INPUT_104_85  = 0hex00  );
+ASSERT( INPUT_104_204  = 0hex00  );
+ASSERT( INPUT_104_365  = 0hex00  );
+ASSERT( INPUT_103_243  = 0hex00  );
+ASSERT( INPUT_103_87  = 0hex00  );
+ASSERT( INPUT_103_409  = 0hex00  );
+ASSERT( INPUT_103_562  = 0hex95  );
+ASSERT( INPUT_104_86  = 0hex00  );
+ASSERT( INPUT_104_205  = 0hex00  );
+ASSERT( INPUT_104_366  = 0hex00  );
+ASSERT( INPUT_103_244  = 0hex00  );
+ASSERT( INPUT_103_88  = 0hex00  );
+ASSERT( INPUT_103_41  = 0hex00  );
+ASSERT( INPUT_103_563  = 0hexFD  );
+ASSERT( INPUT_104_87  = 0hex00  );
+ASSERT( INPUT_104_206  = 0hex00  );
+ASSERT( INPUT_104_367  = 0hex00  );
+ASSERT( INPUT_103_245  = 0hex00  );
+ASSERT( INPUT_103_89  = 0hex00  );
+ASSERT( INPUT_103_410  = 0hex00  );
+ASSERT( INPUT_103_564  = 0hex70  );
+ASSERT( INPUT_104_88  = 0hex00  );
+ASSERT( INPUT_104_207  = 0hex00  );
+ASSERT( INPUT_104_368  = 0hex00  );
+ASSERT( INPUT_103_9  = 0hex00  );
+ASSERT( INPUT_103_246  = 0hex00  );
+ASSERT( INPUT_103_411  = 0hex00  );
+ASSERT( INPUT_103_565  = 0hex91  );
+ASSERT( INPUT_104_89  = 0hex00  );
+ASSERT( INPUT_104_208  = 0hex00000024  );
+ASSERT( INPUT_104_369  = 0hex00  );
+ASSERT( INPUT_103_247  = 0hex00  );
+ASSERT( INPUT_103_90  = 0hex00  );
+ASSERT( INPUT_103_412  = 0hex00  );
+ASSERT( INPUT_104_9  = 0hex00  );
+ASSERT( INPUT_103_566  = 0hex40  );
+ASSERT( INPUT_104_21  = 0hex00  );
+ASSERT( INPUT_104_37  = 0hex00  );
+ASSERT( INPUT_103_248  = 0hex00  );
+ASSERT( INPUT_103_91  = 0hex00  );
+ASSERT( INPUT_103_413  = 0hex00  );
+ASSERT( INPUT_103_567  = 0hex00  );
+ASSERT( INPUT_104_90  = 0hex00  );
+ASSERT( INPUT_104_212  = 0hex00  );
+ASSERT( INPUT_104_370  = 0hex00  );
+ASSERT( INPUT_103_249  = 0hex00  );
+ASSERT( INPUT_103_92  = 0hex00  );
+ASSERT( INPUT_103_414  = 0hex00  );
+ASSERT( INPUT_103_568  = 0hexC9  );
+ASSERT( INPUT_104_91  = 0hex00  );
+ASSERT( INPUT_104_213  = 0hex00  );
+ASSERT( INPUT_104_371  = 0hex00  );
+ASSERT( INPUT_103_25  = 0hex8F  );
+ASSERT( INPUT_103_93  = 0hex00  );
+ASSERT( INPUT_103_415  = 0hex00  );
+ASSERT( INPUT_103_569  = 0hexBC  );
+ASSERT( INPUT_104_92  = 0hex00  );
+ASSERT( INPUT_104_214  = 0hex00  );
+ASSERT( INPUT_104_372  = 0hex00  );
+ASSERT( memory_0[0hex10505F16]  = 0hexA7  );
+ASSERT( INPUT_103_250  = 0hex00  );
+ASSERT( INPUT_103_416  = 0hex00  );
+ASSERT( INPUT_103_57  = 0hex00  );
+ASSERT( INPUT_104_93  = 0hex00  );
+ASSERT( INPUT_104_215  = 0hex00  );
+ASSERT( INPUT_104_373  = 0hex00  );
+ASSERT( INPUT_103_251  = 0hex00  );
+ASSERT( INPUT_103_417  = 0hex00  );
+ASSERT( INPUT_103_570  = 0hex22  );
+ASSERT( INPUT_104_94  = 0hex00  );
+ASSERT( INPUT_104_216  = 0hex00  );
+ASSERT( INPUT_104_374  = 0hex00  );
+ASSERT( INPUT_103_252  = 0hex00  );
+ASSERT( INPUT_103_418  = 0hex00  );
+ASSERT( INPUT_103_571  = 0hex00  );
+ASSERT( INPUT_104_95  = 0hex00  );
+ASSERT( INPUT_104_217  = 0hex00  );
+ASSERT( INPUT_104_375  = 0hex00  );
+ASSERT( INPUT_103_253  = 0hex00  );
+ASSERT( INPUT_103_419  = 0hex00  );
+ASSERT( INPUT_104_333  = 0hex00  );
+ASSERT( INPUT_104_96  = 0hex00  );
+ASSERT( INPUT_104_218  = 0hex00  );
+ASSERT( INPUT_104_376  = 0hex00  );
+ASSERT( INPUT_103_254  = 0hex00  );
+ASSERT( INPUT_103_42  = 0hex00  );
+ASSERT( memory_0[0hex1FFFD3EC]  = 0hexB0  );
+ASSERT( INPUT_104_334  = 0hex00  );
+ASSERT( INPUT_104_97  = 0hex00  );
+ASSERT( INPUT_104_219  = 0hex00  );
+ASSERT( INPUT_104_377  = 0hex00  );
+ASSERT( INPUT_103_255  = 0hex00  );
+ASSERT( INPUT_103_420  = 0hexD2  );
+ASSERT( INPUT_104_335  = 0hex00  );
+ASSERT( INPUT_104_98  = 0hex00  );
+ASSERT( INPUT_104_22  = 0hex00  );
+ASSERT( INPUT_104_378  = 0hex00  );
+ASSERT( INPUT_103_256  = 0hex00  );
+ASSERT( INPUT_103_421  = 0hex00  );
+ASSERT( INPUT_104_336  = 0hex00  );
+ASSERT( INPUT_104_99  = 0hex00  );
+ASSERT( INPUT_104_220  = 0hex00  );
+ASSERT( INPUT_104_379  = 0hex00  );
+ASSERT( memory_0[0hex20000009]  = 0hexC8  );
+ASSERT( INPUT_103_257  = 0hex00  );
+ASSERT( memory_0[0hex8A402F13]  = 0hex5D  );
+ASSERT( INPUT_204_0  = 0hex00000000  );
+ASSERT( INPUT_103_422  = 0hex00  );
+ASSERT( INPUT_104_337  = 0hex00  );
+ASSERT( memory_0[0hex07D1740A]  = 0hexFB  );
+ASSERT( INPUT_104_221  = 0hex00  );
+ASSERT( INPUT_104_38  = 0hex00  );
+ASSERT( INPUT_103_258  = 0hex00  );
+ASSERT( INPUT_103_423  = 0hex00  );
+ASSERT( INPUT_104_338  = 0hex00  );
+ASSERT( memory_0[0hex0023D4AD]  = 0hex36  );
+ASSERT( INPUT_104_222  = 0hex00  );
+ASSERT( INPUT_104_380  = 0hex00  );
+ASSERT( INPUT_103_259  = 0hex00  );
+ASSERT( INPUT_103_424  = 0hexA0  );
+ASSERT( INPUT_104_339  = 0hex00  );
+ASSERT( INPUT_104_223  = 0hex00  );
+ASSERT( INPUT_104_381  = 0hex00  );
+ASSERT( memory_0[0hex1FFFD3EF]  = 0hexAB  );
+ASSERT( INPUT_103_26  = 0hex21  );
+ASSERT( INPUT_103_425  = 0hex40  );
+ASSERT( INPUT_104_34  = 0hex00  );
+ASSERT( memory_0[0hex0022BCD9]  = 0hex5B  );
+ASSERT( INPUT_104_224  = 0hex00  );
+ASSERT( INPUT_104_382  = 0hex00  );
+ASSERT( memory_0[0hex002454AD]  = 0hex00  );
+ASSERT( INPUT_103_260  = 0hex00  );
+ASSERT( INPUT_103_426  = 0hex09  );
+ASSERT( INPUT_104_340  = 0hex00  );
+ASSERT( INPUT_104_225  = 0hex00  );
+ASSERT( INPUT_104_383  = 0hex00  );
+ASSERT( INPUT_103_261  = 0hex00  );
+ASSERT( INPUT_103_427  = 0hex00  );
+ASSERT( INPUT_104_341  = 0hexFF  );
+ASSERT( INPUT_104_226  = 0hex00  );
+ASSERT( INPUT_104_384  = 0hex00  );
+ASSERT( INPUT_103_262  = 0hex00  );
+ASSERT( INPUT_103_428  = 0hex00  );
+ASSERT( INPUT_104_342  = 0hexE7  );
+ASSERT( INPUT_104_227  = 0hex00  );
+ASSERT( INPUT_104_385  = 0hex00  );
+ASSERT( memory_0[0hex17D7835A]  = 0hexFB  );
+ASSERT( INPUT_103_263  = 0hex00  );
+ASSERT( INPUT_103_429  = 0hex3B  );
+ASSERT( INPUT_104_343  = 0hexFB  );
+ASSERT( INPUT_104_228  = 0hex00  );
+ASSERT( INPUT_104_386  = 0hex00  );
+ASSERT( INPUT_103_264  = 0hex00000004  );
+ASSERT( INPUT_103_43  = 0hex00  );
+ASSERT( memory_0[0hex07D1740B]  = 0hex8F  );
+ASSERT( INPUT_104_344  = 0hex6C  );
+ASSERT( INPUT_104_229  = 0hex00  );
+ASSERT( memory_0[0hex1FD55358]  = 0hexE0  );
+ASSERT( INPUT_104_387  = 0hex00  );
+ASSERT( INPUT_103_268  = 0hex00  );
+ASSERT( INPUT_103_430  = 0hexDD  );
+ASSERT( INPUT_104_345  = 0hex00  );
+ASSERT( memory_0[0hex0044FA13]  = 0hexCB  );
+ASSERT( INPUT_104_23  = 0hex00  );
+ASSERT( INPUT_104_388  = 0hex00  );
+ASSERT( INPUT_103_269  = 0hex00  );
+ASSERT( INPUT_103_431  = 0hexFE  );
+ASSERT( INPUT_104_346  = 0hex00  );
+ASSERT( INPUT_104_230  = 0hex00  );
+ASSERT( INPUT_104_389  = 0hex00  );
+ASSERT( INPUT_103_27  = 0hexC1  );
+ASSERT( INPUT_103_432  = 0hex00  );
+ASSERT( INPUT_104_347  = 0hex00  );
+ASSERT( INPUT_104_231  = 0hex00  );
+ASSERT( memory_0[0hex10040CA9]  = 0hex07  );
+ASSERT( INPUT_104_39  = 0hex00  );
+ASSERT( INPUT_103_270  = 0hex00  );
+ASSERT( INPUT_103_433  = 0hex00  );
+ASSERT( INPUT_104_348  = 0hex00  );
+ASSERT( INPUT_104_232  = 0hex00  );
+ASSERT( INPUT_104_390  = 0hex00  );
+ASSERT( memory_0[0hex17D78359]  = 0hexBE  );
+ASSERT( INPUT_103_271  = 0hex00  );
+ASSERT( INPUT_103_434  = 0hex00  );
+ASSERT( INPUT_104_349  = 0hex00  );
+ASSERT( INPUT_104_233  = 0hex00  );
+ASSERT( INPUT_104_391  = 0hex00  );
+ASSERT( INPUT_103_272  = 0hex00  );
+ASSERT( INPUT_103_435  = 0hex00  );
+ASSERT( INPUT_104_35  = 0hex00  );
+ASSERT( INPUT_104_234  = 0hex00  );
+ASSERT( INPUT_104_392  = 0hex00  );
+ASSERT( INPUT_103_273  = 0hex00  );
+ASSERT( INPUT_103_436  = 0hex00  );
+ASSERT( INPUT_104_350  = 0hex00  );
+ASSERT( INPUT_104_235  = 0hex00  );
+ASSERT( INPUT_104_393  = 0hex00  );
+ASSERT( INPUT_103_274  = 0hex00  );
+ASSERT( INPUT_103_437  = 0hex2F  );
+ASSERT( INPUT_104_351  = 0hex00  );
+ASSERT( INPUT_104_236  = 0hex00  );
+ASSERT( INPUT_104_394  = 0hex00  );
+ASSERT( INPUT_103_275  = 0hex00  );
+ASSERT( INPUT_103_438  = 0hex40  );
+ASSERT( INPUT_104_352  = 0hex00  );
+ASSERT( memory_0[0hex1FDDC370]  = 0hexF9  );
+ASSERT( INPUT_104_237  = 0hexFF  );
+ASSERT( INPUT_104_395  = 0hex00  );
+ASSERT( INPUT_103_276  = 0hex00  );
+ASSERT( INPUT_103_439  = 0hex8A  );
+ASSERT( INPUT_104_353  = 0hex00  );
+ASSERT( INPUT_104_238  = 0hex2B  );
+ASSERT( INPUT_104_396  = 0hex00  );
+ASSERT( INPUT_103_277  = 0hex00  );
+ASSERT( INPUT_103_44  = 0hex00  );
+ASSERT( INPUT_104_354  = 0hex00  );
+ASSERT( INPUT_104_239  = 0hex68  );
+ASSERT( INPUT_104_397  = 0hex00  );
+ASSERT( INPUT_103_278  = 0hex00  );
+ASSERT( INPUT_103_440  = 0hex00  );
+ASSERT( INPUT_104_355  = 0hex00  );
+ASSERT( INPUT_104_24  = 0hex00  );
+ASSERT( INPUT_104_398  = 0hex00  );
+ASSERT( INPUT_103_459  = 0hex00  );
+ASSERT( INPUT_103_441  = 0hex00  );
+ASSERT( INPUT_104_356  = 0hex00  );
+ASSERT( INPUT_104_240  = 0hex2B  );
+ASSERT( INPUT_104_399  = 0hex00  );
+ASSERT( memory_0[0hex00240D29]  = 0hexFF  );
+ASSERT( INPUT_103_442  = 0hex00  );
+ASSERT( INPUT_104_357  = 0hex00  );
+ASSERT( INPUT_103_46  = 0hex00  );
+ASSERT( INPUT_104_4  = 0hex00  );
+ASSERT( INPUT_104_241  = 0hex00  );
+ASSERT( INPUT_103_443  = 0hex00  );
+ASSERT( INPUT_104_358  = 0hex00  );
+ASSERT( INPUT_103_460  = 0hex00  );
+ASSERT( INPUT_104_242  = 0hex00  );
+ASSERT( INPUT_104_40  = 0hex00  );
+ASSERT( INPUT_103_444  = 0hex00  );
+ASSERT( INPUT_104_359  = 0hex00  );
+ASSERT( INPUT_103_461  = 0hex00  );
+ASSERT( INPUT_104_243  = 0hex00  );
+ASSERT( INPUT_104_400  = 0hex00  );
+ASSERT( INPUT_103_445  = 0hex00  );
+ASSERT( INPUT_104_36  = 0hex00  );
+ASSERT( INPUT_103_462  = 0hex00  );
+ASSERT( INPUT_103_0  = 0hex80000000  );
+ASSERT( INPUT_104_244  = 0hex00  );
+ASSERT( INPUT_104_401  = 0hex00  );
+ASSERT( INPUT_103_446  = 0hex00  );
+ASSERT( INPUT_104_360  = 0hex00  );
+ASSERT( INPUT_103_463  = 0hex00  );
+ASSERT( INPUT_104_245  = 0hex00  );
+ASSERT( INPUT_104_402  = 0hex00  );
+ASSERT( INPUT_103_10  = 0hex00  );
+ASSERT( INPUT_103_447  = 0hex00  );
+ASSERT( INPUT_104_361  = 0hex00  );
+ASSERT( INPUT_103_464  = 0hex00  );
+ASSERT( INPUT_104_246  = 0hex00  );
+ASSERT( INPUT_103_100  = 0hex00  );
+ASSERT( INPUT_104_403  = 0hex00  );
+ASSERT( INPUT_103_448  = 0hex00  );
+ASSERT( INPUT_104_362  = 0hex00  );
+ASSERT( INPUT_103_465  = 0hex00  );
+ASSERT( INPUT_104_247  = 0hex00  );
+ASSERT( INPUT_104_404  = 0hex00  );
+ASSERT( INPUT_103_101  = 0hex00  );
+ASSERT( memory_0[0hex104F786C]  = 0hexB2  );
+ASSERT( INPUT_103_449  = 0hex00  );
+ASSERT( INPUT_104_363  = 0hex00  );
+ASSERT( INPUT_103_466  = 0hex00  );
+ASSERT( INPUT_104_248  = 0hex00  );
+ASSERT( INPUT_104_405  = 0hex00  );
+ASSERT( INPUT_103_102  = 0hex00  );
+ASSERT( INPUT_103_45  = 0hex00  );
+ASSERT( INPUT_103_467  = 0hex00  );
+ASSERT( INPUT_103_588  = 0hex00  );
+ASSERT( INPUT_104_249  = 0hex00  );
+ASSERT( INPUT_104_406  = 0hex00  );
+ASSERT( INPUT_103_103  = 0hex00  );
+ASSERT( INPUT_103_450  = 0hex00  );
+ASSERT( INPUT_103_468  = 0hex00  );
+ASSERT( INPUT_103_589  = 0hex00  );
+ASSERT( INPUT_104_25  = 0hex00  );
+ASSERT( INPUT_104_407  = 0hex00  );
+ASSERT( INPUT_103_104  = 0hex00  );
+ASSERT( INPUT_103_451  = 0hex00  );
+ASSERT( memory_0[0hex002454AC]  = 0hex00  );
+ASSERT( INPUT_103_469  = 0hex00  );
+ASSERT( INPUT_103_59  = 0hex00  );
+ASSERT( INPUT_103_159  = 0hexFE  );
+ASSERT( INPUT_104_250  = 0hex00  );
+ASSERT( INPUT_104_408  = 0hex00  );
+ASSERT( INPUT_103_452  = 0hex00  );
+ASSERT( INPUT_103_47  = 0hex00  );
+ASSERT( INPUT_103_105  = 0hex00  );
+ASSERT( INPUT_103_590  = 0hex00  );
+ASSERT( INPUT_104_251  = 0hex00  );
+ASSERT( INPUT_104_409  = 0hex00  );
+ASSERT( memory_0[0hex1846DE93]  = 0hexD9  );
+ASSERT( INPUT_103_453  = 0hex00  );
+ASSERT( INPUT_103_470  = 0hex00  );
+ASSERT( INPUT_103_106  = 0hex00  );
+ASSERT( INPUT_103_591  = 0hex00  );
+ASSERT( INPUT_104_252  = 0hex00  );
+ASSERT( INPUT_104_41  = 0hex00  );
+ASSERT( memory_0[0hex10040CAB]  = 0hexAE  );
+ASSERT( INPUT_103_454  = 0hex00  );
+ASSERT( INPUT_103_471  = 0hex00  );
+ASSERT( INPUT_103_107  = 0hex00  );
+ASSERT( INPUT_103_592  = 0hex00  );
+ASSERT( INPUT_104_253  = 0hex00  );
+ASSERT( INPUT_104_410  = 0hex00  );
+ASSERT( INPUT_103_455  = 0hex00  );
+ASSERT( INPUT_103_472  = 0hex00  );
+ASSERT( INPUT_103_108  = 0hex00  );
+ASSERT( INPUT_103_593  = 0hex00  );
+ASSERT( INPUT_104_254  = 0hex00  );
+ASSERT( INPUT_104_411  = 0hex00  );
+ASSERT( INPUT_103_456  = 0hex00  );
+ASSERT( memory_0[0hex00000012]  = 0hex00  );
+ASSERT( INPUT_103_473  = 0hex00  );
+ASSERT( INPUT_103_109  = 0hex00  );
+ASSERT( INPUT_103_594  = 0hex00  );
+ASSERT( INPUT_104_255  = 0hex00  );
+ASSERT( INPUT_104_412  = 0hex00  );
+ASSERT( memory_0[0hex2000000A]  = 0hex0F  );
+ASSERT( INPUT_103_457  = 0hex00  );
+ASSERT( INPUT_103_474  = 0hex00  );
+ASSERT( INPUT_103_11  = 0hex00  );
+ASSERT( INPUT_103_595  = 0hex00  );
+ASSERT( INPUT_104_256  = 0hex00  );
+ASSERT( INPUT_104_413  = 0hex00  );
+ASSERT( INPUT_103_458  = 0hex00  );
+ASSERT( INPUT_103_475  = 0hex00  );
+ASSERT( INPUT_103_110  = 0hex00  );
+ASSERT( INPUT_103_596  = 0hex00  );
+ASSERT( INPUT_104_257  = 0hex00  );
+ASSERT( INPUT_104_414  = 0hex00  );
+ASSERT( INPUT_103_279  = 0hex00  );
+ASSERT( INPUT_103_476  = 0hex00  );
+ASSERT( INPUT_103_111  = 0hex00  );
+ASSERT( INPUT_103_597  = 0hex00  );
+ASSERT( INPUT_103_94  = 0hex00  );
+ASSERT( INPUT_104_258  = 0hex00  );
+ASSERT( INPUT_104_415  = 0hex00  );
+ASSERT( INPUT_103_28  = 0hexC0  );
+ASSERT( INPUT_103_477  = 0hex00  );
+ASSERT( INPUT_103_127  = 0hex00  );
+ASSERT( INPUT_103_598  = 0hex00  );
+ASSERT( memory_0[0hex00240D28]  = 0hex98  );
+ASSERT( INPUT_103_95  = 0hex00  );
+ASSERT( INPUT_104_259  = 0hex00  );
+ASSERT( INPUT_104_416  = 0hex135BC544  );
+ASSERT( INPUT_103_280  = 0hex00  );
+ASSERT( INPUT_103_478  = 0hex00  );
+ASSERT( INPUT_103_599  = 0hex00  );
+ASSERT( INPUT_103_112  = 0hex00  );
+ASSERT( INPUT_103_96  = 0hex00  );
+ASSERT( INPUT_104_26  = 0hex00  );
+ASSERT( INPUT_104_42  = 0hex00  );
+ASSERT( INPUT_103_281  = 0hex00  );
+ASSERT( INPUT_103_6  = 0hex00  );
+ASSERT( INPUT_103_479  = 0hex00  );
+ASSERT( INPUT_103_113  = 0hex00  );
+ASSERT( INPUT_103_97  = 0hex00  );
+ASSERT( INPUT_104_260  = 0hex00  );
+ASSERT( INPUT_104_420  = 0hex00  );
+ASSERT( INPUT_103_282  = 0hex00  );
+ASSERT( INPUT_103_60  = 0hex00  );
+ASSERT( INPUT_103_48  = 0hex00  );
+ASSERT( INPUT_103_114  = 0hex00  );
+ASSERT( INPUT_103_98  = 0hex00  );
+ASSERT( INPUT_104_261  = 0hex00  );
+ASSERT( INPUT_104_421  = 0hex00  );
+ASSERT( INPUT_103_283  = 0hex00  );
+ASSERT( INPUT_103_600  = 0hex00  );
+ASSERT( INPUT_103_480  = 0hex00  );
+ASSERT( INPUT_103_115  = 0hex00  );
+ASSERT( INPUT_103_99  = 0hex00  );
+ASSERT( INPUT_104_262  = 0hex00  );
+ASSERT( INPUT_104_422  = 0hex00  );
+ASSERT( INPUT_103_601  = 0hex00  );
+ASSERT( INPUT_104_0  = 0hexA9494860  );
+ASSERT( INPUT_103_481  = 0hex00  );
+ASSERT( INPUT_103_116  = 0hex00  );
+ASSERT( INPUT_104_263  = 0hex00  );
+ASSERT( INPUT_104_423  = 0hex00  );
+ASSERT( INPUT_103_602  = 0hex00  );
+ASSERT( INPUT_103_482  = 0hex00  );
+ASSERT( INPUT_104_10  = 0hex00  );
+ASSERT( INPUT_103_117  = 0hex00  );
+ASSERT( INPUT_104_264  = 0hex00  );
+ASSERT( INPUT_104_424  = 0hex00  );
+ASSERT( INPUT_103_603  = 0hex00  );
+ASSERT( INPUT_103_483  = 0hex00  );
+ASSERT( INPUT_104_100  = 0hex00  );
+ASSERT( INPUT_103_118  = 0hex00  );
+ASSERT( INPUT_104_265  = 0hex00  );
+ASSERT( INPUT_104_425  = 0hex00  );
+ASSERT( memory_0[0hex17D7835B]  = 0hexBF  );
+ASSERT( INPUT_103_604  = 0hex00  );
+ASSERT( INPUT_103_484  = 0hex00  );
+ASSERT( INPUT_104_101  = 0hex00  );
+ASSERT( INPUT_103_119  = 0hex00  );
+ASSERT( INPUT_104_266  = 0hex00  );
+ASSERT( INPUT_104_426  = 0hex00  );
+ASSERT( INPUT_103_605  = 0hex00  );
+ASSERT( INPUT_103_485  = 0hex00  );
+ASSERT( INPUT_104_102  = 0hex00  );
+ASSERT( INPUT_103_12  = 0hex00  );
+ASSERT( INPUT_104_267  = 0hex00  );
+ASSERT( INPUT_104_427  = 0hex00  );
+ASSERT( memory_0[0hex00409170]  = 0hex00  );
+ASSERT( INPUT_103_606  = 0hex00  );
+ASSERT( INPUT_103_486  = 0hex00  );
+ASSERT( INPUT_104_103  = 0hex00  );
+ASSERT( INPUT_103_120  = 0hex00  );
+ASSERT( memory_0[0hex00000013]  = 0hex00  );
+ASSERT( INPUT_104_268  = 0hex00  );
+ASSERT( INPUT_104_428  = 0hex00  );
+ASSERT( INPUT_103_607  = 0hex00  );
+ASSERT( INPUT_103_487  = 0hex00  );
+ASSERT( memory_0[0hex0CC6CC22]  = 0hex2B  );
+ASSERT( INPUT_104_104  = 0hex8000002A  );
+ASSERT( INPUT_103_121  = 0hex00  );
+ASSERT( memory_0[0hex0023D4AC]  = 0hex91  );
+ASSERT( INPUT_104_269  = 0hex00  );
+ASSERT( INPUT_104_429  = 0hex00  );
+ASSERT( INPUT_103_608  = 0hex00  );
+ASSERT( INPUT_103_488  = 0hex00  );
+ASSERT( INPUT_104_108  = 0hex00  );
+ASSERT( INPUT_103_122  = 0hex00  );
+ASSERT( INPUT_104_27  = 0hex00  );
+ASSERT( INPUT_104_43  = 0hex00  );
+ASSERT( memory_0[0hex0042AC8E]  = 0hex53  );
+ASSERT( INPUT_103_609  = 0hex00  );
+ASSERT( INPUT_103_489  = 0hex00  );
+ASSERT( INPUT_104_109  = 0hex00  );
+ASSERT( INPUT_103_123  = 0hex00  );
+ASSERT( INPUT_104_270  = 0hex00  );
+ASSERT( INPUT_104_430  = 0hex00  );
+ASSERT( memory_0[0hex20000008]  = 0hex85  );
+ASSERT( INPUT_103_61  = 0hex00  );
+ASSERT( INPUT_103_49  = 0hex00  );
+ASSERT( INPUT_104_11  = 0hex00  );
+ASSERT( INPUT_103_124  = 0hex00  );
+ASSERT( INPUT_104_271  = 0hex00  );
+ASSERT( INPUT_104_431  = 0hex00  );
+ASSERT( INPUT_103_610  = 0hex00  );
+ASSERT( INPUT_103_490  = 0hex00  );
+ASSERT( INPUT_104_110  = 0hex00  );
+ASSERT( INPUT_103_125  = 0hex00  );
+ASSERT( INPUT_104_272  = 0hex00  );
+ASSERT( INPUT_104_432  = 0hex00  );
+ASSERT( INPUT_103_611  = 0hex00  );
+ASSERT( INPUT_103_491  = 0hex00  );
+ASSERT( INPUT_104_111  = 0hex00  );
+ASSERT( INPUT_103_126  = 0hex00  );
+ASSERT( INPUT_104_273  = 0hex00  );
+ASSERT( INPUT_104_433  = 0hex00  );
+ASSERT( memory_0[0hex0CC6CC21]  = 0hexE4  );
+ASSERT( INPUT_103_612  = 0hex00  );
+ASSERT( INPUT_103_492  = 0hex00  );
+ASSERT( INPUT_103_16  = 0hex00  );
+ASSERT( INPUT_104_112  = 0hex00  );
+ASSERT( INPUT_104_274  = 0hex00  );
+ASSERT( INPUT_104_434  = 0hex00  );
+ASSERT( memory_0[0hex0022BCDC]  = 0hex7D  );
+ASSERT( INPUT_103_613  = 0hex00  );
+ASSERT( INPUT_104_113  = 0hex00  );
+ASSERT( INPUT_104_275  = 0hex00  );
+ASSERT( INPUT_103_160  = 0hex80  );
+ASSERT( INPUT_103_296  = 0hex83  );
+ASSERT( INPUT_104_435  = 0hex00  );
+ASSERT( memory_0[0hex00000010]  = 0hex00  );
+ASSERT( memory_0[0hex0022BCDA]  = 0hexBA  );
+ASSERT( INPUT_103_614  = 0hex00  );
+ASSERT( INPUT_104_114  = 0hex00  );
+ASSERT( INPUT_104_276  = 0hex00  );
+ASSERT( INPUT_104_436  = 0hex00  );
+ASSERT( INPUT_103_128  = 0hex00  );
+ASSERT( INPUT_103_297  = 0hex04  );
+ASSERT( INPUT_103_615  = 0hex00  );
+ASSERT( INPUT_104_115  = 0hex00  );
+ASSERT( INPUT_104_277  = 0hex00  );
+ASSERT( INPUT_103_129  = 0hex00  );
+ASSERT( INPUT_104_437  = 0hex00  );
+ASSERT( INPUT_103_298  = 0hex0B  );
+ASSERT( memory_0[0hex0022ACAE]  = 0hex00  );
+ASSERT( INPUT_103_616  = 0hex00  );
+ASSERT( INPUT_104_116  = 0hex00  );
+ASSERT( INPUT_104_278  = 0hex00  );
+ASSERT( INPUT_103_13  = 0hex00  );
+ASSERT( INPUT_104_438  = 0hex00  );
+ASSERT( INPUT_103_299  = 0hex00  );
+ASSERT( INPUT_103_617  = 0hex00  );
+ASSERT( INPUT_104_117  = 0hex00  );
+ASSERT( INPUT_103_130  = 0hex00  );
+ASSERT( INPUT_104_279  = 0hex00  );
+ASSERT( INPUT_104_439  = 0hex00  );
+ASSERT( INPUT_103_30  = 0hex12  );
+ASSERT( INPUT_103_618  = 0hex00  );
+ASSERT( INPUT_104_118  = 0hex00  );
+ASSERT( INPUT_103_131  = 0hex00  );
+ASSERT( INPUT_104_28  = 0hex00  );
+ASSERT( INPUT_104_44  = 0hex00  );
+ASSERT( INPUT_103_300  = 0hex00  );
+ASSERT( INPUT_103_619  = 0hex00  );
+ASSERT( INPUT_104_119  = 0hex00  );
+ASSERT( INPUT_103_132  = 0hex00000001  );
+ASSERT( INPUT_104_280  = 0hex00  );
+ASSERT( INPUT_104_440  = 0hex00  );
+ASSERT( INPUT_103_301  = 0hex00  );
+ASSERT( INPUT_103_62  = 0hex00  );
+ASSERT( INPUT_104_12  = 0hex00  );
+ASSERT( INPUT_103_136  = 0hex00  );
+ASSERT( INPUT_104_281  = 0hex00  );
+ASSERT( INPUT_104_441  = 0hex00  );
+ASSERT( INPUT_103_302  = 0hex00  );
+ASSERT( INPUT_103_620  = 0hex00  );
+ASSERT( INPUT_104_120  = 0hex00  );
+ASSERT( INPUT_103_137  = 0hex00  );
+ASSERT( INPUT_104_282  = 0hex00  );
+ASSERT( INPUT_104_442  = 0hex00  );
+ASSERT( INPUT_103_303  = 0hex00  );
+ASSERT( INPUT_103_621  = 0hex00  );
+ASSERT( INPUT_104_121  = 0hex00  );
+ASSERT( INPUT_103_138  = 0hex00  );
+ASSERT( INPUT_104_283  = 0hex00  );
+ASSERT( INPUT_104_443  = 0hex00  );
+ASSERT( INPUT_103_304  = 0hex0F  );
+ASSERT( INPUT_103_622  = 0hex00  );
+ASSERT( INPUT_104_122  = 0hex00  );
+ASSERT( INPUT_103_139  = 0hex00  );
+ASSERT( INPUT_104_284  = 0hex00  );
+ASSERT( INPUT_104_444  = 0hex00  );
+ASSERT( INPUT_103_305  = 0hexCC  );
+ASSERT( memory_0[0hex1846DE90]  = 0hex77  );
+ASSERT( INPUT_103_623  = 0hex00  );
+ASSERT( INPUT_104_123  = 0hex00  );
+ASSERT( INPUT_103_14  = 0hex00  );
+ASSERT( INPUT_104_285  = 0hex00  );
+ASSERT( INPUT_104_445  = 0hex00  );
+ASSERT( INPUT_103_306  = 0hexC6  );
+ASSERT( INPUT_103_624  = 0hex00  );
+ASSERT( INPUT_104_124  = 0hex00  );
+ASSERT( INPUT_104_286  = 0hex00  );
+ASSERT( INPUT_103_140  = 0hex00  );
+ASSERT( INPUT_104_446  = 0hex00  );
+ASSERT( INPUT_103_307  = 0hex0C  );
+ASSERT( memory_0[0hex0023D4AE]  = 0hexA2  );
+ASSERT( INPUT_103_625  = 0hex00  );
+ASSERT( INPUT_104_125  = 0hex00  );
+ASSERT( INPUT_104_287  = 0hex00  );
+ASSERT( INPUT_103_141  = 0hex00  );
+ASSERT( INPUT_104_447  = 0hex00  );
+ASSERT( memory_0[0hex0042AC8D]  = 0hexEA  );
+ASSERT( INPUT_103_308  = 0hex00  );
+ASSERT( INPUT_103_626  = 0hex00  );
+ASSERT( INPUT_104_126  = 0hex00  );
+ASSERT( INPUT_104_288  = 0hex00  );
+ASSERT( INPUT_103_142  = 0hex00  );
+ASSERT( INPUT_104_448  = 0hex00  );
+ASSERT( INPUT_103_309  = 0hex00  );
+ASSERT( memory_0[0hex0044FA12]  = 0hex3B  );
+ASSERT( memory_0[0hex0022ACAD]  = 0hex00  );
+ASSERT( INPUT_103_627  = 0hex00  );
+ASSERT( INPUT_104_127  = 0hex00  );
+ASSERT( INPUT_104_289  = 0hex00  );
+ASSERT( INPUT_103_143  = 0hex00  );
+ASSERT( INPUT_104_449  = 0hex00  );
+ASSERT( INPUT_103_31  = 0hex01  );
+ASSERT( INPUT_103_628  = 0hex00  );
+ASSERT( INPUT_104_128  = 0hex00  );
+ASSERT( INPUT_104_29  = 0hex00  );
+ASSERT( INPUT_103_144  = 0hex00  );
+ASSERT( INPUT_104_45  = 0hex00  );
+ASSERT( INPUT_103_310  = 0hex00  );
+ASSERT( INPUT_103_629  = 0hex00  );
+ASSERT( INPUT_104_129  = 0hex00  );
+ASSERT( INPUT_103_145  = 0hex00  );
+ASSERT( INPUT_104_290  = 0hex00  );
+ASSERT( INPUT_104_450  = 0hex00  );
+ASSERT( INPUT_103_311  = 0hex00  );
+ASSERT( INPUT_103_63  = 0hex00  );
+ASSERT( INPUT_104_13  = 0hex00  );
+ASSERT( INPUT_103_146  = 0hex00  );
+ASSERT( INPUT_104_291  = 0hex00  );
+ASSERT( INPUT_104_451  = 0hex00  );
+ASSERT( INPUT_103_312  = 0hex00  );
+ASSERT( INPUT_103_630  = 0hex00  );
+ASSERT( INPUT_104_130  = 0hex00  );
+ASSERT( INPUT_103_147  = 0hex00  );
+ASSERT( INPUT_104_292  = 0hex00  );
+ASSERT( INPUT_104_452  = 0hex00  );
+ASSERT( INPUT_103_313  = 0hex00  );
+ASSERT( memory_0[0hex00240D2A]  = 0hex8A  );
+ASSERT( INPUT_103_631  = 0hex00  );
+ASSERT( memory_0[0hex10040CAA]  = 0hexED  );
+ASSERT( memory_0[0hex104D08A4]  = 0hex26  );
+ASSERT( INPUT_104_131  = 0hex00  );
+ASSERT( INPUT_103_148  = 0hex00  );
+ASSERT( INPUT_104_293  = 0hex00  );
+ASSERT( INPUT_104_453  = 0hex00  );
+ASSERT( INPUT_103_314  = 0hex00  );
+ASSERT( INPUT_103_632  = 0hex00  );
+ASSERT( INPUT_104_132  = 0hex00  );
+ASSERT( INPUT_103_149  = 0hex00  );
+ASSERT( INPUT_104_294  = 0hex00  );
+ASSERT( INPUT_103_284  = 0hex00  );
+ASSERT( INPUT_104_454  = 0hex00  );
+ASSERT( INPUT_103_315  = 0hex00  );
+ASSERT( memory_0[0hex8A402F12]  = 0hex44  );
+ASSERT( INPUT_103_633  = 0hex00  );
+ASSERT( INPUT_104_133  = 0hex00  );
+ASSERT( INPUT_103_15  = 0hex00  );
+ASSERT( INPUT_104_295  = 0hex00  );
+ASSERT( INPUT_104_455  = 0hex00  );
+ASSERT( INPUT_103_285  = 0hex00  );
+ASSERT( INPUT_103_316  = 0hex00  );
+ASSERT( INPUT_103_634  = 0hex00  );
+ASSERT( INPUT_104_134  = 0hex00  );
+ASSERT( INPUT_103_150  = 0hex00  );
+ASSERT( INPUT_104_296  = 0hex00  );
+ASSERT( INPUT_104_456  = 0hex00  );
+ASSERT( INPUT_103_286  = 0hex00  );
+ASSERT( INPUT_103_317  = 0hex00  );
+ASSERT( INPUT_103_635  = 0hex00  );
+ASSERT( INPUT_104_135  = 0hex00  );
+ASSERT( INPUT_103_151  = 0hex00  );
+ASSERT( INPUT_104_297  = 0hex00  );
+ASSERT( INPUT_104_457  = 0hex00  );
+ASSERT( INPUT_103_287  = 0hex00  );
+ASSERT( INPUT_103_318  = 0hex00  );
+ASSERT( INPUT_103_636  = 0hex00  );
+ASSERT( INPUT_104_136  = 0hex00  );
+ASSERT( INPUT_104_298  = 0hex00  );
+ASSERT( INPUT_103_152  = 0hex00  );
+ASSERT( INPUT_104_458  = 0hex00  );
+ASSERT( INPUT_103_288  = 0hexC2  );
+ASSERT( INPUT_103_319  = 0hex00  );
+ASSERT( memory_0[0hex00409171]  = 0hex40  );
+ASSERT( INPUT_103_637  = 0hex00  );
+ASSERT( memory_0[0hex1FD5535A]  = 0hexF2  );
+ASSERT( INPUT_104_137  = 0hex00  );
+ASSERT( INPUT_104_299  = 0hex00  );
+ASSERT( INPUT_103_153  = 0hex00  );
+ASSERT( INPUT_104_459  = 0hex00  );
+ASSERT( INPUT_103_289  = 0hexB6  );
+ASSERT( INPUT_103_32  = 0hex00  );
+ASSERT( INPUT_103_638  = 0hex00  );
+ASSERT( INPUT_104_138  = 0hex00  );
+ASSERT( INPUT_104_30  = 0hex00  );
+ASSERT( INPUT_103_154  = 0hex00  );
+ASSERT( INPUT_104_46  = 0hex00  );
+ASSERT( INPUT_103_320  = 0hex00  );
+ASSERT( memory_0[0hex0022ACAC]  = 0hex00  );
+ASSERT( INPUT_103_639  = 0hex00  );
+ASSERT( INPUT_104_139  = 0hex00  );
+ASSERT( memory_0[0hex00000011]  = 0hex00  );
+ASSERT( INPUT_104_300  = 0hex00  );
+ASSERT( INPUT_103_155  = 0hex00  );
+ASSERT( INPUT_104_460  = 0hex00  );
+ASSERT( INPUT_103_321  = 0hex00  );
+ASSERT( INPUT_103_64  = 0hex00  );
+ASSERT( INPUT_104_14  = 0hex00  );
+ASSERT( INPUT_103_156  = 0hex88  );
+ASSERT( INPUT_104_301  = 0hex00  );
+ASSERT( INPUT_104_461  = 0hex00  );
+ASSERT( INPUT_103_322  = 0hex00  );
+ASSERT( INPUT_103_640  = 0hex00  );
+ASSERT( INPUT_104_140  = 0hex00  );
+ASSERT( INPUT_103_157  = 0hex9B  );
+ASSERT( INPUT_104_302  = 0hex00  );
+ASSERT( INPUT_104_462  = 0hex00  );
+ASSERT( INPUT_103_323  = 0hex00  );
+ASSERT( INPUT_103_641  = 0hex00  );
+ASSERT( INPUT_104_141  = 0hex00  );
+ASSERT( INPUT_103_158  = 0hexEA  );
+ASSERT( INPUT_104_303  = 0hex00  );
+ASSERT( INPUT_104_463  = 0hex00  );
+ASSERT( INPUT_103_324  = 0hex00  );
+ASSERT( INPUT_103_642  = 0hex00  );
+ASSERT( INPUT_104_142  = 0hex00  );
+ASSERT( INPUT_103_217  = 0hex00  );
+ASSERT( INPUT_104_304  = 0hex00  );
+ASSERT( INPUT_104_464  = 0hex00  );
+ASSERT( INPUT_103_325  = 0hex00  );
+ASSERT( INPUT_103_643  = 0hex00  );
+ASSERT( INPUT_104_143  = 0hex00  );
+ASSERT( INPUT_103_218  = 0hex00  );
+ASSERT( INPUT_104_305  = 0hex00  );
+ASSERT( INPUT_104_465  = 0hex00  );
+ASSERT( INPUT_103_326  = 0hex00  );
+ASSERT( memory_0[0hex07D17408]  = 0hex93  );
+ASSERT( INPUT_103_644  = 0hex00  );
+ASSERT( INPUT_104_144  = 0hex00  );
+ASSERT( INPUT_103_219  = 0hex00  );
+ASSERT( INPUT_104_306  = 0hex00  );
+ASSERT( INPUT_104_466  = 0hex00  );
+ASSERT( INPUT_103_327  = 0hex00  );
+ASSERT( INPUT_103_645  = 0hex00  );
+ASSERT( memory_0[0hex0CC6CC20]  = 0hex65  );
+ASSERT( INPUT_104_145  = 0hex00  );
+ASSERT( INPUT_103_22  = 0hex00  );
+ASSERT( INPUT_104_307  = 0hex00  );
+ASSERT( memory_0[0hex0023D4AF]  = 0hexBE  );
+ASSERT( INPUT_104_467  = 0hex00  );
+ASSERT( INPUT_103_328  = 0hex00  );
+ASSERT( INPUT_103_646  = 0hex00  );
+ASSERT( INPUT_104_146  = 0hex00  );
+ASSERT( INPUT_104_308  = 0hex00  );
+ASSERT( INPUT_104_468  = 0hex00  );
+ASSERT( INPUT_103_329  = 0hex00  );
+ASSERT( INPUT_103_161  = 0hex00  );
+ASSERT( INPUT_103_714  = 0hex00  );
+ASSERT( INPUT_103_647  = 0hex00  );
+ASSERT( memory_0[0hex00240D2B]  = 0hex90  );
+ASSERT( INPUT_104_147  = 0hex00  );
+ASSERT( INPUT_104_309  = 0hex00  );
+ASSERT( INPUT_104_469  = 0hex00  );
+ASSERT( INPUT_103_33  = 0hexB6  );
+ASSERT( INPUT_103_162  = 0hex0B  );
+ASSERT( memory_0[0hex10505F14]  = 0hex3C  );
+ASSERT( INPUT_103_715  = 0hex00  );
+ASSERT( INPUT_103_648  = 0hex00  );
+ASSERT( memory_0[0hex1FFFD3EE]  = 0hex39  );
+ASSERT( INPUT_104_148  = 0hex00  );
+ASSERT( INPUT_104_31  = 0hex00  );
+ASSERT( INPUT_104_47  = 0hex00  );
+ASSERT( INPUT_103_330  = 0hex00  );
+ASSERT( INPUT_103_163  = 0hex7F  );
+ASSERT( memory_0[0hex104D08A7]  = 0hexCC  );
+ASSERT( INPUT_103_716  = 0hex00  );
+ASSERT( memory_0[0hex0022ACB2]  = 0hex08  );
+ASSERT( INPUT_103_649  = 0hex00  );
+ASSERT( INPUT_104_149  = 0hex00  );
+ASSERT( INPUT_104_310  = 0hex00  );
+ASSERT( INPUT_104_470  = 0hex00  );
+ASSERT( INPUT_103_331  = 0hex00  );
+ASSERT( INPUT_103_164  = 0hexA0  );
+ASSERT( INPUT_103_717  = 0hex00  );
+ASSERT( INPUT_103_65  = 0hex00  );
+ASSERT( INPUT_104_15  = 0hex00  );
+ASSERT( INPUT_104_311  = 0hex00  );
+ASSERT( INPUT_104_471  = 0hex00  );
+ASSERT( INPUT_103_332  = 0hex00  );
+ASSERT( INPUT_103_165  = 0hex3A  );
+ASSERT( INPUT_103_718  = 0hex00  );
+ASSERT( INPUT_103_650  = 0hex00  );
+ASSERT( INPUT_104_150  = 0hex00  );
+ASSERT( INPUT_104_312  = 0hex0000001F  );
+ASSERT( INPUT_104_472  = 0hex00  );
+ASSERT( INPUT_103_333  = 0hex00  );
+ASSERT( INPUT_103_166  = 0hexE9  );
+ASSERT( memory_0[0hex0022ACAF]  = 0hex00  );
+ASSERT( INPUT_103_719  = 0hex00  );
+ASSERT( INPUT_103_651  = 0hex00  );
+ASSERT( INPUT_104_151  = 0hex00  );
+ASSERT( INPUT_104_316  = 0hex00  );
+ASSERT( INPUT_104_473  = 0hex00  );
+ASSERT( INPUT_103_334  = 0hex00  );
+ASSERT( INPUT_103_167  = 0hexFE  );
+ASSERT( INPUT_103_72  = 0hex00  );
+ASSERT( INPUT_103_652  = 0hex00  );
+ASSERT( INPUT_104_152  = 0hex00  );
+ASSERT( INPUT_104_317  = 0hex00  );
+ASSERT( INPUT_104_474  = 0hex00  );
+ASSERT( INPUT_103_335  = 0hex00  );
+ASSERT( INPUT_103_168  = 0hex00  );
+ASSERT( INPUT_103_720  = 0hex00  );
+ASSERT( INPUT_103_653  = 0hex00  );
+ASSERT( memory_0[0hex1846DE91]  = 0hexF9  );
+ASSERT( INPUT_104_153  = 0hex00  );
+ASSERT( INPUT_104_318  = 0hex00  );
+ASSERT( INPUT_104_475  = 0hex00  );
+ASSERT( INPUT_103_572  = 0hex00  );
+ASSERT( INPUT_103_169  = 0hex00  );
+ASSERT( INPUT_103_721  = 0hex00  );
+ASSERT( INPUT_103_654  = 0hex00  );
+ASSERT( INPUT_104_154  = 0hex00  );
+ASSERT( INPUT_104_319  = 0hex00  );
+ASSERT( INPUT_104_476  = 0hex00  );
+ASSERT( INPUT_103_573  = 0hex00  );
+ASSERT( INPUT_103_17  = 0hex00  );
+ASSERT( memory_0[0hex17D78358]  = 0hex52  );
+ASSERT( INPUT_103_722  = 0hex00  );
+ASSERT( INPUT_103_655  = 0hex00  );
+ASSERT( INPUT_104_155  = 0hex00  );
+ASSERT( INPUT_104_32  = 0hex00  );
+ASSERT( INPUT_104_477  = 0hex00  );
+ASSERT( INPUT_103_574  = 0hex00  );
+ASSERT( INPUT_103_170  = 0hex00  );
+ASSERT( INPUT_103_723  = 0hex00  );
+ASSERT( INPUT_103_656  = 0hex00  );
+ASSERT( INPUT_104_156  = 0hex00  );
+ASSERT( INPUT_104_320  = 0hex00  );
+ASSERT( INPUT_104_478  = 0hex00  );
+ASSERT( INPUT_103_575  = 0hex00  );
+ASSERT( INPUT_103_171  = 0hex00  );
+ASSERT( INPUT_103_724  = 0hex00  );
+ASSERT( INPUT_103_657  = 0hex00  );
+ASSERT( INPUT_104_157  = 0hex00  );
+ASSERT( INPUT_104_321  = 0hex00  );
+ASSERT( INPUT_104_479  = 0hex00  );
+ASSERT( INPUT_103_576  = 0hex00  );
+ASSERT( INPUT_103_172  = 0hex00  );
+ASSERT( INPUT_103_725  = 0hex00  );
+ASSERT( INPUT_103_658  = 0hex00  );
+ASSERT( INPUT_104_158  = 0hex00  );
+ASSERT( INPUT_104_322  = 0hex00  );
+ASSERT( INPUT_103_29  = 0hex6B  );
+ASSERT( INPUT_104_48  = 0hex00  );
+ASSERT( INPUT_103_577  = 0hex00  );
+ASSERT( INPUT_103_173  = 0hex00  );
+ASSERT( memory_0[0hex1FDDC371]  = 0hexEA  );
+ASSERT( INPUT_103_726  = 0hex00  );
+ASSERT( INPUT_103_659  = 0hex00  );
+ASSERT( INPUT_104_159  = 0hex00  );
+ASSERT( INPUT_104_323  = 0hex00  );
+ASSERT( INPUT_103_290  = 0hexD8  );
+ASSERT( INPUT_104_480  = 0hex00  );
+ASSERT( INPUT_103_578  = 0hex00  );
+ASSERT( INPUT_103_174  = 0hex00  );
+ASSERT( INPUT_103_727  = 0hex00  );
+ASSERT( INPUT_103_66  = 0hex00  );
+ASSERT( INPUT_104_16  = 0hex00  );
+ASSERT( INPUT_104_324  = 0hex00  );
+ASSERT( INPUT_103_291  = 0hexFD  );
+ASSERT( INPUT_104_481  = 0hex00  );
+ASSERT( INPUT_103_579  = 0hex00  );
+ASSERT( INPUT_103_175  = 0hex00  );
+ASSERT( memory_0[0hex1FD55359]  = 0hex2B  );
+ASSERT( INPUT_103_728  = 0hex00  );
+ASSERT( INPUT_103_660  = 0hex20000000  );
+ASSERT( INPUT_104_160  = 0hex00  );
+ASSERT( INPUT_104_325  = 0hex00  );
+ASSERT( INPUT_103_292  = 0hex80  );
+ASSERT( INPUT_104_482  = 0hex00  );
+ASSERT( INPUT_103_58  = 0hex00  );
+ASSERT( INPUT_103_176  = 0hex00  );
+ASSERT( INPUT_103_729  = 0hex00  );
+ASSERT( INPUT_103_664  = 0hex00  );
+ASSERT( INPUT_104_161  = 0hex00  );
+ASSERT( INPUT_104_326  = 0hex00  );
+ASSERT( INPUT_103_293  = 0hex3B  );
+ASSERT( INPUT_104_483  = 0hex00  );
+ASSERT( INPUT_103_580  = 0hex00  );
+ASSERT( INPUT_103_177  = 0hex00  );
+ASSERT( INPUT_103_73  = 0hex00  );
+ASSERT( INPUT_103_665  = 0hex00  );
+ASSERT( INPUT_104_162  = 0hex00  );
+ASSERT( INPUT_104_327  = 0hex00  );
+ASSERT( INPUT_103_294  = 0hex76  );
+ASSERT( INPUT_104_484  = 0hex00  );
+ASSERT( INPUT_103_581  = 0hex00  );
+ASSERT( INPUT_103_178  = 0hex00  );
+ASSERT( INPUT_103_730  = 0hex00  );
+ASSERT( memory_0[0hex1FFE53F9]  = 0hex75  );
+ASSERT( INPUT_103_666  = 0hex00  );
+ASSERT( INPUT_104_163  = 0hex00  );
+ASSERT( INPUT_104_328  = 0hex00  );
+ASSERT( INPUT_103_295  = 0hex3D  );
+ASSERT( INPUT_104_485  = 0hex00  );
+ASSERT( INPUT_103_582  = 0hex00  );
+ASSERT( INPUT_103_179  = 0hex00  );
+ASSERT( memory_0[0hex10505F17]  = 0hex13  );
+ASSERT( INPUT_103_731  = 0hex00  );
+ASSERT( INPUT_103_667  = 0hex00  );
+ASSERT( INPUT_104_164  = 0hex00  );
+ASSERT( INPUT_104_329  = 0hex00  );
+ASSERT( INPUT_104_486  = 0hex00  );
+ASSERT( INPUT_103_583  = 0hex00  );
+ASSERT( INPUT_103_18  = 0hex00  );
+ASSERT( INPUT_103_732  = 0hex00  );
+ASSERT( INPUT_103_668  = 0hex00  );
+ASSERT( INPUT_104_33  = 0hex00  );
+ASSERT( INPUT_103_493  = 0hex00  );
+ASSERT( INPUT_104_487  = 0hex00  );
+ASSERT( INPUT_103_584  = 0hex00  );
+ASSERT( INPUT_103_180  = 0hex00  );
+ASSERT( INPUT_103_494  = 0hex00  );
+ASSERT( INPUT_103_733  = 0hex00  );
+ASSERT( INPUT_103_669  = 0hex00  );
+ASSERT( INPUT_104_330  = 0hex00  );
+ASSERT( INPUT_104_488  = 0hex00  );
+ASSERT( INPUT_103_585  = 0hex00  );
+ASSERT( INPUT_103_181  = 0hex00  );
+ASSERT( INPUT_103_734  = 0hex00  );
+ASSERT( INPUT_103_67  = 0hex00  );
+ASSERT( INPUT_103_495  = 0hex00  );
+ASSERT( memory_0[0hex1FD5535B]  = 0hex51  );
+ASSERT( INPUT_104_331  = 0hex00  );
+ASSERT( memory_0[0hex0022ACB1]  = 0hex43  );
+ASSERT( INPUT_104_489  = 0hex00  );
+ASSERT( memory_0[0hex1FFE53F8]  = 0hexF2  );
+ASSERT( INPUT_103_586  = 0hex00  );
+ASSERT( INPUT_103_182  = 0hex00  );
+ASSERT( INPUT_103_735  = 0hex00  );
+ASSERT( INPUT_103_670  = 0hex00  );
+ASSERT( INPUT_103_496  = 0hex00  );
+ASSERT( INPUT_104_332  = 0hex00  );
+ASSERT( INPUT_104_49  = 0hex00  );
+ASSERT( INPUT_103_587  = 0hex00  );
+ASSERT( INPUT_103_183  = 0hex00  );
+ASSERT( INPUT_103_736  = 0hex00  );
+ASSERT( INPUT_103_671  = 0hex00  );
+ASSERT( INPUT_103_497  = 0hex00  );
+ASSERT( INPUT_104_490  = 0hex00  );
+ASSERT( INPUT_103_184  = 0hex00  );
+ASSERT( INPUT_103_737  = 0hex00  );
+ASSERT( INPUT_103_344  = 0hex00  );
+ASSERT( INPUT_103_672  = 0hex00  );
+ASSERT( INPUT_103_498  = 0hex00  );
+ASSERT( INPUT_104_491  = 0hex00  );
+ASSERT( INPUT_103_185  = 0hex00  );
+ASSERT( INPUT_103_738  = 0hex00  );
+ASSERT( INPUT_103_345  = 0hex00  );
+ASSERT( INPUT_103_673  = 0hex00  );
+ASSERT( INPUT_103_499  = 0hex00  );
+ASSERT( INPUT_104_492  = 0hex00  );
+ASSERT( INPUT_103_186  = 0hex00  );
+ASSERT( INPUT_103_5  = 0hex00  );
+ASSERT( INPUT_103_739  = 0hex00  );
+ASSERT( INPUT_103_346  = 0hex00  );
+ASSERT( INPUT_103_674  = 0hex00  );
+ASSERT( INPUT_104_493  = 0hex00  );
+ASSERT( INPUT_103_187  = 0hex00  );
+ASSERT( memory_0[0hex104F786E]  = 0hex50  );
+ASSERT( INPUT_103_74  = 0hex00  );
+ASSERT( INPUT_103_50  = 0hex00  );
+ASSERT( INPUT_103_347  = 0hex00  );
+ASSERT( INPUT_103_675  = 0hex00  );
+ASSERT( INPUT_104_494  = 0hex00  );
+ASSERT( INPUT_103_188  = 0hex00  );
+ASSERT( INPUT_103_740  = 0hex00  );
+ASSERT( INPUT_103_500  = 0hex00  );
+ASSERT( INPUT_103_348  = 0hex00  );
+ASSERT( INPUT_103_676  = 0hex00  );
+ASSERT( INPUT_104_495  = 0hex00  );
+ASSERT( INPUT_103_189  = 0hex00  );
+ASSERT( INPUT_103_741  = 0hex00  );
+ASSERT( INPUT_103_501  = 0hex00  );
+ASSERT( INPUT_103_349  = 0hex00  );
+ASSERT( INPUT_103_677  = 0hex00  );
+ASSERT( INPUT_104_496  = 0hex00  );
+ASSERT( INPUT_103_19  = 0hex00  );
+ASSERT( INPUT_103_742  = 0hex00  );
+ASSERT( INPUT_103_502  = 0hex00  );
+ASSERT( INPUT_103_35  = 0hexBD  );
+ASSERT( INPUT_103_678  = 0hex00  );
+ASSERT( INPUT_104_497  = 0hex00  );
+ASSERT( INPUT_103_190  = 0hex00  );
+ASSERT( INPUT_103_743  = 0hex00  );
+ASSERT( INPUT_103_503  = 0hex00  );
+ASSERT( INPUT_103_350  = 0hex00  );
+ASSERT( INPUT_103_679  = 0hex00  );
+ASSERT( INPUT_104_498  = 0hex00  );
+ASSERT( INPUT_103_191  = 0hex00  );
+ASSERT( INPUT_103_744  = 0hex00  );
+ASSERT( INPUT_103_504  = 0hex00  );
+ASSERT( INPUT_103_351  = 0hex00  );
+ASSERT( INPUT_103_68  = 0hex00  );
+ASSERT( INPUT_104_499  = 0hex00  );
+ASSERT( INPUT_103_192  = 0hex00  );
+ASSERT( INPUT_103_745  = 0hex00  );
+ASSERT( INPUT_103_505  = 0hex00  );
+ASSERT( INPUT_103_352  = 0hex00  );
+ASSERT( INPUT_103_680  = 0hex00  );
+ASSERT( INPUT_104_5  = 0hex00  );
+ASSERT( INPUT_103_193  = 0hex00  );
+ASSERT( INPUT_103_746  = 0hex00  );
+ASSERT( INPUT_103_506  = 0hex00  );
+ASSERT( INPUT_103_353  = 0hex00  );
+ASSERT( INPUT_103_681  = 0hex00  );
+ASSERT( INPUT_104_50  = 0hex00  );
+ASSERT( INPUT_103_194  = 0hex00  );
+ASSERT( INPUT_103_747  = 0hex00  );
+ASSERT( INPUT_103_507  = 0hex00  );
+ASSERT( INPUT_103_354  = 0hex00  );
+ASSERT( INPUT_103_682  = 0hex00  );
+ASSERT( INPUT_104_500  = 0hex00  );
+ASSERT( INPUT_103_195  = 0hex00  );
+ASSERT( INPUT_103_748  = 0hex00  );
+ASSERT( INPUT_103_508  = 0hex00  );
+ASSERT( INPUT_103_355  = 0hex00  );
+ASSERT( INPUT_103_683  = 0hex00  );
+ASSERT( INPUT_104_501  = 0hex00  );
+ASSERT( INPUT_103_196  = 0hex00  );
+ASSERT( INPUT_103_749  = 0hex00  );
+ASSERT( INPUT_103_509  = 0hex00  );
+ASSERT( INPUT_103_356  = 0hex00  );
+ASSERT( INPUT_103_684  = 0hex00  );
+
+real	0m36.981s
+user	0m36.406s
+sys	0m0.412s
+Runtime: 37 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/cksumcookie_20-memwrites.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/cksumcookie_20-memwrites.stp.cvc
+***
+Invalid.
+ASSERT( memory_0[0hexBFFFF7A8]  = 0hex80  );
+ASSERT( cast_223  = 0hex00000001  );
+ASSERT( unopRes_18  = 0bin1  );
+ASSERT( letvar_12853_1  = 0hex32A0F20E  );
+ASSERT( cast_259  = 0hex000000A2  );
+ASSERT( memval_18  = 0hex50  );
+ASSERT( letvar_4214_1  = 0bin0  );
+ASSERT( BinOpRes_260  = 0hex00583604  );
+ASSERT( BinOpRes_125  = 0hexBFFFF769  );
+ASSERT( memval_31  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF75A]  = 0hex67  );
+ASSERT( cast_258  = 0hex000000F0  );
+ASSERT( BinOpRes_94  = 0hexBFFFF75C  );
+ASSERT( cast_287  = 0hex00000033  );
+ASSERT( memory_0[0hexBFFFF76D]  = 0hex85  );
+ASSERT( cast_323  = 0hex00  );
+ASSERT( cast_304  = 0hex0000002D  );
+ASSERT( memind_41  = 0hexBFFFF77C  );
+ASSERT( memval_59  = 0hex44  );
+ASSERT( cast_157  = 0hex00  );
+ASSERT( cast_188  = 0hex0000  );
+ASSERT( memory_0[0hexBFFFF79D]  = 0hex36  );
+ASSERT( cast_161  = 0hex62  );
+ASSERT( cast_286  = 0hex0000004B  );
+ASSERT( cast_121  = 0hex62  );
+ASSERT( memind_40  = 0hexBFFFF77B  );
+ASSERT( cast_86  = 0hex00  );
+ASSERT( BinOpRes_237  = 0hex00003102  );
+ASSERT( memval_8  = 0hexBF  );
+ASSERT( memind_7  = 0hexBFFFF726  );
+ASSERT( cast_139  = 0hex00  );
+ASSERT( letvar_12692_1  = 0hex50583604  );
+ASSERT( memval_1  = 0hex62  );
+ASSERT( letvar_8921_1  = 0bin0  );
+ASSERT( cast_245  = 0hex0000000A  );
+ASSERT( cast_59  = 0hex00  );
+ASSERT( BinOpRes_253  = 0hexAEE01446  );
+ASSERT( letvar_6306_1  = 0bin0  );
+ASSERT( BinOpRes_199  = 0hex00830000  );
+ASSERT( BinOpRes_362  = 0bin1  );
+ASSERT( BinOpRes_373  = 0bin1  );
+ASSERT( BinOpRes_14  = 0hexBFFFF728  );
+ASSERT( cast_97  = 0hex62  );
+ASSERT( memory_0[0hexBFFFFB47]  = 0hex65  );
+ASSERT( BinOpRes_96  = 0hex00000E00  );
+ASSERT( BinOpRes_18  = 0hexBFFFF727  );
+ASSERT( memval_87  = 0hex04  );
+ASSERT( BinOpRes_38  = 0hexBFFFF713  );
+ASSERT( cast_314  = 0hex00000038  );
+ASSERT( BinOpRes_241  = 0hexBFFFF797  );
+ASSERT( cast_105  = 0hex62  );
+ASSERT( memory_0[0hexBFFFF793]  = 0hex4F  );
+ASSERT( cast_207  = 0hex00000000  );
+ASSERT( memind_26  = 0hexBFFFF76D  );
+ASSERT( memind_69  = 0hexBFFFF798  );
+ASSERT( unopRes_14  = 0bin1  );
+ASSERT( unopRes_1  = 0bin1  );
+ASSERT( BinOpRes_64  = 0bin0  );
+ASSERT( BinOpRes_122  = 0hex57000000  );
+ASSERT( BinOpRes_345  = 0hexBFFFFB48  );
+ASSERT( unopRes_9  = 0bin1  );
+ASSERT( BinOpRes_71  = 0hex00000005  );
+ASSERT( BinOpRes_143  = 0hexF100852E  );
+ASSERT( letvar_4737_1  = 0bin0  );
+ASSERT( cjmp8048247_15_1  = 0bin1  );
+ASSERT( memind_54  = 0hexBFFFF789  );
+ASSERT( BinOpRes_311  = 0hexD2FBBEE8  );
+ASSERT( BinOpRes_187  = 0hex0000F20E  );
+ASSERT( BinOpRes_322  = 0hexF026E3AA  );
+ASSERT( BinOpRes_269  = 0hex00370000  );
+ASSERT( cast_144  = 0bin0  );
+ASSERT( memval_99  = 0hexFF  );
+ASSERT( memval_30  = 0hex81  );
+ASSERT( cast_334  = 0hex000000BF  );
+ASSERT( BinOpRes_213  = 0hex14285814  );
+ASSERT( cast_67  = 0hex00  );
+ASSERT( cast_116  = 0hex0000  );
+ASSERT( cast_103  = 0hex00000000  );
+ASSERT( memval_58  = 0hex12  );
+ASSERT( cast_135  = 0hex00000000  );
+ASSERT( BinOpRes_194  = 0hexBFFFF784  );
+ASSERT( BinOpRes_110  = 0hex000144CC  );
+ASSERT( cast_315  = 0hex0000002A  );
+ASSERT( memind_6  = 0hexBFFFF725  );
+ASSERT( cjmp804832f_19_1  = 0bin1  );
+ASSERT( cast_194  = 0hex0062  );
+ASSERT( BinOpRes_191  = 0hexBFFFF783  );
+ASSERT( memind_82  = 0hexBFFFF7A5  );
+ASSERT( BinOpRes_257  = 0hex00003604  );
+ASSERT( BinOpRes_249  = 0hex00E00000  );
+ASSERT( memval_41  = 0hex1A  );
+ASSERT( cast_92  = 0hex0000  );
+ASSERT( cast_244  = 0hex00000050  );
+ASSERT( cast_257  = 0hex00000000  );
+ASSERT( BinOpRes_196  = 0hex00001300  );
+ASSERT( BinOpRes_283  = 0hex8C8C7D42  );
+ASSERT( memval_40  = 0hexCD  );
+ASSERT( BinOpRes_123  = 0hex570A5005  );
+ASSERT( memval_7  = 0hexFF  );
+ASSERT( cast_175  = 0hex00000000  );
+ASSERT( memval_86  = 0hex63  );
+ASSERT( BinOpRes_34  = 0hexBFFFF717  );
+ASSERT( cast_285  = 0hex00000044  );
+ASSERT( cast_17  = 0hex8A  );
+ASSERT( memind_39  = 0hexBFFFF77A  );
+ASSERT( letvar_2645_1  = 0bin0  );
+ASSERT( letvar_13037_1  = 0hex2F0144CC  );
+ASSERT( cast_224  = 0bin1  );
+ASSERT( BinOpRes_264  = 0hexBFFFF7A0  );
+ASSERT( cjmp8048247_13_1  = 0bin1  );
+ASSERT( BinOpRes_155  = 0hexBFFFF775  );
+ASSERT( cjmp8048271_18_1  = 0bin1  );
+ASSERT( BinOpRes_261  = 0hexBFFFF79F  );
+ASSERT( BinOpRes_26  = 0hexBFFFF71F  );
+ASSERT( BinOpRes_152  = 0hexF0000000  );
+ASSERT( cast_234  = 0hex000000BF  );
+ASSERT( BinOpRes_334  = 0hex68676665  );
+ASSERT( BinOpRes_225  = 0hexBFFFF791  );
+ASSERT( memind_5  = 0hexBFFFF724  );
+ASSERT( BinOpRes_266  = 0hex00002D00  );
+ASSERT( memind_22  = 0hexBFFFF769  );
+ASSERT( cast_327  = 0hex00000065  );
+ASSERT( memind_3  = 0hexBFFFF71A  );
+ASSERT( memval_98  = 0hexFB  );
+ASSERT( cast_324  = 0hex0000  );
+ASSERT( BinOpRes_222  = 0hex4B000000  );
+ASSERT( memval_69  = 0hex46  );
+ASSERT( cast_189  = 0hex00  );
+ASSERT( unopRes_2  = 0bin1  );
+ASSERT( cast_111  = 0hex00000000  );
+ASSERT( cast_313  = 0hex00000004  );
+ASSERT( BinOpRes_47  = 0hex00000011  );
+ASSERT( memory_0[0hexBFFFF7A3]  = 0hexFD  );
+ASSERT( BinOpRes_238  = 0hexBFFFF796  );
+ASSERT( memind_9  = 0hexBFFFF75C  );
+ASSERT( memory_0[0hexBFFFF79B]  = 0hexAE  );
+ASSERT( cast_140  = 0hex0000  );
+ASSERT( cast_162  = 0hex0062  );
+ASSERT( letvar_12557_1  = 0hex00000062  );
+ASSERT( BinOpRes_119  = 0hex000A0000  );
+ASSERT( memory_0[0hexBFFFF786]  = 0hex83  );
+ASSERT( cast_122  = 0hex0062  );
+ASSERT( BinOpRes_140  = 0hex0000852E  );
+ASSERT( letvar_12715_1  = 0hexAEE01446  );
+ASSERT( cast_1  = 0hex00000062  );
+ASSERT( BinOpRes_363  = 0bin1  );
+ASSERT( cast_342  = 0hex0062  );
+ASSERT( BinOpRes_374  = 0bin1  );
+ASSERT( BinOpRes_9  = 0hex00000062  );
+ASSERT( cast_158  = 0hex00  );
+ASSERT( cast_41  = 0hex00000001  );
+ASSERT( memory_0[0hexBFFFF769]  = 0hex0A  );
+ASSERT( cast_333  = 0hex000000FF  );
+ASSERT( BinOpRes_210  = 0hex00285814  );
+ASSERT( cast_256  = 0hex00000081  );
+ASSERT( BinOpRes_292  = 0hex38000000  );
+ASSERT( memory_0[0hexBFFFF77A]  = 0hexA0  );
+ASSERT( memory_0[0hexBFFFF777]  = 0hex3D  );
+ASSERT( memory_0[0hexBFFFF765]  = 0hex50  );
+ASSERT( cast_208  = 0bin0  );
+ASSERT( memind_68  = 0hexBFFFF797  );
+ASSERT( memval_6  = 0hexF7  );
+ASSERT( cast_98  = 0hex0062  );
+ASSERT( cjmp8048247_f_1  = 0bin1  );
+ASSERT( cjmp8048311_1_1  = 0bin1  );
+ASSERT( BinOpRes_30  = 0hexBFFFF71B  );
+ASSERT( cast_284  = 0hex00000012  );
+ASSERT( cjmp8048247_a_1  = 0bin1  );
+ASSERT( BinOpRes_358  = 0bin1  );
+ASSERT( BinOpRes_72  = 0bin0  );
+ASSERT( cast_11  = 0hex47  );
+ASSERT( BinOpRes_107  = 0hex000044CC  );
+ASSERT( cast_106  = 0hex0062  );
+ASSERT( letvar_12968_1  = 0hexF100852E  );
+ASSERT( BinOpRes_312  = 0hex73164602  );
+ASSERT( BinOpRes_323  = 0hex282B472A  );
+ASSERT( BinOpRes_188  = 0hexBFFFF782  );
+ASSERT( memind_102  = 0hexBFFFFB48  );
+ASSERT( BinOpRes_343  = 0hexBF000000  );
+ASSERT( cast_79  = 0hex00000000  );
+ASSERT( cast_101  = 0hex00  );
+ASSERT( letvar_12807_1  = 0hex14285814  );
+ASSERT( cast_267  = 0hex0000001A  );
+ASSERT( BinOpRes_280  = 0hex008C7D42  );
+ASSERT( cast_68  = 0hex0000  );
+ASSERT( cast_117  = 0hex00  );
+ASSERT( memval_39  = 0hexA0  );
+ASSERT( cast_136  = 0bin0  );
+ASSERT( cast_266  = 0hex000000CD  );
+ASSERT( BinOpRes_114  = 0hexBFFFF764  );
+ASSERT( letvar_11465_1  = 0hex00000062  );
+ASSERT( BinOpRes_295  = 0hexBFFFF7AD  );
+ASSERT( cast_233  = 0hex000000FF  );
+ASSERT( cast_312  = 0hex00000063  );
+ASSERT( memind_49  = 0hexBFFFF784  );
+ASSERT( BinOpRes_111  = 0hexBFFFF763  );
+ASSERT( memory_0[0hexBFFFFB48]  = 0hex66  );
+ASSERT( memval_5  = 0hex58  );
+ASSERT( cast_195  = 0hex00  );
+ASSERT( memind_48  = 0hexBFFFF783  );
+ASSERT( memval_3  = 0hex00  );
+ASSERT( BinOpRes_116  = 0hex00005000  );
+ASSERT( BinOpRes_258  = 0hexBFFFF79E  );
+ASSERT( BinOpRes_149  = 0hex00000000  );
+ASSERT( cast_93  = 0hex00  );
+ASSERT( BinOpRes_331  = 0hex00676665  );
+ASSERT( BinOpRes_15  = 0hexBFFFF724  );
+ASSERT( memory_0[0hexBFFFF785]  = 0hex13  );
+ASSERT( memory_0[0hexBFFFF7AF]  = 0hex28  );
+ASSERT( memory_0[0hexBFFFF77C]  = 0hex1A  );
+ASSERT( letvar_12646_1  = 0hex8C8C7D42  );
+ASSERT( letvar_13014_1  = 0hex570A5005  );
+ASSERT( memval_9  = 0hex15  );
+ASSERT( cast_217  = 0hex62  );
+ASSERT( cast_176  = 0bin0  );
+ASSERT( cast_35  = 0hex58  );
+ASSERT( BinOpRes_219  = 0hex00440000  );
+ASSERT( cast_332  = 0hex000000FB  );
+ASSERT( letvar_7352_1  = 0bin0  );
+ASSERT( cast_295  = 0hex00000046  );
+ASSERT( memval_65  = 0hex02  );
+ASSERT( memory_0[0hexBFFFF77E]  = 0hex1A  );
+ASSERT( memind_77  = 0hexBFFFF7A0  );
+ASSERT( memory_0[0hexBFFFF7A2]  = 0hex37  );
+ASSERT( cast_23  = 0hexC8  );
+ASSERT( BinOpRes_91  = 0hexBF000000  );
+ASSERT( memind_76  = 0hexBFFFF79F  );
+ASSERT( memory_0[0hexBFFFF78E]  = 0hex44  );
+ASSERT( memind_34  = 0hexBFFFF775  );
+ASSERT( letvar_13138_1  = 0hex68676665  );
+ASSERT( BinOpRes_137  = 0hex0000852E  );
+ASSERT( BinOpRes_326  = 0hexBFFFF759  );
+ASSERT( memval_68  = 0hexB1  );
+ASSERT( unopRes_11  = 0bin1  );
+ASSERT( BinOpRes_163  = 0hex3D308AA2  );
+ASSERT( cjmp8048247_3_1  = 0bin1  );
+ASSERT( cast_325  = 0hex00  );
+ASSERT( cast_112  = 0bin0  );
+ASSERT( memind_62  = 0hexBFFFF791  );
+ASSERT( BinOpRes_207  = 0hex00005814  );
+ASSERT( cast_190  = 0hex00  );
+ASSERT( BinOpRes_289  = 0hex00040000  );
+ASSERT( BinOpRes_48  = 0bin0  );
+ASSERT( letvar_9281_1  = 0hex00000062  );
+ASSERT( letvar_1637_1  = 0hex00000062  );
+ASSERT( BinOpRes_61  = 0hex0000000A  );
+ASSERT( memval_38  = 0hex80  );
+ASSERT( letvar_6551_1  = 0hex00000062  );
+ASSERT( cast_232  = 0hex000000F7  );
+ASSERT( memind_67  = 0hexBFFFF796  );
+ASSERT( cjmp8048247_16_1  = 0bin1  );
+ASSERT( BinOpRes_233  = 0hex4F840833  );
+ASSERT( cast_141  = 0hex00  );
+ASSERT( BinOpRes_144  = 0hexBFFFF770  );
+ASSERT( cast_163  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF7AB]  = 0hex38  );
+ASSERT( cast_123  = 0hex00  );
+ASSERT( BinOpRes_350  = 0hex00676665  );
+ASSERT( BinOpRes_141  = 0hexBFFFF76F  );
+ASSERT( letvar_545_1  = 0hex00000062  );
+ASSERT( BinOpRes_364  = 0bin1  );
+ASSERT( BinOpRes_214  = 0hexBFFFF78C  );
+ASSERT( cast_201  = 0hex62  );
+ASSERT( BinOpRes_375  = 0bin1  );
+ASSERT( cast_343  = 0hex00  );
+ASSERT( BinOpRes_340  = 0hex00FF0000  );
+ASSERT( BinOpRes_146  = 0hex00008100  );
+ASSERT( BinOpRes_211  = 0hexBFFFF78B  );
+ASSERT( BinOpRes_277  = 0hex00007D42  );
+ASSERT( memval_49  = 0hex02  );
+ASSERT( cast_265  = 0hex000000A0  );
+ASSERT( cast_29  = 0hex62  );
+ASSERT( BinOpRes_216  = 0hex00001200  );
+ASSERT( memval_48  = 0hex32  );
+ASSERT( BinOpRes_359  = 0bin1  );
+ASSERT( BinOpRes_108  = 0hexBFFFF762  );
+ASSERT( cast_107  = 0hex00  );
+ASSERT( cast_211  = 0hex00  );
+ASSERT( cast_151  = 0hex00000000  );
+ASSERT( BinOpRes_313  = 0hexA5B73810  );
+ASSERT( BinOpRes_324  = 0hex00000000  );
+ASSERT( memind_47  = 0hexBFFFF782  );
+ASSERT( cast_80  = 0bin0  );
+ASSERT( BinOpRes_284  = 0hexBFFFF7A8  );
+ASSERT( cast_102  = 0hex00  );
+ASSERT( BinOpRes_328  = 0hex00006665  );
+ASSERT( BinOpRes_175  = 0hexBFFFF77D  );
+ASSERT( BinOpRes_124  = 0hexBFFFF768  );
+ASSERT( cast_291  = 0hex00000002  );
+ASSERT( BinOpRes_29  = 0hexBFFFF71A  );
+ASSERT( BinOpRes_23  = 0hexBFFFF71C  );
+ASSERT( memory_0[0hexBFFFF78D]  = 0hex12  );
+ASSERT( BinOpRes_1  = 0hexBFFFF719  );
+ASSERT( BinOpRes_281  = 0hexBFFFF7A7  );
+ASSERT( BinOpRes_19  = 0hexBFFFF720  );
+ASSERT( cast_118  = 0hex00  );
+ASSERT( BinOpRes_172  = 0hexCD000000  );
+ASSERT( unopRes_19  = 0bin1  );
+ASSERT( memval_77  = 0hex42  );
+ASSERT( memval_22  = 0hex0A  );
+ASSERT( BinOpRes_88  = 0hex00FF0000  );
+ASSERT( memind_17  = 0hexBFFFF764  );
+ASSERT( cast_235  = 0hex00000015  );
+ASSERT( BinOpRes_286  = 0hex00006300  );
+ASSERT( memory_0[0hexBFFFF796]  = 0hex00  );
+ASSERT( cast_42  = 0bin1  );
+ASSERT( memval_76  = 0hex50  );
+ASSERT( memind_16  = 0hexBFFFF763  );
+ASSERT( memind_90  = 0hexBFFFF7AD  );
+ASSERT( cast_3  = 0hex00000000  );
+ASSERT( BinOpRes_335  = 0hexBFFFF720  );
+ASSERT( cast_196  = 0hex0000  );
+ASSERT( cast_169  = 0hex62  );
+ASSERT( cast_54  = 0hex00000062  );
+ASSERT( memind_75  = 0hexBFFFF79E  );
+ASSERT( cast_129  = 0hex62  );
+ASSERT( cast_94  = 0hex00  );
+ASSERT( BinOpRes_332  = 0hexBFFFF75B  );
+ASSERT( BinOpRes_303  = 0hex282B472A  );
+ASSERT( BinOpRes_353  = 0hex68676665  );
+ASSERT( letvar_2729_1  = 0hex00000062  );
+ASSERT( memval_67  = 0hex00  );
+ASSERT( BinOpRes_337  = 0hex0000FB00  );
+ASSERT( BinOpRes_160  = 0hex00308AA2  );
+ASSERT( cast_294  = 0hex000000B1  );
+ASSERT( letvar_13103_1  = 0hex00000062  );
+ASSERT( letvar_9444_1  = 0bin0  );
+ASSERT( BinOpRes_245  = 0hexBFFFF799  );
+ASSERT( cast_6  = 0hexF758  );
+ASSERT( memory_0[0hexBFFFF7AD]  = 0hex47  );
+ASSERT( cast_218  = 0hex0062  );
+ASSERT( BinOpRes_230  = 0hex00840833  );
+ASSERT( cast_264  = 0hex00000080  );
+ASSERT( BinOpRes_347  = 0hex00006665  );
+ASSERT( BinOpRes_35  = 0hexBFFFF710  );
+ASSERT( BinOpRes_138  = 0hexBFFFF76E  );
+ASSERT( cjmp8048247_c_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF7AA]  = 0hex04  );
+ASSERT( unopRes_15  = 0bin1  );
+ASSERT( letvar_12922_1  = 0hex3D308AA2  );
+ASSERT( cast_326  = 0hex00  );
+ASSERT( BinOpRes_208  = 0hexBFFFF78A  );
+ASSERT( BinOpRes_73  = 0hex00000004  );
+ASSERT( BinOpRes_27  = 0hexBFFFF718  );
+ASSERT( BinOpRes_85  = 0hex0000F700  );
+ASSERT( unopRes_10  = 0bin1  );
+ASSERT( letvar_12761_1  = 0hex4F840833  );
+ASSERT( cast_275  = 0hex00000002  );
+ASSERT( cast_142  = 0hex00  );
+ASSERT( memval_47  = 0hexA0  );
+ASSERT( memind_29  = 0hexBFFFF770  );
+ASSERT( cast_164  = 0hex0000  );
+ASSERT( cast_274  = 0hex00000032  );
+ASSERT( cast_124  = 0hex0000  );
+ASSERT( BinOpRes_351  = 0hexBFFFFB4A  );
+ASSERT( memind_28  = 0hexBFFFF76F  );
+ASSERT( BinOpRes_62  = 0bin0  );
+ASSERT( BinOpRes_365  = 0bin1  );
+ASSERT( memind_57  = 0hexBFFFF78C  );
+ASSERT( BinOpRes_376  = 0bin1  );
+ASSERT( cast_344  = 0hex0000  );
+ASSERT( memval_17  = 0hex05  );
+ASSERT( memind_56  = 0hexBFFFF78B  );
+ASSERT( memory_0[0hexBFFFF795]  = 0hex31  );
+ASSERT( BinOpRes_278  = 0hexBFFFF7A6  );
+ASSERT( BinOpRes_169  = 0hex00A00000  );
+ASSERT( cast_202  = 0hex0062  );
+ASSERT( memval_16  = 0hex2F  );
+ASSERT( memory_0[0hexBFFFF774]  = 0hexA2  );
+ASSERT( memory_0[0hexBFFFF760]  = 0hexCC  );
+ASSERT( cast_212  = 0hex0000  );
+ASSERT( cast_303  = 0hex00000042  );
+ASSERT( cast_73  = 0hex62  );
+ASSERT( cast_248  = 0hex0000000A  );
+ASSERT( memval_75  = 0hex58  );
+ASSERT( memind_15  = 0hexBFFFF762  );
+ASSERT( cast_293  = 0hex00000000  );
+ASSERT( cast_152  = 0bin0  );
+ASSERT( cast_108  = 0hex0000  );
+ASSERT( cast_302  = 0hex00000050  );
+ASSERT( BinOpRes_10  = 0bin1  );
+ASSERT( cast_225  = 0hex62  );
+ASSERT( cast_183  = 0hex00000000  );
+ASSERT( BinOpRes_314  = 0hex073A4B12  );
+ASSERT( BinOpRes_325  = 0bin1  );
+ASSERT( BinOpRes_235  = 0hexBFFFF795  );
+ASSERT( memind_85  = 0hexBFFFF7A8  );
+ASSERT( cast_18  = 0hex838A  );
+ASSERT( BinOpRes_31  = 0hexBFFFF714  );
+ASSERT( letvar_3168_1  = 0bin0  );
+ASSERT( BinOpRes_51  = 0hex0000000F  );
+ASSERT( BinOpRes_329  = 0hexBFFFF75A  );
+ASSERT( memind_21  = 0hexBFFFF768  );
+ASSERT( BinOpRes_300  = 0hex002B472A  );
+ASSERT( cast_12  = 0hexFB47  );
+ASSERT( cjmp8048247_14_1  = 0bin1  );
+ASSERT( BinOpRes_65  = 0hex00000008  );
+ASSERT( memind_84  = 0hexBFFFF7A7  );
+ASSERT( BinOpRes_55  = 0hex0000000D  );
+ASSERT( memind_42  = 0hexBFFFF77D  );
+ASSERT( memory_0[0hexBFFFFB49]  = 0hex67  );
+ASSERT( BinOpRes_157  = 0hex00008AA2  );
+ASSERT( BinOpRes_95  = 0hexBFFFF75D  );
+ASSERT( unopRes_7  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF767]  = 0hex57  );
+ASSERT( BinOpRes_183  = 0hexA01A871A  );
+ASSERT( BinOpRes_5  = 0hex00000000  );
+ASSERT( BinOpRes_227  = 0hex00000833  );
+ASSERT( memind_97  = 0hexBFFFF720  );
+ASSERT( memval_46  = 0hexF2  );
+ASSERT( cast_197  = 0hex00  );
+ASSERT( unopRes_3  = 0bin1  );
+ASSERT( letvar_7643_1  = 0hex00000062  );
+ASSERT( BinOpRes_49  = 0hex00000010  );
+ASSERT( memind_96  = 0hexBFFFF75B  );
+ASSERT( letvar_12600_1  = 0hex282B472A  );
+ASSERT( BinOpRes_164  = 0hexBFFFF778  );
+ASSERT( letvar_13136_1  = 0hex68676665  );
+ASSERT( cjmp804fb93_0_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF780]  = 0hex0E  );
+ASSERT( BinOpRes_242  = 0hexB1000000  );
+ASSERT( cast_170  = 0hex0062  );
+ASSERT( BinOpRes_161  = 0hexBFFFF777  );
+ASSERT( cast_130  = 0hex0062  );
+ASSERT( memory_0[0hexBFFFF77D]  = 0hex87  );
+ASSERT( BinOpRes_234  = 0hexBFFFF794  );
+ASSERT( memval_29  = 0hex67  );
+ASSERT( BinOpRes_166  = 0hex00008000  );
+ASSERT( cast_219  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF770]  = 0hex67  );
+ASSERT( memind_70  = 0hexBFFFF799  );
+ASSERT( BinOpRes_231  = 0hexBFFFF793  );
+ASSERT( memval_28  = 0hexF1  );
+ASSERT( memind_2  = 0hexBFFFF719  );
+ASSERT( memval_57  = 0hex81  );
+ASSERT( cast_36  = 0hexF758  );
+ASSERT( memval_74  = 0hex36  );
+ASSERT( cast_273  = 0hex000000A0  );
+ASSERT( BinOpRes_348  = 0hexBFFFFB49  );
+ASSERT( memind_27  = 0hexBFFFF76E  );
+ASSERT( memval_56  = 0hex14  );
+ASSERT( cjmp8048247_10_1  = 0bin1  );
+ASSERT( BinOpRes_74  = 0bin0  );
+ASSERT( cast_24  = 0hexF7C8  );
+ASSERT( letvar_13612_1  = 0hexBFFFF758  );
+ASSERT( memind_55  = 0hexBFFFF78A  );
+ASSERT( memory_0[0hexBFFFF79C]  = 0hex04  );
+ASSERT( memory_0[0hexBFFFF7A5]  = 0hex7D  );
+ASSERT( cast_243  = 0hex00000005  );
+ASSERT( BinOpRes_195  = 0hexBFFFF785  );
+ASSERT( memval_15  = 0hex01  );
+ASSERT( cast_55  = 0hex0062  );
+ASSERT( cast_87  = 0hex00000000  );
+ASSERT( cast_242  = 0hex0000002F  );
+ASSERT( BinOpRes_192  = 0hex32000000  );
+ASSERT( cast_165  = 0hex00  );
+ASSERT( memval_85  = 0hex80  );
+ASSERT( cast_125  = 0hex00  );
+ASSERT( memval_21  = 0hex01  );
+ASSERT( memind_104  = 0hexBFFFFB4A  );
+ASSERT( cast_301  = 0hex00000058  );
+ASSERT( cast_61  = 0hex00  );
+ASSERT( memval_84  = 0hex8C  );
+ASSERT( memory_0[0hexBFFFF788]  = 0hex14  );
+ASSERT( BinOpRes_366  = 0bin1  );
+ASSERT( BinOpRes_377  = 0bin1  );
+ASSERT( cast_345  = 0hex00  );
+ASSERT( letvar_12011_1  = 0hex00000062  );
+ASSERT( BinOpRes_297  = 0hex0000472A  );
+ASSERT( memind_83  = 0hexBFFFF7A6  );
+ASSERT( cast_203  = 0hex00  );
+ASSERT( cast_145  = 0hex62  );
+ASSERT( BinOpRes_265  = 0hexBFFFF7A1  );
+ASSERT( BinOpRes_126  = 0hex00000A00  );
+ASSERT( cast_7  = 0hexF7  );
+ASSERT( memval_97  = 0hex47  );
+ASSERT( cast_213  = 0hex00  );
+ASSERT( BinOpRes_239  = 0hex00000000  );
+ASSERT( BinOpRes_180  = 0hex001A871A  );
+ASSERT( BinOpRes_262  = 0hex50000000  );
+ASSERT( memval_96  = 0hex68  );
+ASSERT( cast_109  = 0hex00  );
+ASSERT( cast_184  = 0bin0  );
+ASSERT( BinOpRes_304  = 0hex10950E15  );
+ASSERT( BinOpRes_315  = 0hex1B62A326  );
+ASSERT( cast_74  = 0hex0062  );
+ASSERT( BinOpRes_354  = 0hex00000000  );
+ASSERT( cast_30  = 0hex0062  );
+ASSERT( letvar_1091_1  = 0hex00000062  );
+ASSERT( cast_272  = 0hex000000F2  );
+ASSERT( BinOpRes_66  = 0bin0  );
+ASSERT( memind_95  = 0hexBFFFF75A  );
+ASSERT( BinOpRes_301  = 0hexBFFFF7AF  );
+ASSERT( BinOpRes_56  = 0bin0  );
+ASSERT( memind_66  = 0hexBFFFF795  );
+ASSERT( memory_0[0hexBFFFF775]  = 0hex8A  );
+ASSERT( cast_226  = 0hex0062  );
+ASSERT( cjmp8048247_8_1  = 0bin1  );
+ASSERT( BinOpRes_158  = 0hexBFFFF776  );
+ASSERT( BinOpRes_103  = 0hex10950E15  );
+ASSERT( letvar_12876_1  = 0hexA01A871A  );
+ASSERT( letvar_6829_1  = 0bin0  );
+ASSERT( cast_255  = 0hex00000067  );
+ASSERT( memval_14  = 0hex44  );
+ASSERT( unopRes_12  = 0bin1  );
+ASSERT( cast_13  = 0hexFB  );
+ASSERT( BinOpRes_228  = 0hexBFFFF792  );
+ASSERT( memval_27  = 0hex00  );
+ASSERT( cjmp8048247_4_1  = 0bin1  );
+ASSERT( memind_93  = 0hexBFFFF758  );
+ASSERT( BinOpRes_128  = 0hexBFFFF76A  );
+ASSERT( memind_10  = 0hexBFFFF75D  );
+ASSERT( memory_0[0hexBFFFF787]  = 0hex61  );
+ASSERT( cast_254  = 0hex000000F1  );
+ASSERT( cast_198  = 0hex00  );
+ASSERT( BinOpRes_50  = 0bin0  );
+ASSERT( letvar_9827_1  = 0hex00000062  );
+ASSERT( cast_283  = 0hex00000081  );
+ASSERT( memval_2  = 0hex00  );
+ASSERT( cast_300  = 0hex00000036  );
+ASSERT( memval_55  = 0hex28  );
+ASSERT( memind_37  = 0hexBFFFF778  );
+ASSERT( cast_19  = 0hex83  );
+ASSERT( cast_282  = 0hex00000014  );
+ASSERT( letvar_12597_1  = 0bin1  );
+ASSERT( cast_171  = 0hex00  );
+ASSERT( memind_36  = 0hexBFFFF777  );
+ASSERT( cast_131  = 0hex00  );
+ASSERT( memind_65  = 0hexBFFFF794  );
+ASSERT( memory_0[0hexBFFFF7A4]  = 0hex42  );
+ASSERT( cast_209  = 0hex62  );
+ASSERT( cast_220  = 0hex0000  );
+ASSERT( memind_64  = 0hexBFFFF793  );
+ASSERT( cast_241  = 0hex00000001  );
+ASSERT( BinOpRes_189  = 0hex00A00000  );
+ASSERT( memind_103  = 0hexBFFFFB49  );
+ASSERT( cast_311  = 0hex00000080  );
+ASSERT( memory_0[0hexBFFFFB4A]  = 0hex68  );
+ASSERT( memval_83  = 0hex8C  );
+ASSERT( memory_0[0hexBFFFF790]  = 0hex33  );
+ASSERT( cast_310  = 0hex0000008C  );
+ASSERT( memind_94  = 0hexBFFFF759  );
+ASSERT( BinOpRes_115  = 0hexBFFFF765  );
+ASSERT( cast_37  = 0hexF7  );
+ASSERT( letvar_544_1  = 0bin1  );
+ASSERT( BinOpRes_127  = 0hex00000A01  );
+ASSERT( cast_88  = 0bin0  );
+ASSERT( BinOpRes_112  = 0hex2F000000  );
+ASSERT( cast_43  = 0hex00000061  );
+ASSERT( cast_56  = 0hex62  );
+ASSERT( BinOpRes_133  = 0hex50890A01  );
+ASSERT( cast_62  = 0hex00  );
+ASSERT( memind_50  = 0hexBFFFF785  );
+ASSERT( cast_166  = 0hex00  );
+ASSERT( BinOpRes_177  = 0hex0000871A  );
+ASSERT( cast_331  = 0hex00000047  );
+ASSERT( BinOpRes_259  = 0hex00580000  );
+ASSERT( cast_25  = 0hexF7  );
+ASSERT( cast_126  = 0hex00  );
+ASSERT( memval_95  = 0hex67  );
+ASSERT( memval_26  = 0hex85  );
+ASSERT( cast_330  = 0hex00000068  );
+ASSERT( BinOpRes_203  = 0hex61831302  );
+ASSERT( BinOpRes_367  = 0bin1  );
+ASSERT( cast_346  = 0hex00  );
+ASSERT( BinOpRes_378  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF75E]  = 0hex95  );
+ASSERT( cast_143  = 0hex00000000  );
+ASSERT( letvar_5459_1  = 0hex00000062  );
+ASSERT( BinOpRes_298  = 0hexBFFFF7AE  );
+ASSERT( memval_54  = 0hex58  );
+ASSERT( cast_204  = 0hex0000  );
+ASSERT( cast_177  = 0hex62  );
+ASSERT( BinOpRes_184  = 0hexBFFFF780  );
+ASSERT( memval_93  = 0hex65  );
+ASSERT( memory_0[0hexBFFFF764]  = 0hex05  );
+ASSERT( cast_214  = 0hex00  );
+ASSERT( BinOpRes_16  = 0hexBFFFF725  );
+ASSERT( letvar_3275_1  = 0hex00000062  );
+ASSERT( BinOpRes_6  = 0hex00000062  );
+ASSERT( BinOpRes_181  = 0hexBFFFF77F  );
+ASSERT( cast_319  = 0hex00000001  );
+ASSERT( memind_78  = 0hexBFFFF7A1  );
+ASSERT( cast_146  = 0hex0062  );
+ASSERT( cast_110  = 0hex00  );
+ASSERT( memval_37  = 0hexCA  );
+ASSERT( cast_240  = 0hex00000044  );
+ASSERT( cast_253  = 0hex00000000  );
+ASSERT( BinOpRes_305  = 0hex3F9652E1  );
+ASSERT( BinOpRes_186  = 0hex0000F200  );
+ASSERT( letvar_9967_1  = 0bin0  );
+ASSERT( BinOpRes_316  = 0hex66A6B5A7  );
+ASSERT( memory_0[0hexBFFFF78F]  = 0hex4B  );
+ASSERT( BinOpRes_355  = 0bin1  );
+ASSERT( cast_75  = 0hex00  );
+ASSERT( BinOpRes_273  = 0hexFD372D42  );
+ASSERT( memval_36  = 0hex3D  );
+ASSERT( memind_92  = 0hexBFFFF7AF  );
+ASSERT( BinOpRes_100  = 0hex00950E15  );
+ASSERT( memval_82  = 0hex7D  );
+ASSERT( cast_227  = 0hex00  );
+ASSERT( cast_281  = 0hex00000028  );
+ASSERT( memind_35  = 0hexBFFFF776  );
+ASSERT( memval_64  = 0hex4F  );
+ASSERT( letvar_13060_1  = 0hex10950E15  );
+ASSERT( BinOpRes_254  = 0hexBFFFF79C  );
+ASSERT( BinOpRes_145  = 0hexBFFFF771  );
+ASSERT( cast_31  = 0hex00  );
+ASSERT( cjmp8048247_d_1  = 0bin1  );
+ASSERT( memval_103  = 0hex67  );
+ASSERT( unopRes_16  = 0bin1  );
+ASSERT( BinOpRes_20  = 0hexBFFFF721  );
+ASSERT( memind_63  = 0hexBFFFF792  );
+ASSERT( BinOpRes_142  = 0hexF1000000  );
+ASSERT( BinOpRes_75  = 0hex00000003  );
+ASSERT( BinOpRes_215  = 0hexBFFFF78D  );
+ASSERT( cast_5  = 0hex58  );
+ASSERT( BinOpRes_256  = 0hex00003600  );
+ASSERT( memval_94  = 0hex66  );
+ASSERT( BinOpRes_212  = 0hex14000000  );
+ASSERT( BinOpRes_24  = 0hexBFFFF71D  );
+ASSERT( memory_0[0hexBFFFF798]  = 0hex46  );
+ASSERT( cast_172  = 0hex0000  );
+ASSERT( cast_309  = 0hex0000008C  );
+ASSERT( cast_132  = 0hex0000  );
+ASSERT( memind_23  = 0hexBFFFF76A  );
+ASSERT( R_EBX_0  = 0hex00000000  );
+ASSERT( BinOpRes_109  = 0hex00010000  );
+ASSERT( memory_0[0hexBFFFF781]  = 0hexF2  );
+ASSERT( cast_221  = 0hex00  );
+ASSERT( BinOpRes_130  = 0hex00890A01  );
+ASSERT( memval_104  = 0hex68  );
+ASSERT( letvar_7875_1  = 0bin0  );
+ASSERT( BinOpRes_285  = 0hexBFFFF7A9  );
+ASSERT( letvar_5260_1  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF75C]  = 0hex15  );
+ASSERT( cast_210  = 0hex0062  );
+ASSERT( cast_329  = 0hex00000067  );
+ASSERT( BinOpRes_200  = 0hex00831302  );
+ASSERT( cast_252  = 0hex00000085  );
+ASSERT( BinOpRes_282  = 0hex8C000000  );
+ASSERT( cast_298  = 0hex000000AE  );
+ASSERT( cast_81  = 0hex62  );
+ASSERT( memory_0[0hexBFFFF77F]  = 0hexA0  );
+ASSERT( BinOpRes_36  = 0hexBFFFF711  );
+ASSERT( cast_280  = 0hex00000058  );
+ASSERT( cast_191  = 0hex00000000  );
+ASSERT( memind_18  = 0hexBFFFF765  );
+ASSERT( cast_57  = 0hex00000062  );
+ASSERT( letvar_3691_1  = 0bin0  );
+ASSERT( letvar_12991_1  = 0hex50890A01  );
+ASSERT( BinOpRes_336  = 0hexBFFFF721  );
+ASSERT( cast_63  = 0hex00000001  );
+ASSERT( BinOpRes_67  = 0hex00000007  );
+ASSERT( BinOpRes_178  = 0hexBFFFF77E  );
+ASSERT( BinOpRes_28  = 0hexBFFFF719  );
+ASSERT( BinOpRes_57  = 0hex0000000C  );
+ASSERT( memval_102  = 0hex66  );
+ASSERT( cast_2  = 0hex00000000  );
+ASSERT( BinOpRes_333  = 0hex68000000  );
+ASSERT( memval_92  = 0hex28  );
+ASSERT( letvar_12830_1  = 0hex61831302  );
+ASSERT( cast_263  = 0hex000000CA  );
+ASSERT( memory_0[0hexBFFFF797]  = 0hexB1  );
+ASSERT( BinOpRes_368  = 0bin1  );
+ASSERT( BinOpRes_356  = 0hex00000000  );
+ASSERT( BinOpRes_379  = 0bin1  );
+ASSERT( BinOpRes_270  = 0hex00372D42  );
+ASSERT( memval_35  = 0hex30  );
+ASSERT( memind_91  = 0hexBFFFF7AE  );
+ASSERT( cast_262  = 0hex0000003D  );
+ASSERT( BinOpRes_104  = 0hexBFFFF760  );
+ASSERT( R_ECX_0  = 0hexBFFFF758  );
+ASSERT( BinOpRes_80  = 0bin0  );
+ASSERT( cast_205  = 0hex00  );
+ASSERT( unopRes_4  = 0bin1  );
+ASSERT( cast_308  = 0hex0000007D  );
+ASSERT( memval_63  = 0hex84  );
+ASSERT( memind_45  = 0hexBFFFF780  );
+ASSERT( letvar_8189_1  = 0hex00000062  );
+ASSERT( BinOpRes_97  = 0hex00000E15  );
+ASSERT( BinOpRes_43  = 0hex00000013  );
+ASSERT( BinOpRes_7  = 0hexBFFFF71B  );
+ASSERT( BinOpRes_79  = 0hex00000001  );
+ASSERT( cast_290  = 0hex0000004F  );
+ASSERT( cast_320  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF79F]  = 0hex50  );
+ASSERT( memind_44  = 0hexBFFFF77F  );
+ASSERT( BinOpRes_106  = 0hex00004400  );
+ASSERT( cast_292  = 0hex00000031  );
+ASSERT( cast_49  = 0hex0000  );
+ASSERT( cast_147  = 0hex00  );
+ASSERT( cast_178  = 0hex0062  );
+ASSERT( BinOpRes_139  = 0hex00000000  );
+ASSERT( BinOpRes_53  = 0hex0000000E  );
+ASSERT( BinOpRes_101  = 0hexBFFFF75F  );
+ASSERT( cast_337  = 0hex00000067  );
+ASSERT( BinOpRes_306  = 0hex96A0A2E6  );
+ASSERT( BinOpRes_317  = 0hexB62ABDDA  );
+ASSERT( cast_76  = 0hex0000  );
+ASSERT( letvar_12669_1  = 0hexFD372D42  );
+ASSERT( cast_44  = 0hex0062  );
+ASSERT( memval_23  = 0hex89  );
+ASSERT( BinOpRes_209  = 0hex00280000  );
+ASSERT( cast_328  = 0hex00000066  );
+ASSERT( cast_228  = 0hex0000  );
+ASSERT( cast_338  = 0hex00000068  );
+ASSERT( cast_159  = 0hex00000000  );
+ASSERT( cast_119  = 0hex00000000  );
+ASSERT( memind_73  = 0hexBFFFF79C  );
+ASSERT( BinOpRes_32  = 0hexBFFFF715  );
+ASSERT( cjmp8048247_11_1  = 0bin1  );
+ASSERT( cast_14  = 0hexBFFF  );
+ASSERT( BinOpRes_250  = 0hex00E01446  );
+ASSERT( memind_30  = 0hexBFFFF771  );
+ASSERT( BinOpRes_76  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF766]  = 0hex0A  );
+ASSERT( memory_0[0hexBFFFF778]  = 0hexCA  );
+ASSERT( BinOpRes_153  = 0hexF0008167  );
+ASSERT( cast_20  = 0hex0804  );
+ASSERT( memind_58  = 0hexBFFFF78D  );
+ASSERT( BinOpRes_271  = 0hexBFFFF7A3  );
+ASSERT( BinOpRes_197  = 0hex00001302  );
+ASSERT( cast_95  = 0hex00000000  );
+ASSERT( letvar_1073_1  = 0bin0  );
+ASSERT( BinOpRes_279  = 0hex008C0000  );
+ASSERT( letvar_13133_1  = 0bin1  );
+ASSERT( R_EDX_0  = 0hex00000064  );
+ASSERT( memval_34  = 0hex8A  );
+ASSERT( cast_173  = 0hex00  );
+ASSERT( cast_133  = 0hex00  );
+ASSERT( BinOpRes_223  = 0hex4B441281  );
+ASSERT( BinOpRes_134  = 0hexBFFFF76C  );
+ASSERT( memory_0[0hexBFFFF759]  = 0hex66  );
+ASSERT( memval_62  = 0hex08  );
+ASSERT( cast_222  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF758]  = 0hex65  );
+ASSERT( BinOpRes_131  = 0hexBFFFF76B  );
+ASSERT( BinOpRes_204  = 0hexBFFFF788  );
+ASSERT( BinOpRes_120  = 0hex000A5005  );
+ASSERT( BinOpRes_330  = 0hex00670000  );
+ASSERT( memval_91  = 0hex2B  );
+ASSERT( BinOpRes_136  = 0hex00008500  );
+ASSERT( cast_153  = 0hex62  );
+ASSERT( BinOpRes_252  = 0hexAE000000  );
+ASSERT( cast_336  = 0hex00000066  );
+ASSERT( BinOpRes_201  = 0hexBFFFF787  );
+ASSERT( cast_318  = 0hex00000028  );
+ASSERT( memind_86  = 0hexBFFFF7A9  );
+ASSERT( BinOpRes_267  = 0hex00002D42  );
+ASSERT( memory_0[0hexBFFFF79E]  = 0hex58  );
+ASSERT( memval_45  = 0hex0E  );
+ASSERT( cast_38  = 0hexBFFF  );
+ASSERT( cast_261  = 0hex00000030  );
+ASSERT( BinOpRes_206  = 0hex00005800  );
+ASSERT( memory_0[0hexBFFFF78A]  = 0hex28  );
+ASSERT( cast_192  = 0bin0  );
+ASSERT( BinOpRes_293  = 0hex38046380  );
+ASSERT( memory_0[0hexBFFFF718]  = 0hex62  );
+ASSERT( memval_44  = 0hexA0  );
+ASSERT( BinOpRes_41  = 0hex00000000  );
+ASSERT( cast_69  = 0hex00  );
+ASSERT( cast_82  = 0hex0062  );
+ASSERT( cast_28  = 0hexBF  );
+ASSERT( cast_64  = 0bin1  );
+ASSERT( R_ESI_0  = 0hexBFFFFB47  );
+ASSERT( BinOpRes_68  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF76E]  = 0hex00  );
+ASSERT( cast_289  = 0hex00000084  );
+ASSERT( cast_26  = 0hexBFFF  );
+ASSERT( BinOpRes_58  = 0bin0  );
+ASSERT( BinOpRes_2  = 0hex00000000  );
+ASSERT( memind_43  = 0hexBFFFF77E  );
+ASSERT( BinOpRes_274  = 0hexBFFFF7A4  );
+ASSERT( memind_98  = 0hexBFFFF721  );
+ASSERT( BinOpRes_165  = 0hexBFFFF779  );
+ASSERT( BinOpRes_369  = 0bin1  );
+ASSERT( BinOpRes_380  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF7A7]  = 0hex8C  );
+ASSERT( BinOpRes_162  = 0hex3D000000  );
+ASSERT( BinOpRes_344  = 0hexBFFFFB47  );
+ASSERT( memval_73  = 0hex04  );
+ASSERT( memind_13  = 0hexBFFFF760  );
+ASSERT( cjmp8048247_5_1  = 0bin1  );
+ASSERT( BinOpRes_276  = 0hex00007D00  );
+ASSERT( cast_249  = 0hex00000089  );
+ASSERT( BinOpRes_11  = 0hexBFFFF71C  );
+ASSERT( BinOpRes_98  = 0hexBFFFF75E  );
+ASSERT( cast_206  = 0hex00  );
+ASSERT( letvar_10373_1  = 0hex00000062  );
+ASSERT( BinOpRes_232  = 0hex4F000000  );
+ASSERT( memind_12  = 0hexBFFFF75F  );
+ASSERT( BinOpRes_357  = 0bin1  );
+ASSERT( BinOpRes_236  = 0hex00003100  );
+ASSERT( cast_47  = 0hex62  );
+ASSERT( BinOpRes_54  = 0bin0  );
+ASSERT( cast_339  = 0hex00000001  );
+ASSERT( BinOpRes_349  = 0hex00670000  );
+ASSERT( cast_50  = 0hex00  );
+ASSERT( cast_148  = 0hex0000  );
+ASSERT( cast_179  = 0hex00  );
+ASSERT( BinOpRes_247  = 0hex00001446  );
+ASSERT( BinOpRes_307  = 0hexE729ACE7  );
+ASSERT( BinOpRes_318  = 0hex672AEEDC  );
+ASSERT( cast_77  = 0hex00  );
+ASSERT( BinOpRes_327  = 0hex00006600  );
+ASSERT( BinOpRes_150  = 0hex00008167  );
+ASSERT( memval_90  = 0hex47  );
+ASSERT( cast_45  = 0hex62  );
+ASSERT( BinOpRes_352  = 0hex68000000  );
+ASSERT( cast_160  = 0bin0  );
+ASSERT( cast_120  = 0bin0  );
+ASSERT( cast_32  = 0hex0000  );
+ASSERT( BinOpRes_220  = 0hex00441281  );
+ASSERT( cast_260  = 0hex0000008A  );
+ASSERT( cjmp804824c_17_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF789]  = 0hex58  );
+ASSERT( BinOpRes_92  = 0hexBFFFF758  );
+ASSERT( letvar_11536_1  = 0bin0  );
+ASSERT( BinOpRes_251  = 0hexBFFFF79B  );
+ASSERT( R_EDI_0  = 0hexBFFFF758  );
+ASSERT( cast_288  = 0hex00000008  );
+ASSERT( memind_4  = 0hexBFFFF71B  );
+ASSERT( BinOpRes_117  = 0hex00005005  );
+ASSERT( letvar_12945_1  = 0hexF0008167  );
+ASSERT( cast_96  = 0bin0  );
+ASSERT( BinOpRes_198  = 0hexBFFFF786  );
+ASSERT( cast_317  = 0hex0000002B  );
+ASSERT( cast_15  = 0hexFF  );
+ASSERT( memory_0[0hexBFFFF7A6]  = 0hex8C  );
+ASSERT( cast_174  = 0hex00  );
+ASSERT( cast_134  = 0hex00  );
+ASSERT( letvar_12784_1  = 0hex4B441281  );
+ASSERT( cast_271  = 0hex0000000E  );
+ASSERT( memory_0[0hexBFFFF792]  = 0hex84  );
+ASSERT( BinOpRes_290  = 0hex00046380  );
+ASSERT( cjmp8048247_b_1  = 0bin1  );
+ASSERT( memval_43  = 0hex1A  );
+ASSERT( memind_25  = 0hexBFFFF76C  );
+ASSERT( cast_60  = 0hex0000  );
+ASSERT( cast_270  = 0hex000000A0  );
+ASSERT( cast_104  = 0bin0  );
+ASSERT( BinOpRes_81  = 0hex00000000  );
+ASSERT( BinOpRes_44  = 0bin0  );
+ASSERT( memind_24  = 0hexBFFFF76B  );
+ASSERT( memind_53  = 0hexBFFFF788  );
+ASSERT( cast_9  = 0hexFF  );
+ASSERT( BinOpRes_121  = 0hexBFFFF767  );
+ASSERT( memory_0[0hexBFFFF771]  = 0hex81  );
+ASSERT( BinOpRes_346  = 0hex00006600  );
+ASSERT( memind_80  = 0hexBFFFF7A3  );
+ASSERT( BinOpRes_302  = 0hex28000000  );
+ASSERT( cast_185  = 0hex62  );
+ASSERT( memval_13  = 0hexCC  );
+ASSERT( memind_52  = 0hexBFFFF787  );
+ASSERT( BinOpRes_268  = 0hexBFFFF7A2  );
+ASSERT( letvar_3821_1  = 0hex00000062  );
+ASSERT( BinOpRes_159  = 0hex00300000  );
+ASSERT( BinOpRes_341  = 0hex00FFFB47  );
+ASSERT( memval_12  = 0hex10  );
+ASSERT( BinOpRes_42  = 0bin1  );
+ASSERT( cast_154  = 0hex0062  );
+ASSERT( R_EBP_0  = 0hexBFFFF7C8  );
+ASSERT( letvar_12623_1  = 0hex38046380  );
+ASSERT( cast_299  = 0hex00000004  );
+ASSERT( letvar_10490_1  = 0bin0  );
+ASSERT( cast_83  = 0hex00  );
+ASSERT( BinOpRes_229  = 0hex00840000  );
+ASSERT( cjmp8048316_2_1  = 0bin1  );
+ASSERT( letvar_14195_1  = 0hex00000062  );
+ASSERT( memory_0[0hexBFFFF719]  = 0hex00  );
+ASSERT( cast_39  = 0hexFF  );
+ASSERT( memory_0[0hexBFFFF7AC]  = 0hex2A  );
+ASSERT( memind_81  = 0hexBFFFF7A4  );
+ASSERT( BinOpRes_370  = 0bin1  );
+ASSERT( BinOpRes_381  = 0bin1  );
+ASSERT( memind_38  = 0hexBFFFF779  );
+ASSERT( letvar_13137_1  = 0hexBFFFFB47  );
+ASSERT( BinOpRes_147  = 0hex00008167  );
+ASSERT( BinOpRes_129  = 0hex00890000  );
+ASSERT( cast_215  = 0hex00000000  );
+ASSERT( memind_11  = 0hexBFFFF75E  );
+ASSERT( unopRes_17  = 0bin1  );
+ASSERT( cast_27  = 0hexFF  );
+ASSERT( cast_316  = 0hex00000047  );
+ASSERT( letvar_13649_1  = 0hex00000062  );
+ASSERT( BinOpRes_77  = 0hex00000002  );
+ASSERT( BinOpRes_173  = 0hexCDA080CA  );
+ASSERT( BinOpRes_217  = 0hex00001281  );
+ASSERT( cast_340  = 0bin1  );
+ASSERT( memval_42  = 0hex87  );
+ASSERT( cast_8  = 0hexBFFF  );
+ASSERT( memory_0[0hexBFFFF791]  = 0hex08  );
+ASSERT( letvar_7097_1  = 0hex00000062  );
+ASSERT( cast_51  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF76F]  = 0hexF1  );
+ASSERT( cast_149  = 0hex00  );
+ASSERT( cast_180  = 0hex0000  );
+ASSERT( BinOpRes_248  = 0hexBFFFF79A  );
+ASSERT( BinOpRes_154  = 0hexBFFFF774  );
+ASSERT( BinOpRes_308  = 0hexD82A3215  );
+ASSERT( cast_229  = 0hex00  );
+ASSERT( BinOpRes_319  = 0hex160B0322  );
+ASSERT( cast_113  = 0hex62  );
+ASSERT( cast_78  = 0hex00  );
+ASSERT( R_ESP_0  = 0hexBFFFF718  );
+ASSERT( BinOpRes_89  = 0hex00FFF758  );
+ASSERT( BinOpRes_151  = 0hexBFFFF773  );
+ASSERT( cast_46  = 0hex00000062  );
+ASSERT( BinOpRes_224  = 0hexBFFFF790  );
+ASSERT( memval_25  = 0hex2E  );
+ASSERT( letvar_8398_1  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF782]  = 0hexA0  );
+ASSERT( BinOpRes_156  = 0hex00008A00  );
+ASSERT( memory_0[0hexBFFFF763]  = 0hex2F  );
+ASSERT( letvar_5783_1  = 0bin0  );
+ASSERT( BinOpRes_221  = 0hexBFFFF78F  );
+ASSERT( memval_24  = 0hex50  );
+ASSERT( BinOpRes_287  = 0hex00006380  );
+ASSERT( memory_0[0hexBFFFF79A]  = 0hexE0  );
+ASSERT( letvar_13066_1  = 0hexBFFFF758  );
+ASSERT( memval_53  = 0hex14  );
+ASSERT( memval_80  = 0hexFD  );
+ASSERT( cast_89  = 0hex62  );
+ASSERT( cast_269  = 0hex0000001A  );
+ASSERT( BinOpRes_12  = 0hexBFFFF720  );
+ASSERT( BinOpRes_226  = 0hex00000800  );
+ASSERT( BinOpRes_243  = 0hexB1003102  );
+ASSERT( memind_72  = 0hexBFFFF79B  );
+ASSERT( memval_52  = 0hex61  );
+ASSERT( BinOpRes_118  = 0hexBFFFF766  );
+ASSERT( memval_70  = 0hex14  );
+ASSERT( cast_199  = 0hex00000000  );
+ASSERT( memory_0[0hexBFFFF762]  = 0hex01  );
+ASSERT( cast_33  = 0hex00  );
+ASSERT( BinOpRes_299  = 0hex002B0000  );
+ASSERT( unopRes_13  = 0bin1  );
+ASSERT( memind_51  = 0hexBFFFF786  );
+ASSERT( BinOpRes_21  = 0hexBFFFF722  );
+ASSERT( cast_239  = 0hex000000CC  );
+ASSERT( unopRes_8  = 0bin1  );
+ASSERT( BinOpRes_294  = 0hexBFFFF7AC  );
+ASSERT( BinOpRes_69  = 0hex00000006  );
+ASSERT( BinOpRes_338  = 0hex0000FB47  );
+ASSERT( BinOpRes_185  = 0hexBFFFF781  );
+ASSERT( BinOpRes_59  = 0hex0000000B  );
+ASSERT( letvar_2183_1  = 0hex00000062  );
+ASSERT( cast_238  = 0hex00000010  );
+ASSERT( BinOpRes_291  = 0hexBFFFF7AB  );
+ASSERT( letvar_13661_1  = 0bin1  );
+ASSERT( BinOpRes_182  = 0hexA0000000  );
+ASSERT( BinOpRes_82  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF7AE]  = 0hex2B  );
+ASSERT( R_EAX_0  = 0hex00000002  );
+ASSERT( memval_81  = 0hex42  );
+ASSERT( memval_4  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF773]  = 0hexF0  );
+ASSERT( memind_101  = 0hexBFFFFB47  );
+ASSERT( cast_48  = 0hex00  );
+ASSERT( BinOpRes_17  = 0hexBFFFF726  );
+ASSERT( memind_20  = 0hexBFFFF767  );
+ASSERT( cast_21  = 0hex04  );
+ASSERT( cast_321  = 0hex62  );
+ASSERT( unopRes_5  = 0bin1  );
+ASSERT( memval_11  = 0hex95  );
+ASSERT( memory_0[0hexBFFFF76A]  = 0hex89  );
+ASSERT( memind_79  = 0hexBFFFF7A2  );
+ASSERT( unopRes_6  = 0bin1  );
+ASSERT( BinOpRes_342  = 0hexBFFFF723  );
+ASSERT( cast_137  = 0hex62  );
+ASSERT( BinOpRes_255  = 0hexBFFFF79D  );
+ASSERT( cast_155  = 0hex00  );
+ASSERT( cast_186  = 0hex0062  );
+ASSERT( BinOpRes_170  = 0hex00A080CA  );
+ASSERT( cast_84  = 0hex0000  );
+ASSERT( cast_99  = 0hex00  );
+ASSERT( memory_0[0hexBFFFF799]  = 0hex14  );
+ASSERT( BinOpRes_86  = 0hex0000F758  );
+ASSERT( BinOpRes_37  = 0hexBFFFF712  );
+ASSERT( cast_268  = 0hex00000087  );
+ASSERT( cast_167  = 0hex00000000  );
+ASSERT( cast_127  = 0hex00000000  );
+ASSERT( memory_0[0hexBFFFF7A1]  = 0hex2D  );
+ASSERT( letvar_2122_1  = 0bin0  );
+ASSERT( BinOpRes_360  = 0bin1  );
+ASSERT( BinOpRes_371  = 0bin1  );
+ASSERT( BinOpRes_382  = 0bin1  );
+ASSERT( BinOpRes_93  = 0hex00000000  );
+ASSERT( cast_216  = 0bin0  );
+ASSERT( cjmp8048247_12_1  = 0bin1  );
+ASSERT( BinOpRes_148  = 0hexBFFFF772  );
+ASSERT( BinOpRes_296  = 0hex00004700  );
+ASSERT( BinOpRes_78  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF71A]  = 0hex00  );
+ASSERT( letvar_12899_1  = 0hexCDA080CA  );
+ASSERT( cast_251  = 0hex0000002E  );
+ASSERT( letvar_1612_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF784]  = 0hex02  );
+ASSERT( memval_72  = 0hexAE  );
+ASSERT( BinOpRes_218  = 0hexBFFFF78E  );
+ASSERT( cast_306  = 0hex000000FD  );
+ASSERT( cast_250  = 0hex00000050  );
+ASSERT( cast_52  = 0hex00000000  );
+ASSERT( cast_279  = 0hex00000014  );
+ASSERT( cast_150  = 0hex00  );
+ASSERT( cast_181  = 0hex00  );
+ASSERT( memind_71  = 0hexBFFFF79A  );
+ASSERT( memory_0[0hexBFFFF761]  = 0hex44  );
+ASSERT( memval_51  = 0hex83  );
+ASSERT( memind_33  = 0hexBFFFF774  );
+ASSERT( BinOpRes_90  = 0hexBFFFF727  );
+ASSERT( BinOpRes_309  = 0hexC82AB37C  );
+ASSERT( cast_65  = 0hex62  );
+ASSERT( BinOpRes_320  = 0hex66633926  );
+ASSERT( BinOpRes_45  = 0hex00000012  );
+ASSERT( cast_347  = 0hex00000001  );
+ASSERT( BinOpRes_39  = 0hex00000001  );
+ASSERT( cast_278  = 0hex00000061  );
+ASSERT( memind_32  = 0hexBFFFF773  );
+ASSERT( BinOpRes_52  = 0bin0  );
+ASSERT( memval_10  = 0hex0E  );
+ASSERT( cast_296  = 0hex00000014  );
+ASSERT( R_EIP_0  = 0hex0804FB8D  );
+ASSERT( memind_61  = 0hexBFFFF790  );
+ASSERT( cast_114  = 0hex0062  );
+ASSERT( memval_101  = 0hex65  );
+ASSERT( cast_231  = 0hex00000058  );
+ASSERT( memind_60  = 0hexBFFFF78F  );
+ASSERT( BinOpRes_288  = 0hexBFFFF7AA  );
+ASSERT( BinOpRes_179  = 0hex001A0000  );
+ASSERT( memval_20  = 0hex57  );
+ASSERT( memval_66  = 0hex31  );
+ASSERT( letvar_12738_1  = 0hexB1003102  );
+ASSERT( cast_230  = 0hex00  );
+ASSERT( cast_307  = 0hex00000042  );
+ASSERT( BinOpRes_25  = 0hexBFFFF71E  );
+ASSERT( cast_200  = 0bin0  );
+ASSERT( memval_79  = 0hex37  );
+ASSERT( BinOpRes_3  = 0hex00000062  );
+ASSERT( memind_19  = 0hexBFFFF766  );
+ASSERT( BinOpRes_33  = 0hexBFFFF716  );
+ASSERT( cjmp8048247_e_1  = 0bin1  );
+ASSERT( cast_90  = 0hex0062  );
+ASSERT( cast_16  = 0hexBF  );
+ASSERT( BinOpRes_105  = 0hexBFFFF761  );
+ASSERT( cjmp8048247_9_1  = 0bin1  );
+ASSERT( BinOpRes_70  = 0bin0  );
+ASSERT( BinOpRes_13  = 0hexBFFFF730  );
+ASSERT( BinOpRes_60  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF783]  = 0hex32  );
+ASSERT( BinOpRes_339  = 0hexBFFFF722  );
+ASSERT( BinOpRes_102  = 0hex10000000  );
+ASSERT( cast_237  = 0hex00000095  );
+ASSERT( memind_88  = 0hexBFFFF7AB  );
+ASSERT( cast_4  = 0hex00000000  );
+ASSERT( memind_46  = 0hexBFFFF781  );
+ASSERT( cast_71  = 0hex00000000  );
+ASSERT( BinOpRes_167  = 0hex000080CA  );
+ASSERT( memory_0[0hexBFFFF7A9]  = 0hex63  );
+ASSERT( cast_10  = 0hexBF  );
+ASSERT( R_EFLAGS_0  = 0hex00200246  );
+ASSERT( BinOpRes_193  = 0hex32A0F20E  );
+ASSERT( cjmp8048247_6_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF7A0]  = 0hex42  );
+ASSERT( cast_58  = 0hex62  );
+ASSERT( letvar_10919_1  = 0hex00000062  );
+ASSERT( cast_247  = 0hex00000001  );
+ASSERT( memval_50  = 0hex13  );
+ASSERT( cjmp8048247_7_1  = 0bin1  );
+ASSERT( memory_0[0hexBFFFF779]  = 0hex80  );
+ASSERT( memind_100  = 0hexBFFFF723  );
+ASSERT( cast_322  = 0hex0062  );
+ASSERT( BinOpRes_174  = 0hexBFFFF77C  );
+ASSERT( cast_100  = 0hex0000  );
+ASSERT( cast_187  = 0hex00  );
+ASSERT( cast_156  = 0hex0000  );
+ASSERT( cast_85  = 0hex00  );
+ASSERT( BinOpRes_171  = 0hexBFFFF77B  );
+ASSERT( memind_74  = 0hexBFFFF79D  );
+ASSERT( memval_71  = 0hexE0  );
+ASSERT( memory_0[0hexBFFFF78C]  = 0hex81  );
+ASSERT( cast_138  = 0hex0062  );
+ASSERT( memval_33  = 0hexA2  );
+ASSERT( BinOpRes_87  = 0hexBFFFF726  );
+ASSERT( cast_40  = 0hexBF  );
+ASSERT( post_1  = 0bin1  );
+ASSERT( memind_89  = 0hexBFFFF7AC  );
+ASSERT( cast_168  = 0bin0  );
+ASSERT( BinOpRes_176  = 0hex00008700  );
+ASSERT( memory_0[0hexBFFFF776]  = 0hex30  );
+ASSERT( BinOpRes_263  = 0hex50583604  );
+ASSERT( cast_128  = 0bin0  );
+ASSERT( memval_32  = 0hexF0  );
+ASSERT( memory_0[0hexBFFFF772]  = 0hex00  );
+ASSERT( memval_61  = 0hex33  );
+ASSERT( cast_70  = 0hex00  );
+ASSERT( BinOpRes_361  = 0bin1  );
+ASSERT( memval_78  = 0hex2D  );
+ASSERT( BinOpRes_372  = 0bin1  );
+ASSERT( cast_277  = 0hex00000083  );
+ASSERT( memind_31  = 0hexBFFFF772  );
+ASSERT( memval_60  = 0hex4B  );
+ASSERT( letvar_12059_1  = 0bin1  );
+ASSERT( BinOpRes_135  = 0hexBFFFF76D  );
+ASSERT( cast_236  = 0hex0000000E  );
+ASSERT( memind_1  = 0hexBFFFF718  );
+ASSERT( BinOpRes_240  = 0hex00003102  );
+ASSERT( BinOpRes_272  = 0hexFD000000  );
+ASSERT( memind_59  = 0hexBFFFF78E  );
+ASSERT( BinOpRes_132  = 0hex50000000  );
+ASSERT( letvar_13065_1  = 0hex00000000  );
+ASSERT( memory_0[0hexBFFFF77B]  = 0hexCD  );
+ASSERT( BinOpRes_244  = 0hexBFFFF798  );
+ASSERT( cast_53  = 0bin0  );
+ASSERT( memval_19  = 0hex0A  );
+ASSERT( BinOpRes_205  = 0hexBFFFF789  );
+ASSERT( memind_8  = 0hexBFFFF727  );
+ASSERT( BinOpRes_63  = 0hex00000009  );
+ASSERT( cast_182  = 0hex00  );
+ASSERT( cast_246  = 0hex00000057  );
+ASSERT( BinOpRes_246  = 0hex00001400  );
+ASSERT( BinOpRes_46  = 0bin0  );
+ASSERT( cast_335  = 0hex00000065  );
+ASSERT( cast_348  = 0bin1  );
+ASSERT( letvar_8735_1  = 0hex00000062  );
+ASSERT( BinOpRes_40  = 0bin0  );
+ASSERT( memory_0[0hexBFFFF71B]  = 0hex00  );
+ASSERT( BinOpRes_202  = 0hex61000000  );
+ASSERT( BinOpRes_310  = 0hex055B3E1E  );
+ASSERT( BinOpRes_321  = 0hex639A6668  );
+ASSERT( letvar_6005_1  = 0hex00000062  );
+ASSERT( unopRes_20  = 0bin1  );
+ASSERT( cast_305  = 0hex00000037  );
+ASSERT( memval_88  = 0hex38  );
+ASSERT( memory_0[0hexBFFFF75F]  = 0hex10  );
+ASSERT( memory_0[0hexBFFFF75D]  = 0hex0E  );
+ASSERT( cast_66  = 0hex0062  );
+ASSERT( cast_115  = 0hex00  );
+ASSERT( BinOpRes_84  = 0hexBFFFF725  );
+ASSERT( memory_0[0hexBFFFF78B]  = 0hex14  );
+ASSERT( memory_0[0hexBFFFF76C]  = 0hex2E  );
+ASSERT( cast_193  = 0hex62  );
+ASSERT( memind_87  = 0hexBFFFF7AA  );
+ASSERT( letvar_4367_1  = 0hex00000062  );
+ASSERT( BinOpRes_275  = 0hexBFFFF7A5  );
+ASSERT( BinOpRes_83  = 0hexBFFFF724  );
+ASSERT( cast_22  = 0hex08  );
+ASSERT( BinOpRes_4  = 0hexBFFFF71A  );
+ASSERT( BinOpRes_190  = 0hex00A0F20E  );
+ASSERT( cast_341  = 0hex62  );
+ASSERT( cast_34  = 0hex00  );
+ASSERT( letvar_4913_1  = 0hex00000062  );
+ASSERT( memval_100  = 0hexBF  );
+ASSERT( letvar_11013_1  = 0bin0  );
+ASSERT( cast_91  = 0hex00  );
+ASSERT( cast_297  = 0hex000000E0  );
+ASSERT( cast_276  = 0hex00000013  );
+ASSERT( memory_0[0hexBFFFF75B]  = 0hex68  );
+ASSERT( BinOpRes_99  = 0hex00950000  );
+ASSERT( memind_99  = 0hexBFFFF722  );
+ASSERT( memory_0[0hexBFFFF76B]  = 0hex50  );
+ASSERT( memind_14  = 0hexBFFFF761  );
+ASSERT( BinOpRes_8  = 0hex00000000  );
+ASSERT( cast_72  = 0bin0  );
+ASSERT( memval_89  = 0hex2A  );
+ASSERT( memory_0[0hexBFFFF768]  = 0hex01  );
+ASSERT( BinOpRes_168  = 0hexBFFFF77A  );
+ASSERT( BinOpRes_113  = 0hex2F0144CC  );
+ASSERT( BinOpRes_22  = 0hexBFFFF723  );
+ASSERT( memory_0[0hexBFFFF794]  = 0hex02  );
+
+real	0m0.653s
+user	0m0.628s
+sys	0m0.012s
+Runtime: 0 sec
+=============== End of testcase ===============
+===============================================
+bigarray-test/noregions-fullmemite.stp.cvc:
+Language: all
+Checking proofs: no
+STP options: -d
+***
+Running /home/vganesh/stp/bin/stp -d < /home/vganesh/stp/bigarray-test/noregions-fullmemite.stp.cvc
+***
+
+real	0m10.999s
+user	0m10.605s
+sys	0m0.352s
+Runtime: 11 sec
+=============== End of testcase ===============
+
+Statistics:
+Total tests run: 43
+Total running time: 3089 sec
+Total number of proofs checked: 0
+Problematic cases: 3
+
+Detailed Statistics:
+Tests running longer [3]:
+  bigarray-test/cmu-model15.cvc
+  bigarray-test/cmu-model16.cvc
+  bigarray-test/cmu-model17.cvc

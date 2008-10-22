@@ -1,0 +1,213 @@
+//////////////////////////////////////////////////////////
+//
+// Owned and copyright BitBlaze, 2007. All rights reserved.
+// 
+//////////////////////////////////////////////////////////
+
+typedef [abstract] void* Vc;
+typedef [abstract] void* Expr;
+typedef [abstract] void* Typ;
+
+// o  : optimizations
+// c  : check counterexample
+// p  : print counterexample
+// h  : help
+// s  : stats
+// v  : print nodes
+void vc_setFlags(char c);
+
+//! Flags can be NULL
+Vc vc_createValidityChecker(void);
+//destroys the STP instance, and removes all the created expressions
+void vc_Destroy(Vc vc);
+
+
+// Basic types
+Typ vc_boolType(Vc vc);
+
+//! Create an array type
+Typ vc_arrayType(Vc vc, Typ typeIndex, Typ typeData);
+
+/////////////////////////////////////////////////////////////////////////////
+// Expr manipulation methods                                               //
+/////////////////////////////////////////////////////////////////////////////
+
+//! Create a variable with a given name and type 
+/*! The type cannot be a function type. */  
+Expr vc_varExpr(Vc vc, [string] char * name, Typ type);
+
+Expr vc_varExpr1(Vc vc, [string] char* name, 
+		  int indexwidth, int valuewidth);
+
+//! Get the expression and type associated with a name.
+/*!  If there is no such Expr, a NULL Expr is returned. */
+//Expr vc_lookupVar(Vc vc, [string] char* name, Type* type);
+
+//! Get the type of the Expr.
+//Typ vc_getType(Vc vc, Expr e);
+
+//! Create an equality expression.  The two children must have the same type.
+Expr vc_eqExpr(Vc vc, Expr child0, Expr child1);
+
+// Boolean expressions
+
+// The following functions create Boolean expressions.  The children provided
+// as arguments must be of type Boolean.
+Expr vc_trueExpr(Vc vc);
+Expr vc_falseExpr(Vc vc);
+Expr vc_notExpr(Vc vc, Expr child);
+Expr vc_andExpr(Vc vc, Expr left, Expr right);
+Expr vc_andExprN(Vc vc, Expr* children, int numOfChildNodes);
+Expr vc_orExpr(Vc vc, Expr left, Expr right);
+Expr vc_orExprN(Vc vc, Expr* children, int numOfChildNodes);
+Expr vc_impliesExpr(Vc vc, Expr hyp, Expr conc);
+Expr vc_iffExpr(Vc vc, Expr left, Expr right);
+Expr vc_iteExpr(Vc vc, Expr ifpart, Expr thenpart, Expr elsepart);
+
+//Boolean to single bit BV Expression
+Expr vc_boolToBVExpr(Vc vc, Expr form);
+
+// Arrays
+
+//! Create an expression for the value of array at the given index
+Expr vc_readExpr(Vc vc, Expr array, Expr index);
+
+//! Array update; equivalent to "array WITH [index] := newValue"
+Expr vc_writeExpr(Vc vc, Expr array, Expr index, Expr newValue);
+
+// Expr I/O
+//! Expr vc_parseExpr(Vc vc, [string] char* s);
+void vc_printExpr(Vc vc, Expr e);
+//! Print 'e' into an open file descriptor
+void vc_printExprFile(Vc vc, Expr e, int fd);
+//! Print state of vc into malloc'd buffer buf and store the lenth into *len
+//void vc_printStateToBuffer(Vc vc, char **buf, unsigned long *len);
+//! Print Expr to malloced buffer buf
+void vc_printExprToBuffer(Vc vc, Expr e, char **buf, unsigned long * len);
+//! print counterexample
+void vc_printCounterExample(Vc vc);
+//! prints variable declarations
+void vc_printVarDecls(Vc vc);
+//! prints asserts
+void vc_printAsserts(Vc vc);
+//! prints the state of the query to malloc'd buffer *buf and stores the
+//! length of the buffer to *len.
+void vc_printQueryStateToBuffer(Vc vc, Expr e,char **buf,unsigned long *len);
+//! prints query
+void vc_printQuery(Vc vc);
+
+/////////////////////////////////////////////////////////////////////////////
+// Context-related methods                                                 //
+/////////////////////////////////////////////////////////////////////////////
+
+//! Assert a new formula in the current context.  
+/*! The formula must have Boolean type. */
+void vc_assertFormula(Vc vc, Expr e);
+
+//! Simplify e with respect to the current context
+Expr vc_simplify(Vc vc, Expr e);
+
+//! Check validity of e in the current context.
+/*!  If the result is true, then the resulting context is the same as
+ * the starting context.  If the result is false, then the resulting
+ * context is a context in which e is false.  e must have Boolean
+ * type.
+ * Return values:
+ *   0 is INVALID
+ *   1 is VALID
+ *   2 is ERROR 
+ */
+int vc_query(Vc vc, Expr e);
+
+//! Return the counterexample after a failed query.
+Expr vc_getCounterExample(Vc vc, Expr e);
+
+//! get size of counterexample, i.e. the number of variables/array
+//locations in the counterexample.
+int vc_counterexample_size(Vc vc);
+
+//! Checkpoint the current context and increase the scope level
+void vc_push(Vc vc);
+
+//! Restore the current context to its state at the last checkpoint
+void vc_pop(Vc vc);
+
+//! Return an int from a constant bitvector expression
+int getBVInt(Expr e);
+//! Return an unsigned int from a constant bitvector expression
+unsigned int getBVUnsigned(Expr e);
+//! Return an unsigned long long int from a constant bitvector expressions
+[int64] unsigned long long int getBVUnsignedLongLong(Expr e);
+
+/**************************/
+/* BIT VECTOR OPERATIONS  */
+/**************************/
+Typ vc_bvType(Vc vc, int no_bits);
+Typ vc_bv32Type(Vc vc);
+
+Expr vc_bvConstExprFromStr(Vc vc, [string] char* binary_repr);
+Expr vc_bvConstExprFromInt(Vc vc, int n_bits, unsigned int val);
+Expr vc_bv32ConstExprFromInt(Vc vc, [int32] unsigned int val);
+Expr vc_bvConstExprFromLL(Vc vc, int n_bits, [int64]unsigned long long val);
+
+Expr vc_bvConcatExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvPlusExpr(Vc vc, int n_bits, Expr left, Expr right);
+Expr vc_bv32PlusExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvMinusExpr(Vc vc, int n_bits, Expr left, Expr right);
+Expr vc_bv32MinusExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvMultExpr(Vc vc, int n_bits, Expr left, Expr right);
+Expr vc_bv32MultExpr(Vc vc, Expr left, Expr right);
+// left divided by right i.e. left/right
+Expr vc_bvDivExpr(Vc vc, int n_bits, Expr left, Expr right);
+// left modulo right i.e. left%right
+Expr vc_bvModExpr(Vc vc, int n_bits, Expr left, Expr right);
+
+Expr vc_bvLtExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvLeExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvGtExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvGeExpr(Vc vc, Expr left, Expr right);
+
+Expr vc_sbvLtExpr(Vc vc, Expr left, Expr right);
+Expr vc_sbvLeExpr(Vc vc, Expr left, Expr right);
+Expr vc_sbvGtExpr(Vc vc, Expr left, Expr right);
+Expr vc_sbvGeExpr(Vc vc, Expr left, Expr right);
+
+Expr vc_bvUMinusExpr(Vc vc, Expr child);
+
+Expr vc_bvAndExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvOrExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvXorExpr(Vc vc, Expr left, Expr right);
+Expr vc_bvNotExpr(Vc vc, Expr child);
+
+Expr vc_bvLeftShiftExpr(Vc vc, int sh_amt, Expr child);
+Expr vc_bvRightShiftExpr(Vc vc, int sh_amt, Expr child);
+/* Same as vc_bvLeftShift only that the answer in 32 bits long */
+Expr vc_bv32LeftShiftExpr(Vc vc, int sh_amt, Expr child);
+/* Same as vc_bvRightShift only that the answer in 32 bits long */
+Expr vc_bv32RightShiftExpr(Vc vc, int sh_amt, Expr child);
+Expr vc_bvVar32LeftShiftExpr(Vc vc, Expr sh_amt, Expr child);
+Expr vc_bvVar32RightShiftExpr(Vc vc, Expr sh_amt, Expr child);
+Expr vc_bvVar32DivByPowOfTwoExpr(Vc vc, Expr child, Expr rhs);
+
+Expr vc_bvExtract(Vc vc, Expr child, int high_bit_no, int low_bit_no);
+Expr vc_bvBoolExtract(Vc vc, Expr child, int bit_no);
+
+Expr vc_bvSignExtend(Vc vc, Expr child, int nbits);
+
+/*C pointer support:  C interface to support C memory arrays in CVcL */
+Expr vc_bvCreateMemoryArray(Vc vc, [string] char * arrayName);
+Expr vc_bvReadMemoryArray(Vc vc, 
+			  Expr array, Expr byteIndex, int numOfBytes);
+Expr vc_bvWriteToMemoryArray(Vc vc, 
+			       Expr array, Expr  byteIndex, 
+			       Expr element, int numOfBytes);
+
+[string] char* exprString(Expr e);
+
+[string] char* typeString(Typ t);
+
+Expr getChild(Expr e, int i);
+
+/* Register the given error handler to be called for each fatal error.*/
+//void vc_registerErrorHandler(void (*error_hdlr)(char* err_msg));
+void libstp_regerrorhandler(void);

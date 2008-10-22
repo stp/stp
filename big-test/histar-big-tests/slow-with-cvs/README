@@ -1,0 +1,17 @@
+Okay, compile and build the test C (just need to give include path to
+stp and lib dir).  You probably want to build an intermediate .o
+because compilation of it takes quite a while since it is so
+large. I'm sure it can be trimmed down I just don't have time to do it
+at the moment.
+
+i.e.
+g++ -c -o test.o test.c -I/home/ddunbar/include
+
+and link
+
+g++ -o test test.o -L/home/ddunbar/lib -lstp
+
+now if I link this with the current stp and try to run it just
+crashes. If I run it using forked stp queries it completes ok, but
+runs much much slower. If I link it with the stp from 2007-11-01 then
+it runs to completion in about 3s on my machine.

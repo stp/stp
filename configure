@@ -1,0 +1,64 @@
+#!/bin/sh
+
+#********************************************************************
+# AUTHORS: Vijay Ganesh, David L. Dill
+#
+# BEGIN DATE: November, 2005
+#
+# LICENSE: Please view LICENSE file in the home dir of this Program
+#********************************************************************
+
+# check for an option --with-prefix=/path/to/prefix and use that as the 
+# prefix, otherwise use /usr/local
+PREFIX=/usr/local
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+	--with-prefix=*)
+	    arg=`expr "x$1" : 'x[^=]*=\(.*\)'`
+	    PREFIX=$arg;;
+	--with-g++=*)
+	    arg=`expr "x$1" : 'x[^=]*=\(.*\)'`    
+	    CXX=$arg
+	    echo "Using g++ instead of gcc";;
+	*)
+	    echo "Usage: configure [options]"
+	    echo "   --with-prefix=/prefix/path   Install STP at the specified path"
+	    echo "configure failed"
+	    exit 1;;
+    esac
+
+    shift
+done
+
+
+echo "PREFIX=$PREFIX" > config.info
+echo "Setting prefix to... $PREFIX"
+if [ $CXX ]
+then echo "CXX=$CXX" >> config.info
+export CXX="$CXX"
+echo "Setting CXX to... $CXX"
+fi
+
+if [ ! -d $PREFIX/include ]
+then mkdir $PREFIX/include
+fi
+
+if [ ! -d $PREFIX/bin ]
+then mkdir $PREFIX/bin
+fi
+
+if [ ! -d $PREFIX/lib ]
+then mkdir $PREFIX/lib
+fi
+
+if [ ! -d $PREFIX/include/stp ]
+then mkdir $PREFIX/include/stp
+fi
+
+echo "STP is configured successfully."
+cp Makefile.in Makefile
+
+echo
+echo "Type 'make' to compile STP."
+echo "Type 'make install' to compile & install STP."
