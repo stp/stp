@@ -83,7 +83,7 @@ int main(int argc, char ** argv) {
   helpstring +=  "-h  : help\n";
 
   for(int i=1; i < argc;i++) {
-    if(argv[i][0] == '-')
+    if(argv[i][0] == '-') {
       switch(argv[i][1]) {
       case 'a' :
 	BEEV::optimize = false;
@@ -151,7 +151,14 @@ int main(int argc, char ** argv) {
 	return -1;
 	break;
       }
-    else {
+      if(argv[i][2]) {
+	fprintf(stderr, "Multiple character options are not allowed.\n");
+	fprintf(stderr, "(-ab is not an abbreviation for -a -b)\n");
+	fprintf(stderr,usage,prog);
+	cout << helpstring;
+	return -1;
+      }
+    } else {
       infile = argv[i];
       yyin = fopen(infile,"r");
       if(yyin == NULL) {
