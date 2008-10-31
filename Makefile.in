@@ -1,6 +1,6 @@
  # STP (Simple Theorem Prover) top level makefile
  #
- # To make in debug mode, type 'make "CLFAGS=-ggdb"
+ # To make in debug mode, type 'make "CFLAGS=-ggdb"
  # To make in optimized mode, type 'make "CFLAGS=-O2" 
 
 
@@ -19,13 +19,13 @@ HEADERS=c_interface/*.h
 .PHONY: all
 all:
 	$(MAKE) -C AST
-	$(MAKE) -C sat
+	$(MAKE) -C sat/core lib
 	$(MAKE) -C simplifier
 	$(MAKE) -C bitvec
 	$(MAKE) -C c_interface
 	$(MAKE) -C constantbv
 	$(MAKE) -C parser
-	$(AR) rc libstp.a  AST/*.o sat/*.o simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o
+	$(AR) rc libstp.a  AST/*.o sat/core/*.or simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
@@ -33,6 +33,7 @@ all:
 	@echo ""
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
+
 
 .PHONY: install
 install: all
@@ -50,11 +51,11 @@ clean:
 	rm -rf bin/*~
 	rm -rf bin/stp
 	rm -rf *.log
-	rm -rf Makefile
-	rm -rf config.info
+	#rm -rf Makefile
+	#rm -rf config.info
 	rm -f TAGS
 	$(MAKE) clean -C AST
-	$(MAKE) clean -C sat
+	$(MAKE) clean -C sat/core
 	$(MAKE) clean -C simplifier
 	$(MAKE) clean -C bitvec
 	$(MAKE) clean -C parser
@@ -84,8 +85,30 @@ regress:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-#	bin/run_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
-	bin/run_tests $(ALL_OPTIONS) 2>&1 | grep -v "ulimit" | grep -v "elapsed" | grep -v "swaps" | tee -a $(REGRESS_LOG);
+	bin/run_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+
+# The higher the level, the more tests are run (3 = all)
+REGRESS_TESTS0 = test \
+ test/EGT
+REGRESS_LEVEL=4
+REGRESS_TESTS=$(REGRESS_TESTS0)
+#REGRESS_LOG = `date +%Y-%m-%d`"-regress-bigarray.log"
+PROGNAME=bin/stp
+ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
+
+.PHONY: regressbigarray
+regressbigarray:
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	bin/run_bigarray_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
