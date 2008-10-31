@@ -20,6 +20,8 @@
 #include <hash_map>
 #endif
 
+#include <cstring>
+
 using namespace std; 
 namespace BEEV {
 #ifdef EXT_HASH_MAP
