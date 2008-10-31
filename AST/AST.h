@@ -15,6 +15,12 @@
 #ifdef EXT_HASH_MAP
 #include <ext/hash_set>
 #include <ext/hash_map>
+#elif defined(TR1_UNORDERED_MAP)
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+#define hash_map tr1::unordered_map
+#define hash_set tr1::unordered_set
+#define hash_multiset tr1::unordered_multiset
 #else
 #include <hash_set>
 #include <hash_map>
@@ -24,6 +30,7 @@
 #include <string>
 #include <map>
 #include <set>
+#include <algorithm>
 #include "ASTUtil.h"
 #include "ASTKind.h"
 #include "../sat/core/Solver.h"
@@ -543,7 +550,11 @@ namespace BEEV {
     class ASTSymbolHasher{
     public:
       size_t operator() (const ASTSymbol *sym_ptr) const{ 
+#ifdef TR1_UNORDERED_MAP
+	tr1::hash<string> h;
+#else
 	hash<char*> h; 
+#endif
 	return h(sym_ptr->_name); 
       };
     };

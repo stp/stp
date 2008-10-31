@@ -15,6 +15,9 @@
 #ifdef EXT_HASH_MAP
 #include <ext/hash_set>
 #include <ext/hash_map>
+#elif defined(TR1_UNORDERED_MAP)
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
 #else
 #include <hash_set>
 #include <hash_map>
@@ -97,8 +100,13 @@ namespace BEEV {
   };
 
   // Table for storing function count stats.
+#ifdef TR1_UNORDERED_MAP
+  typedef tr1::unordered_map<const char*,int, 
+                             tr1::hash<const char *>,eqstr> function_counters;
+#else
   typedef hash_map<const char*,int, 
 		   hash<char *>,eqstr> function_counters;
+#endif
 
   void CountersAndStats(const char * functionname);
 
