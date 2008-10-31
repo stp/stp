@@ -924,7 +924,7 @@ namespace BEEV {
 
 	//cout << "debugging: " << ss;
 	size_t pos = ss.find('_',0);
-	if(!(0< pos < ss.size()))
+	if(!((0 < pos) && (pos < ss.size())))
 	  continue;
 
 	//get the associated length

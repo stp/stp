@@ -797,7 +797,7 @@ namespace BEEV {
     //number of bits in unsigned long. The variable "copied" keeps
     //track of the number of chunks copied so far
 
-    while(copied + sizeof(unsigned long)<<3 < width){
+    while(copied + (sizeof(unsigned long)<<3) < width){
       CONSTANTBV::BitVector_Chunk_Store(bv, sizeof(unsigned long)<<3,copied,c_val);
       bvconst = bvconst >> (sizeof(unsigned long) << 3);
       c_val = (0x00000000ffffffffLL) & bvconst;
