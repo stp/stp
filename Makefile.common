@@ -1,3 +1,4 @@
+# This is a -*- makefile -*-, Emacs
 #Please refer LICENSE FILE in the home directory for licensing
 #information always use full screen mode to view/edit this file in
 #emacs
@@ -6,10 +7,11 @@
 #OPTIONS1 = -DNATIVE_C_ARITH
 #OPTIONS2 = -DSMTLIB
 
-#CFLAGS_BASE = -g -ggdb -pg $(OPTIONS1) $(OPTIONS2)
-#CFLAGS_BASE = -ggdb $(OPTIONS1) $(OPTIONS2)
+#OPTIMIZE = -g -pg # Debugging and gprof-style profiling
+#OPTIMIZE = -g     # Debugging
+OPTIMIZE = -O3     # Maximum optimization
 
-CFLAGS_BASE = -O3 $(OPTIONS1) $(OPTIONS2)
+CFLAGS_BASE = $(OPTIMIZE) $(OPTIONS1) $(OPTIONS2)
 # You can compile using make STATIC=true to compile a statically linked executable
 # Note that you should execute liblinks.sh first.
 ifdef STATIC
@@ -42,6 +44,7 @@ else
 endif
 
 CXXFLAGS = $(CFLAGS) -Wall -DEXT_HASH_MAP
+#CXXFLAGS = $(CFLAGS) -Wall -DTR1_UNORDERED_MAP
 #CXXFLAGS = $(CFLAGS) -Wall 
 #LDFLAGS= -lstdc++
 #LDFLAGS= -lstdc++ -pg
