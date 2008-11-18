@@ -35,7 +35,7 @@ UNIVERSAL_SDK = /Developer/SDKs/MacOSX10.4u.sdk
 
 
 # use the darmin test as a proxy for detecting Mac OS X
-ifeq ($(shell uname -s), Darwin)
+ifeq ($(shell uname -s), DarwinX)
   LDFLAGS = -Wl,-syslibroot,$(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(LDFLAGS_BASE)
   CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
 else
