@@ -12,11 +12,17 @@ Install
 -------
 See INSTALL file in the home dir of this program
 
-Authors
--------
-Vijay Ganesh, Stanford University, Stanford, CA, USA
-David L. Dill, Stanford University, Stanford, CA, USA
-Tim King, Stanford University, Stanford, CA, USA
+Primary Author
+--------------
+Vijay Ganesh, Stanford University, Stanford, CA, USA (Nov, 2005 to present)
+
+
+Others Who Have Contributed Some Code
+-------------------------------------
+David L. Dill, Stanford University, Stanford, CA, USA (Nov - Dec, 2005)
+Michael Katelman, University of Illinois, Urbana-Champaign, USA (July - Oct, 2008)
+Tim King, Stanford University, Stanford, CA, USA (July - Sep, 2007)
+
 
 Makefiles and configuration scripts
 ------------------------------------
