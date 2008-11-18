@@ -84,7 +84,7 @@ my %optionsDefault = ("level" => 4,
 my %options = ();
 # The list of testcases to run
 #
-my @testcases = "bigarray-test";
+my @testcases = "sample-tests";
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
