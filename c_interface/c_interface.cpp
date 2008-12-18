@@ -24,6 +24,10 @@ BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
 bool cinterface_exprdelete_on = false;
 
+/* GLOBAL FUNCTION: parser
+ */
+extern int yyparse();
+
 void vc_setFlags(char c) {
   std::string helpstring = "Usage: stp [-option] [infile]\n\n";
   helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
@@ -1401,6 +1405,34 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
         return strdup(s);
 }
 #endif
+
+
+Expr vc_parseExpr(VC vc, char* infile) {
+  bmstar b = (bmstar)vc;
+  extern FILE* yyin;
+  const char * prog = "stp";
+  
+  yyin = fopen(infile,"r");
+  if(yyin == NULL) {
+    fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+    BEEV::FatalError("");
+  }
+  
+  BEEV::globalBeevMgr_for_parser = b;
+
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+  if(0 != c) {
+    cout << CONSTANTBV::BitVector_Error(c) << endl;
+    return 0;
+  }
+
+  yyparse();
+  nodelist aaa = b->GetAsserts();
+  node o =  b->CreateNode(BEEV::AND,aaa);
+  
+  nodestar output = new node(o);
+  return output;
+} //end of vc_parseExpr()
 
 char* exprString(Expr e){
   stringstream ss;

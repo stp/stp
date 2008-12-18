@@ -21,6 +21,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdio.h>
   
 #ifdef STP_STRONG_TYPING
 #else
@@ -109,8 +111,8 @@ extern "C" {
   //! Array update; equivalent to "array WITH [index] := newValue"
   Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
   
-  // Expr I/O
-  //! Expr vc_parseExpr(VC vc, char* s);
+  // Expr I/O: Parses directly from file in the c_interface. pretty cool!!
+  Expr vc_parseExpr(VC vc, char* s);
 
   //! Prints 'e' to stdout.
   void vc_printExpr(VC vc, Expr e);
