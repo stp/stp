@@ -503,7 +503,8 @@ namespace BEEV {
       ASTNode modelentry;
       if(CounterExampleMap.find(index) != CounterExampleMap.end()) {	
 	//index has a const value in the CounterExampleMap
-	ASTNode indexVal = CounterExampleMap[index];
+	//ASTNode indexVal = CounterExampleMap[index];
+   ASTNode indexVal = TermToConstTermUsingModel(CounterExampleMap[index], ArrayReadFlag);
 	modelentry = CreateTerm(READ, arrName.GetValueWidth(), arrName, indexVal);
       }
       else { 
