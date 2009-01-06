@@ -103,9 +103,6 @@ namespace BEEV {
     // Usual constructor.  
     ASTNode(ASTInternal *in);
 
-    //Check if it points to a null node
-    bool IsNull () const { return _int_node_ptr == NULL; }
-
     //Equal iff ASTIntNode pointers are the same.
     friend bool operator==(const ASTNode node1, const ASTNode node2){
       return ((size_t) node1._int_node_ptr) == ((size_t) node2._int_node_ptr);
@@ -127,6 +124,9 @@ namespace BEEV {
     }
 
   public:
+    //Check if it points to a null node
+    bool IsNull () const { return _int_node_ptr == NULL; }
+
     // This is for sorting by expression number (used in Boolean
     //optimization).
     // With any ordering operation, the properties of the order

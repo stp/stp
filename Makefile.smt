@@ -18,17 +18,17 @@ HEADERS=c_interface/*.h
 .PHONY: all
 all:
 	$(MAKE) -C AST
-	$(MAKE) -C sat
+	$(MAKE) -C sat/core lib
 	$(MAKE) -C simplifier
 	$(MAKE) -C bitvec
 	$(MAKE) -C c_interface
 	$(MAKE) -C constantbv
 	$(MAKE) -C parser -f Makefile.smt
-	$(AR) rc libstp.a  AST/*.o sat/*.o simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o
-	ranlib libstp.a
+	$(AR) rc libstp.a  AST/*.o sat/core/*.or simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o
+	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
-	$(MAKE) TAGS
+#	$(MAKE) TAGS
 	@echo ""
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
@@ -53,7 +53,7 @@ clean:
 	rm -rf config.info
 	rm -f TAGS
 	$(MAKE) clean -C AST
-	$(MAKE) clean -C sat
+	$(MAKE) clean -C sat/core
 	$(MAKE) clean -C simplifier
 	$(MAKE) clean -C bitvec
 	$(MAKE) clean -C parser

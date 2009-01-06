@@ -375,7 +375,7 @@ foreach my $testcase (@testcases) {
 	# Now, run the sucker
 	my $timeMax = getOpt('time');
 	my $timeLimit = ($timeMax > 0)? "-t $timeMax" : "";
-	my $limits = "ulimit -c 0 -d 2000000 -m 2000000 -s 2000000 -v 2000000 $timeLimit";
+	my $limits = "ulimit -c 0; ulimit -d 2000000;ulimit -m 2000000; ulimit -s 2000000; ulimit -v 2000000; ulimit -t $timeLimit";
 	#    "-s 10240 -v 2000000 $timeLimit";	
 	my $logging = ($verbose)? " 2>&1 | tee output" : "> output 2>&1";
 	my $timing = ($verbose)? "time " : "";

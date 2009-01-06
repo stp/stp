@@ -5,7 +5,7 @@ YACC=bison -d -y --debug -v
 
 SRCS = lexPL.cpp parsePL.cpp let-funcs.cpp main.cpp
 OBJS = $(SRCS:.cpp=.o)
-LIBS = -L../AST -last -L../sat/core -L../sat/simp -lminisatp -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
+LIBS = -L../AST -last -L../sat/core -L../sat/simp -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
 CFLAGS += -I../sat/mtl -I../sat/core -I../sat/simp
 
 all: parsePL.cpp lexPL.cpp let-funcs.cpp parser parsePL.o lexPL.o let-funcs.o 
