@@ -666,6 +666,7 @@ namespace BEEV {
       os << endl;
       break;
     case BVSX:
+    case BVZX: 
       os << kind << "(";
       c[0].PL_Print1(os,indentation,letize);
       os << ",";
@@ -1197,10 +1198,19 @@ namespace BEEV {
       case BVSX:
 	//in BVSX(n[0],len), the length of the BVSX term must be
 	//greater than the length of n[0]
-	if(n[0].GetValueWidth() >= n.GetValueWidth()) {
+	if(n[0].GetValueWidth() > n.GetValueWidth()) {
 	  FatalError("BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n",n);
 	} 
 	break;
+
+      case BVZX:
+	//in BVZX(n[0],len), the length of the BVZX term must be
+	//greater than the length of n[0]
+	if(n[0].GetValueWidth() > n.GetValueWidth()) {
+	  FatalError("BVTypeCheck: BVZX(t,bvzx_len) : length of 't' must be <= bvzx_len\n",n);
+	}
+	break;
+
       default:
 	for(ASTVec::iterator it=v.begin(),itend=v.end();it!=itend;it++)
 	  if(BITVECTOR_TYPE != it->GetType()) {

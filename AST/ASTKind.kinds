@@ -32,6 +32,7 @@ SBVDIV		2	2	Term
 SBVREM		2	2	Term
 SBVMOD		2	2	Term
 BVSX		1	1	Term
+BVZX		1	1	Term
 BOOLVEC         0       -       Term
 
 # Formula OR term, depending on context

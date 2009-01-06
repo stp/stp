@@ -1403,6 +1403,14 @@ namespace BEEV {
       }
       break;
     }
+
+   case BVZX:
+      {
+	output = CreateTerm(BVZX,inputValueWidth,SimplifyTerm(inputterm[0]),inputterm[1]);
+      }
+	break;
+
+
     case BVSX:{
       //a0 is the expr which is being sign extended
       ASTNode a0 = SimplifyTerm(inputterm[0]);

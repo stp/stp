@@ -80,6 +80,22 @@ namespace BEEV {
       }
       break;
     }
+
+    case BVZX: {
+      output = CONSTANTBV::BitVector_Create(inputwidth,true);
+      unsigned t0_width = t[0].GetValueWidth();
+      if(inputwidth == t0_width) {
+        CONSTANTBV::BitVector_Copy(output, tmp0);
+        OutputNode = CreateBVConst(output, outputwidth);
+      }
+      else {
+        CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, t0_width);
+        OutputNode = CreateBVConst(output, outputwidth);
+      }
+      break;
+    }
+
+
     case BVAND: {
       output = CONSTANTBV::BitVector_Create(inputwidth,true);
       CONSTANTBV::Set_Intersection(output,tmp0,tmp1);

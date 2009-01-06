@@ -194,6 +194,7 @@
 %token BVSLE_TOK
 %token BVSGE_TOK
 %token BVSX_TOK 
+%token BVZX_TOK
 %token BOOLEXTRACT_TOK
 %token BOOL_TO_BV_TOK
 %token BVEXTRACT_TOK
@@ -1108,6 +1109,17 @@ an_nonbvconst_term:
       $$ = n;
       delete $5;
     }
+| BVZX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
+    {
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*$5);
+      unsigned w = $5->GetValueWidth() + $3;
+      BEEV::ASTNode width = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,w);
+      BEEV::ASTNode *n =  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVZX,w,*$5,width));
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+      $$ = n;
+      delete $5;
+    }
+
 ;
   
 sort_symb:

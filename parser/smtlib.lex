@@ -183,7 +183,7 @@ bit{DIGIT}+     {
 "bvsub"         { return BVSUB_TOK;}
 "bvnot"         { return BVNOT_TOK;}
 "bvmul"         { return BVMULT_TOK;}
-"bvdiv"         { return BVDIV_TOK;}
+"bvudiv"         { return BVDIV_TOK;}
 "bvsdiv"        { return SBVDIV_TOK;}
 "bvurem"        { return BVMOD_TOK;} 
 "bvsrem"        { return SBVREM_TOK;}
@@ -215,6 +215,7 @@ bit{DIGIT}+     {
 "bvsle"         { return BVSLE_TOK;}
 "bvsge"         { return BVSGE_TOK;}
 
+"zero_extend"   { return BVZX_TOK;}
 "sign_extend"   { return BVSX_TOK;} 
 "boolextract"   { return BOOLEXTRACT_TOK;}
 "boolbv"        { return BOOL_TO_BV_TOK;}
