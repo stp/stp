@@ -2020,6 +2020,20 @@ namespace BEEV {
       }
       break;
     }
+    case BVZX:
+      {
+      //a0 is the expr which is being zero extended
+      ASTNode a0 = SimplifyTerm(inputterm[0]);
+      //a1 represents the length of the term BVZX(a0)
+      ASTNode a1 = inputterm[1];
+      //output length of the BVSX term
+      unsigned len = inputValueWidth;
+
+	output = CreateTerm(BVZX,len,a0,a1);
+	break;
+      }
+      break;
+
     case BVSX:{
       //a0 is the expr which is being sign extended
       ASTNode a0 = SimplifyTerm(inputterm[0]);
@@ -2232,6 +2246,7 @@ namespace BEEV {
       output = CreateSimplifiedTermITE(t0,t1,t2);      
       break;
     }
+    case SBVREM:
     case SBVMOD:
     case SBVDIV: {
       ASTVec c = inputterm.GetChildren();
@@ -2245,7 +2260,7 @@ namespace BEEV {
     }
     case WRITE:     
     default:
-      FatalError("SimplifyTerm: Control should never reach here:", inputterm, k);
+      FatalError("SimplifyTermAux: Control should never reach here:", inputterm, k);
       return inputterm;
       break;
     }

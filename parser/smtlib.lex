@@ -79,7 +79,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 {DIGIT}+	{ yylval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK; }
 
 
-bv{DIGIT}+	{ yylval.ullval = strtoull(yytext+2, NULL, 10); return BVCONST_TOK; }
+	 bv{DIGIT}+	{ yylval.str = new std::string(yytext+2); return BVCONST_TOK; }
 
 bit{DIGIT}+     {
   		   char c = yytext[3];

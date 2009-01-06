@@ -96,6 +96,36 @@ namespace BEEV {
     }
 
 
+   case BVLEFTSHIFT: 
+     {
+      output = CONSTANTBV::BitVector_Create(inputwidth,true);
+
+      // the shift is destructive, get a copy.
+      CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, inputwidth);
+
+      // get the number of bits to shift it.
+      unsigned int shift = GetUnsignedConst(BVConstEvaluator(t[1]));
+
+      CONSTANTBV::BitVector_Move_Left(output,shift);
+      OutputNode = CreateBVConst(output,outputwidth);
+      break;
+    }
+    case BVRIGHTSHIFT: 
+      {
+	output = CONSTANTBV::BitVector_Create(inputwidth,true);
+
+      // the shift is destructive, get a copy.
+      CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, inputwidth);
+
+      // get the number of bits to shift it.
+      unsigned int shift = GetUnsignedConst(BVConstEvaluator(t[1]));
+
+      CONSTANTBV::BitVector_Move_Right(output,shift);
+      OutputNode = CreateBVConst(output,outputwidth);
+      break;
+    }
+
+
     case BVAND: {
       output = CONSTANTBV::BitVector_Create(inputwidth,true);
       CONSTANTBV::Set_Intersection(output,tmp0,tmp1);

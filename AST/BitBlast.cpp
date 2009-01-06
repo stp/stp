@@ -69,6 +69,78 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
     result = CreateNode(BOOLVEC, BBNeg(bbkids.GetChildren()));
     break;
   }
+
+  case BVLEFTSHIFT:
+   {
+     if (BVCONST == term[1].GetKind())
+       {
+	 // Constant shifts should be removed during simplification.
+	 unsigned int shift = GetUnsignedConst(term[1]);
+
+	 ASTNode term0 = BBTerm(term[0]);
+	 ASTVec children(term0.GetChildren()); // mutable copy of the children.
+	 BBLShift(children, shift);
+	 
+	 result = CreateNode(BOOLVEC, children);
+      }
+     else
+     {
+     // Barrel shifter
+    	const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
+     	const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();  
+     	
+     	ASTVec temp_result(bbarg1);
+     	
+     	for (unsigned int i =0; i < bbarg2.size(); i++)
+		{
+			if (bbarg2[i] == ASTFalse) 
+				continue;  // Not shifting by anything.
+			
+			unsigned int shift_amount = 1 << i;
+			
+			bool done = false;
+			
+			for (unsigned int j=temp_result.size()-1; !done; j--)
+			{
+				if (j < shift_amount)
+					temp_result[j] = CreateSimpForm(ITE, bbarg2[i],ASTFalse,temp_result[j]);
+				else
+					temp_result[j] = CreateSimpForm(ITE, bbarg2[i],temp_result[j-shift_amount],temp_result[j]);
+				
+				// want it to stop after doing 0, but subtracting 1 from j makes it very big. 
+				if (j ==0)
+					done = true;
+			}
+		}
+
+	result =  CreateNode(BOOLVEC, temp_result);
+  }
+	break;
+   }
+   
+   case BVRIGHTSHIFT:
+   {
+    if (BVCONST == term[1].GetKind())
+      {
+	 	// Constant shifts should be removed during simplification.
+	  	
+	    unsigned int shift = GetUnsignedConst(term[1]);
+
+      	ASTNode term0 = BBTerm(term[0]);
+      	ASTVec children(term0.GetChildren()); // mutable copy of the children.
+      	BBRShift(children, shift);
+
+      	result = CreateNode(BOOLVEC, children);
+      }
+     else
+     	{
+		FatalError("Not implemented shift right by unk. value.");
+  	 	}
+   }
+	break;
+   
+
+
   case BVSRSHIFT:
   case BVVARSHIFT: 
     FatalError("BBTerm: These kinds have not been implemented in the BitBlaster: ", term);
@@ -86,6 +158,8 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
        CreateNode(BOOLVEC, BBITE(cond, thn.GetChildren(), els.GetChildren()));
     break;
   }
+
+
   case BVSX: {
     // Replicate high-order bit as many times as necessary.
     // Arg 0 is expression to be sign extended.
@@ -139,7 +213,7 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
 	*res_it = *bb_it;
       }
       // repeat MSB to fill up rest of result.
-      for( ; res_it < res_end; (res_it++, bb_it++)) {
+      for( ; res_it < res_end; (res_it++)) {
 	*res_it = msb;
       }
       
@@ -841,6 +915,40 @@ void BeevMgr::BBLShift(ASTVec& x)
   // lpvec(x);
 }
 
+// Left shift  within fixed field inserting zeros at LSB.
+// Writes result into first argument.
+  void BeevMgr::BBLShift(ASTVec& x, unsigned int shift)
+{
+  // left shift x (destructively) within width.
+  // loop backwards so that copy to self works correctly. (DON'T use STL insert!)
+  ASTVec::iterator xbeg = x.begin();
+  ASTVec::iterator xit = x.end()-1;
+  for(; xit >= xbeg; xit--) {
+    if (xit-shift >= xbeg)
+      *xit = *(xit-shift);
+    else
+      *xit= ASTFalse; // new LSB is zero.
+  }
+}
+
+// Right shift within fixed field inserting zeros at MSB.
+// Writes result into first argument.
+  void BeevMgr::BBRShift(ASTVec& x, unsigned int shift)
+{
+  // right shift x (destructively) within width.
+  ASTVec::iterator xend = x.end();
+  ASTVec::iterator xit = x.begin();
+  for(; xit < xend; xit++) {
+    if (xit+shift < xend)
+      *xit = *(xit+shift);
+    else
+      *xit= ASTFalse; // new MSB is zero.
+  }
+}
+
+
+
+
 // Right shift by 1 within fixed field, inserting new zeros at MSB.
 // Writes result into first argument.
 // Fixme: generalize to n bits.
@@ -853,7 +961,6 @@ void BeevMgr::BBRShift(ASTVec& x)
   }
   *xit = ASTFalse;		// new MSB is zero.
 }
-
 
 // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc. 
 ASTNode BeevMgr::BBcompare(const ASTNode& form) {

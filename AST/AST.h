@@ -687,12 +687,23 @@ namespace BEEV {
     CBV GetBVConst() const {return _bvconst;}
   }; //End of ASTBVConst
 
-  //FIXME This function is DEPRICATED
+
+  //FIXME This function is DEPRECATED
   //Do not use in the future
-  inline unsigned int GetUnsignedConst(const ASTNode n) {
-    if(32 < n.GetValueWidth())
-      FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int:");
-        
+ inline unsigned int GetUnsignedConst(const ASTNode n) 
+  {
+    if(sizeof(unsigned int) * 8  <= n.GetValueWidth())  
+      {
+	// It may only contain a small value in a bit type, which fits nicely into an unsigned int.
+	// This is common for functions like: bvshl(bv1[128], bv1[128])
+	// where both operands have the same type.
+	unsigned long maxBit = (unsigned) CONSTANTBV::Set_Max(n.GetBVConst());
+	if (maxBit >= sizeof(unsigned int) * 8 )
+	  {
+	    n.LispPrint(cerr); //print the node so they can find it.
+	    FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int");
+	  }
+      }
     return (unsigned int) *((unsigned int *)n.GetBVConst());
   }
 #else
@@ -1216,6 +1227,9 @@ namespace BEEV {
     void BBLShift(ASTVec& x);
     void BBRShift(ASTVec& x);
 
+    void BBLShift(ASTVec& x, unsigned int shift);
+    void BBRShift(ASTVec& x, unsigned int shift);
+
   public:
     // Simplifying create functions
     ASTNode CreateSimpForm(Kind kind, ASTVec &children);
@@ -1350,11 +1364,13 @@ namespace BEEV {
 
     // Create and return an ASTNode for a symbol
     // Width is number of bits.
+    ASTNode CreateBVConst(string*& strval, unsigned int base,  size_t bit_width);
     ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
     ASTNode CreateZeroConst(unsigned int width);
     ASTNode CreateOneConst(unsigned int width);
     ASTNode CreateTwoConst(unsigned int width);
     ASTNode CreateMaxConst(unsigned int width);
+
 
     // Create and return an ASTNode for a symbol
     // Optional base was a problem because 0 could be an int or char *,

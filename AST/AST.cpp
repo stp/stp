@@ -786,7 +786,7 @@ namespace BEEV {
     
 
     CBV bv = CONSTANTBV::BitVector_Create(width, true);
-    unsigned long c_val = (0x00000000ffffffffLL) & bvconst;
+    unsigned long c_val = (~((unsigned long)0)) & bvconst;
     unsigned int copied = 0;
 
     // sizeof(unsigned long) returns the number of bytes in unsigned
@@ -801,12 +801,42 @@ namespace BEEV {
     while(copied + (sizeof(unsigned long)<<3) < width){
       CONSTANTBV::BitVector_Chunk_Store(bv, sizeof(unsigned long)<<3,copied,c_val);
       bvconst = bvconst >> (sizeof(unsigned long) << 3);
-      c_val = (0x00000000ffffffffLL) & bvconst;
+      c_val = (~((unsigned long)0)) & bvconst;
       copied += sizeof(unsigned long) << 3;
     }
     CONSTANTBV::BitVector_Chunk_Store(bv,width - copied,copied,c_val);
     return CreateBVConst(bv,width);
   }
+
+ ASTNode BeevMgr::CreateBVConst(string*& strval, unsigned int base,  size_t bit_width) {
+
+   if(!(2 == base || 10 == base || 16 == base))
+     {
+      FatalError("CreateBVConst: unsupported base: ",ASTUndefined,base);
+     }
+
+    //checking if the input is in the correct format
+    CBV bv = CONSTANTBV::BitVector_Create(bit_width,true);
+    CONSTANTBV::ErrCode e;
+    if(2 == base){
+      e = CONSTANTBV::BitVector_from_Bin(bv, (unsigned char*) strval->c_str());
+    }else if(10 == base){
+      e = CONSTANTBV::BitVector_from_Dec(bv, (unsigned char*) strval->c_str());
+    }else if(16 == base){
+      e = CONSTANTBV::BitVector_from_Hex(bv, (unsigned char*) strval->c_str());
+    }else{
+      e = CONSTANTBV::ErrCode_Pars;
+    }
+
+    if(0 != e) {
+      cerr << "CreateBVConst: " << BitVector_Error(e);
+      FatalError("",ASTUndefined);
+    }
+
+    return CreateBVConst(bv, bit_width);
+  }
+
+
 
   //Create a ASTBVConst node from std::string
   ASTNode BeevMgr::CreateBVConst(const char* const strval, int base) {

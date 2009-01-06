@@ -99,7 +99,7 @@
 %type <str> user_value
 
 %token <uintval> NUMERAL_TOK
-%token <ullval> BVCONST_TOK
+%token <str> BVCONST_TOK
 %token <node> BITCONST_TOK
 %token <node> FORMID_TOK TERMID_TOK 
 %token <str> STRING_TOK
@@ -671,11 +671,12 @@ an_terms:
 an_term:
     BVCONST_TOK
     {
-      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(64, $1));
+      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst($1, 10, 32));
     }
   | BVCONST_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
     {
-      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst($3, $1));
+      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst($1,10,$3));
+      delete $1;
     }
   | an_nonbvconst_term
   ;
@@ -1018,24 +1019,22 @@ an_nonbvconst_term:
       delete $2;
     }
    |  BVLEFTSHIFT_1_TOK an_term an_term 
-    {
+{
+	// shifting left by who know how much?
       unsigned int w = $2->GetValueWidth();
-      unsigned int shift_amt = GetUnsignedConst(*$3);
-      if((unsigned)shift_amt < w) {
-	BEEV::ASTNode trailing_zeros = BEEV::globalBeevMgr_for_parser->CreateBVConst(shift_amt, 0);
-	BEEV::ASTNode hi = BEEV::globalBeevMgr_for_parser->CreateBVConst(32, w-shift_amt-1);
-	BEEV::ASTNode low = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,0);
-	BEEV::ASTNode m = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,w-shift_amt,*$2,hi,low);
-	BEEV::ASTNode * n = 
-	  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVCONCAT,w,m,trailing_zeros));
-	BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
-	$$ = n;
-      }
-      else {
-	$$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(w,0));
-      }
+      BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVLEFTSHIFT,w,*$2,*$3));
+	  BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+  	  $$ = n;
       delete $2;
-      //delete $3;
+    }
+  | BVRIGHTSHIFT_1_TOK an_term an_term 
+    {
+    // shifting right by who know how much?
+      unsigned int w = $2->GetValueWidth();
+      BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVRIGHTSHIFT,w,*$2,*$3));
+	  BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+  	  $$ = n;
+      delete $2;
     }
   |  BVRIGHTSHIFT_TOK an_term NUMERAL_TOK 
     {
@@ -1049,29 +1048,6 @@ an_nonbvconst_term:
 	BEEV::ASTNode hi = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,w-1);
 	BEEV::ASTNode low = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,$3);
 	BEEV::ASTNode extract = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,w-$3,*$2,hi,low);
-	BEEV::ASTNode * n = 
-	  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVCONCAT, w,leading_zeros, extract));
-	BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
-	$$ = n;
-      }
-      else {
-	$$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(w,0));
-      }
-      delete $2;
-    }
-   |  BVRIGHTSHIFT_1_TOK an_term an_term 
-    {
-      unsigned int shift_amt = GetUnsignedConst(*$3);
-      BEEV::ASTNode leading_zeros = BEEV::globalBeevMgr_for_parser->CreateBVConst(shift_amt, 0);
-      unsigned int w = $2->GetValueWidth();
-      
-      //the amount by which you are rightshifting
-      //is less-than/equal-to the length of input
-      //bitvector
-      if((unsigned)shift_amt < w) {
-	BEEV::ASTNode hi = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,w-1);
-	BEEV::ASTNode low = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,shift_amt);
-	BEEV::ASTNode extract = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,w-shift_amt,*$2,hi,low);
 	BEEV::ASTNode * n = 
 	  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVCONCAT, w,leading_zeros, extract));
 	BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
