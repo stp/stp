@@ -697,8 +697,8 @@ namespace BEEV {
 	// It may only contain a small value in a bit type, which fits nicely into an unsigned int.
 	// This is common for functions like: bvshl(bv1[128], bv1[128])
 	// where both operands have the same type.
-	unsigned long maxBit = (unsigned) CONSTANTBV::Set_Max(n.GetBVConst());
-	if (maxBit >= sizeof(unsigned int) * 8 )
+	signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
+	if (maxBit >= ((signed long) sizeof(unsigned int)) * 8 )
 	  {
 	    n.LispPrint(cerr); //print the node so they can find it.
 	    FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int");
