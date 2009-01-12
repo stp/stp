@@ -153,7 +153,7 @@ int main(int argc, char ** argv) {
       }
       if(argv[i][2]) {
 	fprintf(stderr, "Multiple character options are not allowed.\n");
-	fprintf(stderr, "(-ab is not an abbreviation for -a -b)\n");
+	fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
 	fprintf(stderr,usage,prog);
 	cout << helpstring;
 	return -1;

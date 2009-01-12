@@ -1406,7 +1406,11 @@ namespace BEEV {
 
    case BVZX:
       {
-	output = CreateTerm(BVZX,inputValueWidth,SimplifyTerm(inputterm[0]),inputterm[1]);
+	ASTNode a0 = SimplifyTerm(inputterm[0]);
+	if (a0.GetKind() ==  BVCONST)
+	  output = BVConstEvaluator(CreateTerm(BVZX,inputValueWidth,a0,inputterm[1]));
+	else
+	  output = CreateTerm(BVZX,inputValueWidth,a0,inputterm[1]);
       }
 	break;
 
@@ -1647,6 +1651,8 @@ namespace BEEV {
     //memoize
     UpdateSimplifyMap(inputterm,output,false);
     //cerr << "SimplifyTerm: output" << output << endl;
+    // CheckSimplifyInvariant(inputterm,output);
+
     return output;
   } //end of SimplifyTerm()
 
@@ -2271,17 +2277,14 @@ namespace BEEV {
   //At the end of each simplification call, we want the output to be
   //always smaller or equal to the input in size.
   void BeevMgr::CheckSimplifyInvariant(const ASTNode& a, const ASTNode& output) {
-    //Don't do the check in optimized mode
-    if(optimize)
-      return;
 
-    if(NodeSize(a,true) < NodeSize(output,true)) {
+    if(NodeSize(a,true) + 1  < NodeSize(output,true)) {
       cerr << "lhs := " << a << endl;
       cerr << "NodeSize of lhs is: " << NodeSize(a, true) << endl;
       cerr << endl;
       cerr << "rhs := " << output << endl;
       cerr << "NodeSize of rhs is: " << NodeSize(output, true) << endl;
-      FatalError("SimplifyFormula: The nodesize shoudl decrease from lhs to rhs: ",ASTUndefined);
+      //  FatalError("SimplifyFormula: The nodesize shoudl decrease from lhs to rhs: ",ASTUndefined);
     }
   }
 

@@ -107,7 +107,7 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
 				else
 					temp_result[j] = CreateSimpForm(ITE, bbarg2[i],temp_result[j-shift_amount],temp_result[j]);
 				
-				// want it to stop after doing 0, but subtracting 1 from j makes it very big. 
+		// want the loop to finish after j=0, but when j=0, j-1 == MAX_INT. Hence this weird idiom.
 				if (j ==0)
 					done = true;
 			}
@@ -134,8 +134,43 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
       }
      else
      	{
-		FatalError("Not implemented shift right by unk. value.");
-  	 	}
+	// Barrel shifter
+    	const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
+     	const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();  
+     	
+     	ASTVec temp_result(bbarg1);
+     	
+     	for (unsigned int i =0; i < bbarg2.size(); i++)
+	  {
+	    if (bbarg2[i] == ASTFalse) 
+	      continue;  // Not shifting by anything.
+	    
+	    unsigned int shift_amount = 1 << i;
+	    
+	    bool done = false;
+	    
+	    for (unsigned int j=0; j < temp_result.size()-1; j++)
+	      {
+		if (j + shift_amount >= temp_result.size())
+		  temp_result[j] = CreateSimpForm(ITE, bbarg2[i],ASTFalse,temp_result[j]);
+		else
+		  temp_result[j] = CreateSimpForm(ITE, bbarg2[i],temp_result[j+shift_amount],temp_result[j]);
+		
+		if (j ==0)
+		  done = true;
+	      }
+	  }
+
+	
+	result =  CreateNode(BOOLVEC, temp_result);
+
+	/*	cerr << result << endl;
+	cerr << term[0] << endl;
+	cerr << term[1] << endl;
+	cerr << "right shift. Node size is:" << NodeSize(result) << endl;
+	cerr << "input size: " << NodeSize(term[0]) << " " << NodeSize(term[1]) << endl;
+	*/
+	}
    }
 	break;
    
