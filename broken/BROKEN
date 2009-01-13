@@ -1,9 +1,5 @@
-little.smt
----
-* Ends without achieving a result. Not sure why?
-
-
 nextpoweroftwo064.smt
 ---
-With optimizations disabled it finishes in 7.3 seconds (on my machine). With optimizations enabled. Uses lots of memory when converting to CNF.
+With optimizations disabled it finishes in 7.3 seconds (on my machine). With optimizations enabled it uses up all the available virtual memory (atleast twice more than when optimizations are disabled).
+
 

@@ -1541,6 +1541,9 @@ private:
     ASTNode BBFormula = BBForm(q);
     CNFMgr* cm = new CNFMgr(this);
     ClauseList* cl = cm->convertToCNF(BBFormula);
+    if(stats)
+      cerr << "Number of clauses:" << cl->size() << endl;
+  	//PrintClauseList(cout, *cl);
     bool sat = toSATandSolve(newS,*cl);    
     cm->DELETE(cl);
     delete cm;

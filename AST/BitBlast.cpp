@@ -149,7 +149,7 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term) {
 	    
 	    bool done = false;
 	    
-	    for (unsigned int j=0; j < temp_result.size()-1; j++)
+	    for (unsigned int j=0; j < temp_result.size(); j++)
 	      {
 		if (j + shift_amount >= temp_result.size())
 		  temp_result[j] = CreateSimpForm(ITE, bbarg2[i],ASTFalse,temp_result[j]);
