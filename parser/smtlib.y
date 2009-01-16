@@ -42,17 +42,14 @@
   // compile error)
 #undef __GNUC_MINOR__
   
-  extern char* yytext;
-  extern int yylineno;
+  extern char* smttext;
+  extern int smtlineno;
   
-  //int yylineno;
-
-  extern int yylex(void);
+  extern int smtlex(void);
 
   int yyerror(char *s) {
-    //yylineno = 0;
-    cout << "syntax error: line " << yylineno << "\n" << s << endl;
-    cout << "  token: " << yytext << endl;
+    cout << "syntax error: line " << smtlineno << "\n" << s << endl;
+    cout << "  token: " << smttext << endl;
     BEEV::FatalError("");
     return 1;
   }

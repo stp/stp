@@ -8,10 +8,10 @@
  ********************************************************************/
 #include <iostream>
 #include "../AST/AST.h"
-#include "parsePL_defs.h"
+#include "parseCVC_defs.h"
 
 extern char *yytext;
-extern int yyerror (const char *msg);
+extern int cvcerror (const char *msg);
 %}
 
 %option noyywrap
@@ -33,11 +33,11 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 
 [\n]             { /*Skip new line */ }
 [ \t\r\f]	 { /* skip whitespace */ }
-0b{BITS}+	 { yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
-0bin{BITS}+	 { yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
-0h{HEX}+         { yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
-0hex{HEX}+       { yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
-{DIGIT}+	 { yylval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}
+0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
+0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
+0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
+0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
+{DIGIT}+	 { cvclval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}
 
 "%"		 { BEGIN COMMENT;}
 <COMMENT>"\n"	 { BEGIN INITIAL; /* return to normal mode */}
@@ -117,13 +117,13 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->ResolveID(nptr));
-  //yylval.node = new BEEV::ASTNode(nptr);
-  if ((yylval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+  cvclval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->ResolveID(nptr));
+  //cvclval.node = new BEEV::ASTNode(nptr);
+  if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
     return FORMID_TOK;
   else 
     return TERMID_TOK;  
 }
 
-.                { yyerror("Illegal input character."); }
+.                { cvcerror("Illegal input character."); }
 %%

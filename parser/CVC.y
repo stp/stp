@@ -15,11 +15,11 @@ using namespace std;
   // compile error)
 #undef __GNUC_MINOR__
 
-  extern int yylex(void);
+  extern int cvclex(void);
   extern char* yytext;
-  extern int yylineno;
+  extern int cvclineno;
   int yyerror(const char *s) {
-    cout << "syntax error: line " << yylineno << "\n" << s << endl;    
+    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
     BEEV::FatalError("");
     return 1;			/* Dill: don't know what it should return */
   };

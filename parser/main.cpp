@@ -17,7 +17,6 @@
 //#include <zlib.h>
 #include <stdio.h>
 #include "../AST/AST.h"
-#include "parsePL_defs.h"
 #include "../sat/core/Solver.h"
 #include "../sat/core/SolverTypes.h"
 //#include "../sat/VarOrder.h"
@@ -30,8 +29,9 @@
 
 /* GLOBAL FUNCTION: parser
  */
-extern int yyparse();
-//extern int smtlibparse();
+extern int smtparse();
+extern int cvcparse();
+
 
 /* GLOBAL VARS: Some global vars for the Main function.
  *
@@ -60,7 +60,10 @@ BEEV::ASTNode SingleBitZero;
  ******************************************************************************/
 int main(int argc, char ** argv) {
   char * infile;
-  extern FILE *yyin;
+  extern FILE *cvcin;
+  extern FILE *smtin;
+
+
 
   // Grab some memory from the OS upfront to reduce system time when individual
   // hash tables are being allocated
@@ -81,6 +84,10 @@ int main(int argc, char ** argv) {
   helpstring +=  "-p  : print counterexample\n";
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
+  helpstring +=  "-m  : use the SMTLIB parser\n";
+
+
+  bool smtlibParser = false;
 
   for(int i=1; i < argc;i++) {
     if(argv[i][0] == '-') {
@@ -116,6 +123,9 @@ int main(int argc, char ** argv) {
 	break;
       case 'n':
 	BEEV::print_output = true;
+	break;  
+      case 'm':
+	smtlibParser=true;
 	break;
       case 'p':
 	BEEV::print_counterexample = true;
@@ -160,11 +170,25 @@ int main(int argc, char ** argv) {
       }
     } else {
       infile = argv[i];
-      yyin = fopen(infile,"r");
-      if(yyin == NULL) {
-	fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-	BEEV::FatalError("");
-      }
+
+      if (smtlibParser)
+	{
+	  smtin = fopen(infile,"r");
+	  if(smtin == NULL) 
+	    {
+	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+	      BEEV::FatalError("");
+	    }
+	}
+      else
+	{
+	  cvcin = fopen(infile,"r");
+	  if(cvcin == NULL) 
+	    {
+	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+	      BEEV::FatalError("");
+	    }
+	}
     }
   }
 
@@ -184,5 +208,9 @@ int main(int argc, char ** argv) {
   SingleBitOne = BEEV::globalBeevMgr_for_parser->CreateOneConst(1);
   SingleBitZero = BEEV::globalBeevMgr_for_parser->CreateZeroConst(1);
   //BEEV::smtlib_parser_enable = true;
-  yyparse();
+
+  if (smtlibParser)
+    smtparse();
+  else
+    cvcparse();
 }//end of Main

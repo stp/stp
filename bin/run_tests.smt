@@ -71,7 +71,7 @@ my %optionsDefault = ("level" => 4,
 		      "lang" => "all",
 		      "stppath" => "stp/bin",
 		      #"vc" => $pwd . "/bin/yices -smt", # Program names
-		      "vc" => $pwd . "/bin/stp -d -f", # Program names
+		      "vc" => $pwd . "/bin/stp -d -f -m", # Program names
 		      #"vc" => "valgrind --leak-check=full /home/vganesh/stp/bin/stp", # Program names
 		      "pfc" => "true",
 		      "stptestpath" => "stp/smt_tests",

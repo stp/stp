@@ -35,10 +35,10 @@
   // -*- c++ -*-
 #include <iostream>
 #include "../AST/AST.h"
-#include "parsePL_defs.h"
+#include "parseSMT_defs.h"
   
-  extern char *yytext;
-  extern int yyerror (char *msg);
+  extern char *smttext;
+  extern int smterror (char *msg);
   
   // File-static (local to this file) variables and functions
   static std::string _string_lit;
@@ -55,7 +55,7 @@
   extern BEEV::ASTNode SingleBitZero;
 
 /* Changed for smtlib speedup */
-/* bv{DIGIT}+      { yylval.node = new BEEV::ASTNode(BEEV::_bm->CreateBVConst(yytext+2, 10)); return BVCONST_TOK;} */
+/* bv{DIGIT}+      { smtlval.node = new BEEV::ASTNode(BEEV::_bm->CreateBVConst(smttext+2, 10)); return BVCONST_TOK;} */
 
 %}
 
@@ -76,18 +76,18 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
 [ \n\t\r\f]	{ /* sk'ip whitespace */ }
-{DIGIT}+	{ yylval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK; }
+{DIGIT}+	{ smtlval.uintval = strtoul(smttext, NULL, 10); return NUMERAL_TOK; }
 
 
-	 bv{DIGIT}+	{ yylval.str = new std::string(yytext+2); return BVCONST_TOK; }
+	 bv{DIGIT}+	{ smtlval.str = new std::string(smttext+2); return BVCONST_TOK; }
 
 bit{DIGIT}+     {
-  		   char c = yytext[3];
+  		   char c = smttext[3];
 		   if (c == '1') {
-		     yylval.node = new BEEV::ASTNode(SingleBitOne);
+		     smtlval.node = new BEEV::ASTNode(SingleBitOne);
 		   }
 		   else {
-		     yylval.node = new BEEV::ASTNode(SingleBitZero);
+		     smtlval.node = new BEEV::ASTNode(SingleBitZero);
 		   }
 		   return BITCONST_TOK;
 		};
@@ -102,24 +102,24 @@ bit{DIGIT}+     {
                                             _string_lit.end()); }
 <STRING_LITERAL>"\\".	{ /* escape characters (like \n or \") */
                           _string_lit.insert(_string_lit.end(),
-                                             escapeChar(yytext[1])); }
+                                             escapeChar(smttext[1])); }
 <STRING_LITERAL>"\""	{ BEGIN INITIAL; /* return to normal mode */
-			  yylval.str = new std::string(_string_lit);
+			  smtlval.str = new std::string(_string_lit);
                           return STRING_TOK; }
-<STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*yytext); }
+<STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smttext); }
 
 
 <INITIAL>"{"		{ BEGIN USER_VALUE;
                           _string_lit.erase(_string_lit.begin(),
                                             _string_lit.end()); }
 <USER_VALUE>"\\"[{}] { /* escape characters */
-                          _string_lit.insert(_string_lit.end(),yytext[1]); }
+                          _string_lit.insert(_string_lit.end(),smttext[1]); }
 
 <USER_VALUE>"}"	        { BEGIN INITIAL; /* return to normal mode */
-			  yylval.str = new std::string(_string_lit);
+			  smtlval.str = new std::string(_string_lit);
                           return USER_VAL_TOK; }
 <USER_VALUE>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
-<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*yytext); }
+<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*smttext); }
 
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
@@ -221,17 +221,17 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = BEEV::globalBeevMgr_for_parser->CreateSymbol(yytext); 
+  BEEV::ASTNode nptr = BEEV::globalBeevMgr_for_parser->CreateSymbol(smttext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  yylval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->ResolveID(nptr));
-  //yylval.node = new BEEV::ASTNode(nptr);
-  if ((yylval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+  smtlval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->ResolveID(nptr));
+  //smtlval.node = new BEEV::ASTNode(nptr);
+  if ((smtlval.node)->GetType() == BEEV::BOOLEAN_TYPE)
     return FORMID_TOK;
   else 
     return TERMID_TOK;  
 }
-. { yyerror("Illegal input character."); }
+. { smterror("Illegal input character."); }
 %%
