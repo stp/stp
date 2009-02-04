@@ -26,7 +26,7 @@ bool cinterface_exprdelete_on = false;
 
 /* GLOBAL FUNCTION: parser
  */
-extern int yyparse();
+extern int cvcparse();
 
 void vc_setFlags(char c) {
   std::string helpstring = "Usage: stp [-option] [infile]\n\n";
@@ -133,6 +133,34 @@ void vc_printExpr(VC vc, Expr e) {
   //   b->Begin_RemoveWrites = false;    
   q.PL_Print(cout);
 }
+
+// prints Expr 'e' to stdout as C code
+void vc_printExprCCode(VC vc, Expr e) {
+  BEEV::ASTNode q = (*(nodestar)e);
+
+  // print variable declarations
+  BEEV::ASTVec declsFromParser = (nodelist)BEEV::globalBeevMgr_for_parser->_special_print_set;
+
+  for(BEEV::ASTVec::iterator it=declsFromParser.begin(),itend=declsFromParser.end(); it!=itend;it++) {
+    if(BEEV::BITVECTOR_TYPE == it->GetType()) {
+      const char* name = it->GetName();
+      unsigned int bitWidth = it->GetValueWidth();
+      assert(bitWidth % 8 == 0);
+      unsigned int byteWidth = bitWidth / 8;
+      cout << "unsigned char " << name << "[" << byteWidth << "];" << endl;
+    }
+    else {
+      // vc_printExprCCode: unsupported decl. type
+      assert(0);
+    }
+  }
+
+  cout << endl;
+
+  // print constraints and assert
+  q.C_Print(cout);
+}
+
 
 void vc_printExprFile(VC vc, Expr e, int fd) {
   fdostream os(fd);
@@ -1409,11 +1437,11 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 
 Expr vc_parseExpr(VC vc, char* infile) {
   bmstar b = (bmstar)vc;
-  extern FILE* yyin;
+  extern FILE* cvcin;
   const char * prog = "stp";
   
-  yyin = fopen(infile,"r");
-  if(yyin == NULL) {
+  cvcin = fopen(infile,"r");
+  if(cvcin == NULL) {
     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
     BEEV::FatalError("");
   }
@@ -1426,7 +1454,7 @@ Expr vc_parseExpr(VC vc, char* infile) {
     return 0;
   }
 
-  yyparse();
+  cvcparse();
   nodelist aaa = b->GetAsserts();
   node o =  b->CreateNode(BEEV::AND,aaa);
   

@@ -117,6 +117,9 @@ extern "C" {
   //! Prints 'e' to stdout.
   void vc_printExpr(VC vc, Expr e);
 
+  //! Prints 'e' to stdout as C code
+  void vc_printExprCCode(VC vc, Expr e);
+
   //! Prints 'e' into an open file descriptor 'fd'
   void vc_printExprFile(VC vc, Expr e, int fd);
 

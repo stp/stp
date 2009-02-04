@@ -295,6 +295,11 @@ namespace BEEV {
 
     void PL_Print1(ostream &os, int indentation = 0, bool b = false) const;
 
+    // C code printer
+    ostream& C_Print(ostream &os, int indentation = 0) const;
+    void C_Print1(ostream &os, int indentation = 0, bool b = false) const;
+
+
     //Construct let variables for shared subterms
     void LetizeNode(void) const;
 
@@ -461,7 +466,8 @@ namespace BEEV {
     virtual ~ASTInternal();
 
     // Abstract virtual print function for internal node.
-    virtual void nodeprint(ostream& os) { os << "*"; };
+    // (c_friendly is for printing hex. numbers that C compilers will accept)
+    virtual void nodeprint(ostream& os, bool c_friendly = false) { os << "*"; };
   }; //End of Class ASTInternal
 
   // FIXME: Should children be only in interior node type?
@@ -506,7 +512,8 @@ namespace BEEV {
 
     // Returns kinds.  "lispprinter" handles printing of parenthesis
     // and childnodes.
-    virtual void nodeprint(ostream& os) {
+    // (c_friendly is for printing hex. numbers that C compilers will accept)
+    virtual void nodeprint(ostream& os, bool c_friendly = false) {
       os << _kind_names[_kind];
     }
     public:
@@ -574,7 +581,8 @@ namespace BEEV {
     const char * const GetName() const{return _name;}  
 
     // Print function for symbol -- return name */
-    virtual void nodeprint(ostream& os) { os << _name;}
+    // (c_friendly is for printing hex. numbers that C compilers will accept)
+    virtual void nodeprint(ostream& os, bool c_friendly = false) { os << _name;}
 
     // Call this when deleting a node that has been stored in the
     // the unique table
@@ -652,16 +660,27 @@ namespace BEEV {
     virtual void CleanUp();
 
     // Print function for bvconst -- return _bvconst value in bin format
-    virtual void nodeprint(ostream& os) {
+    // (c_friendly is for printing hex. numbers that C compilers will accept)
+    virtual void nodeprint(ostream& os, bool c_friendly = false) {
       unsigned char *res;
       const char *prefix;
 
       if (_value_width%4 == 0) {
         res = CONSTANTBV::BitVector_to_Hex(_bvconst);
-        prefix = "0hex";
+        if (c_friendly) {
+          prefix = "0x";
+        }
+        else {
+          prefix = "0hex";
+        }
       } else {      
         res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-        prefix = "0bin";
+        if (c_friendly) {
+          prefix = "0b";
+        }
+        else {
+          prefix = "0bin";
+        }
       }
       if (NULL == res) {
         os << "nodeprint: BVCONST : could not convert to string" << _bvconst;
@@ -774,7 +793,7 @@ namespace BEEV {
     }
 
     // Print function for bvconst -- return _bvconst value in binary format
-    virtual void nodeprint(ostream& os) {
+    virtual void nodeprint(ostream& os, bool c_friendly = false) {
       string s = "0bin";
       unsigned long long int bitmask = 0x8000000000000000LL;
       bitmask = bitmask >> (64-_value_width);
