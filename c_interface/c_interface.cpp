@@ -1328,19 +1328,21 @@ Expr vc_simplify(VC vc, Expr e) {
   nodestar a = (nodestar)e;
 
   if(BEEV::BOOLEAN_TYPE == a->GetType()) {
-    nodestar output = new node(b->SimplifyFormula_TopLevel(*a,false));
-    //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+    nodestar round1 = new node(b->SimplifyFormula_TopLevel(*a,false));
     b->Begin_RemoveWrites = true;
-    output = new node(b->SimplifyFormula_TopLevel(*output,false));
+    nodestar output = new node(b->SimplifyFormula_TopLevel(*round1,false));
+    //if(cinterface_exprdelete_on) created_exprs.push_back(output);
     b->Begin_RemoveWrites = false;
+    delete round1;
     return output;    
   }
   else {
-    nodestar output = new node(b->SimplifyTerm(*a));
-    //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+    nodestar round1 = new node(b->SimplifyTerm(*a));
     b->Begin_RemoveWrites = true;
-    output = new node(b->SimplifyTerm(*output));
+    nodestar output = new node(b->SimplifyTerm(*round1));
+    //if(cinterface_exprdelete_on) created_exprs.push_back(output);
     b->Begin_RemoveWrites = false;
+    delete round1;
     return output;
   }
 }

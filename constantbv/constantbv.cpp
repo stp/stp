@@ -79,7 +79,7 @@ static unsigned int EXP10;    /* = largest possible power of 10 in signed int   
     /* global bit mask table for fast access (set by "BitVector_Boot"): */
     /********************************************************************/
 
-static unsigned int *  BITMASKTAB;
+static unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
 
     /*****************************/
     /* global macro definitions: */
@@ -299,10 +299,6 @@ ErrCode BitVector_Boot(void) {
     MODMASK = BITS - 1;
     FACTOR = LOGBITS - 3;  /* ld(BITS / 8) = ld(BITS) - ld(8) = ld(BITS) - 3 */
     MSB = (LSB << MODMASK);
-
-    BITMASKTAB = (unsigned int * ) malloc((size_t) (BITS << FACTOR));
-
-    if (BITMASKTAB == NULL) return(ErrCode_Null);
 
     for ( sample = 0; sample < BITS; sample++ ) {
         BITMASKTAB[sample] = (LSB << sample);
