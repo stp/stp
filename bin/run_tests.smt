@@ -80,14 +80,14 @@ my %optionsDefault = ("level" => 4,
 		      # when looking for info comments
 		      "maxInfoLines" => 8,
 		      # Runtime limit; 0 = no limit
-		      "time" => 1200,
+		      "time" => 60,
 		      # Additional command line options to stp
 		      "stpOptions" => "-d -f");
 
 # Database of command line options.  Initially, they are undefined
 my %options = ();
 # The list of testcases to run
-my @testcases = "cav2007-smt-1";
+my @testcases = "smt";
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
