@@ -14,8 +14,8 @@ namespace BEEV {
   bool BeevMgr::CheckSimplifyMap(const ASTNode& key, 
 				 ASTNode& output, bool pushNeg) {
     ASTNodeMap::iterator it, itend;
-    it = pushNeg ? SimplifyNegMap.find(key) : SimplifyMap.find(key);
-    itend = pushNeg ? SimplifyNegMap.end() : SimplifyMap.end();
+    it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
+    itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
     
     if(it != itend) {
       output = it->second;
@@ -23,7 +23,7 @@ namespace BEEV {
       return true;
     }
 
-    if(pushNeg && (it = SimplifyMap.find(key)) != SimplifyMap.end()) {
+    if(pushNeg && (it = SimplifyMap->find(key)) != SimplifyMap->end()) {
       output = 
 	(ASTFalse == it->second) ? 
 	ASTTrue : 
@@ -37,9 +37,9 @@ namespace BEEV {
   
   void BeevMgr::UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg) {
     if(pushNeg) 
-      SimplifyNegMap[key] = value;
+      (*SimplifyNegMap)[key] = value;
     else
-      SimplifyMap[key] = value;
+      (*SimplifyMap)[key] = value;
   }
 
   bool BeevMgr::CheckSubstitutionMap(const ASTNode& key, ASTNode& output) {
@@ -189,11 +189,9 @@ namespace BEEV {
   }
 
   ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg) {
-    SimplifyMap.clear();
-    SimplifyNegMap.clear();
+    ResetSimplifyMaps();
     ASTNode out = SimplifyFormula(b,pushNeg);
-    SimplifyMap.clear();
-    SimplifyNegMap.clear();
+    ResetSimplifyMaps();
     return out;
   }
 
@@ -1016,11 +1014,9 @@ namespace BEEV {
   } //end of flattenonelevel()
 
   ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b) {
-    SimplifyMap.clear();
-    SimplifyNegMap.clear();
+    ResetSimplifyMaps();
     ASTNode out = SimplifyTerm(b);
-    SimplifyNegMap.clear();
-    SimplifyMap.clear();
+    ResetSimplifyMaps();
     return out;
   }
 
@@ -3133,4 +3129,19 @@ namespace BEEV {
     TermsAlreadySeenMap[term] = var;
     return false;
   }
+
+// in ext/hash_map, and tr/unordered_map, there is no provision to shrink down
+// the number of buckets in a hash map. If the hash_map has previously held a 
+// lot of data, then it will have  a lot of buckets. Slowing down iterators and 
+// clears() in particular.
+void BeevMgr::ResetSimplifyMaps()
+{
+  delete SimplifyMap;
+  SimplifyMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
+    
+  delete SimplifyNegMap;
+  SimplifyNegMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
+}
+  
+
 };//end of namespace

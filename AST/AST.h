@@ -1477,8 +1477,8 @@ namespace BEEV {
     void CheckSimplifyInvariant(const ASTNode& a, const ASTNode& output);    
   private:
     //memo table for simplifcation
-    ASTNodeMap SimplifyMap;
-    ASTNodeMap SimplifyNegMap;
+    ASTNodeMap *SimplifyMap;
+    ASTNodeMap *SimplifyNegMap;
     ASTNodeMap SolverMap;
     ASTNodeSet AlwaysTrueFormMap;
     ASTNodeMap MultInverseMap;
@@ -1645,7 +1645,7 @@ namespace BEEV {
     // MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs
     // with the corresponding expressions.
-    ASTNodeMap _letid_expr_map;
+    ASTNodeMap *_letid_expr_map;
   public:
 
     ASTNode ResolveID(const ASTNode& var);
@@ -1823,6 +1823,7 @@ namespace BEEV {
     //functions for checking and updating simplifcation map
     bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg);
     void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg);
+    void ResetSimplifyMaps();
     bool CheckAlwaysTrueFormMap(const ASTNode& key);
     void UpdateAlwaysTrueFormMap(const ASTNode& val);
     bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
@@ -1857,8 +1858,6 @@ namespace BEEV {
 		ASTFalse(CreateNode(FALSE)),
 		ASTTrue(CreateNode(TRUE)),
 		ASTUndefined(CreateNode(UNDEFINED)),
-		SimplifyMap(INITIAL_SIMPLIFY_MAP_SIZE),
-		SimplifyNegMap(INITIAL_SIMPLIFY_MAP_SIZE),
 		SolverMap(INITIAL_SOLVER_MAP_SIZE),
 		_arrayread_symbol(INITIAL_ARRAYREAD_SYMBOL_SIZE),
 		_introduced_symbols(INITIAL_INTRODUCED_SYMBOLS_SIZE),
@@ -1870,6 +1869,9 @@ namespace BEEV {
       start_abstracting = false;
       Begin_RemoveWrites = false;
       SimplifyWrites_InPlace_Flag = false;
+      SimplifyMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
+      SimplifyNegMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
+      _letid_expr_map = new ASTNodeMap(INITIAL_INTRODUCED_SYMBOLS_SIZE);
     };
     
     //destructor

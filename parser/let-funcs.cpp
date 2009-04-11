@@ -27,7 +27,7 @@ namespace BEEV {
   //3. otherwise add the <var,letExpr> pair to the _letid_expr table.
   void BeevMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr) {
     ASTNodeMap::iterator it;
-    if(((it = _letid_expr_map.find(var)) != _letid_expr_map.end()) && 
+    if(((it = _letid_expr_map->find(var)) != _letid_expr_map->end()) && 
        it->second != ASTUndefined) {      
       FatalError("LetExprMgr:The LET-var v has already been defined in this LET scope: v =", var);
     }
@@ -36,13 +36,16 @@ namespace BEEV {
       FatalError("LetExprMgr:This var is already declared. cannot redeclare as a letvar: v =", var);
     }
 
-    _letid_expr_map[var] = letExpr;   
+    (*_letid_expr_map)[var] = letExpr;   
   }
 
   //this function looksup the "var to letexpr map" and returns the
   //corresponding letexpr. if there is no letexpr, then it simply
   //returns the var.
   ASTNode BeevMgr::ResolveID(const ASTNode& v) {
+    if (_letid_expr_map == NULL)
+         InitializeLetIDMap();
+
     if(v.GetKind() != SYMBOL) {
       return v;
     }
@@ -52,7 +55,7 @@ namespace BEEV {
     }
 
     ASTNodeMap::iterator it;
-    if((it =_letid_expr_map.find(v)) != _letid_expr_map.end()) {
+    if((it =_letid_expr_map->find(v)) != _letid_expr_map->end()) {
       if(it->second == ASTUndefined) 
 	FatalError("Unresolved Identifier: ",v);
       else
@@ -66,20 +69,35 @@ namespace BEEV {
     //declared variables also get stored in this map, but there value
     //is ASTUndefined. This is really a hack. I don't know how to get
     //rid of this hack.
-    _letid_expr_map[v] = ASTUndefined;
+    (*_letid_expr_map)[v] = ASTUndefined;
     return v;    
   }
   
   // This function simply cleans up the LetID -> LetExpr Map.   
   void BeevMgr::CleanupLetIDMap(void) { 
-    ASTNodeMap::iterator it = _letid_expr_map.begin();
-    ASTNodeMap::iterator itend = _letid_expr_map.end();
+
+   // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
+    if (_letid_expr_map->size()  ==0)
+    	return;
+
+
+    ASTNodeMap::iterator it = _letid_expr_map->begin();
+    ASTNodeMap::iterator itend = _letid_expr_map->end();
     for(;it!=itend;it++) {
       if(it->second != ASTUndefined) {
 	it->first.SetValueWidth(0);
 	it->first.SetIndexWidth(0);
       }
     }
-    _letid_expr_map.clear();
+
+  // May contain lots of buckets, so reset.
+    delete _letid_expr_map;
+    _letid_expr_map = new ASTNodeMap();
+
+  }
+
+ void BeevMgr::InitializeLetIDMap(void)
+  {
+  	_letid_expr_map = new ASTNodeMap();
   }
 };
