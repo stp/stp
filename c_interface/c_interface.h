@@ -120,6 +120,9 @@ extern "C" {
   //! Prints 'e' to stdout as C code
   void vc_printExprCCode(VC vc, Expr e);
 
+	//! print in smtlib format
+  char * vc_printSMTLIB(VC vc, Expr e);
+
   //! Prints 'e' into an open file descriptor 'fd'
   void vc_printExprFile(VC vc, Expr e, int fd);
 
@@ -203,6 +206,7 @@ extern "C" {
   Type vc_bvType(VC vc, int no_bits);
   Type vc_bv32Type(VC vc);
   
+  Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, char* decimalInput );  		
   Expr vc_bvConstExprFromStr(VC vc, char* binary_repr);
   Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value);
   Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value);

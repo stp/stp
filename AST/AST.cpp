@@ -686,6 +686,177 @@ namespace BEEV {
   } //end of PL_Print1()
 
 
+	// copied from Presentation Langauge printer.
+  ostream& ASTNode::SMTLIB_Print(ostream &os, int indentation) const {
+    // Clear the PrintMap
+    BeevMgr& bm = GetBeevMgr(); 
+    bm.PLPrintNodeSet.clear();
+    bm.NodeLetVarMap.clear();
+    bm.NodeLetVarVec.clear();
+    bm.NodeLetVarMap1.clear();
+
+    //pass 1: letize the node
+    LetizeNode();
+
+    //pass 2: 
+    //
+    //2. print all the let variables and their counterpart expressions
+    //2. as follows (LET var1 = expr1, var2 = expr2, ...
+    //
+    //3. Then print the Node itself, replacing every occurence of
+    //3. expr1 with var1, expr2 with var2, ...
+    //os << "(";
+    if(0 < bm.NodeLetVarMap.size()) {
+      //ASTNodeMap::iterator it=bm.NodeLetVarMap.begin();
+      //ASTNodeMap::iterator itend=bm.NodeLetVarMap.end();
+      std::vector<pair<ASTNode,ASTNode> >::iterator it = bm.NodeLetVarVec.begin();
+      std::vector<pair<ASTNode,ASTNode> >::iterator itend = bm.NodeLetVarVec.end();
+
+      os << "(LET ";      
+      //print the let var first
+      it->first.SMTLIB_Print1(os,indentation,false);
+      os << " = ";
+      //print the expr
+      it->second.SMTLIB_Print1(os,indentation,false);
+
+      //update the second map for proper printing of LET
+      bm.NodeLetVarMap1[it->second] = it->first;
+
+      for(it++;it!=itend;it++) {
+        os << "," << endl;
+	//print the let var first
+	it->first.SMTLIB_Print1(os,indentation,false);
+	os << " = ";
+	//print the expr
+	it->second.SMTLIB_Print1(os,indentation,false);
+
+        //update the second map for proper printing of LET
+        bm.NodeLetVarMap1[it->second] = it->first;
+      }
+    
+      os << " IN " << endl;      
+      SMTLIB_Print1(os,indentation, true);
+      os << ") ";
+    }
+    else
+      SMTLIB_Print1(os,indentation, false);
+    return os;
+  } 
+
+
+
+
+
+void ASTNode::SMTLIB_Print1(ostream& os,
+			  int indentation, 
+			  bool letize) const 
+{
+    //os << spaces(indentation);
+    //os << endl << spaces(indentation);
+    if (!IsDefined()) {
+      os << "<undefined>";
+      return;
+    }
+    
+    //if this node is present in the letvar Map, then print the letvar
+    BeevMgr &bm = GetBeevMgr();
+
+    //this is to print letvars for shared subterms inside the printing
+    //of "(LET v0 = term1, v1=term1@term2,...
+    if((bm.NodeLetVarMap1.find(*this) != bm.NodeLetVarMap1.end()) && !letize) {
+      (bm.NodeLetVarMap1[*this]).SMTLIB_Print1(os,indentation,letize);
+      return;
+    }
+
+    //this is to print letvars for shared subterms inside the actual
+    //term to be printed
+    if((bm.NodeLetVarMap.find(*this) != bm.NodeLetVarMap.end()) && letize) {
+      (bm.NodeLetVarMap[*this]).SMTLIB_Print1(os,indentation,letize);
+      return;
+    }
+    
+    //otherwise print it normally
+    Kind kind = GetKind();
+    const ASTVec &c = GetChildren();     
+    switch(kind) 
+    {
+    case BITVECTOR: // Not sure how this is differen to a BVCONST??
+      {os << "bv";
+      unsigned char * str;
+      str = CONSTANTBV::BitVector_to_Dec(c[0].GetBVConst());
+      os << str << "[" << c[0].GetValueWidth() << "]";
+      CONSTANTBV::BitVector_Dispose(str);
+      }
+      break;
+    case BVCONST:
+      {
+      os << "bv";
+      unsigned char * str;
+      str = CONSTANTBV::BitVector_to_Dec(GetBVConst());
+      os << str << "[" << GetValueWidth() << "]";
+      CONSTANTBV::BitVector_Dispose(str);
+      }
+      break;
+	case SYMBOL:
+      _int_node_ptr->nodeprint(os); 
+      break;
+    case FALSE:
+    	os << "false";
+    	break;
+    case TRUE:
+      	os << "true";
+      	break;   
+    case BVEXTRACT:
+       {
+      unsigned int upper = GetUnsignedConst(c[1]);
+      unsigned int lower = GetUnsignedConst(c[2]);
+      assert(upper > lower);
+	  os << "(extract[" << upper << ":" << lower << "] ";
+      c[0].SMTLIB_Print1(os,indentation,letize);
+	  os << ")";
+      }
+	default:
+		{
+		os << "(" << functionToSMTLIBName(kind);
+		
+    	ASTVec::const_iterator iend = c.end();
+    	for (ASTVec::const_iterator i = c.begin(); i != iend; i++) 
+    	{
+    		os << " ";
+    		i->SMTLIB_Print1(os,0,letize);	
+		}
+
+		os << ")";
+		}
+    }
+}
+
+string ASTNode::functionToSMTLIBName(const Kind k) const
+{
+	switch(k)
+	{	
+	    case AND:
+    	case OR:
+    	case NAND:
+    	case NOR:
+    	case XOR:
+	  	case BVAND:
+	  	case BVNEG:
+	    case ITE: 
+		case BVOR: 
+		case NOT:
+	  		return _kind_names[k];
+	  		
+	    case BVMULT: return "bvmul";
+		case WRITE: return "store";
+		case EQ: return "=";	
+		case BVCONCAT: return "concat";
+	
+		default: 
+			FatalError(_kind_names[k]); 
+	}
+}
+
   // printer for C code (copied from PL_Print())
   // TODO: this does not fully implement printing of all of the STP
   // language - FatalError calls inserted for unimplemented
@@ -1303,7 +1474,7 @@ namespace BEEV {
     return CreateBVConst(bv,width);
   }
 
- ASTNode BeevMgr::CreateBVConst(string*& strval, unsigned int base,  size_t bit_width) {
+ ASTNode BeevMgr::CreateBVConst(string*& strval, int base,  int bit_width) {
 
    if(!(2 == base || 10 == base || 16 == base))
      {
@@ -1661,7 +1832,7 @@ namespace BEEV {
   void BeevMgr::BVTypeCheck(const ASTNode& n) {
     Kind k = n.GetKind();
     //The children of bitvector terms are in turn bitvectors.
-    ASTVec v = n.GetChildren();
+    const ASTVec& v = n.GetChildren();
     if(is_Term_kind(k)) {
       switch(k) {
       case BVCONST:
@@ -1707,7 +1878,7 @@ namespace BEEV {
 	if(!(v.size() >= 2))
 	  FatalError("BVTypeCheck:bitwise Booleans and BV arith operators must have atleast two arguments\n",n);
 	unsigned int width = n.GetValueWidth();
-	for(ASTVec::iterator it=v.begin(),itend=v.end();it!=itend;it++){
+	for(ASTVec::const_iterator it=v.begin(),itend=v.end();it!=itend;it++){
 	  if(width != it->GetValueWidth()) {
 	    cerr << "BVTypeCheck:Operands of bitwise-Booleans and BV arith operators must be of equal length\n";
 	    cerr << n << endl;
@@ -1737,7 +1908,7 @@ namespace BEEV {
 	break;
 
       default:
-	for(ASTVec::iterator it=v.begin(),itend=v.end();it!=itend;it++)
+	for(ASTVec::const_iterator it=v.begin(),itend=v.end();it!=itend;it++)
 	  if(BITVECTOR_TYPE != it->GetType()) {
 	    cerr << "The type is: " << it->GetType() << endl;
 	    FatalError("BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n",n);
@@ -2162,6 +2333,10 @@ namespace BEEV {
 
   BeevMgr::~BeevMgr() {
     ClearAllTables();
+    
+   	delete SimplifyMap;
+	delete SimplifyNegMap;
+    delete _letid_expr_map;
   }
 
 }; // end namespace

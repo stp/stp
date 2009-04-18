@@ -537,6 +537,48 @@ namespace BEEV {
     if(BVCONST == k1 && BVCONST == k2)
       return ASTFalse;
     
+    // can concat have multiple children?
+    // so (= (concat bv1[24] x ) bv0[32]) == false
+    if((BVCONCAT==k1 && BVCONST== k2) ||(BVCONCAT==k2 && BVCONST== k1) )   
+    {
+    	ASTNode concat = (k1 == BVCONCAT)? in1: in2;
+    	ASTNode constant =  (k1 == BVCONST)? in1: in2;
+    		
+    	if(concat.GetChildren().size() == 2 && 
+    	(BVCONST == concat.GetChildren()[0].GetKind() || BVCONST == concat.GetChildren()[1].GetKind()))
+    	{
+    	int start;
+    	CBV partial;
+    	int partialWidth;
+    	ASTNode other;
+    		
+    	if (BVCONST == concat.GetChildren()[0].GetKind())
+    	{
+    		start = concat.GetChildren()[1].GetValueWidth();
+    		partial = concat.GetChildren()[0].GetBVConst();
+    		partialWidth = concat.GetChildren()[0].GetValueWidth();
+    		other = concat.GetChildren()[1];
+    	}
+    	else
+    	{
+    		start = 0;
+    		partial = concat.GetChildren()[1].GetBVConst();
+    		partialWidth = concat.GetChildren()[1].GetValueWidth();
+    		other = concat.GetChildren()[0];
+    	}
+	
+    	CBV complete = constant.GetBVConst();
+    			
+    	for (int i = 0; i < partialWidth; i++)
+    		if (CONSTANTBV::BitVector_bit_test(partial,i) != CONSTANTBV::BitVector_bit_test(complete,i+start))
+				return ASTFalse;
+    
+    	// if we get to here then the two constants in the equality are the same. Remove the constants.
+    	
+    	return CreateNode(EQ,other,CreateTerm(BVEXTRACT,other.GetValueWidth(),constant,CreateBVConst(32, partialWidth+other.GetValueWidth()-1),CreateBVConst(32,partialWidth)));
+    }
+    }
+        
     //last resort is to CreateNode
     return CreateNode(EQ,in1,in2);
   }
@@ -1063,10 +1105,62 @@ namespace BEEV {
       output = inputterm;
       break;
     case BVMULT:
-    case BVPLUS:{
-      if(BVMULT == k && 2 != inputterm.Degree()) {
-	FatalError("SimplifyTerm: We assume that BVMULT is binary",inputterm);
+   {
+      if(2 != inputterm.Degree()) 
+      {
+		FatalError("SimplifyTerm: We assume that BVMULT is binary",inputterm);
       }
+      
+      // Described nicely by Warren, Hacker's Delight pg 135.
+      // Turn sequences of one bits into subtractions.
+      // 28*x == 32x - 4x (two instructions), rather than 16x+ 8x+ 4x.
+      // When fully implemented. I.e. supporting sequences of 1 anywhere. 
+      // Other simplifications will try to fold these back in. So need to be careful
+      // about when the simplifications are applied. But in this version it won't 
+      // be simplified down by anything else. 
+
+      
+      // This (temporary) version only simplifies if all the left most bits are set.
+      // All the leftmost bits being set simplifies very nicely down.
+      const ASTNode& n0 = inputterm.GetChildren()[0];
+      const ASTNode& n1 = inputterm.GetChildren()[1];
+      
+      if (BVCONST == n0.GetKind() || BVCONST == n1.GetKind())
+      {
+      		// assuming that if both are constants it is handled already.
+      		assert(BVCONST == n0.GetKind() ^ BVCONST == n1.GetKind());
+      	
+      		CBV constant = (BVCONST == n0.GetKind())? n0.GetBVConst(): n1.GetBVConst();
+      		ASTNode other = (BVCONST == n0.GetKind())? n1: n0;
+      		
+      		int startSequence = 0;
+      		for (unsigned int i = 0; i < inputValueWidth; i++)
+      		{
+      			if (!CONSTANTBV::BitVector_bit_test(constant,i))
+      				startSequence = i;
+      		}
+      		
+      		if((inputValueWidth - startSequence) > 3)
+      		{
+      			// turn off all bits from "startSequence to the end", then add one.
+      			CBV maskedPlusOne = CONSTANTBV::BitVector_Create(inputValueWidth,true);
+      			for (int i=0; i < startSequence;i++)
+      			{
+     				if (!CONSTANTBV::BitVector_bit_test(constant,i)) // swap
+      					CONSTANTBV::BitVector_Bit_On(maskedPlusOne, i);
+      			}
+      			CONSTANTBV::BitVector_increment(maskedPlusOne);
+      			ASTNode& temp = CreateTerm(BVMULT,inputValueWidth, CreateBVConst(maskedPlusOne,inputValueWidth),other);
+      			output = CreateTerm(BVNEG, inputValueWidth, temp); 
+      		}
+      }
+      if(NULL == output)
+      	output = inputterm;
+      
+   }
+    break;
+   
+    case BVPLUS:{
       
       ASTVec c = FlattenOneLevel(inputterm).GetChildren();
       SortByArith(c);
@@ -1643,6 +1737,8 @@ namespace BEEV {
       return inputterm;
       break;
     }
+	assert(NULL != output);
+	
 
     //memoize
     UpdateSimplifyMap(inputterm,output,false);
@@ -2298,7 +2394,7 @@ namespace BEEV {
       return output;
     }
     
-    ASTVec c = a.GetChildren();
+    const ASTVec& c = a.GetChildren();
     //map from variables to vector of constants
     ASTNodeToVecMap vars_to_consts;
     //vector to hold constants

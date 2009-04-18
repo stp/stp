@@ -134,6 +134,16 @@ void vc_printExpr(VC vc, Expr e) {
   q.PL_Print(cout);
 }
 
+char * vc_printSMTLIB(VC vc, Expr e) 
+{
+	stringstream ss;
+  ((nodestar)e)->SMTLIB_Print(ss,0);
+  string s = ss.str();
+  char *copy = strdup(s.c_str());
+  return copy;
+	
+}
+
 // prints Expr 'e' to stdout as C code
 void vc_printExprCCode(VC vc, Expr e) {
   BEEV::ASTNode q = (*(nodestar)e);
@@ -736,6 +746,18 @@ Type vc_bvType(VC vc, int num_bits) {
 
 Type vc_bv32Type(VC vc) {
   return vc_bvType(vc,32);
+}
+
+Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, char* decimalInput ) {
+  bmstar b = (bmstar)vc;
+
+  string *param = new string(decimalInput);
+  // funny type to get it to compile. fix later when I understand what this does.
+  node n = b->CreateBVConst((string*&)param, (int)10,(int)width);
+  b->BVTypeCheck(n);
+  nodestar output = new node(n);
+  delete param;
+  return output;
 }
 
 
@@ -1435,7 +1457,6 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
         return strdup(s);
 }
 #endif
-
 
 Expr vc_parseExpr(VC vc, char* infile) {
   bmstar b = (bmstar)vc;

@@ -123,6 +123,8 @@ namespace BEEV {
       return ((size_t) node1._int_node_ptr) < ((size_t) node2._int_node_ptr);
     }
 
+	string functionToSMTLIBName(const Kind k) const;
+
   public:
     //Check if it points to a null node
     bool IsNull () const { return _int_node_ptr == NULL; }
@@ -298,6 +300,9 @@ namespace BEEV {
     // C code printer
     ostream& C_Print(ostream &os, int indentation = 0) const;
     void C_Print1(ostream &os, int indentation = 0, bool b = false) const;
+
+	ostream& SMTLIB_Print(ostream &os, int indentation) const;
+	void SMTLIB_Print1(ostream& os, int indentation,  bool letize) const;
 
 
     //Construct let variables for shared subterms
@@ -1383,7 +1388,7 @@ namespace BEEV {
 
     // Create and return an ASTNode for a symbol
     // Width is number of bits.
-    ASTNode CreateBVConst(string*& strval, unsigned int base,  size_t bit_width);
+    ASTNode CreateBVConst(string*& strval, int base,  int bit_width);
     ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
     ASTNode CreateZeroConst(unsigned int width);
     ASTNode CreateOneConst(unsigned int width);
