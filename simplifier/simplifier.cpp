@@ -1125,11 +1125,8 @@ namespace BEEV {
       const ASTNode& n0 = inputterm.GetChildren()[0];
       const ASTNode& n1 = inputterm.GetChildren()[1];
       
-      if (BVCONST == n0.GetKind() || BVCONST == n1.GetKind())
+      if (BVCONST == n0.GetKind() ^ BVCONST == n1.GetKind())
       {
-      		// assuming that if both are constants it is handled already.
-      		assert(BVCONST == n0.GetKind() ^ BVCONST == n1.GetKind());
-      	
       		CBV constant = (BVCONST == n0.GetKind())? n0.GetBVConst(): n1.GetBVConst();
       		ASTNode other = (BVCONST == n0.GetKind())? n1: n0;
       		
@@ -1150,7 +1147,7 @@ namespace BEEV {
       					CONSTANTBV::BitVector_Bit_On(maskedPlusOne, i);
       			}
       			CONSTANTBV::BitVector_increment(maskedPlusOne);
-      			ASTNode& temp = CreateTerm(BVMULT,inputValueWidth, CreateBVConst(maskedPlusOne,inputValueWidth),other);
+      			ASTNode temp = CreateTerm(BVMULT,inputValueWidth, CreateBVConst(maskedPlusOne,inputValueWidth),other);
       			output = CreateTerm(BVNEG, inputValueWidth, temp); 
       		}
       }
