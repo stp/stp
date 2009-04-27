@@ -1061,6 +1061,9 @@ private:
       CNFInfo* x0 = info[varphi[0]];
       CNFInfo* x1 = info[varphi[1]];
       convertFormulaToCNF(varphi[0], defs);
+      if(x0->clausesneg->size() > 1){
+         setDoSibRenamingPos(*x1);
+      }
       convertFormulaToCNF(varphi[1], defs);
       BeevMgr::ClauseList* psi = 
          PRODUCT(*(x0->clausesneg), *(x1->clausespos));
@@ -1078,7 +1081,13 @@ private:
       CNFInfo* x1 = info[varphi[1]];
       CNFInfo* x2 = info[varphi[2]];
       convertFormulaToCNF(varphi[0], defs);
+      if(x0->clausesneg->size() > 1){
+         setDoSibRenamingPos(*x1);
+      }
       convertFormulaToCNF(varphi[1], defs);
+      if(x0->clausespos->size() > 1){
+         setDoSibRenamingPos(*x2);
+      }
       convertFormulaToCNF(varphi[2], defs);
       BeevMgr::ClauseList* psi1 = PRODUCT(*(x0->clausesneg)
          , *(x1->clausespos));
@@ -1335,7 +1344,13 @@ private:
       CNFInfo* x1 = info[varphi[1]];
       CNFInfo* x2 = info[varphi[2]];
       convertFormulaToCNF(varphi[0], defs);
+      if(x0->clausesneg->size() > 1){
+         setDoSibRenamingNeg(*x1);
+      }
       convertFormulaToCNF(varphi[1], defs);
+      if(x0->clausespos->size() > 1){
+         setDoSibRenamingNeg(*x2);
+      }
       convertFormulaToCNF(varphi[2], defs);
       BeevMgr::ClauseList* psi1 = PRODUCT(*(x0->clausesneg)
          , *(x1->clausesneg));
