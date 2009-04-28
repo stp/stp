@@ -84,7 +84,8 @@ my %optionsDefault = ("level" => 4,
 my %options = ();
 # The list of testcases to run
 #
-my @testcases = "sample-tests";
+#my @testcases = "sample-tests";
+my @testcases = "../../stp-tests/test";
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
