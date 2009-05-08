@@ -1084,7 +1084,14 @@ namespace BEEV {
       const ASTNode& n0 = inputterm.GetChildren()[0];
       const ASTNode& n1 = inputterm.GetChildren()[1];
 
-      if (BVCONST == n0.GetKind() ^ BVCONST == n1.GetKind())
+      // This implementation has two problems.
+      // 1) It causes a segfault for cmu-model15,16,17
+      // 2) It doesn't count the number of bits saved, so if there is a single
+      // leading bit it will invert it. Even though that will take more shifts
+      // and adds when it's finally done.
+
+      // disabled.
+      if (false && (BVCONST == n0.GetKind()) ^ (BVCONST == n1.GetKind()))
       {
       		CBV constant = (BVCONST == n0.GetKind())? n0.GetBVConst(): n1.GetBVConst();
       		ASTNode other = (BVCONST == n0.GetKind())? n1: n0;
