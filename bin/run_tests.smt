@@ -87,7 +87,7 @@ my %optionsDefault = ("level" => 4,
 # Database of command line options.  Initially, they are undefined
 my %options = ();
 # The list of testcases to run
-my @testcases = "smt";
+my @testcases = "../../stp-tests/smt-test";
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
