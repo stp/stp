@@ -128,7 +128,6 @@ bit{DIGIT}+     {
 "not"           { return NOT_TOK; }
 "implies"       { return IMPLIES_TOK; }
 "ite"           { return ITE_TOK;}
-"if_then_else"  { return IF_THEN_ELSE_TOK; }
 "and"           { return AND_TOK; }
 "or"            { return OR_TOK; }
 "xor"           { return XOR_TOK; }

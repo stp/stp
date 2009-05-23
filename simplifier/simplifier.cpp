@@ -578,6 +578,32 @@ namespace BEEV {
     return CreateTerm(ITE,t1.GetValueWidth(),t0,t1,t2);
   }
 
+ASTNode BeevMgr::CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1, const ASTNode& in2) {
+	ASTNode t0 = in0;
+	ASTNode t1 = in1;
+	ASTNode t2 = in2;
+	CountersAndStats("CreateSimplifiedFormulaITE");
+
+	if (optimize) {
+		if (t0 == ASTTrue)
+			return t1;
+		if (t0 == ASTFalse)
+			return t2;
+		if (t1 == t2)
+			return t1;
+		if (CheckAlwaysTrueFormMap(t0)) {
+			return t1;
+		}
+		if (CheckAlwaysTrueFormMap(CreateNode(NOT, t0)) || (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0]))) {
+			return t2;
+		}
+	}
+	ASTNode result = CreateNode(ITE, t0, t1, t2);
+	BVTypeCheck(result);
+	return result;
+}
+
+
   ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg) {
     ASTNode output;
     //cerr << "input:\n" << a << endl;

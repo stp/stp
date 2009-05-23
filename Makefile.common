@@ -11,7 +11,7 @@
 #OPTIMIZE = -g     # Debugging
 OPTIMIZE = -O3     # Maximum optimization
 
-CFLAGS_BASE = $(OPTIMIZE) $(OPTIONS1) $(OPTIONS2)
+CFLAGS_BASE = $(OPTIMIZE) $(OPTIONS1) $(OPTIONS2) 
 # You can compile using make STATIC=true to compile a statically linked executable
 # Note that you should execute liblinks.sh first.
 ifdef STATIC
@@ -43,7 +43,7 @@ else
   CFLAGS = $(CFLAGS_BASE)
 endif
 
-CXXFLAGS = $(CFLAGS) -Wall -DEXT_HASH_MAP
+CXXFLAGS = $(CFLAGS) -Wall -DEXT_HASH_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wall -DTR1_UNORDERED_MAP
 #CXXFLAGS = $(CFLAGS) -Wall 
 #LDFLAGS= -lstdc++

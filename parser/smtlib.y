@@ -113,7 +113,6 @@
 %token NOT_TOK
 %token IMPLIES_TOK
 %token ITE_TOK
-%token IF_THEN_ELSE_TOK
 %token AND_TOK
 %token OR_TOK
 %token XOR_TOK
@@ -570,9 +569,9 @@ an_formula:
       delete $3;
       delete $4;
     }
-  | LPAREN_TOK IF_THEN_ELSE_TOK an_formula an_formula an_formula RPAREN_TOK
+  | LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
     {
-      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::ITE, *$3, *$4, *$5));
+      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateSimplifiedFormulaITE(*$3, *$4, *$5));
       delete $3;
       delete $4;
       delete $5;

@@ -1842,9 +1842,7 @@ string ASTNode::functionToSMTLIBName(const Kind k) const
       case SYMBOL:
 	return;
       case ITE:     
-	if(BOOLEAN_TYPE != n[0].GetType() && 
-	   BITVECTOR_TYPE != n[1].GetType() &&
-	   BITVECTOR_TYPE != n[2].GetType())
+	if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
 	  FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",n);
 	if(n[1].GetValueWidth() != n[2].GetValueWidth())
 	  FatalError("BVTypeCheck: length of THENbranch != length of ELSEbranch in the term t = \n",n);

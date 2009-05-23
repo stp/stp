@@ -1493,6 +1493,7 @@ namespace BEEV {
     ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
     ASTNode ITEOpt_InEqs(const ASTNode& in1);
     ASTNode CreateSimplifiedTermITE(const ASTNode& t1, const ASTNode& t2, const ASTNode& t3);
+    ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1, const ASTNode& in2);
     ASTNode CreateSimplifiedINEQ(Kind k, const ASTNode& a0, const ASTNode& a1, bool pushNeg);
     ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg);
     ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg);
