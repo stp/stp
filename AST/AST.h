@@ -123,8 +123,6 @@ namespace BEEV {
       return ((size_t) node1._int_node_ptr) < ((size_t) node2._int_node_ptr);
     }
 
-	string functionToSMTLIBName(const Kind k) const;
-
   public:
     //Check if it points to a null node
     bool IsNull () const { return _int_node_ptr == NULL; }
@@ -184,6 +182,10 @@ namespace BEEV {
     // just print the node number?
     bool IsAlreadyPrinted() const;
     void MarkAlreadyPrinted() const;
+
+    // delegates to the ASTInternal node.
+    void nodeprint(ostream& os, bool c_friendly = false) const;
+
 
   public:
     // Default constructor.  This gets used when declaring an ASTVec
@@ -296,14 +298,6 @@ namespace BEEV {
     ostream& PL_Print(ostream &os, int indentation = 0) const;
 
     void PL_Print1(ostream &os, int indentation = 0, bool b = false) const;
-
-    // C code printer
-    ostream& C_Print(ostream &os, int indentation = 0) const;
-    void C_Print1(ostream &os, int indentation = 0, bool b = false) const;
-
-	ostream& SMTLIB_Print(ostream &os, int indentation) const;
-	void SMTLIB_Print1(ostream& os, int indentation,  bool letize) const;
-
 
     //Construct let variables for shared subterms
     void LetizeNode(void) const;

@@ -12,6 +12,7 @@
 #include <assert.h>
 #include "fdstream.h"
 #include "../AST/AST.h"
+#include "../AST/printer/printers.h"
 
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)
@@ -137,7 +138,7 @@ void vc_printExpr(VC vc, Expr e) {
 char * vc_printSMTLIB(VC vc, Expr e) 
 {
 	stringstream ss;
-  ((nodestar)e)->SMTLIB_Print(ss,0);
+ printer::SMTLIB_Print(ss,*((nodestar)e), 0);
   string s = ss.str();
   char *copy = strdup(s.c_str());
   return copy;
@@ -168,7 +169,7 @@ void vc_printExprCCode(VC vc, Expr e) {
   cout << endl;
 
   // print constraints and assert
-  q.C_Print(cout);
+  printer::C_Print(cout,q);
 }
 
 

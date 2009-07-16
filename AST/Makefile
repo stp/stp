@@ -1,7 +1,7 @@
 include ../Makefile.common
 
 #SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp DPLLMgr.cpp ToSAT.cpp Transform.cpp
-SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp
+SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp printer/SMTLIBPrinter.cpp  printer/dotPrinter.cpp  printer/CPrinter.cpp
 OBJS = $(SRCS:.cpp=.o)
 CFLAGS += -I../sat/mtl -I../sat/core
 
@@ -29,6 +29,7 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 clean:
 	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.h ASTKind.cpp .#*
+	rm -rf outputer/*.o
 
 depend:
 	makedepend -Y -- $(CFLAGS) -- $(SRCS)
