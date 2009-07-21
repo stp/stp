@@ -322,10 +322,20 @@ logic_name:
 ;
 
 status:
-    SAT_TOK { $$ = NULL; }
-  | UNSAT_TOK { $$ = NULL; }
-  | UNKNOWN_TOK { $$ = NULL; }
-;
+    SAT_TOK { 
+    	BEEV::input_status = BEEV::TO_BE_SATISFIABLE; 
+    	$$ = NULL; 
+ 		}
+  | UNSAT_TOK { 
+      	BEEV::input_status = BEEV::TO_BE_UNSATISFIABLE; 
+    	$$ = NULL; 
+  }
+  | UNKNOWN_TOK 
+  { 
+      	BEEV::input_status = BEEV::TO_BE_UNKNOWN; 
+    	$$ = NULL; 
+  }
+ ;
 
 
 /* annotations: */

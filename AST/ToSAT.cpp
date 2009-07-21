@@ -1424,6 +1424,21 @@ namespace BEEV {
   //This function prints the output of the STP solver
   void BeevMgr::PrintOutput(bool true_iff_valid) {
     //self-explanatory
+      if(print_output) {
+	if(smtlib_parser_enable)
+    	  {
+	    if (true_iff_valid && (BEEV::input_status == TO_BE_SATISFIABLE))
+	      {
+		cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
+	      }
+	    else
+	      if (!true_iff_valid && (BEEV::input_status == TO_BE_UNSATISFIABLE))
+		{
+		  cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
+		}
+    	  }
+      }
+
     if(true_iff_valid) {
       ValidFlag = true;
       if(print_output) {

@@ -33,6 +33,14 @@ extern int smtparse();
 extern int cvcparse();
 
 
+namespace BEEV
+{
+extern BEEV::ASTNode SingleBitOne;
+extern BEEV::ASTNode SingleBitZero;
+}
+
+
+
 /* GLOBAL VARS: Some global vars for the Main function.
  *
  */
@@ -43,10 +51,6 @@ std::string helpstring = "\n\n";
 
 // Amount of memory to ask for at beginning of main.
 static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
-
-// Used only in smtlib lexer/parser
-BEEV::ASTNode SingleBitOne;
-BEEV::ASTNode SingleBitZero;
 
 /******************************************************************************
  * MAIN FUNCTION: 
@@ -205,8 +209,8 @@ int main(int argc, char ** argv) {
   BEEV::print_output = true;
   BEEV::globalBeevMgr_for_parser = new BEEV::BeevMgr();  
 
-  SingleBitOne = BEEV::globalBeevMgr_for_parser->CreateOneConst(1);
-  SingleBitZero = BEEV::globalBeevMgr_for_parser->CreateZeroConst(1);
+  BEEV::SingleBitOne = BEEV::globalBeevMgr_for_parser->CreateOneConst(1);
+  BEEV::SingleBitZero = BEEV::globalBeevMgr_for_parser->CreateZeroConst(1);
   //BEEV::smtlib_parser_enable = true;
 
   if (smtlibParser)

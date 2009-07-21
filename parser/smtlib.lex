@@ -51,8 +51,11 @@
     }
   }      
 
+namespace BEEV
+{
   extern BEEV::ASTNode SingleBitOne;
   extern BEEV::ASTNode SingleBitZero;
+ }
 
 /* Changed for smtlib speedup */
 /* bv{DIGIT}+      { smtlval.node = new BEEV::ASTNode(BEEV::_bm->CreateBVConst(smttext+2, 10)); return BVCONST_TOK;} */
@@ -84,10 +87,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(SingleBitOne);
+		     smtlval.node = new BEEV::ASTNode(BEEV::SingleBitOne);
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(SingleBitZero);
+		     smtlval.node = new BEEV::ASTNode(BEEV::SingleBitZero);
 		   }
 		   return BITCONST_TOK;
 		};
@@ -128,6 +131,7 @@ bit{DIGIT}+     {
 "not"           { return NOT_TOK; }
 "implies"       { return IMPLIES_TOK; }
 "ite"           { return ITE_TOK;}
+"if_then_else"  { return ITE_TOK;} // This is in the SMTLIB benchmarks.
 "and"           { return AND_TOK; }
 "or"            { return OR_TOK; }
 "xor"           { return XOR_TOK; }
@@ -135,7 +139,6 @@ bit{DIGIT}+     {
 "let"           { return LET_TOK; }
 "flet"          { return FLET_TOK; }
 "notes"         { return NOTES_TOK; }
-"cvc_command"   { return CVC_COMMAND_TOK; }
 "sorts"         { return SORTS_TOK; }
 "funs"          { return FUNS_TOK; }
 "preds"         { return PREDS_TOK; }
@@ -171,11 +174,7 @@ bit{DIGIT}+     {
 
 "nand"		{ return NAND_TOK;}
 "nor"		{ return NOR_TOK;}
-"/="		{ return NEQ_TOK; }
- ":="           { return ASSIGN_TOK;}
-"shift_left0"   { return BVLEFTSHIFT_TOK;}
 "bvshl"         { return BVLEFTSHIFT_1_TOK;}
-"shift_right0"  { return BVRIGHTSHIFT_TOK;}
 "bvlshr"        { return BVRIGHTSHIFT_1_TOK;}
 "bvashr"        { return BVARITHRIGHTSHIFT_TOK;}
 "bvadd"         { return BVPLUS_TOK;}

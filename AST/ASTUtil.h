@@ -77,6 +77,16 @@ namespace BEEV {
   //print the input back
   extern bool print_STPinput_back;
 
+  enum inputStatus
+    {
+  	  NOT_DECLARED =0, // Not included in the input file / stream
+  	  TO_BE_SATISFIABLE,
+  	  TO_BE_UNSATISFIABLE,
+  	  TO_BE_UNKNOWN // Specified in the input file as unknown.
+    };
+
+  extern enum inputStatus input_status;
+
   extern void (*vc_error_hdlr)(const char* err_msg);
   /*Spacer class is basically just an int, but the new class allows
     overloading of << with a special definition that prints the int as

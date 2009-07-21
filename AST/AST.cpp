@@ -58,6 +58,12 @@ namespace BEEV {
   //print the input back
   bool print_STPinput_back = false;
   
+  enum BEEV::inputStatus input_status = NOT_DECLARED;
+
+  // Used only in smtlib lexer/parser
+  ASTNode SingleBitOne;
+  ASTNode SingleBitZero;
+
   //global BEEVMGR for the parser
   BeevMgr * globalBeevMgr_for_parser;
 
@@ -1497,6 +1503,7 @@ namespace BEEV {
     for(ASTtoBitvectorMap::iterator it=_ASTNode_to_Bitvector.begin(),
 	  itend=_ASTNode_to_Bitvector.end();it!=itend;it++) {
       (it->second)->clear();
+      delete (it->second);
     }
     _ASTNode_to_Bitvector.clear();
     
@@ -1556,6 +1563,7 @@ namespace BEEV {
     for(ASTtoBitvectorMap::iterator it=_ASTNode_to_Bitvector.begin(),
 	  itend=_ASTNode_to_Bitvector.end();it!=itend;it++) {
       (it->second)->clear();
+      delete (it->second);
     }
     _ASTNode_to_Bitvector.clear();
     
