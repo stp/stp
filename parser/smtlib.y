@@ -274,13 +274,14 @@ bench_attribute:
     }
   | COLON_TOK FORMULA_TOK an_formula
     {
-      //the query
-      query = BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::NOT,*$3);
-      BEEV::globalBeevMgr_for_parser->AddQuery(query);
-      //dummy true
-      $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::TRUE));
-      
-      
+		// Previously this would call AddQuery() on the negation.
+		// But if multiple formula were (eroneously) present
+		// it discarded all but the last formula. Allowing multiple 
+		// formula and taking the conjunction of them along with all
+		// the assumptions is what the other solvers do.  
+
+      //assumptions are like asserts
+      $$ = $3;
     }
   | COLON_TOK STATUS_TOK status
     {
@@ -700,19 +701,6 @@ an_nonbvconst_term:
       $$ = $2;
       //$$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->SimplifyTerm(*$2));
       //delete $2;
-    }
-  | LPAREN_TOK TERMID_TOK an_term RPAREN_TOK
-    {
-      //ARRAY READ
-      // valuewidth is same as array, indexwidth is 0.
-      BEEV::ASTNode in = *$2;
-      BEEV::ASTNode m = *$3;
-      unsigned int width = in.GetValueWidth();
-      BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::READ, width, in, m));
-      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
-      $$ = n;
-      delete $2;
-      delete $3;
     }
   | SELECT_TOK an_term an_term
     {
