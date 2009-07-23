@@ -131,7 +131,7 @@ namespace BEEV {
        )
       return 1;
 
-    if(SYMBOL == k1)
+    if(SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2))
       return 1;
 
     //b is of the form READ(Arr,const), and a is const, or
@@ -146,7 +146,7 @@ namespace BEEV {
 	))
       return -1;
 
-    if(SYMBOL == k2)
+    if(SYMBOL == k2 && (BVCONST == k1 || TRUE == k1 || FALSE == k1))
       return -1;
 
     return 0;
