@@ -4,14 +4,16 @@
  * Outputs in DOT graph format. Can be layed out by the dotty/neato tools.
  */
 
-namespace printer {
+namespace printer
+{
 
 using std::string;
 using namespace BEEV;
 
 void outputBitVec(const ASTNode n, ostream& os);
 
-void Dot_Print1(ostream &os, const ASTNode n, hash_set<int> *alreadyOutput) {
+void Dot_Print1(ostream &os, const ASTNode n, hash_set<int> *alreadyOutput)
+{
 
 	// check if this node has already been printed. If so return.
 	if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
@@ -20,7 +22,7 @@ void Dot_Print1(ostream &os, const ASTNode n, hash_set<int> *alreadyOutput) {
 	alreadyOutput->insert(n.GetNodeNum());
 
 	os << "n" << n.GetNodeNum() << "[label =\"";
-	switch(n.GetKind())
+	switch (n.GetKind())
 	{
 		case SYMBOL:
 			n.nodeprint(os);
@@ -35,27 +37,26 @@ void Dot_Print1(ostream &os, const ASTNode n, hash_set<int> *alreadyOutput) {
 			os << _kind_names[n.GetKind()];
 	}
 
-
-	os  << "\"];" << endl;
-
+	os << "\"];" << endl;
 
 	// print the edges to each child.
-    ASTVec ch = n.GetChildren();
-    ASTVec::iterator itend = ch.end();
-    int i =0;
-    for(ASTVec::iterator it = ch.begin(); it < itend; it++)
-    {
-    	os << "n" << n.GetNodeNum() << " -> " << "n" << it->GetNodeNum() << "[label=" << i++ << "];" << endl;
-    }
+	ASTVec ch = n.GetChildren();
+	ASTVec::iterator itend = ch.end();
+	int i = 0;
+	for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+	{
+		os << "n" << n.GetNodeNum() << " -> " << "n" << it->GetNodeNum() << "[label=" << i++ << "];" << endl;
+	}
 
-    // print each of the children.
-    for(ASTVec::iterator it = ch.begin(); it < itend; it++)
-    {
-    	Dot_Print1(os, *it, alreadyOutput);
-    }
+	// print each of the children.
+	for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+	{
+		Dot_Print1(os, *it, alreadyOutput);
+	}
 }
 
-ostream& Dot_Print(ostream &os, const ASTNode n) {
+ostream& Dot_Print(ostream &os, const ASTNode n)
+{
 
 	os << "digraph G{" << endl;
 

@@ -1,10 +1,10 @@
 #include "printers.h"
 
-namespace printer {
+namespace printer
+{
 
 using std::string;
 using namespace BEEV;
-
 
 // printer for C code (copied from PL_Print())
 // TODO: this does not fully implement printing of all of the STP
@@ -13,14 +13,16 @@ using namespace BEEV;
 //   FatalError("C_Print1: printing not implemented for this kind: ",*this);
 
 // helper function for printing C code (copied from PL_Print1())
-void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
+void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
+{
 
 	unsigned int upper, lower, num_bytes;
 	Kind LHSkind, RHSkind;
 
 	//os << spaces(indentation);
 	//os << endl << spaces(indentation);
-	if (!n.IsDefined()) {
+	if (!n.IsDefined())
+	{
 		os << "<undefined>";
 		return;
 	}
@@ -30,14 +32,16 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 
 	//this is to print letvars for shared subterms inside the printing
 	//of "(LET v0 = term1, v1=term1@term2,...
-	if ((bm.NodeLetVarMap1.find(n) != bm.NodeLetVarMap1.end()) && !letize) {
+	if ((bm.NodeLetVarMap1.find(n) != bm.NodeLetVarMap1.end()) && !letize)
+	{
 		C_Print1(os, (bm.NodeLetVarMap1[n]), indentation, letize);
 		return;
 	}
 
 	//this is to print letvars for shared subterms inside the actual
 	//term to be printed
-	if ((bm.NodeLetVarMap.find(n) != bm.NodeLetVarMap.end()) && letize) {
+	if ((bm.NodeLetVarMap.find(n) != bm.NodeLetVarMap.end()) && letize)
+	{
 		C_Print1(os, (bm.NodeLetVarMap[n]), indentation, letize);
 		return;
 	}
@@ -45,7 +49,8 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 	//otherwise print it normally
 	Kind kind = n.GetKind();
 	const ASTVec &c = n.GetChildren();
-	switch (kind) {
+	switch (kind)
+	{
 		case BVGETBIT:
 			FatalError("C_Print1: printing not implemented for this kind: ", n);
 			C_Print1(os, c[0], indentation, letize);
@@ -110,7 +115,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 		case BVCONCAT:
 			FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
 			os << "(";
-			C_Print1(os,c[0], indentation, letize);
+			C_Print1(os, c[0], indentation, letize);
 			os << " @ ";
 			C_Print1(os, c[1], indentation, letize);
 			os << ")" << endl;
@@ -143,13 +148,15 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 			assert (num_bytes > 0);
 
 			// for multi-byte extraction, use the ADDRESS
-			if (num_bytes > 1) {
+			if (num_bytes > 1)
+			{
 				os << "&";
 				C_Print1(os, c[0], indentation, letize);
 				os << "[" << lower / 8 << "]";
 			}
 			// for single-byte extraction, use the VALUE
-			else {
+			else
+			{
 				C_Print1(os, c[0], indentation, letize);
 				os << "[" << lower / 8 << "]";
 			}
@@ -166,7 +173,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 		case BVRIGHTSHIFT:
 			FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
 			os << "(";
-			C_Print1(os,c[0], indentation, letize);
+			C_Print1(os, c[0], indentation, letize);
 			os << " >> ";
 			os << GetUnsignedConst(c[1]);
 			os << ")";
@@ -180,7 +187,8 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 		case BVMOD:
 			os << kind << "(";
 			os << n.GetValueWidth();
-			for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++) {
+			for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
+			{
 				os << ", " << endl;
 				C_Print1(os, *it, indentation, letize);
 			}
@@ -284,34 +292,39 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 
 			// try to figure out whether it's a single-byte or multi-byte
 			// comparison
-			if (LHSkind == BVEXTRACT) {
+			if (LHSkind == BVEXTRACT)
+			{
 				upper = GetUnsignedConst(c[0].GetChildren()[1]);
 				lower = GetUnsignedConst(c[0].GetChildren()[2]);
 				num_bytes = (upper - lower + 1) / 8;
 			}
-			else if (RHSkind == BVEXTRACT) {
+			else if (RHSkind == BVEXTRACT)
+			{
 				upper = GetUnsignedConst(c[1].GetChildren()[1]);
 				lower = GetUnsignedConst(c[1].GetChildren()[2]);
 				num_bytes = (upper - lower + 1) / 8;
 			}
 
-			if (num_bytes > 1) {
+			if (num_bytes > 1)
+			{
 				os << "(memcmp(";
-				C_Print1(os,c[0], indentation, letize);
+				C_Print1(os, c[0], indentation, letize);
 				os << ", ";
 				C_Print1(os, c[1], indentation, letize);
 				os << ", ";
 				os << num_bytes;
 				os << ") == 0)";
 			}
-			else if (num_bytes == 1) {
+			else if (num_bytes == 1)
+			{
 				os << "(";
 				C_Print1(os, c[0], indentation, letize);
 				os << " == ";
 				C_Print1(os, c[1], indentation, letize);
 				os << ")";
 			}
-			else {
+			else
+			{
 				FatalError("C_Print1: ugh problem in implementing ==");
 			}
 
@@ -326,15 +339,18 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 		case OR:
 		case NAND:
 		case NOR:
-		case XOR: {
+		case XOR:
+		{
 			os << "(";
 			C_Print1(os, c[0], indentation, letize);
 			ASTVec::const_iterator it = c.begin();
 			ASTVec::const_iterator itend = c.end();
 
 			it++;
-			for (; it != itend; it++) {
-				switch (kind) {
+			for (; it != itend; it++)
+			{
+				switch (kind)
+				{
 					case AND:
 						os << " && ";
 						break;
@@ -362,11 +378,11 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 			FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
 			os << "(";
 			os << "(";
-			C_Print1(os,c[0], indentation, letize);
+			C_Print1(os, c[0], indentation, letize);
 			os << ")";
 			os << " <=> ";
 			os << "(";
-			C_Print1(os,c[1], indentation, letize);
+			C_Print1(os, c[1], indentation, letize);
 			os << ")";
 			os << ")";
 			os << endl;
@@ -375,7 +391,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 			FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
 			os << "(";
 			os << "(";
-			C_Print1(os, c[0],indentation, letize);
+			C_Print1(os, c[0], indentation, letize);
 			os << ")";
 			os << " => ";
 			os << "(";
@@ -388,7 +404,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 			FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
 
 			os << kind << "(";
-			C_Print1(os, c[0],indentation, letize);
+			C_Print1(os, c[0], indentation, letize);
 			os << ",";
 			os << n.GetValueWidth();
 			os << ")" << endl;
@@ -411,7 +427,8 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize) {
 //2. In the second pass print a "global let" and then print N
 //2. as follows: Every occurence of a node occuring more than
 //2. once is replaced with the corresponding let variable.
-ostream& C_Print(ostream &os, const ASTNode n,  int indentation)  {
+ostream& C_Print(ostream &os, const ASTNode n, int indentation)
+{
 	// Clear the PrintMap
 	BeevMgr& bm = n.GetBeevMgr();
 	bm.PLPrintNodeSet.clear();
@@ -432,7 +449,8 @@ ostream& C_Print(ostream &os, const ASTNode n,  int indentation)  {
 	//3. Then print the Node itself, replacing every occurence of
 	//3. expr1 with var1, expr2 with var2, ...
 	//os << "(";
-	if (0 < bm.NodeLetVarMap.size()) {
+	if (0 < bm.NodeLetVarMap.size())
+	{
 		//ASTNodeMap::iterator it=bm.NodeLetVarMap.begin();
 		//ASTNodeMap::iterator itend=bm.NodeLetVarMap.end();
 		std::vector<pair<ASTNode, ASTNode> >::iterator it = bm.NodeLetVarVec.begin();
@@ -441,10 +459,12 @@ ostream& C_Print(ostream &os, const ASTNode n,  int indentation)  {
 		// start a new block to create new static scope
 		os << "{" << endl;
 
-		for (; it != itend; it++) {
+		for (; it != itend; it++)
+		{
 
 			// see if it's a BVEXTRACT, and if so, whether it's multi-byte
-			if (it->second.GetKind() == BVEXTRACT) {
+			if (it->second.GetKind() == BVEXTRACT)
+			{
 				upper = GetUnsignedConst(it->second.GetChildren()[1]);
 				lower = GetUnsignedConst(it->second.GetChildren()[2]);
 				num_bytes = (upper - lower + 1) / 8;
@@ -452,25 +472,27 @@ ostream& C_Print(ostream &os, const ASTNode n,  int indentation)  {
 			}
 
 			//print the let var first
-			if (num_bytes > 1) {
+			if (num_bytes > 1)
+			{
 				// for multi-byte assignment, use 'memcpy' and array notation
 				os << "unsigned char ";
-				C_Print1(os, it->first,indentation, false);
+				C_Print1(os, it->first, indentation, false);
 				os << "[" << num_bytes << "]; ";
 				os << "memcpy(";
-				C_Print1(os,it->first, indentation, false);
+				C_Print1(os, it->first, indentation, false);
 				os << ", ";
 				//print the expr
-				C_Print1(os,it->second, indentation, false);
+				C_Print1(os, it->second, indentation, false);
 				os << ", " << num_bytes << ");";
 			}
-			else {
+			else
+			{
 				// for single-byte assignment, use '='
 				os << "unsigned char ";
-				C_Print1(os, it->first,indentation, false);
+				C_Print1(os, it->first, indentation, false);
 				os << " = ";
 				//print the expr
-				C_Print1(os, it->second,indentation, false);
+				C_Print1(os, it->second, indentation, false);
 				os << ";" << endl;
 			}
 
@@ -483,7 +505,8 @@ ostream& C_Print(ostream &os, const ASTNode n,  int indentation)  {
 
 		os << ";" << endl << "}";
 	}
-	else {
+	else
+	{
 		os << "stp_assert ";
 		C_Print1(os, n, indentation, false);
 		os << ";";
