@@ -81,7 +81,7 @@ sub gen_h_file {
     print HFILE
 	"extern const char *_kind_names[];\n\n",
 	"/** Prints symbolic name of kind */\n",
-	"inline ostream& operator<<(ostream &os, const Kind &kind) { os << _kind_names[kind]; return os; }\n",
+	"inline std::ostream& operator<<(std::ostream &os, const Kind &kind) { os << _kind_names[kind]; return os; }\n",
 	"\n\n",
 	"};  // end namespace\n",
 	"\n\n#endif\n";

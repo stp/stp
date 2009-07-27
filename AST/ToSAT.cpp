@@ -1158,6 +1158,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 	Begin_RemoveWrites = false;
 
 	newq = TransformFormula(newq);
+	assertTransformPostConditions(newq);
 	ASTNodeStats("after transformation: ", newq);
 	TermsAlreadySeenMap.clear();
 
@@ -1197,7 +1198,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 		return res;
 	}
 
-	FatalError("TopLevelSAT: reached the end without proper conclusion:"
+	FatalError("TopLevelSATAux: reached the end without proper conclusion:"
 		"either a divide by zero in the input or a bug in STP");
 	//bogus return to make the compiler shut up
 	return 2;

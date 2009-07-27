@@ -1724,7 +1724,8 @@ public:
 	ASTNode TransformFormula(const ASTNode& query);
 	ASTNode TransformTerm(const ASTNode& term);
 	ASTNode TransformArray(const ASTNode& term);
-	ASTNode TranslateSignedDivMod(const ASTNode& term);
+	ASTNode TranslateSignedDivModRem(const ASTNode& term);
+	void    assertTransformPostConditions(const ASTNode & term);
 
 	//LET Management
 private:
@@ -1843,7 +1844,14 @@ public:
 	//in scenarios like where you are building the ASTNode Tree, and
 	//you typecheck as you go along. It is not suitable as a general
 	//typechecker
-	void BVTypeCheck(const ASTNode& n);
+
+	// NB: The boolean value is always true!
+	bool BVTypeCheck(const ASTNode& n);
+
+	// Checks recursively all the way down.
+	bool BVTypeCheckRecursive(const ASTNode& n);
+
+
 
 private:
 	//stack of Logical Context. each entry in the stack is a logical

@@ -59,7 +59,7 @@ bool smtlib_parser_enable = false;
 //print the input back
 bool print_STPinput_back = false;
 
-enum BEEV::inputStatus input_status = NOT_DECLARED;
+enum inputStatus input_status = NOT_DECLARED;
 
 // Used only in smtlib lexer/parser
 ASTNode SingleBitOne;
@@ -1247,15 +1247,36 @@ ASTNode::ASTNode(const ASTNode &n) :
 #endif
 }
 
+// If there is a lot of sharing in the graph, this will take a long time.
+// it doesn't mark subgraphs as already having been typechecked.
+bool BeevMgr::BVTypeCheckRecursive(const ASTNode& n)
+{
+	const ASTVec& c = n.GetChildren();
+
+	BVTypeCheck(n);
+
+	for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
+		BVTypeCheckRecursive(*it);
+
+	return true;
+}
+
+
+
 /* FUNCTION: Typechecker for terms and formulas
  *
  * TypeChecker: Assumes that the immediate Children of the input
  * ASTNode have been typechecked. This function is suitable in
  * scenarios like where you are building the ASTNode Tree, and you
  * typecheck as you go along. It is not suitable as a general
- * typechecker
+ * typechecker.
+ *
+ * This ALWAYS returns true. If there is an error it will call
+ * FatalError() and abort.
  */
-void BeevMgr::BVTypeCheck(const ASTNode& n)
+
+
+bool BeevMgr::BVTypeCheck(const ASTNode& n)
 {
 	Kind k = n.GetKind();
 	//The children of bitvector terms are in turn bitvectors.
@@ -1269,7 +1290,7 @@ void BeevMgr::BVTypeCheck(const ASTNode& n)
 					FatalError("BVTypeCheck: The term t does not typecheck, where t = \n", n);
 				break;
 			case SYMBOL:
-				return;
+				return true;
 			case ITE:
 				if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
 					FatalError("BVTypeCheck: The term t does not typecheck, where t = \n", n);
@@ -1392,7 +1413,7 @@ void BeevMgr::BVTypeCheck(const ASTNode& n)
 			case TRUE:
 			case FALSE:
 			case SYMBOL:
-				return;
+				return true;
 			case EQ:
 			case NEQ:
 				if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
@@ -1445,6 +1466,7 @@ void BeevMgr::BVTypeCheck(const ASTNode& n)
 				break;
 		}
 	}
+	return true;
 } //End of TypeCheck function
 
 //add an assertion to the current logical context

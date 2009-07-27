@@ -1896,6 +1896,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& inputterm)
 		}
 		case SBVREM:
 		case SBVDIV:
+		case SBVMOD:
 		{
 			ASTVec c = inputterm.GetChildren();
 			ASTVec o;

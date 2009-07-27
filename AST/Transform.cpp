@@ -7,19 +7,20 @@
  ********************************************************************/
 // -*- c++ -*-
 
+// Transform: * Converts signed Div/ signed remainder/ signed modulus into unsigned.
+//            * Removes array selects / stores from formula.
+
+
 #include "AST.h"
 #include <stdlib.h>
 #include <stdio.h>
 namespace BEEV
 {
 
-//Translates signed BVDIV/BVMOD into unsigned variety
-ASTNode BeevMgr::TranslateSignedDivMod(const ASTNode& in)
+//Translates signed BVDIV,BVMOD and BVREM into unsigned variety
+ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 {
-	if (!(SBVREM == in.GetKind() || SBVDIV == in.GetKind()))
-	{
-		FatalError("TranslateSignedDivMod: input must be signed DIV/MOD\n", in);
-	}
+	assert(in.GetChildren().size() ==2);
 
 	ASTNode dividend = in[0];
 	ASTNode divisor = in[1];
@@ -51,10 +52,13 @@ ASTNode BeevMgr::TranslateSignedDivMod(const ASTNode& in)
 
 		//put everything together, simplify, and return
 		ASTNode n = CreateTerm(ITE, len, cond_dividend, minus_modnode, modnode);
-		return SimplifyTerm_TopLevel(n);
+		return SimplifyTerm(n);
 	}
 
-	if (SBVMOD == in.GetKind())
+	// This is the modulus of dividing rounding to -infinity.
+	// Except if the signs are different, and it perfectly divides
+	// the modulus is the divisor (not zero).
+	else if (SBVMOD == in.GetKind())
 	{
 		// (let (?msb_s (extract[|m-1|:|m-1|] s))
 		// (let (?msb_t (extract[|m-1|:|m-1|] t))
@@ -67,16 +71,16 @@ ASTNode BeevMgr::TranslateSignedDivMod(const ASTNode& in)
 		//      (bvneg (bvurem (bvneg s) (bvneg t)))))))
 		ASTNode & s = dividend;
 		ASTNode & t = divisor;
-		ASTNode & msb_s = cond_dividend;
-		ASTNode & msb_t = cond_divisor;
 
-		ASTNode isSPos = CreateNode(EQ, msb_s, zero); // (= ?msb_s bit0)
-		ASTNode isSNeg = CreateNode(EQ, msb_s, one); // (= ?msb_s bit1)
-		ASTNode isTPos = CreateNode(EQ, msb_t, zero); // (= ?msb_t bit0)
-		ASTNode isTNeg = CreateNode(EQ, msb_t, one); // (= ?msb_t bit1)
+		ASTNode isSNeg = cond_dividend; // (= ?msb_s bit1)
+		ASTNode isSPos = CreateNode(NOT, isSNeg); // (= ?msb_s bit0)
+
+		ASTNode isTNeg = cond_divisor; // (= ?msb_t bit1)
+		ASTNode isTPos = CreateNode(NOT, isTNeg); // (= ?msb_t bit0)
+
 
 		ASTNode negS = CreateTerm(BVUMINUS, len, s); // (bvneg s)
-		ASTNode negT = CreateTerm(BVUMINUS, len, t); // (bvneg s)
+		ASTNode negT = CreateTerm(BVUMINUS, len, t); // (bvneg t)
 
 		// (bvneg (bvurem (bvneg s) (bvneg t)))
 		ASTNode branch4 = CreateTerm(BVUMINUS, len, CreateTerm(BVMOD, len, negS, negT));
@@ -91,133 +95,76 @@ ASTNode BeevMgr::TranslateSignedDivMod(const ASTNode& in)
 		ASTNode ite2 = CreateTerm(ITE, len, CreateNode(AND, isSNeg, isTPos), branch2, ite3);
 		ASTNode ite1 = CreateTerm(ITE, len, CreateNode(AND, isSPos, isTPos), branch1, ite2);
 
-		return SimplifyTerm_TopLevel(ite1);
+		return SimplifyTerm(ite1);
+	}
+	else if (SBVDIV == in.GetKind())
+	{
+		//now handle the BVDIV case
+		//if topBit(dividend) is 1 and topBit(divisor) is 0
+		//
+		//then output is -BVDIV(-dividend,divisor)
+		//
+		//elseif topBit(dividend) is 0 and topBit(divisor) is 1
+		//
+		//then output is -BVDIV(dividend,-divisor)
+		//
+		//elseif topBit(dividend) is 1 and topBit(divisor) is 1
+		//
+		// then output is BVDIV(-dividend,-divisor)
+		//
+		//else simply output BVDIV(dividend,divisor)
+
+		ASTNode divnode = CreateTerm(BVDIV, len, dividend, divisor);
+
+		ASTNode cond1 = CreateNode(AND, CreateNode(EQ, zero, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT,
+				1, divisor, hi1, hi1)));
+		ASTNode minus_divnode1 = CreateTerm(BVDIV, len, dividend, CreateTerm(BVUMINUS, len, divisor));
+		minus_divnode1 = CreateTerm(BVUMINUS, len, minus_divnode1);
+
+		ASTNode cond2 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, zero, CreateTerm(BVEXTRACT,
+				1, divisor, hi1, hi1)));
+		ASTNode minus_divnode2 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), divisor);
+		minus_divnode2 = CreateTerm(BVUMINUS, len, minus_divnode2);
+
+		ASTNode cond3 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT,
+				1, divisor, hi1, hi1)));
+		ASTNode minus_divnode3 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), CreateTerm(BVUMINUS, len, divisor));
+		ASTNode n = CreateTerm(ITE, len, cond1, minus_divnode1, CreateTerm(ITE, len, cond2, minus_divnode2, CreateTerm(ITE, len, cond3,
+				minus_divnode3, divnode)));
+		return SimplifyTerm(n);
 	}
 
-	//now handle the BVDIV case
-	//if topBit(dividend) is 1 and topBit(divisor) is 0
-	//
-	//then output is -BVDIV(-dividend,divisor)
-	//
-	//elseif topBit(dividend) is 0 and topBit(divisor) is 1
-	//
-	//then output is -BVDIV(dividend,-divisor)
-	//
-	//elseif topBit(dividend) is 1 and topBit(divisor) is 1
-	//
-	// then output is BVDIV(-dividend,-divisor)
-	//
-	//else simply output BVDIV(dividend,divisor)
-	ASTNode divnode = CreateTerm(BVDIV, len, dividend, divisor);
+	FatalError("TranslateSignedDivModRem: input must be signed DIV/MOD/REM", in);
+	return ASTUndefined;
 
-	ASTNode cond1 = CreateNode(AND, CreateNode(EQ, zero, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1,
-			divisor, hi1, hi1)));
-	ASTNode minus_divnode1 = CreateTerm(BVDIV, len, dividend, CreateTerm(BVUMINUS, len, divisor));
-	minus_divnode1 = CreateTerm(BVUMINUS, len, minus_divnode1);
+}//end of TranslateSignedDivModRem()
 
-	ASTNode cond2 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, zero, CreateTerm(BVEXTRACT, 1,
-			divisor, hi1, hi1)));
-	ASTNode minus_divnode2 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), divisor);
-	minus_divnode2 = CreateTerm(BVUMINUS, len, minus_divnode2);
+// Check that the transformations have occurred.
+void BeevMgr::assertTransformPostConditions(const ASTNode & term)
+{
+	const Kind k = term.GetKind();
 
-	ASTNode cond3 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1,
-			divisor, hi1, hi1)));
-	ASTNode minus_divnode3 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), CreateTerm(BVUMINUS, len, divisor));
-	ASTNode n = CreateTerm(ITE, len, cond1, minus_divnode1, CreateTerm(ITE, len, cond2, minus_divnode2, CreateTerm(ITE, len, cond3, minus_divnode3,
-			divnode)));
-	return SimplifyTerm_TopLevel(n);
-}//end of TranslateSignedDivMod()
+	// Check the signed operations have been removed.
+	assert(  SBVDIV != k);
+	assert(  SBVMOD != k);
+	assert(  SBVREM !=k);
 
-/*
- //Translates signed BVDIV/BVMOD into unsigned variety
- ASTNode BeevMgr::TranslateSignedDivMod(const ASTNode& in) {
- if(!(SBVREM == in.GetKind() || SBVDIV == in.GetKind())) {
- FatalError("TranslateSignedDivMod: input must be signed DIV/MOD\n",in);
- }
+	// Check the array reads / writes have been removed
+	assert(  READ !=k );
+	assert(  WRITE !=k);
 
- ASTNode dividend = in[0];
- ASTNode divisor  = in[1];
- unsigned len = in.GetValueWidth();
- if(SBVMOD == in.GetKind()) {
- //if(TopBit(dividend)==1)
- //
- //then -BVMOD(-dividend,abs(divisor))
- //
- //else BVMOD(dividend,abs(divisor))
+	// There should be no nodes left of type array.
+	assert(0 == term.GetIndexWidth());
 
- //create the condition for the dividend
- ASTNode hi1  = CreateBVConst(32,len-1);
- ASTNode one  = CreateOneConst(1);
- ASTNode cond = CreateNode(EQ,one,CreateTerm(BVEXTRACT,1,dividend,hi1,hi1));
-
- //create the condition and conditional for the divisor
- ASTNode cond_divisor = CreateNode(EQ,one,CreateTerm(BVEXTRACT,1,divisor,hi1,hi1));
- ASTNode pos_divisor  = CreateTerm(ITE,len,cond_divisor,CreateTerm(BVUMINUS,len,divisor),divisor);
-
- //create the modulus term for each case
- ASTNode modnode = CreateTerm(BVMOD,len,dividend,pos_divisor);
- ASTNode minus_modnode = CreateTerm(BVMOD,len,CreateTerm(BVUMINUS,len,dividend),pos_divisor);
- minus_modnode = CreateTerm(BVUMINUS,len,minus_modnode);
-
- //put everything together, simplify, and return
- ASTNode n = CreateTerm(ITE,len,cond,minus_modnode,modnode);
- return SimplifyTerm_TopLevel(n);
- }
-
- //now handle the BVDIV case
- //if topBit(dividend) is 1 and topBit(divisor) is 0
- //
- //then output is -BVDIV(-dividend,divisor)
- //
- //elseif topBit(dividend) is 0 and topBit(divisor) is 1
- //
- //then output is -BVDIV(dividend,-divisor)
- //
- //elseif topBit(dividend) is 1 and topBit(divisor) is 1
- //
- // then output is BVDIV(-dividend,-divisor)
- //
- //else simply output BVDIV(dividend,divisor)
- ASTNode hi1 = CreateBVConst(32,len-1);
- ASTNode zero = CreateZeroConst(1);
- ASTNode one = CreateOneConst(1);
- ASTNode divnode = CreateTerm(BVDIV, len, dividend, divisor);
-
- ASTNode cond1 = CreateNode(AND,
- CreateNode(EQ,zero,CreateTerm(BVEXTRACT,1,dividend,hi1,hi1)),
- CreateNode(EQ,one, CreateTerm(BVEXTRACT,1,divisor,hi1,hi1)));
- ASTNode minus_divnode1 = CreateTerm(BVDIV,len,
- dividend,
- CreateTerm(BVUMINUS,len,divisor));
- minus_divnode1 = CreateTerm(BVUMINUS,len,minus_divnode1);
-
- ASTNode cond2 = CreateNode(AND,
- CreateNode(EQ,one,CreateTerm(BVEXTRACT,1,dividend,hi1,hi1)),
- CreateNode(EQ,zero,CreateTerm(BVEXTRACT,1,divisor,hi1,hi1)));
- ASTNode minus_divnode2 = CreateTerm(BVDIV,len,
- CreateTerm(BVUMINUS,len,dividend),
- divisor);
- minus_divnode2 = CreateTerm(BVUMINUS,len,minus_divnode2);
-
- ASTNode cond3 = CreateNode(AND,
- CreateNode(EQ,one,CreateTerm(BVEXTRACT,1,dividend,hi1,hi1)),
- CreateNode(EQ,one,CreateTerm(BVEXTRACT,1,divisor,hi1,hi1)));
- ASTNode minus_divnode3 = CreateTerm(BVDIV,len,
- CreateTerm(BVUMINUS,len,dividend),
- CreateTerm(BVUMINUS,len,divisor));
- ASTNode n = CreateTerm(ITE,len,
- cond1,
- minus_divnode1,
- CreateTerm(ITE,len,
- cond2,
- minus_divnode2,
- CreateTerm(ITE,len,
- cond3,
- minus_divnode3,
- divnode)));
- return SimplifyTerm_TopLevel(n);
- }//end of TranslateSignedDivMod()
- */
+	ASTVec c = term.GetChildren();
+	ASTVec::iterator it = c.begin();
+	ASTVec::iterator itend = c.end();
+	ASTVec o;
+	for (; it != itend; it++)
+	{
+		assertTransformPostConditions(*it);
+	}
+}
 
 ASTNode BeevMgr::TransformFormula(const ASTNode& form)
 {
@@ -304,7 +251,7 @@ ASTNode BeevMgr::TransformFormula(const ASTNode& form)
 			}
 			break;
 	}
-	//BVTypeCheck(result);
+	assert(BVTypeCheckRecursive(result));
 	TransformMap[simpleForm] = result;
 	return result;
 } //End of TransformFormula
@@ -371,7 +318,7 @@ ASTNode BeevMgr::TransformTerm(const ASTNode& inputterm)
 
 			if (SBVDIV == result.GetKind() || SBVREM == result.GetKind() || SBVMOD == result.GetKind())
 			{
-				result = TranslateSignedDivMod(result);
+				result = TranslateSignedDivModRem(result);
 			}
 			break;
 		}
