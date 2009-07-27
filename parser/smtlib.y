@@ -191,6 +191,8 @@
 %token BVSGE_TOK
 %token BVSX_TOK 
 %token BVZX_TOK
+%token BVROTATE_RIGHT_TOK
+%token BVROTATE_LEFT_TOK
 %token BOOLEXTRACT_TOK
 %token BOOL_TO_BV_TOK
 %token BVEXTRACT_TOK
@@ -1068,6 +1070,70 @@ an_nonbvconst_term:
       $$ = new BEEV::ASTNode(extract);
       delete $2;
       delete $3;
+    }
+  |  BVROTATE_LEFT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
+    {
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*$5);
+      
+      BEEV::ASTNode *n;
+      unsigned width = $5->GetValueWidth();
+      unsigned rotate = $3;
+      if (0 == rotate)
+      {
+      	n = $5;
+      }
+      else if (rotate < width)
+      {
+      	BEEV::ASTNode high = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,width-1);
+      	BEEV::ASTNode zero = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,0);
+      	BEEV::ASTNode cut = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,width-rotate);
+      	BEEV::ASTNode cutMinusOne = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,width-rotate-1);
+
+      	BEEV::ASTNode top =  BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,rotate,*$5,high, cut);
+      	BEEV::ASTNode bottom =  BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,width-rotate,*$5,cutMinusOne,zero);
+      	n =  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVCONCAT,width,bottom,top));
+        delete $5;
+      }
+      else
+      {
+      	yyerror("Rotate must be strictly less than the width.");
+      }
+      
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+      $$ = n;
+      
+    }
+    |  BVROTATE_RIGHT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
+    {
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*$5);
+      
+      BEEV::ASTNode *n;
+      unsigned width = $5->GetValueWidth();
+      unsigned rotate = $3;
+      if (0 == rotate)
+      {
+      	n = $5;
+      }
+      else if (rotate < width)
+      {
+      	BEEV::ASTNode high = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,width-1);
+      	BEEV::ASTNode zero = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,0);
+      	BEEV::ASTNode cut = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,rotate); 
+      	BEEV::ASTNode cutMinusOne = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,rotate-1);
+
+      	BEEV::ASTNode bottom =  BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,rotate,*$5,cutMinusOne, zero);
+      	BEEV::ASTNode top =  BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,width-rotate,*$5,high,cut);
+      	n =  new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVCONCAT,width,bottom,top));
+        delete $5;
+      }
+      else
+      {
+      	yyerror("Rotate must be strictly less than the width.");
+      }
+      
+      BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+      $$ = n;
+      
     }
   |  BVSX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
     {
