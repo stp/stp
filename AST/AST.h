@@ -1361,6 +1361,7 @@ private:
 	void BBLShift(ASTVec& x);
 	void BBRShift(ASTVec& x);
 
+	void BBRSignedShift(ASTVec& x, unsigned int shift);
 	void BBLShift(ASTVec& x, unsigned int shift);
 	void BBRShift(ASTVec& x, unsigned int shift);
 

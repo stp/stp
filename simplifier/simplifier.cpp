@@ -828,7 +828,7 @@ ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg)
 		a1 = output[1];
 		if (a0 == a1)
 			output = ASTFalse;
-		else if (a0 == ASTTrue && a1 == ASTFalse || a0 == ASTFalse && a1 == ASTTrue)
+		else if ((a0 == ASTTrue && a1 == ASTFalse) || (a0 == ASTFalse && a1 == ASTTrue))
 			output = ASTTrue;
 	}
 

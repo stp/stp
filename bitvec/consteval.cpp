@@ -125,7 +125,10 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			break;
 		}
 		case BVRIGHTSHIFT:
+		case BVSRSHIFT:
 		{
+			bool msb = CONSTANTBV::BitVector_msb_(tmp0);
+
 			output = CONSTANTBV::BitVector_Create(inputwidth, true);
 
 			// the shift is destructive, get a copy.
@@ -135,6 +138,18 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			unsigned int shift = GetUnsignedConst(BVConstEvaluator(t[1]));
 
 			CONSTANTBV::BitVector_Move_Right(output, shift);
+
+			if (BVSRSHIFT == k && msb)
+			{
+				// signed shift, and the number was originally negative.
+				// Shift may be larger than the inputwidth.
+				for (int i =0; i < min(shift,inputwidth);i++)
+				{
+					CONSTANTBV::BitVector_Bit_On(output,(inputwidth-1 -i));
+				}
+				assert(CONSTANTBV::BitVector_Sign(output) == -1); //must be negative.
+			}
+
 			OutputNode = CreateBVConst(output, outputwidth);
 			break;
 		}
@@ -304,7 +319,7 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			{
 				// Signs are both positive
 				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
-				if(e != CONSTANTBV::ErrCode_Ok)
+				if (e != CONSTANTBV::ErrCode_Ok)
 				{
 					cerr << "Error code was:" << e << endl;
 					assert(e == CONSTANTBV::ErrCode_Ok);

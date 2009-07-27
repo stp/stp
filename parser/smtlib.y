@@ -1056,20 +1056,12 @@ an_nonbvconst_term:
     }
   |  BVARITHRIGHTSHIFT_TOK an_term an_term
     {
-      unsigned int shift_amt = GetUnsignedConst(*$3);
-//      BEEV::ASTNode leading_zeros = BEEV::globalBeevMgr_for_parser->CreateBVConst(shift_amt, 0);
+      // shifting arithmetic right by who know how much?
       unsigned int w = $2->GetValueWidth();
-
-      BEEV::ASTNode width = BEEV::globalBeevMgr_for_parser->CreateBVConst(32, shift_amt + w);
-      BEEV::ASTNode extended = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVSX, shift_amt+w, *$2, width);
-
-      BEEV::ASTNode hi = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,w-1);
-      BEEV::ASTNode low = BEEV::globalBeevMgr_for_parser->CreateBVConst(32,shift_amt);
-      BEEV::ASTNode extract = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT,w-shift_amt,*$2,hi,low);
-
-      $$ = new BEEV::ASTNode(extract);
+      BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVSRSHIFT,w,*$2,*$3));
+	  BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+  	  $$ = n;
       delete $2;
-      delete $3;
     }
   |  BVROTATE_LEFT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
     {

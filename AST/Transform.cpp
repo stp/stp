@@ -251,7 +251,7 @@ ASTNode BeevMgr::TransformFormula(const ASTNode& form)
 			}
 			break;
 	}
-	assert(BVTypeCheckRecursive(result));
+	//assert(BVTypeCheckRecursive(result));
 	TransformMap[simpleForm] = result;
 	return result;
 } //End of TransformFormula

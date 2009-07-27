@@ -1158,7 +1158,8 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 	Begin_RemoveWrites = false;
 
 	newq = TransformFormula(newq);
-	assertTransformPostConditions(newq);
+	if (false)
+		assertTransformPostConditions(newq);
 	ASTNodeStats("after transformation: ", newq);
 	TermsAlreadySeenMap.clear();
 

@@ -122,6 +122,7 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 		}
 
 		case BVRIGHTSHIFT:
+		case BVSRSHIFT:
 		{
 			if (BVCONST == term[1].GetKind())
 			{
@@ -131,7 +132,11 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 
 				ASTNode term0 = BBTerm(term[0]);
 				ASTVec children(term0.GetChildren()); // mutable copy of the children.
-				BBRShift(children, shift);
+
+				if (BVRIGHTSHIFT == k)
+					BBRShift(children, shift);
+				else
+					BBRSignedShift(children, shift);
 
 				result = CreateNode(BOOLVEC, children);
 			}
@@ -140,6 +145,14 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 				// Barrel shifter
 				const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
 				const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
+
+
+				// Signed right shift, need to copy the sign bit.
+				ASTNode toFill;
+				if (BVRIGHTSHIFT == k)
+					toFill = ASTFalse;
+				else
+					toFill = bbarg1.back();
 
 				ASTVec temp_result(bbarg1);
 
@@ -155,7 +168,7 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 					for (unsigned int j = 0; j < temp_result.size(); j++)
 					{
 						if (j + shift_amount >= temp_result.size())
-							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], ASTFalse, temp_result[j]);
+							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
 						else
 							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
 
@@ -175,8 +188,6 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 			}
 		}
 			break;
-
-		case BVSRSHIFT:
 		case BVVARSHIFT:
 			FatalError("BBTerm: These kinds have not been implemented in the BitBlaster: ", term);
 			break;
@@ -1035,6 +1046,23 @@ void BeevMgr::BBRShift(ASTVec& x, unsigned int shift)
 			*xit = *(xit + shift);
 		else
 			*xit = ASTFalse; // new MSB is zero.
+	}
+}
+
+// Right shift within fixed field copying the MSB.
+// Writes result into first argument.
+void BeevMgr::BBRSignedShift(ASTVec& x, unsigned int shift)
+{
+	// right shift x (destructively) within width.
+	ASTNode & MSB = x.back();
+	ASTVec::iterator xend = x.end();
+	ASTVec::iterator xit = x.begin();
+	for (; xit < xend; xit++)
+	{
+		if (xit + shift < xend)
+			*xit = *(xit + shift);
+		else
+			*xit = MSB; // new MSB is zero.
 	}
 }
 
