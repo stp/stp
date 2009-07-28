@@ -145,13 +145,13 @@ void BeevMgr::assertTransformPostConditions(const ASTNode & term)
 	const Kind k = term.GetKind();
 
 	// Check the signed operations have been removed.
-	assert(  SBVDIV != k);
-	assert(  SBVMOD != k);
-	assert(  SBVREM !=k);
+	assert( SBVDIV != k);
+	assert( SBVMOD != k);
+	assert( SBVREM !=k);
 
 	// Check the array reads / writes have been removed
-	assert(  READ !=k );
-	assert(  WRITE !=k);
+	assert( READ !=k );
+	assert( WRITE !=k);
 
 	// There should be no nodes left of type array.
 	assert(0 == term.GetIndexWidth());
@@ -501,25 +501,44 @@ ASTNode BeevMgr::TransformArray(const ASTNode& term)
 					ASTNode writeIndex = TransformTerm(arrName[1]);
 					ASTNode writeVal = TransformTerm(arrName[2]);
 
-					if (!(SYMBOL == arrName[0].GetKind() || WRITE == arrName[0].GetKind()))
-						FatalError("TransformArray: An array write is being attempted on a non-array:", term);
 					if (ARRAY_TYPE != arrName[0].GetType())
 						FatalError("TransformArray: An array write is being attempted on a non-array:", term);
 
-					ASTNode cond = CreateSimplifiedEQ(writeIndex, readIndex);
-					//TypeCheck internally created node
-					BVTypeCheck(cond);
-					ASTNode readTerm = CreateTerm(READ, width, arrName[0], readIndex);
-					//TypeCheck internally created node
-					BVTypeCheck(readTerm);
-					ASTNode readPushedIn = TransformArray(readTerm);
-					//TypeCheck internally created node
-					BVTypeCheck(readPushedIn);
-					//result = CreateTerm(ITE, arrName[0].GetValueWidth(),cond,writeVal,readPushedIn);
-					result = CreateSimplifiedTermITE(cond, writeVal, readPushedIn);
+					if ((SYMBOL == arrName[0].GetKind() || WRITE == arrName[0].GetKind()))
+					{
+						ASTNode cond = CreateSimplifiedEQ(writeIndex, readIndex);
+						BVTypeCheck(cond);
 
-					//Good idea to typecheck terms created inside the system
-					BVTypeCheck(result);
+						ASTNode readTerm = CreateTerm(READ, width, arrName[0], readIndex);
+						BVTypeCheck(readTerm);
+
+						ASTNode readPushedIn = TransformArray(readTerm);
+						BVTypeCheck(readPushedIn);
+
+						result = CreateSimplifiedTermITE(cond, writeVal, readPushedIn);
+
+						BVTypeCheck(result);
+					}
+					else if (ITE == arrName[0].GetKind())
+					{
+						// pull out the ite from the write.
+						ASTNode writeTrue = CreateNode(WRITE, (arrName[0][1]), writeIndex, writeVal);
+						writeTrue.SetIndexWidth(writeIndex.GetValueWidth());
+						writeTrue.SetValueWidth(writeVal.GetValueWidth());
+						assert(ARRAY_TYPE == writeTrue.GetType());
+
+						ASTNode writeFalse = CreateNode(WRITE, (arrName[0][2]), writeIndex, writeVal);
+						writeFalse.SetIndexWidth(writeIndex.GetValueWidth());
+						writeFalse.SetValueWidth(writeVal.GetValueWidth());
+						assert(ARRAY_TYPE == writeFalse.GetType());
+
+						result = CreateSimplifiedTermITE(TransformFormula(arrName[0][0]), (writeTrue), (writeFalse));
+						result = CreateTerm(READ, writeVal.GetValueWidth(), result, readIndex);
+						BVTypeCheck(result);
+						result = TransformArray(result);
+					}
+					else
+						FatalError("TransformArray: Write over bad type.");
 					break;
 				} //end of READ over a WRITE
 				case ITE:
@@ -543,8 +562,8 @@ ASTNode BeevMgr::TransformArray(const ASTNode& term)
 					ASTNode t02 = term0[2];
 
 					cond = TransformFormula(cond);
-					ASTNode thn = TransformTerm(t01);
-					ASTNode els = TransformTerm(t02);
+					ASTNode& thn = t01;
+					ASTNode& els = t02;
 
 					if (!(t01.GetValueWidth() == t02.GetValueWidth() && t01.GetValueWidth() == thn.GetValueWidth() && t01.GetValueWidth()
 							== els.GetValueWidth()))

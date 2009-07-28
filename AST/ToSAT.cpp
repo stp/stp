@@ -431,6 +431,7 @@ void BeevMgr::ConstructCounterExample(MINISAT::Solver& newS)
 	}
 } //End of ConstructCounterExample
 
+
 // FUNCTION: accepts a non-constant term, and returns the
 // corresponding constant term with respect to a model.
 //
@@ -531,8 +532,8 @@ ASTNode BeevMgr::TermToConstTermUsingModel(const ASTNode& t, bool ArrayReadFlag)
 				FatalError("TermToConstTermUsingModel: array has 0 index width: ", arrName);
 			}
 
-			//READ over a WRITE
-			if (WRITE == arrName.GetKind())
+
+			if (WRITE == arrName.GetKind()) //READ over a WRITE
 			{
 				ASTNode wrtterm = Expand_ReadOverWrite_UsingModel(term, ArrayReadFlag);
 				if (wrtterm == term)
@@ -540,12 +541,33 @@ ASTNode BeevMgr::TermToConstTermUsingModel(const ASTNode& t, bool ArrayReadFlag)
 					FatalError("TermToConstTermUsingModel: Read_Over_Write term must be expanded into an ITE", term);
 				}
 				ASTNode rtterm = TermToConstTermUsingModel(wrtterm, ArrayReadFlag);
+				assert(ArrayReadFlag || (BVCONST == rtterm.GetKind()));
 				return rtterm;
 			}
-			//READ over an ITE
-			if (ITE == arrName.GetKind())
+			else if (ITE == arrName.GetKind()) //READ over an ITE
 			{
-				arrName = TermToConstTermUsingModel(arrName, ArrayReadFlag);
+				// The "then" and "else" branch are arrays.
+				ASTNode indexVal = TermToConstTermUsingModel(index, ArrayReadFlag);
+
+				ASTNode condcompute = ComputeFormulaUsingModel(arrName[0]); // Get the truth value.
+				if (ASTTrue == condcompute)
+				{
+					const ASTNode & result = TermToConstTermUsingModel(CreateTerm(READ, arrName.GetValueWidth(), arrName[1], indexVal), ArrayReadFlag);
+					assert(ArrayReadFlag || (BVCONST == result.GetKind()));
+					return result;
+				}
+				else if (ASTFalse == condcompute)
+				{
+					const ASTNode & result =  TermToConstTermUsingModel(CreateTerm(READ, arrName.GetValueWidth(), arrName[2], indexVal), ArrayReadFlag);
+					assert(ArrayReadFlag || (BVCONST == result.GetKind()));
+					return result;
+				}
+				else
+				{
+					cerr << "TermToConstTermUsingModel: termITE: value of conditional is wrong: " << condcompute << endl;
+					FatalError(" TermToConstTermUsingModel: termITE: cannot compute ITE conditional against model: ", term);
+				}
+				FatalError("bn23143 Never Here");
 			}
 
 			ASTNode modelentry;
@@ -623,6 +645,8 @@ ASTNode BeevMgr::TermToConstTermUsingModel(const ASTNode& t, bool ArrayReadFlag)
 			break;
 		}
 	}
+
+	assert(ArrayReadFlag || (BVCONST == output.GetKind()));
 
 	//when this flag is false, we should compute the arrayread to a
 	//constant. this constant is stored in the counter_example

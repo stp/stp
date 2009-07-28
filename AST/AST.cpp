@@ -1271,7 +1271,7 @@ bool BeevMgr::BVTypeCheckRecursive(const ASTNode& n)
  * typecheck as you go along. It is not suitable as a general
  * typechecker.
  *
- * This ALWAYS returns true. If there is an error it will call
+ * If this returns, this ALWAYS returns true. If there is an error it will call
  * FatalError() and abort.
  */
 
@@ -1300,18 +1300,33 @@ bool BeevMgr::BVTypeCheck(const ASTNode& n)
 					FatalError("BVTypeCheck: length of THENbranch != length of ELSEbranch in the term t = \n", n);
 				break;
 			case READ:
+				if (n.GetChildren().size() !=2)
+					FatalError("2 params to read.");
 				if (n[0].GetIndexWidth() != n[1].GetValueWidth())
 				{
 					cerr << "Length of indexwidth of array: " << n[0] << " is : " << n[0].GetIndexWidth() << endl;
 					cerr << "Length of the actual index is: " << n[1] << " is : " << n[1].GetValueWidth() << endl;
 					FatalError("BVTypeCheck: length of indexwidth of array != length of actual index in the term t = \n", n);
 				}
+				if (ARRAY_TYPE != n[0].GetType())
+					FatalError("First parameter to read should be an array", n[0]);
+				if (BITVECTOR_TYPE != n[1].GetType())
+					FatalError("Second parameter to read should be a bitvector", n[1]);
 				break;
 			case WRITE:
+				if (n.GetChildren().size() !=3)
+					FatalError("3 params to write.");
 				if (n[0].GetIndexWidth() != n[1].GetValueWidth())
 					FatalError("BVTypeCheck: length of indexwidth of array != length of actual index in the term t = \n", n);
 				if (n[0].GetValueWidth() != n[2].GetValueWidth())
 					FatalError("BVTypeCheck: valuewidth of array != length of actual value in the term t = \n", n);
+				if (ARRAY_TYPE != n[0].GetType())
+					FatalError("First parameter to read should be an array", n[0]);
+				if (BITVECTOR_TYPE != n[1].GetType())
+					FatalError("Second parameter to read should be a bitvector", n[1]);
+				if (BITVECTOR_TYPE != n[2].GetType())
+					FatalError("Third parameter to read should be a bitvector", n[2]);
+
 				break;
 			case BVOR:
 			case BVAND:
