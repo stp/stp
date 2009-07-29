@@ -68,10 +68,13 @@ bool BeevMgr::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
 	if (0 == i)
 		return false;
 
+	assert(e0 != e1); // One side should be a variable, the other a constant.
+
 	//e0 is of the form READ(Arr,const), and e1 is const, or
 	//e0 is of the form var, and e1 is const
 	if (1 == i && !CheckSubstitutionMap(e0))
 	{
+		assert((e1.GetKind() == TRUE) || (e1.GetKind() == FALSE) || (e1.GetKind() == BVCONST));
 		SolverMap[e0] = e1;
 		return true;
 	}
@@ -80,6 +83,7 @@ bool BeevMgr::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
 	//e1 is of the form var, and e0 is const
 	if (-1 == i && !CheckSubstitutionMap(e1))
 	{
+		assert((e0.GetKind() == TRUE) || (e0.GetKind() == FALSE) || (e0.GetKind() == BVCONST));
 		SolverMap[e1] = e0;
 		return true;
 	}
@@ -1167,20 +1171,20 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& inputterm)
 	}
 
 	ASTNode output;
-	BVTypeCheck(inputterm);
+	assert(BVTypeCheck(inputterm));
 
 	//########################################
 	//########################################
 
-	if (wordlevel_solve && CheckSolverMap(inputterm, output))
+	if (CheckSubstitutionMap(inputterm, output))
 	{
-		//cout << "SimplifyTerm: output: " << output << endl;
+		//cout << "SolverMap:" << inputterm << " output: " << output << endl;
 		return SimplifyTerm(output);
 	}
 
 	if (CheckSimplifyMap(inputterm, output, false))
 	{
-		//cerr << "output of SimplifyTerm Cache: " << output << endl;
+		//cerr << "SimplifierMap:" << inputterm << " output: " << output << endl;
 		return output;
 	}
 	//########################################
@@ -1940,7 +1944,6 @@ ASTNode BeevMgr::SimplifyTermAux(const ASTNode& inputterm)
 
 	if (wordlevel_solve && CheckSolverMap(inputterm, output))
 	{
-		//cout << "SimplifyTerm: output: " << output << endl;
 		return SimplifyTermAux(output);
 	}
 
@@ -3097,7 +3100,7 @@ ASTNode BeevMgr::SimplifyWrites_InPlace(const ASTNode& term)
 	ASTNodeMultiSet WriteIndicesSeenSoFar;
 	bool SeenNonConstWriteIndex = false;
 
-	if (READ != term.GetKind() && WRITE != term[0].GetKind())
+	if ((READ != term.GetKind()) || (WRITE != term[0].GetKind()))
 	{
 		FatalError("RemovesWrites: Input must be a READ over a WRITE", term);
 	}
@@ -3154,15 +3157,14 @@ ASTNode BeevMgr::SimplifyWrites_InPlace(const ASTNode& term)
 
 		//Setup the write for the new iteration, one level inner write
 		write = write[0];
-	} while (SYMBOL != write.GetKind());
+	} while (WRITE == write.GetKind());
 
 	ASTVec::reverse_iterator it_index = writeIndices.rbegin();
 	ASTVec::reverse_iterator itend_index = writeIndices.rend();
 	ASTVec::reverse_iterator it_values = writeValues.rbegin();
 	ASTVec::reverse_iterator itend_values = writeValues.rend();
 
-	//"write" must be a symbol at the control point before the
-	//begining of the "for loop"
+	// May be a symbol, or an ITE.
 
 	for (; it_index != itend_index; it_index++, it_values++)
 	{

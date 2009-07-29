@@ -8,7 +8,7 @@
 // -*- c++ -*-
 
 // Transform: * Converts signed Div/ signed remainder/ signed modulus into unsigned.
-//            * Removes array selects / stores from formula.
+//            * Removes array selects and stores from formula.
 
 
 #include "AST.h"
@@ -345,257 +345,229 @@ ASTNode BeevMgr::TransformTerm(const ASTNode& inputterm)
  *
  * ITE(i=j,v1,v2)
  *
- * Transform2:
- *
- * Transform3:
  */
 ASTNode BeevMgr::TransformArray(const ASTNode& term)
 {
 	ASTNode result = term;
 
-	unsigned int width = term.GetValueWidth();
-	Kind k = term.GetKind();
-	if (!is_Term_kind(k))
-		FatalError("TransformArray: Illegal kind: You have input a nonterm:", ASTUndefined, k);
+	const unsigned int width = term.GetValueWidth();
+
+	if (READ != term.GetKind())
+		FatalError("TransformArray: input term is of wrong kind: ", ASTUndefined);
+
 	ASTNodeMap::iterator iter;
 	if ((iter = TransformMap.find(term)) != TransformMap.end())
 		return iter->second;
 
-	switch (k)
+	//'term' is of the form READ(arrName, readIndex)
+	const ASTNode & arrName = term[0];
+	const ASTNode & readIndex = TransformTerm(term[1]);
+
+	switch (arrName.GetKind())
 	{
-		//'term' is of the form READ(arrName, readIndex)
-		case READ:
+		case SYMBOL:
 		{
-			ASTNode arrName = term[0];
-			switch (arrName.GetKind())
+			/* input is of the form: READ(A, readIndex)
+			 *
+			 * output is of the from: A1, if this is the first READ over A
+			 *
+			 *                        ITE(previous_readIndex=readIndex,A1,A2)
+			 *
+			 *                        .....
+			 */
+
+			//  Recursively transform read index, which may also contain reads.
+			ASTNode processedTerm = CreateTerm(READ, width, arrName, readIndex);
+
+			//check if the 'processedTerm' has a corresponding ITE construct
+			//already. if so, return it. else continue processing.
+			ASTNodeMap::iterator it;
+			if ((it = _arrayread_ite.find(processedTerm)) != _arrayread_ite.end())
 			{
-				case SYMBOL:
-				{
-					/* input is of the form: READ(A, readIndex)
-					 *
-					 * output is of the from: A1, if this is the first READ over A
-					 *
-					 *                        ITE(previous_readIndex=readIndex,A1,A2)
-					 *
-					 *                        .....
-					 */
-
-					//  Recursively transform read index, which may also contain reads.
-					ASTNode readIndex = TransformTerm(term[1]);
-					ASTNode processedTerm = CreateTerm(READ, width, arrName, readIndex);
-
-					//check if the 'processedTerm' has a corresponding ITE construct
-					//already. if so, return it. else continue processing.
-					ASTNodeMap::iterator it;
-					if ((it = _arrayread_ite.find(processedTerm)) != _arrayread_ite.end())
-					{
-						result = it->second;
-						break;
-					}
-					//Constructing Symbolic variable corresponding to 'processedTerm'
-					ASTNode CurrentSymbol;
-					ASTNodeMap::iterator it1;
-					// First, check if read index is constant and it has a constant value in the substitution map.
-					if (CheckSubstitutionMap(processedTerm, CurrentSymbol))
-					{
-						_arrayread_symbol[processedTerm] = CurrentSymbol;
-					}
-					// Check if it already has an abstract variable.
-					else if ((it1 = _arrayread_symbol.find(processedTerm)) != _arrayread_symbol.end())
-					{
-						CurrentSymbol = it1->second;
-					}
-					else
-					{
-						// Make up a new abstract variable.
-						// FIXME: Make this into a method (there already may BE a method) and
-						// get rid of the fixed-length buffer!
-						//build symbolic name corresponding to array read. The symbolic
-						//name has 2 components: stringname, and a count
-						const char * b = arrName.GetName();
-						std::string c(b);
-						char d[32];
-						sprintf(d, "%d", _symbol_count++);
-						std::string ccc(d);
-						c += "array_" + ccc;
-
-						CurrentSymbol = CreateSymbol(c.c_str());
-						CurrentSymbol.SetValueWidth(processedTerm.GetValueWidth());
-						CurrentSymbol.SetIndexWidth(processedTerm.GetIndexWidth());
-						_arrayread_symbol[processedTerm] = CurrentSymbol;
-					}
-
-					//list of array-read indices corresponding to arrName, seen while
-					//traversing the AST tree. we need this list to construct the ITEs
-					// Dill: we hope to make this irrelevant.  Harmless for now.
-					ASTVec readIndices = _arrayname_readindices[arrName];
-
-					//construct the ITE structure for this array-read
-					ASTNode ite = CurrentSymbol;
-					_introduced_symbols.insert(CurrentSymbol);
-					BVTypeCheck(ite);
-
-					if (arrayread_refinement)
-					{
-						// ite is really a variable here; it is an ite in the
-						// else-branch
-						result = ite;
-					}
-					else
-					{
-						// Full Seshia transform if we're not doing read refinement.
-						//do not loop if the current readIndex is a BVCONST
-						// if(BVCONST == term[1].GetKind() && !SeenNonConstReadIndex && optimize) {
-						// 	    result = ite;
-						// 	  }
-						// 	  else {
-						//else part: SET the SeenNonConstReadIndex var, and do the hard work
-						//SeenNonConstReadIndex = true;
-						ASTVec::reverse_iterator it2 = readIndices.rbegin();
-						ASTVec::reverse_iterator it2end = readIndices.rend();
-						for (; it2 != it2end; it2++)
-						{
-							ASTNode cond = CreateSimplifiedEQ(readIndex, *it2);
-							if (ASTFalse == cond)
-								continue;
-
-							ASTNode arrRead = CreateTerm(READ, width, arrName, *it2);
-							//Good idea to TypeCheck internally constructed nodes
-							BVTypeCheck(arrRead);
-
-							ASTNode arrayreadSymbol = _arrayread_symbol[arrRead];
-							if (arrayreadSymbol.IsNull())
-								FatalError("TransformArray:symbolic variable for processedTerm, p,"
-									"does not exist:p = ", arrRead);
-							ite = CreateSimplifiedTermITE(cond, arrayreadSymbol, ite);
-						}
-						result = ite;
-						//}
-					}
-
-					_arrayname_readindices[arrName].push_back(readIndex);
-					//save the ite corresponding to 'processedTerm'
-					_arrayread_ite[processedTerm] = result;
-					break;
-				} //end of READ over a SYMBOL
-				case WRITE:
-				{
-					/* The input to this case is: READ((WRITE A i val) j)
-					 *
-					 * The output of this case is: ITE( (= i j) val (READ A i))
-					 */
-
-					/* 1. arrName or term[0] is infact a WRITE(A,i,val) expression
-					 *
-					 * 2. term[1] is the read-index j
-					 *
-					 * 3. arrName[0] is the new arrName i.e. A. A can be either a
-					 SYMBOL or a nested WRITE. no other possibility
-					 *
-					 * 4. arrName[1] is the WRITE index i.e. i
-					 *
-					 * 5. arrName[2] is the WRITE value i.e. val (val can inturn
-					 *    be an array read)
-					 */
-					ASTNode readIndex = TransformTerm(term[1]);
-					ASTNode writeIndex = TransformTerm(arrName[1]);
-					ASTNode writeVal = TransformTerm(arrName[2]);
-
-					if (ARRAY_TYPE != arrName[0].GetType())
-						FatalError("TransformArray: An array write is being attempted on a non-array:", term);
-
-					if ((SYMBOL == arrName[0].GetKind() || WRITE == arrName[0].GetKind()))
-					{
-						ASTNode cond = CreateSimplifiedEQ(writeIndex, readIndex);
-						BVTypeCheck(cond);
-
-						ASTNode readTerm = CreateTerm(READ, width, arrName[0], readIndex);
-						BVTypeCheck(readTerm);
-
-						ASTNode readPushedIn = TransformArray(readTerm);
-						BVTypeCheck(readPushedIn);
-
-						result = CreateSimplifiedTermITE(cond, writeVal, readPushedIn);
-
-						BVTypeCheck(result);
-					}
-					else if (ITE == arrName[0].GetKind())
-					{
-						// pull out the ite from the write.
-						ASTNode writeTrue = CreateNode(WRITE, (arrName[0][1]), writeIndex, writeVal);
-						writeTrue.SetIndexWidth(writeIndex.GetValueWidth());
-						writeTrue.SetValueWidth(writeVal.GetValueWidth());
-						assert(ARRAY_TYPE == writeTrue.GetType());
-
-						ASTNode writeFalse = CreateNode(WRITE, (arrName[0][2]), writeIndex, writeVal);
-						writeFalse.SetIndexWidth(writeIndex.GetValueWidth());
-						writeFalse.SetValueWidth(writeVal.GetValueWidth());
-						assert(ARRAY_TYPE == writeFalse.GetType());
-
-						result = CreateSimplifiedTermITE(TransformFormula(arrName[0][0]), (writeTrue), (writeFalse));
-						result = CreateTerm(READ, writeVal.GetValueWidth(), result, readIndex);
-						BVTypeCheck(result);
-						result = TransformArray(result);
-					}
-					else
-						FatalError("TransformArray: Write over bad type.");
-					break;
-				} //end of READ over a WRITE
-				case ITE:
-				{
-					/* READ((ITE cond thn els) j)
-					 *
-					 * is transformed into
-					 *
-					 * (ITE cond (READ thn j) (READ els j))
-					 */
-
-					//(ITE cond thn els)
-					ASTNode term0 = term[0];
-					//READINDEX j
-					ASTNode j = TransformTerm(term[1]);
-
-					ASTNode cond = term0[0];
-					//first array
-					ASTNode t01 = term0[1];
-					//second array
-					ASTNode t02 = term0[2];
-
-					cond = TransformFormula(cond);
-					ASTNode& thn = t01;
-					ASTNode& els = t02;
-
-					if (!(t01.GetValueWidth() == t02.GetValueWidth() && t01.GetValueWidth() == thn.GetValueWidth() && t01.GetValueWidth()
-							== els.GetValueWidth()))
-						FatalError("TransformArray: length of THENbranch != length of ELSEbranch in the term t = \n", term);
-
-					if (!(t01.GetIndexWidth() == t02.GetIndexWidth() && t01.GetIndexWidth() == thn.GetIndexWidth() && t01.GetIndexWidth()
-							== els.GetIndexWidth()))
-						FatalError("TransformArray: length of THENbranch != length of ELSEbranch in the term t = \n", term);
-
-					//(READ thn j)
-					ASTNode thnRead = CreateTerm(READ, width, thn, j);
-					BVTypeCheck(thnRead);
-					thnRead = TransformArray(thnRead);
-
-					//(READ els j)
-					ASTNode elsRead = CreateTerm(READ, width, els, j);
-					BVTypeCheck(elsRead);
-					elsRead = TransformArray(elsRead);
-
-					//(ITE cond (READ thn j) (READ els j))
-					result = CreateSimplifiedTermITE(cond, thnRead, elsRead);
-					BVTypeCheck(result);
-					break;
-				}
-				default:
-					FatalError("TransformArray: The READ is NOT over SYMBOL/WRITE/ITE", term);
-					break;
+				result = it->second;
+				break;
 			}
+			//Constructing Symbolic variable corresponding to 'processedTerm'
+			ASTNode CurrentSymbol;
+			ASTNodeMap::iterator it1;
+			// First, check if read index is constant and it has a constant value in the substitution map.
+			if (CheckSubstitutionMap(processedTerm, CurrentSymbol))
+			{
+				_arrayread_symbol[processedTerm] = CurrentSymbol;
+			}
+			// Check if it already has an abstract variable.
+			else if ((it1 = _arrayread_symbol.find(processedTerm)) != _arrayread_symbol.end())
+			{
+				CurrentSymbol = it1->second;
+			}
+			else
+			{
+				// Make up a new abstract variable.
+				// FIXME: Make this into a method (there already may BE a method) and
+				// get rid of the fixed-length buffer!
+				//build symbolic name corresponding to array read. The symbolic
+				//name has 2 components: stringname, and a count
+				const char * b = arrName.GetName();
+				std::string c(b);
+				char d[32];
+				sprintf(d, "%d", _symbol_count++);
+				std::string ccc(d);
+				c += "array_" + ccc;
+
+				CurrentSymbol = CreateSymbol(c.c_str());
+				CurrentSymbol.SetValueWidth(processedTerm.GetValueWidth());
+				CurrentSymbol.SetIndexWidth(processedTerm.GetIndexWidth());
+				_arrayread_symbol[processedTerm] = CurrentSymbol;
+			}
+
+			//list of array-read indices corresponding to arrName, seen while
+			//traversing the AST tree. we need this list to construct the ITEs
+			// Dill: we hope to make this irrelevant.  Harmless for now.
+			const ASTVec & readIndices = _arrayname_readindices[arrName];
+
+			//construct the ITE structure for this array-read
+			ASTNode ite = CurrentSymbol;
+			_introduced_symbols.insert(CurrentSymbol);
+			assert(BVTypeCheck(ite));
+
+			if (arrayread_refinement)
+			{
+				// ite is really a variable here; it is an ite in the
+				// else-branch
+				result = ite;
+			}
+			else
+			{
+				// Full Seshia transform if we're not doing read refinement.
+				ASTVec::const_reverse_iterator it2 = readIndices.rbegin();
+				ASTVec::const_reverse_iterator it2end = readIndices.rend();
+				for (; it2 != it2end; it2++)
+				{
+					ASTNode cond = CreateSimplifiedEQ(readIndex, *it2);
+					if (ASTFalse == cond)
+						continue;
+
+					ASTNode arrRead = CreateTerm(READ, width, arrName, *it2);
+					assert(BVTypeCheck(arrRead));
+
+					ASTNode arrayreadSymbol = _arrayread_symbol[arrRead];
+					if (arrayreadSymbol.IsNull())
+						FatalError("TransformArray:symbolic variable for processedTerm, p,"
+							"does not exist:p = ", arrRead);
+					ite = CreateSimplifiedTermITE(cond, arrayreadSymbol, ite);
+				}
+				result = ite;
+				//}
+			}
+
+			_arrayname_readindices[arrName].push_back(readIndex);
+			//save the ite corresponding to 'processedTerm'
+			_arrayread_ite[processedTerm] = result;
 			break;
-		} //end of READ switch
+		} //end of READ over a SYMBOL
+		case WRITE:
+		{
+			/* The input to this case is: READ((WRITE A i val) j)
+			 *
+			 * The output of this case is: ITE( (= i j) val (READ A i))
+			 */
+
+			/* 1. arrName or term[0] is infact a WRITE(A,i,val) expression
+			 *
+			 * 2. term[1] is the read-index j
+			 *
+			 * 3. arrName[0] is the new arrName i.e. A. A can be either a
+			 SYMBOL or a nested WRITE. no other possibility
+			 *
+			 * 4. arrName[1] is the WRITE index i.e. i
+			 *
+			 * 5. arrName[2] is the WRITE value i.e. val (val can inturn
+			 *    be an array read)
+			 */
+
+			ASTNode writeIndex = TransformTerm(arrName[1]);
+			ASTNode writeVal = TransformTerm(arrName[2]);
+
+			if (ARRAY_TYPE != arrName[0].GetType())
+				FatalError("TransformArray: An array write is being attempted on a non-array:", term);
+
+			if ((SYMBOL == arrName[0].GetKind() || WRITE == arrName[0].GetKind()))
+			{
+				ASTNode cond = CreateSimplifiedEQ(writeIndex, readIndex);
+				BVTypeCheck(cond);
+
+				ASTNode readTerm = CreateTerm(READ, width, arrName[0], readIndex);
+				BVTypeCheck(readTerm);
+
+				ASTNode readPushedIn = TransformArray(readTerm);
+				BVTypeCheck(readPushedIn);
+
+				result = CreateSimplifiedTermITE(cond, writeVal, readPushedIn);
+
+				BVTypeCheck(result);
+			}
+			else if (ITE == arrName[0].GetKind())
+			{
+				// pull out the ite from the write // pushes the write through.
+				ASTNode writeTrue = CreateNode(WRITE, (arrName[0][1]), writeIndex, writeVal);
+				writeTrue.SetIndexWidth(writeIndex.GetValueWidth());
+				writeTrue.SetValueWidth(writeVal.GetValueWidth());
+				assert(ARRAY_TYPE == writeTrue.GetType());
+
+				ASTNode writeFalse = CreateNode(WRITE, (arrName[0][2]), writeIndex, writeVal);
+				writeFalse.SetIndexWidth(writeIndex.GetValueWidth());
+				writeFalse.SetValueWidth(writeVal.GetValueWidth());
+				assert(ARRAY_TYPE == writeFalse.GetType());
+
+				result = CreateSimplifiedTermITE(TransformFormula(arrName[0][0]), writeTrue, writeFalse);
+				result.SetIndexWidth(writeIndex.GetValueWidth());
+				result.SetValueWidth(writeVal.GetValueWidth());
+				assert(ARRAY_TYPE == result.GetType());
+
+				result = CreateTerm(READ, writeVal.GetValueWidth(), result, readIndex);
+				BVTypeCheck(result);
+				result = TransformArray(result);
+			}
+			else
+				FatalError("TransformArray: Write over bad type.");
+			break;
+		} //end of READ over a WRITE
+		case ITE:
+		{
+			/* READ((ITE cond thn els) j)
+			 *
+			 * is transformed into
+			 *
+			 * (ITE cond (READ thn j) (READ els j))
+			 */
+
+			// pull out the ite from the read // pushes the read through.
+
+			//(ITE cond thn els)
+
+			ASTNode cond = arrName[0];
+			cond = TransformFormula(cond);
+
+			const ASTNode& thn = arrName[1];
+			const ASTNode& els = arrName[2];
+
+			//(READ thn j)
+			ASTNode thnRead = CreateTerm(READ, width, thn, readIndex);
+			BVTypeCheck(thnRead);
+			thnRead = TransformArray(thnRead);
+
+			//(READ els j)
+			ASTNode elsRead = CreateTerm(READ, width, els, readIndex);
+			BVTypeCheck(elsRead);
+			elsRead = TransformArray(elsRead);
+
+			//(ITE cond (READ thn j) (READ els j))
+			result = CreateSimplifiedTermITE(cond, thnRead, elsRead);
+			BVTypeCheck(result);
+			break;
+		}
 		default:
-			FatalError("TransformArray: input term is of wrong kind: ", ASTUndefined);
+			FatalError("TransformArray: The READ is NOT over SYMBOL/WRITE/ITE", term);
 			break;
 	}
 
