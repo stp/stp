@@ -9,7 +9,7 @@
 
 #OPTIMIZE = -g -pg # Debugging and gprof-style profiling
 #OPTIMIZE = -g     # Debugging
-OPTIMIZE = -O3     # Maximum optimization
+OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
 
 CFLAGS_BASE = $(OPTIMIZE) $(OPTIONS1) $(OPTIONS2) 
 # You can compile using make STATIC=true to compile a statically linked executable

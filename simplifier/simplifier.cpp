@@ -227,6 +227,9 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 	if (CheckSimplifyMap(a, output, pushNeg))
 		return output;
 
+	a = PullUpITE(a);
+	kind = a.GetKind(); // pullUpITE can change the Kind of the node.
+
 	switch (kind)
 	{
 		case AND:
@@ -475,6 +478,72 @@ ASTNode BeevMgr::CreateSimplifiedINEQ(Kind k, const ASTNode& left, const ASTNode
 
 	return output;
 }
+
+//Look through the AND Node for terms that contradict.
+//Should be made significantly more general..
+ASTNode BeevMgr::RemoveContradictionsFromAND(const ASTNode& in)
+{
+	assert(AND == in.GetKind());
+	const int childrenSize = in.GetChildren().size();
+
+	for (int i = 0; i < childrenSize; i++)
+	{
+		if (BVLT != in[i].GetKind())
+			continue;
+
+		for (int j = i + 1; j < childrenSize; j++)
+		{
+			if (BVLT != in[j].GetKind())
+				continue;
+			if (in[i][0] == in[j][1] && in[i][1] == in[j][0]) // parameters are swapped.
+				return ASTFalse;
+		}
+	}
+	return in;
+}
+
+// turns say (bvslt (ite a  b c) (ite a d e)) INTO (ite a (bvslt b d) (bvslt c e))
+// Expensive. But makes some other simplifications possible.
+ASTNode BeevMgr::PullUpITE(const ASTNode& in)
+{
+	if (2 != in.GetChildren().size())
+		return in;
+	if (ITE != in[0].GetKind())
+		return in;
+	if (ITE != in[1].GetKind())
+		return in;
+	if (in[0][0] != in[1][0]) // if the conditional is not equal.
+		return in;
+
+	// Consider equals. It takes bitvectors and returns a boolean.
+	// Consider add. It takes bitvectors and returns bitvectors.
+	// Consider concat. The bitwidth of each side could vary.
+
+	ASTNode l1;
+	ASTNode l2;
+	ASTNode result;
+
+	if (in.GetType() == BOOLEAN_TYPE)
+	{
+		l1 = CreateNode(in.GetKind(), in[0][1], in[1][1]);
+		l2 = CreateNode(in.GetKind(), in[0][2], in[1][2]);
+		result = CreateNode(ITE, in[0][0], l1, l2);
+	}
+	else
+	{
+		l1 = CreateTerm(in.GetKind(), in.GetValueWidth(), in[0][1], in[1][1]);
+		l2 = CreateTerm(in.GetKind(), in.GetValueWidth(), in[0][2], in[1][2]);
+		result = CreateTerm(ITE, in.GetValueWidth(), in[0][0], l1, l2);
+	}
+
+	assert(result.GetType() == in.GetType());
+	assert(result.GetValueWidth() == in.GetValueWidth());
+	assert(result.GetIndexWidth() == in.GetIndexWidth());
+	assert(BVTypeCheck(result));
+
+	return result;
+}
+
 
 //takes care of some simple ITE Optimizations in the context of equations
 ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
@@ -753,6 +822,11 @@ ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
 			break;
 		}
 	}
+
+	// I haven't verified this is useful.
+	//if (output.GetKind() == AND)
+	//	output = RemoveContradictionsFromAND(output);
+
 	//memoize
 	UpdateSimplifyMap(a, output, pushNeg);
 	//cerr << "output:\n" << output << endl;
@@ -1162,8 +1236,10 @@ ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b)
 }
 
 //This function simplifies terms based on their kind
-ASTNode BeevMgr::SimplifyTerm(const ASTNode& inputterm)
+ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 {
+	ASTNode inputterm(actualInputterm); // mutable local copy.
+
 	//cout << "SimplifyTerm: input: " << a << endl;
 	if (!optimize)
 	{
@@ -1197,6 +1273,10 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& inputterm)
 	}
 
 	unsigned int inputValueWidth = inputterm.GetValueWidth();
+
+	inputterm = PullUpITE(inputterm);
+	k = inputterm.GetKind(); // pull up ITE can change the kind of the node
+
 	switch (k)
 	{
 		case BVCONST:
@@ -3075,7 +3155,7 @@ ASTNode BeevMgr::ConvertBVSXToITE(const ASTNode& a)
 
 ASTNode BeevMgr::RemoveWrites_TopLevel(const ASTNode& term)
 {
-	if (READ != term.GetKind() && WRITE != term[0].GetKind())
+	if (READ != term.GetKind() || WRITE != term[0].GetKind())
 	{
 		FatalError("RemovesWrites: Input must be a READ over a WRITE", term);
 	}
