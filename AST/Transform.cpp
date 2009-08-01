@@ -318,26 +318,29 @@ ASTNode BeevMgr::TransformTerm(const ASTNode& inputterm)
 
 			Kind k = result.GetKind();
 
-			if (SBVDIV == result.GetKind() || SBVREM == result.GetKind() || SBVMOD == result.GetKind())
+			if (BVDIV == k || BVMOD == k || SBVDIV == k || SBVREM == k || SBVMOD == k)
 			{
-				result = TranslateSignedDivModRem(result);
-			}
+				ASTNode bottom = result[1];
 
-			////// Temporary hack so we don't get killed on the Spear benchmarks in SMTCOMP-2009
-			// This is a difficult rule to introduce in other places because it's recursive. i.e.
-			// result is imbedded unchanged inside the result. It's not
-			if (BVDIV==k || BVMOD==k || SBVDIV == k || SBVREM == k || SBVMOD == k)
-			{
+				if (SBVDIV == result.GetKind() || SBVREM == result.GetKind() || SBVMOD == result.GetKind())
+				{
+					result = TranslateSignedDivModRem(result);
+				}
+
+				////// Temporary hack so we don't get killed on the Spear benchmarks in SMTCOMP-2009
+				// This is a difficult rule to introduce in other places because it's recursive. i.e.
+				// result is imbedded unchanged inside the result. It's not
+
 				unsigned inputValueWidth = result.GetValueWidth();
 				ASTNode zero = CreateZeroConst(inputValueWidth);
 				ASTNode one = CreateOneConst(inputValueWidth);
-				result = CreateTerm(ITE, inputValueWidth, CreateNode(EQ, zero, result[1]), one, result);
+				result = CreateTerm(ITE, inputValueWidth, CreateNode(EQ, zero, bottom), one, result);
 			}
+		}
 			////////////////////////////////////////////////////////////////////////////////////
 
 
 			break;
-		}
 	}
 
 	TransformMap[term] = result;
