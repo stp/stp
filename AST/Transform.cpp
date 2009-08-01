@@ -52,7 +52,7 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 
 		//put everything together, simplify, and return
 		ASTNode n = CreateTerm(ITE, len, cond_dividend, minus_modnode, modnode);
-		return SimplifyTerm(n);
+		return SimplifyTerm_TopLevel(n);
 	}
 
 	// This is the modulus of dividing rounding to -infinity.
@@ -95,7 +95,7 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 		ASTNode ite2 = CreateTerm(ITE, len, CreateNode(AND, isSNeg, isTPos), branch2, ite3);
 		ASTNode ite1 = CreateTerm(ITE, len, CreateNode(AND, isSPos, isTPos), branch1, ite2);
 
-		return SimplifyTerm(ite1);
+		return SimplifyTerm_TopLevel(ite1);
 	}
 	else if (SBVDIV == in.GetKind())
 	{
@@ -131,7 +131,7 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 		ASTNode minus_divnode3 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), CreateTerm(BVUMINUS, len, divisor));
 		ASTNode n = CreateTerm(ITE, len, cond1, minus_divnode1, CreateTerm(ITE, len, cond2, minus_divnode2, CreateTerm(ITE, len, cond3,
 				minus_divnode3, divnode)));
-		return SimplifyTerm(n);
+		return SimplifyTerm_TopLevel(n);
 	}
 
 	FatalError("TranslateSignedDivModRem: input must be signed DIV/MOD/REM", in);
