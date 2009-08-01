@@ -316,10 +316,26 @@ ASTNode BeevMgr::TransformTerm(const ASTNode& inputterm)
 			result = CreateTerm(k, width, o);
 			result.SetIndexWidth(indexwidth);
 
+			Kind k = result.GetKind();
+
 			if (SBVDIV == result.GetKind() || SBVREM == result.GetKind() || SBVMOD == result.GetKind())
 			{
 				result = TranslateSignedDivModRem(result);
 			}
+
+			////// Temporary hack so we don't get killed on the Spear benchmarks in SMTCOMP-2009
+			// This is a difficult rule to introduce in other places because it's recursive. i.e.
+			// result is imbedded unchanged inside the result. It's not
+			if (BVDIV==k || BVMOD==k || SBVDIV == k || SBVREM == k || SBVMOD == k)
+			{
+				unsigned inputValueWidth = result.GetValueWidth();
+				ASTNode zero = CreateZeroConst(inputValueWidth);
+				ASTNode one = CreateOneConst(inputValueWidth);
+				result = CreateTerm(ITE, inputValueWidth, CreateNode(EQ, zero, result[1]), one, result);
+			}
+			////////////////////////////////////////////////////////////////////////////////////
+
+
 			break;
 		}
 	}
