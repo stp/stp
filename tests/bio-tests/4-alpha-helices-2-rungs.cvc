@@ -1,0 +1,298 @@
+% 4 alpha helices. Each helix with 6 amino acid (residues), and 4
+% faces (two inner and two outer). Each face has 1 or 2 residues
+% The problem is encoded with two bit bit-vector variable per face.
+
+
+alpha1_inner1, alpha1_outer1, alpha1_inner2, alpha1_outer2 : BITVECTOR(4);
+alpha1_inner1_index, alpha1_outer1_index, alpha1_inner2_index, alpha1_outer2_index : BITVECTOR(8);
+alpha1_inner1_energy, alpha1_outer1_energy, alpha1_inner2_energy, alpha1_outer2_energy : BITVECTOR(4);
+
+
+alpha2_inner1, alpha2_outer1, alpha2_inner2, alpha2_outer2 : BITVECTOR(4);
+alpha2_inner1_index, alpha2_outer1_index, alpha2_inner2_index, alpha2_outer2_index : BITVECTOR(8);
+alpha2_inner1_energy, alpha2_outer1_energy, alpha2_inner2_energy, alpha2_outer2_energy : BITVECTOR(4);
+
+
+alpha3_inner1, alpha3_outer1, alpha3_inner2, alpha3_outer2 : BITVECTOR(4);
+alpha3_inner1_index, alpha3_outer1_index, alpha3_inner2_index, alpha3_outer2_index : BITVECTOR(8);
+alpha3_inner1_energy, alpha3_outer1_energy, alpha3_inner2_energy, alpha3_outer2_energy : BITVECTOR(4);
+
+
+alpha4_inner1, alpha4_outer1, alpha4_inner2, alpha4_outer2 : BITVECTOR(4);
+alpha4_inner1_index, alpha4_outer1_index, alpha4_inner2_index, alpha4_outer2_index : BITVECTOR(8);
+alpha4_inner1_energy, alpha4_outer1_energy, alpha4_inner2_energy, alpha4_outer2_energy : BITVECTOR(4);
+
+contact_energy12_zero, contact_energy12_one : BITVECTOR(4);
+contact_energy23_zero, contact_energy23_one : BITVECTOR(4);
+contact_energy34_zero, contact_energy34_one : BITVECTOR(4);
+contact_energy41_zero, contact_energy41_one : BITVECTOR(4);
+
+outer_energy : BITVECTOR(6);
+inner_energy : BITVECTOR(6);
+
+aminoacid_energies : ARRAY BITVECTOR(8) OF BITVECTOR(4);
+ASSERT (aminoacid_energies[0hex00] = 0hex1);
+ASSERT (aminoacid_energies[0hex01] = 0hex1);
+ASSERT (aminoacid_energies[0hex02] = 0hex1);
+ASSERT (aminoacid_energies[0hex03] = 0hex0);
+ASSERT (aminoacid_energies[0hex04] = 0hex0);
+ASSERT (aminoacid_energies[0hex05] = 0hex1);
+ASSERT (aminoacid_energies[0hex06] = 0hex1);
+ASSERT (aminoacid_energies[0hex07] = 0hex1);
+ASSERT (aminoacid_energies[0hex08] = 0hex1);
+ASSERT (aminoacid_energies[0hex09] = 0hex1);
+ASSERT (aminoacid_energies[0hex0A] = 0hex1);
+ASSERT (aminoacid_energies[0hex0B] = 0hex1);
+ASSERT (aminoacid_energies[0hex0C] = 0hex1);
+ASSERT (aminoacid_energies[0hex0D] = 0hex0);
+ASSERT (aminoacid_energies[0hex0E] = 0hex0);
+ASSERT (aminoacid_energies[0hex0F] = 0hex1);
+ASSERT (aminoacid_energies[0hex10] = 0hex0);
+ASSERT (aminoacid_energies[0hex11] = 0hex1);
+ASSERT (aminoacid_energies[0hex12] = 0hex1);
+ASSERT (aminoacid_energies[0hex13] = 0hex1);
+ASSERT (aminoacid_energies[0hex14] = 0hex0);
+ASSERT (aminoacid_energies[0hex15] = 0hex0);
+ASSERT (aminoacid_energies[0hex16] = 0hex0);
+ASSERT (aminoacid_energies[0hex17] = 0hex1);
+
+index : BITVECTOR(4);
+nonindex : BITVECTOR(4);
+
+ASSERT (alpha1_inner1 = 0hex1 OR alpha1_inner1 = 0hex2);
+ASSERT (alpha1_outer1 = 0hex1 OR alpha1_outer1 = 0hex2);
+ASSERT (alpha1_inner2 = 0hex1 OR alpha1_inner2 = 0hex2);
+ASSERT (alpha1_outer2 = 0hex1 OR alpha1_outer2 = 0hex2);
+
+ASSERT (alpha2_inner1 = 0hex1 OR alpha2_inner1 = 0hex2);
+ASSERT (alpha2_outer1 = 0hex1 OR alpha2_outer1 = 0hex2);
+ASSERT (alpha2_inner2 = 0hex1 OR alpha2_inner2 = 0hex2);
+ASSERT (alpha2_outer2 = 0hex1 OR alpha2_outer2 = 0hex2);
+
+ASSERT (alpha3_inner1 = 0hex1 OR alpha3_inner1 = 0hex2);
+ASSERT (alpha3_outer1 = 0hex1 OR alpha3_outer1 = 0hex2);
+ASSERT (alpha3_inner2 = 0hex1 OR alpha3_inner2 = 0hex2);
+ASSERT (alpha3_outer2 = 0hex1 OR alpha3_outer2 = 0hex2);
+
+ASSERT (alpha4_inner1 = 0hex1 OR alpha4_inner1 = 0hex2);
+ASSERT (alpha4_outer1 = 0hex1 OR alpha4_outer1 = 0hex2);
+ASSERT (alpha4_inner2 = 0hex1 OR alpha4_inner2 = 0hex2);
+ASSERT (alpha4_outer2 = 0hex1 OR alpha4_outer2 = 0hex2);
+
+
+ASSERT (BVPLUS(4, alpha1_inner1, alpha1_outer1, alpha1_inner2, alpha1_outer2) = 0hex6);
+ASSERT (BVPLUS(4, alpha2_inner1, alpha2_outer1, alpha2_inner2, alpha2_outer2) = 0hex6);
+ASSERT (BVPLUS(4, alpha3_inner1, alpha3_outer1, alpha3_inner2, alpha3_outer2) = 0hex6);
+ASSERT (BVPLUS(4, alpha4_inner1, alpha4_outer1, alpha4_inner2, alpha4_outer2) = 0hex6);
+
+
+ASSERT (alpha1_inner1 = 0hex1 => alpha1_outer1 = 0hex2);
+ASSERT (alpha1_inner1 = 0hex2 => alpha1_outer1 = 0hex1);
+ASSERT (alpha1_outer1 = 0hex1 => alpha1_inner2 = 0hex2);
+ASSERT (alpha1_outer1 = 0hex2 => alpha1_inner2 = 0hex1);
+ASSERT (alpha1_inner2 = 0hex1 => alpha1_outer2 = 0hex2);
+ASSERT (alpha1_inner2 = 0hex2 => alpha1_outer2 = 0hex1);
+
+ASSERT (alpha2_inner1 = 0hex1 => alpha2_outer1 = 0hex2);
+ASSERT (alpha2_inner1 = 0hex2 => alpha2_outer1 = 0hex1);
+ASSERT (alpha2_outer1 = 0hex1 => alpha2_inner2 = 0hex2);
+ASSERT (alpha2_outer1 = 0hex2 => alpha2_inner2 = 0hex1);
+ASSERT (alpha2_inner2 = 0hex1 => alpha2_outer2 = 0hex2);
+ASSERT (alpha2_inner2 = 0hex2 => alpha2_outer2 = 0hex1);
+
+ASSERT (alpha3_inner1 = 0hex1 => alpha3_outer1 = 0hex2);
+ASSERT (alpha3_inner1 = 0hex2 => alpha3_outer1 = 0hex1);
+ASSERT (alpha3_outer1 = 0hex1 => alpha3_inner2 = 0hex2);
+ASSERT (alpha3_outer1 = 0hex2 => alpha3_inner2 = 0hex1);
+ASSERT (alpha3_inner2 = 0hex1 => alpha3_outer2 = 0hex2);
+ASSERT (alpha3_inner2 = 0hex2 => alpha3_outer2 = 0hex1);
+
+ASSERT (alpha4_inner1 = 0hex1 => alpha4_outer1 = 0hex2);
+ASSERT (alpha4_inner1 = 0hex2 => alpha4_outer1 = 0hex1);
+ASSERT (alpha4_outer1 = 0hex1 => alpha4_inner2 = 0hex2);
+ASSERT (alpha4_outer1 = 0hex2 => alpha4_inner2 = 0hex1);
+ASSERT (alpha4_inner2 = 0hex1 => alpha4_outer2 = 0hex2);
+ASSERT (alpha4_inner2 = 0hex2 => alpha4_outer2 = 0hex1);
+
+ASSERT (alpha1_inner1_index = 0hex02 => alpha1_inner1 = 0hex2);
+ASSERT (alpha1_outer1_index = 0hex02 => alpha1_outer1 = 0hex2);
+ASSERT (alpha1_inner2_index = 0hex02 => alpha1_inner2 = 0hex2);
+ASSERT (alpha1_outer2_index = 0hex02 => alpha1_outer2 = 0hex2);
+
+ASSERT (alpha2_inner1_index = 0hex02 => alpha2_inner1 = 0hex2);
+ASSERT (alpha2_outer1_index = 0hex02 => alpha2_outer1 = 0hex2);
+ASSERT (alpha2_inner2_index = 0hex02 => alpha2_inner2 = 0hex2);
+ASSERT (alpha2_outer2_index = 0hex02 => alpha2_outer2 = 0hex2);
+
+ASSERT (alpha3_inner1_index = 0hex02 => alpha3_inner1 = 0hex2);
+ASSERT (alpha3_outer1_index = 0hex02 => alpha3_outer1 = 0hex2);
+ASSERT (alpha3_inner2_index = 0hex02 => alpha3_inner2 = 0hex2);
+ASSERT (alpha3_outer2_index = 0hex02 => alpha3_outer2 = 0hex2);
+
+ASSERT (alpha4_inner1_index = 0hex02 => alpha4_inner1 = 0hex2);
+ASSERT (alpha4_outer1_index = 0hex02 => alpha4_outer1 = 0hex2);
+ASSERT (alpha4_inner2_index = 0hex02 => alpha4_inner2 = 0hex2);
+ASSERT (alpha4_outer2_index = 0hex02 => alpha4_outer2 = 0hex2);
+
+ASSERT (alpha1_inner1_index = 0hex00 OR alpha1_inner1_index = 0hex01);
+
+ASSERT (alpha1_inner1 = 0hex1 => alpha1_inner1_index = 0hex00);
+ASSERT (alpha1_inner1 = 0hex2 => alpha1_inner1_index = 0hex01);
+ASSERT (alpha1_outer1 = 0hex1 => alpha1_outer1_index = BVPLUS(8,alpha1_inner1_index,0hex01));
+ASSERT (alpha1_outer1 = 0hex2 => alpha1_outer1_index = BVPLUS(8,alpha1_inner1_index,0hex02));
+ASSERT (alpha1_inner2 = 0hex1 => alpha1_inner2_index = BVPLUS(8,alpha1_outer1_index,0hex01));
+ASSERT (alpha1_inner2 = 0hex2 => alpha1_inner2_index = BVPLUS(8,alpha1_outer1_index,0hex02));
+ASSERT (alpha1_outer2 = 0hex1 => alpha1_outer2_index = BVPLUS(8,alpha1_inner2_index,0hex01));
+ASSERT (alpha1_outer2 = 0hex2 => alpha1_outer2_index = BVPLUS(8,alpha1_inner2_index,0hex02));
+
+ASSERT (alpha2_inner1 = 0hex1 => alpha2_inner1_index = BVPLUS(8,alpha1_outer2_index,0hex01));
+ASSERT (alpha2_inner1 = 0hex2 => alpha2_inner1_index = BVPLUS(8,alpha1_outer2_index,0hex02));
+ASSERT (alpha2_outer1 = 0hex1 => alpha2_outer1_index = BVPLUS(8,alpha2_inner1_index,0hex01));
+ASSERT (alpha2_outer1 = 0hex2 => alpha2_outer1_index = BVPLUS(8,alpha2_inner1_index,0hex02));
+ASSERT (alpha2_inner2 = 0hex1 => alpha2_inner2_index = BVPLUS(8,alpha2_outer1_index,0hex01));
+ASSERT (alpha2_inner2 = 0hex2 => alpha2_inner2_index = BVPLUS(8,alpha2_outer1_index,0hex02));
+ASSERT (alpha2_outer2 = 0hex1 => alpha2_outer2_index = BVPLUS(8,alpha2_inner2_index,0hex01));
+ASSERT (alpha2_outer2 = 0hex2 => alpha2_outer2_index = BVPLUS(8,alpha2_inner2_index,0hex02));
+
+ASSERT (alpha3_inner1 = 0hex1 => alpha3_inner1_index = BVPLUS(8,alpha2_outer2_index,0hex01));
+ASSERT (alpha3_inner1 = 0hex2 => alpha3_inner1_index = BVPLUS(8,alpha2_outer2_index,0hex02));
+ASSERT (alpha3_outer1 = 0hex1 => alpha3_outer1_index = BVPLUS(8,alpha3_inner1_index,0hex01));
+ASSERT (alpha3_outer1 = 0hex2 => alpha3_outer1_index = BVPLUS(8,alpha3_inner1_index,0hex02));
+ASSERT (alpha3_inner2 = 0hex1 => alpha3_inner2_index = BVPLUS(8,alpha3_outer1_index,0hex01));
+ASSERT (alpha3_inner2 = 0hex2 => alpha3_inner2_index = BVPLUS(8,alpha3_outer1_index,0hex02));
+ASSERT (alpha3_outer2 = 0hex1 => alpha3_outer2_index = BVPLUS(8,alpha3_inner2_index,0hex01));
+ASSERT (alpha3_outer2 = 0hex2 => alpha3_outer2_index = BVPLUS(8,alpha3_inner2_index,0hex02));
+
+ASSERT (alpha4_inner1 = 0hex1 => alpha4_inner1_index = BVPLUS(8,alpha3_outer2_index,0hex01));
+ASSERT (alpha4_inner1 = 0hex2 => alpha4_inner1_index = BVPLUS(8,alpha3_outer2_index,0hex02));
+ASSERT (alpha4_outer1 = 0hex1 => alpha4_outer1_index = BVPLUS(8,alpha4_inner1_index,0hex01));
+ASSERT (alpha4_outer1 = 0hex2 => alpha4_outer1_index = BVPLUS(8,alpha4_inner1_index,0hex02));
+ASSERT (alpha4_inner2 = 0hex1 => alpha4_inner2_index = BVPLUS(8,alpha4_outer1_index,0hex01));
+ASSERT (alpha4_inner2 = 0hex2 => alpha4_inner2_index = BVPLUS(8,alpha4_outer1_index,0hex02));
+ASSERT (alpha4_outer2 = 0hex1 => alpha4_outer2_index = BVPLUS(8,alpha4_inner2_index,0hex01));
+ASSERT (alpha4_outer2 = 0hex2 => alpha4_outer2_index = BVPLUS(8,alpha4_inner2_index,0hex02));
+
+
+ASSERT (alpha1_inner1 = 0hex1 => alpha1_inner1_energy = aminoacid_energies[alpha1_inner1_index]);
+ASSERT (alpha1_inner1 = 0hex2 =>  
+	alpha1_inner1_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha1_inner1_index,0hex01)],aminoacid_energies[alpha1_inner1_index]));
+
+
+ASSERT (alpha1_outer1 = 0hex1 => alpha1_outer1_energy = BVSUB(4,0hex1,aminoacid_energies[alpha1_outer1_index]));
+ASSERT (alpha1_outer1 = 0hex2 =>
+	alpha1_outer1_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha1_outer1_index,0hex01)], aminoacid_energies[alpha1_outer1_index])));
+
+
+ASSERT (alpha1_inner2 = 0hex1 => alpha1_inner2_energy = aminoacid_energies[alpha1_inner2_index]);
+ASSERT (alpha1_inner2 = 0hex2 =>
+	alpha1_inner2_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha1_inner2_index,0hex01)],aminoacid_energies[alpha1_inner2_index]));
+
+
+ASSERT (alpha1_outer2 = 0hex1 => alpha1_outer2_energy = BVSUB(4,0hex1,aminoacid_energies[alpha1_outer2_index]));
+ASSERT (alpha1_outer2 = 0hex2 =>
+	alpha1_outer2_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha1_outer2_index,0hex01)], aminoacid_energies[alpha1_outer2_index])));
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ASSERT (alpha2_inner1 = 0hex1 => alpha2_inner1_energy = aminoacid_energies[alpha2_inner1_index]);
+ASSERT (alpha2_inner1 = 0hex2 =>  
+	alpha2_inner1_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha2_inner1_index,0hex01)],aminoacid_energies[alpha2_inner1_index]));
+
+
+ASSERT (alpha2_outer1 = 0hex1 => alpha2_outer1_energy = BVSUB(4,0hex1,aminoacid_energies[alpha2_outer1_index]));
+ASSERT (alpha2_outer1 = 0hex2 =>
+	alpha2_outer1_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha2_outer1_index,0hex01)], aminoacid_energies[alpha2_outer1_index])));
+
+
+ASSERT (alpha2_inner2 = 0hex1 => alpha2_inner2_energy = aminoacid_energies[alpha2_inner2_index]);
+ASSERT (alpha2_inner2 = 0hex2 =>
+	alpha2_inner2_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha2_inner2_index,0hex01)],aminoacid_energies[alpha2_inner2_index]));
+
+
+ASSERT (alpha2_outer2 = 0hex1 => alpha2_outer2_energy = BVSUB(4,0hex1,aminoacid_energies[alpha2_outer2_index]));
+ASSERT (alpha2_outer2 = 0hex2 =>
+	alpha2_outer2_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha2_outer2_index,0hex01)], aminoacid_energies[alpha2_outer2_index])));
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ASSERT (alpha3_inner1 = 0hex1 => alpha3_inner1_energy = aminoacid_energies[alpha3_inner1_index]);
+ASSERT (alpha3_inner1 = 0hex2 =>  
+	alpha3_inner1_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha3_inner1_index,0hex01)],aminoacid_energies[alpha3_inner1_index]));
+
+
+ASSERT (alpha3_outer1 = 0hex1 => alpha3_outer1_energy = BVSUB(4,0hex1,aminoacid_energies[alpha3_outer1_index]));
+ASSERT (alpha3_outer1 = 0hex2 =>
+	alpha3_outer1_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha3_outer1_index,0hex01)], aminoacid_energies[alpha3_outer1_index])));
+
+% ASSERT (alpha3_outer1 = 0hex2 =>
+%	alpha3_outer1_energy = BVSUB(4,0hex2,BVPLUS(4,0hex0, 0hex0)));
+
+
+ASSERT (alpha3_inner2 = 0hex1 => alpha3_inner2_energy = aminoacid_energies[alpha3_inner2_index]);
+ASSERT (alpha3_inner2 = 0hex2 =>
+	alpha3_inner2_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha3_inner2_index,0hex01)],aminoacid_energies[alpha3_inner2_index]));
+
+
+ASSERT (alpha3_outer2 = 0hex1 => alpha3_outer2_energy = BVSUB(4,0hex1,aminoacid_energies[alpha3_outer2_index]));
+ASSERT (alpha3_outer2 = 0hex2 =>
+	alpha3_outer2_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha3_outer2_index,0hex01)], aminoacid_energies[alpha3_outer2_index])));
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ASSERT (alpha4_inner1 = 0hex1 => alpha4_inner1_energy = aminoacid_energies[alpha4_inner1_index]);
+ASSERT (alpha4_inner1 = 0hex2 =>  
+	alpha4_inner1_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha4_inner1_index,0hex01)],aminoacid_energies[alpha4_inner1_index]));
+
+
+ASSERT (alpha4_outer1 = 0hex1 => alpha4_outer1_energy = BVSUB(4,0hex1,aminoacid_energies[alpha4_outer1_index]));
+ASSERT (alpha4_outer1 = 0hex2 =>
+	alpha4_outer1_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha4_outer1_index,0hex01)], aminoacid_energies[alpha4_outer1_index])));
+
+
+ASSERT (alpha4_inner2 = 0hex1 => alpha4_inner2_energy = aminoacid_energies[alpha4_inner2_index]);
+ASSERT (alpha4_inner2 = 0hex2 =>
+	alpha4_inner2_energy = BVPLUS(4,aminoacid_energies[BVSUB(8,alpha4_inner2_index,0hex01)],aminoacid_energies[alpha4_inner2_index]));
+
+
+ASSERT (alpha4_outer2 = 0hex1 => alpha4_outer2_energy = BVSUB(4,0hex1,aminoacid_energies[alpha4_outer2_index]));
+ASSERT (alpha4_outer2 = 0hex2 =>
+	alpha4_outer2_energy = BVSUB(4,0hex2,BVPLUS(4,aminoacid_energies[BVSUB(8,alpha4_outer2_index,0hex01)], aminoacid_energies[alpha4_outer2_index])));
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ASSERT (contact_energy12_zero = BVMULT(4, alpha1_inner1_energy, alpha2_inner1_energy));
+ASSERT (contact_energy12_one  = BVMULT(4, alpha1_inner2_energy, alpha2_inner2_energy));
+
+
+ASSERT (contact_energy23_zero = BVMULT(4, alpha2_inner1_energy, alpha3_inner1_energy));
+ASSERT (contact_energy23_one  = BVMULT(4, alpha2_inner2_energy, alpha3_inner2_energy));
+
+
+ASSERT (contact_energy34_zero = BVMULT(4, alpha3_inner1_energy, alpha4_inner1_energy));
+ASSERT (contact_energy34_one  = BVMULT(4, alpha3_inner2_energy, alpha4_inner2_energy));
+
+
+ASSERT (contact_energy41_zero = BVMULT(4, alpha4_inner1_energy, alpha1_inner1_energy));
+ASSERT (contact_energy41_one  = BVMULT(4, alpha4_inner2_energy, alpha1_inner2_energy));
+
+
+ASSERT (outer_energy = BVPLUS(6, 0bin00@alpha1_outer1_energy, 0bin00@alpha1_outer2_energy, 
+				 0bin00@alpha2_outer1_energy, 0bin00@alpha2_outer2_energy, 	
+				 0bin00@alpha3_outer1_energy, 0bin00@alpha3_outer2_energy, 
+				 0bin00@alpha4_outer1_energy, 0bin00@alpha4_outer2_energy));
+
+
+ASSERT (inner_energy = BVPLUS(6, 0bin00@contact_energy12_zero, 0bin00@contact_energy12_one,
+      			         0bin00@contact_energy23_zero, 0bin00@contact_energy23_one,
+			         0bin00@contact_energy34_zero, 0bin00@contact_energy34_one,
+                                 0bin00@contact_energy41_zero, 0bin00@contact_energy41_one));
+
+
+% final query
+ASSERT (BVGE(BVPLUS(7,0bin0@outer_energy,0bin0@inner_energy), 0bin0001111));
+% ASSERT (BVGE(outer_energy, 0bin000100));
+QUERY FALSE;
