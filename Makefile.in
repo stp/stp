@@ -10,27 +10,25 @@ BIN_DIR=$(PREFIX)/bin
 LIB_DIR=$(PREFIX)/lib
 INCLUDE_DIR=$(PREFIX)/include/stp
 
+SRC=src
 BINARIES=bin/stp
 LIBRARIES=lib/libstp.a
-HEADERS=c_interface/*.h
+HEADERS=$(SRC)/c_interface/*.h
 
-# NB: the TAGS target is a hack to get around this recursive make nonsense
-# we want all the source and header files generated before we make tags
 .PHONY: all
 all:
-	$(MAKE) -C AST
-	$(MAKE) -C sat core
-	$(MAKE) -C simplifier
-	$(MAKE) -C bitvec
-	$(MAKE) -C c_interface
-	$(MAKE) -C constantbv
-	$(MAKE) -C parser
-	#$(AR) rc libstp.a  AST/*.o sat/core/*.or simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o parser/let-funcs.o parser/parseCVC.o parser/lexCVC.o
-	$(AR) rc libstp.a  AST/*.o sat/*.a simplifier/*.o bitvec/*.o constantbv/*.o c_interface/*.o parser/let-funcs.o parser/parseCVC.o parser/lexCVC.o
+	$(MAKE) -C $(SRC)/AST
+	$(MAKE) -C $(SRC)/sat core
+	$(MAKE) -C $(SRC)/simplifier
+	$(MAKE) -C $(SRC)/bitvec
+	$(MAKE) -C $(SRC)/c_interface
+	$(MAKE) -C $(SRC)/constantbv
+	$(MAKE) -C $(SRC)/parser
+	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/sat/*.a $(SRC)/simplifier/*.o $(SRC)/bitvec/*.o $(SRC)/constantbv/*.o \
+			   $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
-#	$(MAKE) TAGS
 	@echo ""
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
@@ -55,13 +53,13 @@ clean:
 	#rm -rf Makefile
 	#rm -rf config.info
 	rm -f TAGS
-	$(MAKE) clean -C AST
-	$(MAKE) clean -C sat
-	$(MAKE) clean -C simplifier
-	$(MAKE) clean -C bitvec
-	$(MAKE) clean -C parser
-	$(MAKE) clean -C c_interface
-	$(MAKE) clean -C constantbv
+	$(MAKE) clean -C $(SRC)/AST
+	$(MAKE) clean -C $(SRC)/sat
+	$(MAKE) clean -C $(SRC)/simplifier
+	$(MAKE) clean -C $(SRC)/bitvec
+	$(MAKE) clean -C $(SRC)/parser
+	$(MAKE) clean -C $(SRC)/c_interface
+	$(MAKE) clean -C $(SRC)/constantbv
 
 # this is make way too difficult because of the recursive Make junk, it 
 # should be removed

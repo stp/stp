@@ -1,4 +1,4 @@
-include ../Makefile.common
+include ../../Makefile.common
 
 SRCS = c_interface.cpp
 OBJS = $(SRCS:.cpp=.o)

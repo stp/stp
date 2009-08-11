@@ -1,4 +1,4 @@
-include ../Makefile.common
+include ../../Makefile.common
 
 #SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp DPLLMgr.cpp ToSAT.cpp Transform.cpp
 SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp printer/SMTLIBPrinter.cpp  printer/dotPrinter.cpp  printer/CPrinter.cpp

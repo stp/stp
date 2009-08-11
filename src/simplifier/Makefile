@@ -1,4 +1,4 @@
-include ../Makefile.common
+include ../../Makefile.common
 
 SRCS = simplifier.cpp bvsolver.cpp
 OBJS = $(SRCS:.cpp=.o)

@@ -1,5 +1,4 @@
-
-include ../Makefile.common
+include ../../Makefile.common
 
 LEX=flex
 YACC=bison -d -y --debug -v
@@ -13,7 +12,7 @@ all: parseSMT.cpp lexSMT.cpp parseCVC.cpp lexCVC.cpp let-funcs.cpp parser parseC
 
 parser:		lexCVC.o parseCVC.o lexSMT.o parseSMT.o let-funcs.o main.o 
 		$(CXX) $(CFLAGS) $(LDFLAGS) lexCVC.o lexSMT.o parseCVC.o parseSMT.o main.o let-funcs.o $(LIBS) -o parser
-		@mv parser ../bin/stp
+		@mv parser ../../bin/stp
 
 lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
 		$(LEX)  -o lexCVC.cpp --prefix cvc CVC.lex
