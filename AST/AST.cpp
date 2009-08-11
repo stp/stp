@@ -1365,6 +1365,8 @@ bool BeevMgr::BVTypeCheck(const ASTNode& n)
 				{
 					FatalError("BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n", n);
 				}
+				if ((v.size() != 2))
+						FatalError("BVTypeCheck:BVSX must have two arguments. The second is the new width\n", n);
 				break;
 
 			case BVZX:
@@ -1374,6 +1376,9 @@ bool BeevMgr::BVTypeCheck(const ASTNode& n)
 				{
 					FatalError("BVTypeCheck: BVZX(t,bvzx_len) : length of 't' must be <= bvzx_len\n", n);
 				}
+				if ((v.size() != 2))
+						FatalError("BVTypeCheck:BVZX must have two arguments. The second is the new width\n", n);
+
 				break;
 
 			default:
