@@ -9,3 +9,5 @@ CSRCS     = $(wildcard *.C)
 COBJS     = $(addsuffix .o, $(basename $(CSRCS))) $(CORE)/Solver.o
 
 include ../mtl/template.mk
+all:
+	cp libminisat.a ../
