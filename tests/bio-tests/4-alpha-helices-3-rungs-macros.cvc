@@ -292,6 +292,14 @@ ASSERT (alpha1_inner3_length = FACE_LEN2_MACRO => alpha1_inner3_index = BVPLUS(1
 ASSERT (alpha1_outer3_length = FACE_LEN1_MACRO => alpha1_outer3_index = BVPLUS(12,alpha1_inner3_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha1_outer3_length = FACE_LEN2_MACRO => alpha1_outer3_index = BVPLUS(12,alpha1_inner3_index,0hex00@FACE_LEN2_MACRO));
 
+%%% ADDITIONAL CONSTRAINTS ON THE INDICES %%%
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex001),alpha1_inner1_index) AND BVLE(alpha1_inner1_index,BVPLUS(12,start_coil_index,0hex002)));
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex002),alpha1_outer1_index) AND BVLE(alpha1_outer1_index,BVPLUS(12,start_coil_index,0hex004)));
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex003),alpha1_inner2_index) AND BVLE(alpha1_inner2_index,BVPLUS(12,start_coil_index,0hex006)));
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex004),alpha1_outer2_index) AND BVLE(alpha1_outer2_index,BVPLUS(12,start_coil_index,0hex008)));
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex005),alpha1_inner3_index) AND BVLE(alpha1_inner3_index,BVPLUS(12,start_coil_index,0hex00A)));
+ASSERT (BVLE(BVPLUS(12,start_coil_index,0hex006),alpha1_outer3_index) AND BVLE(alpha1_outer3_index,BVPLUS(12,start_coil_index,0hex00A)));
+
 ASSERT (BVLE(BVPLUS(12,BITS12_ONE_MACRO,alpha1_outer3_index),coil_12_index) AND BVLE(coil_12_index, BVPLUS(12,alpha1_outer3_index,COIL12_HIGHINDEX_MACRO)));
 ASSERT (alpha2_outer3_length = FACE_LEN1_MACRO => alpha2_outer3_index = BVPLUS(12,coil_12_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha2_outer3_length = FACE_LEN2_MACRO => alpha2_outer3_index = BVPLUS(12,coil_12_index,0hex00@FACE_LEN2_MACRO));
@@ -305,6 +313,14 @@ ASSERT (alpha2_outer1_length = FACE_LEN1_MACRO => alpha2_outer1_index = BVPLUS(1
 ASSERT (alpha2_outer1_length = FACE_LEN2_MACRO => alpha2_outer1_index = BVPLUS(12,alpha2_inner2_index,0hex00@FACE_LEN2_MACRO));
 ASSERT (alpha2_inner1_length = FACE_LEN1_MACRO => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha2_inner1_length = FACE_LEN2_MACRO => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex00@FACE_LEN2_MACRO));
+
+%%% ADDITIONAL CONSTRAINTS ON THE INDICES %%%
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex001),alpha2_outer3_index) AND BVLE(alpha2_outer3_index,BVPLUS(12,coil_12_index,0hex002)));
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex002),alpha2_inner3_index) AND BVLE(alpha2_inner3_index,BVPLUS(12,coil_12_index,0hex004)));
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex003),alpha2_outer2_index) AND BVLE(alpha2_outer2_index,BVPLUS(12,coil_12_index,0hex006)));
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex004),alpha2_inner2_index) AND BVLE(alpha2_inner2_index,BVPLUS(12,coil_12_index,0hex008)));
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex005),alpha2_outer1_index) AND BVLE(alpha2_outer1_index,BVPLUS(12,coil_12_index,0hex00A)));
+ASSERT (BVLE(BVPLUS(12,coil_12_index,0hex006),alpha2_inner1_index) AND BVLE(alpha2_inner1_index,BVPLUS(12,coil_12_index,0hex00A)));
 
 ASSERT (BVLE(BVPLUS(12,BITS12_ONE_MACRO,alpha2_inner1_index),coil_23_index) AND BVLE(coil_23_index, BVPLUS(12,alpha2_inner1_index,COIL23_HIGHINDEX_MACRO)));
 ASSERT (alpha3_inner1_length = FACE_LEN1_MACRO => alpha3_inner1_index = BVPLUS(12,coil_23_index,0hex00@FACE_LEN1_MACRO));
@@ -320,6 +336,15 @@ ASSERT (alpha3_inner3_length = FACE_LEN2_MACRO => alpha3_inner3_index = BVPLUS(1
 ASSERT (alpha3_outer3_length = FACE_LEN1_MACRO => alpha3_outer3_index = BVPLUS(12,alpha3_inner3_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha3_outer3_length = FACE_LEN2_MACRO => alpha3_outer3_index = BVPLUS(12,alpha3_inner3_index,0hex00@FACE_LEN2_MACRO));
 
+%%% ADDITIONAL CONSTRAINTS ON THE INDICES %%%
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex001),alpha3_inner1_index) AND BVLE(alpha3_inner1_index,BVPLUS(12,coil_23_index,0hex002)));
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex002),alpha3_outer1_index) AND BVLE(alpha3_outer1_index,BVPLUS(12,coil_23_index,0hex004)));
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex003),alpha3_inner2_index) AND BVLE(alpha3_inner2_index,BVPLUS(12,coil_23_index,0hex006)));
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex004),alpha3_outer2_index) AND BVLE(alpha3_outer2_index,BVPLUS(12,coil_23_index,0hex008)));
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex005),alpha3_inner3_index) AND BVLE(alpha3_inner3_index,BVPLUS(12,coil_23_index,0hex00A)));
+ASSERT (BVLE(BVPLUS(12,coil_23_index,0hex006),alpha3_outer3_index) AND BVLE(alpha3_outer3_index,BVPLUS(12,coil_23_index,0hex00A)));
+
+
 ASSERT (BVLE(BVPLUS(12,BITS12_ONE_MACRO,alpha3_outer3_index),coil_34_index) AND BVLE(coil_34_index, BVPLUS(12,alpha3_outer3_index,COIL34_HIGHINDEX_MACRO)));
 ASSERT (alpha4_outer3_length = FACE_LEN1_MACRO => alpha4_outer3_index = BVPLUS(12,coil_34_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha4_outer3_length = FACE_LEN2_MACRO => alpha4_outer3_index = BVPLUS(12,coil_34_index,0hex00@FACE_LEN2_MACRO));
@@ -333,6 +358,15 @@ ASSERT (alpha4_outer1_length = FACE_LEN1_MACRO => alpha4_outer1_index = BVPLUS(1
 ASSERT (alpha4_outer1_length = FACE_LEN2_MACRO => alpha4_outer1_index = BVPLUS(12,alpha4_inner2_index,0hex00@FACE_LEN2_MACRO));
 ASSERT (alpha4_inner1_length = FACE_LEN1_MACRO => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex00@FACE_LEN1_MACRO));
 ASSERT (alpha4_inner1_length = FACE_LEN2_MACRO => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex00@FACE_LEN2_MACRO));
+
+%%% ADDITIONAL CONSTRAINTS ON THE INDICES %%%
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex001),alpha4_outer3_index) AND BVLE(alpha4_outer3_index,BVPLUS(12,coil_34_index,0hex002)));
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex002),alpha4_inner3_index) AND BVLE(alpha4_inner3_index,BVPLUS(12,coil_34_index,0hex004)));
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex003),alpha4_outer2_index) AND BVLE(alpha4_outer2_index,BVPLUS(12,coil_34_index,0hex006)));
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex004),alpha4_inner2_index) AND BVLE(alpha4_inner2_index,BVPLUS(12,coil_34_index,0hex008)));
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex005),alpha4_outer1_index) AND BVLE(alpha4_outer1_index,BVPLUS(12,coil_34_index,0hex00A)));
+ASSERT (BVLE(BVPLUS(12,coil_34_index,0hex006),alpha4_inner1_index) AND BVLE(alpha4_inner1_index,BVPLUS(12,coil_34_index,0hex00A)));
+
 
 ASSERT (BVLE(BVPLUS(12,BITS12_ONE_MACRO,alpha4_inner1_index),end_coil_index) AND BVLE(end_coil_index, BVPLUS(12,alpha4_inner1_index,ENDCOIL_HIGHINDEX_MACRO)));
 %%%%%%%%%%%%%%%%%%%%%%%%%% END OF CHAINING %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -496,5 +530,5 @@ ASSERT (inner_energy = BVPLUS(16,  contact_energy12_zero, contact_energy12_one, 
 
 
 % final query
-ASSERT (BVGE(inner_energy, 0hex0010));
+ASSERT (BVGE(inner_energy, 0hex0FF0));
 QUERY FALSE;
