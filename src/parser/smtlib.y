@@ -770,7 +770,7 @@ an_nonbvconst_term:
       if (width < 0)
 	yyerror("Negative width in extract");
       
-      if((unsigned)$3 >= $7->GetValueWidth() || (unsigned)$5 < 0)
+      if((unsigned)$3 >= $7->GetValueWidth())
 	yyerror("Parsing: Wrong width in BVEXTRACT\n");			 
       
       BEEV::ASTNode hi  =  BEEV::globalBeevMgr_for_parser->CreateBVConst(32, $3);

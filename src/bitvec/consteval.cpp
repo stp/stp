@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, David L. Dill
+ * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
  *
@@ -143,7 +143,7 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			{
 				// signed shift, and the number was originally negative.
 				// Shift may be larger than the inputwidth.
-				for (int i =0; i < min(shift,inputwidth);i++)
+				for (unsigned int i =0; i < min(shift,inputwidth);i++)
 				{
 					CONSTANTBV::BitVector_Bit_On(output,(inputwidth-1 -i));
 				}

@@ -1316,6 +1316,7 @@ int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& 
 			ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
 			//printf("spot 01\n");
 			int res2 = 2;
+			//if (FalseAxiomsVec.size() > 0)
 			if (FalseAxiomsVec.size() > oldFalseAxiomsSize)
 			{
 				res2 = CallSAT_ResultCheck(newS, FalseAxioms, orig_input);
@@ -1328,7 +1329,6 @@ int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& 
 			}
 		}
 	}
-	//ASTNode RemainingAxioms = RemainingAxiomsVec[0];
 	ASTNode RemainingAxioms = (RemainingAxiomsVec.size() > 1) ? CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
 	ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
 	return CallSAT_ResultCheck(newS, RemainingAxioms, orig_input);

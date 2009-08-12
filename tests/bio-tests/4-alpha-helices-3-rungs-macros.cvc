@@ -66,8 +66,8 @@ ASSERT (BITS12_ONE_MACRO          = 0hex001);
 ASSERT (BITS16_ONE_MACRO          = 0hex0001);
 ASSERT (BITS16_TWO_MACRO          = 0hex0002);
 
-ASSERT (HIGH_ENERGY_MACRO         = 0hex0001);
-ASSERT (LOW_ENERGY_MACRO          = 0hex0000);
+ASSERT (HIGH_ENERGY_MACRO         = 0hex0FFF);
+ASSERT (LOW_ENERGY_MACRO          = 0hex007F);
  
 ASSERT (FACE_LEN1_MACRO           = 0hex1);
 ASSERT (FACE_LEN2_MACRO           = 0hex2);
@@ -530,5 +530,5 @@ ASSERT (inner_energy = BVPLUS(16,  contact_energy12_zero, contact_energy12_one, 
 
 
 % final query
-ASSERT (BVGE(inner_energy, 0hex0FF0));
+ASSERT (BVGE(inner_energy, 0hexEFFF));
 QUERY FALSE;

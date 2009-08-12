@@ -43,7 +43,8 @@ else
   CFLAGS = $(CFLAGS_BASE)
 endif
 
-CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
+#CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
+CXXFLAGS = $(CFLAGS) -Wextra -DEXT_HASH_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wall -DTR1_UNORDERED_MAP
 #CXXFLAGS = $(CFLAGS) -Wall 
 #LDFLAGS= -lstdc++

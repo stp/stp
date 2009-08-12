@@ -410,7 +410,7 @@ Formula		:     '(' Formula ')' { $$ = $2; }
                 |      BOOLEXTRACT_TOK '(' Expr ',' NUMERAL_TOK ')'
                        {
 			 unsigned int width = $3->GetValueWidth();
-			 if(0 > (unsigned)$5 || width <= (unsigned)$5)
+			 if(width <= (unsigned)$5)
 			   yyerror("Fatal Error: BOOLEXTRACT: trying to boolextract a bit which beyond range");
 			 
 			 BEEV::ASTNode hi  =  BEEV::globalBeevMgr_for_parser->CreateBVConst(32, $5);
@@ -652,7 +652,7 @@ Expr		:      TERMID_TOK { $$ = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser-
 			 if (width < 0)
 			   yyerror("Negative width in extract");
 			 
-			 if((unsigned)$3 >= $1->GetValueWidth() || (unsigned)$5 < 0)
+			 if((unsigned)$3 >= $1->GetValueWidth())
 			   yyerror("Parsing: Wrong width in BVEXTRACT\n");			 
 
 			 BEEV::ASTNode hi  =  BEEV::globalBeevMgr_for_parser->CreateBVConst(32, $3);
