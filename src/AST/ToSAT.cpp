@@ -1186,7 +1186,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 
 	int res;
 	//solver instantiated here
-	MINISAT::Solver newS;
+	MINISAT::SimpSolver newS;
 	if (arrayread_refinement)
 	{
 		counterexample_checking_during_refinement = true;
