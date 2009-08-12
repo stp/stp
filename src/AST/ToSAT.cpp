@@ -1221,7 +1221,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 	}
 
 	FatalError("TopLevelSATAux: reached the end without proper conclusion:"
-		"either a divide by zero in the input or a bug in STP");
+		   "either a divide by zero in the input or a bug in STP");
 	//bogus return to make the compiler shut up
 	return 2;
 } //End of TopLevelSAT
@@ -1242,8 +1242,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 // This is not the most obvious way to do it, and I don't know how it
 // compares with other approaches (e.g., one false axiom at a time or
 // all the false axioms each time).
-int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input)
-{
+int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input) {
 	//printf("doing array read refinement\n");
 	if (!arrayread_refinement)
 		FatalError("SATBased_ArrayReadRefinement: Control should not reach here");
@@ -1279,7 +1278,8 @@ int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& 
 			//get the variable corresponding to the array_read1
 			ASTNode arrsym1 = _arrayread_symbol[arr_read1];
 			if (!(SYMBOL == arrsym1.GetKind() || BVCONST == arrsym1.GetKind()))
-				FatalError("TopLevelSAT: refinementloop:term arrsym1 corresponding to READ must be a var", arrsym1);
+				FatalError("TopLevelSAT: refinementloop:"
+					   "term arrsym1 corresponding to READ must be a var", arrsym1);
 
 			//we have nonconst index here. create Leibnitz axiom for it
 			//w.r.t every index in listOfIndices
@@ -1300,7 +1300,7 @@ int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& 
 				ASTNode arrsym2 = _arrayread_symbol[arr_read2];
 				if (!(SYMBOL == arrsym2.GetKind() || BVCONST == arrsym2.GetKind()))
 					FatalError("TopLevelSAT: refinement loop:"
-						"term arrsym2 corresponding to READ must be a var", arrsym2);
+						   "term arrsym2 corresponding to READ must be a var", arrsym2);
 
 				ASTNode eqOfReads = CreateSimplifiedEQ(arrsym1, arrsym2);
 				//construct appropriate Leibnitz axiom
@@ -1328,6 +1328,7 @@ int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& 
 			}
 		}
 	}
+	//ASTNode RemainingAxioms = RemainingAxiomsVec[0];
 	ASTNode RemainingAxioms = (RemainingAxiomsVec.size() > 1) ? CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
 	ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
 	return CallSAT_ResultCheck(newS, RemainingAxioms, orig_input);
