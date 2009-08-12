@@ -30,123 +30,135 @@ start_coil_length, coil_12_length, coil_23_length, coil_34_length, end_coil_leng
 start_coil_index, coil_12_index, coil_23_index, coil_34_index, end_coil_index : BITVECTOR(12);
 start_coil_energy, coil_12_energy, coil_23_energy, coil_34_energy, end_coil_energy : BITVECTOR(20);
 
-contact_energy12_zero, contact_energy12_one, contact_energy12_two : BITVECTOR(32);
-contact_energy23_zero, contact_energy23_one, contact_energy23_two : BITVECTOR(32);
-contact_energy34_zero, contact_energy34_one, contact_energy34_two : BITVECTOR(32);
-contact_energy41_zero, contact_energy41_one, contact_energy41_two : BITVECTOR(32);
+contact_energy12_zero, contact_energy12_one, contact_energy12_two : BITVECTOR(20);
+contact_energy23_zero, contact_energy23_one, contact_energy23_two : BITVECTOR(20);
+contact_energy34_zero, contact_energy34_one, contact_energy34_two : BITVECTOR(20);
+contact_energy41_zero, contact_energy41_one, contact_energy41_two : BITVECTOR(20);
 
-outer_energy : BITVECTOR(32);
-inner_energy : BITVECTOR(32);
+outer_energy : BITVECTOR(20);
+inner_energy : BITVECTOR(20);
 bits20_one   : BITVECTOR(20);
 bits20_two   : BITVECTOR(20);
+high_energy  : BITVECTOR(20);
+low_energy   : BITVECTOR(20);
+
+rung_length_limit : BITVECTOR(4);
+COIL_LEN_LOW_LIMIT  : BITVECTOR(8);
+COIL_LEN_HIGH_LIMIT : BITVECTOR(8);
+
 
 ASSERT (bits20_one = 0hex00001);
 ASSERT (bits20_two = 0hex00002);
 
+ASSERT (high_energy = 0hex00001);
+ASSERT (low_energy  = 0hex00000);
+
+ASSERT (COIL_LEN_LOW_LIMIT  = 0hex00);
+ASSERT (COIL_LEN_HIGH_LIMIT = 0hex20);
 
 %%%%%%%%%%%%%% START OF AMINO ACID ENERGY ARRAY %%%%%%%%%%%%%
 
 aminoacid_energies : ARRAY BITVECTOR(12) OF BITVECTOR(20);
-ASSERT (aminoacid_energies[0hex000] = 0hex01111);
-ASSERT (aminoacid_energies[0hex001] = 0hex01111);
-ASSERT (aminoacid_energies[0hex002] = 0hex00011);
-ASSERT (aminoacid_energies[0hex003] = 0hex01111);
-ASSERT (aminoacid_energies[0hex004] = 0hex00011);
-ASSERT (aminoacid_energies[0hex005] = 0hex01111);
-ASSERT (aminoacid_energies[0hex006] = 0hex00011);
-ASSERT (aminoacid_energies[0hex007] = 0hex01111);
-ASSERT (aminoacid_energies[0hex008] = 0hex00011);
-ASSERT (aminoacid_energies[0hex009] = 0hex01111);
-ASSERT (aminoacid_energies[0hex00A] = 0hex00011);
-ASSERT (aminoacid_energies[0hex00B] = 0hex01111);
-ASSERT (aminoacid_energies[0hex00C] = 0hex00011);
-ASSERT (aminoacid_energies[0hex00D] = 0hex01111);
-ASSERT (aminoacid_energies[0hex00E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex00F] = 0hex01111);
-ASSERT (aminoacid_energies[0hex010] = 0hex01111);
-ASSERT (aminoacid_energies[0hex011] = 0hex00011);
-ASSERT (aminoacid_energies[0hex012] = 0hex01111);
-ASSERT (aminoacid_energies[0hex013] = 0hex01111);
-ASSERT (aminoacid_energies[0hex014] = 0hex00011);
-ASSERT (aminoacid_energies[0hex015] = 0hex01111);
-ASSERT (aminoacid_energies[0hex016] = 0hex00011);
-ASSERT (aminoacid_energies[0hex017] = 0hex01111);
-ASSERT (aminoacid_energies[0hex018] = 0hex00011);
-ASSERT (aminoacid_energies[0hex019] = 0hex01111);
-ASSERT (aminoacid_energies[0hex01A] = 0hex00011);
-ASSERT (aminoacid_energies[0hex01B] = 0hex01111);
-ASSERT (aminoacid_energies[0hex01C] = 0hex01111);
-ASSERT (aminoacid_energies[0hex01D] = 0hex01111);
-ASSERT (aminoacid_energies[0hex01E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex01F] = 0hex01111);
-ASSERT (aminoacid_energies[0hex020] = 0hex01111);
-ASSERT (aminoacid_energies[0hex021] = 0hex00011);
-ASSERT (aminoacid_energies[0hex022] = 0hex01111);
-ASSERT (aminoacid_energies[0hex023] = 0hex00011);
-ASSERT (aminoacid_energies[0hex024] = 0hex01111);
-ASSERT (aminoacid_energies[0hex025] = 0hex00011);
-ASSERT (aminoacid_energies[0hex026] = 0hex01111);
-ASSERT (aminoacid_energies[0hex027] = 0hex00011);
-ASSERT (aminoacid_energies[0hex028] = 0hex01111);
-ASSERT (aminoacid_energies[0hex029] = 0hex01111);
-ASSERT (aminoacid_energies[0hex02A] = 0hex00011);
-ASSERT (aminoacid_energies[0hex02B] = 0hex01111);
-ASSERT (aminoacid_energies[0hex02C] = 0hex00011);
-ASSERT (aminoacid_energies[0hex02D] = 0hex00011);
-ASSERT (aminoacid_energies[0hex02E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex02F] = 0hex01111);
-ASSERT (aminoacid_energies[0hex030] = 0hex00011);
-ASSERT (aminoacid_energies[0hex031] = 0hex01111);
-ASSERT (aminoacid_energies[0hex032] = 0hex00011);
-ASSERT (aminoacid_energies[0hex033] = 0hex01111);
-ASSERT (aminoacid_energies[0hex034] = 0hex00011);
-ASSERT (aminoacid_energies[0hex035] = 0hex01111);
-ASSERT (aminoacid_energies[0hex036] = 0hex00011);
-ASSERT (aminoacid_energies[0hex037] = 0hex01111);
-ASSERT (aminoacid_energies[0hex038] = 0hex00011);
-ASSERT (aminoacid_energies[0hex039] = 0hex01111);
-ASSERT (aminoacid_energies[0hex03A] = 0hex01111);
-ASSERT (aminoacid_energies[0hex03B] = 0hex00011);
-ASSERT (aminoacid_energies[0hex03C] = 0hex01111);
-ASSERT (aminoacid_energies[0hex03D] = 0hex00011);
-ASSERT (aminoacid_energies[0hex03E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex03F] = 0hex00011);
-ASSERT (aminoacid_energies[0hex040] = 0hex01111);
-ASSERT (aminoacid_energies[0hex041] = 0hex00011);
-ASSERT (aminoacid_energies[0hex042] = 0hex01111);
-ASSERT (aminoacid_energies[0hex043] = 0hex00011);
-ASSERT (aminoacid_energies[0hex044] = 0hex01111);
-ASSERT (aminoacid_energies[0hex045] = 0hex00011);
-ASSERT (aminoacid_energies[0hex046] = 0hex01111);
-ASSERT (aminoacid_energies[0hex047] = 0hex00011);
-ASSERT (aminoacid_energies[0hex048] = 0hex01111);
-ASSERT (aminoacid_energies[0hex049] = 0hex00011);
-ASSERT (aminoacid_energies[0hex04A] = 0hex01111);
-ASSERT (aminoacid_energies[0hex04B] = 0hex01111);
-ASSERT (aminoacid_energies[0hex04C] = 0hex01111);
-ASSERT (aminoacid_energies[0hex04D] = 0hex01111);
-ASSERT (aminoacid_energies[0hex04E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex04F] = 0hex01111);
-ASSERT (aminoacid_energies[0hex050] = 0hex01111);
-ASSERT (aminoacid_energies[0hex051] = 0hex00011);
-ASSERT (aminoacid_energies[0hex052] = 0hex01111);
-ASSERT (aminoacid_energies[0hex053] = 0hex00011);
-ASSERT (aminoacid_energies[0hex054] = 0hex01111);
-ASSERT (aminoacid_energies[0hex055] = 0hex00011);
-ASSERT (aminoacid_energies[0hex056] = 0hex01111);
-ASSERT (aminoacid_energies[0hex057] = 0hex00011);
-ASSERT (aminoacid_energies[0hex058] = 0hex01111);
-ASSERT (aminoacid_energies[0hex059] = 0hex01111);
-ASSERT (aminoacid_energies[0hex05A] = 0hex01111);
-ASSERT (aminoacid_energies[0hex05B] = 0hex00011);
-ASSERT (aminoacid_energies[0hex05C] = 0hex01111);
-ASSERT (aminoacid_energies[0hex05D] = 0hex00011);
-ASSERT (aminoacid_energies[0hex05E] = 0hex01111);
-ASSERT (aminoacid_energies[0hex05F] = 0hex01111);
-ASSERT (aminoacid_energies[0hex060] = 0hex00011);
-ASSERT (aminoacid_energies[0hex061] = 0hex01111);
-ASSERT (aminoacid_energies[0hex062] = 0hex01111);
-ASSERT (aminoacid_energies[0hex063] = 0hex00000);
+ASSERT (aminoacid_energies[0hex000] = high_energy);
+ASSERT (aminoacid_energies[0hex001] = high_energy);
+ASSERT (aminoacid_energies[0hex002] = low_energy);
+ASSERT (aminoacid_energies[0hex003] = high_energy);
+ASSERT (aminoacid_energies[0hex004] = low_energy);
+ASSERT (aminoacid_energies[0hex005] = high_energy);
+ASSERT (aminoacid_energies[0hex006] = low_energy);
+ASSERT (aminoacid_energies[0hex007] = high_energy);
+ASSERT (aminoacid_energies[0hex008] = low_energy);
+ASSERT (aminoacid_energies[0hex009] = high_energy);
+ASSERT (aminoacid_energies[0hex00A] = low_energy);
+ASSERT (aminoacid_energies[0hex00B] = high_energy);
+ASSERT (aminoacid_energies[0hex00C] = low_energy);
+ASSERT (aminoacid_energies[0hex00D] = high_energy);
+ASSERT (aminoacid_energies[0hex00E] = high_energy);
+ASSERT (aminoacid_energies[0hex00F] = high_energy);
+ASSERT (aminoacid_energies[0hex010] = high_energy);
+ASSERT (aminoacid_energies[0hex011] = low_energy);
+ASSERT (aminoacid_energies[0hex012] = high_energy);
+ASSERT (aminoacid_energies[0hex013] = high_energy);
+ASSERT (aminoacid_energies[0hex014] = low_energy);
+ASSERT (aminoacid_energies[0hex015] = high_energy);
+ASSERT (aminoacid_energies[0hex016] = low_energy);
+ASSERT (aminoacid_energies[0hex017] = high_energy);
+ASSERT (aminoacid_energies[0hex018] = low_energy);
+ASSERT (aminoacid_energies[0hex019] = high_energy);
+ASSERT (aminoacid_energies[0hex01A] = low_energy);
+ASSERT (aminoacid_energies[0hex01B] = high_energy);
+ASSERT (aminoacid_energies[0hex01C] = high_energy);
+ASSERT (aminoacid_energies[0hex01D] = high_energy);
+ASSERT (aminoacid_energies[0hex01E] = high_energy);
+ASSERT (aminoacid_energies[0hex01F] = high_energy);
+ASSERT (aminoacid_energies[0hex020] = high_energy);
+ASSERT (aminoacid_energies[0hex021] = low_energy);
+ASSERT (aminoacid_energies[0hex022] = high_energy);
+ASSERT (aminoacid_energies[0hex023] = low_energy);
+ASSERT (aminoacid_energies[0hex024] = high_energy);
+ASSERT (aminoacid_energies[0hex025] = low_energy);
+ASSERT (aminoacid_energies[0hex026] = high_energy);
+ASSERT (aminoacid_energies[0hex027] = low_energy);
+ASSERT (aminoacid_energies[0hex028] = high_energy);
+ASSERT (aminoacid_energies[0hex029] = high_energy);
+ASSERT (aminoacid_energies[0hex02A] = low_energy);
+ASSERT (aminoacid_energies[0hex02B] = high_energy);
+ASSERT (aminoacid_energies[0hex02C] = low_energy);
+ASSERT (aminoacid_energies[0hex02D] = low_energy);
+ASSERT (aminoacid_energies[0hex02E] = high_energy);
+ASSERT (aminoacid_energies[0hex02F] = high_energy);
+ASSERT (aminoacid_energies[0hex030] = low_energy);
+ASSERT (aminoacid_energies[0hex031] = high_energy);
+ASSERT (aminoacid_energies[0hex032] = low_energy);
+ASSERT (aminoacid_energies[0hex033] = high_energy);
+ASSERT (aminoacid_energies[0hex034] = low_energy);
+ASSERT (aminoacid_energies[0hex035] = high_energy);
+ASSERT (aminoacid_energies[0hex036] = low_energy);
+ASSERT (aminoacid_energies[0hex037] = high_energy);
+ASSERT (aminoacid_energies[0hex038] = low_energy);
+ASSERT (aminoacid_energies[0hex039] = high_energy);
+ASSERT (aminoacid_energies[0hex03A] = high_energy);
+ASSERT (aminoacid_energies[0hex03B] = low_energy);
+ASSERT (aminoacid_energies[0hex03C] = high_energy);
+ASSERT (aminoacid_energies[0hex03D] = low_energy);
+ASSERT (aminoacid_energies[0hex03E] = high_energy);
+ASSERT (aminoacid_energies[0hex03F] = low_energy);
+ASSERT (aminoacid_energies[0hex040] = high_energy);
+ASSERT (aminoacid_energies[0hex041] = low_energy);
+ASSERT (aminoacid_energies[0hex042] = high_energy);
+ASSERT (aminoacid_energies[0hex043] = low_energy);
+ASSERT (aminoacid_energies[0hex044] = high_energy);
+ASSERT (aminoacid_energies[0hex045] = low_energy);
+ASSERT (aminoacid_energies[0hex046] = high_energy);
+ASSERT (aminoacid_energies[0hex047] = low_energy);
+ASSERT (aminoacid_energies[0hex048] = high_energy);
+ASSERT (aminoacid_energies[0hex049] = low_energy);
+ASSERT (aminoacid_energies[0hex04A] = high_energy);
+ASSERT (aminoacid_energies[0hex04B] = high_energy);
+ASSERT (aminoacid_energies[0hex04C] = high_energy);
+ASSERT (aminoacid_energies[0hex04D] = high_energy);
+ASSERT (aminoacid_energies[0hex04E] = high_energy);
+ASSERT (aminoacid_energies[0hex04F] = high_energy);
+ASSERT (aminoacid_energies[0hex050] = high_energy);
+ASSERT (aminoacid_energies[0hex051] = low_energy);
+ASSERT (aminoacid_energies[0hex052] = high_energy);
+ASSERT (aminoacid_energies[0hex053] = low_energy);
+ASSERT (aminoacid_energies[0hex054] = high_energy);
+ASSERT (aminoacid_energies[0hex055] = low_energy);
+ASSERT (aminoacid_energies[0hex056] = high_energy);
+ASSERT (aminoacid_energies[0hex057] = low_energy);
+ASSERT (aminoacid_energies[0hex058] = high_energy);
+ASSERT (aminoacid_energies[0hex059] = high_energy);
+ASSERT (aminoacid_energies[0hex05A] = high_energy);
+ASSERT (aminoacid_energies[0hex05B] = low_energy);
+ASSERT (aminoacid_energies[0hex05C] = high_energy);
+ASSERT (aminoacid_energies[0hex05D] = low_energy);
+ASSERT (aminoacid_energies[0hex05E] = high_energy);
+ASSERT (aminoacid_energies[0hex05F] = high_energy);
+ASSERT (aminoacid_energies[0hex060] = low_energy);
+ASSERT (aminoacid_energies[0hex061] = high_energy);
+ASSERT (aminoacid_energies[0hex062] = high_energy);
+ASSERT (aminoacid_energies[0hex063] = low_energy);
 
 %%%%%%%%%%%%%% END OF AMINO ACID ENERGY ARRAY %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -212,7 +224,12 @@ ASSERT (BVPLUS(4, alpha4_inner3_length, alpha4_outer3_length) = 0hex3);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% END OF COIL LENGTH CONSTRAINTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-ASSERT (0hex40 = BVPLUS(8,start_coil_length,coil_12_length,coil_23_length,coil_34_length,end_coil_length));
+ASSERT (BVLT(COIL_LEN_LOW_LIMIT,start_coil_length) AND BVLT(start_coil_length, COIL_LEN_HIGH_LIMIT));
+ASSERT (BVLT(COIL_LEN_LOW_LIMIT,coil_12_length)    AND BVLT(coil_12_length, COIL_LEN_HIGH_LIMIT));
+ASSERT (BVLT(COIL_LEN_LOW_LIMIT,coil_23_length)    AND BVLT(coil_23_length, COIL_LEN_HIGH_LIMIT));
+ASSERT (BVLT(COIL_LEN_LOW_LIMIT,coil_34_length)    AND BVLT(coil_34_length, COIL_LEN_HIGH_LIMIT));
+ASSERT (BVLT(COIL_LEN_LOW_LIMIT,end_coil_length)   AND BVLT(end_coil_length, COIL_LEN_HIGH_LIMIT));
+
 ASSERT (0hex64 = BVPLUS(8,start_coil_length,coil_12_length,coil_23_length,coil_34_length,end_coil_length,
 			  0hex0@alpha1_inner1_length, 0hex0@alpha1_outer1_length, 0hex0@alpha1_inner2_length, 
 			  0hex0@alpha1_outer2_length, 0hex0@alpha1_inner3_length, 0hex0@alpha1_outer3_length,
@@ -224,9 +241,10 @@ ASSERT (0hex64 = BVPLUS(8,start_coil_length,coil_12_length,coil_23_length,coil_3
 			  0hex0@alpha4_outer2_length, 0hex0@alpha4_inner3_length, 0hex0@alpha4_outer3_length));
 
 ASSERT (0hex0@start_coil_length = BVPLUS(12,start_coil_index,0hex001));
-ASSERT (0hex0@coil_12_length    = BVSUB(12,BVSUB(12,BVPLUS(12,coil_12_index,0hex001),0hex009),0hex0@start_coil_length));
-ASSERT (0hex0@coil_23_length    = BVSUB(12,BVSUB(12,BVSUB(12,BVPLUS(12,coil_23_index,0hex001),0hex012),0hex0@start_coil_length),0hex0@coil_12_length));
-ASSERT (0hex0@coil_34_length    = BVSUB(12,BVSUB(12,BVSUB(12,BVSUB(12,BVPLUS(12,coil_34_index,0hex001),0hex01B),0hex0@start_coil_length),0hex0@coil_12_length),0hex0@coil_23_length));
+ASSERT (0hex0@coil_12_length    = BVSUB(12,coil_12_index,alpha1_outer3_index));
+ASSERT (0hex0@coil_23_length    = BVSUB(12,coil_23_index,alpha2_inner1_index));
+ASSERT (0hex0@coil_34_length    = BVSUB(12,coil_34_index,alpha3_outer3_index));
+ASSERT (0hex0@end_coil_length   = BVSUB(12,0hex063,alpha4_inner1_index));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% END OF COIL LENGTH CONSTRAINTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -248,20 +266,20 @@ ASSERT (alpha1_outer3_length = 0hex1 => alpha1_outer3_index = BVPLUS(12,alpha1_i
 ASSERT (alpha1_outer3_length = 0hex2 => alpha1_outer3_index = BVPLUS(12,alpha1_inner3_index,0hex002));
 
 ASSERT (BVLE(BVPLUS(12,0hex001,alpha1_outer3_index),coil_12_index) AND BVLE(coil_12_index, BVPLUS(12,alpha1_outer3_index,0hex00A)));
-ASSERT (alpha2_outer1_length = 0hex1 => alpha2_outer1_index = BVPLUS(12,coil_12_index,0hex001));
-ASSERT (alpha2_outer1_length = 0hex2 => alpha2_outer1_index = BVPLUS(12,coil_12_index,0hex002));
-ASSERT (alpha2_inner1_length = 0hex1 => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex001));
-ASSERT (alpha2_inner1_length = 0hex2 => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex002));
-ASSERT (alpha2_outer2_length = 0hex1 => alpha2_outer2_index = BVPLUS(12,alpha2_inner1_index,0hex001));
-ASSERT (alpha2_outer2_length = 0hex2 => alpha2_outer2_index = BVPLUS(12,alpha2_inner1_index,0hex002));
-ASSERT (alpha2_inner2_length = 0hex1 => alpha2_inner2_index = BVPLUS(12,alpha2_outer2_index,0hex001));
-ASSERT (alpha2_inner2_length = 0hex2 => alpha2_inner2_index = BVPLUS(12,alpha2_outer2_index,0hex002));
-ASSERT (alpha2_outer3_length = 0hex1 => alpha2_outer3_index = BVPLUS(12,alpha2_inner2_index,0hex001));
-ASSERT (alpha2_outer3_length = 0hex2 => alpha2_outer3_index = BVPLUS(12,alpha2_inner2_index,0hex002));
+ASSERT (alpha2_outer3_length = 0hex1 => alpha2_outer3_index = BVPLUS(12,coil_12_index,0hex001));
+ASSERT (alpha2_outer3_length = 0hex2 => alpha2_outer3_index = BVPLUS(12,coil_12_index,0hex002));
 ASSERT (alpha2_inner3_length = 0hex1 => alpha2_inner3_index = BVPLUS(12,alpha2_outer3_index,0hex001));
 ASSERT (alpha2_inner3_length = 0hex2 => alpha2_inner3_index = BVPLUS(12,alpha2_outer3_index,0hex002));
+ASSERT (alpha2_outer2_length = 0hex1 => alpha2_outer2_index = BVPLUS(12,alpha2_inner3_index,0hex001));
+ASSERT (alpha2_outer2_length = 0hex2 => alpha2_outer2_index = BVPLUS(12,alpha2_inner3_index,0hex002));
+ASSERT (alpha2_inner2_length = 0hex1 => alpha2_inner2_index = BVPLUS(12,alpha2_outer2_index,0hex001));
+ASSERT (alpha2_inner2_length = 0hex2 => alpha2_inner2_index = BVPLUS(12,alpha2_outer2_index,0hex002));
+ASSERT (alpha2_outer1_length = 0hex1 => alpha2_outer1_index = BVPLUS(12,alpha2_inner2_index,0hex001));
+ASSERT (alpha2_outer1_length = 0hex2 => alpha2_outer1_index = BVPLUS(12,alpha2_inner2_index,0hex002));
+ASSERT (alpha2_inner1_length = 0hex1 => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex001));
+ASSERT (alpha2_inner1_length = 0hex2 => alpha2_inner1_index = BVPLUS(12,alpha2_outer1_index,0hex002));
 
-ASSERT (BVLE(BVPLUS(12,0hex001,alpha2_inner3_index),coil_23_index) AND BVLE(coil_23_index, BVPLUS(12,alpha2_inner3_index,0hex00A)));
+ASSERT (BVLE(BVPLUS(12,0hex001,alpha2_inner1_index),coil_23_index) AND BVLE(coil_23_index, BVPLUS(12,alpha2_inner1_index,0hex00A)));
 ASSERT (alpha3_inner1_length = 0hex1 => alpha3_inner1_index = BVPLUS(12,coil_23_index,0hex001));
 ASSERT (alpha3_inner1_length = 0hex2 => alpha3_inner1_index = BVPLUS(12,coil_23_index,0hex002));
 ASSERT (alpha3_outer1_length = 0hex1 => alpha3_outer1_index = BVPLUS(12,alpha3_inner1_index,0hex001));
@@ -276,20 +294,20 @@ ASSERT (alpha3_outer3_length = 0hex1 => alpha3_outer3_index = BVPLUS(12,alpha3_i
 ASSERT (alpha3_outer3_length = 0hex2 => alpha3_outer3_index = BVPLUS(12,alpha3_inner3_index,0hex002));
 
 ASSERT (BVLE(BVPLUS(12,0hex001,alpha3_outer3_index),coil_34_index) AND BVLE(coil_34_index, BVPLUS(12,alpha3_outer3_index,0hex00A)));
-ASSERT (alpha4_outer1_length = 0hex1 => alpha4_outer1_index = BVPLUS(12,coil_34_index,0hex001));
-ASSERT (alpha4_outer1_length = 0hex2 => alpha4_outer1_index = BVPLUS(12,coil_34_index,0hex002));
-ASSERT (alpha4_inner1_length = 0hex1 => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex001));
-ASSERT (alpha4_inner1_length = 0hex2 => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex002));
-ASSERT (alpha4_outer2_length = 0hex1 => alpha4_outer2_index = BVPLUS(12,alpha4_inner1_index,0hex001));
-ASSERT (alpha4_outer2_length = 0hex2 => alpha4_outer2_index = BVPLUS(12,alpha4_inner1_index,0hex002));
-ASSERT (alpha4_inner2_length = 0hex1 => alpha4_inner2_index = BVPLUS(12,alpha4_outer2_index,0hex001));
-ASSERT (alpha4_inner2_length = 0hex2 => alpha4_inner2_index = BVPLUS(12,alpha4_outer2_index,0hex002));
-ASSERT (alpha4_outer3_length = 0hex1 => alpha4_outer3_index = BVPLUS(12,alpha4_inner2_index,0hex001));
-ASSERT (alpha4_outer3_length = 0hex2 => alpha4_outer3_index = BVPLUS(12,alpha4_inner2_index,0hex002));
+ASSERT (alpha4_outer3_length = 0hex1 => alpha4_outer3_index = BVPLUS(12,coil_34_index,0hex001));
+ASSERT (alpha4_outer3_length = 0hex2 => alpha4_outer3_index = BVPLUS(12,coil_34_index,0hex002));
 ASSERT (alpha4_inner3_length = 0hex1 => alpha4_inner3_index = BVPLUS(12,alpha4_outer3_index,0hex001));
 ASSERT (alpha4_inner3_length = 0hex2 => alpha4_inner3_index = BVPLUS(12,alpha4_outer3_index,0hex002));
+ASSERT (alpha4_outer2_length = 0hex1 => alpha4_outer2_index = BVPLUS(12,alpha4_inner3_index,0hex001));
+ASSERT (alpha4_outer2_length = 0hex2 => alpha4_outer2_index = BVPLUS(12,alpha4_inner3_index,0hex002));
+ASSERT (alpha4_inner2_length = 0hex1 => alpha4_inner2_index = BVPLUS(12,alpha4_outer2_index,0hex001));
+ASSERT (alpha4_inner2_length = 0hex2 => alpha4_inner2_index = BVPLUS(12,alpha4_outer2_index,0hex002));
+ASSERT (alpha4_outer1_length = 0hex1 => alpha4_outer1_index = BVPLUS(12,alpha4_inner2_index,0hex001));
+ASSERT (alpha4_outer1_length = 0hex2 => alpha4_outer1_index = BVPLUS(12,alpha4_inner2_index,0hex002));
+ASSERT (alpha4_inner1_length = 0hex1 => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex001));
+ASSERT (alpha4_inner1_length = 0hex2 => alpha4_inner1_index = BVPLUS(12,alpha4_outer1_index,0hex002));
 
-ASSERT (BVLE(BVPLUS(12,0hex001,alpha4_inner3_index),end_coil_index) AND BVLE(end_coil_index, BVPLUS(12,alpha4_inner3_index,0hex012)));
+ASSERT (BVLE(BVPLUS(12,0hex001,alpha4_inner1_index),end_coil_index) AND BVLE(end_coil_index, BVPLUS(12,alpha4_inner1_index,0hex020)));
 %%%%%%%%%%%%%%%%%%%%%%%%%% END OF CHAINING %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -420,37 +438,36 @@ ASSERT (alpha4_outer3_length = 0hex2 => alpha4_outer3_energy = BVSUB(20,bits20_t
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% END OF ENERGY COMPUTATION ALPHA4 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
-ASSERT (contact_energy12_zero = BVPLUS(32, 0hex000@alpha1_inner1_energy, 0hex000@alpha2_inner1_energy));
-ASSERT (contact_energy12_one  = BVPLUS(32, 0hex000@alpha1_inner2_energy, 0hex000@alpha2_inner2_energy));
-ASSERT (contact_energy12_two  = BVPLUS(32, 0hex000@alpha1_inner3_energy, 0hex000@alpha2_inner3_energy));
-
-
-ASSERT (contact_energy23_zero = BVPLUS(32, 0hex000@alpha2_inner1_energy, 0hex000@alpha3_inner1_energy));
-ASSERT (contact_energy23_one  = BVPLUS(32, 0hex000@alpha2_inner2_energy, 0hex000@alpha3_inner2_energy));
-ASSERT (contact_energy23_two  = BVPLUS(32, 0hex000@alpha2_inner3_energy, 0hex000@alpha3_inner3_energy));
+ASSERT (contact_energy12_zero = BVMULT(20, alpha1_inner1_energy, alpha2_inner1_energy));
+ASSERT (contact_energy12_one  = BVMULT(20, alpha1_inner2_energy, alpha2_inner2_energy));
+ASSERT (contact_energy12_two  = BVMULT(20, alpha1_inner3_energy, alpha2_inner3_energy));
 
 
-ASSERT (contact_energy34_zero = BVPLUS(32, 0hex000@alpha3_inner1_energy, 0hex000@alpha4_inner1_energy));
-ASSERT (contact_energy34_one  = BVPLUS(32, 0hex000@alpha3_inner2_energy, 0hex000@alpha4_inner2_energy));
-ASSERT (contact_energy34_two  = BVPLUS(32, 0hex000@alpha3_inner3_energy, 0hex000@alpha4_inner3_energy));
-
-ASSERT (contact_energy41_zero = BVPLUS(32, 0hex000@alpha4_inner1_energy, 0hex000@alpha1_inner1_energy));
-ASSERT (contact_energy41_one  = BVPLUS(32, 0hex000@alpha4_inner2_energy, 0hex000@alpha1_inner2_energy));
-ASSERT (contact_energy41_two  = BVPLUS(32, 0hex000@alpha4_inner3_energy, 0hex000@alpha1_inner3_energy));
-
-ASSERT (outer_energy = BVPLUS(32,  0hex000@alpha1_outer1_energy, 0hex000@alpha1_outer2_energy, 0hex000@alpha1_outer3_energy, 
-				   0hex000@alpha2_outer1_energy, 0hex000@alpha2_outer2_energy, 0hex000@alpha2_outer3_energy,	
-				   0hex000@alpha3_outer1_energy, 0hex000@alpha3_outer2_energy, 0hex000@alpha3_outer3_energy,
-				   0hex000@alpha4_outer1_energy, 0hex000@alpha4_outer2_energy, 0hex000@alpha4_outer3_energy));
+ASSERT (contact_energy23_zero = BVMULT(20, alpha2_inner1_energy, alpha3_inner1_energy));
+ASSERT (contact_energy23_one  = BVMULT(20, alpha2_inner2_energy, alpha3_inner2_energy));
+ASSERT (contact_energy23_two  = BVMULT(20, alpha2_inner3_energy, alpha3_inner3_energy));
 
 
-ASSERT (inner_energy = BVPLUS(32,  contact_energy12_zero, contact_energy12_one, contact_energy12_two,
+ASSERT (contact_energy34_zero = BVMULT(20, alpha3_inner1_energy, alpha4_inner1_energy));
+ASSERT (contact_energy34_one  = BVMULT(20, alpha3_inner2_energy, alpha4_inner2_energy));
+ASSERT (contact_energy34_two  = BVMULT(20, alpha3_inner3_energy, alpha4_inner3_energy));
+
+ASSERT (contact_energy41_zero = BVMULT(20, alpha4_inner1_energy, alpha1_inner1_energy));
+ASSERT (contact_energy41_one  = BVMULT(20, alpha4_inner2_energy, alpha1_inner2_energy));
+ASSERT (contact_energy41_two  = BVMULT(20, alpha4_inner3_energy, alpha1_inner3_energy));
+
+ASSERT (outer_energy = BVPLUS(20,  alpha1_outer1_energy, alpha1_outer2_energy, alpha1_outer3_energy, 
+				   alpha2_outer1_energy, alpha2_outer2_energy, alpha2_outer3_energy,	
+				   alpha3_outer1_energy, alpha3_outer2_energy, alpha3_outer3_energy,
+				   alpha4_outer1_energy, alpha4_outer2_energy, alpha4_outer3_energy));
+
+
+ASSERT (inner_energy = BVPLUS(20,  contact_energy12_zero, contact_energy12_one, contact_energy12_two,
       			           contact_energy23_zero, contact_energy23_one, contact_energy23_two,
 			           contact_energy34_zero, contact_energy34_one, contact_energy34_two,
                                    contact_energy41_zero, contact_energy41_one, contact_energy41_two));
 
 
 % final query
-ASSERT (BVGE(BVPLUS(32,outer_energy,inner_energy), 0hex00111110));
+ASSERT (BVGE(BVPLUS(20,outer_energy, inner_energy), 0hex00010));
 QUERY FALSE;
