@@ -121,7 +121,7 @@ regress_smt:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	bin/run_tests.smt $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	bin/run_smt_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
