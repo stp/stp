@@ -1,6 +1,6 @@
 %{
   /********************************************************************
-   * AUTHORS: Vijay Ganesh, David L. Dill
+   * AUTHORS: Vijay Ganesh
    *
    * BEGIN DATE: July, 2006
    *

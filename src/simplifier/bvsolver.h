@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, David L. Dill
+ * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
  *
