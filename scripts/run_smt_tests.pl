@@ -84,6 +84,20 @@ my %optionsDefault = ("level" => 4,
 		      # Additional command line options to stp
 		      "stpOptions" => "-d -f");
 
+# Database of command line options.  Initially, they are undefined
+my %options = ();
+
+# The list of testcases to run
+#
+my @testcases = "../../stp-tests/smt-test";
+my @testcases1 = "../../stp-tests/smt-test/QF_AUFBV";
+# Temporary array for STP options
+my @stpOptions = ();
+
+# State is either "own" or "stp", meaning that we're reading either
+# our own or stp's options.
+my $argState = "own";
+
 if($#stpOptions >= 0) {
     $options{'stpOptions'} = join(" ", map { "\"" . $_ . "\"" } @stpOptions);
 }
