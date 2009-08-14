@@ -1,4 +1,4 @@
-include ../../Makefile.common
+include ../../make-scripts/Makefile.common
 
 LEX=flex
 YACC=bison -d -y --debug -v

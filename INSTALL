@@ -1,16 +1,23 @@
-1. To install STP perform the following steps on your Unix/GNU-Linux/MacOS X commandline:
+1. To install STP perform the following steps on your
+Unix/GNU-Linux/MacOS X commandline:
 
-./configure --with-prefix=$HOME (or another installation directory)
-make
-make install
+./clean-install.sh
 
-2. To test the system after installation, you will need to download the regression tests. The regression are 190MB big, so are stored separately. To download them, try something like:
+2. To test the system after installation, you will need to download
+the regression tests. The regression are 190MB big, so are stored
+separately. To download them, try something like:
 
-svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
+svn co
+https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
 
-The directory of the regression tests is hard-coded in /bin/run_tests, which you may need to update, depending on where you checkout the regression tests to.
+The directory of the regression tests is hard-coded in /bin/run_tests,
+which you may need to update, depending on where you checkout the
+regression tests to.
 
 To run the regression tests: make regressall
 
-NB:
-* If you want to compile a statically linked version of STP, run ./liblinks.sh after the configure script, and then compile adding STATIC=true to the make commands.
+NB: 
+
+* If you want to compile a statically linked version of STP, run
+./liblinks.sh after the configure script, and then compile adding
+STATIC=true to the make commands.

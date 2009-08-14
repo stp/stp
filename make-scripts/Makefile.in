@@ -4,7 +4,7 @@
  # To make in optimized mode, type 'make "OPTIMIZE=-O3" 
 
 
-include Makefile.common make-scripts/config.info
+include make-scripts/Makefile.common make-scripts/config.info
 
 BIN_DIR=$(PREFIX)/bin
 LIB_DIR=$(PREFIX)/lib

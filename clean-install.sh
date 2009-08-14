@@ -17,8 +17,8 @@ while [ $# -gt 0 ]; do
 done
 
 
+./make-scripts/configure --with-prefix=$PREFIX
 make clean
-./configure --with-prefix=$PREFIX
 make
 make install
 
