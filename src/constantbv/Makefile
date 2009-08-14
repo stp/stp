@@ -1,4 +1,4 @@
-include ../../make-scripts/Makefile.common
+include ../../scripts/Makefile.common
 
 SRCS = constantbv.cpp
 OBJS = $(SRCS:.cpp=.o)

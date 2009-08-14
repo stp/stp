@@ -4,7 +4,7 @@
  # To make in optimized mode, type 'make "OPTIMIZE=-O3" 
 
 
-include make-scripts/Makefile.common make-scripts/config.info
+include scripts/Makefile.common scripts/config.info
 
 BIN_DIR=$(PREFIX)/bin
 LIB_DIR=$(PREFIX)/lib
@@ -69,8 +69,6 @@ TAGS: FORCE
 FORCE:
 
 # The higher the level, the more tests are run (3 = all)
-REGRESS_TESTS0 = test \
- test/EGT
 REGRESS_LEVEL=4
 REGRESS_TESTS=$(REGRESS_TESTS0)
 REGRESS_LOG = `date +%Y-%m-%d`"-regress.log"
@@ -84,7 +82,7 @@ regress:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	bin/run_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_cvc_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
@@ -92,8 +90,6 @@ regress:
           | tee -a $(REGRESS_LOG)
 
 # The higher the level, the more tests are run (3 = all)
-REGRESS_TESTS0 = test \
- test/EGT
 REGRESS_LEVEL=4
 REGRESS_TESTS=$(REGRESS_TESTS0)
 #REGRESS_LOG = `date +%Y-%m-%d`"-regress-bigarray.log"
@@ -107,7 +103,7 @@ regressbigarray:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	bin/run_bigarray_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_bigarray_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
@@ -121,7 +117,7 @@ regress_smt:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	bin/run_smt_tests $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_smt_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
@@ -149,10 +145,9 @@ grind:
 	@echo "Starting tests at" `date` | tee -a $(GRIND_LOG)
 	@echo "*********************************************************" \
           | tee -a $(GRIND_LOG)
-	bin/run_tests $(GRIND_OPTIONS) 2>&1 | tee -a $(GRIND_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_cvc_tests.pl $(GRIND_OPTIONS) 2>&1 | tee -a $(GRIND_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(GRIND_LOG)
 	@echo "Output is saved in $(GRIND_LOG)" | tee -a $(GRIND_LOG)
 	@echo "*********************************************************" \
           | tee -a $(GRIND_LOG)
-

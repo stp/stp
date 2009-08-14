@@ -32,10 +32,10 @@ while [ $# -gt 0 ]; do
 done
 
 
-echo "PREFIX=$PREFIX" > make-scripts/config.info
+echo "PREFIX=$PREFIX" > scripts/config.info
 echo "Setting prefix to... $PREFIX"
 if [ $CXX ]
-then echo "CXX=$CXX" >> make-scripts/config.info
+then echo "CXX=$CXX" >> scripts/config.info
 export CXX="$CXX"
 echo "Setting CXX to... $CXX"
 fi
@@ -57,7 +57,7 @@ then mkdir $PREFIX/include/stp
 fi
 
 echo "STP is configured successfully."
-cp make-scripts/Makefile.in Makefile
+cp scripts/Makefile.in Makefile
 
 echo
 echo "Type 'make' to compile STP."
