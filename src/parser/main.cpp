@@ -86,6 +86,8 @@ int main(int argc, char ** argv) {
   helpstring +=  "-c  : construct counterexample\n";
   helpstring +=  "-d  : check counterexample\n";
   helpstring +=  "-p  : print counterexample\n";
+  helpstring +=  "-y  : print counterexample in binary\n";
+  helpstring +=  "-b  : STP input read back\n";
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
@@ -133,6 +135,9 @@ int main(int argc, char ** argv) {
 	break;
       case 'p':
 	BEEV::print_counterexample = true;
+	break;
+      case 'y':
+	BEEV::print_binary = true;
 	break;
       case 'q':
 	BEEV::print_arrayval_declaredorder = true;

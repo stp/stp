@@ -39,6 +39,7 @@ bool check_counterexample = false;
 //on the counterexample returned by SAT solver
 bool construct_counterexample = true;
 bool print_counterexample = false;
+bool print_binary = false;
 //if this option is true then print the way dawson wants using a
 //different printer. do not use this printer.
 bool print_arrayval_declaredorder = false;
@@ -497,7 +498,7 @@ void ASTNode::PL_Print1(ostream& os, int indentation, bool letize) const
 		case BITVECTOR:
 			os << "BITVECTOR(";
 			unsigned char * str;
-			str = CONSTANTBV::BitVector_to_Hex(c[0].GetBVConst());
+			str = CONSTANTBV::BitVector_to_Hex(c[0].GetBVConst());			
 			os << str << ")";
 			CONSTANTBV::BitVector_Dispose(str);
 			break;

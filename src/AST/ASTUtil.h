@@ -56,6 +56,7 @@ namespace BEEV {
   //on the counterexample returned by SAT solver
   extern bool construct_counterexample;
   extern bool print_counterexample;
+  extern bool print_binary;
   //if this option is true then print the way dawson wants using a
   //different printer. do not use this printer.
   extern bool print_arrayval_declaredorder;

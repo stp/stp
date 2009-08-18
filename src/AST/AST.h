@@ -743,7 +743,18 @@ private:
 		unsigned char *res;
 		const char *prefix;
 
-		if (_value_width % 4 == 0)
+		if(print_binary) {
+		  res = CONSTANTBV::BitVector_to_Bin(_bvconst);
+		  if (c_friendly)
+			{
+				prefix = "0b";
+			}
+			else
+			{
+				prefix = "0bin";
+			}
+		}
+		else if (_value_width % 4 == 0)
 		{
 			res = CONSTANTBV::BitVector_to_Hex(_bvconst);
 			if (c_friendly)
