@@ -310,7 +310,7 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
 {
 	ASTNode eq = input;
 	//cerr << "Input to BVSolve_Odd()" << eq << endl;
-	if (!(wordlevel_solve && EQ == eq.GetKind()))
+	if (!(wordlevel_solve_flag && EQ == eq.GetKind()))
 	{
 		return input;
 	}
@@ -385,12 +385,31 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
 			output = ASTTrue;
 			break;
 		}
+// 	        case READ:
+// 		{
+// 		  if(BVCONST != lhs[1].GetKind() || READ != rhs.GetKind() || 
+// 		       BVCONST != rhs[1].GetKind() || lhs == rhs) 
+// 		  {
+// 		    return eq;
+// 		  }
+// 		  else 
+// 		  {
+// 		    DoNotSolve_TheseVars.insert(lhs);
+// 		    if (!_bm->UpdateSolverMap(lhs, rhs))
+// 		      {
+// 			return eq;
+// 		      }
+
+// 		    output = ASTTrue;
+// 		    break;		    
+// 		  }
+// 		}
 		case BVEXTRACT:
 		{
 			ASTNode zero = _bm->CreateZeroConst(32);
 
-			if (!(SYMBOL == lhs[0].GetKind() && BVCONST == lhs[1].GetKind() && zero == lhs[2] && !_bm->VarSeenInTerm(lhs[0], rhs) && !DoNotSolveThis(
-					lhs[0])))
+			if (!(SYMBOL == lhs[0].GetKind() && BVCONST == lhs[1].GetKind() && 
+			      zero == lhs[2] && !_bm->VarSeenInTerm(lhs[0], rhs) && !DoNotSolveThis(lhs[0])))
 			{
 				return eq;
 			}
@@ -505,7 +524,7 @@ ASTNode BVSolver::NewVar(unsigned int n)
 //the formula
 ASTNode BVSolver::TopLevelBVSolve(const ASTNode& input)
 {
-	if (!wordlevel_solve)
+	if (!wordlevel_solve_flag)
 	{
 		return input;
 	}
@@ -532,9 +551,8 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& input)
 	ASTNode solved = ASTFalse;
 	for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
 	{
-		//_bm->ASTNodeStats("Printing before calling simplifyformula inside the solver:", *it);
-		ASTNode aaa = (ASTTrue == solved && EQ == it->GetKind()) ? _bm->SimplifyFormula(*it, false) : *it;
-		//ASTNode aaa = *it;
+	        //_bm->ASTNodeStats("Printing before calling simplifyformula inside the solver:", *it);
+		ASTNode aaa = (ASTTrue == solved && EQ == it->GetKind()) ? _bm->SimplifyFormula(*it, false) : *it;		
 		//_bm->ASTNodeStats("Printing after calling simplifyformula inside the solver:", aaa);
 		aaa = BVSolve_Odd(aaa);
 		//_bm->ASTNodeStats("Printing after oddsolver:", aaa);
@@ -578,7 +596,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
 {
 	ASTNode eq = input;
 	//cerr << "Input to BVSolve_Odd()" << eq << endl;
-	if (!(wordlevel_solve && EQ == eq.GetKind()))
+	if (!(wordlevel_solve_flag && EQ == eq.GetKind()))
 	{
 		evenflag = false;
 		return eq;
@@ -634,7 +652,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
 //solve an eqn whose monomials have only even coefficients
 ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
 {
-	if (!wordlevel_solve)
+	if (!wordlevel_solve_flag)
 	{
 		return input;
 	}

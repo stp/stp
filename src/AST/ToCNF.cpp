@@ -1778,7 +1778,7 @@ int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const 
 	ASTNode BBFormula = BBForm(q);
 	CNFMgr* cm = new CNFMgr(this);
 	ClauseList* cl = cm->convertToCNF(BBFormula);
-	if (stats)
+	if (stats_flag)
 		cerr << "Number of clauses:" << cl->size() << endl;
 	//PrintClauseList(cout, *cl);
 	bool sat = toSATandSolve(newS, *cl);
@@ -1794,7 +1794,7 @@ int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const 
 	{
 		CounterExampleMap.clear();
 		ConstructCounterExample(newS);
-		if (stats && print_nodes)
+		if (stats_flag && print_nodes_flag)
 		{
 			PrintSATModel(newS);
 		}
@@ -1827,13 +1827,13 @@ int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const 
 		// counterexample is bogus: flag it
 		else
 		{
-			if (stats && print_nodes)
+			if (stats_flag && print_nodes_flag)
 			{
 				cout << "Supposedly bogus one: \n";
-				bool tmp = print_counterexample;
-				print_counterexample = true;
+				bool tmp = print_counterexample_flag;
+				print_counterexample_flag = true;
 				PrintCounterExample(true);
-				print_counterexample = tmp;
+				print_counterexample_flag = tmp;
 			}
 
 			return 2;

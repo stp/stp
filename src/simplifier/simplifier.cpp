@@ -138,7 +138,10 @@ int BeevMgr::TermOrder(const ASTNode& a, const ASTNode& b)
 
 	//a is of the form READ(Arr,const), and b is const, or
 	//a is of the form var, and b is const
-	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST) && (k2 == BVCONST))
+	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST && 
+	     (k2 == BVCONST)))
+	  // || 
+// 	      k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind() == BVCONST)))
 		return 1;
 
 	if (SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2))
@@ -206,7 +209,7 @@ ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 
 ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 {
-	if (!optimize)
+	if (!optimize_flag)
 		return b;
 
 	Kind kind = b.GetKind();
@@ -271,7 +274,7 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 
 ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
 {
-	if (!optimize)
+	if (!optimize_flag)
 	{
 		return a;
 	}
@@ -550,7 +553,7 @@ ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
 {
 	CountersAndStats("ITEOpts_InEqs");
 
-	if (!(EQ == in.GetKind() && optimize))
+	if (!(EQ == in.GetKind() && optimize_flag))
 	{
 		return in;
 	}
@@ -642,7 +645,7 @@ ASTNode BeevMgr::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
 	Kind k1 = in1.GetKind();
 	Kind k2 = in2.GetKind();
 
-	if (!optimize)
+	if (!optimize_flag)
 	{
 		return CreateNode(EQ, in1, in2);
 	}
@@ -667,7 +670,7 @@ ASTNode BeevMgr::CreateSimplifiedTermITE(const ASTNode& in0, const ASTNode& in1,
 	ASTNode t1 = in1;
 	ASTNode t2 = in2;
 	CountersAndStats("CreateSimplifiedITE");
-	if (!optimize)
+	if (!optimize_flag)
 	{
 		if (t1.GetValueWidth() != t2.GetValueWidth())
 		{
@@ -707,7 +710,7 @@ ASTNode BeevMgr::CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& i
 	ASTNode t2 = in2;
 	CountersAndStats("CreateSimplifiedFormulaITE");
 
-	if (optimize)
+	if (optimize_flag)
 	{
 		if (t0 == ASTTrue)
 			return t1;
@@ -1106,7 +1109,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 
 ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
 {
-	if (!optimize)
+	if (!optimize_flag)
 		return b;
 
 	ASTNode output;
@@ -1241,7 +1244,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 	ASTNode inputterm(actualInputterm); // mutable local copy.
 
 	//cout << "SimplifyTerm: input: " << a << endl;
-	if (!optimize)
+	if (!optimize_flag)
 	{
 		return inputterm;
 	}
@@ -2011,7 +2014,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 ASTNode BeevMgr::SimplifyTermAux(const ASTNode& inputterm)
 {
 	//cout << "SimplifyTerm: input: " << a << endl;
-	if (!optimize)
+	if (!optimize_flag)
 	{
 		return inputterm;
 	}
@@ -2022,7 +2025,7 @@ ASTNode BeevMgr::SimplifyTermAux(const ASTNode& inputterm)
 	//########################################
 	//########################################
 
-	if (wordlevel_solve && CheckSolverMap(inputterm, output))
+	if (wordlevel_solve_flag && CheckSolverMap(inputterm, output))
 	{
 		return SimplifyTermAux(output);
 	}
@@ -3508,8 +3511,8 @@ bool BeevMgr::BVConstIsOdd(const ASTNode& c)
 //The big substitution function
 ASTNode BeevMgr::CreateSubstitutionMap(const ASTNode& a)
 {
-	if (!optimize)
-		return a;
+        if (!wordlevel_solve_flag)
+	  return a;
 
 	ASTNode output = a;
 	//if the variable has been solved for, then simply return it
@@ -3552,16 +3555,17 @@ ASTNode BeevMgr::CreateSubstitutionMap(const ASTNode& a)
 		SortByArith(c);
 		FillUp_ArrReadIndex_Vec(c[0], c[1]);
 
-		if (SYMBOL == c[0].GetKind() && VarSeenInTerm(c[0], SimplifyTermAux(c[1])))
+		ASTNode c1 = SimplifyTermAux(c[1]);
+		if (SYMBOL == c[0].GetKind() && VarSeenInTerm(c[0], c1))
 		{
 			return a;
 		}
 
-		if (1 == TermOrder(c[0], c[1]) && READ == c[0].GetKind() && VarSeenInTerm(c[0][0], SimplifyTermAux(c[1])))
+		if (1 == TermOrder(c[0], c[1]) && READ == c[0].GetKind() && VarSeenInTerm(c[0][1], c1))
 		{
 			return a;
 		}
-		bool updated = UpdateSubstitutionMap(c[0], SimplifyTermAux(c[1]));
+		bool updated = UpdateSubstitutionMap(c[0], c1);
 		output = updated ? ASTTrue : a;
 		return output;
 	}

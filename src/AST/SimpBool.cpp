@@ -230,7 +230,7 @@ ASTNode BeevMgr::CreateSimpAndOr(bool IsAnd, ASTVec &children)
 	ASTVec new_children;
 
 	ASTVec flat_children;
-	if (xor_flatten)
+	if (xor_flatten_flag)
 	{
 		flat_children = FlattenKind(k, children);
 	}
@@ -331,7 +331,7 @@ ASTNode BeevMgr::CreateSimpXor(ASTVec &children)
 	ASTVec flat_children; // empty vector
 	ASTVec::const_iterator it_end = children.end();
 
-	if (xor_flatten)
+	if (xor_flatten_flag)
 	{
 		flat_children = FlattenKind(XOR, children);
 	}

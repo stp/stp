@@ -71,7 +71,7 @@ my %optionsDefault = ("level" => 4,
 		      "lang" => "all",
 		      "stppath" => "stp/bin",
 		      #"vc" => $pwd . "/bin/yices -smt", # Program names
-		      "vc" => $pwd . "/bin/stp -d -f -m", # Program names
+		      "vc" => $pwd . "/bin/stp -d -m", # Program names
 		      #"vc" => "valgrind --leak-check=full /home/vganesh/stp/bin/stp", # Program names
 		      "pfc" => "true",
 		      "stptestpath" => "stp/smt_tests",
@@ -82,7 +82,7 @@ my %optionsDefault = ("level" => 4,
 		      # Runtime limit; 0 = no limit
 		      "time" => 60,
 		      # Additional command line options to stp
-		      "stpOptions" => "-d -f");
+		      "stpOptions" => "-d");
 
 # Database of command line options.  Initially, they are undefined
 my %options = ();

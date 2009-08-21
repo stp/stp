@@ -92,31 +92,21 @@ int main(int argc, char ** argv) {
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
 
-
-  bool smtlibParser = false;
-
   for(int i=1; i < argc;i++) {
     if(argv[i][0] == '-') {
       switch(argv[i][1]) {
       case 'a' :
-	BEEV::optimize = false;
-	BEEV::wordlevel_solve = false;
+	BEEV::optimize_flag = false;
 	break;
       case 'b':
-	BEEV::print_STPinput_back = true;
+	BEEV::print_STPinput_back_flag = true;
 	break;
       case 'c':
-	BEEV::construct_counterexample = true;
+	BEEV::construct_counterexample_flag = true;
 	break;
       case 'd':
-	BEEV::construct_counterexample = true;
-	BEEV::check_counterexample = true;
-	break;
-      case 'e':
-	BEEV::variable_activity_optimize = true;
-	break;
-      case 'f':
-	BEEV::smtlib_parser_enable = true;
+	BEEV::construct_counterexample_flag = true;
+	BEEV::check_counterexample_flag = true;
 	break;
       case 'h':
 	fprintf(stderr,usage,prog);
@@ -124,44 +114,41 @@ int main(int argc, char ** argv) {
 	//BEEV::FatalError("");
 	return -1;
 	break;
-      case 'l' :
-	BEEV::linear_search = true;
-	break;
       case 'n':
-	BEEV::print_output = true;
+	BEEV::print_output_flag = true;
 	break;  
       case 'm':
-	smtlibParser=true;
+	BEEV::smtlib_parser_flag=true;
 	break;
       case 'p':
-	BEEV::print_counterexample = true;
+	BEEV::print_counterexample_flag = true;
 	break;
       case 'y':
-	BEEV::print_binary = true;
+	BEEV::print_binary_flag = true;
 	break;
       case 'q':
-	BEEV::print_arrayval_declaredorder = true;
+	BEEV::print_arrayval_declaredorder_flag = true;
 	break;
       case 'r':
-	BEEV::arrayread_refinement = false;
+	BEEV::arrayread_refinement_flag = false;
 	break;
       case 's' :
-	BEEV::stats = true;
+	BEEV::stats_flag = true;
 	break;
       case 'u':
-	BEEV::arraywrite_refinement = false;
+	BEEV::arraywrite_refinement_flag = false;
 	break;
       case 'v' :
-	BEEV::print_nodes = true;
+	BEEV::print_nodes_flag = true;
 	break;
       case 'w':
-	BEEV::wordlevel_solve = false;
+	BEEV::wordlevel_solve_flag = false;
 	break;
       case 'x':
-	BEEV::xor_flatten = true;
+	BEEV::xor_flatten_flag = true;
 	break;
       case 'z':
-	BEEV::print_sat_varorder = true;
+	BEEV::print_sat_varorder_flag = true;
 	break;
       default:
 	fprintf(stderr,usage,prog);
@@ -180,7 +167,7 @@ int main(int argc, char ** argv) {
     } else {
       infile = argv[i];
 
-      if (smtlibParser)
+      if (BEEV::smtlib_parser_flag)
 	{
 	  smtin = fopen(infile,"r");
 	  if(smtin == NULL) 
@@ -201,24 +188,20 @@ int main(int argc, char ** argv) {
     }
   }
 
-#ifdef NATIVE_C_ARITH
-#else
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
-#endif           
 
   //want to print the output always from the commandline. 
-  BEEV::print_output = true;
+  BEEV::print_output_flag = true;
   BEEV::globalBeevMgr_for_parser = new BEEV::BeevMgr();  
 
   BEEV::SingleBitOne = BEEV::globalBeevMgr_for_parser->CreateOneConst(1);
   BEEV::SingleBitZero = BEEV::globalBeevMgr_for_parser->CreateZeroConst(1);
-  //BEEV::smtlib_parser_enable = true;
-
-  if (smtlibParser)
+  
+  if (BEEV::smtlib_parser_flag)
     smtparse();
   else
     cvcparse();

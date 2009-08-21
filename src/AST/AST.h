@@ -743,7 +743,7 @@ private:
 		unsigned char *res;
 		const char *prefix;
 
-		if(print_binary) {
+		if(print_binary_flag) {
 		  res = CONSTANTBV::BitVector_to_Bin(_bvconst);
 		  if (c_friendly)
 			{

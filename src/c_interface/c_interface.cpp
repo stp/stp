@@ -23,7 +23,7 @@ typedef BEEV::ASTVec   nodelist;
 typedef BEEV::CompleteCounterExample* CompleteCEStar;
 BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
-bool cinterface_exprdelete_on = false;
+bool cinterface_exprdelete_on_flag = false;
 
 /* GLOBAL FUNCTION: parser
  */
@@ -39,65 +39,60 @@ void vc_setFlags(char c) {
   helpstring +=  "-c  : construct counterexample\n";
   helpstring +=  "-d  : check counterexample\n";
   helpstring +=  "-p  : print counterexample\n";
+  helpstring +=  "-y  : print counterexample in binary\n";
+  helpstring +=  "-b  : STP input read back\n";
+  helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
+  helpstring +=  "-m  : use the SMTLIB parser\n";
   
   switch(c) {
   case 'a' :
-    BEEV::optimize = false;
-    BEEV::wordlevel_solve = false;
+    BEEV::optimize_flag = false;
+    BEEV::wordlevel_solve_flag = false;
     break;
   case 'b':
-    BEEV::print_STPinput_back = true;
+    BEEV::print_STPinput_back_flag = true;
     break;
   case 'c':
-    BEEV::construct_counterexample = true;
+    BEEV::construct_counterexample_flag = true;
     break;
   case 'd':
-    BEEV::construct_counterexample = true;
-    BEEV::check_counterexample = true;
-    break;
-  case 'e':
-    BEEV::variable_activity_optimize = true;
-    break;
-  case 'f':
-    BEEV::smtlib_parser_enable = true;
+    BEEV::construct_counterexample_flag = true;
+    BEEV::check_counterexample_flag = true;
     break;
   case 'h':
     cout << helpstring;
     BEEV::FatalError("");
     break;
-  case 'l' :
-    BEEV::linear_search = true;
-    break;
   case 'n':
-    BEEV::print_output = true;
+    BEEV::print_output_flag = true;
     break;
   case 'p':
-    BEEV::print_counterexample = true;
+    BEEV::print_counterexample_flag = true;
     break;
   case 'q':
-    BEEV::print_arrayval_declaredorder = true;
+    BEEV::print_arrayval_declaredorder_flag = true;
     break;
   case 'r':
-    BEEV::arrayread_refinement = false;
+    BEEV::arrayread_refinement_flag = false;
     break;
   case 's' :
-    BEEV::stats = true;
+    BEEV::stats_flag = true;
     break;
   case 'u':
-    BEEV::arraywrite_refinement = true;
+    BEEV::arraywrite_refinement_flag = true;
     break;  
   case 'v' :
-    BEEV::print_nodes = true;
+    BEEV::print_nodes_flag = true;
     break;
   case 'w':
-    BEEV::wordlevel_solve = false;
+    BEEV::wordlevel_solve_flag = false;
     break;
   case 'x':
-    cinterface_exprdelete_on = true;
+    cinterface_exprdelete_on_flag = true;
     break;
   case 'z':
-    BEEV::print_sat_varorder = true;
+    BEEV::print_sat_varorder_flag = true;
     break;
   default:
     std::string s = "C_interface: vc_setFlags: Unrecognized commandline flag:\n";
@@ -110,14 +105,11 @@ void vc_setFlags(char c) {
 //Create a validity Checker. This is the global BeevMgr
 VC vc_createValidityChecker(void) {
   vc_setFlags('d');
-#ifdef NATIVE_C_ARITH
-#else
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
-#endif
   bmstar bm = new BEEV::BeevMgr();
   decls = new BEEV::ASTVec();
   //created_exprs.clear();
@@ -266,7 +258,7 @@ void vc_printCounterExampleToBuffer(VC vc, char **buf, unsigned long *len) {
 
   // formate the state of the query
   std::ostringstream os;
-  BEEV::print_counterexample = true;
+  BEEV::print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   b->PrintCounterExample(true,os);
   os << "COUNTEREXAMPLE END: \n";
@@ -426,7 +418,7 @@ void vc_pop(VC vc) {
 
 void vc_printCounterExample(VC vc) {
   bmstar b = (bmstar)vc;
-  BEEV::print_counterexample = true;    
+  BEEV::print_counterexample_flag = true;    
   cout << "COUNTEREXAMPLE BEGIN: \n";
   b->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
@@ -1629,7 +1621,7 @@ int getIWidth (Expr ex) {
 void vc_printCounterExampleFile(VC vc, int fd) {
   fdostream os(fd);
   bmstar b = (bmstar)vc;
-  BEEV::print_counterexample = true;    
+  BEEV::print_counterexample_flag = true;    
   os << "COUNTEREXAMPLE BEGIN: \n";
   b->PrintCounterExample(true, os);
   os << "COUNTEREXAMPLE END: \n";

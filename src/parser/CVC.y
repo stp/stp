@@ -169,7 +169,7 @@ cmd             :      other_cmd
 
 counterexample  :      COUNTEREXAMPLE_TOK ';'
                        {
-			 BEEV::print_counterexample = true;			 
+			 BEEV::print_counterexample_flag = true;			 
 			 BEEV::globalBeevMgr_for_parser->PrintCounterExample(true);
 		       }                              
                 ;

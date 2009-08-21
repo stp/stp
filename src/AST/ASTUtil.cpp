@@ -33,7 +33,7 @@ void CountersAndStats(const char * functionname)
 {
 	static function_counters s;
 
-	if (stats)
+	if (stats_flag)
 	{
 
 		if (!strcmp(functionname, "print_func_stats"))

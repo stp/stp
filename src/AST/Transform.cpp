@@ -449,7 +449,7 @@ ASTNode BeevMgr::TransformArray(const ASTNode& term)
 			_introduced_symbols.insert(CurrentSymbol);
 			assert(BVTypeCheck(ite));
 
-			if (arrayread_refinement)
+			if (arrayread_refinement_flag)
 			{
 				// ite is really a variable here; it is an ite in the
 				// else-branch

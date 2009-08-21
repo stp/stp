@@ -134,7 +134,7 @@ bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
 // GLOBAL FUNCTION: Prints statistics from the MINISAT Solver
 void BeevMgr::PrintStats(MINISAT::Solver& s)
 {
-	if (!stats)
+	if (!stats_flag)
 		return;
 	double cpu_time = MINISAT::cpuTime();
 	uint64_t mem_used = MINISAT::memUsed();
@@ -157,7 +157,7 @@ void BeevMgr::PrintSATModel(MINISAT::Solver& newS)
 	// FIXME: Don't put tests like this in the print functions.  The print functions
 	// should print unconditionally.  Put a conditional around the call if you don't
 	// want them to print
-	if (!(stats && print_nodes))
+	if (!(stats_flag && print_nodes_flag))
 		return;
 
 	int num_vars = newS.nVars();
@@ -320,7 +320,7 @@ void BeevMgr::ConstructCounterExample(MINISAT::Solver& newS)
 
 	if (!newS.okay())
 		return;
-	if (!construct_counterexample)
+	if (!construct_counterexample_flag)
 		return;
 
 	CopySolverMap_To_CounterExample();
@@ -900,7 +900,7 @@ void BeevMgr::CheckCounterExample(bool t)
 	// the flag in order to make it actualy happen!
 
 	printf("checking counterexample\n");
-	if (!check_counterexample)
+	if (!check_counterexample_flag)
 	{
 		return;
 	}
@@ -932,7 +932,7 @@ void BeevMgr::PrintCounterExample(bool t, std::ostream& os)
 	//global command-line option
 	// FIXME: This should always print the counterexample.  If you want
 	// to turn it off, check the switch at the point of call.
-	if (!print_counterexample)
+	if (!print_counterexample_flag)
 	{
 		return;
 	}
@@ -945,7 +945,7 @@ void BeevMgr::PrintCounterExample(bool t, std::ostream& os)
 
 	//if this option is true then print the way dawson wants using a
 	//different printer. do not use this printer.
-	if (print_arrayval_declaredorder)
+	if (print_arrayval_declaredorder_flag)
 	{
 		return;
 	}
@@ -1006,7 +1006,7 @@ void BeevMgr::PrintCounterExample_InOrder(bool t)
 	//want both counterexample printers to print at the sametime.
 	// FIXME: This should always print the counterexample.  If you want
 	// to turn it off, check the switch at the point of call.
-	if (print_counterexample)
+	if (print_counterexample_flag)
 		return;
 
 	//input is valid, no counterexample to print
@@ -1015,7 +1015,7 @@ void BeevMgr::PrintCounterExample_InOrder(bool t)
 
 	//print if the commandline option is '-q'. allows printing the
 	//counterexample in order.
-	if (!print_arrayval_declaredorder)
+	if (!print_arrayval_declaredorder_flag)
 		return;
 
 	//t is true if SAT solver generated a counterexample, else it is
@@ -1125,11 +1125,11 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 		q = newq;
 		newq = CreateSubstitutionMap(newq);
 		//printf("##################################################\n");
-		//ASTNodeStats("after pure substitution: ", newq);
+		ASTNodeStats("after pure substitution: ", newq);
 		newq = SimplifyFormula_TopLevel(newq, false);
-		//ASTNodeStats("after simplification: ", newq);
+		ASTNodeStats("after simplification: ", newq);
 		newq = bvsolver.TopLevelBVSolve(newq);
-		//ASTNodeStats("after solving: ", newq);
+		ASTNodeStats("after solving: ", newq);
 	} while (q != newq);
 
 	ASTNodeStats("Before SimplifyWrites_Inplace begins: ", newq);
@@ -1141,15 +1141,15 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 	{
 		q = newq;
 		newq = CreateSubstitutionMap(newq);
-		//ASTNodeStats("after pure substitution: ", newq);
+		ASTNodeStats("after pure substitution: ", newq);
 		newq = SimplifyFormula_TopLevel(newq, false);
-		//ASTNodeStats("after simplification: ", newq);
+		ASTNodeStats("after simplification: ", newq);
 		newq = bvsolver.TopLevelBVSolve(newq);
-		//ASTNodeStats("after solving: ", newq);
+		ASTNodeStats("after solving: ", newq);
 	} while (q != newq);
 	ASTNodeStats("After SimplifyWrites_Inplace: ", newq);
 
-	start_abstracting = (arraywrite_refinement) ? true : false;
+	start_abstracting = (arraywrite_refinement_flag) ? true : false;
 	SimplifyWrites_InPlace_Flag = false;
 	Begin_RemoveWrites = (start_abstracting) ? false : true;
 	if (start_abstracting)
@@ -1186,8 +1186,8 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 
 	int res;
 	//solver instantiated here
-	MINISAT::SimpSolver newS;
-	if (arrayread_refinement)
+	MINISAT::Solver newS;
+	if (arrayread_refinement_flag)
 	{
 		counterexample_checking_during_refinement = true;
 	}
@@ -1244,7 +1244,7 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 // all the false axioms each time).
 int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input) {
 	//printf("doing array read refinement\n");
-	if (!arrayread_refinement)
+	if (!arrayread_refinement_flag)
 		FatalError("SATBased_ArrayReadRefinement: Control should not reach here");
 
 	ASTVec FalseAxiomsVec, RemainingAxiomsVec;
@@ -1580,28 +1580,27 @@ ASTNode BeevMgr::BoolVectoBVConst(hash_map<unsigned, bool> * w, unsigned int l)
 //This function prints the output of the STP solver
 void BeevMgr::PrintOutput(bool true_iff_valid)
 {
-	//self-explanatory
-	if (print_output)
+        if (print_output_flag)
 	{
-		if (smtlib_parser_enable)
+		if (smtlib_parser_flag)
 		{
-			if (true_iff_valid && (BEEV::input_status == TO_BE_SATISFIABLE))
-			{
-				cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
-			}
-			else if (!true_iff_valid && (BEEV::input_status == TO_BE_UNSATISFIABLE))
-			{
-				cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
-			}
+		  if (true_iff_valid && (BEEV::input_status == TO_BE_SATISFIABLE))
+		    {
+		      cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
+		    }
+		  else if (!true_iff_valid && (BEEV::input_status == TO_BE_UNSATISFIABLE))
+		    {
+		      cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
+		    }
 		}
 	}
 
 	if (true_iff_valid)
 	{
 		ValidFlag = true;
-		if (print_output)
+		if (print_output_flag)
 		{
-			if (smtlib_parser_enable)
+			if (smtlib_parser_flag)
 				cout << "unsat\n";
 			else
 				cout << "Valid.\n";
@@ -1610,9 +1609,9 @@ void BeevMgr::PrintOutput(bool true_iff_valid)
 	else
 	{
 		ValidFlag = false;
-		if (print_output)
+		if (print_output_flag)
 		{
-			if (smtlib_parser_enable)
+			if (smtlib_parser_flag)
 				cout << "sat\n";
 			else
 				cout << "Invalid.\n";

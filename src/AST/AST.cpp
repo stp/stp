@@ -18,47 +18,41 @@ namespace BEEV
 //here
 //
 //collect statistics on certain functions
-bool stats = false;
+bool stats_flag = false;
 //print DAG nodes
-bool print_nodes = false;
-//tentative global var to allow for variable activity optimization
-//in the SAT solver. deprecated.
-bool variable_activity_optimize = false;
+bool print_nodes_flag = false;
 //run STP in optimized mode
-bool optimize = true;
+bool optimize_flag = true;
 //do sat refinement, i.e. underconstraint the problem, and feed to
 //SAT. if this works, great. else, add a set of suitable constraints
 //to re-constraint the problem correctly, and call SAT again, until
 //all constraints have been added.
-bool arrayread_refinement = true;
+bool arrayread_refinement_flag = true;
 //flag to control write refinement
-bool arraywrite_refinement = true;
+bool arraywrite_refinement_flag = true;
 //check the counterexample against the original input to STP
-bool check_counterexample = false;
+bool check_counterexample_flag = false;
 //construct the counterexample in terms of original variable based
 //on the counterexample returned by SAT solver
-bool construct_counterexample = true;
-bool print_counterexample = false;
-bool print_binary = false;
+bool construct_counterexample_flag = true;
+bool print_counterexample_flag = false;
+bool print_binary_flag = false;
 //if this option is true then print the way dawson wants using a
 //different printer. do not use this printer.
-bool print_arrayval_declaredorder = false;
+bool print_arrayval_declaredorder_flag = false;
 //flag to decide whether to print "valid/invalid" or not
-bool print_output = false;
-//do linear search in the array values of an input array. experimental
-bool linear_search = false;
+bool print_output_flag = false;
 //print the variable order chosen by the sat solver while it is
 //solving.
-bool print_sat_varorder = false;
+bool print_sat_varorder_flag = false;
 //turn on word level bitvector solver
-bool wordlevel_solve = true;
+bool wordlevel_solve_flag = true;
 //turn off XOR flattening
-bool xor_flatten = false;
-
-//the smtlib parser has been turned on
-bool smtlib_parser_enable = false;
+bool xor_flatten_flag = false;
+//Flag to switch on the smtlib parser
+bool smtlib_parser_flag = false;
 //print the input back
-bool print_STPinput_back = false;
+bool print_STPinput_back_flag = false;
 
 enum inputStatus input_status = NOT_DECLARED;
 
@@ -1606,13 +1600,13 @@ ASTNode BeevMgr::NewVar(unsigned int value)
 //prints statistics for the ASTNode
 void BeevMgr::ASTNodeStats(const char * c, const ASTNode& a)
 {
-	if (!stats)
+	if (!stats_flag)
 		return;
 
 	StatInfoSet.clear();
 	//print node size:
 	cout << endl << "Printing: " << c;
-	if (print_nodes)
+	if (print_nodes_flag)
 	{
 		//a.PL_Print(cout,0);
 		//cout << endl;
