@@ -18,7 +18,7 @@ HEADERS=$(SRC)/c_interface/*.h
 .PHONY: all
 all:
 	$(MAKE) -C $(SRC)/AST
-	$(MAKE) -C $(SRC)/sat core
+	$(MAKE) -C $(SRC)/sat simp
 	$(MAKE) -C $(SRC)/simplifier
 	$(MAKE) -C $(SRC)/bitvec
 	$(MAKE) -C $(SRC)/c_interface

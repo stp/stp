@@ -140,7 +140,7 @@ int BeevMgr::TermOrder(const ASTNode& a, const ASTNode& b)
 	//a is of the form var, and b is const
 	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST && 
 	     (k2 == BVCONST)))
-	  // || 
+// 	      || 
 // 	      k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind() == BVCONST)))
 		return 1;
 
@@ -209,8 +209,8 @@ ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 
 ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 {
-	if (!optimize_flag)
-		return b;
+  if (!optimize_flag)
+    return b;
 
 	Kind kind = b.GetKind();
 	if (BOOLEAN_TYPE != b.GetType())
@@ -275,9 +275,8 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
 {
 	if (!optimize_flag)
-	{
-		return a;
-	}
+	  return a;
+
 
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -645,10 +644,10 @@ ASTNode BeevMgr::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
 	Kind k1 = in1.GetKind();
 	Kind k2 = in2.GetKind();
 
-	if (!optimize_flag)
-	{
-		return CreateNode(EQ, in1, in2);
-	}
+	// if (!optimize_flag)
+// 	{
+// 		return CreateNode(EQ, in1, in2);
+// 	}
 
 	if (in1 == in2)
 		//terms are syntactically the same
@@ -1110,7 +1109,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
 {
 	if (!optimize_flag)
-		return b;
+	  return b;
 
 	ASTNode output;
 	if (CheckSimplifyMap(b, output, pushNeg))
@@ -1246,12 +1245,12 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 	//cout << "SimplifyTerm: input: " << a << endl;
 	if (!optimize_flag)
 	{
-		return inputterm;
+	  return inputterm;
 	}
 
+	
 	ASTNode output;
 	assert(BVTypeCheck(inputterm));
-
 	//########################################
 	//########################################
 
