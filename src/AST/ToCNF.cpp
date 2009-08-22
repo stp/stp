@@ -608,6 +608,7 @@ private:
 				}
 			}
 		}
+
 	}
 
 	void scanTerm(const ASTNode& varphi)
@@ -1274,8 +1275,18 @@ private:
 
 	void convertFormulaToCNFPosXOR(const ASTNode& varphi, BeevMgr::ClauseList* defs)
 	{
+		ASTVec::const_iterator it = varphi.GetChildren().begin();
+		for (; it != varphi.GetChildren().end(); it++)
+    {
+		  convertFormulaToCNF(*it, defs); // make pos and neg clause sets
+    }
 		BeevMgr::ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
 		info[varphi]->clausespos = psi;
+		ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+		for (; it2 != varphi.GetChildren().end(); it2++){
+		  reduceMemoryFootprintPos(*it2);
+		  reduceMemoryFootprintNeg(*it2);
+    }
 	}
 
 	BeevMgr::ClauseList* convertFormulaToCNFPosXORAux(const ASTNode& varphi, unsigned int idx, BeevMgr::ClauseList* defs)
@@ -1293,7 +1304,6 @@ private:
 			//    (PRODUCT       [idx]   ;     [idx+1])
 			//  ; (PRODUCT NOT   [idx]   ; NOT [idx+1])
 			//****************************************
-			convertFormulaToCNF(varphi[idx], defs);
 			renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
 			if (renamesibs)
 			{
@@ -1304,15 +1314,10 @@ private:
 			{
 				setDoSibRenamingNeg(*info[varphi[idx + 1]]);
 			}
-			convertFormulaToCNF(varphi[idx + 1], defs);
 
 			psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausespos));
 			psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausesneg));
 			NOCOPY_INPLACE_UNION(psi1, psi2);
-			reduceMemoryFootprintPos(varphi[idx]);
-			reduceMemoryFootprintPos(varphi[idx + 1]);
-			reduceMemoryFootprintNeg(varphi[idx]);
-			reduceMemoryFootprintNeg(varphi[idx + 1]);
 
 			psi = psi1;
 		}
@@ -1337,15 +1342,12 @@ private:
 			{
 				setDoSibRenamingNeg(*info[varphi[idx]]);
 			}
-			convertFormulaToCNF(varphi[idx], defs);
 
 			psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta1);
 			psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta2);
 			DELETE(theta1);
 			DELETE(theta2);
 			NOCOPY_INPLACE_UNION(psi1, psi2);
-			reduceMemoryFootprintPos(varphi[idx]);
-			reduceMemoryFootprintNeg(varphi[idx]);
 
 			psi = psi1;
 		}
@@ -1567,8 +1569,18 @@ private:
 
 	void convertFormulaToCNFNegXOR(const ASTNode& varphi, BeevMgr::ClauseList* defs)
 	{
+		ASTVec::const_iterator it = varphi.GetChildren().begin();
+		for (; it != varphi.GetChildren().end(); it++)
+    {
+		  convertFormulaToCNF(*it, defs); // make pos and neg clause sets
+    }
 		BeevMgr::ClauseList* psi = convertFormulaToCNFNegXORAux(varphi, 0, defs);
 		info[varphi]->clausesneg = psi;
+		ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+		for (; it2 != varphi.GetChildren().end(); it2++){
+		  reduceMemoryFootprintPos(*it2);
+		  reduceMemoryFootprintNeg(*it2);
+    }
 	}
 
 	BeevMgr::ClauseList* convertFormulaToCNFNegXORAux(const ASTNode& varphi, unsigned int idx, BeevMgr::ClauseList* defs)
@@ -1593,7 +1605,6 @@ private:
 			{
 				setDoSibRenamingPos(*info[varphi[idx + 1]]);
 			}
-			convertFormulaToCNF(varphi[idx + 1], defs);
 
 			convertFormulaToCNF(varphi[idx], defs);
 			renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
@@ -1601,21 +1612,15 @@ private:
 			{
 				setDoSibRenamingNeg(*info[varphi[idx + 1]]);
 			}
-			convertFormulaToCNF(varphi[idx + 1], defs);
 
 			psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausespos));
 			psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausesneg));
 			NOCOPY_INPLACE_UNION(psi1, psi2);
-			reduceMemoryFootprintNeg(varphi[idx]);
-			reduceMemoryFootprintPos(varphi[idx + 1]);
-			reduceMemoryFootprintPos(varphi[idx]);
-			reduceMemoryFootprintNeg(varphi[idx + 1]);
 
 			psi = psi1;
 		}
 		else
 		{
-
 			//****************************************
 			// (neg) XOR ~> UNION
 			//    (PRODUCT NOT   [idx] ; XOR      [idx+1..])
@@ -1637,15 +1642,12 @@ private:
 			{
 				setDoSibRenamingPos(*info[varphi[idx]]);
 			}
-			convertFormulaToCNF(varphi[idx], defs);
 
 			psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta1);
 			psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta2);
 			DELETE(theta1);
 			DELETE(theta2);
 			NOCOPY_INPLACE_UNION(psi1, psi2);
-			reduceMemoryFootprintNeg(varphi[idx]);
-			reduceMemoryFootprintPos(varphi[idx]);
 
 			psi = psi1;
 		}
