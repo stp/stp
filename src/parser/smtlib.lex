@@ -38,7 +38,7 @@
 #include "parseSMT_defs.h"
   
   extern char *smttext;
-  extern int smterror (char *msg);
+  extern int smterror (const char *msg);
   
   // File-static (local to this file) variables and functions
   static std::string _string_lit;

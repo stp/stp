@@ -47,7 +47,7 @@
   
   extern int smtlex(void);
 
-  int yyerror(char *s) {
+  int yyerror(const char *s) {
     cout << "syntax error: line " << smtlineno << "\n" << s << endl;
     cout << "  token: " << smttext << endl;
     BEEV::FatalError("");
@@ -1088,6 +1088,7 @@ an_nonbvconst_term:
       }
       else
       {
+      	n = NULL; // remove gcc warning.
       	yyerror("Rotate must be strictly less than the width.");
       }
       
@@ -1120,6 +1121,7 @@ an_nonbvconst_term:
       }
       else
       {
+		n = NULL; // remove gcc warning.
       	yyerror("Rotate must be strictly less than the width.");
       }
       

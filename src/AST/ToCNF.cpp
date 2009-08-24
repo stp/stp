@@ -508,6 +508,7 @@ private:
 	{
 
 		BeevMgr::ClauseList* psi = new BeevMgr::ClauseList();
+		psi->reserve(varphi1.size() * varphi2.size());
 
 		BeevMgr::ClauseList::const_iterator it1 = varphi1.begin();
 		for (; it1 != varphi1.end(); it1++)
@@ -518,6 +519,7 @@ private:
 			{
 				BeevMgr::ClausePtr clause2 = *it2;
 				BeevMgr::ClausePtr clause = new vector<const ASTNode*> ();
+				clause->reserve(clause1->size() + clause2->size());
 				clause->insert(clause->end(), clause1->begin(), clause1->end());
 				clause->insert(clause->end(), clause2->begin(), clause2->end());
 				psi->push_back(clause);

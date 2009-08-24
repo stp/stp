@@ -29,7 +29,7 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 clean:
 	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.h ASTKind.cpp .#*
-	rm -rf outputer/*.o
+	rm -rf printer/*.o
 
 depend:
 	makedepend -Y -- $(CFLAGS) -- $(SRCS)
