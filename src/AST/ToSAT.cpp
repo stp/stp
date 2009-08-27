@@ -143,7 +143,7 @@ void BeevMgr::PrintStats(MINISAT::Solver& s)
 	 reportf("decisions             : %llu   (%.0f /sec)\n",        s.decisions   , s.decisions   /cpu_time);
 	 reportf("propagations          : %llu   (%.0f /sec)\n",        s.propagations, s.propagations/cpu_time);
 	 reportf("conflict literals     : %llu   (%4.2f %% deleted)\n", s.tot_literals,
-		 (s.max_literals - s.tot_literals)*100 / (double)s.max_literals);	 
+		 (s.max_literals - s.tot_literals)*100 / (double)s.max_literals);
 	if (mem_used != 0)
 		reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
 	reportf("CPU time              : %g s\n", cpu_time);
@@ -977,7 +977,7 @@ void BeevMgr::PrintCounterExample(bool t, std::ostream& os)
 		if (f.GetKind() == SYMBOL || (f.GetKind() == READ && f[0].GetKind() == SYMBOL && f[1].GetKind() == BVCONST))
 		{
 			os << "ASSERT( ";
-			f.PL_Print(os, 0);
+			f.PL_Print(os,0);
 			os << " = ";
 			if (BITVECTOR_TYPE == se.GetType())
 			{

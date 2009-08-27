@@ -10,6 +10,7 @@
 #include "AST.h"
 
 #include <assert.h>
+#include "printer/printers.h"
 
 namespace BEEV
 {
@@ -221,165 +222,7 @@ void ASTNode::NFASTPrint(int l, int max, int prefix) const
 	}
 }
 
-// Print in lisp format
-ostream &ASTNode::LispPrint(ostream &os, int indentation) const
-{
-	// Clear the PrintMap
-	BeevMgr& bm = GetBeevMgr();
-	bm.AlreadyPrintedSet.clear();
-	LispPrint_indent(os, indentation);
-	printf("\n");
-	return os;
-}
 
-// Print newline and indentation, then print the thing.
-ostream &ASTNode::LispPrint_indent(ostream &os, int indentation) const
-{
-	os << endl << spaces(indentation);
-	LispPrint1(os, indentation);
-	return os;
-}
-
-/** Internal function to print in lisp format.  Assume newline
- and indentation printed already before first line.  Recursive
- calls will have newline & indent, though */
-ostream &ASTNode::LispPrint1(ostream &os, int indentation) const
-{
-	if (!IsDefined())
-	{
-		os << "<undefined>";
-		return os;
-	}
-	Kind kind = GetKind();
-	// FIXME: figure out how to avoid symbols with same names as kinds.
-	//    if (kind == READ) {
-	//      const ASTVec &children = GetChildren();
-	//      children[0].LispPrint1(os, indentation);
-	//	os << "[" << children[1] << "]";
-	//    } else
-	if (kind == BVGETBIT)
-	{
-		const ASTVec &children = GetChildren();
-		// child 0 is a symbol.  Print without the NodeNum.
-		os << GetNodeNum() << ":";
-
-		children[0]._int_node_ptr->nodeprint(os);
-		//os << "{" << children[1].GetBVConst() << "}";
-		os << "{";
-		children[1]._int_node_ptr->nodeprint(os);
-		os << "}";
-	}
-	else if (kind == NOT)
-	{
-		const ASTVec &children = GetChildren();
-		os << GetNodeNum() << ":";
-		os << "(NOT ";
-		children[0].LispPrint1(os, indentation);
-		os << ")";
-	}
-	else if (Degree() == 0)
-	{
-		// Symbol or a kind with no children print as index:NAME if shared,
-		// even if they have been printed before.
-		os << GetNodeNum() << ":";
-		_int_node_ptr->nodeprint(os);
-		// os << "(" << _int_node_ptr->_ref_count << ")";
-		// os << "{" << GetValueWidth() << "}";
-	}
-	else if (IsAlreadyPrinted())
-	{
-		// print non-symbols as "[index]" if seen before.
-		os << "[" << GetNodeNum() << "]";
-		//	   << "(" << _int_node_ptr->_ref_count << ")";
-	}
-	else
-	{
-		MarkAlreadyPrinted();
-		const ASTVec &children = GetChildren();
-		os << GetNodeNum() << ":"
-		//<< "(" << _int_node_ptr->_ref_count << ")"
-				<< "(" << kind << " ";
-		// os << "{" << GetValueWidth() << "}";
-		ASTVec::const_iterator iend = children.end();
-		for (ASTVec::const_iterator i = children.begin(); i != iend; i++)
-		{
-			i->LispPrint_indent(os, indentation + 2);
-		}
-		os << ")";
-	}
-	return os;
-}
-
-//print in PRESENTATION LANGUAGE
-//
-//two pass algorithm:
-//
-//1. In the first pass, letize this Node, N: i.e. if a node
-//1. appears more than once in N, then record this fact.
-//
-//2. In the second pass print a "global let" and then print N
-//2. as follows: Every occurence of a node occuring more than
-//2. once is replaced with the corresponding let variable.
-ostream& ASTNode::PL_Print(ostream &os, int indentation) const
-{
-	// Clear the PrintMap
-	BeevMgr& bm = GetBeevMgr();
-	bm.PLPrintNodeSet.clear();
-	bm.NodeLetVarMap.clear();
-	bm.NodeLetVarVec.clear();
-	bm.NodeLetVarMap1.clear();
-
-	//pass 1: letize the node
-	LetizeNode();
-
-	//pass 2:
-	//
-	//2. print all the let variables and their counterpart expressions
-	//2. as follows (LET var1 = expr1, var2 = expr2, ...
-	//
-	//3. Then print the Node itself, replacing every occurence of
-	//3. expr1 with var1, expr2 with var2, ...
-	//os << "(";
-	if (0 < bm.NodeLetVarMap.size())
-	{
-		//ASTNodeMap::iterator it=bm.NodeLetVarMap.begin();
-		//ASTNodeMap::iterator itend=bm.NodeLetVarMap.end();
-		std::vector<pair<ASTNode, ASTNode> >::iterator it = bm.NodeLetVarVec.begin();
-		std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm.NodeLetVarVec.end();
-
-		os << "(LET ";
-		//print the let var first
-		it->first.PL_Print1(os, indentation, false);
-		os << " = ";
-		//print the expr
-		it->second.PL_Print1(os, indentation, false);
-
-		//update the second map for proper printing of LET
-		bm.NodeLetVarMap1[it->second] = it->first;
-
-		for (it++; it != itend; it++)
-		{
-			os << "," << endl;
-			//print the let var first
-			it->first.PL_Print1(os, indentation, false);
-			os << " = ";
-			//print the expr
-			it->second.PL_Print1(os, indentation, false);
-
-			//update the second map for proper printing of LET
-			bm.NodeLetVarMap1[it->second] = it->first;
-		}
-
-		os << " IN " << endl;
-		PL_Print1(os, indentation, true);
-		os << ") ";
-	}
-	else
-		PL_Print1(os, indentation, false);
-	//os << " )";
-	os << " ";
-	return os;
-} //end of PL_Print()
 
 //traverse "*this", and construct "let variables" for terms that
 //occur more than once in "*this".
@@ -449,279 +292,7 @@ void ASTNode::LetizeNode(void) const
 	}
 } //end of LetizeNode()
 
-void ASTNode::PL_Print1(ostream& os, int indentation, bool letize) const
-{
-	//os << spaces(indentation);
-	//os << endl << spaces(indentation);
-	if (!IsDefined())
-	{
-		os << "<undefined>";
-		return;
-	}
 
-	//if this node is present in the letvar Map, then print the letvar
-	BeevMgr &bm = GetBeevMgr();
-
-	//this is to print letvars for shared subterms inside the printing
-	//of "(LET v0 = term1, v1=term1@term2,...
-	if ((bm.NodeLetVarMap1.find(*this) != bm.NodeLetVarMap1.end()) && !letize)
-	{
-		(bm.NodeLetVarMap1[*this]).PL_Print1(os, indentation, letize);
-		return;
-	}
-
-	//this is to print letvars for shared subterms inside the actual
-	//term to be printed
-	if ((bm.NodeLetVarMap.find(*this) != bm.NodeLetVarMap.end()) && letize)
-	{
-		(bm.NodeLetVarMap[*this]).PL_Print1(os, indentation, letize);
-		return;
-	}
-
-	//otherwise print it normally
-	Kind kind = GetKind();
-	const ASTVec &c = GetChildren();
-	switch (kind)
-	{
-		case BVGETBIT:
-			c[0].PL_Print1(os, indentation, letize);
-			os << "{";
-			c[1].PL_Print1(os, indentation, letize);
-			os << "}";
-			break;
-		case BITVECTOR:
-			os << "BITVECTOR(";
-			unsigned char * str;
-			str = CONSTANTBV::BitVector_to_Hex(c[0].GetBVConst());			
-			os << str << ")";
-			CONSTANTBV::BitVector_Dispose(str);
-			break;
-		case BOOLEAN:
-			os << "BOOLEAN";
-			break;
-		case FALSE:
-		case TRUE:
-			os << kind;
-			break;
-		case BVCONST:
-		case SYMBOL:
-			_int_node_ptr->nodeprint(os);
-			break;
-		case READ:
-			c[0].PL_Print1(os, indentation, letize);
-			os << "[";
-			c[1].PL_Print1(os, indentation, letize);
-			os << "]";
-			break;
-		case WRITE:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " WITH [";
-			c[1].PL_Print1(os, indentation, letize);
-			os << "] := ";
-			c[2].PL_Print1(os, indentation, letize);
-			os << ")";
-			os << endl;
-			break;
-		case BVUMINUS:
-			os << kind << "( ";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ")";
-			break;
-		case NOT:
-			os << "NOT(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ") " << endl;
-			break;
-		case BVNEG:
-			os << " ~(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ")";
-			break;
-		case BVCONCAT:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " @ ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case BVOR:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " | ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")";
-			break;
-		case BVAND:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " & ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")";
-			break;
-		case BVEXTRACT:
-			c[0].PL_Print1(os, indentation, letize);
-			os << "[";
-			os << GetUnsignedConst(c[1]);
-			os << ":";
-			os << GetUnsignedConst(c[2]);
-			os << "]";
-			break;
-		case BVLEFTSHIFT:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " << ";
-			os << GetUnsignedConst(c[1]);
-			os << ")";
-			break;
-		case BVRIGHTSHIFT:
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << " >> ";
-			os << GetUnsignedConst(c[1]);
-			os << ")";
-			break;
-		case BVMULT:
-		case BVSUB:
-		case BVPLUS:
-		case SBVDIV:
-		case SBVREM:
-		case BVDIV:
-		case BVMOD:
-			os << kind << "(";
-			os << this->GetValueWidth();
-			for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
-			{
-				os << ", " << endl;
-				it->PL_Print1(os, indentation, letize);
-			}
-			os << ")" << endl;
-			break;
-		case ITE:
-			os << "IF(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			os << "THEN ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << endl << "ELSE ";
-			c[2].PL_Print1(os, indentation, letize);
-			os << endl << "ENDIF";
-			break;
-		case BVLT:
-		case BVLE:
-		case BVGT:
-		case BVGE:
-		case BVXOR:
-		case BVNAND:
-		case BVNOR:
-		case BVXNOR:
-			os << kind << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case BVSLT:
-			os << "SBVLT" << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case BVSLE:
-			os << "SBVLE" << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case BVSGT:
-			os << "SBVGT" << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case BVSGE:
-			os << "SBVGE" << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")" << endl;
-			break;
-		case EQ:
-			c[0].PL_Print1(os, indentation, letize);
-			os << " = ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << endl;
-			break;
-		case NEQ:
-			c[0].PL_Print1(os, indentation, letize);
-			os << " /= ";
-			c[1].PL_Print1(os, indentation, letize);
-			os << endl;
-			break;
-		case AND:
-		case OR:
-		case NAND:
-		case NOR:
-		case XOR:
-		{
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			ASTVec::const_iterator it = c.begin();
-			ASTVec::const_iterator itend = c.end();
-
-			it++;
-			for (; it != itend; it++)
-			{
-				os << " " << kind << " ";
-				it->PL_Print1(os, indentation, letize);
-				os << endl;
-			}
-			os << ")";
-			break;
-		}
-		case IFF:
-			os << "(";
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ")";
-			os << " <=> ";
-			os << "(";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")";
-			os << ")";
-			os << endl;
-			break;
-		case IMPLIES:
-			os << "(";
-			os << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ")";
-			os << " => ";
-			os << "(";
-			c[1].PL_Print1(os, indentation, letize);
-			os << ")";
-			os << ")";
-			os << endl;
-			break;
-		case BVSX:
-		case BVZX:
-			os << kind << "(";
-			c[0].PL_Print1(os, indentation, letize);
-			os << ",";
-			os << this->GetValueWidth();
-			os << ")" << endl;
-			break;
-		default:
-			//remember to use LispPrinter here. Otherwise this function will
-			//go into an infinite loop. Recall that "<<" is overloaded to
-			//the lisp printer. FatalError uses lispprinter
-			FatalError("PL_Print1: printing not implemented for this kind: ", *this);
-			break;
-	}
-} //end of PL_Print1()
 
 ////////////////////////////////////////////////////////////////
 //  BeevMgr members
@@ -1616,6 +1187,21 @@ void BeevMgr::ASTNodeStats(const char * c, const ASTNode& a)
 	cout << NodeSize(a) << endl << endl;
 }
 
+ostream &ASTNode::LispPrint(ostream &os, int indentation) const
+{
+	printer::Lisp_Print(os, *this, indentation);
+}
+
+ostream &ASTNode::LispPrint_indent(ostream &os, int indentation) const
+{
+	printer::Lisp_Print_indent(os, *this, indentation);
+}
+
+ostream& ASTNode::PL_Print(ostream &os,  int indentation) const
+{
+	printer::PL_Print(os, *this, indentation);
+}
+
 unsigned int BeevMgr::NodeSize(const ASTNode& a, bool clearStatInfo)
 {
 	if (clearStatInfo)
@@ -1799,7 +1385,7 @@ void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision_level, in
 	{
 		cout << "!";
 	}
-	vv.PL_Print(cout, 0);
+	printer::PL_Print(cout,vv, 0);
 	cout << endl;
 }
 

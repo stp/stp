@@ -184,9 +184,7 @@ public:
 	} //end of arithless
 
 	// Internal lisp-form printer that does not clear _node_print_table
-	ostream &LispPrint1(ostream &os, int indentation) const;
-
-	ostream &LispPrint_indent(ostream &os, int indentation) const;
+	//ostream &LispPrint1(ostream &os, int indentation) const;
 
 	// For lisp DAG printing.  Has it been printed already, so we can
 	// just print the node number?
@@ -317,11 +315,11 @@ public:
 
 	// lisp-form printer
 	ostream& LispPrint(ostream &os, int indentation = 0) const;
+	ostream &LispPrint_indent(ostream &os, int indentation) const;
+
 
 	//Presentation Language Printer
 	ostream& PL_Print(ostream &os, int indentation = 0) const;
-
-	void PL_Print1(ostream &os, int indentation = 0, bool b = false) const;
 
 	//Construct let variables for shared subterms
 	void LetizeNode(void) const;
