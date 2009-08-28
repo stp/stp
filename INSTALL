@@ -1,20 +1,28 @@
-1. To install STP perform the following steps on your
-Unix/GNU-Linux/MacOS X commandline:
+/********************************************************************
+ * PROGRAM NAME: STP (Simple Theorem Prover)	
+ *		
+ * AUTHORS: Vijay Ganesh
+ *	
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
 
-./clean-install.sh
+1. To install STP:
 
-2. To test the system after installation, you will need to download
-the regression tests. The regression are 190MB big, so are stored
-separately. To download them, try something like:
+   ./clean-install.sh
 
-svn co
-https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
 
-The directory of the regression tests is hard-coded in /bin/run_tests,
-which you may need to update, depending on where you checkout the
-regression tests to.
 
-To run the regression tests: make regressall
+2. Download large tests:
+
+   svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
+
+
+
+3. Run tests:
+
+   make regressall
 
 NB: 
 

@@ -1,0 +1,39 @@
+/********************************************************************
+ * PROGRAM NAME: STP (Simple Theorem Prover)	
+ *		
+ * AUTHORS: Vijay Ganesh
+ *	
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
+
+Primary Author
+--------------
+Vijay Ganesh, Stanford University, Stanford, CA, USA (Nov, 2005 to 2007), MIT (Oct, 2007 to present)
+
+
+
+Other Significant Author
+------------------------
+Trevor Alexander Hansen, University of Melbourne, Australia (Sep, 2008 - present)
+
+
+
+Authors who contributed some code
+---------------------------------------
+David L. Dill, Stanford University, Stanford, CA, USA (Nov - Dec, 2005)
+Michael Katelman, University of Illinois, Urbana-Champaign, USA (July - Oct, 2008)
+Tim King, Stanford University, Stanford, CA, USA (July - Sep, 2007)
+Philip Guo, Stanford University, Stanford, CA, USA (Dec 2008 - Jan 2009)
+
+
+Following authors provided some code to Makefiles and configuration scripts
+---------------------------------------------------------------------------
+Cristian Cadar, Stanford University, Stanford, CA, USA
+Paul Twohey, Stanford University, Stanford, CA, USA
+Sergey Berezin, ATG Synopsys, Mountain View, CA, USA
+Clark Barrett, New York University, New York, NY, USA
+
+

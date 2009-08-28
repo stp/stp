@@ -8,31 +8,20 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-Install
+INSTALL
 -------
 See INSTALL file in the home dir of this program
 
-Primary Author
---------------
-Vijay Ganesh, Stanford University, Stanford, CA, USA (Nov, 2005 to present)
+LICENSE
+-------
+See LICENSE file in the home dir of this program
 
-Other Significant Author
-------------------------
-Trevor Alexander Hansen, University of Melbourne, Australia (Sep, 2008 - present)
+WEBSITE
+-------
+http://sourceforge.net/projects/stp-fast-prover/
 
+http://people.csail.mit.edu/vganesh/stp.html
 
-
-Authors who contributed some code
----------------------------------------
-David L. Dill, Stanford University, Stanford, CA, USA (Nov - Dec, 2005)
-Michael Katelman, University of Illinois, Urbana-Champaign, USA (July - Oct, 2008)
-Tim King, Stanford University, Stanford, CA, USA (July - Sep, 2007)
-Philip Guo, Stanford University, Stanford, CA, USA (Dec 2008 - Jan 2009)
-
-
-Makefiles and configuration scripts
-------------------------------------
-Cristian Cadar, Stanford University, Stanford, CA, USA
-Paul Twohey, Stanford University, Stanford, CA, USA
-Sergey Berezin, ATG Synopsys, Mountain View, CA, USA
-Clark Barrett, New York University, New York, NY, USA
+DOCUMENTATION
+-------------
+http://people.csail.mit.edu/vganesh/STP_files/stp-docs.html
