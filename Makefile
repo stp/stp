@@ -18,13 +18,15 @@ HEADERS=$(SRC)/c_interface/*.h
 .PHONY: all
 all:
 	$(MAKE) -C $(SRC)/AST
-	$(MAKE) -C $(SRC)/sat simp
+	$(MAKE) -C $(SRC)/sat core
+#	$(MAKE) -C $(SRC)/sat simp
+#	$(MAKE) -C $(SRC)/sat unsound
 	$(MAKE) -C $(SRC)/simplifier
 	$(MAKE) -C $(SRC)/bitvec
 	$(MAKE) -C $(SRC)/c_interface
 	$(MAKE) -C $(SRC)/constantbv
 	$(MAKE) -C $(SRC)/parser
-	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/sat/*.a $(SRC)/simplifier/*.o $(SRC)/bitvec/*.o $(SRC)/constantbv/*.o \
+	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/AST/printer/*.o $(SRC)/sat/*.or $(SRC)/simplifier/*.o $(SRC)/bitvec/*.o $(SRC)/constantbv/*.o \
 			   $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib

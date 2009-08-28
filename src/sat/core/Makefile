@@ -7,4 +7,6 @@ LFLAGS    = -lz
 
 include ../mtl/template.mk
 all:
+	ranlib libminisat.a
+	cp *.or ../
 	cp libminisat.a ../

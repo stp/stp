@@ -72,7 +72,7 @@ $(EXEC) $(EXEC)_profile $(EXEC)_debug $(EXEC)_release $(EXEC)_static:
 lib$(LIB).a lib$(LIB)d.a lib$(LIB)p.a:
 	@echo Library: "$@ ( $^ )"
 	@rm -f $@
-	@ar cq $@ $^
+	@ar cq $@ $^	
 
 ## Clean rule
 clean:

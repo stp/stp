@@ -10,4 +10,6 @@ COBJS     = $(addsuffix .o, $(basename $(CSRCS))) $(CORE)/Solver.o
 
 include ../mtl/template.mk
 all:
+	ranlib libminisat.a
+	cp *.o ../
 	cp libminisat.a ../

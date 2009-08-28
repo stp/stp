@@ -121,6 +121,7 @@ bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
 	//PrintActivityLevels_Of_SATVars("Before SAT:",newS);
 	//ChangeActivityLevels_Of_SATVars(newS);
 	//PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
+	//newS.solve();
 	newS.solve();
 	//PrintActivityLevels_Of_SATVars("After SAT",newS);
 
@@ -1186,7 +1187,9 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 
 	int res;
 	//solver instantiated here
-	MINISAT::SimpSolver newS;
+	MINISAT::Solver newS;
+	//MINISAT::SimpSolver newS;
+	//MINISAT::UnsoundSimpSolver newS;
 	if (arrayread_refinement_flag)
 	{
 		counterexample_checking_during_refinement = true;

@@ -56,6 +56,7 @@ using namespace std;
 %token	AND_TOK			"AND"
 %token	OR_TOK			"OR"
 %token	NOT_TOK			"NOT"
+%token	FOR_TOK			"FOR"
 %token	XOR_TOK			"XOR"
 %token	NAND_TOK		"NAND"
 %token	NOR_TOK			"NOR"
@@ -439,6 +440,22 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 			 $$ = n;
 			 delete $1;
 			 delete $3;
+		       }
+                |      FOR_TOK '(' Formula ';' Formula ';' Formula ')' '{' Formula '}'
+                       {
+			 //Allows a compact representation of
+			 //parameterized set of formulas
+			 //
+			 //$1 is the initialization (this is an AND of
+			 //formulas of the form var = constant)
+			 //
+			 //$2 is the constant bounding (this is an AND
+			 //of formulas of the form var < constant).
+			 //
+			 //$3 is the increment (this is an AND of
+			 //formulas of the form var = var + constant).
+			 //
+			 //$4 is the parameterized formula
 		       }
 		|      NOT_TOK Formula 
                        {

@@ -5,8 +5,9 @@ YACC=bison -d -y --debug -v
 
 SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp let-funcs.cpp main.cpp
 OBJS = $(SRCS:.cpp=.o)
-LIBS = -L../AST -last -L../sat/core -L../sat/simp -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
-CFLAGS += -I../sat/mtl -I../sat/core -I../sat/simp
+LIBS = -L../AST -last -L../sat -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
+#CFLAGS += -I../sat/mtl -I../sat/core -I../sat/simp
+CFLAGS += -I../sat/mtl -I../sat/core  -I../sat/unsound
 
 all: parseSMT.cpp lexSMT.cpp parseCVC.cpp lexCVC.cpp let-funcs.cpp parser parseCVC.o lexCVC.o let-funcs.o 
 

@@ -1,5 +1,5 @@
 #Please refer LICENSE FILE in the home directory for licensing information
-# name minkids maxkids cat1 cat2 ...
+# name minkids maxkids category1 category2
 Categories:	Term	Form
 
 # Leaf nodes.
@@ -60,6 +60,7 @@ NOR		1	-	Form
 XOR		1	-	Form
 IFF		1	-	Form
 IMPLIES		2	2	Form
+FOR		4	4	Form
 
 # array operations
 READ		2	2	Term

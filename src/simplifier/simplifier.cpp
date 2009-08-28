@@ -140,7 +140,7 @@ int BeevMgr::TermOrder(const ASTNode& a, const ASTNode& b)
 	//a is of the form var, and b is const
 	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST && 
 	     (k2 == BVCONST)))
-// 	      || 
+	      // || 
 // 	      k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind() == BVCONST)))
 		return 1;
 

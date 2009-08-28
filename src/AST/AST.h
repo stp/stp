@@ -32,8 +32,9 @@
 #include <algorithm>
 #include "ASTUtil.h"
 #include "ASTKind.h"
-//#include "../sat/core/Solver.h"
-#include "../sat/simp/SimpSolver.h"
+#include "../sat/core/Solver.h"
+//#include "../sat/simp/SimpSolver.h"
+//#include "../sat/unsound/UnsoundSimpSolver.h"
 #include "../sat/core/SolverTypes.h"
 #include <stdlib.h>
 #ifndef NATIVE_C_ARITH

@@ -27,8 +27,9 @@ int main() {
   Expr a_of_i = vc_bvSignExtend(vc,
 				vc_readExpr(vc,cvcl_array,i32),
 				32);  
-  Expr a_of_i_eq_11 = vc_eqExpr(vc, a_of_i,
-				vc_bvConstExprFromInt(vc, 32, 11));
+  Expr a_of_i_eq_11 = vc_eqExpr(vc, 
+				vc_bvConcatExpr(vc,i32,a_of_i),
+				vc_bvConstExprFromInt(vc, 64, 11));
  
   vc_assertFormula(vc, in_bounds);
   vc_assertFormula(vc, a_of_i_eq_11);  

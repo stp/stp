@@ -4,7 +4,6 @@ core:
 .PHONY: simp
 simp:
 	$(MAKE) -C simp lib all
-
 .PHONY: unsound
 unsound:
 	$(MAKE) -C unsound lib all
@@ -14,4 +13,4 @@ clean:
 	rm -rf *~ libminisat.a
 	$(MAKE) -C core clean
 	$(MAKE) -C simp clean
-	#$(MAKE) -C unsound clean
+	$(MAKE) -C unsound clean
