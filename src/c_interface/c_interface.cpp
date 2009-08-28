@@ -1472,8 +1472,14 @@ Expr vc_parseExpr(VC vc, char* infile) {
 
   cvcparse();
   nodelist aaa = b->GetAsserts();
+
+  //Don't add the query. It gets added automatically if the input file
+  //has QUERY in it 
+  //
+  //node bbb = b->CreateNode(BEEV::NOT,b->GetQuery());
   node o =  b->CreateNode(BEEV::AND,aaa);
-  
+  //node o = b->CreateNode(BEEV::AND,oo,bbb);
+
   nodestar output = new node(o);
   return output;
 } //end of vc_parseExpr()
