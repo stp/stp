@@ -1719,7 +1719,10 @@ private:
 	void cleanup(const ASTNode& varphi)
 	{
 		delete info[varphi]->clausespos;
-		info.erase(varphi);
+		CNFInfo* toDelete = info[varphi]; // get the thing to delete.
+		info.erase(varphi);				  // remove it from the hashtable
+		delete toDelete;
+
 
 		ASTNodeToCNFInfoMap::const_iterator it1 = info.begin();
 		for (; it1 != info.end(); it1++)
