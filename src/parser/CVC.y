@@ -15,6 +15,7 @@ using namespace std;
   // compile error)
 #undef __GNUC_MINOR__
 
+
   extern int cvclex(void);
   extern char* yytext;
   extern int cvclineno;
