@@ -10,7 +10,7 @@ unsound:
 
 .PHONY: clean
 clean:
-	rm -rf *~ libminisat.a
+	rm -rf *.or *~ libminisat.a
 	$(MAKE) -C core clean
 	$(MAKE) -C simp clean
 	$(MAKE) -C unsound clean
