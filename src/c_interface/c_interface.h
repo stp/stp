@@ -144,7 +144,7 @@ extern "C" {
   //! Prints asserts to stdout. The flag simplify_print must be set to
   //"1" if you wish simplification to occur dring printing. It must be
   //set to "0" otherwise
-  void vc_printAsserts(VC vc, int simplify_print);
+  void vc_printAsserts(VC vc, int simplify_print=0);
 
   //! Prints the state of the query to malloc'd buffer '*buf' and
   //stores ! the length of the buffer to '*len'.  It is the

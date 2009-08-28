@@ -77,8 +77,8 @@ REGRESS_LOG = `date +%Y-%m-%d`"-regress.log"
 PROGNAME=bin/stp
 ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
 
-.PHONY: regress
-regress:
+.PHONY: regressall
+regressall:
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
@@ -126,18 +126,25 @@ regress_smt:
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 
-
-.PHONY: regressall
-regressall:
-	$(MAKE) regress
+.PHONY: regress_c_api
+regress_c_api:
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	$(MAKE) -C tests/c-api-tests 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
+	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(REGRESS_LOG)
 
 GRIND_LOG = `date +%Y-%m-%d`"-grind.log"
 GRINDPROG = valgrind --leak-check=full --undef-value-errors=no
 GRIND_TAR  = $(BIN_DIR)/stp -d
 GRIND_CALL = -vc "$(GRINDPROG) $(GRIND_TAR)" 
 GRIND_OPTIONS = -l $(REGRESS_LEVEL) -rt $(GRIND_CALL) $(REGRESS_TESTS)
-
-
 .PHONY: grind
 grind:
 
