@@ -45,7 +45,7 @@ install: all
 
 .PHONY: clean
 clean:
-	rm -rf *~
+	rm -rf *~ scripts/*~
 	rm -rf *.a
 	rm -rf lib/*.a
 	rm -rf test/*~

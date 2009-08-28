@@ -407,12 +407,13 @@ ASTNode BeevMgr::CreateBVConst(unsigned int width, unsigned long long int bvcons
 	//number of bits in unsigned long. The variable "copied" keeps
 	//track of the number of chunks copied so far
 
+	int shift_amount = (sizeof(unsigned long) << 3);
 	while (copied + (sizeof(unsigned long) << 3) < width)
 	{
-		CONSTANTBV::BitVector_Chunk_Store(bv, sizeof(unsigned long) << 3, copied, c_val);
-		bvconst = bvconst >> (sizeof(unsigned long) << 3);
+		CONSTANTBV::BitVector_Chunk_Store(bv, shift_amount, copied, c_val);
+		bvconst = bvconst >> shift_amount;
 		c_val = (~((unsigned long) 0)) & bvconst;
-		copied += sizeof(unsigned long) << 3;
+		copied += shift_amount;
 	}
 	CONSTANTBV::BitVector_Chunk_Store(bv, width - copied, copied, c_val);
 	return CreateBVConst(bv, width);
