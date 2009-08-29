@@ -36,22 +36,19 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 
 	if (SBVREM == in.GetKind())
 	{
-		//if(TopBit(dividend)==1)
-		//
-		//then -BVMOD(-dividend,abs(divisor))
-		//
-		//else BVMOD(dividend,abs(divisor))
+		//BVMOD is an expensive operation. So have the fewest bvmods possible. Just one.
 
-		//create the condition and conditional for the divisor
-		ASTNode pos_divisor = CreateTerm(ITE, len, cond_divisor, CreateTerm(BVUMINUS, len, divisor), divisor);
+		//Take absolute value.
+		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
+		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
 
-		//create the modulus term for each case
-		ASTNode modnode = CreateTerm(BVMOD, len, dividend, pos_divisor);
-		ASTNode minus_modnode = CreateTerm(BVMOD, len, CreateTerm(BVUMINUS, len, dividend), pos_divisor);
-		minus_modnode = CreateTerm(BVUMINUS, len, minus_modnode);
+		//create the modulus term
+		ASTNode modnode = CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
+
+		//If the dividend is <0 take the unary minus.
+		ASTNode n = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, modnode), modnode);
 
 		//put everything together, simplify, and return
-		ASTNode n = CreateTerm(ITE, len, cond_dividend, minus_modnode, modnode);
 		return SimplifyTerm_TopLevel(n);
 	}
 
@@ -69,33 +66,21 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 		// (ite (and (= ?msb_s bit0) (= ?msb_t bit1))
 		//      (bvadd (bvurem s (bvneg t)) t)
 		//      (bvneg (bvurem (bvneg s) (bvneg t)))))))
-		ASTNode & s = dividend;
-		ASTNode & t = divisor;
 
-		ASTNode isSNeg = cond_dividend; // (= ?msb_s bit1)
-		ASTNode isSPos = CreateNode(NOT, isSNeg); // (= ?msb_s bit0)
+		//Take absolute value.
+		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
+		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
 
-		ASTNode isTNeg = cond_divisor; // (= ?msb_t bit1)
-		ASTNode isTPos = CreateNode(NOT, isTNeg); // (= ?msb_t bit0)
+		ASTNode urem_node = CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
 
+		// If the dividend is <0, then we negate the whole thing.
+		ASTNode rev_node =  CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, urem_node), urem_node);
 
-		ASTNode negS = CreateTerm(BVUMINUS, len, s); // (bvneg s)
-		ASTNode negT = CreateTerm(BVUMINUS, len, t); // (bvneg t)
+		// if It's XOR <0 then add t (not its absolute value).
+		ASTNode xor_node = CreateNode(XOR, cond_dividend, cond_divisor);
+		ASTNode n = CreateTerm(ITE, len, xor_node, CreateTerm(BVPLUS, len, rev_node, divisor), rev_node);
 
-		// (bvneg (bvurem (bvneg s) (bvneg t)))
-		ASTNode branch4 = CreateTerm(BVUMINUS, len, CreateTerm(BVMOD, len, negS, negT));
-		// (bvadd (bvurem s (bvneg t)) t)
-		ASTNode branch3 = CreateTerm(BVPLUS, len, CreateTerm(BVMOD, len, s, negT), t);
-		// (bvadd (bvneg (bvurem (bvneg s) t)) t)
-		ASTNode branch2 = CreateTerm(BVPLUS, len, CreateTerm(BVUMINUS, len, CreateTerm(BVMOD, len, negS, t)), t);
-		// (bvurem s t)
-		ASTNode branch1 = CreateTerm(BVMOD, len, s, t);
-
-		ASTNode ite3 = CreateTerm(ITE, len, CreateNode(AND, isSPos, isTNeg), branch3, branch4);
-		ASTNode ite2 = CreateTerm(ITE, len, CreateNode(AND, isSNeg, isTPos), branch2, ite3);
-		ASTNode ite1 = CreateTerm(ITE, len, CreateNode(AND, isSPos, isTPos), branch1, ite2);
-
-		return SimplifyTerm_TopLevel(ite1);
+		return SimplifyTerm_TopLevel(n);
 	}
 	else if (SBVDIV == in.GetKind())
 	{
@@ -114,23 +99,16 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 		//
 		//else simply output BVDIV(dividend,divisor)
 
-		ASTNode divnode = CreateTerm(BVDIV, len, dividend, divisor);
+		//Take absolute value.
+		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
+		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
 
-		ASTNode cond1 = CreateNode(AND, CreateNode(EQ, zero, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT,
-				1, divisor, hi1, hi1)));
-		ASTNode minus_divnode1 = CreateTerm(BVDIV, len, dividend, CreateTerm(BVUMINUS, len, divisor));
-		minus_divnode1 = CreateTerm(BVUMINUS, len, minus_divnode1);
+		ASTNode divnode = CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
 
-		ASTNode cond2 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, zero, CreateTerm(BVEXTRACT,
-				1, divisor, hi1, hi1)));
-		ASTNode minus_divnode2 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), divisor);
-		minus_divnode2 = CreateTerm(BVUMINUS, len, minus_divnode2);
+		// A little confusing. Only negate the result if they are XOR <0.
+		ASTNode xor_node = CreateNode(XOR, cond_dividend, cond_divisor);
+		ASTNode n = CreateTerm(ITE, len, xor_node, CreateTerm(BVUMINUS, len, divnode), divnode);
 
-		ASTNode cond3 = CreateNode(AND, CreateNode(EQ, one, CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1)), CreateNode(EQ, one, CreateTerm(BVEXTRACT,
-				1, divisor, hi1, hi1)));
-		ASTNode minus_divnode3 = CreateTerm(BVDIV, len, CreateTerm(BVUMINUS, len, dividend), CreateTerm(BVUMINUS, len, divisor));
-		ASTNode n = CreateTerm(ITE, len, cond1, minus_divnode1, CreateTerm(ITE, len, cond2, minus_divnode2, CreateTerm(ITE, len, cond3,
-				minus_divnode3, divnode)));
 		return SimplifyTerm_TopLevel(n);
 	}
 
