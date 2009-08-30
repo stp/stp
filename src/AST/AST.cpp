@@ -55,6 +55,9 @@ bool smtlib_parser_flag = false;
 //print the input back
 bool print_STPinput_back_flag = false;
 
+// If enabled. division, mod and remainder by zero will evaluate to 1.
+bool division_by_zero_returns_one = false;
+
 enum inputStatus input_status = NOT_DECLARED;
 
 // Used only in smtlib lexer/parser

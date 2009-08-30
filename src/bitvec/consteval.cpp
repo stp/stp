@@ -143,9 +143,9 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			{
 				// signed shift, and the number was originally negative.
 				// Shift may be larger than the inputwidth.
-				for (unsigned int i =0; i < min(shift,inputwidth);i++)
+				for (unsigned int i = 0; i < min(shift, inputwidth); i++)
 				{
-					CONSTANTBV::BitVector_Bit_On(output,(inputwidth-1 -i));
+					CONSTANTBV::BitVector_Bit_On(output, (inputwidth - 1 - i));
 				}
 				assert(CONSTANTBV::BitVector_Sign(output) == -1); //must be negative.
 			}
@@ -261,26 +261,33 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
 			CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-			CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Divide(quotient, tmp0, tmp1, remainder);
-
-			if (e != 0)
+			if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
 			{
-				cerr << "WARNING" << endl;
-				FatalError((const char*) CONSTANTBV::BitVector_Error(e));
-			}
-
-			if (SBVDIV == k)
-			{
-				OutputNode = CreateBVConst(quotient, outputwidth);
-				CONSTANTBV::BitVector_Destroy(remainder);
+				// Expecting a division by zero. Just return one.
+				OutputNode = CreateOneConst(outputwidth);
 			}
 			else
 			{
-				OutputNode = CreateBVConst(remainder, outputwidth);
-				CONSTANTBV::BitVector_Destroy(quotient);
+				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Divide(quotient, tmp0, tmp1, remainder);
 
+				if (e != 0)
+				{
+					cerr << "WARNING" << endl;
+					FatalError((const char*) CONSTANTBV::BitVector_Error(e));
+				}
+
+				if (SBVDIV == k)
+				{
+					OutputNode = CreateBVConst(quotient, outputwidth);
+					CONSTANTBV::BitVector_Destroy(remainder);
+				}
+				else
+				{
+					OutputNode = CreateBVConst(remainder, outputwidth);
+					CONSTANTBV::BitVector_Destroy(quotient);
+
+				}
 			}
-
 			break;
 		}
 
@@ -309,87 +316,90 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
 			tmp1 = CONSTANTBV::BitVector_Clone(tmp1);
 
-			if (CONSTANTBV::BitVector_is_empty(tmp1))
+			if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
 			{
-				// If t is zero
-				FatalError("Dividing by zero");
-			}
+				// Expecting a division by zero. Just return one.
+				OutputNode = CreateOneConst(outputwidth);
 
-			if (!isNegativeS && !isNegativeT)
-			{
-				// Signs are both positive
-				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
-				if (e != CONSTANTBV::ErrCode_Ok)
-				{
-					cerr << "Error code was:" << e << endl;
-					assert(e == CONSTANTBV::ErrCode_Ok);
-				}
-				OutputNode = CreateBVConst(remainder, outputwidth);
-			}
-			else if (isNegativeS && !isNegativeT)
-			{
-				// S negative, T positive.
-				CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
-
-				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1, remainder);
-
-				assert(e == CONSTANTBV::ErrCode_Ok);
-
-				CBV remb = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_Negate(remb, remainder);
-
-				bool carry = false;
-				CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_add(res, remb, tmp1, &carry);
-
-				OutputNode = CreateBVConst(res, outputwidth);
-
-				CONSTANTBV::BitVector_Destroy(tmp0b);
-				CONSTANTBV::BitVector_Destroy(remb);
-				CONSTANTBV::BitVector_Destroy(remainder);
-			}
-			else if (!isNegativeS && isNegativeT)
-			{
-				// If s is positive and t is negative
-				CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
-
-				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1b, remainder);
-
-				assert(e == CONSTANTBV::ErrCode_Ok);
-
-				bool carry = false;
-				CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_add(res, remainder, tmp1, &carry);
-
-				OutputNode = CreateBVConst(res, outputwidth);
-
-				CONSTANTBV::BitVector_Destroy(tmp1b);
-				CONSTANTBV::BitVector_Destroy(remainder);
-			}
-			else if (isNegativeS && isNegativeT)
-			{
-				// Signs are both negative
-				CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
-				CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
-
-				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1b, remainder);
-				assert(e == CONSTANTBV::ErrCode_Ok);
-
-				CBV remb = CONSTANTBV::BitVector_Create(inputwidth, true);
-				CONSTANTBV::BitVector_Negate(remb, remainder);
-
-				OutputNode = CreateBVConst(remb, outputwidth);
-				CONSTANTBV::BitVector_Destroy(tmp0b);
-				CONSTANTBV::BitVector_Destroy(tmp1b);
-				CONSTANTBV::BitVector_Destroy(remainder);
 			}
 			else
 			{
-				FatalError("never get called");
+				if (!isNegativeS && !isNegativeT)
+				{
+					// Signs are both positive
+					CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
+					if (e != CONSTANTBV::ErrCode_Ok)
+					{
+						cerr << "Error code was:" << e << endl;
+						assert(e == CONSTANTBV::ErrCode_Ok);
+					}
+					OutputNode = CreateBVConst(remainder, outputwidth);
+				}
+				else if (isNegativeS && !isNegativeT)
+				{
+					// S negative, T positive.
+					CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
+
+					CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1, remainder);
+
+					assert(e == CONSTANTBV::ErrCode_Ok);
+
+					CBV remb = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_Negate(remb, remainder);
+
+					bool carry = false;
+					CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_add(res, remb, tmp1, &carry);
+
+					OutputNode = CreateBVConst(res, outputwidth);
+
+					CONSTANTBV::BitVector_Destroy(tmp0b);
+					CONSTANTBV::BitVector_Destroy(remb);
+					CONSTANTBV::BitVector_Destroy(remainder);
+				}
+				else if (!isNegativeS && isNegativeT)
+				{
+					// If s is positive and t is negative
+					CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
+
+					CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1b, remainder);
+
+					assert(e == CONSTANTBV::ErrCode_Ok);
+
+					bool carry = false;
+					CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_add(res, remainder, tmp1, &carry);
+
+					OutputNode = CreateBVConst(res, outputwidth);
+
+					CONSTANTBV::BitVector_Destroy(tmp1b);
+					CONSTANTBV::BitVector_Destroy(remainder);
+				}
+				else if (isNegativeS && isNegativeT)
+				{
+					// Signs are both negative
+					CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
+					CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
+
+					CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1b, remainder);
+					assert(e == CONSTANTBV::ErrCode_Ok);
+
+					CBV remb = CONSTANTBV::BitVector_Create(inputwidth, true);
+					CONSTANTBV::BitVector_Negate(remb, remainder);
+
+					OutputNode = CreateBVConst(remb, outputwidth);
+					CONSTANTBV::BitVector_Destroy(tmp0b);
+					CONSTANTBV::BitVector_Destroy(tmp1b);
+					CONSTANTBV::BitVector_Destroy(remainder);
+				}
+				else
+				{
+					FatalError("never get called");
+				}
 			}
 
 			CONSTANTBV::BitVector_Destroy(tmp0);
@@ -404,45 +414,53 @@ ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
 			CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
 			CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-			// tmp0 is dividend, tmp1 is the divisor
-			//All parameters to BitVector_Div_Pos must be distinct unlike BitVector_Divide
-			//FIXME the contents of the second parameter to Div_Pos is destroyed
-			//As tmp0 is currently the same as the copy belonging to an ASTNode t[0]
-			//this must be copied.
-			tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
-			CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
-			CONSTANTBV::BitVector_Destroy(tmp0);
-
-			if (0 != e)
+			if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
 			{
-				//error printing
-				if (counterexample_checking_during_refinement)
-				{
-					output = CONSTANTBV::BitVector_Create(inputwidth, true);
-					OutputNode = CreateBVConst(output, outputwidth);
-					bvdiv_exception_occured = true;
-
-					//  CONSTANTBV::BitVector_Destroy(output);
-					break;
-				}
-				else
-				{
-					BVConstEvaluatorError(e, t);
-				}
-			} //end of error printing
-
-			//FIXME Not very standard in the current scheme
-			if (BVDIV == k)
-			{
-				OutputNode = CreateBVConst(quotient, outputwidth);
-				CONSTANTBV::BitVector_Destroy(remainder);
+				// Expecting a division by zero. Just return one.
+				OutputNode = CreateOneConst(outputwidth);
 			}
 			else
 			{
-				OutputNode = CreateBVConst(remainder, outputwidth);
-				CONSTANTBV::BitVector_Destroy(quotient);
-			}
 
+				// tmp0 is dividend, tmp1 is the divisor
+				//All parameters to BitVector_Div_Pos must be distinct unlike BitVector_Divide
+				//FIXME the contents of the second parameter to Div_Pos is destroyed
+				//As tmp0 is currently the same as the copy belonging to an ASTNode t[0]
+				//this must be copied.
+				tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
+				CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
+				CONSTANTBV::BitVector_Destroy(tmp0);
+
+				if (0 != e)
+				{
+					//error printing
+					if (counterexample_checking_during_refinement)
+					{
+						output = CONSTANTBV::BitVector_Create(inputwidth, true);
+						OutputNode = CreateBVConst(output, outputwidth);
+						bvdiv_exception_occured = true;
+
+						//  CONSTANTBV::BitVector_Destroy(output);
+						break;
+					}
+					else
+					{
+						BVConstEvaluatorError(e, t);
+					}
+				} //end of error printing
+
+				//FIXME Not very standard in the current scheme
+				if (BVDIV == k)
+				{
+					OutputNode = CreateBVConst(quotient, outputwidth);
+					CONSTANTBV::BitVector_Destroy(remainder);
+				}
+				else
+				{
+					OutputNode = CreateBVConst(remainder, outputwidth);
+					CONSTANTBV::BitVector_Destroy(quotient);
+				}
+			}
 			break;
 		}
 		case ITE:

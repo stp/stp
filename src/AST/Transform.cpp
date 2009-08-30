@@ -40,7 +40,7 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 
 		//Take absolute value.
 		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
-		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
+		ASTNode pos_divisor = CreateTerm(ITE, len, cond_divisor, CreateTerm(BVUMINUS, len, divisor), divisor);
 
 		//create the modulus term
 		ASTNode modnode = CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
@@ -69,12 +69,12 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 
 		//Take absolute value.
 		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
-		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
+		ASTNode pos_divisor = CreateTerm(ITE, len, cond_divisor, CreateTerm(BVUMINUS, len, divisor), divisor);
 
 		ASTNode urem_node = CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
 
 		// If the dividend is <0, then we negate the whole thing.
-		ASTNode rev_node =  CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, urem_node), urem_node);
+		ASTNode rev_node = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, urem_node), urem_node);
 
 		// if It's XOR <0 then add t (not its absolute value).
 		ASTNode xor_node = CreateNode(XOR, cond_dividend, cond_divisor);
@@ -101,7 +101,7 @@ ASTNode BeevMgr::TranslateSignedDivModRem(const ASTNode& in)
 
 		//Take absolute value.
 		ASTNode pos_dividend = CreateTerm(ITE, len, cond_dividend, CreateTerm(BVUMINUS, len, dividend), dividend);
-		ASTNode pos_divisor =  CreateTerm(ITE, len, cond_divisor,  CreateTerm(BVUMINUS, len, divisor), divisor);
+		ASTNode pos_divisor = CreateTerm(ITE, len, cond_divisor, CreateTerm(BVUMINUS, len, divisor), divisor);
 
 		ASTNode divnode = CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
 
@@ -305,14 +305,16 @@ ASTNode BeevMgr::TransformTerm(const ASTNode& inputterm)
 					result = TranslateSignedDivModRem(result);
 				}
 
-				////// Temporary hack so we don't get killed on the Spear benchmarks in SMTCOMP-2009
-				// This is a difficult rule to introduce in other places because it's recursive. i.e.
-				// result is imbedded unchanged inside the result. It's not
+				if (division_by_zero_returns_one)
+				{
+					// This is a difficult rule to introduce in other places because it's recursive. i.e.
+					// result is embedded unchanged inside the result.
 
-				unsigned inputValueWidth = result.GetValueWidth();
-				ASTNode zero = CreateZeroConst(inputValueWidth);
-				ASTNode one = CreateOneConst(inputValueWidth);
-				result = CreateTerm(ITE, inputValueWidth, CreateNode(EQ, zero, bottom), one, result);
+					unsigned inputValueWidth = result.GetValueWidth();
+					ASTNode zero = CreateZeroConst(inputValueWidth);
+					ASTNode one = CreateOneConst(inputValueWidth);
+					result = CreateTerm(ITE, inputValueWidth, CreateNode(EQ, zero, bottom), one, result);
+				}
 			}
 		}
 			////////////////////////////////////////////////////////////////////////////////////

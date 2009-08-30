@@ -25,7 +25,7 @@
 
 #include <cstring>
 
-using namespace std; 
+using namespace std;
 namespace BEEV {
 #ifdef EXT_HASH_MAP
   using namespace __gnu_cxx;
@@ -61,7 +61,7 @@ namespace BEEV {
   extern bool print_output_flag;
   //print the variable order chosen by the sat solver while it is
   //solving.
-  extern bool print_sat_varorder_flag; 
+  extern bool print_sat_varorder_flag;
   //turn on word level bitvector solver
   extern bool wordlevel_solve_flag;
   //XOR flattening optimizations.
@@ -72,6 +72,8 @@ namespace BEEV {
   extern bool print_STPinput_back_flag;
   //Flag to switch on the smtlib parser
   extern bool smtlib_parser_flag;
+
+  extern bool division_by_zero_returns_one;
 
   enum inputStatus
     {
@@ -107,10 +109,10 @@ namespace BEEV {
 
   // Table for storing function count stats.
 #ifdef TR1_UNORDERED_MAP
-  typedef tr1::unordered_map<const char*,int, 
+  typedef tr1::unordered_map<const char*,int,
                              tr1::hash<const char *>,eqstr> function_counters;
 #else
-  typedef hash_map<const char*,int, 
+  typedef hash_map<const char*,int,
 		   hash<char *>,eqstr> function_counters;
 #endif
 
@@ -118,7 +120,7 @@ namespace BEEV {
 
   //global function which accepts an integer and looks up the
   //corresponding ASTNode and prints a char* of that ASTNode
-  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, 
+  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
 					   int decision, int polarity=0);
 }; // end namespace.
 #endif

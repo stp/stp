@@ -53,7 +53,7 @@ std::string helpstring = "\n\n";
 static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
 
 /******************************************************************************
- * MAIN FUNCTION: 
+ * MAIN FUNCTION:
  *
  * step 0. Parse the input into an ASTVec.
  * step 1. Do BV Rewrites
@@ -76,7 +76,7 @@ int main(int argc, char ** argv) {
     // FIXME: figure out how to get and print the real error message.
     BEEV::FatalError("Initial allocation of memory failed.");
   }
-  
+
   //populate the help string
   helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
@@ -116,9 +116,10 @@ int main(int argc, char ** argv) {
 	break;
       case 'n':
 	BEEV::print_output_flag = true;
-	break;  
+	break;
       case 'm':
 	BEEV::smtlib_parser_flag=true;
+	BEEV::division_by_zero_returns_one = true;
 	break;
       case 'p':
 	BEEV::print_counterexample_flag = true;
@@ -170,7 +171,7 @@ int main(int argc, char ** argv) {
       if (BEEV::smtlib_parser_flag)
 	{
 	  smtin = fopen(infile,"r");
-	  if(smtin == NULL) 
+	  if(smtin == NULL)
 	    {
 	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
 	      BEEV::FatalError("");
@@ -179,7 +180,7 @@ int main(int argc, char ** argv) {
       else
 	{
 	  cvcin = fopen(infile,"r");
-	  if(cvcin == NULL) 
+	  if(cvcin == NULL)
 	    {
 	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
 	      BEEV::FatalError("");
@@ -188,19 +189,19 @@ int main(int argc, char ** argv) {
     }
   }
 
-  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
 
-  //want to print the output always from the commandline. 
+  //want to print the output always from the commandline.
   BEEV::print_output_flag = true;
-  BEEV::globalBeevMgr_for_parser = new BEEV::BeevMgr();  
+  BEEV::globalBeevMgr_for_parser = new BEEV::BeevMgr();
 
   BEEV::SingleBitOne = BEEV::globalBeevMgr_for_parser->CreateOneConst(1);
   BEEV::SingleBitZero = BEEV::globalBeevMgr_for_parser->CreateZeroConst(1);
-  
+
   if (BEEV::smtlib_parser_flag)
     smtparse();
   else
