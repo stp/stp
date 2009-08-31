@@ -841,8 +841,8 @@ bool BeevMgr::BVTypeCheckRecursive(const ASTNode& n)
  * typecheck as you go along. It is not suitable as a general
  * typechecker.
  *
- * If this returns, this ALWAYS returns true. If there is an error it will call
- * FatalError() and abort.
+ * If this returns, this ALWAYS returns true. If there is an error it
+ * will call FatalError() and abort.
  */
 
 
@@ -1051,6 +1051,9 @@ bool BeevMgr::BVTypeCheck(const ASTNode& n)
 				if (3 != n.Degree())
 					FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
 				break;
+		        case FOR:
+			  //FIXME: Todo
+			        break;
 			default:
 				FatalError("BVTypeCheck: Unrecognized kind: ", ASTUndefined);
 				break;

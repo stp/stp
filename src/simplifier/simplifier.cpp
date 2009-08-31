@@ -276,7 +276,7 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 }
 
 ASTNode BeevMgr::SimplifyForFormula(const ASTNode& a, bool pushNeg) {
-        //Code this up properly later. Mainly pushing the negation down
+        //FIXME: Code this up properly later. Mainly pushing the negation down
         return a;
 }
 

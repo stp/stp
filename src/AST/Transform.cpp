@@ -577,4 +577,10 @@ ASTNode BeevMgr::TransformArray(const ASTNode& term)
 	TransformMap[term] = result;
 	return result;
 } //end of TransformArray()
+
+ASTNode BeevMgr::TransformFiniteFor(const ASTNode& form)
+{
+  return form;
+}
+
 } //end of namespace BEEV

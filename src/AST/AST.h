@@ -1692,6 +1692,7 @@ public:
 	ASTNode TransformFormula(const ASTNode& query);
 	ASTNode TransformTerm(const ASTNode& term);
 	ASTNode TransformArray(const ASTNode& term);
+	ASTNode TransformFiniteFor(const ASTNode& form);
 	ASTNode TranslateSignedDivModRem(const ASTNode& term);
 	void    assertTransformPostConditions(const ASTNode & term);
 
