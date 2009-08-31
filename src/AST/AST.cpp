@@ -626,10 +626,11 @@ ASTNode BeevMgr::CreateBVConst(const char* strval, int base)
 	else
 	{
 		//this is an ugly hack to accomodate SMTLIB format
-		//restrictions. SMTLIB format represents bitvector constants in
-		//base 10 (what a terrible idea, but i have no choice but to
-		//support it), and make an implicit assumption that the length
-		//is 32 (another terrible idea).
+		//restrictions. SMTLIB format represents bitvector
+		//constants in base 10 (what a terrible idea, but i
+		//have no choice but to support it), and make an
+		//implicit assumption that the length is 32 (another
+		//terrible idea).
 		unsigned width = 32;
 		unsigned long long int val = strtoull(strval, NULL, base);
 		ASTNode bvcon = CreateBVConst(width, val);
@@ -809,16 +810,15 @@ void lpvec(const ASTVec &vec)
 ASTNode::ASTNode(const ASTNode &n) :
 	_int_node_ptr(n._int_node_ptr)
 {
-#ifndef SMTLIB
 	if (n._int_node_ptr)
 	{
 		n._int_node_ptr->IncRef();
 	}
-#endif
 }
 
-// If there is a lot of sharing in the graph, this will take a long time.
-// it doesn't mark subgraphs as already having been typechecked.
+// If there is a lot of sharing in the graph, this will take a long
+// time.  it doesn't mark subgraphs as already having been
+// typechecked.
 bool BeevMgr::BVTypeCheckRecursive(const ASTNode& n)
 {
 	const ASTVec& c = n.GetChildren();

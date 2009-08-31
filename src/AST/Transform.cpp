@@ -7,9 +7,13 @@
  ********************************************************************/
 // -*- c++ -*-
 
-// Transform: * Converts signed Div/ signed remainder/ signed modulus into unsigned.
-//            * Removes array selects and stores from formula.
 
+/* Transform: 
+ *
+ * Converts signed Div/signed remainder/signed modulus into their
+ * unsigned counterparts. Removes array selects and stores from
+ * formula. Arrays are replaced by equivalent bit-vector variables
+ */
 
 #include "AST.h"
 #include <stdlib.h>
@@ -437,7 +441,7 @@ ASTNode BeevMgr::TransformArray(const ASTNode& term)
 			}
 			else
 			{
-				// Full Seshia transform if we're not doing read refinement.
+				// Full Array transform if we're not doing read refinement.
 				ASTVec::const_reverse_iterator it2 = readIndices.rbegin();
 				ASTVec::const_reverse_iterator it2end = readIndices.rend();
 				for (; it2 != it2end; it2++)

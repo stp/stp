@@ -423,15 +423,10 @@ protected:
 	unsigned int _value_width;
 
 	// Increment refcount.
-#ifndef SMTLIB
 	void IncRef()
 	{
 		++_ref_count;
 	}
-#else
-	void IncRef()
-	{}
-#endif
 
 	// DecRef is a potentially expensive, because it has to delete
 	// the node from the unique table, in addition to freeing it.
@@ -1177,25 +1172,19 @@ inline types ASTNode::GetType() const
 
 // Constructor; creates a new pointer, increments refcount of
 // pointed-to object.
-#ifndef SMTLIB
 inline ASTNode::ASTNode(ASTInternal *in) :
 	_int_node_ptr(in)
 {
 	if (in)
 		in->IncRef();
 }
-#else
-inline ASTNode::ASTNode(ASTInternal *in) : _int_node_ptr(in)
-{};
-#endif
 
-// Assignment.  Increment refcount of new value, decrement refcount
-// of old value and destroy if this was the last pointer.  FIXME:
+// Assignment.  Increment refcount of new value, decrement refcount of
+// old value and destroy if this was the last pointer.  FIXME:
 // accelerate this by creating an intnode with a ref counter instead
-// of pointing to NULL.  Need a special check in CleanUp to make
-// sure the null node never gets freed.
+// of pointing to NULL.  Need a special check in CleanUp to make sure
+// the null node never gets freed.
 
-#ifndef SMTLIB
 inline ASTNode& ASTNode::operator=(const ASTNode& n)
 {
 	if (n._int_node_ptr)
@@ -1209,15 +1198,7 @@ inline ASTNode& ASTNode::operator=(const ASTNode& n)
 	_int_node_ptr = n._int_node_ptr;
 	return *this;
 }
-#else
-inline ASTNode& ASTNode::operator=(const ASTNode& n)
-{
-	_int_node_ptr = n._int_node_ptr;
-	return *this;
-}
-#endif
 
-#ifndef SMTLIB
 inline void ASTInternal::DecRef()
 {
 	if (--_ref_count == 0)
@@ -1235,18 +1216,6 @@ inline ASTNode::~ASTNode()
 		_int_node_ptr->DecRef();
 	}
 }
-;
-#else
-// No refcounting
-inline void ASTInternal::DecRef()
-{
-}
-
-// Destructor
-inline ASTNode::~ASTNode()
-{
-};
-#endif
 
 inline BeevMgr& ASTNode::GetBeevMgr() const
 {
@@ -1265,9 +1234,6 @@ class BeevMgr
 	friend class ASTBVConst;
 	friend class ASTSymbol;
 
-	// FIXME: The values appear to be the same regardless of the value of SMTLIB
-	// initial hash table sizes, to save time on resizing.
-#ifdef SMTLIB
 	static const int INITIAL_INTERIOR_UNIQUE_TABLE_SIZE = 100;
 	static const int INITIAL_SYMBOL_UNIQUE_TABLE_SIZE = 100;
 	static const int INITIAL_BVCONST_UNIQUE_TABLE_SIZE = 100;
@@ -1278,19 +1244,6 @@ class BeevMgr
 	static const int INITIAL_SOLVER_MAP_SIZE = 100;
 	static const int INITIAL_ARRAYREAD_SYMBOL_SIZE = 100;
 	static const int INITIAL_INTRODUCED_SYMBOLS_SIZE = 100;
-#else
-	// these are the STL defaults
-	static const int INITIAL_INTERIOR_UNIQUE_TABLE_SIZE = 100;
-	static const int INITIAL_SYMBOL_UNIQUE_TABLE_SIZE = 100;
-	static const int INITIAL_BVCONST_UNIQUE_TABLE_SIZE = 100;
-	static const int INITIAL_BBTERM_MEMO_TABLE_SIZE = 100;
-	static const int INITIAL_BBFORM_MEMO_TABLE_SIZE = 100;
-
-	static const int INITIAL_SIMPLIFY_MAP_SIZE = 100;
-	static const int INITIAL_SOLVER_MAP_SIZE = 100;
-	static const int INITIAL_ARRAYREAD_SYMBOL_SIZE = 100;
-	static const int INITIAL_INTRODUCED_SYMBOLS_SIZE = 100;
-#endif
 
 private:
 	// Typedef for unique Interior node table.
@@ -1604,6 +1557,7 @@ public:
 	ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg);
 	ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg);
 	ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg);
+        ASTNode SimplifyForFormula(const ASTNode& a, bool pushNeg);
 	ASTNode FlattenOneLevel(const ASTNode& a);
 	ASTNode FlattenAndOr(const ASTNode& a);
 	ASTNode CombineLikeTerms(const ASTNode& a);

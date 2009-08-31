@@ -8,24 +8,28 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
+
 INSTALL
 -------
 See INSTALL file in the home dir of this program
+
 
 LICENSE
 -------
 See LICENSE file in the home dir of this program
 
+
 WEBSITE
 -------
-http://sourceforge.net/projects/stp-fast-prover/
+http://sourceforge.net/projects/stp-fast-prover
 
-http://people.csail.mit.edu/vganesh/stp.html
 
 DOCUMENTATION
 -------------
 http://people.csail.mit.edu/vganesh/STP_files/stp-docs.html
 
-cd papers
 
+PAPERS
+-----
+http://people.csail.mit.edu/vganesh/STP_files/stp-papers.html
 

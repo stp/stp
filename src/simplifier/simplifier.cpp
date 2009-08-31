@@ -220,7 +220,7 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 
 	ASTNode a = b;
 	ASTVec ca = a.GetChildren();
-	if (!(IMPLIES == kind || ITE == kind || isAtomic(kind)))
+	if (!(IMPLIES == kind || ITE == kind || FOR == kind || isAtomic(kind)))
 	{
 		SortByArith(ca);
 		a = CreateNode(kind, ca);
@@ -260,6 +260,9 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 		case ITE:
 			output = SimplifyIteFormula(a, pushNeg);
 			break;
+	        case FOR:
+		        output = SimplifyForFormula(a, pushNeg);
+			break;
 		default:
 			//kind can be EQ,NEQ,BVLT,BVLE,... or a propositional variable
 			output = SimplifyAtomicFormula(a, pushNeg);
@@ -270,6 +273,11 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 	//memoize
 	UpdateSimplifyMap(a, output, pushNeg);
 	return output;
+}
+
+ASTNode BeevMgr::SimplifyForFormula(const ASTNode& a, bool pushNeg) {
+        //Code this up properly later. Mainly pushing the negation down
+        return a;
 }
 
 ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
