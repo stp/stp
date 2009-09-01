@@ -1101,6 +1101,23 @@ ASTNode BeevMgr::GetCounterExample(bool t, const ASTNode& expr)
 //##################################################
 //##################################################
 
+
+void BeevMgr::printCacheStatus()
+{
+	cerr << SimplifyMap->size() << endl;
+	cerr << SimplifyNegMap->size() << endl;
+	cerr << ReferenceCount->size() << endl;
+	cerr << TermsAlreadySeenMap.size() << endl;
+
+	cerr << SimplifyMap->bucket_count() << endl;
+	cerr << SimplifyNegMap->bucket_count() << endl;
+	cerr << ReferenceCount->bucket_count() << endl;
+	cerr << TermsAlreadySeenMap.bucket_count() << endl;
+
+
+
+}
+
 // FIXME:  Don't use numeric codes.  Use an enum type!
 //Acceps a query, calls the SAT solver and generates Valid/InValid.
 //if returned 0 then input is INVALID
@@ -1179,11 +1196,12 @@ int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
 	SimplifyWrites_InPlace_Flag = false;
 	Begin_RemoveWrites = false;
 
-	newq = TransformFormula(newq);
-	if (false)
-		assertTransformPostConditions(newq);
+	newq = TransformFormula_TopLevel(newq);
 	ASTNodeStats("after transformation: ", newq);
 	TermsAlreadySeenMap.clear();
+
+	//if(stats_flag)
+	//	printCacheStatus();
 
 	int res;
 	//solver instantiated here
@@ -1369,12 +1387,12 @@ int BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode&
 		writeAxiom = Create_ArrayWriteAxioms(it->first, it->second);
 		if (ASTFalse == ComputeFormulaUsingModel(writeAxiom))
 		{
-			writeAxiom = TransformFormula(writeAxiom);
+			writeAxiom = TransformFormula_TopLevel(writeAxiom);
 			FalseAxioms.push_back(writeAxiom);
 		}
 		else
 		{
-			writeAxiom = TransformFormula(writeAxiom);
+			writeAxiom = TransformFormula_TopLevel(writeAxiom);
 			RemainingAxioms.push_back(writeAxiom);
 		}
 	}

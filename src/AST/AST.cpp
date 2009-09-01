@@ -1265,12 +1265,13 @@ void BeevMgr::ClearAllTables(void)
 	AlreadyPrintedSet.clear();
 	SimplifyMap->clear();
 	SimplifyNegMap->clear();
+	ReferenceCount->clear();
 	SolverMap.clear();
 	AlwaysTrueFormMap.clear();
 	_arrayread_ite.clear();
 	_arrayread_symbol.clear();
 	_introduced_symbols.clear();
-	TransformMap.clear();
+	//TransformMap.clear();
 	_letid_expr_map->clear();
 	CounterExampleMap.clear();
 	ComputeFormulaMap.clear();
@@ -1324,12 +1325,12 @@ void BeevMgr::ClearAllCaches(void)
 	AlreadyPrintedSet.clear();
 	SimplifyMap->clear();
 	SimplifyNegMap->clear();
+	ReferenceCount->clear();
 	SolverMap.clear();
 	AlwaysTrueFormMap.clear();
 	_arrayread_ite.clear();
 	_arrayread_symbol.clear();
 	_introduced_symbols.clear();
-	TransformMap.clear();
 	_letid_expr_map->clear();
 	CounterExampleMap.clear();
 	ComputeFormulaMap.clear();
@@ -1421,6 +1422,7 @@ BeevMgr::~BeevMgr()
 	delete SimplifyMap;
 	delete SimplifyNegMap;
 	delete _letid_expr_map;
+	delete ReferenceCount;
 }
 
 }

@@ -776,7 +776,7 @@ an_nonbvconst_term:
       BEEV::ASTNode hi  =  BEEV::globalBeevMgr_for_parser->CreateBVConst(32, $3);
       BEEV::ASTNode low =  BEEV::globalBeevMgr_for_parser->CreateBVConst(32, $5);
       BEEV::ASTNode output = BEEV::globalBeevMgr_for_parser->CreateTerm(BEEV::BVEXTRACT, width, *$7,hi,low);
-      BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->SimplifyTerm(output));
+      BEEV::ASTNode * n = new BEEV::ASTNode(output);
       BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
       $$ = n;
       delete $7;

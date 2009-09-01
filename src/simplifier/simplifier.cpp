@@ -1,4 +1,4 @@
-/********************************************************************
+					/********************************************************************
  * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
@@ -35,8 +35,22 @@ bool BeevMgr::CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg
 	return false;
 }
 
+// Push any reference count used by the key to the value.
 void BeevMgr::UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg)
 {
+	// If there are references to the key, add them to the references of the value.
+	ASTNodeCountMap::const_iterator itKey, itValue;
+	itKey = ReferenceCount->find(key);
+	if (itKey != ReferenceCount->end())
+	{
+		itValue = ReferenceCount->find(value);
+		if (itValue != ReferenceCount->end())
+			(*ReferenceCount)[value] = itValue->second + itKey->second;
+		else
+			(*ReferenceCount)[value] = itKey->second;
+	}
+
+
 	if (pushNeg)
 		(*SimplifyNegMap)[key] = value;
 	else
@@ -138,10 +152,9 @@ int BeevMgr::TermOrder(const ASTNode& a, const ASTNode& b)
 
 	//a is of the form READ(Arr,const), and b is const, or
 	//a is of the form var, and b is const
-	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST && 
-	     (k2 == BVCONST)))
-	      // || 
-// 	      k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind() == BVCONST)))
+	if ((k1 == READ && a[0].GetKind() == SYMBOL && a[1].GetKind() == BVCONST && (k2 == BVCONST)))
+		// ||
+		// 	      k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind() == BVCONST)))
 		return 1;
 
 	if (SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2))
@@ -199,9 +212,37 @@ ASTNode BeevMgr::SimplifyFormula_NoRemoveWrites(const ASTNode& b, bool pushNeg)
 	return out;
 }
 
+void BeevMgr::BuildReferenceCountMap(const ASTNode& b)
+{
+	if (b.GetChildren().size() == 0)
+		return;
+
+	ASTNodeCountMap::iterator it, itend;
+
+	it = ReferenceCount->find(b);
+	if (it == ReferenceCount->end())
+	{
+		(*ReferenceCount)[b] = 1;
+	}
+	else
+	{
+		(*ReferenceCount)[b] = it->second + 1;
+		return;
+	}
+
+	const ASTVec& c = b.GetChildren();
+	ASTVec::const_iterator itC = c.begin();
+	ASTVec::const_iterator itendC = c.end();
+	for (; itC != itendC; itC++)
+	{
+		BuildReferenceCountMap(*itC);
+	}
+}
+
 ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 {
 	ResetSimplifyMaps();
+	BuildReferenceCountMap(b);
 	ASTNode out = SimplifyFormula(b, pushNeg);
 	ResetSimplifyMaps();
 	return out;
@@ -209,8 +250,8 @@ ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 
 ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 {
-  if (!optimize_flag)
-    return b;
+	if (!optimize_flag)
+		return b;
 
 	Kind kind = b.GetKind();
 	if (BOOLEAN_TYPE != b.GetType())
@@ -283,8 +324,7 @@ ASTNode BeevMgr::SimplifyForFormula(const ASTNode& a, bool pushNeg) {
 ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
 {
 	if (!optimize_flag)
-	  return a;
-
+		return a;
 
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -554,7 +594,6 @@ ASTNode BeevMgr::PullUpITE(const ASTNode& in)
 	return result;
 }
 
-
 //takes care of some simple ITE Optimizations in the context of equations
 ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
 {
@@ -653,9 +692,9 @@ ASTNode BeevMgr::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
 	Kind k2 = in2.GetKind();
 
 	// if (!optimize_flag)
-// 	{
-// 		return CreateNode(EQ, in1, in2);
-// 	}
+	// 	{
+	// 		return CreateNode(EQ, in1, in2);
+	// 	}
 
 	if (in1 == in2)
 		//terms are syntactically the same
@@ -1117,7 +1156,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
 {
 	if (!optimize_flag)
-	  return b;
+		return b;
 
 	ASTNode output;
 	if (CheckSimplifyMap(b, output, pushNeg))
@@ -1253,10 +1292,9 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 	//cout << "SimplifyTerm: input: " << a << endl;
 	if (!optimize_flag)
 	{
-	  return inputterm;
+		return inputterm;
 	}
 
-	
 	ASTNode output;
 	assert(BVTypeCheck(inputterm));
 	//########################################
@@ -2921,6 +2959,14 @@ ASTNode BeevMgr::LhsMinusRhs(const ASTNode& eq)
 		swap_flag = true;
 	}
 
+	ASTNodeCountMap::const_iterator it;
+	it = ReferenceCount->find(lhs);
+	if (it != ReferenceCount->end())
+	{
+		if (it->second > 1)
+			return eq;
+	}
+
 	unsigned int len = lhs.GetValueWidth();
 	ASTNode zero = CreateZeroConst(len);
 	//right is -1*(rhs): Simplify(-1*rhs)
@@ -3518,8 +3564,8 @@ bool BeevMgr::BVConstIsOdd(const ASTNode& c)
 //The big substitution function
 ASTNode BeevMgr::CreateSubstitutionMap(const ASTNode& a)
 {
-        if (!wordlevel_solve_flag)
-	  return a;
+	if (!wordlevel_solve_flag)
+		return a;
 
 	ASTNode output = a;
 	//if the variable has been solved for, then simply return it
@@ -3656,11 +3702,17 @@ bool BeevMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 // clears() in particular.
 void BeevMgr::ResetSimplifyMaps()
 {
+	SimplifyMap->clear();
 	delete SimplifyMap;
 	SimplifyMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
 
+	SimplifyNegMap->clear();
 	delete SimplifyNegMap;
 	SimplifyNegMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
+
+	ReferenceCount->clear();
+	delete ReferenceCount;
+	ReferenceCount = new ASTNodeCountMap(INITIAL_SIMPLIFY_MAP_SIZE);
 }
 
 }

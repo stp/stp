@@ -32,6 +32,7 @@
 #include <algorithm>
 #include "ASTUtil.h"
 #include "ASTKind.h"
+#include <stdint.h>
 #include "../sat/core/Solver.h"
 //#include "../sat/simp/SimpSolver.h"
 //#include "../sat/unsound/UnsoundSimpSolver.h"
@@ -1027,6 +1028,9 @@ inline unsigned int GetUnsignedConst(const ASTNode n)
 // Hash table from ASTNodes to ASTNodes
 typedef hash_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeMap;
 
+typedef hash_map<ASTNode, int32_t, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeCountMap;
+
+
 // Function to dump contents of ASTNodeMap
 ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
 
@@ -1532,6 +1536,8 @@ public:
 	ASTNode SimplifyTerm(const ASTNode& a);
 	ASTNode SimplifyTermAux(const ASTNode& a);
 	void CheckSimplifyInvariant(const ASTNode& a, const ASTNode& output);
+	void BuildReferenceCountMap(const ASTNode& b);
+
 private:
 	//memo table for simplifcation
 	ASTNodeMap *SimplifyMap;
@@ -1539,6 +1545,15 @@ private:
 	ASTNodeMap SolverMap;
 	ASTNodeSet AlwaysTrueFormMap;
 	ASTNodeMap MultInverseMap;
+
+
+	// The number of direct parents of each node. i.e. the number of times the pointer is in "children".
+	// When we simplify we want to be careful sometimes about using the context of a node. For example,
+	// given ((x + 23) = 2), the obvious simplification is to join the constants. However, if there are
+	// lots of references to the plus node. Then each time we simplify, we'll create an additional plus.
+	// nextpoweroftwo064.smt is the motivating benchmark. The splitting increased the number of pluses
+	// from 1 to 65.
+	ASTNodeCountMap *ReferenceCount;
 
 public:
 	ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg);
@@ -1610,6 +1625,8 @@ public:
 	///print SAT solver statistics
 	void PrintStats(MINISAT::Solver& stats);
 
+	void printCacheStatus();
+
 	//from v8
 	int TopLevelSATAux(const ASTNode& query);
 
@@ -1678,23 +1695,18 @@ private:
 
 	ASTNodeSet _introduced_symbols;
 
-	/*Memoization map for TransformFormula/TransformTerm/TransformArray function
-	 */
-	ASTNodeMap TransformMap;
-
 	//count to keep track of new symbolic constants introduced
 	//corresponding to Array Reads
 	unsigned int _symbol_count;
 
 	//Formula/Term Transformers. Let Expr Manager, Type Checker
 public:
-	//Functions that Transform ASTNodes
-	ASTNode TransformFormula(const ASTNode& query);
-	ASTNode TransformTerm(const ASTNode& term);
+	//Functions that Transform ASTNodes. TransformArray should be a non-member function,
+	// but it accesses private elements. Move it later.
+	ASTNode TransformFormula_TopLevel(const ASTNode& form);
 	ASTNode TransformArray(const ASTNode& term);
 	ASTNode TransformFiniteFor(const ASTNode& form);
-	ASTNode TranslateSignedDivModRem(const ASTNode& term);
-	void    assertTransformPostConditions(const ASTNode & term);
+
 
 	//LET Management
 private:
@@ -1931,6 +1943,7 @@ public:
 		SimplifyMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
 		SimplifyNegMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
 		_letid_expr_map = new ASTNodeMap(INITIAL_INTRODUCED_SYMBOLS_SIZE);
+		ReferenceCount = new ASTNodeCountMap(INITIAL_SIMPLIFY_MAP_SIZE);
 	}
 	;
 
