@@ -12,6 +12,23 @@
 namespace BEEV
 {
 
+bool BeevMgr::CheckMap(ASTNodeMap* VarConstMap, 
+		       const ASTNode& key, ASTNode& output)
+{
+        if(NULL == VarConstMap)
+	{
+                return false;
+	}
+	ASTNodeMap::iterator it;
+	if ((it = VarConstMap->find(key)) != VarConstMap->end())
+	{
+		output = it->second;
+		return true;
+	}
+	return false;
+}
+
+
 bool BeevMgr::CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg)
 {
 	ASTNodeMap::iterator it, itend;
@@ -205,10 +222,10 @@ void BeevMgr::FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1)
 	}
 }
 
-ASTNode BeevMgr::SimplifyFormula_NoRemoveWrites(const ASTNode& b, bool pushNeg)
+ASTNode BeevMgr::SimplifyFormula_NoRemoveWrites(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	Begin_RemoveWrites = false;
-	ASTNode out = SimplifyFormula(b, pushNeg);
+	ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
 	return out;
 }
 
@@ -248,7 +265,7 @@ ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 	return out;
 }
 
-ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
+ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	if (!optimize_flag)
 		return b;
@@ -316,12 +333,12 @@ ASTNode BeevMgr::SimplifyFormula(const ASTNode& b, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyForFormula(const ASTNode& a, bool pushNeg) {
+ASTNode BeevMgr::SimplifyForFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap) {
         //FIXME: Code this up properly later. Mainly pushing the negation down
         return a;
 }
 
-ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	if (!optimize_flag)
 		return a;
@@ -595,7 +612,7 @@ ASTNode BeevMgr::PullUpITE(const ASTNode& in)
 }
 
 //takes care of some simple ITE Optimizations in the context of equations
-ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
+ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
 {
 	CountersAndStats("ITEOpts_InEqs");
 
@@ -645,7 +662,7 @@ ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
 		}
 		else if (in1[2] == in2)
 		{
-			cond = SimplifyFormula(cond, true);
+			cond = SimplifyFormula(cond, true, VarConstMap);
 			output = cond;
 		}
 		else
@@ -664,7 +681,7 @@ ASTNode BeevMgr::ITEOpt_InEqs(const ASTNode& in)
 		}
 		else if (in2[2] == in1)
 		{
-			cond = SimplifyFormula(cond, true);
+			cond = SimplifyFormula(cond, true, VarConstMap);
 			output = cond;
 		}
 		else
@@ -778,7 +795,7 @@ ASTNode BeevMgr::CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& i
 	return result;
 }
 
-ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output;
 	//cerr << "input:\n" << a << endl;
@@ -807,7 +824,7 @@ ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
 		next_it = i + 1;
 		bool nextexists = (next_it < iend);
 
-		aaa = SimplifyFormula(aaa, pushNeg);
+		aaa = SimplifyFormula(aaa, pushNeg, VarConstMap);
 		if (annihilator == aaa)
 		{
 			//memoize
@@ -819,7 +836,7 @@ ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
 		ASTNode bbb = ASTFalse;
 		if (nextexists)
 		{
-			bbb = SimplifyFormula(*next_it, pushNeg);
+			bbb = SimplifyFormula(*next_it, pushNeg, VarConstMap);
 		}
 		if (nextexists && bbb == aaa)
 		{
@@ -860,7 +877,7 @@ ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
 		}
 		case 1:
 		{
-			output = SimplifyFormula(outvec[0], false);
+			output = SimplifyFormula(outvec[0], false, VarConstMap);
 			break;
 		}
 		default:
@@ -883,7 +900,7 @@ ASTNode BeevMgr::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg)
 } //end of SimplifyAndOrFormula
 
 
-ASTNode BeevMgr::SimplifyNotFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyNotFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -926,7 +943,7 @@ ASTNode BeevMgr::SimplifyNotFormula(const ASTNode& a, bool pushNeg)
 	}
 	else
 	{
-		output = SimplifyFormula(o, pn);
+		output = SimplifyFormula(o, pn, VarConstMap);
 	}
 	//memoize
 	UpdateSimplifyMap(o, output, pn);
@@ -934,7 +951,7 @@ ASTNode BeevMgr::SimplifyNotFormula(const ASTNode& a, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -945,8 +962,8 @@ ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg)
 		FatalError("Simplify got an XOR with more than two children.");
 	}
 
-	ASTNode a0 = SimplifyFormula(a[0], false);
-	ASTNode a1 = SimplifyFormula(a[1], false);
+	ASTNode a0 = SimplifyFormula(a[0], false, VarConstMap);
+	ASTNode a1 = SimplifyFormula(a[1], false, VarConstMap);
 	output = pushNeg ? CreateNode(IFF, a0, a1) : CreateNode(XOR, a0, a1);
 
 	if (XOR == output.GetKind())
@@ -964,7 +981,33 @@ ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyNandFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyNandFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
+{
+	ASTNode output, a0, a1;
+	if (CheckSimplifyMap(a, output, pushNeg))
+		return output;
+
+	//the two NOTs cancel out
+	if (pushNeg)
+	{
+		a0 = SimplifyFormula(a[0], false, VarConstMap);
+		a1 = SimplifyFormula(a[1], false, VarConstMap);
+		output = CreateNode(AND, a0, a1);
+	}
+	else
+	{
+		//push the NOT implicit in the NAND
+		a0 = SimplifyFormula(a[0], true, VarConstMap);
+		a1 = SimplifyFormula(a[1], true, VarConstMap);
+		output = CreateNode(OR, a0, a1);
+	}
+
+	//memoize
+	UpdateSimplifyMap(a, output, pushNeg);
+	return output;
+}
+
+ASTNode BeevMgr::SimplifyNorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output, a0, a1;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -974,40 +1017,14 @@ ASTNode BeevMgr::SimplifyNandFormula(const ASTNode& a, bool pushNeg)
 	if (pushNeg)
 	{
 		a0 = SimplifyFormula(a[0], false);
-		a1 = SimplifyFormula(a[1], false);
-		output = CreateNode(AND, a0, a1);
-	}
-	else
-	{
-		//push the NOT implicit in the NAND
-		a0 = SimplifyFormula(a[0], true);
-		a1 = SimplifyFormula(a[1], true);
-		output = CreateNode(OR, a0, a1);
-	}
-
-	//memoize
-	UpdateSimplifyMap(a, output, pushNeg);
-	return output;
-}
-
-ASTNode BeevMgr::SimplifyNorFormula(const ASTNode& a, bool pushNeg)
-{
-	ASTNode output, a0, a1;
-	if (CheckSimplifyMap(a, output, pushNeg))
-		return output;
-
-	//the two NOTs cancel out
-	if (pushNeg)
-	{
-		a0 = SimplifyFormula(a[0], false);
-		a1 = SimplifyFormula(a[1], false);
+		a1 = SimplifyFormula(a[1], false, VarConstMap);
 		output = CreateNode(OR, a0, a1);
 	}
 	else
 	{
 		//push the NOT implicit in the NAND
-		a0 = SimplifyFormula(a[0], true);
-		a1 = SimplifyFormula(a[1], true);
+		a0 = SimplifyFormula(a[0], true, VarConstMap);
+		a1 = SimplifyFormula(a[1], true, VarConstMap);
 		output = CreateNode(AND, a0, a1);
 	}
 
@@ -1016,7 +1033,7 @@ ASTNode BeevMgr::SimplifyNorFormula(const ASTNode& a, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -1028,14 +1045,14 @@ ASTNode BeevMgr::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg)
 	ASTNode c0, c1;
 	if (pushNeg)
 	{
-		c0 = SimplifyFormula(a[0], false);
-		c1 = SimplifyFormula(a[1], true);
+		c0 = SimplifyFormula(a[0], false, VarConstMap);
+		c1 = SimplifyFormula(a[1], true, VarConstMap);
 		output = CreateNode(AND, c0, c1);
 	}
 	else
 	{
-		c0 = SimplifyFormula(a[0], false);
-		c1 = SimplifyFormula(a[1], false);
+		c0 = SimplifyFormula(a[0], false, VarConstMap);
+		c1 = SimplifyFormula(a[1], false, VarConstMap);
 		if (ASTFalse == c0)
 		{
 			output = ASTTrue;
@@ -1086,7 +1103,7 @@ ASTNode BeevMgr::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
+ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	ASTNode output;
 	if (CheckSimplifyMap(a, output, pushNeg))
@@ -1096,12 +1113,12 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 		FatalError("SimplifyIffFormula: vector with wrong num of nodes", ASTUndefined);
 
 	ASTNode c0 = a[0];
-	ASTNode c1 = SimplifyFormula(a[1], false);
+	ASTNode c1 = SimplifyFormula(a[1], false, VarConstMap);
 
 	if (pushNeg)
-		c0 = SimplifyFormula(c0, true);
+		c0 = SimplifyFormula(c0, true, VarConstMap);
 	else
-		c0 = SimplifyFormula(c0, false);
+		c0 = SimplifyFormula(c0, false, VarConstMap);
 
 	if (ASTTrue == c0)
 	{
@@ -1109,7 +1126,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 	}
 	else if (ASTFalse == c0)
 	{
-		output = SimplifyFormula(c1, true);
+		output = SimplifyFormula(c1, true, VarConstMap);
 	}
 	else if (ASTTrue == c1)
 	{
@@ -1117,7 +1134,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 	}
 	else if (ASTFalse == c1)
 	{
-		output = SimplifyFormula(c0, true);
+		output = SimplifyFormula(c0, true, VarConstMap);
 	}
 	else if (c0 == c1)
 	{
@@ -1153,7 +1170,7 @@ ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg)
 	return output;
 }
 
-ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
+ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
 {
 	if (!optimize_flag)
 		return b;
@@ -1166,17 +1183,17 @@ ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
 		FatalError("SimplifyIteFormula: vector with wrong num of nodes", ASTUndefined);
 
 	ASTNode a = b;
-	ASTNode t0 = SimplifyFormula(a[0], false);
+	ASTNode t0 = SimplifyFormula(a[0], false, VarConstMap);
 	ASTNode t1, t2;
 	if (pushNeg)
 	{
-		t1 = SimplifyFormula(a[1], true);
-		t2 = SimplifyFormula(a[2], true);
+		t1 = SimplifyFormula(a[1], true, VarConstMap);
+		t2 = SimplifyFormula(a[2], true, VarConstMap);
 	}
 	else
 	{
-		t1 = SimplifyFormula(a[1], false);
-		t2 = SimplifyFormula(a[2], false);
+		t1 = SimplifyFormula(a[1], false, VarConstMap);
+		t2 = SimplifyFormula(a[2], false, VarConstMap);
 	}
 
 	if (ASTTrue == t0)
@@ -1197,7 +1214,7 @@ ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg)
 	}
 	else if (ASTFalse == t1 && ASTTrue == t2)
 	{
-		output = SimplifyFormula(t0, true);
+		output = SimplifyFormula(t0, true, VarConstMap);
 	}
 	else if (ASTTrue == t1)
 	{
@@ -1285,7 +1302,7 @@ ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b)
 }
 
 //This function simplifies terms based on their kind
-ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
+ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm, ASTNodeMap* VarConstMap)
 {
 	ASTNode inputterm(actualInputterm); // mutable local copy.
 
@@ -1297,6 +1314,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 
 	ASTNode output;
 	assert(BVTypeCheck(inputterm));
+	
 	//########################################
 	//########################################
 
@@ -1331,9 +1349,13 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 			output = inputterm;
 			break;
 		case SYMBOL:
+		        if(CheckMap(VarConstMap, inputterm, output)) 
+			{
+			  return output;
+			}
 			if (CheckSolverMap(inputterm, output))
 			{
-				return SimplifyTerm(output);
+			  return SimplifyTerm(output);
 			}
 			output = inputterm;
 			break;
@@ -1341,7 +1363,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 		{
 			if (2 != inputterm.Degree())
 			{
-				FatalError("SimplifyTerm: We assume that BVMULT is binary", inputterm);
+			  FatalError("SimplifyTerm: We assume that BVMULT is binary", inputterm);
 			}
 
 			// Described nicely by Warren, Hacker's Delight pg 135.
@@ -1993,7 +2015,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 				}
 				else if (ITE == inputterm[0].GetKind())
 				{
-					ASTNode cond = SimplifyFormula(inputterm[0][0], false);
+					ASTNode cond = SimplifyFormula(inputterm[0][0], false, VarConstMap);
 					ASTNode index = SimplifyTerm(inputterm[1]);
 
 					ASTNode read1 = CreateTerm(READ, inputValueWidth, inputterm[0][1], index);
@@ -2020,7 +2042,7 @@ ASTNode BeevMgr::SimplifyTerm(const ASTNode& actualInputterm)
 		}
 		case ITE:
 		{
-			ASTNode t0 = SimplifyFormula(inputterm[0], false);
+			ASTNode t0 = SimplifyFormula(inputterm[0], false, VarConstMap);
 			ASTNode t1 = SimplifyTerm(inputterm[1]);
 			ASTNode t2 = SimplifyTerm(inputterm[2]);
 			output = CreateSimplifiedTermITE(t0, t1, t2);
@@ -2535,7 +2557,7 @@ ASTNode BeevMgr::RemoveWrites_TopLevel(const ASTNode& term)
 	}
 } //end of RemoveWrites_TopLevel()
 
-ASTNode BeevMgr::SimplifyWrites_InPlace(const ASTNode& term)
+ASTNode BeevMgr::SimplifyWrites_InPlace(const ASTNode& term, ASTNodeMap* VarConstMap)
 {
 	ASTNodeMultiSet WriteIndicesSeenSoFar;
 	bool SeenNonConstWriteIndex = false;
@@ -2564,7 +2586,7 @@ ASTNode BeevMgr::SimplifyWrites_InPlace(const ASTNode& term)
 
 		//compare the readIndex and the current writeIndex and see if they
 		//simplify to TRUE or FALSE or UNDETERMINABLE at this stage
-		ASTNode compare_readwrite_indices = SimplifyFormula(CreateSimplifiedEQ(writeIndex, readIndex), false);
+		ASTNode compare_readwrite_indices = SimplifyFormula(CreateSimplifiedEQ(writeIndex, readIndex), false, VarConstMap);
 
 		//if readIndex and writeIndex are equal
 		if (ASTTrue == compare_readwrite_indices && !SeenNonConstWriteIndex)
@@ -2660,7 +2682,7 @@ ASTNode BeevMgr::RemoveWrites(const ASTNode& input)
 	return output;
 } //end of RemoveWrites()
 
-ASTNode BeevMgr::ReadOverWrite_To_ITE(const ASTNode& term)
+ASTNode BeevMgr::ReadOverWrite_To_ITE(const ASTNode& term, ASTNodeMap* VarConstMap)
 {
 	unsigned int width = term.GetValueWidth();
 	ASTNode input = term;
@@ -2689,7 +2711,7 @@ ASTNode BeevMgr::ReadOverWrite_To_ITE(const ASTNode& term)
 		ASTNode writeIndex = SimplifyTerm(write[1]);
 		ASTNode writeVal = SimplifyTerm(write[2]);
 
-		ASTNode cond = SimplifyFormula(CreateSimplifiedEQ(writeIndex, readIndex), false);
+		ASTNode cond = SimplifyFormula(CreateSimplifiedEQ(writeIndex, readIndex), false, VarConstMap);
 		ASTNode newRead = CreateTerm(READ, width, writeA, readIndex);
 		ASTNode newRead_memoized = newRead;
 		if (CheckSimplifyMap(newRead, newRead_memoized, false))
@@ -2769,16 +2791,6 @@ ASTNode BeevMgr::MultiplicativeInverse(const ASTNode& d)
 	inverse = c;
 	unsigned inputwidth = c.GetValueWidth();
 
-#ifdef NATIVE_C_ARITH
-	ASTNode one = CreateOneConst(inputwidth);
-	while(c != one)
-	{
-		//c = c*c
-		c = BVConstEvaluator(CreateTerm(BVMULT,inputwidth,c,c));
-		//inverse = invsere*c
-		inverse = BVConstEvaluator(CreateTerm(BVMULT,inputwidth,inverse,c));
-	}
-#else
 	//Compute the multiplicative inverse of c using the extended
 	//euclidian algorithm
 	//
@@ -2834,7 +2846,6 @@ ASTNode BeevMgr::MultiplicativeInverse(const ASTNode& d)
 	ASTNode low = CreateZeroConst(32);
 	inverse = CreateTerm(BVEXTRACT, inputwidth, x2, hi, low);
 	inverse = BVConstEvaluator(inverse);
-#endif
 
 	UpdateMultInverseMap(d, inverse);
 	//cerr << "output of multinverse function is: " << inverse << endl;

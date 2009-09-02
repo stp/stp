@@ -38,9 +38,7 @@
 //#include "../sat/unsound/UnsoundSimpSolver.h"
 #include "../sat/core/SolverTypes.h"
 #include <stdlib.h>
-#ifndef NATIVE_C_ARITH
 #include "../constantbv/constantbv.h"
-#endif
 
 /*****************************************************************************
  * LIST OF CLASSES DECLARED IN THIS FILE:
@@ -91,8 +89,12 @@ class ASTNode
 	friend class ASTInterior;
 	friend class vector<ASTNode> ;
 	//Print the arguments in lisp format.
-	friend ostream &LispPrintVec(ostream &os, const ASTVec &v, int indentation = 0);
-	friend ostream &LispPrintVecSpecial(ostream &os, const vector<const ASTNode*> &v, int indentation = 0);
+	friend ostream &LispPrintVec(ostream &os, 
+				     const ASTVec &v, 
+				     int indentation = 0);
+	friend ostream &LispPrintVecSpecial(ostream &os, 
+					    const vector<const ASTNode*> &v, 
+					    int indentation = 0);
 
 private:
 	// FIXME: make this into a reference?
@@ -267,11 +269,7 @@ public:
 	const char * const GetName() const;
 
 	//Get the BVCONST value
-#ifndef NATIVE_C_ARITH
 	const CBV GetBVConst() const;
-#else
-	unsigned long long int GetBVConst() const;
-#endif
 
 	/*ASTNode is of type BV <==> ((indexwidth=0)&&(valuewidth>0))
 	 *
@@ -675,9 +673,6 @@ public:
 /***************************************************************************/
 /*  Class ASTBVConst:  Class to represent internals of a bitvectorconst    */
 /***************************************************************************/
-
-#ifndef NATIVE_C_ARITH
-
 class ASTBVConst: public ASTInternal
 {
 	friend class BeevMgr;
@@ -802,233 +797,21 @@ public:
 	}
 }; //End of ASTBVConst
 
-
-//FIXME This function is DEPRECATED
-//Do not use in the future
-inline unsigned int GetUnsignedConst(const ASTNode n)
-{
-	if (sizeof(unsigned int) * 8 <= n.GetValueWidth())
-	{
-		// It may only contain a small value in a bit type, which fits nicely into an unsigned int.
-		// This is common for functions like: bvshl(bv1[128], bv1[128])
-		// where both operands have the same type.
-		signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
-		if (maxBit >= ((signed long) sizeof(unsigned int)) * 8)
-		{
-			n.LispPrint(cerr); //print the node so they can find it.
-			FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int");
-		}
-	}
-	return (unsigned int) *((unsigned int *) n.GetBVConst());
-}
-#else
-class ASTBVConst : public ASTInternal
-{
-	friend class BeevMgr;
-	friend class ASTNode;
-	friend class ASTNodeHasher;
-	friend class ASTNodeEqual;
-
-private:
-	// the bitvector contents. bitvector contents will be in two
-	// modes. one mode where all bitvectors are NATIVE and in this
-	// mode we use native unsigned long long int to represent the
-	// 32/64 bitvectors. The other for arbitrary length bitvector
-	// operations.
-	const unsigned long long int _bvconst;
-
-	class ASTBVConstHasher
-	{
-	public:
-		size_t operator() (const ASTBVConst * bvc) const
-		{
-			//Thomas Wang's 64 bit Mix Function
-			unsigned long long int key(bvc->_bvconst);
-			key += ~(key << 32);
-			key ^= (key >> 22);
-			key += ~(key << 13);
-			key ^= (key >> 8);
-			key += (key << 3);
-			key ^= (key >> 15);
-			key += ~(key << 27);
-			key ^= (key >> 31);
-
-			size_t return_key = key;
-			return return_key;
-		};
-	};
-
-	class ASTBVConstEqual
-	{
-	public:
-		bool operator()(const ASTBVConst * bvc1, const ASTBVConst * bvc2) const
-		{
-			return ((bvc1->_bvconst == bvc2->_bvconst)
-					&& (bvc1->_value_width == bvc2->_value_width));
-		}
-	};
-
-	// Call this when deleting a node that has been stored in the
-	// the unique table
-	virtual void CleanUp();
-public:
-	// Default constructor
-	ASTBVConst(const unsigned long long int bv, BeevMgr &bm) :
-	ASTInternal(BVCONST, bm), _bvconst(bv)
-	{
-	}
-
-	// Copy constructor. FIXME: figure out how this is supposed to
-	// work.
-	ASTBVConst(const ASTBVConst &sym) :
-	ASTInternal(sym._kind, sym._children, sym._bm),
-	_bvconst(sym._bvconst)
-	{
-		_value_width = sym._value_width;
-	}
-
-	// Destructor (does nothing, but is declared virtual here)
-	virtual ~ASTBVConst()
-	{}
-
-	friend bool operator==(const ASTBVConst &sym1, const ASTBVConst &sym2)
-	{
-		return ((sym1._bvconst == sym2._bvconst) &&
-				(sym1._value_width == sym2._value_width));
-	}
-
-	// Print function for bvconst -- return _bvconst value in binary format
-	virtual void nodeprint(ostream& os, bool c_friendly = false)
-	{
-		string s = "0bin";
-		unsigned long long int bitmask = 0x8000000000000000LL;
-		bitmask = bitmask >> (64-_value_width);
-
-		for (; bitmask > 0; bitmask >>= 1)
-		s += (_bvconst & bitmask) ? '1' : '0';
-		os << s;
-	}
-
-	unsigned long long int GetBVConst() const
-	{	return _bvconst;}
-}; //End of ASTBVConst
-
-//return value of bvconst
-inline unsigned int GetUnsignedConst(const ASTNode n)
-{
-	if(32 < n.GetValueWidth())
-	FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int:");
-	return (unsigned int)n.GetBVConst();
-}
-#endif
-/*
- #else
- // the bitvector contents. bitvector contents will be in two
- // modes. one mode where all bitvectors are NATIVE and in this mode
- // we use native unsigned long long int to represent the 32/64
- // bitvectors. The other for arbitrary length bitvector operations.
-
- //BVCONST defined for arbitrary length bitvectors
- class ASTBVConst : public ASTInternal{
- friend class BeevMgr;
- friend class ASTNode;
- friend class ASTNodeHasher;
- friend class ASTNodeEqual;
-
- private:
- const char * const _bvconst;
-
- class ASTBVConstHasher{
- public:
- size_t operator() (const ASTBVConst * bvc) const{
- hash<char*> h;
- return h(bvc->_bvconst);
- };
- };
-
- class ASTBVConstEqual{
- public:
- bool operator()(const ASTBVConst * bvc1, const ASTBVConst  * bvc2) const {
- if(bvc1->_value_width != bvc2->_value_width)
- return false;
- return (0 == strncmp(bvc1->_bvconst,bvc2->_bvconst,bvc1->_value_width));
- }
- };
-
- ASTBVConst(const char * bv, BeevMgr &bm) :
- ASTInternal(BVCONST, bm), _bvconst(bv) {
- //_value_width = strlen(bv);
- }
-
- friend bool operator==(const ASTBVConst &bvc1, const ASTBVConst &bvc2){
- if(bvc1._value_width != bvc2._value_width)
- return false;
- return (0 == strncmp(bvc1._bvconst,bvc2._bvconst,bvc1._value_width));
- }
-
- // Call this when deleting a node that has been stored in the
- // the unique table
- virtual void CleanUp();
-
- // Print function for bvconst -- return _bvconst value in binary format
- virtual void nodeprint(ostream& os) {
- if(_value_width%4 == 0) {
- unsigned int *  iii = CONSTANTBV::BitVector_Create(_value_width,true);
- CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_from_Bin(iii,(unsigned char*)_bvconst);
- //error printing
- if(0 != e) {
- os << "nodeprint: BVCONST : wrong hex value: " << BitVector_Error(e);
- FatalError("");
- }
- unsigned char * ccc = CONSTANTBV::BitVector_to_Hex(iii);
- os << "0hex" << ccc;
- CONSTANTBV::BitVector_Destroy(iii);
- }
- else {
- std::string s(_bvconst,_value_width);
- s = "0bin" + s;
- os << s;
- }
- }
-
- // Copy constructor.
- ASTBVConst(const ASTBVConst &sym) : ASTInternal(sym._kind, sym._children, sym._bm),_bvconst(sym._bvconst) {
- //checking if the input is in the correct format
- for(unsigned int jj=0;jj<sym._value_width;jj++)
- if(!(sym._bvconst[jj] == '0' || sym._bvconst[jj] == '1')) {
- cerr << "Fatal Error: wrong input to ASTBVConst copy constructor:" << sym._bvconst << endl;
- FatalError("");
- }
- _value_width = sym._value_width;
- }
- public:
- // Destructor (does nothing, but is declared virtual here)
- virtual ~ASTBVConst(){}
-
- const char * const GetBVConst() const {return _bvconst;}
- }; //End of ASTBVConst
-
- unsigned int * ConvertToCONSTANTBV(const char * s);
-
- //return value of bvconst
- inline unsigned int GetUnsignedConst(const ASTNode n) {
- if(32 < n.GetValueWidth())
- FatalError("GetUnsignedConst: cannot convert bvconst of length greater than 32 to unsigned int:");
- std::string s(n.GetBVConst(), n.GetValueWidth());
- unsigned int output = strtoul(s.c_str(),NULL,2);
- return output;
- } //end of ASTBVConst class
- #endif
- */
 /***************************************************************************
  * Typedef ASTNodeMap:  This is a hash table from ASTNodes to ASTNodes.
  * It is very convenient for attributes that are not speed-critical
  **************************************************************************/
 // These are generally useful for storing ASTNodes or attributes thereof
 // Hash table from ASTNodes to ASTNodes
-typedef hash_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeMap;
+typedef hash_map<ASTNode, 
+		 ASTNode, 
+		 ASTNode::ASTNodeHasher, 
+		 ASTNode::ASTNodeEqual> ASTNodeMap;
 
-typedef hash_map<ASTNode, int32_t, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeCountMap;
+typedef hash_map<ASTNode, 
+		 int32_t, 
+		 ASTNode::ASTNodeHasher, 
+		 ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
 
 // Function to dump contents of ASTNodeMap
@@ -1038,9 +821,13 @@ ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
  Typedef ASTNodeSet:  This is a hash set of ASTNodes.  Very useful
  for representing things like "visited nodes"
  ***************************************************************************/
-typedef hash_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeSet;
+typedef hash_set<ASTNode, 
+		 ASTNode::ASTNodeHasher, 
+		 ASTNode::ASTNodeEqual> ASTNodeSet;
 
-typedef hash_multiset<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeMultiSet;
+typedef hash_multiset<ASTNode, 
+		      ASTNode::ASTNodeHasher, 
+		      ASTNode::ASTNodeEqual> ASTNodeMultiSet;
 
 //external parser table for declared symbols.
 //FIXME: move to a more appropriate place
@@ -1529,12 +1316,12 @@ public:
 		return n;
 	}
 
-	ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg);
+	ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
 	ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg);
 	ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
-	ASTNode SimplifyTerm(const ASTNode& a);
-	ASTNode SimplifyTermAux(const ASTNode& a);
+
+	ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyTerm(const ASTNode& inputterm, ASTNodeMap* VarConstMap=NULL);
 	void CheckSimplifyInvariant(const ASTNode& a, const ASTNode& output);
 	void BuildReferenceCountMap(const ASTNode& b);
 
@@ -1547,32 +1334,35 @@ private:
 	ASTNodeMap MultInverseMap;
 
 
-	// The number of direct parents of each node. i.e. the number of times the pointer is in "children".
-	// When we simplify we want to be careful sometimes about using the context of a node. For example,
-	// given ((x + 23) = 2), the obvious simplification is to join the constants. However, if there are
-	// lots of references to the plus node. Then each time we simplify, we'll create an additional plus.
-	// nextpoweroftwo064.smt is the motivating benchmark. The splitting increased the number of pluses
-	// from 1 to 65.
+	// The number of direct parents of each node. i.e. the number
+	// of times the pointer is in "children".  When we simplify we
+	// want to be careful sometimes about using the context of a
+	// node. For example, given ((x + 23) = 2), the obvious
+	// simplification is to join the constants. However, if there
+	// are lots of references to the plus node. Then each time we
+	// simplify, we'll create an additional plus.
+	// nextpoweroftwo064.smt is the motivating benchmark. The
+	// splitting increased the number of pluses from 1 to 65.
 	ASTNodeCountMap *ReferenceCount;
 
 public:
-	ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg);
+	ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
 	ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
-	ASTNode ITEOpt_InEqs(const ASTNode& in1);
+	ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNodeMap* VarConstMap=NULL);
 	ASTNode PullUpITE(const ASTNode& in);
 	ASTNode RemoveContradictionsFromAND(const ASTNode& in);
 	ASTNode CreateSimplifiedTermITE(const ASTNode& t1, const ASTNode& t2, const ASTNode& t3);
 	ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1, const ASTNode& in2);
 	ASTNode CreateSimplifiedINEQ(Kind k, const ASTNode& a0, const ASTNode& a1, bool pushNeg);
-	ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg);
-	ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg);
-        ASTNode SimplifyForFormula(const ASTNode& a, bool pushNeg);
+	ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+	ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+        ASTNode SimplifyForFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
 	ASTNode FlattenOneLevel(const ASTNode& a);
 	ASTNode FlattenAndOr(const ASTNode& a);
 	ASTNode CombineLikeTerms(const ASTNode& a);
@@ -1590,10 +1380,17 @@ public:
 	int CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
 	int SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
 	int SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input);
-	//creates array write axiom only for the input term or formula, if
+	
+        int SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, const ASTNode& orig_input);
+        int Expand_A_FiniteLoop(const ASTNode& finiteloop, ASTNodeMap* ParamToCurrentValMap);
+        ASTNode FiniteLoop_Extract_SingleFormula(const ASTNode& finiteloop_formulabody, 
+						 ASTNodeMap* VarConstMap);
+
+        //creates array write axiom only for the input term or formula, if
 	//necessary. If there are no axioms to produce then it simply
 	//generates TRUE
-	ASTNode Create_ArrayWriteAxioms(const ASTNode& array_readoverwrite_term, const ASTNode& array_newname);
+	ASTNode Create_ArrayWriteAxioms(const ASTNode& array_readoverwrite_term, 
+					const ASTNode& array_newname);
 	ASTVec ArrayWrite_RemainingAxioms;
 	//variable indicates that counterexample will now be checked by
 	//the counterexample checker, and hence simplifyterm must switch
@@ -1771,8 +1568,8 @@ private:
 	//Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
 	ASTNode RemoveWrites_TopLevel(const ASTNode& term);
 	ASTNode RemoveWrites(const ASTNode& term);
-	ASTNode SimplifyWrites_InPlace(const ASTNode& term);
-	ASTNode ReadOverWrite_To_ITE(const ASTNode& term);
+	ASTNode SimplifyWrites_InPlace(const ASTNode& term, ASTNodeMap* VarConstMap=NULL);
+	ASTNode ReadOverWrite_To_ITE(const ASTNode& term, ASTNodeMap* VarConstMap=NULL);
 
 	ASTNode NewArrayVar(unsigned int index, unsigned int value);
 	ASTNode NewVar(unsigned int valuewidth);
@@ -1783,6 +1580,10 @@ private:
 	//terms
 	ASTNodeMap NewName_ReadOverWrite_Map;
 
+        //For finiteloop construct
+        //
+        //A list of all finiteloop constructs in the input formula
+        ASTVec List_Of_FiniteLoops;
 public:
 	//print the STP solver output
 	void PrintOutput(bool true_iff_valid);
@@ -1884,6 +1685,10 @@ private:
 public:
 	//prints statistics for the ASTNode. can add a prefix string c
 	void ASTNodeStats(const char * c, const ASTNode& a);
+
+        //Check the map passed to SimplifyTerm
+        bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
+
 
 	//substitution
 	bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
@@ -1989,6 +1794,30 @@ public:
 	}
 };
 
-}
-; // end namespace BEEV
+//Return the unsigned constant value of the input 'n'
+inline unsigned int GetUnsignedConst(const ASTNode n)
+{
+  if(BVCONST != n.GetKind()){
+    FatalError("GetUnsignedConst: cannot extract an "\
+	       "unsigned value from a non-bvconst");
+  }
+
+  if (sizeof(unsigned int) * 8 <= n.GetValueWidth())
+    {
+      // It may only contain a small value in a bit type,
+      // which fits nicely into an unsigned int.  This is
+      // common for functions like: bvshl(bv1[128],
+      // bv1[128]) where both operands have the same type.
+      signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
+      if (maxBit >= ((signed long) sizeof(unsigned int)) * 8)
+	{
+	  n.LispPrint(cerr); //print the node so they can find it.
+	  FatalError("GetUnsignedConst: cannot convert bvconst "\
+		     "of length greater than 32 to unsigned int");
+	}
+    }
+  return (unsigned int) *((unsigned int *) n.GetBVConst());
+} //end of GetUnsignedConst
+
+}; // end namespace BEEV
 #endif

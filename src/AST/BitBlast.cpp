@@ -549,18 +549,12 @@ const ASTNode BeevMgr::BBTerm(const ASTNode& term)
 		case BVCONST:
 		{
 			ASTVec tmp_res(num_bits);
-#ifndef NATIVE_C_ARITH
 			CBV bv = term.GetBVConst();
 			for (unsigned int i = 0; i < num_bits; i++)
 			{
-				tmp_res[i] = CONSTANTBV::BitVector_bit_test(bv, i) ? ASTTrue : ASTFalse;
+				tmp_res[i] = 
+				  CONSTANTBV::BitVector_bit_test(bv, i) ? ASTTrue : ASTFalse;
 			}
-#else
-			const unsigned long long int c = term.GetBVConst();
-			unsigned long long int bitmask = 0x00000000000000001LL;
-			for (unsigned int i = 0; i < num_bits; i++, bitmask <<= 1)
-			tmp_res[i] = ((c & (bitmask)) ? ASTTrue : ASTFalse);
-#endif
 			result = CreateNode(BOOLVEC, tmp_res);
 			break;
 		}

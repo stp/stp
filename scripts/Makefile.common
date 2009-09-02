@@ -3,14 +3,11 @@
 #information always use full screen mode to view/edit this file in
 #emacs
 
-#do not edit
-#OPTIONS1 = -DNATIVE_C_ARITH
-
 #OPTIMIZE = -g -pg # Debugging and gprof-style profiling
 #OPTIMIZE = -g     # Debugging
 OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
 
-CFLAGS_BASE = $(OPTIMIZE) $(OPTIONS1)
+CFLAGS_BASE = $(OPTIMIZE)
 # You can compile using make STATIC=true to compile a statically linked executable
 # Note that you should execute liblinks.sh first.
 ifdef STATIC

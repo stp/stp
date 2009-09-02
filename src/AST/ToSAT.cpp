@@ -1421,114 +1421,104 @@ int BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode&
 	return 2;
 } //end of SATBased_ArrayWriteRefinement
 
-#ifdef PHONY
-//Check result after calling SAT FIXME: Document arguments in
-//comments, and give them meaningful names.  How is anyone supposed
-//to know what "q" is?
-int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS,
-		const ASTNode& q, const ASTNode& orig_input)
+//Expands all finite-for-loops using counterexample-guided
+//abstraction-refinement.
+int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, 
+					    const ASTNode& orig_input)
 {
-	//Bitblast, CNF, call SAT now
-	ASTNode BBFormula = BBForm(q);
-	//ASTNodeStats("after bitblasting", BBFormula);
-	//ClauseList *cllp = ToCNF(BBFormula);
-	// if(stats && print_nodes) {
-	//       cout << "\nClause list" << endl;
-	//       PrintClauseList(cout, *cllp);
-	//       cerr << "\n finished printing clauselist\n";
-	//     }
+  /*
+   * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
+   *
+   * Expand_A_FiniteLoop(finiteloop);
+   *
+   * The 'Expand_A_FiniteLoop' function expands the 'finiteloop' in a
+   * counterexample-guided refinement fashion
+   *
+   * Once all the finiteloops have been expanded, we need to go back
+   * and recheck that every discarded constraint is true with the
+   * final model. A flag 'done' is set to false if atleast one
+   * constraint is false during model-check, and is set to true if all
+   * constraints are true during model-check.
+   *
+   * if the 'done' flag is true, then we terminate this refinement
+   * loop.
+   */
+}
 
-	//****************************************
-	// TOCNF CONVERSION
-	//****************************************
-	CNFMgr *cm = new CNFMgr(this);
+int BeevMgr::Expand_A_FiniteLoop(const ASTNode& finiteloop,
+				 ASTNodeMap* ParamToCurrentValMap) {
+  /*
+   * 'finiteloop' is the finite loop to be expanded
+   * 
+   * Every finiteloop has three parts:
+   *
+   * 1) Parameter initialization
+   *
+   * 2) Parameter limit value
+   *
+   * 3) Formula Body (This can be a NESTED for loop)
+   *
+   * 4) Increment formula
+   *
+   * Each entry of the parameter_stack contains the following:
+   *
+   * 1. Current parameter name
+   *
+   * 2. Initial value of the parameter
+   *
+   * 3. Limit value of the parameter
+   *
+   * 4. Increment value
+   *
+   * If parameter_stack is empty then it means that we are at the
+   * start of expanding this finite loop
+   *
+   * Nested FORs are allowed, but only the innermost loop can have a
+   * formula in it
+   *   
+   * STEPS:
+   *
+   * 0. Populate the top of the parameter stack with 'finiteloop'
+   *    parameter initial, limit and increment values
+   *
+   * 1. If formulabody in 'finiteloop' is another for loop, then
+   *    recurse
+   *
+   * 2. Else if current parameter value is less than limit value then
+   *
+   *    Instantiate a singleformula
+   *
+   *    Check if the formula is true in the current model
+   *
+   *    If true, discard it
+   *
+   *    If false, add it to the SAT solver to get a new model. Make
+   *    sure to update array index tables to facilitate array
+   *    read refinement later.
+   *
+   * 3. If control reaches here, it means one of the following
+   * possibilities (We have instantiated all relevant formulas by
+   * now):
+   *
+   *    3.1: We have UNSAT. Return UNSAT
+   *
+   *    3.2: We have SAT, and it is indeed a satisfying model
+   */
 
-	ClauseList* cllp = new ClauseList();
-	cm->NOCOPY_INPLACE_UNION(cllp, cm->SINGLETON(cm->dummy_true_var));
-	cm->CountSharesPos(BBFormula);
-	cm->ToCNFModRenamingPos(BBFormula);
-	cm->INPLACE_UNION(cllp, *((cm->ClausesPos)[BBFormula]));
-	cm->AddDefs(cllp);
-	//****************************************
-	// TOCNF CONVERSION
-	//****************************************
+  //0th element of FOR-construct stores the initial parameter value
+  int paramInitValue = finiteloop[0].GetUnsignedConst();
+}
 
-	bool sat = toSATandSolve(newS,*cllp);
-	// Temporary debugging call.
-	// CheckBBandCNF(newS, BBFormula);
+ASTNode BeevMgr::FiniteLoop_Extract_SingleFormula(const ASTNode& formulabody, 
+						  ASTNodeMap* VarToConstantMap)
+{
+  /* 
+   * Takes a formula 'formulabody', and simplifies it against
+   * variable-to-constant map 'VarToConstantMap'
+   */
+  return SimplifyFormula(formulabody, VarToConstantMap);
+}
 
-	//****************************************
-	// TOCNF CLEANUP
-	//****************************************
-	cm->CLEAR();
-	cm->DELETE(cllp);
-	delete cm;
-	//****************************************
-	// TOCNF CLEANUP
-	//****************************************
-
-	if(!sat)
-	{
-		PrintOutput(true);
-		return 1;
-	}
-	else if(newS.okay())
-	{
-		CounterExampleMap.clear();
-		ConstructCounterExample(newS);
-		if (stats && print_nodes)
-		{
-			PrintSATModel(newS);
-		}
-		//check if the counterexample is good or not
-		ComputeFormulaMap.clear();
-		if(counterexample_checking_during_refinement)
-		bvdiv_exception_occured = false;
-		ASTNode orig_result = ComputeFormulaUsingModel(orig_input);
-		if(!(ASTTrue == orig_result || ASTFalse == orig_result))
-		FatalError("TopLevelSat: Original input must compute to true or false against model");
-
-		//       if(!arrayread_refinement && !(ASTTrue == orig_result)) {
-		// 	print_counterexample = true;
-		// 	PrintCounterExample(true);
-		//       	FatalError("counterexample bogus : arrayread_refinement is switched off: "
-		//       		   "EITHER all LA axioms have not been added OR bitblaster() or ToCNF()"
-		// 		   "or satsolver() or counterexamplechecker() have a bug");
-		//       }
-
-		// if the counterexample is indeed a good one, then return
-		// invalid
-		if(ASTTrue == orig_result)
-		{
-			CheckCounterExample(newS.okay());
-			PrintOutput(false);
-			PrintCounterExample(newS.okay());
-			PrintCounterExample_InOrder(newS.okay());
-			return 0;
-		}
-		// counterexample is bogus: flag it
-
-		else
-		{
-			if(stats && print_nodes)
-			{
-				cout << "Supposedly bogus one: \n";
-				bool tmp = print_counterexample;
-				print_counterexample = true;
-				PrintCounterExample(true);
-				print_counterexample = tmp;
-			}
-
-			return 2;
-		}
-	}
-	else
-	{
-		PrintOutput(true);
-		return -100;
-	}
-} //end of CALLSAT_ResultCheck
-#endif
 
 //FUNCTION: this function accepts a boolvector and returns a BVConst
 ASTNode BeevMgr::BoolVectoBVConst(hash_map<unsigned, bool> * w, unsigned int l)
@@ -1548,55 +1538,6 @@ ASTNode BeevMgr::BoolVectoBVConst(hash_map<unsigned, bool> * w, unsigned int l)
 	}
 	return CreateBVConst(cc.c_str(), 2);
 }
-
-/*
- void BeevMgr::PrintActivityLevels_Of_SATVars(char * init_msg, MINISAT::Solver& newS) {
- if(!print_sat_varorder)
- return;
-
- ASTtoSATMap::iterator itbegin = _ASTNode_to_SATVar.begin();
- ASTtoSATMap::iterator itend = _ASTNode_to_SATVar.end();
-
- cout << init_msg;
- cout << ": Printing activity levels of variables\n";
- for(ASTtoSATMap::iterator it=itbegin;it!=itend;it++){
- cout << (it->second) << "  :  ";
- (it->first).PL_Print(cout,0);
- cout << "   :   ";
- cout << newS.returnActivity(it->second) << endl;
- }
- }
-
- //this function biases the activity levels of MINISAT variables.
- void BeevMgr::ChangeActivityLevels_Of_SATVars(MINISAT::Solver& newS) {
- if(!variable_activity_optimize)
- return;
-
- ASTtoSATMap::iterator itbegin = _ASTNode_to_SATVar.begin();
- ASTtoSATMap::iterator itend = _ASTNode_to_SATVar.end();
-
- unsigned int index=1;
- double base = 2;
- for(ASTtoSATMap::iterator it=itbegin;it!=itend;it++){
- ASTNode n = it->first;
-
- if(BVGETBIT == n.GetKind() || NOT == n.GetKind()) {
- if(BVGETBIT == n.GetKind())
- index = GetUnsignedConst(n[1]);
- else if (NOT == n.GetKind() && BVGETBIT == n[0].GetKind())
- index = GetUnsignedConst(n[0][1]);
- else
- index = 0;
- double initial_activity = pow(base,(double)index);
- newS.updateInitialActivity(it->second,initial_activity);
- }
- else {
- double initial_activity = pow(base,pow(base,(double)index));
- newS.updateInitialActivity(it->second,initial_activity);
- }
- }
- }
- */
 
 //This function prints the output of the STP solver
 void BeevMgr::PrintOutput(bool true_iff_valid)

@@ -1780,7 +1780,8 @@ void BeevMgr::DeleteClauseList(BeevMgr::ClauseList *cllp)
 	delete cllp;
 }
 
-int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input)
+int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, 
+				 const ASTNode& q, const ASTNode& orig_input)
 {
 	ASTNode BBFormula = BBForm(q);
 	CNFMgr* cm = new CNFMgr(this);

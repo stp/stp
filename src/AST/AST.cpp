@@ -390,7 +390,6 @@ ASTNode BeevMgr::CreateSymbol(const char * const name)
 	return n;
 }
 
-#ifndef NATIVE_C_ARITH
 //Create a ASTBVConst node
 ASTNode BeevMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
 {
@@ -588,121 +587,6 @@ CBV const ASTNode::GetBVConst() const
 		FatalError("GetBVConst: non bitvector-constant: ", *this);
 	return ((ASTBVConst *) _int_node_ptr)->GetBVConst();
 }
-#else
-//Create a ASTBVConst node
-ASTNode BeevMgr::CreateBVConst(const unsigned int width,
-		const unsigned long long int bvconst)
-{
-	if(width > 64 || width <= 0)
-	FatalError("Fatal Error: CreateBVConst: trying to create a bvconst of width:", ASTUndefined, width);
-
-	//64 bit mask
-	unsigned long long int mask = 0xffffffffffffffffLL;
-	mask = mask >> (64 - width);
-
-	unsigned long long int bv = bvconst;
-	bv = bv & mask;
-
-	ASTBVConst temp_bvconst(bv, *this);
-	temp_bvconst._value_width = width;
-	ASTNode n(LookupOrCreateBVConst(temp_bvconst));
-	n.SetValueWidth(width);
-	n.SetIndexWidth(0);
-	return n;
-}
-//Create a ASTBVConst node from std::string
-ASTNode BeevMgr::CreateBVConst(const char* strval, int base)
-{
-	if(!(base == 2 || base == 16 || base == 10))
-	FatalError("CreateBVConst: This base is not supported: ", ASTUndefined, base);
-
-	if(10 != base)
-	{
-		unsigned int width = (base == 2) ? strlen(strval) : strlen(strval)*4;
-		unsigned long long int val = strtoull(strval, NULL, base);
-		ASTNode bvcon = CreateBVConst(width, val);
-		return bvcon;
-	}
-	else
-	{
-		//this is an ugly hack to accomodate SMTLIB format
-		//restrictions. SMTLIB format represents bitvector
-		//constants in base 10 (what a terrible idea, but i
-		//have no choice but to support it), and make an
-		//implicit assumption that the length is 32 (another
-		//terrible idea).
-		unsigned width = 32;
-		unsigned long long int val = strtoull(strval, NULL, base);
-		ASTNode bvcon = CreateBVConst(width, val);
-		return bvcon;
-	}
-}
-
-//To ensure unique BVConst nodes, lookup the node in unique-table
-//before creating a new one.
-ASTBVConst *BeevMgr::LookupOrCreateBVConst(ASTBVConst &s)
-{
-	ASTBVConst *s_ptr = &s; // it's a temporary key.
-
-	// Do an explicit lookup to see if we need to create a copy of the
-	// string.
-	ASTBVConstSet::const_iterator it;
-	if ((it = _bvconst_unique_table.find(s_ptr)) == _bvconst_unique_table.end())
-	{
-		// Make a new ASTBVConst. Can cast the iterator to non-const --
-		// carefully.
-		unsigned int width = s_ptr->_value_width;
-		ASTBVConst * s_ptr1 = new ASTBVConst(s_ptr->GetBVConst(), *this);
-		s_ptr1->SetNodeNum(NewNodeNum());
-		s_ptr1->_value_width = width;
-		pair<ASTBVConstSet::const_iterator, bool> p = _bvconst_unique_table.insert(s_ptr1);
-		return *p.first;
-	}
-	else
-	// return BVConst found in table.
-	return *it;
-}
-
-// Inline because we need to wait until unique_table is defined
-void ASTBVConst::CleanUp()
-{
-	//  cout << "Deleting node " << this->GetNodeNum() << endl;
-	_bm._bvconst_unique_table.erase(this);
-	delete this;
-}
-
-// Get the value of bvconst from a bvconst.  It's an error if kind
-// != BVCONST
-unsigned long long int ASTNode::GetBVConst() const
-{
-	if(GetKind() != BVCONST)
-	FatalError("GetBVConst: non bitvector-constant: ", *this);
-	return ((ASTBVConstTmp *) _int_node_ptr)->GetBVConst();
-}
-
-ASTNode BeevMgr::CreateZeroConst(unsigned width)
-{
-	return CreateBVConst(width,0);
-}
-
-ASTNode BeevMgr::CreateOneConst(unsigned width)
-{
-	return CreateBVConst(width,1);
-}
-
-ASTNode BeevMgr::CreateTwoConst(unsigned width)
-{
-	return CreateBVConst(width,2);
-}
-
-ASTNode BeevMgr::CreateMaxConst(unsigned width)
-{
-	std::string s;
-	s.insert(s.end(),width,'1');
-	return CreateBVConst(s.c_str(),2);
-}
-
-#endif
 
 // FIXME: _name is now a constant field, and this assigns to it
 // because it tries not to copy the string unless it needs to.  How

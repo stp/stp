@@ -1324,17 +1324,14 @@ unsigned long long int getBVUnsignedLongLong(Expr e) {
   nodestar a = (nodestar)e;
 
   if(BEEV::BVCONST != a->GetKind())
-    BEEV::FatalError("getBVUnsigned: Attempting to extract int value from a NON-constant BITVECTOR: ",*a);
-#ifdef NATIVE_C_ARITH
-  return (unsigned long long int)a->GetBVConst();
-#else
+    BEEV::FatalError("getBVUnsigned: Attempting to extract int value"\ 
+		     "from a NON-constant BITVECTOR: ",*a);
   unsigned* bv = a->GetBVConst();
 
   char * str_bv  = (char *)CONSTANTBV::BitVector_to_Bin(bv);
   unsigned long long int tmp = strtoull(str_bv,NULL,2);
   CONSTANTBV::BitVector_Dispose((unsigned char *)str_bv);
   return tmp;
-#endif
 }
 
 
