@@ -1,7 +1,7 @@
 include ../../scripts/Makefile.common
 
 #SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp DPLLMgr.cpp ToSAT.cpp Transform.cpp
-SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp printer/SMTLIBPrinter.cpp  printer/dotPrinter.cpp  printer/CPrinter.cpp printer/PLPrinter.cpp printer/LispPrinter.cpp
+SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp AbstractionRefinement.cpp printer/SMTLIBPrinter.cpp  printer/dotPrinter.cpp  printer/CPrinter.cpp printer/PLPrinter.cpp printer/LispPrinter.cpp
 OBJS = $(SRCS:.cpp=.o)
 CFLAGS += -I../sat/mtl -I../sat/core
 
