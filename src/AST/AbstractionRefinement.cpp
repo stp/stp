@@ -17,9 +17,9 @@ namespace BEEV
    * Abstraction Refinement related functions
    ******************************************************************/  
   
-  int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
-                                            const ASTNode& inputAlreadyInSAT, 
-					    const ASTNode& original_input) {
+  SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
+							   const ASTNode& inputAlreadyInSAT, 
+							   const ASTNode& original_input) {
     //go over the list of indices for each array, and generate Leibnitz
     //axioms. Then assert these axioms into the SAT solver. Check if the
     //addition of the new constraints has made the bogus counterexample
@@ -116,7 +116,7 @@ namespace BEEV
               CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
             ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
             //printf("spot 01\n");
-            int res2 = 2;
+            SOLVER_RETURN_TYPE res2 = SOLVER_UNDECIDED;
             //if (FalseAxiomsVec.size() > 0)
             if (FalseAxiomsVec.size() > oldFalseAxiomsSize)
               {
@@ -124,7 +124,7 @@ namespace BEEV
                 oldFalseAxiomsSize = FalseAxiomsVec.size();
               }
             //printf("spot 02, res2 = %d\n", res2);
-            if (2 != res2)
+            if (SOLVER_UNDECIDED != res2)
               {
                 return res2;
               }
@@ -150,7 +150,8 @@ namespace BEEV
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
 
-  int BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, const ASTNode& original_input)
+  SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, 
+							    const ASTNode& original_input)
   {
     ASTNode writeAxiom;
     ASTNodeMap::iterator it = ReadOverWrite_NewName_Map.begin();
@@ -183,13 +184,13 @@ namespace BEEV
       (FalseAxioms.size() != 1) ? 
       CreateNode(AND, FalseAxioms) : FalseAxioms[0];
     ASTNodeStats("adding false writeaxiom to SAT: ", writeAxiom);
-    int res2 = 2;
+    SOLVER_RETURN_TYPE res2 = SOLVER_UNDECIDED;
     if (FalseAxioms.size() > oldFalseAxiomsSize)
       {
         res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input);
         oldFalseAxiomsSize = FalseAxioms.size();
       }
-    if (2 != res2)
+    if (SOLVER_UNDECIDED != res2)
       {
         return res2;
       }
@@ -199,18 +200,18 @@ namespace BEEV
       CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
     ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
     res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input);
-    if (2 != res2)
+    if (SOLVER_UNDECIDED != res2)
       {
         return res2;
       }
 
-    return 2;
+    return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayWriteRefinement
 
   //Expands all finite-for-loops using counterexample-guided
   //abstraction-refinement.
-  int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
-                                              const ASTNode& original_input)
+  SOLVER_RETURN_TYPE BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+							     const ASTNode& original_input)
   {
     /*
      * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
@@ -231,10 +232,9 @@ namespace BEEV
      */
   }
 
-  void BeevMgr::Expand_FiniteLoop(MINISAT::Solver& SatSolver,
-				  const ASTNode& original_input,
-				  const ASTNode& finiteloop,
-				  ASTNodeMap* ParamToCurrentValMap) {
+  void BeevMgr::Expand_FiniteLoop(MINISAT::Solver& SatSolver, const ASTNode& original_input,
+				  const ASTNode& finiteloop, ASTNodeMap* ParamToCurrentValMap,
+				  bool AbstractionRefinement) {
     /*
      * 'finiteloop' is the finite loop to be expanded
      * 
@@ -316,33 +316,43 @@ namespace BEEV
 	  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
 	} //end of While
       }
-    else 
+
+    ASTVec forloopFormulaVector;
+    //Expand the leaf level FOR-construct completely
+    for(; 
+	paramCurrentValue < paramLimit; 
+	paramCurrentValue = paramCurrentValue + paramIncrement) 
       {
-      //Expand the leaf level FOR-construct completely
-      for(; 
-          paramCurrentValue < paramLimit; 
-          paramCurrentValue = paramCurrentValue + paramIncrement) 
-	{
         ASTNode currentFormula = 
           FiniteLoop_Extract_SingleFormula(formulabody, ParamToCurrentValMap);
-      
-        //Check the currentformula against the model, and add it to the
-        //SAT solver if it is false against the model
-	ASTNode formulaInModel = ComputeFormulaUsingModel(currentFormula);
-
-	int result = 0;
-	if(ASTFalse == formulaInModel) {
-	  result = CallSAT_ResultCheck(SatSolver, currentFormula, original_input);
-	}
-
-        //Update ParamToCurrentValMap with parameter and its current
-        //value 
-        //
-        //FIXME: Possible leak since I am not freeing the previous
-        //'value' for the same 'key'
-        (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
-      }
-    } //end of else
+	
+	if(AbstractionRefinement) 
+	  {
+	    int result = 0;
+	    //Check the currentformula against the model, and add it to the
+	    //SAT solver if it is false against the model
+	    if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) {
+	      forloopFormulaVector.push_back(currentFormula);
+	    }
+	
+	    //Update ParamToCurrentValMap with parameter and its current
+	    //value 
+	    //
+	    //FIXME: Possible leak since I am not freeing the previous
+	    //'value' for the same 'key'
+	    (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+	  } //end of if
+	else 
+	  {
+	    forloopFormulaVector.push_back(currentFormula);
+	  }
+      } //end of for
+    
+    ASTNode forloopFormulas = 
+      (forloopFormulaVector.size() != 1) ?
+      CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
+    
+    //result = CallSAT_ResultCheck(SatSolver, forloopFormulas, original_input);
   } //end of the Expand_FiniteLoop()
 
   ASTNode BeevMgr::FiniteLoop_Extract_SingleFormula(const ASTNode& formulabody, 

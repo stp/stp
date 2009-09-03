@@ -279,11 +279,13 @@ namespace BEEV
       {
         if (smtlib_parser_flag)
           {
-            if (true_iff_valid && (BEEV::input_status == TO_BE_SATISFIABLE))
+            if (true_iff_valid && 
+		(BEEV::input_status == TO_BE_SATISFIABLE))
               {
                 cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
               }
-            else if (!true_iff_valid && (BEEV::input_status == TO_BE_UNSATISFIABLE))
+            else if (!true_iff_valid && 
+		     (BEEV::input_status == TO_BE_UNSATISFIABLE))
               {
                 cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
               }

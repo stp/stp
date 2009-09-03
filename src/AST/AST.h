@@ -64,6 +64,12 @@ namespace BEEV
       BOOLEAN_TYPE = 0, BITVECTOR_TYPE, ARRAY_TYPE, UNKNOWN_TYPE
     };
 
+  enum SOLVER_RETURN_TYPE 
+    {
+      SOLVER_INVALID=0, SOLVER_VALID=1, SOLVER_UNDECIDED=2, SOLVER_ERROR=-100
+    };
+
+
   class BeevMgr;
   class ASTNode;
   class ASTInternal;
@@ -1218,15 +1224,20 @@ namespace BEEV
     void ClearAllTables(void);
     void ClearAllCaches(void);
     int  BeforeSAT_ResultCheck(const ASTNode& q);
-    int  CallSAT_ResultCheck(MINISAT::Solver& newS, 
-			     const ASTNode& q, const ASTNode& orig_input);
-    int  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
-				      const ASTNode& q, const ASTNode& orig_input);
-    int  SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input);
+    SOLVER_RETURN_TYPE  CallSAT_ResultCheck(MINISAT::Solver& newS,
+					    const ASTNode& modified_input, 
+					    const ASTNode& original_input);
+    SOLVER_RETURN_TYPE  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
+						     const ASTNode& modified_input, 
+						     const ASTNode& original_input);
+    SOLVER_RETURN_TYPE  SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
+						      const ASTNode& orig_input);
         
-    int  SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, const ASTNode& orig_input);
+    SOLVER_RETURN_TYPE  SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, 
+						       const ASTNode& orig_input);
     void Expand_FiniteLoop(MINISAT::Solver& SatSolver, const ASTNode& original_input,
-			   const ASTNode& finiteloop,ASTNodeMap* ParamToCurrentValMap);
+			   const ASTNode& finiteloop,ASTNodeMap* ParamToCurrentValMap,
+			   bool AbstractionRefinement=true);
     ASTNode FiniteLoop_Extract_SingleFormula(const ASTNode& finiteloop_formulabody, 
                                              ASTNodeMap* VarConstMap);
 

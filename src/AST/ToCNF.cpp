@@ -1777,37 +1777,42 @@ namespace BEEV
     delete cllp;
   }
 
-  int BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& newS, 
-                                   const ASTNode& q, const ASTNode& orig_input)
+  //Call the SAT solver, and check the result before returning. This
+  //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or SOLVER_UNDECIDED
+  SOLVER_RETURN_TYPE BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
+						  const ASTNode& modified_input, 
+						  const ASTNode& original_input)
   {
-    ASTNode BBFormula = BBForm(q);
+    ASTNode BBFormula = BBForm(modified_input);
     CNFMgr* cm = new CNFMgr(this);
     ClauseList* cl = cm->convertToCNF(BBFormula);
     if (stats_flag)
+      {
       cerr << "Number of clauses:" << cl->size() << endl;
+      }
     //PrintClauseList(cout, *cl);
-    bool sat = toSATandSolve(newS, *cl);
+    bool sat = toSATandSolve(SatSolver, *cl);
     cm->DELETE(cl);
     delete cm;
 
     if (!sat)
       {
         PrintOutput(true);
-        return 1;
+        return SOLVER_VALID;
       }
-    else if (newS.okay())
+    else if (SatSolver.okay())
       {
         CounterExampleMap.clear();
-        ConstructCounterExample(newS);
+        ConstructCounterExample(SatSolver);
         if (stats_flag && print_nodes_flag)
           {
-            PrintSATModel(newS);
+            PrintSATModel(SatSolver);
           }
         //check if the counterexample is good or not
         ComputeFormulaMap.clear();
         if (counterexample_checking_during_refinement)
           bvdiv_exception_occured = false;
-        ASTNode orig_result = ComputeFormulaUsingModel(orig_input);
+        ASTNode orig_result = ComputeFormulaUsingModel(original_input);
         if (!(ASTTrue == orig_result || ASTFalse == orig_result))
           FatalError("TopLevelSat: Original input must compute to "\
 		     "true or false against model");
@@ -1816,11 +1821,11 @@ namespace BEEV
         // invalid
         if (ASTTrue == orig_result)
           {
-            //CheckCounterExample(newS.okay());
+            //CheckCounterExample(SatSolver.okay());
             PrintOutput(false);
-            PrintCounterExample(newS.okay());
-            PrintCounterExample_InOrder(newS.okay());
-            return 0;
+            PrintCounterExample(SatSolver.okay());
+            PrintCounterExample_InOrder(SatSolver.okay());
+            return SOLVER_INVALID;
           }
         // counterexample is bogus: flag it
         else
@@ -1834,13 +1839,14 @@ namespace BEEV
                 print_counterexample_flag = tmp;
               }
 
-            return 2;
+            return SOLVER_UNDECIDED;
           }
       }
     else
       {
+	//Control should never reach here
         PrintOutput(true);
-        return -100;
+        return SOLVER_ERROR;
       }
   } //end of CALLSAT_ResultCheck
 

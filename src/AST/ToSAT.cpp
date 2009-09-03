@@ -909,11 +909,9 @@ namespace BEEV
   //##################################################
   //##################################################
 
-  // FIXME:  Don't use numeric codes.  Use an enum type!
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
-  //if returned 0 then input is INVALID
-  //if returned 1 then input is VALID
-  //if returned 2 then ERROR
+  //if returned 0 then input is INVALID if returned 1 then input is
+  //VALID if returned 2 then UNDECIDED
   int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
   {
     ASTNode inputToSAT = inputasserts;
@@ -998,10 +996,7 @@ namespace BEEV
     ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
     TermsAlreadySeenMap.clear();
 
-    //if(stats_flag)
-    //  printCacheStatus();
-
-    int res;
+    SOLVER_RETURN_TYPE res;
     //solver instantiated here
     MINISAT::Solver newS;
     //MINISAT::SimpSolver newS;
@@ -1012,28 +1007,28 @@ namespace BEEV
       }
 
     res = CallSAT_ResultCheck(newS, simplified_solved_InputToSAT, orig_input);
-    if (2 != res)
+    if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");
         return res;
       }
 
     res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);
-    if (2 != res)
+    if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");
         return res;
       }
 
     res = SATBased_ArrayWriteRefinement(newS, orig_input);
-    if (2 != res)
+    if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");
         return res;
       }
 
     res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);
-    if (2 != res)
+    if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");
         return res;
@@ -1042,8 +1037,8 @@ namespace BEEV
     FatalError("TopLevelSATAux: reached the end without proper conclusion:"
                "either a divide by zero in the input or a bug in STP");
     //bogus return to make the compiler shut up
-    return 2;
-  } //End of TopLevelSAT
+    return SOLVER_ERROR;
+  } //End of TopLevelSATAux
 
   /*******************************************************************
    * Helper Functions
