@@ -78,6 +78,7 @@ int main(int argc, char ** argv) {
   }
 
   //populate the help string
+  helpstring += "version: " + version + "\n\n";
   helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
   helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
@@ -91,6 +92,8 @@ int main(int argc, char ** argv) {
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
+
+
 
   for(int i=1; i < argc;i++) {
     if(argv[i][0] == '-') {
