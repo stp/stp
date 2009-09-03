@@ -11,6 +11,7 @@
 
 #include <assert.h>
 #include "printer/printers.h"
+#include "printer/AssortedPrinters.h"
 
 namespace BEEV
 {
@@ -677,19 +678,6 @@ namespace BEEV
     return os;
   }
 
-  // FIXME: Made non-ref in the hope that it would work better.
-  void lp(ASTNode node)
-  {
-    cout << lisp(node) << endl;
-  }
-
-  void lpvec(const ASTVec &vec)
-  {
-    vec[0].GetBeevMgr().AlreadyPrintedSet.clear();
-    LispPrintVec(cout, vec, 0);
-    cout << endl;
-  }
-
   // Copy constructor.  Maintain _ref_count
   ASTNode::ASTNode(const ASTNode &n) :
     _int_node_ptr(n._int_node_ptr)
@@ -1076,21 +1064,6 @@ namespace BEEV
       }
     cout << "Node size is: ";
     cout << NodeSize(a) << endl << endl;
-  }
-
-  ostream &ASTNode::LispPrint(ostream &os, int indentation) const
-  {
-    printer::Lisp_Print(os, *this, indentation);
-  }
-
-  ostream &ASTNode::LispPrint_indent(ostream &os, int indentation) const
-  {
-    printer::Lisp_Print_indent(os, *this, indentation);
-  }
-
-  ostream& ASTNode::PL_Print(ostream &os,  int indentation) const
-  {
-    printer::PL_Print(os, *this, indentation);
   }
 
   unsigned int BeevMgr::NodeSize(const ASTNode& a, bool clearStatInfo)

@@ -74,10 +74,9 @@ namespace BEEV
 
   //Vector of ASTNodes, used for child nodes among other things.
   typedef vector<ASTNode> ASTVec;
+  typedef unsigned int * CBV;
   extern ASTVec _empty_ASTVec;
   extern BeevMgr * globalBeevMgr_for_parser;
-
-  typedef unsigned int * CBV;
 
   /***************************************************************************/
   /*  Class ASTNode: Smart pointer to actual ASTNode internal datastructure. */
@@ -832,77 +831,6 @@ namespace BEEV
   //external parser table for declared symbols.
   //FIXME: move to a more appropriate place
   extern ASTNodeSet _parser_symbol_table;
-
-  /***************************************************************************
- Class LispPrinter:  iomanipulator for printing ASTNode or ASTVec
-  ***************************************************************************/
-  class LispPrinter
-  {
-
-  public:
-    ASTNode _node;
-
-    // number of spaces to print before first real character of
-    // object.
-    int _indentation;
-
-    // FIXME: pass ASTNode by reference
-    // Constructor to build the LispPrinter object
-    LispPrinter(ASTNode node, int indentation) :
-      _node(node), _indentation(indentation)
-    {
-    }
-
-    friend ostream &operator<<(ostream &os, const LispPrinter &lp)
-    {
-      return lp._node.LispPrint(os, lp._indentation);
-    }
-    ;
-
-  }; //End of ListPrinter
-
-  //This is the IO manipulator.  It builds an object of class
-  //"LispPrinter" that has a special overloaded "<<" operator.
-  inline LispPrinter lisp(const ASTNode &node, int indentation = 0)
-  {
-    LispPrinter lp(node, indentation);
-    return lp;
-  }
-
-  /***************************************************************************/
-  /*  Class LispVecPrinter:iomanipulator for printing vector of ASTNodes     */
-  /***************************************************************************/
-  class LispVecPrinter
-  {
-
-  public:
-    const ASTVec * _vec;
-    // number of spaces to print before first real
-    // character of object.
-    int _indentation;
-
-    // Constructor to build the LispPrinter object
-    LispVecPrinter(const ASTVec &vec, int indentation)
-    {
-      _vec = &vec;
-      _indentation = indentation;
-    }
-
-    friend ostream &operator<<(ostream &os, const LispVecPrinter &lvp)
-    {
-      LispPrintVec(os, *lvp._vec, lvp._indentation);
-      return os;
-    }
-    ;
-  }; //End of Class ListVecPrinter
-
-  //iomanipulator. builds an object of class "LisPrinter" that has a
-  //special overloaded "<<" operator.
-  inline LispVecPrinter lisp(const ASTVec &vec, int indentation = 0)
-  {
-    LispVecPrinter lvp(vec, indentation);
-    return lvp;
-  }
 
   /***************************************************************************
    * Class BeevMgr.  This holds all "global" variables for the system, such as
@@ -1819,6 +1747,5 @@ namespace BEEV
       }
     return (unsigned int) *((unsigned int *) n.GetBVConst());
   } //end of GetUnsignedConst
-
 }; // end namespace BEEV
 #endif

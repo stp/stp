@@ -51,11 +51,13 @@ namespace BEEV
     //are no more axioms to add
     //
     //for each array, fetch its list of indices seen so far
-    for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
+    for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), 
+           iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
       {
         ASTVec listOfIndices = iset->second;
         //loop over the list of indices for the array and create LA, and add to q
-        for (ASTVec::iterator it = listOfIndices.begin(), itend = listOfIndices.end(); it != itend; it++)
+        for (ASTVec::iterator it = listOfIndices.begin(),
+               itend = listOfIndices.end(); it != itend; it++)
           {
             if (BVCONST == it->GetKind())
               {
@@ -76,7 +78,8 @@ namespace BEEV
 
             //we have nonconst index here. create Leibnitz axiom for it
             //w.r.t every index in listOfIndices
-            for (ASTVec::iterator it1 = listOfIndices.begin(), itend1 = listOfIndices.end(); it1 != itend1; it1++)
+            for (ASTVec::iterator it1 = listOfIndices.begin(), 
+                   itend1 = listOfIndices.end(); it1 != itend1; it1++)
               {
                 ASTNode compare_index = *it1;
                 //do not compare with yourself
@@ -85,8 +88,9 @@ namespace BEEV
 
                 //prepare for SAT LOOP
                 //first construct the antecedent for the LA axiom
-                ASTNode eqOfIndices = (exprless(the_index, compare_index)) ? CreateSimplifiedEQ(the_index, compare_index) : CreateSimplifiedEQ(
-                                                                                                                                               compare_index, the_index);
+                ASTNode eqOfIndices = 
+                  (exprless(the_index, compare_index)) ? 
+                  CreateSimplifiedEQ(the_index, compare_index) : CreateSimplifiedEQ(compare_index, the_index);
 
                 ASTNode arr_read2 = CreateTerm(READ, ArrName.GetValueWidth(), ArrName, compare_index);
                 //get the variable corresponding to the array_read2
@@ -105,7 +109,9 @@ namespace BEEV
                   //RemainingAxioms = CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
                   RemainingAxiomsVec.push_back(LeibnitzAxiom);
               }
-            ASTNode FalseAxioms = (FalseAxiomsVec.size() > 1) ? CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
+            ASTNode FalseAxioms = 
+              (FalseAxiomsVec.size() > 1) ? 
+              CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
             ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
             //printf("spot 01\n");
             int res2 = 2;
@@ -122,7 +128,9 @@ namespace BEEV
               }
           }
       }
-    ASTNode RemainingAxioms = (RemainingAxiomsVec.size() > 1) ? CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
+    ASTNode RemainingAxioms = 
+      (RemainingAxiomsVec.size() > 1) ? 
+      CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
     ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
     return CallSAT_ResultCheck(newS, RemainingAxioms, orig_input);
   } //end of SATBased_ArrayReadRefinement
@@ -169,7 +177,9 @@ namespace BEEV
           }
       }
 
-    writeAxiom = (FalseAxioms.size() != 1) ? CreateNode(AND, FalseAxioms) : FalseAxioms[0];
+    writeAxiom = 
+      (FalseAxioms.size() != 1) ? 
+      CreateNode(AND, FalseAxioms) : FalseAxioms[0];
     ASTNodeStats("adding false writeaxiom to SAT: ", writeAxiom);
     int res2 = 2;
     if (FalseAxioms.size() > oldFalseAxiomsSize)
@@ -182,7 +192,9 @@ namespace BEEV
         return res2;
       }
 
-    writeAxiom = (RemainingAxioms.size() != 1) ? CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
+    writeAxiom = 
+      (RemainingAxioms.size() != 1) ? 
+      CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
     ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
     res2 = CallSAT_ResultCheck(newS, writeAxiom, orig_input);
     if (2 != res2)
@@ -217,58 +229,60 @@ namespace BEEV
      */
   }
 
-  /*
-   * 'finiteloop' is the finite loop to be expanded
-   * 
-   * Every finiteloop has three parts:
-   *
-   * 0) Parameter Name
-   *
-   * 1) Parameter initialization
-   *
-   * 2) Parameter limit value
-   *
-   * 3) Increment formula
-   *
-   * 4) Formula Body
-   *    
-   * ParamToCurrentValMap contains a map from parameters to their
-   * current values in the recursion
-   *   
-   * Nested FORs are allowed, but only the innermost loop can have a
-   * formula in it
-   *   
-   * STEPS:
-   *
-   * 0. Populate the top of the parameter stack with 'finiteloop'
-   *    parameter initial, limit and increment values
-   *
-   * 1. If formulabody in 'finiteloop' is another for loop, then
-   *    recurse
-   *
-   * 2. Else if current parameter value is less than limit value then
-   *
-   *    Instantiate a singleformula
-   *
-   *    Check if the formula is true in the current model
-   *
-   *    If true, discard it
-   *
-   *    If false, add it to the SAT solver to get a new model. Make
-   *    sure to update array index tables to facilitate array
-   *    read refinement later.
-   *
-   * 3. If control reaches here, it means one of the following
-   * possibilities (We have instantiated all relevant formulas by
-   * now):
-   *
-   *    3.1: We have UNSAT. Return UNSAT
-   *
-   *    3.2: We have SAT, and it is indeed a satisfying model
-   */
   int BeevMgr::Expand_FiniteLoop(const ASTNode& finiteloop,
                                  ASTNodeMap* ParamToCurrentValMap) {
-    //Make sure that the parameter is a variable
+    /*
+     * 'finiteloop' is the finite loop to be expanded
+     * 
+     * Every finiteloop has three parts:
+     *
+     * 0) Parameter Name
+     *
+     * 1) Parameter initialization
+     *
+     * 2) Parameter limit value
+     *
+     * 3) Increment formula
+     *
+     * 4) Formula Body
+     *    
+     * ParamToCurrentValMap contains a map from parameters to their
+     * current values in the recursion
+     *   
+     * Nested FORs are allowed, but only the innermost loop can have a
+     * formula in it
+     *   
+     * STEPS:
+     *
+     * 0. Populate the top of the parameter stack with 'finiteloop'
+     *    parameter initial, limit and increment values
+     *
+     * 1. If formulabody in 'finiteloop' is another for loop, then
+     *    recurse
+     *
+     * 2. Else if current parameter value is less than limit value then
+     *
+     *    Instantiate a singleformula
+     *
+     *    Check if the formula is true in the current model
+     *
+     *    If true, discard it
+     *
+     *    If false, add it to the SAT solver to get a new model. Make
+     *    sure to update array index tables to facilitate array
+     *    read refinement later.
+     *
+     * 3. If control reaches here, it means one of the following
+     * possibilities (We have instantiated all relevant formulas by
+     * now):
+     *
+     *    3.1: We have UNSAT. Return UNSAT
+     *
+     *    3.2: We have SAT, and it is indeed a satisfying model
+     */
+
+    //BVTypeCheck should have already checked the sanity of the input
+    //FOR-formula
     ASTNode parameter     = finiteloop[0];
     int paramInit         = GetUnsignedConst(finiteloop[1]);
     int paramLimit        = GetUnsignedConst(finiteloop[2]);
