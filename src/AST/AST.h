@@ -186,9 +186,6 @@ namespace BEEV
         }
     } //end of arithless
 
-    // Internal lisp-form printer that does not clear _node_print_table
-    //ostream &LispPrint1(ostream &os, int indentation) const;
-
     // For lisp DAG printing.  Has it been printed already, so we can
     // just print the node number?
     bool IsAlreadyPrinted() const;
@@ -315,7 +312,6 @@ namespace BEEV
     // lisp-form printer
     ostream& LispPrint(ostream &os, int indentation = 0) const;
     ostream &LispPrint_indent(ostream &os, int indentation) const;
-
 
     //Presentation Language Printer
     ostream& PL_Print(ostream &os, int indentation = 0) const;
@@ -528,16 +524,19 @@ namespace BEEV
     class ASTInteriorEqual
     {
     public:
-      bool operator()(const ASTInterior *int_node_ptr1, const ASTInterior *int_node_ptr2) const
+      bool operator()(const ASTInterior *int_node_ptr1, 
+		      const ASTInterior *int_node_ptr2) const
       {
         return (*int_node_ptr1 == *int_node_ptr2);
       }
     };
 
     // Used in Equality class for hash tables
-    friend bool operator==(const ASTInterior &int_node1, const ASTInterior &int_node2)
+    friend bool operator==(const ASTInterior &int_node1, 
+			   const ASTInterior &int_node2)
     {
-      return (int_node1._kind == int_node2._kind) && (int_node1._children == int_node2._children);
+      return (int_node1._kind == int_node2._kind) && 
+	(int_node1._children == int_node2._children);
     }
 
     // Call this when deleting a node that has been stored in the
@@ -545,8 +544,8 @@ namespace BEEV
     virtual void CleanUp();
 
     // Returns kinds.  "lispprinter" handles printing of parenthesis
-    // and childnodes.
-    // (c_friendly is for printing hex. numbers that C compilers will accept)
+    // and childnodes. (c_friendly is for printing hex. numbers that C
+    // compilers will accept)
     virtual void nodeprint(ostream& os, bool c_friendly = false)
     {
       os << _kind_names[_kind];
@@ -857,10 +856,14 @@ namespace BEEV
 
   private:
     // Typedef for unique Interior node table.
-    typedef hash_set<ASTInterior *, ASTInterior::ASTInteriorHasher, ASTInterior::ASTInteriorEqual> ASTInteriorSet;
+    typedef hash_set<ASTInterior *, 
+		     ASTInterior::ASTInteriorHasher, 
+		     ASTInterior::ASTInteriorEqual> ASTInteriorSet;
 
     // Typedef for unique Symbol node (leaf) table.
-    typedef hash_set<ASTSymbol *, ASTSymbol::ASTSymbolHasher, ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
+    typedef hash_set<ASTSymbol *, 
+		     ASTSymbol::ASTSymbolHasher, 
+		     ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
 
     // Unique tables to share nodes whenever possible.
     ASTInteriorSet _interior_unique_table;
@@ -869,15 +872,23 @@ namespace BEEV
     ASTSymbolSet _symbol_unique_table;
 
     //Typedef for unique BVConst node (leaf) table.
-    typedef hash_set<ASTBVConst *, ASTBVConst::ASTBVConstHasher, ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
+    typedef hash_set<ASTBVConst *, 
+		     ASTBVConst::ASTBVConstHasher, 
+		     ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
     //table to uniquefy bvconst
     ASTBVConstSet _bvconst_unique_table;
 
     // type of memo table.
-    typedef hash_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeToVecMap;
+    typedef hash_map<ASTNode, 
+		     ASTVec, 
+		     ASTNode::ASTNodeHasher, 
+		     ASTNode::ASTNodeEqual> ASTNodeToVecMap;
 
-    typedef hash_map<ASTNode, ASTNodeSet, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeToSetMap;
+    typedef hash_map<ASTNode, 
+		     ASTNodeSet,
+		     ASTNode::ASTNodeHasher, 
+		     ASTNode::ASTNodeEqual> ASTNodeToSetMap;
 
     // Memo table for bit blasted terms.  If a node has already been
     // bitblasted, it is mapped to a vector of Boolean formulas for
@@ -943,8 +954,10 @@ namespace BEEV
     // Simplifying create functions
     ASTNode CreateSimpForm(Kind kind, ASTVec &children);
     ASTNode CreateSimpForm(Kind kind, const ASTNode& child0);
-    ASTNode CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1);
-    ASTNode CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2);
+    ASTNode CreateSimpForm(Kind kind, 
+			   const ASTNode& child0, const ASTNode& child1);
+    ASTNode CreateSimpForm(Kind kind, const ASTNode& child0,
+			   const ASTNode& child1, const ASTNode& child2);
 
     ASTNode CreateSimpNot(const ASTNode& form);
 
@@ -953,9 +966,11 @@ namespace BEEV
     // not in AST.h
     ASTNode CreateSimpXor(const ASTNode& form1, const ASTNode& form2);
     ASTNode CreateSimpXor(ASTVec &children);
-    ASTNode CreateSimpAndOr(bool isAnd, const ASTNode& form1, const ASTNode& form2);
+    ASTNode CreateSimpAndOr(bool isAnd, 
+			    const ASTNode& form1, const ASTNode& form2);
     ASTNode CreateSimpAndOr(bool IsAnd, ASTVec &children);
-    ASTNode CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1, const ASTNode& child2);
+    ASTNode CreateSimpFormITE(const ASTNode& child0, 
+			      const ASTNode& child1, const ASTNode& child2);
 
     // Declarations of BitBlaster functions (BitBlast.cpp)
   public:
@@ -1083,11 +1098,15 @@ namespace BEEV
     // Create and return an interior ASTNode
     ASTNode CreateNode(Kind kind, const ASTVec &children = _empty_ASTVec);
 
-    ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTVec &children = _empty_ASTVec);
+    ASTNode CreateNode(Kind kind, const ASTNode& child0, 
+		       const ASTVec &children = _empty_ASTVec);
 
-    ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTVec &children = _empty_ASTVec);
+    ASTNode CreateNode(Kind kind, const ASTNode& child0, 
+		       const ASTNode& child1, const ASTVec &children = _empty_ASTVec);
 
-    ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2, const ASTVec &children = _empty_ASTVec);
+    ASTNode CreateNode(Kind kind, const ASTNode& child0, 
+		       const ASTNode& child1, const ASTNode& child2, 
+		       const ASTVec &children = _empty_ASTVec);
 
     // Create and return an ASTNode for a term
     inline ASTNode CreateTerm(Kind kind, unsigned int width, const ASTVec &children = _empty_ASTVec)
@@ -1103,7 +1122,8 @@ namespace BEEV
       return n;
     }
 
-    inline ASTNode CreateTerm(Kind kind, unsigned int width, const ASTNode& child0, const ASTVec &children = _empty_ASTVec)
+    inline ASTNode CreateTerm(Kind kind, unsigned int width, 
+			      const ASTNode& child0, const ASTVec &children = _empty_ASTVec)
     {
       if (!is_Term_kind(kind))
         FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
@@ -1112,7 +1132,9 @@ namespace BEEV
       return n;
     }
 
-    inline ASTNode CreateTerm(Kind kind, unsigned int width, const ASTNode& child0, const ASTNode& child1, const ASTVec &children = _empty_ASTVec)
+    inline ASTNode CreateTerm(Kind kind, unsigned int width, 
+			      const ASTNode& child0, const ASTNode& child1, 
+			      const ASTVec &children = _empty_ASTVec)
     {
       if (!is_Term_kind(kind))
         FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
@@ -1195,13 +1217,13 @@ namespace BEEV
 
     void ClearAllTables(void);
     void ClearAllCaches(void);
-    int BeforeSAT_ResultCheck(const ASTNode& q);
-    int CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
-    int SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
-    int SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input);
+    int  BeforeSAT_ResultCheck(const ASTNode& q);
+    int  CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
+    int  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
+    int  SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input);
         
-    int SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, const ASTNode& orig_input);
-    int Expand_FiniteLoop(const ASTNode& finiteloop, ASTNodeMap* ParamToCurrentValMap);
+    int  SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, const ASTNode& orig_input);
+    void Expand_FiniteLoop(const ASTNode& finiteloop, ASTNodeMap* ParamToCurrentValMap);
     ASTNode FiniteLoop_Extract_SingleFormula(const ASTNode& finiteloop_formulabody, 
                                              ASTNodeMap* VarConstMap);
 

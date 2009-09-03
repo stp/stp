@@ -1758,18 +1758,6 @@ namespace BEEV
   //############################################################
 
 
-  void BeevMgr::PrintClauseList(ostream& os, BeevMgr::ClauseList& cll)
-  {
-    int num_clauses = cll.size();
-    os << "Clauses: " << endl << "=========================================" << endl;
-    for (int i = 0; i < num_clauses; i++)
-      {
-        os << "Clause " << i << endl << "-------------------------------------------" << endl;
-        LispPrintVecSpecial(os, *cll[i], 0);
-        os << endl << "-------------------------------------------" << endl;
-      }
-  }
-
   void BeevMgr::DeleteClauseList(BeevMgr::ClauseList *cllp)
   {
     BeevMgr::ClauseList::const_iterator iend = cllp->end();
@@ -1812,15 +1800,8 @@ namespace BEEV
           bvdiv_exception_occured = false;
         ASTNode orig_result = ComputeFormulaUsingModel(orig_input);
         if (!(ASTTrue == orig_result || ASTFalse == orig_result))
-          FatalError("TopLevelSat: Original input must compute to true or false against model");
-
-        //       if(!arrayread_refinement && !(ASTTrue == orig_result)) {
-        //      print_counterexample = true;
-        //      PrintCounterExample(true);
-        //              FatalError("counterexample bogus : arrayread_refinement is switched off: "
-        //                         "EITHER all LA axioms have not been added OR bitblaster() or ToCNF()"
-        //                 "or satsolver() or counterexamplechecker() have a bug");
-        //       }
+          FatalError("TopLevelSat: Original input must compute to "\
+		     "true or false against model");
 
         // if the counterexample is indeed a good one, then return
         // invalid

@@ -182,7 +182,7 @@ namespace BEEV
   } //End of PrintCounterExample
 
 
-/* iterate through the CounterExampleMap data structure and print it
+  /* iterate through the CounterExampleMap data structure and print it
    * to stdout. this function prints only the declared array variables
    * IN the ORDER in which they were declared. It also assumes that
    * the variables are of the form 'varname_number'. otherwise it will
@@ -313,4 +313,34 @@ namespace BEEV
           }
       }
   } //end of PrintOutput()
+
+
+  void BeevMgr::PrintClauseList(ostream& os, BeevMgr::ClauseList& cll)
+  {
+    int num_clauses = cll.size();
+    os << "Clauses: " << endl << "=========================================" << endl;
+    for (int i = 0; i < num_clauses; i++)
+      {
+        os << "Clause " << i << endl << "-------------------------------------------" << endl;
+        LispPrintVecSpecial(os, *cll[i], 0);
+        os << endl << "-------------------------------------------" << endl;
+      }
+  } //end of PrintClauseList()
+
+  //Variable Order Printer: A global function which converts a MINISAT
+  //var into a ASTNODE var. It then prints this var along with
+  //variable order dcisions taken by MINISAT.
+  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, 
+					   int decision_level, int polarity)
+  {
+    BEEV::ASTNode vv = globalBeevMgr_for_parser->_SATVar_to_AST[minisat_var];
+    cout << spaces(decision_level);
+    if (polarity)
+      {
+        cout << "!";
+      }
+    printer::PL_Print(cout,vv, 0);
+    cout << endl;
+  }
+
 };//end of namespace BEEV

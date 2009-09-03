@@ -229,7 +229,7 @@ namespace BEEV
      */
   }
 
-  int BeevMgr::Expand_FiniteLoop(const ASTNode& finiteloop,
+  void BeevMgr::Expand_FiniteLoop(const ASTNode& finiteloop,
                                  ASTNodeMap* ParamToCurrentValMap) {
     /*
      * 'finiteloop' is the finite loop to be expanded
@@ -296,29 +296,39 @@ namespace BEEV
     (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
     
     //Go recursively thru' all the FOR-constructs.
-    if(FOR == formulabody.GetKind()) { 
-      while(paramCurrentValue < paramLimit) {
-        Expand_FiniteLoop(formulabody, ParamToCurrentValMap);
-        paramCurrentValue = paramCurrentValue + paramIncrement;
+    if(FOR == formulabody.GetKind()) 
+      { 
+      while(paramCurrentValue < paramLimit) 
+	{
+	  Expand_FiniteLoop(formulabody, ParamToCurrentValMap);
+	  paramCurrentValue = paramCurrentValue + paramIncrement;
 
-        //Update ParamToCurrentValMap with parameter and its current
-        //value
-        //
-        //FIXME: Possible leak since I am not freeing the previous
-        //'value' for the same 'key'            
-        (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
-      } //end of While
-    }
-    else {
+	  //Update ParamToCurrentValMap with parameter and its current
+	  //value
+	  //
+	  //FIXME: Possible leak since I am not freeing the previous
+	  //'value' for the same 'key'       
+	  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+	} //end of While
+      }
+    else 
+      {
       //Expand the leaf level FOR-construct completely
       for(; 
           paramCurrentValue < paramLimit; 
-          paramCurrentValue = paramCurrentValue + paramIncrement) {
-        ASTNode currentformula = 
+          paramCurrentValue = paramCurrentValue + paramIncrement) 
+	{
+        ASTNode currentFormula = 
           FiniteLoop_Extract_SingleFormula(formulabody, ParamToCurrentValMap);
       
         //Check the currentformula against the model, and add it to the
         //SAT solver if it is false against the model
+	ASTNode formulaInModel = ComputeFormulaUsingModel(currentFormula);
+
+	int result = 0;
+	if(ASTFalse == formulaInModel) {
+	  //result = CallSAT_ResultCheck(newS, currentFormula, orig_input);
+	}
 
         //Update ParamToCurrentValMap with parameter and its current
         //value 

@@ -180,7 +180,6 @@ namespace BEEV
 
   void ASTNode::MarkAlreadyPrinted() const
   {
-    // FIXME: Fetching BeevMgr is annoying.  Can we put this in lispprinter class?
     BeevMgr &bm = GetBeevMgr();
     bm.AlreadyPrintedSet.insert(*this);
   }
@@ -251,8 +250,6 @@ namespace BEEV
             //
             //2. Letize its childNodes
 
-            //FIXME: Fetching BeevMgr is annoying.  Can we put this in
-            //some kind of a printer class
             bm.PLPrintNodeSet.insert(ccc);
             //debugging
             //cerr << ccc;
@@ -1238,22 +1235,7 @@ namespace BEEV
     exit(-1);
     //assert(0);
   }
-
-  //Variable Order Printer: A global function which converts a MINISAT
-  //var into a ASTNODE var. It then prints this var along with
-  //variable order dcisions taken by MINISAT.
-  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision_level, int polarity)
-  {
-    BEEV::ASTNode vv = globalBeevMgr_for_parser->_SATVar_to_AST[minisat_var];
-    cout << spaces(decision_level);
-    if (polarity)
-      {
-        cout << "!";
-      }
-    printer::PL_Print(cout,vv, 0);
-    cout << endl;
-  }
-
+  
   void SortByExprNum(ASTVec& v)
   {
     sort(v.begin(), v.end(), exprless);
@@ -1266,8 +1248,13 @@ namespace BEEV
 
   bool isAtomic(Kind kind)
   {
-    if (TRUE == kind || FALSE == kind || EQ == kind || NEQ == kind || BVLT == kind || BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind
-        || BVSLE == kind || BVSGT == kind || BVSGE == kind || SYMBOL == kind || BVGETBIT == kind)
+    if (TRUE == kind  || FALSE == kind || 
+	EQ == kind    || NEQ == kind   || 
+	BVLT == kind  || BVLE == kind  || 
+	BVGT == kind  || BVGE == kind  || 
+	BVSLT == kind || BVSLE == kind || 
+	BVSGT == kind || BVSGE == kind || 
+	SYMBOL == kind || BVGETBIT == kind)
       return true;
     return false;
   }
@@ -1282,6 +1269,5 @@ namespace BEEV
     delete ReferenceCount;
   }
 
-}
-; // end namespace
+}; // end namespace beev
 
