@@ -1,3 +1,12 @@
+/********************************************************************
+ * AUTHORS: Vijay Ganesh
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+// -*- c++ -*-
+
 #include "AST.h"
 #include "../simplifier/bvsolver.h"
 

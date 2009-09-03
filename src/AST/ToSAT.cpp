@@ -916,11 +916,11 @@ namespace BEEV
   //if returned 2 then ERROR
   int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
   {
-    ASTNode q = inputasserts;
-    ASTNode orig_input = q;
-    ASTNodeStats("input asserts and query: ", q);
+    ASTNode inputToSAT = inputasserts;
+    ASTNode orig_input = inputToSAT;
+    ASTNodeStats("input asserts and query: ", inputToSAT);
 
-    ASTNode newq = q;
+    ASTNode simplified_solved_InputToSAT = inputToSAT;
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
@@ -931,64 +931,71 @@ namespace BEEV
     TermsAlreadySeenMap.clear();
     do
       {
-        q = newq;
-        newq = CreateSubstitutionMap(newq);
+        inputToSAT = simplified_solved_InputToSAT;
+        simplified_solved_InputToSAT = 
+	  CreateSubstitutionMap(simplified_solved_InputToSAT);
         //printf("##################################################\n");
-        ASTNodeStats("after pure substitution: ", newq);
-        newq = SimplifyFormula_TopLevel(newq, false);
-        ASTNodeStats("after simplification: ", newq);
-        newq = bvsolver.TopLevelBVSolve(newq);
-        ASTNodeStats("after solving: ", newq);
-      } while (q != newq);
+        ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = 
+	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+        ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = 
+	  bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+        ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+      } while (inputToSAT != simplified_solved_InputToSAT);
 
-    ASTNodeStats("Before SimplifyWrites_Inplace begins: ", newq);
+    ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
     SimplifyWrites_InPlace_Flag = true;
     Begin_RemoveWrites = false;
     start_abstracting = false;
     TermsAlreadySeenMap.clear();
     do
       {
-        q = newq;
-        newq = CreateSubstitutionMap(newq);
-        ASTNodeStats("after pure substitution: ", newq);
-        newq = SimplifyFormula_TopLevel(newq, false);
-        ASTNodeStats("after simplification: ", newq);
-        newq = bvsolver.TopLevelBVSolve(newq);
-        ASTNodeStats("after solving: ", newq);
-      } while (q != newq);
-    ASTNodeStats("After SimplifyWrites_Inplace: ", newq);
+        inputToSAT = simplified_solved_InputToSAT;
+        simplified_solved_InputToSAT = 
+	  CreateSubstitutionMap(simplified_solved_InputToSAT);
+        ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = 
+	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+        ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = 
+	  bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+        ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+      } while (inputToSAT != simplified_solved_InputToSAT);
+    ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
 
     start_abstracting = (arraywrite_refinement_flag) ? true : false;
     SimplifyWrites_InPlace_Flag = false;
     Begin_RemoveWrites = (start_abstracting) ? false : true;
     if (start_abstracting)
       {
-        ASTNodeStats("before abstraction round begins: ", newq);
+        ASTNodeStats("before abstraction round begins: ", simplified_solved_InputToSAT);
       }
 
     TermsAlreadySeenMap.clear();
     do
       {
-        q = newq;
-        //newq = CreateSubstitutionMap(newq);
+        inputToSAT = simplified_solved_InputToSAT;
+        //simplified_solved_InputToSAT = CreateSubstitutionMap(simplified_solved_InputToSAT);
         //Begin_RemoveWrites = true;
-        //ASTNodeStats("after pure substitution: ", newq);
-        newq = SimplifyFormula_TopLevel(newq, false);
-        //ASTNodeStats("after simplification: ", newq);
-        //newq = bvsolver.TopLevelBVSolve(newq);
-        //ASTNodeStats("after solving: ", newq);
-      } while (q != newq);
+        //ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = 
+	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+        //ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+        //simplified_solved_InputToSAT = bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+        //ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+      } while (inputToSAT != simplified_solved_InputToSAT);
 
     if (start_abstracting)
       {
-        ASTNodeStats("After abstraction: ", newq);
+        ASTNodeStats("After abstraction: ", simplified_solved_InputToSAT);
       }
     start_abstracting = false;
     SimplifyWrites_InPlace_Flag = false;
     Begin_RemoveWrites = false;
 
-    newq = TransformFormula_TopLevel(newq);
-    ASTNodeStats("after transformation: ", newq);
+    simplified_solved_InputToSAT = TransformFormula_TopLevel(simplified_solved_InputToSAT);
+    ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
     TermsAlreadySeenMap.clear();
 
     //if(stats_flag)
@@ -1004,14 +1011,14 @@ namespace BEEV
         counterexample_checking_during_refinement = true;
       }
 
-    res = CallSAT_ResultCheck(newS, newq, orig_input);
+    res = CallSAT_ResultCheck(newS, simplified_solved_InputToSAT, orig_input);
     if (2 != res)
       {
         CountersAndStats("print_func_stats");
         return res;
       }
 
-    res = SATBased_ArrayReadRefinement(newS, newq, orig_input);
+    res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);
     if (2 != res)
       {
         CountersAndStats("print_func_stats");
@@ -1025,7 +1032,7 @@ namespace BEEV
         return res;
       }
 
-    res = SATBased_ArrayReadRefinement(newS, newq, orig_input);
+    res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);
     if (2 != res)
       {
         CountersAndStats("print_func_stats");

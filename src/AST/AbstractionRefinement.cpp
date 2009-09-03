@@ -17,8 +17,9 @@ namespace BEEV
    * Abstraction Refinement related functions
    ******************************************************************/  
   
-  int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
-                                            const ASTNode& q, const ASTNode& orig_input) {
+  int BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
+                                            const ASTNode& inputAlreadyInSAT, 
+					    const ASTNode& original_input) {
     //go over the list of indices for each array, and generate Leibnitz
     //axioms. Then assert these axioms into the SAT solver. Check if the
     //addition of the new constraints has made the bogus counterexample
@@ -55,7 +56,8 @@ namespace BEEV
            iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
       {
         ASTVec listOfIndices = iset->second;
-        //loop over the list of indices for the array and create LA, and add to q
+        //loop over the list of indices for the array and create LA,
+        //and add to inputAlreadyInSAT
         for (ASTVec::iterator it = listOfIndices.begin(),
                itend = listOfIndices.end(); it != itend; it++)
           {
@@ -118,7 +120,7 @@ namespace BEEV
             //if (FalseAxiomsVec.size() > 0)
             if (FalseAxiomsVec.size() > oldFalseAxiomsSize)
               {
-                res2 = CallSAT_ResultCheck(newS, FalseAxioms, orig_input);
+                res2 = CallSAT_ResultCheck(SatSolver, FalseAxioms, original_input);
                 oldFalseAxiomsSize = FalseAxiomsVec.size();
               }
             //printf("spot 02, res2 = %d\n", res2);
@@ -132,7 +134,7 @@ namespace BEEV
       (RemainingAxiomsVec.size() > 1) ? 
       CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
     ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
-    return CallSAT_ResultCheck(newS, RemainingAxioms, orig_input);
+    return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input);
   } //end of SATBased_ArrayReadRefinement
 
   ASTNode BeevMgr::Create_ArrayWriteAxioms(const ASTNode& term, const ASTNode& newvar)
@@ -148,7 +150,7 @@ namespace BEEV
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
 
-  int BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input)
+  int BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, const ASTNode& original_input)
   {
     ASTNode writeAxiom;
     ASTNodeMap::iterator it = ReadOverWrite_NewName_Map.begin();
@@ -184,7 +186,7 @@ namespace BEEV
     int res2 = 2;
     if (FalseAxioms.size() > oldFalseAxiomsSize)
       {
-        res2 = CallSAT_ResultCheck(newS, writeAxiom, orig_input);
+        res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input);
         oldFalseAxiomsSize = FalseAxioms.size();
       }
     if (2 != res2)
@@ -196,7 +198,7 @@ namespace BEEV
       (RemainingAxioms.size() != 1) ? 
       CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
     ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
-    res2 = CallSAT_ResultCheck(newS, writeAxiom, orig_input);
+    res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input);
     if (2 != res2)
       {
         return res2;
@@ -207,8 +209,8 @@ namespace BEEV
 
   //Expands all finite-for-loops using counterexample-guided
   //abstraction-refinement.
-  int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, 
-                                              const ASTNode& orig_input)
+  int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+                                              const ASTNode& original_input)
   {
     /*
      * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
@@ -229,8 +231,10 @@ namespace BEEV
      */
   }
 
-  void BeevMgr::Expand_FiniteLoop(const ASTNode& finiteloop,
-                                 ASTNodeMap* ParamToCurrentValMap) {
+  void BeevMgr::Expand_FiniteLoop(MINISAT::Solver& SatSolver,
+				  const ASTNode& original_input,
+				  const ASTNode& finiteloop,
+				  ASTNodeMap* ParamToCurrentValMap) {
     /*
      * 'finiteloop' is the finite loop to be expanded
      * 
@@ -300,7 +304,8 @@ namespace BEEV
       { 
       while(paramCurrentValue < paramLimit) 
 	{
-	  Expand_FiniteLoop(formulabody, ParamToCurrentValMap);
+	  Expand_FiniteLoop(SatSolver, original_input,
+			    formulabody, ParamToCurrentValMap);
 	  paramCurrentValue = paramCurrentValue + paramIncrement;
 
 	  //Update ParamToCurrentValMap with parameter and its current
@@ -327,7 +332,7 @@ namespace BEEV
 
 	int result = 0;
 	if(ASTFalse == formulaInModel) {
-	  //result = CallSAT_ResultCheck(newS, currentFormula, orig_input);
+	  result = CallSAT_ResultCheck(SatSolver, currentFormula, original_input);
 	}
 
         //Update ParamToCurrentValMap with parameter and its current

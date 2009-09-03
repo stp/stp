@@ -1218,12 +1218,15 @@ namespace BEEV
     void ClearAllTables(void);
     void ClearAllCaches(void);
     int  BeforeSAT_ResultCheck(const ASTNode& q);
-    int  CallSAT_ResultCheck(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
-    int  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, const ASTNode& q, const ASTNode& orig_input);
+    int  CallSAT_ResultCheck(MINISAT::Solver& newS, 
+			     const ASTNode& q, const ASTNode& orig_input);
+    int  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
+				      const ASTNode& q, const ASTNode& orig_input);
     int  SATBased_ArrayWriteRefinement(MINISAT::Solver& newS, const ASTNode& orig_input);
         
     int  SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, const ASTNode& orig_input);
-    void Expand_FiniteLoop(const ASTNode& finiteloop, ASTNodeMap* ParamToCurrentValMap);
+    void Expand_FiniteLoop(MINISAT::Solver& SatSolver, const ASTNode& original_input,
+			   const ASTNode& finiteloop,ASTNodeMap* ParamToCurrentValMap);
     ASTNode FiniteLoop_Extract_SingleFormula(const ASTNode& finiteloop_formulabody, 
                                              ASTNodeMap* VarConstMap);
 
