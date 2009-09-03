@@ -1429,9 +1429,9 @@ int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS,
   /*
    * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
    *
-   * Expand_A_FiniteLoop(finiteloop);
+   * Expand_FiniteLoop(finiteloop);
    *
-   * The 'Expand_A_FiniteLoop' function expands the 'finiteloop' in a
+   * The 'Expand_FiniteLoop' function expands the 'finiteloop' in a
    * counterexample-guided refinement fashion
    *
    * Once all the finiteloops have been expanded, we need to go back
@@ -1445,34 +1445,26 @@ int BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS,
    */
 }
 
-int BeevMgr::Expand_A_FiniteLoop(const ASTNode& finiteloop,
-				 ASTNodeMap* ParamToCurrentValMap) {
+int BeevMgr::Expand_FiniteLoop(const ASTNode& finiteloop,
+			       ASTNodeMap* ParamToCurrentValMap) {
   /*
    * 'finiteloop' is the finite loop to be expanded
    * 
    * Every finiteloop has three parts:
    *
+   * 0) Parameter Name
+   *
    * 1) Parameter initialization
    *
    * 2) Parameter limit value
    *
-   * 3) Formula Body (This can be a NESTED for loop)
+   * 3) Increment formula
    *
-   * 4) Increment formula
-   *
-   * Each entry of the parameter_stack contains the following:
-   *
-   * 1. Current parameter name
-   *
-   * 2. Initial value of the parameter
-   *
-   * 3. Limit value of the parameter
-   *
-   * 4. Increment value
-   *
-   * If parameter_stack is empty then it means that we are at the
-   * start of expanding this finite loop
-   *
+   * 4) Formula Body
+   *    
+   * ParamToCurrentValMap contains a map from parameters to their
+   * current values in the recursion
+   *   
    * Nested FORs are allowed, but only the innermost loop can have a
    * formula in it
    *   
@@ -1505,9 +1497,53 @@ int BeevMgr::Expand_A_FiniteLoop(const ASTNode& finiteloop,
    *    3.2: We have SAT, and it is indeed a satisfying model
    */
 
-  //0th element of FOR-construct stores the initial parameter value
-  int paramInitValue = finiteloop[0].GetUnsignedConst();
-}
+  //Make sure that the parameter is a variable
+  ASTNode parameter     = finiteloop[0];
+  int paramInit         = GetUnsignedConst(finiteloop[1]);
+  int paramLimit        = GetUnsignedConst(finiteloop[2]);
+  int paramIncrement    = GetUnsignedConst(finiteloop[3]);
+  ASTNode formulabody   = finiteloop[4];
+  int paramCurrentValue = paramInit;
+
+  //Update ParamToCurrentValMap with parameter and its current
+  //value. Here paramCurrentValue is the initial value
+  unsigned width = 32;
+  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+    
+  //Go recursively thru' all the FOR-constructs.
+  if(FOR == formulabody.GetKind()) { 
+    while(paramCurrentValue < paramLimit) {
+      Expand_FiniteLoop(formulabody, ParamToCurrentValMap);
+      paramCurrentValue = paramCurrentValue + paramIncrement;
+
+      //Update ParamToCurrentValMap with parameter and its current
+      //value
+      //
+      //FIXME: Possible leak since I am not freeing the previous
+      //'value' for the same 'key'            
+      (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+    } //end of While
+  }
+  else {
+    //Expand the leaf level FOR-construct completely
+    for(; 
+	paramCurrentValue < paramLimit; 
+	paramCurrentValue = paramCurrentValue + paramIncrement) {
+      ASTNode currentformula = 
+	FiniteLoop_Extract_SingleFormula(formulabody, ParamToCurrentValMap);
+      
+      //Check the currentformula against the model, and add it to the
+      //SAT solver if it is false against the model
+
+      //Update ParamToCurrentValMap with parameter and its current
+      //value 
+      //
+      //FIXME: Possible leak since I am not freeing the previous
+      //'value' for the same 'key'
+      (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+    }
+  } //end of else
+} //end of the Expand_FiniteLoop()
 
 ASTNode BeevMgr::FiniteLoop_Extract_SingleFormula(const ASTNode& formulabody, 
 						  ASTNodeMap* VarToConstantMap)
@@ -1517,7 +1553,7 @@ ASTNode BeevMgr::FiniteLoop_Extract_SingleFormula(const ASTNode& formulabody,
    * variable-to-constant map 'VarToConstantMap'
    */
   return SimplifyFormula(formulabody, VarToConstantMap);
-}
+} //end of FiniteLoop_Extract_SingleFormula()
 
 
 //FUNCTION: this function accepts a boolvector and returns a BVConst

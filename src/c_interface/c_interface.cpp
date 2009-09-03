@@ -1324,7 +1324,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e) {
   nodestar a = (nodestar)e;
 
   if(BEEV::BVCONST != a->GetKind())
-    BEEV::FatalError("getBVUnsigned: Attempting to extract int value"\ 
+    BEEV::FatalError("getBVUnsigned: Attempting to extract int value"\
 		     "from a NON-constant BITVECTOR: ",*a);
   unsigned* bv = a->GetBVConst();
 

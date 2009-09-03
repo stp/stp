@@ -38,3 +38,12 @@ PAPERS
 -----
 http://sites.google.com/site/stpfastprover
 
+REGRESSIONS
+-----------
+
+Assumes you have downloaded the testcases
+
+make regressall
+make regress_smt
+make regress_c_api
+make regressbigarray
