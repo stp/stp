@@ -39,7 +39,7 @@ extern BEEV::ASTNode SingleBitOne;
 extern BEEV::ASTNode SingleBitZero;
 }
 
-
+const string version = "$Id$";
 
 /* GLOBAL VARS: Some global vars for the Main function.
  *
