@@ -24,7 +24,7 @@
 #include <unistd.h>
 
 #ifdef EXT_HASH_MAP
-  using namespace __gnu_cxx;
+using namespace __gnu_cxx;
 #endif
 
 /* GLOBAL FUNCTION: parser
@@ -35,8 +35,8 @@ extern int cvcparse();
 
 namespace BEEV
 {
-extern BEEV::ASTNode SingleBitOne;
-extern BEEV::ASTNode SingleBitZero;
+  extern BEEV::ASTNode SingleBitOne;
+  extern BEEV::ASTNode SingleBitZero;
 }
 
 const string version = "$Id$";
@@ -99,96 +99,96 @@ int main(int argc, char ** argv) {
     if(argv[i][0] == '-') {
       switch(argv[i][1]) {
       case 'a' :
-	BEEV::optimize_flag = false;
-	break;
+        BEEV::optimize_flag = false;
+        break;
       case 'b':
-	BEEV::print_STPinput_back_flag = true;
-	break;
+        BEEV::print_STPinput_back_flag = true;
+        break;
       case 'c':
-	BEEV::construct_counterexample_flag = true;
-	break;
+        BEEV::construct_counterexample_flag = true;
+        break;
       case 'd':
-	BEEV::construct_counterexample_flag = true;
-	BEEV::check_counterexample_flag = true;
-	break;
+        BEEV::construct_counterexample_flag = true;
+        BEEV::check_counterexample_flag = true;
+        break;
       case 'h':
-	fprintf(stderr,usage,prog);
-	cout << helpstring;
-	//BEEV::FatalError("");
-	return -1;
-	break;
+        fprintf(stderr,usage,prog);
+        cout << helpstring;
+        //BEEV::FatalError("");
+        return -1;
+        break;
       case 'n':
-	BEEV::print_output_flag = true;
-	break;
+        BEEV::print_output_flag = true;
+        break;
       case 'm':
-	BEEV::smtlib_parser_flag=true;
-	BEEV::division_by_zero_returns_one = true;
-	break;
+        BEEV::smtlib_parser_flag=true;
+        BEEV::division_by_zero_returns_one = true;
+        break;
       case 'p':
-	BEEV::print_counterexample_flag = true;
-	break;
+        BEEV::print_counterexample_flag = true;
+        break;
       case 'y':
-	BEEV::print_binary_flag = true;
-	break;
+        BEEV::print_binary_flag = true;
+        break;
       case 'q':
-	BEEV::print_arrayval_declaredorder_flag = true;
-	break;
+        BEEV::print_arrayval_declaredorder_flag = true;
+        break;
       case 'r':
-	BEEV::arrayread_refinement_flag = false;
-	break;
+        BEEV::arrayread_refinement_flag = false;
+        break;
       case 's' :
-	BEEV::stats_flag = true;
-	break;
+        BEEV::stats_flag = true;
+        break;
       case 'u':
-	BEEV::arraywrite_refinement_flag = false;
-	break;
+        BEEV::arraywrite_refinement_flag = false;
+        break;
       case 'v' :
-	BEEV::print_nodes_flag = true;
-	break;
+        BEEV::print_nodes_flag = true;
+        break;
       case 'w':
-	BEEV::wordlevel_solve_flag = false;
-	break;
+        BEEV::wordlevel_solve_flag = false;
+        break;
       case 'x':
-	BEEV::xor_flatten_flag = true;
-	break;
+        BEEV::xor_flatten_flag = true;
+        break;
       case 'z':
-	BEEV::print_sat_varorder_flag = true;
-	break;
+        BEEV::print_sat_varorder_flag = true;
+        break;
       default:
-	fprintf(stderr,usage,prog);
-	cout << helpstring;
-	//BEEV::FatalError("");
-	return -1;
-	break;
+        fprintf(stderr,usage,prog);
+        cout << helpstring;
+        //BEEV::FatalError("");
+        return -1;
+        break;
       }
       if(argv[i][2]) {
-	fprintf(stderr, "Multiple character options are not allowed.\n");
-	fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
-	fprintf(stderr,usage,prog);
-	cout << helpstring;
-	return -1;
+        fprintf(stderr, "Multiple character options are not allowed.\n");
+        fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
+        fprintf(stderr,usage,prog);
+        cout << helpstring;
+        return -1;
       }
     } else {
       infile = argv[i];
 
       if (BEEV::smtlib_parser_flag)
-	{
-	  smtin = fopen(infile,"r");
-	  if(smtin == NULL)
-	    {
-	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-	      BEEV::FatalError("");
-	    }
-	}
+        {
+          smtin = fopen(infile,"r");
+          if(smtin == NULL)
+            {
+              fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+              BEEV::FatalError("");
+            }
+        }
       else
-	{
-	  cvcin = fopen(infile,"r");
-	  if(cvcin == NULL)
-	    {
-	      fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-	      BEEV::FatalError("");
-	    }
-	}
+        {
+          cvcin = fopen(infile,"r");
+          if(cvcin == NULL)
+            {
+              fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+              BEEV::FatalError("");
+            }
+        }
     }
   }
 

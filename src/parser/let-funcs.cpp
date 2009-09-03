@@ -44,7 +44,7 @@ namespace BEEV {
   //returns the var.
   ASTNode BeevMgr::ResolveID(const ASTNode& v) {
     if (_letid_expr_map == NULL)
-         InitializeLetIDMap();
+      InitializeLetIDMap();
 
     if(v.GetKind() != SYMBOL) {
       return v;
@@ -57,9 +57,9 @@ namespace BEEV {
     ASTNodeMap::iterator it;
     if((it =_letid_expr_map->find(v)) != _letid_expr_map->end()) {
       if(it->second == ASTUndefined) 
-	FatalError("Unresolved Identifier: ",v);
+        FatalError("Unresolved Identifier: ",v);
       else
-	return it->second;
+        return it->second;
     }
 
     //this is to mark the let-var as undefined. the let var is defined
@@ -76,28 +76,28 @@ namespace BEEV {
   // This function simply cleans up the LetID -> LetExpr Map.   
   void BeevMgr::CleanupLetIDMap(void) { 
 
-   // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
+    // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
     if (_letid_expr_map->size()  ==0)
-    	return;
+      return;
 
 
     ASTNodeMap::iterator it = _letid_expr_map->begin();
     ASTNodeMap::iterator itend = _letid_expr_map->end();
     for(;it!=itend;it++) {
       if(it->second != ASTUndefined) {
-	it->first.SetValueWidth(0);
-	it->first.SetIndexWidth(0);
+        it->first.SetValueWidth(0);
+        it->first.SetIndexWidth(0);
       }
     }
 
-  // May contain lots of buckets, so reset.
+    // May contain lots of buckets, so reset.
     delete _letid_expr_map;
     _letid_expr_map = new ASTNodeMap();
 
   }
 
- void BeevMgr::InitializeLetIDMap(void)
+  void BeevMgr::InitializeLetIDMap(void)
   {
-  	_letid_expr_map = new ASTNodeMap();
+    _letid_expr_map = new ASTNodeMap();
   }
 };

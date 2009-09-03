@@ -77,10 +77,10 @@ namespace BEEV {
 
   enum inputStatus
     {
-  	  NOT_DECLARED =0, // Not included in the input file / stream
-  	  TO_BE_SATISFIABLE,
-  	  TO_BE_UNSATISFIABLE,
-  	  TO_BE_UNKNOWN // Specified in the input file as unknown.
+      NOT_DECLARED =0, // Not included in the input file / stream
+      TO_BE_SATISFIABLE,
+      TO_BE_UNSATISFIABLE,
+      TO_BE_UNKNOWN // Specified in the input file as unknown.
     };
 
   extern enum inputStatus input_status;
@@ -110,10 +110,10 @@ namespace BEEV {
   // Table for storing function count stats.
 #ifdef TR1_UNORDERED_MAP
   typedef tr1::unordered_map<const char*,int,
-                             tr1::hash<const char *>,eqstr> function_counters;
+    tr1::hash<const char *>,eqstr> function_counters;
 #else
   typedef hash_map<const char*,int,
-		   hash<char *>,eqstr> function_counters;
+    hash<char *>,eqstr> function_counters;
 #endif
 
   void CountersAndStats(const char * functionname);
@@ -121,6 +121,6 @@ namespace BEEV {
   //global function which accepts an integer and looks up the
   //corresponding ASTNode and prints a char* of that ASTNode
   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
-					   int decision, int polarity=0);
+                                           int decision, int polarity=0);
 }; // end namespace.
 #endif

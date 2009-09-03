@@ -62,23 +62,23 @@ namespace CONSTANTBV {
 #endif
 
     typedef enum {
-        ErrCode_Ok = 0,    /* everything went allright                       */	
-        ErrCode_Type,      /* types word and size_t have incompatible sizes  */
-        ErrCode_Bits,      /* bits of word and sizeof(word) are inconsistent */
-        ErrCode_Word,      /* size of word is less than 16 bits              */
-        ErrCode_Long,      /* size of word is greater than size of long      */
-        ErrCode_Powr,      /* number of bits of word is not a power of two   */
-        ErrCode_Loga,      /* error in calculation of logarithm              */	
-        ErrCode_Null,      /* unable to allocate memory                      */	
-        ErrCode_Indx,      /* index out of range                             */
-        ErrCode_Ordr,      /* minimum > maximum index                        */
-        ErrCode_Size,      /* bit vector size mismatch                       */
-        ErrCode_Pars,      /* input string syntax error                      */
-        ErrCode_Ovfl,      /* numeric overflow error                         */
-        ErrCode_Same,      /* operands must be distinct                      */
-        ErrCode_Expo,      /* exponent must be positive                      */
-        ErrCode_Zero       /* division by zero error                         */
-      } ErrCode;
+      ErrCode_Ok = 0,    /* everything went allright                       */   
+      ErrCode_Type,      /* types word and size_t have incompatible sizes  */
+      ErrCode_Bits,      /* bits of word and sizeof(word) are inconsistent */
+      ErrCode_Word,      /* size of word is less than 16 bits              */
+      ErrCode_Long,      /* size of word is greater than size of long      */
+      ErrCode_Powr,      /* number of bits of word is not a power of two   */
+      ErrCode_Loga,      /* error in calculation of logarithm              */   
+      ErrCode_Null,      /* unable to allocate memory                      */   
+      ErrCode_Indx,      /* index out of range                             */
+      ErrCode_Ordr,      /* minimum > maximum index                        */
+      ErrCode_Size,      /* bit vector size mismatch                       */
+      ErrCode_Pars,      /* input string syntax error                      */
+      ErrCode_Ovfl,      /* numeric overflow error                         */
+      ErrCode_Same,      /* operands must be distinct                      */
+      ErrCode_Expo,      /* exponent must be positive                      */
+      ErrCode_Zero       /* division by zero error                         */
+    } ErrCode;
 
 
     /* ===> MISCELLANEOUS BASIC FUNCTIONS: <=== */
@@ -129,14 +129,14 @@ namespace CONSTANTBV {
     void    BitVector_Interval_Reverse    (unsigned int * addr, unsigned int lower, unsigned int upper);
     
     boolean BitVector_interval_scan_inc   (unsigned int * addr, unsigned int start,
-					   unsigned int * min, unsigned int * max);
+                                           unsigned int * min, unsigned int * max);
     boolean BitVector_interval_scan_dec   (unsigned int * addr, unsigned int start,
-					   unsigned int * min, unsigned int * max);
+                                           unsigned int * min, unsigned int * max);
     void    BitVector_Interval_Copy       (unsigned int * X, unsigned int * Y, 
-					   unsigned int Xoffset, unsigned int Yoffset, unsigned int length);
+                                           unsigned int Xoffset, unsigned int Yoffset, unsigned int length);
     unsigned int * BitVector_Interval_Substitute(unsigned int * X, unsigned int * Y,
-						 unsigned int Xoffset, unsigned int Xlength,
-						 unsigned int Yoffset, unsigned int Ylength);
+                                                 unsigned int Xoffset, unsigned int Xlength,
+                                                 unsigned int Yoffset, unsigned int Ylength);
 
     /* ===> bit vector test functions: */
     boolean BitVector_is_empty            (unsigned int * addr);                         /* X == {} ?   */
@@ -176,19 +176,19 @@ namespace CONSTANTBV {
     
     /* ===> bit vector insert/delete bits: */
     void    BitVector_Insert              (unsigned int * addr, 
-					   unsigned int offset, unsigned int count, boolean clear);
+                                           unsigned int offset, unsigned int count, boolean clear);
     void    BitVector_Delete              (unsigned int * addr, 
-					   unsigned int offset, unsigned int count, boolean clear);
+                                           unsigned int offset, unsigned int count, boolean clear);
     
     /* ===> bit vector arithmetic: */
     boolean BitVector_increment           (unsigned int * addr);                        /*  X++  */
     boolean BitVector_decrement           (unsigned int * addr);                        /*  X--  */
     boolean BitVector_compute             (unsigned int * X, unsigned int * Y, 
-					   unsigned int * Z, boolean minus, boolean *carry);
+                                           unsigned int * Z, boolean minus, boolean *carry);
     boolean BitVector_add                 (unsigned int * X, 
-					   unsigned int * Y, unsigned int * Z, boolean *carry);
+                                           unsigned int * Y, unsigned int * Z, boolean *carry);
     boolean BitVector_sub                 (unsigned int * X, 
-					   unsigned int * Y, unsigned int * Z, boolean *carry); /* X = Y-Z*/
+                                           unsigned int * Y, unsigned int * Z, boolean *carry); /* X = Y-Z*/
     boolean BitVector_inc                 (unsigned int * X, unsigned int * Y);
     boolean BitVector_dec                 (unsigned int * X, unsigned int * Y);
     
@@ -196,33 +196,33 @@ namespace CONSTANTBV {
     void    BitVector_Absolute            (unsigned int * X, unsigned int * Y);
     signed int   BitVector_Sign           (unsigned int * addr);
     ErrCode BitVector_Mul_Pos             (unsigned int * X, 
-					   unsigned int * Y, unsigned int * Z, boolean strict);
+                                           unsigned int * Y, unsigned int * Z, boolean strict);
     ErrCode BitVector_Multiply            (unsigned int * X, unsigned int * Y, unsigned int * Z);
     ErrCode BitVector_Div_Pos             (unsigned int * Q, unsigned int * X, unsigned int * Y, unsigned int * R);
     ErrCode BitVector_Divide              (unsigned int * Q, unsigned int * X, unsigned int * Y, unsigned int * R);
     ErrCode BitVector_GCD                 (unsigned int * X, unsigned int * Y, unsigned int * Z);
     ErrCode BitVector_GCD2                (unsigned int * U, unsigned int * V, unsigned int * W,      /*   O   */
-					   unsigned int * X, unsigned int * Y);     /*   I   */
+                                           unsigned int * X, unsigned int * Y);     /*   I   */
     ErrCode BitVector_Power               (unsigned int * X, unsigned int * Y, unsigned int * Z);
     
     /* ===> direct memory access functions: */
     void    BitVector_Block_Store         (unsigned int * addr, 
-					   unsigned char * buffer, unsigned int length);
+                                           unsigned char * buffer, unsigned int length);
     unsigned char * BitVector_Block_Read  (unsigned int * addr, unsigned int * length);
     
     /* ===> word array functions: */
     void    BitVector_Word_Store          (unsigned int * addr, unsigned int offset, unsigned int value);
     unsigned int   BitVector_Word_Read    (unsigned int * addr, unsigned int offset);
     void    BitVector_Word_Insert         (unsigned int * addr, 
-					   unsigned int offset, unsigned int count, boolean clear);
+                                           unsigned int offset, unsigned int count, boolean clear);
     void    BitVector_Word_Delete         (unsigned int * addr, 
-					   unsigned int offset, unsigned int count, boolean clear);
+                                           unsigned int offset, unsigned int count, boolean clear);
     
     /* ===> arbitrary size chunk functions: */
     void    BitVector_Chunk_Store         (unsigned int * addr, unsigned int chunksize,
-					   unsigned int offset, unsigned long value);
+                                           unsigned int offset, unsigned long value);
     unsigned long  BitVector_Chunk_Read   (unsigned int * addr, 
-					   unsigned int chunksize,unsigned int offset);
+                                           unsigned int chunksize,unsigned int offset);
     
     /* ===> set operations: */
     void    Set_Union                     (unsigned int * X, unsigned int * Y, unsigned int * Z); /* X = Y + Z */
@@ -241,14 +241,14 @@ namespace CONSTANTBV {
     
     /* ===> matrix-of-booleans operations: */
     void    Matrix_Multiplication         (unsigned int * X, unsigned int rowsX, unsigned int colsX,
-					   unsigned int * Y, unsigned int rowsY, unsigned int colsY,
-					   unsigned int * Z, unsigned int rowsZ, unsigned int colsZ);
+                                           unsigned int * Y, unsigned int rowsY, unsigned int colsY,
+                                           unsigned int * Z, unsigned int rowsZ, unsigned int colsZ);
     void    Matrix_Product                (unsigned int * X, unsigned int rowsX, unsigned int colsX,
-					   unsigned int * Y, unsigned int rowsY, unsigned int colsY,
-					   unsigned int * Z, unsigned int rowsZ, unsigned int colsZ);
+                                           unsigned int * Y, unsigned int rowsY, unsigned int colsY,
+                                           unsigned int * Z, unsigned int rowsZ, unsigned int colsZ);
     void    Matrix_Closure                (unsigned int * addr, unsigned int rows, unsigned int cols);
     void    Matrix_Transpose              (unsigned int * X, unsigned int rowsX, unsigned int colsX,
-					   unsigned int * Y, unsigned int rowsY, unsigned int colsY);
+                                           unsigned int * Y, unsigned int rowsY, unsigned int colsY);
     
     /*****************************************************************************/
     /*  MODULE RESOURCES:                                                        */
