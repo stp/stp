@@ -90,9 +90,9 @@ my %options = ();
 # The list of testcases to run
 #
 my @testcases = "../../stp-tests/smt-test";
-#my @testcases1 = "../../stp-tests/smt-test/QF_AUFBV/brummayerbiere2";
-#my @testcases2 = "../../stp-tests/smt-test/QF_AUFBV/brummayerbiere2";
-#my @testcases3 = "../../stp-tests/smt-test/QF_AUFBV/platania";
+my @testcases1 = "../../stp-tests/smt-test/QF_AUFBV/brummayerbiere2";
+my @testcases2 = "../../stp-tests/smt-test/QF_AUFBV/brummayerbiere2";
+my @testcases3 = "../../stp-tests/smt-test/QF_AUFBV/platania";
 # Temporary array for STP options
 my @stpOptions = ();
 
@@ -250,7 +250,7 @@ my $totalTime = time;
 my $defaultDir = `pwd`;
 $defaultDir =~ s/\n//;
 
-foreach my $testcase ((@testcases)) {
+foreach my $testcase ((@testcases,@testcases1,@testcases2,@testcases3)) {
     chdir $defaultDir or die "Cannot chdir to $defaultDir: $?";
     my @testcasesTmp = ();
     if(-f $testcase) { push @testcasesTmp, $testcase; }
