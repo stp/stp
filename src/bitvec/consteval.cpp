@@ -9,6 +9,8 @@
 
 #include "../AST/AST.h"
 #include "../AST/ASTUtil.h"
+#include <cassert>
+
 namespace BEEV
 {
 
@@ -479,12 +481,6 @@ namespace BEEV
         break;
       case EQ:
         if (CONSTANTBV::BitVector_equal(tmp0, tmp1))
-          OutputNode = ASTTrue;
-        else
-          OutputNode = ASTFalse;
-        break;
-      case NEQ:
-        if (!CONSTANTBV::BitVector_equal(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
           OutputNode = ASTFalse;

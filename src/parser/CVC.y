@@ -436,7 +436,7 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 		       } 
 		|      Expr NEQ_TOK Expr 
                        {
-			 BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::NEQ, *$1, *$3));
+			 BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::NOT, BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::EQ, *$1, *$3)));
 			 BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;

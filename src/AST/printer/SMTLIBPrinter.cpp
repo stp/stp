@@ -1,4 +1,5 @@
 #include "printers.h"
+#include <cassert>
 
 namespace printer
 {

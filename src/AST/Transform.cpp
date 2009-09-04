@@ -17,8 +17,10 @@
 
 
 #include "AST.h"
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cassert>
+
 namespace BEEV
 {
 
@@ -217,7 +219,6 @@ namespace BEEV
       case BVSLE:
       case BVSGT:
       case BVSGE:
-      case NEQ:
         {
           ASTVec c;
           c.push_back(TransformTerm(simpleForm[0]));

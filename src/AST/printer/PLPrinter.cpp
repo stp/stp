@@ -212,12 +212,6 @@ namespace printer
         PL_Print1(os, c[1], indentation, letize);
         os << endl;
         break;
-      case NEQ:
-        PL_Print1(os, c[0], indentation, letize);
-        os << " /= ";
-        PL_Print1(os, c[1], indentation, letize);
-        os << endl;
-        break;
       case AND:
       case OR:
       case NAND:

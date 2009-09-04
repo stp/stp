@@ -9,6 +9,8 @@
 
 #include "../AST/AST.h"
 #include "../AST/ASTUtil.h"
+#include <cassert>
+
 namespace BEEV
 {
 
@@ -405,18 +407,6 @@ namespace BEEV
             output = pushNeg ? ASTTrue : ASTFalse;
           else
             output = pushNeg ? CreateNode(NOT, output) : output;
-          break;
-        }
-      case NEQ:
-        {
-          output = CreateSimplifiedEQ(left, right);
-          output = LhsMinusRhs(output);
-          if (output == ASTTrue)
-            output = pushNeg ? ASTTrue : ASTFalse;
-          else if (output == ASTFalse)
-            output = pushNeg ? ASTFalse : ASTTrue;
-          else
-            output = pushNeg ? output : CreateNode(NOT, output);
           break;
         }
       case BVLT:

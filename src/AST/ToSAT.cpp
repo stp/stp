@@ -9,7 +9,8 @@
 #include "AST.h"
 #include "ASTUtil.h"
 #include "../simplifier/bvsolver.h"
-#include <math.h>
+#include <cmath>
+#include "../sat/sat.h"
 
 namespace BEEV
 {
@@ -17,7 +18,7 @@ namespace BEEV
    * lookup or create new MINISAT Vars from the global MAP
    * _ASTNode_to_SATVar.
    */
-  const MINISAT::Var BeevMgr::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
+  /**const**/ MINISAT::Var BeevMgr::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
   {
     ASTtoSATMap::iterator it;
     MINISAT::Var v;
@@ -731,7 +732,6 @@ namespace BEEV
           output = ASTFalse;
         break;
       case EQ:
-      case NEQ:
       case BVLT:
       case BVLE:
       case BVGT:

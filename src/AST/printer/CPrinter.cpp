@@ -1,4 +1,5 @@
 #include "printers.h"
+#include <cassert>
 
 namespace printer
 {
@@ -328,12 +329,6 @@ namespace printer
             FatalError("C_Print1: ugh problem in implementing ==");
           }
 
-        break;
-      case NEQ:
-        C_Print1(os, c[0], indentation, letize);
-        os << " != ";
-        C_Print1(os, c[1], indentation, letize);
-        os << endl;
         break;
       case AND:
       case OR:

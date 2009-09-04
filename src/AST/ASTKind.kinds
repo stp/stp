@@ -49,7 +49,6 @@ BVSLE		2	2	Form
 BVSGT		2	2	Form
 BVSGE		2	2	Form
 EQ		2	2	Form
-NEQ		2	2	Form
 FALSE		0	0	Form
 TRUE		0	0	Form
 NOT		1	1	Form

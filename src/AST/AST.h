@@ -33,12 +33,14 @@
 #include "ASTUtil.h"
 #include "ASTKind.h"
 #include <stdint.h>
-#include "../sat/core/Solver.h"
-//#include "../sat/simp/SimpSolver.h"
-//#include "../sat/unsound/UnsoundSimpSolver.h"
-#include "../sat/core/SolverTypes.h"
 #include <stdlib.h>
 #include "../constantbv/constantbv.h"
+
+namespace MINISAT
+{
+	class Solver;
+	typedef int Var;
+}
 
 /*****************************************************************************
  * LIST OF CLASSES DECLARED IN THIS FILE:
@@ -268,10 +270,12 @@ namespace BEEV
     ;
 
     // Get the name from a symbol (char *).  It's an error if kind != SYMBOL
-    const char * const GetName() const;
+    // The result should be treated as const.
+    const char * /**const**/ GetName() const;
 
     //Get the BVCONST value
-    const CBV GetBVConst() const;
+    // The result should be treated as const.
+    /*const*/ CBV GetBVConst() const;
 
     /*ASTNode is of type BV <==> ((indexwidth=0)&&(valuewidth>0))
      *
@@ -307,7 +311,7 @@ namespace BEEV
     types GetType(void) const;
 
     // Hash is pointer value of _int_node_ptr.
-    const size_t Hash() const
+    /* const */ size_t Hash() const
     {
       return (size_t) _int_node_ptr;
       //return GetNodeNum();
@@ -434,7 +438,8 @@ namespace BEEV
     // table entry so it can be deleted without looking it up again.
     void DecRef();
 
-    virtual const Kind GetKind() const
+    // Treat the result as const pleases
+    virtual /**const**/ Kind GetKind() const
     {
       return _kind;
     }
@@ -632,7 +637,7 @@ namespace BEEV
       return (strcmp(sym1._name, sym2._name) == 0);
     }
 
-    const char * const GetName() const
+    const char * /**const**/ GetName() const
     {
       return _name;
     }
@@ -1302,7 +1307,8 @@ namespace BEEV
 
     //looksup a MINISAT var from the minisat-var memo-table. if none
     //exists, then creates one.
-    const MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, const ASTNode& n);
+    // Treat the result as const.
+    /**const**/ MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, const ASTNode& n);
 
     // Memo table for CheckBBandCNF debugging function
     ASTNodeMap CheckBBandCNFMemo;

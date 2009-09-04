@@ -185,7 +185,7 @@ namespace BEEV
   }
 
   // Get the name from a symbol (char *).  It's an error if kind != SYMBOL
-  const char * const ASTNode::GetName() const
+  const char * /**const**/ ASTNode::GetName() const
   {
     if (GetKind() != SYMBOL)
       FatalError("GetName: Called GetName on a non-symbol: ", *this);
@@ -579,7 +579,8 @@ namespace BEEV
   }
 
   // Get the value of bvconst from a bvconst.  It's an error if kind != BVCONST
-  CBV const ASTNode::GetBVConst() const
+  // Treat the result as const (the compiler can't enforce it).
+  CBV /**const**/ ASTNode::GetBVConst() const
   {
     if (GetKind() != BVCONST)
       FatalError("GetBVConst: non bitvector-constant: ", *this);
@@ -874,7 +875,6 @@ namespace BEEV
           case SYMBOL:
             return true;
           case EQ:
-          case NEQ:
             if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
               {
                 cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
@@ -1249,7 +1249,7 @@ namespace BEEV
   bool isAtomic(Kind kind)
   {
     if (TRUE == kind  || FALSE == kind || 
-	EQ == kind    || NEQ == kind   || 
+	EQ == kind    ||
 	BVLT == kind  || BVLE == kind  || 
 	BVGT == kind  || BVGE == kind  || 
 	BVSLT == kind || BVSLE == kind || 

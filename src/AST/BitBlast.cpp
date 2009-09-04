@@ -661,12 +661,6 @@ namespace BEEV
           break;
         }
 
-      case NEQ:
-        {
-          ASTNode bbkid = BBForm(CreateNode(EQ, form.GetChildren()));
-          result = CreateSimpNot(bbkid);
-          break;
-        }
 
       case EQ:
         {

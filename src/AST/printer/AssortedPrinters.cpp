@@ -9,6 +9,12 @@
 #include "../AST.h"
 #include "AssortedPrinters.h"
 #include "printers.h"
+#include "../../sat/sat.h"
+
+// to get the PRIu64 macro from inttypes, this needs to be defined.
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#undef __STDC_FORMAT_MACROS
 
 namespace BEEV
 {
@@ -71,11 +77,11 @@ namespace BEEV
       return;
     double cpu_time = MINISAT::cpuTime();
     uint64_t mem_used = MINISAT::memUsed();
-    reportf("restarts              : %llu\n",                      s.starts);
-    reportf("conflicts             : %llu   (%.0f /sec)\n",        s.conflicts   , s.conflicts   /cpu_time);
-    reportf("decisions             : %llu   (%.0f /sec)\n",        s.decisions   , s.decisions   /cpu_time);
-    reportf("propagations          : %llu   (%.0f /sec)\n",        s.propagations, s.propagations/cpu_time);
-    reportf("conflict literals     : %llu   (%4.2f %% deleted)\n", s.tot_literals,
+    reportf("restarts              : %"PRIu64"\n",                      s.starts);
+    reportf("conflicts             : %"PRIu64"   (%.0f /sec)\n",        s.conflicts   , s.conflicts   /cpu_time);
+    reportf("decisions             : %"PRIu64"   (%.0f /sec)\n",        s.decisions   , s.decisions   /cpu_time);
+    reportf("propagations          : %"PRIu64"   (%.0f /sec)\n",        s.propagations, s.propagations/cpu_time);
+    reportf("conflict literals     : %"PRIu64"   (%4.2f %% deleted)\n", s.tot_literals,
             (s.max_literals - s.tot_literals)*100 / (double)s.max_literals);
     if (mem_used != 0)
       reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);

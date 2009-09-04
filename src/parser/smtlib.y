@@ -477,7 +477,7 @@ an_formula:
       for(BEEV::ASTVec::const_iterator it=terms.begin(),itend=terms.end();
           it!=itend; it++) {
         for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-          BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::NEQ, *it, *it2));
+          BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::NOT, BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::EQ, *it, *it2)));
 
           globalBeevMgr_for_parser->BVTypeCheck(*n);
           

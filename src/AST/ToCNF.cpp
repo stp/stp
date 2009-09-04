@@ -9,6 +9,7 @@
 
 #include "AST.h"
 #include "../simplifier/bvsolver.h"
+#include "../sat/sat.h"
 
 namespace BEEV
 {
@@ -190,11 +191,6 @@ namespace BEEV
             break;
           }
         case EQ:
-          {
-            result = true;
-            break;
-          }
-        case NEQ:
           {
             result = true;
             break;
