@@ -442,21 +442,35 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 			 delete $1;
 			 delete $3;
 		       }
-                |      FOR_TOK '(' Formula ';' Formula ';' Formula ')' '{' Formula '}'
+                |      FOR_TOK '(' TERMID_TOK ';' BVCONST_TOK ';' BVCONST_TOK ';' BVCONST_TOK ')' '{' Formula '}'
                        {
 			 //Allows a compact representation of
-			 //parameterized set of formulas
+			 //parameterized set of formulas (bounded
+			 //universal quantification)
 			 //
-			 //$1 is the initialization (this is an AND of
-			 //formulas of the form var = constant)
+			 //parameter name (a variable)
 			 //
-			 //$2 is the constant bounding (this is an AND
-			 //of formulas of the form var < constant).
+			 //initial value (BVCONST)
 			 //
-			 //$3 is the increment (this is an AND of
-			 //formulas of the form var = var + constant).
+			 //limit value (BVCONST)
 			 //
-			 //$4 is the parameterized formula
+			 //increment value (BVCONST)
+			 //
+			 //formula (it can be a nested forloop)
+			 BEEV::ASTVec vec;
+			 vec.push_back(*$3);
+			 vec.push_back(*$5);
+			 vec.push_back(*$7);
+			 vec.push_back(*$9);
+			 vec.push_back(*$12);
+			 BEEV::ASTNode * n = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->CreateNode(BEEV::FOR,vec));
+			 BEEV::globalBeevMgr_for_parser->BVTypeCheck(*n);
+			 $$ = n;
+			 delete $3;
+			 delete $5;
+			 delete $7;
+			 delete $9;
+			 delete $12;
 		       }
 		|      NOT_TOK Formula 
                        {

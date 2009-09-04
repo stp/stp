@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Vijay Ganesh
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "printers.h"
 
 namespace printer
@@ -164,6 +173,19 @@ namespace printer
         PL_Print1(os, c[2], indentation, letize);
         os << endl << "ENDIF";
         break;
+      case FOR:
+	os << "FOR(";
+	PL_Print1(os, c[0], indentation, letize);
+	os << ";";
+	PL_Print1(os, c[1], indentation, letize);
+	os << ";";
+	PL_Print1(os, c[2], indentation, letize);
+	os << ";";
+	PL_Print1(os, c[3], indentation, letize);
+	os << "){ \n";
+	PL_Print1(os, c[4], indentation, letize);
+	os << "} \n";
+	break;
       case BVLT:
       case BVLE:
       case BVGT:

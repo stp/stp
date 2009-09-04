@@ -6,6 +6,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 // -*- c++ -*-
+
 #include "../AST.h"
 #include "AssortedPrinters.h"
 #include "printers.h"
@@ -14,7 +15,7 @@
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
-#undef __STDC_FORMAT_MACROS
+//#undef __STDC_FORMAT_MACROS
 
 namespace BEEV
 {
@@ -172,7 +173,14 @@ namespace BEEV
           {
             os << "ASSERT( ";
             f.PL_Print(os,0);
-            os << " = ";
+	    if(BOOLEAN_TYPE == f.GetType()) 
+	      {
+	      os << "<=>";
+	      }
+	    else 
+	      {
+	      os << " = ";
+	      }
             if (BITVECTOR_TYPE == se.GetType())
               {
                 TermToConstTermUsingModel(se, false).PL_Print(os, 0);

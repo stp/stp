@@ -290,7 +290,7 @@ namespace BEEV
 	  //'value' for the same 'key'       
 	  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
 	} //end of While
-      }
+      } //end of recursion FORs
 
     ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
@@ -303,19 +303,20 @@ namespace BEEV
 	
 	//Check the currentformula against the model, and add it to the
 	//SAT solver if it is false against the model
-	if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) {
-	  forloopFormulaVector.push_back(currentFormula);
-	  ASTNode forloopFormulas = 
-	    (forloopFormulaVector.size() != 1) ?
-	    CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
-	  	
-	  SOLVER_RETURN_TYPE result = 
-	    CallSAT_ResultCheck(SatSolver, forloopFormulas, original_input);
-	  if(result != SOLVER_UNDECIDED) 	     
-	    {
-	      return result;
-	    }
-	}
+	if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
+	  {
+	    forloopFormulaVector.push_back(currentFormula);
+	    ASTNode forloopFormulas = 
+	      (forloopFormulaVector.size() != 1) ?
+	      CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
+	    
+	    SOLVER_RETURN_TYPE result = 
+	      CallSAT_ResultCheck(SatSolver, forloopFormulas, original_input);
+	    if(result != SOLVER_UNDECIDED) 	     
+	      {
+		return result;
+	      }
+	  }
 	
 	//Update ParamToCurrentValMap with parameter and its current
 	//value 
@@ -323,7 +324,8 @@ namespace BEEV
 	//FIXME: Possible leak since I am not freeing the previous
 	//'value' for the same 'key'
 	(*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
-      }
+      } //end of expanding the FOR loop
+    
     return SOLVER_UNDECIDED;
   } //end of the SATBased_FiniteLoop_Refinement()
 
