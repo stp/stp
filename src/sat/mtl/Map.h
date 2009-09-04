@@ -83,7 +83,7 @@ class Map {
         cap = newsize;
     }
 
-    
+
     public:
 
      Map () : table(NULL), cap(0), size(0) {}
@@ -98,7 +98,7 @@ class Map {
         for (int i = 0; i < ps.size(); i++)
             if (equals(ps[i].key, k)){
                 d = ps[i].data;
-                return true; } 
+                return true; }
         return false;
     }
 
@@ -106,7 +106,7 @@ class Map {
         assert(table != NULL);
         vec<Pair>& ps = table[index(k)];
         int j = 0;
-        for (; j < ps.size() && !equals(ps[j].key, k); j++);
+        for (; j < ps.size() && !equals(ps[j].key, k); j++) ;
         assert(j < ps.size());
         ps[j] = ps.last();
         ps.pop();
