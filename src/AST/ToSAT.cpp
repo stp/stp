@@ -18,7 +18,7 @@ namespace BEEV
    * lookup or create new MINISAT Vars from the global MAP
    * _ASTNode_to_SATVar.
    */
-  /**const**/ MINISAT::Var BeevMgr::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
+  MINISAT::Var BeevMgr::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
   {
     ASTtoSATMap::iterator it;
     MINISAT::Var v;
@@ -46,8 +46,10 @@ namespace BEEV
    * calls solve(). If solve returns unsat, then stop and return
    * unsat. else continue.
    */
-  // FIXME: Still need to deal with TRUE/FALSE in clauses!
-  //bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll, ASTNodeToIntMap& heuristic)
+  // FIXME: Still need to deal with TRUE/FALSE in clauses!  
+  //
+  //bool BeevMgr::toSATandSolve(MINISAT::Solver& newS,
+  //BeevMgr::ClauseList& cll, ASTNodeToIntMap& heuristic)
   bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
   {
     CountersAndStats("SAT Solver");

@@ -1232,20 +1232,24 @@ namespace BEEV
     SOLVER_RETURN_TYPE  CallSAT_ResultCheck(MINISAT::Solver& newS,
 					    const ASTNode& modified_input, 
 					    const ASTNode& original_input);
-    SOLVER_RETURN_TYPE  SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
-						     const ASTNode& modified_input, 
-						     const ASTNode& original_input);
-    SOLVER_RETURN_TYPE  SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
-						      const ASTNode& orig_input);
-        
-    SOLVER_RETURN_TYPE  SATBased_FiniteLoop_Refinement(MINISAT::Solver& newS, 
-						       const ASTNode& orig_input);
-    void Expand_FiniteLoop(MINISAT::Solver& SatSolver, const ASTNode& original_input,
-			   const ASTNode& finiteloop,ASTNodeMap* ParamToCurrentValMap,
-			   bool AbstractionRefinement=true);
-    ASTNode FiniteLoop_Extract_SingleFormula(const ASTNode& finiteloop_formulabody, 
-                                             ASTNodeMap* VarConstMap);
+    SOLVER_RETURN_TYPE SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
+						    const ASTNode& modified_input, 
+						    const ASTNode& original_input);
+    SOLVER_RETURN_TYPE SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
+						     const ASTNode& orig_input);        
+    SOLVER_RETURN_TYPE SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+						      const ASTNode& original_input, 						  
+						      const ASTNode& finiteloop,
+						      ASTNodeMap* ParamToCurrentValMap);    
+    SOLVER_RETURN_TYPE SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& newS, 
+							  const ASTNode& orig_input);
 
+    ASTNode Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
+					ASTNodeMap* ParamToCurrentValMap,
+					bool CheckUsingModel_Or_Expand);
+  
+    ASTNode Expand_FiniteLoop_TopLevel(const ASTNode& finiteloop);
+      
     //creates array write axiom only for the input term or formula, if
     //necessary. If there are no axioms to produce then it simply
     //generates TRUE

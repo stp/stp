@@ -1846,5 +1846,4 @@ namespace BEEV
       }
   } //end of CALLSAT_ResultCheck
 
-
-} // end namespace
+} // end namespace BEEV
