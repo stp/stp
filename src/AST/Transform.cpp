@@ -180,7 +180,7 @@ namespace BEEV
   {
     BeevMgr& bm = form.GetBeevMgr();
 
-    assert(TransformMap != null);
+	assert(TransformMap != NULL);
 
     ASTNode result;
 
@@ -270,9 +270,10 @@ namespace BEEV
     return result;
   } //End of TransformFormula
 
+
   ASTNode TransformTerm(const ASTNode& inputterm)
   {
-    assert(TransformMap != null);
+	assert(TransformMap != NULL);
 
     BeevMgr& bm = inputterm.GetBeevMgr();
 
@@ -388,7 +389,7 @@ namespace BEEV
    */
   ASTNode BeevMgr::TransformArray(const ASTNode& term)
   {
-    assert(TransformMap != null);
+    assert(TransformMap != NULL);
 
     ASTNode result = term;
 
