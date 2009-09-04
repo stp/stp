@@ -180,7 +180,7 @@ namespace BEEV
   {
     BeevMgr& bm = form.GetBeevMgr();
 
-	assert(TransformMap != NULL);
+    assert(TransformMap != NULL);
 
     ASTNode result;
 
@@ -273,7 +273,7 @@ namespace BEEV
 
   ASTNode TransformTerm(const ASTNode& inputterm)
   {
-	assert(TransformMap != NULL);
+    assert(TransformMap != NULL);
 
     BeevMgr& bm = inputterm.GetBeevMgr();
 

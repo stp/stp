@@ -19,8 +19,8 @@ namespace BEEV
   
   //FIXME: Write a detailed comment on how this actually works
   SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
-							   const ASTNode& inputAlreadyInSAT, 
-							   const ASTNode& original_input) {
+                                                           const ASTNode& inputAlreadyInSAT, 
+                                                           const ASTNode& original_input) {
     //go over the list of indices for each array, and generate Leibnitz
     //axioms. Then assert these axioms into the SAT solver. Check if the
     //addition of the new constraints has made the bogus counterexample
@@ -154,7 +154,7 @@ namespace BEEV
 
   //FIXME: Write a detailed comment on how this actually works
   SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, 
-							    const ASTNode& original_input)
+                                                            const ASTNode& original_input)
   {
     ASTNode writeAxiom;
     ASTNodeMap::iterator it = ReadOverWrite_NewName_Map.begin();
@@ -214,7 +214,7 @@ namespace BEEV
   //Expands all finite-for-loops using counterexample-guided
   //abstraction-refinement.
   SOLVER_RETURN_TYPE BeevMgr::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
-								 const ASTNode& original_input)
+                                                                 const ASTNode& original_input)
   {
     /*
      * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
@@ -240,9 +240,9 @@ namespace BEEV
   //Expand the finite loop, check against model, and add false
   //formulas to the SAT solver
   SOLVER_RETURN_TYPE BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
-							     const ASTNode& original_input, 						  
-							     const ASTNode& finiteloop,
-							     ASTNodeMap* ParamToCurrentValMap)
+                                                             const ASTNode& original_input,                                               
+                                                             const ASTNode& finiteloop,
+                                                             ASTNodeMap* ParamToCurrentValMap)
   { 
     /*
      * 'finiteloop' is the finite loop to be expanded
@@ -277,53 +277,53 @@ namespace BEEV
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
-      while(paramCurrentValue < paramLimit) 
-	{
-	  SATBased_FiniteLoop_Refinement(SatSolver, original_input,
-					 formulabody, ParamToCurrentValMap);
-	  paramCurrentValue = paramCurrentValue + paramIncrement;
+        while(paramCurrentValue < paramLimit) 
+          {
+            SATBased_FiniteLoop_Refinement(SatSolver, original_input,
+                                           formulabody, ParamToCurrentValMap);
+            paramCurrentValue = paramCurrentValue + paramIncrement;
 
-	  //Update ParamToCurrentValMap with parameter and its current
-	  //value
-	  //
-	  //FIXME: Possible leak since I am not freeing the previous
-	  //'value' for the same 'key'       
-	  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
-	} //end of While
+            //Update ParamToCurrentValMap with parameter and its current
+            //value
+            //
+            //FIXME: Possible leak since I am not freeing the previous
+            //'value' for the same 'key'       
+            (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+          } //end of While
       } //end of recursion FORs
 
     ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
     for(; 
-	paramCurrentValue < paramLimit; 
-	paramCurrentValue = paramCurrentValue + paramIncrement) 
+        paramCurrentValue < paramLimit; 
+        paramCurrentValue = paramCurrentValue + paramIncrement) 
       {
-	ASTNode currentFormula;
-	currentFormula = SimplifyFormula(formulabody, ParamToCurrentValMap);
-	
-	//Check the currentformula against the model, and add it to the
-	//SAT solver if it is false against the model
-	if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
-	  {
-	    forloopFormulaVector.push_back(currentFormula);
-	    ASTNode forloopFormulas = 
-	      (forloopFormulaVector.size() != 1) ?
-	      CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
-	    
-	    SOLVER_RETURN_TYPE result = 
-	      CallSAT_ResultCheck(SatSolver, forloopFormulas, original_input);
-	    if(result != SOLVER_UNDECIDED) 	     
-	      {
-		return result;
-	      }
-	  }
-	
-	//Update ParamToCurrentValMap with parameter and its current
-	//value 
-	//
-	//FIXME: Possible leak since I am not freeing the previous
-	//'value' for the same 'key'
-	(*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+        ASTNode currentFormula;
+        currentFormula = SimplifyFormula(formulabody, ParamToCurrentValMap);
+        
+        //Check the currentformula against the model, and add it to the
+        //SAT solver if it is false against the model
+        if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
+          {
+            forloopFormulaVector.push_back(currentFormula);
+            ASTNode forloopFormulas = 
+              (forloopFormulaVector.size() != 1) ?
+              CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
+            
+            SOLVER_RETURN_TYPE result = 
+              CallSAT_ResultCheck(SatSolver, forloopFormulas, original_input);
+            if(result != SOLVER_UNDECIDED)           
+              {
+                return result;
+              }
+          }
+        
+        //Update ParamToCurrentValMap with parameter and its current
+        //value 
+        //
+        //FIXME: Possible leak since I am not freeing the previous
+        //'value' for the same 'key'
+        (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
       } //end of expanding the FOR loop
     
     return SOLVER_UNDECIDED;
@@ -334,8 +334,8 @@ namespace BEEV
   //Expand the finite loop, check against model, and add false
   //formulas to the SAT solver
   ASTNode BeevMgr::Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
-					       ASTNodeMap* ParamToCurrentValMap,
-					       bool CheckUsingModel_Or_Expand = true)
+                                               ASTNodeMap* ParamToCurrentValMap,
+                                               bool CheckUsingModel_Or_Expand = true)
   {
     /*
      * 'finiteloop' is the finite loop to be expanded
@@ -370,59 +370,59 @@ namespace BEEV
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
-      while(paramCurrentValue < paramLimit) 
-	{
-	  Check_FiniteLoop_UsingModel(formulabody,
-				      ParamToCurrentValMap, CheckUsingModel_Or_Expand);
-	  paramCurrentValue = paramCurrentValue + paramIncrement;
+        while(paramCurrentValue < paramLimit) 
+          {
+            Check_FiniteLoop_UsingModel(formulabody,
+                                        ParamToCurrentValMap, CheckUsingModel_Or_Expand);
+            paramCurrentValue = paramCurrentValue + paramIncrement;
 
-	  //Update ParamToCurrentValMap with parameter and its current
-	  //value
-	  //
-	  //FIXME: Possible leak since I am not freeing the previous
-	  //'value' for the same 'key'       
-	  (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
-	} //end of While
+            //Update ParamToCurrentValMap with parameter and its current
+            //value
+            //
+            //FIXME: Possible leak since I am not freeing the previous
+            //'value' for the same 'key'       
+            (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+          } //end of While
       }
 
     ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
     for(; 
-	paramCurrentValue < paramLimit; 
-	paramCurrentValue = paramCurrentValue + paramIncrement) 
+        paramCurrentValue < paramLimit; 
+        paramCurrentValue = paramCurrentValue + paramIncrement) 
       {
-	ASTNode currentFormula;
-	currentFormula = SimplifyFormula(formulabody, ParamToCurrentValMap);
-	
-	if(CheckUsingModel_Or_Expand) 
-	  {
-	    //Check the currentformula against the model, and add it to the
-	    //SAT solver if it is false against the model
-	    if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
-	      return ASTFalse;
-	  }
-	else 
-	  {
-	    forloopFormulaVector.push_back(currentFormula);
-	  }
-	
-	//Update ParamToCurrentValMap with parameter and its current
-	//value 	
-	//FIXME: Possible leak since I am not freeing the previous
-	//'value' for the same 'key'
-	(*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+        ASTNode currentFormula;
+        currentFormula = SimplifyFormula(formulabody, ParamToCurrentValMap);
+        
+        if(CheckUsingModel_Or_Expand) 
+          {
+            //Check the currentformula against the model, and add it to the
+            //SAT solver if it is false against the model
+            if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
+              return ASTFalse;
+          }
+        else 
+          {
+            forloopFormulaVector.push_back(currentFormula);
+          }
+        
+        //Update ParamToCurrentValMap with parameter and its current
+        //value         
+        //FIXME: Possible leak since I am not freeing the previous
+        //'value' for the same 'key'
+        (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
       }
 
 
     if(CheckUsingModel_Or_Expand) 
       {
-	ASTNode retFormula = 
-	  (forloopFormulaVector.size() != 1) ? CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
-	return retFormula;
+        ASTNode retFormula = 
+          (forloopFormulaVector.size() != 1) ? CreateNode(AND, forloopFormulaVector) : forloopFormulaVector[0];
+        return retFormula;
       }
     else 
       {
-	return ASTTrue;
+        return ASTTrue;
       }
   } //end of the Check_FiniteLoop_UsingModel()
   

@@ -8,6 +8,7 @@
 // -*- c++ -*-
 
 #include "ASTUtil.h"
+#include "../main/Globals.h"
 namespace BEEV
 {
   ostream &operator<<(ostream &os, const Spacer &sp)

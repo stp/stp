@@ -36,13 +36,15 @@
 #include <iostream>
 #include "../AST/AST.h"
 #include "parseSMT_defs.h"
+
+  using namespace std;
+  using namespace BEEV;
   
   extern char *smttext;
   extern int smterror (const char *msg);
   
   // File-static (local to this file) variables and functions
-  static std::string _string_lit;
-  
+  static std::string _string_lit;  
   static char escapeChar(char c) {
     switch(c) {
     case 'n': return '\n';
@@ -50,16 +52,6 @@
     default: return c;
     }
   }      
-
-namespace BEEV
-{
-  extern BEEV::ASTNode SingleBitOne;
-  extern BEEV::ASTNode SingleBitZero;
- }
-
-/* Changed for smtlib speedup */
-/* bv{DIGIT}+      { smtlval.node = new BEEV::ASTNode(BEEV::_bm->CreateBVConst(smttext+2, 10)); return BVCONST_TOK;} */
-
 %}
 
 %option noyywrap
@@ -87,10 +79,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(BEEV::SingleBitOne);
+		     smtlval.node = new BEEV::ASTNode(GlobalBeevMgr->CreateOneConst(1));
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(BEEV::SingleBitZero);
+		     smtlval.node = new BEEV::ASTNode(GlobalBeevMgr->CreateZeroConst(1));
 		   }
 		   return BITCONST_TOK;
 		};
@@ -223,14 +215,14 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = BEEV::globalBeevMgr_for_parser->CreateSymbol(smttext); 
+  BEEV::ASTNode nptr = BEEV::GlobalBeevMgr->CreateSymbol(smttext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  smtlval.node = new BEEV::ASTNode(BEEV::globalBeevMgr_for_parser->ResolveID(nptr));
+  smtlval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->ResolveID(nptr));
   //smtlval.node = new BEEV::ASTNode(nptr);
-  if ((smtlval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+  if ((smtlval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;
   else 
     return TERMID_TOK;  

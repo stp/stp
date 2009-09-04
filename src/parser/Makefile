@@ -3,17 +3,16 @@ include ../../scripts/Makefile.common
 LEX=flex
 YACC=bison -d -y --debug -v
 
-SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp let-funcs.cpp main.cpp
+SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp let-funcs.cpp
 OBJS = $(SRCS:.cpp=.o)
 LIBS = -L../AST -last -L../sat -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
-#CFLAGS += -I../sat/mtl -I../sat/core -I../sat/simp
-CFLAGS += -I../sat/mtl -I../sat/core  -I../sat/unsound
+CFLAGS += -I../sat/mtl -I../sat/core  -I../sat/simp -I../sat/unsound
 
-all: parseSMT.cpp lexSMT.cpp parseCVC.cpp lexCVC.cpp let-funcs.cpp parser parseCVC.o lexCVC.o let-funcs.o 
+#all: parseSMT.cpp lexSMT.cpp parseCVC.cpp lexCVC.cpp let-funcs.cpp parser parseCVC.o lexCVC.o let-funcs.o 
 
-parser:		lexCVC.o parseCVC.o lexSMT.o parseSMT.o let-funcs.o main.o 
-		$(CXX) $(CFLAGS) $(LDFLAGS) lexCVC.o lexSMT.o parseCVC.o parseSMT.o main.o let-funcs.o $(LIBS) -o parser
-		@mv parser ../../bin/stp
+libparser.a: $(OBJS)
+	$(AR) rc $@ $^
+	$(RANLIB) $@
 
 lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
 		$(LEX)  -o lexCVC.cpp --prefix cvc CVC.lex

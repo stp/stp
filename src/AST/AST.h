@@ -30,17 +30,12 @@
 #include <map>
 #include <set>
 #include <algorithm>
+#include "../main/Globals.h"
 #include "ASTUtil.h"
 #include "ASTKind.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include "../constantbv/constantbv.h"
-
-namespace MINISAT
-{
-	class Solver;
-	typedef int Var;
-}
 
 /*****************************************************************************
  * LIST OF CLASSES DECLARED IN THIS FILE:
@@ -60,18 +55,6 @@ namespace BEEV
   using namespace __gnu_cxx;
 #endif
 
-  //return types for the GetType() function in ASTNode class
-  enum types
-    {
-      BOOLEAN_TYPE = 0, BITVECTOR_TYPE, ARRAY_TYPE, UNKNOWN_TYPE
-    };
-
-  enum SOLVER_RETURN_TYPE 
-    {
-      SOLVER_INVALID=0, SOLVER_VALID=1, SOLVER_UNDECIDED=2, SOLVER_ERROR=-100
-    };
-
-
   class BeevMgr;
   class ASTNode;
   class ASTInternal;
@@ -80,12 +63,11 @@ namespace BEEV
   class ASTBVConst;
   class BVSolver;
 
-  //Vector of ASTNodes, used for child nodes among other things.
+  //Useful typedefs: Vector of ASTNodes, used for child nodes among
+  //other things.
   typedef vector<ASTNode> ASTVec;
   typedef unsigned int * CBV;
   extern ASTVec _empty_ASTVec;
-  extern BeevMgr * globalBeevMgr_for_parser;
-
   /***************************************************************************/
   /*  Class ASTNode: Smart pointer to actual ASTNode internal datastructure. */
   /***************************************************************************/
@@ -462,13 +444,15 @@ namespace BEEV
 
     // Constructor (bm only)
     ASTInternal(BeevMgr &bm, int nodenum = 0) :
-      _ref_count(0), _kind(UNDEFINED), _bm(bm), _node_num(nodenum), _index_width(0), _value_width(0)
+      _ref_count(0), _kind(UNDEFINED), _bm(bm), 
+      _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
 
     // Constructor (kind only, empty children, int nodenum)
     ASTInternal(Kind kind, BeevMgr &bm, int nodenum = 0) :
-      _ref_count(0), _kind(kind), _bm(bm), _node_num(nodenum), _index_width(0), _value_width(0)
+      _ref_count(0), _kind(kind), _bm(bm), 
+      _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
 
@@ -476,7 +460,8 @@ namespace BEEV
     // the child nodes.
     // FIXME: is there a way to avoid repeating these?
     ASTInternal(Kind kind, const ASTVec &children, BeevMgr &bm, int nodenum = 0) :
-      _ref_count(0), _kind(kind), _children(children), _bm(bm), _node_num(nodenum), _index_width(0), _value_width(0)
+      _ref_count(0), _kind(kind), _children(children), 
+      _bm(bm), _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
 
@@ -486,8 +471,10 @@ namespace BEEV
     // temporary hash keys before uniquefication.
     // FIXME:  I don't think children need to be copied.
     ASTInternal(const ASTInternal &int_node, int nodenum = 0) :
-      _ref_count(0), _kind(int_node._kind), _children(int_node._children), _bm(int_node._bm), _node_num(int_node._node_num), _index_width(
-                                                                                                                                          int_node._index_width), _value_width(int_node._value_width)
+      _ref_count(0), _kind(int_node._kind), 
+      _children(int_node._children), _bm(int_node._bm), 
+      _node_num(int_node._node_num), _index_width(int_node._index_width), 
+      _value_width(int_node._value_width)
     {
     }
 
@@ -1409,7 +1396,9 @@ namespace BEEV
      * BVGETBIT Node), and this maps allows us to assemble the bits
      * into bitvectors.
      */
-    typedef hash_map<ASTNode, hash_map<unsigned int, bool> *, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTtoBitvectorMap;
+    typedef hash_map<ASTNode, 
+		     hash_map<unsigned int, bool> *, 
+		     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTtoBitvectorMap;
     ASTtoBitvectorMap _ASTNode_to_Bitvector;
 
     //Data structure that holds the counter-model
@@ -1597,11 +1586,16 @@ namespace BEEV
 
     // Constructor
     BeevMgr() :
-      _interior_unique_table(INITIAL_INTERIOR_UNIQUE_TABLE_SIZE), _symbol_unique_table(INITIAL_SYMBOL_UNIQUE_TABLE_SIZE), _bvconst_unique_table(
-                                                                                                                                                INITIAL_BVCONST_UNIQUE_TABLE_SIZE), BBTermMemo(INITIAL_BBTERM_MEMO_TABLE_SIZE), BBFormMemo(INITIAL_BBFORM_MEMO_TABLE_SIZE),
-      _max_node_num(0), ASTFalse(CreateNode(FALSE)), ASTTrue(CreateNode(TRUE)), ASTUndefined(CreateNode(UNDEFINED)), SolverMap(
-                                                                                                                               INITIAL_SOLVER_MAP_SIZE), _arrayread_symbol(INITIAL_ARRAYREAD_SYMBOL_SIZE), _introduced_symbols(
-                                                                                                                                                                                                                               INITIAL_INTRODUCED_SYMBOLS_SIZE), _symbol_count(0)
+      _interior_unique_table(INITIAL_INTERIOR_UNIQUE_TABLE_SIZE), 
+      _symbol_unique_table(INITIAL_SYMBOL_UNIQUE_TABLE_SIZE), 
+      _bvconst_unique_table(INITIAL_BVCONST_UNIQUE_TABLE_SIZE), 
+      BBTermMemo(INITIAL_BBTERM_MEMO_TABLE_SIZE), 
+      BBFormMemo(INITIAL_BBFORM_MEMO_TABLE_SIZE),
+      _max_node_num(0), ASTFalse(CreateNode(FALSE)), 
+      ASTTrue(CreateNode(TRUE)), ASTUndefined(CreateNode(UNDEFINED)), 
+      SolverMap(INITIAL_SOLVER_MAP_SIZE), 
+      _arrayread_symbol(INITIAL_ARRAYREAD_SYMBOL_SIZE), 
+      _introduced_symbols(INITIAL_INTRODUCED_SYMBOLS_SIZE), _symbol_count(0)
     {
       _current_query = ASTUndefined;
       ValidFlag = false;

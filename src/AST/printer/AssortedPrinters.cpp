@@ -294,12 +294,12 @@ namespace BEEV
         if (smtlib_parser_flag)
           {
             if (true_iff_valid && 
-		(BEEV::input_status == TO_BE_SATISFIABLE))
+		(input_status == TO_BE_SATISFIABLE))
               {
                 cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
               }
             else if (!true_iff_valid && 
-		     (BEEV::input_status == TO_BE_UNSATISFIABLE))
+		     (input_status == TO_BE_UNSATISFIABLE))
               {
                 cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
               }
@@ -349,7 +349,7 @@ namespace BEEV
   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, 
 					   int decision_level, int polarity)
   {
-    BEEV::ASTNode vv = globalBeevMgr_for_parser->_SATVar_to_AST[minisat_var];
+    BEEV::ASTNode vv = BEEV::GlobalBeevMgr->_SATVar_to_AST[minisat_var];
     cout << spaces(decision_level);
     if (polarity)
       {
@@ -357,6 +357,5 @@ namespace BEEV
       }
     printer::PL_Print(cout,vv, 0);
     cout << endl;
-  }
-
+  } //end of Convert_MINISATVar_To_ASTNode_Print()
 };//end of namespace BEEV

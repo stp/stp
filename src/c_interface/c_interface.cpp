@@ -142,7 +142,7 @@ void vc_printExprCCode(VC vc, Expr e) {
   BEEV::ASTNode q = (*(nodestar)e);
 
   // print variable declarations
-  BEEV::ASTVec declsFromParser = (nodelist)BEEV::globalBeevMgr_for_parser->_special_print_set;
+  BEEV::ASTVec declsFromParser = (nodelist)BEEV::GlobalBeevMgr->_special_print_set;
 
   for(BEEV::ASTVec::iterator it=declsFromParser.begin(),itend=declsFromParser.end(); it!=itend;it++) {
     if(BEEV::BITVECTOR_TYPE == it->GetType()) {
@@ -1459,7 +1459,7 @@ Expr vc_parseExpr(VC vc, char* infile) {
     BEEV::FatalError("");
   }
   
-  BEEV::globalBeevMgr_for_parser = b;
+  BEEV::GlobalBeevMgr = b;
 
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
   if(0 != c) {

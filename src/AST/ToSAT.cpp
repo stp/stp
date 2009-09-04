@@ -933,14 +933,14 @@ namespace BEEV
       {
         inputToSAT = simplified_solved_InputToSAT;
         simplified_solved_InputToSAT = 
-	  CreateSubstitutionMap(simplified_solved_InputToSAT);
+          CreateSubstitutionMap(simplified_solved_InputToSAT);
         //printf("##################################################\n");
         ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-	  bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+          bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
       } while (inputToSAT != simplified_solved_InputToSAT);
 
@@ -953,13 +953,13 @@ namespace BEEV
       {
         inputToSAT = simplified_solved_InputToSAT;
         simplified_solved_InputToSAT = 
-	  CreateSubstitutionMap(simplified_solved_InputToSAT);
+          CreateSubstitutionMap(simplified_solved_InputToSAT);
         ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-	  bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+          bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
       } while (inputToSAT != simplified_solved_InputToSAT);
     ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
@@ -980,7 +980,7 @@ namespace BEEV
         //Begin_RemoveWrites = true;
         //ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-	  SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         //ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
         //simplified_solved_InputToSAT = bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
         //ASTNodeStats("after solving: ", simplified_solved_InputToSAT);

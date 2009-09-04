@@ -1776,15 +1776,15 @@ namespace BEEV
   //Call the SAT solver, and check the result before returning. This
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or SOLVER_UNDECIDED
   SOLVER_RETURN_TYPE BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
-						  const ASTNode& modified_input, 
-						  const ASTNode& original_input)
+                                                  const ASTNode& modified_input, 
+                                                  const ASTNode& original_input)
   {
     ASTNode BBFormula = BBForm(modified_input);
     CNFMgr* cm = new CNFMgr(this);
     ClauseList* cl = cm->convertToCNF(BBFormula);
     if (stats_flag)
       {
-      cerr << "Number of clauses:" << cl->size() << endl;
+        cerr << "Number of clauses:" << cl->size() << endl;
       }
     //PrintClauseList(cout, *cl);
     bool sat = toSATandSolve(SatSolver, *cl);
@@ -1811,7 +1811,7 @@ namespace BEEV
         ASTNode orig_result = ComputeFormulaUsingModel(original_input);
         if (!(ASTTrue == orig_result || ASTFalse == orig_result))
           FatalError("TopLevelSat: Original input must compute to "\
-		     "true or false against model");
+                     "true or false against model");
 
         // if the counterexample is indeed a good one, then return
         // invalid
@@ -1840,7 +1840,7 @@ namespace BEEV
       }
     else
       {
-	//Control should never reach here
+        //Control should never reach here
         PrintOutput(true);
         return SOLVER_ERROR;
       }

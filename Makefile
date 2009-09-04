@@ -26,8 +26,9 @@ all:
 	$(MAKE) -C $(SRC)/c_interface
 	$(MAKE) -C $(SRC)/constantbv
 	$(MAKE) -C $(SRC)/parser
+	$(MAKE) -C $(SRC)/main
 	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/AST/printer/*.o $(SRC)/sat/*.or $(SRC)/simplifier/*.o $(SRC)/bitvec/*.o $(SRC)/constantbv/*.o \
-			   $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o
+			   $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o $(SRC)/main/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
@@ -52,16 +53,15 @@ clean:
 	rm -rf bin/*~
 	rm -rf bin/stp
 	rm -rf *.log
-	#rm -rf Makefile
-	#rm -rf config.info
 	rm -f TAGS
 	$(MAKE) clean -C $(SRC)/AST
 	$(MAKE) clean -C $(SRC)/sat
 	$(MAKE) clean -C $(SRC)/simplifier
 	$(MAKE) clean -C $(SRC)/bitvec
-	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/c_interface
 	$(MAKE) clean -C $(SRC)/constantbv
+	$(MAKE) clean -C $(SRC)/parser
+	$(MAKE) clean -C $(SRC)/main
 
 # this is make way too difficult because of the recursive Make junk, it 
 # should be removed
