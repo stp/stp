@@ -15,7 +15,7 @@ using namespace __gnu_cxx;
 #endif
 using namespace BEEV;
 
-extern int smtparse();
+extern int smtparse(void*);
 extern int cvcparse(void*);
 
 // Amount of memory to ask for at beginning of main.
@@ -173,14 +173,17 @@ int main(int argc, char ** argv) {
   GlobalBeevMgr = new BeevMgr();
   ASTVec * AssertsQuery = new ASTVec;
 
-  if (smtlib_parser_flag) {
-    smtparse();
-  }
-  else {
-    cvcparse((void*)AssertsQuery);      
-    ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-    ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
-    GlobalBeevMgr->TopLevelSAT(asserts, query);
-  }
+  if (smtlib_parser_flag) 
+    {
+      smtparse((void*)AssertsQuery);
+    }
+  else 
+    {
+      cvcparse((void*)AssertsQuery);      
+    }
+
+  ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
+  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
+  GlobalBeevMgr->TopLevelSAT(asserts, query);
   return 0;
 }//end of Main

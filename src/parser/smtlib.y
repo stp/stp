@@ -60,6 +60,7 @@
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
+#define YYPARSE_PARAM AssertsQuery
 %}
 
 %union {  
@@ -206,19 +207,23 @@ cmd:
     benchmark
     {
       ASTNode assumptions;
-      if($1 == NULL) {
-        assumptions = GlobalBeevMgr->CreateNode(TRUE);
-      } else {
+      if($1 == NULL) 
+	{
+	  assumptions = GlobalBeevMgr->CreateNode(TRUE);
+	} 
+      else 
+	{
         assumptions = *$1;
-      }
+	}
+      
+      if(query.IsNull()) 
+	{
+	  query = GlobalBeevMgr->CreateNode(FALSE);
+	}
 
-      if(query.IsNull()) {
-        query = GlobalBeevMgr->CreateNode(FALSE);
-      }
-
-      GlobalBeevMgr->TopLevelSAT(assumptions, query);
+      ((ASTVec*)AssertsQuery)->push_back(assumptions);
+      ((ASTVec*)AssertsQuery)->push_back(query);
       delete $1;
-
       YYACCEPT;
     }
 ;

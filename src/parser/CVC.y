@@ -30,7 +30,6 @@
 #define YYMAXDEPTH 10485760
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
-
 #define YYPARSE_PARAM AssertsQuery
 %}
 
@@ -182,14 +181,12 @@ counterexample  :      COUNTEREXAMPLE_TOK ';'
 other_cmd       :      other_cmd1
                 |      Query 
                        { 
-			 //GlobalBeevMgr->TopLevelSAT(GlobalBeevMgr->CreateNode(TRUE),*$1);
 			 ((ASTVec*)AssertsQuery)->push_back(GlobalBeevMgr->CreateNode(TRUE));
 			 ((ASTVec*)AssertsQuery)->push_back(*$1);			 
 			 delete $1;
 		       }
                 |      VarDecls Query 
                        { 
-			 //GlobalBeevMgr->TopLevelSAT(GlobalBeevMgr->CreateNode(TRUE),*$2); 
 			 ((ASTVec*)AssertsQuery)->push_back(GlobalBeevMgr->CreateNode(TRUE));
 			 ((ASTVec*)AssertsQuery)->push_back(*$2);
 			 delete $2;
@@ -198,15 +195,9 @@ other_cmd       :      other_cmd1
                        {
 			 ASTVec aaa = GlobalBeevMgr->GetAsserts();
 			 if(aaa.size() == 0)
-			   yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: ");
-			 /* if(aaa.size() == 1) */
-			 /* 			   { */
-			 /*GlobalBeevMgr->TopLevelSAT(aaa[0],*$2); */
-			 /* 			   } */
-			 /* 			 else */
-			 /* 			   { */
-			 /*GlobalBeevMgr->TopLevelSAT(GlobalBeevMgr->CreateNode(AND,aaa),*$2); */
-			 /* 			   } */
+			   {
+			     yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: ");
+			   }
 			 ASTNode asserts = GlobalBeevMgr->CreateNode(AND,aaa);
 			 ((ASTVec*)AssertsQuery)->push_back(asserts);
 			 ((ASTVec*)AssertsQuery)->push_back(*$2);
