@@ -185,5 +185,11 @@ int main(int argc, char ** argv) {
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
   GlobalBeevMgr->TopLevelSAT(asserts, query);
+
+  //   if(print_STPinput_back_flag) {
+  //     asserts.PL_Print(cout);
+  //     query.PL_Print(cout);
+  //   }
+
   return 0;
 }//end of Main
