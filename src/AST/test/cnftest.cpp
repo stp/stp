@@ -2,7 +2,7 @@
 
 // Test program for CNF conversion.
 
-#include "AST.h"
+#include "../AST.h"
 
 using namespace BEEV;
 
