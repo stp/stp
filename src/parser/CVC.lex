@@ -39,6 +39,7 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 [ \t\r\f]	 { /* skip whitespace */ }
 0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
 0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
+0x{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
 0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
 0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
 {DIGIT}+	 { cvclval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}

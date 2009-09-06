@@ -9,6 +9,7 @@
 #include "../AST/AST.h"
 #include "../sat/core/Solver.h"
 #include "../sat/core/SolverTypes.h"
+#include "../AST/printer/AssortedPrinters.h"
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
@@ -55,7 +56,7 @@ int main(int argc, char ** argv) {
   helpstring +=  "-d  : check counterexample\n";
   helpstring +=  "-p  : print counterexample\n";
   helpstring +=  "-y  : print counterexample in binary\n";
-  helpstring +=  "-b  : STP input read back\n";
+  helpstring +=  "-b  : print STP input back to cout\n";
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
@@ -181,15 +182,14 @@ int main(int argc, char ** argv) {
     {
       cvcparse((void*)AssertsQuery);      
     }
-
+  
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
-  GlobalBeevMgr->TopLevelSAT(asserts, query);
+  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];  
+  if(print_STPinput_back_flag) {
+    print_STPInput_Back(asserts, query);
+    return 0;
+  }
 
-  //   if(print_STPinput_back_flag) {
-  //     asserts.PL_Print(cout);
-  //     query.PL_Print(cout);
-  //   }
-
+  GlobalBeevMgr->TopLevelSAT(asserts, query);  
   return 0;
 }//end of Main

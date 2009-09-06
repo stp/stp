@@ -40,7 +40,7 @@ void vc_setFlags(char c) {
   helpstring +=  "-d  : check counterexample\n";
   helpstring +=  "-p  : print counterexample\n";
   helpstring +=  "-y  : print counterexample in binary\n";
-  helpstring +=  "-b  : STP input read back\n";
+  helpstring +=  "-b  : print STP input back to cout\n";
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
@@ -142,7 +142,7 @@ void vc_printExprCCode(VC vc, Expr e) {
   BEEV::ASTNode q = (*(nodestar)e);
 
   // print variable declarations
-  BEEV::ASTVec declsFromParser = (nodelist)BEEV::GlobalBeevMgr->_special_print_set;
+  BEEV::ASTVec declsFromParser = (nodelist)BEEV::GlobalBeevMgr->ListOfDeclaredVars;
 
   for(BEEV::ASTVec::iterator it=declsFromParser.begin(),itend=declsFromParser.end(); it!=itend;it++) {
     if(BEEV::BITVECTOR_TYPE == it->GetType()) {

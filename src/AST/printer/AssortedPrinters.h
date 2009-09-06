@@ -70,5 +70,12 @@ namespace BEEV
     }
     ;
   }; //End of Class ListVecPrinter
+
+  //global function which accepts an integer and looks up the
+  //corresponding ASTNode and prints a string of that ASTNode
+  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
+                                           int decision, int polarity=0);
+
+  void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query);
 };// end of namespace BEEV
 #endif

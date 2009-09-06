@@ -63,10 +63,5 @@ namespace BEEV {
 #endif
 
   void CountersAndStats(const char * functionname);
-
-  //global function which accepts an integer and looks up the
-  //corresponding ASTNode and prints a string of that ASTNode
-  void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
-                                           int decision, int polarity=0);
 }; // end namespace.
 #endif

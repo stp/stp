@@ -1572,17 +1572,8 @@ namespace BEEV
     bool UpdateSolverMap(const ASTNode& e0, const ASTNode& e1);
 
   public:
-    //FIXME: HACK_ATTACK. this vector was hacked into the code to
-    //support a special request by Dawson' group. They want the
-    //counterexample to be printed in the order of variables declared.
-    //TO BE COMMENTED LATER (say by 1st week of march,2006)
-    ASTVec _special_print_set;
-
-    //prints the initial activity levels of variables
-    //void PrintActivityLevels_Of_SATVars(char * init_msg, MINISAT::Solver& newS);
-
-    //this function biases the activity levels of MINISAT variables.
-    //void ChangeActivityLevels_Of_SATVars(MINISAT::Solver& n);
+    ASTVec ListOfDeclaredVars;
+    void printVarDeclsToStream(ostream &os);
 
     // Constructor
     BeevMgr() :

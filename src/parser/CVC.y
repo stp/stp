@@ -275,7 +275,7 @@ VarDecl		:      FORM_IDs ':' Type
 			   //FIXME: HACK_ATTACK. this vector was hacked into the code to
 			   //support a special request by Dawson' group. They want the
 			   //counterexample to be printed in the order of variables declared.
-			   GlobalBeevMgr->_special_print_set.push_back(*i);
+			   GlobalBeevMgr->ListOfDeclaredVars.push_back(*i);
 			 }
 			 delete $1;
 		       }

@@ -232,7 +232,7 @@ namespace BEEV
     //vector to store the integer values
     std::vector<int> out_int;
     cout << "% ";
-    for (ASTVec::iterator it = _special_print_set.begin(), itend = _special_print_set.end(); it != itend; it++)
+    for (ASTVec::iterator it = ListOfDeclaredVars.begin(), itend = ListOfDeclaredVars.end(); it != itend; it++)
       {
         if (ARRAY_TYPE == it->GetType())
           {
@@ -358,4 +358,38 @@ namespace BEEV
     printer::PL_Print(cout,vv, 0);
     cout << endl;
   } //end of Convert_MINISATVar_To_ASTNode_Print()
+
+  void BeevMgr::printVarDeclsToStream(ostream &os) {
+    for(ASTVec::iterator i = ListOfDeclaredVars.begin(),iend=ListOfDeclaredVars.end();i!=iend;i++) {
+      BEEV::ASTNode a = *i;
+      switch(a.GetType()) {
+      case BEEV::BITVECTOR_TYPE:
+	a.PL_Print(os);
+	os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+	break;
+      case BEEV::ARRAY_TYPE:
+	a.PL_Print(os);
+	os << " : ARRAY " << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
+	os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+	break;
+      case BEEV::BOOLEAN_TYPE:
+	a.PL_Print(os);
+	os << " : BOOLEAN;" << endl;
+	break;
+      default:
+	BEEV::FatalError("vc_printDeclsToStream: Unsupported type",a);
+	break;
+      }
+    }
+  } //printVarDeclsToStream
+
+  void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query) {
+    BEEV::GlobalBeevMgr->printVarDeclsToStream(cout);
+    cout << "ASSERT(";
+    asserts.PL_Print(cout);
+    cout << ");\n\n";
+    cout << "QUERY(";
+    query.PL_Print(cout);
+    cout << ");\n";
+  } //end of print_STPInput_Back()
 };//end of namespace BEEV
