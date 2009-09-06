@@ -6,7 +6,7 @@ OBJS = $(SRCS:.cpp=.o)
 CFLAGS += -I../sat/mtl -I../sat/core
 
 #Make the ast library for use by other modules
-libast.a:	$(OBJS) depend
+libast.a:$(OBJS) depend
 	-rm -rf $@
 	$(AR) rc $@ $(OBJS)
 	$(RANLIB) $@

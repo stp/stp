@@ -27,7 +27,7 @@ bool cinterface_exprdelete_on_flag = false;
 
 /* GLOBAL FUNCTION: parser
  */
-extern int cvcparse();
+extern int cvcparse(void*);
 
 void vc_setFlags(char c) {
   std::string helpstring = "Usage: stp [-option] [infile]\n\n";
@@ -1448,6 +1448,40 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 }
 #endif
 
+// Expr vc_parseExpr(VC vc, char* infile) {
+//   bmstar b = (bmstar)vc;
+//   extern FILE* cvcin;
+//   const char * prog = "stp";
+  
+//   cvcin = fopen(infile,"r");
+//   if(cvcin == NULL) {
+//     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+//     BEEV::FatalError("");
+//   }
+  
+//   BEEV::GlobalBeevMgr = b;
+
+//   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+//   if(0 != c) {
+//     cout << CONSTANTBV::BitVector_Error(c) << endl;
+//     return 0;
+//   }
+
+//   cvcparse();
+//   nodelist aaa = b->GetAsserts();
+
+//   //Don't add the query. It gets added automatically if the input file
+//   //has QUERY in it 
+//   //
+//   //node bbb = b->CreateNode(BEEV::NOT,b->GetQuery());
+//   node o =  b->CreateNode(BEEV::AND,aaa);
+//   //node o = b->CreateNode(BEEV::AND,oo,bbb);
+
+//   nodestar output = new node(o);
+//   return output;
+// } //end of vc_parseExpr()
+
+
 Expr vc_parseExpr(VC vc, char* infile) {
   bmstar b = (bmstar)vc;
   extern FILE* cvcin;
@@ -1460,23 +1494,20 @@ Expr vc_parseExpr(VC vc, char* infile) {
   }
   
   BEEV::GlobalBeevMgr = b;
-
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
 
-  cvcparse();
-  nodelist aaa = b->GetAsserts();
-
-  //Don't add the query. It gets added automatically if the input file
-  //has QUERY in it 
-  //
-  //node bbb = b->CreateNode(BEEV::NOT,b->GetQuery());
-  node o =  b->CreateNode(BEEV::AND,aaa);
-  //node o = b->CreateNode(BEEV::AND,oo,bbb);
-
+  BEEV::ASTVec * AssertsQuery = new BEEV::ASTVec;
+  cvcparse((void*)AssertsQuery);
+  BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
+  BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
+  //b->TopLevelSAT(asserts, query);
+  
+  node oo = b->CreateNode(BEEV::NOT,query);
+  node o = b->CreateNode(BEEV::AND,asserts,oo);
   nodestar output = new node(o);
   return output;
 } //end of vc_parseExpr()

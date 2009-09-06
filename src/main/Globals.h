@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <vector>
 
 namespace MINISAT
 {
@@ -102,6 +103,9 @@ namespace BEEV
 
   //Useful global variables. There are very few them
   extern BeevMgr * GlobalBeevMgr;
+
+  //Empty vector
+  extern std::vector<BEEV::ASTNode> _empty_ASTVec;
 
   //Some global vars for the Main function.
   extern const char * prog;
