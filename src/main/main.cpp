@@ -185,10 +185,17 @@ int main(int argc, char ** argv) {
   
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];  
-  if(print_STPinput_back_flag) {
-    print_STPInput_Back(asserts, query);
-    return 0;
-  }
+  if(print_STPinput_back_flag) 
+    {
+      if(smtlib_parser_flag) 
+	{	  
+	}
+      else 
+	{
+	  print_STPInput_Back(asserts, query);
+	}
+      return 0;
+    } //end of PrintBack if
 
   GlobalBeevMgr->TopLevelSAT(asserts, query);  
   return 0;
