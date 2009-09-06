@@ -67,7 +67,7 @@ namespace BEEV
   ASTVec _empty_ASTVec;
 
   //Some global vars for the Main function.
-  const std::string version = "$Id: main.cpp 174 2009-09-03 19:22:47Z vijay_ganesh $";
+  const std::string version = "$Id$";
   const char * prog = "stp";
   int linenum  = 1;
   const char * usage = "Usage: %s [-option] [infile]\n";
