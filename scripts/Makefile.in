@@ -77,7 +77,7 @@ REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
 PROGNAME=bin/stp
 ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
 
-.PHONY: regressall
+.PHONY: regresscvc
 regressall:
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)

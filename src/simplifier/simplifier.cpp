@@ -46,7 +46,11 @@ namespace BEEV
 
     if (pushNeg && (it = SimplifyMap->find(key)) != SimplifyMap->end())
       {
-        output = (ASTFalse == it->second) ? ASTTrue : (ASTTrue == it->second) ? ASTFalse : CreateNode(NOT, it->second);
+        output = 
+	  (ASTFalse == it->second) ? 
+	  ASTTrue : 
+	  (ASTTrue == it->second) ? 
+	  ASTFalse : CreateNode(NOT, it->second);
         CountersAndStats("2nd_Successful_CheckSimplifyMap");
         return true;
       }

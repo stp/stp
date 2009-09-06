@@ -253,14 +253,15 @@ namespace BEEV
           result = bm.CreateNode(k, vec);
           break;
         }
+      case FOR:
       default:
         if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
           result = simpleForm;
         else
           {
+            FatalError("TransformFormula: Illegal kind: ", bm.CreateNode(UNDEFINED), k);
             cerr << "The input is: " << simpleForm << endl;
             cerr << "The valuewidth of input is : " << simpleForm.GetValueWidth() << endl;
-            FatalError("TransformFormula: Illegal kind: ", bm.CreateNode(UNDEFINED), k);
           }
         break;
       }

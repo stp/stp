@@ -43,7 +43,7 @@ REGRESSIONS
 
 Assumes you have downloaded the testcases
 
-make regressall
+make regresscvc
 make regress_smt
 make regress_c_api
 make regressbigarray

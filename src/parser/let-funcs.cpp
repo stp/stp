@@ -37,7 +37,7 @@ namespace BEEV {
     }
 
     (*_letid_expr_map)[var] = letExpr;   
-  }
+  }//end of LetExprMgr()
 
   //this function looksup the "var to letexpr map" and returns the
   //corresponding letexpr. if there is no letexpr, then it simply
@@ -57,10 +57,10 @@ namespace BEEV {
     ASTNodeMap::iterator it;
     if((it =_letid_expr_map->find(v)) != _letid_expr_map->end()) {
       if(it->second == ASTUndefined) 
-        FatalError("Unresolved Identifier: ",v);
+        FatalError("ResolveID :: Unresolved Identifier: ",v);
       else
         return it->second;
-    }
+    }//end of ResolveID()
 
     //this is to mark the let-var as undefined. the let var is defined
     //only after the LetExprMgr has completed its work, and until then
@@ -75,7 +75,6 @@ namespace BEEV {
   
   // This function simply cleans up the LetID -> LetExpr Map.   
   void BeevMgr::CleanupLetIDMap(void) { 
-
     // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
     if (_letid_expr_map->size()  ==0)
       return;
@@ -94,10 +93,10 @@ namespace BEEV {
     delete _letid_expr_map;
     _letid_expr_map = new ASTNodeMap();
 
-  }
+  }//end of CleanupLetIDMap()
 
   void BeevMgr::InitializeLetIDMap(void)
   {
     _letid_expr_map = new ASTNodeMap();
-  }
+  } //end of InitializeLetIDMap()
 };
