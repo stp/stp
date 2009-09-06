@@ -1268,6 +1268,38 @@ Expr vc_bvBoolExtract(VC vc, Expr ccc, int bit_num) {
   return output; 
 }
 
+Expr vc_bvBoolExtract_Zero(VC vc, Expr ccc, int bit_num) {
+  bmstar b = (bmstar)vc;
+  nodestar a = (nodestar)ccc;
+  b->BVTypeCheck(*a);
+
+  node bit = b->CreateBVConst(32,bit_num);
+  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);  
+  node zero = b->CreateBVConst(1,0);
+  node oo = b->CreateTerm(BEEV::BVEXTRACT,1,*a,bit,bit);
+  node o = b->CreateNode(BEEV::EQ,oo,zero);
+  b->BVTypeCheck(o);
+  nodestar output = new node(o);
+  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output; 
+}
+
+Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num) {
+  bmstar b = (bmstar)vc;
+  nodestar a = (nodestar)ccc;
+  b->BVTypeCheck(*a);
+
+  node bit = b->CreateBVConst(32,bit_num);
+  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);  
+  node one = b->CreateBVConst(1,1);
+  node oo = b->CreateTerm(BEEV::BVEXTRACT,1,*a,bit,bit);
+  node o = b->CreateNode(BEEV::EQ,oo,one);
+  b->BVTypeCheck(o);
+  nodestar output = new node(o);
+  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output; 
+}
+
 Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)ccc;

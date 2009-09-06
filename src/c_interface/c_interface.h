@@ -260,9 +260,14 @@ extern "C" {
   
   //accepts a bitvector and position, and returns a boolean
   //corresponding to that position. More precisely, it return the
-  //equation (x[bit_no:bit_no] = 0)
-  //FIXME  = 1 ?
-  Expr vc_bvBoolExtract(VC vc, Expr x, int bit_no);  
+  //equation (x[bit_no:bit_no] == 0)
+  Expr vc_bvBoolExtract(VC vc, Expr x, int bit_no);
+  Expr vc_bvBoolExtract_Zero(VC vc, Expr x, int bit_no);
+  
+  //accepts a bitvector and position, and returns a boolean
+  //corresponding to that position. More precisely, it return the
+  //equation (x[bit_no:bit_no] == 1)
+  Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);  
   Expr vc_bvSignExtend(VC vc, Expr child, int nbits);
   
   /*C pointer support:  C interface to support C memory arrays in CVCL */
