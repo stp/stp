@@ -204,7 +204,7 @@ namespace BEEV
   
   //Creates Array Write Axioms
   ASTNode BeevMgr::Create_ArrayWriteAxioms(const ASTNode& term, 
-					   const ASTNode& newvar)
+                                           const ASTNode& newvar)
   {
     if (READ != term.GetKind() && WRITE != term[0].GetKind())
       {
@@ -241,16 +241,16 @@ namespace BEEV
                                                                  const ASTNode& original_input)
   {
     for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),iend=GlobalList_Of_FiniteLoops.end();
-	i!=iend;i++)
+        i!=iend;i++)
       {
-	ASTNodeMap ParamToCurrentValMap;
-	SOLVER_RETURN_TYPE ret = SATBased_FiniteLoop_Refinement(SatSolver,
-								original_input,
-								*i,&ParamToCurrentValMap);
-	if(SOLVER_UNDECIDED != ret)
-	  {
-	    return ret;
-	  }
+        ASTNodeMap ParamToCurrentValMap;
+        SOLVER_RETURN_TYPE ret = SATBased_FiniteLoop_Refinement(SatSolver,
+                                                                original_input,
+                                                                *i,&ParamToCurrentValMap);
+        if(SOLVER_UNDECIDED != ret)
+          {
+            return ret;
+          }
       }
     return SOLVER_UNDECIDED;
   } //end of SATBased_AllFiniteLoops_Refinement()

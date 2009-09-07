@@ -188,13 +188,13 @@ int main(int argc, char ** argv) {
   if(print_STPinput_back_flag) 
     {
       if(smtlib_parser_flag) 
-	{
-	  FatalError("Print back feature for SMT format not yet implemented\n");
-	}
+        {
+          FatalError("Print back feature for SMT format not yet implemented\n");
+        }
       else 
-	{
-	  print_STPInput_Back(asserts, query);
-	}
+        {
+          print_STPInput_Back(asserts, query);
+        }
       return 0;
     } //end of PrintBack if
 
