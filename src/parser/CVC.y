@@ -16,6 +16,12 @@
   // compile error)
 #undef __GNUC_MINOR__
 
+#define YYLTYPE_IS_TRIVIAL 1
+#define YYMAXDEPTH 10485760
+#define YYERROR_VERBOSE 1
+#define YY_EXIT_FAILURE -1
+#define YYPARSE_PARAM AssertsQuery
+
 
   extern int cvclex(void);
   extern char* yytext;
@@ -23,14 +29,8 @@
   int yyerror(const char *s) {
     cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
     FatalError("");
-    return 1;			/* Dill: don't know what it should return */
+    return YY_EXIT_FAILURE;			/* Dill: don't know what it should return */
   };
-
-#define YYLTYPE_IS_TRIVIAL 1
-#define YYMAXDEPTH 10485760
-#define YYERROR_VERBOSE 1
-#define YY_EXIT_FAILURE -1
-#define YYPARSE_PARAM AssertsQuery
 %}
 
 %union {
@@ -457,10 +457,10 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 			 //
 			 //increment value (BVCONST)
 			 //
-			 //formula (it can be a nested forloop)
-			 _parser_symbol_table.insert(*$3);
+			 //formula (it can be a nested forloop)			 
 			 $3->SetIndexWidth($5.indexwidth);
 			 $3->SetValueWidth($5.valuewidth);
+			 _parser_symbol_table.insert(*$3);
 			   
 			 ASTVec vec;
 			 vec.push_back(*$3);

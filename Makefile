@@ -77,8 +77,8 @@ REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
 PROGNAME=bin/stp
 ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
 
-.PHONY: regressall
-regressall:
+.PHONY: regresscvc
+regresscvc:
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
@@ -111,8 +111,8 @@ regressbigarray:
           | tee -a $(BIGARRAY_LOG)
 
 SMT_LOG = `date +%Y-%m-%d`"-regress-smt.log"
-.PHONY: regress_smt
-regress_smt:
+.PHONY: regresssmt
+regresssmt:
 	@echo "*********************************************************" \
           | tee -a $(SMT_LOG)
 	@echo "Starting tests at" `date` | tee -a $(SMT_LOG)
@@ -126,8 +126,8 @@ regress_smt:
           | tee -a $(SMT_LOG)
 
 CAPI_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
-.PHONY: regress_c_api
-regress_c_api:
+.PHONY: regresscapi
+regresscapi:
 	@echo "*********************************************************" \
           | tee -a $(CAPI_LOG)
 	@echo "Starting tests at" `date` | tee -a $(CAPI_LOG)

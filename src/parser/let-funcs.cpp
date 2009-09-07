@@ -29,11 +29,13 @@ namespace BEEV {
     ASTNodeMap::iterator it;
     if(((it = _letid_expr_map->find(var)) != _letid_expr_map->end()) && 
        it->second != ASTUndefined) {      
-      FatalError("LetExprMgr:The LET-var v has already been defined in this LET scope: v =", var);
+      FatalError("LetExprMgr:The LET-var v has already been defined"\ 
+		 "in this LET scope: v =", var);
     }
 
     if(_parser_symbol_table.find(var) != _parser_symbol_table.end()) {
-      FatalError("LetExprMgr:This var is already declared. cannot redeclare as a letvar: v =", var);
+      FatalError("LetExprMgr:This var is already declared. "\
+		 "cannot redeclare as a letvar: v =", var);
     }
 
     (*_letid_expr_map)[var] = letExpr;   

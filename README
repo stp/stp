@@ -44,6 +44,6 @@ REGRESSIONS
 Assumes you have downloaded the testcases
 
 make regresscvc
-make regress_smt
-make regress_c_api
+make regresssmt
+make regresscapi
 make regressbigarray
