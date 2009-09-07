@@ -19,6 +19,5 @@ done
 
 ./scripts/configure --with-prefix=$PREFIX
 make clean
-make
 make install
 

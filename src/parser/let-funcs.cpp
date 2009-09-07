@@ -29,7 +29,7 @@ namespace BEEV {
     ASTNodeMap::iterator it;
     if(((it = _letid_expr_map->find(var)) != _letid_expr_map->end()) && 
        it->second != ASTUndefined) {      
-      FatalError("LetExprMgr:The LET-var v has already been defined"\ 
+      FatalError("LetExprMgr:The LET-var v has already been defined"\
 		 "in this LET scope: v =", var);
     }
 

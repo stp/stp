@@ -156,7 +156,7 @@
 
 %type <vec>  Exprs FORM_IDs reverseFORM_IDs
 %type <vec>  Asserts 
-%type <node> Expr Formula IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
+%type <node> Expr Formula ForDecl IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
 %type <Index_To_UpdateValue> Updates
 
 %type <indexvaluewidth>  BvType BoolType ArrayType Type 
@@ -334,6 +334,14 @@ FORM_IDs         :     reverseFORM_IDs
                       }
                 ;
 
+ForDecl         :      FORMID_TOK ':' Type
+                      {
+			$1->SetIndexWidth($3.indexwidth);
+			$1->SetValueWidth($3.valuewidth);
+			_parser_symbol_table.insert(*$1);
+			$$ = $1;			
+		      }
+
 /* Grammar for Types */
 Type		:      BvType { $$ = $1; }
                 |      BoolType { $$ = $1; }
@@ -443,7 +451,7 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 			 delete $1;
 			 delete $3;
 		       }
-                |      FOR_TOK '(' FORMID_TOK ':' Type ';' BVCONST_TOK ';' BVCONST_TOK ';' BVCONST_TOK ')' '{' Formula '}'
+                |      FOR_TOK '(' ForDecl ';' BVCONST_TOK ';' BVCONST_TOK ';' BVCONST_TOK ')' '{' Formula '}'
                        {
 			 //Allows a compact representation of
 			 //parameterized set of formulas (bounded
@@ -458,24 +466,21 @@ Formula		:     '(' Formula ')' { $$ = $2; }
 			 //increment value (BVCONST)
 			 //
 			 //formula (it can be a nested forloop)			 
-			 $3->SetIndexWidth($5.indexwidth);
-			 $3->SetValueWidth($5.valuewidth);
-			 _parser_symbol_table.insert(*$3);
 			   
 			 ASTVec vec;
 			 vec.push_back(*$3);
+			 vec.push_back(*$5);
 			 vec.push_back(*$7);
 			 vec.push_back(*$9);
-			 vec.push_back(*$11);
-			 vec.push_back(*$14);
+			 vec.push_back(*$12);
 			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(FOR,vec));
 			 GlobalBeevMgr->BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
+			 delete $5;
 			 delete $7;
 			 delete $9;
-			 delete $11;
-			 delete $14;
+			 delete $12;
 		       }
 		|      NOT_TOK Formula 
                        {
