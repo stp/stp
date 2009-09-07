@@ -7,7 +7,7 @@
  ********************************************************************/
 // -*- c++ -*-
 
-#include "AST.h"
+#include "../AST/AST.h"
 #include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
 

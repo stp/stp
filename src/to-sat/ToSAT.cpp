@@ -6,10 +6,9 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 // -*- c++ -*-
-#include "AST.h"
-#include "ASTUtil.h"
-#include "../simplifier/bvsolver.h"
 #include <cmath>
+#include "../AST/AST.h"
+#include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
 
 namespace BEEV

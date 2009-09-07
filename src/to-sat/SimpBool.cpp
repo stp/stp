@@ -18,7 +18,7 @@
 static bool _trace_simpbool = 0;
 static bool _disable_simpbool = 0;
 
-#include "AST.h"
+#include "../AST/AST.h"
 
 // SMTLIB experimental hack.  Try allocating a single stack here for
 // children to reduce growing of vectors.

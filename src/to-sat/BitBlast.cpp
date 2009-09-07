@@ -18,7 +18,7 @@
 // A bitblasted term is a vector of ASTNodes for formulas.
 // The 0th element of the vector corresponds to bit 0 -- the low-order bit.
 
-#include "AST.h"
+#include "../AST/AST.h"
 namespace BEEV
 {
   //  extern void lpvec(ASTVec &vec);

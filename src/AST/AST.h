@@ -76,7 +76,7 @@ namespace BEEV
     friend class BeevMgr;
     friend class CNFMgr;
     friend class ASTInterior;
-    friend class vector<ASTNode> ;
+    friend class vector<ASTNode>;
     //Print the arguments in lisp format.
     friend ostream &LispPrintVec(ostream &os, 
                                  const ASTVec &v, 

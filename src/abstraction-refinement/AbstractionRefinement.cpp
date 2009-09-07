@@ -6,9 +6,9 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 // -*- c++ -*-
-#include "AST.h"
-#include "ASTUtil.h"
-#include "../simplifier/bvsolver.h"
+#include "../AST/AST.h"
+#include "../AST/ASTUtil.h"
+//#include "../simplifier/bvsolver.h"
 #include <math.h>
 
 namespace BEEV
@@ -21,6 +21,8 @@ namespace BEEV
   /******************************************************************
    * ARRAY READ ABSTRACTION REFINEMENT
    *   
+   * SATBased_ArrayReadRefinement()
+   *
    * What it really does is, for each array, loop over each index i.
    * inside that loop, it finds all the true and false axioms with i
    * as first index.  When it's got them all, it adds the false axioms
