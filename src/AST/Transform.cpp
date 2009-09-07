@@ -15,7 +15,6 @@
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
 
-
 #include "AST.h"
 #include <cstdlib>
 #include <cstdio>
@@ -174,8 +173,13 @@ namespace BEEV
       {
         assertTransformPostConditions(*it);
       }
-  }
+  }//End of assertTransformPostConditions()
 
+  /********************************************************
+   * TransformFormula()
+   *
+   * Get rid of DIV/MODs, ARRAY read/writes, FOR constructs
+   ********************************************************/
   ASTNode TransformFormula(const ASTNode& form)
   {
     BeevMgr& bm = form.GetBeevMgr();
@@ -254,6 +258,10 @@ namespace BEEV
           break;
         }
       case FOR:
+	//Insert in a global list of FOR constructs. Return TRUE now
+	bm.GlobalList_Of_FiniteLoops.push_back(simpleForm);
+	return bm.CreateNode(TRUE);
+	break;
       default:
         if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
           result = simpleForm;
@@ -618,10 +626,4 @@ namespace BEEV
     (*TransformMap)[term] = result;
     return result;
   } //end of TransformArray()
-
-  ASTNode BeevMgr::TransformFiniteFor(const ASTNode& form)
-  {
-    return form;
-  }
-
 } //end of namespace BEEV

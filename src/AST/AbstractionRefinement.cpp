@@ -13,31 +13,31 @@
 
 namespace BEEV
 {
+
   /******************************************************************
    * Abstraction Refinement related functions
    ******************************************************************/  
   
-  //FIXME: Write a detailed comment on how this actually works
+  /******************************************************************
+   * ARRAY READ ABSTRACTION REFINEMENT
+   *   
+   * What it really does is, for each array, loop over each index i.
+   * inside that loop, it finds all the true and false axioms with i
+   * as first index.  When it's got them all, it adds the false axioms
+   * to the formula and re-solves, and returns if the result is
+   * correct.  Otherwise, it goes on to the next index.
+   *
+   * If it gets through all the indices without a correct result
+   * (which I think is impossible), it then solves with all the true
+   * axioms, too.
+   *
+   * This is not the most obvious way to do it, and I don't know how
+   * it compares with other approaches (e.g., one false axiom at a
+   * time or all the false axioms each time).
+   *****************************************************************/
   SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
                                                            const ASTNode& inputAlreadyInSAT, 
                                                            const ASTNode& original_input) {
-    //go over the list of indices for each array, and generate Leibnitz
-    //axioms. Then assert these axioms into the SAT solver. Check if the
-    //addition of the new constraints has made the bogus counterexample
-    //go away. if yes, return the correct answer. if no, continue adding
-    //Leibnitz axioms systematically.
-    // FIXME:  What it really does is, for each array, loop over each index i.
-    // inside that loop, it finds all the true and false axioms with i as first
-    // index.  When it's got them all, it adds the false axioms to the formula
-    // and re-solves, and returns if the result is correct.  Otherwise, it
-    // goes on to the next index.
-    // If it gets through all the indices without a correct result (which I think
-    // is impossible, but this is pretty confusing), it then solves with all
-    // the true axioms, too.
-    // This is not the most obvious way to do it, and I don't know how it
-    // compares with other approaches (e.g., one false axiom at a time or
-    // all the false axioms each time).
-    
     //printf("doing array read refinement\n");
     if (!arrayread_refinement_flag)
       FatalError("SATBased_ArrayReadRefinement: Control should not reach here");
@@ -138,21 +138,12 @@ namespace BEEV
     return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input);
   } //end of SATBased_ArrayReadRefinement
 
-  //Creates Array Write Axioms
-  ASTNode BeevMgr::Create_ArrayWriteAxioms(const ASTNode& term, const ASTNode& newvar)
-  {
-    if (READ != term.GetKind() && WRITE != term[0].GetKind())
-      {
-        FatalError("Create_ArrayWriteAxioms: Input must be a READ over a WRITE", term);
-      }
 
-    ASTNode lhs = newvar;
-    ASTNode rhs = term;
-    ASTNode arraywrite_axiom = CreateSimplifiedEQ(lhs, rhs);
-    return arraywrite_axiom;
-  }//end of Create_ArrayWriteAxioms()
-
-  //FIXME: Write a detailed comment on how this actually works
+  /******************************************************************
+   * ARRAY WRITE ABSTRACTION REFINEMENT
+   *
+   * FIXME: Write Detailed Comment
+   *****************************************************************/
   SOLVER_RETURN_TYPE BeevMgr::SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, 
                                                             const ASTNode& original_input)
   {
@@ -211,30 +202,78 @@ namespace BEEV
     return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayWriteRefinement
   
-  //Expands all finite-for-loops using counterexample-guided
-  //abstraction-refinement.
+  //Creates Array Write Axioms
+  ASTNode BeevMgr::Create_ArrayWriteAxioms(const ASTNode& term, 
+					   const ASTNode& newvar)
+  {
+    if (READ != term.GetKind() && WRITE != term[0].GetKind())
+      {
+        FatalError("Create_ArrayWriteAxioms: Input must be a READ over a WRITE", term);
+      }
+
+    ASTNode lhs = newvar;
+    ASTNode rhs = term;
+    ASTNode arraywrite_axiom = CreateSimplifiedEQ(lhs, rhs);
+    return arraywrite_axiom;
+  }//end of Create_ArrayWriteAxioms()
+
+
+  /******************************************************************
+   * FINITE FORLOOP ABSTRACTION REFINEMENT
+   *
+   * For each 'finiteloop' in the list 'GlobalList_Of_FiniteLoops'
+   *
+   * Expand_FiniteLoop(finiteloop);
+   *
+   * The 'Expand_FiniteLoop' function expands the 'finiteloop' in a
+   * counterexample-guided refinement fashion
+   *
+   * Once all the finiteloops have been expanded, we need to go back
+   * and recheck that every discarded constraint is true with the
+   * final model. A flag 'done' is set to false if atleast one
+   * constraint is false during model-check, and is set to true if all
+   * constraints are true during model-check.
+   *
+   * if the 'done' flag is true, then we terminate this refinement
+   * loop.  
+   *****************************************************************/
   SOLVER_RETURN_TYPE BeevMgr::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
                                                                  const ASTNode& original_input)
   {
-    /*
-     * For each 'finiteloop' in the global list 'List_Of_FiniteLoops'
-     *
-     * Expand_FiniteLoop(finiteloop);
-     *
-     * The 'Expand_FiniteLoop' function expands the 'finiteloop' in a
-     * counterexample-guided refinement fashion
-     *
-     * Once all the finiteloops have been expanded, we need to go back
-     * and recheck that every discarded constraint is true with the
-     * final model. A flag 'done' is set to false if atleast one
-     * constraint is false during model-check, and is set to true if all
-     * constraints are true during model-check.
-     *
-     * if the 'done' flag is true, then we terminate this refinement
-     * loop.
-     */
+    for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),iend=GlobalList_Of_FiniteLoops.end();
+	i!=iend;i++)
+      {
+	ASTNodeMap ParamToCurrentValMap;
+	SOLVER_RETURN_TYPE ret = SATBased_FiniteLoop_Refinement(SatSolver,
+								original_input,
+								*i,&ParamToCurrentValMap);
+	if(SOLVER_UNDECIDED != ret)
+	  {
+	    return ret;
+	  }
+      }
+    return SOLVER_UNDECIDED;
   } //end of SATBased_AllFiniteLoops_Refinement()
   
+  
+  /*****************************************************************
+   * SATBased_FiniteLoop_Refinement
+   *
+   *
+   * 'finiteloop' is the finite loop to be expanded
+   * Every finiteloop has three parts:
+   * 0) Parameter Name
+   * 1) Parameter initialization
+   * 2) Parameter limit value
+   * 3) Increment formula
+   * 4) Formula Body
+   *
+   * ParamToCurrentValMap contains a map from parameters to their
+   * current values in the recursion
+   *   
+   * Nested FORs are allowed, but only the innermost loop can have a
+   * formula in it
+   *****************************************************************/
   //SATBased_FiniteLoop_Refinement
   //
   //Expand the finite loop, check against model, and add false
@@ -243,23 +282,7 @@ namespace BEEV
                                                              const ASTNode& original_input,                                               
                                                              const ASTNode& finiteloop,
                                                              ASTNodeMap* ParamToCurrentValMap)
-  { 
-    /*
-     * 'finiteloop' is the finite loop to be expanded
-     * Every finiteloop has three parts:
-     * 0) Parameter Name
-     * 1) Parameter initialization
-     * 2) Parameter limit value
-     * 3) Increment formula
-     * 4) Formula Body
-     *
-     * ParamToCurrentValMap contains a map from parameters to their
-     * current values in the recursion
-     *   
-     * Nested FORs are allowed, but only the innermost loop can have a
-     * formula in it
-     */
-
+  {     
     //BVTypeCheck should have already checked the sanity of the input
     //FOR-formula
     ASTNode parameter     = finiteloop[0];

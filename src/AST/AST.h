@@ -1234,7 +1234,6 @@ namespace BEEV
     ASTNode Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
 					ASTNodeMap* ParamToCurrentValMap,
 					bool CheckUsingModel_Or_Expand);
-  
     ASTNode Expand_FiniteLoop_TopLevel(const ASTNode& finiteloop);
       
     //creates array write axiom only for the input term or formula, if
@@ -1250,6 +1249,11 @@ namespace BEEV
     bool start_abstracting;
     bool Begin_RemoveWrites;
     bool SimplifyWrites_InPlace_Flag;
+
+    //For finiteloop construct
+    //
+    //A list of all finiteloop constructs in the input formula
+    ASTVec GlobalList_Of_FiniteLoops;
 
     void CopySolverMap_To_CounterExample(void);
     //int LinearSearch(const ASTNode& orig_input);
@@ -1354,8 +1358,6 @@ namespace BEEV
     // but it accesses private elements. Move it later.
     ASTNode TransformFormula_TopLevel(const ASTNode& form);
     ASTNode TransformArray(const ASTNode& term);
-    ASTNode TransformFiniteFor(const ASTNode& form);
-
 
     //LET Management
   private:
@@ -1434,10 +1436,6 @@ namespace BEEV
     //terms
     ASTNodeMap NewName_ReadOverWrite_Map;
 
-    //For finiteloop construct
-    //
-    //A list of all finiteloop constructs in the input formula
-    ASTVec List_Of_FiniteLoops;
   public:
     //print the STP solver output
     void PrintOutput(bool true_iff_valid);
@@ -1604,7 +1602,7 @@ namespace BEEV
 
     //destructor
     ~BeevMgr();
-  }; //End of Class BeevMgr
+  };//End of Class BeevMgr
 
 
   class CompleteCounterExample
