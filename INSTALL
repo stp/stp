@@ -1,3 +1,5 @@
+
+
 /********************************************************************
  * PROGRAM NAME: STP (Simple Theorem Prover)	
  *		
@@ -29,3 +31,5 @@ NB:
 * If you want to compile a statically linked version of STP, run
 ./liblinks.sh after the configure script, and then compile adding
 STATIC=true to the make commands.
+
+
