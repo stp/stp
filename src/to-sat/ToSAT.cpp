@@ -923,7 +923,7 @@ namespace BEEV
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
-    BVSolver bvsolver(this);
+    BVSolver* bvsolver = new BVSolver(this);
     SimplifyWrites_InPlace_Flag = false;
     Begin_RemoveWrites = false;
     start_abstracting = false;
@@ -939,7 +939,7 @@ namespace BEEV
           SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-          bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+          bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
       } while (inputToSAT != simplified_solved_InputToSAT);
 
@@ -958,10 +958,13 @@ namespace BEEV
           SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
-          bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+          bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
       } while (inputToSAT != simplified_solved_InputToSAT);
     ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
+
+    delete bvsolver;
+    bvsolver = NULL;
 
     start_abstracting = (arraywrite_refinement_flag) ? true : false;
     SimplifyWrites_InPlace_Flag = false;

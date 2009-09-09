@@ -29,17 +29,17 @@ namespace BEEV
 
   ostream &ASTNode::LispPrint(ostream &os, int indentation) const
   {
-    printer::Lisp_Print(os, *this, indentation);
+    return printer::Lisp_Print(os, *this, indentation);
   }
 
   ostream &ASTNode::LispPrint_indent(ostream &os, int indentation) const
   {
-    printer::Lisp_Print_indent(os, *this, indentation);
+    return printer::Lisp_Print_indent(os, *this, indentation);
   }
 
   ostream& ASTNode::PL_Print(ostream &os,  int indentation) const
   {
-    printer::PL_Print(os, *this, indentation);
+    return printer::PL_Print(os, *this, indentation);
   }
 
   //This is the IO manipulator.  It builds an object of class
