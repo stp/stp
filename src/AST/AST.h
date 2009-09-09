@@ -1155,12 +1155,19 @@ namespace BEEV
       return n;
     }
 
-    ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg);
+    ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, 
+					   bool pushNeg, 
+					   ASTNodeMap* VarConstMap=NULL);
+    ASTNode SimplifyFormula_TopLevel(const ASTNode& a, 
+				     bool pushNeg,
+				     ASTNodeMap* VarConstMap=NULL);
     ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
 
-    ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    ASTNode SimplifyTerm(const ASTNode& inputterm, ASTNodeMap* VarConstMap=NULL);
+    ASTNode SimplifyFormula(const ASTNode& a, 
+			    bool pushNeg, 
+			    ASTNodeMap* VarConstMap=NULL);
+    ASTNode SimplifyTerm(const ASTNode& inputterm, 
+			 ASTNodeMap* VarConstMap=NULL);
     void CheckSimplifyInvariant(const ASTNode& a, const ASTNode& output);
     void BuildReferenceCountMap(const ASTNode& b);
 
@@ -1235,7 +1242,8 @@ namespace BEEV
 					ASTNodeMap* ParamToCurrentValMap,
 					bool CheckUsingModel_Or_Expand);
     ASTNode Expand_FiniteLoop_TopLevel(const ASTNode& finiteloop);
-      
+    ASTNode Check_FiniteLoop_UsingModel(const ASTNode& finiteloop);
+  
     //creates array write axiom only for the input term or formula, if
     //necessary. If there are no axioms to produce then it simply
     //generates TRUE
@@ -1539,7 +1547,8 @@ namespace BEEV
     void ASTNodeStats(const char * c, const ASTNode& a);
 
     //Check the map passed to SimplifyTerm
-    bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
+    bool CheckMap(ASTNodeMap* VarConstMap, 
+		  const ASTNode& key, ASTNode& output);
 
 
     //substitution

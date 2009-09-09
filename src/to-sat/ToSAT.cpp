@@ -660,7 +660,8 @@ namespace BEEV
         ASTNode writeIndex = TermToConstTermUsingModel(write[1], false);
         ASTNode writeVal = TermToConstTermUsingModel(write[2], false);
 
-        ASTNode cond = ComputeFormulaUsingModel(CreateSimplifiedEQ(writeIndex, readIndex));
+        ASTNode cond = 
+	  ComputeFormulaUsingModel(CreateSimplifiedEQ(writeIndex, readIndex));
         if (ASTTrue == cond)
           {
             //found the write-value. return it
@@ -837,10 +838,15 @@ namespace BEEV
         else if (ASTFalse == t0)
           output = ComputeFormulaUsingModel(form[2]);
         else
-          FatalError("ComputeFormulaUsingModel: ITE: something is wrong with the formula: ", form);
+          FatalError("ComputeFormulaUsingModel: ITE: "\
+		     "something is wrong with the formula: ", form);
         break;
+      case FOR:
+	output = Check_FiniteLoop_UsingModel(form);
+	break;
       default:
-        FatalError(" ComputeFormulaUsingModel: the kind has not been implemented", ASTUndefined);
+        FatalError(" ComputeFormulaUsingModel: "\
+		   "the kind has not been implemented", ASTUndefined);
         break;
       }
 
@@ -931,17 +937,22 @@ namespace BEEV
     do
       {
         inputToSAT = simplified_solved_InputToSAT;
+
         simplified_solved_InputToSAT = 
           CreateSubstitutionMap(simplified_solved_InputToSAT);
         //printf("##################################################\n");
         ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+
         simplified_solved_InputToSAT = 
           SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+
         simplified_solved_InputToSAT = 
           bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
-      } while (inputToSAT != simplified_solved_InputToSAT);
+
+      } 
+    while (inputToSAT != simplified_solved_InputToSAT);
 
     ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
     SimplifyWrites_InPlace_Flag = true;
@@ -954,13 +965,17 @@ namespace BEEV
         simplified_solved_InputToSAT = 
           CreateSubstitutionMap(simplified_solved_InputToSAT);
         ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
-        simplified_solved_InputToSAT = 
+    
+	simplified_solved_InputToSAT = 
           SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
         ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
-        simplified_solved_InputToSAT = 
+        
+	simplified_solved_InputToSAT = 
           bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
         ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
-      } while (inputToSAT != simplified_solved_InputToSAT);
+      
+      } 
+    while (inputToSAT != simplified_solved_InputToSAT);
     ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
 
     delete bvsolver;
@@ -978,14 +993,17 @@ namespace BEEV
     do
       {
         inputToSAT = simplified_solved_InputToSAT;
-        //simplified_solved_InputToSAT = CreateSubstitutionMap(simplified_solved_InputToSAT);
-        //Begin_RemoveWrites = true;
-        //ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+        //simplified_solved_InputToSAT =
+        //CreateSubstitutionMap(simplified_solved_InputToSAT);
+        //Begin_RemoveWrites = true; ASTNodeStats("after pure
+        //substitution: ", simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = 
           SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-        //ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
-        //simplified_solved_InputToSAT = bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
-        //ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+        //ASTNodeStats("after simplification: ",
+        //simplified_solved_InputToSAT); simplified_solved_InputToSAT
+        //= bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+        //ASTNodeStats("after solving: ",
+        //simplified_solved_InputToSAT);
       } while (inputToSAT != simplified_solved_InputToSAT);
 
     if (start_abstracting)
@@ -996,7 +1014,8 @@ namespace BEEV
     SimplifyWrites_InPlace_Flag = false;
     Begin_RemoveWrites = false;
 
-    simplified_solved_InputToSAT = TransformFormula_TopLevel(simplified_solved_InputToSAT);
+    simplified_solved_InputToSAT = 
+      TransformFormula_TopLevel(simplified_solved_InputToSAT);
     ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
     TermsAlreadySeenMap.clear();
 
@@ -1015,6 +1034,13 @@ namespace BEEV
       {
         CountersAndStats("print_func_stats");
         return res;
+      }
+
+    res = SATBased_AllFiniteLoops_Refinement(newS, orig_input);
+    if (SOLVER_UNDECIDED != res)
+      {
+	CountersAndStats("print_func_stats");
+        return res;      
       }
 
     res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);

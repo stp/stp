@@ -1,15 +1,18 @@
 # This is a -*- makefile -*-, Emacs
+#
 #Please refer LICENSE FILE in the home directory for licensing
 #information always use full screen mode to view/edit this file in
 #emacs
 
 #OPTIMIZE = -g -pg # Debugging and gprof-style profiling
-#OPTIMIZE = -g     # Debugging
-OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
+OPTIMIZE = -g     # Debugging
+#OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
 
 CFLAGS_BASE = $(OPTIMIZE)
-# You can compile using make STATIC=true to compile a statically linked executable
-# Note that you should execute liblinks.sh first.
+
+# You can compile using make STATIC=true to compile a statically
+# linked executable Note that you should execute liblinks.sh first.
+
 ifdef STATIC
     LDFLAGS_BASE = -static-libgcc -static
 else
@@ -17,11 +20,11 @@ else
 endif
 
 # PKT: support for universal binaries
-# NB: static libraries are poorly supported in Mac OS X. More specifically
-#     -static has different semantics than on ELF based systems
-# Also, building mac os x universal binaries is a tad tricky
-# 1. you cannot use ar on a library after calling ranlib
-# 2. -MM dependency tracking does not work
+# NB: static libraries are poorly supported in Mac OS X. More
+# specifically -static has different semantics than on ELF based
+# systems Also, building mac os x universal binaries is a tad tricky
+# 1. you cannot use ar on a library after calling ranlib 2. -MM
+# dependency tracking does not work
 
 # the architectures to compile for
 UNIVERSAL_ARCH = -arch i386 -arch ppc -arch ppc64

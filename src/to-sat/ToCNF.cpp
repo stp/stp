@@ -1776,7 +1776,7 @@ namespace BEEV
   //Call the SAT solver, and check the result before returning. This
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or SOLVER_UNDECIDED
   SOLVER_RETURN_TYPE BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
-                                                  const ASTNode& modified_input, 
+                                                  const ASTNode& modified_input,
                                                   const ASTNode& original_input)
   {
     ASTNode BBFormula = BBForm(modified_input);
