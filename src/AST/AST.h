@@ -35,7 +35,7 @@
 #include "ASTKind.h"
 #include <stdint.h>
 #include <stdlib.h>
-#include "../constantbv/constantbv.h"
+#include "../extlib-constbv/constantbv.h"
 
 /*****************************************************************************
  * LIST OF CLASSES DECLARED IN THIS FILE:

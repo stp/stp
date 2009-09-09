@@ -8,8 +8,8 @@ LIBS = 	-L../to-sat -ltosat \
 	-L../abstraction-refinement -labstractionrefinement \
 	-L../sat -lminisat  \
 	-L../simplifier -lsimplifier \
-        -L../bitvec -lconsteval \
-	-L../constantbv -lconstantbv \
+        -L../const-evaluator -lconsteval \
+	-L../extlib-constbv -lconstantbv \
 	-L../parser -lparser
 
 # This rebuilds each time, because the target "parser" is not created
