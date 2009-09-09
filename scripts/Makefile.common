@@ -5,8 +5,8 @@
 #emacs
 
 #OPTIMIZE = -g -pg # Debugging and gprof-style profiling
-OPTIMIZE = -g     # Debugging
-#OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
+#OPTIMIZE = -g     # Debugging
+OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
 
 CFLAGS_BASE = $(OPTIMIZE)
 
