@@ -67,9 +67,8 @@ namespace BEEV
   ASTVec _empty_ASTVec;
 
   //Some global vars for the Main function.
-  const std::string version = "$Id$";
   const char * prog = "stp";
   int linenum  = 1;
   const char * usage = "Usage: %s [-option] [infile]\n";
-  std::string helpstring = "\n\n";  
+  std::string helpstring = "\n\n";
 }; //end of namespace BEEV
