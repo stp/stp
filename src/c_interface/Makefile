@@ -1,14 +1,18 @@
 include ../../scripts/Makefile.common
 
-SRCS = c_interface.cpp
+SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I../sat/mtl -I../sat/core
 
-libcinterface.a: $(OBJS)
-	$(AR) rc $@ $^
+libcinterface.a: $(OBJS) depend
+	$(AR) rc $@ $(OBJS)
 	$(RANLIB) $@
 
+.PHONY: clean
 clean:	
-	rm -rf *.o *~ *.a .#*
+	rm -rf *.o *~ *.a .#* depend
 
-c_interface.o: c_interface.h
+depend: $(SRCS)
+	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+
+-include depend
+

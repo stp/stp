@@ -1,12 +1,19 @@
 include ../../scripts/Makefile.common
 
-SRCS = BitBlast.cpp SimpBool.cpp ToCNF.cpp ToSAT.cpp
+SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
 CFLAGS += -I../sat/mtl -I../sat/simp -I../sat/core
 
-libtosat.a: 	$(OBJS)
-		$(AR) rc $@ $^
+libtosat.a: 	$(OBJS) depend
+		$(AR) rc $@ $(OBJS)
 		$(RANLIB) $@
 
+.PHONY: clean
 clean:	
-		rm -rf *.o *~ *.a .#*
+		rm -rf *.o *~ *.a .#* depend
+
+depend: $(SRCS)
+	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+
+-include depend
+		

@@ -7,8 +7,6 @@
  ********************************************************************/
 // -*- c++ -*-
 #include "../AST/AST.h"
-#include "../sat/core/Solver.h"
-#include "../sat/core/SolverTypes.h"
 #include "../AST/printer/AssortedPrinters.h"
 
 #ifdef EXT_HASH_MAP

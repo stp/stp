@@ -1,13 +1,17 @@
 include ../../scripts/Makefile.common
 
-SRCS = constantbv.cpp
+SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
 
-libconstantbv.a: $(OBJS)
-	$(AR) rc $@ $^
+libconstantbv.a: $(OBJS) depend
+	$(AR) rc $@ $(OBJS)
 	$(RANLIB) $@
 
+.PHONY: clean
 clean:	
-	rm -rf *.o *~ *.a .#*
+	rm -rf *.o *~ *.a .#* depend
 
-constantbv.o: constantbv.h
+depend: $(SRCS)
+	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+
+-include depend

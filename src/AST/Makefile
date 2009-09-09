@@ -17,10 +17,10 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.h ASTKind.cpp .#*
+	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.h ASTKind.cpp .#* depend
 	rm -rf printer/*.o
 
 depend: $(SRCS)
-	$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
 
 -include depend

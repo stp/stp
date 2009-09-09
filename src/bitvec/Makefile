@@ -1,12 +1,18 @@
 include ../../scripts/Makefile.common
 
-SRCS = consteval.cpp
+SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I../sat/mtl -I../sat/core -I../sat/simp
 
-libconsteval.a: $(OBJS)
-	$(AR) rc $@ $^
+libconsteval.a: $(OBJS) depend
+	$(AR) rc $@ $(OBJS)
 	$(RANLIB) $@
 
+.PHONY: clean
 clean:	
-	rm -rf *.o *~ *.a .#*
+	rm -rf *.o *~ *.a .#* depend
+
+depend: $(SRCS)
+	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+
+-include depend
+	

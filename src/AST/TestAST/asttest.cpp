@@ -1,4 +1,4 @@
-#include "AST.h"
+#include "../AST.h"
 
 using namespace BEEV;
 
