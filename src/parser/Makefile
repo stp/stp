@@ -32,4 +32,3 @@ parseSMT_defs.h parseSMT.cpp:smtlib.y
 
 clean:	
 		rm -rf *.o parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser y.tab.* lex.yy.c .#*
-

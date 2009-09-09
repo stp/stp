@@ -1565,8 +1565,12 @@ namespace BEEV
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
     //functions for checking and updating simplifcation map
-    bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg);
-    void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg);
+    bool CheckSimplifyMap(const ASTNode& key, 
+			  ASTNode& output, 
+			  bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+    void UpdateSimplifyMap(const ASTNode& key, 
+			   const ASTNode& value, 
+			   bool pushNeg, ASTNodeMap* VarConstMap=NULL);
     void ResetSimplifyMaps();
     bool CheckAlwaysTrueFormMap(const ASTNode& key);
     void UpdateAlwaysTrueFormMap(const ASTNode& val);

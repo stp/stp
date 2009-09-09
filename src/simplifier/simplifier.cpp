@@ -48,8 +48,13 @@ ASTNode Flatten(const ASTNode& a)
 
 
   bool BeevMgr::CheckSimplifyMap(const ASTNode& key, 
-				 ASTNode& output, bool pushNeg)
+				 ASTNode& output, 
+				 bool pushNeg, ASTNodeMap* VarConstMap)
   {
+    if(NULL != VarConstMap) 
+      {
+	return false;
+      }
     ASTNodeMap::iterator it, itend;
     it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
     itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
@@ -77,11 +82,18 @@ ASTNode Flatten(const ASTNode& a)
 
   // Push any reference count used by the key to the value.
   void BeevMgr::UpdateSimplifyMap(const ASTNode& key, 
-				  const ASTNode& value, bool pushNeg)
+				  const ASTNode& value, 
+				  bool pushNeg, ASTNodeMap* VarConstMap)
   {
-	  // Don't add leaves. Leaves are easy to recalculate, no need to cache.
-	  if (0 == key.Degree())
-		  return;
+    if(NULL != VarConstMap)
+      {
+	return;
+      }
+
+    // Don't add leaves. Leaves are easy to recalculate, no need
+    // to cache.
+    if (0 == key.Degree())
+      return;
     // If there are references to the key, add them to the references of the value.
     ASTNodeCountMap::const_iterator itKey, itValue;
     itKey = ReferenceCount->find(key);
@@ -303,7 +315,7 @@ ASTNode Flatten(const ASTNode& a)
 
     if (smtlib_parser_flag)
     BuildReferenceCountMap(b);
-    ASTNode out = SimplifyFormula(b, pushNeg);
+    ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ResetSimplifyMaps();
     return out;
   }
@@ -331,7 +343,7 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     a = PullUpITE(a);
@@ -375,7 +387,7 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
@@ -383,7 +395,8 @@ ASTNode Flatten(const ASTNode& a)
   BeevMgr::SimplifyForFormula(const ASTNode& a, 
 			      bool pushNeg, ASTNodeMap* VarConstMap) 
   {
-    //FIXME: Code this up properly later. Mainly pushing the negation down
+    //FIXME: Code this up properly later. Mainly pushing the negation
+    //down
     return a;
   }
 
@@ -395,7 +408,7 @@ ASTNode Flatten(const ASTNode& a)
       return a;
 
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       {
         return output;
       }
@@ -480,7 +493,7 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   } //end of SimplifyAtomicFormula()
 
@@ -757,7 +770,7 @@ ASTNode Flatten(const ASTNode& a)
         output = CreateNode(EQ, in1, in2);
       }
 
-    UpdateSimplifyMap(in, output, false);
+    UpdateSimplifyMap(in, output, false, VarConstMap);
     return output;
   } //End of ITEOpts_InEqs()
 
@@ -865,7 +878,7 @@ ASTNode Flatten(const ASTNode& a)
     ASTNode output;
     //cerr << "input:\n" << a << endl;
 
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     ASTVec c, outvec;
@@ -893,8 +906,8 @@ ASTNode Flatten(const ASTNode& a)
         if (annihilator == aaa)
           {
             //memoize
-            UpdateSimplifyMap(*i, annihilator, pushNeg);
-            UpdateSimplifyMap(a, annihilator, pushNeg);
+            UpdateSimplifyMap(*i, annihilator, pushNeg, VarConstMap);
+            UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
             //cerr << "annihilator1: output:\n" << annihilator << endl;
             return annihilator;
           }
@@ -910,7 +923,7 @@ ASTNode Flatten(const ASTNode& a)
         else if (nextexists && ((bbb.GetKind() == NOT && bbb[0] == aaa)))
           {
             //memoize
-            UpdateSimplifyMap(a, annihilator, pushNeg);
+            UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
             //cerr << "annihilator2: output:\n" << annihilator << endl;
             return annihilator;
           }
@@ -947,8 +960,11 @@ ASTNode Flatten(const ASTNode& a)
         }
       default:
         {
-          output = (isAnd) ? (pushNeg ? CreateNode(OR, outvec) : CreateNode(AND, outvec)) : (pushNeg ? CreateNode(AND, outvec) : CreateNode(OR,
-                                                                                                                                            outvec));
+          output = 
+	    (isAnd) ? (pushNeg ? 
+		       CreateNode(OR, outvec) : 
+		       CreateNode(AND, outvec)) : 
+	    (pushNeg ? CreateNode(AND, outvec) : CreateNode(OR,outvec));
           //output = FlattenOneLevel(output);
           break;
         }
@@ -959,7 +975,7 @@ ASTNode Flatten(const ASTNode& a)
     //  output = RemoveContradictionsFromAND(output);
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     //cerr << "output:\n" << output << endl;
     return output;
   } //end of SimplifyAndOrFormula
@@ -970,7 +986,7 @@ ASTNode Flatten(const ASTNode& a)
 			      bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     if (!(a.Degree() == 1 && NOT == a.GetKind()))
@@ -1013,15 +1029,15 @@ ASTNode Flatten(const ASTNode& a)
         output = SimplifyFormula(o, pn, VarConstMap);
       }
     //memoize
-    UpdateSimplifyMap(o, output, pn);
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(o, output, pn, VarConstMap);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
   ASTNode BeevMgr::SimplifyXorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     if (a.GetChildren().size() > 2)
@@ -1044,14 +1060,14 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
   ASTNode BeevMgr::SimplifyNandFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output, a0, a1;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     //the two NOTs cancel out
@@ -1070,14 +1086,14 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
   ASTNode BeevMgr::SimplifyNorFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output, a0, a1;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     //the two NOTs cancel out
@@ -1096,14 +1112,14 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
   ASTNode BeevMgr::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     if (!(a.Degree() == 2 && IMPLIES == a.GetKind()))
@@ -1139,14 +1155,17 @@ ASTNode Flatten(const ASTNode& a)
             //applying modus ponens
             output = c1;
           }
-        else if (CheckAlwaysTrueFormMap(c1) || CheckAlwaysTrueFormMap(CreateNode(NOT, c0)) || (NOT == c0.GetKind() && CheckAlwaysTrueFormMap(c0[0])))
+        else if (CheckAlwaysTrueFormMap(c1) || 
+		 CheckAlwaysTrueFormMap(CreateNode(NOT, c0)) || 
+		 (NOT == c0.GetKind() && CheckAlwaysTrueFormMap(c0[0])))
           {
             //(~c0 AND (~c0 OR c1)) <==> TRUE
             //
             //(c0 AND ~c0->c1) <==> TRUE
             output = ASTTrue;
           }
-        else if (CheckAlwaysTrueFormMap(CreateNode(NOT, c1)) || (NOT == c1.GetKind() && CheckAlwaysTrueFormMap(c1[0])))
+        else if (CheckAlwaysTrueFormMap(CreateNode(NOT, c1)) || 
+		 (NOT == c1.GetKind() && CheckAlwaysTrueFormMap(c1[0])))
           {
             //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
             //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
@@ -1166,14 +1185,14 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
   ASTNode BeevMgr::SimplifyIffFormula(const ASTNode& a, bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg))
+    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
     if (!(a.Degree() == 2 && IFF == a.GetKind()))
@@ -1233,7 +1252,7 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
@@ -1243,7 +1262,7 @@ ASTNode Flatten(const ASTNode& a)
       return b;
 
     ASTNode output;
-    if (CheckSimplifyMap(b, output, pushNeg))
+    if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
       return output;
 
     if (!(b.Degree() == 3 && ITE == b.GetKind()))
@@ -1313,7 +1332,7 @@ ASTNode Flatten(const ASTNode& a)
       }
 
     //memoize
-    UpdateSimplifyMap(a, output, pushNeg);
+    UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
 
@@ -1392,7 +1411,7 @@ ASTNode Flatten(const ASTNode& a)
         return SimplifyTerm(output);
       }
 
-    if (CheckSimplifyMap(inputterm, output, false))
+    if (CheckSimplifyMap(inputterm, output, false, VarConstMap))
       {
         //cerr << "SimplifierMap:" << inputterm << " output: " << output << endl;
         return output;
@@ -2019,7 +2038,7 @@ ASTNode Flatten(const ASTNode& a)
                 {
                   output = annihilator;
                   //memoize
-                  UpdateSimplifyMap(inputterm, output, false);
+                  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
                   //cerr << "output of SimplifyTerm: " << output << endl;
                   return output;
                 }
@@ -2182,7 +2201,7 @@ ASTNode Flatten(const ASTNode& a)
     assert(NULL != output);
 
     //memoize
-    UpdateSimplifyMap(inputterm, output, false);
+    UpdateSimplifyMap(inputterm, output, false, VarConstMap);
     //cerr << "SimplifyTerm: output" << output << endl;
     // CheckSimplifyInvariant(inputterm,output);
 

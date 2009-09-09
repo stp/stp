@@ -323,37 +323,50 @@ namespace BEEV
     int paramCurrentValue = paramInit;
 
     //Update ParamToCurrentValMap with parameter and its current
-    //value. Here paramCurrentValue is the initial value
-    unsigned width = 32;
-    (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+    //value. Here paramCurrentValue is the initial value    
+    (*ParamToCurrentValMap)[parameter] = 
+      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
     
+    SOLVER_RETURN_TYPE ret;
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
         while(paramCurrentValue < paramLimit) 
           {
-            SATBased_FiniteLoop_Refinement(SatSolver, 
-					   original_input,
-                                           formulabody, 
-					   ParamToCurrentValMap);
-            paramCurrentValue = paramCurrentValue + paramIncrement;
+            ret = SATBased_FiniteLoop_Refinement(SatSolver, 
+						 original_input,
+						 formulabody, 
+						 ParamToCurrentValMap);
+	    if(SOLVER_VALID == ret) 
+	      {
+		//If formula is valid, return immediately
+		return ret;
+	      }
+
 
             //Update ParamToCurrentValMap with parameter and its current
             //value
             //
             //FIXME: Possible leak since I am not freeing the previous
-            //'value' for the same 'key'       
+            //'value' for the same 'key'
+            paramCurrentValue = paramCurrentValue + paramIncrement;
             (*ParamToCurrentValMap)[parameter] = 
-	      CreateBVConst(32,paramCurrentValue);
+	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
           } //end of While
+
+	//The last 'ret' value is the truthvalue of the formula. If it
+	//is SOLVER_INVALID then the formula is indeed INVALID, else
+	//ret can only be SOLVER_UNDECIDED at this point. Hence return
+	//UNDECIDED.
+	return ret;
       } //end of recursion FORs
 
     //ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
-    int AllLoopsAreTrue = 0;
-    for(; 
-        paramCurrentValue < paramLimit; 
-        paramCurrentValue = paramCurrentValue + paramIncrement) 
+    int ThisForLoopAllTrue = 0;
+    for(;paramCurrentValue < paramLimit;
+	//increment of paramCurrentValue done inside loop
+	) 
       {
         ASTNode currentFormula;
         currentFormula = 
@@ -369,7 +382,8 @@ namespace BEEV
 	    //             CreateNode(AND, forloopFormulaVector) :
 	    //             forloopFormulaVector[0];
             
-            SOLVER_RETURN_TYPE result = 
+            currentFormula = TransformFormula_TopLevel(currentFormula);
+	    SOLVER_RETURN_TYPE result = 
               CallSAT_ResultCheck(SatSolver, currentFormula, original_input);
             if(result != SOLVER_UNDECIDED)           
               {
@@ -380,7 +394,7 @@ namespace BEEV
 	  {
 	    //ComputeFormulaUsingModel can either return ASTFalse or
 	    //ASTTrue
-	    AllLoopsAreTrue++;	    
+	    ThisForLoopAllTrue++;	    
 	  }
         
         //Update ParamToCurrentValMap with parameter and its current
@@ -388,11 +402,13 @@ namespace BEEV
         //
         //FIXME: Possible leak since I am not freeing the previous
         //'value' for the same 'key'
+	paramCurrentValue = paramCurrentValue + paramIncrement;
         (*ParamToCurrentValMap)[parameter] = 
-	  CreateBVConst(32,paramCurrentValue);
+	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
+	//cout << (*ParamToCurrentValMap)[parameter];
       } //end of expanding the FOR loop
     
-    if(AllLoopsAreTrue == paramLimit) 
+    if(ThisForLoopAllTrue == paramLimit) 
       {
 	return SOLVER_INVALID;
       }
@@ -435,34 +451,50 @@ namespace BEEV
 
     //Update ParamToCurrentValMap with parameter and its current
     //value. Here paramCurrentValue is the initial value
-    unsigned width = 32;
-    (*ParamToCurrentValMap)[parameter] = CreateBVConst(32,paramCurrentValue);
+    (*ParamToCurrentValMap)[parameter] = 
+      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
     
+    ASTNode ret = ASTTrue;
+    ASTVec returnVec;
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
         while(paramCurrentValue < paramLimit) 
           {
-            Check_FiniteLoop_UsingModel(formulabody,
-                                        ParamToCurrentValMap, 
-					checkusingmodel_flag);
-            paramCurrentValue = paramCurrentValue + paramIncrement;
+            ret = Check_FiniteLoop_UsingModel(formulabody,
+					      ParamToCurrentValMap, 
+					      checkusingmodel_flag);
+	    if(ASTFalse == ret) 
+	      {
+		//no more expansion needed. Return immediately
+		return ret;
+	      }
+	    else 
+	      {
+		returnVec.push_back(ret);
+	      }
 
             //Update ParamToCurrentValMap with parameter and its current
             //value
             //
             //FIXME: Possible leak since I am not freeing the previous
-            //'value' for the same 'key'       
+            //'value' for the same 'key'
+            paramCurrentValue = paramCurrentValue + paramIncrement;
             (*ParamToCurrentValMap)[parameter] = 
-	      CreateBVConst(32,paramCurrentValue);
+	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
           } //end of While
+
+	ASTNode retFormula = 
+	  (returnVec.size() != 1) ? 
+	  CreateNode(AND, returnVec) : returnVec[0];
+        return retFormula;      
       }
 
     ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
-    for(; 
-        paramCurrentValue < paramLimit; 
-        paramCurrentValue = paramCurrentValue + paramIncrement) 
+    for(;paramCurrentValue < paramLimit;
+	//incrementing of paramCurrentValue is done inside loop
+	)
       {
         ASTNode currentFormula;
         currentFormula = 
@@ -484,10 +516,11 @@ namespace BEEV
         //value         
         //FIXME: Possible leak since I am not freeing the previous
         //'value' for the same 'key'
-        (*ParamToCurrentValMap)[parameter] = 
-	  CreateBVConst(32,paramCurrentValue);
-      }
-
+	paramCurrentValue = paramCurrentValue + paramIncrement;
+	(*ParamToCurrentValMap)[parameter] = 
+	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
+	//cout << (*ParamToCurrentValMap)[parameter];
+      } //end of For
 
     if(checkusingmodel_flag) 
       {

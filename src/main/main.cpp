@@ -19,7 +19,7 @@ extern int cvcparse(void*);
 
 // Amount of memory to ask for at beginning of main.
 static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
-/******************************************************************************
+/********************************************************************
  * MAIN FUNCTION:
  *
  * step 0. Parse the input into an ASTVec.
@@ -28,7 +28,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 3. Convert to CNF
  * step 4. Convert to SAT
  * step 5. Call SAT to determine if input is SAT or UNSAT
- ******************************************************************************/
+ ********************************************************************/
 int main(int argc, char ** argv) {
   char * infile;
   extern FILE *cvcin;
@@ -44,22 +44,21 @@ int main(int argc, char ** argv) {
     }
 
   //populate the help string
-  helpstring += "version: " + version + "\n\n";
-  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
-  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring += "STP version: " + version + "\n\n";
   helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
-  helpstring +=  "-s  : print function statistics\n";
-  helpstring +=  "-v  : print nodes \n";
+  helpstring +=  "-b  : print STP input back to cout\n";
   helpstring +=  "-c  : construct counterexample\n";
   helpstring +=  "-d  : check counterexample\n";
-  helpstring +=  "-p  : print counterexample\n";
-  helpstring +=  "-y  : print counterexample in binary\n";
-  helpstring +=  "-b  : print STP input back to cout\n";
-  helpstring +=  "-x  : flatten nested XORs\n";
+  helpstring +=  "-e  : expand finite-for construct\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
-
-
+  helpstring +=  "-p  : print counterexample\n";
+  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
+  helpstring +=  "-s  : print function statistics\n";
+  helpstring +=  "-v  : print nodes \n";
+  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring +=  "-x  : flatten nested XORs\n";
+  helpstring +=  "-y  : print counterexample in binary\n";
 
   for(int i=1; i < argc;i++) 
     {
@@ -80,6 +79,9 @@ int main(int argc, char ** argv) {
               construct_counterexample_flag = true;
               check_counterexample_flag = true;
               break;
+	    case 'e':
+	      expand_finitefor_flag = true;
+	      break;
             case 'h':
               fprintf(stderr,usage,prog);
               cout << helpstring;

@@ -38,4 +38,4 @@ depend: $(SRCS)
 
 
 
--include depend
+#-include depend

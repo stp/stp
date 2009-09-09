@@ -42,40 +42,57 @@ namespace BEEV
   //
   //collect statistics on certain functions
   extern bool stats_flag;
+  
   //print DAG nodes
   extern bool print_nodes_flag;
+  
   //run STP in optimized mode
   extern bool optimize_flag;
+  
   //do sat refinement, i.e. underconstraint the problem, and feed to
   //SAT. if this works, great. else, add a set of suitable constraints
   //to re-constraint the problem correctly, and call SAT again, until
   //all constraints have been added.
   extern bool arrayread_refinement_flag;
+  
   //switch to control write refinements
   extern bool arraywrite_refinement_flag;
+  
   //check the counterexample against the original input to STP
   extern bool check_counterexample_flag;
+  
   //construct the counterexample in terms of original variable based
   //on the counterexample returned by SAT solver
   extern bool construct_counterexample_flag;
   extern bool print_counterexample_flag;
   extern bool print_binary_flag;
+  
+  //Expands out the finite for-construct completely
+  extern bool expand_finitefor_flag;
+
   //if this option is true then print the way dawson wants using a
   //different printer. do not use this printer.
   extern bool print_arrayval_declaredorder_flag;
+  
   //flag to decide whether to print "valid/invalid" or not
   extern bool print_output_flag;
+  
   //print the variable order chosen by the sat solver while it is
   //solving.
   extern bool print_sat_varorder_flag;
+  
   //turn on word level bitvector solver
   extern bool wordlevel_solve_flag;
+  
   //XOR flattening optimizations.
   extern bool xor_flatten_flag;
+  
   //this flag indicates that the BVSolver() succeeded
   extern bool toplevel_solved_flag;
+  
   //print the input back
   extern bool print_STPinput_back_flag;
+  
   //Flag to switch on the smtlib parser
   extern bool smtlib_parser_flag;
 
