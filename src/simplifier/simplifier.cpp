@@ -14,6 +14,22 @@
 namespace BEEV
 {
 
+ASTNode Flatten(const ASTNode& a)
+{
+	ASTNode n = a;
+	while (true)
+	{
+		ASTNode& nold = n;
+		n = a.GetBeevMgr().FlattenOneLevel(n);
+		if ((n == nold))
+			break;
+	}
+
+	return n;
+}
+
+
+
   bool BeevMgr::CheckMap(ASTNodeMap* VarConstMap, 
                          const ASTNode& key, ASTNode& output)
   {
@@ -61,6 +77,10 @@ namespace BEEV
   // Push any reference count used by the key to the value.
   void BeevMgr::UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg)
   {
+	  // Don't add leaves. Leaves are easy to recalculate, no need to cache.
+	  if (0 == key.Degree())
+		  return;
+
     // If there are references to the key, add them to the references of the value.
     ASTNodeCountMap::const_iterator itKey, itValue;
     itKey = ReferenceCount->find(key);
@@ -265,6 +285,8 @@ namespace BEEV
   ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
   {
     ResetSimplifyMaps();
+
+    if (smtlib_parser_flag)
     BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg);
     ResetSimplifyMaps();
@@ -799,7 +821,7 @@ namespace BEEV
 
     ASTVec c, outvec;
     c = a.GetChildren();
-    ASTNode flat = FlattenOneLevel(a);
+    ASTNode flat = Flatten(a);
     c = flat.GetChildren();
     SortByArith(c);
 
@@ -1414,9 +1436,11 @@ namespace BEEV
 
       case BVPLUS:
         {
-          ASTVec c = FlattenOneLevel(inputterm).GetChildren();
+          ASTVec c = Flatten(inputterm).GetChildren();
           SortByArith(c);
           ASTVec constkids, nonconstkids;
+
+
 
           //go through the childnodes, and separate constant and
           //nonconstant nodes. combine the constant nodes using the
@@ -1493,7 +1517,7 @@ namespace BEEV
                       //more than 1 element in nonconstkids. create BVPLUS term
                       SortByArith(nonconstkids);
                       output = CreateTerm(k, inputValueWidth, nonconstkids);
-                      output = FlattenOneLevel(output);
+                      output = Flatten(output);
                       output = DistributeMultOverPlus(output, true);
                       output = CombineLikeTerms(output);
                     }
@@ -1505,12 +1529,42 @@ namespace BEEV
                   output = constoutput;
                 }
             }
+
+          // propagate bvuminus upwards through multiplies.
+          if (BVMULT == output.GetKind())
+			{
+				ASTVec d = output.GetChildren();
+				int uminus = 0;
+				for (unsigned i = 0; i < d.size(); i++)
+				{
+					if (d[i].GetKind() == BVUMINUS)
+					{
+						d[i] = d[i][0];
+						uminus++;
+					}
+				}
+				if (uminus != 0)
+				{
+					SortByArith(d);
+					output = CreateTerm(BVMULT, output.GetValueWidth(), d);
+					if ((uminus & 0x1) != 0) // odd, pull up the uminus.
+					{
+						output = CreateTerm(BVUMINUS, output.GetValueWidth(), output);
+					}
+				}
+			}
+
+
+
           if (BVMULT == output.GetKind() || BVPLUS == output.GetKind())
             {
               ASTVec d = output.GetChildren();
               SortByArith(d);
               output = CreateTerm(output.GetKind(), output.GetValueWidth(), d);
             }
+
+
+
           break;
 
         }
@@ -1570,8 +1624,17 @@ namespace BEEV
                   }
                 else
                   {
+                	// If the first argument to the multiply is a constant, push it through.
+                	// Without regard for the splitting of nodes (hmm.)
+                	// This is necessary because the bitvector solver can process -3*x, but
+                	// not -(3*x).
+                	if (BVCONST == a0[0].GetKind())
+                	{
                     ASTNode a00 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[0]));
                     output = CreateTerm(BVMULT, l, a00, a0[1]);
+                  }
+                	else
+                	output = CreateTerm(BVUMINUS, l, a0);
                   }
                 break;
               }
@@ -1886,7 +1949,7 @@ namespace BEEV
 
           ASTNode identity = (BVAND == k) ? max : zero;
           ASTNode annihilator = (BVAND == k) ? zero : max;
-          ASTVec c = FlattenOneLevel(inputterm).GetChildren();
+          ASTVec c = Flatten(inputterm).GetChildren();
           SortByArith(c);
           ASTVec o;
           bool constant = true;
