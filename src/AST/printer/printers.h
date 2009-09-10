@@ -26,6 +26,8 @@ namespace printer
   ostream& Lisp_Print(ostream &os, const BEEV::ASTNode& n,  int indentation=0);
   ostream& Lisp_Print_indent(ostream &os,  const BEEV::ASTNode& n,int indentation=0);
 
+  void SMTLIB_PrintBack(ostream &os, const BEEV::ASTNode& n );
+
 }
 
 #endif /* PRINTERS_H_ */

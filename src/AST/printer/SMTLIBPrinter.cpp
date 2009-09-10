@@ -10,6 +10,11 @@
 #include "printers.h"
 #include <cassert>
 
+// todo  : fix lets.
+//       : Finish mapping function names from internal names to SMTLIB names.
+//	     : build proper headers for PrintBack
+//       : Letize code for each printer should be merged.
+
 namespace printer
 {
 
@@ -18,6 +23,51 @@ namespace printer
 
   string functionToSMTLIBName(const BEEV::Kind k);
   void SMTLIB_Print1(ostream& os, const BEEV::ASTNode n, int indentation, bool letize);
+  void printVarDeclsToStream( const BeevMgr mgr, ostream &os);
+
+  // Initial version intended to print the whole thing back.
+  void SMTLIB_PrintBack(ostream &os, const ASTNode& n) {
+	  // need to add fake headers into here.
+	  os << "(" << endl;
+	  os << "benchmark blah" << endl;
+	  printVarDeclsToStream(n.GetBeevMgr(),os);
+	  SMTLIB_Print(os, n, 0);
+	  os << ")" << endl;
+  }
+
+  void printVarDeclsToStream( const BeevMgr mgr, ostream &os) {
+      for(ASTVec::const_iterator i = mgr.ListOfDeclaredVars.begin(),iend=mgr.ListOfDeclaredVars.end();i!=iend;i++) {
+        const BEEV::ASTNode& a = *i;
+
+        // Should be a symbol.
+        assert(a.GetKind()== SYMBOL);
+
+        switch(a.GetType()) {
+        case BEEV::BITVECTOR_TYPE:
+
+  	os << ":extrafuns (( ";
+    a.nodeprint(os);
+    os << " bv[" << a.GetValueWidth() << "]";
+    os << " ))" << endl;
+  	break;
+
+        case BEEV::ARRAY_TYPE:
+        	os << ":extrafuns (( ";
+        	    a.nodeprint(os);
+        	    os << " Array[" << a.GetIndexWidth();
+        	    os << ":" << a.GetValueWidth() << "] ))" << endl;
+  	break;
+        case BEEV::BOOLEAN_TYPE:
+        	os << ":extrapred (( ";
+        	a.nodeprint(os);
+        	os << "))" << endl;
+  	break;
+        default:
+  	BEEV::FatalError("printVarDeclsToStream: Unsupported type",a);
+  	break;
+        }
+      }
+    } //printVarDeclsToStream
 
   void outputBitVec(const ASTNode n, ostream& os)
   {

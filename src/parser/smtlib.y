@@ -416,6 +416,8 @@ var_decl:
       //var
       $2->SetIndexWidth($3.indexwidth);
       $2->SetValueWidth($3.valuewidth);
+      if(print_STPinput_back_flag)
+      	GlobalBeevMgr->ListOfDeclaredVars.push_back(*$2);
     }
    | LPAREN_TOK FORMID_TOK RPAREN_TOK
     {
@@ -424,6 +426,8 @@ var_decl:
       //var
       $2->SetIndexWidth(0);
       $2->SetValueWidth(0);
+      if(print_STPinput_back_flag)
+      	GlobalBeevMgr->ListOfDeclaredVars.push_back(*$2);
     }
 ;
 

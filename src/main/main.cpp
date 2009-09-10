@@ -8,6 +8,7 @@
 // -*- c++ -*-
 #include "../AST/AST.h"
 #include "../AST/printer/AssortedPrinters.h"
+#include "../AST/printer/printers.h"
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
@@ -36,7 +37,7 @@ int main(int argc, char ** argv) {
 
   // Grab some memory from the OS upfront to reduce system time when
   // individual hash tables are being allocated
-  if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void *) -1)) 
+  if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void *) -1))
     {
       // FIXME: figure out how to get and print the real error
       // message.
@@ -60,11 +61,11 @@ int main(int argc, char ** argv) {
   helpstring +=  "-x  : flatten nested XORs\n";
   helpstring +=  "-y  : print counterexample in binary\n";
 
-  for(int i=1; i < argc;i++) 
+  for(int i=1; i < argc;i++)
     {
-      if(argv[i][0] == '-') 
+      if(argv[i][0] == '-')
         {
-          switch(argv[i][1]) 
+          switch(argv[i][1])
             {
             case 'a' :
               optimize_flag = false;
@@ -174,30 +175,31 @@ int main(int argc, char ** argv) {
   GlobalBeevMgr = new BeevMgr();
   ASTVec * AssertsQuery = new ASTVec;
 
-  if (smtlib_parser_flag) 
+  if (smtlib_parser_flag)
     {
       smtparse((void*)AssertsQuery);
     }
-  else 
+  else
     {
-      cvcparse((void*)AssertsQuery);      
+      cvcparse((void*)AssertsQuery);
     }
-  
+
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];  
-  if(print_STPinput_back_flag) 
+  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
+  if(print_STPinput_back_flag)
     {
-      if(smtlib_parser_flag) 
+      if(smtlib_parser_flag)
         {
-          FatalError("Print back feature for SMT format not yet implemented\n");
+    	  // don't pass the query. It's not returned by the smtlib parser.
+    	  printer::SMTLIB_PrintBack(cout, asserts);
         }
-      else 
+      else
         {
           print_STPInput_Back(asserts, query);
         }
       return 0;
     } //end of PrintBack if
 
-  GlobalBeevMgr->TopLevelSAT(asserts, query);  
+  GlobalBeevMgr->TopLevelSAT(asserts, query);
   return 0;
 }//end of Main
