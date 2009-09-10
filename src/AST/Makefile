@@ -1,8 +1,8 @@
 include ../../scripts/Makefile.common
 
 SRCS=$(wildcard  *.cpp printer/*.cpp)
-SRCS+= ASTKind.cpp
 OBJS = $(SRCS:.cpp=.o)
+OBJS+= ASTKind.o
 CFLAGS += -I../sat/mtl -I../sat/core
 
 #Make the ast library for use by other modules
@@ -17,10 +17,11 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp .#* depend
+	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp .#*
 	rm -rf printer/*.o printer/*~
 
 depend: $(SRCS)
-	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
 
-#-include depend
+-include ./depend
+
