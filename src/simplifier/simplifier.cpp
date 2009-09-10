@@ -1322,7 +1322,8 @@ ASTNode Flatten(const ASTNode& a)
       {
         output = t1;
       }
-    else if (CheckAlwaysTrueFormMap(CreateNode(NOT, t0)) || (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0])))
+    else if (CheckAlwaysTrueFormMap(CreateNode(NOT, t0)) || 
+	     (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0])))
       {
         output = t2;
       }
@@ -1408,7 +1409,7 @@ ASTNode Flatten(const ASTNode& a)
     if (CheckSubstitutionMap(inputterm, output))
       {
         //cout << "SolverMap:" << inputterm << " output: " << output << endl;
-        return SimplifyTerm(output);
+        return SimplifyTerm(output, VarConstMap);
       }
 
     if (CheckSimplifyMap(inputterm, output, false, VarConstMap))
@@ -1442,7 +1443,7 @@ ASTNode Flatten(const ASTNode& a)
           }
         if (CheckSolverMap(inputterm, output))
           {
-            return SimplifyTerm(output);
+            return SimplifyTerm(output, VarConstMap);
           }
         output = inputterm;
         break;
@@ -1523,7 +1524,7 @@ ASTNode Flatten(const ASTNode& a)
           //sort, and create BVPLUS/BVMULT and return
           for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
             {
-              ASTNode aaa = SimplifyTerm(*it);
+              ASTNode aaa = SimplifyTerm(*it, VarConstMap);
               if (BVCONST == aaa.GetKind())
                 {
                   constkids.push_back(aaa);
@@ -1644,8 +1645,8 @@ ASTNode Flatten(const ASTNode& a)
       case BVSUB:
         {
           ASTVec c = inputterm.GetChildren();
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
-          ASTNode a1 = SimplifyTerm(inputterm[1]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
+          ASTNode a1 = SimplifyTerm(inputterm[1], VarConstMap);
           unsigned int l = inputValueWidth;
           if (a0 == a1)
             output = CreateZeroConst(l);
@@ -1654,8 +1655,8 @@ ASTNode Flatten(const ASTNode& a)
               //covert x-y into x+(-y) and simplify. this transformation
               //triggers more simplifications
               //
-              a1 = SimplifyTerm(CreateTerm(BVUMINUS, l, a1));
-              output = SimplifyTerm(CreateTerm(BVPLUS, l, a0, a1));
+              a1 = SimplifyTerm(CreateTerm(BVUMINUS, l, a1), VarConstMap);
+              output = SimplifyTerm(CreateTerm(BVPLUS, l, a0, a1), VarConstMap);
             }
           break;
         }
@@ -1666,7 +1667,7 @@ ASTNode Flatten(const ASTNode& a)
           //actually 0. One way to reveal this fact is to strip bvuminus
           //out, and replace with something else so that combineliketerms
           //can catch this fact.
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
           Kind k1 = a0.GetKind();
           unsigned int l = a0.GetValueWidth();
           ASTNode one = CreateOneConst(l);
@@ -1682,7 +1683,7 @@ ASTNode Flatten(const ASTNode& a)
               }
             case BVNEG:
               {
-                output = SimplifyTerm(CreateTerm(BVPLUS, l, a0[0], one));
+                output = SimplifyTerm(CreateTerm(BVPLUS, l, a0[0], one), VarConstMap);
                 break;
               }
             case BVMULT:
@@ -1703,7 +1704,7 @@ ASTNode Flatten(const ASTNode& a)
                 	// not -(3*x).
                 	if (BVCONST == a0[0].GetKind())
                 	{
-                    ASTNode a00 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[0]));
+                    ASTNode a00 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[0]), VarConstMap);
                     output = CreateTerm(BVMULT, l, a00, a0[1]);
                   }
                 	else
@@ -1723,25 +1724,25 @@ ASTNode Flatten(const ASTNode& a)
                 for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
                   {
                     //Simplify(BVUMINUS(a1x1))
-                    ASTNode aaa = SimplifyTerm(CreateTerm(BVUMINUS, l, *it));
+                    ASTNode aaa = SimplifyTerm(CreateTerm(BVUMINUS, l, *it), VarConstMap);
                     o.push_back(aaa);
                   }
                 //simplify the bvplus
-                output = SimplifyTerm(CreateTerm(BVPLUS, l, o));
+                output = SimplifyTerm(CreateTerm(BVPLUS, l, o), VarConstMap);
                 break;
               }
             case BVSUB:
               {
                 //BVUMINUS(BVSUB(x,y)) <=> BVSUB(y,x)
-                output = SimplifyTerm(CreateTerm(BVSUB, l, a0[1], a0[0]));
+                output = SimplifyTerm(CreateTerm(BVSUB, l, a0[1], a0[0]), VarConstMap);
                 break;
               }
             case ITE:
               {
                 //BVUMINUS(ITE(c,t1,t2)) <==> ITE(c,BVUMINUS(t1),BVUMINUS(t2))
                 ASTNode c = a0[0];
-                ASTNode t1 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[1]));
-                ASTNode t2 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[2]));
+                ASTNode t1 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[1]), VarConstMap);
+                ASTNode t2 = SimplifyTerm(CreateTerm(BVUMINUS, l, a0[2]), VarConstMap);
                 output = CreateSimplifiedTermITE(c, t1, t2);
                 break;
               }
@@ -1758,7 +1759,7 @@ ASTNode Flatten(const ASTNode& a)
           //it is important to take care of wordlevel transformation in
           //BVEXTRACT. it exposes oppurtunities for later simplification
           //and solving (variable elimination)
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
           Kind k1 = a0.GetKind();
           unsigned int a_len = inputValueWidth;
 
@@ -1800,7 +1801,7 @@ ASTNode Flatten(const ASTNode& a)
                     //Apply the following rule:
                     // (t@u)[i:j] <==> u[i:j], if len(u) > i
                     //
-                    output = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, u, i, j));
+                    output = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, u, i, j), VarConstMap);
                   }
                 else if (len_a0 > i_val && j_val >= len_u)
                   {
@@ -1808,7 +1809,7 @@ ASTNode Flatten(const ASTNode& a)
                     // (t@u)[i:j] <==> t[i-len_u:j-len_u], if len(t@u) > i >= j >= len(u)
                     i = CreateBVConst(32, i_val - len_u);
                     j = CreateBVConst(32, j_val - len_u);
-                    output = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j));
+                    output = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j), VarConstMap);
                   }
                 else
                   {
@@ -1816,8 +1817,8 @@ ASTNode Flatten(const ASTNode& a)
                     // (t@u)[i:j] <==> t[i-len_u:0] @ u[len_u-1:j]
                     i = CreateBVConst(32, i_val - len_u);
                     ASTNode m = CreateBVConst(32, len_u - 1);
-                    t = SimplifyTerm(CreateTerm(BVEXTRACT, i_val - len_u + 1, t, i, zero));
-                    u = SimplifyTerm(CreateTerm(BVEXTRACT, len_u - j_val, u, m, j));
+                    t = SimplifyTerm(CreateTerm(BVEXTRACT, i_val - len_u + 1, t, i, zero), VarConstMap);
+                    u = SimplifyTerm(CreateTerm(BVEXTRACT, len_u - j_val, u, m, j), VarConstMap);
                     output = CreateTerm(BVCONCAT, a_len, t, u);
                   }
                 break;
@@ -1832,7 +1833,7 @@ ASTNode Flatten(const ASTNode& a)
                 for (ASTVec::iterator jt = c.begin(), jtend = c.end(); jt != jtend; jt++)
                   {
                     ASTNode aaa = *jt;
-                    aaa = SimplifyTerm(CreateTerm(BVEXTRACT, i_val + 1, aaa, i, zero));
+                    aaa = SimplifyTerm(CreateTerm(BVEXTRACT, i_val + 1, aaa, i, zero), VarConstMap);
                     o.push_back(aaa);
                   }
                 output = CreateTerm(a0.GetKind(), i_val + 1, o);
@@ -1852,8 +1853,8 @@ ASTNode Flatten(const ASTNode& a)
                 // (t op u)[i:j] <==> t[i:j] op u[i:j]
                 ASTNode t = a0[0];
                 ASTNode u = a0[1];
-                t = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j));
-                u = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, u, i, j));
+                t = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j), VarConstMap);
+                u = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, u, i, j), VarConstMap);
                 BVTypeCheck(t);
                 BVTypeCheck(u);
                 output = CreateTerm(k1, a_len, t, u);
@@ -1863,7 +1864,7 @@ ASTNode Flatten(const ASTNode& a)
               {
                 // (~t)[i:j] <==> ~(t[i:j])
                 ASTNode t = a0[0];
-                t = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j));
+                t = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, t, i, j), VarConstMap);
                 output = CreateTerm(BVNEG, a_len, t);
                 break;
               }
@@ -1886,8 +1887,8 @@ ASTNode Flatten(const ASTNode& a)
             case ITE:
               {
                 ASTNode t0 = a0[0];
-                ASTNode t1 = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, a0[1], i, j));
-                ASTNode t2 = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, a0[2], i, j));
+                ASTNode t1 = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, a0[1], i, j), VarConstMap);
+                ASTNode t2 = SimplifyTerm(CreateTerm(BVEXTRACT, a_len, a0[2], i, j), VarConstMap);
                 output = CreateSimplifiedTermITE(t0, t1, t2);
                 break;
               }
@@ -1901,7 +1902,7 @@ ASTNode Flatten(const ASTNode& a)
         }
       case BVNEG:
         {
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
           unsigned len = inputValueWidth;
           switch (a0.GetKind())
             {
@@ -1913,8 +1914,8 @@ ASTNode Flatten(const ASTNode& a)
               break;
               // case ITE: {
               //        ASTNode cond = a0[0];
-              //        ASTNode thenpart = SimplifyTerm(CreateTerm(BVNEG,len,a0[1]));
-              //        ASTNode elsepart = SimplifyTerm(CreateTerm(BVNEG,len,a0[2]));
+              //        ASTNode thenpart = SimplifyTerm(CreateTerm(BVNEG,len,a0[1]), VarConstMap);
+              //        ASTNode elsepart = SimplifyTerm(CreateTerm(BVNEG,len,a0[2]), VarConstMap);
               //        output = CreateSimplifiedTermITE(cond,thenpart,elsepart);
               //        break;
               //       }
@@ -1927,7 +1928,7 @@ ASTNode Flatten(const ASTNode& a)
 
       case BVZX:
         {
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
           if (a0.GetKind() == BVCONST)
             output = BVConstEvaluator(CreateTerm(BVZX, inputValueWidth, a0, inputterm[1]));
           else
@@ -1938,7 +1939,7 @@ ASTNode Flatten(const ASTNode& a)
       case BVSX:
         {
           //a0 is the expr which is being sign extended
-          ASTNode a0 = SimplifyTerm(inputterm[0]);
+          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
           //a1 represents the length of the term BVSX(a0)
           ASTNode a1 = inputterm[1];
           //output length of the BVSX term
@@ -1985,7 +1986,7 @@ ASTNode Flatten(const ASTNode& a)
                     ASTVec o;
                     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
                       {
-                        ASTNode aaa = SimplifyTerm(CreateTerm(BVSX, len, *it, a1));
+                        ASTNode aaa = SimplifyTerm(CreateTerm(BVSX, len, *it, a1), VarConstMap);
                         o.push_back(aaa);
                       }
                     output = CreateTerm(a0.GetKind(), len, o);
@@ -1996,15 +1997,15 @@ ASTNode Flatten(const ASTNode& a)
               {
                 //if you have BVSX(m,BVSX(n,a)) then you can drop the inner
                 //BVSX provided m is greater than n.
-                a0 = SimplifyTerm(a0[0]);
+                a0 = SimplifyTerm(a0[0], VarConstMap);
                 output = CreateTerm(BVSX, len, a0, a1);
                 break;
               }
             case ITE:
               {
                 ASTNode cond = a0[0];
-                ASTNode thenpart = SimplifyTerm(CreateTerm(BVSX, len, a0[1], a1));
-                ASTNode elsepart = SimplifyTerm(CreateTerm(BVSX, len, a0[2], a1));
+                ASTNode thenpart = SimplifyTerm(CreateTerm(BVSX, len, a0[1], a1), VarConstMap);
+                ASTNode elsepart = SimplifyTerm(CreateTerm(BVSX, len, a0[2], a1), VarConstMap);
                 output = CreateSimplifiedTermITE(cond, thenpart, elsepart);
                 break;
               }
@@ -2028,7 +2029,7 @@ ASTNode Flatten(const ASTNode& a)
           bool constant = true;
           for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
             {
-              ASTNode aaa = SimplifyTerm(*it);
+              ASTNode aaa = SimplifyTerm(*it, VarConstMap);
               if (BVCONST != aaa.GetKind())
                 {
                   constant = false;
@@ -2070,8 +2071,8 @@ ASTNode Flatten(const ASTNode& a)
         }
       case BVCONCAT:
         {
-          ASTNode t = SimplifyTerm(inputterm[0]);
-          ASTNode u = SimplifyTerm(inputterm[1]);
+          ASTNode t = SimplifyTerm(inputterm[0], VarConstMap);
+          ASTNode u = SimplifyTerm(inputterm[1], VarConstMap);
           Kind tkind = t.GetKind();
           Kind ukind = u.GetKind();
 
@@ -2118,7 +2119,7 @@ ASTNode Flatten(const ASTNode& a)
           bool constant = true;
           for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
             {
-              ASTNode aaa = SimplifyTerm(*it);
+              ASTNode aaa = SimplifyTerm(*it, VarConstMap);
               if (BVCONST != aaa.GetKind())
                 {
                   constant = false;
@@ -2146,13 +2147,13 @@ ASTNode Flatten(const ASTNode& a)
               else if (ITE == inputterm[0].GetKind())
                 {
                   ASTNode cond = SimplifyFormula(inputterm[0][0], false, VarConstMap);
-                  ASTNode index = SimplifyTerm(inputterm[1]);
+                  ASTNode index = SimplifyTerm(inputterm[1], VarConstMap);
 
                   ASTNode read1 = CreateTerm(READ, inputValueWidth, inputterm[0][1], index);
                   ASTNode read2 = CreateTerm(READ, inputValueWidth, inputterm[0][2], index);
 
-                  read1 = SimplifyTerm(read1);
-                  read2 = SimplifyTerm(read2);
+                  read1 = SimplifyTerm(read1, VarConstMap);
+                  read2 = SimplifyTerm(read2, VarConstMap);
                   out1 = CreateSimplifiedTermITE(cond, read1, read2);
                 }
               else
@@ -2173,8 +2174,8 @@ ASTNode Flatten(const ASTNode& a)
       case ITE:
         {
           ASTNode t0 = SimplifyFormula(inputterm[0], false, VarConstMap);
-          ASTNode t1 = SimplifyTerm(inputterm[1]);
-          ASTNode t2 = SimplifyTerm(inputterm[2]);
+          ASTNode t1 = SimplifyTerm(inputterm[1], VarConstMap);
+          ASTNode t2 = SimplifyTerm(inputterm[2], VarConstMap);
           output = CreateSimplifiedTermITE(t0, t1, t2);
           break;
         }
@@ -2186,7 +2187,7 @@ ASTNode Flatten(const ASTNode& a)
           ASTVec o;
           for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
             {
-              ASTNode aaa = SimplifyTerm(*it);
+              ASTNode aaa = SimplifyTerm(*it, VarConstMap);
               o.push_back(aaa);
             }
           output = CreateTerm(k, inputValueWidth, o);

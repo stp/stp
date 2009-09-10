@@ -287,8 +287,10 @@ namespace BEEV
   } //printCacheStatus()
 
   //This function prints the output of the STP solver
-  void BeevMgr::PrintOutput(bool true_iff_valid)
+  void BeevMgr::PrintOutput(SOLVER_RETURN_TYPE ret)
   {
+    bool true_iff_valid = (SOLVER_VALID == ret);
+
     if (print_output_flag)
       {
         if (smtlib_parser_flag)

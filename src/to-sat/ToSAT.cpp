@@ -919,7 +919,7 @@ namespace BEEV
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
   //if returned 0 then input is INVALID if returned 1 then input is
   //VALID if returned 2 then UNDECIDED
-  int BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
+  SOLVER_RETURN_TYPE BeevMgr::TopLevelSATAux(const ASTNode& inputasserts)
   {
     ASTNode inputToSAT = inputasserts;
     ASTNode orig_input = inputToSAT;

@@ -200,6 +200,7 @@ int main(int argc, char ** argv) {
       return 0;
     } //end of PrintBack if
 
-  GlobalBeevMgr->TopLevelSAT(asserts, query);
+  SOLVER_RETURN_TYPE ret = GlobalBeevMgr->TopLevelSAT(asserts, query);
+  GlobalBeevMgr->PrintOutput(ret);
   return 0;
 }//end of Main

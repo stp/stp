@@ -1288,7 +1288,7 @@ namespace BEEV
     void printCacheStatus();
 
     //from v8
-    int TopLevelSATAux(const ASTNode& query);
+    SOLVER_RETURN_TYPE TopLevelSATAux(const ASTNode& query);
 
     //##################################################
     //##################################################
@@ -1296,7 +1296,7 @@ namespace BEEV
     //accepts query and returns the answer. if query is valid, return
     //true, else return false. Automatically constructs counterexample
     //for invalid queries, and prints them upon request.
-    int TopLevelSAT(const ASTNode& query, const ASTNode& asserts);
+    SOLVER_RETURN_TYPE TopLevelSAT(const ASTNode& query, const ASTNode& asserts);
 
     // Debugging function to find problems in BitBlast and ToCNF.
     // See body in ToSAT.cpp for more explanation.
@@ -1446,7 +1446,7 @@ namespace BEEV
 
   public:
     //print the STP solver output
-    void PrintOutput(bool true_iff_valid);
+    void PrintOutput(SOLVER_RETURN_TYPE ret);
 
     //Converts MINISAT counterexample into an AST memotable (i.e. the
     //function populates the datastructure CounterExampleMap)

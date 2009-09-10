@@ -1752,7 +1752,8 @@ namespace BEEV
 
   }; // end of CNFMgr class
 
-  int BeevMgr::TopLevelSAT(const ASTNode& inputasserts, const ASTNode& query)
+  SOLVER_RETURN_TYPE BeevMgr::TopLevelSAT(const ASTNode& inputasserts, 
+					  const ASTNode& query)
   {
 
     ASTNode q = CreateNode(AND, inputasserts, CreateNode(NOT, query));
@@ -1793,7 +1794,7 @@ namespace BEEV
 
     if (!sat)
       {
-        PrintOutput(true);
+        //PrintOutput(true);
         return SOLVER_VALID;
       }
     else if (SatSolver.okay())
@@ -1818,7 +1819,7 @@ namespace BEEV
         if (ASTTrue == orig_result)
           {
             //CheckCounterExample(SatSolver.okay());
-            PrintOutput(false);
+            //PrintOutput(false);
             PrintCounterExample(SatSolver.okay());
             PrintCounterExample_InOrder(SatSolver.okay());
             return SOLVER_INVALID;
@@ -1841,7 +1842,7 @@ namespace BEEV
     else
       {
         //Control should never reach here
-        PrintOutput(true);
+        //PrintOutput(true);
         return SOLVER_ERROR;
       }
   } //end of CALLSAT_ResultCheck

@@ -281,7 +281,8 @@ namespace BEEV
       }
 
     //All for loops are true in the model
-    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input);
+    //return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input);
+    return ret;
   } //end of SATBased_AllFiniteLoops_Refinement()
   
   
@@ -319,7 +320,8 @@ namespace BEEV
     int paramInit         = GetUnsignedConst(finiteloop[1]);
     int paramLimit        = GetUnsignedConst(finiteloop[2]);
     int paramIncrement    = GetUnsignedConst(finiteloop[3]);
-    ASTNode formulabody   = finiteloop[4];
+    ASTNode exceptFormula = finiteloop[4];
+    ASTNode formulabody   = finiteloop[5];
     int paramCurrentValue = paramInit;
 
     //Update ParamToCurrentValMap with parameter and its current
@@ -327,7 +329,7 @@ namespace BEEV
     (*ParamToCurrentValMap)[parameter] = 
       CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
     
-    SOLVER_RETURN_TYPE ret;
+    SOLVER_RETURN_TYPE ret = SOLVER_UNDECIDED;
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
@@ -344,11 +346,9 @@ namespace BEEV
 	      }
 
 
-            //Update ParamToCurrentValMap with parameter and its current
-            //value
-            //
-            //FIXME: Possible leak since I am not freeing the previous
-            //'value' for the same 'key'
+            //Update ParamToCurrentValMap with parameter and its
+            //current value. FIXME: Possible leak since I am not
+            //freeing the previous 'value' for the same 'key'
             paramCurrentValue = paramCurrentValue + paramIncrement;
             (*ParamToCurrentValMap)[parameter] = 
 	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
@@ -361,27 +361,28 @@ namespace BEEV
 	return ret;
       } //end of recursion FORs
 
-    //ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
+    //increment of paramCurrentValue done inside loop
     int ThisForLoopAllTrue = 0;
-    for(;paramCurrentValue < paramLimit;
-	//increment of paramCurrentValue done inside loop
-	) 
+    for(;paramCurrentValue < paramLimit;) 
       {
         ASTNode currentFormula;
-        currentFormula = 
-	  SimplifyFormula(formulabody, false, ParamToCurrentValMap);
-        
+	ASTNode currentExceptFormula =
+	  SimplifyFormula(exceptFormula, false, ParamToCurrentValMap);
+	if(ASTTrue ==  currentExceptFormula)
+	  {	    
+	    currentFormula = ASTTrue;
+	  }
+	else 
+	  {
+	    currentFormula = 
+	      SimplifyFormula(formulabody, false, ParamToCurrentValMap);
+	  }
+
         //Check the currentformula against the model, and add it to the
         //SAT solver if it is false against the model
         if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
           {
-            // forloopFormulaVector.push_back(currentFormula); ASTNode
-	    //             forloopFormulas =
-	    //             (forloopFormulaVector.size() != 1) ?
-	    //             CreateNode(AND, forloopFormulaVector) :
-	    //             forloopFormulaVector[0];
-            
             currentFormula = TransformFormula_TopLevel(currentFormula);
 	    SOLVER_RETURN_TYPE result = 
               CallSAT_ResultCheck(SatSolver, currentFormula, original_input);
@@ -446,7 +447,8 @@ namespace BEEV
     int paramInit         = GetUnsignedConst(finiteloop[1]);
     int paramLimit        = GetUnsignedConst(finiteloop[2]);
     int paramIncrement    = GetUnsignedConst(finiteloop[3]);
-    ASTNode formulabody   = finiteloop[4];
+    ASTNode exceptFormula = finiteloop[4];
+    ASTNode formulabody   = finiteloop[5];
     int paramCurrentValue = paramInit;
 
     //Update ParamToCurrentValMap with parameter and its current
@@ -474,11 +476,9 @@ namespace BEEV
 		returnVec.push_back(ret);
 	      }
 
-            //Update ParamToCurrentValMap with parameter and its current
-            //value
-            //
-            //FIXME: Possible leak since I am not freeing the previous
-            //'value' for the same 'key'
+            //Update ParamToCurrentValMap with parameter and its
+            //current value. FIXME: Possible leak since I am not
+            //freeing the previous 'value' for the same 'key'
             paramCurrentValue = paramCurrentValue + paramIncrement;
             (*ParamToCurrentValMap)[parameter] = 
 	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
@@ -492,20 +492,35 @@ namespace BEEV
 
     ASTVec forloopFormulaVector;
     //Expand the leaf level FOR-construct completely
-    for(;paramCurrentValue < paramLimit;
-	//incrementing of paramCurrentValue is done inside loop
-	)
+    //incrementing of paramCurrentValue is done inside loop
+    for(;paramCurrentValue < paramLimit;)
       {
-        ASTNode currentFormula;
-        currentFormula = 
-	  SimplifyFormula(formulabody, false, ParamToCurrentValMap);
-        
+	ASTNode currentFormula;
+
+	ASTNode currentExceptFormula =
+	  SimplifyFormula(exceptFormula, false, ParamToCurrentValMap);
+	if(ASTTrue ==  currentExceptFormula)
+	  {
+	    currentFormula = ASTTrue;
+	    //continue;
+	  }
+	else 
+	  {
+	    currentFormula = 
+	      SimplifyFormula(formulabody, false, ParamToCurrentValMap);
+	  }
+
         if(checkusingmodel_flag) 
           {
-            //Check the currentformula against the model, and add it to the
-            //SAT solver if it is false against the model
-            if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
-              return ASTFalse;
+            //Check the currentformula against the model, and return
+            //immediately
+	    //cout << "Printing current Formula: " << currentFormula << "\n"; 
+	    ASTNode computedForm = ComputeFormulaUsingModel(currentFormula);
+	    //cout << "Printing computed Formula: " << computedForm << "\n"; 
+            if(ASTFalse == computedForm)
+	      {
+		return ASTFalse;
+	      }
           }
         else 
           {
