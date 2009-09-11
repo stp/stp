@@ -257,31 +257,36 @@ namespace BEEV
     SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;
     for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
 	  iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
-    {
-      //cout << "The number of abs-refinement limit is " << num_absrefine << endl;
-      for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
-	{
-	  ASTNodeMap ParamToCurrentValMap;
-	  retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
-						   original_input,
-						   *i,
-						   &ParamToCurrentValMap,
-						   true); //absrefine flag
-	  ASTNode retformula = 
-	    (retvec.size() == 1) ?
-	    retvec[0] : CreateNode(AND,retvec);
-	  //SimplifyFormula(CreateNode(AND,Allretvec),false,NULL);
-	  retformula = TransformFormula_TopLevel(retformula);
-
-	  //Add the return value of all loops to the SAT Solver
-	  res = 
-	    CallSAT_ResultCheck(SatSolver, retformula, original_input);
-	  if(SOLVER_UNDECIDED != res) 
-	    {
+      {
+	//cout << "The number of abs-refinement limit is " << num_absrefine << endl;
+	for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
+	  {
+	    ASTNodeMap ParamToCurrentValMap;
+	    retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
+						     original_input,
+						     *i,
+						     &ParamToCurrentValMap,
+						     true); //absrefine flag
+	    ASTNode retformula = 
+	      (retvec.size() == 1) ?
+	      retvec[0] : CreateNode(AND,retvec);
+	    //SimplifyFormula(CreateNode(AND,Allretvec),false,NULL);
+	    retformula = TransformFormula_TopLevel(retformula);
+	    
+	    //Add the return value of all loops to the SAT Solver
+	    res = 
+	      CallSAT_ResultCheck(SatSolver, retformula, original_input);
+	    if(SOLVER_UNDECIDED != res) 
+	      {
 	      return res;
-	    }	  
-	} //end of absrefine count
+	      }
+	  } //end of absrefine count
+    } //End of For
 
+    for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
+	  iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
+    {
+      //The abs-refine didn't finish the job. Add the remaining axioms
       ASTNodeMap ParamToCurrentValMap;
       retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
 					       original_input,
@@ -300,7 +305,7 @@ namespace BEEV
 	{
 	  return res;
 	}	  	
-      } //End of For()
+    } //End of For()
 
     return res;
   } //end of SATBased_AllFiniteLoops_Refinement()
