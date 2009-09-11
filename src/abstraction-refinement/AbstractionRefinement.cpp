@@ -251,44 +251,63 @@ namespace BEEV
   BeevMgr::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
 					      const ASTNode& original_input)
   {
-    SOLVER_RETURN_TYPE ret = SOLVER_UNDECIDED;
-    std::vector<SOLVER_RETURN_TYPE> retvec;
+    ASTVec retvec;
+    ASTVec Allretvec;
+    Allretvec.push_back(ASTTrue);
+    SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;
     for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
 	  iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
-      {
-        //ASTNodeMap * ParamToCurrentValMap = new ASTNodeMap;
-	ASTNodeMap ParamToCurrentValMap;
-	ret =  SATBased_FiniteLoop_Refinement(SatSolver,
-					      original_input,
-					      *i,
-					      &ParamToCurrentValMap);
-        if(SOLVER_VALID == ret)
-          {
-            return ret;
-          }
-	retvec.push_back(ret);
+    {
+      //cout << "The number of abs-refinement limit is " << num_absrefine << endl;
+      for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
+	{
+	  ASTNodeMap ParamToCurrentValMap;
+	  retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
+						   original_input,
+						   *i,
+						   &ParamToCurrentValMap,
+						   true); //absrefine flag
+	  ASTNode retformula = 
+	    (retvec.size() == 1) ?
+	    retvec[0] : CreateNode(AND,retvec);
+	  //SimplifyFormula(CreateNode(AND,Allretvec),false,NULL);
+	  retformula = TransformFormula_TopLevel(retformula);
+
+	  //Add the return value of all loops to the SAT Solver
+	  res = 
+	    CallSAT_ResultCheck(SatSolver, retformula, original_input);
+	  if(SOLVER_UNDECIDED != res) 
+	    {
+	      return res;
+	    }	  
+	} //end of absrefine count
+
+      ASTNodeMap ParamToCurrentValMap;
+      retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
+					       original_input,
+					       *i,
+					       &ParamToCurrentValMap,
+					       false); //absrefine flag
+	
+      ASTNode retformula = 
+      (retvec.size() == 1) ?
+      retvec[0] : CreateNode(AND,retvec);
+      retformula = TransformFormula_TopLevel(retformula);
+      //Add the return value of all loops to the SAT Solver
+      SOLVER_RETURN_TYPE res = 
+	CallSAT_ResultCheck(SatSolver, retformula, original_input);
+      if(SOLVER_UNDECIDED != res) 
+	{
+	  return res;
+	}	  	
       } //End of For()
 
-    //Even if one of the for loops results in SOLVER_UNDECIDED, then
-    //it means that the constructed model is bogus. Return this fact.
-    for(vector<SOLVER_RETURN_TYPE>::iterator i=retvec.begin(),
-	  iend=retvec.end();i!=iend;i++) 
-      {
-	if(SOLVER_UNDECIDED == *i) 
-	  {
-	    return SOLVER_UNDECIDED;
-	  }
-      }
-
-    //All for loops are true in the model
-    //return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input);
-    return ret;
+    return res;
   } //end of SATBased_AllFiniteLoops_Refinement()
   
   
   /*****************************************************************
    * SATBased_FiniteLoop_Refinement
-   *
    *
    * 'finiteloop' is the finite loop to be expanded
    * Every finiteloop has three parts:
@@ -308,11 +327,12 @@ namespace BEEV
   //
   //Expand the finite loop, check against model, and add false
   //formulas to the SAT solver
-  SOLVER_RETURN_TYPE 
+  ASTVec
   BeevMgr::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
 					  const ASTNode& original_input,
 					  const ASTNode& finiteloop,
-					  ASTNodeMap* ParamToCurrentValMap)
+					  ASTNodeMap* ParamToCurrentValMap,
+					  bool absrefine_flag)
   {     
     //BVTypeCheck should have already checked the sanity of the input
     //FOR-formula
@@ -329,22 +349,26 @@ namespace BEEV
     (*ParamToCurrentValMap)[parameter] = 
       CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
     
-    SOLVER_RETURN_TYPE ret = SOLVER_UNDECIDED;
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
       { 
+	ASTVec retvec;
+	ASTVec retvec_innerfor;
+	retvec.push_back(ASTTrue);
         while(paramCurrentValue < paramLimit) 
           {
-            ret = SATBased_FiniteLoop_Refinement(SatSolver, 
-						 original_input,
-						 formulabody, 
-						 ParamToCurrentValMap);
-	    if(SOLVER_VALID == ret) 
-	      {
-		//If formula is valid, return immediately
-		return ret;
-	      }
+            retvec_innerfor = 
+	      SATBased_FiniteLoop_Refinement(SatSolver, 
+					     original_input,
+					     formulabody, 
+					     ParamToCurrentValMap,
+					     absrefine_flag);
 
+	    for(ASTVec::iterator i=retvec_innerfor.begin(),
+		  iend=retvec_innerfor.end();i!=iend;i++)
+	      {
+		retvec.push_back(*i);
+	      }
 
             //Update ParamToCurrentValMap with parameter and its
             //current value. FIXME: Possible leak since I am not
@@ -354,16 +378,14 @@ namespace BEEV
 	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
           } //end of While
 
-	//The last 'ret' value is the truthvalue of the formula. If it
-	//is SOLVER_INVALID then the formula is indeed INVALID, else
-	//ret can only be SOLVER_UNDECIDED at this point. Hence return
-	//UNDECIDED.
-	return ret;
+	return retvec;
       } //end of recursion FORs
 
     //Expand the leaf level FOR-construct completely
     //increment of paramCurrentValue done inside loop
     int ThisForLoopAllTrue = 0;
+    ASTVec ForloopVec;
+    ForloopVec.push_back(ASTTrue);
     for(;paramCurrentValue < paramLimit;) 
       {
         ASTNode currentFormula;
@@ -381,40 +403,33 @@ namespace BEEV
 
         //Check the currentformula against the model, and add it to the
         //SAT solver if it is false against the model
-        if(ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
-          {
-            currentFormula = TransformFormula_TopLevel(currentFormula);
-	    SOLVER_RETURN_TYPE result = 
-              CallSAT_ResultCheck(SatSolver, currentFormula, original_input);
-            if(result != SOLVER_UNDECIDED)           
-              {
-                return result;
-              }
+        if(absrefine_flag && 
+	   ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
+	  {
+	    ForloopVec.push_back(currentFormula);
           }
 	else 
 	  {
-	    //ComputeFormulaUsingModel can either return ASTFalse or
-	    //ASTTrue
-	    ThisForLoopAllTrue++;	    
+	    if(ASTTrue != currentFormula)
+	      {
+		ForloopVec.push_back(currentFormula);
+	      }
+	    if(ASTFalse == currentFormula)
+	      {
+		ForloopVec.push_back(ASTFalse);
+		return ForloopVec;
+	      }
 	  }
         
         //Update ParamToCurrentValMap with parameter and its current
-        //value 
-        //
-        //FIXME: Possible leak since I am not freeing the previous
-        //'value' for the same 'key'
+        //value. FIXME: Possible leak since I am not freeing the
+        //previous 'value' for the same 'key'
 	paramCurrentValue = paramCurrentValue + paramIncrement;
         (*ParamToCurrentValMap)[parameter] = 
-	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
-	//cout << (*ParamToCurrentValMap)[parameter];
+	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);	
       } //end of expanding the FOR loop
     
-    if(ThisForLoopAllTrue == paramLimit) 
-      {
-	return SOLVER_INVALID;
-      }
-
-    return SOLVER_UNDECIDED;
+    return ForloopVec;
   } //end of the SATBased_FiniteLoop_Refinement()
 
   //SATBased_FiniteLoop_Refinement_UsingModel  

@@ -51,6 +51,7 @@ int main(int argc, char ** argv) {
   helpstring +=  "-c  : construct counterexample\n";
   helpstring +=  "-d  : check counterexample\n";
   helpstring +=  "-e  : expand finite-for construct\n";
+  helpstring +=  "-f  : number of abstraction-refinement loops\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
   helpstring +=  "-p  : print counterexample\n";
@@ -65,6 +66,13 @@ int main(int argc, char ** argv) {
     {
       if(argv[i][0] == '-')
         {
+          if(argv[i][2]) {
+            fprintf(stderr, "Multiple character options are not allowed.\n");
+            fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
+            fprintf(stderr,usage,prog);
+            cout << helpstring;
+            return -1;
+          }
           switch(argv[i][1])
             {
             case 'a' :
@@ -83,6 +91,10 @@ int main(int argc, char ** argv) {
 	    case 'e':
 	      expand_finitefor_flag = true;
 	      break;
+	    case 'f':
+	      num_absrefine_flag = true;
+	      num_absrefine = atoi(argv[++i]);
+	      break;            
             case 'h':
               fprintf(stderr,usage,prog);
               cout << helpstring;
@@ -133,16 +145,8 @@ int main(int argc, char ** argv) {
               return -1;
               break;
             }
-          if(argv[i][2]) {
-            fprintf(stderr, "Multiple character options are not allowed.\n");
-            fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
-            fprintf(stderr,usage,prog);
-            cout << helpstring;
-            return -1;
-          }
-        } else {
+        } else {	  
           infile = argv[i];
-
           if (smtlib_parser_flag)
             {
               smtin = fopen(infile,"r");

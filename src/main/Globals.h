@@ -70,6 +70,11 @@ namespace BEEV
   //Expands out the finite for-construct completely
   extern bool expand_finitefor_flag;
 
+  //Determines the number of abstraction-refinement loop count for the
+  //for-construct
+  extern bool num_absrefine_flag;
+  extern int num_absrefine;
+
   //if this option is true then print the way dawson wants using a
   //different printer. do not use this printer.
   extern bool print_arrayval_declaredorder_flag;

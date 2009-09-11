@@ -42,7 +42,13 @@ namespace BEEV
   bool print_binary_flag = false;
 
   //Expands out the finite for-construct completely
-  bool expand_finitefor_flag;
+  bool expand_finitefor_flag = false;
+
+  //Determines the number of abstraction-refinement loop count for the
+  //for-construct
+  bool num_absrefine_flag = false;
+  int num_absrefine = 0;
+
 
   //if this option is true then print the way dawson wants using a
   //different printer. do not use this printer.

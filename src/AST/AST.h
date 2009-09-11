@@ -1231,13 +1231,16 @@ namespace BEEV
 						    const ASTNode& original_input);
     SOLVER_RETURN_TYPE SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
 						     const ASTNode& orig_input);        
-    SOLVER_RETURN_TYPE SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
-						      const ASTNode& original_input, 						  
-						      const ASTNode& finiteloop,
-						      ASTNodeMap* ParamToCurrentValMap);    
+   
     SOLVER_RETURN_TYPE SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& newS, 
 							  const ASTNode& orig_input);
-
+    
+    ASTVec SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+					  const ASTNode& original_input, 						  
+					  const ASTNode& finiteloop,
+					  ASTNodeMap* ParamToCurrentValMap,
+					  bool absrefine_flag=false);    
+    
     ASTNode Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
 					ASTNodeMap* ParamToCurrentValMap,
 					bool CheckUsingModel_Or_Expand);

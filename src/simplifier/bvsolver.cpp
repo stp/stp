@@ -310,7 +310,7 @@ namespace BEEV
   {
     ASTNode eq = input;
     //cerr << "Input to BVSolve_Odd()" << eq << endl;
-    if (!(wordlevel_solve_flag && EQ == eq.GetKind()))
+    if (!(EQ == eq.GetKind()))
       {
         return input;
       }
@@ -524,10 +524,10 @@ namespace BEEV
   //the formula
   ASTNode BVSolver::TopLevelBVSolve(const ASTNode& input)
   {
-    if (!wordlevel_solve_flag)
-      {
-        return input;
-      }
+    //    if (!wordlevel_solve_flag)
+    //       {
+    //         return input;
+    //       }
 
     Kind k = input.GetKind();
     if (!(EQ == k || AND == k))
@@ -596,7 +596,7 @@ namespace BEEV
   {
     ASTNode eq = input;
     //cerr << "Input to BVSolve_Odd()" << eq << endl;
-    if (!(wordlevel_solve_flag && EQ == eq.GetKind()))
+    if (!(EQ == eq.GetKind()))
       {
         evenflag = false;
         return eq;
@@ -652,10 +652,10 @@ namespace BEEV
   //solve an eqn whose monomials have only even coefficients
   ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
   {
-    if (!wordlevel_solve_flag)
-      {
-        return input;
-      }
+    //     if (!wordlevel_solve_flag)
+    //       {
+    //         return input;
+    //       }
 
     if (!(EQ == input.GetKind() || AND == input.GetKind()))
       {

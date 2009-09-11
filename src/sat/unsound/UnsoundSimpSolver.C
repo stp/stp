@@ -491,30 +491,32 @@ bool UnsoundSimpSolver::eliminateVar(Var v, bool fail, bool stop_unsoundness)
                 return false;
 
 
-    if(!stop_unsoundness) {
-      //abductive logic
-      vec<Lit > resolvedClauses;
-      for (int i = 0; i < pos.size(); i++) {
-	for (int j = 0; j < pos.size(); j++) {
+    if(!stop_unsoundness) 
+      {
+	//abductive logic
+	vec<Lit > resolvedClauses;
+	for (int i = 0; i < pos.size(); i++) {
+	  for (int j = 0; j < pos.size(); j++) {
+	    if(i == j) 
+	      continue;
+	    abductive_merge(*pos[i], *pos[j], v, resolvedClauses, true);	  
+	    if(!addClause(resolvedClauses))
+	      return false;
+	  }
+	}
+	//}
+
+      resolvedClauses.clear();
+      for (int i = 0; i < neg.size(); i++) {
+	for (int j = 0; j < neg.size(); j++) {
 	  if(i == j) 
 	    continue;
-	  abductive_merge(*pos[i], *pos[j], v, resolvedClauses, true);	  
+	  abductive_neg_merge(*neg[i], *neg[j], v, resolvedClauses,true);
 	  if(!addClause(resolvedClauses))
-	    return false;
+	    return false;	
 	}
-      }
-    }
-//       resolvedClauses.clear();
-//       for (int i = 0; i < neg.size(); i++) {
-// 	for (int j = 0; j < neg.size(); j++) {
-// 	  if(i == j) 
-// 	    continue;
-// 	  abductive_neg_merge(*neg[i], *neg[j], v, resolvedClauses,true);
-// 	  if(!addClause(resolvedClauses))
-// 	    return false;	
-// 	}
-//      }
-//    }
+     }
+   }
 
     // DEBUG: For checking that a clause set is saturated with respect
     //        to variable elimination.  If the clause set is expected

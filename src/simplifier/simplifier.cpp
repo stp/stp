@@ -324,8 +324,8 @@ ASTNode Flatten(const ASTNode& a)
   BeevMgr::SimplifyFormula(const ASTNode& b, 
 			   bool pushNeg, ASTNodeMap* VarConstMap)
   {
-    if (!optimize_flag)
-      return b;
+//     if (!optimize_flag)
+//       return b;
 
     Kind kind = b.GetKind();
     if (BOOLEAN_TYPE != b.GetType())
@@ -404,8 +404,8 @@ ASTNode Flatten(const ASTNode& a)
   BeevMgr::SimplifyAtomicFormula(const ASTNode& a, 
 				 bool pushNeg, ASTNodeMap* VarConstMap)
   {
-    if (!optimize_flag)
-      return a;
+//     if (!optimize_flag)
+//       return a;
 
     ASTNode output;
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
@@ -686,7 +686,7 @@ ASTNode Flatten(const ASTNode& a)
   {
     CountersAndStats("ITEOpts_InEqs");
 
-    if (!(EQ == in.GetKind() && optimize_flag))
+    if (!(EQ == in.GetKind()))
       {
         return in;
       }
@@ -1258,8 +1258,8 @@ ASTNode Flatten(const ASTNode& a)
 
   ASTNode BeevMgr::SimplifyIteFormula(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
   {
-    if (!optimize_flag)
-      return b;
+ //    if (!optimize_flag)
+//       return b;
 
     ASTNode output;
     if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
@@ -1395,10 +1395,10 @@ ASTNode Flatten(const ASTNode& a)
     ASTNode inputterm(actualInputterm); // mutable local copy.
 
     //cout << "SimplifyTerm: input: " << a << endl;
-    if (!optimize_flag)
-      {
-        return inputterm;
-      }
+    // if (!optimize_flag)
+    //       {
+    //         return inputterm;
+    //       }
 
     ASTNode output;
     assert(BVTypeCheck(inputterm));

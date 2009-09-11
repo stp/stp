@@ -938,23 +938,32 @@ namespace BEEV
       {
         inputToSAT = simplified_solved_InputToSAT;
 
-        simplified_solved_InputToSAT = 
-          CreateSubstitutionMap(simplified_solved_InputToSAT);
-        //printf("##################################################\n");
-        ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+	if(optimize_flag) 
+	  {
 
-        simplified_solved_InputToSAT = 
-          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-        ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+	    simplified_solved_InputToSAT = 
+	      CreateSubstitutionMap(simplified_solved_InputToSAT);
+	    //printf("##################################################\n");
+	    ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
 
-        simplified_solved_InputToSAT = 
-          bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-        ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+	    simplified_solved_InputToSAT = 
+	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+	    ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+	  }
+
+	if(wordlevel_solve_flag)
+	  {
+	    simplified_solved_InputToSAT = 
+	      bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+	    ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+	  }
 
       } 
     while (inputToSAT != simplified_solved_InputToSAT);
 
-    ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
+    ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
+		 simplified_solved_InputToSAT);
+
     SimplifyWrites_InPlace_Flag = true;
     Begin_RemoveWrites = false;
     start_abstracting = false;
@@ -962,22 +971,27 @@ namespace BEEV
     do
       {
         inputToSAT = simplified_solved_InputToSAT;
-        simplified_solved_InputToSAT = 
-          CreateSubstitutionMap(simplified_solved_InputToSAT);
-        ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
-    
-	simplified_solved_InputToSAT = 
-          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-        ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
-        
-	simplified_solved_InputToSAT = 
-          bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-        ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
-      
-      } 
-    while (inputToSAT != simplified_solved_InputToSAT);
-    ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
 
+	if(optimize_flag) 
+	  {
+	    simplified_solved_InputToSAT = 
+	      CreateSubstitutionMap(simplified_solved_InputToSAT);
+	    ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+
+	    simplified_solved_InputToSAT = 
+	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+	    ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+	  }
+	
+	if(wordlevel_solve_flag)
+	  {
+	    simplified_solved_InputToSAT = 
+	      bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+	    ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+	  }
+      } while (inputToSAT != simplified_solved_InputToSAT);
+    
+    ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
     delete bvsolver;
     bvsolver = NULL;
 
@@ -990,21 +1004,31 @@ namespace BEEV
       }
 
     TermsAlreadySeenMap.clear();
-    do
-      {
-        inputToSAT = simplified_solved_InputToSAT;
-        //simplified_solved_InputToSAT =
-        //CreateSubstitutionMap(simplified_solved_InputToSAT);
-        //Begin_RemoveWrites = true; ASTNodeStats("after pure
-        //substitution: ", simplified_solved_InputToSAT);
-        simplified_solved_InputToSAT = 
-          SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-        //ASTNodeStats("after simplification: ",
-        //simplified_solved_InputToSAT); simplified_solved_InputToSAT
-        //= bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
-        //ASTNodeStats("after solving: ",
-        //simplified_solved_InputToSAT);
-      } while (inputToSAT != simplified_solved_InputToSAT);
+    // do
+//       {
+//         inputToSAT = simplified_solved_InputToSAT;
+
+// 	if(optimize_flag) 
+// 	  {
+// 	    //simplified_solved_InputToSAT =
+// 	    //CreateSubstitutionMap(simplified_solved_InputToSAT);
+// 	    //Begin_RemoveWrites = true; ASTNodeStats("after pure
+// 	    //substitution: ", simplified_solved_InputToSAT);
+// 	    simplified_solved_InputToSAT = 
+// 	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+// 	    //ASTNodeStats("after simplification: ",
+// 	    //simplified_solved_InputToSAT); 
+// 	    //
+// 	  }
+
+// 	if(wordlevel_solve_flag)
+// 	  {
+// 	    simplified_solved_InputToSAT
+// 	      = bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
+// 	    ASTNodeStats("after solving: ",
+// 			 simplified_solved_InputToSAT);
+// 	  }
+//       } while (inputToSAT != simplified_solved_InputToSAT);
 
     if (start_abstracting)
       {
