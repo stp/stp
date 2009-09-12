@@ -1107,7 +1107,8 @@ namespace BEEV
 		       const ASTVec &children = _empty_ASTVec);
 
     // Create and return an ASTNode for a term
-    inline ASTNode CreateTerm(Kind kind, unsigned int width, const ASTVec &children = _empty_ASTVec)
+    inline ASTNode CreateTerm(Kind kind, 
+			      unsigned int width, const ASTVec &children = _empty_ASTVec)
     {
       if (!is_Term_kind(kind))
         FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);

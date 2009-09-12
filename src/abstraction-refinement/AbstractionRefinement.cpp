@@ -8,7 +8,7 @@
 // -*- c++ -*-
 #include "../AST/AST.h"
 #include "../AST/ASTUtil.h"
-//#include "../simplifier/bvsolver.h"
+#include <assert.h>
 #include <math.h>
 
 namespace BEEV
@@ -228,6 +228,18 @@ namespace BEEV
   }//end of Create_ArrayWriteAxioms()
 
 
+//   static ASTNode
+//   SpecialSimplify(const ASTNode& a, ASTNodeMap* VarConstMap)
+//   {
+//     assert(READ == a[0].GetKind() && 
+// 	   READ == a[1].GetKind() &&
+// 	   EQ   == a.GetKind());
+//     ASTNode a0 = GlobalBeevMgr->SimplifyTerm(a[0], VarConstMap);
+//     ASTNode a1 = GlobalBeevMgr->SimplifyTerm(a[1], VarConstMap);
+    
+//     return GlobalBeevMgr->CreateSimplifiedEQ(a0,a1);
+//   }
+
   /******************************************************************
    * FINITE FORLOOP ABSTRACTION REFINEMENT
    *
@@ -251,62 +263,71 @@ namespace BEEV
   BeevMgr::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
 					      const ASTNode& original_input)
   {
-    ASTVec retvec;
-    ASTVec Allretvec;
-    Allretvec.push_back(ASTTrue);
-    SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;
-    for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
-	  iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
+    //cout << "The number of abs-refinement limit is " << num_absrefine << endl;
+    for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
       {
-	//cout << "The number of abs-refinement limit is " << num_absrefine << endl;
-	for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
+	ASTVec Allretvec0;
+	Allretvec0.push_back(ASTTrue);
+	SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;	
+	for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
+	      iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
 	  {
+	    ASTVec retvec;
 	    ASTNodeMap ParamToCurrentValMap;
 	    retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
 						     original_input,
 						     *i,
 						     &ParamToCurrentValMap,
 						     true); //absrefine flag
-	    ASTNode retformula = 
-	      (retvec.size() == 1) ?
-	      retvec[0] : CreateNode(AND,retvec);
-	    //SimplifyFormula(CreateNode(AND,Allretvec),false,NULL);
-	    retformula = TransformFormula_TopLevel(retformula);
-	    
-	    //Add the return value of all loops to the SAT Solver
-	    res = 
-	      CallSAT_ResultCheck(SatSolver, retformula, original_input);
-	    if(SOLVER_UNDECIDED != res) 
-	      {
-	      return res;
-	      }
-	  } //end of absrefine count
-    } //End of For
 
+	    for(ASTVec::iterator j=retvec.begin(),jend=retvec.end();j!=jend;j++) 
+	      {
+		Allretvec0.push_back(*j);
+	      }
+	    //Allretvec0.(Allretvec0.end(),retvec.begin(),retvec.end());
+	  } //End of For
+	  
+	ASTNode retformula = 
+	  (Allretvec0.size() == 1) ?
+	  Allretvec0[0] : CreateNode(AND,Allretvec0);
+	retformula = TransformFormula_TopLevel(retformula);
+	
+	//Add the return value of all loops to the SAT Solver
+	res = 
+	  CallSAT_ResultCheck(SatSolver, retformula, original_input);
+	if(SOLVER_UNDECIDED != res) 
+	  {
+	    return res;
+	  }	
+      } //end of absrefine count
+    
+    
+    ASTVec Allretvec1;
+    Allretvec1.push_back(ASTTrue);
+    SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;	
     for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
 	  iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
     {
-      //The abs-refine didn't finish the job. Add the remaining axioms
+      //cout << "The abs-refine didn't finish the job. Add the remaining formulas\n";
       ASTNodeMap ParamToCurrentValMap;
+      ASTVec retvec;
       retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
 					       original_input,
 					       *i,
 					       &ParamToCurrentValMap,
 					       false); //absrefine flag
-	
-      ASTNode retformula = 
-      (retvec.size() == 1) ?
-      retvec[0] : CreateNode(AND,retvec);
-      retformula = TransformFormula_TopLevel(retformula);
-      //Add the return value of all loops to the SAT Solver
-      SOLVER_RETURN_TYPE res = 
-	CallSAT_ResultCheck(SatSolver, retformula, original_input);
-      if(SOLVER_UNDECIDED != res) 
+      for(ASTVec::iterator j=retvec.begin(),jend=retvec.end();j!=jend;j++) 
 	{
-	  return res;
-	}	  	
-    } //End of For()
-
+	  Allretvec1.push_back(*j);
+	}
+    } //End of For    
+	
+    ASTNode retformula = 
+      (Allretvec1.size() == 1) ?
+      Allretvec1[0] : CreateNode(AND,Allretvec1);
+    retformula = TransformFormula_TopLevel(retformula);
+    //Add the return value of all loops to the SAT Solver
+    res = CallSAT_ResultCheck(SatSolver, retformula, original_input);
     return res;
   } //end of SATBased_AllFiniteLoops_Refinement()
   
@@ -394,7 +415,8 @@ namespace BEEV
     for(;paramCurrentValue < paramLimit;) 
       {
         ASTNode currentFormula;
-	ASTNode currentExceptFormula =
+	ASTNode currentExceptFormula = exceptFormula;
+	currentExceptFormula = 
 	  SimplifyFormula(exceptFormula, false, ParamToCurrentValMap);
 	if(ASTTrue ==  currentExceptFormula)
 	  {	    
@@ -402,7 +424,7 @@ namespace BEEV
 	  }
 	else 
 	  {
-	    currentFormula = 
+	    currentFormula =
 	      SimplifyFormula(formulabody, false, ParamToCurrentValMap);
 	  }
 
@@ -517,7 +539,8 @@ namespace BEEV
       {
 	ASTNode currentFormula;
 
-	ASTNode currentExceptFormula =
+	ASTNode currentExceptFormula = exceptFormula;
+	currentExceptFormula = 
 	  SimplifyFormula(exceptFormula, false, ParamToCurrentValMap);
 	if(ASTTrue ==  currentExceptFormula)
 	  {
@@ -544,7 +567,10 @@ namespace BEEV
           }
         else 
           {
-            forloopFormulaVector.push_back(currentFormula);
+	    if(ASTTrue != currentFormula)
+	      {
+		forloopFormulaVector.push_back(currentFormula);
+	      }
           }
         
         //Update ParamToCurrentValMap with parameter and its current
@@ -588,5 +614,5 @@ namespace BEEV
     return Check_FiniteLoop_UsingModel(finiteloop, 
 				       &ParamToCurrentValMap, true);
   } //end of Check_FiniteLoop_UsingModel
-
+  
 };// end of namespace BEEV

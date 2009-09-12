@@ -1423,7 +1423,7 @@ ASTNode Flatten(const ASTNode& a)
     Kind k = inputterm.GetKind();
     if (!is_Term_kind(k))
       {
-        FatalError("SimplifyTerm: You have input a Non-term", ASTUndefined);
+        FatalError("SimplifyTerm: You have input a Non-term", inputterm);
       }
 
     unsigned int inputValueWidth = inputterm.GetValueWidth();
