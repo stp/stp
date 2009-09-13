@@ -1,0 +1,7 @@
+ASSERT (
+FOR(j:BITVECTOR(8);0x00;0xFF;0x01){
+  A(j) <=> B(j)
+}
+);
+
+QUERY FALSE;

@@ -59,7 +59,8 @@ NOR		1	-	Form
 XOR		1	-	Form
 IFF		1	-	Form
 IMPLIES		2	2	Form
-FOR		4	4	Form
+FOR		5	5	Form
+PARAMBOOL       2       2       Form
 
 # array operations
 READ		2	2	Term

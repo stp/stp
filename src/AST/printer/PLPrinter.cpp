@@ -173,6 +173,12 @@ namespace printer
         PL_Print1(os, c[2], indentation, letize);
         os << endl << "ENDIF";
         break;
+      case PARAMBOOL:
+	PL_Print1(os, c[0], indentation, letize);
+	os << "(";
+	PL_Print1(os, c[1], indentation, letize);
+	os << ")";
+	break;
       case FOR:
 	if(expand_finitefor_flag) 
 	  {

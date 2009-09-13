@@ -336,7 +336,11 @@ ASTNode Flatten(const ASTNode& a)
 
     ASTNode a = b;
     ASTVec ca = a.GetChildren();
-    if (!(IMPLIES == kind || ITE == kind || FOR == kind || isAtomic(kind)))
+    if (!(IMPLIES == kind || 
+	  ITE == kind     || 
+	  FOR == kind     ||
+	  PARAMBOOL==kind ||
+	  isAtomic(kind)))
       {
         SortByArith(ca);
         a = CreateNode(kind, ca);
@@ -440,14 +444,21 @@ ASTNode Flatten(const ASTNode& a)
           }
         output = pushNeg ? CreateNode(NOT, output) : output;
         break;
+      case PARAMBOOL:
+	{
+	  ASTNode term = SimplifyTerm(a[1], VarConstMap);
+	  output = CreateNode(PARAMBOOL, a[0], term);
+	  output = pushNeg ? CreateNode(NOT, output) : output;
+	  break;
+	}
       case BVGETBIT:
         {
-          ASTNode term = SimplifyTerm(a[0]);
+          ASTNode term = SimplifyTerm(a[0], VarConstMap);
           ASTNode thebit = a[1];
           ASTNode zero = CreateZeroConst(1);
           ASTNode one = CreateOneConst(1);
           ASTNode getthebit = 
-	    SimplifyTerm(CreateTerm(BVEXTRACT, 1, term, thebit, thebit));
+	    SimplifyTerm(CreateTerm(BVEXTRACT, 1, term, thebit, thebit), VarConstMap);
           if (getthebit == zero)
             output = pushNeg ? ASTTrue : ASTFalse;
           else if (getthebit == one)

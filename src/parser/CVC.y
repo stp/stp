@@ -417,8 +417,20 @@ ElseRestExpr	:      ELSE_TOK Expr ENDIF_TOK  { $$ = $2; }
 		;
 
 /* Grammar for formulas */
-Formula		:     '(' Formula ')' { $$ = $2; }
-		|      FORMID_TOK {  $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); delete $1;}
+Formula		:     '(' Formula ')' 
+                       {
+			 $$ = $2; 
+		       }
+		|      FORMID_TOK 
+                       {  
+			 $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); delete $1;
+		       }
+		|      FORMID_TOK '(' Expr ')' 
+                       {
+			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(PARAMBOOL,*$1,*$3));
+			 delete $1;
+			 delete $3;
+		       }
                 |      BOOLEXTRACT_TOK '(' Expr ',' NUMERAL_TOK ')'
                        {
 			 unsigned int width = $3->GetValueWidth();

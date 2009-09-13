@@ -1237,7 +1237,7 @@ namespace BEEV
 							  const ASTNode& orig_input);
     
     ASTVec SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
-					  const ASTNode& original_input, 						  
+					  const ASTNode& original_input,
 					  const ASTNode& finiteloop,
 					  ASTNodeMap* ParamToCurrentValMap,
 					  bool absrefine_flag=false);    
@@ -1449,6 +1449,8 @@ namespace BEEV
     ASTNodeMap NewName_ReadOverWrite_Map;
 
   public:
+    ASTNode NewBooleanVar(const ASTNode& var, const ASTNode& param);
+
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
 

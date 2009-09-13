@@ -167,9 +167,15 @@ namespace BEEV
           }
 
         //skip over introduced variables
-        if (f.GetKind() == SYMBOL && (_introduced_symbols.find(f) != _introduced_symbols.end()))
-          continue;
-        if (f.GetKind() == SYMBOL || (f.GetKind() == READ && f[0].GetKind() == SYMBOL && f[1].GetKind() == BVCONST))
+        if (f.GetKind() == SYMBOL && 
+	    (_introduced_symbols.find(f) != _introduced_symbols.end())) 
+	  {
+	    continue;
+	  }
+        if (f.GetKind() == SYMBOL     || 
+	    (f.GetKind() == READ      && 
+	     f[0].GetKind() == SYMBOL && 
+	     f[1].GetKind() == BVCONST))
           {
             os << "ASSERT( ";
             f.PL_Print(os,0);

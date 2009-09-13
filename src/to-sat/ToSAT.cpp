@@ -731,7 +731,10 @@ namespace BEEV
               }
           }
         else
-          output = ASTFalse;
+	  {
+	    CounterExampleMap[form] = ASTFalse;
+	    output = ASTFalse;
+	  }
         break;
       case EQ:
       case BVLT:
@@ -841,6 +844,10 @@ namespace BEEV
           FatalError("ComputeFormulaUsingModel: ITE: "\
 		     "something is wrong with the formula: ", form);
         break;
+      case PARAMBOOL:
+	output = NewBooleanVar(form[0],form[1]);
+	output = ComputeFormulaUsingModel(output);
+	break;
       case FOR:
 	output = Check_FiniteLoop_UsingModel(form);
 	break;

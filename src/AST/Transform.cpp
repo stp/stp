@@ -14,11 +14,13 @@
  * unsigned counterparts. Removes array selects and stores from
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
-
-#include "AST.h"
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
+#include <iostream>
+#include <sstream>
+#include "AST.h"
+#include  "printer/printers.h"
 
 namespace BEEV
 {
@@ -175,6 +177,24 @@ namespace BEEV
       }
   }//End of assertTransformPostConditions()
 
+  ASTNode BeevMgr::NewBooleanVar(const ASTNode& var,
+				 const ASTNode& constant)
+  {
+    ostringstream outVar;
+    ostringstream outNum;
+    //Get the name of Boolean Var
+    var.PL_Print(outVar);
+    constant.PL_Print(outNum);
+    std::string str(outVar.str()); 
+    str += "(";
+    str += outNum.str();
+    str += ")";
+    ASTNode CurrentSymbol = CreateSymbol(str.c_str());
+    CurrentSymbol.SetValueWidth(0);
+    CurrentSymbol.SetIndexWidth(0);
+    return CurrentSymbol;
+  }
+
   /********************************************************
    * TransformFormula()
    *
@@ -258,21 +278,43 @@ namespace BEEV
           break;
         }
       case FOR:
-        //Insert in a global list of FOR constructs. Return TRUE now
-        bm.GlobalList_Of_FiniteLoops.push_back(simpleForm);
-        return bm.CreateNode(TRUE);
-        break;
+	{
+	  //Insert in a global list of FOR constructs. Return TRUE now
+	  bm.GlobalList_Of_FiniteLoops.push_back(simpleForm);
+	  return bm.CreateNode(TRUE);
+	  break;
+	}
+      case PARAMBOOL:
+	{
+	  //If the parameteric boolean variable is of the form
+	  //VAR(const), then convert it into a Boolean variable of the
+	  //form "VAR(const)".
+	  //
+	  //Else if the paramteric boolean variable is of the form
+	  //VAR(expression), then simply return it
+	  if(BVCONST == simpleForm[1].GetKind())
+	    {
+	      result = bm.NewBooleanVar(simpleForm[0],simpleForm[1]);
+	    }
+	  else
+	    {
+	      result = simpleForm;
+	    }	  
+	  break;
+	}
       default:
-        if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
-          result = simpleForm;
-        else
-          {
-            FatalError("TransformFormula: Illegal kind: ", bm.CreateNode(UNDEFINED), k);
-            cerr << "The input is: " << simpleForm << endl;
-            cerr << "The valuewidth of input is : " << simpleForm.GetValueWidth() << endl;
-          }
-        break;
-      }
+	{
+	  if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
+	    result = simpleForm;
+	  else
+	    {
+	      FatalError("TransformFormula: Illegal kind: ", bm.CreateNode(UNDEFINED), k);
+	      cerr << "The input is: " << simpleForm << endl;
+	      cerr << "The valuewidth of input is : " << simpleForm.GetValueWidth() << endl;
+	    }
+	  break;
+	}
+      } //end of Switch
 
     if (simpleForm.GetChildren().size() > 0)
       (*TransformMap)[simpleForm] = result;
