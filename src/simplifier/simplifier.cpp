@@ -311,12 +311,13 @@ ASTNode Flatten(const ASTNode& a)
   BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, 
 				    bool pushNeg, ASTNodeMap* VarConstMap)
   {
+	runTimes.start(RunTimes::SimplifyTopLevel);
     ResetSimplifyMaps();
-
     if (smtlib_parser_flag)
     BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ResetSimplifyMaps();
+    runTimes.stop(RunTimes::SimplifyTopLevel);
     return out;
   }
 

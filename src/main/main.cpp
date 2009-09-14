@@ -44,6 +44,8 @@ int main(int argc, char ** argv) {
       FatalError("Initial allocation of memory failed.");
     }
 
+  bool quick_statistics_flag=false;
+
   //populate the help string
   helpstring += "STP version: " + version + "\n\n";
   helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
@@ -57,6 +59,7 @@ int main(int argc, char ** argv) {
   helpstring +=  "-p  : print counterexample\n";
   helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  "-s  : print function statistics\n";
+  helpstring +=  "-t  : print quick statistics\n";
   helpstring +=  "-v  : print nodes \n";
   helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
   helpstring +=  "-x  : flatten nested XORs\n";
@@ -123,6 +126,9 @@ int main(int argc, char ** argv) {
             case 's' :
               stats_flag = true;
               break;
+            case 't':
+            	quick_statistics_flag = true;
+            	break;
             case 'u':
               arraywrite_refinement_flag = false;
               break;
@@ -179,6 +185,7 @@ int main(int argc, char ** argv) {
   GlobalBeevMgr = new BeevMgr();
   ASTVec * AssertsQuery = new ASTVec;
 
+  GlobalBeevMgr->runTimes.start(RunTimes::Parsing);
   if (smtlib_parser_flag)
     {
       smtparse((void*)AssertsQuery);
@@ -187,6 +194,7 @@ int main(int argc, char ** argv) {
     {
       cvcparse((void*)AssertsQuery);
     }
+  GlobalBeevMgr->runTimes.stop(RunTimes::Parsing);
 
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
@@ -205,6 +213,8 @@ int main(int argc, char ** argv) {
     } //end of PrintBack if
 
   SOLVER_RETURN_TYPE ret = GlobalBeevMgr->TopLevelSAT(asserts, query);
+  if (quick_statistics_flag)
+	  GlobalBeevMgr->runTimes.print();
   GlobalBeevMgr->PrintOutput(ret);
   return 0;
 }//end of Main

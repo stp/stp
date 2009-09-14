@@ -23,7 +23,7 @@ namespace printer
 
   string functionToSMTLIBName(const BEEV::Kind k);
   void SMTLIB_Print1(ostream& os, const BEEV::ASTNode n, int indentation, bool letize);
-  void printVarDeclsToStream( const BeevMgr mgr, ostream &os);
+  void printVarDeclsToStream( const BeevMgr& mgr, ostream &os);
 
   // Initial version intended to print the whole thing back.
   void SMTLIB_PrintBack(ostream &os, const ASTNode& n) {
@@ -35,7 +35,7 @@ namespace printer
 	  os << ")" << endl;
   }
 
-  void printVarDeclsToStream( const BeevMgr mgr, ostream &os) {
+  void printVarDeclsToStream( const BeevMgr& mgr, ostream &os) {
       for(ASTVec::const_iterator i = mgr.ListOfDeclaredVars.begin(),iend=mgr.ListOfDeclaredVars.end();i!=iend;i++) {
         const BEEV::ASTNode& a = *i;
 

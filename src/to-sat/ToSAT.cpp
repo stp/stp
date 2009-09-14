@@ -10,6 +10,7 @@
 #include "../AST/AST.h"
 #include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
+#include "../AST/RunTimes.h"
 
 namespace BEEV
 {
@@ -953,8 +954,10 @@ namespace BEEV
 	    //printf("##################################################\n");
 	    ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
 
+
 	    simplified_solved_InputToSAT = 
 	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+
 	    ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
 	  }
 
@@ -1061,6 +1064,7 @@ namespace BEEV
       }
 
     res = CallSAT_ResultCheck(newS, simplified_solved_InputToSAT, orig_input);
+
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");

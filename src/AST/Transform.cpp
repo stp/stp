@@ -38,6 +38,8 @@ namespace BEEV
   // up the cache that the others use.
   ASTNode BeevMgr::TransformFormula_TopLevel(const ASTNode& form)
   {
+	runTimes.start(RunTimes::TransformFormulaTopLevel);
+
     assert(TransformMap == NULL);
     TransformMap = new ASTNodeMap(100);
     ASTNode result = TransformFormula(form);
@@ -46,6 +48,9 @@ namespace BEEV
     TransformMap->clear();
     delete TransformMap;
     TransformMap = NULL;
+
+    runTimes.stop(RunTimes::TransformFormulaTopLevel);
+
     return result;
   }
 

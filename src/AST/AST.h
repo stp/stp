@@ -36,6 +36,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "../extlib-constbv/constantbv.h"
+#include "RunTimes.h"
 
 /*****************************************************************************
  * LIST OF CLASSES DECLARED IN THIS FILE:
@@ -1556,6 +1557,7 @@ namespace BEEV
     bool CheckMap(ASTNodeMap* VarConstMap, 
 		  const ASTNode& key, ASTNode& output);
 
+    RunTimes runTimes;
 
     //substitution
     bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
