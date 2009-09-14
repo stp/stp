@@ -9,9 +9,10 @@ class RunTimes
 {
 public:
 	enum Category
-	{ // BE VERY CAREFUL> Update the Category Names to match.
-		Transforming = 0, SimplifyTopLevel, Parsing, TransformFormulaTopLevel, CNFConversion, BitBlasting, Solving
+		{
+			Transforming = 0, SimplifyTopLevel, Parsing, CNFConversion, BitBlasting, Solving
 	};
+
 	static std::string CategoryNames[];
 
 	typedef std::pair<Category, long> Element;

@@ -125,7 +125,11 @@ namespace BEEV
     //ChangeActivityLevels_Of_SATVars(newS);
     //PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
     //newS.solve();
+
+    runTimes.start(RunTimes::Solving);
     newS.solve();
+    runTimes.stop(RunTimes::Solving);
+
     //PrintActivityLevels_Of_SATVars("After SAT",newS);
 
     PrintStats(newS);

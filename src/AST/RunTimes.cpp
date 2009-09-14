@@ -1,10 +1,11 @@
 //Hold the runtime statistics. E.g. how long was spent in simplification.
 //The times don't add up to the runtime, because we allow multiple times to
 //be counted simultaneously. For example, the current Transform()s call
-//Simplify_TopLevel, so inside simplify time will be couunted towards both
+//Simplify_TopLevel, so inside simplify time will be counted towards both
 //Simplify_TopLevel & Transform.
 
-// This is intended as a low overhead profiling class. So it can be always run.
+// This is intended as a low overhead profiling class. So runtimes can
+// always be tracked.
 
 #include "RunTimes.h"
 #include <cassert>
@@ -13,8 +14,8 @@
 #include <iostream>
 #include <utility>
 
-
-std::string RunTimes::CategoryNames[] = { "Transforming", "Simplify Top Level", "Parsing","Transforming" , "CNF Conversion", "Bit Blasting", "Solving"};
+// BE VERY CAREFUL> Update the Category Names to match.
+std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "Solving"};
 
 namespace BEEV
 {
