@@ -38,7 +38,7 @@ namespace BEEV
   // up the cache that the others use.
   ASTNode BeevMgr::TransformFormula_TopLevel(const ASTNode& form)
   {
-	runTimes.start(RunTimes::TransformFormulaTopLevel);
+	runTimes.start(RunTimes::Transforming);
 
     assert(TransformMap == NULL);
     TransformMap = new ASTNodeMap(100);
@@ -49,7 +49,7 @@ namespace BEEV
     delete TransformMap;
     TransformMap = NULL;
 
-    runTimes.stop(RunTimes::TransformFormulaTopLevel);
+    runTimes.stop(RunTimes::Transforming);
 
     return result;
   }
@@ -190,7 +190,7 @@ namespace BEEV
     //Get the name of Boolean Var
     var.PL_Print(outVar);
     constant.PL_Print(outNum);
-    std::string str(outVar.str()); 
+    std::string str(outVar.str());
     str += "(";
     str += outNum.str();
     str += ")";
@@ -304,7 +304,7 @@ namespace BEEV
 	  else
 	    {
 	      result = simpleForm;
-	    }	  
+	    }
 	  break;
 	}
       default:
