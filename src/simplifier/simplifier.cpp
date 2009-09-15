@@ -2159,8 +2159,8 @@ ASTNode Flatten(const ASTNode& a)
 						else if (k == BVRIGHTSHIFT)
 						{
 							ASTNode zero = CreateZeroConst(shift);
-							ASTNode hi = CreateBVConst(32, width );
-							ASTNode low = CreateBVConst(32, shift+1);
+							ASTNode hi = CreateBVConst(32, width -1);
+							ASTNode low = CreateBVConst(32, shift);
 							ASTNode extract = CreateTerm(BVEXTRACT, width - shift, a, hi, low);
 							BVTypeCheck(extract);
 							output = CreateTerm(BVCONCAT, width, zero, extract);
