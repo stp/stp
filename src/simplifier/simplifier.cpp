@@ -10,6 +10,7 @@
 #include "../AST/AST.h"
 #include "../AST/ASTUtil.h"
 #include <cassert>
+#include <cmath>
 
 namespace BEEV
 {
@@ -2115,12 +2116,71 @@ ASTNode Flatten(const ASTNode& a)
             }
           break;
         }
+
+
+      case BVLEFTSHIFT:
+		case BVRIGHTSHIFT:
+
+		{ // If the shift amount is known. Then replace it by an extract.
+			ASTNode a = SimplifyTerm(inputterm[0], VarConstMap);
+			ASTNode b = SimplifyTerm(inputterm[1], VarConstMap);
+			const unsigned int width = a.GetValueWidth();
+			if (BVCONST == b.GetKind()) // known shift amount.
+			{
+				if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
+				{
+					// Intended to remove shifts by very large amounts that don't fit into the unsigned.
+					// at thhe start of the "else" branch.
+					output = CreateZeroConst(width);
+				}
+				else
+				{
+					const unsigned int shift = GetUnsignedConst(b);
+					if (shift > width)
+					{
+						output = CreateZeroConst(width);
+					}
+					else if (shift == 0)
+					{
+						output = a; // unchanged.
+					}
+					else
+					{
+						if (k == BVLEFTSHIFT)
+						{
+							ASTNode zero = CreateZeroConst(shift);
+							ASTNode hi = CreateBVConst(32, width - shift -1);
+							ASTNode low = CreateBVConst(32, 0);
+							ASTNode extract = CreateTerm(BVEXTRACT, width - shift, a, hi, low);
+							BVTypeCheck(extract);
+							output = CreateTerm(BVCONCAT, width, extract, zero);
+							BVTypeCheck(output);
+						}
+						else if (k == BVRIGHTSHIFT)
+						{
+							ASTNode zero = CreateZeroConst(shift);
+							ASTNode hi = CreateBVConst(32, width );
+							ASTNode low = CreateBVConst(32, shift+1);
+							ASTNode extract = CreateTerm(BVEXTRACT, width - shift, a, hi, low);
+							BVTypeCheck(extract);
+							output = CreateTerm(BVCONCAT, width, zero, extract);
+							BVTypeCheck(output);
+						}
+						else
+							FatalError("herasdf");
+					}
+				}
+			}
+			else
+				output = CreateTerm(k, width, a, b);
+		}
+		break;
+
+
       case BVXOR:
       case BVXNOR:
       case BVNAND:
       case BVNOR:
-      case BVLEFTSHIFT:
-      case BVRIGHTSHIFT:
       case BVVARSHIFT:
       case BVSRSHIFT:
       case BVDIV:

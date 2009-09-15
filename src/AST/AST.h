@@ -941,10 +941,6 @@ namespace BEEV
     // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
     ASTNode BBcompare(const ASTNode& form);
 
-    // Left and right shift one.  Writes into x.
-    void BBLShift(ASTVec& x);
-    void BBRShift(ASTVec& x);
-
     void BBRSignedShift(ASTVec& x, unsigned int shift);
     void BBLShift(ASTVec& x, unsigned int shift);
     void BBRShift(ASTVec& x, unsigned int shift);

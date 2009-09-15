@@ -1,10 +1,10 @@
-#include <cstdint>
+//#include <cstdint>
 #include <iostream>
 #include <cstdlib>
 #include <cassert>
 #include <cmath>
-#include "../constantbv/constantbv.h"
-#include "../AST/AST.h"
+#include "../../src/AST/AST.h"
+#include "../../src/extlib-constbv/constantbv.h"
 
 /*
  * Generates random (a op b = c) triples to check that solver.
@@ -17,9 +17,9 @@ using std::cerr;
 using namespace BEEV;
 using namespace CONSTANTBV;
 
-int width = 16;
-typedef uint16_t uns;
-typedef int16_t sig;
+int width = 64;
+typedef uint64_t uns;
+typedef int64_t sig;
 
 const bool debug = false;
 
@@ -38,7 +38,14 @@ uns getUnsignedResult(uns a, Kind k, uns b)
 	else if (BVDIV == k)
 	{
 		return a / b;
+	}else if (BVLEFTSHIFT == k)
+	{
+		return (b > (sizeof(a) * 8) ? 0 : a << b);
 	}
+	else if (BVRIGHTSHIFT == k)
+		{
+			return (b > (sizeof(a) * 8) ? 0 : a << b);
+		}
 	cerr << "not implemetned" << endl;
 	exit(2);
 
@@ -68,6 +75,10 @@ sig getSignedResult(sig a, Kind k, sig b)
 	{
 		gold = a / b;
 	}
+	else if (BVSRSHIFT == k)
+	{
+		return (b > (sizeof(a) * 8) ? 0 : a >> b);
+	}
 	else
 	{
 		cerr << "not implemetned" << endl;
@@ -77,7 +88,7 @@ sig getSignedResult(sig a, Kind k, sig b)
 
 }
 
-void go(int count, uns a, uns b, uns result, char* name)
+void go(int count, uns a, uns b, uns result, const char* name)
 {
 	cout << ":extrafuns ((a" << count << " BitVec[" << width << "])) " << endl;
 	cout << ":extrafuns ((b" << count << " BitVec[" << width << "])) " << endl;
@@ -123,7 +134,7 @@ void testSolver(void)
 		bS = rand();
 	} while (bS == 0 || b == 0);
 
-	switch (rand() % 6)
+	switch (rand() % 9)
 	{
 		case 0:
 			go(0, a, b, getUnsignedResult(a, BVMULT, b), "bvmul");
@@ -143,6 +154,16 @@ void testSolver(void)
 		case 5:
 			go(5, aS, bS, getSignedResult(aS, SBVMOD, bS), "bvsmod");
 			break;
+		case 6:
+			go(5, aS, bS, getUnsignedResult(aS, BVLEFTSHIFT, bS), "bvshl");
+			break;
+		case 7:
+			go(5, aS, bS, getUnsignedResult(aS, BVRIGHTSHIFT, bS), "bvshl");
+			break;
+		case 8:
+			go(5, aS, bS, getSignedResult(aS, BVSRSHIFT, bS), "bvshl");
+			break;
+
 
 	}
 	cout << ")" << endl;
@@ -164,12 +185,6 @@ int main(int argc, char**argv)
 
 	BitVector_Boot();
 
-	if (false)
-	{
-		testConstEval(SBVMOD);
-		testConstEval(SBVREM);
-		testConstEval(SBVDIV);
-	}
 	testSolver();
 
 	return 0;

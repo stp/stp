@@ -19,6 +19,8 @@
 // The 0th element of the vector corresponds to bit 0 -- the low-order bit.
 
 #include "../AST/AST.h"
+#include <cmath>
+
 namespace BEEV
 {
   //  extern void lpvec(ASTVec &vec);
@@ -45,17 +47,9 @@ namespace BEEV
         return it->second;
       }
 
-    //  ASTNode& result = ASTJunk;
     ASTNode result;
 
-    /*
-      bool weregood = false;
-      if(term.GetNodeNum() == 17408){
-      weregood = true;
-      }
-    */
-
-    Kind k = term.GetKind();
+    const Kind k = term.GetKind();
     if (!is_Term_kind(k))
       FatalError("BBTerm: Illegal kind to BBTerm", term);
 
@@ -73,121 +67,78 @@ namespace BEEV
           break;
         }
 
-      case BVLEFTSHIFT:
-        {
-          if (BVCONST == term[1].GetKind())
-            {
-              // Constant shifts should be removed during simplification.
-              unsigned int shift = GetUnsignedConst(term[1]);
+		case BVRIGHTSHIFT:
+		case BVSRSHIFT:
+		case BVLEFTSHIFT:
+		{
+			// Barrel shifter
+			const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
+			const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
 
-              ASTNode term0 = BBTerm(term[0]);
-              ASTVec children(term0.GetChildren()); // mutable copy of the children.
-              BBLShift(children, shift);
+			// Signed right shift, need to copy the sign bit.
+			ASTNode toFill;
+			if (BVSRSHIFT == k)
+				toFill = bbarg1.back();
+			else
+				toFill = ASTFalse;
 
-              result = CreateNode(BOOLVEC, children);
-            }
-          else
-            {
-              // Barrel shifter
-              const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
-              const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
+			ASTVec temp_result(bbarg1);
+			// if any bit is set in bbarg2 higher than log2Width, then we know that the result is zero.
+			// Add one to make allowance for rounding down. For example, given 300 bits, the log2 is about
+			// 8.2 so round up to 9.
 
-              ASTVec temp_result(bbarg1);
-
-              for (unsigned int i = 0; i < bbarg2.size(); i++)
-                {
-                  if (bbarg2[i] == ASTFalse)
-                    continue; // Not shifting by anything.
-
-                  unsigned int shift_amount = 1 << i;
-
-                  bool done = false;
-
-                  for (unsigned int j = temp_result.size() - 1; !done; j--)
-                    {
-                      if (j < shift_amount)
-                        temp_result[j] = CreateSimpForm(ITE, bbarg2[i], ASTFalse, temp_result[j]);
-                      else
-                        temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
-
-                      // want the loop to finish after j=0, but when j=0, j-1 == MAX_INT. Hence this weird idiom.
-                      if (j == 0)
-                        done = true;
-                    }
-                }
-
-              result = CreateNode(BOOLVEC, temp_result);
-            }
-          break;
-        }
-
-      case BVRIGHTSHIFT:
-      case BVSRSHIFT:
-        {
-          if (BVCONST == term[1].GetKind())
-            {
-              // Constant shifts should be removed during simplification.
-
-              unsigned int shift = GetUnsignedConst(term[1]);
-
-              ASTNode term0 = BBTerm(term[0]);
-              ASTVec children(term0.GetChildren()); // mutable copy of the children.
-
-              if (BVRIGHTSHIFT == k)
-                BBRShift(children, shift);
-              else
-                BBRSignedShift(children, shift);
-
-              result = CreateNode(BOOLVEC, children);
-            }
-          else
-            {
-              // Barrel shifter
-              const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
-              const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
+			const unsigned width = bbarg1.size();
+			unsigned log2Width = log2(width) + 1;
 
 
-              // Signed right shift, need to copy the sign bit.
-              ASTNode toFill;
-              if (BVRIGHTSHIFT == k)
-                toFill = ASTFalse;
-              else
-                toFill = bbarg1.back();
+			if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
+				for (unsigned int i = 0; i < log2Width; i++)
+				{
+					if (bbarg2[i] == ASTFalse)
+						continue; // Not shifting by anything.
 
-              ASTVec temp_result(bbarg1);
+					unsigned int shift_amount = 1 << i;
 
-              for (unsigned int i = 0; i < bbarg2.size(); i++)
-                {
-                  if (bbarg2[i] == ASTFalse)
-                    continue; // Not shifting by anything.
+					for (unsigned int j = 0; j < width; j++)
+					{
+						if (j + shift_amount >= width)
+							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+						else
+							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
+					}
+				}
+			else
+				for (unsigned int i = 0; i < log2Width; i++)
+				{
+					if (bbarg2[i] == ASTFalse)
+						continue; // Not shifting by anything.
 
-                  unsigned int shift_amount = 1 << i;
+					int shift_amount = 1 << i;
 
-                  bool done = false;
+					for (signed int j = width - 1; j > 0; j--)
+					{
+						if (j < shift_amount)
+							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+						else
+							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
+					}
+				}
 
-                  for (unsigned int j = 0; j < temp_result.size(); j++)
-                    {
-                      if (j + shift_amount >= temp_result.size())
-                        temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
-                      else
-                        temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
+			// If any of the remainder are true. Then the whole thing gets the fill value.
+			ASTNode remainder = ASTFalse;
+			for (unsigned int i = log2Width; i < width; i++)
+			{
+				remainder = CreateNode(OR, remainder, bbarg2[i]);
+			}
 
-                      if (j == 0)
-                        done = true;
-                    }
-                }
+			for (unsigned int i = 0; i < width; i++)
+			{
+				temp_result[i] = CreateSimpForm(ITE, remainder, toFill, temp_result[i]);
+			}
 
-              result = CreateNode(BOOLVEC, temp_result);
-
-              /*        cerr << result << endl;
-                        cerr << term[0] << endl;
-                        cerr << term[1] << endl;
-                        cerr << "right shift. Node size is:" << NodeSize(result) << endl;
-                        cerr << "input size: " << NodeSize(term[0]) << " " << NodeSize(term[1]) << endl;
-              */
-            }
-        }
-        break;
+			result = CreateNode(BOOLVEC, temp_result);
+		}
+			break;
       case BVVARSHIFT:
         FatalError("BBTerm: These kinds have not been implemented in the BitBlaster: ", term);
         break;
@@ -552,7 +503,7 @@ namespace BEEV
           CBV bv = term.GetBVConst();
           for (unsigned int i = 0; i < num_bits; i++)
             {
-              tmp_res[i] = 
+              tmp_res[i] =
                 CONSTANTBV::BitVector_bit_test(bv, i) ? ASTTrue : ASTFalse;
             }
           result = CreateNode(BOOLVEC, tmp_res);
@@ -835,7 +786,7 @@ namespace BEEV
     for (xit++; xit < xend; xit++)
       {
         // shift first
-        BBLShift(ycopy);
+        BBLShift(ycopy,1);
 
         if (ASTFalse == *xit)
           {
@@ -867,16 +818,16 @@ namespace BEEV
       {
         ASTVec q1, r1;
         ASTVec yrshift1(y);
-        BBRShift(yrshift1);
+        BBRShift(yrshift1,1);
 
         // recursively divide y/2 by x.
         BBDivMod(yrshift1, x, q1, r1, rwidth - 1);
 
         ASTVec q1lshift1(q1);
-        BBLShift(q1lshift1);
+        BBLShift(q1lshift1,1);
 
         ASTVec r1lshift1(r1);
-        BBLShift(r1lshift1);
+        BBLShift(r1lshift1,1);
 
         ASTVec r1lshift1plusyodd = BBAddOneBit(r1lshift1, y[0]);
         ASTVec rminusx(r1lshift1plusyodd);
@@ -987,23 +938,6 @@ namespace BEEV
     return msb;
   }
 
-  // Left shift by 1 within fixed field inserting zeros at LSB.
-  // Writes result into first argument.
-  // Fixme: generalize to n bits
-  void BeevMgr::BBLShift(ASTVec& x)
-  {
-    // left shift x (destructively) within width.
-    // loop backwards so that copy to self works correctly. (DON'T use STL insert!)
-    ASTVec::iterator xbeg = x.begin();
-    for (ASTVec::iterator xit = x.end() - 1; xit > xbeg; xit--)
-      {
-        *xit = *(xit - 1);
-      }
-    *xbeg = ASTFalse; // new LSB is zero.
-    // cout << "Shifted result" << endl;
-    // lpvec(x);
-  }
-
   // Left shift  within fixed field inserting zeros at LSB.
   // Writes result into first argument.
   void BeevMgr::BBLShift(ASTVec& x, unsigned int shift)
@@ -1052,20 +986,6 @@ namespace BEEV
         else
           *xit = MSB; // new MSB is zero.
       }
-  }
-
-  // Right shift by 1 within fixed field, inserting new zeros at MSB.
-  // Writes result into first argument.
-  // Fixme: generalize to n bits.
-  void BeevMgr::BBRShift(ASTVec& x)
-  {
-    ASTVec::iterator xend = x.end() - 1;
-    ASTVec::iterator xit = x.begin();
-    for (; xit < xend; xit++)
-      {
-        *xit = *(xit + 1);
-      }
-    *xit = ASTFalse; // new MSB is zero.
   }
 
   // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
