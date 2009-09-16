@@ -854,7 +854,7 @@ namespace BEEV
 	output = ComputeFormulaUsingModel(output);
 	break;
       case FOR:
-	output = Check_FiniteLoop_UsingModel(form);
+	output = Check_FiniteLoop_UsingModel(form);	
 	break;
       default:
         FatalError(" ComputeFormulaUsingModel: "\
@@ -1018,31 +1018,6 @@ namespace BEEV
       }
 
     TermsAlreadySeenMap.clear();
-    // do
-//       {
-//         inputToSAT = simplified_solved_InputToSAT;
-
-// 	if(optimize_flag) 
-// 	  {
-// 	    //simplified_solved_InputToSAT =
-// 	    //CreateSubstitutionMap(simplified_solved_InputToSAT);
-// 	    //Begin_RemoveWrites = true; ASTNodeStats("after pure
-// 	    //substitution: ", simplified_solved_InputToSAT);
-// 	    simplified_solved_InputToSAT = 
-// 	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-// 	    //ASTNodeStats("after simplification: ",
-// 	    //simplified_solved_InputToSAT); 
-// 	    //
-// 	  }
-
-// 	if(wordlevel_solve_flag)
-// 	  {
-// 	    simplified_solved_InputToSAT
-// 	      = bvsolver.TopLevelBVSolve(simplified_solved_InputToSAT);
-// 	    ASTNodeStats("after solving: ",
-// 			 simplified_solved_InputToSAT);
-// 	  }
-//       } while (inputToSAT != simplified_solved_InputToSAT);
 
     if (start_abstracting)
       {
@@ -1068,7 +1043,6 @@ namespace BEEV
       }
 
     res = CallSAT_ResultCheck(newS, simplified_solved_InputToSAT, orig_input);
-
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats");

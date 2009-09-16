@@ -68,12 +68,13 @@ clean:
 	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/main
 
-# this is make way too difficult because of the recursive Make junk, it 
-# should be removed
-TAGS: FORCE
-	find . -name "*.[h]" -or -name "*.cpp" -or -name "*.C" | grep -v SCCS | etags -
 
-FORCE:
+.PHONY: regressall
+regressall:
+	$(MAKE) regresscvc
+	$(MAKE) regresssmt
+	$(MAKE) regresscapi
+	$(MAKE) regressbigarray
 
 # The higher the level, the more tests are run (3 = all)
 REGRESS_LEVEL=4

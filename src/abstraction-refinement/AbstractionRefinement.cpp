@@ -227,6 +227,21 @@ namespace BEEV
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
 
+
+  static void ReplaceOrAddToMap(ASTNodeMap * VarToConstMap, 
+				const ASTNode& key, const ASTNode& value)
+  {
+    ASTNodeMap::iterator it = VarToConstMap->find(key);
+    if(it != VarToConstMap->end())
+      {
+	VarToConstMap->erase(it);	
+      }
+
+    (*VarToConstMap)[key] = value;
+    return;   
+  }
+
+
   /******************************************************************
    * FINITE FORLOOP ABSTRACTION REFINEMENT
    *
@@ -250,7 +265,7 @@ namespace BEEV
   BeevMgr::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
 					      const ASTNode& original_input)
   {
-    //cout << "The number of abs-refinement limit is " << num_absrefine << endl;
+    cout << "The number of abs-refinement limit is " << num_absrefine << endl;
     for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
       {
 	ASTVec Allretvec0;
@@ -287,7 +302,7 @@ namespace BEEV
 	    return res;
 	  }	
       } //end of absrefine count
-        
+    
     ASTVec Allretvec1;
     Allretvec1.push_back(ASTTrue);
     SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;	
@@ -355,11 +370,13 @@ namespace BEEV
     ASTNode exceptFormula = finiteloop[4];
     ASTNode formulabody   = finiteloop[5];
     int paramCurrentValue = paramInit;
+    int width             = finiteloop[1].GetValueWidth();
 
     //Update ParamToCurrentValMap with parameter and its current
     //value. Here paramCurrentValue is the initial value    
-    (*ParamToCurrentValMap)[parameter] = 
-      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
+    ASTNode value =       
+      CreateBVConst(width,paramCurrentValue);
+    ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
     
     //Go recursively thru' all the FOR-constructs.
     if(FOR == formulabody.GetKind()) 
@@ -383,11 +400,13 @@ namespace BEEV
 	      }
 
             //Update ParamToCurrentValMap with parameter and its
-            //current value. FIXME: Possible leak since I am not
-            //freeing the previous 'value' for the same 'key'
-            paramCurrentValue = paramCurrentValue + paramIncrement;
-            (*ParamToCurrentValMap)[parameter] = 
-	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
+            //current value.
+            paramCurrentValue = paramCurrentValue + paramIncrement;	    
+	    value = CreateTerm(BVPLUS, 
+			       width, 
+			       (*ParamToCurrentValMap)[parameter],
+			       CreateOneConst(width));	
+	    ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
           } //end of While
 
 	return retvec;
@@ -416,8 +435,10 @@ namespace BEEV
 
         //Check the currentformula against the model, and add it to the
         //SAT solver if it is false against the model
-        if(absrefine_flag && 
-	   ASTFalse == ComputeFormulaUsingModel(currentFormula)) 
+        if(absrefine_flag 
+	   && 
+	   ASTFalse == ComputeFormulaUsingModel(currentFormula)
+	   ) 
 	  {
 	    ForloopVec.push_back(currentFormula);
           }
@@ -435,11 +456,13 @@ namespace BEEV
 	  }
         
         //Update ParamToCurrentValMap with parameter and its current
-        //value. FIXME: Possible leak since I am not freeing the
-        //previous 'value' for the same 'key'
+        //value.
 	paramCurrentValue = paramCurrentValue + paramIncrement;
-        (*ParamToCurrentValMap)[parameter] = 
-	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);	
+	value = CreateTerm(BVPLUS, 
+			   width, 
+			   (*ParamToCurrentValMap)[parameter],
+			   CreateOneConst(width));	
+	ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
       } //end of expanding the FOR loop
     
     return ForloopVec;
@@ -477,12 +500,14 @@ namespace BEEV
     ASTNode exceptFormula = finiteloop[4];
     ASTNode formulabody   = finiteloop[5];
     int paramCurrentValue = paramInit;
+    int width             = finiteloop[1].GetValueWidth();
 
     //Update ParamToCurrentValMap with parameter and its current
     //value. Here paramCurrentValue is the initial value
-    (*ParamToCurrentValMap)[parameter] = 
-      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
-    
+    ASTNode value =       
+      CreateBVConst(width,paramCurrentValue);
+    ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
+
     ASTNode ret = ASTTrue;
     ASTVec returnVec;
     //Go recursively thru' all the FOR-constructs.
@@ -504,16 +529,21 @@ namespace BEEV
 	      }
 
             //Update ParamToCurrentValMap with parameter and its
-            //current value. FIXME: Possible leak since I am not
-            //freeing the previous 'value' for the same 'key'
+            //current value.
             paramCurrentValue = paramCurrentValue + paramIncrement;
-            (*ParamToCurrentValMap)[parameter] = 
-	      CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
+	    value = CreateTerm(BVPLUS, 
+			       width, 
+			       (*ParamToCurrentValMap)[parameter],
+			       CreateOneConst(width));
+	    ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
           } //end of While
 
 	ASTNode retFormula = 
-	  (returnVec.size() != 1) ? 
-	  CreateNode(AND, returnVec) : returnVec[0];
+	  (returnVec.size() > 1) ? 
+	  CreateNode(AND, returnVec) : 
+	  (returnVec.size() == 1) ?
+	  returnVec[0] :
+	  ASTTrue;
         return retFormula;      
       }
 
@@ -560,12 +590,12 @@ namespace BEEV
         
         //Update ParamToCurrentValMap with parameter and its current
         //value         
-        //FIXME: Possible leak since I am not freeing the previous
-        //'value' for the same 'key'
 	paramCurrentValue = paramCurrentValue + paramIncrement;
-	(*ParamToCurrentValMap)[parameter] = 
-	  CreateBVConst(finiteloop[1].GetValueWidth(),paramCurrentValue);
-	//cout << (*ParamToCurrentValMap)[parameter];
+	value = CreateTerm(BVPLUS, 
+			   width, 
+			   (*ParamToCurrentValMap)[parameter],
+			   CreateOneConst(width));	
+	ReplaceOrAddToMap(ParamToCurrentValMap, parameter, value);
       } //end of For
 
     if(checkusingmodel_flag) 
@@ -575,9 +605,11 @@ namespace BEEV
     else 
       {
         ASTNode retFormula = 
-          (forloopFormulaVector.size() != 1) ? 
-	  CreateNode(AND, forloopFormulaVector) : 
-	  forloopFormulaVector[0];
+          (forloopFormulaVector.size() > 1) ? 
+	  CreateNode(AND, forloopFormulaVector) :
+	  (forloopFormulaVector.size() == 1) ? 
+	  forloopFormulaVector[0] :
+	  ASTTrue;
         return retFormula;
       }
   } //end of the Check_FiniteLoop_UsingModel()
@@ -599,7 +631,6 @@ namespace BEEV
     return Check_FiniteLoop_UsingModel(finiteloop, 
 				       &ParamToCurrentValMap, true);
   } //end of Check_FiniteLoop_UsingModel
-
 
 
 //   /******************************************************************
