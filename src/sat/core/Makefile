@@ -2,7 +2,6 @@ MTL       = ../mtl
 CHDRS     = $(wildcard *.h) $(wildcard $(MTL)/*.h)
 EXEC      = minisat
 CFLAGS    = -I$(MTL) -Wall -DEXT_HASH_MAP -ffloat-store -m32
-CFLAGS    = -I$(MTL) -Wall -DEXT_HASH_MAP -ffloat-store
 LFLAGS    = -lz
 
 
