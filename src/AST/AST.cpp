@@ -794,6 +794,8 @@ namespace BEEV
               FatalError("BVTypeCheck: indices should be BVCONST\n", n);
             if (n.GetValueWidth() != GetUnsignedConst(n[1]) - GetUnsignedConst(n[2]) + 1)
               FatalError("BVTypeCheck: length mismatch\n", n);
+			if (GetUnsignedConst(n[1]) >= n[0].GetValueWidth())
+				FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
             break;
           case BVLEFTSHIFT:
           case BVRIGHTSHIFT:

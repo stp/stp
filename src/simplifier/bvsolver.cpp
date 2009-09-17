@@ -541,6 +541,8 @@ namespace BEEV
         //output is TRUE. The formula is thus dropped
         return output;
       }
+
+    _bm->runTimes.start(RunTimes::BVSolver);
     ASTVec o;
     ASTVec c;
     if (EQ == k)
@@ -589,6 +591,7 @@ namespace BEEV
     output = _bm->CreateNode(AND, output, evens);
 
     UpdateAlreadySolvedMap(input, output);
+    _bm->runTimes.stop(RunTimes::BVSolver);
     return output;
   } //end of TopLevelBVSolve()
 

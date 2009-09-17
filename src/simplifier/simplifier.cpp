@@ -308,12 +308,11 @@ ASTNode Flatten(const ASTNode& a)
       }
   }
 
-  ASTNode 
-  BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, 
-				    bool pushNeg, ASTNodeMap* VarConstMap)
+  // The SimplifyMaps on entry to the topLevel functions may contain useful entries.
+  // E.g. The BVSolver calls SimplifyTerm()
+  ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
   {
 	runTimes.start(RunTimes::SimplifyTopLevel);
-    ResetSimplifyMaps();
     if (smtlib_parser_flag)
     BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
@@ -321,6 +320,16 @@ ASTNode Flatten(const ASTNode& a)
     runTimes.stop(RunTimes::SimplifyTopLevel);
     return out;
   }
+
+ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b)
+{
+	runTimes.start(RunTimes::SimplifyTopLevel);
+	ASTNode out = SimplifyTerm(b);
+	ResetSimplifyMaps();
+	runTimes.stop(RunTimes::SimplifyTopLevel);
+	return out;
+}
+
 
   ASTNode 
   BeevMgr::SimplifyFormula(const ASTNode& b, 
@@ -1392,14 +1401,6 @@ ASTNode Flatten(const ASTNode& a)
     return output;
     //memoize
   } //end of flattenonelevel()
-
-  ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b)
-  {
-    ResetSimplifyMaps();
-    ASTNode out = SimplifyTerm(b);
-    ResetSimplifyMaps();
-    return out;
-  }
 
   //This function simplifies terms based on their kind
   ASTNode 
@@ -3220,15 +3221,20 @@ ASTNode Flatten(const ASTNode& a)
   // clears() in particular.
   void BeevMgr::ResetSimplifyMaps()
   {
-    SimplifyMap->clear();
+    // clear() is extremely expensive for hash_maps with a lot of buckets,
+    // in the EXT_MAP implementation it visits every bucket, checking whether
+    // each bucket is empty or not, if non-empty it deletes the contents. 
+    // The destructor seems to clear everything anyway. 
+
+    //SimplifyMap->clear();
     delete SimplifyMap;
     SimplifyMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
 
-    SimplifyNegMap->clear();
+    //SimplifyNegMap->clear();
     delete SimplifyNegMap;
     SimplifyNegMap = new ASTNodeMap(INITIAL_SIMPLIFY_MAP_SIZE);
 
-    ReferenceCount->clear();
+    //ReferenceCount->clear();
     delete ReferenceCount;
     ReferenceCount = new ASTNodeCountMap(INITIAL_SIMPLIFY_MAP_SIZE);
   }
