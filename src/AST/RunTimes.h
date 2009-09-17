@@ -10,7 +10,7 @@ class RunTimes
 public:
 	enum Category
 		{
-			Transforming = 0, SimplifyTopLevel, Parsing, CNFConversion, BitBlasting, Solving, BVSolver, CreateSubstitutionMap
+			Transforming = 0, SimplifyTopLevel, Parsing, CNFConversion, BitBlasting, Solving, BVSolver, CreateSubstitutionMap, SendingToSAT
 	};
 
 	static std::string CategoryNames[];

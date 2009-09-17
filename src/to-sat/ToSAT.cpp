@@ -54,6 +54,8 @@ namespace BEEV
   {
     CountersAndStats("SAT Solver");
 
+    runTimes.start(RunTimes::SendingToSAT);
+
     //iterate through the list (conjunction) of ASTclauses cll
     BeevMgr::ClauseList::const_iterator i = cll.begin(), iend = cll.end();
 
@@ -74,6 +76,7 @@ namespace BEEV
       {
         //Clause for the SATSolver
         MINISAT::vec<MINISAT::Lit> satSolverClause;
+        satSolverClause.capacity((*i)->size());
 
         //now iterate through the internals of the ASTclause itself
         vector<const ASTNode*>::const_iterator j = (*i)->begin(), jend = (*i)->end();
@@ -104,15 +107,12 @@ namespace BEEV
         else
           {
             PrintStats(newS);
+            runTimes.stop(RunTimes::SendingToSAT);
             return false;
+          }
           }
 
-        if (!newS.simplify())
-          {
-            PrintStats(newS);
-            return false;
-          }
-      }
+    runTimes.stop(RunTimes::SendingToSAT);
 
     // if input is UNSAT return false, else return true
     if (!newS.simplify())
