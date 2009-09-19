@@ -1940,16 +1940,6 @@ ASTNode BeevMgr::SimplifyTerm_TopLevel(const ASTNode& b)
           break;
         }
 
-      case BVZX:
-        {
-          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
-          if (a0.GetKind() == BVCONST)
-            output = BVConstEvaluator(CreateTerm(BVZX, inputValueWidth, a0, inputterm[1]));
-          else
-            output = CreateTerm(BVZX, inputValueWidth, a0, inputterm[1]);
-        }
-        break;
-
       case BVSX:
         {
           //a0 is the expr which is being sign extended

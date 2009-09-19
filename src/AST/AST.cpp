@@ -752,18 +752,6 @@ namespace BEEV
               FatalError("BVTypeCheck:BVSX must have two arguments. The second is the new width\n", n);
             break;
 
-          case BVZX:
-            //in BVZX(n[0],len), the length of the BVZX term must be
-            //greater than the length of n[0]
-            if (n[0].GetValueWidth() > n.GetValueWidth())
-              {
-                FatalError("BVTypeCheck: BVZX(t,bvzx_len) : length of 't' must be <= bvzx_len\n", n);
-              }
-            if ((v.size() != 2))
-              FatalError("BVTypeCheck:BVZX must have two arguments. The second is the new width\n", n);
-
-            break;
-
           default:
             for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
               if (BITVECTOR_TYPE != it->GetType())

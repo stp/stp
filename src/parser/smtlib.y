@@ -1152,14 +1152,19 @@ an_nonbvconst_term:
 | BVZX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
     {
       GlobalBeevMgr->BVTypeCheck(*$5);
+      if (0 != $3)
+      {
       unsigned w = $5->GetValueWidth() + $3;
-      ASTNode width = GlobalBeevMgr->CreateBVConst(32,w);
-      ASTNode *n =  new ASTNode(GlobalBeevMgr->CreateTerm(BVZX,w,*$5,width));
+	  ASTNode leading_zeroes = GlobalBeevMgr->CreateBVConst($3, 0);
+      ASTNode *n =  new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT,w,leading_zeroes,*$5));
       GlobalBeevMgr->BVTypeCheck(*n);
       $$ = n;
       delete $5;
     }
+      else
+      	$$ = $5;
 
+    }
 ;
   
 sort_symb:

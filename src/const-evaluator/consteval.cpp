@@ -94,23 +94,6 @@ namespace BEEV
           break;
         }
 
-      case BVZX:
-        {
-          output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          unsigned t0_width = t[0].GetValueWidth();
-          if (inputwidth == t0_width)
-            {
-              CONSTANTBV::BitVector_Copy(output, tmp0);
-              OutputNode = CreateBVConst(output, outputwidth);
-            }
-          else
-            {
-              CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, t0_width);
-              OutputNode = CreateBVConst(output, outputwidth);
-            }
-          break;
-        }
-
         case BVLEFTSHIFT:
 		case BVRIGHTSHIFT:
 		case BVSRSHIFT:
@@ -216,9 +199,10 @@ namespace BEEV
           OutputNode = CreateBVConst(output, outputwidth);
           break;
         }
-        //FIXME Only 2 inputs?
+
       case BVCONCAT:
         {
+          assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           unsigned t0_width = t[0].GetValueWidth();
           unsigned t1_width = t[1].GetValueWidth();

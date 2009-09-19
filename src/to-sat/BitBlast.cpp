@@ -232,47 +232,6 @@ namespace BEEV
             }
         }
 
-      case BVZX:
-        {
-          // Fill the high-order bits with as many zeroes as needed.
-          // Arg 0 is expression to be sign extended.
-          const ASTNode& arg = term[0];
-          unsigned long result_width = term.GetValueWidth();
-          unsigned long arg_width = arg.GetValueWidth();
-
-          //FIXME Uses a temporary const ASTNode reference
-          const ASTNode& bbarg = BBTerm(arg);
-          ASTVec tmp_res(result_width);
-
-          //FIXME Should these be gotten from result?
-          ASTVec::const_iterator bb_it = bbarg.begin();
-          ASTVec::iterator res_it = tmp_res.begin();
-          ASTVec::iterator res_ext = res_it + arg_width; // first bit of extended part
-          ASTVec::iterator res_end = tmp_res.end();
-          // copy LSBs directly from bbvec
-          for (; res_it < res_ext; (res_it++, bb_it++))
-            {
-              *res_it = *bb_it;
-            }
-          // repeat zero to fill up rest of result.
-          for (; res_it < res_end; (res_it++))
-            {
-              *res_it = ASTFalse;
-            }
-
-          // Temporary debugging code
-          //         cout << "Zero extending:" << endl
-          //            << "  Vec ";
-          //    lpvec( bbarg.GetChildren() );
-          //     cout << "  Extended to ";
-          //       cout << result;
-          //   cout << endl;
-
-          result = CreateNode(BOOLVEC, tmp_res);
-
-          break;
-        }
-
       case BVEXTRACT:
         {
           // bitblast the child, then extract the relevant bits.
