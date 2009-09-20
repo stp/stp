@@ -161,9 +161,7 @@
 %token ASSIGN_TOK
 %token BV_TOK
 %token BOOLEAN_TOK
-%token BVLEFTSHIFT_TOK
 %token BVLEFTSHIFT_1_TOK
-%token BVRIGHTSHIFT_TOK
 %token BVRIGHTSHIFT_1_TOK
 %token BVARITHRIGHTSHIFT_TOK
 %token BVPLUS_TOK
@@ -744,36 +742,6 @@ an_nonbvconst_term:
       delete $3;
       delete $4;
     }
-/*   | BVEXTRACT_TOK LBRACKET_TOK NUMERAL_TOK COLON_TOK NUMERAL_TOK RBRACKET_TOK BVCONST_TOK */
-/*     { */
-/*       // This special case is when we have an extract on top of a constant bv, which happens */
-/*       // almost all the time in the smt syntax. */
-
-/*       // $3 is high, $5 is low.  They are ints (why not unsigned? See uintval) */
-/*       int hi  =  $3; */
-/*       int low =  $5; */
-/*       int width = hi - low + 1; */
-
-/*       if (width < 0) */
-/* 	yyerror("Negative width in extract"); */
-
-/*       unsigned long long int val = $7; */
-
-/*       // cut and past from BV32 const evaluator */
-
-/*       unsigned long long int mask1 = 0xffffffffffffffffLL; */
-
-/*       mask1 >>= 64-(hi+1); */
-      
-/*       //extract val[hi:0] */
-/*       val &= mask1; */
-/*       //extract val[hi:low] */
-/*       val >>= low; */
-
-/*       // val is the desired BV32. */
-/*       ASTNode * n = new ASTNode(GlobalBeevMgr->CreateBVConst(width, val)); */
-/*       $$ = n; */
-/*     } */
   | BVEXTRACT_TOK LBRACKET_TOK NUMERAL_TOK COLON_TOK NUMERAL_TOK RBRACKET_TOK an_term
     {
       int width = $3 - $5 + 1;
@@ -1007,23 +975,6 @@ an_nonbvconst_term:
       delete $2;
       delete $3;
     }
-  |  BVLEFTSHIFT_TOK an_term NUMERAL_TOK 
-    {
-      unsigned int w = $2->GetValueWidth();
-      if((unsigned)$3 < w) {
-	ASTNode trailing_zeros = GlobalBeevMgr->CreateBVConst($3, 0);
-	ASTNode hi = GlobalBeevMgr->CreateBVConst(32, w-$3-1);
-	ASTNode low = GlobalBeevMgr->CreateBVConst(32,0);
-	ASTNode m = GlobalBeevMgr->CreateTerm(BVEXTRACT,w-$3,*$2,hi,low);
-	ASTNode * n = 
-	  new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT,w,m,trailing_zeros));
-	GlobalBeevMgr->BVTypeCheck(*n);
-	$$ = n;
-      }
-      else
-	$$ = new ASTNode(GlobalBeevMgr->CreateBVConst(w,0));
-      delete $2;
-    }
    |  BVLEFTSHIFT_1_TOK an_term an_term 
 {
 	// shifting left by who know how much?
@@ -1042,29 +993,7 @@ an_nonbvconst_term:
   	  $$ = n;
       delete $2;
     }
-  |  BVRIGHTSHIFT_TOK an_term NUMERAL_TOK 
-    {
-      ASTNode leading_zeros = GlobalBeevMgr->CreateBVConst($3, 0);
-      unsigned int w = $2->GetValueWidth();
-      
-      //the amount by which you are rightshifting
-      //is less-than/equal-to the length of input
-      //bitvector
-      if((unsigned)$3 < w) {
-	ASTNode hi = GlobalBeevMgr->CreateBVConst(32,w-1);
-	ASTNode low = GlobalBeevMgr->CreateBVConst(32,$3);
-	ASTNode extract = GlobalBeevMgr->CreateTerm(BVEXTRACT,w-$3,*$2,hi,low);
-	ASTNode * n = 
-	  new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT, w,leading_zeros, extract));
-	GlobalBeevMgr->BVTypeCheck(*n);
-	$$ = n;
-      }
-      else {
-	$$ = new ASTNode(GlobalBeevMgr->CreateBVConst(w,0));
-      }
-      delete $2;
-    }
-  |  BVARITHRIGHTSHIFT_TOK an_term an_term
+   |  BVARITHRIGHTSHIFT_TOK an_term an_term
     {
       // shifting arithmetic right by who know how much?
       unsigned int w = $2->GetValueWidth();
@@ -1155,7 +1084,7 @@ an_nonbvconst_term:
       if (0 != $3)
       {
       unsigned w = $5->GetValueWidth() + $3;
-	  ASTNode leading_zeroes = GlobalBeevMgr->CreateBVConst($3, 0);
+	  ASTNode leading_zeroes = GlobalBeevMgr->CreateZeroConst($3);
       ASTNode *n =  new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT,w,leading_zeroes,*$5));
       GlobalBeevMgr->BVTypeCheck(*n);
       $$ = n;
