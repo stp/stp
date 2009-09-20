@@ -20,6 +20,7 @@
 
 #include "../AST/AST.h"
 #include <cmath>
+#include <cassert>
 
 namespace BEEV
 {
@@ -169,6 +170,7 @@ namespace BEEV
           if (result_width == arg_width)
             {
               //nothing to sign extend
+			  result = arg;
               break;
             }
           else
@@ -484,6 +486,7 @@ namespace BEEV
     // lpvec(result);
     // cout << endl;
 
+    assert(!result.IsNull());
     return (BBTermMemo[term] = result);
 
   }

@@ -365,6 +365,10 @@ namespace BEEV
   ASTNode BeevMgr::CreateBVConst(string*& strval, int base, int bit_width)
   {
 
+	if (bit_width <= 0)
+	    FatalError("CreateBVConst: trying to create a bvconst of width: ", ASTUndefined, bit_width);
+
+
     if (!(2 == base || 10 == base || 16 == base))
       {
         FatalError("CreateBVConst: unsupported base: ", ASTUndefined, base);
