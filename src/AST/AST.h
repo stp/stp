@@ -96,7 +96,7 @@ namespace BEEV
     //Integer that helps sort the ASTNodes. This sorting is different
     //from the sorting based on NodeNum. This is used as a way of
     //achieving abstraction-refinement.
-    unsigned int _sort_for_absrefine;
+    //unsigned int _sort_for_absrefine;
 
     //Equal iff ASTIntNode pointers are the same.
     friend bool operator==(const ASTNode node1, const ASTNode node2)
@@ -122,18 +122,18 @@ namespace BEEV
     }
 
   public:
-    //Set the sorting integer for abstraction refinement
-    void SetAbsRefineInt(unsigned int a) {_sort_for_absrefine = a;}
-
-    //Get the sorting integer for abstraction refinement
-    unsigned int GetAbsRefineInt(void) {return _sort_for_absrefine;}
-
-    //Compare two ASTNodes based on their abstraction refinement
-    //number
-    bool CmpAbsRefine(const ASTNode node1, const ASTNode node2) {
-      return (node1._sort_for_absrefine < node2._sort_for_absrefine);
-    }
-
+    //     //Set the sorting integer for abstraction refinement
+    //     void SetAbsRefineInt(unsigned int a) {_sort_for_absrefine = a;}
+    
+    //     //Get the sorting integer for abstraction refinement
+    //     unsigned int GetAbsRefineInt(void) {return _sort_for_absrefine;}
+    
+    //     //Compare two ASTNodes based on their abstraction refinement
+    //     //number
+    //     bool CmpAbsRefine(const ASTNode node1, const ASTNode node2) {
+    //       return (node1._sort_for_absrefine < node2._sort_for_absrefine);
+    //     }
+    
     //Check if it points to a null node
     bool IsNull() const
     {
@@ -211,7 +211,7 @@ namespace BEEV
     ASTNode() :
       _int_node_ptr(NULL)
     {
-      _sort_for_absrefine=0;
+      //_sort_for_absrefine=0;
     }
     ;
 
