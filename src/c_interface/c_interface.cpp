@@ -388,7 +388,7 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
     BEEV::FatalError("Trying to assert a NON formula: ",*a);
 
   b->BVTypeCheck(*a);
-  a->SetAbsRefineInt(absrefine_num);
+  //a->SetAbsRefineInt(absrefine_num);
   b->AddAssert(*a);
 }
 
