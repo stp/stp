@@ -93,6 +93,11 @@ namespace BEEV
     // Usual constructor.
     ASTNode(ASTInternal *in);
 
+    //Integer that helps sort the ASTNodes. This sorting is different
+    //from the sorting based on NodeNum. This is used as a way of
+    //achieving abstraction-refinement.
+    unsigned int _sort_for_absrefine;
+
     //Equal iff ASTIntNode pointers are the same.
     friend bool operator==(const ASTNode node1, const ASTNode node2)
     {
@@ -117,6 +122,18 @@ namespace BEEV
     }
 
   public:
+    //Set the sorting integer for abstraction refinement
+    void SetAbsRefineInt(unsigned int a) {_sort_for_absrefine = a;}
+
+    //Get the sorting integer for abstraction refinement
+    unsigned int GetAbsRefineInt(void) {return _sort_for_absrefine;}
+
+    //Compare two ASTNodes based on their abstraction refinement
+    //number
+    bool CmpAbsRefine(const ASTNode node1, const ASTNode node2) {
+      return (node1._sort_for_absrefine < node2._sort_for_absrefine);
+    }
+
     //Check if it points to a null node
     bool IsNull() const
     {
@@ -194,6 +211,7 @@ namespace BEEV
     ASTNode() :
       _int_node_ptr(NULL)
     {
+      _sort_for_absrefine=0;
     }
     ;
 
@@ -810,6 +828,9 @@ namespace BEEV
                    ASTNode::ASTNodeHasher, 
                    ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
+//   typedef hash_map<int32_t,
+// 		   ASTVec,
+// 		   hash(int32_t)> IntToASTVecMap;
 
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
@@ -1506,7 +1527,7 @@ namespace BEEV
     //by PUSH/POP
     std::vector<ASTVec *> _asserts;
     //The query for the current logical context.
-    ASTNode _current_query;
+    ASTNode _current_query;    
 
     //this flag, when true, indicates that counterexample is being
     //checked by the counterexample checker

@@ -114,9 +114,6 @@ int main(int argc, char ** argv) {
             case 'p':
               print_counterexample_flag = true;
               break;
-            case 'y':
-              print_binary_flag = true;
-              break;
             case 'q':
               print_arrayval_declaredorder_flag = true;
               break;
@@ -141,6 +138,9 @@ int main(int argc, char ** argv) {
             case 'x':
               xor_flatten_flag = true;
               break;
+	    case 'y':
+              print_binary_flag = true;
+              break;            
             case 'z':
               print_sat_varorder_flag = true;
               break;

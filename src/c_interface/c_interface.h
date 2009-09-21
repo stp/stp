@@ -103,6 +103,9 @@ extern "C" {
   //Boolean to single bit BV Expression
   Expr vc_boolToBVExpr(VC vc, Expr form);
 
+  //Parameterized Boolean Expression (PARAMBOOL, Boolean_Var, parameter)
+  Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
+
   // Arrays
   
   //! Create an expression for the value of array at the given index
@@ -166,7 +169,7 @@ extern "C" {
   
   //! Assert a new formula in the current context.  
   /*! The formula must have Boolean type. */
-  void vc_assertFormula(VC vc, Expr e);
+  void vc_assertFormula(VC vc, Expr e, int absrefine_num=0);
   
   //! Simplify e with respect to the current context
   Expr vc_simplify(VC vc, Expr e);
@@ -214,6 +217,7 @@ extern "C" {
   
   Expr vc_bvConcatExpr(VC vc, Expr left, Expr right);
   Expr vc_bvPlusExpr(VC vc, int n_bits, Expr left, Expr right);
+  Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* children, int numOfChildNodes);
   Expr vc_bv32PlusExpr(VC vc, Expr left, Expr right);
   Expr vc_bvMinusExpr(VC vc, int n_bits, Expr left, Expr right);
   Expr vc_bv32MinusExpr(VC vc, Expr left, Expr right);

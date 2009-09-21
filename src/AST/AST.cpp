@@ -335,7 +335,7 @@ namespace BEEV
   ASTNode BeevMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
   {
     if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
-      FatalError("CreateBVConst: trying to create a bvconst of width: ", ASTUndefined, width);
+      FatalError("CreateBVConst: trying to create a bvconst using unsigned long long of width: ", ASTUndefined, width);
 
     CBV bv = CONSTANTBV::BitVector_Create(width, true);
     unsigned long c_val = (~((unsigned long) 0)) & bvconst;
@@ -811,6 +811,10 @@ namespace BEEV
           case FALSE:
           case SYMBOL:
             return true;
+	  case PARAMBOOL:
+	    if(2 != n.Degree())
+	      FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);
+	    break;
           case EQ:
             if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
               {

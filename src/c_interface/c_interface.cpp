@@ -31,27 +31,25 @@ extern int cvcparse(void*);
 
 void vc_setFlags(char c) {
   std::string helpstring = "Usage: stp [-option] [infile]\n\n";
-  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
-  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring += "STP version: " + BEEV::version + "\n\n";
   helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
-  helpstring +=  "-s  : print function statistics\n";
-  helpstring +=  "-v  : print nodes \n";
   helpstring +=  "-c  : construct counterexample\n";
   helpstring +=  "-d  : check counterexample\n";
-  helpstring +=  "-p  : print counterexample\n";
-  helpstring +=  "-y  : print counterexample in binary\n";
-  helpstring +=  "-b  : print STP input back to cout\n";
-  helpstring +=  "-x  : flatten nested XORs\n";
+  helpstring +=  "-e  : expand finite-for construct\n";
+  helpstring +=  "-f  : number of abstraction-refinement loops\n";
   helpstring +=  "-h  : help\n";
   helpstring +=  "-m  : use the SMTLIB parser\n";
-  
+  helpstring +=  "-p  : print counterexample\n";
+  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
+  helpstring +=  "-s  : print function statistics\n";
+  helpstring +=  "-v  : print nodes \n";
+  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring +=  "-x  : flatten nested XORs\n";
+  helpstring +=  "-y  : print counterexample in binary\n";
+
   switch(c) {
   case 'a' :
     BEEV::optimize_flag = false;
-    BEEV::wordlevel_solve_flag = false;
-    break;
-  case 'b':
-    BEEV::print_STPinput_back_flag = true;
     break;
   case 'c':
     BEEV::construct_counterexample_flag = true;
@@ -60,12 +58,25 @@ void vc_setFlags(char c) {
     BEEV::construct_counterexample_flag = true;
     BEEV::check_counterexample_flag = true;
     break;
+  case 'e':
+    BEEV::expand_finitefor_flag = true;
+    break;
+  case 'f':
+    BEEV::num_absrefine_flag = true;
+    //BEEV::num_absrefine = atoi(argv[++i]);
+    break;            
   case 'h':
+    BEEV::fprintf(stderr,BEEV::usage,BEEV::prog);
     cout << helpstring;
-    BEEV::FatalError("");
+    //FatalError("");
+    //return -1;
     break;
   case 'n':
     BEEV::print_output_flag = true;
+    break;
+  case 'm':
+    BEEV::smtlib_parser_flag=true;
+    BEEV::division_by_zero_returns_one = true;
     break;
   case 'p':
     BEEV::print_counterexample_flag = true;
@@ -80,8 +91,8 @@ void vc_setFlags(char c) {
     BEEV::stats_flag = true;
     break;
   case 'u':
-    BEEV::arraywrite_refinement_flag = true;
-    break;  
+    BEEV::arraywrite_refinement_flag = false;
+    break;
   case 'v' :
     BEEV::print_nodes_flag = true;
     break;
@@ -89,17 +100,22 @@ void vc_setFlags(char c) {
     BEEV::wordlevel_solve_flag = false;
     break;
   case 'x':
-    cinterface_exprdelete_on_flag = true;
+    BEEV::xor_flatten_flag = true;
+    break;
+  case 'y':
+    BEEV::print_binary_flag = true;
     break;
   case 'z':
     BEEV::print_sat_varorder_flag = true;
-    break;
+    break;    
   default:
     std::string s = "C_interface: vc_setFlags: Unrecognized commandline flag:\n";
     s += helpstring;
     BEEV::FatalError(s.c_str());
     break;
   }
+
+  
 }
 
 //Create a validity Checker. This is the global BeevMgr
@@ -364,7 +380,7 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue) {
 /////////////////////////////////////////////////////////////////////////////
 //! Assert a new formula in the current context.  
 /*! The formula must have Boolean type. */
-void vc_assertFormula(VC vc, Expr e) {
+void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
   nodestar a = (nodestar)e;
   bmstar b = (bmstar)vc;
 
@@ -372,6 +388,7 @@ void vc_assertFormula(VC vc, Expr e) {
     BEEV::FatalError("Trying to assert a NON formula: ",*a);
 
   b->BVTypeCheck(*a);
+  a->SetAbsRefineInt(absrefine_num);
   b->AddAssert(*a);
 }
 
@@ -387,13 +404,12 @@ int vc_query(VC vc, Expr e) {
   if(!BEEV::is_Form_kind(a->GetKind()))
     BEEV::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
 
-  //printf("kill all humans\n");
   //a->LispPrint(cout, 0);
   //printf("##################################################\n");
   b->BVTypeCheck(*a);
   b->AddQuery(*a);
 
-  const BEEV::ASTVec v = b->GetAsserts();
+  const BEEV::ASTVec v = b->GetAsserts();  
   node o;
   if(!v.empty()) {
     if(v.size()==1)
@@ -646,6 +662,23 @@ Expr vc_orExprN(VC vc, Expr* cc, int n) {
   return output;
 }
 
+Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* cc, int n) {
+  bmstar b = (bmstar)vc;
+  nodestar * c = (nodestar *)cc;
+  nodelist d;
+  
+  for(int i =0; i < n; i++)
+    d.push_back(*c[i]);
+  
+  node o = b->CreateTerm(BEEV::BVPLUS, n_bits, d);
+  b->BVTypeCheck(o);
+
+  nodestar output = new node(o);
+  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output;
+}
+
+
 Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart){
   bmstar b = (bmstar)vc;
   nodestar c = (nodestar)cond;
@@ -720,6 +753,23 @@ Expr vc_boolToBVExpr(VC vc, Expr form) {
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;
 }
+
+Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter){
+  bmstar b = (bmstar)vc;
+  nodestar c = (nodestar)boolvar;
+  nodestar t = (nodestar)parameter;
+  
+  b->BVTypeCheck(*c);
+  b->BVTypeCheck(*t);
+  node o;
+
+  o = b->CreateNode(BEEV::PARAMBOOL,*c,*t);
+  //b->BVTypeCheck(o);
+  nodestar output = new node(o);
+  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // BITVECTOR EXPR Creation methods                                         //
