@@ -50,7 +50,7 @@ using namespace __gnu_cxx;
 struct eqint
 {
   bool operator()(int s1, int s2) const {
-	return (s1==s2);
+	return (s1 == s2);
   }	
 };
 
@@ -134,8 +134,8 @@ int main(int argc, char** argv) {
   int idx2_bits_width = req_bits(seq_len*seq_len);
   int idx3_bits_width = req_bits(seq_len*seq_len*UNKNOWN_CONST*UNKNOWN_CONST);
 
-  hash_set<int, hash<int>, eqint> Ex_blacklist(100000);
-  hash_set<int, hash<int>, eqint> Ey_blacklist(100000);
+  hash_set<int, hash<int>, eqint> Ex_blacklist(10000);
+  hash_set<int, hash<int>, eqint> Ey_blacklist(10000);
 
 
   int E_table[36];
@@ -521,7 +521,7 @@ int main(int argc, char** argv) {
   int e_bitdiff = TOT_E_BITS - E_BITS;
   Expr padding  = vc_bvConstExprFromInt(vc, e_bitdiff, 0);
   int count     = 0;
-  Expr bvplus_terms[10000];
+  Expr bvplus_terms[100000];
   for(int i=0; i<seq_len; i++) {
     for(int j=0; j<seq_len; j++) {
       int ij = i*seq_len + j;

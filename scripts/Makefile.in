@@ -71,10 +71,7 @@ clean:
 
 .PHONY: regressall
 regressall:
-	$(MAKE) regresscvc
-	$(MAKE) regresssmt
-	$(MAKE) regresscapi
-	$(MAKE) regressbigarray
+	$(MAKE) regresscapi && $(MAKE) regresscvc && $(MAKE) regresssmt && $(MAKE) regressstp && $(MAKE) regressbigarray
 
 # The higher the level, the more tests are run (3 = all)
 REGRESS_LEVEL=4
@@ -145,6 +142,22 @@ regresscapi:
 	@echo "Output is saved in $(CAPI_LOG)" | tee -a $(CAPI_LOG)
 	@echo "*********************************************************" \
           | tee -a $(CAPI_LOG)
+
+STP_LOG = `date +%Y-%m-%d`"-regress-stp.log"
+.PHONY: regressstp
+regressstp:
+	@echo "*********************************************************" \
+          | tee -a $(STP_LOG)
+	@echo "Starting tests at" `date` | tee -a $(STP_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(STP_LOG)
+	scripts/run_stp_tests.pl 2>&1 | tee -a $(STP_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(STP_LOG)
+	@echo "Output is saved in $(STP_LOG)" | tee -a $(STP_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(STP_LOG)
+
 
 GRIND_LOG = `date +%Y-%m-%d`"-grind.log"
 GRINDPROG = valgrind --leak-check=full --undef-value-errors=no

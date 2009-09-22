@@ -1,7 +1,7 @@
 CXXFLAGS=-DEXT_HASH_MAP -m32 -I../../src/c_interface -L../../lib
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	rm -rf *.out
 
 0:	
@@ -61,7 +61,11 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18
 	./a17.out
 18:
 	g++  $(CXXFLAGS)  cvc-to-c.cpp  -lstp -o a18.out
-	./a18.out ./t.cvc
+	#./a18.out ./t.cvc
+
+19:
+	g++  -g $(CXXFLAGS)  biosat-rna.cpp  -lstp -o biosat.out
+	time ./biosat.out AUUGGUAUGUAAGCUACUUCUUCCAGUAGCUGCGUCAUAACAUCAAGGUUAUGCAUACUGAGCCGAAGCUCAGCUUCGGUCCUCCAAGGAAGACCA 800
 
 
 clean:

@@ -50,5 +50,5 @@ make regresssmt
 make regresscvc
 make regresscapi
 make regressbigarray
+make regressstp
 make regressall
-
