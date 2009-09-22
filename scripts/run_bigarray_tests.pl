@@ -91,61 +91,6 @@ my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
 # our own or stp's options.
 my $argState = "own";
-# for(my $i=0; $i <= $#ARGV; $i++) {
-#     if($argState eq "own") {
-# 	if($ARGV[$i] eq "--") { $argState = "stp"; }
-# 	elsif($ARGV[$i] eq "-h") { print($usageString, "\n"); exit 0; }
-# 	elsif($ARGV[$i] eq "+rt") { $options{'rt'} = 1; }
-# 	elsif($ARGV[$i] eq "-rt") { $options{'rt'} = 0; }
-# 	elsif($ARGV[$i] eq "+proofs") { $options{'proofs'} = 1; }
-# 	elsif($ARGV[$i] eq "-proofs") { $options{'proofs'} = 0; }
-# 	elsif($ARGV[$i] eq "-v") { $options{'verbose'} = 1; }
-# 	elsif($ARGV[$i] eq "-q") { $options{'verbose'} = 0; }
-# 	elsif($ARGV[$i] eq "-lang") {
-# 	    if(++$i>$#ARGV) {
-# 		print STDERR "Option -lang requires an argument.\n";
-# 		print STDERR "Run run_tests -h for help\n";
-# 		exit 1;
-# 	    }
-# 	    $options{'lang'} = $ARGV[$i];
-# 	} elsif($ARGV[$i] eq "-l") {
-# 	    if(++$i>$#ARGV) {
-# 		print STDERR "Option -l requires an argument.\n";
-# 		print STDERR "Run run_tests -h for help\n";
-# 		exit 1;
-# 	    }
-# 	    $options{'level'} = $ARGV[$i];
-# 	} elsif($ARGV[$i] eq "-t") {
-# 	    if(++$i>$#ARGV) {
-# 		print STDERR "Option -t requires an argument.\n";
-# 		print STDERR "Run run_tests -h for help\n";
-# 		exit 1;
-# 	    }
-# 	    $options{'time'} = $ARGV[$i];
-# 	} elsif($ARGV[$i] eq "-vc") {
-# 	    if(++$i>$#ARGV) {
-# 		print STDERR "Option -vc requires an argument.\n";
-# 		print STDERR "Run run_tests -h for help\n";
-# 		exit 1;
-# 	    }
-# 	    $options{'vc'} = $ARGV[$i];
-# 	} elsif($ARGV[$i] eq "-pfc") {
-# 	    if(++$i>$#ARGV) {
-# 		print STDERR "Option -pfc requires an argument.\n";
-# 		print STDERR "Run run_tests -h for help\n";
-# 		exit 1;
-# 	    }
-# 	    $options{'pfc'} = $ARGV[$i];
-# 	} else {
-# 	    # This must be a testcase name
-# 	    push @testcases, $ARGV[$i];
-# 	}
-#     } elsif($argState eq "stp") {
-# 	push @stpOptions, $ARGV[$i];
-#     } else {
-# 	die "BUG: Bad argState: $argState";
-#     }
-# }
 
 if($#stpOptions >= 0) {
     $options{'stpOptions'} = join(" ", map { "\"" . $_ . "\"" } @stpOptions);
@@ -534,4 +479,4 @@ if($testsProblems > 0 && $verbose) {
 # Delete temporary dir if there is one
 system("/bin/rm -rf $tmpdir");
 
-exit ($testsProblems > 0 ? 2 : 0);
+#exit ($testsProblems > 0 ? 2 : 0);
