@@ -35,7 +35,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
+#include <cstring>
 #include <cmath>
 #include <ext/hash_set>
 #include "c_interface.h"

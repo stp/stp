@@ -64,7 +64,7 @@ void vc_setFlags(char c) {
   case 'f':
     BEEV::num_absrefine_flag = true;
     //BEEV::num_absrefine = atoi(argv[++i]);
-    break;            
+    break;
   case 'h':
     BEEV::fprintf(stderr,BEEV::usage,BEEV::prog);
     cout << helpstring;
@@ -107,7 +107,7 @@ void vc_setFlags(char c) {
     break;
   case 'z':
     BEEV::print_sat_varorder_flag = true;
-    break;    
+    break;
   default:
     std::string s = "C_interface: vc_setFlags: Unrecognized commandline flag:\n";
     s += helpstring;
@@ -115,13 +115,13 @@ void vc_setFlags(char c) {
     break;
   }
 
-  
+
 }
 
 //Create a validity Checker. This is the global BeevMgr
 VC vc_createValidityChecker(void) {
   vc_setFlags('d');
-  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
@@ -139,18 +139,18 @@ void vc_printExpr(VC vc, Expr e) {
   BEEV::ASTNode q = (*(nodestar)e);
   //   b->Begin_RemoveWrites = true;
   //   BEEV::ASTNode q = b->SimplifyFormula_TopLevel(*((nodestar)e),false);
-  //   b->Begin_RemoveWrites = false;    
+  //   b->Begin_RemoveWrites = false;
   q.PL_Print(cout);
 }
 
-char * vc_printSMTLIB(VC vc, Expr e) 
+char * vc_printSMTLIB(VC vc, Expr e)
 {
   stringstream ss;
   printer::SMTLIB_Print(ss,*((nodestar)e), 0);
   string s = ss.str();
   char *copy = strdup(s.c_str());
   return copy;
-        
+
 }
 
 // prints Expr 'e' to stdout as C code
@@ -249,7 +249,7 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char **buf, unsigned long *len, i
   os << "QUERY( ";
   b->Begin_RemoveWrites = true;
   BEEV::ASTNode q = (simplify_print == 1) ? b->SimplifyFormula_TopLevel(*((nodestar)e),false) : *(nodestar)e;
-  b->Begin_RemoveWrites = false;    
+  b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   os << " );" << endl;
 
@@ -298,7 +298,7 @@ void vc_printExprToBuffer(VC vc, Expr e, char **buf, unsigned long * len) {
   BEEV::ASTNode q = *((nodestar)e);
   // b->Begin_RemoveWrites = true;
   //   BEEV::ASTNode q = b->SimplifyFormula_TopLevel(*((nodestar)e),false);
-  //   b->Begin_RemoveWrites = false;    
+  //   b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   //((nodestar)e)->PL_Print(os);
   string s = os.str();
@@ -316,7 +316,7 @@ void vc_printQuery(VC vc){
   //b->Begin_RemoveWrites = true;
   //BEEV::ASTNode q = b->SimplifyFormula_TopLevel(b->GetQuery(),false);
   BEEV::ASTNode q = b->GetQuery();
-  //b->Begin_RemoveWrites = false;    
+  //b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   // b->GetQuery().PL_Print(os);
   os << ");" << endl;
@@ -345,7 +345,7 @@ Expr vc_readExpr(VC vc, Expr array, Expr index) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)array;
   nodestar i = (nodestar)index;
-  
+
   b->BVTypeCheck(*a);
   b->BVTypeCheck(*i);
   node o = b->CreateTerm(BEEV::READ,a->GetValueWidth(),*a,*i);
@@ -378,7 +378,7 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue) {
 /////////////////////////////////////////////////////////////////////////////
 // Context-related methods                                                 //
 /////////////////////////////////////////////////////////////////////////////
-//! Assert a new formula in the current context.  
+//! Assert a new formula in the current context.
 /*! The formula must have Boolean type. */
 void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
   nodestar a = (nodestar)e;
@@ -409,12 +409,12 @@ int vc_query(VC vc, Expr e) {
   b->BVTypeCheck(*a);
   b->AddQuery(*a);
 
-  const BEEV::ASTVec v = b->GetAsserts();  
+  const BEEV::ASTVec v = b->GetAsserts();
   node o;
   if(!v.empty()) {
     if(v.size()==1)
       return b->TopLevelSAT(v[0],*a);
-    else 
+    else
       return b->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
   }
   else
@@ -434,7 +434,7 @@ void vc_pop(VC vc) {
 
 void vc_printCounterExample(VC vc) {
   bmstar b = (bmstar)vc;
-  BEEV::print_counterexample_flag = true;    
+  BEEV::print_counterexample_flag = true;
   cout << "COUNTEREXAMPLE BEGIN: \n";
   b->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
@@ -450,12 +450,12 @@ void vc_printCounterExample(VC vc) {
 
 Expr vc_getCounterExample(VC vc, Expr e) {
   nodestar a = (nodestar)e;
-  bmstar b = (bmstar)vc;    
+  bmstar b = (bmstar)vc;
 
   bool t = false;
   if(b->CounterExampleSize())
     t = true;
-  nodestar output = new node(b->GetCounterExample(t, *a));  
+  nodestar output = new node(b->GetCounterExample(t, *a));
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;
 }
@@ -467,7 +467,7 @@ int vc_counterexample_size(VC vc) {
 
 WholeCounterExample vc_getWholeCounterExample(VC vc) {
   bmstar b = (bmstar)vc;
-  CompleteCEStar c = 
+  CompleteCEStar c =
     new BEEV::CompleteCounterExample(b->GetCompleteCounterExample(), b);
   return c;
 }
@@ -494,16 +494,16 @@ int vc_getBVLength(VC vc, Expr ex) {
 /////////////////////////////////////////////////////////////////////////////
 // Expr Creation methods                                                   //
 /////////////////////////////////////////////////////////////////////////////
-//! Create a variable with a given name and type 
+//! Create a variable with a given name and type
 /*! The type cannot be a function type. */
-Expr vc_varExpr1(VC vc, char* name, 
+Expr vc_varExpr1(VC vc, const char* name,
                  int indexwidth, int valuewidth) {
   bmstar b = (bmstar)vc;
 
   node o = b->CreateSymbol(name);
   o.SetIndexWidth(indexwidth);
   o.SetValueWidth(valuewidth);
-  
+
   nodestar output = new node(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
   b->BVTypeCheck(*output);
@@ -513,7 +513,7 @@ Expr vc_varExpr1(VC vc, char* name,
   return output;
 }
 
-Expr vc_varExpr(VC vc, char * name, Type type) {
+Expr vc_varExpr(VC vc, const char * name, Type type) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)type;
 
@@ -577,7 +577,7 @@ Expr vc_boolType(VC vc) {
 Expr vc_trueExpr(VC vc) {
   bmstar b = (bmstar)vc;
   node c = b->CreateNode(BEEV::TRUE);
-  
+
   nodestar d = new node(c);
   //if(cinterface_exprdelete_on) created_exprs.push_back(d);
   return d;
@@ -586,7 +586,7 @@ Expr vc_trueExpr(VC vc) {
 Expr vc_falseExpr(VC vc) {
   bmstar b = (bmstar)vc;
   node c = b->CreateNode(BEEV::FALSE);
-  
+
   nodestar d = new node(c);
   //if(cinterface_exprdelete_on) created_exprs.push_back(d);
   return d;
@@ -595,7 +595,7 @@ Expr vc_falseExpr(VC vc) {
 Expr vc_notExpr(VC vc, Expr ccc) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)ccc;
-  
+
   node o = b->CreateNode(BEEV::NOT,*a);
   b->BVTypeCheck(o);
 
@@ -608,7 +608,7 @@ Expr vc_andExpr(VC vc, Expr left, Expr right) {
   bmstar b = (bmstar)vc;
   nodestar l = (nodestar)left;
   nodestar r = (nodestar)right;
-  
+
   node o = b->CreateNode(BEEV::AND,*l,*r);
   b->BVTypeCheck(o);
 
@@ -633,10 +633,10 @@ Expr vc_andExprN(VC vc, Expr* cc, int n) {
   bmstar b = (bmstar)vc;
   nodestar * c = (nodestar *)cc;
   nodelist d;
-  
+
   for(int i =0; i < n; i++)
     d.push_back(*c[i]);
-  
+
   node o = b->CreateNode(BEEV::AND,d);
   b->BVTypeCheck(o);
 
@@ -650,10 +650,10 @@ Expr vc_orExprN(VC vc, Expr* cc, int n) {
   bmstar b = (bmstar)vc;
   nodestar * c = (nodestar *)cc;
   nodelist d;
-  
+
   for(int i =0; i < n; i++)
     d.push_back(*c[i]);
-  
+
   node o = b->CreateNode(BEEV::OR,d);
   b->BVTypeCheck(o);
 
@@ -666,10 +666,10 @@ Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* cc, int n) {
   bmstar b = (bmstar)vc;
   nodestar * c = (nodestar *)cc;
   nodelist d;
-  
+
   for(int i =0; i < n; i++)
     d.push_back(*c[i]);
-  
+
   node o = b->CreateTerm(BEEV::BVPLUS, n_bits, d);
   b->BVTypeCheck(o);
 
@@ -684,7 +684,7 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart){
   nodestar c = (nodestar)cond;
   nodestar t = (nodestar)thenpart;
   nodestar e = (nodestar)elsepart;
-  
+
   b->BVTypeCheck(*c);
   b->BVTypeCheck(*t);
   b->BVTypeCheck(*e);
@@ -707,7 +707,7 @@ Expr vc_impliesExpr(VC vc, Expr antecedent, Expr consequent){
   bmstar b = (bmstar)vc;
   nodestar c = (nodestar)antecedent;
   nodestar t = (nodestar)consequent;
-  
+
   b->BVTypeCheck(*c);
   b->BVTypeCheck(*t);
   node o;
@@ -723,7 +723,7 @@ Expr vc_iffExpr(VC vc, Expr e0, Expr e1){
   bmstar b = (bmstar)vc;
   nodestar c = (nodestar)e0;
   nodestar t = (nodestar)e1;
-  
+
   b->BVTypeCheck(*c);
   b->BVTypeCheck(*t);
   node o;
@@ -738,14 +738,14 @@ Expr vc_iffExpr(VC vc, Expr e0, Expr e1){
 Expr vc_boolToBVExpr(VC vc, Expr form) {
   bmstar b = (bmstar)vc;
   nodestar c = (nodestar)form;
-  
+
   b->BVTypeCheck(*c);
   if(!is_Form_kind(c->GetKind()))
     BEEV::FatalError("CInterface: vc_BoolToBVExpr: You have input a NON formula:",*c);
-  
+
   node o;
-  node one = b->CreateOneConst(1); 
-  node zero = b->CreateZeroConst(1);  
+  node one = b->CreateOneConst(1);
+  node zero = b->CreateZeroConst(1);
   o = b->CreateTerm(BEEV::ITE,1,*c,one,zero);
 
   b->BVTypeCheck(o);
@@ -758,7 +758,7 @@ Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter){
   bmstar b = (bmstar)vc;
   nodestar c = (nodestar)boolvar;
   nodestar t = (nodestar)parameter;
-  
+
   b->BVTypeCheck(*c);
   b->BVTypeCheck(*t);
   node o;
@@ -776,9 +776,9 @@ Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter){
 /////////////////////////////////////////////////////////////////////////////
 Type vc_bvType(VC vc, int num_bits) {
   bmstar b = (bmstar)vc;
-  
+
   if(!(0 < num_bits))
-    BEEV::FatalError("CInterface: number of bits in a bvtype must be a positive integer:", 
+    BEEV::FatalError("CInterface: number of bits in a bvtype must be a positive integer:",
                      b->CreateNode(BEEV::UNDEFINED));
 
   node e = b->CreateBVConst(32, num_bits);
@@ -791,7 +791,7 @@ Type vc_bv32Type(VC vc) {
   return vc_bvType(vc,32);
 }
 
-Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, char* decimalInput ) {
+Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, const char* decimalInput ) {
   bmstar b = (bmstar)vc;
 
   string *param = new string(decimalInput);
@@ -804,7 +804,7 @@ Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, char* decimalInput ) {
 }
 
 
-Expr vc_bvConstExprFromStr(VC vc, char* binary_repr) {
+Expr vc_bvConstExprFromStr(VC vc, const char* binary_repr) {
   bmstar b = (bmstar)vc;
 
   node n = b->CreateBVConst(binary_repr,2);
@@ -815,7 +815,7 @@ Expr vc_bvConstExprFromStr(VC vc, char* binary_repr) {
 }
 
 Expr vc_bvConstExprFromInt(VC vc,
-                           int n_bits, 
+                           int n_bits,
                            unsigned int value) {
   bmstar b = (bmstar)vc;
 
@@ -828,10 +828,10 @@ Expr vc_bvConstExprFromInt(VC vc,
 }
 
 Expr vc_bvConstExprFromLL(VC vc,
-                          int n_bits, 
+                          int n_bits,
                           unsigned long long value) {
   bmstar b = (bmstar)vc;
-  
+
   node n = b->CreateBVConst(n_bits, value);
   b->BVTypeCheck(n);
   nodestar output = new node(n);
@@ -1173,11 +1173,11 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)ccc;
   b->BVTypeCheck(*a);
-  
-  unsigned int w = a->GetValueWidth();  
+
+  unsigned int w = a->GetValueWidth();
   //the amount by which you are rightshifting
   //is less-than/equal-to the length of input
-  //bitvector  
+  //bitvector
   if(0 < (unsigned)sh_amt && (unsigned)sh_amt < w) {
     node len = b->CreateBVConst(sh_amt, 0);
     node hi = b->CreateBVConst(32,w-1);
@@ -1228,7 +1228,7 @@ Expr vc_bvVar32LeftShiftExpr(VC vc, Expr sh_amt, Expr child) {
 
   for(int count=32; count >= 0; count--){
     if(count != 32) {
-      ifpart = vc_eqExpr(vc, sh_amt, 
+      ifpart = vc_eqExpr(vc, sh_amt,
                          vc_bvConstExprFromInt(vc, shift_width, count));
       thenpart = vc_bvExtract(vc,
                               vc_bvLeftShiftExpr(vc, count, child),
@@ -1236,11 +1236,11 @@ Expr vc_bvVar32LeftShiftExpr(VC vc, Expr sh_amt, Expr child) {
 
       ite = vc_iteExpr(vc,ifpart,thenpart,elsepart);
       elsepart = ite;
-    } 
+    }
     else
-      elsepart = vc_bvConstExprFromInt(vc,child_width, 0);    
-  }  
-  return ite;  
+      elsepart = vc_bvConstExprFromInt(vc,child_width, 0);
+  }
+  return ite;
 }
 
 Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs) {
@@ -1251,16 +1251,16 @@ Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs) {
 
   for(int count=32; count >= 0; count--){
     if(count != 32) {
-      ifpart = vc_eqExpr(vc, rhs, 
-                         vc_bvConstExprFromInt(vc, 32, 1 << count));      
-      thenpart = vc_bvRightShiftExpr(vc, count, child);      
+      ifpart = vc_eqExpr(vc, rhs,
+                         vc_bvConstExprFromInt(vc, 32, 1 << count));
+      thenpart = vc_bvRightShiftExpr(vc, count, child);
       ite = vc_iteExpr(vc,ifpart,thenpart,elsepart);
       elsepart = ite;
     } else {
       elsepart = vc_bvConstExprFromInt(vc,32, 0);
-    }    
-  }  
-  return ite;  
+    }
+  }
+  return ite;
 }
 
 Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child) {
@@ -1276,16 +1276,16 @@ Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child) {
 
   for(int count=32; count >= 0; count--){
     if(count != 32) {
-      ifpart = vc_eqExpr(vc, sh_amt, 
-                         vc_bvConstExprFromInt(vc, shift_width, count));      
-      thenpart = vc_bvRightShiftExpr(vc, count, child);      
+      ifpart = vc_eqExpr(vc, sh_amt,
+                         vc_bvConstExprFromInt(vc, shift_width, count));
+      thenpart = vc_bvRightShiftExpr(vc, count, child);
       ite = vc_iteExpr(vc,ifpart,thenpart,elsepart);
       elsepart = ite;
     } else {
       elsepart = vc_bvConstExprFromInt(vc,child_width, 0);
-    }    
-  }  
-  return ite;  
+    }
+  }
+  return ite;
 }
 
 Expr vc_bvExtract(VC vc, Expr ccc, int hi_num, int low_num) {
@@ -1308,14 +1308,14 @@ Expr vc_bvBoolExtract(VC vc, Expr ccc, int bit_num) {
   b->BVTypeCheck(*a);
 
   node bit = b->CreateBVConst(32,bit_num);
-  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);  
+  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);
   node zero = b->CreateBVConst(1,0);
   node oo = b->CreateTerm(BEEV::BVEXTRACT,1,*a,bit,bit);
   node o = b->CreateNode(BEEV::EQ,oo,zero);
   b->BVTypeCheck(o);
   nodestar output = new node(o);
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output; 
+  return output;
 }
 
 Expr vc_bvBoolExtract_Zero(VC vc, Expr ccc, int bit_num) {
@@ -1324,14 +1324,14 @@ Expr vc_bvBoolExtract_Zero(VC vc, Expr ccc, int bit_num) {
   b->BVTypeCheck(*a);
 
   node bit = b->CreateBVConst(32,bit_num);
-  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);  
+  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);
   node zero = b->CreateBVConst(1,0);
   node oo = b->CreateTerm(BEEV::BVEXTRACT,1,*a,bit,bit);
   node o = b->CreateNode(BEEV::EQ,oo,zero);
   b->BVTypeCheck(o);
   nodestar output = new node(o);
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output; 
+  return output;
 }
 
 Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num) {
@@ -1340,24 +1340,24 @@ Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num) {
   b->BVTypeCheck(*a);
 
   node bit = b->CreateBVConst(32,bit_num);
-  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);  
+  //node o = b->CreateNode(BEEV::BVGETBIT,*a,bit);
   node one = b->CreateBVConst(1,1);
   node oo = b->CreateTerm(BEEV::BVEXTRACT,1,*a,bit,bit);
   node o = b->CreateNode(BEEV::EQ,oo,one);
   b->BVTypeCheck(o);
   nodestar output = new node(o);
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output; 
+  return output;
 }
 
 Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits) {
   bmstar b = (bmstar)vc;
   nodestar a = (nodestar)ccc;
-  
+
   //width of the expr which is being sign extended. nbits is the
   //resulting length of the signextended expr
   b->BVTypeCheck(*a);
-  
+
   unsigned exprlen = a->GetValueWidth();
   unsigned outputlen = nbits;
   node n;
@@ -1428,7 +1428,7 @@ Expr vc_simplify(VC vc, Expr e) {
     //if(cinterface_exprdelete_on) created_exprs.push_back(output);
     b->Begin_RemoveWrites = false;
     delete round1;
-    return output;    
+    return output;
   }
   else {
     nodestar round1 = new node(b->SimplifyTerm(*a));
@@ -1442,16 +1442,16 @@ Expr vc_simplify(VC vc, Expr e) {
 }
 
 /* C pointer support: C interface to support C memory arrays in CVCL */
-Expr vc_bvCreateMemoryArray(VC vc, char * arrayName) {
+Expr vc_bvCreateMemoryArray(VC vc, const char * arrayName) {
   Type bv8  = vc_bvType(vc,8);
   Type bv32 = vc_bvType(vc,32);
-  
+
   Type malloced_mem0 = vc_arrayType(vc,bv32,bv8);
   return vc_varExpr(vc, arrayName, malloced_mem0);
 }
 
-Expr vc_bvReadMemoryArray(VC vc, 
-                          Expr array, 
+Expr vc_bvReadMemoryArray(VC vc,
+                          Expr array,
                           Expr byteIndex, int numOfBytes) {
   if(!(numOfBytes > 0))
     BEEV::FatalError("numOfBytes must be greater than 0");
@@ -1464,22 +1464,22 @@ Expr vc_bvReadMemoryArray(VC vc,
     while(--numOfBytes > 0) {
       Expr b = vc_readExpr(vc,array,
                            /*vc_simplify(vc, */
-                           vc_bvPlusExpr(vc, 32, 
+                           vc_bvPlusExpr(vc, 32,
                                          byteIndex,
                                          vc_bvConstExprFromInt(vc,32,count)))/*)*/;
       a = vc_bvConcatExpr(vc,b,a);
       count++;
     }
     return a;
-  }    
+  }
 }
 
-Expr vc_bvWriteToMemoryArray(VC vc, 
-                             Expr array, Expr byteIndex, 
+Expr vc_bvWriteToMemoryArray(VC vc,
+                             Expr array, Expr byteIndex,
                              Expr element, int numOfBytes) {
   if(!(numOfBytes > 0))
     BEEV::FatalError("numOfBytes must be greater than 0");
-            
+
   int newBitsPerElem = numOfBytes*8;
   if(numOfBytes == 1)
     return vc_writeExpr(vc, array, byteIndex, element);
@@ -1493,20 +1493,20 @@ Expr vc_bvWriteToMemoryArray(VC vc,
     Expr newarray = vc_writeExpr(vc, array, byteIndex, c);
     while(--numOfBytes > 0) {
       hi = low-1;
-      low = low-8;      
+      low = low-8;
 
       low_elem = low_elem + 8;
       hi_elem = low_elem + 7;
 
       c = vc_bvExtract(vc, element, hi_elem, low_elem);
-      newarray = 
+      newarray =
         vc_writeExpr(vc, newarray,
                      vc_bvPlusExpr(vc, 32, byteIndex, vc_bvConstExprFromInt(vc,32,count)),
                      c);
       count++;
     }
     return newarray;
-  }    
+  }
 }
 
 Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value){
@@ -1534,16 +1534,16 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 //   bmstar b = (bmstar)vc;
 //   extern FILE* cvcin;
 //   const char * prog = "stp";
-  
+
 //   cvcin = fopen(infile,"r");
 //   if(cvcin == NULL) {
 //     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
 //     BEEV::FatalError("");
 //   }
-  
+
 //   BEEV::GlobalBeevMgr = b;
 
-//   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+//   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
 //   if(0 != c) {
 //     cout << CONSTANTBV::BitVector_Error(c) << endl;
 //     return 0;
@@ -1553,7 +1553,7 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 //   nodelist aaa = b->GetAsserts();
 
 //   //Don't add the query. It gets added automatically if the input file
-//   //has QUERY in it 
+//   //has QUERY in it
 //   //
 //   //node bbb = b->CreateNode(BEEV::NOT,b->GetQuery());
 //   node o =  b->CreateNode(BEEV::AND,aaa);
@@ -1564,19 +1564,19 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 // } //end of vc_parseExpr()
 
 
-Expr vc_parseExpr(VC vc, char* infile) {
+Expr vc_parseExpr(VC vc, const char* infile) {
   bmstar b = (bmstar)vc;
   extern FILE* cvcin;
   const char * prog = "stp";
-  
+
   cvcin = fopen(infile,"r");
   if(cvcin == NULL) {
     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
     BEEV::FatalError("");
   }
-  
+
   BEEV::GlobalBeevMgr = b;
-  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot(); 
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
@@ -1587,7 +1587,7 @@ Expr vc_parseExpr(VC vc, char* infile) {
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
   //b->TopLevelSAT(asserts, query);
-  
+
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);
   nodestar output = new node(o);
@@ -1621,7 +1621,7 @@ Expr getChild(Expr e, int i){
     //if(cinterface_exprdelete_on) created_exprs.push_back(output);
     return output;
   }
-  else 
+  else
     BEEV::FatalError("getChild: Error accessing childNode in expression: ",*a);
   return a;
 }
@@ -1636,7 +1636,7 @@ int vc_getHashQueryStateToBuffer(VC vc, Expr query) {
   assert(query);
   bmstar b = (bmstar)vc;
   nodestar qry = (nodestar)query;
-  BEEV::ASTVec v = b->GetAsserts(); 
+  BEEV::ASTVec v = b->GetAsserts();
   BEEV::ASTNode out = b->CreateNode(BEEV::AND,b->CreateNode(BEEV::NOT,*qry),v);
   return out.Hash();
 }
@@ -1647,7 +1647,7 @@ Type vc_getType(VC vc, Expr ex) {
   switch(e->GetType()) {
   case BEEV::BOOLEAN_TYPE:
     return vc_boolType(vc);
-    break;      
+    break;
   case BEEV::BITVECTOR_TYPE:
     return vc_bvType(vc,e->GetValueWidth());
     break;
@@ -1698,7 +1698,7 @@ void vc_DeleteExpr(Expr e) {
 
 exprkind_t getExprKind(Expr e) {
   nodestar input = (nodestar)e;
-  return (exprkind_t)(input->GetKind());  
+  return (exprkind_t)(input->GetKind());
 }
 
 int getDegree (Expr e) {
@@ -1714,11 +1714,11 @@ int getBVLength(Expr ex) {
   }
 
   return e->GetValueWidth();
-} 
+}
 
 type_t getType (Expr ex) {
   nodestar e = (nodestar)ex;
-    
+
   return (type_t)(e->GetType());
 }
 
@@ -1737,7 +1737,7 @@ int getIWidth (Expr ex) {
 void vc_printCounterExampleFile(VC vc, int fd) {
   fdostream os(fd);
   bmstar b = (bmstar)vc;
-  BEEV::print_counterexample_flag = true;    
+  BEEV::print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   b->PrintCounterExample(true, os);
   os << "COUNTEREXAMPLE END: \n";

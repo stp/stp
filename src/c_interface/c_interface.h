@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 #include <stdio.h>
-  
+
 #ifdef STP_STRONG_TYPING
 #else
   //This gives absolutely no pointer typing at compile-time. Most C
@@ -42,13 +42,13 @@ extern "C" {
   // s  : stats
   // v  : print nodes
   void vc_setFlags(char c);
-  
+
   //! Flags can be NULL
   VC vc_createValidityChecker(void);
-  
+
   // Basic types
   Type vc_boolType(VC vc);
-  
+
   //! Create an array type
   Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 
@@ -56,31 +56,31 @@ extern "C" {
   // Expr manipulation methods                                               //
   /////////////////////////////////////////////////////////////////////////////
 
-  //! Create a variable with a given name and type 
+  //! Create a variable with a given name and type
   /*! The type cannot be a function type. The var name can contain
     only variables, numerals and underscore. If you use any other
-    symbol, you will get a segfault. */  
-  Expr vc_varExpr(VC vc, char * name, Type type);
+    symbol, you will get a segfault. */
+  Expr vc_varExpr(VC vc, const char * name, Type type);
 
   //The var name can contain only variables, numerals and
   //underscore. If you use any other symbol, you will get a segfault.
-  Expr vc_varExpr1(VC vc, char* name, 
+  Expr vc_varExpr1(VC vc, const char* name,
                    int indexwidth, int valuewidth);
 
   //! Get the expression and type associated with a name.
   /*!  If there is no such Expr, a NULL Expr is returned. */
   //Expr vc_lookupVar(VC vc, char* name, Type* type);
-  
+
   //! Get the type of the Expr.
   Type vc_getType(VC vc, Expr e);
-  
+
   int vc_getBVLength(VC vc, Expr e);
 
   //! Create an equality expression.  The two children must have the same type.
   Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
-  
+
   // Boolean expressions
-  
+
   // The following functions create Boolean expressions.  The children
   // provided as arguments must be of type Boolean (except for the
   // function vc_iteExpr(). In the case of vc_iteExpr() the
@@ -99,7 +99,7 @@ extern "C" {
   //The output type of vc_iteExpr can be Boolean (formula-level ite)
   //or bit-vector (word-level ite)
   Expr vc_iteExpr(VC vc, Expr conditional, Expr ifthenpart, Expr elsepart);
-  
+
   //Boolean to single bit BV Expression
   Expr vc_boolToBVExpr(VC vc, Expr form);
 
@@ -107,15 +107,15 @@ extern "C" {
   Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 
   // Arrays
-  
+
   //! Create an expression for the value of array at the given index
   Expr vc_readExpr(VC vc, Expr array, Expr index);
 
   //! Array update; equivalent to "array WITH [index] := newValue"
   Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
-  
+
   // Expr I/O: Parses directly from file in the c_interface. pretty cool!!
-  Expr vc_parseExpr(VC vc, char* s);
+  Expr vc_parseExpr(VC vc, const char* s);
 
   //! Prints 'e' to stdout.
   void vc_printExpr(VC vc, Expr e);
@@ -129,12 +129,12 @@ extern "C" {
   //! Prints 'e' into an open file descriptor 'fd'
   void vc_printExprFile(VC vc, Expr e, int fd);
 
-  //! Prints state of 'vc' into malloc'd buffer '*buf' and stores the 
-  //  length into '*len'.  It is the responsibility of the caller to 
+  //! Prints state of 'vc' into malloc'd buffer '*buf' and stores the
+  //  length into '*len'.  It is the responsibility of the caller to
   //  free the buffer.
   //void vc_printStateToBuffer(VC vc, char **buf, unsigned long *len);
 
-  //! Prints 'e' to malloc'd buffer '*buf'.  Sets '*len' to the length of 
+  //! Prints 'e' to malloc'd buffer '*buf'.  Sets '*len' to the length of
   //  the buffer. It is the responsibility of the caller to free the buffer.
   void vc_printExprToBuffer(VC vc, Expr e, char **buf, unsigned long * len);
 
@@ -154,7 +154,7 @@ extern "C" {
   //responsibility of the caller to free the buffer. The flag
   //simplify_print must be set to "1" if you wish simplification to
   //occur dring printing. It must be set to "0" otherwise
-  void vc_printQueryStateToBuffer(VC vc, Expr e, 
+  void vc_printQueryStateToBuffer(VC vc, Expr e,
                                   char **buf, unsigned long *len, int simplify_print);
 
   //! Similar to vc_printQueryStateToBuffer()
@@ -166,55 +166,55 @@ extern "C" {
   /////////////////////////////////////////////////////////////////////////////
   // Context-related methods                                                 //
   /////////////////////////////////////////////////////////////////////////////
-  
-  //! Assert a new formula in the current context.  
+
+  //! Assert a new formula in the current context.
   /*! The formula must have Boolean type. */
   void vc_assertFormula(VC vc, Expr e, int absrefine_num=0);
-  
+
   //! Simplify e with respect to the current context
   Expr vc_simplify(VC vc, Expr e);
 
   //! Check validity of e in the current context. e must be a FORMULA
   //
-  //if returned 0 then input is INVALID. 
+  //if returned 0 then input is INVALID.
   //
   //if returned 1 then input is VALID
   //
   //if returned 2 then ERROR
   int vc_query(VC vc, Expr e);
-  
+
   //! Return the counterexample after a failed query.
   Expr vc_getCounterExample(VC vc, Expr e);
 
   //! get size of counterexample, i.e. the number of variables/array
   //locations in the counterexample.
   int vc_counterexample_size(VC vc);
-  
+
   //! Checkpoint the current context and increase the scope level
   void vc_push(VC vc);
-  
+
   //! Restore the current context to its state at the last checkpoint
   void vc_pop(VC vc);
-  
+
   //! Return an int from a constant bitvector expression
   int getBVInt(Expr e);
   //! Return an unsigned int from a constant bitvector expression
   unsigned int getBVUnsigned(Expr e);
   //! Return an unsigned long long int from a constant bitvector expressions
   unsigned long long int getBVUnsignedLongLong(Expr e);
-  
+
   /**************************/
   /* BIT VECTOR OPERATIONS  */
   /**************************/
   Type vc_bvType(VC vc, int no_bits);
   Type vc_bv32Type(VC vc);
-  
-  Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, char* decimalInput );                
-  Expr vc_bvConstExprFromStr(VC vc, char* binary_repr);
+
+  Expr vc_bvConstExprFromDecStr(VC vc, const size_t width, const char* decimalInput );
+  Expr vc_bvConstExprFromStr(VC vc, const char* binary_repr);
   Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value);
   Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value);
   Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
-  
+
   Expr vc_bvConcatExpr(VC vc, Expr left, Expr right);
   Expr vc_bvPlusExpr(VC vc, int n_bits, Expr left, Expr right);
   Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* children, int numOfChildNodes);
@@ -231,25 +231,25 @@ extern "C" {
   Expr vc_sbvDivExpr(VC vc, int n_bits, Expr left, Expr right);
   // signed left modulo right i.e. left%right
   Expr vc_sbvModExpr(VC vc, int n_bits, Expr left, Expr right);
-  
+
   Expr vc_bvLtExpr(VC vc, Expr left, Expr right);
   Expr vc_bvLeExpr(VC vc, Expr left, Expr right);
   Expr vc_bvGtExpr(VC vc, Expr left, Expr right);
   Expr vc_bvGeExpr(VC vc, Expr left, Expr right);
-  
+
   Expr vc_sbvLtExpr(VC vc, Expr left, Expr right);
   Expr vc_sbvLeExpr(VC vc, Expr left, Expr right);
   Expr vc_sbvGtExpr(VC vc, Expr left, Expr right);
   Expr vc_sbvGeExpr(VC vc, Expr left, Expr right);
-  
+
   Expr vc_bvUMinusExpr(VC vc, Expr child);
 
-  // bitwise operations: these are terms not formulas  
+  // bitwise operations: these are terms not formulas
   Expr vc_bvAndExpr(VC vc, Expr left, Expr right);
   Expr vc_bvOrExpr(VC vc, Expr left, Expr right);
   Expr vc_bvXorExpr(VC vc, Expr left, Expr right);
   Expr vc_bvNotExpr(VC vc, Expr child);
-  
+
   Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr child);
   Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr child);
   /* Same as vc_bvLeftShift only that the answer in 32 bits long */
@@ -261,32 +261,32 @@ extern "C" {
   Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
 
   Expr vc_bvExtract(VC vc, Expr child, int high_bit_no, int low_bit_no);
-  
+
   //accepts a bitvector and position, and returns a boolean
   //corresponding to that position. More precisely, it return the
   //equation (x[bit_no:bit_no] == 0)
   Expr vc_bvBoolExtract(VC vc, Expr x, int bit_no);
   Expr vc_bvBoolExtract_Zero(VC vc, Expr x, int bit_no);
-  
+
   //accepts a bitvector and position, and returns a boolean
   //corresponding to that position. More precisely, it return the
   //equation (x[bit_no:bit_no] == 1)
-  Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);  
+  Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);
   Expr vc_bvSignExtend(VC vc, Expr child, int nbits);
-  
+
   /*C pointer support:  C interface to support C memory arrays in CVCL */
-  Expr vc_bvCreateMemoryArray(VC vc, char * arrayName);
-  Expr vc_bvReadMemoryArray(VC vc, 
+  Expr vc_bvCreateMemoryArray(VC vc, const char * arrayName);
+  Expr vc_bvReadMemoryArray(VC vc,
                             Expr array, Expr byteIndex, int numOfBytes);
-  Expr vc_bvWriteToMemoryArray(VC vc, 
-                               Expr array, Expr  byteIndex, 
+  Expr vc_bvWriteToMemoryArray(VC vc,
+                               Expr array, Expr  byteIndex,
                                Expr element, int numOfBytes);
   Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
-  
+
   // return a string representation of the Expr e. The caller is responsible
   // for deallocating the string with free()
   char* exprString(Expr e);
-  
+
   // return a string representation of the Type t. The caller is responsible
   // for deallocating the string with free()
   char* typeString(Type t);
@@ -406,7 +406,7 @@ extern "C" {
 
   // get name of expression. must be a variable.
   const char* exprName(Expr e);
-  
+
   // get the node ID of an Expr.
   int getExprID (Expr ex);
 

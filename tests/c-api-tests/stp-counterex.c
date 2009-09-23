@@ -44,7 +44,7 @@ int main() {
   Expr ce = vc_getCounterExample(vc, a_of_1);
   unsigned long long v = getBVUnsigned(ce);
   
-  fprintf(stderr, "a[1] = %ld\n", v);
+  fprintf(stderr, "a[1] = %llu\n", v);
 
   vc_Destroy(vc);
 }

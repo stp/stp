@@ -57,7 +57,7 @@ int main() {
     Expr elem = vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 32, i));
     Expr ce = vc_getCounterExample(vc, elem);
     unsigned long long v = getBVUnsigned(ce);
-    fprintf(stderr, "a[%d] = %ld\n", i, v);
+    fprintf(stderr, "a[%d] = %llu\n", i, v);
     *p = v; p++;
   }
   printf("a = %d\n", *a_val);
