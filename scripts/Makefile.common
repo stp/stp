@@ -7,11 +7,12 @@
 #OPTIMIZE = -g -pg           # Debugging and gprof-style profiling
 OPTIMIZE = -g                # Debugging
 OPTIMIZE = -O3 -DNDEBUG     # Maximum optimization
-
 CFLAGS_BASE = $(OPTIMIZE)
+
 
 # You can compile using make STATIC=true to compile a statically
 # linked executable Note that you should execute liblinks.sh first.
+#STATIC=true
 
 ifdef STATIC
     LDFLAGS_BASE = -static-libgcc -static
