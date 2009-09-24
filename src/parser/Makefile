@@ -15,7 +15,7 @@ libparser.a: $(OBJS)
 	$(RANLIB) $@
 
 lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
-		$(LEX)  -o lexCVC.cpp --prefix cvc CVC.lex
+		$(LEX)  -olexCVC.cpp -Pcvc CVC.lex
 
 parseCVC_defs.h parseCVC.cpp:	CVC.y
 		$(YACC) -p cvc CVC.y
@@ -23,7 +23,7 @@ parseCVC_defs.h parseCVC.cpp:	CVC.y
 		@cp y.tab.h parseCVC_defs.h
 
 lexSMT.cpp:	parseSMT_defs.h smtlib.lex ../AST/AST.h
-		$(LEX) -o lexSMT.cpp --prefix smt smtlib.lex 
+		$(LEX) -olexSMT.cpp -Psmt smtlib.lex 
 
 parseSMT_defs.h parseSMT.cpp:smtlib.y
 		$(YACC) -p smt smtlib.y
