@@ -24,7 +24,7 @@
 
 3. Run tests:
 
-   make regresscvc
+   make regressall
 
 NB: 
 
