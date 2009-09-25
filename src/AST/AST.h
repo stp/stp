@@ -287,13 +287,9 @@ namespace BEEV
      *both indexwidth and valuewidth should never be less than 0
      */
     unsigned int GetIndexWidth() const;
-
-    // FIXME: This function is dangerous.  Try to eliminate it's use.
     void SetIndexWidth(unsigned int iw) const;
 
     unsigned int GetValueWidth() const;
-
-    // FIXME: This function is dangerous.  Try to eliminate it's use.
     void SetValueWidth(unsigned int vw) const;
 
     //return the type of the ASTNode

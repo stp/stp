@@ -388,12 +388,11 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
     BEEV::FatalError("Trying to assert a NON formula: ",*a);
 
   b->BVTypeCheck(*a);
-  //a->SetAbsRefineInt(absrefine_num);
   b->AddAssert(*a);
 }
 
 //! Check validity of e in the current context.
-/*!  If the result is true, then the resulting context is the same as
+/*! If the result is true, then the resulting context is the same as
  * the starting context.  If the result is false, then the resulting
  * context is a context in which e is false.  e must have Boolean
  * type. */
@@ -420,6 +419,30 @@ int vc_query(VC vc, Expr e) {
   else
     return b->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
 }
+
+// int vc_absRefineQuery(VC vc, Expr e) {
+//   nodestar a = (nodestar)e;
+//   bmstar b   = (bmstar)vc;
+
+//   if(!BEEV::is_Form_kind(a->GetKind()))
+//     BEEV::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
+
+//   //a->LispPrint(cout, 0);
+//   //printf("##################################################\n");
+//   b->BVTypeCheck(*a);
+//   b->AddQuery(*a);
+
+//   const BEEV::ASTVec v = b->GetAsserts();
+//   node o;
+//   if(!v.empty()) {
+//     if(v.size()==1)
+//       return b->TopLevelSAT(v[0],*a);
+//     else
+//       return b->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
+//   }
+//   else
+//     return b->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
+// }
 
 void vc_push(VC vc) {
   bmstar b = (bmstar)vc;
