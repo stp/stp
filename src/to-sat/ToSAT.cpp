@@ -990,7 +990,7 @@ namespace BEEV
 
 	if(optimize_flag) 
 	  {
-		runTimes.start(RunTimes::CreateSubstitutionMap);
+	    runTimes.start(RunTimes::CreateSubstitutionMap);
 	    simplified_solved_InputToSAT = 
 	      CreateSubstitutionMap(simplified_solved_InputToSAT);
 	    runTimes.stop(RunTimes::CreateSubstitutionMap);
@@ -1022,7 +1022,31 @@ namespace BEEV
       }
 
     TermsAlreadySeenMap.clear();
-
+    // do
+    //       {
+    //         inputToSAT = simplified_solved_InputToSAT;
+    
+    // 	if(optimize_flag) 
+    // 	  {
+    // 	    runTimes.start(RunTimes::CreateSubstitutionMap);
+    // 	    simplified_solved_InputToSAT = 
+    // 	      CreateSubstitutionMap(simplified_solved_InputToSAT);
+    // 	    runTimes.stop(RunTimes::CreateSubstitutionMap);
+    // 	    ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+    
+    // 	    simplified_solved_InputToSAT = 
+    // 	      SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+    // 	    ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+    // 	  }
+    
+    // 	if(wordlevel_solve_flag)
+    // 	  {
+    // 	    simplified_solved_InputToSAT = 
+    // 	      bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+    // 	    ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+    // 	  }
+    //       } while (inputToSAT != simplified_solved_InputToSAT);
+    
     if (start_abstracting)
       {
         ASTNodeStats("After abstraction: ", simplified_solved_InputToSAT);
@@ -1053,12 +1077,12 @@ namespace BEEV
         return res;
       }
 
-    res = SATBased_AllFiniteLoops_Refinement(newS, orig_input);
-    if (SOLVER_UNDECIDED != res)
-      {
-	CountersAndStats("print_func_stats");
-        return res;      
-      }
+    // res = SATBased_AllFiniteLoops_Refinement(newS, orig_input);
+    //     if (SOLVER_UNDECIDED != res)
+    //       {
+    // 	CountersAndStats("print_func_stats");
+    //         return res;      
+    //       }
 
     res = SATBased_ArrayReadRefinement(newS, simplified_solved_InputToSAT, orig_input);
     if (SOLVER_UNDECIDED != res)

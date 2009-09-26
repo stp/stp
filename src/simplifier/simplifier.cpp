@@ -310,9 +310,10 @@ ASTNode Flatten(const ASTNode& a)
 
   // The SimplifyMaps on entry to the topLevel functions may contain useful entries.
   // E.g. The BVSolver calls SimplifyTerm()
-  ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
+  ASTNode BeevMgr::SimplifyFormula_TopLevel(const ASTNode& b, 
+					    bool pushNeg, ASTNodeMap* VarConstMap)
   {
-	runTimes.start(RunTimes::SimplifyTopLevel);
+    runTimes.start(RunTimes::SimplifyTopLevel);
     if (smtlib_parser_flag)
     BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
