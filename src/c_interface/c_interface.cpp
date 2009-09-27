@@ -391,6 +391,15 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
   b->AddAssert(*a);
 }
 
+
+//! Check validity of e in the current context. e must be a FORMULA
+//
+//if returned 0 then input is INVALID.
+//
+//if returned 1 then input is VALID
+//
+//if returned 2 then ERROR
+//
 //! Check validity of e in the current context.
 /*! If the result is true, then the resulting context is the same as
  * the starting context.  If the result is false, then the resulting
@@ -410,15 +419,20 @@ int vc_query(VC vc, Expr e) {
 
   const BEEV::ASTVec v = b->GetAsserts();
   node o;
+  int output;
   if(!v.empty()) {
-    if(v.size()==1)
-      return b->TopLevelSAT(v[0],*a);
-    else
-      return b->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
+    if(v.size()==1) {
+      output = b->TopLevelSAT(v[0],*a);
+    }
+    else {
+      output = b->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
+    }
   }
-  else
-    return b->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
-}
+  else {
+    output = b->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
+  }
+  return output;
+} //end of vc_query
 
 // int vc_absRefineQuery(VC vc, Expr e) {
 //   nodestar a = (nodestar)e;
@@ -843,6 +857,11 @@ Expr vc_bvConstExprFromInt(VC vc,
   bmstar b = (bmstar)vc;
 
   unsigned long long int v = (unsigned long long int)value;
+  if(v > (unsigned long long)(1 << n_bits)-1) {
+    printf("CInterface: vc_bvConstExprFromInt: "\
+	   "You are trying to construct an constant %llu >= 2 ^ %d,\n", v, n_bits);
+    BEEV::FatalError("FatalError");
+  }
   node n = b->CreateBVConst(n_bits, v);
   b->BVTypeCheck(n);
   nodestar output = new node(n);
