@@ -1606,6 +1606,7 @@ namespace BEEV
   public:
     ASTVec ListOfDeclaredVars;
     void printVarDeclsToStream(ostream &os);
+    void printAssertsToStream(ostream &os, int simplify);
 
     // Constructor
     BeevMgr() :

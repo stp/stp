@@ -391,11 +391,24 @@ namespace BEEV
     }
   } //printVarDeclsToStream
 
+
+
+  void BeevMgr::printAssertsToStream(ostream &os, int simplify_print) {
+  ASTVec v = GetAsserts();
+  for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
+    Begin_RemoveWrites = true;
+    ASTNode q = (simplify_print == 1) ? SimplifyFormula_TopLevel(*i,false) : *i;
+    q = (simplify_print == 1) ? SimplifyFormula_TopLevel(q,false) : q;
+    Begin_RemoveWrites = false;
+    os << "ASSERT( ";
+    q.PL_Print(os);
+    os << ");" << endl;
+  }
+}
+
   void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query) {
     BEEV::GlobalBeevMgr->printVarDeclsToStream(cout);
-    cout << "ASSERT(";
-    asserts.PL_Print(cout);
-    cout << ");\n\n";
+    BEEV::GlobalBeevMgr->printAssertsToStream(cout,0);
     cout << "QUERY(";
     query.PL_Print(cout);
     cout << ");\n";
