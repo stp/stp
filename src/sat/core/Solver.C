@@ -30,7 +30,7 @@ namespace MINISAT {
 Solver::Solver() :
 
     // Parameters: (formerly in 'SearchParams')
-  var_decay(1 / 0.95), clause_decay(1 / 0.999), random_var_freq(0.02)
+  var_decay(1 / 0.75), clause_decay(1 / 0.999), random_var_freq(0.02)
   , restart_first(100), restart_inc(1.5), learntsize_factor((double)1/(double)3), learntsize_inc(1.1)
 
     // More parameters:
