@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
   //inputs: the RNA sequence
   char * seq  = argv[1];
   int seq_len = strlen(seq);
-  printf("The sequence length is : %d \n", seq_len);
+  //printf("The sequence length is : %d \n", seq_len);
 
   //inputs: STP needs to find a sequence whose energy is greater than
   //'energy_bound'

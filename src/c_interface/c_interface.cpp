@@ -857,9 +857,11 @@ Expr vc_bvConstExprFromInt(VC vc,
   bmstar b = (bmstar)vc;
 
   unsigned long long int v = (unsigned long long int)value;
-  if(v > (unsigned long long)(1 << n_bits)-1) {
+  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> 64-n_bits;
+  //printf("%ull", max_n_bits);
+  if(v > max_n_bits) {
     printf("CInterface: vc_bvConstExprFromInt: "\
-	   "You are trying to construct an constant %llu >= 2 ^ %d,\n", v, n_bits);
+	   "You are trying to construct a constant %llu >= %d,\n", v, max_n_bits);
     BEEV::FatalError("FatalError");
   }
   node n = b->CreateBVConst(n_bits, v);
