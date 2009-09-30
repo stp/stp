@@ -1001,7 +1001,7 @@ namespace BEEV
         cout << a << endl;
       }
     cout << "Node size is: ";
-    cout << NodeSize(a) << endl << endl;
+    cout << NodeSize(a) << endl;
   }
 
   unsigned int BeevMgr::NodeSize(const ASTNode& a, bool clearStatInfo)
@@ -1016,6 +1016,8 @@ namespace BEEV
 
     //record that you have seen this node already
     StatInfoSet.insert(a);
+    // cout << "Number of bytes per Node is: ";
+    // cout << sizeof(*(a._int_node_ptr)) << endl;
 
     //leaf node has a size of 1
     if (a.Degree() == 0)

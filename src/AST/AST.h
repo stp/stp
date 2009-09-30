@@ -64,6 +64,28 @@ namespace BEEV
   class ASTBVConst;
   class BVSolver;
 
+
+  template <class E, class T>
+  struct enumeration
+  {
+    typedef T type;
+    typedef E enum_type;
+
+    enumeration()
+      : e_(E())
+    {}
+    
+    enumeration(E e)
+      : e_(static_cast<T>(e))
+    {}
+    
+    operator E() const
+    { return static_cast<E>(e_); }
+    
+  private:
+    T e_;
+  };
+
   //Useful typedefs: Vector of ASTNodes, used for child nodes among
   //other things.
   typedef vector<ASTNode> ASTVec;
@@ -87,7 +109,6 @@ namespace BEEV
                                         int indentation = 0);
 
   private:
-    // FIXME: make this into a reference?
     ASTInternal * _int_node_ptr; // The real data.
 
     // Usual constructor.
@@ -398,7 +419,8 @@ namespace BEEV
     int _ref_count;
 
     // Kind.  It's a type tag and the operator.
-    Kind _kind;
+    //Kind _kind;
+    enumeration<Kind,unsigned char> _kind;
 
     // The vector of children (*** should this be in ASTInterior? ***)
     ASTVec _children;
@@ -416,12 +438,12 @@ namespace BEEV
     // Length of bitvector type for array index.  The term is an
     // array iff this is positive.  Otherwise, the term is a bitvector
     // or a bit.
-    unsigned int _index_width;
+    unsigned short _index_width;
 
     // Length of bitvector type for scalar value or array element.
     // If this is one, the term represents a single bit (same as a bitvector
     // of length 1).  It must be 1 or greater.
-    unsigned int _value_width;
+    unsigned short _value_width;
 
     // Increment refcount.
     void IncRef()

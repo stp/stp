@@ -22,5 +22,5 @@
 
 3. Run tests:
 
-   make regressall
+   make regresscapi && make regresscvc && make regresssmt
 
