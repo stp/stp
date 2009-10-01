@@ -50,7 +50,7 @@ namespace BEEV
 
     BeevMgr::ClauseList* convertToCNF(const ASTNode& varphi)
     {
-      varphi.GetBeevMgr().runTimes.start(RunTimes::CNFConversion);
+      varphi.GetBeevMgr()->runTimes.start(RunTimes::CNFConversion);
       scanFormula(varphi, true);
       ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
       BeevMgr::ClauseList* defs = SINGLETON(dummy_true_var);
@@ -59,7 +59,7 @@ namespace BEEV
       defs->insert(defs->begin() + 1, top->begin(), top->end());
 
       cleanup(varphi);
-      varphi.GetBeevMgr().runTimes.stop(RunTimes::CNFConversion);
+      varphi.GetBeevMgr()->runTimes.stop(RunTimes::CNFConversion);
       return defs;
     }
 

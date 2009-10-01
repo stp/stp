@@ -26,21 +26,21 @@ namespace printer
       }
 
     //if this node is present in the letvar Map, then print the letvar
-    BeevMgr &bm = n.GetBeevMgr();
+    BeevMgr *bm = n.GetBeevMgr();
 
     //this is to print letvars for shared subterms inside the printing
     //of "(LET v0 = term1, v1=term1@term2,...
-    if ((bm.NodeLetVarMap1.find(n) != bm.NodeLetVarMap1.end()) && !letize)
+    if ((bm->NodeLetVarMap1.find(n) != bm->NodeLetVarMap1.end()) && !letize)
       {
-        PL_Print1(os, (bm.NodeLetVarMap1[n]), indentation, letize);
+        PL_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize);
         return;
       }
 
     //this is to print letvars for shared subterms inside the actual
     //term to be printed
-    if ((bm.NodeLetVarMap.find(n) != bm.NodeLetVarMap.end()) && letize)
+    if ((bm->NodeLetVarMap.find(n) != bm->NodeLetVarMap.end()) && letize)
       {
-        PL_Print1(os, (bm.NodeLetVarMap[n]), indentation, letize);
+        PL_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize);
         return;
       }
 
@@ -182,7 +182,7 @@ namespace printer
       case FOR:
 	if(expand_finitefor_flag) 
 	  {
-	    ASTNode expandedfor = bm.Expand_FiniteLoop_TopLevel(n);
+	    ASTNode expandedfor = bm->Expand_FiniteLoop_TopLevel(n);
 	    PL_Print1(os, expandedfor, indentation, letize);
 	  }
 	else 
@@ -327,11 +327,11 @@ namespace printer
   ostream& PL_Print(ostream &os,  const ASTNode& n, int indentation)
   {
     // Clear the PrintMap
-    BeevMgr& bm = n.GetBeevMgr();
-    bm.PLPrintNodeSet.clear();
-    bm.NodeLetVarMap.clear();
-    bm.NodeLetVarVec.clear();
-    bm.NodeLetVarMap1.clear();
+    BeevMgr* bm = n.GetBeevMgr();
+    bm->PLPrintNodeSet.clear();
+    bm->NodeLetVarMap.clear();
+    bm->NodeLetVarVec.clear();
+    bm->NodeLetVarMap1.clear();
 
     //pass 1: letize the node
     n.LetizeNode();
@@ -344,12 +344,12 @@ namespace printer
     //3. Then print the Node itself, replacing every occurence of
     //3. expr1 with var1, expr2 with var2, ...
     //os << "(";
-    if (0 < bm.NodeLetVarMap.size())
+    if (0 < bm->NodeLetVarMap.size())
       {
-        //ASTNodeMap::iterator it=bm.NodeLetVarMap.begin();
-        //ASTNodeMap::iterator itend=bm.NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator it = bm.NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm.NodeLetVarVec.end();
+        //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
+        //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
+        std::vector<pair<ASTNode, ASTNode> >::iterator it = bm->NodeLetVarVec.begin();
+        std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm->NodeLetVarVec.end();
 
         os << "(LET ";
         //print the let var first
@@ -359,7 +359,7 @@ namespace printer
         PL_Print1(os, it->second, indentation, false);
 
         //update the second map for proper printing of LET
-        bm.NodeLetVarMap1[it->second] = it->first;
+        bm->NodeLetVarMap1[it->second] = it->first;
 
         for (it++; it != itend; it++)
           {
@@ -371,7 +371,7 @@ namespace printer
             PL_Print1(os, it->second, indentation, false);
 
             //update the second map for proper printing of LET
-            bm.NodeLetVarMap1[it->second] = it->first;
+            bm->NodeLetVarMap1[it->second] = it->first;
           }
 
         os << " IN " << endl;

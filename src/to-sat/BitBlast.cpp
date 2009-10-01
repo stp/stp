@@ -432,30 +432,13 @@ namespace BEEV
           // ASSERT: IndexWidth = 0?  Semantic analysis should check.
           //Leaking ASTVec& bbvec = *(new ASTVec);
 
-          //FIXME Why is isn't this ASTVEC bbvec(num_bits) ?
           ASTVec bbvec;
-          /*
-            if(term.GetNodeNum() == 17132){
-            weregood = true;
-            }
-          */
-
-          /*
-            if(weregood){
-            printf("number of bits for node 17132: %d\n", num_bits);
-            }
-          */
           for (unsigned int i = 0; i < num_bits; i++)
             {
               ASTNode bit_node = CreateNode(BVGETBIT, term, CreateBVConst(32, i));
               bbvec.push_back(bit_node);
             }
           result = CreateNode(BOOLVEC, bbvec);
-          /*
-            if(weregood){
-            printf("done\n");
-            }
-          */
           break;
         }
       case BVCONST:

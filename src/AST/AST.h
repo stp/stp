@@ -245,7 +245,7 @@ namespace BEEV
     // Assignment (for ref counting)
     ASTNode& operator=(const ASTNode& n);
 
-    BeevMgr &GetBeevMgr() const;
+    BeevMgr* GetBeevMgr() const;
 
     // Access node number
     int GetNodeNum() const;
@@ -414,36 +414,42 @@ namespace BEEV
     friend class CNFMgr;
 
   protected:
-
     // reference count.
-    int _ref_count;
+    //#ifdef LESSBYTES_PERNODE    
+    //unsigned short _ref_count;
+    //#else
+    unsigned int   _ref_count;
+    //#endif
 
     // Kind.  It's a type tag and the operator.
-    //Kind _kind;
     enumeration<Kind,unsigned char> _kind;
 
     // The vector of children (*** should this be in ASTInterior? ***)
     ASTVec _children;
 
-    // Manager object.  Having this backpointer means it's easy to
-    // find the manager when we need it.
-    BeevMgr &_bm;
-
     //Nodenum is a unique positive integer for the node.  The nodenum
     //of a node should always be greater than its descendents (which
     //is easily achieved by incrementing the number each time a new
     //node is created).
-    int _node_num;
+    unsigned int _node_num;
 
     // Length of bitvector type for array index.  The term is an
     // array iff this is positive.  Otherwise, the term is a bitvector
     // or a bit.
-    unsigned short _index_width;
+#ifdef LESSBYTES_PERNODE
+    unsigned char _index_width;
+#else
+    unsigned int  _index_width;
+#endif
 
     // Length of bitvector type for scalar value or array element.
     // If this is one, the term represents a single bit (same as a bitvector
     // of length 1).  It must be 1 or greater.
-    unsigned short _value_width;
+#ifdef LESSBYTES_PERNODE
+    unsigned char _value_width;
+#else
+    unsigned int  _value_width;
+#endif
 
     // Increment refcount.
     void IncRef()
@@ -480,15 +486,15 @@ namespace BEEV
     ;
 
     // Constructor (bm only)
-    ASTInternal(BeevMgr &bm, int nodenum = 0) :
-      _ref_count(0), _kind(UNDEFINED), _bm(bm), 
+    ASTInternal(int nodenum = 0) :
+      _ref_count(0), _kind(UNDEFINED),
       _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
 
     // Constructor (kind only, empty children, int nodenum)
-    ASTInternal(Kind kind, BeevMgr &bm, int nodenum = 0) :
-      _ref_count(0), _kind(kind), _bm(bm), 
+    ASTInternal(Kind kind, int nodenum = 0) :
+      _ref_count(0), _kind(kind),
       _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
@@ -496,9 +502,9 @@ namespace BEEV
     // Constructor (kind and children).  This copies the contents of
     // the child nodes.
     // FIXME: is there a way to avoid repeating these?
-    ASTInternal(Kind kind, const ASTVec &children, BeevMgr &bm, int nodenum = 0) :
+    ASTInternal(Kind kind, const ASTVec &children, int nodenum = 0) :
       _ref_count(0), _kind(kind), _children(children), 
-      _bm(bm), _node_num(nodenum), _index_width(0), _value_width(0)
+      _node_num(nodenum), _index_width(0), _value_width(0)
     {
     }
 
@@ -509,7 +515,7 @@ namespace BEEV
     // FIXME:  I don't think children need to be copied.
     ASTInternal(const ASTInternal &int_node, int nodenum = 0) :
       _ref_count(0), _kind(int_node._kind), 
-      _children(int_node._children), _bm(int_node._bm), 
+      _children(int_node._children),
       _node_num(int_node._node_num), _index_width(int_node._index_width), 
       _value_width(int_node._value_width)
     {
@@ -593,13 +599,13 @@ namespace BEEV
     // to put "friend class hash_set<ASTInterior, ...>" in here.
 
     // Basic constructors
-    ASTInterior(Kind kind, BeevMgr &bm) :
-      ASTInternal(kind, bm)
+    ASTInterior(Kind kind) :
+      ASTInternal(kind)
     {
     }
 
-    ASTInterior(Kind kind, ASTVec &children, BeevMgr &bm) :
-      ASTInternal(kind, children, bm)
+    ASTInterior(Kind kind, ASTVec &children) :
+      ASTInternal(kind, children)
     {
     }
 
@@ -680,14 +686,14 @@ namespace BEEV
   public:
 
     // Default constructor
-    ASTSymbol(BeevMgr &bm) :
-      ASTInternal(bm), _name(NULL)
+    ASTSymbol() :
+      ASTInternal(), _name(NULL)
     {
     }
 
     // Constructor.  This does NOT copy its argument.
-    ASTSymbol(const char * const name, BeevMgr &bm) :
-      ASTInternal(SYMBOL, bm), _name(name)
+    ASTSymbol(const char * const name) :
+      ASTInternal(SYMBOL), _name(name)
     {
     }
 
@@ -697,7 +703,7 @@ namespace BEEV
     // Copy constructor
     // FIXME: seems to be calling default constructor for astinternal
     ASTSymbol(const ASTSymbol &sym) :
-      ASTInternal(sym._kind, sym._children, sym._bm), _name(sym._name)
+      ASTInternal(sym._kind, sym._children), _name(sym._name)
     {
     }
   }; //End of ASTSymbol
@@ -742,8 +748,8 @@ namespace BEEV
     };
 
     //FIXME Keep an eye on this function
-    ASTBVConst(CBV bv, unsigned int width, BeevMgr &bm) :
-      ASTInternal(BVCONST, bm)
+    ASTBVConst(CBV bv, unsigned int width) :
+      ASTInternal(BVCONST)
     {
       _bvconst = CONSTANTBV::BitVector_Clone(bv);
       _value_width = width;
@@ -812,7 +818,7 @@ namespace BEEV
 
     // Copy constructor.
     ASTBVConst(const ASTBVConst &sym) :
-      ASTInternal(sym._kind, sym._children, sym._bm)
+      ASTInternal(sym._kind, sym._children)
     {
       _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
       _value_width = sym._value_width;
@@ -1804,9 +1810,9 @@ namespace BEEV
       }
   }
 
-  inline BeevMgr& ASTNode::GetBeevMgr() const
+  inline BeevMgr* ASTNode::GetBeevMgr() const
   {
-    return _int_node_ptr->_bm;
+    return GlobalBeevMgr;
   }
 
   //Return the unsigned constant value of the input 'n'

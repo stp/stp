@@ -1,0 +1,7 @@
+1. We try to follow the GNU coding guidelines and indentation
+standards. Please visit the following website to learn more:
+
+http://www.gnu.org/prep/standards/standards.html 
+
+2. The code is automatically formatted with the indent tool before
+check-in.

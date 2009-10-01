@@ -102,7 +102,7 @@ namespace BEEV
   void ASTInterior::CleanUp()
   {
     // cout << "Deleting node " << this->GetNodeNum() << endl;
-    _bm._interior_unique_table.erase(this);
+    GlobalBeevMgr->_interior_unique_table.erase(this);
     delete this;
   }
 
@@ -112,8 +112,8 @@ namespace BEEV
   //ASTNode constructors are inlined in AST.h
   bool ASTNode::IsAlreadyPrinted() const
   {
-    BeevMgr &bm = GetBeevMgr();
-    return (bm.AlreadyPrintedSet.find(*this) != bm.AlreadyPrintedSet.end());
+    BeevMgr * bm = GetBeevMgr();
+    return (bm->AlreadyPrintedSet.find(*this) != bm->AlreadyPrintedSet.end());
   }
 
   void ASTNode::nodeprint(ostream& os, bool c_friendly) const
@@ -123,8 +123,8 @@ namespace BEEV
 
   void ASTNode::MarkAlreadyPrinted() const
   {
-    BeevMgr &bm = GetBeevMgr();
-    bm.AlreadyPrintedSet.insert(*this);
+    BeevMgr * bm = GetBeevMgr();
+    bm->AlreadyPrintedSet.insert(*this);
   }
 
   // Get the name from a symbol (char *).  It's an error if kind != SYMBOL
@@ -180,12 +180,12 @@ namespace BEEV
       return;
 
     //FIXME: this is ugly.
-    BeevMgr& bm = GetBeevMgr();
+    BeevMgr * bm = GetBeevMgr();
     const ASTVec &c = this->GetChildren();
     for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
         ASTNode ccc = *it;
-        if (bm.PLPrintNodeSet.find(ccc) == bm.PLPrintNodeSet.end())
+        if (bm->PLPrintNodeSet.find(ccc) == bm->PLPrintNodeSet.end())
           {
             //If branch: if *it is not in NodeSet then,
             //
@@ -193,7 +193,7 @@ namespace BEEV
             //
             //2. Letize its childNodes
 
-            bm.PLPrintNodeSet.insert(ccc);
+            bm->PLPrintNodeSet.insert(ccc);
             //debugging
             //cerr << ccc;
             ccc.LetizeNode();
@@ -211,15 +211,15 @@ namespace BEEV
             //
             //2. if no, then create a new var and add it to the
             //2. NodeLetVarMap
-            if (bm.NodeLetVarMap.find(ccc) == bm.NodeLetVarMap.end())
+            if (bm->NodeLetVarMap.find(ccc) == bm->NodeLetVarMap.end())
               {
                 //Create a new symbol. Get some name. if it conflicts with a
                 //declared name, too bad.
-                int sz = bm.NodeLetVarMap.size();
+                int sz = bm->NodeLetVarMap.size();
                 ostringstream oss;
                 oss << "let_k_" << sz;
 
-                ASTNode CurrentSymbol = bm.CreateSymbol(oss.str().c_str());
+                ASTNode CurrentSymbol = bm->CreateSymbol(oss.str().c_str());
                 CurrentSymbol.SetValueWidth(this->GetValueWidth());
                 CurrentSymbol.SetIndexWidth(this->GetIndexWidth());
                 /* If for some reason the variable being created here is
@@ -228,9 +228,9 @@ namespace BEEV
                  * check for this.  [Vijay is the author of this comment.]
                  */
 
-                bm.NodeLetVarMap[ccc] = CurrentSymbol;
+                bm->NodeLetVarMap[ccc] = CurrentSymbol;
                 std::pair<ASTNode, ASTNode> node_letvar_pair(CurrentSymbol, ccc);
-                bm.NodeLetVarVec.push_back(node_letvar_pair);
+                bm->NodeLetVarVec.push_back(node_letvar_pair);
               }
           }
       }
@@ -244,7 +244,7 @@ namespace BEEV
   ASTNode BeevMgr::CreateNode(Kind kind, const ASTVec & back_children)
   {
     // create a new node.  Children will be modified.
-    ASTInterior *n_ptr = new ASTInterior(kind, *this);
+    ASTInterior *n_ptr = new ASTInterior(kind);
 
     // insert all of children at end of new_children.
     ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
@@ -254,7 +254,7 @@ namespace BEEV
   ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTVec & back_children)
   {
 
-    ASTInterior *n_ptr = new ASTInterior(kind, *this);
+    ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
     front_children.push_back(child0);
     ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
@@ -264,7 +264,7 @@ namespace BEEV
   ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTVec & back_children)
   {
 
-    ASTInterior *n_ptr = new ASTInterior(kind, *this);
+    ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
     front_children.push_back(child0);
     front_children.push_back(child1);
@@ -274,7 +274,7 @@ namespace BEEV
 
   ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2, const ASTVec & back_children)
   {
-    ASTInterior *n_ptr = new ASTInterior(kind, *this);
+    ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
     front_children.push_back(child0);
     front_children.push_back(child1);
@@ -326,7 +326,7 @@ namespace BEEV
   ////////////////////////////////////////////////////////////////
   ASTNode BeevMgr::CreateSymbol(const char * const name)
   {
-    ASTSymbol temp_sym(name, *this);
+    ASTSymbol temp_sym(name);
     ASTNode n(LookupOrCreateSymbol(temp_sym));
     return n;
   }
@@ -451,7 +451,7 @@ namespace BEEV
   //FIXME Code currently assumes that it will destroy the bitvector passed to it
   ASTNode BeevMgr::CreateBVConst(CBV bv, unsigned width)
   {
-    ASTBVConst temp_bvconst(bv, width, *this);
+    ASTBVConst temp_bvconst(bv, width);
     ASTNode n(LookupOrCreateBVConst(temp_bvconst));
 
     CONSTANTBV::BitVector_Destroy(bv);
@@ -521,7 +521,7 @@ namespace BEEV
   void ASTBVConst::CleanUp()
   {
     //  cout << "Deleting node " << this->GetNodeNum() << endl;
-    _bm._bvconst_unique_table.erase(this);
+    GlobalBeevMgr->_bvconst_unique_table.erase(this);
     delete this;
   }
 
@@ -557,7 +557,7 @@ namespace BEEV
         // _name because it's const).  Can cast the iterator to
         // non-const -- carefully.
         //std::string strname(s_ptr->GetName());
-        ASTSymbol * s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()), *this);
+        ASTSymbol * s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()));
         s_ptr1->SetNodeNum(NewNodeNum());
         s_ptr1->_value_width = s_ptr->_value_width;
         pair<ASTSymbolSet::const_iterator, bool> p = _symbol_unique_table.insert(s_ptr1);
@@ -582,7 +582,7 @@ namespace BEEV
   void ASTSymbol::CleanUp()
   {
     //  cout << "Deleting node " << this->GetNodeNum() << endl;
-    _bm._symbol_unique_table.erase(this);
+    GlobalBeevMgr->_symbol_unique_table.erase(this);
     //FIXME This is a HUGE free to invoke.
     //TEST IT!
     free((char*) this->_name);

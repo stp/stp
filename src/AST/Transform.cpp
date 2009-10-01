@@ -57,37 +57,37 @@ namespace BEEV
   //Translates signed BVDIV,BVMOD and BVREM into unsigned variety
   ASTNode TranslateSignedDivModRem(const ASTNode& in)
   {
-    BeevMgr& bm = in.GetBeevMgr();
+    BeevMgr* bm = GlobalBeevMgr;
     assert(in.GetChildren().size() ==2);
 
     ASTNode dividend = in[0];
     ASTNode divisor = in[1];
     unsigned len = in.GetValueWidth();
 
-    ASTNode hi1 = bm.CreateBVConst(32, len - 1);
-    ASTNode one = bm.CreateOneConst(1);
-    ASTNode zero = bm.CreateZeroConst(1);
+    ASTNode hi1 = bm->CreateBVConst(32, len - 1);
+    ASTNode one = bm->CreateOneConst(1);
+    ASTNode zero = bm->CreateZeroConst(1);
     // create the condition for the dividend
-    ASTNode cond_dividend = bm.CreateNode(EQ, one, bm.CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
+    ASTNode cond_dividend = bm->CreateNode(EQ, one, bm->CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
     // create the condition for the divisor
-    ASTNode cond_divisor = bm.CreateNode(EQ, one, bm.CreateTerm(BVEXTRACT, 1, divisor, hi1, hi1));
+    ASTNode cond_divisor = bm->CreateNode(EQ, one, bm->CreateTerm(BVEXTRACT, 1, divisor, hi1, hi1));
 
     if (SBVREM == in.GetKind())
       {
         //BVMOD is an expensive operation. So have the fewest bvmods possible. Just one.
 
         //Take absolute value.
-        ASTNode pos_dividend = bm.CreateTerm(ITE, len, cond_dividend, bm.CreateTerm(BVUMINUS, len, dividend), dividend);
-        ASTNode pos_divisor = bm.CreateTerm(ITE, len, cond_divisor, bm.CreateTerm(BVUMINUS, len, divisor), divisor);
+        ASTNode pos_dividend = bm->CreateTerm(ITE, len, cond_dividend, bm->CreateTerm(BVUMINUS, len, dividend), dividend);
+        ASTNode pos_divisor = bm->CreateTerm(ITE, len, cond_divisor, bm->CreateTerm(BVUMINUS, len, divisor), divisor);
 
         //create the modulus term
-        ASTNode modnode = bm.CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
+        ASTNode modnode = bm->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
 
         //If the dividend is <0 take the unary minus.
-        ASTNode n = bm.CreateTerm(ITE, len, cond_dividend, bm.CreateTerm(BVUMINUS, len, modnode), modnode);
+        ASTNode n = bm->CreateTerm(ITE, len, cond_dividend, bm->CreateTerm(BVUMINUS, len, modnode), modnode);
 
         //put everything together, simplify, and return
-        return bm.SimplifyTerm_TopLevel(n);
+        return bm->SimplifyTerm_TopLevel(n);
       }
 
     // This is the modulus of dividing rounding to -infinity.
@@ -106,19 +106,19 @@ namespace BEEV
         //      (bvneg (bvurem (bvneg s) (bvneg t)))))))
 
         //Take absolute value.
-        ASTNode pos_dividend = bm.CreateTerm(ITE, len, cond_dividend, bm.CreateTerm(BVUMINUS, len, dividend), dividend);
-        ASTNode pos_divisor = bm.CreateTerm(ITE, len, cond_divisor, bm.CreateTerm(BVUMINUS, len, divisor), divisor);
+        ASTNode pos_dividend = bm->CreateTerm(ITE, len, cond_dividend, bm->CreateTerm(BVUMINUS, len, dividend), dividend);
+        ASTNode pos_divisor = bm->CreateTerm(ITE, len, cond_divisor, bm->CreateTerm(BVUMINUS, len, divisor), divisor);
 
-        ASTNode urem_node = bm.CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
+        ASTNode urem_node = bm->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
 
         // If the dividend is <0, then we negate the whole thing.
-        ASTNode rev_node = bm.CreateTerm(ITE, len, cond_dividend, bm.CreateTerm(BVUMINUS, len, urem_node), urem_node);
+        ASTNode rev_node = bm->CreateTerm(ITE, len, cond_dividend, bm->CreateTerm(BVUMINUS, len, urem_node), urem_node);
 
         // if It's XOR <0 then add t (not its absolute value).
-        ASTNode xor_node = bm.CreateNode(XOR, cond_dividend, cond_divisor);
-        ASTNode n = bm.CreateTerm(ITE, len, xor_node, bm.CreateTerm(BVPLUS, len, rev_node, divisor), rev_node);
+        ASTNode xor_node = bm->CreateNode(XOR, cond_dividend, cond_divisor);
+        ASTNode n = bm->CreateTerm(ITE, len, xor_node, bm->CreateTerm(BVPLUS, len, rev_node, divisor), rev_node);
 
-        return bm.SimplifyTerm_TopLevel(n);
+        return bm->SimplifyTerm_TopLevel(n);
       }
     else if (SBVDIV == in.GetKind())
       {
@@ -138,20 +138,20 @@ namespace BEEV
         //else simply output BVDIV(dividend,divisor)
 
         //Take absolute value.
-        ASTNode pos_dividend = bm.CreateTerm(ITE, len, cond_dividend, bm.CreateTerm(BVUMINUS, len, dividend), dividend);
-        ASTNode pos_divisor = bm.CreateTerm(ITE, len, cond_divisor, bm.CreateTerm(BVUMINUS, len, divisor), divisor);
+        ASTNode pos_dividend = bm->CreateTerm(ITE, len, cond_dividend, bm->CreateTerm(BVUMINUS, len, dividend), dividend);
+        ASTNode pos_divisor = bm->CreateTerm(ITE, len, cond_divisor, bm->CreateTerm(BVUMINUS, len, divisor), divisor);
 
-        ASTNode divnode = bm.CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
+        ASTNode divnode = bm->CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
 
         // A little confusing. Only negate the result if they are XOR <0.
-        ASTNode xor_node = bm.CreateNode(XOR, cond_dividend, cond_divisor);
-        ASTNode n = bm.CreateTerm(ITE, len, xor_node, bm.CreateTerm(BVUMINUS, len, divnode), divnode);
+        ASTNode xor_node = bm->CreateNode(XOR, cond_dividend, cond_divisor);
+        ASTNode n = bm->CreateTerm(ITE, len, xor_node, bm->CreateTerm(BVUMINUS, len, divnode), divnode);
 
-        return bm.SimplifyTerm_TopLevel(n);
+        return bm->SimplifyTerm_TopLevel(n);
       }
 
     FatalError("TranslateSignedDivModRem: input must be signed DIV/MOD/REM", in);
-    return bm.CreateNode(UNDEFINED);
+    return bm->CreateNode(UNDEFINED);
 
   }//end of TranslateSignedDivModRem()
 
@@ -207,7 +207,7 @@ namespace BEEV
    ********************************************************/
   ASTNode TransformFormula(const ASTNode& form)
   {
-    BeevMgr& bm = form.GetBeevMgr();
+    BeevMgr* bm = form.GetBeevMgr();
 
     assert(TransformMap != NULL);
 
@@ -237,7 +237,7 @@ namespace BEEV
         {
           ASTVec c;
           c.push_back(TransformFormula(simpleForm[0]));
-          result = bm.CreateNode(NOT, c);
+          result = bm->CreateNode(NOT, c);
           break;
         }
       case BVLT:
@@ -252,14 +252,14 @@ namespace BEEV
           ASTVec c;
           c.push_back(TransformTerm(simpleForm[0]));
           c.push_back(TransformTerm(simpleForm[1]));
-          result = bm.CreateNode(k, c);
+          result = bm->CreateNode(k, c);
           break;
         }
       case EQ:
         {
           ASTNode term1 = TransformTerm(simpleForm[0]);
           ASTNode term2 = TransformTerm(simpleForm[1]);
-          result = bm.CreateSimplifiedEQ(term1, term2);
+          result = bm->CreateSimplifiedEQ(term1, term2);
           break;
         }
       case AND:
@@ -279,14 +279,14 @@ namespace BEEV
               vec.push_back(o);
             }
 
-          result = bm.CreateNode(k, vec);
+          result = bm->CreateNode(k, vec);
           break;
         }
       case FOR:
 	{
 	  //Insert in a global list of FOR constructs. Return TRUE now
-	  bm.GlobalList_Of_FiniteLoops.push_back(simpleForm);
-	  return bm.CreateNode(TRUE);
+	  bm->GlobalList_Of_FiniteLoops.push_back(simpleForm);
+	  return bm->CreateNode(TRUE);
 	  break;
 	}
       case PARAMBOOL:
@@ -299,7 +299,7 @@ namespace BEEV
 	  //VAR(expression), then simply return it
 	  if(BVCONST == simpleForm[1].GetKind())
 	    {
-	      result = bm.NewBooleanVar(simpleForm[0],simpleForm[1]);
+	      result = bm->NewBooleanVar(simpleForm[0],simpleForm[1]);
 	    }
 	  else
 	    {
@@ -313,7 +313,7 @@ namespace BEEV
 	    result = simpleForm;
 	  else
 	    {
-	      FatalError("TransformFormula: Illegal kind: ", bm.CreateNode(UNDEFINED), k);
+	      FatalError("TransformFormula: Illegal kind: ", bm->CreateNode(UNDEFINED), k);
 	      cerr << "The input is: " << simpleForm << endl;
 	      cerr << "The valuewidth of input is : " << simpleForm.GetValueWidth() << endl;
 	    }
@@ -331,7 +331,7 @@ namespace BEEV
   {
     assert(TransformMap != NULL);
 
-    BeevMgr& bm = inputterm.GetBeevMgr();
+    BeevMgr* bm = inputterm.GetBeevMgr();
 
     ASTNode result;
     ASTNode term = inputterm;
@@ -360,7 +360,7 @@ namespace BEEV
         FatalError("TransformTerm: this kind is not supported", term);
         break;
       case READ:
-        result = bm.TransformArray(term);
+        result = bm->TransformArray(term);
         break;
       case ITE:
         {
@@ -371,7 +371,7 @@ namespace BEEV
           thn = TransformTerm(thn);
           els = TransformTerm(els);
           //result = CreateTerm(ITE,term.GetValueWidth(),cond,thn,els);
-          result = bm.CreateSimplifiedTermITE(cond, thn, els);
+          result = bm->CreateSimplifiedTermITE(cond, thn, els);
           result.SetIndexWidth(term.GetIndexWidth());
           break;
         }
@@ -388,7 +388,7 @@ namespace BEEV
               o.push_back(TransformTerm(*it));
             }
 
-          result = bm.CreateTerm(k, width, o);
+          result = bm->CreateTerm(k, width, o);
           result.SetIndexWidth(indexwidth);
 
           Kind k = result.GetKind();
@@ -408,9 +408,9 @@ namespace BEEV
                   // result is embedded unchanged inside the result.
 
                   unsigned inputValueWidth = result.GetValueWidth();
-                  ASTNode zero = bm.CreateZeroConst(inputValueWidth);
-                  ASTNode one = bm.CreateOneConst(inputValueWidth);
-                  result = bm.CreateTerm(ITE, inputValueWidth, bm.CreateNode(EQ, zero, bottom), one, result);
+                  ASTNode zero = bm->CreateZeroConst(inputValueWidth);
+                  ASTNode one = bm->CreateOneConst(inputValueWidth);
+                  result = bm->CreateTerm(ITE, inputValueWidth, bm->CreateNode(EQ, zero, bottom), one, result);
                 }
             }
         }

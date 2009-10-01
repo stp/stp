@@ -21,7 +21,7 @@ ASTNode Flatten(const ASTNode& a)
 	while (true)
 	{
 		ASTNode& nold = n;
-		n = a.GetBeevMgr().FlattenOneLevel(n);
+		n = a.GetBeevMgr()->FlattenOneLevel(n);
 		if ((n == nold))
 			break;
 	}

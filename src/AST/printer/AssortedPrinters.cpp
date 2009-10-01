@@ -66,7 +66,7 @@ namespace BEEV
 
   void lpvec(const ASTVec &vec)
   {
-    vec[0].GetBeevMgr().AlreadyPrintedSet.clear();
+    (vec[0].GetBeevMgr())->AlreadyPrintedSet.clear();
     LispPrintVec(cout, vec, 0);
     cout << endl;
   }

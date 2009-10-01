@@ -127,6 +127,7 @@ VC vc_createValidityChecker(void) {
     return 0;
   }
   bmstar bm = new BEEV::BeevMgr();
+  BEEV::GlobalBeevMgr = bm;
   decls = new BEEV::ASTVec();
   //created_exprs.clear();
   return (VC)bm;
@@ -156,9 +157,10 @@ char * vc_printSMTLIB(VC vc, Expr e)
 // prints Expr 'e' to stdout as C code
 void vc_printExprCCode(VC vc, Expr e) {
   BEEV::ASTNode q = (*(nodestar)e);
+  bmstar b = (bmstar)vc;
 
   // print variable declarations
-  BEEV::ASTVec declsFromParser = (nodelist)BEEV::GlobalBeevMgr->ListOfDeclaredVars;
+  BEEV::ASTVec declsFromParser = (nodelist)b->ListOfDeclaredVars;
 
   for(BEEV::ASTVec::iterator it=declsFromParser.begin(),itend=declsFromParser.end(); it!=itend;it++) {
     if(BEEV::BITVECTOR_TYPE == it->GetType()) {
@@ -1573,40 +1575,6 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
   return strdup(s);
 }
 #endif
-
-// Expr vc_parseExpr(VC vc, char* infile) {
-//   bmstar b = (bmstar)vc;
-//   extern FILE* cvcin;
-//   const char * prog = "stp";
-
-//   cvcin = fopen(infile,"r");
-//   if(cvcin == NULL) {
-//     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-//     BEEV::FatalError("");
-//   }
-
-//   BEEV::GlobalBeevMgr = b;
-
-//   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
-//   if(0 != c) {
-//     cout << CONSTANTBV::BitVector_Error(c) << endl;
-//     return 0;
-//   }
-
-//   cvcparse();
-//   nodelist aaa = b->GetAsserts();
-
-//   //Don't add the query. It gets added automatically if the input file
-//   //has QUERY in it
-//   //
-//   //node bbb = b->CreateNode(BEEV::NOT,b->GetQuery());
-//   node o =  b->CreateNode(BEEV::AND,aaa);
-//   //node o = b->CreateNode(BEEV::AND,oo,bbb);
-
-//   nodestar output = new node(o);
-//   return output;
-// } //end of vc_parseExpr()
-
 
 Expr vc_parseExpr(VC vc, const char* infile) {
   bmstar b = (bmstar)vc;
