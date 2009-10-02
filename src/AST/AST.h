@@ -18,7 +18,6 @@
 
 namespace BEEV
 {
-
   void FatalError(const char * str, const ASTNode& a, int w = 0);
   void FatalError(const char * str);
   void SortByExprNum(ASTVec& c);
@@ -27,38 +26,30 @@ namespace BEEV
   bool arithless(const ASTNode n1, const ASTNode n2);
   bool isAtomic(Kind k);
 
+  typedef hash_map<
+    ASTNode, 
+    ASTNode, 
+    ASTNode::ASTNodeHasher, 
+    ASTNode::ASTNodeEqual> ASTNodeMap;
 
-  /***************************************************************************
-   * Typedef ASTNodeMap:  This is a hash table from ASTNodes to ASTNodes.
-   * It is very convenient for attributes that are not speed-critical
-   **************************************************************************/
-  // These are generally useful for storing ASTNodes or attributes thereof
-  // Hash table from ASTNodes to ASTNodes
-  typedef hash_map<ASTNode, 
-                   ASTNode, 
-                   ASTNode::ASTNodeHasher, 
-                   ASTNode::ASTNodeEqual> ASTNodeMap;
+  typedef hash_map<
+    ASTNode, 
+    int32_t, 
+    ASTNode::ASTNodeHasher, 
+    ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
-  typedef hash_map<ASTNode, 
-                   int32_t, 
-                   ASTNode::ASTNodeHasher, 
-                   ASTNode::ASTNodeEqual> ASTNodeCountMap;
+  typedef hash_set<
+    ASTNode, 
+    ASTNode::ASTNodeHasher, 
+    ASTNode::ASTNodeEqual> ASTNodeSet;
 
+  typedef hash_multiset<
+    ASTNode, 
+    ASTNode::ASTNodeHasher, 
+    ASTNode::ASTNodeEqual> ASTNodeMultiSet;
+  
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
-
-  /***************************************************************************
- Typedef ASTNodeSet:  This is a hash set of ASTNodes.  Very useful
- for representing things like "visited nodes"
-  ***************************************************************************/
-  typedef hash_set<ASTNode, 
-                   ASTNode::ASTNodeHasher, 
-                   ASTNode::ASTNodeEqual> ASTNodeSet;
-
-  typedef hash_multiset<ASTNode, 
-                        ASTNode::ASTNodeHasher, 
-                        ASTNode::ASTNodeEqual> ASTNodeMultiSet;
-
 
   /***************************************************************************
    * Class BeevMgr.  This holds all "global" variables for the system, such as
@@ -84,15 +75,37 @@ namespace BEEV
     static const int INITIAL_INTRODUCED_SYMBOLS_SIZE = 100;
 
   private:
-    // Typedef for unique Interior node table.
-    typedef hash_set<ASTInterior *, 
-		     ASTInterior::ASTInteriorHasher, 
-		     ASTInterior::ASTInteriorEqual> ASTInteriorSet;
 
+    // Typedef for unique Interior node table.
+    typedef hash_set<
+      ASTInterior *, 
+      ASTInterior::ASTInteriorHasher, 
+      ASTInterior::ASTInteriorEqual> ASTInteriorSet;
+    
     // Typedef for unique Symbol node (leaf) table.
-    typedef hash_set<ASTSymbol *, 
-		     ASTSymbol::ASTSymbolHasher, 
-		     ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
+    typedef hash_set<
+      ASTSymbol *, 
+      ASTSymbol::ASTSymbolHasher, 
+      ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
+
+    //Typedef for unique BVConst node (leaf) table.
+    typedef hash_set<
+      ASTBVConst *, 
+      ASTBVConst::ASTBVConstHasher, 
+      ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
+
+    // type of memo table.
+    typedef hash_map<
+      ASTNode, 
+      ASTVec, 
+      ASTNode::ASTNodeHasher, 
+      ASTNode::ASTNodeEqual> ASTNodeToVecMap;
+
+    typedef hash_map<
+      ASTNode, 
+      ASTNodeSet,
+      ASTNode::ASTNodeHasher, 
+      ASTNode::ASTNodeEqual> ASTNodeToSetMap;
 
     // Unique tables to share nodes whenever possible.
     ASTInteriorSet _interior_unique_table;
@@ -100,24 +113,8 @@ namespace BEEV
     //during parsing/semantic analysis
     ASTSymbolSet _symbol_unique_table;
 
-    //Typedef for unique BVConst node (leaf) table.
-    typedef hash_set<ASTBVConst *, 
-		     ASTBVConst::ASTBVConstHasher, 
-		     ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
-
     //table to uniquefy bvconst
     ASTBVConstSet _bvconst_unique_table;
-
-    // type of memo table.
-    typedef hash_map<ASTNode, 
-		     ASTVec, 
-		     ASTNode::ASTNodeHasher, 
-		     ASTNode::ASTNodeEqual> ASTNodeToVecMap;
-
-    typedef hash_map<ASTNode, 
-		     ASTNodeSet,
-		     ASTNode::ASTNodeHasher, 
-		     ASTNode::ASTNodeEqual> ASTNodeToSetMap;
 
     // Memo table for bit blasted terms.  If a node has already been
     // bitblasted, it is mapped to a vector of Boolean formulas for
@@ -851,7 +848,6 @@ namespace BEEV
     //destructor
     ~BeevMgr();
   };//End of Class BeevMgr
-
 
   class CompleteCounterExample
   {
