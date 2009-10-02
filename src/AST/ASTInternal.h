@@ -155,22 +155,28 @@ namespace BEEV
     void IncRef()
     {
       ++_ref_count;
-    }
+    } //End of IncRef()
 
     // Decrement Reference Count
-    void DecRef();
+    void DecRef()
+    {
+      if (--_ref_count == 0)
+	{
+	  // Delete node from unique table and kill it.
+	  CleanUp();
+	}
+    }//End of DecRef()
 
     int GetNodeNum() const
     {
       return _node_num;
-    }
+    } //End of GetNodeNum()
 
     void SetNodeNum(int nn)
     {
       _node_num = nn;
-    }
-    ;
-  }; //End of Class ASTInternal
+    } //End of SetNodeNum()
 
+  }; //End of Class ASTInternal
 }; //end of namespace
 #endif

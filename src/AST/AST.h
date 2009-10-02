@@ -44,10 +44,6 @@ namespace BEEV
                    ASTNode::ASTNodeHasher, 
                    ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
-//   typedef hash_map<int32_t,
-// 		   ASTVec,
-// 		   hash(int32_t)> IntToASTVecMap;
-
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
 
@@ -902,110 +898,6 @@ namespace BEEV
    * INLINE METHODS from various classed, declared here because of
    * dependencies on classes that are declared later.
    *****************************************************************/
-  // ASTNode accessor function.
-  inline Kind ASTNode::GetKind() const
-  {
-    //cout << "GetKind: " << _int_node_ptr;
-    return _int_node_ptr->GetKind();
-  }
-
-  // FIXME: should be const ASTVec const?
-  // Declared here because of same ordering problem as  GetKind.
-  inline const ASTVec &ASTNode::GetChildren() const
-  {
-    return _int_node_ptr->GetChildren();
-  }
-
-  // Access node number
-  inline int ASTNode::GetNodeNum() const
-  {
-    return _int_node_ptr->_node_num;
-  }
-
-  inline unsigned int ASTNode::GetIndexWidth() const
-  {
-    return _int_node_ptr->_index_width;
-  }
-
-  inline void ASTNode::SetIndexWidth(unsigned int iw) const
-  {
-    _int_node_ptr->_index_width = iw;
-  }
-
-  inline unsigned int ASTNode::GetValueWidth() const
-  {
-    return _int_node_ptr->_value_width;
-  }
-
-  inline void ASTNode::SetValueWidth(unsigned int vw) const
-  {
-    _int_node_ptr->_value_width = vw;
-  }
-
-  //return the type of the ASTNode: 0 iff BOOLEAN; 1 iff BITVECTOR; 2
-  //iff ARRAY; 3 iff UNKNOWN;
-  inline types ASTNode::GetType() const
-  {
-    if ((GetIndexWidth() == 0) && (GetValueWidth() == 0)) //BOOLEAN
-      return BOOLEAN_TYPE;
-    if ((GetIndexWidth() == 0) && (GetValueWidth() > 0)) //BITVECTOR
-      return BITVECTOR_TYPE;
-    if ((GetIndexWidth() > 0) && (GetValueWidth() > 0)) //ARRAY
-      return ARRAY_TYPE;
-    return UNKNOWN_TYPE;
-  }
-
-  // Constructor; creates a new pointer, increments refcount of
-  // pointed-to object.
-  inline ASTNode::ASTNode(ASTInternal *in) :
-    _int_node_ptr(in)
-  {
-    if (in)
-      in->IncRef();
-  }
-
-  // Assignment.  Increment refcount of new value, decrement refcount of
-  // old value and destroy if this was the last pointer.  FIXME:
-  // accelerate this by creating an intnode with a ref counter instead
-  // of pointing to NULL.  Need a special check in CleanUp to make sure
-  // the null node never gets freed.
-
-  inline ASTNode& ASTNode::operator=(const ASTNode& n)
-  {
-    if (n._int_node_ptr)
-      {
-        n._int_node_ptr->IncRef();
-      }
-    if (_int_node_ptr)
-      {
-        _int_node_ptr->DecRef();
-      }
-    _int_node_ptr = n._int_node_ptr;
-    return *this;
-  }
-
-  inline void ASTInternal::DecRef()
-  {
-    if (--_ref_count == 0)
-      {
-        // Delete node from unique table and kill it.
-        CleanUp();
-      }
-  }
-
-  // Destructor
-  inline ASTNode::~ASTNode()
-  {
-    if (_int_node_ptr)
-      {
-        _int_node_ptr->DecRef();
-      }
-  }
-
-  inline BeevMgr* ASTNode::GetBeevMgr() const
-  {
-    return GlobalBeevMgr;
-  }
 
   //Return the unsigned constant value of the input 'n'
   inline unsigned int GetUnsignedConst(const ASTNode n)

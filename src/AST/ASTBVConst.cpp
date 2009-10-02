@@ -95,5 +95,27 @@ namespace BEEV
   {
     return _bvconst;
   } //End of GetBVConst()
+
+  /****************************************************************
+   * Class ASTBVConstHasher and ASTBVConstEqual Functions         *
+   ****************************************************************/
+
+  size_t ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst * bvc) const
+  {
+    return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
+  } //End of ASTBVConstHasher operator
+
+
+  bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst * bvc1, 
+					       const ASTBVConst * bvc2) const
+  {
+    if (bvc1->_value_width != bvc2->_value_width)
+      {
+	return false;
+      }
+    return (0 == 
+	    CONSTANTBV::BitVector_Compare(bvc1->_bvconst, 
+					  bvc2->_bvconst));
+  } //End of ASTBVConstEqual operator
 };//End of namespace
 

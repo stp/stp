@@ -35,4 +35,26 @@ namespace BEEV
     free((char*) this->_name);
     delete this;
   }//End of cleanup()
+
+  
+  /****************************************************************
+   * ASTSymbolHasher and ASTSymbolEqual functions                 *
+   *                                                              *   
+   ****************************************************************/
+  size_t 
+  ASTSymbol::ASTSymbolHasher::operator()(const ASTSymbol *sym_ptr) const
+  {
+#ifdef TR1_UNORDERED_MAP
+    tr1::hash<string> h;
+#else
+    hash<char*> h;
+#endif
+    return h(sym_ptr->_name);
+  } //End of ASTSymbolHasher operator
+
+  bool ASTSymbol::ASTSymbolEqual::operator()(const ASTSymbol *sym_ptr1, 
+					     const ASTSymbol *sym_ptr2) const
+  {
+    return (*sym_ptr1 == *sym_ptr2);
+  } //End of ASTSymbolEqual operator
 };//end of namespace

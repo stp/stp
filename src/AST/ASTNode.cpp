@@ -13,6 +13,16 @@
  ********************************************************************/
 namespace BEEV 
 {
+  // Constructor; 
+  //
+  // creates a new pointer, increments refcount of pointed-to object.
+  inline ASTNode::ASTNode(ASTInternal *in) :
+    _int_node_ptr(in)
+  {
+    if (in)
+      in->IncRef();
+  } //End of Constructor
+
   // Copy constructor.  Maintain _ref_count
   ASTNode::ASTNode(const ASTNode &n) :
     _int_node_ptr(n._int_node_ptr)
@@ -22,6 +32,88 @@ namespace BEEV
         n._int_node_ptr->IncRef();
       }
   } //End of Copy Constructor for ASTNode
+
+  // ASTNode accessor function.
+  inline Kind ASTNode::GetKind() const
+  {
+    //cout << "GetKind: " << _int_node_ptr;
+    return _int_node_ptr->GetKind();
+  } //End of GetKind()
+
+  // Declared here because of same ordering problem as GetKind.
+  inline const ASTVec &ASTNode::GetChildren() const
+  {
+    return _int_node_ptr->GetChildren();
+  } //End of GetChildren()
+
+  // Access node number
+  inline int ASTNode::GetNodeNum() const
+  {
+    return _int_node_ptr->_node_num;
+  } //End of GetNodeNum()
+
+  inline unsigned int ASTNode::GetIndexWidth() const
+  {
+    return _int_node_ptr->_index_width;
+  } //End of GetIndexWidth()
+
+  inline void ASTNode::SetIndexWidth(unsigned int iw) const
+  {
+    _int_node_ptr->_index_width = iw;
+  } //End of SetIndexWidth()
+
+  inline unsigned int ASTNode::GetValueWidth() const
+  {
+    return _int_node_ptr->_value_width;
+  } //End of GetValueWidth()
+
+  inline void ASTNode::SetValueWidth(unsigned int vw) const
+  {
+    _int_node_ptr->_value_width = vw;
+  } //End of SetValueWidth()
+
+  //return the type of the ASTNode: 
+  //
+  // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
+  inline types ASTNode::GetType() const
+  {
+    if ((GetIndexWidth() == 0) && (GetValueWidth() == 0)) //BOOLEAN
+      return BOOLEAN_TYPE;
+    if ((GetIndexWidth() == 0) && (GetValueWidth() > 0)) //BITVECTOR
+      return BITVECTOR_TYPE;
+    if ((GetIndexWidth() > 0) && (GetValueWidth() > 0)) //ARRAY
+      return ARRAY_TYPE;
+    return UNKNOWN_TYPE;
+  } //End of GetType()
+
+  // Assignment
+  inline ASTNode& ASTNode::operator=(const ASTNode& n)
+  {
+    if (n._int_node_ptr)
+      {
+        n._int_node_ptr->IncRef();
+      }
+    if (_int_node_ptr)
+      {
+        _int_node_ptr->DecRef();
+      }
+    _int_node_ptr = n._int_node_ptr;
+    return *this;
+  } //End of operator=
+
+  // Destructor
+  inline ASTNode::~ASTNode()
+  {
+    if (_int_node_ptr)
+      {
+        _int_node_ptr->DecRef();
+      }
+  } //End of Destructor()
+
+  inline BeevMgr* ASTNode::GetBeevMgr() const
+  {
+    return GlobalBeevMgr;
+  } //End of GetBeevMgr()
 
   // Checks if the node has alreadybeen printed or not
   bool ASTNode::IsAlreadyPrinted() const

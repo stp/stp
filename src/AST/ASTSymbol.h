@@ -39,16 +39,7 @@ namespace BEEV
     class ASTSymbolHasher
     {
     public:
-      size_t operator()(const ASTSymbol *sym_ptr) const
-      {
-#ifdef TR1_UNORDERED_MAP
-        tr1::hash<string> h;
-#else
-        hash<char*> h;
-#endif
-        return h(sym_ptr->_name);
-      }
-      ;
+      size_t operator()(const ASTSymbol *sym_ptr) const;
     }; // End of class ASTSymbolHasher
 
     /****************************************************************
@@ -60,10 +51,7 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTSymbol *sym_ptr1, 
-		      const ASTSymbol *sym_ptr2) const
-      {
-        return (*sym_ptr1 == *sym_ptr2);
-      }
+		      const ASTSymbol *sym_ptr2) const;
     }; //End of class ASTSymbolEqual
 
     friend bool operator==(const ASTSymbol &sym1, 

@@ -43,11 +43,7 @@ namespace BEEV
     class ASTBVConstHasher
     {
     public:
-      size_t operator()(const ASTBVConst * bvc) const
-      {
-        return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
-      }
-      ;
+      size_t operator()(const ASTBVConst * bvc) const;
     }; //End of class ASTBVConstHahser
 
     /****************************************************************
@@ -59,18 +55,8 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTBVConst * bvc1, 
-		      const ASTBVConst * bvc2) const
-      {
-        if (bvc1->_value_width != bvc2->_value_width)
-          {
-            return false;
-          }
-        return (0 == 
-		CONSTANTBV::BitVector_Compare(bvc1->_bvconst, 
-					      bvc2->_bvconst));
-      }
+		      const ASTBVConst * bvc2) const;
     }; //End of class ASTBVConstEqual
-
 
     /****************************************************************
      * Private Functions (virtual defs and friends)                 *
