@@ -9,8 +9,14 @@
 
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
+
+#include "TopLevel.h"
 namespace BEEV
 {
+  class ASTNode;
+  class BeevMgr;
+  typedef vector<ASTNode> ASTVec;
+  
   /******************************************************************
    * Class ASTInterior:                                             *
    *                                                                *
@@ -38,7 +44,7 @@ namespace BEEV
     {
     public:
       size_t operator()(const ASTInterior *int_node_ptr) const;
-    };
+    }; //End of ASTInteriorHasher
 
     /******************************************************************
      * Class ASTInteriorEqual:                                        *
@@ -49,11 +55,8 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTInterior *int_node_ptr1, 
-		      const ASTInterior *int_node_ptr2) const
-      {
-        return (*int_node_ptr1 == *int_node_ptr2);
-      }
-    };
+		      const ASTInterior *int_node_ptr2) const;
+    }; //End of class ASTInteriorEqual
 
     // Used in Equality class for hash tables
     friend bool operator==(const ASTInterior &int_node1, 
@@ -61,7 +64,7 @@ namespace BEEV
     {
       return ((int_node1._kind == int_node2._kind) 
 	      && (int_node1._children == int_node2._children));
-    }
+    } //End of operator==
 
     // Call this when deleting a node that has been stored in the
     // the unique table
@@ -70,36 +73,33 @@ namespace BEEV
     // Returns kinds.  "lispprinter" handles printing of parenthesis
     // and childnodes. (c_friendly is for printing hex. numbers that C
     // compilers will accept)
-    virtual void nodeprint(ostream& os, bool c_friendly = false)
-    {
-      os << _kind_names[_kind];
-    }
+    virtual void nodeprint(ostream& os, bool c_friendly = false);
+
   public:
     /******************************************************************
      * Public Member Functions                                        *
      ******************************************************************/
     
     // Basic constructors
-    ASTInterior(Kind kind) :
-      ASTInternal(kind)
+    ASTInterior(Kind kind) : ASTInternal(kind)
     {
     }
 
-    ASTInterior(Kind kind, ASTVec &children) :
-      ASTInternal(kind, children)
+    ASTInterior(Kind kind, ASTVec &children) : ASTInternal(kind, children)
     {
     }
 
     //Copy constructor.  This copies the contents of the child nodes
     //array, along with everything else. Assigning the smart pointer,
     //ASTNode, does NOT invoke this.
-    ASTInterior(const ASTInterior &int_node) :
-      ASTInternal(int_node)
+    ASTInterior(const ASTInterior &int_node) : ASTInternal(int_node)
     {
     }
 
     // Destructor (does nothing, but is declared virtual here.
-    virtual ~ASTInterior();
+    virtual ~ASTInterior()
+    {
+    }
   }; //End of ASTNodeInterior
 }; //end of namespace BEEV
 #endif

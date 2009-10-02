@@ -11,6 +11,7 @@
 #define ASTBVCONST_H
 namespace BEEV
 {
+  class BeevMgr;
   void FatalError(const char * str);
 
   /******************************************************************
@@ -47,7 +48,7 @@ namespace BEEV
         return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
       }
       ;
-    };
+    }; //End of class ASTBVConstHahser
 
     /****************************************************************
      * Class ASTBVConstEqual:                                       *
@@ -68,26 +69,26 @@ namespace BEEV
 		CONSTANTBV::BitVector_Compare(bvc1->_bvconst, 
 					      bvc2->_bvconst));
       }
-    };
+    }; //End of class ASTBVConstEqual
 
 
     /****************************************************************
      * Private Functions (virtual defs and friends)                 *
      ****************************************************************/
-    ASTBVConst(CBV bv, unsigned int width) :
-      ASTInternal(BVCONST)
-    {
-      _bvconst = CONSTANTBV::BitVector_Clone(bv);
-      _value_width = width;
-    }
+    //Constructor
+    ASTBVConst(CBV bv, unsigned int width);
 
+    // Copy constructor.
+    ASTBVConst(const ASTBVConst &sym);  
+  
+    //friend equality operator
     friend bool operator==(const ASTBVConst &bvc1, const ASTBVConst &bvc2)
     {
       if (bvc1._value_width != bvc2._value_width)
         return false;
       return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, 
 						 bvc2._bvconst));
-    }
+    } //End of operator==
 
     // Call this when deleting a node that has been stored in the the
     // unique table
@@ -96,63 +97,8 @@ namespace BEEV
     // Print function for bvconst -- return _bvconst value in bin
     // format (c_friendly is for printing hex. numbers that C
     // compilers will accept)
-    virtual void nodeprint(ostream& os, bool c_friendly = false)
-    {
-      unsigned char *res;
-      const char *prefix;
-
-      if(print_binary_flag) {
-        res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-        if (c_friendly)
-          {
-            prefix = "0b";
-          }
-        else
-          {
-            prefix = "0bin";
-          }
-      }
-      else if (_value_width % 4 == 0)
-        {
-          res = CONSTANTBV::BitVector_to_Hex(_bvconst);
-          if (c_friendly)
-            {
-              prefix = "0x";
-            }
-          else
-            {
-              prefix = "0hex";
-            }
-        }
-      else
-        {
-          res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-          if (c_friendly)
-            {
-              prefix = "0b";
-            }
-          else
-            {
-              prefix = "0bin";
-            }
-        }
-      if (NULL == res)
-        {
-          os << "nodeprint: BVCONST : could not convert to string" << _bvconst;
-          FatalError("");
-        }
-      os << prefix << res;
-      CONSTANTBV::BitVector_Dispose(res);
-    }
-
-    // Copy constructor.
-    ASTBVConst(const ASTBVConst &sym) :
-      ASTInternal(sym._kind, sym._children)
-    {
-      _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
-      _value_width = sym._value_width;
-    }
-
+    virtual void nodeprint(ostream& os, bool c_friendly = false);
+    
   public:
 
     /****************************************************************
@@ -163,13 +109,10 @@ namespace BEEV
     virtual ~ASTBVConst()
     {
       CONSTANTBV::BitVector_Destroy(_bvconst);
-    }
+    } //End of destructor
 
     // Return the bvconst. It is a const-value
-    CBV GetBVConst() const
-    {
-      return _bvconst;
-    }
+    CBV GetBVConst() const;
   }; //End of ASTBVConst
 };//end of namespace
 #endif

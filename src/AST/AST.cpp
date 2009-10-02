@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,38 +6,10 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 
 #include "AST.h"
-#include <assert.h>
-//#include "../printer/printers.h"
-//#include "../printer/AssortedPrinters.h"
-
 namespace BEEV
 {
-  ////////////////////////////////////////////////////////////////
-  //  ASTInternal members
-  ////////////////////////////////////////////////////////////////
-  /** Trivial but virtual destructor */
-  ASTInternal::~ASTInternal()
-  {
-  }
-
-  ////////////////////////////////////////////////////////////////
-  //  ASTInterior members
-  ////////////////////////////////////////////////////////////////
-  /** Copy constructor */
-  // ASTInterior::ASTInterior(const ASTInterior &int_node)
-  // {
-  //   _kind = int_node._kind;
-  //   _children = int_node._children;
-  // }
-
-  /** Trivial but virtual destructor */
-  ASTInterior::~ASTInterior()
-  {
-  }
-
   // FIXME: Darn it! I think this ends up copying the children twice!
   /** Either return an old node or create it if it doesn't exist.
       Note that nodes are physically allocated in the hash table. */
@@ -78,166 +51,8 @@ namespace BEEV
     return *it;
   }
 
-  size_t ASTInterior::ASTInteriorHasher::operator()(const ASTInterior *int_node_ptr) const
-  {
-    //size_t hashval = 0;
-    size_t hashval = ((size_t) int_node_ptr->GetKind());
-    const ASTVec &ch = int_node_ptr->GetChildren();
-    ASTVec::const_iterator iend = ch.end();
-    for (ASTVec::const_iterator i = ch.begin(); i != iend; i++)
-      {
-        //Using "One at a time hash" by Bob Jenkins
-        hashval += i->Hash();
-        hashval += (hashval << 10);
-        hashval ^= (hashval >> 6);
-      }
-
-    hashval += (hashval << 3);
-    hashval ^= (hashval >> 11);
-    hashval += (hashval << 15);
-    return hashval;
-    //return hashval += ((size_t) int_node_ptr->GetKind());
-  }
-
-  void ASTInterior::CleanUp()
-  {
-    // cout << "Deleting node " << this->GetNodeNum() << endl;
-    GlobalBeevMgr->_interior_unique_table.erase(this);
-    delete this;
-  }
-
-  ////////////////////////////////////////////////////////////////
-  //  ASTNode members
-  ////////////////////////////////////////////////////////////////
-  //ASTNode constructors are inlined in AST.h
-  bool ASTNode::IsAlreadyPrinted() const
-  {
-    BeevMgr * bm = GetBeevMgr();
-    return (bm->AlreadyPrintedSet.find(*this) != bm->AlreadyPrintedSet.end());
-  }
-
-  void ASTNode::nodeprint(ostream& os, bool c_friendly) const
-  {
-    _int_node_ptr->nodeprint(os, c_friendly);
-  }
-
-  void ASTNode::MarkAlreadyPrinted() const
-  {
-    BeevMgr * bm = GetBeevMgr();
-    bm->AlreadyPrintedSet.insert(*this);
-  }
-
-  // Get the name from a symbol (char *).  It's an error if kind != SYMBOL
-  const char * /**const**/ ASTNode::GetName() const
-  {
-    if (GetKind() != SYMBOL)
-      FatalError("GetName: Called GetName on a non-symbol: ", *this);
-    return ((ASTSymbol *) _int_node_ptr)->GetName();
-  }
-
-  void ASTNode::NFASTPrint(int l, int max, int prefix) const
-  {
-    //****************************************
-    // stop
-    //****************************************
-    if (l > max)
-      {
-        return;
-      }
-
-    //****************************************
-    // print
-    //****************************************
-    printf("[%10d]", 0);
-    for (int i = 0; i < prefix; i++)
-      {
-        printf("    ");
-      }
-    cout << GetKind();
-    printf("\n");
-
-    //****************************************
-    // recurse
-    //****************************************
-
-    const ASTVec &children = GetChildren();
-    ASTVec::const_iterator it = children.begin();
-    for (; it != children.end(); it++)
-      {
-        it->NFASTPrint(l + 1, max, prefix + 1);
-      }
-  }
-
-
-
-  //traverse "*this", and construct "let variables" for terms that
-  //occur more than once in "*this".
-  void ASTNode::LetizeNode(void) const
-  {
-    Kind kind = this->GetKind();
-
-    if (kind == SYMBOL || kind == BVCONST || kind == FALSE || kind == TRUE)
-      return;
-
-    //FIXME: this is ugly.
-    BeevMgr * bm = GetBeevMgr();
-    const ASTVec &c = this->GetChildren();
-    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
-      {
-        ASTNode ccc = *it;
-        if (bm->PLPrintNodeSet.find(ccc) == bm->PLPrintNodeSet.end())
-          {
-            //If branch: if *it is not in NodeSet then,
-            //
-            //1. add it to NodeSet
-            //
-            //2. Letize its childNodes
-
-            bm->PLPrintNodeSet.insert(ccc);
-            //debugging
-            //cerr << ccc;
-            ccc.LetizeNode();
-          }
-        else
-          {
-            Kind k = ccc.GetKind();
-            if (k == SYMBOL || k == BVCONST || k == FALSE || k == TRUE)
-              continue;
-
-            //0. Else branch: Node has been seen before
-            //
-            //1. Check if the node has a corresponding letvar in the
-            //1. NodeLetVarMap.
-            //
-            //2. if no, then create a new var and add it to the
-            //2. NodeLetVarMap
-            if (bm->NodeLetVarMap.find(ccc) == bm->NodeLetVarMap.end())
-              {
-                //Create a new symbol. Get some name. if it conflicts with a
-                //declared name, too bad.
-                int sz = bm->NodeLetVarMap.size();
-                ostringstream oss;
-                oss << "let_k_" << sz;
-
-                ASTNode CurrentSymbol = bm->CreateSymbol(oss.str().c_str());
-                CurrentSymbol.SetValueWidth(this->GetValueWidth());
-                CurrentSymbol.SetIndexWidth(this->GetIndexWidth());
-                /* If for some reason the variable being created here is
-                 * already declared by the user then the printed output will
-                 * not be a legal input to the system. too bad. I refuse to
-                 * check for this.  [Vijay is the author of this comment.]
-                 */
-
-                bm->NodeLetVarMap[ccc] = CurrentSymbol;
-                std::pair<ASTNode, ASTNode> node_letvar_pair(CurrentSymbol, ccc);
-                bm->NodeLetVarVec.push_back(node_letvar_pair);
-              }
-          }
-      }
-  } //end of LetizeNode()
-
-
-
+  
+ 
   ////////////////////////////////////////////////////////////////
   //  BeevMgr members
   ////////////////////////////////////////////////////////////////
@@ -303,11 +118,6 @@ namespace BEEV
       }
 
     return LookupOrCreateInterior(n_ptr);
-  }
-
-  /** Trivial but virtual destructor */
-  ASTSymbol::~ASTSymbol()
-  {
   }
 
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap)
@@ -517,23 +327,6 @@ namespace BEEV
       }
   }
 
-  // Inline because we need to wait until unique_table is defined
-  void ASTBVConst::CleanUp()
-  {
-    //  cout << "Deleting node " << this->GetNodeNum() << endl;
-    GlobalBeevMgr->_bvconst_unique_table.erase(this);
-    delete this;
-  }
-
-  // Get the value of bvconst from a bvconst.  It's an error if kind != BVCONST
-  // Treat the result as const (the compiler can't enforce it).
-  CBV /**const**/ ASTNode::GetBVConst() const
-  {
-    if (GetKind() != BVCONST)
-      FatalError("GetBVConst: non bitvector-constant: ", *this);
-    return ((ASTBVConst *) _int_node_ptr)->GetBVConst();
-  }
-
   // FIXME: _name is now a constant field, and this assigns to it
   // because it tries not to copy the string unless it needs to.  How
   // do I avoid copying children in ASTInterior?  Perhaps I don't!
@@ -578,17 +371,6 @@ namespace BEEV
       return true;
   }
 
-  // Inline because we need to wait until unique_table is defined
-  void ASTSymbol::CleanUp()
-  {
-    //  cout << "Deleting node " << this->GetNodeNum() << endl;
-    GlobalBeevMgr->_symbol_unique_table.erase(this);
-    //FIXME This is a HUGE free to invoke.
-    //TEST IT!
-    free((char*) this->_name);
-    delete this;
-  }
-
   ////////////////////////////////////////////////////////////////
   //
   //  IO manipulators for Lisp format printing of AST.
@@ -621,16 +403,6 @@ namespace BEEV
         (*i)->LispPrint_indent(os, indentation);
       }
     return os;
-  }
-
-  // Copy constructor.  Maintain _ref_count
-  ASTNode::ASTNode(const ASTNode &n) :
-    _int_node_ptr(n._int_node_ptr)
-  {
-    if (n._int_node_ptr)
-      {
-        n._int_node_ptr->IncRef();
-      }
   }
 
   // If there is a lot of sharing in the graph, this will take a long

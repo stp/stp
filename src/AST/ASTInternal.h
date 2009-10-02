@@ -83,10 +83,12 @@ namespace BEEV
     virtual void CleanUp() = 0;
 
     // Destructor (does nothing, but is declared virtual here.
-    virtual ~ASTInternal();
+    virtual ~ASTInternal()
+    {
+    }
 
-    // Abstract virtual print function for internal node.  (c_friendly
-    // is for printing hex. numbers that C compilers will accept)
+    // Abstract virtual print function for internal node. c_friendly
+    // is for printing hex. numbers that C compilers will accept
     virtual void nodeprint(ostream& os, bool c_friendly = false)
     {
       os << "*";

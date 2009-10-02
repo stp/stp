@@ -9,31 +9,35 @@
 #ifndef TOPLEVEL_H
 #define TOPLEVEL_H
 
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <vector>
-#ifdef EXT_HASH_MAP
-#include <ext/hash_set>
-#include <ext/hash_map>
-#elif defined(TR1_UNORDERED_MAP)
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
-#define hash_map tr1::unordered_map
-#define hash_set tr1::unordered_set
-#define hash_multiset tr1::unordered_multiset
-#else
-#include <hash_set>
-#include <hash_map>
-#endif
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <map>
 #include <set>
 #include <algorithm>
+#include <assert.h>
+
+#ifdef EXT_HASH_MAP
+ #include <ext/hash_set>
+ #include <ext/hash_map>
+#elif defined(TR1_UNORDERED_MAP)
+ #include <tr1/unordered_map>
+ #include <tr1/unordered_set>
+ #define hash_map tr1::unordered_map
+ #define hash_set tr1::unordered_set
+ #define hash_multiset tr1::unordered_multiset
+#else
+ #include <hash_set>
+ #include <hash_map>
+#endif
+
 #include "../main/Globals.h"
 #include "ASTUtil.h"
 #include "ASTKind.h"
-#include <stdint.h>
-#include <stdlib.h>
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"
 

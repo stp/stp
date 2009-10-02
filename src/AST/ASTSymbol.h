@@ -16,7 +16,7 @@ namespace BEEV
    *                                                                *
    *  Class to represent internals of Symbol node.                  *
    ******************************************************************/
-  class ASTSymbol: public ASTInternal
+  class ASTSymbol : public ASTInternal
   {
     friend class BeevMgr;
     friend class ASTNode;
@@ -49,7 +49,7 @@ namespace BEEV
         return h(sym_ptr->_name);
       }
       ;
-    };
+    }; // End of class ASTSymbolHasher
 
     /****************************************************************
      * Class ASTSymbolEqual:                                        *
@@ -64,7 +64,7 @@ namespace BEEV
       {
         return (*sym_ptr1 == *sym_ptr2);
       }
-    };
+    }; //End of class ASTSymbolEqual
 
     friend bool operator==(const ASTSymbol &sym1, 
 			   const ASTSymbol &sym2)
@@ -72,21 +72,16 @@ namespace BEEV
       return (strcmp(sym1._name, sym2._name) == 0);
     }
 
-    const char * /**const**/ GetName() const
-    {
-      return _name;
-    }
-
     /****************************************************************
      * Private Member Functions                                     *
      ****************************************************************/
 
+    // Get the name of the symbol
+    const char * GetName() const;
+    
     // Print function for symbol -- return name. (c_friendly is for
     // printing hex. numbers that C compilers will accept)
-    virtual void nodeprint(ostream& os, bool c_friendly = false)
-    {
-      os << _name;
-    }
+    virtual void nodeprint(ostream& os, bool c_friendly = false);
 
     // Call this when deleting a node that has been stored in the the
     // unique table
@@ -110,7 +105,9 @@ namespace BEEV
     }
 
     // Destructor (does nothing, but is declared virtual here.
-    virtual ~ASTSymbol();
+    virtual ~ASTSymbol()
+    {
+    }
 
     // Copy constructor
     ASTSymbol(const ASTSymbol &sym) :
