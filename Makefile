@@ -18,6 +18,7 @@ HEADERS=$(SRC)/c_interface/*.h
 .PHONY: all
 all:
 	$(MAKE) -C $(SRC)/AST
+	$(MAKE) -C $(SRC)/printer
 	$(MAKE) -C $(SRC)/abstraction-refinement
 	$(MAKE) -C $(SRC)/to-sat
 	$(MAKE) -C $(SRC)/sat core
@@ -29,7 +30,7 @@ all:
 	$(MAKE) -C $(SRC)/extlib-constbv
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
-	$(AR) rc libstp.a  $(SRC)/AST/*.o  $(SRC)/AST/printer/*.o $(SRC)/abstraction-refinement/*.o $(SRC)/to-sat/*.o \
+	$(AR) rc libstp.a  $(SRC)/AST/*.o  $(SRC)/printer/*.o $(SRC)/abstraction-refinement/*.o $(SRC)/to-sat/*.o \
 			   $(SRC)/sat/*.or $(SRC)/simplifier/*.o  $(SRC)/const-evaluator/*.o $(SRC)/extlib-constbv/*.o $(SRC)/c_interface/*.o \
 			   $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o $(SRC)/main/*.o
 	$(RANLIB) libstp.a
@@ -58,6 +59,7 @@ clean:
 	rm -rf *.log
 	rm -f TAGS
 	$(MAKE) clean -C $(SRC)/AST
+	$(MAKE) clean -C $(SRC)/printer
 	$(MAKE) clean -C $(SRC)/abstraction-refinement
 	$(MAKE) clean -C $(SRC)/to-sat
 	$(MAKE) clean -C $(SRC)/sat

@@ -10,8 +10,7 @@
 #ifndef PRINTER_H
 #define PRINTER_H
 
-#include "../AST.h"
-
+#include "../AST/AST.h"
 namespace BEEV
 {
   using namespace std;

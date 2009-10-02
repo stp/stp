@@ -12,7 +12,7 @@
 #include <assert.h>
 #include "fdstream.h"
 #include "../AST/AST.h"
-#include "../AST/printer/printers.h"
+#include "../printer/printers.h"
 
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)

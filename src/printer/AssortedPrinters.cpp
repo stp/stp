@@ -7,10 +7,9 @@
  ********************************************************************/
 // -*- c++ -*-
 
-#include "../AST.h"
-#include "AssortedPrinters.h"
 #include "printers.h"
-#include "../../sat/sat.h"
+#include "AssortedPrinters.h"
+#include "../sat/sat.h"
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #define __STDC_FORMAT_MACROS

@@ -7,8 +7,8 @@
  ********************************************************************/
 // -*- c++ -*-
 #include "../AST/AST.h"
-#include "../AST/printer/AssortedPrinters.h"
-#include "../AST/printer/printers.h"
+#include "../printer/AssortedPrinters.h"
+#include "../printer/printers.h"
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;

@@ -10,9 +10,9 @@
 #ifndef PRINTERS_H_
 #define PRINTERS_H_
 
-#include "../AST.h"
-#include "../ASTUtil.h"
-#include "../ASTKind.h"
+#include "../AST/AST.h"
+#include "../AST/ASTUtil.h"
+#include "../AST/ASTKind.h"
 
 namespace printer
 {

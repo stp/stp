@@ -5,6 +5,7 @@ OBJS = $(SRCS:.cpp=.o)
 
 LIBS = 	-L../to-sat -ltosat \
 	-L../AST -last \
+	-L../printer -lprinter \
 	-L../abstraction-refinement -labstractionrefinement \
 	-L../sat -lminisat  \
 	-L../simplifier -lsimplifier \

@@ -1,6 +1,6 @@
 include ../../scripts/Makefile.common
 
-SRCS=$(wildcard  *.cpp printer/*.cpp)
+SRCS=$(wildcard  *.cpp)
 OBJS = $(SRCS:.cpp=.o)
 OBJS+= ASTKind.o
 CFLAGS += -I../sat/mtl -I../sat/core
@@ -18,7 +18,6 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 .PHONY: clean
 clean:
 	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp ASTKind.h .#*
-	rm -rf printer/*.o printer/*~
 
 depend: $(SRCS) ASTKind.h ASTKind.cpp
 	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
