@@ -1,21 +1,22 @@
 %{
-/********************************************************************
- * AUTHORS: Vijay Ganesh
- *
- * BEGIN DATE: November, 2005
- *
- * LICENSE: Please view LICENSE file in the home dir of this Program
- ********************************************************************/
-// -*- c++ -*-
+  // -*- c++ -*-
+  /********************************************************************
+   * AUTHORS: Vijay Ganesh
+   *
+   * BEGIN DATE: November, 2005
+   *
+   * LICENSE: Please view LICENSE file in the home dir of this Program
+   ********************************************************************/
+  
+#include "parser.h"
 
-#include "../AST/AST.h"
   using namespace std; 
   using namespace BEEV;
 
   // Suppress the bogus warning suppression in bison (it generates
   // compile error)
 #undef __GNUC_MINOR__
-
+  
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 10485760
 #define YYERROR_VERBOSE 1
@@ -23,15 +24,15 @@
 #define YYPARSE_PARAM AssertsQuery
 
 
-  extern int cvclex(void);
-  extern char* yytext;
-  extern int cvclineno;
-  int yyerror(const char *s) {
-    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
-    FatalError("");
-    return YY_EXIT_FAILURE;
-  };
-%}
+ extern int cvclex(void);
+ extern char* yytext;
+ extern int cvclineno;
+ int yyerror(const char *s) {
+   cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
+   FatalError("");
+   return YY_EXIT_FAILURE;
+ };
+ %}
 
 %union {
 

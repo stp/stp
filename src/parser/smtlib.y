@@ -35,7 +35,8 @@
    ********************************************************************/
   // -*- c++ -*-
 
-#include "../AST/AST.h"
+#include "parser.h"
+
   using namespace std; 
   using namespace BEEV;
 

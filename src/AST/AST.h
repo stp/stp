@@ -59,9 +59,6 @@ namespace BEEV
                         ASTNode::ASTNodeHasher, 
                         ASTNode::ASTNodeEqual> ASTNodeMultiSet;
 
-  //external parser table for declared symbols.
-  //FIXME: move to a more appropriate place
-  extern ASTNodeSet _parser_symbol_table;
 
   /***************************************************************************
    * Class BeevMgr.  This holds all "global" variables for the system, such as

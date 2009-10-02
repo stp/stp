@@ -34,7 +34,7 @@
    ********************************************************************/
   // -*- c++ -*-
 #include <iostream>
-#include "../AST/AST.h"
+#include "parser.h"
 #include "parseSMT_defs.h"
 
   using namespace std;

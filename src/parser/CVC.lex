@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include <iostream>
-#include "../AST/AST.h"
+#include "parser.h"
 #include "parseCVC_defs.h"
 
   using namespace std;
