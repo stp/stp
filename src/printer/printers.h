@@ -13,6 +13,7 @@
 #include "../AST/AST.h"
 #include "../AST/ASTUtil.h"
 #include "../AST/ASTKind.h"
+#include "../STPManager/STPManager.h"
 
 namespace printer
 {

@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,10 +6,10 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
+
 
 #include "../AST/AST.h"
-#include "../AST/ASTUtil.h"
+#include "../STPManager/STPManager.h"
 #include "bvsolver.h"
 
 //This file contains the implementation of member functions of

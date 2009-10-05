@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,11 +6,9 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 
-#include "printers.h"
 #include <cassert>
-
+#include "printers.h"
 namespace printer
 {
 

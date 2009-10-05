@@ -4,6 +4,7 @@ SRCS=main.cpp versionString.cpp Globals.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 LIBS = 	-L../to-sat -ltosat \
+	-L../STPManager -lstpmgr \
 	-L../AST -last \
 	-L../printer -lprinter \
 	-L../abstraction-refinement -labstractionrefinement \

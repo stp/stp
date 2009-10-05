@@ -7,7 +7,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-#include "AST.h"
+#include "../STPManager/STPManager.h"
 namespace BEEV
 {
   // FIXME: Darn it! I think this ends up copying the children twice!

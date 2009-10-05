@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,10 +6,10 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 
 #include "../AST/AST.h"
-#include "../simplifier/bvsolver.h"
+#include "../STPManager/STPManager.h"
+//#include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
 
 namespace BEEV

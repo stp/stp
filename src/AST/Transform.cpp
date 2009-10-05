@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,7 +6,7 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
+
 
 
 /* Transform:
@@ -20,7 +21,7 @@
 #include <iostream>
 #include <sstream>
 #include "AST.h"
-//#include  "../printer/printers.h"
+#include "../STPManager/STPManager.h"
 
 namespace BEEV
 {

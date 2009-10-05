@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,9 +6,9 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 #include <cmath>
 #include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
 #include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
 #include "../AST/RunTimes.h"

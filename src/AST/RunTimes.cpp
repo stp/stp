@@ -7,12 +7,12 @@
 // This is intended as a low overhead profiling class. So runtimes can
 // always be tracked.
 
-#include "RunTimes.h"
 #include <cassert>
 #include <sys/time.h>
 #include <sstream>
 #include <iostream>
 #include <utility>
+#include "RunTimes.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
 std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver"};

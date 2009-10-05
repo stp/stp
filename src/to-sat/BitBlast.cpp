@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: David L. Dill, Vijay Ganesh
  *
@@ -5,36 +6,28 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 
-// BitBlast -- convert bitvector terms and formulas to boolean
-// formulas.  A term is something that can represent a multi-bit
-// bitvector, such as BVPLUS or BVXOR (or a BV variable or constant).
-// A formula (form) represents a boolean value, such as EQ or BVLE.
-// Bit blasting a term representing an n-bit bitvector with BBTerm
-// yields a vector of n boolean formulas (returning ASTVec).
-// Bit blasting a formula returns a single boolean formula (type ASTNode).
-
-// A bitblasted term is a vector of ASTNodes for formulas.
-// The 0th element of the vector corresponds to bit 0 -- the low-order bit.
-
-#include "../AST/AST.h"
 #include <cmath>
 #include <cassert>
+#include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
 
 namespace BEEV
 {
-  //  extern void lpvec(ASTVec &vec);
 
-  // FIXME: Assert no zero-length bit vectors!!!
-  // FIXME: Need top-level functions that create and destroy the memo tables.
-  // FIXME:  Check resource limits and generate an exception when exceeded.
-  // FIXME:  THis does a lot of unnecessary copying of vectors.
-  //    Had to be careful not to modify memoized vectors!
-  // FIXME:  Might be some redundant variables.
-
-  // accepts a term, and returns a vector of bitblasted bits(ASTVec)
-
+  /********************************************************************
+   * BitBlast
+   *
+   * Convert bitvector terms and formulas to boolean formulas.  A term
+   * is something that can represent a multi-bit bitvector, such as
+   * BVPLUS or BVXOR (or a BV variable or constant).  A formula (form)
+   * represents a boolean value, such as EQ or BVLE.  Bit blasting a
+   * term representing an n-bit bitvector with BBTerm yields a vector of
+   * n boolean formulas (returning ASTVec).  Bit blasting a formula
+   * returns a single boolean formula (type ASTNode).  A bitblasted term
+   * is a vector of ASTNodes for formulas.  The 0th element of the
+   * vector corresponds to bit 0 -- the low-order bit.
+   ********************************************************************/
 
   ASTNode ASTJunk;
   const ASTNode BeevMgr::BBTerm(const ASTNode& term)

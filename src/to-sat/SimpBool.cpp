@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, David L. Dill
  *
@@ -5,8 +6,6 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-
-// -*- c++ -*-
 
 // Simplifying create methods for Boolean operations.
 // These are only very simple local simplifications.
@@ -19,6 +18,7 @@ static bool _trace_simpbool = 0;
 static bool _disable_simpbool = 0;
 
 #include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
 
 // SMTLIB experimental hack.  Try allocating a single stack here for
 // children to reduce growing of vectors.

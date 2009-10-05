@@ -9,7 +9,10 @@
 
 #ifndef PARSER_H
 #define PARSER_H
+
 #include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
+
 namespace BEEV 
 {
   //external parser table for declared symbols.

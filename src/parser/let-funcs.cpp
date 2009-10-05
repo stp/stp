@@ -1,3 +1,4 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -5,10 +6,10 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-// -*- c++ -*-
 
-#include "../AST/AST.h"
 #include <stdlib.h>
+#include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
 
 namespace BEEV {
   //external parser table for declared symbols. Only symbols which are
