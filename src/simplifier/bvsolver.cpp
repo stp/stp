@@ -251,7 +251,7 @@ namespace BEEV
     //handle BVPLUS case
     ASTVec c = lhs.GetChildren();
     ASTVec o;
-    ASTNode outmonom = _bm->CreateNode(UNDEFINED);
+    ASTNode outmonom = ASTUndefined;
     bool chosen_symbol = false;
     bool chosen_odd = false;
 

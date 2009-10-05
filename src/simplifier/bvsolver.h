@@ -38,7 +38,7 @@ namespace BEEV
       //(i.e. construct various kinds of expressions), and also has
       //member functions that simplify bit-vector expressions
       BeevMgr * _bm;
-      ASTNode ASTTrue, ASTFalse;
+      ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
       //Those formulas which have already been solved. If the same
       //formula occurs twice then do not solve the second occurence, and
@@ -123,6 +123,7 @@ namespace BEEV
         {
           ASTTrue = _bm->CreateNode(TRUE);
           ASTFalse = _bm->CreateNode(FALSE);
+	  ASTUndefined = _bm->CreateNode(UNDEFINED);
         }
       ;
 

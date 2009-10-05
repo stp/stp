@@ -12,6 +12,8 @@
 #include "../simplifier/bvsolver.h"
 #include "../sat/sat.h"
 #include "../AST/RunTimes.h"
+#include "BitBlast.h"
+#include "ToCNF.h"
 
 namespace BEEV
 {
@@ -50,15 +52,15 @@ namespace BEEV
   // FIXME: Still need to deal with TRUE/FALSE in clauses!  
   //
   //bool BeevMgr::toSATandSolve(MINISAT::Solver& newS,
-  //BeevMgr::ClauseList& cll, ASTNodeToIntMap& heuristic)
-  bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
+  //ClauseList& cll, ASTNodeToIntMap& heuristic)
+  bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, ClauseList& cll)
   {
     CountersAndStats("SAT Solver");
 
     runTimes.start(RunTimes::SendingToSAT);
 
     //iterate through the list (conjunction) of ASTclauses cll
-    BeevMgr::ClauseList::const_iterator i = cll.begin(), iend = cll.end();
+    ClauseList::const_iterator i = cll.begin(), iend = cll.end();
 
     if (i == iend)
       FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);
@@ -1109,4 +1111,90 @@ namespace BEEV
       }
     return CreateBVConst(cc.c_str(), 2);
   } //end of BoolVectoBVConst()
+
+
+  //Call the SAT solver, and check the result before returning. This
+  //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or SOLVER_UNDECIDED
+  SOLVER_RETURN_TYPE BeevMgr::CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
+                                                  const ASTNode& modified_input,
+                                                  const ASTNode& original_input)
+  {
+    runTimes.start(RunTimes::BitBlasting);
+    BitBlaster BB(this);
+    ASTNode BBFormula = BB.BBForm(modified_input);
+    runTimes.stop(RunTimes::BitBlasting);
+
+    CNFMgr* cm = new CNFMgr(this);
+    ClauseList* cl = cm->convertToCNF(BBFormula);
+    if (stats_flag)
+      {
+        cerr << "Number of clauses:" << cl->size() << endl;
+      }
+    //PrintClauseList(cout, *cl);
+    bool sat = toSATandSolve(SatSolver, *cl);
+    cm->DELETE(cl);
+    delete cm;
+
+    if (!sat)
+      {
+        //PrintOutput(true);
+        return SOLVER_VALID;
+      }
+    else if (SatSolver.okay())
+      {
+        CounterExampleMap.clear();
+        ConstructCounterExample(SatSolver);
+        if (stats_flag && print_nodes_flag)
+          {
+            PrintSATModel(SatSolver);
+          }
+        //check if the counterexample is good or not
+        ComputeFormulaMap.clear();
+        if (counterexample_checking_during_refinement)
+          bvdiv_exception_occured = false;
+        ASTNode orig_result = ComputeFormulaUsingModel(original_input);
+        if (!(ASTTrue == orig_result || ASTFalse == orig_result))
+          FatalError("TopLevelSat: Original input must compute to "\
+                     "true or false against model");
+
+        // if the counterexample is indeed a good one, then return
+        // invalid
+        if (ASTTrue == orig_result)
+          {
+            //CheckCounterExample(SatSolver.okay());
+            //PrintOutput(false);
+            PrintCounterExample(SatSolver.okay());
+            PrintCounterExample_InOrder(SatSolver.okay());
+            return SOLVER_INVALID;
+          }
+        // counterexample is bogus: flag it
+        else
+          {
+            if (stats_flag && print_nodes_flag)
+              {
+                cout << "Supposedly bogus one: \n";
+                bool tmp = print_counterexample_flag;
+                print_counterexample_flag = true;
+                PrintCounterExample(true);
+                print_counterexample_flag = tmp;
+              }
+
+            return SOLVER_UNDECIDED;
+          }
+      }
+    else
+      {
+        //Control should never reach here
+        //PrintOutput(true);
+        return SOLVER_ERROR;
+      }
+  } //end of CALLSAT_ResultCheck()
+
+ SOLVER_RETURN_TYPE BeevMgr::TopLevelSAT(const ASTNode& inputasserts, 
+					  const ASTNode& query)
+  {
+
+    ASTNode q = CreateNode(AND, inputasserts, CreateNode(NOT, query));
+    return TopLevelSATAux(q);
+  } //End of TopLevelSAT()
 }; //end of namespace BEEV

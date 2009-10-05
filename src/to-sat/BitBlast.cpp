@@ -11,6 +11,7 @@
 #include <cassert>
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include "BitBlast.h"
 
 namespace BEEV
 {
@@ -29,8 +30,7 @@ namespace BEEV
    * vector corresponds to bit 0 -- the low-order bit.
    ********************************************************************/
 
-  ASTNode ASTJunk;
-  const ASTNode BeevMgr::BBTerm(const ASTNode& term)
+  const ASTNode BitBlaster::BBTerm(const ASTNode& term)
   {
 
     //CHANGED TermMemo is now an ASTNodeMap. Based on BBFormMemo
@@ -57,7 +57,7 @@ namespace BEEV
           // bitblast the child.
           //FIXME Uses a tempory const ASTNode
           const ASTNode& bbkids = BBTerm(term[0]);
-          result = CreateNode(BOOLVEC, BBNeg(bbkids.GetChildren()));
+          result = _bm->CreateNode(BOOLVEC, BBNeg(bbkids.GetChildren()));
           break;
         }
 
@@ -82,7 +82,7 @@ namespace BEEV
 			// 8.2 so round up to 9.
 
 			const unsigned width = bbarg1.size();
-			unsigned log2Width = log2(width) + 1;
+			unsigned log2Width = (unsigned)log2(width) + 1;
 
 
 			if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
@@ -96,9 +96,9 @@ namespace BEEV
 					for (unsigned int j = 0; j < width; j++)
 					{
 						if (j + shift_amount >= width)
-							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
 						else
-							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
+							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
 					}
 				}
 			else
@@ -112,9 +112,9 @@ namespace BEEV
 					for (signed int j = width - 1; j > 0; j--)
 					{
 						if (j < shift_amount)
-							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
 						else
-							temp_result[j] = CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
+							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
 					}
 				}
 
@@ -122,15 +122,15 @@ namespace BEEV
 			ASTNode remainder = ASTFalse;
 			for (unsigned int i = log2Width; i < width; i++)
 			{
-				remainder = CreateNode(OR, remainder, bbarg2[i]);
+				remainder = _bm->CreateNode(OR, remainder, bbarg2[i]);
 			}
 
 			for (unsigned int i = 0; i < width; i++)
 			{
-				temp_result[i] = CreateSimpForm(ITE, remainder, toFill, temp_result[i]);
+				temp_result[i] = _bm->CreateSimpForm(ITE, remainder, toFill, temp_result[i]);
 			}
 
-			result = CreateNode(BOOLVEC, temp_result);
+			result = _bm->CreateNode(BOOLVEC, temp_result);
 		}
 			break;
       case BVVARSHIFT:
@@ -146,7 +146,7 @@ namespace BEEV
           const ASTNode& cond = BBForm(term[0]);
           const ASTNode& thn = BBTerm(term[1]);
           const ASTNode& els = BBTerm(term[2]);
-          result = CreateNode(BOOLVEC, BBITE(cond, thn.GetChildren(), els.GetChildren()));
+          result = _bm->CreateNode(BOOLVEC, BBITE(cond, thn.GetChildren(), els.GetChildren()));
           break;
         }
 
@@ -173,14 +173,14 @@ namespace BEEV
               //const ASTNode& msb1 = msbX;
 
               ASTVec ccc = msbX.GetChildren();
-              const ASTNode& msb = CreateSimpForm(msbX.GetKind(), ccc);
+              const ASTNode& msb = _bm->CreateSimpForm(msbX.GetKind(), ccc);
 
               //  Old version
               //  ASTNode msb = bbarg.back();
               //  const ASTNode msb1 = msb;
 
               //  ASTVec ccc = msb.GetChildren();
-              //  msb = CreateSimpForm(msb.GetKind(),ccc);
+              //  msb = _bm->CreateSimpForm(msb.GetKind(),ccc);
 
               // DD 1/14/07 Simplify silently drops all but first two args of XOR.
               // I expanded XOR to N args with flattening optimization.
@@ -221,7 +221,7 @@ namespace BEEV
               //    lp(result);
               //    cout << endl;
 
-              result = CreateNode(BOOLVEC, tmp_res);
+              result = _bm->CreateNode(BOOLVEC, tmp_res);
 
               break;
             }
@@ -264,8 +264,8 @@ namespace BEEV
           ASTVec::const_iterator bbkfit = bbkids.begin();
           // I should have used pointers to ASTVec, to avoid this crock
 
-          //FIXME Creates a new local ASTVec and does the CreateNode from that
-          result = CreateNode(BOOLVEC, ASTVec(bbkfit + low, bbkfit + high + 1));
+          //FIXME _bm->Creates a new local ASTVec and does the _bm->CreateNode from that
+          result = _bm->CreateNode(BOOLVEC, ASTVec(bbkfit + low, bbkfit + high + 1));
           /*
             if(weregood){
             printf("spot05\n");
@@ -283,7 +283,7 @@ namespace BEEV
           //Leaking ASTVec tmp_res = *(new ASTVec(vec2.GetChildren()));
           ASTVec tmp_res(vec2.GetChildren());
           tmp_res.insert(tmp_res.end(), vec1.begin(), vec1.end());
-          result = CreateNode(BOOLVEC, tmp_res);
+          result = _bm->CreateNode(BOOLVEC, tmp_res);
           break;
         }
       case BVPLUS:
@@ -302,14 +302,14 @@ namespace BEEV
               BBPlus2(tmp_res, tmp, ASTFalse);
             }
 
-          result = CreateNode(BOOLVEC, tmp_res);
+          result = _bm->CreateNode(BOOLVEC, tmp_res);
           break;
         }
       case BVUMINUS:
         {
           //FIXME Using const ASTNode reference
           const ASTNode& bbkid = BBTerm(term[0]);
-          result = CreateNode(BOOLVEC, BBUminus(bbkid.GetChildren()));
+          result = _bm->CreateNode(BOOLVEC, BBUminus(bbkid.GetChildren()));
           break;
         }
       case BVSUB:
@@ -322,7 +322,7 @@ namespace BEEV
 
           const ASTVec& bbkid1 = BBTerm(term[1]).GetChildren();
           BBSub(tmp_res, bbkid1);
-          result = CreateNode(BOOLVEC, tmp_res);
+          result = _bm->CreateNode(BOOLVEC, tmp_res);
           break;
         }
       case BVMULT:
@@ -338,11 +338,11 @@ namespace BEEV
           //This is needed because t0 an t1 must be const
           if ((BVCONST != t0.GetKind()) && (BVCONST == t1.GetKind()))
             {
-              result = CreateNode(BOOLVEC, BBMult(mpcd2.GetChildren(), mpcd1.GetChildren()));
+              result = _bm->CreateNode(BOOLVEC, BBMult(mpcd2.GetChildren(), mpcd1.GetChildren()));
             }
           else
             {
-              result = CreateNode(BOOLVEC, BBMult(mpcd1.GetChildren(), mpcd2.GetChildren()));
+              result = _bm->CreateNode(BOOLVEC, BBMult(mpcd1.GetChildren(), mpcd2.GetChildren()));
             }
           break;
         }
@@ -356,9 +356,9 @@ namespace BEEV
           ASTVec r(width);
           BBDivMod(dvdd.GetChildren(), dvsr.GetChildren(), q, r, width);
           if (k == BVDIV)
-            result = CreateNode(BOOLVEC, q);
+            result = _bm->CreateNode(BOOLVEC, q);
           else
-            result = CreateNode(BOOLVEC, r);
+            result = _bm->CreateNode(BOOLVEC, r);
           break;
         }
         //  n-ary bitwise operators.
@@ -414,10 +414,10 @@ namespace BEEV
               int n = y.size();
               for (int i = 0; i < n; i++)
                 {
-                  sum[i] = CreateSimpForm(bk, sum[i], y[i]);
+                  sum[i] = _bm->CreateSimpForm(bk, sum[i], y[i]);
                 }
             }
-          result = CreateNode(BOOLVEC, sum);
+          result = _bm->CreateNode(BOOLVEC, sum);
           break;
         }
       case SYMBOL:
@@ -428,10 +428,10 @@ namespace BEEV
           ASTVec bbvec;
           for (unsigned int i = 0; i < num_bits; i++)
             {
-              ASTNode bit_node = CreateNode(BVGETBIT, term, CreateBVConst(32, i));
+              ASTNode bit_node = _bm->CreateNode(BVGETBIT, term, _bm->CreateBVConst(32, i));
               bbvec.push_back(bit_node);
             }
-          result = CreateNode(BOOLVEC, bbvec);
+          result = _bm->CreateNode(BOOLVEC, bbvec);
           break;
         }
       case BVCONST:
@@ -443,7 +443,7 @@ namespace BEEV
               tmp_res[i] =
                 CONSTANTBV::BitVector_bit_test(bv, i) ? ASTTrue : ASTFalse;
             }
-          result = CreateNode(BOOLVEC, tmp_res);
+          result = _bm->CreateNode(BOOLVEC, tmp_res);
           break;
         }
       case BOOLVEC:
@@ -455,13 +455,6 @@ namespace BEEV
         FatalError("BBTerm: Illegal kind to BBTerm", term);
       }
 
-    //if(result == ASTJunk)
-    //  cout<<"result does not change"<<endl;
-    // cout << "================" << endl << "BBTerm:" << term << endl;
-    // cout << "----------------" << endl << "BBTerm result:";
-    // lpvec(result);
-    // cout << endl;
-
     assert(!result.IsNull());
     return (BBTermMemo[term] = result);
 
@@ -470,9 +463,8 @@ namespace BEEV
   // bit blast a formula (boolean term).  Result is one bit wide,
   // so it returns a single ASTNode.
   // FIXME:  Add IsNegated flag.
-  const ASTNode BeevMgr::BBForm(const ASTNode& form)
+  const ASTNode BitBlaster::BBForm(const ASTNode& form)
   {
-
     ASTNodeMap::iterator it = BBFormMemo.find(form);
     if (it != BBFormMemo.end())
       {
@@ -521,12 +513,12 @@ namespace BEEV
         }
 
       case NOT:
-        result = CreateSimpNot(BBForm(form[0]));
+        result = _bm->CreateSimpNot(BBForm(form[0]));
         break;
 
       case ITE:
-        // FIXME: SHould this be CreateSimpITE?
-        result = CreateNode(ITE, BBForm(form[0]), BBForm(form[1]), BBForm(form[2]));
+        // FIXME: SHould this be _bm->CreateSimpITE?
+        result = _bm->CreateNode(ITE, BBForm(form[0]), BBForm(form[1]), BBForm(form[2]));
         break;
 
       case AND:
@@ -546,7 +538,7 @@ namespace BEEV
             {
               bbkids.push_back(BBForm(*it));
             }
-          result = CreateSimpForm(k, bbkids);
+          result = _bm->CreateSimpForm(k, bbkids);
           break;
         }
 
@@ -599,7 +591,7 @@ namespace BEEV
 
   // Bit blast a sum of two equal length BVs.
   // Update sum vector destructively with new sum.
-  void BeevMgr::BBPlus2(ASTVec& sum, const ASTVec& y, ASTNode cin)
+  void BitBlaster::BBPlus2(ASTVec& sum, const ASTVec& y, ASTNode cin)
   {
     //   cout << "Bitblasting plus.  Operand 1: " << endl;
     //   lpvec(sum);
@@ -614,7 +606,7 @@ namespace BEEV
     for (int i = 0; i < n; i++)
       {
         ASTNode nextcin = Majority(sum[i], y[i], cin);
-        sum[i] = CreateSimpForm(XOR, CreateSimpForm(XOR, sum[i], y[i]), cin);
+        sum[i] = _bm->CreateSimpForm(XOR, _bm->CreateSimpForm(XOR, sum[i], y[i]), cin);
         cin = nextcin;
       }
 
@@ -625,21 +617,21 @@ namespace BEEV
   }
 
   // Stores result - x in result, destructively
-  void BeevMgr::BBSub(ASTVec& result, const ASTVec& y)
+  void BitBlaster::BBSub(ASTVec& result, const ASTVec& y)
   {
     ASTVec compsubtrahend = BBNeg(y);
     BBPlus2(result, compsubtrahend, ASTTrue);
   }
 
   // Add one bit
-  ASTVec BeevMgr::BBAddOneBit(ASTVec& x, ASTNode cin)
+  ASTVec BitBlaster::BBAddOneBit(ASTVec& x, ASTNode cin)
   {
     ASTVec result = ASTVec(0);
     ASTVec::const_iterator itend = x.end();
     for (ASTVec::const_iterator it = x.begin(); it < itend; it++)
       {
-        ASTNode nextcin = CreateSimpForm(AND, *it, cin);
-        result.push_back(CreateSimpForm(XOR, *it, cin));
+        ASTNode nextcin = _bm->CreateSimpForm(AND, *it, cin);
+        result.push_back(_bm->CreateSimpForm(XOR, *it, cin));
         cin = nextcin;
       }
     // FIXME: unnecessary array copy on return?
@@ -647,72 +639,72 @@ namespace BEEV
   }
 
   // Increment bit-blasted vector and return result.
-  ASTVec BeevMgr::BBInc(ASTVec& x)
+  ASTVec BitBlaster::BBInc(ASTVec& x)
   {
     return BBAddOneBit(x, ASTTrue);
   }
 
   // Return formula for majority function of three bits.
   // Pass arguments by reference to reduce refcounting.
-  ASTNode BeevMgr::Majority(const ASTNode& a, const ASTNode& b, const ASTNode& c)
+  ASTNode BitBlaster::Majority(const ASTNode& a, const ASTNode& b, const ASTNode& c)
   {
     // Checking explicitly for constant a, b and c could
     // be more efficient, because they are repeated in the logic.
     if (ASTTrue == a)
       {
-        return CreateSimpForm(OR, b, c);
+        return _bm->CreateSimpForm(OR, b, c);
       }
     else if (ASTFalse == a)
       {
-        return CreateSimpForm(AND, b, c);
+        return _bm->CreateSimpForm(AND, b, c);
       }
     else if (ASTTrue == b)
       {
-        return CreateSimpForm(OR, a, c);
+        return _bm->CreateSimpForm(OR, a, c);
       }
     else if (ASTFalse == b)
       {
-        return CreateSimpForm(AND, a, c);
+        return _bm->CreateSimpForm(AND, a, c);
       }
     else if (ASTTrue == c)
       {
-        return CreateSimpForm(OR, a, b);
+        return _bm->CreateSimpForm(OR, a, b);
       }
     else if (ASTFalse == c)
       {
-        return CreateSimpForm(AND, a, b);
+        return _bm->CreateSimpForm(AND, a, b);
       }
     // there are lots more simplifications, but I'm not sure they're
     // worth doing explicitly (e.g., a = b, a = ~b, etc.)
     else
       {
-        return CreateSimpForm(OR, CreateSimpForm(AND, a, b), CreateSimpForm(AND, b, c), CreateSimpForm(AND, a, c));
+        return _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, a, b), _bm->CreateSimpForm(AND, b, c), _bm->CreateSimpForm(AND, a, c));
       }
   }
 
   // Bitwise complement
-  ASTVec BeevMgr::BBNeg(const ASTVec& x)
+  ASTVec BitBlaster::BBNeg(const ASTVec& x)
   {
     ASTVec result = ASTVec(0); // FIXME: faster to preallocate n entries?
     // Negate each bit.
     ASTVec::const_iterator xend = x.end();
     for (ASTVec::const_iterator it = x.begin(); it < xend; it++)
       {
-        result.push_back(CreateSimpNot(*it));
+        result.push_back(_bm->CreateSimpNot(*it));
       }
     // FIXME: unecessary array copy when it returns?
     return result;
   }
 
   // Compute unary minus
-  ASTVec BeevMgr::BBUminus(const ASTVec& x)
+  ASTVec BitBlaster::BBUminus(const ASTVec& x)
   {
     ASTVec xneg = BBNeg(x);
     return BBInc(xneg);
   }
 
   // Multiply two bitblasted numbers
-  ASTVec BeevMgr::BBMult(const ASTVec& x, const ASTVec& y)
+  ASTVec BitBlaster::BBMult(const ASTVec& x, const ASTVec& y)
   {
     ASTVec ycopy(y);
     ASTVec::const_iterator xend = x.end();
@@ -743,7 +735,7 @@ namespace BEEV
   // This implements a variant of binary long division.
   // q and r are "out" parameters.  rwidth puts a bound on the
   // recursion depth.
-  void BeevMgr::BBDivMod(const ASTVec &y, const ASTVec &x, ASTVec &q, ASTVec &r, unsigned int rwidth)
+  void BitBlaster::BBDivMod(const ASTVec &y, const ASTVec &x, ASTVec &q, ASTVec &r, unsigned int rwidth)
   {
     unsigned int width = y.size();
     if (rwidth == 0)
@@ -784,7 +776,7 @@ namespace BEEV
         ASTVec notylessxqval = BBITE(yeqx, one, ygtrxqval);
         ASTVec notylessxrval = BBITE(yeqx, BBfill(width, ASTFalse), ygtrxrval);
         // y < x <=> not x >= y.
-        ASTNode ylessx = CreateSimpNot(BBBVLE(x, y, false));
+        ASTNode ylessx = _bm->CreateSimpNot(BBBVLE(x, y, false));
         // final values of q and r
         q = BBITE(ylessx, BBfill(width, ASTFalse), notylessxqval);
         r = BBITE(ylessx, y, notylessxrval);
@@ -792,7 +784,7 @@ namespace BEEV
   }
 
   // build ITE's (ITE cond then[i] else[i]) for each i.
-  ASTVec BeevMgr::BBITE(const ASTNode& cond, const ASTVec& thn, const ASTVec& els)
+  ASTVec BitBlaster::BBITE(const ASTNode& cond, const ASTVec& thn, const ASTVec& els)
   {
     // Fast exits.
     if (ASTTrue == cond)
@@ -809,12 +801,12 @@ namespace BEEV
     ASTVec::const_iterator el_it = els.begin();
     for (ASTVec::const_iterator th_it = thn.begin(); th_it < th_it_end; th_it++, el_it++)
       {
-        result.push_back(CreateSimpForm(ITE, cond, *th_it, *el_it));
+        result.push_back(_bm->CreateSimpForm(ITE, cond, *th_it, *el_it));
       }
     return result;
   }
   // AND each bit of vector y with single bit b and return the result.
-  ASTVec BeevMgr::BBAndBit(const ASTVec& y, ASTNode b)
+  ASTVec BitBlaster::BBAndBit(const ASTVec& y, ASTNode b)
   {
     ASTVec result(0);
 
@@ -827,7 +819,7 @@ namespace BEEV
     ASTVec::const_iterator yend = y.end();
     for (ASTVec::const_iterator yit = y.begin(); yit < yend; yit++)
       {
-        result.push_back(CreateSimpForm(AND, *yit, b));
+        result.push_back(_bm->CreateSimpForm(AND, *yit, b));
       }
     return result;
   }
@@ -838,7 +830,7 @@ namespace BEEV
   // FIXME:  If this were done MSB first, it would enable a fast exit sometimes
   // when the MSB is constant, deciding the result without looking at the rest
   // of the bits.
-  ASTNode BeevMgr::BBBVLE(const ASTVec& left, const ASTVec& right, bool is_signed)
+  ASTNode BitBlaster::BBBVLE(const ASTVec& left, const ASTVec& right, bool is_signed)
   {
     // "thisbit" represents BVLE of the suffixes of the BVs
     // from that position .  if R < L, return TRUE, else if L < R
@@ -852,9 +844,9 @@ namespace BEEV
     ASTNode prevbit = ASTTrue;
     for (; lit < litend - 1; lit++, rit++)
       {
-        ASTNode neglit = CreateSimpNot(*lit);
-        ASTNode thisbit = CreateSimpForm(OR, CreateSimpForm(AND, neglit, *rit), // TRUE if l < r
-                                         CreateSimpForm(AND, CreateSimpForm(OR, neglit, *rit), // false if not equal
+        ASTNode neglit = _bm->CreateSimpNot(*lit);
+        ASTNode thisbit = _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglit, *rit), // TRUE if l < r
+                                         _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglit, *rit), // false if not equal
                                                         prevbit)); // else prevbit
         prevbit = thisbit;
       }
@@ -865,20 +857,20 @@ namespace BEEV
     ASTNode rmsb = *rit;
     if (is_signed)
       {
-        lmsb = CreateSimpNot(*lit);
-        rmsb = CreateSimpNot(*rit);
+        lmsb = _bm->CreateSimpNot(*lit);
+        rmsb = _bm->CreateSimpNot(*rit);
       }
 
-    ASTNode neglmsb = CreateSimpNot(lmsb);
-    ASTNode msb = CreateSimpForm(OR, CreateSimpForm(AND, neglmsb, rmsb), // TRUE if l < r
-                                 CreateSimpForm(AND, CreateSimpForm(OR, neglmsb, rmsb), // false if not equal
+    ASTNode neglmsb = _bm->CreateSimpNot(lmsb);
+    ASTNode msb = _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglmsb, rmsb), // TRUE if l < r
+                                 _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglmsb, rmsb), // false if not equal
                                                 prevbit)); // else prevbit
     return msb;
   }
 
   // Left shift  within fixed field inserting zeros at LSB.
   // Writes result into first argument.
-  void BeevMgr::BBLShift(ASTVec& x, unsigned int shift)
+  void BitBlaster::BBLShift(ASTVec& x, unsigned int shift)
   {
     // left shift x (destructively) within width.
     // loop backwards so that copy to self works correctly. (DON'T use STL insert!)
@@ -895,7 +887,7 @@ namespace BEEV
 
   // Right shift within fixed field inserting zeros at MSB.
   // Writes result into first argument.
-  void BeevMgr::BBRShift(ASTVec& x, unsigned int shift)
+  void BitBlaster::BBRShift(ASTVec& x, unsigned int shift)
   {
     // right shift x (destructively) within width.
     ASTVec::iterator xend = x.end();
@@ -911,7 +903,7 @@ namespace BEEV
 
   // Right shift within fixed field copying the MSB.
   // Writes result into first argument.
-  void BeevMgr::BBRSignedShift(ASTVec& x, unsigned int shift)
+  void BitBlaster::BBRSignedShift(ASTVec& x, unsigned int shift)
   {
     // right shift x (destructively) within width.
     ASTNode & MSB = x.back();
@@ -927,7 +919,7 @@ namespace BEEV
   }
 
   // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
-  ASTNode BeevMgr::BBcompare(const ASTNode& form)
+  ASTNode BitBlaster::BBcompare(const ASTNode& form)
   {
     const ASTNode lnode = BBTerm(form[0]);
     const ASTNode rnode = BBTerm(form[1]);
@@ -952,12 +944,12 @@ namespace BEEV
         }
       case BVGT:
         {
-          return CreateSimpNot(BBBVLE(left, right, false));
+          return _bm->CreateSimpNot(BBBVLE(left, right, false));
           break;
         }
       case BVLT:
         {
-          return CreateSimpNot(BBBVLE(right, left, false));
+          return _bm->CreateSimpNot(BBBVLE(right, left, false));
           break;
         }
       case BVSLE:
@@ -972,12 +964,12 @@ namespace BEEV
         }
       case BVSGT:
         {
-          return CreateSimpNot(BBBVLE(left, right, true));
+          return _bm->CreateSimpNot(BBBVLE(left, right, true));
           break;
         }
       case BVSLT:
         {
-          return CreateSimpNot(BBBVLE(right, left, true));
+          return _bm->CreateSimpNot(BBBVLE(right, left, true));
           break;
         }
       default:
@@ -988,13 +980,13 @@ namespace BEEV
   }
 
   // return a vector with n copies of fillval
-  ASTVec BeevMgr::BBfill(unsigned int width, ASTNode fillval)
+  ASTVec BitBlaster::BBfill(unsigned int width, ASTNode fillval)
   {
     ASTVec zvec(width, fillval);
     return zvec;
   }
 
-  ASTNode BeevMgr::BBEQ(const ASTVec& left, const ASTVec& right)
+  ASTNode BitBlaster::BBEQ(const ASTVec& left, const ASTVec& right)
   {
     ASTVec andvec;
     ASTVec::const_iterator lit = left.begin();
@@ -1005,7 +997,7 @@ namespace BEEV
       {
         for (; lit != litend; lit++, rit++)
           {
-            ASTNode biteq = CreateSimpForm(IFF, *lit, *rit);
+            ASTNode biteq = _bm->CreateSimpForm(IFF, *lit, *rit);
             // fast path exit
             if (biteq == ASTFalse)
               {
@@ -1016,10 +1008,10 @@ namespace BEEV
                 andvec.push_back(biteq);
               }
           }
-        ASTNode n = CreateSimpForm(AND, andvec);
+        ASTNode n = _bm->CreateSimpForm(AND, andvec);
         return n;
       }
     else
-      return CreateSimpForm(IFF, *lit, *rit);
+      return _bm->CreateSimpForm(IFF, *lit, *rit);
   }
 } // BEEV namespace

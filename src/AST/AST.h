@@ -48,6 +48,12 @@ namespace BEEV
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeMultiSet;
   
+  // Datatype for clauses
+  typedef vector<const ASTNode*>* ClausePtr;
+  
+  // Datatype for Clauselists
+  typedef vector<ClausePtr> ClauseList;
+  
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
 }; // end namespace BEEV

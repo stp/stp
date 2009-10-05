@@ -114,8 +114,6 @@ void vc_setFlags(char c) {
     BEEV::FatalError(s.c_str());
     break;
   }
-
-
 }
 
 //Create a validity Checker. This is the global BeevMgr

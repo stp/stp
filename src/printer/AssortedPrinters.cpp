@@ -338,17 +338,17 @@ namespace BEEV
   } //end of PrintOutput()
 
 
-  void BeevMgr::PrintClauseList(ostream& os, BeevMgr::ClauseList& cll)
-  {
-    int num_clauses = cll.size();
-    os << "Clauses: " << endl << "=========================================" << endl;
-    for (int i = 0; i < num_clauses; i++)
-      {
-        os << "Clause " << i << endl << "-------------------------------------------" << endl;
-        LispPrintVecSpecial(os, *cll[i], 0);
-        os << endl << "-------------------------------------------" << endl;
-      }
-  } //end of PrintClauseList()
+//   void BeevMgr::PrintClauseList(ostream& os, BeevMgr::ClauseList& cll)
+//   {
+//     int num_clauses = cll.size();
+//     os << "Clauses: " << endl << "=========================================" << endl;
+//     for (int i = 0; i < num_clauses; i++)
+//       {
+//         os << "Clause " << i << endl << "-------------------------------------------" << endl;
+//         LispPrintVecSpecial(os, *cll[i], 0);
+//         os << endl << "-------------------------------------------" << endl;
+//       }
+//   } //end of PrintClauseList()
 
   //Variable Order Printer: A global function which converts a MINISAT
   //var into a ASTNODE var. It then prints this var along with

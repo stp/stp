@@ -127,7 +127,8 @@ namespace BEEV
   extern BeevMgr * GlobalBeevMgr;
 
   //Empty vector
-  extern std::vector<BEEV::ASTNode> _empty_ASTVec;
+  extern std::vector<ASTNode> _empty_ASTVec;  
+  extern ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   //Some global vars for the Main function.
   extern const char * prog;

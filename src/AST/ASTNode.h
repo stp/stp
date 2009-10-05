@@ -68,6 +68,7 @@ namespace BEEV
     /****************************************************************
      * Public Member Functions                                      *
      ****************************************************************/
+
     // Default constructor.
     ASTNode() :_int_node_ptr(NULL) {};
 

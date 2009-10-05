@@ -71,7 +71,7 @@ clean:
 	$(MAKE) clean -C $(SRC)/extlib-constbv
 	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/main
-
+	$(MAKE) clean -C tests/c-api-tests
 
 .PHONY: regressall
 regressall:

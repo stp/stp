@@ -815,19 +815,6 @@ namespace BEEV
       }
     _ASTNode_to_Bitvector.clear();
 
-    /* OLD Destructor
-     * for(ASTNodeToVecMap::iterator ivec = BBTermMemo.begin(),
-     ivec_end=BBTermMemo.end();ivec!=ivec_end;ivec++) {
-     ivec->second.clear();
-     }*/
-
-    /*What should I do here? For ASTNodes?
-     * for(ASTNodeMap::iterator ivec = BBTermMemo.begin(),
-     ivec_end=BBTermMemo.end();ivec!=ivec_end;ivec++) {
-     ivec->second.clear();
-     }*/
-    BBTermMemo.clear();
-    BBFormMemo.clear();
     NodeLetVarMap.clear();
     NodeLetVarMap1.clear();
     PLPrintNodeSet.clear();
@@ -875,19 +862,6 @@ namespace BEEV
       }
     _ASTNode_to_Bitvector.clear();
 
-    /*OLD destructor
-     * for(ASTNodeToVecMap::iterator ivec = BBTermMemo.begin(),
-     ivec_end=BBTermMemo.end();ivec!=ivec_end;ivec++) {
-     ivec->second.clear();
-     }*/
-
-    /*What should I do here?
-     *for(ASTNodeMap::iterator ivec = BBTermMemo.begin(),
-     ivec_end=BBTermMemo.end();ivec!=ivec_end;ivec++) {
-     ivec->second.clear();
-     }*/
-    BBTermMemo.clear();
-    BBFormMemo.clear();
     NodeLetVarMap.clear();
     NodeLetVarMap1.clear();
     PLPrintNodeSet.clear();

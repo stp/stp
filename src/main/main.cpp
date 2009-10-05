@@ -39,8 +39,6 @@ int main(int argc, char ** argv) {
   // individual hash tables are being allocated
   if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void *) -1))
     {
-      // FIXME: figure out how to get and print the real error
-      // message.
       FatalError("Initial allocation of memory failed.");
     }
 
@@ -101,7 +99,6 @@ int main(int argc, char ** argv) {
             case 'h':
               fprintf(stderr,usage,prog);
               cout << helpstring;
-              //FatalError("");
               return -1;
               break;
             case 'n':
