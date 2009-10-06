@@ -291,7 +291,7 @@ VarDecl		:      FORM_IDs ':' Type
 			   i->SetValueWidth($5->GetValueWidth());
 			   i->SetIndexWidth($5->GetIndexWidth());
 			   
-			   GlobalBeevMgr->LetExprMgr(*i,*$5);
+			   GlobalBeevMgr->GetLetMgr()->LetExprMgr(*i,*$5);
 			   delete $5;
 			 }
 		       }
@@ -309,7 +309,7 @@ VarDecl		:      FORM_IDs ':' Type
 			   i->SetValueWidth($5->GetValueWidth());
 			   i->SetIndexWidth($5->GetIndexWidth());
 			   
-			   GlobalBeevMgr->LetExprMgr(*i,*$5);
+			   GlobalBeevMgr->GetLetMgr()->LetExprMgr(*i,*$5);
 			   delete $5;
 			 }
 		       }                
@@ -424,7 +424,7 @@ Formula		:     '(' Formula ')'
 		       }
 		|      FORMID_TOK 
                        {  
-			 $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); delete $1;
+			 $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); delete $1;
 		       }
 		|      FORMID_TOK '(' Expr ')' 
                        {
@@ -659,7 +659,7 @@ Formula		:     '(' Formula ')'
                        {
 			 $$ = $4;
 			 //Cleanup the LetIDToExprMap
-			 GlobalBeevMgr->CleanupLetIDMap();
+			 GlobalBeevMgr->GetLetMgr()->CleanupLetIDMap();
 		       }
                 ;
 
@@ -701,7 +701,7 @@ Exprs		:      Expr
 		;
 
 /* Grammar for Expr */
-Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); delete $1;}
+Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); delete $1;}
                 |      '(' Expr ')' { $$ = $2; }
 	        |      BVCONST_TOK { $$ = $1; }
                 |      BOOL_TO_BV_TOK '(' Formula ')'		
@@ -1036,7 +1036,7 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  //
 			  //2. Ensure that LET variables are not
 			  //2. defined more than once
-			  GlobalBeevMgr->LetExprMgr(*$1,*$3);
+			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$3);
 			  delete $1;
 			  delete $3;
 			}
@@ -1054,7 +1054,7 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  $1->SetValueWidth($5->GetValueWidth());
 			  $1->SetIndexWidth($5->GetIndexWidth());
 
-			  GlobalBeevMgr->LetExprMgr(*$1,*$5);
+			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$5);
 			  delete $1;
 			  delete $5;
 			}
@@ -1068,7 +1068,7 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  $1->SetIndexWidth($3->GetIndexWidth());
 
 			  //Do LET-expr management
-			  GlobalBeevMgr->LetExprMgr(*$1,*$3);
+			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$3);
 			  delete $1;
 			  delete $3;
 			}
@@ -1087,7 +1087,7 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  $1->SetIndexWidth($5->GetIndexWidth());
 
 			  //Do LET-expr management
-			  GlobalBeevMgr->LetExprMgr(*$1,*$5);
+			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$5);
 			  delete $1;
 			  delete $5;
 			}                

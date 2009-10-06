@@ -124,7 +124,7 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->ResolveID(nptr));
+  cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->GetLetMgr()->ResolveID(nptr));
   //cvclval.node = new BEEV::ASTNode(nptr);
   if ((cvclval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

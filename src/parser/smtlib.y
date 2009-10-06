@@ -625,7 +625,7 @@ an_formula:
     {
       $$ = $2;
       //Cleanup the LetIDToExprMap
-      GlobalBeevMgr->CleanupLetIDMap();			 
+      GlobalBeevMgr->GetLetMgr()->CleanupLetIDMap();			 
     }
 ;
 
@@ -647,7 +647,7 @@ letexpr_mgmt:
       //
       //2. Ensure that LET variables are not
       //2. defined more than once
-      GlobalBeevMgr->LetExprMgr(*$5,*$6);
+      GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$5,*$6);
       delete $5;
       delete $6;      
    }
@@ -661,7 +661,7 @@ letexpr_mgmt:
      $5->SetIndexWidth($6->GetIndexWidth());
      
      //Do LET-expr management
-     GlobalBeevMgr->LetExprMgr(*$5,*$6);
+     GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$5,*$6);
      delete $5;
      delete $6;     
    }
@@ -703,7 +703,7 @@ an_nonbvconst_term:
     BITCONST_TOK { $$ = $1; }
   | var
     {
-      $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1));
+      $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1));
       delete $1;
     }
   | LPAREN_TOK an_term RPAREN_TOK
@@ -1136,12 +1136,12 @@ sort_symb:
 var:
     FORMID_TOK 
     {
-      $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); 
+      $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); 
       delete $1;      
     }
    | TERMID_TOK
     {
-      $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1));
+      $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1));
       delete $1;
     }
    | QUESTION_TOK TERMID_TOK
@@ -1157,7 +1157,7 @@ fvar:
     }
   | FORMID_TOK
     {
-      $$ = new ASTNode(GlobalBeevMgr->ResolveID(*$1)); 
+      $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); 
       delete $1;      
     }   
 ;

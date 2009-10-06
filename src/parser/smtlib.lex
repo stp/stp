@@ -220,7 +220,7 @@ bit{DIGIT}+     {
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  smtlval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->ResolveID(nptr));
+  smtlval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->GetLetMgr()->ResolveID(nptr));
   //smtlval.node = new BEEV::ASTNode(nptr);
   if ((smtlval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

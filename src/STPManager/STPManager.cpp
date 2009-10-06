@@ -371,6 +371,63 @@ namespace BEEV
       return true;
   }
 
+  // Create and return an ASTNode for a term
+  ASTNode BeevMgr::CreateTerm(Kind kind, 
+			      unsigned int width, 
+			      const ASTVec &children)
+  {
+    if (!is_Term_kind(kind))
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:", 
+		 ASTUndefined, kind);
+    ASTNode n = CreateNode(kind, children);
+    n.SetValueWidth(width);
+    
+    //by default we assume that the term is a Bitvector. If
+    //necessary the indexwidth can be changed later
+    n.SetIndexWidth(0);
+    return n;
+  }
+
+  ASTNode BeevMgr::CreateTerm(Kind kind, 
+			      unsigned int width, 
+			      const ASTNode& child0, 
+			      const ASTVec &children)
+  {
+    if (!is_Term_kind(kind))
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+      ASTNode n = CreateNode(kind, child0, children);
+      n.SetValueWidth(width);
+      return n;
+  }
+
+  ASTNode BeevMgr::CreateTerm(Kind kind, 
+			      unsigned int width, 
+			      const ASTNode& child0,
+			      const ASTNode& child1, 
+			      const ASTVec &children)
+  {
+    if (!is_Term_kind(kind))
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+    ASTNode n = CreateNode(kind, child0, child1, children);
+    n.SetValueWidth(width);
+    return n;
+  }
+  
+  ASTNode BeevMgr::CreateTerm(Kind kind,
+			      unsigned int width,
+			      const ASTNode& child0,
+			      const ASTNode& child1,
+			      const ASTNode& child2,
+			      const ASTVec &children)
+  {
+    if (!is_Term_kind(kind))
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+    ASTNode n = CreateNode(kind, child0, child1, child2, children);
+    n.SetValueWidth(width);
+    return n;
+  }
+
+
   ////////////////////////////////////////////////////////////////
   //
   //  IO manipulators for Lisp format printing of AST.
@@ -827,8 +884,6 @@ namespace BEEV
     _arrayread_ite.clear();
     _arrayread_symbol.clear();
     _introduced_symbols.clear();
-    //TransformMap.clear();
-    _letid_expr_map->clear();
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
     StatInfoSet.clear();
@@ -874,7 +929,6 @@ namespace BEEV
     _arrayread_ite.clear();
     _arrayread_symbol.clear();
     _introduced_symbols.clear();
-    _letid_expr_map->clear();
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
     StatInfoSet.clear();
@@ -954,7 +1008,6 @@ namespace BEEV
 
     delete SimplifyMap;
     delete SimplifyNegMap;
-    delete _letid_expr_map;
     delete ReferenceCount;
   }
 

@@ -8,8 +8,7 @@
  ********************************************************************/
 
 #include <stdlib.h>
-#include "../AST/AST.h"
-#include "../STPManager/STPManager.h"
+#include "let-funcs.h"
 
 namespace BEEV {
   //external parser table for declared symbols. Only symbols which are
@@ -26,7 +25,8 @@ namespace BEEV {
   //2. the function returns an error
   //
   //3. otherwise add the <var,letExpr> pair to the _letid_expr table.
-  void BeevMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr) {
+  void LETMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr) 
+  {
     ASTNodeMap::iterator it;
     if(((it = _letid_expr_map->find(var)) != _letid_expr_map->end()) && 
        it->second != ASTUndefined) {      
@@ -45,7 +45,8 @@ namespace BEEV {
   //this function looksup the "var to letexpr map" and returns the
   //corresponding letexpr. if there is no letexpr, then it simply
   //returns the var.
-  ASTNode BeevMgr::ResolveID(const ASTNode& v) {
+  ASTNode LETMgr::ResolveID(const ASTNode& v) 
+  {
     if (_letid_expr_map == NULL)
       InitializeLetIDMap();
 
@@ -74,10 +75,11 @@ namespace BEEV {
     //rid of this hack.
     (*_letid_expr_map)[v] = ASTUndefined;
     return v;    
-  }
+  }//End of ResolveID()
   
   // This function simply cleans up the LetID -> LetExpr Map.   
-  void BeevMgr::CleanupLetIDMap(void) { 
+  void LETMgr::CleanupLetIDMap(void) 
+  { 
     // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
     if (_letid_expr_map->size()  ==0)
       return;
@@ -95,10 +97,9 @@ namespace BEEV {
     // May contain lots of buckets, so reset.
     delete _letid_expr_map;
     _letid_expr_map = new ASTNodeMap();
-
   }//end of CleanupLetIDMap()
 
-  void BeevMgr::InitializeLetIDMap(void)
+  void LETMgr::InitializeLetIDMap(void)
   {
     _letid_expr_map = new ASTNodeMap();
   } //end of InitializeLetIDMap()

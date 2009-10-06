@@ -244,9 +244,8 @@ namespace BEEV
                 /* If for some reason the variable being created here is
                  * already declared by the user then the printed output will
                  * not be a legal input to the system. too bad. I refuse to
-                 * check for this.  [Vijay is the author of this comment.]
+                 * check for this.
                  */
-
                 bm->NodeLetVarMap[ccc] = CurrentSymbol;
                 std::pair<ASTNode, ASTNode> node_letvar_pair(CurrentSymbol, ccc);
                 bm->NodeLetVarVec.push_back(node_letvar_pair);
