@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <assert.h>
 
-#define  INITIAL_TABLE_SIZE 1000
+#define  INITIAL_TABLE_SIZE 100
 
 #ifdef EXT_HASH_MAP
  #include <ext/hash_set>
