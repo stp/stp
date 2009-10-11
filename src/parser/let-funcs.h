@@ -47,4 +47,5 @@ namespace BEEV
       ASTNode SubstituteLetExpr(ASTNode inExpr);
     };// End of class LETMgr
 }; //end of namespace
+
 #endif
