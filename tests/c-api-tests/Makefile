@@ -18,8 +18,8 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	g++  $(CXXFLAGS) getbvunsignedlonglong-check.c -lstp -o a3.out
 	./a3.out
 4:
-	g++  $(CXXFLAGS) multiple-queries.c  -lstp -o a4.out
-	./a4.out
+# 	g++  $(CXXFLAGS) multiple-queries.c  -lstp -o a4.out
+# 	./a4.out
 5:
 	g++  $(CXXFLAGS) parsefile-using-cinterface.c -lstp -o a5.out
 	./a5.out
@@ -42,11 +42,11 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	g++  $(CXXFLAGS)  squares-leak.c -lstp -o a11.out
 	./a11.out
 12:
-	g++  $(CXXFLAGS)  stp-counterex.c -lstp -o a12.out
-	./a12.out
+# 	g++  $(CXXFLAGS)  stp-counterex.c -lstp -o a12.out
+# 	./a12.out
 13:
-	g++  $(CXXFLAGS)  stp-div-001.c  -lstp -o a13.out
-	./a13.out
+# 	g++  $(CXXFLAGS)  stp-div-001.c  -lstp -o a13.out
+# 	./a13.out
 14:
 	g++  $(CXXFLAGS)  stpcheck.c -o a14.out -lstp
 	./a14.out
