@@ -288,6 +288,7 @@ namespace BEEV
         return (n1._int_node_ptr == n2._int_node_ptr);
       }
     }; //End of ASTNodeEqual
+
   }; //End of Class ASTNode
 }; //end of namespace
 #endif

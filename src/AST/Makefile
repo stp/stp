@@ -17,7 +17,7 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp ASTKind.h .#*
+	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp ASTKind.h depend .#*
 
 depend: $(SRCS) ASTKind.h ASTKind.cpp
 	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@

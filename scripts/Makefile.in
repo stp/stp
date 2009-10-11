@@ -20,20 +20,20 @@ all:
 	$(MAKE) -C $(SRC)/AST
 	$(MAKE) -C $(SRC)/STPManager
 	$(MAKE) -C $(SRC)/printer
-	$(MAKE) -C $(SRC)/abstraction-refinement
+	$(MAKE) -C $(SRC)/extlib-constbv
+	$(MAKE) -C $(SRC)/simplifier
+	$(MAKE) -C $(SRC)/absrefine_counterexample
 	$(MAKE) -C $(SRC)/to-sat
 	$(MAKE) -C $(SRC)/sat core
 #	$(MAKE) -C $(SRC)/sat simp
 #	$(MAKE) -C $(SRC)/sat unsound
-	$(MAKE) -C $(SRC)/simplifier
-	$(MAKE) -C $(SRC)/const-evaluator
 	$(MAKE) -C $(SRC)/c_interface
-	$(MAKE) -C $(SRC)/extlib-constbv
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
-	$(AR) rc libstp.a  $(SRC)/AST/*.o  $(SRC)/STPManager/*.o  $(SRC)/printer/*.o $(SRC)/abstraction-refinement/*.o $(SRC)/to-sat/*.o \
-			   $(SRC)/sat/*.or $(SRC)/simplifier/*.o  $(SRC)/const-evaluator/*.o $(SRC)/extlib-constbv/*.o $(SRC)/c_interface/*.o \
-			   $(SRC)/parser/let-funcs.o $(SRC)/parser/parseCVC.o $(SRC)/parser/lexCVC.o $(SRC)/main/*.o
+	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/STPManager/*.o $(SRC)/printer/*.o $(SRC)/absrefine_counterexample/*.o \
+			   $(SRC)/to-sat/*.o $(SRC)/sat/*.or $(SRC)/simplifier/*.o  \
+			   $(SRC)/extlib-constbv/*.o $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o  \
+			   $(SRC)/parser/parseCVC.o  $(SRC)/parser/lexCVC.o $(SRC)/main/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
@@ -62,13 +62,12 @@ clean:
 	$(MAKE) clean -C $(SRC)/AST
 	$(MAKE) clean -C $(SRC)/STPManager	
 	$(MAKE) clean -C $(SRC)/printer
-	$(MAKE) clean -C $(SRC)/abstraction-refinement
+	$(MAKE) clean -C $(SRC)/extlib-constbv
+	$(MAKE) clean -C $(SRC)/simplifier
+	$(MAKE) clean -C $(SRC)/absrefine_counterexample
 	$(MAKE) clean -C $(SRC)/to-sat
 	$(MAKE) clean -C $(SRC)/sat
-	$(MAKE) clean -C $(SRC)/simplifier
-	$(MAKE) clean -C $(SRC)/const-evaluator
-	$(MAKE) clean -C $(SRC)/c_interface
-	$(MAKE) clean -C $(SRC)/extlib-constbv
+	$(MAKE) clean -C $(SRC)/c_interface	
 	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/main
 	$(MAKE) clean -C tests/c-api-tests

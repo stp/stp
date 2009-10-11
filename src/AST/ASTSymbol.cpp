@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "AST.h"
-#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 namespace BEEV
 {
   /****************************************************************
@@ -32,30 +32,23 @@ namespace BEEV
   // unique table
   void ASTSymbol::CleanUp()
   {
-    GlobalBeevMgr->_symbol_unique_table.erase(this);
+    (GlobalSTP->bm)->_symbol_unique_table.erase(this);
     free((char*) this->_name);
     delete this;
   }//End of cleanup()
 
-  
-  /****************************************************************
-   * ASTSymbolHasher and ASTSymbolEqual functions                 *
-   *                                                              *   
-   ****************************************************************/
-  size_t 
-  ASTSymbol::ASTSymbolHasher::operator()(const ASTSymbol *sym_ptr) const
+  unsigned long hash(unsigned char *str)
   {
-#ifdef TR1_UNORDERED_MAP
-    tr1::hash<string> h;
-#else
-    hash<char*> h;
-#endif
-    return h(sym_ptr->_name);
-  } //End of ASTSymbolHasher operator
+    unsigned long hash = 5381;
+    int c;
+    
+    while (c = *str++)
+      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
-  bool ASTSymbol::ASTSymbolEqual::operator()(const ASTSymbol *sym_ptr1, 
-					     const ASTSymbol *sym_ptr2) const
-  {
-    return (*sym_ptr1 == *sym_ptr2);
-  } //End of ASTSymbolEqual operator
+    //cout << "Hash value computed is: " << hash << endl;
+    
+    return hash;
+  }
+
+
 };//end of namespace

@@ -35,6 +35,7 @@ namespace BEEV
   class ASTSymbol;
   class ASTBVConst;
   class BVSolver;
+  class STP;
 
   //some global variables that are set through commandline options. it
   //is best that these variables remain global. Default values set
@@ -103,6 +104,8 @@ namespace BEEV
 
   extern bool division_by_zero_returns_one;
 
+  extern bool quick_statistics_flag;
+
   enum inputStatus
     {
       NOT_DECLARED =0, // Not included in the input file / stream
@@ -115,16 +118,23 @@ namespace BEEV
   //return types for the GetType() function in ASTNode class
   enum types
     {
-      BOOLEAN_TYPE = 0, BITVECTOR_TYPE, ARRAY_TYPE, UNKNOWN_TYPE
+      BOOLEAN_TYPE = 0, 
+      BITVECTOR_TYPE, 
+      ARRAY_TYPE, 
+      UNKNOWN_TYPE
     };
 
   enum SOLVER_RETURN_TYPE 
     {
-      SOLVER_INVALID=0, SOLVER_VALID=1, SOLVER_UNDECIDED=2, SOLVER_ERROR=-100
+      SOLVER_INVALID=0, 
+      SOLVER_VALID=1, 
+      SOLVER_UNDECIDED=2, 
+      SOLVER_ERROR=-100
     };
 
-  //Useful global variables. There are very few them
-  extern BeevMgr * GlobalBeevMgr;
+  //Useful global variables. Use for parsing only
+  extern  STP * GlobalSTP;
+  extern  BeevMgr * ParserBM;
 
   //Empty vector
   extern std::vector<ASTNode> _empty_ASTVec;  

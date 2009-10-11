@@ -26,8 +26,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cstdio>
 
-#include "Queue.h"
-#include "Solver.h"
+#include "../mtl/Queue.h"
+#include "../core/Solver.h"
 
 
 namespace MINISAT {

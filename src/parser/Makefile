@@ -8,8 +8,6 @@ OBJS = $(SRCS:.cpp=.o)
 LIBS = -L../AST -last -L../sat -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
 CFLAGS += -I../sat/mtl -I../sat/core  -I../sat/simp -I../sat/unsound
 
-#all: parseSMT.cpp lexSMT.cpp parseCVC.cpp lexCVC.cpp let-funcs.cpp parser parseCVC.o lexCVC.o let-funcs.o 
-
 libparser.a: $(OBJS)
 	$(AR) rc $@ $^
 	$(RANLIB) $@
@@ -31,4 +29,4 @@ parseSMT_defs.h parseSMT.cpp:smtlib.y
 		@cp y.tab.h parseSMT_defs.h
 
 clean:	
-		rm -rf *.o parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser y.tab.* lex.yy.c .#*
+		rm -rf *.o *.a parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser y.tab.* lex.yy.c .#*

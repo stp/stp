@@ -8,6 +8,9 @@
 // -*- c++ -*-
 
 #include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
+
 namespace BEEV
 {
   //some global variables that are set through commandline options. it
@@ -77,11 +80,13 @@ namespace BEEV
   // 1.
   bool division_by_zero_returns_one = false;
 
+  bool quick_statistics_flag=false;
+  
   enum inputStatus input_status = NOT_DECLARED;
 
-
-  //global BEEVMGR for the parser
-  BeevMgr * GlobalBeevMgr;
+  //global BEEVMGR for the parser. Use exclusively for parsing
+  STP     * GlobalSTP;
+  BeevMgr * ParserBM;
 
   void (*vc_error_hdlr)(const char* err_msg) = NULL;
   /** This is reusable empty vector, for representing empty children

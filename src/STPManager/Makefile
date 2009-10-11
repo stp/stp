@@ -2,10 +2,11 @@ include ../../scripts/Makefile.common
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
+CFLAGS += -I../sat/mtl -I../sat/simp -I../sat/core
 
-libconsteval.a: $(OBJS) depend
-	$(AR) rc $@ $(OBJS)
-	$(RANLIB) $@
+libstpmgr.a: 	$(OBJS) depend
+		$(AR) rc $@ $(OBJS)
+		$(RANLIB) $@
 
 .PHONY: clean
 clean:	

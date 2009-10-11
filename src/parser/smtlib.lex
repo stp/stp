@@ -42,7 +42,9 @@
   
   extern char *smttext;
   extern int smterror (const char *msg);
-  
+
+  //BeevMgr * ParserBM = GlobalSTP->bm;  
+
   // File-static (local to this file) variables and functions
   static std::string _string_lit;  
   static char escapeChar(char c) {
@@ -79,10 +81,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(GlobalBeevMgr->CreateOneConst(1));
+		     smtlval.node = new BEEV::ASTNode(ParserBM->CreateOneConst(1));
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(GlobalBeevMgr->CreateZeroConst(1));
+		     smtlval.node = new BEEV::ASTNode(ParserBM->CreateZeroConst(1));
 		   }
 		   return BITCONST_TOK;
 		};
@@ -215,12 +217,12 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = BEEV::GlobalBeevMgr->CreateSymbol(smttext); 
+  BEEV::ASTNode nptr = ParserBM->CreateSymbol(smttext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  smtlval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->GetLetMgr()->ResolveID(nptr));
+  smtlval.node = new BEEV::ASTNode((ParserBM->GetLetMgr())->ResolveID(nptr));
   //smtlval.node = new BEEV::ASTNode(nptr);
   if ((smtlval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

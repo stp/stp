@@ -12,7 +12,7 @@
 
   using namespace std; 
   using namespace BEEV;
-
+  
   // Suppress the bogus warning suppression in bison (it generates
   // compile error)
 #undef __GNUC_MINOR__
@@ -22,17 +22,19 @@
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 #define YYPARSE_PARAM AssertsQuery
-
-
- extern int cvclex(void);
- extern char* yytext;
- extern int cvclineno;
- int yyerror(const char *s) {
-   cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
-   FatalError("");
-   return YY_EXIT_FAILURE;
- };
- %}
+  
+  //BeevMgr * ParserBM = GlobalSTP->bm;
+  
+  extern int cvclex(void);
+  extern char* yytext;
+  extern int cvclineno;
+  int yyerror(const char *s) {
+    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
+    FatalError("");
+    return YY_EXIT_FAILURE;
+  };
+  
+%}
 
 %union {
 
@@ -176,31 +178,35 @@ cmd             :      other_cmd
 counterexample  :      COUNTEREXAMPLE_TOK ';'
                        {
 			 print_counterexample_flag = true;			 
-			 GlobalBeevMgr->PrintCounterExample(true);
+			 (GlobalSTP->Ctr_Example)->PrintCounterExample(true);
 		       }                              
                 ;
 
 other_cmd       :      other_cmd1
                 |      Query 
                        { 
-			 ((ASTVec*)AssertsQuery)->push_back(GlobalBeevMgr->CreateNode(TRUE));
+			 ((ASTVec*)AssertsQuery)->push_back(ParserBM->CreateNode(TRUE));
 			 ((ASTVec*)AssertsQuery)->push_back(*$1);			 
 			 delete $1;
 		       }
                 |      VarDecls Query 
                        { 
-			 ((ASTVec*)AssertsQuery)->push_back(GlobalBeevMgr->CreateNode(TRUE));
+			 ((ASTVec*)AssertsQuery)->push_back(ParserBM->CreateNode(TRUE));
 			 ((ASTVec*)AssertsQuery)->push_back(*$2);
 			 delete $2;
 		       }
                 |      other_cmd1 Query
                        {
-			 ASTVec aaa = GlobalBeevMgr->GetAsserts();
+			 ASTVec aaa = ParserBM->GetAsserts();
 			 if(aaa.size() == 0)
 			   {
 			     yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: ");
 			   }
-			 ASTNode asserts = GlobalBeevMgr->CreateNode(AND,aaa);
+
+			 ASTNode asserts = 
+			   aaa.size() == 1 ? 
+			   aaa[0] :
+			   ParserBM->CreateNode(AND, aaa);
 			 ((ASTVec*)AssertsQuery)->push_back(asserts);
 			 ((ASTVec*)AssertsQuery)->push_back(*$2);
 			 delete $2;
@@ -223,14 +229,14 @@ other_cmd1      :     VarDecls Asserts
 
 /* push            :     PUSH_TOK */
 /*                       { */
-/* 			GlobalBeevMgr->Push(); */
+/* 			ParserBM->Push(); */
 /*                       } */
 /*                 | */
 /*                 ; */
 
 /* pop             :     POP_TOK */
 /*                       { */
-/* 			GlobalBeevMgr->Pop(); */
+/* 			ParserBM->Pop(); */
 /*                       } */
 /*                 | */
 /*                 ; */
@@ -239,13 +245,13 @@ Asserts         :      Assert
                        {
 			 $$ = new ASTVec;
 			 $$->push_back(*$1);
-			 GlobalBeevMgr->AddAssert(*$1);
+			 ParserBM->AddAssert(*$1);
 			 delete $1;
                        }
                 |      Asserts Assert
                        {
 			 $1->push_back(*$2);
-			 GlobalBeevMgr->AddAssert(*$2);
+			 ParserBM->AddAssert(*$2);
 			 $$ = $1;
 			 delete $2;
 		       }
@@ -254,7 +260,7 @@ Asserts         :      Assert
 Assert          :      ASSERT_TOK Formula ';' { $$ = $2; }                
                 ;
 
-Query           :      QUERY_TOK Formula ';' { GlobalBeevMgr->AddQuery(*$2); $$ = $2;}
+Query           :      QUERY_TOK Formula ';' { ParserBM->AddQuery(*$2); $$ = $2;}
                 ; 
 
 
@@ -273,14 +279,14 @@ VarDecl		:      FORM_IDs ':' Type
 			   _parser_symbol_table.insert(*i);
 			   i->SetIndexWidth($3.indexwidth);
 			   i->SetValueWidth($3.valuewidth);
-			   GlobalBeevMgr->ListOfDeclaredVars.push_back(*i);
+			   ParserBM->ListOfDeclaredVars.push_back(*i);
 			 }
 			 delete $1;
 		       }
                 |      FORM_IDs ':' Type '=' Expr
 		       {
 			 //do type checking. if doesn't pass then abort
-			 GlobalBeevMgr->BVTypeCheck(*$5);
+			 BVTypeCheck(*$5);
 			 if($3.indexwidth != $5->GetIndexWidth())
 			   yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
 			 if($3.valuewidth != $5->GetValueWidth())
@@ -291,14 +297,14 @@ VarDecl		:      FORM_IDs ':' Type
 			   i->SetValueWidth($5->GetValueWidth());
 			   i->SetIndexWidth($5->GetIndexWidth());
 			   
-			   GlobalBeevMgr->GetLetMgr()->LetExprMgr(*i,*$5);
+			   ParserBM->GetLetMgr()->LetExprMgr(*i,*$5);
 			   delete $5;
 			 }
 		       }
                 |      FORM_IDs ':' Type '=' Formula
                        {
 			 //do type checking. if doesn't pass then abort
-			 GlobalBeevMgr->BVTypeCheck(*$5);
+			 BVTypeCheck(*$5);
 			 if($3.indexwidth != $5->GetIndexWidth())
 			   yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
 			 if($3.valuewidth != $5->GetValueWidth())
@@ -309,7 +315,7 @@ VarDecl		:      FORM_IDs ':' Type
 			   i->SetValueWidth($5->GetValueWidth());
 			   i->SetIndexWidth($5->GetIndexWidth());
 			   
-			   GlobalBeevMgr->GetLetMgr()->LetExprMgr(*i,*$5);
+			   ParserBM->GetLetMgr()->LetExprMgr(*i,*$5);
 			   delete $5;
 			 }
 		       }                
@@ -384,12 +390,12 @@ IfExpr	        :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
 			 if($4->GetIndexWidth() != $5->GetIndexWidth())
 			   yyerror("Width mismatch in IF-THEN-ELSE");
 
-			 GlobalBeevMgr->BVTypeCheck(*$2);
-			 GlobalBeevMgr->BVTypeCheck(*$4);
-			 GlobalBeevMgr->BVTypeCheck(*$5);
-			 $$ = new ASTNode(GlobalBeevMgr->CreateTerm(ITE, width, *$2, *$4, *$5));
+			 BVTypeCheck(*$2);
+			 BVTypeCheck(*$4);
+			 BVTypeCheck(*$5);
+			 $$ = new ASTNode(ParserBM->CreateTerm(ITE, width, *$2, *$4, *$5));
 			 $$->SetIndexWidth($5->GetIndexWidth());
-			 GlobalBeevMgr->BVTypeCheck(*$$);
+			 BVTypeCheck(*$$);
 			 delete $2;
 			 delete $4;
 			 delete $5;
@@ -405,12 +411,12 @@ ElseRestExpr	:      ELSE_TOK Expr ENDIF_TOK  { $$ = $2; }
 			 if ($2->GetIndexWidth() != $4->GetValueWidth() || $2->GetIndexWidth() != $5->GetValueWidth())
 			   yyerror("Width mismatch in IF-THEN-ELSE");
 
-			 GlobalBeevMgr->BVTypeCheck(*$2);
-			 GlobalBeevMgr->BVTypeCheck(*$4);
-			 GlobalBeevMgr->BVTypeCheck(*$5);			
-			 $$ = new ASTNode(GlobalBeevMgr->CreateTerm(ITE, width, *$2, *$4, *$5));
+			 BVTypeCheck(*$2);
+			 BVTypeCheck(*$4);
+			 BVTypeCheck(*$5);			
+			 $$ = new ASTNode(ParserBM->CreateTerm(ITE, width, *$2, *$4, *$5));
 			 $$->SetIndexWidth($5->GetIndexWidth());
-			 GlobalBeevMgr->BVTypeCheck(*$$);
+			 BVTypeCheck(*$$);
 			 delete $2;
 			 delete $4;
 			 delete $5;
@@ -424,11 +430,11 @@ Formula		:     '(' Formula ')'
 		       }
 		|      FORMID_TOK 
                        {  
-			 $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); delete $1;
+			 $$ = new ASTNode(ParserBM->GetLetMgr()->ResolveID(*$1)); delete $1;
 		       }
 		|      FORMID_TOK '(' Expr ')' 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(PARAMBOOL,*$1,*$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(PARAMBOOL,*$1,*$3));
 			 delete $1;
 			 delete $3;
 		       }
@@ -438,29 +444,29 @@ Formula		:     '(' Formula ')'
 			 if(width <= (unsigned)$5)
 			   yyerror("Fatal Error: BOOLEXTRACT: trying to boolextract a bit which beyond range");
 			 
-			 ASTNode hi  =  GlobalBeevMgr->CreateBVConst(32, $5);
-			 ASTNode low =  GlobalBeevMgr->CreateBVConst(32, $5);
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVEXTRACT,1,*$3,hi,low));
-			 GlobalBeevMgr->BVTypeCheck(*n);
-			 ASTNode zero = GlobalBeevMgr->CreateBVConst(1,0);			 
-			 ASTNode * out = new ASTNode(GlobalBeevMgr->CreateNode(EQ,*n,zero));
-			 GlobalBeevMgr->BVTypeCheck(*out);
+			 ASTNode hi  =  ParserBM->CreateBVConst(32, $5);
+			 ASTNode low =  ParserBM->CreateBVConst(32, $5);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVEXTRACT,1,*$3,hi,low));
+			 BVTypeCheck(*n);
+			 ASTNode zero = ParserBM->CreateBVConst(1,0);			 
+			 ASTNode * out = new ASTNode(ParserBM->CreateNode(EQ,*n,zero));
+			 BVTypeCheck(*out);
 
 			 $$ = out;
 			 delete $3;
                        }
                 |      Expr '=' Expr 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(EQ, *$1, *$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(EQ, *$1, *$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
 			 delete $3;
 		       } 
 		|      Expr NEQ_TOK Expr 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(NOT, GlobalBeevMgr->CreateNode(EQ, *$1, *$3)));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(NOT, ParserBM->CreateNode(EQ, *$1, *$3)));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
 			 delete $3;
@@ -488,8 +494,8 @@ Formula		:     '(' Formula ')'
 			 vec.push_back(*$9);
 			 vec.push_back(*$12);
 			 vec.push_back(*$15);
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(FOR,vec));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(FOR,vec));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
@@ -519,10 +525,10 @@ Formula		:     '(' Formula ')'
 			 vec.push_back(*$5);
 			 vec.push_back(*$7);
 			 vec.push_back(*$9);
-			 vec.push_back(GlobalBeevMgr->CreateNode(FALSE));
+			 vec.push_back(ParserBM->CreateNode(FALSE));
 			 vec.push_back(*$12);
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(FOR,vec));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(FOR,vec));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
@@ -532,111 +538,111 @@ Formula		:     '(' Formula ')'
 		       }
 		|      NOT_TOK Formula 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(NOT, *$2));
+			 $$ = new ASTNode(ParserBM->CreateNode(NOT, *$2));
 			 delete $2;
 		       }
 		|      Formula OR_TOK Formula %prec OR_TOK 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(OR, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(OR, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       } 
 		|      Formula NOR_TOK Formula
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(NOR, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(NOR, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       } 
 		|      Formula AND_TOK Formula %prec AND_TOK 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(AND, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(AND, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       }
 		|      Formula NAND_TOK Formula
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(NAND, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(NAND, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       }
 		|      Formula IMPLIES_TOK Formula
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(IMPLIES, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(IMPLIES, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       }
 		|      Formula IFF_TOK Formula
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(IFF, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(IFF, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       } 
 		|      Formula XOR_TOK Formula
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(XOR, *$1, *$3));
+			 $$ = new ASTNode(ParserBM->CreateNode(XOR, *$1, *$3));
 			 delete $1;
 			 delete $3;
 		       } 
 	        |      BVLT_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVLT, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVLT, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVGT_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVGT, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVGT, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVLE_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVLE, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVLE, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVGE_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVGE, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVGE, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVSLT_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVSLT, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSLT, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVSGT_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVSGT, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSGT, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVSLE_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVSLE, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSLE, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
 		       }
 	        |      BVSGE_TOK '(' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateNode(BVSGE, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSGE, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
@@ -644,13 +650,13 @@ Formula		:     '(' Formula ')'
 		|      IfForm
 		|      TRUELIT_TOK 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(TRUE)); 
+			 $$ = new ASTNode(ParserBM->CreateNode(TRUE)); 
 			 $$->SetIndexWidth(0); 
 			 $$->SetValueWidth(0);
                        }
 		|      FALSELIT_TOK 
                        { 
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(FALSE)); 
+			 $$ = new ASTNode(ParserBM->CreateNode(FALSE)); 
 			 $$->SetIndexWidth(0); 
 			 $$->SetValueWidth(0);
 		       }
@@ -659,14 +665,14 @@ Formula		:     '(' Formula ')'
                        {
 			 $$ = $4;
 			 //Cleanup the LetIDToExprMap
-			 GlobalBeevMgr->GetLetMgr()->CleanupLetIDMap();
+			 ParserBM->GetLetMgr()->CleanupLetIDMap();
 		       }
                 ;
 
 /*Grammar for ITEs which are Formulas */
 IfForm	        :      IF_TOK Formula THEN_TOK Formula ElseRestForm 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(ITE, *$2, *$4, *$5));
+			 $$ = new ASTNode(ParserBM->CreateNode(ITE, *$2, *$4, *$5));
 			 delete $2;
 			 delete $4;
 			 delete $5;
@@ -676,7 +682,7 @@ IfForm	        :      IF_TOK Formula THEN_TOK Formula ElseRestForm
 ElseRestForm	:      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
                 |      ELSIF_TOK Formula THEN_TOK Formula ElseRestForm 
                        {
-			 $$ = new ASTNode(GlobalBeevMgr->CreateNode(ITE, *$2, *$4, *$5));
+			 $$ = new ASTNode(ParserBM->CreateNode(ITE, *$2, *$4, *$5));
 			 delete $2;
 			 delete $4;
 			 delete $5;
@@ -687,39 +693,39 @@ ElseRestForm	:      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 Exprs		:      Expr 
                        {
 			 $$ = new ASTVec;
-			 GlobalBeevMgr->BVTypeCheck(*$1);
+			 BVTypeCheck(*$1);
 			 $$->push_back(*$1);
 			 delete $1;
 		       }
                 |      Exprs ',' Expr 
                        {
 			 $1->push_back(*$3);
-			 GlobalBeevMgr->BVTypeCheck(*$3);
+			 BVTypeCheck(*$3);
 			 $$ = $1; 
 			 delete $3;
 		       }
 		;
 
 /* Grammar for Expr */
-Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID(*$1)); delete $1;}
+Expr		:      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->ResolveID(*$1)); delete $1;}
                 |      '(' Expr ')' { $$ = $2; }
 	        |      BVCONST_TOK { $$ = $1; }
                 |      BOOL_TO_BV_TOK '(' Formula ')'		
                        {
-			 GlobalBeevMgr->BVTypeCheck(*$3);
-			 ASTNode one = GlobalBeevMgr->CreateBVConst(1,1);
-			 ASTNode zero = GlobalBeevMgr->CreateBVConst(1,0);
+			 BVTypeCheck(*$3);
+			 ASTNode one = ParserBM->CreateBVConst(1,1);
+			 ASTNode zero = ParserBM->CreateBVConst(1,0);
 
 			 //return ITE(*$3, length(1), 0bin1, 0bin0)
-			 $$ = new ASTNode(GlobalBeevMgr->CreateTerm(ITE,1,*$3,one,zero));
+			 $$ = new ASTNode(ParserBM->CreateTerm(ITE,1,*$3,one,zero));
 			 delete $3;
                        }
 		|      Expr '[' Expr ']' 
                        {			 
 			 // valuewidth is same as array, indexwidth is 0.
 			 unsigned int width = $1->GetValueWidth();
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(READ, width, *$1, *$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(READ, width, *$1, *$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $1;
@@ -729,8 +735,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
                        {
 			 // valuewidth is same as array, indexwidth is 0.
 			 unsigned int width = $1->GetValueWidth();
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(READ, width, *$1, *$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(READ, width, *$1, *$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $1;
@@ -745,18 +751,18 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if((unsigned)$3 >= $1->GetValueWidth())
 			   yyerror("Parsing: Wrong width in BVEXTRACT\n");			 
 
-			 ASTNode hi  =  GlobalBeevMgr->CreateBVConst(32, $3);
-			 ASTNode low =  GlobalBeevMgr->CreateBVConst(32, $5);
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVEXTRACT, width, *$1,hi,low));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode hi  =  ParserBM->CreateBVConst(32, $3);
+			 ASTNode low =  ParserBM->CreateBVConst(32, $5);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVEXTRACT, width, *$1,hi,low));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
 		       }
 	        |      BVNEG_TOK Expr 
                        {
 			 unsigned int width = $2->GetValueWidth();
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVNEG, width, *$2));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNEG, width, *$2));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $2;
 		       }
@@ -766,8 +772,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $3->GetValueWidth()) {
 			   yyerror("Width mismatch in AND");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVAND, width, *$1, *$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVAND, width, *$1, *$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
 			 delete $3;
@@ -778,8 +784,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $3->GetValueWidth()) {
 			   yyerror("Width mismatch in OR");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVOR, width, *$1, *$3)); 
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVOR, width, *$1, *$3)); 
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
 			 delete $3;
@@ -790,8 +796,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $5->GetValueWidth()) {
 			   yyerror("Width mismatch in XOR");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVXOR, width, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVXOR, width, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
 			 delete $5;
@@ -802,8 +808,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $5->GetValueWidth()) {
 			   yyerror("Width mismatch in NAND");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVNAND, width, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNAND, width, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $3;
@@ -815,8 +821,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $5->GetValueWidth()) {
 			   yyerror("Width mismatch in NOR");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVNOR, width, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNOR, width, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $3;
@@ -828,8 +834,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 if (width != $5->GetValueWidth()) {
 			   yyerror("Width mismatch in NOR");
 			 }
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVXNOR, width, *$3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVXNOR, width, *$3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $3;
@@ -840,15 +846,15 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 			 //width of the expr which is being sign
 			 //extended. $5 is the resulting length of the
 			 //signextended expr
-			 GlobalBeevMgr->BVTypeCheck(*$3);
+			 BVTypeCheck(*$3);
 			 if($3->GetValueWidth() == $5) {
 			   $$ = $3;
 			 }
 			 else {
-			   ASTNode width = GlobalBeevMgr->CreateBVConst(32,$5);
+			   ASTNode width = ParserBM->CreateBVConst(32,$5);
 			   ASTNode *n =  
-			     new ASTNode(GlobalBeevMgr->CreateTerm(BVSX, $5,*$3,width));
-			   GlobalBeevMgr->BVTypeCheck(*n);
+			     new ASTNode(ParserBM->CreateTerm(BVSX, $5,*$3,width));
+			   BVTypeCheck(*n);
 			   $$ = n;
 			   delete $3;
 			 }
@@ -856,8 +862,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 	        |      Expr BVCONCAT_TOK Expr 
                        {
 			 unsigned int width = $1->GetValueWidth() + $3->GetValueWidth();
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT, width, *$1, *$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVCONCAT, width, *$1, *$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 
 			 delete $1;
@@ -865,47 +871,47 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 		       }
                 |      Expr BVLEFTSHIFT_TOK NUMERAL_TOK 
                        {
-			 ASTNode zero_bits = GlobalBeevMgr->CreateZeroConst($3);
+			 ASTNode zero_bits = ParserBM->CreateZeroConst($3);
 			 ASTNode * n = 
-			   new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT,
+			   new ASTNode(ParserBM->CreateTerm(BVCONCAT,
 											$1->GetValueWidth() + $3, *$1, zero_bits));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $1;
                        }
                 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK 
                        {
-			 ASTNode len = GlobalBeevMgr->CreateZeroConst($3);
+			 ASTNode len = ParserBM->CreateZeroConst($3);
 			 unsigned int w = $1->GetValueWidth();
 
 			 //the amount by which you are rightshifting
 			 //is less-than/equal-to the length of input
 			 //bitvector
 			 if((unsigned)$3 < w) {
-			   ASTNode hi = GlobalBeevMgr->CreateBVConst(32,w-1);
-			   ASTNode low = GlobalBeevMgr->CreateBVConst(32,$3);
-			   ASTNode extract = GlobalBeevMgr->CreateTerm(BVEXTRACT,w-$3,*$1,hi,low);
-			   ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVCONCAT, w,len, extract));
-			   GlobalBeevMgr->BVTypeCheck(*n);
+			   ASTNode hi = ParserBM->CreateBVConst(32,w-1);
+			   ASTNode low = ParserBM->CreateBVConst(32,$3);
+			   ASTNode extract = ParserBM->CreateTerm(BVEXTRACT,w-$3,*$1,hi,low);
+			   ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVCONCAT, w,len, extract));
+			   BVTypeCheck(*n);
 			   $$ = n;
 			 } 
 			 else
-			   $$ = new ASTNode(GlobalBeevMgr->CreateZeroConst(w));			 
+			   $$ = new ASTNode(ParserBM->CreateZeroConst(w));			 
 
 			 delete $1;
                        }
                 |      BVPLUS_TOK '(' NUMERAL_TOK ',' Exprs ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVPLUS, $3, *$5));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVPLUS, $3, *$5));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
                        }
                 |      BVSUB_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVSUB, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVSUB, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
@@ -914,15 +920,15 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
                 |      BVUMINUS_TOK '(' Expr ')' 
                        {
 			 unsigned width = $3->GetValueWidth();
-			 ASTNode * n =  new ASTNode(GlobalBeevMgr->CreateTerm(BVUMINUS,width,*$3));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n =  new ASTNode(ParserBM->CreateTerm(BVUMINUS,width,*$3));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $3;
                        }
                 |      BVMULT_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVMULT, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVMULT, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
@@ -930,8 +936,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 		       }
                 |      BVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVDIV, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVDIV, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
@@ -939,8 +945,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 		       }
                 |      BVMOD_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(BVMOD, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVMOD, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
@@ -948,8 +954,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 		       }
                 |      SBVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(SBVDIV, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(SBVDIV, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 
 			 delete $5;
@@ -957,8 +963,8 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
 		       }
                 |      SBVREM_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
                        {
-			 ASTNode * n = new ASTNode(GlobalBeevMgr->CreateTerm(SBVREM, $3, *$5, *$7));
-			 GlobalBeevMgr->BVTypeCheck(*n);
+			 ASTNode * n = new ASTNode(ParserBM->CreateTerm(SBVREM, $3, *$5, *$7));
+			 BVTypeCheck(*n);
 			 $$ = n;
 			 delete $5;
 			 delete $7;
@@ -969,7 +975,7 @@ Expr		:      TERMID_TOK { $$ = new ASTNode(GlobalBeevMgr->GetLetMgr()->ResolveID
                        {
 			 $$ = $4;
 			 //Cleanup the LetIDToExprMap
-			 //GlobalBeevMgr->CleanupLetIDMap();
+			 //ParserBM->CleanupLetIDMap();
 		       }
 		;
 
@@ -981,23 +987,23 @@ ArrayUpdateExpr : Expr WITH_TOK Updates
 
 		    ASTNodeMap::iterator it = $3->begin();
 		    ASTNodeMap::iterator itend = $3->end();
-		    result = new ASTNode(GlobalBeevMgr->CreateTerm(WRITE,
+		    result = new ASTNode(ParserBM->CreateTerm(WRITE,
 							      width,
 							      *$1,
 							      (*it).first,
 							      (*it).second));
 		    result->SetIndexWidth($1->GetIndexWidth());
-		    GlobalBeevMgr->BVTypeCheck(*result);
+		    BVTypeCheck(*result);
 		    for(it++;it!=itend;it++) {
-		      result = new ASTNode(GlobalBeevMgr->CreateTerm(WRITE,
+		      result = new ASTNode(ParserBM->CreateTerm(WRITE,
 								width,
 								*result,
 								(*it).first,
 								(*it).second));
 		      result->SetIndexWidth($1->GetIndexWidth());
-		      GlobalBeevMgr->BVTypeCheck(*result);
+		      BVTypeCheck(*result);
 		    }
-		    GlobalBeevMgr->BVTypeCheck(*result);
+		    BVTypeCheck(*result);
 		    $$ = result;
 		    delete $3;
                   }
@@ -1022,7 +1028,7 @@ LetDecls	:	LetDecl
 LetDecl		:	FORMID_TOK '=' Expr 
                         {
 			  //Expr must typecheck
-			  GlobalBeevMgr->BVTypeCheck(*$3);
+			  BVTypeCheck(*$3);
 
 			  //set the valuewidth of the identifier
 			  $1->SetValueWidth($3->GetValueWidth());
@@ -1036,14 +1042,14 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  //
 			  //2. Ensure that LET variables are not
 			  //2. defined more than once
-			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$3);
+			  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$3);
 			  delete $1;
 			  delete $3;
 			}
                 |	FORMID_TOK ':' Type '=' Expr
 			{
 			  //do type checking. if doesn't pass then abort
-			  GlobalBeevMgr->BVTypeCheck(*$5);
+			  BVTypeCheck(*$5);
 			  
 			  if($3.indexwidth != $5->GetIndexWidth())
 			    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
@@ -1054,28 +1060,28 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  $1->SetValueWidth($5->GetValueWidth());
 			  $1->SetIndexWidth($5->GetIndexWidth());
 
-			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$5);
+			  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$5);
 			  delete $1;
 			  delete $5;
 			}
                 |       FORMID_TOK '=' Formula
                         {
 			  //Expr must typecheck
-			  GlobalBeevMgr->BVTypeCheck(*$3);
+			  BVTypeCheck(*$3);
 
 			  //set the valuewidth of the identifier
 			  $1->SetValueWidth($3->GetValueWidth());
 			  $1->SetIndexWidth($3->GetIndexWidth());
 
 			  //Do LET-expr management
-			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$3);
+			  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$3);
 			  delete $1;
 			  delete $3;
 			}
                 |	FORMID_TOK ':' Type '=' Formula
 			{
 			  //do type checking. if doesn't pass then abort
-			  GlobalBeevMgr->BVTypeCheck(*$5);
+			  BVTypeCheck(*$5);
 
 			  if($3.indexwidth != $5->GetIndexWidth())
 			    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
@@ -1087,7 +1093,7 @@ LetDecl		:	FORMID_TOK '=' Expr
 			  $1->SetIndexWidth($5->GetIndexWidth());
 
 			  //Do LET-expr management
-			  GlobalBeevMgr->GetLetMgr()->LetExprMgr(*$1,*$5);
+			  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$5);
 			  delete $1;
 			  delete $5;
 			}                

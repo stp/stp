@@ -34,7 +34,7 @@ namespace BEEV
     //CBV is actually an unsigned*. The bitvector constant is
     //represented using an external library in extlib-bvconst.
     CBV _bvconst;
-
+  
     /****************************************************************
      * Class ASTBVConstHasher:                                      *
      *                                                              *
@@ -45,7 +45,7 @@ namespace BEEV
     public:
       size_t operator()(const ASTBVConst * bvc) const;
     }; //End of class ASTBVConstHahser
-
+    
     /****************************************************************
      * Class ASTBVConstEqual:                                       *
      *                                                              *
@@ -57,7 +57,7 @@ namespace BEEV
       bool operator()(const ASTBVConst * bvc1, 
 		      const ASTBVConst * bvc2) const;
     }; //End of class ASTBVConstEqual
-
+      
     /****************************************************************
      * Private Functions (virtual defs and friends)                 *
      ****************************************************************/
@@ -99,6 +99,6 @@ namespace BEEV
 
     // Return the bvconst. It is a const-value
     CBV GetBVConst() const;
-  }; //End of ASTBVConst
+  }; //End of ASTBVConst  
 };//end of namespace
 #endif

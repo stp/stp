@@ -15,6 +15,31 @@
 namespace BEEV
 {
   /******************************************************************
+   * struct enumeration:                                            *
+   *                                                                *
+   * Templated class that allows you to define the number of bytes  *
+   * (using class T below) for the enumerated type class E.         *
+   ******************************************************************/
+  template <class E, class T>
+  struct enumeration
+  {
+    typedef T type;
+    typedef E enum_type;
+
+    enumeration() : e_(E())
+    {}
+    
+    enumeration(E e) : e_(static_cast<T>(e))
+    {}
+    
+    operator E() const
+    { return static_cast<E>(e_); }
+    
+  private:
+    T e_;
+  }; //end of Enumeration struct
+
+  /******************************************************************
    * Class ASTInternal:                                             *
    *                                                                *
    * Abstract base class for internal node representation. Requires *

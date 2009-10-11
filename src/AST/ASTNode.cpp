@@ -8,7 +8,8 @@
  ********************************************************************/
 
 #include "AST.h"
-#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
+
 /********************************************************************
  *  This file gives the class definitions of the ASTNode class      *
  ********************************************************************/
@@ -21,7 +22,9 @@ namespace BEEV
     _int_node_ptr(in)
   {
     if (in)
-      in->IncRef();
+      {
+	in->IncRef();
+      }
   } //End of Constructor
 
   // Copy constructor.  Maintain _ref_count
@@ -113,7 +116,7 @@ namespace BEEV
 
    BeevMgr* ASTNode::GetBeevMgr() const
   {
-    return GlobalBeevMgr;
+    return GlobalSTP->bm;
   } //End of GetBeevMgr()
 
   // Checks if the node has alreadybeen printed or not

@@ -9,8 +9,11 @@
 
 #ifndef ASTSYMBOL_H
 #define ASTSYMBOL_H
+
 namespace BEEV
 {
+  unsigned long hash(unsigned char *str);
+
   /******************************************************************
    *  Class ASTSymbol:                                              *
    *                                                                *
@@ -39,7 +42,18 @@ namespace BEEV
     class ASTSymbolHasher
     {
     public:
-      size_t operator()(const ASTSymbol *sym_ptr) const;
+      size_t operator()(const ASTSymbol *sym_ptr) const
+      {
+#ifdef TR1_UNORDERED_MAP
+        tr1::hash<string> h;
+#else
+	//hash<char *> h;
+#endif
+	//return h(sym_ptr->_name);
+	//cerr << "ASTSymbol hasher recieved name: " 
+	//<< sym_ptr->_name << endl;
+        return (size_t)hash((unsigned char*)(sym_ptr->_name));
+      };
     }; // End of class ASTSymbolHasher
 
     /****************************************************************
@@ -51,9 +65,13 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTSymbol *sym_ptr1, 
-		      const ASTSymbol *sym_ptr2) const;
-    }; //End of class ASTSymbolEqual
-
+		      const ASTSymbol *sym_ptr2) const
+      {
+        return (*sym_ptr1 == *sym_ptr2);
+      }
+    }; // End of class ASTSymbolEqual
+    
+    // comparator
     friend bool operator==(const ASTSymbol &sym1, 
 			   const ASTSymbol &sym2)
     {
@@ -82,7 +100,8 @@ namespace BEEV
      ****************************************************************/
 
     // Default constructor
-    ASTSymbol() : ASTInternal(), _name(NULL)
+    ASTSymbol() :
+      ASTInternal(), _name(NULL)
     {
     }
 
@@ -90,6 +109,7 @@ namespace BEEV
     ASTSymbol(const char * const name) :
       ASTInternal(SYMBOL), _name(name)
     {
+      //printf("inside ASTSymbol constructor %s\n", _name);
     }
 
     // Destructor (does nothing, but is declared virtual here.
@@ -101,6 +121,7 @@ namespace BEEV
     ASTSymbol(const ASTSymbol &sym) :
       ASTInternal(sym._kind, sym._children), _name(sym._name)
     {
+      //printf("inside ASTSymbol constructor %s\n", _name);
     }
   }; //End of ASTSymbol
 }; //end of namespace

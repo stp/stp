@@ -12,11 +12,11 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 
 namespace BEEV 
 {
   //external parser table for declared symbols.
   extern ASTNodeSet _parser_symbol_table;
-
 }; //end of namespace
 #endif

@@ -36,7 +36,8 @@ namespace printer
   }
 
   void printVarDeclsToStream( const BeevMgr* mgr, ostream &os) {
-      for(ASTVec::const_iterator i = mgr->ListOfDeclaredVars.begin(),iend=mgr->ListOfDeclaredVars.end();i!=iend;i++) {
+      for(ASTVec::const_iterator i = mgr->ListOfDeclaredVars.begin(),
+	    iend=mgr->ListOfDeclaredVars.end();i!=iend;i++) {
         const BEEV::ASTNode& a = *i;
 
         // Should be a symbol.

@@ -22,10 +22,10 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <cstdio>
 
-#include "Map.h"
-#include "Vec.h"
-#include "Heap.h"
-#include "Alg.h"
+#include "../mtl/Map.h"
+#include "../mtl/Vec.h"
+#include "../mtl/Heap.h"
+#include "../mtl/Alg.h"
 
 #include "SolverTypes.h"
 

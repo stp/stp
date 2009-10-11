@@ -12,8 +12,7 @@
 #include "parseCVC_defs.h"
 
   using namespace std;
-  using namespace BEEV;
-
+  using namespace BEEV;  
   extern char *yytext;
   extern int cvcerror (const char *msg);
 %}
@@ -37,11 +36,11 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 
 [\n]             { /*Skip new line */ }
 [ \t\r\f]	 { /* skip whitespace */ }
-0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
-0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
-0x{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
-0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
-0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
+0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
+0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
+0x{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
+0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
+0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
 {DIGIT}+	 { cvclval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}
 
 "%"		 { BEGIN COMMENT;}
@@ -119,12 +118,13 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
  "POP"           { return POP_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = BEEV::GlobalBeevMgr->CreateSymbol(yytext); 
+  BEEV::ASTNode nptr = (BEEV::ParserBM)->CreateSymbol(yytext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  cvclval.node = new BEEV::ASTNode(BEEV::GlobalBeevMgr->GetLetMgr()->ResolveID(nptr));
+  cvclval.node = 
+    new BEEV::ASTNode((BEEV::ParserBM->GetLetMgr())->ResolveID(nptr));
   //cvclval.node = new BEEV::ASTNode(nptr);
   if ((cvclval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

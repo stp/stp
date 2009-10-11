@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "AST.h"
-#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 namespace BEEV
 {
   /****************************************************************
@@ -35,7 +35,7 @@ namespace BEEV
   // unique table
   void ASTBVConst::CleanUp()
   {
-    GlobalBeevMgr->_bvconst_unique_table.erase(this);
+    (GlobalSTP->bm)->_bvconst_unique_table.erase(this);
     delete this;
   } //End of Cleanup()
 
@@ -108,14 +108,14 @@ namespace BEEV
 
 
   bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst * bvc1, 
-					       const ASTBVConst * bvc2) const
+				   const ASTBVConst * bvc2) const
   {
     if (bvc1->_value_width != bvc2->_value_width)
       {
 	return false;
       }
     return (0 == 
-	    CONSTANTBV::BitVector_Compare(bvc1->_bvconst, 
+	    CONSTANTBV::BitVector_Compare(bvc1->_bvconst,
 					  bvc2->_bvconst));
   } //End of ASTBVConstEqual operator
 };//End of namespace

@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <assert.h>
 
+#define  INITIAL_TABLE_SIZE 100
+
 #ifdef EXT_HASH_MAP
  #include <ext/hash_set>
  #include <ext/hash_map>
@@ -41,37 +43,16 @@
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"
 
+#define HASHMAP hash_map;
+#define HASHSET hash_set;
+
 namespace BEEV {
+
   using namespace std;
   using namespace MINISAT;
 #ifdef EXT_HASH_MAP
   using namespace __gnu_cxx;
 #endif
-
-  /******************************************************************
-   * struct enumeration:                                            *
-   *                                                                *
-   * Templated class that allows you to define the number of bytes  *
-   * (using class T below) for the enumerated type class E.         *
-   ******************************************************************/
-  template <class E, class T>
-  struct enumeration
-  {
-    typedef T type;
-    typedef E enum_type;
-
-    enumeration() : e_(E())
-    {}
-    
-    enumeration(E e) : e_(static_cast<T>(e))
-    {}
-    
-    operator E() const
-    { return static_cast<E>(e_); }
-    
-  private:
-    T e_;
-  }; //end of Enumeration struct
 
   /******************************************************************
    * Important classes declared as part of AST datastructures       *
@@ -94,10 +75,7 @@ namespace BEEV {
    ******************************************************************/
   typedef vector<ASTNode> ASTVec;
   typedef unsigned int * CBV;
-#define HASHMAP hash_map;
-#define HASHSET hash_set;
   extern ASTVec _empty_ASTVec;
-  
 }; //end of namespace
 
 #endif

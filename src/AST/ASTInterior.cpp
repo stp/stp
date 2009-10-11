@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "AST.h"
-#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 namespace BEEV
 {
   /******************************************************************
@@ -19,7 +19,7 @@ namespace BEEV
   // the unique table
   void ASTInterior::CleanUp()
   {
-    GlobalBeevMgr->_interior_unique_table.erase(this);
+    (GlobalSTP->bm)->_interior_unique_table.erase(this);
     delete this;
   } //End of Cleanup()
 

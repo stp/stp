@@ -5,13 +5,12 @@ OBJS = $(SRCS:.cpp=.o)
 
 LIBS = 	-L../to-sat -ltosat \
 	-L../STPManager -lstpmgr \
-	-L../AST -last \
-	-L../printer -lprinter \
-	-L../abstraction-refinement -labstractionrefinement \
-	-L../sat -lminisat  \
+	-L../absrefine_counterexample -labstractionrefinement \
 	-L../simplifier -lsimplifier \
-        -L../const-evaluator -lconsteval \
+	-L../printer -lprinter \
+	-L../AST -last \
 	-L../extlib-constbv -lconstantbv \
+	-L../sat -lminisat  \
 	-L../parser -lparser
 
 # This rebuilds each time, because the target "parser" is not created

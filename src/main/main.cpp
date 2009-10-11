@@ -9,6 +9,8 @@
 #include "../AST/AST.h"
 #include "../printer/AssortedPrinters.h"
 #include "../printer/printers.h"
+#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
@@ -42,8 +44,24 @@ int main(int argc, char ** argv) {
       FatalError("Initial allocation of memory failed.");
     }
 
-  bool quick_statistics_flag=false;
 
+  BeevMgr * bm       = new BeevMgr();
+  Simplifier * simp  = new Simplifier(bm);
+  BVSolver* bvsolver = new BVSolver(bm, simp);
+  ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
+  ToSAT * tosat      = new ToSAT(bm, simp);
+  AbsRefine_CounterExample * Ctr_Example = 
+    new AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
+
+  ParserBM          = bm;
+  GlobalSTP         = 
+    new STP(bm, 
+	    simp, 
+	    bvsolver, 
+	    arrayTransformer, 
+	    tosat, 
+	    Ctr_Example);
+  
   //populate the help string
   helpstring += "STP version: " + version + "\n\n";
   helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
@@ -171,18 +189,16 @@ int main(int argc, char ** argv) {
         }
     }
 
+  //want to print the output always from the commandline.
+  print_output_flag = true;
+  ASTVec * AssertsQuery = new ASTVec;
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
-
-  //want to print the output always from the commandline.
-  print_output_flag = true;
-  GlobalBeevMgr = new BeevMgr();
-  ASTVec * AssertsQuery = new ASTVec;
-
-  GlobalBeevMgr->runTimes.start(RunTimes::Parsing);
+  
+  bm->GetRunTimes()->start(RunTimes::Parsing);
   if (smtlib_parser_flag)
     {
       smtparse((void*)AssertsQuery);
@@ -191,7 +207,7 @@ int main(int argc, char ** argv) {
     {
       cvcparse((void*)AssertsQuery);
     }
-  GlobalBeevMgr->runTimes.stop(RunTimes::Parsing);
+  bm->GetRunTimes()->stop(RunTimes::Parsing);
 
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
@@ -199,7 +215,8 @@ int main(int argc, char ** argv) {
     {
       if(smtlib_parser_flag)
         {
-    	  // don't pass the query. It's not returned by the smtlib parser.
+    	  // don't pass the query. It's not returned by the smtlib
+    	  // parser.
     	  printer::SMTLIB_PrintBack(cout, asserts);
         }
       else
@@ -209,9 +226,11 @@ int main(int argc, char ** argv) {
       return 0;
     } //end of PrintBack if
 
-  SOLVER_RETURN_TYPE ret = GlobalBeevMgr->TopLevelSAT(asserts, query);
-  if (quick_statistics_flag)
-	  GlobalBeevMgr->runTimes.print();
-  GlobalBeevMgr->PrintOutput(ret);
+  SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSAT(asserts, query);
+  if (quick_statistics_flag) 
+    {
+      bm->GetRunTimes()->print();
+    }
+  (GlobalSTP->tosat)->PrintOutput(ret);
   return 0;
 }//end of Main

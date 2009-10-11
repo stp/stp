@@ -7,33 +7,22 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
+// to get the PRIu64 macro from inttypes, this needs to be defined.
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#include <cmath>
+#include "../sat/sat.h"
 #include "../STPManager/STPManager.h"
+
 namespace BEEV
 {
-  // FIXME: Darn it! I think this ends up copying the children twice!
-  /** Either return an old node or create it if it doesn't exist.
-      Note that nodes are physically allocated in the hash table. */
-
-  // There is  an inelegance here that  I don't know how  to solve.  I'd
-  // like to heap allocate and do some other initialization on keys only
-  // if  they aren't  in  the hash  table.   It would  be  great if  the
-  // "insert"  method took a  "creator" class  so that  I could  do that
-  // between  when it  notices that  the key  is not  there and  when it
-  // inserts it.  Alternatively, it would be great if I could insert the
-  // temporary key and replace it  if it actually got inserted.  But STL
-  // hash_set  doesn't have  the creator  feature  and paternalistically
-  // declares that keys are immutable, even though (it seems to me) that
-  // they  could be  mutated if  the hash  value and  eq values  did not
-  // change.
-
   ASTInterior *BeevMgr::LookupOrCreateInterior(ASTInterior *n_ptr)
   {
-    ASTInteriorSet::iterator it;
-
-    if ((it = _interior_unique_table.find(n_ptr)) == _interior_unique_table.end())
+    ASTInteriorSet::iterator it = _interior_unique_table.find(n_ptr);
+    if (it == _interior_unique_table.end())
       {
-        // Make a new ASTInterior node
-        // We want (NOT alpha) always to have alpha.nodenum + 1.
+        // Make a new ASTInterior node We want (NOT alpha) always to
+        // have alpha.nodenum + 1.
         if (n_ptr->GetKind() == NOT)
           {
             n_ptr->SetNodeNum(n_ptr->GetChildren()[0].GetNodeNum() + 1);
@@ -42,7 +31,8 @@ namespace BEEV
           {
             n_ptr->SetNodeNum(NewNodeNum());
           }
-        pair<ASTInteriorSet::const_iterator, bool> p = _interior_unique_table.insert(n_ptr);
+        pair<ASTInteriorSet::const_iterator, bool> p = 
+	  _interior_unique_table.insert(n_ptr);
         return *(p.first);
       }
     else
@@ -66,7 +56,9 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTVec & back_children)
+  ASTNode BeevMgr::CreateNode(Kind kind, 
+			      const ASTNode& child0, 
+			      const ASTVec & back_children)
   {
 
     ASTInterior *n_ptr = new ASTInterior(kind);
@@ -76,9 +68,11 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTVec & back_children)
+  ASTNode BeevMgr::CreateNode(Kind kind, 
+			      const ASTNode& child0, 
+			      const ASTNode& child1, 
+			      const ASTVec & back_children)
   {
-
     ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
     front_children.push_back(child0);
@@ -87,7 +81,11 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2, const ASTVec & back_children)
+  ASTNode BeevMgr::CreateNode(Kind kind, 
+			      const ASTNode& child0, 
+			      const ASTNode& child1, 
+			      const ASTNode& child2, 
+			      const ASTVec & back_children)
   {
     ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
@@ -107,14 +105,20 @@ namespace BEEV
     // insert back_children at end of front_children
     ASTVec &front_children = n_ptr->_children;
 
-    front_children.insert(front_children.end(), back_children.begin(), back_children.end());
+    front_children.insert(front_children.end(), 
+			  back_children.begin(), 
+			  back_children.end());
 
     // check for undefined nodes.
     ASTVec::const_iterator it_end = front_children.end();
     for (ASTVec::const_iterator it = front_children.begin(); it != it_end; it++)
       {
         if (it->IsNull())
-          FatalError("CreateInteriorNode: Undefined childnode in CreateInteriorNode: ", ASTUndefined);
+	  {
+	    FatalError("CreateInteriorNode:"\
+		       "Undefined childnode in CreateInteriorNode: ", 
+		       ASTUndefined);
+	  }
       }
 
     return LookupOrCreateInterior(n_ptr);
@@ -136,16 +140,68 @@ namespace BEEV
   ////////////////////////////////////////////////////////////////
   ASTNode BeevMgr::CreateSymbol(const char * const name)
   {
-    ASTSymbol temp_sym(name);
+    ASTSymbol temp_sym(name);    
     ASTNode n(LookupOrCreateSymbol(temp_sym));
     return n;
+  }
+
+  // FIXME: _name is now a constant field, and this assigns to it
+  // because it tries not to copy the string unless it needs to.  How
+  // do I avoid copying children in ASTInterior?  Perhaps I don't!
+
+  // Note: There seems to be a limitation of hash_set, in that insert
+  // returns a const iterator to the value.  That prevents us from
+  // modifying the name (in a hash-preserving way) after the symbol is
+  // inserted.  FIXME: Is there a way to do this with insert?  Need a
+  // function to make a new object in the middle of insert.  Read STL
+  // documentation.
+  ASTSymbol *BeevMgr::LookupOrCreateSymbol(ASTSymbol& s)
+  {
+    ASTSymbol *s_ptr = &s; // it's a temporary key.
+
+    //_symbol_unique_table.insert(s_ptr);
+    //return s_ptr;
+    // Do an explicit lookup to see if we need to create a copy of the
+    // string.
+    ASTSymbolSet::const_iterator it = _symbol_unique_table.find(s_ptr);
+    if (it == _symbol_unique_table.end())
+      {
+        // Make a new ASTSymbol with duplicated string (can't assign
+        // _name because it's const).  Can cast the iterator to
+        // non-const -- carefully.
+        //std::string strname(s_ptr->GetName());
+        ASTSymbol * s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()));
+        s_ptr1->SetNodeNum(NewNodeNum());
+        s_ptr1->_value_width = s_ptr->_value_width;
+        pair<ASTSymbolSet::const_iterator, bool> p = 
+	  _symbol_unique_table.insert(s_ptr1);
+        return *p.first;
+      }
+    else
+      {
+	// return symbol found in table.
+	return *it;
+      }
+  } // End of LookupOrCreateSymbol
+
+  bool BeevMgr::LookupSymbol(ASTSymbol& s)
+  {
+    ASTSymbol* s_ptr = &s; // it's a temporary key.
+
+    if (_symbol_unique_table.find(s_ptr) == 
+	_symbol_unique_table.end())
+      return false;
+    else
+      return true;
   }
 
   //Create a ASTBVConst node
   ASTNode BeevMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
   {
     if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
-      FatalError("CreateBVConst: trying to create a bvconst using unsigned long long of width: ", ASTUndefined, width);
+      FatalError("CreateBVConst: "\
+		 "trying to create a bvconst using unsigned long long of width: ", 
+		 ASTUndefined, width);
 
     CBV bv = CONSTANTBV::BitVector_Create(width, true);
     unsigned long c_val = (~((unsigned long) 0)) & bvconst;
@@ -327,50 +383,6 @@ namespace BEEV
       }
   }
 
-  // FIXME: _name is now a constant field, and this assigns to it
-  // because it tries not to copy the string unless it needs to.  How
-  // do I avoid copying children in ASTInterior?  Perhaps I don't!
-
-  // Note: There seems to be a limitation of hash_set, in that insert
-  // returns a const iterator to the value.  That prevents us from
-  // modifying the name (in a hash-preserving way) after the symbol is
-  // inserted.  FIXME: Is there a way to do this with insert?  Need a
-  // function to make a new object in the middle of insert.  Read STL
-  // documentation.
-
-  ASTSymbol *BeevMgr::LookupOrCreateSymbol(ASTSymbol& s)
-  {
-    ASTSymbol *s_ptr = &s; // it's a temporary key.
-
-    // Do an explicit lookup to see if we need to create a copy of the string.
-    ASTSymbolSet::const_iterator it;
-    if ((it = _symbol_unique_table.find(s_ptr)) == _symbol_unique_table.end())
-      {
-        // Make a new ASTSymbol with duplicated string (can't assign
-        // _name because it's const).  Can cast the iterator to
-        // non-const -- carefully.
-        //std::string strname(s_ptr->GetName());
-        ASTSymbol * s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()));
-        s_ptr1->SetNodeNum(NewNodeNum());
-        s_ptr1->_value_width = s_ptr->_value_width;
-        pair<ASTSymbolSet::const_iterator, bool> p = _symbol_unique_table.insert(s_ptr1);
-        return *p.first;
-      }
-    else
-      // return symbol found in table.
-      return *it;
-  }
-
-  bool BeevMgr::LookupSymbol(ASTSymbol& s)
-  {
-    ASTSymbol* s_ptr = &s; // it's a temporary key.
-
-    if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
-      return false;
-    else
-      return true;
-  }
-
   // Create and return an ASTNode for a term
   ASTNode BeevMgr::CreateTerm(Kind kind, 
 			      unsigned int width, 
@@ -397,6 +409,7 @@ namespace BEEV
       FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
       ASTNode n = CreateNode(kind, child0, children);
       n.SetValueWidth(width);
+      BVTypeCheck(n);
       return n;
   }
 
@@ -461,245 +474,6 @@ namespace BEEV
       }
     return os;
   }
-
-  // If there is a lot of sharing in the graph, this will take a long
-  // time.  it doesn't mark subgraphs as already having been
-  // typechecked.
-  bool BeevMgr::BVTypeCheckRecursive(const ASTNode& n)
-  {
-    const ASTVec& c = n.GetChildren();
-
-    BVTypeCheck(n);
-
-    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
-      BVTypeCheckRecursive(*it);
-
-    return true;
-  }
-
-
-
-  /* FUNCTION: Typechecker for terms and formulas
-   *
-   * TypeChecker: Assumes that the immediate Children of the input
-   * ASTNode have been typechecked. This function is suitable in
-   * scenarios like where you are building the ASTNode Tree, and you
-   * typecheck as you go along. It is not suitable as a general
-   * typechecker.
-   *
-   * If this returns, this ALWAYS returns true. If there is an error it
-   * will call FatalError() and abort.
-   */
-
-
-  bool BeevMgr::BVTypeCheck(const ASTNode& n)
-  {
-    Kind k = n.GetKind();
-    //The children of bitvector terms are in turn bitvectors.
-    const ASTVec& v = n.GetChildren();
-    if (is_Term_kind(k))
-      {
-        switch (k)
-          {
-          case BVCONST:
-            if (BITVECTOR_TYPE != n.GetType())
-              FatalError("BVTypeCheck: The term t does not typecheck, where t = \n", n);
-            break;
-          case SYMBOL:
-            return true;
-          case ITE:
-            if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
-              FatalError("BVTypeCheck: The term t does not typecheck, where t = \n", n);
-            if (n[1].GetValueWidth() != n[2].GetValueWidth())
-              FatalError("BVTypeCheck: length of THENbranch != length of ELSEbranch in the term t = \n", n);
-            if (n[1].GetIndexWidth() != n[2].GetIndexWidth())
-              FatalError("BVTypeCheck: length of THENbranch != length of ELSEbranch in the term t = \n", n);
-            break;
-          case READ:
-            if (n.GetChildren().size() !=2)
-              FatalError("2 params to read.");
-            if (n[0].GetIndexWidth() != n[1].GetValueWidth())
-              {
-                cerr << "Length of indexwidth of array: " << n[0] << " is : " << n[0].GetIndexWidth() << endl;
-                cerr << "Length of the actual index is: " << n[1] << " is : " << n[1].GetValueWidth() << endl;
-                FatalError("BVTypeCheck: length of indexwidth of array != length of actual index in the term t = \n", n);
-              }
-            if (ARRAY_TYPE != n[0].GetType())
-              FatalError("First parameter to read should be an array", n[0]);
-            if (BITVECTOR_TYPE != n[1].GetType())
-              FatalError("Second parameter to read should be a bitvector", n[1]);
-            break;
-          case WRITE:
-            if (n.GetChildren().size() !=3)
-              FatalError("3 params to write.");
-            if (n[0].GetIndexWidth() != n[1].GetValueWidth())
-              FatalError("BVTypeCheck: length of indexwidth of array != length of actual index in the term t = \n", n);
-            if (n[0].GetValueWidth() != n[2].GetValueWidth())
-              FatalError("BVTypeCheck: valuewidth of array != length of actual value in the term t = \n", n);
-            if (ARRAY_TYPE != n[0].GetType())
-              FatalError("First parameter to read should be an array", n[0]);
-            if (BITVECTOR_TYPE != n[1].GetType())
-              FatalError("Second parameter to read should be a bitvector", n[1]);
-            if (BITVECTOR_TYPE != n[2].GetType())
-              FatalError("Third parameter to read should be a bitvector", n[2]);
-
-            break;
-          case BVOR:
-          case BVAND:
-          case BVXOR:
-          case BVNOR:
-          case BVNAND:
-          case BVXNOR:
-          case BVPLUS:
-          case BVMULT:
-          case BVDIV:
-          case BVMOD:
-          case BVSUB:
-            {
-              if (!(v.size() >= 2))
-                FatalError("BVTypeCheck:bitwise Booleans and BV arith operators must have atleast two arguments\n", n);
-              unsigned int width = n.GetValueWidth();
-              for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
-                {
-                  if (width != it->GetValueWidth())
-                    {
-                      cerr << "BVTypeCheck:Operands of bitwise-Booleans and BV arith operators must be of equal length\n";
-                      cerr << n << endl;
-                      cerr << "width of term:" << width << endl;
-                      cerr << "width of offending operand:" << it->GetValueWidth() << endl;
-                      FatalError("BVTypeCheck:Offending operand:\n", *it);
-                    }
-                  if (BITVECTOR_TYPE != it->GetType())
-                    FatalError("BVTypeCheck: ChildNodes of bitvector-terms must be bitvectors\n", n);
-                }
-              break;
-            }
-          case BVSX:
-            //in BVSX(n[0],len), the length of the BVSX term must be
-            //greater than the length of n[0]
-            if (n[0].GetValueWidth() > n.GetValueWidth())
-              {
-                FatalError("BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n", n);
-              }
-            if ((v.size() != 2))
-              FatalError("BVTypeCheck:BVSX must have two arguments. The second is the new width\n", n);
-            break;
-
-          default:
-            for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
-              if (BITVECTOR_TYPE != it->GetType())
-                {
-                  cerr << "The type is: " << it->GetType() << endl;
-                  FatalError("BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n", n);
-                }
-            break;
-          }
-
-        switch (k)
-          {
-          case BVCONCAT:
-            if (n.Degree() != 2)
-              FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-            if (n.GetValueWidth() != n[0].GetValueWidth() + n[1].GetValueWidth())
-              FatalError("BVTypeCheck:BVCONCAT: lengths do not add up\n", n);
-            break;
-          case BVUMINUS:
-          case BVNEG:
-            if (n.Degree() != 1)
-              FatalError("BVTypeCheck: should have exactly 1 args\n", n);
-            break;
-          case BVEXTRACT:
-            if (n.Degree() != 3)
-              FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-            if (!(BVCONST == n[1].GetKind() && BVCONST == n[2].GetKind()))
-              FatalError("BVTypeCheck: indices should be BVCONST\n", n);
-            if (n.GetValueWidth() != GetUnsignedConst(n[1]) - GetUnsignedConst(n[2]) + 1)
-              FatalError("BVTypeCheck: length mismatch\n", n);
-			if (GetUnsignedConst(n[1]) >= n[0].GetValueWidth())
-				FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
-            break;
-          case BVLEFTSHIFT:
-          case BVRIGHTSHIFT:
-            if (n.Degree() != 2)
-              FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-            break;
-            //case BVVARSHIFT:
-            //case BVSRSHIFT:
-            //break;
-          default:
-            break;
-          }
-      }
-    else
-      {
-        if (!(is_Form_kind(k) && BOOLEAN_TYPE == n.GetType()))
-          FatalError("BVTypeCheck: not a formula:", n);
-        switch (k)
-          {
-          case TRUE:
-          case FALSE:
-          case SYMBOL:
-            return true;
-	  case PARAMBOOL:
-	    if(2 != n.Degree())
-	      FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);
-	    break;
-          case EQ:
-            if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
-              {
-                cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
-                cerr << "valuewidth of rhs of EQ: " << n[1].GetValueWidth() << endl;
-                cerr << "indexwidth of lhs of EQ: " << n[0].GetIndexWidth() << endl;
-                cerr << "indexwidth of rhs of EQ: " << n[1].GetIndexWidth() << endl;
-                FatalError("BVTypeCheck: terms in atomic formulas must be of equal length", n);
-              }
-            break;
-          case BVLT:
-          case BVLE:
-          case BVGT:
-          case BVGE:
-          case BVSLT:
-          case BVSLE:
-          case BVSGT:
-          case BVSGE:
-            if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())
-              FatalError("BVTypeCheck: terms in atomic formulas must be bitvectors", n);
-            if (n[0].GetValueWidth() != n[1].GetValueWidth())
-              FatalError("BVTypeCheck: terms in atomic formulas must be of equal length", n);
-            if (n[0].GetIndexWidth() != n[1].GetIndexWidth())
-              FatalError("BVTypeCheck: terms in atomic formulas must be of equal length", n);
-            break;
-          case NOT:
-            if (1 != n.Degree())
-              FatalError("BVTypeCheck: NOT formula can have exactly one childNode", n);
-            break;
-          case AND:
-          case OR:
-          case XOR:
-          case NAND:
-          case NOR:
-            if (2 > n.Degree())
-              FatalError("BVTypeCheck: AND/OR/XOR/NAND/NOR: must have atleast 2 ChildNodes", n);
-            break;
-          case IFF:
-          case IMPLIES:
-            if (2 != n.Degree())
-              FatalError("BVTypeCheck:IFF/IMPLIES must have exactly 2 ChildNodes", n);
-            break;
-          case ITE:
-            if (3 != n.Degree())
-              FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
-            break;
-          case FOR:
-            //FIXME: Todo
-            break;
-          default:
-            FatalError("BVTypeCheck: Unrecognized kind: ", ASTUndefined);
-            break;
-          }
-      }
-    return true;
-  } //End of TypeCheck function
 
   //add an assertion to the current logical context
   void BeevMgr::AddAssert(const ASTNode& assert)
@@ -782,37 +556,20 @@ namespace BEEV
     return v;
   }
 
-  //Create a new variable of ValueWidth 'n'
-  ASTNode BeevMgr::NewArrayVar(unsigned int index, unsigned int value)
-  {
-    std::string c("v");
-    char d[32];
-    sprintf(d, "%d", _symbol_count++);
-    std::string ccc(d);
-    c += "_writearray_" + ccc;
+  // //Create a new variable of ValueWidth 'n'
+//   ASTNode BeevMgr::NewArrayVar(unsigned int index, unsigned int value)
+//   {
+//     std::string c("v");
+//     char d[32];
+//     sprintf(d, "%d", _symbol_count++);
+//     std::string ccc(d);
+//     c += "_writearray_" + ccc;
 
-    ASTNode CurrentSymbol = CreateSymbol(c.c_str());
-    CurrentSymbol.SetValueWidth(value);
-    CurrentSymbol.SetIndexWidth(index);
-    return CurrentSymbol;
-  } //end of NewArrayVar()
-
-
-  //Create a new variable of ValueWidth 'n'
-  ASTNode BeevMgr::NewVar(unsigned int value)
-  {
-    std::string c("v");
-    char d[32];
-    sprintf(d, "%d", _symbol_count++);
-    std::string ccc(d);
-    c += "_new_stp_var_" + ccc;
-
-    ASTNode CurrentSymbol = CreateSymbol(c.c_str());
-    CurrentSymbol.SetValueWidth(value);
-    CurrentSymbol.SetIndexWidth(0);
-    _introduced_symbols.insert(CurrentSymbol);
-    return CurrentSymbol;
-  } //end of NewVar()
+//     ASTNode CurrentSymbol = CreateSymbol(c.c_str());
+//     CurrentSymbol.SetValueWidth(value);
+//     CurrentSymbol.SetIndexWidth(index);
+//     return CurrentSymbol;
+//   } //end of NewArrayVar()
 
   //prints statistics for the ASTNode
   void BeevMgr::ASTNodeStats(const char * c, const ASTNode& a)
@@ -861,155 +618,187 @@ namespace BEEV
 
   void BeevMgr::ClearAllTables(void)
   {
-    //clear all tables before calling toplevelsat
-    _ASTNode_to_SATVar.clear();
-    _SATVar_to_AST.clear();
+//     //clear all tables before calling toplevelsat
+//     //_ASTNode_to_SATVar.clear();
+//     //_SATVar_to_AST.clear();
 
-    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
-      {
-        (it->second)->clear();
-        delete (it->second);
-      }
-    _ASTNode_to_Bitvector.clear();
+//     //     for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
+//     // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
+//     //       {
+//     //         (it->second)->clear();
+//     //         delete (it->second);
+//     //       }
+//     //     _ASTNode_to_Bitvector.clear();
 
-    NodeLetVarMap.clear();
-    NodeLetVarMap1.clear();
-    PLPrintNodeSet.clear();
-    AlreadyPrintedSet.clear();
-    SimplifyMap->clear();
-    SimplifyNegMap->clear();
-    ReferenceCount->clear();
-    SolverMap.clear();
-    AlwaysTrueFormMap.clear();
-    _arrayread_ite.clear();
-    _arrayread_symbol.clear();
-    _introduced_symbols.clear();
-    CounterExampleMap.clear();
-    ComputeFormulaMap.clear();
-    StatInfoSet.clear();
+//     NodeLetVarMap.clear();
+//     NodeLetVarMap1.clear();
+//     PLPrintNodeSet.clear();
+//     AlreadyPrintedSet.clear();
+//     //ReferenceCount->clear();
+//     //_arrayread_ite.clear();
+//     //_introduced_symbols.clear();
+//     //CounterExampleMap.clear();
+//     //ComputeFormulaMap.clear();
+//     StatInfoSet.clear();
 
-    // for(std::vector<ASTVec *>::iterator it=_asserts.begin(),
-    //    itend=_asserts.end();it!=itend;it++) {
-    //       (*it)->clear();
-    //     }
-    _asserts.clear();
-    for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
-      {
-        iset->second.clear();
-      }
+//     _asserts.clear();
 
-    _arrayname_readindices.clear();
-    _interior_unique_table.clear();
-    _symbol_unique_table.clear();
-    _bvconst_unique_table.clear();
+//     //     for (ASTNodeToVecMap::iterator iset =
+//     //     _arrayname_readindices.begin(), iset_end =
+//     //     _arrayname_readindices.end(); iset != iset_end; iset++) {
+//     //     iset->second.clear(); }   
+//     //     _arrayname_readindices.clear();
+
+//     _interior_unique_table.clear();
+//     _symbol_unique_table->clear();
+//     _bvconst_unique_table.clear();
   }
 
   void BeevMgr::ClearAllCaches(void)
   {
     //clear all tables before calling toplevelsat
-    _ASTNode_to_SATVar.clear();
-    _SATVar_to_AST.clear();
+    //_ASTNode_to_SATVar.clear();
+    //_SATVar_to_AST.clear();
 
-    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
-      {
-        (it->second)->clear();
-        delete (it->second);
-      }
-    _ASTNode_to_Bitvector.clear();
-
+    // for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
+    // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
+    //       {
+    //         (it->second)->clear();
+    //         delete (it->second);
+    //       }
+    //     _ASTNode_to_Bitvector.clear();
+    
     NodeLetVarMap.clear();
     NodeLetVarMap1.clear();
     PLPrintNodeSet.clear();
     AlreadyPrintedSet.clear();
-    SimplifyMap->clear();
-    SimplifyNegMap->clear();
-    ReferenceCount->clear();
-    SolverMap.clear();
-    AlwaysTrueFormMap.clear();
-    _arrayread_ite.clear();
-    _arrayread_symbol.clear();
-    _introduced_symbols.clear();
-    CounterExampleMap.clear();
-    ComputeFormulaMap.clear();
+    // SimplifyMap->clear();
+    //     SimplifyNegMap->clear();
+    //     ReferenceCount->clear();
+    //     SolverMap.clear();
+    //AlwaysTrueFormMap.clear();
+    //_arrayread_ite.clear();
+    //_arrayread_symbol.clear();
+    //_introduced_symbols.clear();
+    //CounterExampleMap.clear();
+    //ComputeFormulaMap.clear();
     StatInfoSet.clear();
 
-    for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
-      {
-        iset->second.clear();
-      }
-
-    _arrayname_readindices.clear();
+    // for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
+    //       {
+    //         iset->second.clear();
+    //       }
+    
+    //     _arrayname_readindices.clear();
     //_interior_unique_table.clear();
     //_symbol_unique_table.clear();
     //_bvconst_unique_table.clear();
   }
 
-  void BeevMgr::CopySolverMap_To_CounterExample(void)
-  {
-    if (!SolverMap.empty())
-      {
-        CounterExampleMap.insert(SolverMap.begin(), SolverMap.end());
-      }
-  }
-
-  void FatalError(const char * str, const ASTNode& a, int w)
-  {
-    if (a.GetKind() != UNDEFINED)
-      {
-        cerr << "Fatal Error: " << str << endl << a << endl;
-        cerr << w << endl;
-      }
-    else
-      {
-        cerr << "Fatal Error: " << str << endl;
-        cerr << w << endl;
-      }
-    if (vc_error_hdlr)
-      vc_error_hdlr(str);
-    exit(-1);
-    //assert(0);
-  }
-
-  void FatalError(const char * str)
-  {
-    cerr << "Fatal Error: " << str << endl;
-    if (vc_error_hdlr)
-      vc_error_hdlr(str);
-    exit(-1);
-    //assert(0);
-  }
-  
-  void SortByExprNum(ASTVec& v)
-  {
-    sort(v.begin(), v.end(), exprless);
-  }
-
-  void SortByArith(ASTVec& v)
-  {
-    sort(v.begin(), v.end(), arithless);
-  }
-
-  bool isAtomic(Kind kind)
-  {
-    if (TRUE == kind  || FALSE == kind || 
-        EQ == kind    ||
-        BVLT == kind  || BVLE == kind  || 
-        BVGT == kind  || BVGE == kind  || 
-        BVSLT == kind || BVSLE == kind || 
-        BVSGT == kind || BVSGE == kind || 
-        SYMBOL == kind || BVGETBIT == kind)
-      return true;
-    return false;
-  }
-
   BeevMgr::~BeevMgr()
   {
-    ClearAllTables();
-
-    delete SimplifyMap;
-    delete SimplifyNegMap;
-    delete ReferenceCount;
+    ClearAllTables();    
   }
+
+
+  // GLOBAL FUNCTION: Prints statistics from the MINISAT Solver
+  void BeevMgr::PrintStats(MINISAT::Solver& s)
+  {
+    if (!stats_flag)
+      return;
+    double cpu_time = MINISAT::cpuTime();
+    uint64_t mem_used = MINISAT::memUsed();
+    reportf("restarts              : %"PRIu64"\n",                      s.starts);
+    reportf("conflicts             : %"PRIu64"   (%.0f /sec)\n",        s.conflicts   , s.conflicts   /cpu_time);
+    reportf("decisions             : %"PRIu64"   (%.0f /sec)\n",        s.decisions   , s.decisions   /cpu_time);
+    reportf("propagations          : %"PRIu64"   (%.0f /sec)\n",        s.propagations, s.propagations/cpu_time);
+    reportf("conflict literals     : %"PRIu64"   (%4.2f %% deleted)\n", s.tot_literals,
+            (s.max_literals - s.tot_literals)*100 / (double)s.max_literals);
+    if (mem_used != 0)
+      reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
+    reportf("CPU time              : %g s\n", cpu_time);
+  } //end of PrintStats()
+
+
+  //Create a new variable of ValueWidth 'n'
+  ASTNode BeevMgr::NewVar(unsigned int n)
+  {
+    std::string c("v");
+    char d[32];
+    sprintf(d, "%d", _symbol_count++);
+    std::string ccc(d);
+    c += "_solver_" + ccc;
+
+    ASTNode CurrentSymbol = CreateSymbol(c.c_str());
+    CurrentSymbol.SetValueWidth(n);
+    CurrentSymbol.SetIndexWidth(0);
+    return CurrentSymbol;
+  } //end of NewVar()
+
+  bool BeevMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
+  {
+    if (READ == term.GetKind() 
+	&& WRITE == term[0].GetKind() 
+	&& !GetRemoveWritesFlag())
+      {
+        return false;
+      }
+
+    if (READ == term.GetKind() 
+	&& WRITE == term[0].GetKind() 
+	&& GetRemoveWritesFlag())
+      {
+        return true;
+      }
+
+    ASTNodeMap::iterator it;
+    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
+      {
+        if (it->second == var)
+          {
+            return false;
+          }
+      }
+
+    if (var == term)
+      {
+        return true;
+      }
+
+    for (ASTVec::const_iterator it = term.begin(), itend = term.end(); it != itend; it++)
+      {
+        if (VarSeenInTerm(var, *it))
+          {
+            return true;
+          }
+        else
+          {
+            TermsAlreadySeenMap[*it] = var;
+          }
+      }
+
+    TermsAlreadySeenMap[term] = var;
+    return false;
+  }//End of VarSeenInTerm
+
+  
+  ASTNode BeevMgr::NewParameterized_BooleanVar(const ASTNode& var,
+					       const ASTNode& constant)
+  {
+    ostringstream outVar;
+    ostringstream outNum;
+    //Get the name of Boolean Var
+    var.PL_Print(outVar);
+    constant.PL_Print(outNum);
+    std::string str(outVar.str());
+    str += "(";
+    str += outNum.str();
+    str += ")";
+    ASTNode CurrentSymbol = CreateSymbol(str.c_str());
+    CurrentSymbol.SetValueWidth(0);
+    CurrentSymbol.SetIndexWidth(0);
+    return CurrentSymbol;
+  } // End of NewParameterized_BooleanVar()
 
 }; // end namespace beev
 

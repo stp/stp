@@ -8,9 +8,7 @@
  ********************************************************************/
 
 #include <cassert>
-#include "../AST/AST.h"
-#include "../STPManager/STPManager.h"
-
+#include "simplifier.h"
 
 namespace BEEV
 {
@@ -23,7 +21,7 @@ namespace BEEV
     FatalError(ss.c_str(), t);
   }
 
-  ASTNode BeevMgr::BVConstEvaluator(const ASTNode& t)
+  ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
   {
     ASTNode OutputNode;
     Kind k = t.GetKind();
@@ -68,7 +66,7 @@ namespace BEEV
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_Complement(output, tmp0);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVSX:
@@ -79,7 +77,7 @@ namespace BEEV
           if (inputwidth == t0_width)
             {
               CONSTANTBV::BitVector_Copy(output, tmp0);
-              OutputNode = CreateBVConst(output, outputwidth);
+              OutputNode = _bm->CreateBVConst(output, outputwidth);
             }
           else
             {
@@ -90,7 +88,7 @@ namespace BEEV
                   CONSTANTBV::BitVector_Fill(output);
                 }
               CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, t0_width);
-              OutputNode = CreateBVConst(output, outputwidth);
+              OutputNode = _bm->CreateBVConst(output, outputwidth);
             }
           break;
         }
@@ -142,7 +140,7 @@ namespace BEEV
 				}
 			}
 
-			OutputNode = CreateBVConst(output, outputwidth);
+			OutputNode = _bm->CreateBVConst(output, outputwidth);
 
 			CONSTANTBV::BitVector_Destroy(width);
 			break;
@@ -153,21 +151,21 @@ namespace BEEV
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_Intersection(output, tmp0, tmp1);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVOR:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_Union(output, tmp0, tmp1);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVXOR:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_ExclusiveOr(output, tmp0, tmp1);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVSUB:
@@ -175,14 +173,14 @@ namespace BEEV
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           bool carry = false;
           CONSTANTBV::BitVector_sub(output, tmp0, tmp1, &carry);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVUMINUS:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::BitVector_Negate(output, tmp0);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
       case BVEXTRACT:
@@ -197,7 +195,7 @@ namespace BEEV
           output = CONSTANTBV::BitVector_Create(len, false);
           CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, low, len);
           outputwidth = len;
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
 
@@ -211,7 +209,7 @@ namespace BEEV
 
           output = CONSTANTBV::BitVector_Concat(tmp0, tmp1);
           outputwidth = t0_width + t1_width;
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
 
           break;
         }
@@ -228,7 +226,7 @@ namespace BEEV
           //FIXME WHAT IS MY OUTPUT???? THE SECOND HALF of tmp?
           //CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, inputwidth, inputwidth);
           CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, 0, inputwidth);
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           CONSTANTBV::BitVector_Destroy(tmp);
           break;
         }
@@ -244,7 +242,7 @@ namespace BEEV
               carry = false;
               //CONSTANTBV::BitVector_Destroy(kk);
             }
-          OutputNode = CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
         }
 
@@ -260,7 +258,7 @@ namespace BEEV
           if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
-              OutputNode = CreateOneConst(outputwidth);
+              OutputNode = _bm->CreateOneConst(outputwidth);
             }
           else
             {
@@ -274,12 +272,12 @@ namespace BEEV
 
               if (SBVDIV == k)
                 {
-                  OutputNode = CreateBVConst(quotient, outputwidth);
+                  OutputNode = _bm->CreateBVConst(quotient, outputwidth);
                   CONSTANTBV::BitVector_Destroy(remainder);
                 }
               else
                 {
-                  OutputNode = CreateBVConst(remainder, outputwidth);
+                  OutputNode = _bm->CreateBVConst(remainder, outputwidth);
                   CONSTANTBV::BitVector_Destroy(quotient);
 
                 }
@@ -315,7 +313,7 @@ namespace BEEV
           if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
-              OutputNode = CreateOneConst(outputwidth);
+              OutputNode = _bm->CreateOneConst(outputwidth);
 
             }
           else
@@ -329,7 +327,7 @@ namespace BEEV
                       cerr << "Error code was:" << e << endl;
                       assert(e == CONSTANTBV::ErrCode_Ok);
                     }
-                  OutputNode = CreateBVConst(remainder, outputwidth);
+                  OutputNode = _bm->CreateBVConst(remainder, outputwidth);
                 }
               else if (isNegativeS && !isNegativeT)
                 {
@@ -348,7 +346,7 @@ namespace BEEV
                   CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
                   CONSTANTBV::BitVector_add(res, remb, tmp1, &carry);
 
-                  OutputNode = CreateBVConst(res, outputwidth);
+                  OutputNode = _bm->CreateBVConst(res, outputwidth);
 
                   CONSTANTBV::BitVector_Destroy(tmp0b);
                   CONSTANTBV::BitVector_Destroy(remb);
@@ -368,7 +366,7 @@ namespace BEEV
                   CBV res = CONSTANTBV::BitVector_Create(inputwidth, true);
                   CONSTANTBV::BitVector_add(res, remainder, tmp1, &carry);
 
-                  OutputNode = CreateBVConst(res, outputwidth);
+                  OutputNode = _bm->CreateBVConst(res, outputwidth);
 
                   CONSTANTBV::BitVector_Destroy(tmp1b);
                   CONSTANTBV::BitVector_Destroy(remainder);
@@ -387,7 +385,7 @@ namespace BEEV
                   CBV remb = CONSTANTBV::BitVector_Create(inputwidth, true);
                   CONSTANTBV::BitVector_Negate(remb, remainder);
 
-                  OutputNode = CreateBVConst(remb, outputwidth);
+                  OutputNode = _bm->CreateBVConst(remb, outputwidth);
                   CONSTANTBV::BitVector_Destroy(tmp0b);
                   CONSTANTBV::BitVector_Destroy(tmp1b);
                   CONSTANTBV::BitVector_Destroy(remainder);
@@ -413,16 +411,17 @@ namespace BEEV
           if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
-              OutputNode = CreateOneConst(outputwidth);
+              OutputNode = _bm->CreateOneConst(outputwidth);
             }
           else
             {
 
-              // tmp0 is dividend, tmp1 is the divisor
-              //All parameters to BitVector_Div_Pos must be distinct unlike BitVector_Divide
-              //FIXME the contents of the second parameter to Div_Pos is destroyed
-              //As tmp0 is currently the same as the copy belonging to an ASTNode t[0]
-              //this must be copied.
+              // tmp0 is dividend, tmp1 is the divisor All parameters
+              //to BitVector_Div_Pos must be distinct unlike
+              //BitVector_Divide FIXME the contents of the second
+              //parameter to Div_Pos is destroyed As tmp0 is currently
+              //the same as the copy belonging to an ASTNode t[0] this
+              //must be copied.
               tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
               CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
               CONSTANTBV::BitVector_Destroy(tmp0);
@@ -430,11 +429,11 @@ namespace BEEV
               if (0 != e)
                 {
                   //error printing
-                  if (counterexample_checking_during_refinement)
+                  if (_bm->counterexample_checking_during_refinement)
                     {
                       output = CONSTANTBV::BitVector_Create(inputwidth, true);
-                      OutputNode = CreateBVConst(output, outputwidth);
-                      bvdiv_exception_occured = true;
+                      OutputNode = _bm->CreateBVConst(output, outputwidth);
+                      _bm->bvdiv_exception_occured = true;
 
                       //  CONSTANTBV::BitVector_Destroy(output);
                       break;
@@ -448,12 +447,12 @@ namespace BEEV
               //FIXME Not very standard in the current scheme
               if (BVDIV == k)
                 {
-                  OutputNode = CreateBVConst(quotient, outputwidth);
+                  OutputNode = _bm->CreateBVConst(quotient, outputwidth);
                   CONSTANTBV::BitVector_Destroy(remainder);
                 }
               else
                 {
-                  OutputNode = CreateBVConst(remainder, outputwidth);
+                  OutputNode = _bm->CreateBVConst(remainder, outputwidth);
                   CONSTANTBV::BitVector_Destroy(quotient);
                 }
             }

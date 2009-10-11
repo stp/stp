@@ -2,6 +2,7 @@ include ../../scripts/Makefile.common
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
+CFLAGS += -I../sat/mtl -I../sat/simp -I../sat/core
 
 libabstractionrefinement.a: 	$(OBJS) depend
 				$(AR) rc $@ $(OBJS)

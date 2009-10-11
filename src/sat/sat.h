@@ -3,8 +3,7 @@
 
 #include "core/Solver.h"
 #include "core/SolverTypes.h"
-#include "../sat/simp/SimpSolver.h"
-//#include "../sat/unsound/UnsoundSimpSolver.h"
+//#include "simp/SimpSolver.h"
+//#include "unsound/UnsoundSimpSolver.h"
 
-
-#endif /* SAT_H_ */
+#endif

@@ -257,7 +257,6 @@ namespace BEEV
     // constructor
     CNFMgr(BeevMgr *bmgr);
    
-
     //########################################
     //########################################
     // destructor

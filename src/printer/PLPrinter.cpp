@@ -180,12 +180,12 @@ namespace printer
 	os << ")";
 	break;
       case FOR:
-	if(expand_finitefor_flag) 
-	  {
-	    ASTNode expandedfor = bm->Expand_FiniteLoop_TopLevel(n);
-	    PL_Print1(os, expandedfor, indentation, letize);
-	  }
-	else 
+	// if(expand_finitefor_flag) 
+	// 	  {
+	// 	    ASTNode expandedfor = bm->Expand_FiniteLoop_TopLevel(n);
+	// 	    PL_Print1(os, expandedfor, indentation, letize);
+	// 	  }
+	// 	else 
 	  {
 	    os << "FOR(";
 	    PL_Print1(os, c[0], indentation, letize);
