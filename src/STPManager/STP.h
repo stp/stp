@@ -19,17 +19,29 @@
 #include "../parser/let-funcs.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
 
+/********************************************************************
+ *  This file gives the class description of the STP class          *
+ ********************************************************************/
 
 namespace BEEV
 {
   class STP {
   public:
+    /****************************************************************
+     * Public Data:
+     *  
+     * Absolute toplevel class. No need to make data private
+     ****************************************************************/
     STPMgr * bm;
     Simplifier * simp;
     BVSolver * bvsolver;
     ArrayTransformer * arrayTransformer;
     ToSAT * tosat;
     AbsRefine_CounterExample * Ctr_Example;
+
+    /****************************************************************
+     * Constructor and Destructor                                   *
+     ****************************************************************/
 
     //Constructor
     STP(STPMgr* b,
@@ -51,6 +63,10 @@ namespace BEEV
     {
       ClearAllTables();	  
     }
+
+    /****************************************************************
+     * Public Member Functions                                      *
+     ****************************************************************/
 
     // The absolute TopLevel function that invokes STP on the input
     // formula
