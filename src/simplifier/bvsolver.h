@@ -129,7 +129,7 @@ namespace BEEV
 
     public:
       //constructor
-      BVSolver(BeevMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)
+      BVSolver(BeevMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)	
         {
           ASTTrue = _bm->CreateNode(TRUE);
           ASTFalse = _bm->CreateNode(FALSE);
