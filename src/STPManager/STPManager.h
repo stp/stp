@@ -16,10 +16,10 @@
 namespace BEEV
 {
   /*****************************************************************
-   * Class BeevMgr.  This holds all "global" variables for the system,
+   * Class STPMgr.  This holds all "global" variables for the system,
    * such as unique tables for the various kinds of nodes.
    *****************************************************************/
-  class BeevMgr
+  class STPMgr
   {
     friend class ASTNode;
     friend class ASTInterior;
@@ -159,7 +159,7 @@ namespace BEEV
      ****************************************************************/
 
     // Constructor
-    BeevMgr() : 
+    STPMgr() : 
       _symbol_unique_table(INITIAL_TABLE_SIZE),
       _bvconst_unique_table(INITIAL_TABLE_SIZE),
       _interior_unique_table(INITIAL_TABLE_SIZE),
@@ -183,7 +183,7 @@ namespace BEEV
     }    
 
     //destructor
-    ~BeevMgr();
+    ~STPMgr();
 
     //Return ptr to let-variables manager (see parser/let-funcs.h)
     LETMgr * GetLetMgr(void)
@@ -322,9 +322,6 @@ namespace BEEV
     //add an assertion to the current logical context
     void AddAssert(const ASTNode& assert);
     
-    void ClearAllTables(void);
-    void ClearAllCaches(void);
-
     /****************************************************************
      * Toplevel printing and stats functions                        *
      ****************************************************************/
@@ -374,6 +371,6 @@ namespace BEEV
       TermsAlreadySeenMap.clear();
     }
 
-  };//End of Class BeevMgr
+  };//End of Class STPMgr
 };//end of namespace
 #endif

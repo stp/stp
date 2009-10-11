@@ -91,7 +91,7 @@ namespace printer
   ostream &Lisp_Print(ostream &os, const ASTNode& n,  int indentation)
   {
     // Clear the PrintMap
-    BeevMgr* bm = n.GetBeevMgr();
+    STPMgr* bm = n.GetSTPMgr();
     bm->AlreadyPrintedSet.clear();
     Lisp_Print_indent(os, n, indentation);
     printf("\n");

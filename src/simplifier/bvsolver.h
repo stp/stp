@@ -44,7 +44,7 @@ namespace BEEV
       // Ptr to toplevel manager that manages bit-vector expressions
       // (i.e. construct various kinds of expressions), and also has
       // member functions that simplify bit-vector expressions
-      BeevMgr * _bm;
+      STPMgr * _bm;
       
       // Ptr to Simplifier
       Simplifier * _simp;
@@ -129,7 +129,7 @@ namespace BEEV
 
     public:
       //constructor
-      BVSolver(BeevMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)	
+      BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)	
         {
           ASTTrue = _bm->CreateNode(TRUE);
           ASTFalse = _bm->CreateNode(FALSE);

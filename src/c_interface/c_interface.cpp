@@ -17,7 +17,7 @@
 //many overloaded meanings of the word type)
 typedef BEEV::ASTNode                    node;
 typedef BEEV::ASTNode*                   nodestar;
-typedef BEEV::BeevMgr*                   bmstar;
+typedef BEEV::STPMgr*                   bmstar;
 typedef BEEV::STP*                       stpstar;
 typedef BEEV::Simplifier*                simpstar;
 typedef BEEV::BVSolver*                  bvsolverstar;
@@ -119,7 +119,7 @@ void vc_setFlags(char c) {
   }
 }
 
-//Create a validity Checker. This is the global BeevMgr
+//Create a validity Checker. This is the global STPMgr
 VC vc_createValidityChecker(void) {
   vc_setFlags('d');
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
@@ -128,18 +128,20 @@ VC vc_createValidityChecker(void) {
     return 0;
   }
 
-  BEEV::BeevMgr * bm       = new BEEV::BeevMgr();
+  BEEV::STPMgr * bm       = new BEEV::STPMgr();
   BEEV::Simplifier * simp  = new BEEV::Simplifier(bm);
   BEEV::BVSolver* bvsolver = new BEEV::BVSolver(bm, simp);
   BEEV::ToSAT * tosat      = new BEEV::ToSAT(bm, simp);
-  BEEV::ArrayTransformer * arrayTransformer = new BEEV::ArrayTransformer(bm, simp);
+  BEEV::ArrayTransformer * arrayTransformer = 
+    new BEEV::ArrayTransformer(bm, simp);
   BEEV::AbsRefine_CounterExample * Ctr_Example = 
-    new BEEV::AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
-  
-  BEEV::ParserBM          = bm;
-  stpstar stp             = new BEEV::STP(bm, simp, 
-					  bvsolver, arrayTransformer, 
-					  tosat, Ctr_Example);
+    new BEEV::AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);
+
+  BEEV::ParserBM = bm;
+  stpstar stp =
+    new BEEV::STP(bm, simp, 
+		  bvsolver, arrayTransformer, 
+		  tosat, Ctr_Example);
   
   BEEV::GlobalSTP = stp;
   decls = new BEEV::ASTVec();
@@ -445,14 +447,14 @@ int vc_query(VC vc, Expr e) {
   int output;
   if(!v.empty()) {
     if(v.size()==1) {
-      output = stp->TopLevelSAT(v[0],*a);
+      output = stp->TopLevelSTP(v[0],*a);
     }
     else {
-      output = stp->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
+      output = stp->TopLevelSTP(b->CreateNode(BEEV::AND,v),*a);
     }
   }
   else {
-    output = stp->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
+    output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
   }
   return output;
 } //end of vc_query
@@ -473,17 +475,17 @@ int vc_query(VC vc, Expr e) {
 //   node o;
 //   if(!v.empty()) {
 //     if(v.size()==1)
-//       return b->TopLevelSAT(v[0],*a);
+//       return b->TopLevelSTP(v[0],*a);
 //     else
-//       return b->TopLevelSAT(b->CreateNode(BEEV::AND,v),*a);
+//       return b->TopLevelSTP(b->CreateNode(BEEV::AND,v),*a);
 //   }
 //   else
-//     return b->TopLevelSAT(b->CreateNode(BEEV::TRUE),*a);
+//     return b->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
 // }
 
 void vc_push(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-  b->ClearAllCaches();
+  ((stpstar)vc)->ClearAllCaches();
   b->Push();
 }
 
@@ -1627,7 +1629,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   cvcparse((void*)AssertsQuery);
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
-  //b->TopLevelSAT(asserts, query);
+  //b->TopLevelSTP(asserts, query);
 
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);

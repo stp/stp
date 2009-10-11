@@ -114,15 +114,15 @@ namespace BEEV
       }
   } //End of Destructor()
 
-   BeevMgr* ASTNode::GetBeevMgr() const
+   STPMgr* ASTNode::GetSTPMgr() const
   {
     return GlobalSTP->bm;
-  } //End of GetBeevMgr()
+  } //End of GetSTPMgr()
 
   // Checks if the node has alreadybeen printed or not
   bool ASTNode::IsAlreadyPrinted() const
   {
-    BeevMgr * bm = GetBeevMgr();
+    STPMgr * bm = GetSTPMgr();
     return (bm->AlreadyPrintedSet.find(*this) != 
 	    bm->AlreadyPrintedSet.end());
   } //End of IsAlreadyPrinted()
@@ -130,7 +130,7 @@ namespace BEEV
   // Mark the node as printed if it has been already printed
   void ASTNode::MarkAlreadyPrinted() const
   {
-    BeevMgr * bm = GetBeevMgr();
+    STPMgr * bm = GetSTPMgr();
     bm->AlreadyPrintedSet.insert(*this);
   } //End of MarkAlreadyPrinted()
 
@@ -202,7 +202,7 @@ namespace BEEV
       return;
 
     //FIXME: this is ugly.
-    BeevMgr * bm = GetBeevMgr();
+    STPMgr * bm = GetSTPMgr();
     const ASTVec &c = this->GetChildren();
     for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {

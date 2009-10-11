@@ -50,7 +50,7 @@ namespace BEEV
     vector<ASTNode> _SATVar_to_AST;
 
     // Ptr to STPManager
-    BeevMgr * bm;
+    STPMgr * bm;
 
     // Ptr to Simplifier
     Simplifier * simp;
@@ -88,7 +88,7 @@ namespace BEEV
      ****************************************************************/
     
     // Constructor
-    ToSAT(BeevMgr * bm, Simplifier * s) :
+    ToSAT(STPMgr * bm, Simplifier * s) :
       bm(bm), simp(s)
     {
       ASTTrue      = bm->CreateNode(TRUE);

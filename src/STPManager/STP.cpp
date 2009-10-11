@@ -14,7 +14,7 @@ namespace BEEV {
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
   //if returned 0 then input is INVALID if returned 1 then input is
   //VALID if returned 2 then UNDECIDED
-  SOLVER_RETURN_TYPE STP::TopLevelSATAux(const ASTNode& inputasserts_and_query)
+  SOLVER_RETURN_TYPE STP::TopLevelSTPAux(const ASTNode& inputasserts_and_query)
   {
     ASTNode inputToSAT = inputasserts_and_query;
     ASTNode orig_input = inputToSAT;
@@ -173,9 +173,98 @@ namespace BEEV {
         return res;
       }
 
-    FatalError("TopLevelSATAux: reached the end without proper conclusion:"
+    FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
                "either a divide by zero in the input or a bug in STP");
     //bogus return to make the compiler shut up
     return SOLVER_ERROR;
-  } //End of TopLevelSATAux
+  } //End of TopLevelSTPAux
+
+  void STP::ClearAllTables(void)
+  {
+//     //Clear STPManager caches
+
+//     //Clear ArrayTransformer caches
+
+//     //Clear Simplifier caches
+
+//     //Clear BVSolver caches
+
+//     //Clear AbsRefine_CounterExample caches
+
+//     //clear all tables before calling toplevelsat
+//     //_ASTNode_to_SATVar.clear();
+//     //_SATVar_to_AST.clear();
+
+//     //     for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
+//     // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
+//     //       {
+//     //         (it->second)->clear();
+//     //         delete (it->second);
+//     //       }
+//     //     _ASTNode_to_Bitvector.clear();
+
+//     NodeLetVarMap.clear();
+//     NodeLetVarMap1.clear();
+//     PLPrintNodeSet.clear();
+//     AlreadyPrintedSet.clear();
+//     //ReferenceCount->clear();
+//     //_arrayread_ite.clear();
+//     //_introduced_symbols.clear();
+//     //CounterExampleMap.clear();
+//     //ComputeFormulaMap.clear();
+//     StatInfoSet.clear();
+
+//     _asserts.clear();
+
+//     //     for (ASTNodeToVecMap::iterator iset =
+//     //     _arrayname_readindices.begin(), iset_end =
+//     //     _arrayname_readindices.end(); iset != iset_end; iset++) {
+//     //     iset->second.clear(); }   
+//     //     _arrayname_readindices.clear();
+
+//     _interior_unique_table.clear();
+//     _symbol_unique_table->clear();
+//     _bvconst_unique_table.clear();
+  }
+
+  void STP::ClearAllCaches(void)
+  {
+//     //clear all tables before calling toplevelsat
+//     //_ASTNode_to_SATVar.clear();
+//     //_SATVar_to_AST.clear();
+
+//     // for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
+//     // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
+//     //       {
+//     //         (it->second)->clear();
+//     //         delete (it->second);
+//     //       }
+//     //     _ASTNode_to_Bitvector.clear();
+    
+//     NodeLetVarMap.clear();
+//     NodeLetVarMap1.clear();
+//     PLPrintNodeSet.clear();
+//     AlreadyPrintedSet.clear();
+//     // SimplifyMap->clear();
+//     //     SimplifyNegMap->clear();
+//     //     ReferenceCount->clear();
+//     //     SolverMap.clear();
+//     //AlwaysTrueFormMap.clear();
+//     //_arrayread_ite.clear();
+//     //_arrayread_symbol.clear();
+//     //_introduced_symbols.clear();
+//     //CounterExampleMap.clear();
+//     //ComputeFormulaMap.clear();
+//     StatInfoSet.clear();
+
+//     // for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
+//     //       {
+//     //         iset->second.clear();
+//     //       }
+    
+//     //     _arrayname_readindices.clear();
+//     //_interior_unique_table.clear();
+//     //_symbol_unique_table.clear();
+//     //_bvconst_unique_table.clear();
+  }
 }; //end of namespace

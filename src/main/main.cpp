@@ -45,7 +45,7 @@ int main(int argc, char ** argv) {
     }
 
 
-  BeevMgr * bm       = new BeevMgr();
+  STPMgr * bm       = new STPMgr();
   Simplifier * simp  = new Simplifier(bm);
   BVSolver* bvsolver = new BVSolver(bm, simp);
   ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
@@ -226,7 +226,7 @@ int main(int argc, char ** argv) {
       return 0;
     } //end of PrintBack if
 
-  SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSAT(asserts, query);
+  SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
   if (quick_statistics_flag) 
     {
       bm->GetRunTimes()->print();

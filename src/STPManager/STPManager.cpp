@@ -16,7 +16,7 @@
 
 namespace BEEV
 {
-  ASTInterior *BeevMgr::LookupOrCreateInterior(ASTInterior *n_ptr)
+  ASTInterior *STPMgr::LookupOrCreateInterior(ASTInterior *n_ptr)
   {
     ASTInteriorSet::iterator it = _interior_unique_table.find(n_ptr);
     if (it == _interior_unique_table.end())
@@ -44,9 +44,9 @@ namespace BEEV
   
  
   ////////////////////////////////////////////////////////////////
-  //  BeevMgr members
+  //  STPMgr members
   ////////////////////////////////////////////////////////////////
-  ASTNode BeevMgr::CreateNode(Kind kind, const ASTVec & back_children)
+  ASTNode STPMgr::CreateNode(Kind kind, const ASTVec & back_children)
   {
     // create a new node.  Children will be modified.
     ASTInterior *n_ptr = new ASTInterior(kind);
@@ -56,7 +56,7 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, 
+  ASTNode STPMgr::CreateNode(Kind kind, 
 			      const ASTNode& child0, 
 			      const ASTVec & back_children)
   {
@@ -68,7 +68,7 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, 
+  ASTNode STPMgr::CreateNode(Kind kind, 
 			      const ASTNode& child0, 
 			      const ASTNode& child1, 
 			      const ASTVec & back_children)
@@ -81,7 +81,7 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateNode(Kind kind, 
+  ASTNode STPMgr::CreateNode(Kind kind, 
 			      const ASTNode& child0, 
 			      const ASTNode& child1, 
 			      const ASTNode& child2, 
@@ -96,7 +96,7 @@ namespace BEEV
     return n;
   }
 
-  ASTInterior *BeevMgr::CreateInteriorNode(Kind kind,
+  ASTInterior *STPMgr::CreateInteriorNode(Kind kind,
                                            // children array of this node will be modified.
                                            ASTInterior *n_ptr,
                                            const ASTVec & back_children)
@@ -136,9 +136,9 @@ namespace BEEV
   }
 
   ////////////////////////////////////////////////////////////////
-  // BeevMgr member functions to create ASTSymbol and ASTBVConst
+  // STPMgr member functions to create ASTSymbol and ASTBVConst
   ////////////////////////////////////////////////////////////////
-  ASTNode BeevMgr::CreateSymbol(const char * const name)
+  ASTNode STPMgr::CreateSymbol(const char * const name)
   {
     ASTSymbol temp_sym(name);    
     ASTNode n(LookupOrCreateSymbol(temp_sym));
@@ -155,7 +155,7 @@ namespace BEEV
   // inserted.  FIXME: Is there a way to do this with insert?  Need a
   // function to make a new object in the middle of insert.  Read STL
   // documentation.
-  ASTSymbol *BeevMgr::LookupOrCreateSymbol(ASTSymbol& s)
+  ASTSymbol *STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
   {
     ASTSymbol *s_ptr = &s; // it's a temporary key.
 
@@ -184,7 +184,7 @@ namespace BEEV
       }
   } // End of LookupOrCreateSymbol
 
-  bool BeevMgr::LookupSymbol(ASTSymbol& s)
+  bool STPMgr::LookupSymbol(ASTSymbol& s)
   {
     ASTSymbol* s_ptr = &s; // it's a temporary key.
 
@@ -196,7 +196,7 @@ namespace BEEV
   }
 
   //Create a ASTBVConst node
-  ASTNode BeevMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
+  ASTNode STPMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
   {
     if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
       FatalError("CreateBVConst: "\
@@ -228,7 +228,7 @@ namespace BEEV
     return CreateBVConst(bv, width);
   }
 
-  ASTNode BeevMgr::CreateBVConst(string*& strval, int base, int bit_width)
+  ASTNode STPMgr::CreateBVConst(string*& strval, int base, int bit_width)
   {
 
 	if (bit_width <= 0)
@@ -270,7 +270,7 @@ namespace BEEV
   }
 
   //Create a ASTBVConst node from std::string
-  ASTNode BeevMgr::CreateBVConst(const char* const strval, int base)
+  ASTNode STPMgr::CreateBVConst(const char* const strval, int base)
   {
     size_t width = strlen((const char *) strval);
     if (!(2 == base || 10 == base || 16 == base))
@@ -315,7 +315,7 @@ namespace BEEV
   }
 
   //FIXME Code currently assumes that it will destroy the bitvector passed to it
-  ASTNode BeevMgr::CreateBVConst(CBV bv, unsigned width)
+  ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   {
     ASTBVConst temp_bvconst(bv, width);
     ASTNode n(LookupOrCreateBVConst(temp_bvconst));
@@ -325,13 +325,13 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateZeroConst(unsigned width)
+  ASTNode STPMgr::CreateZeroConst(unsigned width)
   {
     CBV z = CONSTANTBV::BitVector_Create(width, true);
     return CreateBVConst(z, width);
   }
 
-  ASTNode BeevMgr::CreateOneConst(unsigned width)
+  ASTNode STPMgr::CreateOneConst(unsigned width)
   {
     CBV o = CONSTANTBV::BitVector_Create(width, true);
     CONSTANTBV::BitVector_increment(o);
@@ -339,7 +339,7 @@ namespace BEEV
     return CreateBVConst(o, width);
   }
 
-  ASTNode BeevMgr::CreateTwoConst(unsigned width)
+  ASTNode STPMgr::CreateTwoConst(unsigned width)
   {
     CBV two = CONSTANTBV::BitVector_Create(width, true);
     CONSTANTBV::BitVector_increment(two);
@@ -348,7 +348,7 @@ namespace BEEV
     return CreateBVConst(two, width);
   }
 
-  ASTNode BeevMgr::CreateMaxConst(unsigned width)
+  ASTNode STPMgr::CreateMaxConst(unsigned width)
   {
     CBV max = CONSTANTBV::BitVector_Create(width, false);
     CONSTANTBV::BitVector_Fill(max);
@@ -358,7 +358,7 @@ namespace BEEV
 
   //To ensure unique BVConst nodes, lookup the node in unique-table
   //before creating a new one.
-  ASTBVConst *BeevMgr::LookupOrCreateBVConst(ASTBVConst &s)
+  ASTBVConst *STPMgr::LookupOrCreateBVConst(ASTBVConst &s)
   {
     ASTBVConst *s_ptr = &s; // it's a temporary key.
 
@@ -384,7 +384,7 @@ namespace BEEV
   }
 
   // Create and return an ASTNode for a term
-  ASTNode BeevMgr::CreateTerm(Kind kind, 
+  ASTNode STPMgr::CreateTerm(Kind kind, 
 			      unsigned int width, 
 			      const ASTVec &children)
   {
@@ -400,7 +400,7 @@ namespace BEEV
     return n;
   }
 
-  ASTNode BeevMgr::CreateTerm(Kind kind, 
+  ASTNode STPMgr::CreateTerm(Kind kind, 
 			      unsigned int width, 
 			      const ASTNode& child0, 
 			      const ASTVec &children)
@@ -413,7 +413,7 @@ namespace BEEV
       return n;
   }
 
-  ASTNode BeevMgr::CreateTerm(Kind kind, 
+  ASTNode STPMgr::CreateTerm(Kind kind, 
 			      unsigned int width, 
 			      const ASTNode& child0,
 			      const ASTNode& child1, 
@@ -426,7 +426,7 @@ namespace BEEV
     return n;
   }
   
-  ASTNode BeevMgr::CreateTerm(Kind kind,
+  ASTNode STPMgr::CreateTerm(Kind kind,
 			      unsigned int width,
 			      const ASTNode& child0,
 			      const ASTNode& child1,
@@ -476,7 +476,7 @@ namespace BEEV
   }
 
   //add an assertion to the current logical context
-  void BeevMgr::AddAssert(const ASTNode& assert)
+  void STPMgr::AddAssert(const ASTNode& assert)
   {
     if (!(is_Form_kind(assert.GetKind()) && BOOLEAN_TYPE == assert.GetType()))
       {
@@ -503,14 +503,14 @@ namespace BEEV
       }
   }
 
-  void BeevMgr::Push(void)
+  void STPMgr::Push(void)
   {
     ASTVec * v;
     v = new ASTVec();
     _asserts.push_back(v);
   }
 
-  void BeevMgr::Pop(void)
+  void STPMgr::Pop(void)
   {
     if (!_asserts.empty())
       {
@@ -523,26 +523,26 @@ namespace BEEV
       }
   }
 
-  void BeevMgr::AddQuery(const ASTNode& q)
+  void STPMgr::AddQuery(const ASTNode& q)
   {
     //_current_query = TransformFormula(q);
     //cerr << "\nThe current query is: " << q << endl;
     _current_query = q;
   }
 
-  const ASTNode BeevMgr::PopQuery()
+  const ASTNode STPMgr::PopQuery()
   {
     ASTNode q = _current_query;
     _current_query = ASTTrue;
     return q;
   }
 
-  const ASTNode BeevMgr::GetQuery()
+  const ASTNode STPMgr::GetQuery()
   {
     return _current_query;
   }
 
-  const ASTVec BeevMgr::GetAsserts(void)
+  const ASTVec STPMgr::GetAsserts(void)
   {
     vector<ASTVec *>::iterator it = _asserts.begin();
     vector<ASTVec *>::iterator itend = _asserts.end();
@@ -557,7 +557,7 @@ namespace BEEV
   }
 
   // //Create a new variable of ValueWidth 'n'
-//   ASTNode BeevMgr::NewArrayVar(unsigned int index, unsigned int value)
+//   ASTNode STPMgr::NewArrayVar(unsigned int index, unsigned int value)
 //   {
 //     std::string c("v");
 //     char d[32];
@@ -572,7 +572,7 @@ namespace BEEV
 //   } //end of NewArrayVar()
 
   //prints statistics for the ASTNode
-  void BeevMgr::ASTNodeStats(const char * c, const ASTNode& a)
+  void STPMgr::ASTNodeStats(const char * c, const ASTNode& a)
   {
     if (!stats_flag)
       return;
@@ -590,7 +590,7 @@ namespace BEEV
     cout << NodeSize(a) << endl;
   }
 
-  unsigned int BeevMgr::NodeSize(const ASTNode& a, bool clearStatInfo)
+  unsigned int STPMgr::NodeSize(const ASTNode& a, bool clearStatInfo)
   {
     if (clearStatInfo)
       StatInfoSet.clear();
@@ -616,93 +616,13 @@ namespace BEEV
     return newn;
   }
 
-  void BeevMgr::ClearAllTables(void)
+  STPMgr::~STPMgr()
   {
-//     //clear all tables before calling toplevelsat
-//     //_ASTNode_to_SATVar.clear();
-//     //_SATVar_to_AST.clear();
-
-//     //     for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
-//     // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
-//     //       {
-//     //         (it->second)->clear();
-//     //         delete (it->second);
-//     //       }
-//     //     _ASTNode_to_Bitvector.clear();
-
-//     NodeLetVarMap.clear();
-//     NodeLetVarMap1.clear();
-//     PLPrintNodeSet.clear();
-//     AlreadyPrintedSet.clear();
-//     //ReferenceCount->clear();
-//     //_arrayread_ite.clear();
-//     //_introduced_symbols.clear();
-//     //CounterExampleMap.clear();
-//     //ComputeFormulaMap.clear();
-//     StatInfoSet.clear();
-
-//     _asserts.clear();
-
-//     //     for (ASTNodeToVecMap::iterator iset =
-//     //     _arrayname_readindices.begin(), iset_end =
-//     //     _arrayname_readindices.end(); iset != iset_end; iset++) {
-//     //     iset->second.clear(); }   
-//     //     _arrayname_readindices.clear();
-
-//     _interior_unique_table.clear();
-//     _symbol_unique_table->clear();
-//     _bvconst_unique_table.clear();
-  }
-
-  void BeevMgr::ClearAllCaches(void)
-  {
-    //clear all tables before calling toplevelsat
-    //_ASTNode_to_SATVar.clear();
-    //_SATVar_to_AST.clear();
-
-    // for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
-    // 	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
-    //       {
-    //         (it->second)->clear();
-    //         delete (it->second);
-    //       }
-    //     _ASTNode_to_Bitvector.clear();
-    
-    NodeLetVarMap.clear();
-    NodeLetVarMap1.clear();
-    PLPrintNodeSet.clear();
-    AlreadyPrintedSet.clear();
-    // SimplifyMap->clear();
-    //     SimplifyNegMap->clear();
-    //     ReferenceCount->clear();
-    //     SolverMap.clear();
-    //AlwaysTrueFormMap.clear();
-    //_arrayread_ite.clear();
-    //_arrayread_symbol.clear();
-    //_introduced_symbols.clear();
-    //CounterExampleMap.clear();
-    //ComputeFormulaMap.clear();
-    StatInfoSet.clear();
-
-    // for (ASTNodeToVecMap::iterator iset = _arrayname_readindices.begin(), iset_end = _arrayname_readindices.end(); iset != iset_end; iset++)
-    //       {
-    //         iset->second.clear();
-    //       }
-    
-    //     _arrayname_readindices.clear();
-    //_interior_unique_table.clear();
-    //_symbol_unique_table.clear();
-    //_bvconst_unique_table.clear();
-  }
-
-  BeevMgr::~BeevMgr()
-  {
-    ClearAllTables();    
   }
 
 
   // GLOBAL FUNCTION: Prints statistics from the MINISAT Solver
-  void BeevMgr::PrintStats(MINISAT::Solver& s)
+  void STPMgr::PrintStats(MINISAT::Solver& s)
   {
     if (!stats_flag)
       return;
@@ -721,7 +641,7 @@ namespace BEEV
 
 
   //Create a new variable of ValueWidth 'n'
-  ASTNode BeevMgr::NewVar(unsigned int n)
+  ASTNode STPMgr::NewVar(unsigned int n)
   {
     std::string c("v");
     char d[32];
@@ -735,7 +655,7 @@ namespace BEEV
     return CurrentSymbol;
   } //end of NewVar()
 
-  bool BeevMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
+  bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   {
     if (READ == term.GetKind() 
 	&& WRITE == term[0].GetKind() 
@@ -782,7 +702,7 @@ namespace BEEV
   }//End of VarSeenInTerm
 
   
-  ASTNode BeevMgr::NewParameterized_BooleanVar(const ASTNode& var,
+  ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
 					       const ASTNode& constant)
   {
     ostringstream outVar;

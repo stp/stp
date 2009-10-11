@@ -28,7 +28,7 @@ namespace MINISAT
 
 namespace BEEV
 {  
-  class BeevMgr;
+  class STPMgr;
   class ASTNode;
   class ASTInternal;
   class ASTInterior;
@@ -134,9 +134,9 @@ namespace BEEV
 
   //Useful global variables. Use for parsing only
   extern  STP * GlobalSTP;
-  extern  BeevMgr * ParserBM;
+  extern  STPMgr * ParserBM;
 
-  //Empty vector
+  //Empty vector. Useful commonly used ASTNodes
   extern std::vector<ASTNode> _empty_ASTVec;  
   extern ASTNode ASTFalse, ASTTrue, ASTUndefined;
 

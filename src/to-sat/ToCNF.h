@@ -52,7 +52,7 @@ namespace BEEV
     //########################################
     // this is the data
 
-    BeevMgr *bm;
+    STPMgr *bm;
     ASTNodeToCNFInfoMap info;
     ASTNodeToASTNodePtrMap store;
 
@@ -255,7 +255,7 @@ namespace BEEV
     //########################################
     //########################################
     // constructor
-    CNFMgr(BeevMgr *bmgr);
+    CNFMgr(STPMgr *bmgr);
    
     //########################################
     //########################################

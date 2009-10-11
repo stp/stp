@@ -10,11 +10,11 @@
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
 
-#include "TopLevel.h"
+#include "UsefulDefs.h"
 namespace BEEV
 {
   class ASTNode;
-  class BeevMgr;
+  class STPMgr;
   typedef vector<ASTNode> ASTVec;
   
   /******************************************************************
@@ -26,7 +26,7 @@ namespace BEEV
   class ASTInterior: public ASTInternal
   {
 
-    friend class BeevMgr;
+    friend class STPMgr;
     friend class ASTNodeHasher;
     friend class ASTNodeEqual;
 

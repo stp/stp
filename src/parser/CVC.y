@@ -23,8 +23,6 @@
 #define YY_EXIT_FAILURE -1
 #define YYPARSE_PARAM AssertsQuery
   
-  //BeevMgr * ParserBM = GlobalSTP->bm;
-  
   extern int cvclex(void);
   extern char* yytext;
   extern int cvclineno;

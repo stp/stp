@@ -176,7 +176,7 @@ namespace BEEV
    ********************************************************/
   ASTNode ArrayTransformer::TransformFormula(const ASTNode& form)
   {
-    BeevMgr* bm = form.GetBeevMgr();
+    STPMgr* bm = form.GetSTPMgr();
 
     assert(TransformMap != NULL);
 
@@ -300,11 +300,8 @@ namespace BEEV
   {
     assert(TransformMap != NULL);
 
-    BeevMgr* bm = inputterm.GetBeevMgr();
-
     ASTNode result;
     ASTNode term = inputterm;
-
     Kind k = term.GetKind();
     if (!is_Term_kind(k))
       FatalError("TransformTerm: Illegal kind: You have input a nonterm:", inputterm, k);

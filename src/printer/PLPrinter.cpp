@@ -26,7 +26,7 @@ namespace printer
       }
 
     //if this node is present in the letvar Map, then print the letvar
-    BeevMgr *bm = n.GetBeevMgr();
+    STPMgr *bm = n.GetSTPMgr();
 
     //this is to print letvars for shared subterms inside the printing
     //of "(LET v0 = term1, v1=term1@term2,...
@@ -327,7 +327,7 @@ namespace printer
   ostream& PL_Print(ostream &os,  const ASTNode& n, int indentation)
   {
     // Clear the PrintMap
-    BeevMgr* bm = n.GetBeevMgr();
+    STPMgr* bm = n.GetSTPMgr();
     bm->PLPrintNodeSet.clear();
     bm->NodeLetVarMap.clear();
     bm->NodeLetVarVec.clear();

@@ -65,12 +65,12 @@ namespace BEEV
 
   void lpvec(const ASTVec &vec)
   {
-    (vec[0].GetBeevMgr())->AlreadyPrintedSet.clear();
+    (vec[0].GetSTPMgr())->AlreadyPrintedSet.clear();
     LispPrintVec(cout, vec, 0);
     cout << endl;
   }
 
-  //   void BeevMgr::PrintClauseList(ostream& os, BeevMgr::ClauseList& cll)
+  //   void STPMgr::PrintClauseList(ostream& os, STPMgr::ClauseList& cll)
   //   {
   //     int num_clauses = cll.size();
   //     os << "Clauses: " << endl << "=========================================" << endl;
@@ -88,7 +88,7 @@ namespace BEEV
   //   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, 
   // 					   int decision_level, int polarity)
   //   {
-  //     BEEV::ASTNode vv = BEEV::GlobalBeevMgr->_SATVar_to_AST[minisat_var];
+  //     BEEV::ASTNode vv = BEEV::GlobalSTPMgr->_SATVar_to_AST[minisat_var];
   //     cout << spaces(decision_level);
   //     if (polarity)
   //       {
@@ -98,7 +98,7 @@ namespace BEEV
   //     cout << endl;
   //   } //end of Convert_MINISATVar_To_ASTNode_Print()
 
-  void BeevMgr::printVarDeclsToStream(ostream &os) {
+  void STPMgr::printVarDeclsToStream(ostream &os) {
     for(ASTVec::iterator i = ListOfDeclaredVars.begin(),iend=ListOfDeclaredVars.end();i!=iend;i++) {
       BEEV::ASTNode a = *i;
       switch(a.GetType()) {
@@ -124,7 +124,7 @@ namespace BEEV
 
 
 
-  void BeevMgr::printAssertsToStream(ostream &os, int simplify_print) {
+  void STPMgr::printAssertsToStream(ostream &os, int simplify_print) {
   ASTVec v = GetAsserts();
   for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
     //Begin_RemoveWrites = true;

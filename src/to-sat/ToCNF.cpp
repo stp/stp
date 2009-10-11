@@ -1654,7 +1654,7 @@ namespace BEEV
     //########################################
     // constructor
 
-    CNFMgr::CNFMgr(BeevMgr *bmgr)
+    CNFMgr::CNFMgr(STPMgr *bmgr)
     {
       bm = bmgr;
     }
@@ -1678,7 +1678,7 @@ namespace BEEV
 
     ClauseList* CNFMgr::convertToCNF(const ASTNode& varphi)
     {
-      varphi.GetBeevMgr()->GetRunTimes()->start(RunTimes::CNFConversion);
+      bm->GetRunTimes()->start(RunTimes::CNFConversion);
       scanFormula(varphi, true);
       ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
       ClauseList* defs = SINGLETON(dummy_true_var);
@@ -1687,7 +1687,7 @@ namespace BEEV
       defs->insert(defs->begin() + 1, top->begin(), top->end());
 
       cleanup(varphi);
-      varphi.GetBeevMgr()->GetRunTimes()->stop(RunTimes::CNFConversion);
+      bm->GetRunTimes()->stop(RunTimes::CNFConversion);
       return defs;
     }//End of convertToCNF()
 

@@ -24,7 +24,7 @@ namespace BEEV
 {
   class STP {
   public:
-    BeevMgr * bm;
+    STPMgr * bm;
     Simplifier * simp;
     BVSolver * bvsolver;
     ArrayTransformer * arrayTransformer;
@@ -32,7 +32,7 @@ namespace BEEV
     AbsRefine_CounterExample * Ctr_Example;
 
     //Constructor
-    STP(BeevMgr* b,
+    STP(STPMgr* b,
 	Simplifier* s,
 	BVSolver* bsolv,
 	ArrayTransformer * a,
@@ -47,20 +47,31 @@ namespace BEEV
       Ctr_Example = ce;
     }// End of constructor
 
-    SOLVER_RETURN_TYPE TopLevelSAT(const ASTNode& inputasserts, 
+    ~STP()
+    {
+      ClearAllTables();	  
+    }
+
+    // The absolute TopLevel function that invokes STP on the input
+    // formula
+    SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts, 
 				   const ASTNode& query)
     {      
       ASTNode q = bm->CreateNode(AND, 
 				 inputasserts, 
 				 bm->CreateNode(NOT, query));
-      return TopLevelSATAux(q);
-    } //End of TopLevelSAT()    
+      return TopLevelSTPAux(q);
+    } //End of TopLevelSTP()    
 
     // Accepts query and returns the answer. if query is valid,
     // returns VALID, else returns INVALID. Automatically constructs
     // counterexample for invalid queries, and prints them upon
     // request.    
-    SOLVER_RETURN_TYPE TopLevelSATAux(const ASTNode& inputasserts_and_query);
+    SOLVER_RETURN_TYPE TopLevelSTPAux(const ASTNode& inputasserts_and_query);
+
+    void ClearAllCaches(void);
+    
+    void ClearAllTables(void);    
   }; //End of Class STP
 };//end of namespace
 #endif

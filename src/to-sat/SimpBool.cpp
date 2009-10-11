@@ -27,7 +27,7 @@ static bool _disable_simpbool = 0;
 namespace BEEV
 {
 
-  ASTNode BeevMgr::CreateSimpForm(Kind kind, ASTVec &children = _empty_ASTVec)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, ASTVec &children = _empty_ASTVec)
   {
     if (_disable_simpbool)
       {
@@ -80,7 +80,7 @@ namespace BEEV
 
   // specialized versions
 
-  ASTNode BeevMgr::CreateSimpForm(Kind kind, const ASTNode& child0)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, const ASTNode& child0)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -90,7 +90,7 @@ namespace BEEV
     //return CreateSimpForm(kind, child_stack);
   }
 
-  ASTNode BeevMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -102,7 +102,7 @@ namespace BEEV
     //return CreateSimpForm(kind, child_stack);
   }
 
-  ASTNode BeevMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -116,7 +116,7 @@ namespace BEEV
     //return CreateSimpForm(kind, child_stack);
   }
 
-  ASTNode BeevMgr::CreateSimpNot(const ASTNode& form)
+  ASTNode STPMgr::CreateSimpNot(const ASTNode& form)
   {
     Kind k = form.GetKind();
     switch (k)
@@ -154,7 +154,7 @@ namespace BEEV
   // CreateSimpAndOr instead of CreateSimpXor until 1/9/07 with no
   // ill effects.  Calls seem to go to the version that takes a vector
   // of children.
-  ASTNode BeevMgr::CreateSimpXor(const ASTNode& form1, const ASTNode& form2)
+  ASTNode STPMgr::CreateSimpXor(const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;
     children.push_back(form1);
@@ -206,7 +206,7 @@ namespace BEEV
     return flat_children;
   }
 
-  ASTNode BeevMgr::CreateSimpAndOr(bool IsAnd, const ASTNode& form1, const ASTNode& form2)
+  ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;
     children.push_back(form1);
@@ -215,7 +215,7 @@ namespace BEEV
   }
 
   // FIXME: Could also handle (AND ... (NOT (OR ...) ...)
-  ASTNode BeevMgr::CreateSimpAndOr(bool IsAnd, ASTVec &children)
+  ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, ASTVec &children)
   {
 
     Kind k = IsAnd ? AND : OR;
@@ -318,7 +318,7 @@ namespace BEEV
   }
 
   // Constant children are accumulated in "accumconst".
-  ASTNode BeevMgr::CreateSimpXor(ASTVec &children)
+  ASTNode STPMgr::CreateSimpXor(ASTVec &children)
   {
 
     if (_trace_simpbool)
@@ -440,7 +440,7 @@ namespace BEEV
   }
 
   // FIXME:  How do I know whether ITE is a formula or not?
-  ASTNode BeevMgr::CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
+  ASTNode STPMgr::CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
   {
 
     ASTNode retval;

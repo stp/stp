@@ -23,7 +23,7 @@ namespace BEEV
    ******************************************************************/
   class ASTNode
   {
-    friend class BeevMgr;
+    friend class STPMgr;
     friend class CNFMgr;
     friend class ASTInterior;
     friend class vector<ASTNode>;
@@ -151,9 +151,9 @@ namespace BEEV
     // Assignment (for ref counting)
     ASTNode& operator=(const ASTNode& n);
 
-    //Get the BeevMgr pointer. FIXME: Currently uses a global
+    //Get the STPMgr pointer. FIXME: Currently uses a global
     //ptr. BAD!!
-    BeevMgr* GetBeevMgr() const;
+    STPMgr* GetSTPMgr() const;
 
     // Access node number
     int GetNodeNum() const;

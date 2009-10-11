@@ -84,7 +84,7 @@ namespace BEEV
     Simplifier * simp;
 
     // Ptr to STPManager
-    BeevMgr * bm;
+    STPMgr * bm;
     
     // Ptr to class that records the runtimes for various parts of the
     // code
@@ -115,7 +115,7 @@ namespace BEEV
      ****************************************************************/      
     
     // Constructor
-    ArrayTransformer(BeevMgr * bm, Simplifier* s) : 
+    ArrayTransformer(STPMgr * bm, Simplifier* s) : 
       Arrayread_SymbolMap(INITIAL_TABLE_SIZE),
       Introduced_SymbolsSet(INITIAL_TABLE_SIZE),
       bm(bm), 

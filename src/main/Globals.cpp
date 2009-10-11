@@ -86,7 +86,7 @@ namespace BEEV
 
   //global BEEVMGR for the parser. Use exclusively for parsing
   STP     * GlobalSTP;
-  BeevMgr * ParserBM;
+  STPMgr  * ParserBM;
 
   void (*vc_error_hdlr)(const char* err_msg) = NULL;
   /** This is reusable empty vector, for representing empty children

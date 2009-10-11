@@ -56,14 +56,14 @@ namespace BEEV
       ASTNodeCountMap *ReferenceCount;
       
       //Ptr to STP Manager
-      BeevMgr * _bm;
+      STPMgr * _bm;
 
     public:
       
       /****************************************************************
        * Public Member Functions                                      *
        ****************************************************************/      
-      Simplifier(BeevMgr * bm) : _bm(bm) 
+      Simplifier(STPMgr * bm) : _bm(bm) 
       {
 	SimplifyMap    = new ASTNodeMap(INITIAL_TABLE_SIZE);
 	SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);

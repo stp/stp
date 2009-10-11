@@ -9,7 +9,7 @@
 
 #ifndef AST_H
 #define AST_H
-#include "TopLevel.h"
+#include "UsefulDefs.h"
 #include "ASTNode.h"
 #include "ASTInternal.h"
 #include "ASTInterior.h"

@@ -11,7 +11,7 @@
 #define ASTBVCONST_H
 namespace BEEV
 {
-  class BeevMgr;
+  class STPMgr;
   void FatalError(const char * str);
 
   /******************************************************************
@@ -21,7 +21,7 @@ namespace BEEV
    ******************************************************************/
   class ASTBVConst: public ASTInternal
   {
-    friend class BeevMgr;
+    friend class STPMgr;
     friend class ASTNode;
     friend class ASTNodeHasher;
     friend class ASTNodeEqual;

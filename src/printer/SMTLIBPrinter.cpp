@@ -23,19 +23,19 @@ namespace printer
 
   string functionToSMTLIBName(const BEEV::Kind k);
   void SMTLIB_Print1(ostream& os, const BEEV::ASTNode n, int indentation, bool letize);
-  void printVarDeclsToStream( const BeevMgr* mgr, ostream &os);
+  void printVarDeclsToStream( const STPMgr* mgr, ostream &os);
 
   // Initial version intended to print the whole thing back.
   void SMTLIB_PrintBack(ostream &os, const ASTNode& n) {
 	  // need to add fake headers into here.
 	  os << "(" << endl;
 	  os << "benchmark blah" << endl;
-	  printVarDeclsToStream(n.GetBeevMgr(),os);
+	  printVarDeclsToStream(n.GetSTPMgr(),os);
 	  SMTLIB_Print(os, n, 0);
 	  os << ")" << endl;
   }
 
-  void printVarDeclsToStream( const BeevMgr* mgr, ostream &os) {
+  void printVarDeclsToStream( const STPMgr* mgr, ostream &os) {
       for(ASTVec::const_iterator i = mgr->ListOfDeclaredVars.begin(),
 	    iend=mgr->ListOfDeclaredVars.end();i!=iend;i++) {
         const BEEV::ASTNode& a = *i;
@@ -91,7 +91,7 @@ namespace printer
     // Prepend with zero to convert to unsigned.
 
     os << "bv";
-    CBV unsign = CONSTANTBV::BitVector_Concat((n.GetBeevMgr())->CreateZeroConst(1).GetBVConst(), op.GetBVConst());
+    CBV unsign = CONSTANTBV::BitVector_Concat((n.GetSTPMgr())->CreateZeroConst(1).GetBVConst(), op.GetBVConst());
     unsigned char * str = CONSTANTBV::BitVector_to_Dec(unsign);
     CONSTANTBV::BitVector_Destroy(unsign);
     os << str << "[" << op.GetValueWidth() << "]";
@@ -109,7 +109,7 @@ namespace printer
       }
 
     //if this node is present in the letvar Map, then print the letvar
-    BeevMgr * bm = n.GetBeevMgr();
+    STPMgr * bm = n.GetSTPMgr();
 
     //this is to print letvars for shared subterms inside the printing
     //of "(LET v0 = term1, v1=term1@term2,...
@@ -191,7 +191,7 @@ namespace printer
   ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation)
   {
     // Clear the PrintMap
-    BeevMgr* bm = n.GetBeevMgr();
+    STPMgr* bm = n.GetSTPMgr();
     bm->PLPrintNodeSet.clear();
     bm->NodeLetVarMap.clear();
     bm->NodeLetVarVec.clear();

@@ -43,7 +43,7 @@ namespace BEEV
       ASTNodeMap ComputeFormulaMap;
       
       // Ptr to STPManager
-      BeevMgr * bm;
+      STPMgr * bm;
       
       // Ptr to Simplifier
       Simplifier * simp;
@@ -76,7 +76,7 @@ namespace BEEV
     public:
 
       // Constructor
-      AbsRefine_CounterExample(BeevMgr * b, 
+      AbsRefine_CounterExample(STPMgr * b, 
 			       Simplifier * s, 
 			       ArrayTransformer * at,
 			       ToSAT * t) : 
@@ -176,9 +176,9 @@ namespace BEEV
   class CompleteCounterExample
     {
       ASTNodeMap counterexample;
-      BeevMgr * bv;
+      STPMgr * bv;
     public:
-      CompleteCounterExample(ASTNodeMap a, BeevMgr* beev) :
+      CompleteCounterExample(ASTNodeMap a, STPMgr* beev) :
 	counterexample(a), bv(beev)
 	{
 	}

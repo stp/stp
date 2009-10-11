@@ -22,7 +22,7 @@ namespace BEEV
     /****************************************************************
      * Private Data                                                 *
      ****************************************************************/
-    BeevMgr * _bm;
+    STPMgr * _bm;
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
     
     // Memo table for bit blasted terms.  If a node has already been
@@ -99,7 +99,7 @@ namespace BEEV
      * Public Member Functions                                      *
      ****************************************************************/
     
-    BitBlaster(BeevMgr * bm) : _bm(bm) 
+    BitBlaster(STPMgr * bm) : _bm(bm) 
     {
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);

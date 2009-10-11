@@ -21,7 +21,7 @@ namespace BEEV
    ******************************************************************/
   class ASTSymbol : public ASTInternal
   {
-    friend class BeevMgr;
+    friend class STPMgr;
     friend class ASTNode;
     friend class ASTNodeHasher;
     friend class ASTNodeEqual;
