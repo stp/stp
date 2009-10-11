@@ -27,8 +27,8 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	g++  $(CXXFLAGS) print.c -lstp -o a6.out
 	./a6.out
 7:
-	g++  $(CXXFLAGS) push-pop-1.c -lstp -o a7.out
-	./a7.out
+# 	g++  $(CXXFLAGS) push-pop-1.c -lstp -o a7.out
+# 	./a7.out
 8:
 	g++  $(CXXFLAGS)  sbvmod.c -lstp -o a8.out
 	./a8.out
@@ -57,8 +57,8 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	g++ $(CXXFLAGS)  y.c -lstp -o a16.out
 	./a16.out
 17:
-	g++  $(CXXFLAGS)  push-pop.c -lstp -o a17.out
-	./a17.out
+# 	g++  $(CXXFLAGS)  push-pop.c -lstp -o a17.out
+# 	./a17.out
 18:
 	g++  $(CXXFLAGS)  cvc-to-c.cpp  -lstp -o a18.out
 	#./a18.out ./t.cvc
