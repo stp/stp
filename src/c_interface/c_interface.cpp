@@ -69,7 +69,7 @@ void vc_setFlags(char c) {
     //BEEV::num_absrefine = atoi(argv[++i]);
     break;
   case 'h':
-    BEEV::fprintf(stderr,BEEV::usage,BEEV::prog);
+    fprintf(stderr,BEEV::usage,BEEV::prog);
     cout << helpstring;
     //FatalError("");
     //return -1;

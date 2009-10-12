@@ -9,15 +9,17 @@
 
 #ifndef PRINTERS_H_
 #define PRINTERS_H_
+#include <iostream>
+#include <vector>
+#include <cstring>
 
 #include "../AST/AST.h"
-#include "../AST/ASTUtil.h"
 #include "../AST/ASTKind.h"
 #include "../STPManager/STP.h"
 
+//using namespace std;
 namespace printer
 {
-
   ostream& Dot_Print(ostream &os, const BEEV::ASTNode n);
 
   ostream& SMTLIB_Print(ostream &os, 

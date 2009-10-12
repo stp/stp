@@ -45,8 +45,8 @@
 #define HASHMULTISET hash_multiset
 #define  INITIAL_TABLE_SIZE 100
 
+using namespace std;
 namespace BEEV {
-  using namespace std;
   using namespace MINISAT;
 #ifdef EXT_HASH_MAP
   using namespace __gnu_cxx;
