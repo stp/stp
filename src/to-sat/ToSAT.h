@@ -35,7 +35,7 @@ namespace BEEV
     // ClauseList returned by CNF converter. For every new boolean
     // variable in ASTClause a new MINISAT::Var is created (these vars
     // typedefs for ints)
-    typedef hash_map<
+    typedef HASHMAP<
       ASTNode, 
       MINISAT::Var, 
       ASTNode::ASTNodeHasher, 

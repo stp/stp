@@ -43,8 +43,9 @@
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"
 
-#define HASHMAP hash_map;
-#define HASHSET hash_set;
+#define HASHMAP      hash_map
+#define HASHSET      hash_set
+#define HASHMULTISET hash_multiset
 
 namespace BEEV {
 

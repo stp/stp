@@ -52,10 +52,10 @@ namespace BEEV
                 unsigned int symbolWidth = symbol.GetValueWidth();
 
                 //'v' is the map from bit-index to bit-value
-                hash_map<unsigned, bool> * v;
+                HASHMAP<unsigned, bool> * v;
                 if (_ASTNode_to_Bitvector.find(symbol) == _ASTNode_to_Bitvector.end())
                   _ASTNode_to_Bitvector[symbol] = 
-		    new hash_map<unsigned, bool> (symbolWidth);
+		    new HASHMAP<unsigned, bool> (symbolWidth);
 
                 //v holds the map from bit-index to bit-value
                 v = _ASTNode_to_Bitvector[symbol];
@@ -106,7 +106,7 @@ namespace BEEV
           FatalError("ConstructCounterExample: error while constructing counterexample: not a variable: ", var);
 
         //construct the bitvector value
-        hash_map<unsigned, bool> * w = it->second;
+        HASHMAP<unsigned, bool> * w = it->second;
         ASTNode value = BoolVectoBVConst(w, var.GetValueWidth());
         //debugging
         //cerr << value;
@@ -873,12 +873,12 @@ namespace BEEV
   } //end of PrintSATModel()
 
   //FUNCTION: this function accepts a boolvector and returns a BVConst
-  ASTNode AbsRefine_CounterExample::BoolVectoBVConst(hash_map<unsigned, bool> * w, unsigned int l)
+  ASTNode AbsRefine_CounterExample::BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l)
   {
     unsigned len = w->size();
     if (l < len)
       FatalError("BoolVectorBVConst : "
-                 "length of bitvector does not match hash_map size:", ASTUndefined, l);
+                 "length of bitvector does not match HASHMAP size:", ASTUndefined, l);
     std::string cc;
     for (unsigned int jj = 0; jj < l; jj++)
       {

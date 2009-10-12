@@ -31,9 +31,9 @@ namespace BEEV
       // This map for building/printing counterexamples. MINISAT
       // returns values for each bit (a BVGETBIT Node), and this maps
       // allows us to assemble the bits into bitvectors.
-      typedef hash_map<
+      typedef HASHMAP<
 	ASTNode, 
-	hash_map<unsigned int, bool> *, 
+	HASHMAP<unsigned int, bool> *, 
 	ASTNode::ASTNodeHasher, 
 	ASTNode::ASTNodeEqual> ASTtoBitvectorMap;
 
@@ -71,7 +71,7 @@ namespace BEEV
       void CopySolverMap_To_CounterExample(void);
 
       //Converts a vector of bools to a BVConst
-      ASTNode BoolVectoBVConst(hash_map<unsigned, bool> * w, unsigned int l);
+      ASTNode BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l);
 
     public:
 

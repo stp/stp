@@ -36,13 +36,13 @@ namespace BEEV
       };
     } CNFInfo;
 
-    typedef hash_map<
+    typedef HASHMAP<
       ASTNode, 
       CNFInfo*, 
       ASTNode::ASTNodeHasher, 
       ASTNode::ASTNodeEqual> ASTNodeToCNFInfoMap;
 
-    typedef hash_map<
+    typedef HASHMAP<
       ASTNode, 
       ASTNode*, 
       ASTNode::ASTNodeHasher, 

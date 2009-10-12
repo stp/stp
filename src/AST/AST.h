@@ -46,29 +46,29 @@ namespace BEEV
   //Takes a BVCONST and returns its constant value
   unsigned int GetUnsignedConst(const ASTNode n);
 
-  typedef hash_map<
+  typedef HASHMAP<
     ASTNode, 
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeMap;
 
-  typedef hash_map<
+  typedef HASHMAP<
     ASTNode, 
     int32_t, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
-  typedef hash_set<
+  typedef HASHSET<
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeSet;
 
-  typedef hash_multiset<
+  typedef HASHMULTISET<
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeMultiSet;
 
-  typedef hash_map<
+  typedef HASHMAP<
     ASTNode, 
     ASTVec, 
     ASTNode::ASTNodeHasher, 
