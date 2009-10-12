@@ -21,7 +21,10 @@
 #include <algorithm>
 #include <assert.h>
 
-#define  INITIAL_TABLE_SIZE 100
+#include "../main/Globals.h"
+#include "ASTKind.h"
+#include "../extlib-constbv/constantbv.h"
+#include "RunTimes.h"
 
 #ifdef EXT_HASH_MAP
  #include <ext/hash_set>
@@ -37,18 +40,12 @@
  #include <hash_map>
 #endif
 
-#include "../main/Globals.h"
-#include "ASTUtil.h"
-#include "ASTKind.h"
-#include "../extlib-constbv/constantbv.h"
-#include "RunTimes.h"
-
 #define HASHMAP      hash_map
 #define HASHSET      hash_set
 #define HASHMULTISET hash_multiset
+#define  INITIAL_TABLE_SIZE 100
 
 namespace BEEV {
-
   using namespace std;
   using namespace MINISAT;
 #ifdef EXT_HASH_MAP
@@ -77,6 +74,55 @@ namespace BEEV {
   typedef vector<ASTNode> ASTVec;
   typedef unsigned int * CBV;
   extern ASTVec _empty_ASTVec;
+
+  // Error handling function
+  extern void (*vc_error_hdlr)(const char* err_msg);
+  
+  /******************************************************************
+   * Class Spacer: 
+   *
+   * Spacer class is basically just an int, but the new class allows
+   * overloading of << with a special definition that prints the int
+   * as that many spaces.
+   ******************************************************************/
+  class Spacer {
+  public:
+    int _spaces;
+    Spacer(int spaces) 
+    { 
+      _spaces = spaces; 
+    }
+    friend ostream& operator<<(ostream& os, const Spacer &ind);
+  }; //End of class spacer
+
+  inline Spacer spaces(int width) {
+    Spacer sp(width);
+    return sp;
+  }
+
+  struct eqstr {
+    bool operator()(const char* s1, const char* s2) const {
+      return strcmp(s1, s2) == 0;
+    }
+  };
+
+  // function_counters: Table for storing function count stats.
+#ifdef TR1_UNORDERED_MAP
+  typedef tr1::unordered_map<
+    const char*,
+    int,
+    tr1::hash<const char *>,
+    eqstr> function_counters;
+#else
+  typedef HASHMAP<const char*,
+    int,
+    hash<char *>,
+    eqstr> function_counters;
+#endif
+
+  // Function that computes various kinds of statistics for the phases
+  // of STP
+  void CountersAndStats(const char * functionname);
 }; //end of namespace
 
 #endif

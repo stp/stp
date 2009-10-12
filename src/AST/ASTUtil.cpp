@@ -7,7 +7,7 @@
  ********************************************************************/
 // -*- c++ -*-
 
-#include "ASTUtil.h"
+#include "UsefulDefs.h"
 #include "../main/Globals.h"
 namespace BEEV
 {
@@ -40,8 +40,13 @@ namespace BEEV
         if (!strcmp(functionname, "print_func_stats"))
           {
             cout << endl;
-            for (function_counters::iterator it = s.begin(), itend = s.end(); it != itend; it++)
-              cout << "Number of times the function: " << it->first << ": is called: " << it->second << endl;
+            for (function_counters::iterator 
+		   it = s.begin(), itend = s.end(); 
+		 it != itend; it++)
+              cout << "Number of times the function: " 
+		   << it->first 
+		   << ": is called: " 
+		   << it->second << endl;
             return;
           }
         s[functionname] += 1;
