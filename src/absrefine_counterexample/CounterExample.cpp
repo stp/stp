@@ -53,12 +53,15 @@ namespace BEEV
 
                 //'v' is the map from bit-index to bit-value
                 HASHMAP<unsigned, bool> * v;
-                if (_ASTNode_to_Bitvector.find(symbol) == _ASTNode_to_Bitvector.end())
-                  _ASTNode_to_Bitvector[symbol] = 
-		    new HASHMAP<unsigned, bool> (symbolWidth);
+                if (_ASTNode_to_BitvectorMap.find(symbol) == 
+		    _ASTNode_to_BitvectorMap.end())
+		  {
+		    _ASTNode_to_BitvectorMap[symbol] = 
+		      new HASHMAP<unsigned, bool> (symbolWidth);
+		  }
 
                 //v holds the map from bit-index to bit-value
-                v = _ASTNode_to_Bitvector[symbol];
+                v = _ASTNode_to_BitvectorMap[symbol];
 
                 //kk is the index of BVGETBIT
                 unsigned int kk = GetUnsignedConst(s[1]);
@@ -96,15 +99,17 @@ namespace BEEV
     //iterate over the ASTNode_to_Bitvector data-struct and construct
     //the the aggregate value of the bitvector, and populate the
     //CounterExampleMap datastructure
-    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_Bitvector.begin(), 
-	   itend = _ASTNode_to_Bitvector.end(); it != itend; it++)
+    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_BitvectorMap.begin(), 
+	   itend = _ASTNode_to_BitvectorMap.end(); it != itend; it++)
       {
         ASTNode var = it->first;
         //debugging
         //cerr << var;
         if (SYMBOL != var.GetKind())
-          FatalError("ConstructCounterExample: error while constructing counterexample: not a variable: ", var);
-
+	  {
+	    FatalError("ConstructCounterExample:"\
+		       "error while constructing counterexample: not a variable: ", var);
+	  }
         //construct the bitvector value
         HASHMAP<unsigned, bool> * w = it->second;
         ASTNode value = BoolVectoBVConst(w, var.GetValueWidth());

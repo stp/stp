@@ -40,14 +40,14 @@ namespace BEEV
       MINISAT::Var, 
       ASTNode::ASTNodeHasher, 
       ASTNode::ASTNodeEqual> ASTtoSATMap;
-    ASTtoSATMap _ASTNode_to_SATVar;
+    ASTtoSATMap _ASTNode_to_SATVar_Map;
 
     // MAP: This is a map from MINISAT::Vars to ASTNodes
     //
     // Reverse map used in building counterexamples. MINISAT returns a
     // model in terms of MINISAT Vars, and this map helps us convert
     // it to a model over ASTNode variables.
-    vector<ASTNode> _SATVar_to_AST;
+    vector<ASTNode> _SATVar_to_AST_Vector;
 
     // Ptr to STPManager
     STPMgr * bm;
@@ -114,9 +114,14 @@ namespace BEEV
 
     ASTNode SATVar_to_ASTMap(int i)
     {
-      return _SATVar_to_AST[i];
+      return _SATVar_to_AST_Vector[i];
     }
 
+    void ClearAllTables(void)
+    {
+      _ASTNode_to_SATVar_Map.clear();
+      _SATVar_to_AST_Vector.clear();
+    }
   }; //end of class ToSAT
 }; //end of namespace
 

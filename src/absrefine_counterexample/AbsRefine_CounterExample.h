@@ -37,7 +37,7 @@ namespace BEEV
 	ASTNode::ASTNodeHasher, 
 	ASTNode::ASTNodeEqual> ASTtoBitvectorMap;
 
-      ASTtoBitvectorMap _ASTNode_to_Bitvector;
+      ASTtoBitvectorMap _ASTNode_to_BitvectorMap;
 
       // This memo map is used by the ComputeFormulaUsingModel()
       ASTNodeMap ComputeFormulaMap;
@@ -171,6 +171,11 @@ namespace BEEV
       //     finiteloop); ASTNode Check_FiniteLoop_UsingModel(const
       //     ASTNode& finiteloop);
 
+      void ClearAllTables(void)
+      {
+	_ASTNode_to_BitvectorMap.clear();
+	ComputeFormulaMap.clear();
+      } //End of ClearAllTables()
     };//End of Class CounterExample
 
   class CompleteCounterExample

@@ -371,6 +371,13 @@ namespace BEEV
       TermsAlreadySeenMap.clear();
     }
 
+    void ClearAllTables(void) 
+    {
+      _interior_unique_table.clear();
+      _bvconst_unique_table.clear();
+      _symbol_unique_table.clear();
+    }
+
   };//End of Class STPMgr
 };//end of namespace
 #endif

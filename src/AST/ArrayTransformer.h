@@ -174,6 +174,14 @@ namespace BEEV
       return false;
     } // End of IntroduceSymbolSet
 
+    void ClearAllTables(void)
+    {
+      Arrayname_ReadindicesMap->clear();
+      Arrayread_SymbolMap.clear();
+      Arrayread_IteMap->clear();
+      Introduced_SymbolsSet.clear();
+      TransformMap->clear();
+    }
   }; //end of class Transformer
 
 };//end of namespace

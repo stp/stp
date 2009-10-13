@@ -22,15 +22,15 @@ namespace BEEV
 
     //look for the symbol in the global map from ASTNodes to ints. if
     //not found, create a S.newVar(), else use the existing one.
-    if ((it = _ASTNode_to_SATVar.find(n)) == _ASTNode_to_SATVar.end())
+    if ((it = _ASTNode_to_SATVar_Map.find(n)) == _ASTNode_to_SATVar_Map.end())
       {
         v = newS.newVar();
-        _ASTNode_to_SATVar[n] = v;
+        _ASTNode_to_SATVar_Map[n] = v;
 
         //ASSUMPTION: I am assuming that the newS.newVar() call increments v
         //by 1 each time it is called, and the initial value of a
         //MINISAT::Var is 0.
-        _SATVar_to_AST.push_back(n);
+        _SATVar_to_AST_Vector.push_back(n);
       }
     else
       v = it->second;
@@ -140,7 +140,7 @@ namespace BEEV
   // Returns ASTTrue if true, ASTFalse if false or undefined.
   ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newS, ASTNode form)
   {
-    MINISAT::Var satvar = _ASTNode_to_SATVar[form];
+    MINISAT::Var satvar = _ASTNode_to_SATVar_Map[form];
     if (newS.model[satvar] == MINISAT::l_True)
       {
         return ASTTrue;

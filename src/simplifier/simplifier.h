@@ -242,6 +242,16 @@ namespace BEEV
 	return SolverMap;
       } // End of SolverMap()
 
+      void ClearAllTables(void) 
+      {
+	SimplifyMap->clear();
+	SimplifyNegMap->clear();
+	SolverMap->clear();
+	ReadOverWrite_NewName_Map->clear();
+	NewName_ReadOverWrite_Map.clear();
+	AlwaysTrueFormMap.clear();
+	MultInverseMap.clear();
+      }
     };//end of class Simplifier
 }; //end of namespace
 #endif
