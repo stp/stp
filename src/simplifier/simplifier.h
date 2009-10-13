@@ -251,6 +251,7 @@ namespace BEEV
 	NewName_ReadOverWrite_Map.clear();
 	AlwaysTrueFormMap.clear();
 	MultInverseMap.clear();
+	ReferenceCount->clear();
       }
     };//end of class Simplifier
 }; //end of namespace

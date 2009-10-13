@@ -173,6 +173,15 @@ namespace BEEV
 
       void ClearAllTables(void)
       {
+	CounterExampleMap.clear();
+	for (ASTtoBitvectorMap::iterator
+	       it    = _ASTNode_to_BitvectorMap.begin(), 
+	       itend = _ASTNode_to_BitvectorMap.end(); 
+	     it != itend; it++)
+          {
+            (it->second)->clear();
+            delete (it->second);
+          }
 	_ASTNode_to_BitvectorMap.clear();
 	ComputeFormulaMap.clear();
       } //End of ClearAllTables()

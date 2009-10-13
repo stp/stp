@@ -79,7 +79,11 @@ namespace BEEV
     // created by PUSH/POP
     std::vector<ASTVec *> _asserts;
 
-    //bool Begin_RemoveWrites;
+    // Memo table that tracks terms already seen
+    ASTNodeMap TermsAlreadySeenMap;
+    
+    //Map for computing ASTNode stats
+    ASTNodeSet StatInfoSet;
     
     // The query for the current logical context.
     ASTNode _current_query;    
@@ -90,12 +94,6 @@ namespace BEEV
     // Ptr to class that reports on the running time of various parts
     // of the code
     RunTimes * runTimes;
-
-    // Memo table that tracks terms already seen
-    ASTNodeMap TermsAlreadySeenMap;
-    
-    //Map for computing ASTNode stats
-    ASTNodeSet StatInfoSet;
     
     /****************************************************************
      * Private Member Functions                                     *
@@ -373,10 +371,16 @@ namespace BEEV
 
     void ClearAllTables(void) 
     {
-      _interior_unique_table.clear();
-      _bvconst_unique_table.clear();
-      _symbol_unique_table.clear();
-    }
+      // _interior_unique_table.clear();
+      // _bvconst_unique_table.clear();
+      // _symbol_unique_table.clear();
+      NodeLetVarMap.clear();
+      NodeLetVarMap1.clear();
+      PLPrintNodeSet.clear();
+      AlreadyPrintedSet.clear();
+      StatInfoSet.clear();
+      //_asserts.clear();
+    } //End of ClearAllTables()
 
   };//End of Class STPMgr
 };//end of namespace

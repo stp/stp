@@ -124,6 +124,7 @@ namespace BEEV
     {
       Arrayread_IteMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
       Arrayname_ReadindicesMap = new ASTNodeToVecMap(INITIAL_TABLE_SIZE);
+
       runTimes = bm->GetRunTimes();
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
@@ -176,11 +177,19 @@ namespace BEEV
 
     void ClearAllTables(void)
     {
+
+      for (ASTNodeToVecMap::iterator
+	     iset = Arrayname_ReadindicesMap->begin(), 
+	     iset_end = Arrayname_ReadindicesMap->end(); 
+	   iset != iset_end; iset++)
+          {
+            iset->second.clear();
+          }
+
       Arrayname_ReadindicesMap->clear();
       Arrayread_SymbolMap.clear();
       Arrayread_IteMap->clear();
       Introduced_SymbolsSet.clear();
-      TransformMap->clear();
     }
   }; //end of class Transformer
 

@@ -485,7 +485,7 @@ int vc_query(VC vc, Expr e) {
 
 void vc_push(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-  ((stpstar)vc)->ClearAllCaches();
+  ((stpstar)vc)->ClearAllTables();
   b->Push();
 }
 

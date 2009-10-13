@@ -85,9 +85,17 @@ namespace BEEV
     // request.    
     SOLVER_RETURN_TYPE TopLevelSTPAux(const ASTNode& inputasserts_and_query);
 
-    void ClearAllCaches(void);
+    //void ClearAllCaches(void);
     
-    void ClearAllTables(void);    
+    void ClearAllTables(void)
+    {
+      bm->ClearAllTables();
+      simp->ClearAllTables();
+      bvsolver->ClearAllTables();
+      arrayTransformer->ClearAllTables();
+      tosat->ClearAllTables();
+      Ctr_Example->ClearAllTables();
+    }
   }; //End of Class STP
 };//end of namespace
 #endif

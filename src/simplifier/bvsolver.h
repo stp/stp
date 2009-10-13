@@ -149,6 +149,14 @@ namespace BEEV
       //Top Level Solver: Goes over the input DAG, identifies the
       //equation to be solved, solves them,
       ASTNode TopLevelBVSolve(const ASTNode& a);
+
+      void ClearAllTables(void)
+	{
+          DoNotSolve_TheseVars.clear();
+          FormulasAlreadySolvedMap.clear();
+          TermsAlreadySeenMap_ForArrays.clear();
+	} //End of ClearAllTables()
+
     }; //end of class bvsolver
 };//end of namespace BEEV
 #endif
