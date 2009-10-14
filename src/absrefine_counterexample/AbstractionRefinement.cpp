@@ -42,8 +42,8 @@ namespace BEEV
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
   SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
-			       const ASTNode& inputAlreadyInSAT, 
-			       const ASTNode& original_input) {
+                               const ASTNode& inputAlreadyInSAT, 
+                               const ASTNode& original_input) {
     //printf("doing array read refinement\n");
     if (!bm->UserFlags.arrayread_refinement_flag)
       FatalError("SATBased_ArrayReadRefinement: Control should not reach here");

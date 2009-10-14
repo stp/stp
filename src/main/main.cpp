@@ -95,7 +95,7 @@ int main(int argc, char ** argv) {
           switch(argv[i][1])
             {
             case 'a' :
-	      bm->UserFlags.optimize_flag = false;
+              bm->UserFlags.optimize_flag = false;
               break;
             case 'b':
               bm->UserFlags.print_STPinput_back_flag = true;

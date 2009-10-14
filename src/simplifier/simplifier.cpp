@@ -801,7 +801,7 @@ namespace BEEV
   ASTNode 
   Simplifier::
   CreateSimplifiedFormulaITE(const ASTNode& in0,
-			     const ASTNode& in1, const ASTNode& in2)
+                             const ASTNode& in1, const ASTNode& in2)
   {
     ASTNode t0 = in0;
     ASTNode t1 = in1;
@@ -2311,9 +2311,9 @@ namespace BEEV
           vars_to_consts[aaa].push_back(one);
       } //end of for loop
 
-        //go over the map from variables to vector of values. combine the
-        //vector of values, multiply to the variable, and put the
-        //resultant monomial in the output BVPLUS.
+    //go over the map from variables to vector of values. combine the
+    //vector of values, multiply to the variable, and put the
+    //resultant monomial in the output BVPLUS.
     for (ASTNodeToVecMap::iterator it = vars_to_consts.begin(), itend = vars_to_consts.end(); it != itend; it++)
       {
         ASTVec ccc = it->second;
@@ -2811,7 +2811,7 @@ namespace BEEV
         output = newVar;
       } //end of start_abstracting if condition
 
-        //memoize
+    //memoize
     UpdateSimplifyMap(input, output, false);
     return output;
   } //end of RemoveWrites()

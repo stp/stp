@@ -747,7 +747,7 @@ namespace BEEV
           }//end of inner for loop
       } //end of outer for loop
 
-        //get the exponent
+    //get the exponent
     power_of_2 = power_of_2_lowest;
 
     //if control is here, we are gauranteed that we have chosen a

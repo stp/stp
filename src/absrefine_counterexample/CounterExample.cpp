@@ -858,7 +858,7 @@ namespace BEEV
     // print functions should print unconditionally.  Put a
     // conditional around the call if you don't want them to print
     if (!(bm->UserFlags.stats_flag 
-	  && bm->UserFlags.print_nodes_flag))
+          && bm->UserFlags.print_nodes_flag))
       return;
 
     int num_vars = newS.nVars();
@@ -927,7 +927,7 @@ namespace BEEV
         CounterExampleMap.clear();
         ConstructCounterExample(SatSolver);
         if (bm->UserFlags.stats_flag 
-	    && bm->UserFlags.print_nodes_flag)
+            && bm->UserFlags.print_nodes_flag)
           {
             PrintSATModel(SatSolver);
           }
@@ -954,7 +954,7 @@ namespace BEEV
         else
           {
             if (bm->UserFlags.stats_flag 
-		&& bm->UserFlags.print_nodes_flag)
+                && bm->UserFlags.print_nodes_flag)
               {
                 cout << "Supposedly bogus one: \n";
                 bool tmp = bm->UserFlags.print_counterexample_flag;

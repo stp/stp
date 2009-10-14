@@ -89,7 +89,7 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateSimpForm(Kind kind, 
-				 const ASTNode& child0, const ASTNode& child1)
+                                 const ASTNode& child0, const ASTNode& child1)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -102,8 +102,8 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateSimpForm(Kind kind, 
-				 const ASTNode& child0, 
-				 const ASTNode& child1, const ASTNode& child2)
+                                 const ASTNode& child0, 
+                                 const ASTNode& child1, const ASTNode& child2)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -185,7 +185,7 @@ namespace BEEV
             fflag = 1; // For selective debug printing (below).
             // append grandchildren to children
             flat_children.insert(flat_children.end(), 
-				 gchildren.begin(), gchildren.end());
+                                 gchildren.begin(), gchildren.end());
           }
         else
           {
@@ -209,7 +209,7 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, 
-				  const ASTNode& form1, const ASTNode& form2)
+                                  const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;
     children.push_back(form1);
@@ -254,7 +254,7 @@ namespace BEEV
     ASTVec::const_iterator it_end = flat_children.end();
     ASTVec::const_iterator next_it;
     for (ASTVec::const_iterator it = flat_children.begin(); 
-	 it != it_end; it = next_it)
+         it != it_end; it = next_it)
       {
         next_it = it + 1;
         bool nextexists = (next_it < it_end);
@@ -278,7 +278,7 @@ namespace BEEV
             //  cout << "Dropping [" << it->GetNodeNum() << "]" << endl;
           }
         else if (nextexists && (next_it->GetKind() == NOT) 
-		 && ((*next_it)[0] == *it))
+                 && ((*next_it)[0] == *it))
           {
             // form and negation -- return FALSE for AND, TRUE for OR.
             retval = annihilator;
@@ -379,7 +379,7 @@ namespace BEEV
             *next_it = ASTFalse;
           }
         else if (nextexists && (next_it->GetKind() == NOT) 
-		 && ((*next_it)[0] == *it))
+                 && ((*next_it)[0] == *it))
           {
             // x XOR NOT x = TRUE.  Skip current, write "true" into next_it
             // so that it gets tossed, too.
@@ -447,8 +447,8 @@ namespace BEEV
 
   // FIXME:  How do I know whether ITE is a formula or not?
   ASTNode STPMgr::CreateSimpFormITE(const ASTNode& child0, 
-				    const ASTNode& child1, 
-				    const ASTNode& child2)
+                                    const ASTNode& child1, 
+                                    const ASTNode& child2)
   {
 
     ASTNode retval;
@@ -456,8 +456,8 @@ namespace BEEV
     if (_trace_simpbool)
       {
         cout << "========" << endl 
-	     << "CreateSimpFormITE " 
-	     << child0 << child1 << child2 << endl;
+             << "CreateSimpFormITE " 
+             << child0 << child1 << child2 << endl;
       }
 
     if (ASTTrue == child0)

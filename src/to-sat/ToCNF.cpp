@@ -243,9 +243,9 @@ namespace BEEV
     return result;
   } //End of onChildDoNeg()
   
-    //########################################
-    //########################################
-    //utilities for control bits.
+  //########################################
+  //########################################
+  //utilities for control bits.
 
   void CNFMgr::initializeCNFInfo(CNFInfo& x)
   {
@@ -448,9 +448,9 @@ namespace BEEV
     return psi;
   } //End of Product
 
-    //########################################
-    //########################################
-    //prep. for cnf conversion
+  //########################################
+  //########################################
+  //prep. for cnf conversion
 
   void CNFMgr::scanFormula(const ASTNode& varphi, bool isPos)
   {    
@@ -689,9 +689,9 @@ namespace BEEV
       }
   } //End of convertTermForCNF()
 
-    //########################################
-    //########################################
-    // functions for renaming nodes during cnf conversion
+  //########################################
+  //########################################
+  // functions for renaming nodes during cnf conversion
 
   ASTNode* CNFMgr::doRenameITE(const ASTNode& varphi, ClauseList* defs)
   {
@@ -803,9 +803,9 @@ namespace BEEV
     setWasRenamedNeg(*x);    
   } //End of doRenamingNeg()
 
-    //########################################
-    //########################################
-    //main switch for individual cnf conversion cases
+  //########################################
+  //########################################
+  //main switch for individual cnf conversion cases
 
   void CNFMgr::convertFormulaToCNFPosCases(const ASTNode& varphi, ClauseList* defs)
   {
@@ -966,9 +966,9 @@ namespace BEEV
       }
   } //convertFormulaToCNFNegCases()
 
-    //########################################
-    //########################################
-    // individual cnf conversion cases
+  //########################################
+  //########################################
+  // individual cnf conversion cases
 
   void CNFMgr::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs)
   {
@@ -1564,9 +1564,9 @@ namespace BEEV
     return psi;
   } //End of convertFormulaToCNFNegXORAux()
 
-    //########################################
-    //########################################
-    // utilities for reclaiming memory.
+  //########################################
+  //########################################
+  // utilities for reclaiming memory.
 
   void CNFMgr::reduceMemoryFootprintPos(const ASTNode& varphi)
   {
@@ -1598,8 +1598,8 @@ namespace BEEV
       }
   } //End of reduceMemoryFootprintNeg()
 
-    //########################################
-    //########################################
+  //########################################
+  //########################################
 
   ASTNode* CNFMgr::ASTNodeToASTNodePtr(const ASTNode& varphi)
   {
@@ -1618,8 +1618,8 @@ namespace BEEV
     return psi;
   } //End of ASTNodeToASTNodePtr()
 
-    //########################################
-    //########################################
+  //########################################
+  //########################################
 
   void CNFMgr::cleanup(const ASTNode& varphi)
   {
@@ -1650,9 +1650,9 @@ namespace BEEV
     info.clear();
   } //End of cleanup()
 
-    //########################################
-    //########################################
-    // constructor
+  //########################################
+  //########################################
+  // constructor
 
   CNFMgr::CNFMgr(STPMgr *bmgr)
   {
