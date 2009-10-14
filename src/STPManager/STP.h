@@ -45,11 +45,11 @@ namespace BEEV
 
     //Constructor
     STP(STPMgr* b,
-	Simplifier* s,
-	BVSolver* bsolv,
-	ArrayTransformer * a,
-	ToSAT * ts,
-	AbsRefine_CounterExample * ce)    
+        Simplifier* s,
+        BVSolver* bsolv,
+        ArrayTransformer * a,
+        ToSAT * ts,
+        AbsRefine_CounterExample * ce)    
     {
       bm   = b;
       simp = s;
@@ -61,7 +61,7 @@ namespace BEEV
 
     ~STP()
     {
-      ClearAllTables();	  
+      ClearAllTables();   
     }
 
     /****************************************************************
@@ -71,11 +71,11 @@ namespace BEEV
     // The absolute TopLevel function that invokes STP on the input
     // formula
     SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts, 
-				   const ASTNode& query)
+                                   const ASTNode& query)
     {      
       ASTNode q = bm->CreateNode(AND, 
-				 inputasserts, 
-				 bm->CreateNode(NOT, query));
+                                 inputasserts, 
+                                 bm->CreateNode(NOT, query));
       return TopLevelSTPAux(q);
     } //End of TopLevelSTP()    
 

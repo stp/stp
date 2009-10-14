@@ -82,11 +82,11 @@ namespace BEEV
   //       }
   //   } //end of PrintClauseList()
 
- //  //Variable Order Printer: A global function which converts a MINISAT
+  //  //Variable Order Printer: A global function which converts a MINISAT
   //   //var into a ASTNODE var. It then prints this var along with
   //   //variable order dcisions taken by MINISAT.
   //   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, 
-  // 					   int decision_level, int polarity)
+  //                                       int decision_level, int polarity)
   //   {
   //     BEEV::ASTNode vv = BEEV::GlobalSTPMgr->_SATVar_to_AST[minisat_var];
   //     cout << spaces(decision_level);
@@ -103,21 +103,21 @@ namespace BEEV
       BEEV::ASTNode a = *i;
       switch(a.GetType()) {
       case BEEV::BITVECTOR_TYPE:
-	a.PL_Print(os);
-	os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-	break;
+        a.PL_Print(os);
+        os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+        break;
       case BEEV::ARRAY_TYPE:
-	a.PL_Print(os);
-	os << " : ARRAY " << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
-	os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-	break;
+        a.PL_Print(os);
+        os << " : ARRAY " << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
+        os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+        break;
       case BEEV::BOOLEAN_TYPE:
-	a.PL_Print(os);
-	os << " : BOOLEAN;" << endl;
-	break;
+        a.PL_Print(os);
+        os << " : BOOLEAN;" << endl;
+        break;
       default:
-	BEEV::FatalError("vc_printDeclsToStream: Unsupported type",a);
-	break;
+        BEEV::FatalError("vc_printDeclsToStream: Unsupported type",a);
+        break;
       }
     }
   } //printVarDeclsToStream
@@ -125,18 +125,18 @@ namespace BEEV
 
 
   void STPMgr::printAssertsToStream(ostream &os, int simplify_print) {
-  ASTVec v = GetAsserts();
-  for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
-    //Begin_RemoveWrites = true;
-    //ASTNode q = (simplify_print == 1) ? SimplifyFormula_TopLevel(*i,false) : *i;
-    //q = (simplify_print == 1) ? SimplifyFormula_TopLevel(q,false) : q;
-    ASTNode q = *i;
-    //Begin_RemoveWrites = false;
-    os << "ASSERT( ";
-    q.PL_Print(os);
-    os << ");" << endl;
+    ASTVec v = GetAsserts();
+    for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
+      //Begin_RemoveWrites = true;
+      //ASTNode q = (simplify_print == 1) ? SimplifyFormula_TopLevel(*i,false) : *i;
+      //q = (simplify_print == 1) ? SimplifyFormula_TopLevel(q,false) : q;
+      ASTNode q = *i;
+      //Begin_RemoveWrites = false;
+      os << "ASSERT( ";
+      q.PL_Print(os);
+      os << ");" << endl;
+    }
   }
-}
 
   void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query) {
     (BEEV::GlobalSTP->bm)->printVarDeclsToStream(cout);

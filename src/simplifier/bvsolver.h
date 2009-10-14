@@ -39,124 +39,124 @@ namespace BEEV
    ******************************************************************/
 
   class BVSolver
-    {
-    private:
-      // Ptr to toplevel manager that manages bit-vector expressions
-      // (i.e. construct various kinds of expressions), and also has
-      // member functions that simplify bit-vector expressions
-      STPMgr * _bm;
+  {
+  private:
+    // Ptr to toplevel manager that manages bit-vector expressions
+    // (i.e. construct various kinds of expressions), and also has
+    // member functions that simplify bit-vector expressions
+    STPMgr * _bm;
       
-      // Ptr to Simplifier
-      Simplifier * _simp;
+    // Ptr to Simplifier
+    Simplifier * _simp;
 
-      //
-      ASTNode ASTTrue, ASTFalse, ASTUndefined;
+    //
+    ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
-      //Those formulas which have already been solved. If the same
-      //formula occurs twice then do not solve the second occurence, and
-      //instead drop it
-      ASTNodeMap FormulasAlreadySolvedMap;
+    //Those formulas which have already been solved. If the same
+    //formula occurs twice then do not solve the second occurence, and
+    //instead drop it
+    ASTNodeMap FormulasAlreadySolvedMap;
 
-      //this map is useful while traversing terms and uniquely
-      //identifying variables in the those terms. Prevents double
-      //counting.
-      ASTNodeMap TermsAlreadySeenMap;
-      ASTNodeMap TermsAlreadySeenMap_ForArrays;
+    //this map is useful while traversing terms and uniquely
+    //identifying variables in the those terms. Prevents double
+    //counting.
+    ASTNodeMap TermsAlreadySeenMap;
+    ASTNodeMap TermsAlreadySeenMap_ForArrays;
 
-      //solved variables list: If a variable has been solved for then do
-      //not solve for it again
-      ASTNodeSet DoNotSolve_TheseVars;
+    //solved variables list: If a variable has been solved for then do
+    //not solve for it again
+    ASTNodeSet DoNotSolve_TheseVars;
 
-      //checks if var has been solved for or not. if yes, then return
-      //true else return false
-      bool DoNotSolveThis(const ASTNode& var);
+    //checks if var has been solved for or not. if yes, then return
+    //true else return false
+    bool DoNotSolveThis(const ASTNode& var);
 
-      //traverses a term, and creates a multiset of all variables in the
-      //term. Does memoization to avoid double counting.
-      void VarsInTheTerm(const ASTNode& lhs, ASTNodeMultiSet& v);
-      void VarsInTheTerm_TopLevel(const ASTNode& lhs, ASTNodeMultiSet& v);
+    //traverses a term, and creates a multiset of all variables in the
+    //term. Does memoization to avoid double counting.
+    void VarsInTheTerm(const ASTNode& lhs, ASTNodeMultiSet& v);
+    void VarsInTheTerm_TopLevel(const ASTNode& lhs, ASTNodeMultiSet& v);
 
-      //choose a suitable var from the term
-      ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm);
-      //accepts an equation and solves for a variable or a monom in it
-      ASTNode BVSolve_Odd(const ASTNode& eq);
+    //choose a suitable var from the term
+    ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm);
+    //accepts an equation and solves for a variable or a monom in it
+    ASTNode BVSolve_Odd(const ASTNode& eq);
 
-      //solves equations of the form a*x=t where 'a' is even. Has a
-      //return value, unlike the normal BVSolve()
-      ASTNode BVSolve_Even(const ASTNode& eq);
-      ASTNode CheckEvenEqn(const ASTNode& input, bool& evenflag);
+    //solves equations of the form a*x=t where 'a' is even. Has a
+    //return value, unlike the normal BVSolve()
+    ASTNode BVSolve_Even(const ASTNode& eq);
+    ASTNode CheckEvenEqn(const ASTNode& input, bool& evenflag);
 
-      //Checks for arrayreads in a term. if yes then returns true, else
-      //return false
-      bool CheckForArrayReads(const ASTNode& term);
-      bool CheckForArrayReads_TopLevel(const ASTNode& term);
+    //Checks for arrayreads in a term. if yes then returns true, else
+    //return false
+    bool CheckForArrayReads(const ASTNode& term);
+    bool CheckForArrayReads_TopLevel(const ASTNode& term);
 
-      //Creates new variables used in solving
-      ASTNode NewVar(unsigned int n);
+    //Creates new variables used in solving
+    ASTNode NewVar(unsigned int n);
 
-      //this function return true if the var occurs in term, else the
-      //function returns false
-      bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
+    //this function return true if the var occurs in term, else the
+    //function returns false
+    bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
-      //takes an even number "in" as input, and returns an odd number
-      //(return value) and a power of 2 (as number_shifts by reference),
-      //such that in = (odd_number * power_of_2).
-      //
-      //Refer STP's CAV 2007 (or Clark Barrett's 1998 paper on
-      //bit-vector arithmetic published in DAC 1998) paper for precise
-      //understanding of the algorithm
-      ASTNode SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, 
-					     unsigned int& number_shifts);
+    //takes an even number "in" as input, and returns an odd number
+    //(return value) and a power of 2 (as number_shifts by reference),
+    //such that in = (odd_number * power_of_2).
+    //
+    //Refer STP's CAV 2007 (or Clark Barrett's 1998 paper on
+    //bit-vector arithmetic published in DAC 1998) paper for precise
+    //understanding of the algorithm
+    ASTNode SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, 
+                                           unsigned int& number_shifts);
 
-      //Once a formula has been solved, then update the alreadysolvedmap
-      //with the formula, and the solved value. The solved value can be
-      //described using the following example: Suppose input to the
-      //solver is
-      //
-      // input key: x = 2 AND y = x + t
-      //
-      // output value: y = 2 + t
-      void UpdateAlreadySolvedMap(const ASTNode& key, const ASTNode& value);
+    //Once a formula has been solved, then update the alreadysolvedmap
+    //with the formula, and the solved value. The solved value can be
+    //described using the following example: Suppose input to the
+    //solver is
+    //
+    // input key: x = 2 AND y = x + t
+    //
+    // output value: y = 2 + t
+    void UpdateAlreadySolvedMap(const ASTNode& key, const ASTNode& value);
 
-      //This function checks if the key (formula) has already been
-      //solved for.
-      //
-      //If yes it returns TRUE and fills the "output" with the
-      //solved-value (call by reference argument),
-      //
-      //else returns FALSE
-      bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
+    //This function checks if the key (formula) has already been
+    //solved for.
+    //
+    //If yes it returns TRUE and fills the "output" with the
+    //solved-value (call by reference argument),
+    //
+    //else returns FALSE
+    bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
 
-    public:
-      //constructor
-      BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)	
-        {
-          ASTTrue = _bm->CreateNode(TRUE);
-          ASTFalse = _bm->CreateNode(FALSE);
-	  ASTUndefined = _bm->CreateNode(UNDEFINED);
-        }
-      ;
+  public:
+    //constructor
+  BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)       
+    {
+      ASTTrue = _bm->CreateNode(TRUE);
+      ASTFalse = _bm->CreateNode(FALSE);
+      ASTUndefined = _bm->CreateNode(UNDEFINED);
+    }
+    ;
 
-      //Destructor
-      ~BVSolver()
-        {
-          TermsAlreadySeenMap.clear();
-          DoNotSolve_TheseVars.clear();
-          FormulasAlreadySolvedMap.clear();
-          TermsAlreadySeenMap_ForArrays.clear();
-        }
+    //Destructor
+    ~BVSolver()
+      {
+        TermsAlreadySeenMap.clear();
+        DoNotSolve_TheseVars.clear();
+        FormulasAlreadySolvedMap.clear();
+        TermsAlreadySeenMap_ForArrays.clear();
+      }
 
-      //Top Level Solver: Goes over the input DAG, identifies the
-      //equation to be solved, solves them,
-      ASTNode TopLevelBVSolve(const ASTNode& a);
+    //Top Level Solver: Goes over the input DAG, identifies the
+    //equation to be solved, solves them,
+    ASTNode TopLevelBVSolve(const ASTNode& a);
 
-      void ClearAllTables(void)
-	{
-          DoNotSolve_TheseVars.clear();
-          FormulasAlreadySolvedMap.clear();
-          TermsAlreadySeenMap_ForArrays.clear();
-	} //End of ClearAllTables()
+    void ClearAllTables(void)
+    {
+      DoNotSolve_TheseVars.clear();
+      FormulasAlreadySolvedMap.clear();
+      TermsAlreadySeenMap_ForArrays.clear();
+    } //End of ClearAllTables()
 
-    }; //end of class bvsolver
+  }; //end of class bvsolver
 };//end of namespace BEEV
 #endif

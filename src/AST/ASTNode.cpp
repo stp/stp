@@ -18,12 +18,12 @@ namespace BEEV
   // Constructor; 
   //
   // creates a new pointer, increments refcount of pointed-to object.
-   ASTNode::ASTNode(ASTInternal *in) :
+  ASTNode::ASTNode(ASTInternal *in) :
     _int_node_ptr(in)
   {
     if (in)
       {
-	in->IncRef();
+        in->IncRef();
       }
   } //End of Constructor
 
@@ -38,40 +38,40 @@ namespace BEEV
   } //End of Copy Constructor for ASTNode
 
   // ASTNode accessor function.
-   Kind ASTNode::GetKind() const
+  Kind ASTNode::GetKind() const
   {
     //cout << "GetKind: " << _int_node_ptr;
     return _int_node_ptr->GetKind();
   } //End of GetKind()
 
   // Declared here because of same ordering problem as GetKind.
-   const ASTVec &ASTNode::GetChildren() const
+  const ASTVec &ASTNode::GetChildren() const
   {
     return _int_node_ptr->GetChildren();
   } //End of GetChildren()
 
   // Access node number
-   int ASTNode::GetNodeNum() const
+  int ASTNode::GetNodeNum() const
   {
     return _int_node_ptr->_node_num;
   } //End of GetNodeNum()
 
-   unsigned int ASTNode::GetIndexWidth() const
+  unsigned int ASTNode::GetIndexWidth() const
   {
     return _int_node_ptr->_index_width;
   } //End of GetIndexWidth()
 
-   void ASTNode::SetIndexWidth(unsigned int iw) const
+  void ASTNode::SetIndexWidth(unsigned int iw) const
   {
     _int_node_ptr->_index_width = iw;
   } //End of SetIndexWidth()
 
-   unsigned int ASTNode::GetValueWidth() const
+  unsigned int ASTNode::GetValueWidth() const
   {
     return _int_node_ptr->_value_width;
   } //End of GetValueWidth()
 
-   void ASTNode::SetValueWidth(unsigned int vw) const
+  void ASTNode::SetValueWidth(unsigned int vw) const
   {
     _int_node_ptr->_value_width = vw;
   } //End of SetValueWidth()
@@ -79,7 +79,7 @@ namespace BEEV
   //return the type of the ASTNode: 
   //
   // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
-   types ASTNode::GetType() const
+  types ASTNode::GetType() const
   {
     if ((GetIndexWidth() == 0) && (GetValueWidth() == 0)) //BOOLEAN
       return BOOLEAN_TYPE;
@@ -91,7 +91,7 @@ namespace BEEV
   } //End of GetType()
 
   // Assignment
-   ASTNode& ASTNode::operator=(const ASTNode& n)
+  ASTNode& ASTNode::operator=(const ASTNode& n)
   {
     if (n._int_node_ptr)
       {
@@ -114,7 +114,7 @@ namespace BEEV
       }
   } //End of Destructor()
 
-   STPMgr* ASTNode::GetSTPMgr() const
+  STPMgr* ASTNode::GetSTPMgr() const
   {
     return GlobalSTP->bm;
   } //End of GetSTPMgr()
@@ -124,7 +124,7 @@ namespace BEEV
   {
     STPMgr * bm = GetSTPMgr();
     return (bm->AlreadyPrintedSet.find(*this) != 
-	    bm->AlreadyPrintedSet.end());
+            bm->AlreadyPrintedSet.end());
   } //End of IsAlreadyPrinted()
 
   // Mark the node as printed if it has been already printed

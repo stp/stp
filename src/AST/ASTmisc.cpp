@@ -218,8 +218,8 @@ namespace BEEV
               FatalError("BVTypeCheck: indices should be BVCONST\n", n);
             if (n.GetValueWidth() != GetUnsignedConst(n[1]) - GetUnsignedConst(n[2]) + 1)
               FatalError("BVTypeCheck: length mismatch\n", n);
-			if (GetUnsignedConst(n[1]) >= n[0].GetValueWidth())
-				FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
+            if (GetUnsignedConst(n[1]) >= n[0].GetValueWidth())
+              FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
             break;
           case BVLEFTSHIFT:
           case BVRIGHTSHIFT:
@@ -243,10 +243,10 @@ namespace BEEV
           case FALSE:
           case SYMBOL:
             return true;
-	  case PARAMBOOL:
-	    if(2 != n.Degree())
-	      FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);
-	    break;
+          case PARAMBOOL:
+            if(2 != n.Degree())
+              FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);
+            break;
           case EQ:
             if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
               {
@@ -297,7 +297,7 @@ namespace BEEV
             //FIXME: Todo
             break;
           default:
-	    
+            
             FatalError("BVTypeCheck: Unrecognized kind: ");
             break;
           }
@@ -342,9 +342,9 @@ namespace BEEV
     //a is of the form READ(Arr,const), and b is const, or
     //a is of the form var, and b is const
     if ((k1 == READ 
-	 && a[0].GetKind() == SYMBOL 
-	 && a[1].GetKind() == BVCONST 
-	 && (k2 == BVCONST)))
+         && a[0].GetKind() == SYMBOL 
+         && a[1].GetKind() == BVCONST 
+         && (k2 == BVCONST)))
       // || k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind()
       // == BVCONST)))
       return 1;
@@ -355,15 +355,15 @@ namespace BEEV
     //b is of the form READ(Arr,const), and a is const, or
     //b is of the form var, and a is const
     if ((k1 == BVCONST) 
-	&& ((k2 == READ 
-	     && b[0].GetKind() == SYMBOL 
-	     && b[1].GetKind() == BVCONST)))
+        && ((k2 == READ 
+             && b[0].GetKind() == SYMBOL 
+             && b[1].GetKind() == BVCONST)))
       return -1;
 
     if (SYMBOL == k2 
-	&& (BVCONST == k1 
-	    || TRUE == k1 
-	    || FALSE == k1))
+        && (BVCONST == k1 
+            || TRUE == k1 
+            || FALSE == k1))
       return -1;
 
     return 0;

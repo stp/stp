@@ -78,7 +78,7 @@ namespace BEEV
     // q and r are "out" parameters.  rwidth puts a bound on the
     // recursion depth.   Unsigned only, for now.
     void BBDivMod(const ASTVec &y, const ASTVec &x, 
-		  ASTVec &q, ASTVec &r, unsigned int rwidth);
+                  ASTVec &q, ASTVec &r, unsigned int rwidth);
 
     // Return formula for majority function of three formulas.
     ASTNode Majority(const ASTNode& a, const ASTNode& b, const ASTNode& c);

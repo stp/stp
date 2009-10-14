@@ -27,17 +27,17 @@
 #include "RunTimes.h"
 
 #ifdef EXT_HASH_MAP
- #include <ext/hash_set>
- #include <ext/hash_map>
+#include <ext/hash_set>
+#include <ext/hash_map>
 #elif defined(TR1_UNORDERED_MAP)
- #include <tr1/unordered_map>
- #include <tr1/unordered_set>
- #define hash_map tr1::unordered_map
- #define hash_set tr1::unordered_set
- #define hash_multiset tr1::unordered_multiset
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+#define hash_map tr1::unordered_map
+#define hash_set tr1::unordered_set
+#define hash_multiset tr1::unordered_multiset
 #else
- #include <hash_set>
- #include <hash_map>
+#include <hash_set>
+#include <hash_map>
 #endif
 
 #define HASHMAP      hash_map
@@ -115,9 +115,9 @@ namespace BEEV {
     eqstr> function_counters;
 #else
   typedef HASHMAP<const char*,
-    int,
-    hash<char *>,
-    eqstr> function_counters;
+                  int,
+                  hash<char *>,
+                  eqstr> function_counters;
 #endif
 
   // Function that computes various kinds of statistics for the phases

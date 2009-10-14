@@ -45,22 +45,22 @@ namespace BEEV
     ASTVec::const_iterator iend = ch.end();
     for (ASTVec::const_iterator i = ch.begin(); i != iend; i++)
       {
-	hashval += i->Hash();
-	hashval += (hashval << 10);
-	hashval ^= (hashval >> 6);
+        hashval += i->Hash();
+        hashval += (hashval << 10);
+        hashval ^= (hashval >> 6);
       }
     
     hashval += (hashval << 3);
     hashval ^= (hashval >> 11);
     hashval += (hashval << 15);
-    return hashval;	
+    return hashval;     
   } //End of ASTInteriorHasher operator()
   
   //ASTInteriorEqual operator()
   bool 
   ASTInterior::ASTInteriorEqual::
   operator()(const ASTInterior *int_node_ptr1, 
-	     const ASTInterior *int_node_ptr2) const
+             const ASTInterior *int_node_ptr2) const
   {
     return (*int_node_ptr1 == *int_node_ptr2);
   } ///End of ASTInteriorEqual operator()

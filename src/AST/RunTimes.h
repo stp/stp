@@ -34,7 +34,7 @@ public:
   
   typedef std::pair<Category, long> Element;
   
- private:
+private:
   RunTimes& operator =(const RunTimes&);
   RunTimes(const RunTimes& other);
   
@@ -46,7 +46,7 @@ public:
   long getCurrentTime();
   void addTime(Category c, long milliseconds);
   
- public:
+public:
   
   void addCount(Category c);
   void start(Category c);
@@ -56,11 +56,11 @@ public:
   RunTimes(){}
   
   void clear()
-    {
-      counts.clear();
-      times.clear();
-      category_stack.empty();
-    }
+  {
+    counts.clear();
+    times.clear();
+    category_stack.empty();
+  }
 };
 
 #endif

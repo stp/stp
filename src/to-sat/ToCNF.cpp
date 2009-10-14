@@ -34,30 +34,30 @@ namespace BEEV
     switch (k)
       {
       case TRUE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case FALSE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case SYMBOL:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVCONST:
-	{
-	  result = true;
-	  break;
-          }
+        {
+          result = true;
+          break;
+        }
       default:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       }
     
     return result;
@@ -71,55 +71,55 @@ namespace BEEV
     switch (k)
       {
       case BVLT:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVLE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVGT:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVGE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVSLT:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVSLE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVSGT:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case BVSGE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case EQ:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       default:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       }
     
     return result;
@@ -133,15 +133,15 @@ namespace BEEV
     switch (k)
       {
       case ITE:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       default:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       }
     
     return result;
@@ -155,32 +155,32 @@ namespace BEEV
     switch (k)
       {
       case NOT:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       case NAND:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       case NOR:
-	{
-	  result = false;
-	  break;
-	}
+        {
+          result = false;
+          break;
+        }
       case IMPLIES:
-	{
-	  if (idx == 0)
-	    {
-	      result = false;
-	    }
-	  break;
-	}
+        {
+          if (idx == 0)
+            {
+              result = false;
+            }
+          break;
+        }
       default:
-	{
-	  break;
-	}
+        {
+          break;
+        }
       }
     
     return result;
@@ -194,50 +194,50 @@ namespace BEEV
     switch (k)
       {
       case NOT:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case NAND:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case NOR:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case XOR:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case IFF:
-	{
-	  result = true;
-	  break;
-	}
+        {
+          result = true;
+          break;
+        }
       case IMPLIES:
-	{
-	  if (idx == 0)
-	    {
-	      result = true;
-	    }
-	  break;
-	}
+        {
+          if (idx == 0)
+            {
+              result = true;
+            }
+          break;
+        }
       case ITE:
-	{
-	  if (idx == 0)
-	    {
-	      result = true;
-	    }
-	  break;
-	}
+        {
+          if (idx == 0)
+            {
+              result = true;
+            }
+          break;
+        }
       default:
-	{
-	  break;
-	}
+        {
+          break;
+        }
       }
     
     return result;
@@ -284,8 +284,8 @@ namespace BEEV
     bool result = false;
     
     if (x.control & (1 << idx))
-      {	
-	result = true;
+      { 
+        result = true;
       }
 
     return result;
@@ -383,7 +383,7 @@ namespace BEEV
     ClauseList::const_iterator it = varphi.begin();
     for (; it != varphi.end(); it++)
       {
-	psi->push_back(new vector<const ASTNode*> (**it));
+        psi->push_back(new vector<const ASTNode*> (**it));
       }
     
     return psi;
@@ -421,7 +421,7 @@ namespace BEEV
   void CNFMgr::NOCOPY_INPLACE_UNION(ClauseList* varphi1, ClauseList* varphi2)
   {    
     varphi1->insert(varphi1->end(), varphi2->begin(), varphi2->end());
-      delete varphi2;
+    delete varphi2;
   } //End of NOCOPY_INPLACE_UNION
 
   ClauseList* CNFMgr::PRODUCT(const ClauseList& varphi1, const ClauseList& varphi2)
@@ -432,17 +432,17 @@ namespace BEEV
     ClauseList::const_iterator it1 = varphi1.begin();
     for (; it1 != varphi1.end(); it1++)
       {
-	ClausePtr clause1 = *it1;
-	ClauseList::const_iterator it2 = varphi2.begin();
-	for (; it2 != varphi2.end(); it2++)
-	  {
-	    ClausePtr clause2 = *it2;
-	    ClausePtr clause = new vector<const ASTNode*> ();
-	    clause->reserve(clause1->size() + clause2->size());
-	    clause->insert(clause->end(), clause1->begin(), clause1->end());
-	    clause->insert(clause->end(), clause2->begin(), clause2->end());
-	    psi->push_back(clause);
-	  }
+        ClausePtr clause1 = *it1;
+        ClauseList::const_iterator it2 = varphi2.begin();
+        for (; it2 != varphi2.end(); it2++)
+          {
+            ClausePtr clause2 = *it2;
+            ClausePtr clause = new vector<const ASTNode*> ();
+            clause->reserve(clause1->size() + clause2->size());
+            clause->insert(clause->end(), clause1->begin(), clause1->end());
+            clause->insert(clause->end(), clause2->begin(), clause2->end());
+            psi->push_back(clause);
+          }
       }
     
     return psi;
@@ -462,13 +462,13 @@ namespace BEEV
     
     if (info.find(varphi) == info.end())
       {
-	x = new CNFInfo();
-	initializeCNFInfo(*x);
-	info[varphi] = x;
+        x = new CNFInfo();
+        initializeCNFInfo(*x);
+        info[varphi] = x;
       }
     else
       {
-	x = info[varphi];
+        x = info[varphi];
       }
     
     //########################################
@@ -477,12 +477,12 @@ namespace BEEV
     
     if (isPos && sharesPos(*x) == 2)
       {
-	return;
+        return;
       }
     
     if (!isPos && sharesNeg(*x) == 2)
       {
-	return;
+        return;
       }
     
     //########################################
@@ -491,12 +491,12 @@ namespace BEEV
     
     if (isPos)
       {
-	incrementSharesPos(*x);
+        incrementSharesPos(*x);
       }
     
     if (!isPos)
       {
-	incrementSharesNeg(*x);
+        incrementSharesNeg(*x);
       }
     
     //########################################
@@ -505,28 +505,28 @@ namespace BEEV
     
     if (isAtom(varphi))
       {
-          return;
+        return;
       }
     else if (isPred(varphi))
       {
-	for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
-	  {
-	    scanTerm(varphi[i]);
-	  }
+        for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
+          {
+            scanTerm(varphi[i]);
+          }
       }
     else
       {
-	for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
-	  {
-	    if (onChildDoPos(varphi, i))
-	      {
-		scanFormula(varphi[i], isPos);
-	      }
-	    if (onChildDoNeg(varphi, i))
-	      {
-		scanFormula(varphi[i], !isPos);
-	      }
-	  }
+        for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
+          {
+            if (onChildDoPos(varphi, i))
+              {
+                scanFormula(varphi[i], isPos);
+              }
+            if (onChildDoNeg(varphi, i))
+              {
+                scanFormula(varphi[i], !isPos);
+              }
+          }
       }
     
   } //End of ScanFormula()
@@ -541,13 +541,13 @@ namespace BEEV
     
     if (info.find(varphi) == info.end())
       {
-	x = new CNFInfo();
-	initializeCNFInfo(*x);
-	info[varphi] = x;
+        x = new CNFInfo();
+        initializeCNFInfo(*x);
+        info[varphi] = x;
       }
     else
       {
-	x = info[varphi];
+        x = info[varphi];
       }
     
     //########################################
@@ -556,7 +556,7 @@ namespace BEEV
     
     if (sharesPos(*x) == 2)
       {
-	return;
+        return;
       }
     
     //########################################
@@ -573,27 +573,27 @@ namespace BEEV
     
     if (isAtom(varphi))
       {
-	return;
+        return;
       }
     else if (isITE(varphi))
       {
-	scanFormula(varphi[0], true);
-	scanFormula(varphi[0], false);
-	scanTerm(varphi[1]);
-	scanTerm(varphi[2]);
+        scanFormula(varphi[0], true);
+        scanFormula(varphi[0], false);
+        scanTerm(varphi[1]);
+        scanTerm(varphi[2]);
       }
     else
       {
-	for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
-	  {
-	    scanTerm(varphi[i]);
-	  }
+        for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
+          {
+            scanTerm(varphi[i]);
+          }
       }
   }//End of scanterm()
   
-    //########################################
-    //########################################
-    // main cnf conversion function
+  //########################################
+  //########################################
+  // main cnf conversion function
 
   void CNFMgr::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
   {    
@@ -604,9 +604,9 @@ namespace BEEV
     
     if (isTerm(*x))
       {
-	convertTermForCNF(varphi, defs);
-	setWasVisited(*x);
-	return;
+        convertTermForCNF(varphi, defs);
+        setWasVisited(*x);
+        return;
       }
     
     //########################################
@@ -614,28 +614,28 @@ namespace BEEV
     
     if (sharesPos(*x) > 0 && !wasVisited(*x))
       {
-	convertFormulaToCNFPosCases(varphi, defs);
+        convertFormulaToCNFPosCases(varphi, defs);
       }
     
     if (x->clausespos != NULL && x->clausespos->size() > 1)
       {
-	if (doSibRenamingPos(*x) || sharesPos(*x) > 1)
-	  {
-	    doRenamingPos(varphi, defs);
-	  }
+        if (doSibRenamingPos(*x) || sharesPos(*x) > 1)
+          {
+            doRenamingPos(varphi, defs);
+          }
       }
     
     if (sharesNeg(*x) > 0 && !wasVisited(*x))
       {
-	convertFormulaToCNFNegCases(varphi, defs);
+        convertFormulaToCNFNegCases(varphi, defs);
       }
     
     if (x->clausesneg != NULL && x->clausesneg->size() > 1)
       {
-	if (doSibRenamingNeg(*x) || sharesNeg(*x) > 1)
-	  {
-	    doRenamingNeg(varphi, defs);
-	  }
+        if (doSibRenamingNeg(*x) || sharesNeg(*x) > 1)
+          {
+            doRenamingNeg(varphi, defs);
+          }
       }
     
     //########################################
@@ -654,7 +654,7 @@ namespace BEEV
     
     if (x->termforcnf != NULL)
       {
-	return;
+        return;
       }
     
     //########################################
@@ -663,29 +663,29 @@ namespace BEEV
     
     if (isITE(varphi))
       {
-	x->termforcnf = doRenameITE(varphi, defs);
-	reduceMemoryFootprintPos(varphi[0]);
-	reduceMemoryFootprintNeg(varphi[0]);
-	
+        x->termforcnf = doRenameITE(varphi, defs);
+        reduceMemoryFootprintPos(varphi[0]);
+        reduceMemoryFootprintNeg(varphi[0]);
+        
       }
     else if (isAtom(varphi))
       {
-	x->termforcnf = ASTNodeToASTNodePtr(varphi);
+        x->termforcnf = ASTNodeToASTNodePtr(varphi);
       }
     else
-      {	
-	ASTVec psis;
-	ASTVec::const_iterator it = varphi.GetChildren().begin();
-	for (; it != varphi.GetChildren().end(); it++)
-	  {
-	    convertTermForCNF(*it, defs);
-	    psis.push_back(*(info[*it]->termforcnf));
-	  }
-	
-	ASTNode psi = bm->CreateNode(varphi.GetKind(), psis);
-          psi.SetValueWidth(varphi.GetValueWidth());
-          psi.SetIndexWidth(varphi.GetIndexWidth());
-          x->termforcnf = ASTNodeToASTNodePtr(psi);
+      { 
+        ASTVec psis;
+        ASTVec::const_iterator it = varphi.GetChildren().begin();
+        for (; it != varphi.GetChildren().end(); it++)
+          {
+            convertTermForCNF(*it, defs);
+            psis.push_back(*(info[*it]->termforcnf));
+          }
+        
+        ASTNode psi = bm->CreateNode(varphi.GetKind(), psis);
+        psi.SetValueWidth(varphi.GetValueWidth());
+        psi.SetIndexWidth(varphi.GetIndexWidth());
+        x->termforcnf = ASTNodeToASTNodePtr(psi);
       }
   } //End of convertTermForCNF()
 
@@ -777,7 +777,7 @@ namespace BEEV
     
     //########################################
     // step 2, calc new variable
-      //########################################
+    //########################################
     
     ostringstream oss;
     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
@@ -811,894 +811,894 @@ namespace BEEV
   {
     if (isPred(varphi))
       {
-	convertFormulaToCNFPosPred(varphi, defs);
-	return;
+        convertFormulaToCNFPosPred(varphi, defs);
+        return;
       }
     
     Kind k = varphi.GetKind();
     switch (k)
       {
       case FALSE:
-	{
-	  convertFormulaToCNFPosFALSE(varphi, defs);
-	  break;
-	}
-        case TRUE:
-          {
-            convertFormulaToCNFPosTRUE(varphi, defs);
-            break;
-          }
-      case BVGETBIT:
-	{
-	  convertFormulaToCNFPosBVGETBIT(varphi, defs);
-	  break;
-	}
-      case SYMBOL:
-	{
-	  convertFormulaToCNFPosSYMBOL(varphi, defs);
-	  break;
-	}
-      case NOT:
-	{
-	  convertFormulaToCNFPosNOT(varphi, defs);
-	  break;
-	}
-      case AND:
-	{
-	  convertFormulaToCNFPosAND(varphi, defs);
-	  break;
-	}
-      case NAND:
-	{
-	  convertFormulaToCNFPosNAND(varphi, defs);
-	  break;
-	}
-      case OR:
-	{
-            convertFormulaToCNFPosOR(varphi, defs);
-            break;
-	}
-      case NOR:
-	{
-	  convertFormulaToCNFPosNOR(varphi, defs);
-	  break;
-          }
-        case XOR:
-          {
-            convertFormulaToCNFPosXOR(varphi, defs);
-            break;
-          }
-        case IMPLIES:
-          {
-            convertFormulaToCNFPosIMPLIES(varphi, defs);
-            break;
-          }
-        case ITE:
-          {
-            convertFormulaToCNFPosITE(varphi, defs);
-            break;
-          }
-        default:
-          {
-            fprintf(stderr, "convertFormulaToCNFPosCases: doesn't handle kind %d\n", k);
-            FatalError("");
-          }
+        {
+          convertFormulaToCNFPosFALSE(varphi, defs);
+          break;
         }
+      case TRUE:
+        {
+          convertFormulaToCNFPosTRUE(varphi, defs);
+          break;
+        }
+      case BVGETBIT:
+        {
+          convertFormulaToCNFPosBVGETBIT(varphi, defs);
+          break;
+        }
+      case SYMBOL:
+        {
+          convertFormulaToCNFPosSYMBOL(varphi, defs);
+          break;
+        }
+      case NOT:
+        {
+          convertFormulaToCNFPosNOT(varphi, defs);
+          break;
+        }
+      case AND:
+        {
+          convertFormulaToCNFPosAND(varphi, defs);
+          break;
+        }
+      case NAND:
+        {
+          convertFormulaToCNFPosNAND(varphi, defs);
+          break;
+        }
+      case OR:
+        {
+          convertFormulaToCNFPosOR(varphi, defs);
+          break;
+        }
+      case NOR:
+        {
+          convertFormulaToCNFPosNOR(varphi, defs);
+          break;
+        }
+      case XOR:
+        {
+          convertFormulaToCNFPosXOR(varphi, defs);
+          break;
+        }
+      case IMPLIES:
+        {
+          convertFormulaToCNFPosIMPLIES(varphi, defs);
+          break;
+        }
+      case ITE:
+        {
+          convertFormulaToCNFPosITE(varphi, defs);
+          break;
+        }
+      default:
+        {
+          fprintf(stderr, "convertFormulaToCNFPosCases: doesn't handle kind %d\n", k);
+          FatalError("");
+        }
+      }
   } //End of convertFormulaToCNFPosCases()
 
   void CNFMgr::convertFormulaToCNFNegCases(const ASTNode& varphi, ClauseList* defs)
-    {
+  {
 
-      if (isPred(varphi))
-        {
-          convertFormulaToCNFNegPred(varphi, defs);
-          return;
-        }
+    if (isPred(varphi))
+      {
+        convertFormulaToCNFNegPred(varphi, defs);
+        return;
+      }
 
-      Kind k = varphi.GetKind();
-      switch (k)
+    Kind k = varphi.GetKind();
+    switch (k)
+      {
+      case FALSE:
         {
-        case FALSE:
-          {
-            convertFormulaToCNFNegFALSE(varphi, defs);
-            break;
-          }
-        case TRUE:
-          {
-            convertFormulaToCNFNegTRUE(varphi, defs);
-            break;
-          }
-        case BVGETBIT:
-          {
-            convertFormulaToCNFNegBVGETBIT(varphi, defs);
-            break;
-          }
-        case SYMBOL:
-          {
-            convertFormulaToCNFNegSYMBOL(varphi, defs);
-            break;
-          }
-        case NOT:
-          {
-            convertFormulaToCNFNegNOT(varphi, defs);
-            break;
-          }
-        case AND:
-          {
-            convertFormulaToCNFNegAND(varphi, defs);
-            break;
-          }
-        case NAND:
-          {
-            convertFormulaToCNFNegNAND(varphi, defs);
-            break;
-          }
-        case OR:
-          {
-            convertFormulaToCNFNegOR(varphi, defs);
-            break;
-          }
-        case NOR:
-          {
-            convertFormulaToCNFNegNOR(varphi, defs);
-            break;
-          }
-        case XOR:
-          {
-            convertFormulaToCNFNegXOR(varphi, defs);
-            break;
-          }
-        case IMPLIES:
-          {
-            convertFormulaToCNFNegIMPLIES(varphi, defs);
-            break;
-          }
-        case ITE:
-          {
-            convertFormulaToCNFNegITE(varphi, defs);
-            break;
-          }
-        default:
-          {
-            fprintf(stderr, "convertFormulaToCNFNegCases: doesn't handle kind %d\n", k);
-            FatalError("");
-          }
+          convertFormulaToCNFNegFALSE(varphi, defs);
+          break;
         }
-    } //convertFormulaToCNFNegCases()
+      case TRUE:
+        {
+          convertFormulaToCNFNegTRUE(varphi, defs);
+          break;
+        }
+      case BVGETBIT:
+        {
+          convertFormulaToCNFNegBVGETBIT(varphi, defs);
+          break;
+        }
+      case SYMBOL:
+        {
+          convertFormulaToCNFNegSYMBOL(varphi, defs);
+          break;
+        }
+      case NOT:
+        {
+          convertFormulaToCNFNegNOT(varphi, defs);
+          break;
+        }
+      case AND:
+        {
+          convertFormulaToCNFNegAND(varphi, defs);
+          break;
+        }
+      case NAND:
+        {
+          convertFormulaToCNFNegNAND(varphi, defs);
+          break;
+        }
+      case OR:
+        {
+          convertFormulaToCNFNegOR(varphi, defs);
+          break;
+        }
+      case NOR:
+        {
+          convertFormulaToCNFNegNOR(varphi, defs);
+          break;
+        }
+      case XOR:
+        {
+          convertFormulaToCNFNegXOR(varphi, defs);
+          break;
+        }
+      case IMPLIES:
+        {
+          convertFormulaToCNFNegIMPLIES(varphi, defs);
+          break;
+        }
+      case ITE:
+        {
+          convertFormulaToCNFNegITE(varphi, defs);
+          break;
+        }
+      default:
+        {
+          fprintf(stderr, "convertFormulaToCNFNegCases: doesn't handle kind %d\n", k);
+          FatalError("");
+        }
+      }
+  } //convertFormulaToCNFNegCases()
 
     //########################################
     //########################################
     // individual cnf conversion cases
 
-    void CNFMgr::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTVec psis;
+  void CNFMgr::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTVec psis;
 
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      for (; it != varphi.GetChildren().end(); it++)
-        {
-          convertTermForCNF(*it, defs);
-          psis.push_back(*(info[*it]->termforcnf));
-        }
-
-      info[varphi]->clausespos = SINGLETON(bm->CreateNode(varphi.GetKind(), psis));
-    } //End of convertFormulaToCNFPosPred()
-
-    void CNFMgr::convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTNode dummy_false_var = bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
-      info[varphi]->clausespos = SINGLETON(dummy_false_var);
-    } //End of convertFormulaToCNFPosFALSE()
-
-    void CNFMgr::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
-      info[varphi]->clausespos = SINGLETON(dummy_true_var);
-    } //End of convertFormulaToCNFPosTRUE
-
-    void CNFMgr::convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, ClauseList* defs)
-    {
-      info[varphi]->clausespos = SINGLETON(varphi);
-    }//End of convertFormulaToCNFPosBVGETBIT()
-
-    void CNFMgr::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs)
-    {
-      info[varphi]->clausespos = SINGLETON(varphi);
-    } //End of convertFormulaToCNFPosSYMBOL()
-
-    void CNFMgr::convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs)
-    {
-      convertFormulaToCNF(varphi[0], defs);
-      info[varphi]->clausespos = COPY(*(info[varphi[0]]->clausesneg));
-      reduceMemoryFootprintNeg(varphi[0]);
-    } //End of convertFormulaToCNFPosNOT()
-
-    void CNFMgr::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (pos) AND ~> UNION
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      ClauseList* psi = COPY(*(info[*it]->clausespos));
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs);
-          INPLACE_UNION(psi, *(info[*it]->clausespos));
-          reduceMemoryFootprintPos(*it);
-        }
-
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFPosAND()
-
-    void CNFMgr::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs)
-    {
-      bool renamesibs = false;
-      ClauseList* clauses;
-      ClauseList* psi;
-      ClauseList* oldpsi;
-
-      //****************************************
-      // (pos) NAND ~> PRODUCT NOT
-      //****************************************
-
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      clauses = info[*it]->clausesneg;
-      if (clauses->size() > 1)
-        {
-          renamesibs = true;
-        }
-      psi = COPY(*clauses);
-      reduceMemoryFootprintNeg(*it);
-
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*(info[*it]));
-            }
-          convertFormulaToCNF(*it, defs);
-          clauses = info[*it]->clausesneg;
-          if (clauses->size() > 1)
-            {
-              renamesibs = true;
-            }
-          oldpsi = psi;
-          psi = PRODUCT(*psi, *clauses);
-          reduceMemoryFootprintNeg(*it);
-          DELETE(oldpsi);
-        }
-
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFPosNAND()
-
-    void CNFMgr::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      bool renamesibs = false;
-      ClauseList* clauses;
-      ClauseList* psi;
-      ClauseList* oldpsi;
-
-      //****************************************
-      // (pos) OR ~> PRODUCT
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      clauses = info[*it]->clausespos;
-      if (clauses->size() > 1)
-        {
-          renamesibs = true;
-        }
-      psi = COPY(*clauses);
-      reduceMemoryFootprintPos(*it);
-
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*(info[*it]));
-            }
-          convertFormulaToCNF(*it, defs);
-          clauses = info[*it]->clausespos;
-          if (clauses->size() > 1)
-            {
-              renamesibs = true;
-            }
-          oldpsi = psi;
-          psi = PRODUCT(*psi, *clauses);
-          reduceMemoryFootprintPos(*it);
-          DELETE(oldpsi);
-        }
-
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFPosOR()
-
-    void CNFMgr::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (pos) NOR ~> UNION NOT
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      ClauseList* psi = COPY(*(info[*it]->clausesneg));
-      reduceMemoryFootprintNeg(*it);
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs);
-          INPLACE_UNION(psi, *(info[*it]->clausesneg));
-          reduceMemoryFootprintNeg(*it);
-        }
-
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFPosNOR()
-
-    void CNFMgr::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (pos) IMPLIES ~> PRODUCT NOT [0] ; [1]
-      //****************************************
-      CNFInfo* x0 = info[varphi[0]];
-      CNFInfo* x1 = info[varphi[1]];
-      convertFormulaToCNF(varphi[0], defs);
-      if (x0->clausesneg->size() > 1)
-        {
-          setDoSibRenamingPos(*x1);
-        }
-      convertFormulaToCNF(varphi[1], defs);
-      ClauseList* psi = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
-      reduceMemoryFootprintNeg(varphi[0]);
-      reduceMemoryFootprintPos(varphi[1]);
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFPosIMPLIES()
-
-    void CNFMgr::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (pos) ITE ~> UNION (PRODUCT NOT [0] ; [1])
-      //  ; (PRODUCT [0] ; [2])
-      //****************************************
-      CNFInfo* x0 = info[varphi[0]];
-      CNFInfo* x1 = info[varphi[1]];
-      CNFInfo* x2 = info[varphi[2]];
-      convertFormulaToCNF(varphi[0], defs);
-      if (x0->clausesneg->size() > 1)
-        {
-          setDoSibRenamingPos(*x1);
-        }
-      convertFormulaToCNF(varphi[1], defs);
-      if (x0->clausespos->size() > 1)
-        {
-          setDoSibRenamingPos(*x2);
-        }
-      convertFormulaToCNF(varphi[2], defs);
-      ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
-      ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausespos));
-      NOCOPY_INPLACE_UNION(psi1, psi2);
-      reduceMemoryFootprintNeg(varphi[0]);
-      reduceMemoryFootprintPos(varphi[1]);
-      reduceMemoryFootprintPos(varphi[0]);
-      reduceMemoryFootprintPos(varphi[2]);
-
-      info[varphi]->clausespos = psi1;
-    } //End of convertFormulaToCNFPosITE()
-
-    void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      for (; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs); // make pos and neg clause sets
-        }
-      ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
-      info[varphi]->clausespos = psi;
-      ASTVec::const_iterator it2 = varphi.GetChildren().begin();
-      for (; it2 != varphi.GetChildren().end(); it2++){
-        reduceMemoryFootprintPos(*it2);
-        reduceMemoryFootprintNeg(*it2);
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertTermForCNF(*it, defs);
+        psis.push_back(*(info[*it]->termforcnf));
       }
-    } //End of convertFormulaToCNFPosXOR()
 
-    ClauseList* CNFMgr::convertFormulaToCNFPosXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs)
-    {
+    info[varphi]->clausespos = SINGLETON(bm->CreateNode(varphi.GetKind(), psis));
+  } //End of convertFormulaToCNFPosPred()
 
-      bool renamesibs;
-      ClauseList* psi;
-      ClauseList* psi1;
-      ClauseList* psi2;
+  void CNFMgr::convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTNode dummy_false_var = bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
+    info[varphi]->clausespos = SINGLETON(dummy_false_var);
+  } //End of convertFormulaToCNFPosFALSE()
 
-      if (idx == varphi.GetChildren().size() - 2)
-        {
-          //****************************************
-          // (pos) XOR ~> UNION
-          //    (PRODUCT       [idx]   ;     [idx+1])
-          //  ; (PRODUCT NOT   [idx]   ; NOT [idx+1])
-          //****************************************
-          renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*info[varphi[idx + 1]]);
-            }
-          renamesibs = (info[varphi[idx]]->clausesneg)->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*info[varphi[idx + 1]]);
-            }
+  void CNFMgr::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    info[varphi]->clausespos = SINGLETON(dummy_true_var);
+  } //End of convertFormulaToCNFPosTRUE
 
-          psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausespos));
-          psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausesneg));
-          NOCOPY_INPLACE_UNION(psi1, psi2);
+  void CNFMgr::convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, ClauseList* defs)
+  {
+    info[varphi]->clausespos = SINGLETON(varphi);
+  }//End of convertFormulaToCNFPosBVGETBIT()
 
-          psi = psi1;
-        }
-      else
-        {
-          //****************************************
-          // (pos) XOR ~> UNION
-          //    (PRODUCT       [idx] ; XOR      [idx+1..])
-          //  ; (PRODUCT NOT   [idx] ; NOT XOR  [idx+1..])
-          //****************************************
-          ClauseList* theta1;
-          theta1 = convertFormulaToCNFPosXORAux(varphi, idx + 1, defs);
-          renamesibs = theta1->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*info[varphi[idx]]);
-            }
-          ClauseList* theta2;
-          theta2 = convertFormulaToCNFNegXORAux(varphi, idx + 1, defs);
-          renamesibs = theta2->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*info[varphi[idx]]);
-            }
+  void CNFMgr::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs)
+  {
+    info[varphi]->clausespos = SINGLETON(varphi);
+  } //End of convertFormulaToCNFPosSYMBOL()
 
-          psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta1);
-          psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta2);
-          DELETE(theta1);
-          DELETE(theta2);
-          NOCOPY_INPLACE_UNION(psi1, psi2);
+  void CNFMgr::convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs)
+  {
+    convertFormulaToCNF(varphi[0], defs);
+    info[varphi]->clausespos = COPY(*(info[varphi[0]]->clausesneg));
+    reduceMemoryFootprintNeg(varphi[0]);
+  } //End of convertFormulaToCNFPosNOT()
 
-          psi = psi1;
-        }
-
-      return psi;
-    } //End of convertFormulaToCNFPosXORAux()
-
-    void CNFMgr::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs)
-    {
-
-      ASTVec psis;
-
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      for (; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs);
-          psis.push_back(*(info[*it]->termforcnf));
-        }
-
-      info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, bm->CreateNode(varphi.GetKind(), psis)));
-    } //End of convertFormulaToCNFNegPred()
-
-    void CNFMgr::convertFormulaToCNFNegFALSE(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
-      info[varphi]->clausesneg = SINGLETON(dummy_true_var);
-    } //End of convertFormulaToCNFNegFALSE()
-
-    void CNFMgr::convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTNode dummy_false_var = bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
-      info[varphi]->clausesneg = SINGLETON(dummy_false_var);
-    } //End of convertFormulaToCNFNegTRUE()
-
-    void CNFMgr::convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi, ClauseList* defs)
-    {
-      ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
-      info[varphi]->clausesneg = psi;
-    } //End of convertFormulaToCNFNegBVGETBIT()
-
-    void CNFMgr::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs)
-    {
-      info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, varphi));
-    } //End of convertFormulaToCNFNegSYMBOL()
-
-    void CNFMgr::convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs)
-    {
-      convertFormulaToCNF(varphi[0], defs);
-      info[varphi]->clausesneg = COPY(*(info[varphi[0]]->clausespos));
-      reduceMemoryFootprintPos(varphi[0]);
-    } //End of convertFormulaToCNFNegNOT()
-
-    void CNFMgr::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs)
-    {
-      bool renamesibs = false;
-      ClauseList* clauses;
-      ClauseList* psi;
-      ClauseList* oldpsi;
-
-      //****************************************
-      // (neg) AND ~> PRODUCT NOT
-      //****************************************
-
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      clauses = info[*it]->clausesneg;
-      if (clauses->size() > 1)
-        {
-          renamesibs = true;
-        }
-      psi = COPY(*clauses);
-      reduceMemoryFootprintNeg(*it);
-
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*(info[*it]));
-            }
-          convertFormulaToCNF(*it, defs);
-          clauses = info[*it]->clausesneg;
-          if (clauses->size() > 1)
-            {
-              renamesibs = true;
-            }
-          oldpsi = psi;
-          psi = PRODUCT(*psi, *clauses);
-          reduceMemoryFootprintNeg(*it);
-          DELETE(oldpsi);
-        }
-
-      info[varphi]->clausesneg = psi;
-    } //End of convertFormulaToCNFNegAND()
-
-    void CNFMgr::convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (neg) NAND ~> UNION
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      ClauseList* psi = COPY(*(info[*it]->clausespos));
-      reduceMemoryFootprintPos(*it);
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs);
-          INPLACE_UNION(psi, *(info[*it]->clausespos));
-          reduceMemoryFootprintPos(*it);
-        }
-
-      info[varphi]->clausespos = psi;
-    } //End of convertFormulaToCNFNegNAND()
-
-    void CNFMgr::convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (neg) OR ~> UNION NOT
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      ClauseList* psi = COPY(*(info[*it]->clausesneg));
-      reduceMemoryFootprintNeg(*it);
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs);
-          INPLACE_UNION(psi, *(info[*it]->clausesneg));
-          reduceMemoryFootprintNeg(*it);
-        }
-
-      info[varphi]->clausesneg = psi;
-    } //End of convertFormulaToCNFNegOR()
-
-    void CNFMgr::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      bool renamesibs = false;
-      ClauseList* clauses;
-      ClauseList* psi;
-      ClauseList* oldpsi;
-
-      //****************************************
-      // (neg) NOR ~> PRODUCT
-      //****************************************
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      convertFormulaToCNF(*it, defs);
-      clauses = info[*it]->clausespos;
-      if (clauses->size() > 1)
-        {
-          renamesibs = true;
-        }
-      psi = COPY(*clauses);
-      reduceMemoryFootprintPos(*it);
-
-      for (it++; it != varphi.GetChildren().end(); it++)
-        {
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*(info[*it]));
-            }
-          convertFormulaToCNF(*it, defs);
-          clauses = info[*it]->clausespos;
-          if (clauses->size() > 1)
-            {
-              renamesibs = true;
-            }
-          oldpsi = psi;
-          psi = PRODUCT(*psi, *clauses);
-          reduceMemoryFootprintPos(*it);
-          DELETE(oldpsi);
-        }
-
-      info[varphi]->clausesneg = psi;
-    } //End of convertFormulaToCNFNegNOR()
-
-    void CNFMgr::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (neg) IMPLIES ~> UNION [0] ; NOT [1]
-      //****************************************
-      CNFInfo* x0 = info[varphi[0]];
-      CNFInfo* x1 = info[varphi[1]];
-      convertFormulaToCNF(varphi[0], defs);
-      convertFormulaToCNF(varphi[1], defs);
-      ClauseList* psi = UNION(*(x0->clausespos), *(x1->clausesneg));
-      info[varphi]->clausesneg = psi;
-      reduceMemoryFootprintPos(varphi[0]);
-      reduceMemoryFootprintNeg(varphi[1]);
-    } //End of convertFormulaToCNFNegIMPLIES()
-
-    void CNFMgr::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs)
-    {
-      //****************************************
-      // (neg) ITE ~> UNION (PRODUCT NOT [0] ; NOT [1])
-      //  ; (PRODUCT [0] ; NOT [2])
-      //****************************************
-      CNFInfo* x0 = info[varphi[0]];
-      CNFInfo* x1 = info[varphi[1]];
-      CNFInfo* x2 = info[varphi[2]];
-      convertFormulaToCNF(varphi[0], defs);
-      if (x0->clausesneg->size() > 1)
-        {
-          setDoSibRenamingNeg(*x1);
-        }
-      convertFormulaToCNF(varphi[1], defs);
-      if (x0->clausespos->size() > 1)
-        {
-          setDoSibRenamingNeg(*x2);
-        }
-      convertFormulaToCNF(varphi[2], defs);
-      ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausesneg));
-      ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausesneg));
-      NOCOPY_INPLACE_UNION(psi1, psi2);
-      reduceMemoryFootprintNeg(varphi[0]);
-      reduceMemoryFootprintNeg(varphi[1]);
-      reduceMemoryFootprintPos(varphi[0]);
-      reduceMemoryFootprintNeg(varphi[2]);
-
-      info[varphi]->clausesneg = psi1;
-    } //End of convertFormulaToCNFNegITE()
-
-    void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs)
-    {
-      ASTVec::const_iterator it = varphi.GetChildren().begin();
-      for (; it != varphi.GetChildren().end(); it++)
-        {
-          convertFormulaToCNF(*it, defs); // make pos and neg clause sets
-        }
-      ClauseList* psi = convertFormulaToCNFNegXORAux(varphi, 0, defs);
-      info[varphi]->clausesneg = psi;
-      ASTVec::const_iterator it2 = varphi.GetChildren().begin();
-      for (; it2 != varphi.GetChildren().end(); it2++){
-        reduceMemoryFootprintPos(*it2);
-        reduceMemoryFootprintNeg(*it2);
+  void CNFMgr::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (pos) AND ~> UNION
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    ClauseList* psi = COPY(*(info[*it]->clausespos));
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs);
+        INPLACE_UNION(psi, *(info[*it]->clausespos));
+        reduceMemoryFootprintPos(*it);
       }
-    } //End of convertFormulaToCNFNegXOR()
 
-    ClauseList* CNFMgr::convertFormulaToCNFNegXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs)
-    {
-      bool renamesibs;
-      ClauseList* psi;
-      ClauseList* psi1;
-      ClauseList* psi2;
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFPosAND()
 
-      if (idx == varphi.GetChildren().size() - 2)
-        {
+  void CNFMgr::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs)
+  {
+    bool renamesibs = false;
+    ClauseList* clauses;
+    ClauseList* psi;
+    ClauseList* oldpsi;
 
-          //****************************************
-          // (neg) XOR ~> UNION
-          //    (PRODUCT NOT   [idx]   ;     [idx+1])
-          //  ; (PRODUCT       [idx]   ; NOT [idx+1])
-          //****************************************
-          convertFormulaToCNF(varphi[idx], defs);
-          renamesibs = (info[varphi[idx]]->clausesneg)->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*info[varphi[idx + 1]]);
-            }
+    //****************************************
+    // (pos) NAND ~> PRODUCT NOT
+    //****************************************
 
-          convertFormulaToCNF(varphi[idx], defs);
-          renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*info[varphi[idx + 1]]);
-            }
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    clauses = info[*it]->clausesneg;
+    if (clauses->size() > 1)
+      {
+        renamesibs = true;
+      }
+    psi = COPY(*clauses);
+    reduceMemoryFootprintNeg(*it);
 
-          psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausespos));
-          psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausesneg));
-          NOCOPY_INPLACE_UNION(psi1, psi2);
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*(info[*it]));
+          }
+        convertFormulaToCNF(*it, defs);
+        clauses = info[*it]->clausesneg;
+        if (clauses->size() > 1)
+          {
+            renamesibs = true;
+          }
+        oldpsi = psi;
+        psi = PRODUCT(*psi, *clauses);
+        reduceMemoryFootprintNeg(*it);
+        DELETE(oldpsi);
+      }
 
-          psi = psi1;
-        }
-      else
-        {
-          //****************************************
-          // (neg) XOR ~> UNION
-          //    (PRODUCT NOT   [idx] ; XOR      [idx+1..])
-          //  ; (PRODUCT       [idx] ; NOT XOR  [idx+1..])
-          //****************************************
-          ClauseList* theta1;
-          theta1 = convertFormulaToCNFPosXORAux(varphi, idx + 1, defs);
-          renamesibs = theta1->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingNeg(*info[varphi[idx]]);
-            }
-          convertFormulaToCNF(varphi[idx], defs);
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFPosNAND()
 
-          ClauseList* theta2;
-          theta2 = convertFormulaToCNFNegXORAux(varphi, idx + 1, defs);
-          renamesibs = theta2->size() > 1 ? true : false;
-          if (renamesibs)
-            {
-              setDoSibRenamingPos(*info[varphi[idx]]);
-            }
+  void CNFMgr::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    bool renamesibs = false;
+    ClauseList* clauses;
+    ClauseList* psi;
+    ClauseList* oldpsi;
 
-          psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta1);
-          psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta2);
-          DELETE(theta1);
-          DELETE(theta2);
-          NOCOPY_INPLACE_UNION(psi1, psi2);
+    //****************************************
+    // (pos) OR ~> PRODUCT
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    clauses = info[*it]->clausespos;
+    if (clauses->size() > 1)
+      {
+        renamesibs = true;
+      }
+    psi = COPY(*clauses);
+    reduceMemoryFootprintPos(*it);
 
-          psi = psi1;
-        }
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*(info[*it]));
+          }
+        convertFormulaToCNF(*it, defs);
+        clauses = info[*it]->clausespos;
+        if (clauses->size() > 1)
+          {
+            renamesibs = true;
+          }
+        oldpsi = psi;
+        psi = PRODUCT(*psi, *clauses);
+        reduceMemoryFootprintPos(*it);
+        DELETE(oldpsi);
+      }
 
-      return psi;
-    } //End of convertFormulaToCNFNegXORAux()
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFPosOR()
+
+  void CNFMgr::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (pos) NOR ~> UNION NOT
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    ClauseList* psi = COPY(*(info[*it]->clausesneg));
+    reduceMemoryFootprintNeg(*it);
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs);
+        INPLACE_UNION(psi, *(info[*it]->clausesneg));
+        reduceMemoryFootprintNeg(*it);
+      }
+
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFPosNOR()
+
+  void CNFMgr::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (pos) IMPLIES ~> PRODUCT NOT [0] ; [1]
+    //****************************************
+    CNFInfo* x0 = info[varphi[0]];
+    CNFInfo* x1 = info[varphi[1]];
+    convertFormulaToCNF(varphi[0], defs);
+    if (x0->clausesneg->size() > 1)
+      {
+        setDoSibRenamingPos(*x1);
+      }
+    convertFormulaToCNF(varphi[1], defs);
+    ClauseList* psi = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
+    reduceMemoryFootprintNeg(varphi[0]);
+    reduceMemoryFootprintPos(varphi[1]);
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFPosIMPLIES()
+
+  void CNFMgr::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (pos) ITE ~> UNION (PRODUCT NOT [0] ; [1])
+    //  ; (PRODUCT [0] ; [2])
+    //****************************************
+    CNFInfo* x0 = info[varphi[0]];
+    CNFInfo* x1 = info[varphi[1]];
+    CNFInfo* x2 = info[varphi[2]];
+    convertFormulaToCNF(varphi[0], defs);
+    if (x0->clausesneg->size() > 1)
+      {
+        setDoSibRenamingPos(*x1);
+      }
+    convertFormulaToCNF(varphi[1], defs);
+    if (x0->clausespos->size() > 1)
+      {
+        setDoSibRenamingPos(*x2);
+      }
+    convertFormulaToCNF(varphi[2], defs);
+    ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
+    ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausespos));
+    NOCOPY_INPLACE_UNION(psi1, psi2);
+    reduceMemoryFootprintNeg(varphi[0]);
+    reduceMemoryFootprintPos(varphi[1]);
+    reduceMemoryFootprintPos(varphi[0]);
+    reduceMemoryFootprintPos(varphi[2]);
+
+    info[varphi]->clausespos = psi1;
+  } //End of convertFormulaToCNFPosITE()
+
+  void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs); // make pos and neg clause sets
+      }
+    ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
+    info[varphi]->clausespos = psi;
+    ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+    for (; it2 != varphi.GetChildren().end(); it2++){
+      reduceMemoryFootprintPos(*it2);
+      reduceMemoryFootprintNeg(*it2);
+    }
+  } //End of convertFormulaToCNFPosXOR()
+
+  ClauseList* CNFMgr::convertFormulaToCNFPosXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs)
+  {
+
+    bool renamesibs;
+    ClauseList* psi;
+    ClauseList* psi1;
+    ClauseList* psi2;
+
+    if (idx == varphi.GetChildren().size() - 2)
+      {
+        //****************************************
+        // (pos) XOR ~> UNION
+        //    (PRODUCT       [idx]   ;     [idx+1])
+        //  ; (PRODUCT NOT   [idx]   ; NOT [idx+1])
+        //****************************************
+        renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*info[varphi[idx + 1]]);
+          }
+        renamesibs = (info[varphi[idx]]->clausesneg)->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*info[varphi[idx + 1]]);
+          }
+
+        psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausespos));
+        psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausesneg));
+        NOCOPY_INPLACE_UNION(psi1, psi2);
+
+        psi = psi1;
+      }
+    else
+      {
+        //****************************************
+        // (pos) XOR ~> UNION
+        //    (PRODUCT       [idx] ; XOR      [idx+1..])
+        //  ; (PRODUCT NOT   [idx] ; NOT XOR  [idx+1..])
+        //****************************************
+        ClauseList* theta1;
+        theta1 = convertFormulaToCNFPosXORAux(varphi, idx + 1, defs);
+        renamesibs = theta1->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*info[varphi[idx]]);
+          }
+        ClauseList* theta2;
+        theta2 = convertFormulaToCNFNegXORAux(varphi, idx + 1, defs);
+        renamesibs = theta2->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*info[varphi[idx]]);
+          }
+
+        psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta1);
+        psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta2);
+        DELETE(theta1);
+        DELETE(theta2);
+        NOCOPY_INPLACE_UNION(psi1, psi2);
+
+        psi = psi1;
+      }
+
+    return psi;
+  } //End of convertFormulaToCNFPosXORAux()
+
+  void CNFMgr::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs)
+  {
+
+    ASTVec psis;
+
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs);
+        psis.push_back(*(info[*it]->termforcnf));
+      }
+
+    info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, bm->CreateNode(varphi.GetKind(), psis)));
+  } //End of convertFormulaToCNFNegPred()
+
+  void CNFMgr::convertFormulaToCNFNegFALSE(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    info[varphi]->clausesneg = SINGLETON(dummy_true_var);
+  } //End of convertFormulaToCNFNegFALSE()
+
+  void CNFMgr::convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTNode dummy_false_var = bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
+    info[varphi]->clausesneg = SINGLETON(dummy_false_var);
+  } //End of convertFormulaToCNFNegTRUE()
+
+  void CNFMgr::convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi, ClauseList* defs)
+  {
+    ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
+    info[varphi]->clausesneg = psi;
+  } //End of convertFormulaToCNFNegBVGETBIT()
+
+  void CNFMgr::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs)
+  {
+    info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, varphi));
+  } //End of convertFormulaToCNFNegSYMBOL()
+
+  void CNFMgr::convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs)
+  {
+    convertFormulaToCNF(varphi[0], defs);
+    info[varphi]->clausesneg = COPY(*(info[varphi[0]]->clausespos));
+    reduceMemoryFootprintPos(varphi[0]);
+  } //End of convertFormulaToCNFNegNOT()
+
+  void CNFMgr::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs)
+  {
+    bool renamesibs = false;
+    ClauseList* clauses;
+    ClauseList* psi;
+    ClauseList* oldpsi;
+
+    //****************************************
+    // (neg) AND ~> PRODUCT NOT
+    //****************************************
+
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    clauses = info[*it]->clausesneg;
+    if (clauses->size() > 1)
+      {
+        renamesibs = true;
+      }
+    psi = COPY(*clauses);
+    reduceMemoryFootprintNeg(*it);
+
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*(info[*it]));
+          }
+        convertFormulaToCNF(*it, defs);
+        clauses = info[*it]->clausesneg;
+        if (clauses->size() > 1)
+          {
+            renamesibs = true;
+          }
+        oldpsi = psi;
+        psi = PRODUCT(*psi, *clauses);
+        reduceMemoryFootprintNeg(*it);
+        DELETE(oldpsi);
+      }
+
+    info[varphi]->clausesneg = psi;
+  } //End of convertFormulaToCNFNegAND()
+
+  void CNFMgr::convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (neg) NAND ~> UNION
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    ClauseList* psi = COPY(*(info[*it]->clausespos));
+    reduceMemoryFootprintPos(*it);
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs);
+        INPLACE_UNION(psi, *(info[*it]->clausespos));
+        reduceMemoryFootprintPos(*it);
+      }
+
+    info[varphi]->clausespos = psi;
+  } //End of convertFormulaToCNFNegNAND()
+
+  void CNFMgr::convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (neg) OR ~> UNION NOT
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    ClauseList* psi = COPY(*(info[*it]->clausesneg));
+    reduceMemoryFootprintNeg(*it);
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs);
+        INPLACE_UNION(psi, *(info[*it]->clausesneg));
+        reduceMemoryFootprintNeg(*it);
+      }
+
+    info[varphi]->clausesneg = psi;
+  } //End of convertFormulaToCNFNegOR()
+
+  void CNFMgr::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    bool renamesibs = false;
+    ClauseList* clauses;
+    ClauseList* psi;
+    ClauseList* oldpsi;
+
+    //****************************************
+    // (neg) NOR ~> PRODUCT
+    //****************************************
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    convertFormulaToCNF(*it, defs);
+    clauses = info[*it]->clausespos;
+    if (clauses->size() > 1)
+      {
+        renamesibs = true;
+      }
+    psi = COPY(*clauses);
+    reduceMemoryFootprintPos(*it);
+
+    for (it++; it != varphi.GetChildren().end(); it++)
+      {
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*(info[*it]));
+          }
+        convertFormulaToCNF(*it, defs);
+        clauses = info[*it]->clausespos;
+        if (clauses->size() > 1)
+          {
+            renamesibs = true;
+          }
+        oldpsi = psi;
+        psi = PRODUCT(*psi, *clauses);
+        reduceMemoryFootprintPos(*it);
+        DELETE(oldpsi);
+      }
+
+    info[varphi]->clausesneg = psi;
+  } //End of convertFormulaToCNFNegNOR()
+
+  void CNFMgr::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (neg) IMPLIES ~> UNION [0] ; NOT [1]
+    //****************************************
+    CNFInfo* x0 = info[varphi[0]];
+    CNFInfo* x1 = info[varphi[1]];
+    convertFormulaToCNF(varphi[0], defs);
+    convertFormulaToCNF(varphi[1], defs);
+    ClauseList* psi = UNION(*(x0->clausespos), *(x1->clausesneg));
+    info[varphi]->clausesneg = psi;
+    reduceMemoryFootprintPos(varphi[0]);
+    reduceMemoryFootprintNeg(varphi[1]);
+  } //End of convertFormulaToCNFNegIMPLIES()
+
+  void CNFMgr::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs)
+  {
+    //****************************************
+    // (neg) ITE ~> UNION (PRODUCT NOT [0] ; NOT [1])
+    //  ; (PRODUCT [0] ; NOT [2])
+    //****************************************
+    CNFInfo* x0 = info[varphi[0]];
+    CNFInfo* x1 = info[varphi[1]];
+    CNFInfo* x2 = info[varphi[2]];
+    convertFormulaToCNF(varphi[0], defs);
+    if (x0->clausesneg->size() > 1)
+      {
+        setDoSibRenamingNeg(*x1);
+      }
+    convertFormulaToCNF(varphi[1], defs);
+    if (x0->clausespos->size() > 1)
+      {
+        setDoSibRenamingNeg(*x2);
+      }
+    convertFormulaToCNF(varphi[2], defs);
+    ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausesneg));
+    ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausesneg));
+    NOCOPY_INPLACE_UNION(psi1, psi2);
+    reduceMemoryFootprintNeg(varphi[0]);
+    reduceMemoryFootprintNeg(varphi[1]);
+    reduceMemoryFootprintPos(varphi[0]);
+    reduceMemoryFootprintNeg(varphi[2]);
+
+    info[varphi]->clausesneg = psi1;
+  } //End of convertFormulaToCNFNegITE()
+
+  void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs)
+  {
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs); // make pos and neg clause sets
+      }
+    ClauseList* psi = convertFormulaToCNFNegXORAux(varphi, 0, defs);
+    info[varphi]->clausesneg = psi;
+    ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+    for (; it2 != varphi.GetChildren().end(); it2++){
+      reduceMemoryFootprintPos(*it2);
+      reduceMemoryFootprintNeg(*it2);
+    }
+  } //End of convertFormulaToCNFNegXOR()
+
+  ClauseList* CNFMgr::convertFormulaToCNFNegXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs)
+  {
+    bool renamesibs;
+    ClauseList* psi;
+    ClauseList* psi1;
+    ClauseList* psi2;
+
+    if (idx == varphi.GetChildren().size() - 2)
+      {
+
+        //****************************************
+        // (neg) XOR ~> UNION
+        //    (PRODUCT NOT   [idx]   ;     [idx+1])
+        //  ; (PRODUCT       [idx]   ; NOT [idx+1])
+        //****************************************
+        convertFormulaToCNF(varphi[idx], defs);
+        renamesibs = (info[varphi[idx]]->clausesneg)->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*info[varphi[idx + 1]]);
+          }
+
+        convertFormulaToCNF(varphi[idx], defs);
+        renamesibs = (info[varphi[idx]]->clausespos)->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*info[varphi[idx + 1]]);
+          }
+
+        psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *(info[varphi[idx + 1]]->clausespos));
+        psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *(info[varphi[idx + 1]]->clausesneg));
+        NOCOPY_INPLACE_UNION(psi1, psi2);
+
+        psi = psi1;
+      }
+    else
+      {
+        //****************************************
+        // (neg) XOR ~> UNION
+        //    (PRODUCT NOT   [idx] ; XOR      [idx+1..])
+        //  ; (PRODUCT       [idx] ; NOT XOR  [idx+1..])
+        //****************************************
+        ClauseList* theta1;
+        theta1 = convertFormulaToCNFPosXORAux(varphi, idx + 1, defs);
+        renamesibs = theta1->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingNeg(*info[varphi[idx]]);
+          }
+        convertFormulaToCNF(varphi[idx], defs);
+
+        ClauseList* theta2;
+        theta2 = convertFormulaToCNFNegXORAux(varphi, idx + 1, defs);
+        renamesibs = theta2->size() > 1 ? true : false;
+        if (renamesibs)
+          {
+            setDoSibRenamingPos(*info[varphi[idx]]);
+          }
+
+        psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta1);
+        psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta2);
+        DELETE(theta1);
+        DELETE(theta2);
+        NOCOPY_INPLACE_UNION(psi1, psi2);
+
+        psi = psi1;
+      }
+
+    return psi;
+  } //End of convertFormulaToCNFNegXORAux()
 
     //########################################
     //########################################
     // utilities for reclaiming memory.
 
-    void CNFMgr::reduceMemoryFootprintPos(const ASTNode& varphi)
-    {
-      CNFInfo* x = info[varphi];
-      if (sharesPos(*x) == 1)
-        {
-          DELETE(x->clausespos);
-          x->clausespos = NULL;
-          if (x->clausesneg == NULL)
-            {
-              delete x;
-              info.erase(varphi);
-            }
-        }
-    } //End of reduceMemoryFootprintPos()
+  void CNFMgr::reduceMemoryFootprintPos(const ASTNode& varphi)
+  {
+    CNFInfo* x = info[varphi];
+    if (sharesPos(*x) == 1)
+      {
+        DELETE(x->clausespos);
+        x->clausespos = NULL;
+        if (x->clausesneg == NULL)
+          {
+            delete x;
+            info.erase(varphi);
+          }
+      }
+  } //End of reduceMemoryFootprintPos()
 
-    void CNFMgr::reduceMemoryFootprintNeg(const ASTNode& varphi)
-    {
-      CNFInfo* x = info[varphi];
-      if (sharesNeg(*x) == 1)
-        {
-          DELETE(x->clausesneg);
-          x->clausesneg = NULL;
-          if (x->clausespos == NULL)
-            {
-              delete x;
-              info.erase(varphi);
-            }
-        }
-    } //End of reduceMemoryFootprintNeg()
-
-    //########################################
-    //########################################
-
-    ASTNode* CNFMgr::ASTNodeToASTNodePtr(const ASTNode& varphi)
-    {
-      ASTNode* psi;
-
-      if (store.find(varphi) != store.end())
-        {
-          psi = store[varphi];
-        }
-      else
-        {
-          psi = new ASTNode(varphi);
-          store[varphi] = psi;
-        }
-
-      return psi;
-    } //End of ASTNodeToASTNodePtr()
+  void CNFMgr::reduceMemoryFootprintNeg(const ASTNode& varphi)
+  {
+    CNFInfo* x = info[varphi];
+    if (sharesNeg(*x) == 1)
+      {
+        DELETE(x->clausesneg);
+        x->clausesneg = NULL;
+        if (x->clausespos == NULL)
+          {
+            delete x;
+            info.erase(varphi);
+          }
+      }
+  } //End of reduceMemoryFootprintNeg()
 
     //########################################
     //########################################
 
-    void CNFMgr::cleanup(const ASTNode& varphi)
-    {
-      delete info[varphi]->clausespos;
-      CNFInfo* toDelete = info[varphi]; // get the thing to delete.
-      info.erase(varphi);                                 // remove it from the hashtable
-      delete toDelete;
+  ASTNode* CNFMgr::ASTNodeToASTNodePtr(const ASTNode& varphi)
+  {
+    ASTNode* psi;
+
+    if (store.find(varphi) != store.end())
+      {
+        psi = store[varphi];
+      }
+    else
+      {
+        psi = new ASTNode(varphi);
+        store[varphi] = psi;
+      }
+
+    return psi;
+  } //End of ASTNodeToASTNodePtr()
+
+    //########################################
+    //########################################
+
+  void CNFMgr::cleanup(const ASTNode& varphi)
+  {
+    delete info[varphi]->clausespos;
+    CNFInfo* toDelete = info[varphi]; // get the thing to delete.
+    info.erase(varphi);                                 // remove it from the hashtable
+    delete toDelete;
 
 
-      ASTNodeToCNFInfoMap::const_iterator it1 = info.begin();
-      for (; it1 != info.end(); it1++)
-        {
-          CNFInfo* x = it1->second;
-          if (x->clausespos != NULL)
-            {
-              DELETE(x->clausespos);
-            }
-          if (x->clausesneg != NULL)
-            {
-              if (!isTerm(*x))
-                {
-                  DELETE(x->clausesneg);
-                }
-            }
-          delete x;
-        }
+    ASTNodeToCNFInfoMap::const_iterator it1 = info.begin();
+    for (; it1 != info.end(); it1++)
+      {
+        CNFInfo* x = it1->second;
+        if (x->clausespos != NULL)
+          {
+            DELETE(x->clausespos);
+          }
+        if (x->clausesneg != NULL)
+          {
+            if (!isTerm(*x))
+              {
+                DELETE(x->clausesneg);
+              }
+          }
+        delete x;
+      }
 
-      info.clear();
-    } //End of cleanup()
+    info.clear();
+  } //End of cleanup()
 
     //########################################
     //########################################
     // constructor
 
-    CNFMgr::CNFMgr(STPMgr *bmgr)
-    {
-      bm = bmgr;
-    }
+  CNFMgr::CNFMgr(STPMgr *bmgr)
+  {
+    bm = bmgr;
+  }
 
-    //########################################
-    //########################################
-    // destructor
+  //########################################
+  //########################################
+  // destructor
   CNFMgr::~CNFMgr()
   {
     ASTNodeToASTNodePtrMap::const_iterator it1 = store.begin();
     for (; it1 != store.end(); it1++)
       {
-	delete it1->second;
+        delete it1->second;
       }    
     store.clear();    
   }
 
-    //########################################
-    //########################################
-    // top-level conversion function
+  //########################################
+  //########################################
+  // top-level conversion function
 
-    ClauseList* CNFMgr::convertToCNF(const ASTNode& varphi)
-    {
-      bm->GetRunTimes()->start(RunTimes::CNFConversion);
-      scanFormula(varphi, true);
-      ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
-      ClauseList* defs = SINGLETON(dummy_true_var);
-      convertFormulaToCNF(varphi, defs);
-      ClauseList* top = info[varphi]->clausespos;
-      defs->insert(defs->begin() + 1, top->begin(), top->end());
+  ClauseList* CNFMgr::convertToCNF(const ASTNode& varphi)
+  {
+    bm->GetRunTimes()->start(RunTimes::CNFConversion);
+    scanFormula(varphi, true);
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    ClauseList* defs = SINGLETON(dummy_true_var);
+    convertFormulaToCNF(varphi, defs);
+    ClauseList* top = info[varphi]->clausespos;
+    defs->insert(defs->begin() + 1, top->begin(), top->end());
 
-      cleanup(varphi);
-      bm->GetRunTimes()->stop(RunTimes::CNFConversion);
-      return defs;
-    }//End of convertToCNF()
+    cleanup(varphi);
+    bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+    return defs;
+  }//End of convertToCNF()
 
-    void CNFMgr::DELETE(ClauseList* varphi)
-    {
-      ClauseList::const_iterator it = varphi->begin();
-      for (; it != varphi->end(); it++)
-        {
-          delete *it;
-        }
+  void CNFMgr::DELETE(ClauseList* varphi)
+  {
+    ClauseList::const_iterator it = varphi->begin();
+    for (; it != varphi->end(); it++)
+      {
+        delete *it;
+      }
 
-      delete varphi;
-    } //End of DELETE()
+    delete varphi;
+  } //End of DELETE()
 } // end namespace BEEV

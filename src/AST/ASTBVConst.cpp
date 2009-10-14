@@ -50,42 +50,42 @@ namespace BEEV
     if(print_binary_flag) {
       res = CONSTANTBV::BitVector_to_Bin(_bvconst);
       if (c_friendly)
-	{
-	  prefix = "0b";
-	}
+        {
+          prefix = "0b";
+        }
       else
-	{
-	  prefix = "0bin";
-	}
+        {
+          prefix = "0bin";
+        }
     }
     else if (_value_width % 4 == 0)
       {
-	res = CONSTANTBV::BitVector_to_Hex(_bvconst);
-	if (c_friendly)
-	  {
-	    prefix = "0x";
-	  }
-	else
-	  {
-	    prefix = "0hex";
-	  }
+        res = CONSTANTBV::BitVector_to_Hex(_bvconst);
+        if (c_friendly)
+          {
+            prefix = "0x";
+          }
+        else
+          {
+            prefix = "0hex";
+          }
       }
     else
       {
-	res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-	if (c_friendly)
-	  {
-	    prefix = "0b";
-	  }
-	else
-	  {
-	    prefix = "0bin";
-	  }
+        res = CONSTANTBV::BitVector_to_Bin(_bvconst);
+        if (c_friendly)
+          {
+            prefix = "0b";
+          }
+        else
+          {
+            prefix = "0bin";
+          }
       }
     if (NULL == res)
       {
-	os << "nodeprint: BVCONST : could not convert to string" << _bvconst;
-	FatalError("");
+        os << "nodeprint: BVCONST : could not convert to string" << _bvconst;
+        FatalError("");
       }
     os << prefix << res;
     CONSTANTBV::BitVector_Dispose(res);
@@ -108,15 +108,15 @@ namespace BEEV
 
 
   bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst * bvc1, 
-				   const ASTBVConst * bvc2) const
+                                               const ASTBVConst * bvc2) const
   {
     if (bvc1->_value_width != bvc2->_value_width)
       {
-	return false;
+        return false;
       }
     return (0 == 
-	    CONSTANTBV::BitVector_Compare(bvc1->_bvconst,
-					  bvc2->_bvconst));
+            CONSTANTBV::BitVector_Compare(bvc1->_bvconst,
+                                          bvc2->_bvconst));
   } //End of ASTBVConstEqual operator
 };//End of namespace
 

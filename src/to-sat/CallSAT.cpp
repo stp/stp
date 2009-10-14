@@ -15,8 +15,8 @@ namespace BEEV
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
   bool ToSAT::CallSAT(MINISAT::Solver& SatSolver, 
-		      const ASTNode& modified_input,
-		      const ASTNode& original_input)
+                      const ASTNode& modified_input,
+                      const ASTNode& original_input)
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
     BitBlaster BB(bm);
@@ -53,12 +53,12 @@ namespace BEEV
         if (smtlib_parser_flag)
           {
             if (true_iff_valid && 
-		(input_status == TO_BE_SATISFIABLE))
+                (input_status == TO_BE_SATISFIABLE))
               {
                 cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
               }
             else if (!true_iff_valid && 
-		     (input_status == TO_BE_UNSATISFIABLE))
+                     (input_status == TO_BE_UNSATISFIABLE))
               {
                 cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
               }

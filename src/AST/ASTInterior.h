@@ -55,15 +55,15 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTInterior *int_node_ptr1, 
-		      const ASTInterior *int_node_ptr2) const;
+                      const ASTInterior *int_node_ptr2) const;
     }; //End of class ASTInteriorEqual
 
     // Used in Equality class for hash tables
     friend bool operator==(const ASTInterior &int_node1, 
-			   const ASTInterior &int_node2)
+                           const ASTInterior &int_node2)
     {
       return ((int_node1._kind == int_node2._kind) 
-	      && (int_node1._children == int_node2._children));
+              && (int_node1._children == int_node2._children));
     } //End of operator==
 
     // Call this when deleting a node that has been stored in the

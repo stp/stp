@@ -32,7 +32,7 @@ namespace BEEV
             n_ptr->SetNodeNum(NewNodeNum());
           }
         pair<ASTInteriorSet::const_iterator, bool> p = 
-	  _interior_unique_table.insert(n_ptr);
+          _interior_unique_table.insert(n_ptr);
         return *(p.first);
       }
     else
@@ -57,8 +57,8 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateNode(Kind kind, 
-			      const ASTNode& child0, 
-			      const ASTVec & back_children)
+                             const ASTNode& child0, 
+                             const ASTVec & back_children)
   {
 
     ASTInterior *n_ptr = new ASTInterior(kind);
@@ -69,9 +69,9 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateNode(Kind kind, 
-			      const ASTNode& child0, 
-			      const ASTNode& child1, 
-			      const ASTVec & back_children)
+                             const ASTNode& child0, 
+                             const ASTNode& child1, 
+                             const ASTVec & back_children)
   {
     ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
@@ -82,10 +82,10 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateNode(Kind kind, 
-			      const ASTNode& child0, 
-			      const ASTNode& child1, 
-			      const ASTNode& child2, 
-			      const ASTVec & back_children)
+                             const ASTNode& child0, 
+                             const ASTNode& child1, 
+                             const ASTNode& child2, 
+                             const ASTVec & back_children)
   {
     ASTInterior *n_ptr = new ASTInterior(kind);
     ASTVec &front_children = n_ptr->_children;
@@ -97,28 +97,28 @@ namespace BEEV
   }
 
   ASTInterior *STPMgr::CreateInteriorNode(Kind kind,
-                                           // children array of this node will be modified.
-                                           ASTInterior *n_ptr,
-                                           const ASTVec & back_children)
+                                          // children array of this node will be modified.
+                                          ASTInterior *n_ptr,
+                                          const ASTVec & back_children)
   {
 
     // insert back_children at end of front_children
     ASTVec &front_children = n_ptr->_children;
 
     front_children.insert(front_children.end(), 
-			  back_children.begin(), 
-			  back_children.end());
+                          back_children.begin(), 
+                          back_children.end());
 
     // check for undefined nodes.
     ASTVec::const_iterator it_end = front_children.end();
     for (ASTVec::const_iterator it = front_children.begin(); it != it_end; it++)
       {
         if (it->IsNull())
-	  {
-	    FatalError("CreateInteriorNode:"\
-		       "Undefined childnode in CreateInteriorNode: ", 
-		       ASTUndefined);
-	  }
+          {
+            FatalError("CreateInteriorNode:"\
+                       "Undefined childnode in CreateInteriorNode: ", 
+                       ASTUndefined);
+          }
       }
 
     return LookupOrCreateInterior(n_ptr);
@@ -174,13 +174,13 @@ namespace BEEV
         s_ptr1->SetNodeNum(NewNodeNum());
         s_ptr1->_value_width = s_ptr->_value_width;
         pair<ASTSymbolSet::const_iterator, bool> p = 
-	  _symbol_unique_table.insert(s_ptr1);
+          _symbol_unique_table.insert(s_ptr1);
         return *p.first;
       }
     else
       {
-	// return symbol found in table.
-	return *it;
+        // return symbol found in table.
+        return *it;
       }
   } // End of LookupOrCreateSymbol
 
@@ -189,7 +189,7 @@ namespace BEEV
     ASTSymbol* s_ptr = &s; // it's a temporary key.
 
     if (_symbol_unique_table.find(s_ptr) == 
-	_symbol_unique_table.end())
+        _symbol_unique_table.end())
       return false;
     else
       return true;
@@ -200,8 +200,8 @@ namespace BEEV
   {
     if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
       FatalError("CreateBVConst: "\
-		 "trying to create a bvconst using unsigned long long of width: ", 
-		 ASTUndefined, width);
+                 "trying to create a bvconst using unsigned long long of width: ", 
+                 ASTUndefined, width);
 
     CBV bv = CONSTANTBV::BitVector_Create(width, true);
     unsigned long c_val = (~((unsigned long) 0)) & bvconst;
@@ -231,8 +231,8 @@ namespace BEEV
   ASTNode STPMgr::CreateBVConst(string*& strval, int base, int bit_width)
   {
 
-	if (bit_width <= 0)
-	    FatalError("CreateBVConst: trying to create a bvconst of width: ", ASTUndefined, bit_width);
+    if (bit_width <= 0)
+      FatalError("CreateBVConst: trying to create a bvconst of width: ", ASTUndefined, bit_width);
 
 
     if (!(2 == base || 10 == base || 16 == base))
@@ -385,12 +385,12 @@ namespace BEEV
 
   // Create and return an ASTNode for a term
   ASTNode STPMgr::CreateTerm(Kind kind, 
-			      unsigned int width, 
-			      const ASTVec &children)
+                             unsigned int width, 
+                             const ASTVec &children)
   {
     if (!is_Term_kind(kind))
       FatalError("CreateTerm:  Illegal kind to CreateTerm:", 
-		 ASTUndefined, kind);
+                 ASTUndefined, kind);
     ASTNode n = CreateNode(kind, children);
     n.SetValueWidth(width);
     
@@ -401,23 +401,23 @@ namespace BEEV
   }
 
   ASTNode STPMgr::CreateTerm(Kind kind, 
-			      unsigned int width, 
-			      const ASTNode& child0, 
-			      const ASTVec &children)
+                             unsigned int width, 
+                             const ASTNode& child0, 
+                             const ASTVec &children)
   {
     if (!is_Term_kind(kind))
       FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
-      ASTNode n = CreateNode(kind, child0, children);
-      n.SetValueWidth(width);
-      BVTypeCheck(n);
-      return n;
+    ASTNode n = CreateNode(kind, child0, children);
+    n.SetValueWidth(width);
+    BVTypeCheck(n);
+    return n;
   }
 
   ASTNode STPMgr::CreateTerm(Kind kind, 
-			      unsigned int width, 
-			      const ASTNode& child0,
-			      const ASTNode& child1, 
-			      const ASTVec &children)
+                             unsigned int width, 
+                             const ASTNode& child0,
+                             const ASTNode& child1, 
+                             const ASTVec &children)
   {
     if (!is_Term_kind(kind))
       FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
@@ -427,11 +427,11 @@ namespace BEEV
   }
   
   ASTNode STPMgr::CreateTerm(Kind kind,
-			      unsigned int width,
-			      const ASTNode& child0,
-			      const ASTNode& child1,
-			      const ASTNode& child2,
-			      const ASTVec &children)
+                             unsigned int width,
+                             const ASTNode& child0,
+                             const ASTNode& child1,
+                             const ASTNode& child2,
+                             const ASTVec &children)
   {
     if (!is_Term_kind(kind))
       FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
@@ -557,19 +557,19 @@ namespace BEEV
   }
 
   // //Create a new variable of ValueWidth 'n'
-//   ASTNode STPMgr::NewArrayVar(unsigned int index, unsigned int value)
-//   {
-//     std::string c("v");
-//     char d[32];
-//     sprintf(d, "%d", _symbol_count++);
-//     std::string ccc(d);
-//     c += "_writearray_" + ccc;
+  //   ASTNode STPMgr::NewArrayVar(unsigned int index, unsigned int value)
+  //   {
+  //     std::string c("v");
+  //     char d[32];
+  //     sprintf(d, "%d", _symbol_count++);
+  //     std::string ccc(d);
+  //     c += "_writearray_" + ccc;
 
-//     ASTNode CurrentSymbol = CreateSymbol(c.c_str());
-//     CurrentSymbol.SetValueWidth(value);
-//     CurrentSymbol.SetIndexWidth(index);
-//     return CurrentSymbol;
-//   } //end of NewArrayVar()
+  //     ASTNode CurrentSymbol = CreateSymbol(c.c_str());
+  //     CurrentSymbol.SetValueWidth(value);
+  //     CurrentSymbol.SetIndexWidth(index);
+  //     return CurrentSymbol;
+  //   } //end of NewArrayVar()
 
   //prints statistics for the ASTNode
   void STPMgr::ASTNodeStats(const char * c, const ASTNode& a)
@@ -658,15 +658,15 @@ namespace BEEV
   bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   {
     if (READ == term.GetKind() 
-	&& WRITE == term[0].GetKind() 
-	&& !GetRemoveWritesFlag())
+        && WRITE == term[0].GetKind() 
+        && !GetRemoveWritesFlag())
       {
         return false;
       }
 
     if (READ == term.GetKind() 
-	&& WRITE == term[0].GetKind() 
-	&& GetRemoveWritesFlag())
+        && WRITE == term[0].GetKind() 
+        && GetRemoveWritesFlag())
       {
         return true;
       }
@@ -703,7 +703,7 @@ namespace BEEV
 
   
   ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
-					       const ASTNode& constant)
+                                              const ASTNode& constant)
   {
     ostringstream outVar;
     ostringstream outNum;

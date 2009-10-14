@@ -61,78 +61,78 @@ namespace BEEV
           break;
         }
 
-		case BVRIGHTSHIFT:
-		case BVSRSHIFT:
-		case BVLEFTSHIFT:
-		{
-			// Barrel shifter
-			const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
-			const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
+      case BVRIGHTSHIFT:
+      case BVSRSHIFT:
+      case BVLEFTSHIFT:
+        {
+          // Barrel shifter
+          const ASTVec& bbarg1 = BBTerm(term[0]).GetChildren();
+          const ASTVec& bbarg2 = BBTerm(term[1]).GetChildren();
 
-			// Signed right shift, need to copy the sign bit.
-			ASTNode toFill;
-			if (BVSRSHIFT == k)
-				toFill = bbarg1.back();
-			else
-				toFill = ASTFalse;
+          // Signed right shift, need to copy the sign bit.
+          ASTNode toFill;
+          if (BVSRSHIFT == k)
+            toFill = bbarg1.back();
+          else
+            toFill = ASTFalse;
 
-			ASTVec temp_result(bbarg1);
-			// if any bit is set in bbarg2 higher than log2Width, then we know that the result is zero.
-			// Add one to make allowance for rounding down. For example, given 300 bits, the log2 is about
-			// 8.2 so round up to 9.
+          ASTVec temp_result(bbarg1);
+          // if any bit is set in bbarg2 higher than log2Width, then we know that the result is zero.
+          // Add one to make allowance for rounding down. For example, given 300 bits, the log2 is about
+          // 8.2 so round up to 9.
 
-			const unsigned width = bbarg1.size();
-			unsigned log2Width = (unsigned)log2(width) + 1;
+          const unsigned width = bbarg1.size();
+          unsigned log2Width = (unsigned)log2(width) + 1;
 
 
-			if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
-				for (unsigned int i = 0; i < log2Width; i++)
-				{
-					if (bbarg2[i] == ASTFalse)
-						continue; // Not shifting by anything.
+          if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
+            for (unsigned int i = 0; i < log2Width; i++)
+              {
+                if (bbarg2[i] == ASTFalse)
+                  continue; // Not shifting by anything.
 
-					unsigned int shift_amount = 1 << i;
+                unsigned int shift_amount = 1 << i;
 
-					for (unsigned int j = 0; j < width; j++)
-					{
-						if (j + shift_amount >= width)
-							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
-						else
-							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
-					}
-				}
-			else
-				for (unsigned int i = 0; i < log2Width; i++)
-				{
-					if (bbarg2[i] == ASTFalse)
-						continue; // Not shifting by anything.
+                for (unsigned int j = 0; j < width; j++)
+                  {
+                    if (j + shift_amount >= width)
+                      temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+                    else
+                      temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j + shift_amount], temp_result[j]);
+                  }
+              }
+          else
+            for (unsigned int i = 0; i < log2Width; i++)
+              {
+                if (bbarg2[i] == ASTFalse)
+                  continue; // Not shifting by anything.
 
-					int shift_amount = 1 << i;
+                int shift_amount = 1 << i;
 
-					for (signed int j = width - 1; j > 0; j--)
-					{
-						if (j < shift_amount)
-							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
-						else
-							temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
-					}
-				}
+                for (signed int j = width - 1; j > 0; j--)
+                  {
+                    if (j < shift_amount)
+                      temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], toFill, temp_result[j]);
+                    else
+                      temp_result[j] = _bm->CreateSimpForm(ITE, bbarg2[i], temp_result[j - shift_amount], temp_result[j]);
+                  }
+              }
 
-			// If any of the remainder are true. Then the whole thing gets the fill value.
-			ASTNode remainder = ASTFalse;
-			for (unsigned int i = log2Width; i < width; i++)
-			{
-				remainder = _bm->CreateNode(OR, remainder, bbarg2[i]);
-			}
+          // If any of the remainder are true. Then the whole thing gets the fill value.
+          ASTNode remainder = ASTFalse;
+          for (unsigned int i = log2Width; i < width; i++)
+            {
+              remainder = _bm->CreateNode(OR, remainder, bbarg2[i]);
+            }
 
-			for (unsigned int i = 0; i < width; i++)
-			{
-				temp_result[i] = _bm->CreateSimpForm(ITE, remainder, toFill, temp_result[i]);
-			}
+          for (unsigned int i = 0; i < width; i++)
+            {
+              temp_result[i] = _bm->CreateSimpForm(ITE, remainder, toFill, temp_result[i]);
+            }
 
-			result = _bm->CreateNode(BOOLVEC, temp_result);
-		}
-			break;
+          result = _bm->CreateNode(BOOLVEC, temp_result);
+        }
+        break;
       case BVVARSHIFT:
         FatalError("BBTerm: These kinds have not been implemented in the BitBlaster: ", term);
         break;
@@ -163,7 +163,7 @@ namespace BEEV
           if (result_width == arg_width)
             {
               //nothing to sign extend
-			  result = arg;
+              result = arg;
               break;
             }
           else
@@ -846,8 +846,8 @@ namespace BEEV
       {
         ASTNode neglit = _bm->CreateSimpNot(*lit);
         ASTNode thisbit = _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglit, *rit), // TRUE if l < r
-                                         _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglit, *rit), // false if not equal
-                                                        prevbit)); // else prevbit
+                                              _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglit, *rit), // false if not equal
+                                                                  prevbit)); // else prevbit
         prevbit = thisbit;
       }
 
@@ -863,8 +863,8 @@ namespace BEEV
 
     ASTNode neglmsb = _bm->CreateSimpNot(lmsb);
     ASTNode msb = _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglmsb, rmsb), // TRUE if l < r
-                                 _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglmsb, rmsb), // false if not equal
-                                                prevbit)); // else prevbit
+                                      _bm->CreateSimpForm(AND, _bm->CreateSimpForm(OR, neglmsb, rmsb), // false if not equal
+                                                          prevbit)); // else prevbit
     return msb;
   }
 

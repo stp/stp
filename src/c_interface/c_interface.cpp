@@ -140,8 +140,8 @@ VC vc_createValidityChecker(void) {
   BEEV::ParserBM = bm;
   stpstar stp =
     new BEEV::STP(bm, simp, 
-		  bvsolver, arrayTransformer, 
-		  tosat, Ctr_Example);
+                  bvsolver, arrayTransformer, 
+                  tosat, Ctr_Example);
   
   BEEV::GlobalSTP = stp;
   decls = new BEEV::ASTVec();
@@ -893,7 +893,7 @@ Expr vc_bvConstExprFromInt(VC vc,
   //printf("%ull", max_n_bits);
   if(v > max_n_bits) {
     printf("CInterface: vc_bvConstExprFromInt: "\
-	   "You are trying to construct a constant %llu >= %d,\n", v, max_n_bits);
+           "You are trying to construct a constant %llu >= %d,\n", v, max_n_bits);
     BEEV::FatalError("FatalError");
   }
   node n = b->CreateBVConst(n_bits, v);

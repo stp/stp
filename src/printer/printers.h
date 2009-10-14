@@ -23,18 +23,18 @@ namespace printer
   ostream& Dot_Print(ostream &os, const BEEV::ASTNode n);
 
   ostream& SMTLIB_Print(ostream &os, 
-			const BEEV::ASTNode n, const int indentation = 0);
+                        const BEEV::ASTNode n, const int indentation = 0);
   ostream& C_Print(ostream &os, 
-		   const BEEV::ASTNode n, const int indentation = 0);
+                   const BEEV::ASTNode n, const int indentation = 0);
   ostream& PL_Print(ostream &os, 
-		    const BEEV::ASTNode& n, int indentation=0);
+                    const BEEV::ASTNode& n, int indentation=0);
 
   ostream& Lisp_Print(ostream &os, 
-		      const BEEV::ASTNode& n,  int indentation=0);
+                      const BEEV::ASTNode& n,  int indentation=0);
   ostream& Lisp_Print_indent(ostream &os,  
-			     const BEEV::ASTNode& n,int indentation=0);
+                             const BEEV::ASTNode& n,int indentation=0);
   void SMTLIB_PrintBack(ostream &os, 
-			const BEEV::ASTNode& n );
+                        const BEEV::ASTNode& n );
 
 }
 

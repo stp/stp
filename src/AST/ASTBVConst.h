@@ -55,7 +55,7 @@ namespace BEEV
     {
     public:
       bool operator()(const ASTBVConst * bvc1, 
-		      const ASTBVConst * bvc2) const;
+                      const ASTBVConst * bvc2) const;
     }; //End of class ASTBVConstEqual
       
     /****************************************************************
@@ -73,7 +73,7 @@ namespace BEEV
       if (bvc1._value_width != bvc2._value_width)
         return false;
       return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, 
-						 bvc2._bvconst));
+                                                 bvc2._bvconst));
     } //End of operator==
 
     // Call this when deleting a node that has been stored in the the

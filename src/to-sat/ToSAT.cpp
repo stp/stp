@@ -76,7 +76,9 @@ namespace BEEV
         satSolverClause.capacity((*i)->size());
 
         //now iterate through the internals of the ASTclause itself
-        vector<const ASTNode*>::const_iterator j = (*i)->begin(), jend = (*i)->end();
+        vector<const ASTNode*>::const_iterator j = (*i)->begin(); 
+        vector<const ASTNode*>::const_iterator jend = (*i)->end();
+        
         //j is a disjunct in the ASTclause (*i)
         for (; j != jend; j++)
           {
@@ -107,7 +109,7 @@ namespace BEEV
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             return false;
           }
-          }
+      }
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
 
@@ -120,8 +122,8 @@ namespace BEEV
 
     //PrintActivityLevels_Of_SATVars("Before SAT:",newS);
     //ChangeActivityLevels_Of_SATVars(newS);
-    //PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
-    //newS.solve();
+    //PrintActivityLevels_Of_SATVars("Before SAT and after initial
+    //bias:",newS); newS.solve();
 
     bm->GetRunTimes()->start(RunTimes::Solving);
     newS.solve();
@@ -136,8 +138,9 @@ namespace BEEV
       return false;
   } //end of toSATandSolve()
 
-  // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying assignment.
-  // Returns ASTTrue if true, ASTFalse if false or undefined.
+  // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
+  // assignment.  Returns ASTTrue if true, ASTFalse if false or
+  // undefined.
   ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newS, ASTNode form)
   {
     MINISAT::Var satvar = _ASTNode_to_SATVar_Map[form];

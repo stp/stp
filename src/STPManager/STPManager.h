@@ -33,9 +33,9 @@ namespace BEEV
 
     // Typedef for unique Interior node table.
     typedef HASHSET<
-      ASTInterior *, 
-      ASTInterior::ASTInteriorHasher, 
-      ASTInterior::ASTInteriorEqual> ASTInteriorSet;    
+    ASTInterior *, 
+    ASTInterior::ASTInteriorHasher, 
+    ASTInterior::ASTInteriorEqual> ASTInteriorSet;    
 
     // Typedef for unique Symbol node (leaf) table.
     typedef HASHSET<
@@ -104,9 +104,9 @@ namespace BEEV
     // nodes are not modified.  Then it returns the hashed copy of the
     // node, which is created if necessary.
     ASTInterior *CreateInteriorNode(Kind kind, 
-				    ASTInterior *new_node,
+                                    ASTInterior *new_node,
                                     const ASTVec & back_children = 
-				    _empty_ASTVec);
+                                    _empty_ASTVec);
 
     // Create unique ASTInterior node.
     ASTInterior *LookupOrCreateInterior(ASTInterior *n);
@@ -220,29 +220,29 @@ namespace BEEV
 
     // Simplifying create functions
     ASTNode CreateSimpForm(Kind kind, 
-			   ASTVec &children);
+                           ASTVec &children);
     ASTNode CreateSimpForm(Kind kind, 
-			   const ASTNode& child0);
+                           const ASTNode& child0);
     ASTNode CreateSimpForm(Kind kind, 
-			   const ASTNode& child0, 
-			   const ASTNode& child1);
+                           const ASTNode& child0, 
+                           const ASTNode& child1);
     ASTNode CreateSimpForm(Kind kind, 
-			   const ASTNode& child0,
-			   const ASTNode& child1, 
-			   const ASTNode& child2);
+                           const ASTNode& child0,
+                           const ASTNode& child1, 
+                           const ASTNode& child2);
     ASTNode CreateSimpNot (const ASTNode& form);
 
     ASTNode CreateSimpXor(const ASTNode& form1, 
-			  const ASTNode& form2);
+                          const ASTNode& form2);
     ASTNode CreateSimpXor(ASTVec &children);
     ASTNode CreateSimpAndOr(bool isAnd, 
-			    const ASTNode& form1,
-			    const ASTNode& form2);
+                            const ASTNode& form1,
+                            const ASTNode& form2);
     ASTNode CreateSimpAndOr(bool IsAnd, 
-			    ASTVec &children);
+                            ASTVec &children);
     ASTNode CreateSimpFormITE(const ASTNode& child0, 
-			      const ASTNode& child1,
-			      const ASTNode& child2);
+                              const ASTNode& child1,
+                              const ASTNode& child2);
 
     /****************************************************************
      * Create Symbol and BVConst functions                          *
@@ -268,19 +268,19 @@ namespace BEEV
 
     // Create and return an interior ASTNode
     ASTNode CreateNode(Kind kind, 
-		       const ASTVec &children = _empty_ASTVec);
+                       const ASTVec &children = _empty_ASTVec);
     ASTNode CreateNode(Kind kind, 
-		       const ASTNode& child0, 
-		       const ASTVec &children = _empty_ASTVec);
+                       const ASTNode& child0, 
+                       const ASTVec &children = _empty_ASTVec);
     ASTNode CreateNode(Kind kind, 
-		       const ASTNode& child0, 
-		       const ASTNode& child1, 
-		       const ASTVec &children = _empty_ASTVec);
+                       const ASTNode& child0, 
+                       const ASTNode& child1, 
+                       const ASTVec &children = _empty_ASTVec);
     ASTNode CreateNode(Kind kind, 
-		       const ASTNode& child0, 
-		       const ASTNode& child1, 
-		       const ASTNode& child2, 
-		       const ASTVec &children = _empty_ASTVec);
+                       const ASTNode& child0, 
+                       const ASTNode& child1, 
+                       const ASTNode& child2, 
+                       const ASTVec &children = _empty_ASTVec);
 
     /****************************************************************
      * Create Term functions                                        *
@@ -288,23 +288,23 @@ namespace BEEV
 
     // Create and return an ASTNode for a term
     ASTNode CreateTerm(Kind kind, 
-		       unsigned int width, 
-		       const ASTVec &children = _empty_ASTVec);    
+                       unsigned int width, 
+                       const ASTVec &children = _empty_ASTVec);    
     ASTNode CreateTerm(Kind kind,
-		       unsigned int width, 
-		       const ASTNode& child0, 
-		       const ASTVec &children = _empty_ASTVec);    
+                       unsigned int width, 
+                       const ASTNode& child0, 
+                       const ASTVec &children = _empty_ASTVec);    
     ASTNode CreateTerm(Kind kind, 
-		       unsigned int width, 
-		       const ASTNode& child0, 
-		       const ASTNode& child1, 
-		       const ASTVec &children = _empty_ASTVec);    
+                       unsigned int width, 
+                       const ASTNode& child0, 
+                       const ASTNode& child1, 
+                       const ASTVec &children = _empty_ASTVec);    
     ASTNode CreateTerm(Kind kind,
-		       unsigned int width,
-		       const ASTNode& child0,
-		       const ASTNode& child1,
-		       const ASTNode& child2,
-		       const ASTVec &children = _empty_ASTVec);
+                       unsigned int width,
+                       const ASTNode& child0,
+                       const ASTNode& child1,
+                       const ASTNode& child2,
+                       const ASTVec &children = _empty_ASTVec);
 
 
     /****************************************************************
@@ -362,7 +362,7 @@ namespace BEEV
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
     ASTNode NewParameterized_BooleanVar(const ASTNode& var,
-					const ASTNode& constant);
+                                        const ASTNode& constant);
 
     void TermsAlreadySeenMap_Clear(void)
     {

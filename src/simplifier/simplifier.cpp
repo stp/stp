@@ -16,22 +16,22 @@ namespace BEEV
 
   ASTNode Simplifier::Flatten(const ASTNode& a)
   {
-	ASTNode n = a;
-	while (true)
-	  {
-	    ASTNode& nold = n;
-	    n = FlattenOneLevel(n);
-	    if ((n == nold))
-	      break;
-	  }
-	
-	return n;
+    ASTNode n = a;
+    while (true)
+      {
+        ASTNode& nold = n;
+        n = FlattenOneLevel(n);
+        if ((n == nold))
+          break;
+      }
+        
+    return n;
   }
 
 
 
   bool Simplifier::CheckMap(ASTNodeMap* VarConstMap, 
-                         const ASTNode& key, ASTNode& output)
+                            const ASTNode& key, ASTNode& output)
   {
     if(NULL == VarConstMap)
       {
@@ -48,12 +48,12 @@ namespace BEEV
 
 
   bool Simplifier::CheckSimplifyMap(const ASTNode& key, 
-				 ASTNode& output, 
-				 bool pushNeg, ASTNodeMap* VarConstMap)
+                                    ASTNode& output, 
+                                    bool pushNeg, ASTNodeMap* VarConstMap)
   {
     if(NULL != VarConstMap) 
       {
-	return false;
+        return false;
       }
     ASTNodeMap::iterator it, itend;
     it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
@@ -82,12 +82,12 @@ namespace BEEV
 
   // Push any reference count used by the key to the value.
   void Simplifier::UpdateSimplifyMap(const ASTNode& key, 
-				  const ASTNode& value, 
-				  bool pushNeg, ASTNodeMap* VarConstMap)
+                                     const ASTNode& value, 
+                                     bool pushNeg, ASTNodeMap* VarConstMap)
   {
     if(NULL != VarConstMap)
       {
-	return;
+        return;
       }
 
     // Don't add leaves. Leaves are easy to recalculate, no need
@@ -147,8 +147,8 @@ namespace BEEV
     if (1 == i && !CheckSubstitutionMap(e0))
       {
         assert((e1.GetKind() == TRUE) || 
-	       (e1.GetKind() == FALSE) || 
-	       (e1.GetKind() == BVCONST));
+               (e1.GetKind() == FALSE) || 
+               (e1.GetKind() == BVCONST));
         (*SolverMap)[e0] = e1;
         return true;
       }
@@ -158,8 +158,8 @@ namespace BEEV
     if (-1 == i && !CheckSubstitutionMap(e1))
       {
         assert((e0.GetKind() == TRUE)  || 
-	       (e0.GetKind() == FALSE) || 
-	       (e0.GetKind() == BVCONST));
+               (e0.GetKind() == FALSE) || 
+               (e0.GetKind() == BVCONST));
         (*SolverMap)[e1] = e0;
         return true;
       }
@@ -205,7 +205,7 @@ namespace BEEV
 
   ASTNode 
   Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b, 
-					  bool pushNeg, ASTNodeMap* VarConstMap)
+                                             bool pushNeg, ASTNodeMap* VarConstMap)
   {
     _bm->Begin_RemoveWrites = false;
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
@@ -242,48 +242,48 @@ namespace BEEV
   // The SimplifyMaps on entry to the topLevel functions may contain useful entries.
   // E.g. The BVSolver calls SimplifyTerm()
   ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, 
-					    bool pushNeg, ASTNodeMap* VarConstMap)
+                                               bool pushNeg, ASTNodeMap* VarConstMap)
   {
     _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
     if (smtlib_parser_flag)
-    BuildReferenceCountMap(b);
+      BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ResetSimplifyMaps();
     _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
     return out;
   }
 
-ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
-{
-	_bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
-	ASTNode out = SimplifyTerm(b);
-	ResetSimplifyMaps();
-	_bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
-	return out;
-}
+  ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
+  {
+    _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
+    ASTNode out = SimplifyTerm(b);
+    ResetSimplifyMaps();
+    _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
+    return out;
+  }
 
 
   ASTNode 
   Simplifier::SimplifyFormula(const ASTNode& b, 
-			   bool pushNeg, ASTNodeMap* VarConstMap)
+                              bool pushNeg, ASTNodeMap* VarConstMap)
   {
-//     if (!optimize_flag)
-//       return b;
+    //     if (!optimize_flag)
+    //       return b;
 
     Kind kind = b.GetKind();
     if (BOOLEAN_TYPE != b.GetType())
       {
         FatalError(" SimplifyFormula: "\
-		   "You have input a nonformula kind: ", ASTUndefined, kind);
+                   "You have input a nonformula kind: ", ASTUndefined, kind);
       }
 
     ASTNode a = b;
     ASTVec ca = a.GetChildren();
     if (!(IMPLIES == kind || 
-	  ITE == kind     || 
-	  FOR == kind     ||
-	  PARAMBOOL==kind ||
-	  isAtomic(kind)))
+          ITE == kind     || 
+          FOR == kind     ||
+          PARAMBOOL==kind ||
+          isAtomic(kind)))
       {
         SortByArith(ca);
         a = _bm->CreateNode(kind, ca);
@@ -340,7 +340,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
   ASTNode 
   Simplifier::SimplifyForFormula(const ASTNode& a, 
-			      bool pushNeg, ASTNodeMap* VarConstMap) 
+                                 bool pushNeg, ASTNodeMap* VarConstMap) 
   {
     //FIXME: Code this up properly later. Mainly pushing the negation
     //down
@@ -349,10 +349,10 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
   ASTNode 
   Simplifier::SimplifyAtomicFormula(const ASTNode& a, 
-				 bool pushNeg, ASTNodeMap* VarConstMap)
+                                    bool pushNeg, ASTNodeMap* VarConstMap)
   {
-//     if (!optimize_flag)
-//       return a;
+    //     if (!optimize_flag)
+    //       return a;
 
     ASTNode output;
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
@@ -388,12 +388,12 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         output = pushNeg ? _bm->CreateNode(NOT, output) : output;
         break;
       case PARAMBOOL:
-	{
-	  ASTNode term = SimplifyTerm(a[1], VarConstMap);
-	  output = _bm->CreateNode(PARAMBOOL, a[0], term);
-	  output = pushNeg ? _bm->CreateNode(NOT, output) : output;
-	  break;
-	}
+        {
+          ASTNode term = SimplifyTerm(a[1], VarConstMap);
+          output = _bm->CreateNode(PARAMBOOL, a[0], term);
+          output = pushNeg ? _bm->CreateNode(NOT, output) : output;
+          break;
+        }
       case BVGETBIT:
         {
           ASTNode term = SimplifyTerm(a[0], VarConstMap);
@@ -401,7 +401,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
           ASTNode zero = _bm->CreateZeroConst(1);
           ASTNode one = _bm->CreateOneConst(1);
           ASTNode getthebit = 
-	    SimplifyTerm(_bm->CreateTerm(BVEXTRACT, 1, term, thebit, thebit), VarConstMap);
+            SimplifyTerm(_bm->CreateTerm(BVEXTRACT, 1, term, thebit, thebit), VarConstMap);
           if (getthebit == zero)
             output = pushNeg ? ASTTrue : ASTFalse;
           else if (getthebit == one)
@@ -442,7 +442,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         }
       default:
         FatalError("SimplifyAtomicFormula: "\
-		   "NO atomic formula of the kind: ", ASTUndefined, kind);
+                   "NO atomic formula of the kind: ", ASTUndefined, kind);
         break;
       }
 
@@ -452,8 +452,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
   } //end of SimplifyAtomicFormula()
 
   ASTNode Simplifier::CreateSimplifiedINEQ(Kind k, 
-					const ASTNode& left, 
-					const ASTNode& right, bool pushNeg)
+                                           const ASTNode& left, 
+                                           const ASTNode& right, bool pushNeg)
   {
     ASTNode output;
     if (BVCONST == left.GetKind() && BVCONST == right.GetKind())
@@ -486,9 +486,9 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         else
           {
             output = 
-	      pushNeg ? 
-	      _bm->CreateNode(BVLE, right, left) : 
-	      _bm->CreateNode(BVLT, left, right);
+              pushNeg ? 
+              _bm->CreateNode(BVLE, right, left) : 
+              _bm->CreateNode(BVLT, left, right);
           }
         break;
       case BVLE:
@@ -512,9 +512,9 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         else
           {
             output = 
-	      pushNeg ? 
-	      _bm->CreateNode(BVLT, right, left) : 
-	      _bm->CreateNode(BVLE, left, right);
+              pushNeg ? 
+              _bm->CreateNode(BVLT, right, left) : 
+              _bm->CreateNode(BVLE, left, right);
           }
         break;
       case BVGT:
@@ -529,9 +529,9 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         else
           {
             output = 
-	      pushNeg ? 
-	      _bm->CreateNode(BVLE, left, right) : 
-	      _bm->CreateNode(BVLT, right, left);
+              pushNeg ? 
+              _bm->CreateNode(BVLE, left, right) : 
+              _bm->CreateNode(BVLT, right, left);
           }
         break;
       case BVGE:
@@ -546,9 +546,9 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         else
           {
             output = 
-	      pushNeg ? 
-	      _bm->CreateNode(BVLT, left, right) : 
-	      _bm->CreateNode(BVLE, right, left);
+              pushNeg ? 
+              _bm->CreateNode(BVLT, left, right) : 
+              _bm->CreateNode(BVLE, right, left);
           }
         break;
       case BVSLT:
@@ -584,7 +584,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
           {
             if (BVLT != in[j].GetKind())
               continue;
-	    // parameters are swapped.
+            // parameters are swapped.
             if (in[i][0] == in[j][1] && in[i][1] == in[j][0])
               return ASTFalse;
           }
@@ -667,8 +667,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         output = ASTFalse;
       }
     else if (ITE == k1 && 
-	     BVCONST == in1[1].GetKind() && 
-	     BVCONST == in1[2].GetKind() && BVCONST == k2)
+             BVCONST == in1[1].GetKind() && 
+             BVCONST == in1[2].GetKind() && BVCONST == k2)
       {
         //if one side is a BVCONST and the other side is an ITE over
         //BVCONST then we can do the following optimization:
@@ -698,8 +698,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
           }
       }
     else if (ITE == k2 && 
-	     BVCONST == in2[1].GetKind() && 
-	     BVCONST == in2[2].GetKind() && BVCONST == k1)
+             BVCONST == in2[1].GetKind() && 
+             BVCONST == in2[2].GetKind() && BVCONST == k1)
       {
         ASTNode cond = in2[0];
         if (in2[1] == in1)
@@ -756,8 +756,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
   //accepts cond == t1, then part is t2, and else part is t3
   ASTNode Simplifier::CreateSimplifiedTermITE(const ASTNode& in0, 
-					   const ASTNode& in1, 
-					   const ASTNode& in2)
+                                              const ASTNode& in1, 
+                                              const ASTNode& in2)
   {
     ASTNode t0 = in0;
     ASTNode t1 = in1;
@@ -769,13 +769,13 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
           {
             cerr << "t2 is : = " << t2;
             FatalError("CreateSimplifiedTermITE: "\
-		       "the lengths of the two branches don't match", t1);
+                       "the lengths of the two branches don't match", t1);
           }
         if (t1.GetIndexWidth() != t2.GetIndexWidth())
           {
             cerr << "t2 is : = " << t2;
             FatalError("CreateSimplifiedTermITE: "\
-		       "the lengths of the two branches don't match", t1);
+                       "the lengths of the two branches don't match", t1);
           }
         return _bm->CreateTerm(ITE, t1.GetValueWidth(), t0, t1, t2);
       }
@@ -915,10 +915,10 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
       default:
         {
           output = 
-	    (isAnd) ? (pushNeg ? 
-		       _bm->CreateNode(OR, outvec) : 
-		       _bm->CreateNode(AND, outvec)) : 
-	    (pushNeg ? _bm->CreateNode(AND, outvec) : _bm->CreateNode(OR,outvec));
+            (isAnd) ? (pushNeg ? 
+                       _bm->CreateNode(OR, outvec) : 
+                       _bm->CreateNode(AND, outvec)) : 
+            (pushNeg ? _bm->CreateNode(AND, outvec) : _bm->CreateNode(OR,outvec));
           //output = FlattenOneLevel(output);
           break;
         }
@@ -937,7 +937,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
   ASTNode 
   Simplifier::SimplifyNotFormula(const ASTNode& a, 
-			      bool pushNeg, ASTNodeMap* VarConstMap)
+                                 bool pushNeg, ASTNodeMap* VarConstMap)
   {
     ASTNode output;
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
@@ -1110,8 +1110,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
             output = c1;
           }
         else if (CheckAlwaysTrueFormMap(c1) || 
-		 CheckAlwaysTrueFormMap(_bm->CreateNode(NOT, c0)) || 
-		 (NOT == c0.GetKind() && CheckAlwaysTrueFormMap(c0[0])))
+                 CheckAlwaysTrueFormMap(_bm->CreateNode(NOT, c0)) || 
+                 (NOT == c0.GetKind() && CheckAlwaysTrueFormMap(c0[0])))
           {
             //(~c0 AND (~c0 OR c1)) <==> TRUE
             //
@@ -1119,7 +1119,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
             output = ASTTrue;
           }
         else if (CheckAlwaysTrueFormMap(_bm->CreateNode(NOT, c1)) || 
-		 (NOT == c1.GetKind() && CheckAlwaysTrueFormMap(c1[0])))
+                 (NOT == c1.GetKind() && CheckAlwaysTrueFormMap(c1[0])))
           {
             //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
             //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
@@ -1212,8 +1212,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
   ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
   {
- //    if (!optimize_flag)
-//       return b;
+    //    if (!optimize_flag)
+    //       return b;
 
     ASTNode output;
     if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
@@ -1277,7 +1277,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
         output = t1;
       }
     else if (CheckAlwaysTrueFormMap(_bm->CreateNode(NOT, t0)) || 
-	     (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0])))
+             (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0])))
       {
         output = t2;
       }
@@ -1444,8 +1444,8 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
                     }
                   CONSTANTBV::BitVector_increment(maskedPlusOne);
                   ASTNode temp = 
-		    _bm->CreateTerm(BVMULT, inputValueWidth, 
-			       _bm->CreateBVConst(maskedPlusOne, inputValueWidth), other);
+                    _bm->CreateTerm(BVMULT, inputValueWidth, 
+                                    _bm->CreateBVConst(maskedPlusOne, inputValueWidth), other);
                   output = _bm->CreateTerm(BVNEG, inputValueWidth, temp);
                 }
             }
@@ -1552,27 +1552,27 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
           // propagate bvuminus upwards through multiplies.
           if (BVMULT == output.GetKind())
-			{
-				ASTVec d = output.GetChildren();
-				int uminus = 0;
-				for (unsigned i = 0; i < d.size(); i++)
-				{
-					if (d[i].GetKind() == BVUMINUS)
-					{
-						d[i] = d[i][0];
-						uminus++;
-					}
-				}
-				if (uminus != 0)
-				{
-					SortByArith(d);
-					output = _bm->CreateTerm(BVMULT, output.GetValueWidth(), d);
-					if ((uminus & 0x1) != 0) // odd, pull up the uminus.
-					{
-						output = _bm->CreateTerm(BVUMINUS, output.GetValueWidth(), output);
-					}
-				}
-			}
+            {
+              ASTVec d = output.GetChildren();
+              int uminus = 0;
+              for (unsigned i = 0; i < d.size(); i++)
+                {
+                  if (d[i].GetKind() == BVUMINUS)
+                    {
+                      d[i] = d[i][0];
+                      uminus++;
+                    }
+                }
+              if (uminus != 0)
+                {
+                  SortByArith(d);
+                  output = _bm->CreateTerm(BVMULT, output.GetValueWidth(), d);
+                  if ((uminus & 0x1) != 0) // odd, pull up the uminus.
+                    {
+                      output = _bm->CreateTerm(BVUMINUS, output.GetValueWidth(), output);
+                    }
+                }
+            }
 
 
 
@@ -1644,17 +1644,17 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
                   }
                 else
                   {
-                	// If the first argument to the multiply is a constant, push it through.
-                	// Without regard for the splitting of nodes (hmm.)
-                	// This is necessary because the bitvector solver can process -3*x, but
-                	// not -(3*x).
-                	if (BVCONST == a0[0].GetKind())
-                	{
-                    ASTNode a00 = SimplifyTerm(_bm->CreateTerm(BVUMINUS, l, a0[0]), VarConstMap);
-                    output = _bm->CreateTerm(BVMULT, l, a00, a0[1]);
-                  }
-                	else
-                	output = _bm->CreateTerm(BVUMINUS, l, a0);
+                    // If the first argument to the multiply is a constant, push it through.
+                    // Without regard for the splitting of nodes (hmm.)
+                    // This is necessary because the bitvector solver can process -3*x, but
+                    // not -(3*x).
+                    if (BVCONST == a0[0].GetKind())
+                      {
+                        ASTNode a00 = SimplifyTerm(_bm->CreateTerm(BVUMINUS, l, a0[0]), VarConstMap);
+                        output = _bm->CreateTerm(BVMULT, l, a00, a0[1]);
+                      }
+                    else
+                      output = _bm->CreateTerm(BVUMINUS, l, a0);
                   }
                 break;
               }
@@ -2042,62 +2042,62 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
 
 
       case BVLEFTSHIFT:
-		case BVRIGHTSHIFT:
+      case BVRIGHTSHIFT:
 
-		{ // If the shift amount is known. Then replace it by an extract.
-			ASTNode a = SimplifyTerm(inputterm[0], VarConstMap);
-			ASTNode b = SimplifyTerm(inputterm[1], VarConstMap);
-			const unsigned int width = a.GetValueWidth();
-			if (BVCONST == b.GetKind()) // known shift amount.
-			{
-				if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
-				{
-					// Intended to remove shifts by very large amounts that don't fit into the unsigned.
-					// at thhe start of the "else" branch.
-					output = _bm->CreateZeroConst(width);
-				}
-				else
-				{
-					const unsigned int shift = GetUnsignedConst(b);
-					if (shift > width)
-					{
-						output = _bm->CreateZeroConst(width);
-					}
-					else if (shift == 0)
-					{
-						output = a; // unchanged.
-					}
-					else
-					{
-						if (k == BVLEFTSHIFT)
-						{
-							ASTNode zero = _bm->CreateZeroConst(shift);
-							ASTNode hi = _bm->CreateBVConst(32, width - shift -1);
-							ASTNode low = _bm->CreateBVConst(32, 0);
-							ASTNode extract = _bm->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
-							BVTypeCheck(extract);
-							output = _bm->CreateTerm(BVCONCAT, width, extract, zero);
-							BVTypeCheck(output);
-						}
-						else if (k == BVRIGHTSHIFT)
-						{
-							ASTNode zero = _bm->CreateZeroConst(shift);
-							ASTNode hi = _bm->CreateBVConst(32, width -1);
-							ASTNode low = _bm->CreateBVConst(32, shift);
-							ASTNode extract = _bm->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
-							BVTypeCheck(extract);
-							output = _bm->CreateTerm(BVCONCAT, width, zero, extract);
-							BVTypeCheck(output);
-						}
-						else
-							FatalError("herasdf");
-					}
-				}
-			}
-			else
-				output = _bm->CreateTerm(k, width, a, b);
-		}
-		break;
+        { // If the shift amount is known. Then replace it by an extract.
+          ASTNode a = SimplifyTerm(inputterm[0], VarConstMap);
+          ASTNode b = SimplifyTerm(inputterm[1], VarConstMap);
+          const unsigned int width = a.GetValueWidth();
+          if (BVCONST == b.GetKind()) // known shift amount.
+            {
+              if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
+                {
+                  // Intended to remove shifts by very large amounts that don't fit into the unsigned.
+                  // at thhe start of the "else" branch.
+                  output = _bm->CreateZeroConst(width);
+                }
+              else
+                {
+                  const unsigned int shift = GetUnsignedConst(b);
+                  if (shift > width)
+                    {
+                      output = _bm->CreateZeroConst(width);
+                    }
+                  else if (shift == 0)
+                    {
+                      output = a; // unchanged.
+                    }
+                  else
+                    {
+                      if (k == BVLEFTSHIFT)
+                        {
+                          ASTNode zero = _bm->CreateZeroConst(shift);
+                          ASTNode hi = _bm->CreateBVConst(32, width - shift -1);
+                          ASTNode low = _bm->CreateBVConst(32, 0);
+                          ASTNode extract = _bm->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
+                          BVTypeCheck(extract);
+                          output = _bm->CreateTerm(BVCONCAT, width, extract, zero);
+                          BVTypeCheck(output);
+                        }
+                      else if (k == BVRIGHTSHIFT)
+                        {
+                          ASTNode zero = _bm->CreateZeroConst(shift);
+                          ASTNode hi = _bm->CreateBVConst(32, width -1);
+                          ASTNode low = _bm->CreateBVConst(32, shift);
+                          ASTNode extract = _bm->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
+                          BVTypeCheck(extract);
+                          output = _bm->CreateTerm(BVCONCAT, width, zero, extract);
+                          BVTypeCheck(output);
+                        }
+                      else
+                        FatalError("herasdf");
+                    }
+                }
+            }
+          else
+            output = _bm->CreateTerm(k, width, a, b);
+        }
+        break;
 
 
       case BVXOR:
@@ -2669,14 +2669,14 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
       }
 
     if (!_bm->Begin_RemoveWrites 
-	&& !_bm->SimplifyWrites_InPlace_Flag 
-	&& !_bm->start_abstracting)
+        && !_bm->SimplifyWrites_InPlace_Flag 
+        && !_bm->start_abstracting)
       {
         return term;
       }
     else if (!_bm->Begin_RemoveWrites 
-	     && _bm->SimplifyWrites_InPlace_Flag 
-	     && !_bm->start_abstracting)
+             && _bm->SimplifyWrites_InPlace_Flag 
+             && !_bm->start_abstracting)
       {
         //return term;
         return SimplifyWrites_InPlace(term);
@@ -2788,7 +2788,7 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
       }
 
     if (!_bm->start_abstracting 
-	&& _bm->Begin_RemoveWrites)
+        && _bm->Begin_RemoveWrites)
       {
         output = ReadOverWrite_To_ITE(input);
       }
@@ -3032,16 +3032,16 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
     ReferenceCount = new ASTNodeCountMap();
   }
 
-void Simplifier::printCacheStatus()
-{
-  cerr << SimplifyMap->size() << endl;
-  cerr << SimplifyNegMap->size() << endl;
-  cerr << ReferenceCount->size() << endl;
-  //cerr << TermsAlreadySeenMap.size() << endl;
+  void Simplifier::printCacheStatus()
+  {
+    cerr << SimplifyMap->size() << endl;
+    cerr << SimplifyNegMap->size() << endl;
+    cerr << ReferenceCount->size() << endl;
+    //cerr << TermsAlreadySeenMap.size() << endl;
   
-  cerr << SimplifyMap->bucket_count() << endl;
-  cerr << SimplifyNegMap->bucket_count() << endl;
-  cerr << ReferenceCount->bucket_count() << endl;
-  //cerr << TermsAlreadySeenMap.bucket_count() << endl;
-} //printCacheStatus()
+    cerr << SimplifyMap->bucket_count() << endl;
+    cerr << SimplifyNegMap->bucket_count() << endl;
+    cerr << ReferenceCount->bucket_count() << endl;
+    //cerr << TermsAlreadySeenMap.bucket_count() << endl;
+  } //printCacheStatus()
 };//end of namespace

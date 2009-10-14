@@ -36,10 +36,10 @@ namespace BEEV
     // variable in ASTClause a new MINISAT::Var is created (these vars
     // typedefs for ints)
     typedef HASHMAP<
-      ASTNode, 
-      MINISAT::Var, 
-      ASTNode::ASTNodeHasher, 
-      ASTNode::ASTNodeEqual> ASTtoSATMap;
+    ASTNode, 
+    MINISAT::Var, 
+    ASTNode::ASTNodeHasher, 
+    ASTNode::ASTNodeEqual> ASTtoSATMap;
     ASTtoSATMap _ASTNode_to_SATVar_Map;
 
     // MAP: This is a map from MINISAT::Vars to ASTNodes
@@ -71,7 +71,7 @@ namespace BEEV
     //looksup a MINISAT var from the minisat-var memo-table. if none
     //exists, then creates one.  Treat the result as const.
     MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, 
-				      const ASTNode& n);
+                                      const ASTNode& n);
 
     // Evaluates bitblasted formula in satisfying assignment
     ASTNode CheckBBandCNF(MINISAT::Solver& newS, ASTNode form);
@@ -98,8 +98,8 @@ namespace BEEV
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
     bool CallSAT(MINISAT::Solver& SatSolver, 
-		 const ASTNode& modified_input,
-		 const ASTNode& original_input);
+                 const ASTNode& modified_input,
+                 const ASTNode& original_input);
     
     // Converts the clause to SAT and calls SAT solver
     bool toSATandSolve(MINISAT::Solver& S, ClauseList& cll);

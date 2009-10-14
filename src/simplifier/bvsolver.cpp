@@ -260,19 +260,19 @@ namespace BEEV
       {
         ASTNode monom = *it;
         if (SYMBOL == monom.GetKind() 
-	    && Vars.count(monom) == 1 
-	    && !VarSeenInTerm(monom, rhs) 
-	    && !DoNotSolveThis(monom) && !chosen_symbol)
+            && Vars.count(monom) == 1 
+            && !VarSeenInTerm(monom, rhs) 
+            && !DoNotSolveThis(monom) && !chosen_symbol)
           {
             outmonom = monom;
             chosen_symbol = true;
           }
         else if (BVUMINUS == monom.GetKind() 
-		 && SYMBOL == monom[0].GetKind() 
-		 && Vars.count(monom[0]) == 1 
-		 && !DoNotSolveThis(monom[0])
+                 && SYMBOL == monom[0].GetKind() 
+                 && Vars.count(monom[0]) == 1 
+                 && !DoNotSolveThis(monom[0])
                  && !VarSeenInTerm(monom[0], rhs) 
-		 && !chosen_symbol)
+                 && !chosen_symbol)
           {
             //cerr << "Chosen Monom: " << monom << endl;
             outmonom = monom;
@@ -292,23 +292,23 @@ namespace BEEV
           {
             ASTNode monom = *it;
             ASTNode var = 
-	      (BVMULT == monom.GetKind()) ? 
-	      monom[1] : 
-	      _bm->CreateNode(UNDEFINED);
+              (BVMULT == monom.GetKind()) ? 
+              monom[1] : 
+              _bm->CreateNode(UNDEFINED);
 
             if (BVMULT == monom.GetKind() 
-		&& BVCONST == monom[0].GetKind() 
-		&& _simp->BVConstIsOdd(monom[0]) 
-		&& ((SYMBOL == var.GetKind() 
-		     && Vars.count(var) == 1) 
-		    || (BVEXTRACT == var.GetKind() 
-			&& SYMBOL == var[0].GetKind() 
-			&& BVCONST == var[1].GetKind() 
-			&& zero == var[2]
-			&& !VarSeenInTerm(var[0], rhs) 
-			&& !DoNotSolveThis(var[0]))) 
-		&& !DoNotSolveThis(var) 
-		&& !VarSeenInTerm(var, rhs)
+                && BVCONST == monom[0].GetKind() 
+                && _simp->BVConstIsOdd(monom[0]) 
+                && ((SYMBOL == var.GetKind() 
+                     && Vars.count(var) == 1) 
+                    || (BVEXTRACT == var.GetKind() 
+                        && SYMBOL == var[0].GetKind() 
+                        && BVCONST == var[1].GetKind() 
+                        && zero == var[2]
+                        && !VarSeenInTerm(var[0], rhs) 
+                        && !DoNotSolveThis(var[0]))) 
+                && !DoNotSolveThis(var) 
+                && !VarSeenInTerm(var, rhs)
                 && !chosen_odd)
               {
                 //monom[0] is odd.
@@ -367,9 +367,9 @@ namespace BEEV
         //construct:  rhs - (lhs without the chosen monom)
         unsigned int len = lhs.GetValueWidth();
         leftover_lhs = 
-	  _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS, len, leftover_lhs));
+          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS, len, leftover_lhs));
         ASTNode newrhs = 
-	  _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
+          _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
         lhs = chosen_monom;
         rhs = newrhs;
       } //end of if(BVPLUS ...)
@@ -435,10 +435,10 @@ namespace BEEV
           ASTNode zero = _bm->CreateZeroConst(32);
 
           if (!(SYMBOL == lhs[0].GetKind() 
-		&& BVCONST == lhs[1].GetKind() 
-		&& zero == lhs[2] 
-		&& !VarSeenInTerm(lhs[0], rhs) 
-		&& !DoNotSolveThis(lhs[0])))
+                && BVCONST == lhs[1].GetKind() 
+                && zero == lhs[2] 
+                && !VarSeenInTerm(lhs[0], rhs) 
+                && !DoNotSolveThis(lhs[0])))
             {
               return eq;
             }
@@ -459,9 +459,9 @@ namespace BEEV
           //then also add another entry for x = x1@t
           ASTNode var = lhs[0];
           ASTNode newvar = 
-	    _bm->NewVar(var.GetValueWidth() - lhs.GetValueWidth());
+            _bm->NewVar(var.GetValueWidth() - lhs.GetValueWidth());
           newvar = 
-	    _bm->CreateTerm(BVCONCAT, var.GetValueWidth(), newvar, rhs);
+            _bm->CreateTerm(BVCONCAT, var.GetValueWidth(), newvar, rhs);
           _simp->UpdateSolverMap(var, newvar);
           output = ASTTrue;
           break;
@@ -493,7 +493,7 @@ namespace BEEV
           ASTNode a = _simp->MultiplicativeInverse(lhs[0]);
           ASTNode chosenvar = (BVEXTRACT == lhs[1].GetKind()) ? lhs[1][0] : lhs[1];
           ASTNode chosenvar_value = 
-	    _simp->SimplifyTerm(_bm->CreateTerm(BVMULT, rhs.GetValueWidth(), a, rhs));
+            _simp->SimplifyTerm(_bm->CreateTerm(BVMULT, rhs.GetValueWidth(), a, rhs));
 
           //if chosenvar is seen in chosenvar_value then abort
           if (VarSeenInTerm(chosenvar, chosenvar_value))
@@ -521,11 +521,11 @@ namespace BEEV
             {
               ASTNode var = lhs[1][0];
               ASTNode newvar = 
-		_bm->NewVar(var.GetValueWidth() - lhs[1].GetValueWidth());
+                _bm->NewVar(var.GetValueWidth() - lhs[1].GetValueWidth());
               newvar = 
-		_bm->CreateTerm(BVCONCAT, 
-				var.GetValueWidth(), 
-				newvar, chosenvar_value);
+                _bm->CreateTerm(BVCONCAT, 
+                                var.GetValueWidth(), 
+                                newvar, chosenvar_value);
               _simp->UpdateSolverMap(var, newvar);
             }
           output = ASTTrue;
@@ -727,7 +727,7 @@ namespace BEEV
             ASTNode aaa = *it;
             Kind itk = aaa.GetKind();
             if (!(BVCONST == itk && !_simp->BVConstIsOdd(aaa)) && !(BVMULT == itk && BVCONST == aaa[0].GetKind() && SYMBOL == aaa[1].GetKind()
-                                                                  && !_simp->BVConstIsOdd(aaa[0])))
+                                                                    && !_simp->BVConstIsOdd(aaa[0])))
               {
                 //If the monomials of the lhs are NOT of the form 'a*x' or 'a'
                 //where 'a' is even, then return the eqn
@@ -816,15 +816,15 @@ namespace BEEV
   bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   {
     if (READ == term.GetKind() 
-	&& WRITE == term[0].GetKind() 
-	&& !_bm->GetRemoveWritesFlag())
+        && WRITE == term[0].GetKind() 
+        && !_bm->GetRemoveWritesFlag())
       {
         return false;
       }
 
     if (READ == term.GetKind() 
-	&& WRITE == term[0].GetKind() 
-	&& _bm->GetRemoveWritesFlag())
+        && WRITE == term[0].GetKind() 
+        && _bm->GetRemoveWritesFlag())
       {
         return true;
       }

@@ -93,58 +93,58 @@ namespace BEEV
           break;
         }
 
-        case BVLEFTSHIFT:
-		case BVRIGHTSHIFT:
-		case BVSRSHIFT:
-		{
-			// load in the bitWidth.
-			CBV width = CONSTANTBV::BitVector_Create(inputwidth, true);
-			for (unsigned i = 0; i < sizeof(inputwidth) * 8; i++)
-				if ((inputwidth & (0x1 << i)) != 0)
-					CONSTANTBV::BitVector_Bit_On(width, i);
+      case BVLEFTSHIFT:
+      case BVRIGHTSHIFT:
+      case BVSRSHIFT:
+        {
+          // load in the bitWidth.
+          CBV width = CONSTANTBV::BitVector_Create(inputwidth, true);
+          for (unsigned i = 0; i < sizeof(inputwidth) * 8; i++)
+            if ((inputwidth & (0x1 << i)) != 0)
+              CONSTANTBV::BitVector_Bit_On(width, i);
 
-			output = CONSTANTBV::BitVector_Create(inputwidth, true);
+          output = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-			// Number of bits to shift it.
-			ASTNode shiftNode = BVConstEvaluator(t[1]);
+          // Number of bits to shift it.
+          ASTNode shiftNode = BVConstEvaluator(t[1]);
 
-			bool msb = CONSTANTBV::BitVector_msb_(tmp0);
+          bool msb = CONSTANTBV::BitVector_msb_(tmp0);
 
-			// If this shift is greater than the bitWidth, make it zero.
-			if (CONSTANTBV::BitVector_Lexicompare(width, shiftNode.GetBVConst()) < 0)
-			{
-				if (k == BVSRSHIFT && msb)
-					CONSTANTBV::Set_Complement(output, output);
-			}
-			else
-			{
-				// the shift is destructive, get a copy.
-				CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, inputwidth);
+          // If this shift is greater than the bitWidth, make it zero.
+          if (CONSTANTBV::BitVector_Lexicompare(width, shiftNode.GetBVConst()) < 0)
+            {
+              if (k == BVSRSHIFT && msb)
+                CONSTANTBV::Set_Complement(output, output);
+            }
+          else
+            {
+              // the shift is destructive, get a copy.
+              CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, inputwidth);
 
-				unsigned int shift = GetUnsignedConst(shiftNode);
+              unsigned int shift = GetUnsignedConst(shiftNode);
 
-				if (k == BVLEFTSHIFT)
-					CONSTANTBV::BitVector_Move_Left(output, shift);
-				else
-					CONSTANTBV::BitVector_Move_Right(output, shift);
+              if (k == BVLEFTSHIFT)
+                CONSTANTBV::BitVector_Move_Left(output, shift);
+              else
+                CONSTANTBV::BitVector_Move_Right(output, shift);
 
-				if (k == BVSRSHIFT && msb)
-				{
-					// signed shift, and the number was originally negative.
-					// Shift may be larger than the inputwidth.
-					for (unsigned int i = 0; i < min(shift, inputwidth); i++)
-					{
-						CONSTANTBV::BitVector_Bit_On(output, (inputwidth - 1 - i));
-					}
-					assert(CONSTANTBV::BitVector_Sign(output) == -1); //must be negative.
-				}
-			}
+              if (k == BVSRSHIFT && msb)
+                {
+                  // signed shift, and the number was originally negative.
+                  // Shift may be larger than the inputwidth.
+                  for (unsigned int i = 0; i < min(shift, inputwidth); i++)
+                    {
+                      CONSTANTBV::BitVector_Bit_On(output, (inputwidth - 1 - i));
+                    }
+                  assert(CONSTANTBV::BitVector_Sign(output) == -1); //must be negative.
+                }
+            }
 
-			OutputNode = _bm->CreateBVConst(output, outputwidth);
+          OutputNode = _bm->CreateBVConst(output, outputwidth);
 
-			CONSTANTBV::BitVector_Destroy(width);
-			break;
-		}
+          CONSTANTBV::BitVector_Destroy(width);
+          break;
+        }
 
 
       case BVAND:

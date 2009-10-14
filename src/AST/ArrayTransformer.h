@@ -169,9 +169,9 @@ namespace BEEV
     bool FoundIntroducedSymbolSet(const ASTNode& in)
     {
       if(Introduced_SymbolsSet.find(in) != Introduced_SymbolsSet.end())
-	{
-	  return true;
-	}
+        {
+          return true;
+        }
       return false;
     } // End of IntroduceSymbolSet
 
@@ -179,12 +179,12 @@ namespace BEEV
     {
 
       for (ASTNodeToVecMap::iterator
-	     iset = Arrayname_ReadindicesMap->begin(), 
-	     iset_end = Arrayname_ReadindicesMap->end(); 
-	   iset != iset_end; iset++)
-          {
-            iset->second.clear();
-          }
+             iset = Arrayname_ReadindicesMap->begin(), 
+             iset_end = Arrayname_ReadindicesMap->end(); 
+           iset != iset_end; iset++)
+        {
+          iset->second.clear();
+        }
 
       Arrayname_ReadindicesMap->clear();
       Arrayread_SymbolMap.clear();

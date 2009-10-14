@@ -22,8 +22,8 @@
 
 namespace MINISAT
 {
-	class Solver;
-	typedef int Var;
+  class Solver;
+  typedef int Var;
 }
 
 namespace BEEV

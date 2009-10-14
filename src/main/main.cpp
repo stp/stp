@@ -56,11 +56,11 @@ int main(int argc, char ** argv) {
   ParserBM          = bm;
   GlobalSTP         = 
     new STP(bm, 
-	    simp, 
-	    bvsolver, 
-	    arrayTransformer, 
-	    tosat, 
-	    Ctr_Example);
+            simp, 
+            bvsolver, 
+            arrayTransformer, 
+            tosat, 
+            Ctr_Example);
   
   //populate the help string
   helpstring += "STP version: " + version + "\n\n";
@@ -107,13 +107,13 @@ int main(int argc, char ** argv) {
               construct_counterexample_flag = true;
               check_counterexample_flag = true;
               break;
-	    case 'e':
-	      expand_finitefor_flag = true;
-	      break;
-	    case 'f':
-	      num_absrefine_flag = true;
-	      num_absrefine = atoi(argv[++i]);
-	      break;            
+            case 'e':
+              expand_finitefor_flag = true;
+              break;
+            case 'f':
+              num_absrefine_flag = true;
+              num_absrefine = atoi(argv[++i]);
+              break;            
             case 'h':
               fprintf(stderr,usage,prog);
               cout << helpstring;
@@ -139,8 +139,8 @@ int main(int argc, char ** argv) {
               stats_flag = true;
               break;
             case 't':
-            	quick_statistics_flag = true;
-            	break;
+              quick_statistics_flag = true;
+              break;
             case 'u':
               arraywrite_refinement_flag = false;
               break;
@@ -153,7 +153,7 @@ int main(int argc, char ** argv) {
             case 'x':
               xor_flatten_flag = true;
               break;
-	    case 'y':
+            case 'y':
               print_binary_flag = true;
               break;            
             case 'z':
@@ -166,27 +166,27 @@ int main(int argc, char ** argv) {
               return -1;
               break;
             }
-        } else {	  
-          infile = argv[i];
-          if (smtlib_parser_flag)
-            {
-              smtin = fopen(infile,"r");
-              if(smtin == NULL)
-                {
-                  fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-                  FatalError("");
-                }
-            }
-          else
-            {
-              cvcin = fopen(infile,"r");
-              if(cvcin == NULL)
-                {
-                  fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-                  FatalError("");
-                }
-            }
-        }
+        } else {          
+        infile = argv[i];
+        if (smtlib_parser_flag)
+          {
+            smtin = fopen(infile,"r");
+            if(smtin == NULL)
+              {
+                fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+                FatalError("");
+              }
+          }
+        else
+          {
+            cvcin = fopen(infile,"r");
+            if(cvcin == NULL)
+              {
+                fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+                FatalError("");
+              }
+          }
+      }
     }
 
   //want to print the output always from the commandline.
@@ -215,9 +215,9 @@ int main(int argc, char ** argv) {
     {
       if(smtlib_parser_flag)
         {
-    	  // don't pass the query. It's not returned by the smtlib
-    	  // parser.
-    	  printer::SMTLIB_PrintBack(cout, asserts);
+          // don't pass the query. It's not returned by the smtlib
+          // parser.
+          printer::SMTLIB_PrintBack(cout, asserts);
         }
       else
         {

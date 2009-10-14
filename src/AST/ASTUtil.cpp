@@ -41,12 +41,12 @@ namespace BEEV
           {
             cout << endl;
             for (function_counters::iterator 
-		   it = s.begin(), itend = s.end(); 
-		 it != itend; it++)
+                   it = s.begin(), itend = s.end(); 
+                 it != itend; it++)
               cout << "Number of times the function: " 
-		   << it->first 
-		   << ": is called: " 
-		   << it->second << endl;
+                   << it->first 
+                   << ": is called: " 
+                   << it->second << endl;
             return;
           }
         s[functionname] += 1;

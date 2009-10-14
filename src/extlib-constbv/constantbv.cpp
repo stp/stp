@@ -85,38 +85,38 @@ namespace CONSTANTBV {
   /* global macro definitions: */
   /*****************************/
 
-#define BIT_VECTOR_ZERO_WORDS(target,count) \
-    while (count-- > 0) *target++ = 0;
+#define BIT_VECTOR_ZERO_WORDS(target,count)     \
+  while (count-- > 0) *target++ = 0;
 
-#define BIT_VECTOR_FILL_WORDS(target,fill,count) \
-    while (count-- > 0) *target++ = fill;
+#define BIT_VECTOR_FILL_WORDS(target,fill,count)        \
+  while (count-- > 0) *target++ = fill;
 
-#define BIT_VECTOR_FLIP_WORDS(target,flip,count) \
-    while (count-- > 0) *target++ ^= flip;
+#define BIT_VECTOR_FLIP_WORDS(target,flip,count)        \
+  while (count-- > 0) *target++ ^= flip;
 
-#define BIT_VECTOR_COPY_WORDS(target,source,count) \
-    while (count-- > 0) *target++ = *source++;
+#define BIT_VECTOR_COPY_WORDS(target,source,count)      \
+  while (count-- > 0) *target++ = *source++;
 
-#define BIT_VECTOR_BACK_WORDS(target,source,count) \
-    { target += count; source += count; while (count-- > 0) *--target = *--source; }
+#define BIT_VECTOR_BACK_WORDS(target,source,count)                      \
+  { target += count; source += count; while (count-- > 0) *--target = *--source; }
 
-#define BIT_VECTOR_CLR_BIT(address,index) \
-    *(address+(index>>LOGBITS)) &= ~ BITMASKTAB[index & MODMASK];
+#define BIT_VECTOR_CLR_BIT(address,index)                       \
+  *(address+(index>>LOGBITS)) &= ~ BITMASKTAB[index & MODMASK];
 
-#define BIT_VECTOR_SET_BIT(address,index) \
-    *(address+(index>>LOGBITS)) |= BITMASKTAB[index & MODMASK];
+#define BIT_VECTOR_SET_BIT(address,index)                       \
+  *(address+(index>>LOGBITS)) |= BITMASKTAB[index & MODMASK];
 
-#define BIT_VECTOR_TST_BIT(address,index) \
-    ((*(address+(index>>LOGBITS)) & BITMASKTAB[index & MODMASK]) != 0)
+#define BIT_VECTOR_TST_BIT(address,index)                               \
+  ((*(address+(index>>LOGBITS)) & BITMASKTAB[index & MODMASK]) != 0)
 
-#define BIT_VECTOR_FLP_BIT(address,index,mask) \
-    (mask = BITMASKTAB[index & MODMASK]), \
+#define BIT_VECTOR_FLP_BIT(address,index,mask)          \
+  (mask = BITMASKTAB[index & MODMASK]),                 \
     (((*(addr+(index>>LOGBITS)) ^= mask) & mask) != 0)
 
-#define BIT_VECTOR_DIGITIZE(type,value,digit) \
-    value = (type) ((digit = value) / 10); \
-    digit -= value * 10; \
-    digit += (type) '0';
+#define BIT_VECTOR_DIGITIZE(type,value,digit)   \
+  value = (type) ((digit = value) / 10);        \
+  digit -= value * 10;                          \
+  digit += (type) '0';
 
   /*********************************************************/
   /* private low-level functions (potentially dangerous!): */
@@ -142,8 +142,8 @@ namespace CONSTANTBV {
                                    unsigned int *  source, unsigned int count) {
     if (target != source) {
       if (target < source) BIT_VECTOR_COPY_WORDS(target,source,count)
-                             else                 BIT_VECTOR_BACK_WORDS(target,source,count)
-                                                    }
+        else                 BIT_VECTOR_BACK_WORDS(target,source,count)
+                               }
   }
 
   static void BIT_VECTOR_ins_words(unsigned int *  addr, 
@@ -1537,7 +1537,7 @@ namespace CONSTANTBV {
                     break;
                   case (int) '1':
                     value |= BITMASKTAB[count];
-                    break;
+                  break;
                   default:
                     ok = false;
                     break;
@@ -1907,10 +1907,10 @@ namespace CONSTANTBV {
                     {
                     case (unsigned int) '0':
                       state = 2;
-                      break;
+                    break;
                     case (unsigned int) '\0':
                       state = 0;
-                      break;
+                    break;
                     default:
                       error = ErrCode_Pars;
                       break;
@@ -1921,16 +1921,16 @@ namespace CONSTANTBV {
                     {
                     case (unsigned int) '-':
                       start = index;
-                      state = 3;
-                      break;
+                    state = 3;
+                    break;
                     case (unsigned int) ',':
                       BIT_VECTOR_SET_BIT(addr,index)
-                        state = 5;
-                      break;
+                      state = 5;
+                    break;
                     case (unsigned int) '\0':
                       BIT_VECTOR_SET_BIT(addr,index)
-                        state = 0;
-                      break;
+                      state = 0;
+                    break;
                     default:
                       error = ErrCode_Pars;
                       break;
@@ -1944,9 +1944,9 @@ namespace CONSTANTBV {
                         BitVector_Interval_Fill(addr,start,index);
                       else if (start == index)
                         BIT_VECTOR_SET_BIT(addr,index)
-                          else error = ErrCode_Ordr;
-                      state = 4;
-                      break;
+                        else error = ErrCode_Ordr;
+                    state = 4;
+                    break;
                     default:
                       error = ErrCode_Pars;
                       break;
@@ -1957,10 +1957,10 @@ namespace CONSTANTBV {
                     {
                     case (unsigned int) ',':
                       state = 5;
-                      break;
+                    break;
                     case (unsigned int) '\0':
                       state = 0;
-                      break;
+                    break;
                     default:
                       error = ErrCode_Pars;
                       break;
@@ -1971,7 +1971,7 @@ namespace CONSTANTBV {
                     {
                     case (unsigned int) '0':
                       state = 2;
-                      break;
+                    break;
                     default:
                       error = ErrCode_Pars;
                       break;
@@ -2012,8 +2012,8 @@ namespace CONSTANTBV {
     if (index < bits_(addr))
       {
         if (bit) BIT_VECTOR_SET_BIT(addr,index)
-                   else     BIT_VECTOR_CLR_BIT(addr,index)
-                              }
+          else     BIT_VECTOR_CLR_BIT(addr,index)
+                     }
   }
 
   void BitVector_LSB(unsigned int *  addr, boolean bit)
@@ -3398,8 +3398,8 @@ namespace CONSTANTBV {
                          BIT_VECTOR_TST_BIT(Z,indxZ) ) sum ^= 1;
                   }
                 if (sum) BIT_VECTOR_SET_BIT(X,indxX)
-                           else     BIT_VECTOR_CLR_BIT(X,indxX)
-                                      }
+                  else     BIT_VECTOR_CLR_BIT(X,indxX)
+                             }
           }
       }
   }
@@ -3439,8 +3439,8 @@ namespace CONSTANTBV {
                          BIT_VECTOR_TST_BIT(Z,indxZ) ) sum |= 1;
                   }
                 if (sum) BIT_VECTOR_SET_BIT(X,indxX)
-                           else     BIT_VECTOR_CLR_BIT(X,indxX)
-                                      }
+                  else     BIT_VECTOR_CLR_BIT(X,indxX)
+                             }
           }
       }
   }

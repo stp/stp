@@ -15,37 +15,37 @@ namespace BEEV
 {
   //LET Management
   class LETMgr 
+  {
+  private:
+
+    // MAP: This map is from bound IDs that occur in LETs to
+    // expression. The map is useful in checking replacing the IDs
+    // with the corresponding expressions.
+    ASTNodeMap *_letid_expr_map;
+    ASTNode ASTUndefined;
+      
+  public:
+      
+    LETMgr(ASTNode undefined)
     {
-    private:
+      _letid_expr_map = new ASTNodeMap();
+      ASTUndefined = undefined;
+    }
 
-      // MAP: This map is from bound IDs that occur in LETs to
-      // expression. The map is useful in checking replacing the IDs
-      // with the corresponding expressions.
-      ASTNodeMap *_letid_expr_map;
-      ASTNode ASTUndefined;
+    ASTNode ResolveID(const ASTNode& var);
       
-    public:
+    //Functions that are used to manage LET expressions
+    void LetExprMgr(const ASTNode& var, const ASTNode& letExpr);
       
-      LETMgr(ASTNode undefined)
-      {
-	_letid_expr_map = new ASTNodeMap();
-	ASTUndefined = undefined;
-      }
-
-      ASTNode ResolveID(const ASTNode& var);
+    //Delete Letid Map
+    void CleanupLetIDMap(void);
       
-      //Functions that are used to manage LET expressions
-      void LetExprMgr(const ASTNode& var, const ASTNode& letExpr);
+    //Allocate LetID map
+    void InitializeLetIDMap(void);
       
-      //Delete Letid Map
-      void CleanupLetIDMap(void);
-      
-      //Allocate LetID map
-      void InitializeLetIDMap(void);
-      
-      //Substitute Let-vars with LetExprs
-      ASTNode SubstituteLetExpr(ASTNode inExpr);
-    };// End of class LETMgr
+    //Substitute Let-vars with LetExprs
+    ASTNode SubstituteLetExpr(ASTNode inExpr);
+  };// End of class LETMgr
 }; //end of namespace
 
 #endif

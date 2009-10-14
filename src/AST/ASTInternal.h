@@ -186,10 +186,10 @@ namespace BEEV
     void DecRef()
     {
       if (--_ref_count == 0)
-	{
-	  // Delete node from unique table and kill it.
-	  CleanUp();
-	}
+        {
+          // Delete node from unique table and kill it.
+          CleanUp();
+        }
     }//End of DecRef()
 
     int GetNodeNum() const
