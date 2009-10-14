@@ -40,7 +40,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	./a10.out
 11:
 	g++  $(CXXFLAGS)  squares-leak.c -lstp -o a11.out
-	./a11.out
+#	./a11.out
 12:
 	g++  $(CXXFLAGS)  stp-counterex.c -lstp -o a12.out
 	./a12.out

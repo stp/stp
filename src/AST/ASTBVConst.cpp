@@ -47,7 +47,7 @@ namespace BEEV
     unsigned char *res;
     const char *prefix;
     
-    if(print_binary_flag) {
+    if((GlobalSTP->bm)->UserFlags.print_binary_flag) {
       res = CONSTANTBV::BitVector_to_Bin(_bvconst);
       if (c_friendly)
         {

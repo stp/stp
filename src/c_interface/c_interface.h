@@ -15,6 +15,7 @@
  * EXPRESSED OR IMPLIED.  USE IT AT YOUR OWN RISK.
  ********************************************************************/
 // -*- c++ -*-
+
 #ifndef _cvcl__include__c_interface_h_
 #define _cvcl__include__c_interface_h_
 
@@ -41,7 +42,7 @@ extern "C" {
   // h  : help
   // s  : stats
   // v  : print nodes
-  void vc_setFlags(char c);
+  void vc_setFlags(VC vc, char c);
 
   //! Flags can be NULL
   VC vc_createValidityChecker(void);

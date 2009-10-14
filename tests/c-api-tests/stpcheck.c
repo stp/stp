@@ -7,8 +7,8 @@
 int main() {  
   	
   	VC vc = vc_createValidityChecker();
-	vc_setFlags('n');
-	vc_setFlags('d');
+	vc_setFlags(vc,'n');
+	vc_setFlags(vc,'d');
 		
 	// 8-bit variable 'x'
 	Expr x=vc_varExpr(vc,"x",vc_bvType(vc,8));

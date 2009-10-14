@@ -62,7 +62,7 @@ namespace BEEV
     if (it != itend)
       {
         output = it->second;
-        CountersAndStats("Successful_CheckSimplifyMap");
+        CountersAndStats("Successful_CheckSimplifyMap", _bm);
         return true;
       }
 
@@ -73,7 +73,7 @@ namespace BEEV
           ASTTrue : 
           (ASTTrue == it->second) ? 
           ASTFalse : _bm->CreateNode(NOT, it->second);
-        CountersAndStats("2nd_Successful_CheckSimplifyMap");
+        CountersAndStats("2nd_Successful_CheckSimplifyMap", _bm);
         return true;
       }
 
@@ -191,7 +191,7 @@ namespace BEEV
     if (it != itend)
       {
         //cerr << "found:" << *it << endl;
-        CountersAndStats("Successful_CheckAlwaysTrueFormMap");
+        CountersAndStats("Successful_CheckAlwaysTrueFormMap", _bm);
         return true;
       }
 
@@ -245,7 +245,7 @@ namespace BEEV
                                                bool pushNeg, ASTNodeMap* VarConstMap)
   {
     _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
-    if (smtlib_parser_flag)
+    if (_bm->UserFlags.smtlib_parser_flag)
       BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ResetSimplifyMaps();
@@ -638,7 +638,7 @@ namespace BEEV
   //takes care of some simple ITE Optimizations in the context of equations
   ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
   {
-    CountersAndStats("ITEOpts_InEqs");
+    CountersAndStats("ITEOpts_InEqs", _bm);
 
     if (!(EQ == in.GetKind()))
       {
@@ -732,7 +732,7 @@ namespace BEEV
   //return the constructed equality
   ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   {
-    CountersAndStats("CreateSimplifiedEQ");
+    CountersAndStats("CreateSimplifiedEQ", _bm);
     Kind k1 = in1.GetKind();
     Kind k2 = in2.GetKind();
 
@@ -762,8 +762,8 @@ namespace BEEV
     ASTNode t0 = in0;
     ASTNode t1 = in1;
     ASTNode t2 = in2;
-    CountersAndStats("CreateSimplifiedITE");
-    if (!optimize_flag)
+    CountersAndStats("CreateSimplifiedITE", _bm);
+    if (!_bm->UserFlags.optimize_flag)
       {
         if (t1.GetValueWidth() != t2.GetValueWidth())
           {
@@ -798,14 +798,17 @@ namespace BEEV
     return _bm->CreateTerm(ITE, t1.GetValueWidth(), t0, t1, t2);
   }
 
-  ASTNode Simplifier::CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1, const ASTNode& in2)
+  ASTNode 
+  Simplifier::
+  CreateSimplifiedFormulaITE(const ASTNode& in0,
+			     const ASTNode& in1, const ASTNode& in2)
   {
     ASTNode t0 = in0;
     ASTNode t1 = in1;
     ASTNode t2 = in2;
-    CountersAndStats("CreateSimplifiedFormulaITE");
+    CountersAndStats("CreateSimplifiedFormulaITE", _bm);
 
-    if (optimize_flag)
+    if (_bm->UserFlags.optimize_flag)
       {
         if (t0 == ASTTrue)
           return t1;

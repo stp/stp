@@ -574,13 +574,13 @@ namespace BEEV
   //prints statistics for the ASTNode
   void STPMgr::ASTNodeStats(const char * c, const ASTNode& a)
   {
-    if (!stats_flag)
+    if (!UserFlags.stats_flag)
       return;
 
     StatInfoSet.clear();
     //print node size:
     cout << endl << "Printing: " << c;
-    if (print_nodes_flag)
+    if (UserFlags.print_nodes_flag)
       {
         //a.PL_Print(cout,0);
         //cout << endl;
@@ -616,15 +616,10 @@ namespace BEEV
     return newn;
   }
 
-  STPMgr::~STPMgr()
-  {
-  }
-
-
   // GLOBAL FUNCTION: Prints statistics from the MINISAT Solver
   void STPMgr::PrintStats(MINISAT::Solver& s)
   {
-    if (!stats_flag)
+    if (!UserFlags.stats_flag)
       return;
     double cpu_time = MINISAT::cpuTime();
     uint64_t mem_used = MINISAT::memUsed();

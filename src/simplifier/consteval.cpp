@@ -246,23 +246,29 @@ namespace BEEV
           break;
         }
 
-        // SBVREM : Result of rounding the quotient towards zero. i.e. (-10)/3, has a remainder of -1
-        // SBVMOD : Result of rounding the quotient towards -infinity. i.e. (-10)/3, has a modulus of 2.
-        //          EXCEPT THAT if it divides exactly and the signs are different, then it's equal to the dividend.
+        // SBVREM : Result of rounding the quotient towards
+        // zero. i.e. (-10)/3, has a remainder of -1 
+	//
+	// SBVMOD : Result of rounding the quotient towards
+        // -infinity. i.e. (-10)/3, has a modulus of 2.  EXCEPT THAT
+        // if it divides exactly and the signs are different, then
+        // it's equal to the dividend.
       case SBVDIV:
       case SBVREM:
         {
           CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
           CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-          if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
+          if (_bm->UserFlags.division_by_zero_returns_one_flag 
+	      && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
               OutputNode = _bm->CreateOneConst(outputwidth);
             }
           else
             {
-              CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Divide(quotient, tmp0, tmp1, remainder);
+              CONSTANTBV::ErrCode e = 
+		CONSTANTBV::BitVector_Divide(quotient, tmp0, tmp1, remainder);
 
               if (e != 0)
                 {
@@ -310,7 +316,8 @@ namespace BEEV
           tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
           tmp1 = CONSTANTBV::BitVector_Clone(tmp1);
 
-          if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
+          if (_bm->UserFlags.division_by_zero_returns_one_flag
+	      && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
               OutputNode = _bm->CreateOneConst(outputwidth);
@@ -408,7 +415,8 @@ namespace BEEV
           CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
           CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-          if (division_by_zero_returns_one && CONSTANTBV::BitVector_is_empty(tmp1))
+          if (_bm->UserFlags.division_by_zero_returns_one_flag 
+	      && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
               OutputNode = _bm->CreateOneConst(outputwidth);

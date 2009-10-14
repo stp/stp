@@ -1,12 +1,13 @@
 #include "c_interface.h"
 #include <iostream>
 int main() {
-  vc_setFlags('w');
-  //vc_setFlags('v');
-  //vc_setFlags('s');
-  //vc_setFlags('a');  
-  vc_setFlags('n');
   VC vc = vc_createValidityChecker();
+  vc_setFlags(vc,'w');
+  //vc_setFlags(vc,'v');
+  //vc_setFlags(vc,'s');
+  //vc_setFlags(vc,'a');  
+  vc_setFlags(vc,'n');
+
   vc_push(vc);
   Expr e5283955 = vc_varExpr(vc, "at", vc_bvType(vc, 5));
   Expr e5283956 = e5283955;

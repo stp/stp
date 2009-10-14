@@ -32,7 +32,7 @@ namespace BEEV {
       {
         inputToSAT = simplified_solved_InputToSAT;
 
-        if(optimize_flag) 
+        if(bm->UserFlags.optimize_flag) 
           {
 
             bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
@@ -49,7 +49,7 @@ namespace BEEV {
             bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
           }
 
-        if(wordlevel_solve_flag)
+        if(bm->UserFlags.wordlevel_solve_flag)
           {
             simplified_solved_InputToSAT = 
               bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
@@ -70,7 +70,7 @@ namespace BEEV {
       {
         inputToSAT = simplified_solved_InputToSAT;
 
-        if(optimize_flag) 
+        if(bm->UserFlags.optimize_flag) 
           {
             bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
             simplified_solved_InputToSAT = 
@@ -83,7 +83,7 @@ namespace BEEV {
             bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
           }
         
-        if(wordlevel_solve_flag)
+        if(bm->UserFlags.wordlevel_solve_flag)
           {
             simplified_solved_InputToSAT = 
               bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
@@ -94,7 +94,8 @@ namespace BEEV {
     bm->ASTNodeStats("After SimplifyWrites_Inplace: ", 
                      simplified_solved_InputToSAT);
 
-    bm->start_abstracting = (arraywrite_refinement_flag) ? true : false;
+    bm->start_abstracting = 
+      (bm->UserFlags.arraywrite_refinement_flag) ? true : false;
     bm->SimplifyWrites_InPlace_Flag = false;
     bm->Begin_RemoveWrites = (bm->start_abstracting) ? false : true;
     if (bm->start_abstracting)
@@ -122,7 +123,7 @@ namespace BEEV {
     MINISAT::Solver newS;
     //MINISAT::SimpSolver newS;
     //MINISAT::UnsoundSimpSolver newS;
-    if (arrayread_refinement_flag)
+    if (bm->UserFlags.arrayread_refinement_flag)
       {
         bm->counterexample_checking_during_refinement = true;
       }
@@ -133,7 +134,7 @@ namespace BEEV {
                                        orig_input);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats");
+        CountersAndStats("print_func_stats", bm);
         return res;
       }
 
@@ -150,7 +151,7 @@ namespace BEEV {
                                                 orig_input);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats");
+        CountersAndStats("print_func_stats", bm);
         return res;
       }
 
@@ -158,7 +159,7 @@ namespace BEEV {
       Ctr_Example->SATBased_ArrayWriteRefinement(newS, orig_input);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats");
+        CountersAndStats("print_func_stats", bm);
         return res;
       }
 
@@ -168,7 +169,7 @@ namespace BEEV {
                                                 orig_input);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats");
+        CountersAndStats("print_func_stats", bm);
         return res;
       }
 

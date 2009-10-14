@@ -32,41 +32,58 @@ bool cinterface_exprdelete_on_flag = false;
  */
 extern int cvcparse(void*);
 
-void vc_setFlags(char c) {
+void vc_setFlags(VC vc, char c) {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+
   std::string helpstring = "Usage: stp [-option] [infile]\n\n";
-  helpstring += "STP version: " + BEEV::version + "\n\n";
-  helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
-  helpstring +=  "-c  : construct counterexample\n";
-  helpstring +=  "-d  : check counterexample\n";
-  helpstring +=  "-e  : expand finite-for construct\n";
-  helpstring +=  "-f  : number of abstraction-refinement loops\n";
-  helpstring +=  "-h  : help\n";
-  helpstring +=  "-m  : use the SMTLIB parser\n";
-  helpstring +=  "-p  : print counterexample\n";
-  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
-  helpstring +=  "-s  : print function statistics\n";
-  helpstring +=  "-v  : print nodes \n";
-  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
-  helpstring +=  "-x  : flatten nested XORs\n";
-  helpstring +=  "-y  : print counterexample in binary\n";
+  helpstring += 
+    "STP version: " + BEEV::version + "\n\n";
+  helpstring +=  
+    "-a  : switch optimizations off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-c  : construct counterexample\n";
+  helpstring +=  
+    "-d  : check counterexample\n";
+  helpstring +=  
+    "-e  : expand finite-for construct\n";
+  helpstring +=  
+    "-f  : number of abstraction-refinement loops\n";
+  helpstring +=  
+    "-h  : help\n";
+  helpstring +=  
+    "-m  : use the SMTLIB parser\n";
+  helpstring +=  
+    "-p  : print counterexample\n";
+  helpstring +=  
+    "-r  : switch refinement off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-s  : print function statistics\n";
+  helpstring +=  
+    "-v  : print nodes \n";
+  helpstring +=  
+    "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-x  : flatten nested XORs\n";
+  helpstring +=  
+    "-y  : print counterexample in binary\n";
 
   switch(c) {
   case 'a' :
-    BEEV::optimize_flag = false;
+    b->UserFlags.optimize_flag = false;
     break;
   case 'c':
-    BEEV::construct_counterexample_flag = true;
+    b->UserFlags.construct_counterexample_flag = true;
     break;
   case 'd':
-    BEEV::construct_counterexample_flag = true;
-    BEEV::check_counterexample_flag = true;
+    b->UserFlags.construct_counterexample_flag = true;
+    b->UserFlags.check_counterexample_flag = true;
     break;
   case 'e':
-    BEEV::expand_finitefor_flag = true;
+    b->UserFlags.expand_finitefor_flag = true;
     break;
   case 'f':
-    BEEV::num_absrefine_flag = true;
-    //BEEV::num_absrefine = atoi(argv[++i]);
+    b->UserFlags.num_absrefine_flag = true;
+    //b->UserFlags.num_absrefine = atoi(argv[++i]);
     break;
   case 'h':
     fprintf(stderr,BEEV::usage,BEEV::prog);
@@ -75,41 +92,41 @@ void vc_setFlags(char c) {
     //return -1;
     break;
   case 'n':
-    BEEV::print_output_flag = true;
+    b->UserFlags.print_output_flag = true;
     break;
   case 'm':
-    BEEV::smtlib_parser_flag=true;
-    BEEV::division_by_zero_returns_one = true;
+    b->UserFlags.smtlib_parser_flag=true;
+    b->UserFlags.division_by_zero_returns_one_flag = true;
     break;
   case 'p':
-    BEEV::print_counterexample_flag = true;
+    b->UserFlags.print_counterexample_flag = true;
     break;
   case 'q':
-    BEEV::print_arrayval_declaredorder_flag = true;
+    b->UserFlags.print_arrayval_declaredorder_flag = true;
     break;
   case 'r':
-    BEEV::arrayread_refinement_flag = false;
+    b->UserFlags.arrayread_refinement_flag = false;
     break;
   case 's' :
-    BEEV::stats_flag = true;
+    b->UserFlags.stats_flag = true;
     break;
   case 'u':
-    BEEV::arraywrite_refinement_flag = false;
+    b->UserFlags.arraywrite_refinement_flag = false;
     break;
   case 'v' :
-    BEEV::print_nodes_flag = true;
+    b->UserFlags.print_nodes_flag = true;
     break;
   case 'w':
-    BEEV::wordlevel_solve_flag = false;
+    b->UserFlags.wordlevel_solve_flag = false;
     break;
   case 'x':
-    BEEV::xor_flatten_flag = true;
+    b->UserFlags.xor_flatten_flag = true;
     break;
   case 'y':
-    BEEV::print_binary_flag = true;
+    b->UserFlags.print_binary_flag = true;
     break;
   case 'z':
-    BEEV::print_sat_varorder_flag = true;
+    b->UserFlags.print_sat_varorder_flag = true;
     break;
   default:
     std::string s = "C_interface: vc_setFlags: Unrecognized commandline flag:\n";
@@ -121,7 +138,6 @@ void vc_setFlags(char c) {
 
 //Create a validity Checker. This is the global STPMgr
 VC vc_createValidityChecker(void) {
-  vc_setFlags('d');
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
@@ -146,6 +162,7 @@ VC vc_createValidityChecker(void) {
   BEEV::GlobalSTP = stp;
   decls = new BEEV::ASTVec();
   //created_exprs.clear();
+  vc_setFlags(stp,'d');
   return (VC)stp;
 }
 
@@ -178,7 +195,8 @@ void vc_printExprCCode(VC vc, Expr e) {
   // print variable declarations
   BEEV::ASTVec declsFromParser = (nodelist)b->ListOfDeclaredVars;
 
-  for(BEEV::ASTVec::iterator it=declsFromParser.begin(),itend=declsFromParser.end(); it!=itend;it++) {
+  for(BEEV::ASTVec::iterator it=declsFromParser.begin(),
+	itend=declsFromParser.end(); it!=itend;it++) {
     if(BEEV::BITVECTOR_TYPE == it->GetType()) {
       const char* name = it->GetName();
       unsigned int bitWidth = it->GetValueWidth();
@@ -206,7 +224,8 @@ void vc_printExprFile(VC vc, Expr e, int fd) {
 }
 
 static void vc_printVarDeclsToStream(VC vc, ostream &os) {
-  for(BEEV::ASTVec::iterator i = decls->begin(),iend=decls->end();i!=iend;i++) {
+  for(BEEV::ASTVec::iterator i = decls->begin(),
+	iend=decls->end();i!=iend;i++) {
     node a = *i;
     switch(a.GetType()) {
     case BEEV::BITVECTOR_TYPE:
@@ -239,8 +258,12 @@ static void vc_printAssertsToStream(VC vc, ostream &os, int simplify_print) {
   BEEV::Simplifier * simp = new BEEV::Simplifier(b);
   for(BEEV::ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
     b->Begin_RemoveWrites = true;
-    BEEV::ASTNode q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i,false) : *i;
-    q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q,false) : q;
+    BEEV::ASTNode q = 
+      (simplify_print == 1) ? 
+      simp->SimplifyFormula_TopLevel(*i,false) : *i;
+    q = 
+      (simplify_print == 1) ? 
+      simp->SimplifyFormula_TopLevel(q,false) : q;
     b->Begin_RemoveWrites = false;
     os << "ASSERT( ";
     q.PL_Print(os);
@@ -252,7 +275,9 @@ void vc_printAsserts(VC vc, int simplify_print) {
   vc_printAssertsToStream(vc, cout, simplify_print);
 }
 
-void vc_printQueryStateToBuffer(VC vc, Expr e, char **buf, unsigned long *len, int simplify_print){
+void vc_printQueryStateToBuffer(VC vc, Expr e, 
+				char **buf, 
+				unsigned long *len, int simplify_print){
   assert(vc);
   assert(e);
   assert(buf);
@@ -298,7 +323,7 @@ void vc_printCounterExampleToBuffer(VC vc, char **buf, unsigned long *len) {
 
   // formate the state of the query
   std::ostringstream os;
-  BEEV::print_counterexample_flag = true;
+  b->UserFlags.print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true,os);
   os << "COUNTEREXAMPLE END: \n";
@@ -498,7 +523,7 @@ void vc_printCounterExample(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);
 
-  BEEV::print_counterexample_flag = true;
+  b->UserFlags.print_counterexample_flag = true;
   cout << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
@@ -1629,7 +1654,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   cvcparse((void*)AssertsQuery);
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
-  //b->TopLevelSTP(asserts, query);
+  //BEEV::GlobalSTP->TopLevelSTP(asserts, query);
 
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);
@@ -1782,7 +1807,7 @@ void vc_printCounterExampleFile(VC vc, int fd) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
 
-  BEEV::print_counterexample_flag = true;
+  b->UserFlags.print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true, os);
   os << "COUNTEREXAMPLE END: \n";

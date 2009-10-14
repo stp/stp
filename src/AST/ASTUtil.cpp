@@ -8,6 +8,7 @@
 // -*- c++ -*-
 
 #include "UsefulDefs.h"
+#include "../STPManager/STPManager.h"
 #include "../main/Globals.h"
 namespace BEEV
 {
@@ -30,11 +31,10 @@ namespace BEEV
   //this function accepts the name of a function (as a char *), and
   //records some stats about it. if the input is "print_func_stats",
   //the function will then print the stats that it has collected.
-  void CountersAndStats(const char * functionname)
+  void CountersAndStats(const char * functionname, STPMgr * bm)
   {
     static function_counters s;
-
-    if (stats_flag)
+    if (bm->UserFlags.stats_flag)
       {
 
         if (!strcmp(functionname, "print_func_stats"))

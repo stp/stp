@@ -10,6 +10,7 @@
 #ifndef STPMGR_H
 #define STPMGR_H
 
+#include "UserDefinedFlags.h"
 #include "../AST/AST.h"
 #include "../parser/let-funcs.h"
 
@@ -49,6 +50,12 @@ namespace BEEV
       ASTBVConst::ASTBVConstHasher, 
       ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
+    typedef HASHMAP<
+      ASTNode, 
+      ASTNodeSet,
+      ASTNode::ASTNodeHasher, 
+      ASTNode::ASTNodeEqual> ASTNodeToSetMap;
+
     // Unique node tables that enables common subexpression sharing
     ASTInteriorSet _interior_unique_table;
 
@@ -57,12 +64,6 @@ namespace BEEV
 
     // Table to uniquefy bvconst
     ASTBVConstSet _bvconst_unique_table;
-
-    typedef HASHMAP<
-      ASTNode, 
-      ASTNodeSet,
-      ASTNode::ASTNodeHasher, 
-      ASTNode::ASTNodeEqual> ASTNodeToSetMap;
 
     // Global for assigning new node numbers.
     int _max_node_num;
@@ -94,7 +95,7 @@ namespace BEEV
     // Ptr to class that reports on the running time of various parts
     // of the code
     RunTimes * runTimes;
-    
+
     /****************************************************************
      * Private Member Functions                                     *
      ****************************************************************/
@@ -125,8 +126,8 @@ namespace BEEV
     
     /****************************************************************
      * Public Flags                                                 *
-     * FIXME: Make the private. Get rid of this inelegance          *
-     ****************************************************************/
+     ****************************************************************/    
+    UserDefinedFlags UserFlags;
     
     // This flag, when true, indicates that counterexample is being
     // checked by the counterexample checker
@@ -158,9 +159,10 @@ namespace BEEV
 
     // Constructor
     STPMgr() : 
-      _symbol_unique_table(INITIAL_TABLE_SIZE),
-      _bvconst_unique_table(INITIAL_TABLE_SIZE),
-      _interior_unique_table(INITIAL_TABLE_SIZE),
+      _symbol_unique_table(),
+      _bvconst_unique_table(),
+      _interior_unique_table(),
+      UserFlags(),
       _symbol_count(0)
     {
       _max_node_num = 0;
@@ -179,9 +181,6 @@ namespace BEEV
       runTimes     = new RunTimes();
       _current_query = ASTUndefined;
     }    
-
-    //destructor
-    ~STPMgr();
 
     //Return ptr to let-variables manager (see parser/let-funcs.h)
     LETMgr * GetLetMgr(void)

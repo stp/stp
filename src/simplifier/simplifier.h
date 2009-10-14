@@ -68,8 +68,8 @@ namespace BEEV
       SimplifyMap    = new ASTNodeMap(INITIAL_TABLE_SIZE);
       SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
       SolverMap      = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      ReadOverWrite_NewName_Map = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      ReferenceCount = new ASTNodeCountMap(INITIAL_TABLE_SIZE);
+      ReadOverWrite_NewName_Map = new ASTNodeMap();
+      ReferenceCount = new ASTNodeCountMap();
 
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);

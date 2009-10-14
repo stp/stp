@@ -119,10 +119,6 @@ namespace BEEV {
                   hash<char *>,
                   eqstr> function_counters;
 #endif
-
-  // Function that computes various kinds of statistics for the phases
-  // of STP
-  void CountersAndStats(const char * functionname);
 }; //end of namespace
 
 #endif

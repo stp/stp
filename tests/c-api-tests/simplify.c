@@ -8,9 +8,9 @@
 
 int main() {
   VC vc = vc_createValidityChecker();
-  vc_setFlags('n');
-  vc_setFlags('d');
-  vc_setFlags('p');
+  vc_setFlags(vc,'n');
+  vc_setFlags(vc,'d');
+  vc_setFlags(vc,'p');
 
   Type bv8 = vc_bvType(vc, 8);
   Expr a =  vc_bvCreateMemoryArray(vc, "a");

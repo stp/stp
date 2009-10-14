@@ -31,7 +31,7 @@ namespace BEEV
 
     if (!newS.okay())
       return;
-    if (!construct_counterexample_flag)
+    if (!bm->UserFlags.construct_counterexample_flag)
       return;
 
     CopySolverMap_To_CounterExample();
@@ -632,12 +632,12 @@ namespace BEEV
 
   void AbsRefine_CounterExample::CheckCounterExample(bool t)
   {
-    // FIXME:  Code is more useful if enable flags are check OUTSIDE the method.
-    // If I want to check a counterexample somewhere, I don't want to have to set
-    // the flag in order to make it actualy happen!
-
+    // FIXME: Code is more useful if enable flags are check OUTSIDE
+    // the method.  If I want to check a counterexample somewhere, I
+    // don't want to have to set the flag in order to make it actualy
+    // happen!
     printf("checking counterexample\n");
-    if (!check_counterexample_flag)
+    if (!bm->UserFlags.check_counterexample_flag)
       {
         return;
       }
@@ -693,10 +693,10 @@ namespace BEEV
   // stdout
   void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   {
-    //global command-line option
-    // FIXME: This should always print the counterexample.  If you want
-    // to turn it off, check the switch at the point of call.
-    if (!print_counterexample_flag)
+    //global command-line option FIXME: This should always print the
+    // counterexample.  If you want to turn it off, check the switch
+    // at the point of call.
+    if (!bm->UserFlags.print_counterexample_flag)
       {
         return;
       }
@@ -709,7 +709,7 @@ namespace BEEV
 
     //if this option is true then print the way dawson wants using a
     //different printer. do not use this printer.
-    if (print_arrayval_declaredorder_flag)
+    if (bm->UserFlags.print_arrayval_declaredorder_flag)
       {
         return;
       }
@@ -785,7 +785,7 @@ namespace BEEV
     //want both counterexample printers to print at the sametime.
     // FIXME: This should always print the counterexample.  If you want
     // to turn it off, check the switch at the point of call.
-    if (print_counterexample_flag)
+    if (bm->UserFlags.print_counterexample_flag)
       return;
 
     //input is valid, no counterexample to print
@@ -794,7 +794,7 @@ namespace BEEV
 
     //print if the commandline option is '-q'. allows printing the
     //counterexample in order.
-    if (!print_arrayval_declaredorder_flag)
+    if (!bm->UserFlags.print_arrayval_declaredorder_flag)
       return;
 
     //t is true if SAT solver generated a counterexample, else it is
@@ -854,10 +854,11 @@ namespace BEEV
   {
     if (!newS.okay())
       FatalError("PrintSATModel: NO COUNTEREXAMPLE TO PRINT", ASTUndefined);
-    // FIXME: Don't put tests like this in the print functions.  The print functions
-    // should print unconditionally.  Put a conditional around the call if you don't
-    // want them to print
-    if (!(stats_flag && print_nodes_flag))
+    // FIXME: Don't put tests like this in the print functions.  The
+    // print functions should print unconditionally.  Put a
+    // conditional around the call if you don't want them to print
+    if (!(bm->UserFlags.stats_flag 
+	  && bm->UserFlags.print_nodes_flag))
       return;
 
     int num_vars = newS.nVars();
@@ -925,7 +926,8 @@ namespace BEEV
       {
         CounterExampleMap.clear();
         ConstructCounterExample(SatSolver);
-        if (stats_flag && print_nodes_flag)
+        if (bm->UserFlags.stats_flag 
+	    && bm->UserFlags.print_nodes_flag)
           {
             PrintSATModel(SatSolver);
           }
@@ -951,13 +953,14 @@ namespace BEEV
         // counterexample is bogus: flag it
         else
           {
-            if (stats_flag && print_nodes_flag)
+            if (bm->UserFlags.stats_flag 
+		&& bm->UserFlags.print_nodes_flag)
               {
                 cout << "Supposedly bogus one: \n";
-                bool tmp = print_counterexample_flag;
-                print_counterexample_flag = true;
+                bool tmp = bm->UserFlags.print_counterexample_flag;
+                bm->UserFlags.print_counterexample_flag = true;
                 PrintCounterExample(true);
-                print_counterexample_flag = tmp;
+                bm->UserFlags.print_counterexample_flag = tmp;
               }
 
             return SOLVER_UNDECIDED;

@@ -40,11 +40,12 @@ namespace BEEV
    * time or all the false axioms each time).
    *****************************************************************/
   SOLVER_RETURN_TYPE 
-  AbsRefine_CounterExample::SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
-                                                         const ASTNode& inputAlreadyInSAT, 
-                                                         const ASTNode& original_input) {
+  AbsRefine_CounterExample::
+  SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
+			       const ASTNode& inputAlreadyInSAT, 
+			       const ASTNode& original_input) {
     //printf("doing array read refinement\n");
-    if (!arrayread_refinement_flag)
+    if (!bm->UserFlags.arrayread_refinement_flag)
       FatalError("SATBased_ArrayReadRefinement: Control should not reach here");
     
     ASTVec FalseAxiomsVec, RemainingAxiomsVec;

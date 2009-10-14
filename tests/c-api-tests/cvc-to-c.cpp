@@ -14,9 +14,9 @@ using namespace std;
 int main(int argc, char** argv) {
   VC vc = vc_createValidityChecker();
 
-  //vc_setFlags('n');
-  //vc_setFlags('d');
-  //vc_setFlags('p');
+  //vc_setFlags(vc,'n');
+  //vc_setFlags(vc,'d');
+  //vc_setFlags(vc,'p');
 
   Expr c = vc_parseExpr(vc, argv[1]);
 

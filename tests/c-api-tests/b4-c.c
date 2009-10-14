@@ -2,13 +2,14 @@
 
 int main()
 {
-  vc_setFlags('v');
-  vc_setFlags('s');
-  vc_setFlags('n');
-  //vc_setFlags('a');
-  //vc_setFlags('w');
-  //vc_setFlags('r');
   VC vc = vc_createValidityChecker();
+  vc_setFlags(vc,'v');
+  vc_setFlags(vc,'s');
+  vc_setFlags(vc,'n');
+  //vc_setFlags(vc,'a');
+  //vc_setFlags(vc,'w');
+  //vc_setFlags(vc,'r');
+
   //vc_push(vc);
   Expr e12866 = vc_varExpr(vc, "at", vc_bvType(vc, 5));
   Expr e12867 = e12866;

@@ -427,7 +427,7 @@ namespace BEEV
                   result = TranslateSignedDivModRem(result);
                 }
 
-              if (division_by_zero_returns_one)
+              if (bm->UserFlags.division_by_zero_returns_one_flag)
                 {
                   // This is a difficult rule to introduce in other
                   // places because it's recursive. i.e.  result is
@@ -562,7 +562,7 @@ namespace BEEV
           Introduced_SymbolsSet.insert(CurrentSymbol);
           assert(BVTypeCheck(ite));
 
-          if (arrayread_refinement_flag)
+          if (bm->UserFlags.arrayread_refinement_flag)
             {
               // ite is really a variable here; it is an ite in the
               // else-branch
@@ -729,7 +729,7 @@ namespace BEEV
   //The big substitution function
   ASTNode ArrayTransformer::CreateSubstitutionMap(const ASTNode& a)
   {
-    if (!wordlevel_solve_flag)
+    if (!bm->UserFlags.wordlevel_solve_flag)
       return a;
 
     ASTNode output = a;

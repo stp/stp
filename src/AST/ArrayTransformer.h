@@ -116,14 +116,14 @@ namespace BEEV
     
     // Constructor
     ArrayTransformer(STPMgr * bm, Simplifier* s) : 
-      Arrayread_SymbolMap(INITIAL_TABLE_SIZE),
-      Introduced_SymbolsSet(INITIAL_TABLE_SIZE),
+      Arrayread_SymbolMap(),
+      Introduced_SymbolsSet(),
       bm(bm), 
       simp(s), 
       debug_transform(0)
     {
-      Arrayread_IteMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      Arrayname_ReadindicesMap = new ASTNodeToVecMap(INITIAL_TABLE_SIZE);
+      Arrayread_IteMap = new ASTNodeMap();
+      Arrayname_ReadindicesMap = new ASTNodeToVecMap();
 
       runTimes = bm->GetRunTimes();
       ASTTrue  = bm->CreateNode(TRUE);

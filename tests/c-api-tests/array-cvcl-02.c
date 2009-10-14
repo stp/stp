@@ -7,9 +7,9 @@ g++ -DEXT_HASH_MAP array-cvcl-02.c -I/home/vganesh/stp/c_interface -L/home/vgane
 #include "c_interface.h"
 int main() {  
   VC vc = vc_createValidityChecker();
-  vc_setFlags('n');
-  vc_setFlags('d');
-  vc_setFlags('p');
+  vc_setFlags(vc,'n');
+  vc_setFlags(vc,'d');
+  vc_setFlags(vc,'p');
 
   Expr cvcl_array = vc_varExpr1(vc, "a",32,32);
   Expr i = vc_varExpr1(vc, "i", 0, 8);   

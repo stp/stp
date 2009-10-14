@@ -2,9 +2,9 @@
 
 int main(int argc, char *argv[]) {
   VC vc = vc_createValidityChecker();
-  vc_setFlags('n');
-  vc_setFlags('d');
-  vc_setFlags('p'); 
+  vc_setFlags(vc,'n');
+  vc_setFlags(vc,'d');
+  vc_setFlags(vc,'p'); 
  
   Expr nresp1 = vc_varExpr(vc, "nresp1", vc_bv32Type(vc));
   Expr packet_get_int0 = vc_varExpr(vc, "packet_get_int0", vc_bv32Type(vc));

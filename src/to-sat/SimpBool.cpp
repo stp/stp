@@ -7,12 +7,11 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-// Simplifying create methods for Boolean operations.
-// These are only very simple local simplifications.
+// Simplifying create methods for Boolean operations.  These are only
+// very simple local simplifications.
 
-// This is somewhat redundant with Vijay's simplifier code.  They
-// need to be merged.
-// FIXME: control with optimize flag.
+// This is somewhat redundant with Vijay's simplifier code.  They need
+// to be merged.  FIXME: control with optimize flag.
 
 static bool _trace_simpbool = 0;
 static bool _disable_simpbool = 0;
@@ -21,8 +20,7 @@ static bool _disable_simpbool = 0;
 #include "../STPManager/STPManager.h"
 
 // SMTLIB experimental hack.  Try allocating a single stack here for
-// children to reduce growing of vectors.
-//BEEV::ASTVec child_stack;
+// children to reduce growing of vectors.  BEEV::ASTVec child_stack;
 
 namespace BEEV
 {
@@ -90,7 +88,8 @@ namespace BEEV
     //return CreateSimpForm(kind, child_stack);
   }
 
-  ASTNode STPMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, 
+				 const ASTNode& child0, const ASTNode& child1)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -102,7 +101,9 @@ namespace BEEV
     //return CreateSimpForm(kind, child_stack);
   }
 
-  ASTNode STPMgr::CreateSimpForm(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
+  ASTNode STPMgr::CreateSimpForm(Kind kind, 
+				 const ASTNode& child0, 
+				 const ASTNode& child1, const ASTNode& child2)
   {
     ASTVec children;
     //child_stack.clear();      // could just reset top pointer.
@@ -183,7 +184,8 @@ namespace BEEV
           {
             fflag = 1; // For selective debug printing (below).
             // append grandchildren to children
-            flat_children.insert(flat_children.end(), gchildren.begin(), gchildren.end());
+            flat_children.insert(flat_children.end(), 
+				 gchildren.begin(), gchildren.end());
           }
         else
           {
@@ -206,7 +208,8 @@ namespace BEEV
     return flat_children;
   }
 
-  ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, const ASTNode& form1, const ASTNode& form2)
+  ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, 
+				  const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;
     children.push_back(form1);
@@ -230,7 +233,7 @@ namespace BEEV
     ASTVec new_children;
 
     ASTVec flat_children;
-    if (xor_flatten_flag)
+    if (UserFlags.xor_flatten_flag)
       {
         flat_children = FlattenKind(k, children);
       }
@@ -250,7 +253,8 @@ namespace BEEV
 
     ASTVec::const_iterator it_end = flat_children.end();
     ASTVec::const_iterator next_it;
-    for (ASTVec::const_iterator it = flat_children.begin(); it != it_end; it = next_it)
+    for (ASTVec::const_iterator it = flat_children.begin(); 
+	 it != it_end; it = next_it)
       {
         next_it = it + 1;
         bool nextexists = (next_it < it_end);
@@ -273,7 +277,8 @@ namespace BEEV
             // drop it
             //  cout << "Dropping [" << it->GetNodeNum() << "]" << endl;
           }
-        else if (nextexists && (next_it->GetKind() == NOT) && ((*next_it)[0] == *it))
+        else if (nextexists && (next_it->GetKind() == NOT) 
+		 && ((*next_it)[0] == *it))
           {
             // form and negation -- return FALSE for AND, TRUE for OR.
             retval = annihilator;
@@ -331,7 +336,7 @@ namespace BEEV
     ASTVec flat_children; // empty vector
     ASTVec::const_iterator it_end = children.end();
 
-    if (xor_flatten_flag)
+    if (UserFlags.xor_flatten_flag)
       {
         flat_children = FlattenKind(XOR, children);
       }
@@ -373,7 +378,8 @@ namespace BEEV
             // so that it gets tossed, too.
             *next_it = ASTFalse;
           }
-        else if (nextexists && (next_it->GetKind() == NOT) && ((*next_it)[0] == *it))
+        else if (nextexists && (next_it->GetKind() == NOT) 
+		 && ((*next_it)[0] == *it))
           {
             // x XOR NOT x = TRUE.  Skip current, write "true" into next_it
             // so that it gets tossed, too.
@@ -440,14 +446,18 @@ namespace BEEV
   }
 
   // FIXME:  How do I know whether ITE is a formula or not?
-  ASTNode STPMgr::CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1, const ASTNode& child2)
+  ASTNode STPMgr::CreateSimpFormITE(const ASTNode& child0, 
+				    const ASTNode& child1, 
+				    const ASTNode& child2)
   {
 
     ASTNode retval;
 
     if (_trace_simpbool)
       {
-        cout << "========" << endl << "CreateSimpFormITE " << child0 << child1 << child2 << endl;
+        cout << "========" << endl 
+	     << "CreateSimpFormITE " 
+	     << child0 << child1 << child2 << endl;
       }
 
     if (ASTTrue == child0)

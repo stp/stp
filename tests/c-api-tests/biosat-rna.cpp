@@ -177,13 +177,13 @@ int main(int argc, char** argv) {
   E_table[35] = 3;
 
 
-  vc_setFlags('n');
-  vc_setFlags('d');
-  vc_setFlags('p');
-  vc_setFlags('r');
-  vc_setFlags('a');
-  vc_setFlags('w');
-  vc_setFlags('y');
+  vc_setFlags(vc,'n');
+  vc_setFlags(vc,'d');
+  vc_setFlags(vc,'p');
+  vc_setFlags(vc,'r');
+  vc_setFlags(vc,'a');
+  vc_setFlags(vc,'w');
+  vc_setFlags(vc,'y');
     
   //Parameteric Boolean X
   Expr X = vc_varExpr1(vc, "X", 0, 0);

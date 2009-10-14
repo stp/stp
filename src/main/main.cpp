@@ -95,24 +95,24 @@ int main(int argc, char ** argv) {
           switch(argv[i][1])
             {
             case 'a' :
-              optimize_flag = false;
+	      bm->UserFlags.optimize_flag = false;
               break;
             case 'b':
-              print_STPinput_back_flag = true;
+              bm->UserFlags.print_STPinput_back_flag = true;
               break;
             case 'c':
-              construct_counterexample_flag = true;
+              bm->UserFlags.construct_counterexample_flag = true;
               break;
             case 'd':
-              construct_counterexample_flag = true;
-              check_counterexample_flag = true;
+              bm->UserFlags.construct_counterexample_flag = true;
+              bm->UserFlags.check_counterexample_flag = true;
               break;
             case 'e':
-              expand_finitefor_flag = true;
+              bm->UserFlags.expand_finitefor_flag = true;
               break;
             case 'f':
-              num_absrefine_flag = true;
-              num_absrefine = atoi(argv[++i]);
+              bm->UserFlags.num_absrefine_flag = true;
+              bm->UserFlags.num_absrefine = atoi(argv[++i]);
               break;            
             case 'h':
               fprintf(stderr,usage,prog);
@@ -120,44 +120,44 @@ int main(int argc, char ** argv) {
               return -1;
               break;
             case 'n':
-              print_output_flag = true;
+              bm->UserFlags.print_output_flag = true;
               break;
             case 'm':
-              smtlib_parser_flag=true;
-              division_by_zero_returns_one = true;
+              bm->UserFlags.smtlib_parser_flag=true;
+              bm->UserFlags.division_by_zero_returns_one_flag = true;
               break;
             case 'p':
-              print_counterexample_flag = true;
+              bm->UserFlags.print_counterexample_flag = true;
               break;
             case 'q':
-              print_arrayval_declaredorder_flag = true;
+              bm->UserFlags.print_arrayval_declaredorder_flag = true;
               break;
             case 'r':
-              arrayread_refinement_flag = false;
+              bm->UserFlags.arrayread_refinement_flag = false;
               break;
             case 's' :
-              stats_flag = true;
+              bm->UserFlags.stats_flag = true;
               break;
             case 't':
-              quick_statistics_flag = true;
+              bm->UserFlags.quick_statistics_flag = true;
               break;
             case 'u':
-              arraywrite_refinement_flag = false;
+              bm->UserFlags.arraywrite_refinement_flag = false;
               break;
             case 'v' :
-              print_nodes_flag = true;
+              bm->UserFlags.print_nodes_flag = true;
               break;
             case 'w':
-              wordlevel_solve_flag = false;
+              bm->UserFlags.wordlevel_solve_flag = false;
               break;
             case 'x':
-              xor_flatten_flag = true;
+              bm->UserFlags.xor_flatten_flag = true;
               break;
             case 'y':
-              print_binary_flag = true;
+              bm->UserFlags.print_binary_flag = true;
               break;            
             case 'z':
-              print_sat_varorder_flag = true;
+              bm->UserFlags.print_sat_varorder_flag = true;
               break;
             default:
               fprintf(stderr,usage,prog);
@@ -168,7 +168,7 @@ int main(int argc, char ** argv) {
             }
         } else {          
         infile = argv[i];
-        if (smtlib_parser_flag)
+        if (bm->UserFlags.smtlib_parser_flag)
           {
             smtin = fopen(infile,"r");
             if(smtin == NULL)
@@ -190,7 +190,7 @@ int main(int argc, char ** argv) {
     }
 
   //want to print the output always from the commandline.
-  print_output_flag = true;
+  bm->UserFlags.print_output_flag = true;
   ASTVec * AssertsQuery = new ASTVec;
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
@@ -199,7 +199,7 @@ int main(int argc, char ** argv) {
   }
   
   bm->GetRunTimes()->start(RunTimes::Parsing);
-  if (smtlib_parser_flag)
+  if (bm->UserFlags.smtlib_parser_flag)
     {
       smtparse((void*)AssertsQuery);
     }
@@ -211,9 +211,9 @@ int main(int argc, char ** argv) {
 
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
-  if(print_STPinput_back_flag)
+  if(bm->UserFlags.print_STPinput_back_flag)
     {
-      if(smtlib_parser_flag)
+      if(bm->UserFlags.smtlib_parser_flag)
         {
           // don't pass the query. It's not returned by the smtlib
           // parser.
@@ -227,7 +227,7 @@ int main(int argc, char ** argv) {
     } //end of PrintBack if
 
   SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
-  if (quick_statistics_flag) 
+  if (bm->UserFlags.quick_statistics_flag) 
     {
       bm->GetRunTimes()->print();
     }

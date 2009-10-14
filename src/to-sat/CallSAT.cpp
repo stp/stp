@@ -25,7 +25,7 @@ namespace BEEV
 
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);
-    if (stats_flag)
+    if (bm->UserFlags.stats_flag)
       {
         cerr << "Number of clauses:" << cl->size() << endl;
       }
@@ -48,19 +48,21 @@ namespace BEEV
   {
     bool true_iff_valid = (SOLVER_VALID == ret);
 
-    if (print_output_flag)
+    if (bm->UserFlags.print_output_flag)
       {
-        if (smtlib_parser_flag)
+        if (bm->UserFlags.smtlib_parser_flag)
           {
             if (true_iff_valid && 
                 (input_status == TO_BE_SATISFIABLE))
               {
-                cerr << "Warning. Expected satisfiable, FOUND unsatisfiable" << endl;
+                cerr << "Warning. Expected satisfiable,"\
+		  " FOUND unsatisfiable" << endl;
               }
             else if (!true_iff_valid && 
                      (input_status == TO_BE_UNSATISFIABLE))
               {
-                cerr << "Warning. Expected unsatisfiable, FOUND satisfiable" << endl;
+                cerr << "Warning. Expected unsatisfiable,"\
+		  " FOUND satisfiable" << endl;
               }
           }
       }
@@ -68,9 +70,9 @@ namespace BEEV
     if (true_iff_valid)
       {
         bm->ValidFlag = true;
-        if (print_output_flag)
+        if (bm->UserFlags.print_output_flag)
           {
-            if (smtlib_parser_flag)
+            if (bm->UserFlags.smtlib_parser_flag)
               cout << "unsat\n";
             else
               cout << "Valid.\n";
@@ -79,9 +81,9 @@ namespace BEEV
     else
       {
         bm->ValidFlag = false;
-        if (print_output_flag)
+        if (bm->UserFlags.print_output_flag)
           {
-            if (smtlib_parser_flag)
+            if (bm->UserFlags.smtlib_parser_flag)
               cout << "sat\n";
             else
               cout << "Invalid.\n";

@@ -175,7 +175,7 @@ cmd             :      other_cmd
 
 counterexample  :      COUNTEREXAMPLE_TOK ';'
                        {
-			 print_counterexample_flag = true;			 
+			 ParserBM->UserFlags.print_counterexample_flag = true;
 			 (GlobalSTP->Ctr_Example)->PrintCounterExample(true);
 		       }                              
                 ;

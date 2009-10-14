@@ -38,18 +38,14 @@ namespace BEEV
   }
 
   /* FUNCTION: convert ASTClauses to MINISAT clauses and solve.
-   * Accepts ASTClauses and converts them to MINISAT clauses. Then adds
-   * the newly minted MINISAT clauses to the local SAT instance, and
-   * calls solve(). If solve returns unsat, then stop and return
+   * Accepts ASTClauses and converts them to MINISAT clauses. Then
+   * adds the newly minted MINISAT clauses to the local SAT instance,
+   * and calls solve(). If solve returns unsat, then stop and return
    * unsat. else continue.
    */
-  // FIXME: Still need to deal with TRUE/FALSE in clauses!  
-  //
-  //bool ToSAT::toSATandSolve(MINISAT::Solver& newS,
-  //ClauseList& cll, ASTNodeToIntMap& heuristic)
   bool ToSAT::toSATandSolve(MINISAT::Solver& newS, ClauseList& cll)
   {
-    CountersAndStats("SAT Solver");
+    CountersAndStats("SAT Solver", bm);
 
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
