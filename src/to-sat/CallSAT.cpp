@@ -25,11 +25,6 @@ namespace BEEV
 
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);
-    if (bm->UserFlags.stats_flag)
-      {
-        cerr << "Number of clauses:" << cl->size() << endl;
-      }
-    //PrintClauseList(cout, *cl);
     bool sat = toSATandSolve(SatSolver, *cl);
     cm->DELETE(cl);
     delete cm;

@@ -268,7 +268,9 @@ namespace BEEV
 
     ClauseList* convertToCNF(const ASTNode& varphi);    
 
-    void DELETE(ClauseList* varphi);    
+    void DELETE(ClauseList* varphi);
+
+    void PrintClauseList(ostream& os, ClauseList& cll);
   }; // end of CNFMgr class
 };//end of namespace
 #endif

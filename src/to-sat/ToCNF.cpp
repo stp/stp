@@ -1688,6 +1688,12 @@ namespace BEEV
 
     cleanup(varphi);
     bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+    if (bm->UserFlags.stats_flag)
+      {
+        cerr << "Number of clauses:" << defs->size() << endl;
+	PrintClauseList(cout, *defs);
+      }
+
     return defs;
   }//End of convertToCNF()
 
@@ -1701,4 +1707,17 @@ namespace BEEV
 
     delete varphi;
   } //End of DELETE()
+
+
+  void CNFMgr::PrintClauseList(ostream& os, ClauseList& cll)
+  {
+    int num_clauses = cll.size();
+    os << "Clauses: " << endl << "=========================================" << endl;
+    for (int i = 0; i < num_clauses; i++)
+      {
+	os << "Clause " << i << endl << "-------------------------------------------" << endl;
+	LispPrintVecSpecial(os, *cll[i], 0);
+	os << endl << "-------------------------------------------" << endl;
+      }
+  } //end of PrintClauseList()  
 } // end namespace BEEV
