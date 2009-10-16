@@ -203,12 +203,12 @@ namespace BEEV
           result = SymbolTruthValue(newS, form);
 
           cout << "================" 
-	       << endl 
-	       << "Checking BB formula:" 
-	       << form << endl;
+               << endl 
+               << "Checking BB formula:" 
+               << form << endl;
           cout << "----------------" 
-	       << endl 
-	       << "Result:" << result << endl;
+               << endl 
+               << "Result:" << result << endl;
 
           break;
         }
@@ -225,11 +225,11 @@ namespace BEEV
           result = bm->CreateSimpForm(k, eval_children);
 
           cout << "================" 
-	       << endl 
-	       << "Checking BB formula:" << form << endl;
+               << endl 
+               << "Checking BB formula:" << form << endl;
           cout << "----------------" 
-	       << endl 
-	       << "Result:" << result << endl;
+               << endl 
+               << "Result:" << result << endl;
 
           ASTNode replit_eval;
           // Compare with replit, if there is one.
@@ -246,21 +246,21 @@ namespace BEEV
                 {
                   // It's (NOT sym).  Get value of sym and complement.
                   replit_eval = 
-		    bm->CreateSimpNot(SymbolTruthValue(newS, replit[0]));
+                    bm->CreateSimpNot(SymbolTruthValue(newS, replit[0]));
                 }
 
               cout << "----------------" 
-		   << endl 
-		   << "Rep lit: " << replit << endl;
+                   << endl 
+                   << "Rep lit: " << replit << endl;
               cout << "----------------" 
-		   << endl 
-		   << "Rep lit value: " << replit_eval << endl;
+                   << endl 
+                   << "Rep lit value: " << replit_eval << endl;
 
               if (result != replit_eval)
                 {
                   // Hit the panic button.
                   FatalError("Truth value of BitBlasted formula "\
-			     "disagrees with representative literal in CNF.");
+                             "disagrees with representative literal in CNF.");
                 }
             }
           else

@@ -136,7 +136,7 @@ namespace BEEV
     void NOCOPY_INPLACE_UNION(ClauseList* varphi1, ClauseList* varphi2);   
 
     ClauseList* PRODUCT(const ClauseList& varphi1, 
-			const ClauseList& varphi2);    
+                        const ClauseList& varphi2);    
 
     //########################################
     //########################################
@@ -179,7 +179,7 @@ namespace BEEV
     void convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs);  
     void convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs);   
     void convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, 
-					ClauseList* defs);    
+                                        ClauseList* defs);    
     void convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs);    
     void convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs);    
@@ -190,13 +190,13 @@ namespace BEEV
     void convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs);    
     void convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs);    
     ClauseList* convertFormulaToCNFPosXORAux(const ASTNode& varphi, 
-					     unsigned int idx, 
-					     ClauseList* defs);    
+                                             unsigned int idx, 
+                                             ClauseList* defs);    
     void convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegFALSE(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs);   
     void convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi,
-					ClauseList* defs);    
+                                        ClauseList* defs);    
     void convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs);    
     void convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs);    
@@ -207,8 +207,8 @@ namespace BEEV
     void convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs);    
     void convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs);    
     ClauseList* convertFormulaToCNFNegXORAux(const ASTNode& varphi, 
-					     unsigned int idx, 
-					     ClauseList* defs);    
+                                             unsigned int idx, 
+                                             ClauseList* defs);    
 
     //########################################
     //########################################
