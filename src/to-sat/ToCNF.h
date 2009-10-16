@@ -135,7 +135,8 @@ namespace BEEV
 
     void NOCOPY_INPLACE_UNION(ClauseList* varphi1, ClauseList* varphi2);   
 
-    ClauseList* PRODUCT(const ClauseList& varphi1, const ClauseList& varphi2);    
+    ClauseList* PRODUCT(const ClauseList& varphi1, 
+			const ClauseList& varphi2);    
 
     //########################################
     //########################################
@@ -167,77 +168,53 @@ namespace BEEV
     //########################################
     //main switch for individual cnf conversion cases
 
-    void convertFormulaToCNFPosCases(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFPosCases(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegCases(const ASTNode& varphi, ClauseList* defs);
 
     //########################################
     //########################################
     // individual cnf conversion cases
 
-    void convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs);
+    void convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs);  
+    void convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs);   
+    void convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, 
+					ClauseList* defs);    
+    void convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs);   
     void convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs);   
-
-    void convertFormulaToCNFPosIMPLIES(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFPosIMPLIES(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs);    
-
-    ClauseList* convertFormulaToCNFPosXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs);    
-
-    void convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs);    
-
+    ClauseList* convertFormulaToCNFPosXORAux(const ASTNode& varphi, 
+					     unsigned int idx, 
+					     ClauseList* defs);    
+    void convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegFALSE(const ASTNode& varphi, ClauseList* defs);
-    
-
-    void convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs);   
+    void convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi,
+					ClauseList* defs);    
+    void convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs);    
-
-    void convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs);    
-
+    void convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFNegIMPLIES(const ASTNode& varphi, ClauseList* defs);
-
     void convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs);    
-
     void convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs);    
-
-    ClauseList* convertFormulaToCNFNegXORAux(const ASTNode& varphi, unsigned int idx, ClauseList* defs);    
+    ClauseList* convertFormulaToCNFNegXORAux(const ASTNode& varphi, 
+					     unsigned int idx, 
+					     ClauseList* defs);    
 
     //########################################
     //########################################
     // utilities for reclaiming memory.
 
     void reduceMemoryFootprintPos(const ASTNode& varphi);    
-
     void reduceMemoryFootprintNeg(const ASTNode& varphi);    
 
     //########################################

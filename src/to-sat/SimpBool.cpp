@@ -152,9 +152,9 @@ namespace BEEV
   }
 
   // I don't think this is even called, since it called
-  // CreateSimpAndOr instead of CreateSimpXor until 1/9/07 with no
-  // ill effects.  Calls seem to go to the version that takes a vector
-  // of children.
+  // CreateSimpAndOr instead of CreateSimpXor until 1/9/07 with no ill
+  // effects.  Calls seem to go to the version that takes a vector of
+  // children.
   ASTNode STPMgr::CreateSimpXor(const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;
