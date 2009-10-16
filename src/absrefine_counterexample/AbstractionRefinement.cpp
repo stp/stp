@@ -46,8 +46,10 @@ namespace BEEV
                                const ASTNode& original_input) {
     //printf("doing array read refinement\n");
     if (!bm->UserFlags.arrayread_refinement_flag)
-      FatalError("SATBased_ArrayReadRefinement: Control should not reach here");
-    
+      {
+	FatalError("SATBased_ArrayReadRefinement: "\
+		   "Control should not reach here");
+      }
     ASTVec FalseAxiomsVec, RemainingAxiomsVec;
     RemainingAxiomsVec.push_back(ASTTrue);
     FalseAxiomsVec.push_back(ASTTrue);
@@ -88,7 +90,8 @@ namespace BEEV
             ASTNode arrsym1 = ArrayTransform->ArrayRead_SymbolMap(arr_read1);
             if (!(SYMBOL == arrsym1.GetKind() || BVCONST == arrsym1.GetKind()))
               FatalError("TopLevelSAT: refinementloop:"
-                         "term arrsym1 corresponding to READ must be a var", arrsym1);
+                         "term arrsym1 corresponding to READ must be a var", 
+			 arrsym1);
 
             //we have nonconst index here. create Leibnitz axiom for it
             //w.r.t every index in listOfIndices
@@ -108,23 +111,36 @@ namespace BEEV
                   simp->CreateSimplifiedEQ(compare_index, the_index);
 
                 ASTNode arr_read2 = 
-                  bm->CreateTerm(READ, ArrName.GetValueWidth(), ArrName, compare_index);
+                  bm->CreateTerm(READ, ArrName.GetValueWidth(),
+				 ArrName, compare_index);
                 //get the variable corresponding to the array_read2
                 //ASTNode arrsym2 = _arrayread_symbol[arr_read2];
-                ASTNode arrsym2 = ArrayTransform->ArrayRead_SymbolMap(arr_read2);
-                if (!(SYMBOL == arrsym2.GetKind() || BVCONST == arrsym2.GetKind()))
-                  FatalError("TopLevelSAT: refinement loop:"
-                             "term arrsym2 corresponding to READ must be a var", arrsym2);
+                ASTNode arrsym2 = 
+		  ArrayTransform->ArrayRead_SymbolMap(arr_read2);
+                if (!(SYMBOL == arrsym2.GetKind() 
+		      || BVCONST == arrsym2.GetKind()))
+		  {
+		    FatalError("TopLevelSAT: refinement loop:"
+			       "term arrsym2 corresponding to "\
+			       "READ must be a var", arrsym2);
+		  }
 
                 ASTNode eqOfReads = simp->CreateSimplifiedEQ(arrsym1, arrsym2);
                 //construct appropriate Leibnitz axiom
-                ASTNode LeibnitzAxiom = bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
+                ASTNode LeibnitzAxiom = 
+		  bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
                 if (ASTFalse == ComputeFormulaUsingModel(LeibnitzAxiom))
-                  //FalseAxioms = bm->CreateNode(AND,FalseAxioms,LeibnitzAxiom);
-                  FalseAxiomsVec.push_back(LeibnitzAxiom);
+		  {
+		    //FalseAxioms =
+		    //bm->CreateNode(AND,FalseAxioms,LeibnitzAxiom);
+		    FalseAxiomsVec.push_back(LeibnitzAxiom);
+		  }
                 else
-                  //RemainingAxioms = bm->CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
-                  RemainingAxiomsVec.push_back(LeibnitzAxiom);
+		  {
+		    //RemainingAxioms =
+		    //bm->CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
+		    RemainingAxiomsVec.push_back(LeibnitzAxiom);
+		  }
               }
             ASTNode FalseAxioms = 
               (FalseAxiomsVec.size() > 1) ? 
@@ -228,8 +244,9 @@ namespace BEEV
   } //end of SATBased_ArrayWriteRefinement
   
   //bm->Creates Array Write Axioms
-  ASTNode AbsRefine_CounterExample::Create_ArrayWriteAxioms(const ASTNode& term, 
-                                                            const ASTNode& newvar)
+  ASTNode 
+  AbsRefine_CounterExample::Create_ArrayWriteAxioms(const ASTNode& term, 
+						    const ASTNode& newvar)
   {
     if (READ != term.GetKind() && WRITE != term[0].GetKind())
       {
@@ -278,11 +295,14 @@ namespace BEEV
   //    * loop.  
   //    *****************************************************************/
   //   SOLVER_RETURN_TYPE 
-  //   AbsRefine_CounterExample::SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
+  //   AbsRefine_CounterExample::
+  //   SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
   //                                          const ASTNode& original_input)
   //   {
-  //     //cout << "The number of abs-refinement limit is " << num_absrefine << endl;
-  //     for(int absrefine_count=0;absrefine_count < num_absrefine; absrefine_count++) 
+  //     cout << "The number of abs-refinement limit is " 
+  //          << num_absrefine << endl;
+  //     for(int absrefine_count=0;
+  //         absrefine_count < num_absrefine; absrefine_count++) 
   //       {
   //    ASTVec Allretvec0;
   //    Allretvec0.push_back(ASTTrue);
@@ -298,7 +318,8 @@ namespace BEEV
   //                                                 &ParamToCurrentValMap,
   //                                                 true); //absrefine flag
 
-  //        for(ASTVec::iterator j=retvec.begin(),jend=retvec.end();j!=jend;j++) 
+  //        for(ASTVec::iterator j=retvec.begin(),jend=retvec.end();
+  //            j!=jend;j++) 
   //          {
   //            Allretvec0.push_back(*j);
   //          }
@@ -325,7 +346,8 @@ namespace BEEV
   //     for(ASTVec::iterator i = GlobalList_Of_FiniteLoops.begin(),
   //      iend=GlobalList_Of_FiniteLoops.end(); i!=iend; i++)
   //     {
-  //       //cout << "The abs-refine didn't finish the job. Add the remaining formulas\n";
+  //       //cout << "The abs-refine didn't finish the job. "\
+  //                 "Add the remaining formulas\n";
   //       ASTNodeMap ParamToCurrentValMap;
   //       ASTVec retvec;
   //       retvec =  SATBased_FiniteLoop_Refinement(SatSolver,
@@ -371,7 +393,8 @@ namespace BEEV
   //   //Expand the finite loop, check against model, and add false
   //   //formulas to the SAT solver
   //   ASTVec
-  //   AbsRefine_CounterExample::SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+  //   AbsRefine_CounterExample::
+  //   SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
   //                                      const ASTNode& original_input,
   //                                      const ASTNode& finiteloop,
   //                                      ASTNodeMap* ParamToCurrentValMap,
@@ -417,7 +440,7 @@ namespace BEEV
 
   //             //Update ParamToCurrentValMap with parameter and its
   //             //current value.
-  //             paramCurrentValue = paramCurrentValue + paramIncrement;            
+  //             paramCurrentValue = paramCurrentValue + paramIncrement;
   //        value = bm->CreateTerm(BVPLUS, 
   //                           width, 
   //                           (*ParamToCurrentValMap)[parameter],
@@ -487,7 +510,8 @@ namespace BEEV
   //   //SATBased_FiniteLoop_Refinement_UsingModel().  Expand the finite
   //   //loop, check against model
   //   ASTNode 
-  //   AbsRefine_CounterExample::Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
+  //   AbsRefine_CounterExample::
+  //   Check_FiniteLoop_UsingModel(const ASTNode& finiteloop,
   //                                   ASTNodeMap* ParamToCurrentValMap,
   //                                   bool checkusingmodel_flag = true)
   //   {
@@ -633,7 +657,8 @@ namespace BEEV
 
   //   //Expand_FiniteLoop_For_ModelCheck
   //   ASTNode 
-  //   AbsRefine_CounterExample::Expand_FiniteLoop_TopLevel(const ASTNode& finiteloop) 
+  //   AbsRefine_CounterExample::
+  //   Expand_FiniteLoop_TopLevel(const ASTNode& finiteloop) 
   //   {
   //     ASTNodeMap ParamToCurrentValMap;
   //     return Check_FiniteLoop_UsingModel(finiteloop, 
@@ -641,7 +666,8 @@ namespace BEEV
   //   } //end of Expand_FiniteLoop_TopLevel()  
 
   //   ASTNode
-  //   AbsRefine_CounterExample::Check_FiniteLoop_UsingModel(const ASTNode& finiteloop)
+  //   AbsRefine_CounterExample::
+  //   Check_FiniteLoop_UsingModel(const ASTNode& finiteloop)
   //   {
   //     ASTNodeMap ParamToCurrentValMap;
   //     return Check_FiniteLoop_UsingModel(finiteloop, 
