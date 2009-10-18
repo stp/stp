@@ -1423,12 +1423,27 @@ namespace BEEV
     convertFormulaToCNF(*it, defs);
     ClauseList* psi = COPY(*(info[*it]->clausesneg));
     reduceMemoryFootprintNeg(*it);
-    for (it++; it != varphi.GetChildren().end(); it++)
-      {
-        convertFormulaToCNF(*it, defs);
-        INPLACE_UNION(psi, *(info[*it]->clausesneg));
-        reduceMemoryFootprintNeg(*it);
-      }
+    for (it++; it != varphi.GetChildren().end(); it++) {
+		convertFormulaToCNF(*it, defs);
+		CNFInfo* x = info[*it];
+
+		if (sharesNeg(*x) != 1) {
+			INPLACE_UNION(psi, *(x->clausesneg));
+			reduceMemoryFootprintNeg(*it);
+		} else {
+			// If this is the only use of "clausesneg", no reason to make a copy.
+			psi->insert(psi->end(), x->clausesneg->begin(),
+					x->clausesneg->end());
+			// Copied from reduceMemoryFootprintNeg
+			delete x->clausesneg;
+			x->clausesneg = NULL;
+			if (x->clausespos == NULL) {
+				delete x;
+				info.erase(*it);
+			}
+		}
+
+	}
 
     info[varphi]->clausesneg = psi;
   } //End of convertFormulaToCNFNegOR()
