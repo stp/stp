@@ -42,7 +42,8 @@ namespace BEEV
   bool BVSolver::CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output)
   {
     ASTNodeMap::iterator it;
-    if ((it = FormulasAlreadySolvedMap.find(key)) != FormulasAlreadySolvedMap.end())
+    if ((it = FormulasAlreadySolvedMap.find(key)) 
+        != FormulasAlreadySolvedMap.end())
       {
         output = it->second;
         return true;
@@ -50,7 +51,8 @@ namespace BEEV
     return false;
   } //CheckAlreadySolvedMap()
 
-  void BVSolver::UpdateAlreadySolvedMap(const ASTNode& key, const ASTNode& value)
+  void BVSolver::UpdateAlreadySolvedMap(const ASTNode& key, 
+                                        const ASTNode& value)
   {
     FormulasAlreadySolvedMap[key] = value;
   } //end of UpdateAlreadySolvedMap()
@@ -59,23 +61,28 @@ namespace BEEV
   //accepts an even number "in", and splits it into an odd number and
   //a power of 2. i.e " in = b.(2^k) ". returns the odd number, and
   //the power of two by reference
-  ASTNode BVSolver::SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, unsigned int& number_shifts)
+  ASTNode BVSolver::SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, 
+                                                   unsigned int& number_shifts)
   {
     if (BVCONST != in.GetKind() || _simp->BVConstIsOdd(in))
       {
-        FatalError("BVSolver:SplitNum_Odd_PowerOf2: input must be a BVCONST and even\n", in);
+        FatalError("BVSolver:SplitNum_Odd_PowerOf2: "\
+                   "input must be a BVCONST and even\n", in);
       }
 
     unsigned int len = in.GetValueWidth();
     ASTNode zero = _bm->CreateZeroConst(len);
     ASTNode two = _bm->CreateTwoConst(len);
     ASTNode div_by_2 = in;
-    ASTNode mod_by_2 = _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
+    ASTNode mod_by_2 = 
+      _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
     while (mod_by_2 == zero)
       {
-        div_by_2 = _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, len, div_by_2, two));
+        div_by_2 = 
+          _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, len, div_by_2, two));
         number_shifts++;
-        mod_by_2 = _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
+        mod_by_2 = 
+          _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
       }
     return div_by_2;
   } //end of SplitEven_into_Oddnum_PowerOf2()
@@ -117,7 +124,8 @@ namespace BEEV
       default:
         {
           ASTVec c = term.GetChildren();
-          for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+          for (ASTVec::iterator 
+                 it = c.begin(), itend = c.end(); it != itend; it++)
             {
               if (CheckForArrayReads(*it))
                 {
@@ -169,7 +177,8 @@ namespace BEEV
   } //end of UpdateSolverMap()
 
   //collects the vars in the term 'lhs' into the multiset Vars
-  void BVSolver::VarsInTheTerm_TopLevel(const ASTNode& lhs, ASTNodeMultiSet& Vars)
+  void BVSolver::VarsInTheTerm_TopLevel(const ASTNode& lhs, 
+                                        ASTNodeMultiSet& Vars)
   {
     TermsAlreadySeenMap.clear();
     VarsInTheTerm(lhs, Vars);
@@ -209,7 +218,8 @@ namespace BEEV
       default:
         {
           ASTVec c = term.GetChildren();
-          for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+          for (ASTVec::iterator
+                 it = c.begin(), itend = c.end(); it != itend; it++)
             {
               VarsInTheTerm(*it, Vars);
             }
@@ -288,7 +298,8 @@ namespace BEEV
     if (!chosen_symbol)
       {
         o.clear();
-        for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+        for (ASTVec::iterator
+               it = c.begin(), itend = c.end(); it != itend; it++)
           {
             ASTNode monom = *it;
             ASTNode var = 
@@ -367,7 +378,8 @@ namespace BEEV
         //construct:  rhs - (lhs without the chosen monom)
         unsigned int len = lhs.GetValueWidth();
         leftover_lhs = 
-          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS, len, leftover_lhs));
+          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS, 
+                                                       len, leftover_lhs));
         ASTNode newrhs = 
           _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
         lhs = chosen_monom;
@@ -378,7 +390,8 @@ namespace BEEV
       {
         //equation is of the form (-lhs0) = rhs
         ASTNode lhs0 = lhs[0];
-        rhs = _simp->SimplifyTerm(_bm->CreateTerm(BVUMINUS, rhs.GetValueWidth(), rhs));
+        rhs = _simp->SimplifyTerm(_bm->CreateTerm(BVUMINUS,
+                                                  rhs.GetValueWidth(), rhs));
         lhs = lhs0;
       }
 
@@ -413,7 +426,8 @@ namespace BEEV
         }
         //              case READ:
         //              {
-        //                if(BVCONST != lhs[1].GetKind() || READ != rhs.GetKind() || 
+        //                if(BVCONST != lhs[1].GetKind() 
+        //                   || READ != rhs.GetKind() || 
         //                     BVCONST != rhs[1].GetKind() || lhs == rhs) 
         //                {
         //                  return eq;
@@ -476,12 +490,15 @@ namespace BEEV
               return eq;
             }
 
-          if (!(SYMBOL == lhs[1].GetKind() || (BVEXTRACT == lhs[1].GetKind() && SYMBOL == lhs[1][0].GetKind())))
+          if (!(SYMBOL == lhs[1].GetKind()
+                || (BVEXTRACT == lhs[1].GetKind()
+                    && SYMBOL == lhs[1][0].GetKind())))
             {
               return eq;
             }
 
-          bool ChosenVar_Is_Extract = (BVEXTRACT == lhs[1].GetKind()) ? true : false;
+          bool ChosenVar_Is_Extract = 
+            (BVEXTRACT == lhs[1].GetKind()) ? true : false;
 
           //if coeff is even, then we know that all the coeffs in the eqn
           //are even. Simply return the eqn
@@ -491,9 +508,12 @@ namespace BEEV
             }
 
           ASTNode a = _simp->MultiplicativeInverse(lhs[0]);
-          ASTNode chosenvar = (BVEXTRACT == lhs[1].GetKind()) ? lhs[1][0] : lhs[1];
+          ASTNode chosenvar = 
+            (BVEXTRACT == lhs[1].GetKind()) ? lhs[1][0] : lhs[1];
           ASTNode chosenvar_value = 
-            _simp->SimplifyTerm(_bm->CreateTerm(BVMULT, rhs.GetValueWidth(), a, rhs));
+            _simp->SimplifyTerm(_bm->CreateTerm(BVMULT, 
+                                                rhs.GetValueWidth(), 
+                                                a, rhs));
 
           //if chosenvar is seen in chosenvar_value then abort
           if (VarSeenInTerm(chosenvar, chosenvar_value))
@@ -574,9 +594,15 @@ namespace BEEV
     ASTNode solved = ASTFalse;
     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
-        //_bm->ASTNodeStats("Printing before calling simplifyformula inside the solver:", *it);
-        ASTNode aaa = (ASTTrue == solved && EQ == it->GetKind()) ? _simp->SimplifyFormula(*it, false) : *it;              
-        //_bm->ASTNodeStats("Printing after calling simplifyformula inside the solver:", aaa);
+        //_bm->ASTNodeStats("Printing before calling simplifyformula
+        //inside the solver:", *it);
+        ASTNode aaa = 
+          (ASTTrue == solved 
+           && EQ == it->GetKind()) ? 
+          _simp->SimplifyFormula(*it, false) : 
+          *it;              
+        //_bm->ASTNodeStats("Printing after calling simplifyformula
+        //inside the solver:", aaa);
         aaa = BVSolve_Odd(aaa);
         //_bm->ASTNodeStats("Printing after oddsolver:", aaa);
         bool even = false;
@@ -599,7 +625,10 @@ namespace BEEV
     if (eveneqns.size() > 0)
       {
         //if there is a system of even equations then solve them
-        evens = (eveneqns.size() > 1) ? _bm->CreateNode(AND, eveneqns) : eveneqns[0];
+        evens =
+          (eveneqns.size() > 1) ? 
+          _bm->CreateNode(AND, eveneqns) : 
+          eveneqns[0];
         //evens = _simp->SimplifyFormula(evens,false);
         evens = BVSolve_Even(evens);
         _bm->ASTNodeStats("Printing after evensolver:", evens);
@@ -608,7 +637,12 @@ namespace BEEV
       {
         evens = ASTTrue;
       }
-    output = (o.size() > 0) ? ((o.size() > 1) ? _bm->CreateNode(AND, o) : o[0]) : ASTTrue;
+    output = 
+      (o.size() > 0) ? 
+      ((o.size() > 1) ? 
+       _bm->CreateNode(AND, o) : 
+       o[0]) : 
+      ASTTrue;
     output = _bm->CreateNode(AND, output, evens);
 
     UpdateAlreadySolvedMap(input, output);
@@ -638,7 +672,8 @@ namespace BEEV
 
     ASTVec lhs_c = lhs.GetChildren();
     ASTNode savetheconst = rhs;
-    for (ASTVec::iterator it = lhs_c.begin(), itend = lhs_c.end(); it != itend; it++)
+    for (ASTVec::iterator 
+           it = lhs_c.begin(), itend = lhs_c.end(); it != itend; it++)
       {
         ASTNode aaa = *it;
         Kind itk = aaa.GetKind();
@@ -650,7 +685,10 @@ namespace BEEV
             continue;
           }
 
-        if (!(BVMULT == itk && BVCONST == aaa[0].GetKind() && SYMBOL == aaa[1].GetKind() && !_simp->BVConstIsOdd(aaa[0])))
+        if (!(BVMULT == itk 
+              && BVCONST == aaa[0].GetKind() 
+              && SYMBOL == aaa[1].GetKind() 
+              && !_simp->BVConstIsOdd(aaa[0])))
           {
             //If the monomials of the lhs are NOT of the form 'a*x' where
             //'a' is even, then return the false
@@ -708,7 +746,9 @@ namespace BEEV
     unsigned int power_of_2_lowest = 0xffffffff;
     //the monom which has the least power of 2 in the coeff
     ASTNode monom_with_best_coeff;
-    for (ASTVec::iterator jt = input_c.begin(), jtend = input_c.end(); jt != jtend; jt++)
+    for (ASTVec::iterator 
+           jt = input_c.begin(), jtend = input_c.end(); 
+         jt != jtend; jt++)
       {
         ASTNode eq = *jt;
         ASTNode lhs = eq[0];
@@ -722,12 +762,18 @@ namespace BEEV
 
         ASTVec lhs_c = lhs.GetChildren();
         ASTNode odd;
-        for (ASTVec::iterator it = lhs_c.begin(), itend = lhs_c.end(); it != itend; it++)
+        for (ASTVec::iterator 
+               it = lhs_c.begin(), itend = lhs_c.end(); 
+             it != itend; it++)
           {
             ASTNode aaa = *it;
             Kind itk = aaa.GetKind();
-            if (!(BVCONST == itk && !_simp->BVConstIsOdd(aaa)) && !(BVMULT == itk && BVCONST == aaa[0].GetKind() && SYMBOL == aaa[1].GetKind()
-                                                                    && !_simp->BVConstIsOdd(aaa[0])))
+            if (!(BVCONST == itk 
+                  && !_simp->BVConstIsOdd(aaa)) 
+                && !(BVMULT == itk 
+                     && BVCONST == aaa[0].GetKind() 
+                     && SYMBOL == aaa[1].GetKind()
+                     && !_simp->BVConstIsOdd(aaa[0])))
               {
                 //If the monomials of the lhs are NOT of the form 'a*x' or 'a'
                 //where 'a' is even, then return the eqn
@@ -753,7 +799,8 @@ namespace BEEV
     //if control is here, we are gauranteed that we have chosen a
     //monomial with fewest powers of 2
     ASTVec formula_out;
-    for (ASTVec::iterator jt = input_c.begin(), jtend = input_c.end(); jt != jtend; jt++)
+    for (ASTVec::iterator 
+           jt = input_c.begin(), jtend = input_c.end(); jt != jtend; jt++)
       {
         ASTNode eq = *jt;
         ASTNode lhs = eq[0];
@@ -777,27 +824,56 @@ namespace BEEV
         ASTNode two = two_const;
         while (--count)
           {
-            two = _simp->BVConstEvaluator(_bm->CreateTerm(BVMULT, len, two_const, two));
+            two = 
+              _simp->BVConstEvaluator(_bm->CreateTerm(BVMULT, 
+                                                      len, 
+                                                      two_const, 
+                                                      two));
           }
         ASTVec lhs_c = lhs.GetChildren();
         ASTVec lhs_out;
-        for (ASTVec::iterator it = lhs_c.begin(), itend = lhs_c.end(); it != itend; it++)
+        for (ASTVec::iterator 
+               it = lhs_c.begin(), itend = lhs_c.end(); 
+             it != itend; it++)
           {
             ASTNode aaa = *it;
             Kind itk = aaa.GetKind();
             if (BVCONST == itk)
               {
-                aaa = _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, len, aaa, two));
-                aaa = _simp->BVConstEvaluator(_bm->CreateTerm(BVEXTRACT, newlen, aaa, low_minus_one, low_zero));
+                aaa = 
+                  _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, 
+                                                          len, 
+                                                          aaa, two));
+                aaa = 
+                  _simp->BVConstEvaluator(_bm->CreateTerm(BVEXTRACT, 
+                                                          newlen, 
+                                                          aaa, 
+                                                          low_minus_one, 
+                                                          low_zero));
               }
             else
               {
                 //it must be of the form a*x
-                ASTNode coeff = _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, len, aaa[0], two));
-                coeff = _simp->BVConstEvaluator(_bm->CreateTerm(BVEXTRACT, newlen, coeff, low_minus_one, low_zero));
+                ASTNode coeff = 
+                  _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, 
+                                                          len, 
+                                                          aaa[0], two));
+                coeff = 
+                  _simp->BVConstEvaluator(_bm->CreateTerm(BVEXTRACT, 
+                                                          newlen, 
+                                                          coeff, 
+                                                          low_minus_one, 
+                                                          low_zero));
                 ASTNode upper_x, lower_x;
-                //upper_x = _simp->SimplifyTerm(_bm->CreateTerm(BVEXTRACT, power_of_2, aaa[1], hi, low));
-                lower_x = _simp->SimplifyTerm(_bm->CreateTerm(BVEXTRACT, newlen, aaa[1], low_minus_one, low_zero));
+                //upper_x =
+                //_simp->SimplifyTerm(_bm->CreateTerm(BVEXTRACT,
+                //power_of_2, aaa[1], hi, low));
+                lower_x = 
+                  _simp->SimplifyTerm(_bm->CreateTerm(BVEXTRACT, 
+                                                      newlen, 
+                                                      aaa[1], 
+                                                      low_minus_one, 
+                                                      low_zero));
                 aaa = _bm->CreateTerm(BVMULT, newlen, coeff, lower_x);
               }
             lhs_out.push_back(aaa);
@@ -807,7 +883,12 @@ namespace BEEV
         formula_out.push_back(_simp->CreateSimplifiedEQ(lhs, rhs));
       } //end of outer forloop()
 
-    output = (formula_out.size() > 0) ? (formula_out.size() > 1) ? _bm->CreateNode(AND, formula_out) : formula_out[0] : ASTTrue;
+    output = 
+      (formula_out.size() > 0) ? 
+      (formula_out.size() > 1) ? 
+      _bm->CreateNode(AND, formula_out) : 
+      formula_out[0] : 
+      ASTTrue;
 
     UpdateAlreadySolvedMap(input, output);
     return output;
@@ -843,7 +924,9 @@ namespace BEEV
         return true;
       }
 
-    for (ASTVec::const_iterator it = term.begin(), itend = term.end(); it != itend; it++)
+    for (ASTVec::const_iterator 
+           it = term.begin(), itend = term.end();
+         it != itend; it++)
       {
         if (VarSeenInTerm(var, *it))
           {

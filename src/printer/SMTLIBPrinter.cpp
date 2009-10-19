@@ -22,7 +22,9 @@ namespace printer
   using namespace BEEV;
 
   string functionToSMTLIBName(const BEEV::Kind k);
-  void SMTLIB_Print1(ostream& os, const BEEV::ASTNode n, int indentation, bool letize);
+  void SMTLIB_Print1(ostream& os, 
+                     const BEEV::ASTNode n, 
+                     int indentation, bool letize);
   void printVarDeclsToStream( const STPMgr* mgr, ostream &os);
 
   // Initial version intended to print the whole thing back.
@@ -91,7 +93,10 @@ namespace printer
     // Prepend with zero to convert to unsigned.
 
     os << "bv";
-    CBV unsign = CONSTANTBV::BitVector_Concat((n.GetSTPMgr())->CreateZeroConst(1).GetBVConst(), op.GetBVConst());
+    CBV unsign = 
+      CONSTANTBV::
+      BitVector_Concat((n.GetSTPMgr())->CreateZeroConst(1).GetBVConst(), 
+                       op.GetBVConst());
     unsigned char * str = CONSTANTBV::BitVector_to_Dec(unsign);
     CONSTANTBV::BitVector_Destroy(unsign);
     os << str << "[" << op.GetValueWidth() << "]";
@@ -212,8 +217,10 @@ namespace printer
       {
         //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
         //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator it = bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm->NodeLetVarVec.end();
+        std::vector<pair<ASTNode, ASTNode> >::iterator 
+          it = bm->NodeLetVarVec.begin();
+        std::vector<pair<ASTNode, ASTNode> >::iterator 
+          itend = bm->NodeLetVarVec.end();
 
         os << "(LET ";
         //print the let var first

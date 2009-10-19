@@ -63,35 +63,55 @@ int main(int argc, char ** argv) {
             Ctr_Example);
   
   //populate the help string
-  helpstring += "STP version: " + version + "\n\n";
-  helpstring +=  "-a  : switch optimizations off (optimizations are ON by default)\n";
-  helpstring +=  "-b  : print STP input back to cout\n";
-  helpstring +=  "-c  : construct counterexample\n";
-  helpstring +=  "-d  : check counterexample\n";
-  helpstring +=  "-e  : expand finite-for construct\n";
-  helpstring +=  "-f  : number of abstraction-refinement loops\n";
-  helpstring +=  "-h  : help\n";
-  helpstring +=  "-m  : use the SMTLIB parser\n";
-  helpstring +=  "-p  : print counterexample\n";
-  helpstring +=  "-r  : switch refinement off (optimizations are ON by default)\n";
-  helpstring +=  "-s  : print function statistics\n";
-  helpstring +=  "-t  : print quick statistics\n";
-  helpstring +=  "-v  : print nodes \n";
-  helpstring +=  "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
-  helpstring +=  "-x  : flatten nested XORs\n";
-  helpstring +=  "-y  : print counterexample in binary\n";
+  helpstring += 
+    "STP version: " + version + "\n\n";
+  helpstring +=  
+    "-a  : switch optimizations off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-b  : print STP input back to cout\n";
+  helpstring +=  
+    "-c  : construct counterexample\n";
+  helpstring +=  
+    "-d  : check counterexample\n";
+  helpstring +=  
+    "-e  : expand finite-for construct\n";
+  helpstring +=  
+    "-f  : number of abstraction-refinement loops\n";
+  helpstring +=  
+    "-h  : help\n";
+  helpstring +=  
+    "-m  : use the SMTLIB parser\n";
+  helpstring +=  
+    "-p  : print counterexample\n";
+  helpstring +=  
+    "-r  : switch refinement off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-s  : print function statistics\n";
+  helpstring +=  
+    "-t  : print quick statistics\n";
+  helpstring +=  
+    "-v  : print nodes \n";
+  helpstring +=  
+    "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+  helpstring +=  
+    "-x  : flatten nested XORs\n";
+  helpstring +=  
+    "-y  : print counterexample in binary\n";
 
   for(int i=1; i < argc;i++)
     {
       if(argv[i][0] == '-')
         {
-          if(argv[i][2]) {
-            fprintf(stderr, "Multiple character options are not allowed.\n");
-            fprintf(stderr, "(for example: -ab is not an abbreviation for -a -b)\n");
-            fprintf(stderr,usage,prog);
-            cout << helpstring;
-            return -1;
-          }
+          if(argv[i][2]) 
+            {
+              fprintf(stderr, 
+                      "Multiple character options are not allowed.\n");
+              fprintf(stderr, 
+                      "(for example: -ab is not an abbreviation for -a -b)\n");
+              fprintf(stderr,usage,prog);
+              cout << helpstring;
+              return -1;
+            }
           switch(argv[i][1])
             {
             case 'a' :

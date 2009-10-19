@@ -47,8 +47,8 @@ namespace BEEV
     //printf("doing array read refinement\n");
     if (!bm->UserFlags.arrayread_refinement_flag)
       {
-	FatalError("SATBased_ArrayReadRefinement: "\
-		   "Control should not reach here");
+        FatalError("SATBased_ArrayReadRefinement: "\
+                   "Control should not reach here");
       }
     ASTVec FalseAxiomsVec, RemainingAxiomsVec;
     RemainingAxiomsVec.push_back(ASTTrue);
@@ -91,7 +91,7 @@ namespace BEEV
             if (!(SYMBOL == arrsym1.GetKind() || BVCONST == arrsym1.GetKind()))
               FatalError("TopLevelSAT: refinementloop:"
                          "term arrsym1 corresponding to READ must be a var", 
-			 arrsym1);
+                         arrsym1);
 
             //we have nonconst index here. create Leibnitz axiom for it
             //w.r.t every index in listOfIndices
@@ -112,35 +112,35 @@ namespace BEEV
 
                 ASTNode arr_read2 = 
                   bm->CreateTerm(READ, ArrName.GetValueWidth(),
-				 ArrName, compare_index);
+                                 ArrName, compare_index);
                 //get the variable corresponding to the array_read2
                 //ASTNode arrsym2 = _arrayread_symbol[arr_read2];
                 ASTNode arrsym2 = 
-		  ArrayTransform->ArrayRead_SymbolMap(arr_read2);
+                  ArrayTransform->ArrayRead_SymbolMap(arr_read2);
                 if (!(SYMBOL == arrsym2.GetKind() 
-		      || BVCONST == arrsym2.GetKind()))
-		  {
-		    FatalError("TopLevelSAT: refinement loop:"
-			       "term arrsym2 corresponding to "\
-			       "READ must be a var", arrsym2);
-		  }
+                      || BVCONST == arrsym2.GetKind()))
+                  {
+                    FatalError("TopLevelSAT: refinement loop:"
+                               "term arrsym2 corresponding to "\
+                               "READ must be a var", arrsym2);
+                  }
 
                 ASTNode eqOfReads = simp->CreateSimplifiedEQ(arrsym1, arrsym2);
                 //construct appropriate Leibnitz axiom
                 ASTNode LeibnitzAxiom = 
-		  bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
+                  bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
                 if (ASTFalse == ComputeFormulaUsingModel(LeibnitzAxiom))
-		  {
-		    //FalseAxioms =
-		    //bm->CreateNode(AND,FalseAxioms,LeibnitzAxiom);
-		    FalseAxiomsVec.push_back(LeibnitzAxiom);
-		  }
+                  {
+                    //FalseAxioms =
+                    //bm->CreateNode(AND,FalseAxioms,LeibnitzAxiom);
+                    FalseAxiomsVec.push_back(LeibnitzAxiom);
+                  }
                 else
-		  {
-		    //RemainingAxioms =
-		    //bm->CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
-		    RemainingAxiomsVec.push_back(LeibnitzAxiom);
-		  }
+                  {
+                    //RemainingAxioms =
+                    //bm->CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
+                    RemainingAxiomsVec.push_back(LeibnitzAxiom);
+                  }
               }
             ASTNode FalseAxioms = 
               (FalseAxiomsVec.size() > 1) ? 
@@ -246,7 +246,7 @@ namespace BEEV
   //bm->Creates Array Write Axioms
   ASTNode 
   AbsRefine_CounterExample::Create_ArrayWriteAxioms(const ASTNode& term, 
-						    const ASTNode& newvar)
+                                                    const ASTNode& newvar)
   {
     if (READ != term.GetKind() && WRITE != term[0].GetKind())
       {

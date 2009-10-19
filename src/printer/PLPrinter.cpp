@@ -156,7 +156,8 @@ namespace printer
       case BVMOD:
         os << kind << "(";
         os << n.GetValueWidth();
-        for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
+        for (ASTVec::const_iterator
+               it = c.begin(), itend = c.end(); it != itend; it++)
           {
             os << ", " << endl;
             PL_Print1(os, *it, indentation, letize);
@@ -348,8 +349,10 @@ namespace printer
       {
         //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
         //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator it = bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm->NodeLetVarVec.end();
+        std::vector<pair<ASTNode, ASTNode> >::iterator 
+          it = bm->NodeLetVarVec.begin();
+        std::vector<pair<ASTNode, ASTNode> >::iterator 
+          itend = bm->NodeLetVarVec.end();
 
         os << "(LET ";
         //print the let var first

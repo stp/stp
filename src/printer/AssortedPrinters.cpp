@@ -87,27 +87,30 @@ namespace BEEV
   //   } //end of Convert_MINISATVar_To_ASTNode_Print()
 
   void STPMgr::printVarDeclsToStream(ostream &os) {
-    for(ASTVec::iterator i = ListOfDeclaredVars.begin(),iend=ListOfDeclaredVars.end();i!=iend;i++) {
-      BEEV::ASTNode a = *i;
-      switch(a.GetType()) {
-      case BEEV::BITVECTOR_TYPE:
-        a.PL_Print(os);
-        os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-        break;
-      case BEEV::ARRAY_TYPE:
-        a.PL_Print(os);
-        os << " : ARRAY " << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
-        os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-        break;
-      case BEEV::BOOLEAN_TYPE:
-        a.PL_Print(os);
-        os << " : BOOLEAN;" << endl;
-        break;
-      default:
-        BEEV::FatalError("vc_printDeclsToStream: Unsupported type",a);
-        break;
+    for(ASTVec::iterator 
+          i = ListOfDeclaredVars.begin(),iend=ListOfDeclaredVars.end();
+        i!=iend;i++) 
+      {
+        BEEV::ASTNode a = *i;
+        switch(a.GetType()) {
+        case BEEV::BITVECTOR_TYPE:
+          a.PL_Print(os);
+          os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+          break;
+        case BEEV::ARRAY_TYPE:
+          a.PL_Print(os);
+          os << " : ARRAY " << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
+          os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
+          break;
+        case BEEV::BOOLEAN_TYPE:
+          a.PL_Print(os);
+          os << " : BOOLEAN;" << endl;
+          break;
+        default:
+          BEEV::FatalError("vc_printDeclsToStream: Unsupported type",a);
+          break;
+        }
       }
-    }
   } //printVarDeclsToStream
 
 
@@ -115,9 +118,9 @@ namespace BEEV
   void STPMgr::printAssertsToStream(ostream &os, int simplify_print) {
     ASTVec v = GetAsserts();
     for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
-      //Begin_RemoveWrites = true;
-      //ASTNode q = (simplify_print == 1) ? SimplifyFormula_TopLevel(*i,false) : *i;
-      //q = (simplify_print == 1) ? SimplifyFormula_TopLevel(q,false) : q;
+      //Begin_RemoveWrites = true; ASTNode q = (simplify_print == 1) ?
+      //SimplifyFormula_TopLevel(*i,false) : *i; q = (simplify_print
+      //== 1) ? SimplifyFormula_TopLevel(q,false) : q;
       ASTNode q = *i;
       //Begin_RemoveWrites = false;
       os << "ASSERT( ";

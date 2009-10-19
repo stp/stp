@@ -625,10 +625,10 @@ namespace BEEV
 
     if(_bm->UserFlags.stats_flag)
       {
-//         cout << "================" << endl
-//              << "BBForm: " << form << endl
-//              << "----------------" << endl
-//              << "BBForm Result: " << result << endl;
+        //         cout << "================" << endl
+        //              << "BBForm: " << form << endl
+        //              << "----------------" << endl
+        //              << "BBForm Result: " << result << endl;
       }
 
     return (BBFormMemo[form] = result);

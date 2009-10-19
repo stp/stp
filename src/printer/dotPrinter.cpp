@@ -54,7 +54,11 @@ namespace printer
     int i = 0;
     for (ASTVec::iterator it = ch.begin(); it < itend; it++)
       {
-        os << "n" << n.GetNodeNum() << " -> " << "n" << it->GetNodeNum() << "[label=" << i++ << "];" << endl;
+        os << "n" << n.GetNodeNum() 
+           << " -> " << "n" 
+           << it->GetNodeNum() 
+           << "[label=" << i++ 
+           << "];" << endl;
       }
 
     // print each of the children.

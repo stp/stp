@@ -122,7 +122,8 @@ namespace printer
         os << ")";
         break;
       case BVCONCAT:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         os << "(";
         C_Print1(os, c[0], indentation, letize);
         os << " @ ";
@@ -172,7 +173,8 @@ namespace printer
 
         break;
       case BVLEFTSHIFT:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         os << "(";
         C_Print1(os, c[0], indentation, letize);
         os << " << ";
@@ -180,7 +182,8 @@ namespace printer
         os << ")";
         break;
       case BVRIGHTSHIFT:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         os << "(";
         C_Print1(os, c[0], indentation, letize);
         os << " >> ";
@@ -196,7 +199,8 @@ namespace printer
       case BVMOD:
         os << kind << "(";
         os << n.GetValueWidth();
-        for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
+        for (ASTVec::const_iterator
+               it = c.begin(), itend = c.end(); it != itend; it++)
           {
             os << ", " << endl;
             C_Print1(os, *it, indentation, letize);
@@ -253,7 +257,8 @@ namespace printer
       case BVNAND:
       case BVNOR:
       case BVXNOR:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         break;
       case BVSLT:
         // convert to SIGNED before doing comparison!
@@ -378,7 +383,8 @@ namespace printer
           break;
         }
       case IFF:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         os << "(";
         os << "(";
         C_Print1(os, c[0], indentation, letize);
@@ -391,7 +397,8 @@ namespace printer
         os << endl;
         break;
       case IMPLIES:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
         os << "(";
         os << "(";
         C_Print1(os, c[0], indentation, letize);
@@ -404,7 +411,8 @@ namespace printer
         os << endl;
         break;
       case BVSX:
-        FatalError("C_Print1: printing not implemented for this kind: ", n); // stopgap for un-implemented features
+        // stopgap for un-implemented features
+        FatalError("C_Print1: printing not implemented for this kind: ", n);
 
         os << kind << "(";
         C_Print1(os, c[0], indentation, letize);
@@ -456,8 +464,10 @@ namespace printer
       {
         //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
         //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator it = bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator itend = bm->NodeLetVarVec.end();
+        std::vector<pair<ASTNode, ASTNode> >::iterator it = 
+          bm->NodeLetVarVec.begin();
+        std::vector<pair<ASTNode, ASTNode> >::iterator itend = 
+          bm->NodeLetVarVec.end();
 
         // start a new block to create new static scope
         os << "{" << endl;
