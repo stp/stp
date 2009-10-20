@@ -58,30 +58,41 @@ namespace BEEV
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseList::const_iterator i = cll.begin(), iend = cll.end();
     //ClauseList::reverse_iterator i = cll.rbegin(), iend = cll.rend();
-    for (int count=0; i != iend; i++)
+    for (int count=0, flag=0; i != iend; i++)
       {
         //Clause for the SATSolver
         MINISAT::vec<MINISAT::Lit> satSolverClause;
-        satSolverClause.capacity((*i)->size());
-
-        //now iterate through the internals of the ASTclause itself
-        vector<const ASTNode*>::const_iterator j = (*i)->begin(); 
-        vector<const ASTNode*>::const_iterator jend = (*i)->end();        
+        satSolverClause.capacity((*i)->size());        
+        vector<const ASTNode*>::const_iterator j    = (*i)->begin(); 
+        vector<const ASTNode*>::const_iterator jend = (*i)->end();	
+	//ASTVec  clauseVec;
         //j is a disjunct in the ASTclause (*i)
         for (; j != jend; j++)
-          {
+          {	    
             ASTNode node = **j;
+	    //clauseVec.push_back(node);
             bool negate = (NOT == node.GetKind()) ? true : false;
             ASTNode n = negate ? node[0] : node;
             MINISAT::Var v = LookupOrCreateSATVar(newS, n);
             MINISAT::Lit l(v, negate);
             satSolverClause.push(l);
           }
-        newS.addClause(satSolverClause);
 
-	if(count++ >= input_clauselist_size*0.60)
+        // ASTNode theClause = bm->CreateNode(OR, clauseVec);
+	// 	if(flag 
+	// 	   && ASTTrue == CheckBBandCNF(newS, theClause))
+	// 	  {
+	// 	    continue;
+	// 	  }
+
+	newS.addClause(satSolverClause);
+	float percentage=0.6;
+	if(count++ >= input_clauselist_size*percentage)
 	  {
-	    //cout << "Added 90% of clauses\n";
+	    //Arbitrary adding only 60% of the clauses in the hopes of
+	    //terminating early	
+	    // 	    cout << "Percentage clauses added: " 
+	    // 		 << percentage << endl;
 	    bm->GetRunTimes()->start(RunTimes::Solving);
 	    newS.solve();
 	    bm->GetRunTimes()->stop(RunTimes::Solving);
@@ -90,6 +101,7 @@ namespace BEEV
 		return false;	      
 	      }
 	    count = 0;
+	    flag  = 1;
 	  }
         if (newS.okay())
           {
@@ -148,14 +160,14 @@ namespace BEEV
     return CheckBBandCNF_int(newS, form);
   } //End of CheckBBandCNF()
 
-  // Recursive body CheckBBandCNF FIXME: Modify this to just check if
-  // result is true, and print mismatch if not.  Might have a trace
-  // flag for the other stuff.
+  // Recursive body CheckBBandCNF
   ASTNode ToSAT::CheckBBandCNF_int(MINISAT::Solver& newS, ASTNode form)
   {
-    //    cout << "++++++++++++++++" << endl << "CheckBBandCNF_int form = " <<
-    //      form << endl;
-
+    //     cout << "++++++++++++++++" 
+    // 	 << endl 
+    // 	 << "CheckBBandCNF_int form = " 
+    // 	 << form << endl;
+    
     ASTNodeMap::iterator memoit = CheckBBandCNFMemo.find(form);
     if (memoit != CheckBBandCNFMemo.end())
       {
@@ -177,20 +189,15 @@ namespace BEEV
       case SYMBOL:
       case BVGETBIT:
         {
-          // Look up the truth value
-          // ASTNode -> Sat -> Truthvalue -> ASTTrue or ASTFalse;
-          // FIXME: Could make up a fresh var in undefined case.
-
           result = SymbolTruthValue(newS, form);
 
-          cout << "================" 
-               << endl 
-               << "Checking BB formula:" 
-               << form << endl;
-          cout << "----------------" 
-               << endl 
-               << "Result:" << result << endl;
-
+	  //           cout << "================" 
+	  //                << endl 
+	  //                << "Checking BB formula:" 
+	  //                << form << endl;
+	  //           cout << "----------------" 
+	  //                << endl 
+	  //                << "Result:" << result << endl;
           break;
         }
       default:
@@ -205,13 +212,13 @@ namespace BEEV
             }
           result = bm->CreateSimpForm(k, eval_children);
 
-          cout << "================" 
-               << endl 
-               << "Checking BB formula:" << form << endl;
-          cout << "----------------" 
-               << endl 
-               << "Result:" << result << endl;
-
+	  //           cout << "================" 
+	  //                << endl 
+	  //                << "Checking BB formula:" << form << endl;
+	  //           cout << "----------------" 
+	  //                << endl 
+	  //                << "Result:" << result << endl;
+	  
           ASTNode replit_eval;
           // Compare with replit, if there is one.
           ASTNodeMap::iterator replit_it = RepLitMap.find(form);
@@ -230,12 +237,12 @@ namespace BEEV
                     bm->CreateSimpNot(SymbolTruthValue(newS, replit[0]));
                 }
 
-              cout << "----------------" 
-                   << endl 
-                   << "Rep lit: " << replit << endl;
-              cout << "----------------" 
-                   << endl 
-                   << "Rep lit value: " << replit_eval << endl;
+	      //               cout << "----------------" 
+	      //                    << endl 
+	      //                    << "Rep lit: " << replit << endl;
+	      //               cout << "----------------" 
+	      //                    << endl 
+	      //                    << "Rep lit value: " << replit_eval << endl;
 
               if (result != replit_eval)
                 {
@@ -246,7 +253,7 @@ namespace BEEV
             }
           else
             {
-              cout << "----------------" << endl << "No rep lit" << endl;
+              //cout << "----------------" << endl << "No rep lit" << endl;
             }
 
         }

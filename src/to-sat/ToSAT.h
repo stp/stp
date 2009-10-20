@@ -89,7 +89,9 @@ namespace BEEV
     
     // Constructor
     ToSAT(STPMgr * bm, Simplifier * s) :
-      bm(bm), simp(s)
+      bm(bm), 
+      simp(s),
+      CheckBBandCNFMemo()
     {
       ASTTrue      = bm->CreateNode(TRUE);
       ASTFalse     = bm->CreateNode(FALSE);
