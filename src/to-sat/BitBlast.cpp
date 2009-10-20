@@ -656,10 +656,7 @@ namespace BEEV
 	    //Compute this only for i=0 to n-2
 	    nextcin = Majority(sum[i], y[i], cin);
 	  }
-        sum[i] = 
-          _bm->CreateSimpForm(XOR, 
-                              _bm->CreateSimpForm(XOR, sum[i], y[i]), 
-                              cin);
+        sum[i] = Sum(sum[i], y[i], cin);        
 	if(i != n-1)
 	  {
 	    //Compute this only for i=0 to n-2
@@ -736,11 +733,54 @@ namespace BEEV
     // worth doing explicitly (e.g., a = b, a = ~b, etc.)
     else
       {
-        return _bm->CreateSimpForm(OR, 
-                                   _bm->CreateSimpForm(AND, a, b), 
-                                   _bm->CreateSimpForm(AND, b, c), 
-                                   _bm->CreateSimpForm(AND, a, c));
+	//         return _bm->CreateSimpForm(OR, 
+	//                                    _bm->CreateSimpForm(AND, a, b), 
+	//                                    _bm->CreateSimpForm(AND, b, c), 
+	//                                    _bm->CreateSimpForm(AND, a, c));
+	return _bm->CreateSimpForm(AND, 
+                                   _bm->CreateSimpForm(OR, a, b), 
+                                   _bm->CreateSimpForm(OR, b, c), 
+                                   _bm->CreateSimpForm(OR, a, c));
+      
       }
+  }
+
+  ASTNode BitBlaster::Sum(const ASTNode& xi,
+			  const ASTNode& yi,
+			  const ASTNode& cin)
+  {
+    // For some unexplained reason, XORs are faster than converting
+    // them to cluases at this point
+    return _bm->CreateSimpForm(XOR, 
+    			       _bm->CreateSimpForm(XOR, xi, yi), 
+    			       cin);
+
+    if((ASTTrue == xi && ASTTrue == yi && ASTFalse == cin)
+       || (ASTTrue == xi  && ASTFalse == yi && ASTTrue == cin)
+       || (ASTFalse == xi && ASTTrue == yi  && ASTTrue == cin)
+       || (ASTFalse == xi && ASTFalse== yi && ASTFalse == cin))
+      {
+    	return ASTFalse;
+      }
+    ASTNode S1 = _bm->CreateSimpForm(OR,xi,yi,cin);
+    ASTNode S2 = _bm->CreateSimpForm(OR,
+				     _bm->CreateSimpForm(NOT,xi),
+				     _bm->CreateSimpForm(NOT,yi),
+				     cin);
+    ASTNode S3 = _bm->CreateSimpForm(OR,
+				     _bm->CreateSimpForm(NOT,xi),
+				     yi,
+				     _bm->CreateSimpForm(NOT,cin));
+    ASTNode S4 = _bm->CreateSimpForm(OR,
+				     xi,
+				     _bm->CreateSimpForm(NOT,yi),
+				     _bm->CreateSimpForm(NOT,cin));
+    ASTVec S;
+    S.push_back(S1);
+    S.push_back(S2);
+    S.push_back(S3);
+    S.push_back(S4);
+    return _bm->CreateSimpForm(AND,S);
   }
 
   // Bitwise complement

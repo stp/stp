@@ -82,6 +82,7 @@ namespace BEEV
 
     // Return formula for majority function of three formulas.
     ASTNode Majority(const ASTNode& a, const ASTNode& b, const ASTNode& c);
+    ASTNode Sum(const ASTNode& xi, const ASTNode& yi, const ASTNode& cin);
 
     // Internal bit blasting routines.
     ASTNode BBBVLE(const ASTVec& x, const ASTVec& y, bool is_signed);
