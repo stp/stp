@@ -46,26 +46,19 @@ namespace BEEV
   bool ToSAT::toSATandSolve(MINISAT::Solver& newS, ClauseList& cll)
   {
     CountersAndStats("SAT Solver", bm);
-
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
+    
+    int input_clauselist_size = cll.size();
+    if (cll.size() == 0)
+      {
+	FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);    
+      }
+    
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseList::const_iterator i = cll.begin(), iend = cll.end();
-
-    if (i == iend)
-      FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);
-
-    //turnOffSubsumption
-    // MKK: My understanding is that the rougly equivalent effect is had
-    // through setting the second argument of MINISAT::Solver::solve to
-    // true
-    //newS.turnOffSubsumption();
-
-    // (*i) is an ASTVec-ptr which denotes an ASTclause
-    //****************************************
-    // *i = vector<const ASTNode*>*
-    //****************************************
-    for (; i != iend; i++)
+    //ClauseList::reverse_iterator i = cll.rbegin(), iend = cll.rend();
+    for (int count=0; i != iend; i++)
       {
         //Clause for the SATSolver
         MINISAT::vec<MINISAT::Lit> satSolverClause;
@@ -73,60 +66,48 @@ namespace BEEV
 
         //now iterate through the internals of the ASTclause itself
         vector<const ASTNode*>::const_iterator j = (*i)->begin(); 
-        vector<const ASTNode*>::const_iterator jend = (*i)->end();
-        
+        vector<const ASTNode*>::const_iterator jend = (*i)->end();        
         //j is a disjunct in the ASTclause (*i)
         for (; j != jend; j++)
           {
             ASTNode node = **j;
-
             bool negate = (NOT == node.GetKind()) ? true : false;
             ASTNode n = negate ? node[0] : node;
-
-            //Lookup or create the MINISAT::Var corresponding to the Booelan
-            //ASTNode Variable, and push into sat Solver clause
             MINISAT::Var v = LookupOrCreateSATVar(newS, n);
             MINISAT::Lit l(v, negate);
             satSolverClause.push(l);
           }
         newS.addClause(satSolverClause);
-        // clause printing.
-        // (printClause<MINISAT::vec<MINISAT::Lit> >)(satSolverClause);
-        // cout << " 0 ";
-        // cout << endl;
 
+	if(count++ >= input_clauselist_size*0.60)
+	  {
+	    //cout << "Added 90% of clauses\n";
+	    bm->GetRunTimes()->start(RunTimes::Solving);
+	    newS.solve();
+	    bm->GetRunTimes()->stop(RunTimes::Solving);
+	    if(!newS.okay())
+	      {
+		return false;	      
+	      }
+	    count = 0;
+	  }
         if (newS.okay())
           {
             continue;
-          }
+          }	
         else
           {
             bm->PrintStats(newS);
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             return false;
-          }
-      }
+          }	
+      } // End of For-loop adding the clauses 
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-
-    // if input is UNSAT return false, else return true
-    if (!newS.simplify())
-      {
-        bm->PrintStats(newS);
-        return false;
-      }
-
-    //PrintActivityLevels_Of_SATVars("Before SAT:",newS);
-    //ChangeActivityLevels_Of_SATVars(newS);
-    //PrintActivityLevels_Of_SATVars("Before SAT and after initial
-    //bias:",newS); newS.solve();
-
+    //cout << "Added remaining clauses\n";
     bm->GetRunTimes()->start(RunTimes::Solving);
     newS.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
-
-    //PrintActivityLevels_Of_SATVars("After SAT",newS);
-
     bm->PrintStats(newS);
     if (newS.okay())
       return true;

@@ -650,12 +650,21 @@ namespace BEEV
     // FIXME: Don't bother computing i+1 carry, which is discarded.
     for (int i = 0; i < n; i++)
       {
-        ASTNode nextcin = Majority(sum[i], y[i], cin);
+	ASTNode nextcin;
+	if(i != n-1) 
+	  {
+	    //Compute this only for i=0 to n-2
+	    nextcin = Majority(sum[i], y[i], cin);
+	  }
         sum[i] = 
           _bm->CreateSimpForm(XOR, 
                               _bm->CreateSimpForm(XOR, sum[i], y[i]), 
                               cin);
-        cin = nextcin;
+	if(i != n-1)
+	  {
+	    //Compute this only for i=0 to n-2
+	    cin = nextcin;
+	  }
       }
 
     //   cout << "----------------" << endl << "Result: " << endl;
