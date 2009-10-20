@@ -926,7 +926,8 @@ namespace BEEV
   // complementing the result bit.
   ASTNode BitBlaster::BBBVLE(const ASTVec& left, 
                              const ASTVec& right,
-			     bool is_signed)
+			     bool is_signed,
+			     bool is_bvlt)
   {
     ASTVec::const_reverse_iterator lit    = left.rbegin();
     ASTVec::const_reverse_iterator litend = left.rend();
@@ -958,7 +959,10 @@ namespace BEEV
 	prev_eq_bit = this_eq_bit;
       }
     
-    bit_comparisons.push_back(prev_eq_bit);
+    if(!is_bvlt)
+      {
+	bit_comparisons.push_back(prev_eq_bit);
+      }
     ASTNode output =
       _bm->CreateSimpForm(OR, bit_comparisons);
 
@@ -1090,7 +1094,7 @@ namespace BEEV
         }
       case BVLT:
         {
-          return _bm->CreateSimpNot(BBBVLE(right, left, false));
+          return BBBVLE(left, right, false, true);
           break;
         }
       case BVSLE:

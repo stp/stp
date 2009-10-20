@@ -85,7 +85,8 @@ namespace BEEV
     ASTNode Sum(const ASTNode& xi, const ASTNode& yi, const ASTNode& cin);
 
     // Internal bit blasting routines.
-    ASTNode BBBVLE(const ASTVec& x, const ASTVec& y, bool is_signed);
+    ASTNode BBBVLE(const ASTVec& x, 
+		   const ASTVec& y, bool is_signed, bool is_bvlt = false);
 
     // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
     ASTNode BBcompare(const ASTNode& form);
