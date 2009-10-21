@@ -1,15 +1,19 @@
 # This is a -*- makefile -*-, Emacs
 #
-#Please refer LICENSE FILE in the home directory for licensing
-#information always use full screen mode to view/edit this file in
-#emacs
+#/********************************************************************
+# * AUTHORS: Vijay Ganesh
+# *
+# * BEGIN DATE: November, 2005
+# *
+# * LICENSE: Please view LICENSE file in the home dir of this Program
+# ********************************************************************/
 
 #OPTIMIZE = -g -pg           # Debugging and gprof-style profiling
 OPTIMIZE = -g                # Debugging
 OPTIMIZE = -O3 -DNDEBUG      # Maximum optimization
 #OPTIMIZE = -O3 -DNDEBUG -DLESSBYTES_PERNODE
 CFLAGS_BASE = $(OPTIMIZE)
-
+CFLAGS_M32  = -m32
 
 # You can compile using make STATIC=true to compile a statically
 # linked executable Note that you should execute liblinks.sh first.
@@ -41,8 +45,8 @@ ifeq ($(shell uname -s), DarwinX)
   CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
 else
   LDFLAGS = $(LDFLAGS_BASE)
-  #CFLAGS = $(CFLAGS_BASE) -m32
-  CFLAGS = $(CFLAGS_BASE)	
+  CFLAGS = $(CFLAGS_BASE)		
+  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32)
 endif
 
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
