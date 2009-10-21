@@ -41,7 +41,8 @@ ifeq ($(shell uname -s), DarwinX)
   CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
 else
   LDFLAGS = $(LDFLAGS_BASE)
-  CFLAGS = $(CFLAGS_BASE) -m32
+  #CFLAGS = $(CFLAGS_BASE) -m32
+  CFLAGS = $(CFLAGS_BASE)	
 endif
 
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated

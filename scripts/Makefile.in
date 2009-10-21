@@ -51,7 +51,7 @@ install: all
 
 .PHONY: clean
 clean:
-	rm -rf *~ scripts/*~ scripts/config.info
+	rm -rf *~ scripts/*~
 	rm -rf *.a
 	rm -rf lib/*.a
 	rm -rf test/*~
@@ -71,6 +71,10 @@ clean:
 	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/main
 	$(MAKE) clean -C tests/c-api-tests
+
+.PHONY: configclean
+configclean:
+	rm -rf scripts/config.info
 
 .PHONY: regressall
 regressall:
