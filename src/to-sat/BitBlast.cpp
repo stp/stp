@@ -121,7 +121,7 @@ namespace BEEV
                   
                   int shift_amount = 1 << i;
                   
-                  for (signed int j = width - 1; j > 0; j--)
+                  for (signed int j = width - 1; j >= 0; j--)
                     {
                       if (j < shift_amount)
                         {
