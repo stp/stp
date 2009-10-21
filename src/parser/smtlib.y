@@ -1,6 +1,6 @@
 %{
   /********************************************************************
-   * AUTHORS: Vijay Ganesh
+   * AUTHORS: Vijay Ganesh, Trevor Hansen
    *
    * BEGIN DATE: July, 2006
    *
@@ -195,6 +195,9 @@
 %token BVZX_TOK
 %token BVROTATE_RIGHT_TOK
 %token BVROTATE_LEFT_TOK
+%token BVREPEAT_TOK 
+%token BVCOMP_TOK
+
 %token BOOLEXTRACT_TOK
 %token BOOL_TO_BV_TOK
 %token BVEXTRACT_TOK
@@ -847,6 +850,42 @@ BITCONST_TOK { $$ = $1; }
   delete $2;
   delete $3;
 }
+  | BVXNOR_TOK an_term an_term
+  {
+//   (bvxnor s t) abbreviates (bvor (bvand s t) (bvand (bvnot s) (bvnot t)))
+
+	
+      unsigned int width = $2->GetValueWidth();
+      ASTNode * n = new ASTNode(
+      ParserBM->CreateTerm( BVOR, width,
+     ParserBM->CreateTerm(BVAND, width, *$2, *$3),
+     ParserBM->CreateTerm(BVAND, width,
+	     ParserBM->CreateTerm(BVNEG, width, *$2),
+     	 ParserBM->CreateTerm(BVNEG, width, *$3)
+     )));
+      BVTypeCheck(*n);
+
+      $$ = n;
+      delete $2;
+      delete $3;
+  
+  }
+  |  BVCOMP_TOK an_term an_term
+  {
+	
+
+  	ASTNode * n = new ASTNode(ParserBM->CreateTerm(ITE, 1, 
+  	ParserBM->CreateNode(EQ, *$2, *$3),
+  	ParserBM->CreateOneConst(1),
+  	ParserBM->CreateZeroConst(1)));
+  	
+  	BVTypeCheck(*n);
+      $$ = n;
+      delete $2;
+      delete $3;
+  }
+  
+    
 |  BVSUB_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
@@ -948,19 +987,14 @@ BITCONST_TOK { $$ = $1; }
   delete $2;
   delete $3;
 }        
-
-
-
-
-
 |  BVNAND_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
   if (width != $3->GetValueWidth()) {
     yyerror("Width mismatch in BVNAND");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNAND, width, *$2, *$3));
-  BVTypeCheck(*n);
+      ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNEG, width, ParserBM->CreateTerm(BVAND, width, *$2, *$3)));
+      BVTypeCheck(*n);
   $$ = n;
   delete $2;
   delete $3;
@@ -968,11 +1002,8 @@ BITCONST_TOK { $$ = $1; }
 |  BVNOR_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
-  if (width != $3->GetValueWidth()) {
-    yyerror("Width mismatch in BVNOR");
-  }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNOR, width, *$2, *$3)); 
-  BVTypeCheck(*n);
+      ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNEG, width, ParserBM->CreateTerm(BVOR, width, *$2, *$3))); 
+      BVTypeCheck(*n);
   $$ = n;
   delete $2;
   delete $3;
@@ -1070,6 +1101,23 @@ BITCONST_TOK { $$ = $1; }
   $$ = n;
       
 }
+   |  BVREPEAT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
+    {
+      BVTypeCheck(*$5);
+	  unsigned count = $3;
+	  if (count < 1)
+	  	FatalError("One or more repeats please");
+
+	  unsigned w = $5->GetValueWidth();  
+      ASTNode n =  *$5;
+      
+      for (unsigned i =1; i < count; i++)
+      {
+      	  n = ParserBM->CreateTerm(BVCONCAT,w*(i+1),n,*$5);
+      	  BVTypeCheck(n);
+      }
+      $$ = new ASTNode(n);
+    }
 |  BVSX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
 {
   BVTypeCheck(*$5);

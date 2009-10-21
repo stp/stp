@@ -1,6 +1,6 @@
 %{
   /********************************************************************
-   * AUTHORS: Vijay Ganesh, David L. Dill
+   * AUTHORS: Vijay Ganesh, David L. Dill, Trevor Hansen
    *
    * BEGIN DATE: July, 2006
    *
@@ -207,8 +207,12 @@ bit{DIGIT}+     {
 "bvsle"         { return BVSLE_TOK;}
 "bvsge"         { return BVSGE_TOK;}
 
+"bvcomp"         { return BVCOMP_TOK;}
+
+
 "zero_extend"   { return BVZX_TOK;}
 "sign_extend"   { return BVSX_TOK;} 
+"repeat"        { return BVREPEAT_TOK;} 
 
 "rotate_left"   { return BVROTATE_LEFT_TOK;}
 "rotate_right"   { return BVROTATE_RIGHT_TOK;} 
