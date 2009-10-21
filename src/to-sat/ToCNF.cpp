@@ -1030,23 +1030,34 @@ namespace BEEV
   } //End of convertFormulaToCNFPosNOT()
 
   void CNFMgr::convertFormulaToCNFPosAND(const ASTNode& varphi, 
-                                         ClauseList* defs)
-  {
+                                         ClauseList* defs) {
     //****************************************
     // (pos) AND ~> UNION
     //****************************************
-    ASTVec::const_iterator it = varphi.GetChildren().begin();
-    convertFormulaToCNF(*it, defs);
-    ClauseList* psi = COPY(*(info[*it]->clausespos));
-    for (it++; it != varphi.GetChildren().end(); it++)
-      {
-        convertFormulaToCNF(*it, defs);
-        INPLACE_UNION(psi, *(info[*it]->clausespos));
-        reduceMemoryFootprintPos(*it);
-      }
 
-    info[varphi]->clausespos = psi;
-  } //End of convertFormulaToCNFPosAND()
+  ASTVec::const_iterator it = varphi.GetChildren().begin();
+	convertFormulaToCNF(*it, defs);
+	ClauseList* psi = COPY(*(info[*it]->clausespos));
+
+	for (it++; it != varphi.GetChildren().end(); it++) {
+		convertFormulaToCNF(*it, defs);
+		CNFInfo* x = info[*it];
+
+		if (sharesPos(*x) == 1) {
+			psi->insert(psi->end(),x->clausespos->begin(), x->clausespos->end());
+			delete (x->clausespos);
+			x->clausespos = NULL;
+			if (x->clausesneg == NULL) {
+				delete x;
+				info.erase(*it);
+			}
+		} else {
+			INPLACE_UNION(psi, *(x->clausespos));
+			reduceMemoryFootprintPos(*it);
+		}
+	}
+	info[varphi]->clausespos = psi;
+} //End of convertFormulaToCNFPosAND()
 
   void CNFMgr::convertFormulaToCNFPosNAND(const ASTNode& varphi, 
                                           ClauseList* defs)

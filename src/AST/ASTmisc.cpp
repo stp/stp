@@ -30,8 +30,8 @@ namespace BEEV
       }
     if (vc_error_hdlr)
       vc_error_hdlr(str);
+    assert(0); // gdb will stop here giving a stacktrace.
     exit(-1);
-    //assert(0);
   }
 
   void FatalError(const char * str)
@@ -39,8 +39,9 @@ namespace BEEV
     cerr << "Fatal Error: " << str << endl;
     if (vc_error_hdlr)
       vc_error_hdlr(str);
+    assert(0);
     exit(-1);
-    //assert(0);
+
   }
   
   void SortByExprNum(ASTVec& v)

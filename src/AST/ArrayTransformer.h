@@ -120,7 +120,9 @@ namespace BEEV
       Introduced_SymbolsSet(),
       bm(bm), 
       simp(s), 
-      debug_transform(0)
+      debug_transform(0),
+      TransformMap(NULL),
+      _symbol_count(0)
     {
       Arrayread_IteMap = new ASTNodeMap();
       Arrayname_ReadindicesMap = new ASTNodeToVecMap();

@@ -93,7 +93,8 @@ namespace BEEV
 	    //terminating early	
 	    // 	    cout << "Percentage clauses added: " 
 	    // 		 << percentage << endl;
-	    bm->GetRunTimes()->start(RunTimes::Solving);
+	    bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+		bm->GetRunTimes()->start(RunTimes::Solving);
 	    newS.solve();
 	    bm->GetRunTimes()->stop(RunTimes::Solving);
 	    if(!newS.okay())
@@ -102,10 +103,11 @@ namespace BEEV
 	      }
 	    count = 0;
 	    flag  = 1;
+    	bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 	  }
         if (newS.okay())
           {
-            continue;
+        	continue;
           }	
         else
           {
