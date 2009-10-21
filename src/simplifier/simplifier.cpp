@@ -2219,7 +2219,7 @@ namespace BEEV
               else
                 {
                   const unsigned int shift = GetUnsignedConst(b);
-                  if (shift > width)
+                  if (shift >= width)
                     {
                       output = _bm->CreateZeroConst(width);
                     }
