@@ -439,7 +439,7 @@ namespace BEEV
   Expand_ReadOverWrite_UsingModel(const ASTNode& term, bool arrayread_flag)
   {
     if (READ != term.GetKind() 
-        && WRITE != term[0].GetKind())
+        || WRITE != term[0].GetKind())
       {
         FatalError("RemovesWrites: Input must be a READ over a WRITE", term);
       }
@@ -448,7 +448,7 @@ namespace BEEV
     ASTNodeMap::iterator it1;
     if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
       {
-        ASTNode val = it1->second;
+        const ASTNode& val = it1->second;
         if (BVCONST != val.GetKind())
           {
             //recursion is fine here. There are two maps that are checked
@@ -468,39 +468,34 @@ namespace BEEV
           }
       }
 
-    unsigned int width = term.GetValueWidth();
-    ASTNode writeA = ASTTrue;
     ASTNode newRead = term;
-    ASTNode readIndex = TermToConstTermUsingModel(newRead[1], false);
+        const ASTNode readIndex = TermToConstTermUsingModel(newRead[1], false);
     //iteratively expand read-over-write, and evaluate against the
     //model at every iteration
+        ASTNode write = newRead[0];
     do
       {
-        ASTNode write = newRead[0];
-        writeA = write[0];
         ASTNode writeIndex = TermToConstTermUsingModel(write[1], false);
-        ASTNode writeVal = TermToConstTermUsingModel(write[2], false);
 
-        ASTNode cond = 
-          ComputeFormulaUsingModel(simp->CreateSimplifiedEQ(writeIndex, 
-                                                            readIndex));
-        if (ASTTrue == cond)
+            if (writeIndex == readIndex)
           {
             //found the write-value. return it
-            output = writeVal;
+                output = TermToConstTermUsingModel(write[2], false);
             CounterExampleMap[term] = output;
             return output;
           }
 
-        newRead = bm->CreateTerm(READ, width, writeA, readIndex);
-      } while (READ == newRead.GetKind() && WRITE == newRead[0].GetKind());
+            write = write[0];
+          } while (WRITE == write.GetKind());
 
+		const unsigned int width = term.GetValueWidth();
+        newRead = bm->CreateTerm(READ, width, write, readIndex);
     output = TermToConstTermUsingModel(newRead, arrayread_flag);
 
     //memoize
     CounterExampleMap[term] = output;
     return output;
-  } //Exand_ReadOverWrite_To_ITE_UsingModel()
+      } //Expand_ReadOverWrite_UsingModel()
 
   /* FUNCTION: accepts a non-constant formula, and checks if the
    * formula is ASTTrue or ASTFalse w.r.t to a model
