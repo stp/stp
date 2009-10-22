@@ -1718,7 +1718,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
     BEEV::FatalError("");
   }
 
-  //BEEV::GlobalSTP = (stpstar)vc;
+  BEEV::GlobalSTP = (stpstar)vc;
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if(0 != c) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
@@ -1729,7 +1729,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   cvcparse((void*)AssertsQuery);
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
-  //BEEV::GlobalSTP->TopLevelSTP(asserts, query);
+  BEEV::GlobalSTP->TopLevelSTP(asserts, query);
 
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);
@@ -1836,7 +1836,7 @@ void vc_Destroy(VC vc) {
   //     delete aaa;
   //   }
   delete decls;
-  delete b;
+  delete (stpstar)vc;
 }
 
 void vc_DeleteExpr(Expr e) {

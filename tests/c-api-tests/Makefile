@@ -1,4 +1,5 @@
-CXXFLAGS=-DEXT_HASH_MAP -m32 -I../../src/c_interface -L../../lib
+include ../../scripts/Makefile.common
+CXXFLAGS=-DEXT_HASH_MAP $(CFLAGS) $(CFLAGS_M32) -I../../src/c_interface -L../../lib
 
 
 all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19

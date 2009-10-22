@@ -370,15 +370,17 @@ namespace BEEV
 
     void ClearAllTables(void) 
     {
-      // _interior_unique_table.clear();
-      // _bvconst_unique_table.clear();
-      // _symbol_unique_table.clear();
       NodeLetVarMap.clear();
       NodeLetVarMap1.clear();
       PLPrintNodeSet.clear();
       AlreadyPrintedSet.clear();
       StatInfoSet.clear();
-      //_asserts.clear();
+      
+      //DO NOT UNCOMMENT
+      //   _asserts.clear();
+      //   _interior_unique_table.clear();
+      //   _bvconst_unique_table.clear();
+      //   _symbol_unique_table.clear();      
     } //End of ClearAllTables()
 
   };//End of Class STPMgr

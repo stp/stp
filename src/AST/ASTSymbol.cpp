@@ -37,17 +37,17 @@ namespace BEEV
     delete this;
   }//End of cleanup()
 
-  unsigned long hash(unsigned char *str)
+  unsigned long long hash(unsigned char *str)
   {
-    unsigned long hash = 5381;
-    int c;
+    unsigned long long hash = 5381;
+    long long c;
     
     while (c = *str++)
       hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
     //cout << "Hash value computed is: " << hash << endl;
     
-    return hash;
+    return (unsigned long long)hash;
   }
 
 

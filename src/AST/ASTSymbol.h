@@ -12,7 +12,7 @@
 
 namespace BEEV
 {
-  unsigned long hash(unsigned char *str);
+  unsigned long long hash(unsigned char *str);
 
   /******************************************************************
    *  Class ASTSymbol:                                              *

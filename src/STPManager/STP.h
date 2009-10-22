@@ -89,12 +89,12 @@ namespace BEEV
     
     void ClearAllTables(void)
     {
-      bm->ClearAllTables();
       simp->ClearAllTables();
       bvsolver->ClearAllTables();
       arrayTransformer->ClearAllTables();
       tosat->ClearAllTables();
       Ctr_Example->ClearAllTables();
+      bm->ClearAllTables();
     }
   }; //End of Class STP
 };//end of namespace
