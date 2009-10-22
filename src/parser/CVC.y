@@ -49,6 +49,7 @@
   //ASTNode,ASTVec
   BEEV::ASTNode *node;
   BEEV::ASTVec *vec;
+  char* str;
 
   //Hash_Map to hold Array Updates during parse A map from array index
   //to array values. To support the WITH construct
@@ -166,6 +167,9 @@
 %token <node> BVCONST_TOK
 %token <node> TERMID_TOK FORMID_TOK COUNTEREXAMPLE_TOK
 %token <uintval> NUMERAL_TOK
+%token <str> BIN_BASED_NUMBER
+%token <str> DEC_BASED_NUMBER
+%token <str> HEX_BASED_NUMBER
 
 %%
 
@@ -717,6 +721,24 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->Reso
   //return ITE(*$3, length(1), 0bin1, 0bin0)
   $$ = new ASTNode(ParserBM->CreateTerm(ITE,1,*$3,one,zero));
   delete $3;
+}
+| NUMERAL_TOK BIN_BASED_NUMBER 
+{ 
+  std::string* vals = new std::string($2);
+  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 2, $1));
+  free($2); delete vals;
+}
+| NUMERAL_TOK DEC_BASED_NUMBER
+{ 
+  std::string* vals = new std::string($2);
+  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 10, $1));
+  free($2); delete vals;
+}
+| NUMERAL_TOK HEX_BASED_NUMBER 
+{ 
+  std::string* vals = new std::string($2);
+  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 16, $1));
+  free($2); delete vals;
 }
 |      Expr '[' Expr ']' 
 {                        

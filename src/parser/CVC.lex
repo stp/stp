@@ -42,6 +42,9 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
 0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
 {DIGIT}+	 { cvclval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}
+\'b[0-1]+ { cvclval.str = strdup(yytext+2); return BIN_BASED_NUMBER;}
+\'d[0-9]+ { cvclval.str = strdup(yytext+2); return DEC_BASED_NUMBER;}
+\'h[0-9a-fA-F]+ { cvclval.str = strdup(yytext+2); return HEX_BASED_NUMBER;}
 
 "%"		 { BEGIN COMMENT;}
 <COMMENT>"\n"	 { BEGIN INITIAL; /* return to normal mode */}

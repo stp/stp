@@ -29,19 +29,24 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "SolverTypes.h"
 
-namespace MINISAT {
-   
-/*************************************************************************************/
 #ifdef _MSC_VER
 #include <ctime>
 
-static inline double cpuTime(void) {
-    return (double)clock() / CLOCKS_PER_SEC; }
 #else
 
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <unistd.h>
+#endif
+
+namespace MINISAT {
+   
+/*************************************************************************************/
+#ifdef _MSC_VER
+
+static inline double cpuTime(void) {
+    return (double)clock() / CLOCKS_PER_SEC; }
+#else
 
 static inline double cpuTime(void) {
     struct rusage ru;

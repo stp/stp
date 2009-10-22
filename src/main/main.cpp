@@ -20,6 +20,13 @@ using namespace BEEV;
 extern int smtparse(void*);
 extern int cvcparse(void*);
 
+// callback for SIGALRM.
+void handle_time_out(int parameter){
+   printf("Timed Out.\n");
+   exit(0);
+}
+
+
 // Amount of memory to ask for at beginning of main.
 static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
 /********************************************************************
@@ -52,6 +59,7 @@ int main(int argc, char ** argv) {
   ToSAT * tosat      = new ToSAT(bm, simp);
   AbsRefine_CounterExample * Ctr_Example = 
     new AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
+  itimerval timeout; 
 
   ParserBM          = bm;
   GlobalSTP         = 
@@ -77,6 +85,8 @@ int main(int argc, char ** argv) {
     "-e  : expand finite-for construct\n";
   helpstring +=  
     "-f  : number of abstraction-refinement loops\n";
+  helpstring +=  
+    "-g  : timeout (seconds until STP gives up)\n";
   helpstring +=  
     "-h  : help\n";
   helpstring +=  
@@ -133,6 +143,14 @@ int main(int argc, char ** argv) {
             case 'f':
               bm->UserFlags.num_absrefine_flag = true;
               bm->UserFlags.num_absrefine = atoi(argv[++i]);
+              break;            
+            case 'g':
+              signal(SIGVTALRM, handle_time_out);
+              timeout.it_interval.tv_usec = 0;
+              timeout.it_interval.tv_sec  = 0;
+              timeout.it_value.tv_usec    = 0;
+              timeout.it_value.tv_sec     = atoi(argv[++i]);
+              setitimer(ITIMER_VIRTUAL, &timeout, NULL);
               break;            
             case 'h':
               fprintf(stderr,usage,prog);
