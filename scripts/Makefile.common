@@ -13,7 +13,9 @@ OPTIMIZE = -g                # Debugging
 OPTIMIZE = -O3 -DNDEBUG      # Maximum optimization
 #OPTIMIZE = -O3 -DNDEBUG -DLESSBYTES_PERNODE
 CFLAGS_BASE = $(OPTIMIZE)
-CFLAGS_M32  = -m32
+#CFLAGS_BASE = $(OPTIMIZE) -DCRYPTOMINISAT
+#CFLAGS_M32  = -m32
+
 
 # You can compile using make STATIC=true to compile a statically
 # linked executable Note that you should execute liblinks.sh first.
@@ -50,7 +52,8 @@ else
 endif
 
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
-CXXFLAGS = $(CFLAGS) -Wextra -DEXT_HASH_MAP -Wno-deprecated
+#CXXFLAGS = $(CFLAGS) -Wextra -DEXT_HASH_MAP -Wno-deprecated
+CXXFLAGS = $(CFLAGS) -DEXT_HASH_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wall -DTR1_UNORDERED_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wall 
 #LDFLAGS= -lstdc++

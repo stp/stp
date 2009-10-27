@@ -24,9 +24,13 @@ all:
 	$(MAKE) -C $(SRC)/simplifier
 	$(MAKE) -C $(SRC)/absrefine_counterexample
 	$(MAKE) -C $(SRC)/to-sat
+ifdef CRYPTOMINISAT
+	$(MAKE) -C $(SRC)/sat cryptominisat
+else
 	$(MAKE) -C $(SRC)/sat core
 #	$(MAKE) -C $(SRC)/sat simp
 #	$(MAKE) -C $(SRC)/sat unsound
+endif
 	$(MAKE) -C $(SRC)/c_interface
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main

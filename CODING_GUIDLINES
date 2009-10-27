@@ -3,5 +3,5 @@ standards. Please visit the following website to learn more:
 
 http://www.gnu.org/prep/standards/standards.html 
 
-2. The code is automatically formatted with the indent tool before
+2. The code is auto-formatted using an emacs-based script before
 check-in.

@@ -39,10 +39,14 @@ PAPERS
 -----
 http://sites.google.com/site/stpfastprover
 
+
 REGRESSIONS
 -----------
 
-Assumes you have downloaded the testcases
+Assumes you have downloaded the testcases as follows:
+
+svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
+
 
 make regresssmt
 make regresscvc

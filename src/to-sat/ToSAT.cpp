@@ -55,9 +55,11 @@ namespace BEEV
 	FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);    
       }
     
+#ifdef CRYPTOMINISAT
+    newS.startClauseAdding();
+#endif
     //iterate through the list (conjunction) of ASTclauses cll
-    ClauseList::const_iterator i = cll.begin(), iend = cll.end();
-    //ClauseList::reverse_iterator i = cll.rbegin(), iend = cll.rend();
+    ClauseList::const_iterator i = cll.begin(), iend = cll.end();    
     for (int count=0, flag=0; i != iend; i++)
       {
         //Clause for the SATSolver

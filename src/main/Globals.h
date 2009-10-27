@@ -23,7 +23,10 @@
 namespace MINISAT
 {
   class Solver;
+#if defined(CRYPTOMINISAT)
+#else
   typedef int Var;
+#endif
 }
 
 namespace BEEV

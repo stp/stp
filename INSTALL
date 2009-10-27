@@ -8,19 +8,13 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-1. To install STP:
+1. To install STP on Linux, MacOS or Windows(Cygwin):
 
    ./clean-install.sh
 
 
+2. To run on Windows Natively:
 
-2. Download large tests:
-
-   svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
-
-
-
-3. Run tests:
-
-   make regresscapi && make regresscvc && make regresssmt
-
+   2.1 Compile STP inside cygwin as above
+   2.2 Add cygwin DLLs to PATH
+   2.3 Run

@@ -621,6 +621,8 @@ namespace BEEV
   {
     if (!UserFlags.stats_flag)
       return;
+#ifdef CRYPTOMINISAT
+#else
     double cpu_time = MINISAT::cpuTime();
     uint64_t mem_used = MINISAT::memUsed();
     reportf("restarts              : %"PRIu64"\n",                      s.starts);
@@ -632,6 +634,7 @@ namespace BEEV
     if (mem_used != 0)
       reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
     reportf("CPU time              : %g s\n", cpu_time);
+#endif
   } //end of PrintStats()
 
 
