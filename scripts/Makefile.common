@@ -8,13 +8,14 @@
 # * LICENSE: Please view LICENSE file in the home dir of this Program
 # ********************************************************************/
 
-#OPTIMIZE = -g -pg           # Debugging and gprof-style profiling
-OPTIMIZE = -g                # Debugging
-OPTIMIZE = -O3 -DNDEBUG      # Maximum optimization
-#OPTIMIZE = -O3 -DNDEBUG -DLESSBYTES_PERNODE
-CFLAGS_BASE = $(OPTIMIZE)
-#CFLAGS_BASE = $(OPTIMIZE) -DCRYPTOMINISAT
-#CFLAGS_M32  = -m32
+#OPTIMIZE     = -g -pg            # Debugging and gprof-style profiling
+OPTIMIZE      = -g                # Debugging
+OPTIMIZE      = -O3 -DNDEBUG      # Maximum optimization
+#OPTIMIZE     = -O3 -DNDEBUG -DLESSBYTES_PERNODE
+CFLAGS_BASE   = $(OPTIMIZE)
+#CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
+#CRYPTOMINISAT = true
+#CFLAGS_M32   = -m32
 SHELL=/bin/bash
 
 

@@ -469,33 +469,33 @@ namespace BEEV
       }
 
     ASTNode newRead = term;
-        const ASTNode readIndex = TermToConstTermUsingModel(newRead[1], false);
+    const ASTNode readIndex = TermToConstTermUsingModel(newRead[1], false);
     //iteratively expand read-over-write, and evaluate against the
     //model at every iteration
-        ASTNode write = newRead[0];
+    ASTNode write = newRead[0];
     do
       {
         ASTNode writeIndex = TermToConstTermUsingModel(write[1], false);
 
-            if (writeIndex == readIndex)
+        if (writeIndex == readIndex)
           {
             //found the write-value. return it
-                output = TermToConstTermUsingModel(write[2], false);
+            output = TermToConstTermUsingModel(write[2], false);
             CounterExampleMap[term] = output;
             return output;
           }
 
-            write = write[0];
-          } while (WRITE == write.GetKind());
+        write = write[0];
+      } while (WRITE == write.GetKind());
 
-		const unsigned int width = term.GetValueWidth();
-        newRead = bm->CreateTerm(READ, width, write, readIndex);
+    const unsigned int width = term.GetValueWidth();
+    newRead = bm->CreateTerm(READ, width, write, readIndex);
     output = TermToConstTermUsingModel(newRead, arrayread_flag);
 
     //memoize
     CounterExampleMap[term] = output;
     return output;
-      } //Expand_ReadOverWrite_UsingModel()
+  } //Expand_ReadOverWrite_UsingModel()
 
   /* FUNCTION: accepts a non-constant formula, and checks if the
    * formula is ASTTrue or ASTFalse w.r.t to a model

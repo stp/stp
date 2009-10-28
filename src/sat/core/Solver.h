@@ -30,13 +30,11 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "SolverTypes.h"
 
 #ifdef _MSC_VER
-#include <ctime>
-
+  #include <ctime>
 #else
-
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <unistd.h>
+  #include <sys/time.h>
+  #include <sys/resource.h>
+  #include <unistd.h>
 #endif
 
 namespace MINISAT {

@@ -383,10 +383,10 @@ namespace BEEV
       vector<ASTVec*>::iterator it    = _asserts.begin();
       vector<ASTVec*>::iterator itend = _asserts.end();
       for(;it!=itend;it++) 
-	{
-	  ASTVec * j = (*it);
-	  j->clear();
-	}
+        {
+          ASTVec * j = (*it);
+          j->clear();
+        }
       _asserts.clear();
 
       _interior_unique_table.clear();

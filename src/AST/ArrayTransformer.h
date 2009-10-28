@@ -143,9 +143,9 @@ namespace BEEV
       ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
       ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
       for(;it!=itend;it++)
-	{
-	  ((*it).second).clear();
-	}
+        {
+          ((*it).second).clear();
+        }
       Arrayname_ReadindicesMap->clear();
       delete Arrayname_ReadindicesMap;
     }

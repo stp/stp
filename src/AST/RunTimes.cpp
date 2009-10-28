@@ -33,11 +33,11 @@ long RunTimes::getCurrentTime()
 void RunTimes::print()
 {
   if (0 !=  category_stack.size())
-  {
-	  std::cerr << "size:" <<  category_stack.size() << std::endl;
-	  std::cerr << "top:" << CategoryNames[category_stack.top().first] << std::endl;
-	  BEEV::FatalError("category stack is not yet empty!!");
-  }
+    {
+      std::cerr << "size:" <<  category_stack.size() << std::endl;
+      std::cerr << "top:" << CategoryNames[category_stack.top().first] << std::endl;
+      BEEV::FatalError("category stack is not yet empty!!");
+    }
 
   std::ostringstream result;
   result << "statistics\n";

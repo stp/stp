@@ -648,18 +648,18 @@ namespace BEEV
     // FIXME: Don't bother computing i+1 carry, which is discarded.
     for (int i = 0; i < n; i++)
       {
-	ASTNode nextcin;
-	if(i != n-1) 
-	  {
-	    //Compute this only for i=0 to n-2
-	    nextcin = Majority(sum[i], y[i], cin);
-	  }
+        ASTNode nextcin;
+        if(i != n-1) 
+          {
+            //Compute this only for i=0 to n-2
+            nextcin = Majority(sum[i], y[i], cin);
+          }
         sum[i] = Sum(sum[i], y[i], cin);        
-	if(i != n-1)
-	  {
-	    //Compute this only for i=0 to n-2
-	    cin = nextcin;
-	  }
+        if(i != n-1)
+          {
+            //Compute this only for i=0 to n-2
+            cin = nextcin;
+          }
       }
 
     //   cout << "----------------" << endl << "Result: " << endl;
@@ -731,11 +731,11 @@ namespace BEEV
     // worth doing explicitly (e.g., a = b, a = ~b, etc.)
     else
       {
-	//         return _bm->CreateSimpForm(OR, 
-	//                                    _bm->CreateSimpForm(AND, a, b), 
-	//                                    _bm->CreateSimpForm(AND, b, c), 
-	//                                    _bm->CreateSimpForm(AND, a, c));
-	return _bm->CreateSimpForm(AND, 
+        //         return _bm->CreateSimpForm(OR, 
+        //                                    _bm->CreateSimpForm(AND, a, b), 
+        //                                    _bm->CreateSimpForm(AND, b, c), 
+        //                                    _bm->CreateSimpForm(AND, a, c));
+        return _bm->CreateSimpForm(AND, 
                                    _bm->CreateSimpForm(OR, a, b), 
                                    _bm->CreateSimpForm(OR, b, c), 
                                    _bm->CreateSimpForm(OR, a, c));
@@ -744,28 +744,28 @@ namespace BEEV
   }
 
   ASTNode BitBlaster::Sum(const ASTNode& xi,
-			  const ASTNode& yi,
-			  const ASTNode& cin)
+                          const ASTNode& yi,
+                          const ASTNode& cin)
   {
     // For some unexplained reason, XORs are faster than converting
     // them to cluases at this point
     ASTNode S0 = _bm->CreateSimpForm(XOR, 
-    				     _bm->CreateSimpForm(XOR, xi, yi), 
-    				     cin);    
+                                     _bm->CreateSimpForm(XOR, xi, yi), 
+                                     cin);    
     return S0;
     // ASTNode S1 = _bm->CreateSimpForm(OR,xi,yi,cin);
     //     ASTNode S2 = _bm->CreateSimpForm(OR,
-    // 				     _bm->CreateSimpForm(NOT,xi),
-    // 				     _bm->CreateSimpForm(NOT,yi),
-    // 				     cin);
+    //                               _bm->CreateSimpForm(NOT,xi),
+    //                               _bm->CreateSimpForm(NOT,yi),
+    //                               cin);
     //     ASTNode S3 = _bm->CreateSimpForm(OR,
-    // 				     _bm->CreateSimpForm(NOT,xi),
-    // 				     yi,
-    // 				     _bm->CreateSimpForm(NOT,cin));
+    //                               _bm->CreateSimpForm(NOT,xi),
+    //                               yi,
+    //                               _bm->CreateSimpForm(NOT,cin));
     //     ASTNode S4 = _bm->CreateSimpForm(OR,
-    // 				     xi,
-    // 				     _bm->CreateSimpForm(NOT,yi),
-    // 				     _bm->CreateSimpForm(NOT,cin));
+    //                               xi,
+    //                               _bm->CreateSimpForm(NOT,yi),
+    //                               _bm->CreateSimpForm(NOT,cin));
     //     ASTVec S;
     //     S.push_back(S1);
     //     S.push_back(S2);
@@ -926,8 +926,8 @@ namespace BEEV
   // complementing the result bit.
   ASTNode BitBlaster::BBBVLE(const ASTVec& left, 
                              const ASTVec& right,
-			     bool is_signed,
-			     bool is_bvlt)
+                             bool is_signed,
+                             bool is_bvlt)
   {
     ASTVec::const_reverse_iterator lit    = left.rbegin();
     ASTVec::const_reverse_iterator litend = left.rend();
@@ -945,72 +945,72 @@ namespace BEEV
     for(lit++, rit++; lit < litend; lit++, rit++)
       {
         this_compare_bit = 
-	  _bm->CreateSimpForm(AND, _bm->CreateSimpNot(*lit), *rit);
+          _bm->CreateSimpForm(AND, _bm->CreateSimpNot(*lit), *rit);
 
-	ASTNode thisbit_output = 
-	  _bm->CreateSimpForm(AND, this_compare_bit, prev_eq_bit);
-	bit_comparisons.push_back(thisbit_output);
+        ASTNode thisbit_output = 
+          _bm->CreateSimpForm(AND, this_compare_bit, prev_eq_bit);
+        bit_comparisons.push_back(thisbit_output);
 
-	// (neg(lit) OR rit)(lit OR neg(rit))
-	ASTNode this_eq_bit = 
-	  _bm->CreateSimpForm(AND,
-			      _bm->CreateSimpForm(IFF,*lit,*rit),
-			      prev_eq_bit);
-	prev_eq_bit = this_eq_bit;
+        // (neg(lit) OR rit)(lit OR neg(rit))
+        ASTNode this_eq_bit = 
+          _bm->CreateSimpForm(AND,
+                              _bm->CreateSimpForm(IFF,*lit,*rit),
+                              prev_eq_bit);
+        prev_eq_bit = this_eq_bit;
       }
     
     if(!is_bvlt)
       {
-	bit_comparisons.push_back(prev_eq_bit);
+        bit_comparisons.push_back(prev_eq_bit);
       }
     ASTNode output =
       _bm->CreateSimpForm(OR, bit_comparisons);
 
     return output;
-//     // "thisbit" represents BVLE of the suffixes of the BVs
-//     // from that position .  if R < L, return TRUE, else if L < R
-//     // return FALSE, else return BVLE of lower-order bits.  MSB is
-//     // treated separately, because signed comparison is done by
-//     // complementing the MSB of each BV, then doing an unsigned
-//     // comparison.    
-//     ASTVec::const_iterator lit = left.rbegin();
-//     ASTVec::const_iterator litend = left.rend();
-//     ASTVec::const_iterator rit = right.rbegin();
-//     ASTNode prevbit = ASTTrue;
-//     for (; lit < litend - 1; lit++, rit++)
-//       {
-//         ASTNode neglit = _bm->CreateSimpNot(*lit);
-//         ASTNode thisbit = 
-//           _bm->CreateSimpForm(OR, 
-//                               _bm->CreateSimpForm(AND, neglit, *rit),
-//                               _bm->CreateSimpForm(AND, 
-//                                                   _bm->CreateSimpForm(OR, 
-//                                                                       neglit,
-//                                                                       *rit), 
-//                                                   prevbit));    
-//         prevbit = thisbit;
-//       }
+    //     // "thisbit" represents BVLE of the suffixes of the BVs
+    //     // from that position .  if R < L, return TRUE, else if L < R
+    //     // return FALSE, else return BVLE of lower-order bits.  MSB is
+    //     // treated separately, because signed comparison is done by
+    //     // complementing the MSB of each BV, then doing an unsigned
+    //     // comparison.    
+    //     ASTVec::const_iterator lit = left.rbegin();
+    //     ASTVec::const_iterator litend = left.rend();
+    //     ASTVec::const_iterator rit = right.rbegin();
+    //     ASTNode prevbit = ASTTrue;
+    //     for (; lit < litend - 1; lit++, rit++)
+    //       {
+    //         ASTNode neglit = _bm->CreateSimpNot(*lit);
+    //         ASTNode thisbit = 
+    //           _bm->CreateSimpForm(OR, 
+    //                               _bm->CreateSimpForm(AND, neglit, *rit),
+    //                               _bm->CreateSimpForm(AND, 
+    //                                                   _bm->CreateSimpForm(OR, 
+    //                                                                       neglit,
+    //                                                                       *rit), 
+    //                                                   prevbit));    
+    //         prevbit = thisbit;
+    //       }
 
-//     // Handle MSB -- negate MSBs if signed comparison
-//     // FIXME: make into refs after it's debugged.
-//     ASTNode lmsb = *lit;
-//     ASTNode rmsb = *rit;
-//     if (is_signed)
-//       {
-//         lmsb = _bm->CreateSimpNot(*lit);
-//         rmsb = _bm->CreateSimpNot(*rit);
-//       }
+    //     // Handle MSB -- negate MSBs if signed comparison
+    //     // FIXME: make into refs after it's debugged.
+    //     ASTNode lmsb = *lit;
+    //     ASTNode rmsb = *rit;
+    //     if (is_signed)
+    //       {
+    //         lmsb = _bm->CreateSimpNot(*lit);
+    //         rmsb = _bm->CreateSimpNot(*rit);
+    //       }
 
-//     ASTNode neglmsb = _bm->CreateSimpNot(lmsb);
-//     ASTNode msb = 
-//       // TRUE if l < r
-//       _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglmsb, rmsb), 
-//                           _bm->CreateSimpForm(AND, 
-//                                               _bm->CreateSimpForm(OR, 
-//                                                                   neglmsb,
-//                                                                   rmsb),
-//                                               prevbit)); // else prevbit
-//     return msb;
+    //     ASTNode neglmsb = _bm->CreateSimpNot(lmsb);
+    //     ASTNode msb = 
+    //       // TRUE if l < r
+    //       _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglmsb, rmsb), 
+    //                           _bm->CreateSimpForm(AND, 
+    //                                               _bm->CreateSimpForm(OR, 
+    //                                                                   neglmsb,
+    //                                                                   rmsb),
+    //                                               prevbit)); // else prevbit
+    //     return msb;
   }
 
   // Left shift  within fixed field inserting zeros at LSB.

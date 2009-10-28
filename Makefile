@@ -27,10 +27,19 @@ else
 endif
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
-	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/STPManager/*.o $(SRC)/printer/*.o $(SRC)/absrefine_counterexample/*.o \
-			   $(SRC)/to-sat/*.o $(SRC)/sat/*.or $(SRC)/simplifier/*.o  \
-			   $(SRC)/extlib-constbv/*.o $(SRC)/c_interface/*.o $(SRC)/parser/let-funcs.o  \
-			   $(SRC)/parser/parseCVC.o  $(SRC)/parser/lexCVC.o $(SRC)/main/*.o
+	$(AR) rc libstp.a  $(SRC)/AST/*.o \
+			   $(SRC)/STPManager/*.o \
+			   $(SRC)/printer/*.o \
+		           $(SRC)/absrefine_counterexample/*.o \
+			   $(SRC)/to-sat/*.o \
+			   $(SRC)/sat/*.o \
+			   $(SRC)/simplifier/*.o  \
+			   $(SRC)/extlib-constbv/*.o \
+			   $(SRC)/c_interface/*.o \
+			   $(SRC)/parser/let-funcs.o  \
+			   $(SRC)/parser/parseCVC.o  \
+			   $(SRC)/parser/lexCVC.o \
+			   $(SRC)/main/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/

@@ -22,8 +22,8 @@ extern int cvcparse(void*);
 
 // callback for SIGALRM.
 void handle_time_out(int parameter){
-   printf("Timed Out.\n");
-   exit(0);
+  printf("Timed Out.\n");
+  exit(0);
 }
 
 
