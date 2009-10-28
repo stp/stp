@@ -132,19 +132,18 @@ namespace BEEV
   } //end of toSATandSolve()
 
   // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
-  // assignment.  Returns ASTTrue if true, ASTFalse if false or
-  // undefined.
+  // assignment.
   ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newS, ASTNode form)
   {
     MINISAT::Var satvar = _ASTNode_to_SATVar_Map[form];
-    if (newS.model[satvar] == MINISAT::l_True)
+    if (newS.model[satvar] == MINISAT::l_False)
       {
-        return ASTTrue;
+        return ASTFalse;
       }
     else
       {
-        // False or undefined.
-        return ASTFalse;
+        // True or undefined.
+        return ASTTrue;
       }
   }
 
