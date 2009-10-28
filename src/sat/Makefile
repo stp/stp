@@ -21,4 +21,6 @@ clean:
 	$(MAKE) -C core    clean
 	$(MAKE) -C simp    clean
 	$(MAKE) -C unsound clean
+ifdef CRYPTOMINISAT
 	$(MAKE) -C cryptominisat clean
+endif
