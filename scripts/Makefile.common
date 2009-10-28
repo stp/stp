@@ -15,6 +15,7 @@ OPTIMIZE = -O3 -DNDEBUG      # Maximum optimization
 CFLAGS_BASE = $(OPTIMIZE)
 #CFLAGS_BASE = $(OPTIMIZE) -DCRYPTOMINISAT
 #CFLAGS_M32  = -m32
+SHELL=/bin/bash
 
 
 # You can compile using make STATIC=true to compile a statically

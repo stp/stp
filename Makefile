@@ -98,7 +98,7 @@ regresscvc:
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	scripts/run_cvc_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_cvc_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
@@ -117,7 +117,7 @@ regressbigarray:
 	@echo "Starting tests at" `date` | tee -a $(BIGARRAY_LOG)
 	@echo "*********************************************************" \
           | tee -a $(BIGARRAY_LOG)
-	scripts/run_bigarray_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(BIGARRAY_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_bigarray_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(BIGARRAY_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(BIGARRAY_LOG)
 	@echo "Output is saved in $(BIGARRAY_LOG)" | tee -a $(BIGARRAY_LOG)
@@ -132,7 +132,7 @@ regresssmt:
 	@echo "Starting tests at" `date` | tee -a $(SMT_LOG)
 	@echo "*********************************************************" \
           | tee -a $(SMT_LOG)
-	scripts/run_smt_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(SMT_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_smt_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(SMT_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(SMT_LOG)
 	@echo "Output is saved in $(SMT_LOG)" | tee -a $(SMT_LOG)
@@ -147,7 +147,7 @@ regresscapi:
 	@echo "Starting tests at" `date` | tee -a $(CAPI_LOG)
 	@echo "*********************************************************" \
           | tee -a $(CAPI_LOG)
-	$(MAKE) -C tests/c-api-tests 2>&1 | tee -a $(CAPI_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	$(MAKE) -C tests/c-api-tests 2>&1 | tee -a $(CAPI_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(CAPI_LOG)
 	@echo "Output is saved in $(CAPI_LOG)" | tee -a $(CAPI_LOG)
@@ -162,7 +162,7 @@ regressstp:
 	@echo "Starting tests at" `date` | tee -a $(STP_LOG)
 	@echo "*********************************************************" \
           | tee -a $(STP_LOG)
-	scripts/run_stp_tests.pl 2>&1 | tee -a $(STP_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_stp_tests.pl 2>&1 | tee -a $(STP_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(STP_LOG)
 	@echo "Output is saved in $(STP_LOG)" | tee -a $(STP_LOG)
@@ -184,7 +184,7 @@ grind:
 	@echo "Starting tests at" `date` | tee -a $(GRIND_LOG)
 	@echo "*********************************************************" \
           | tee -a $(GRIND_LOG)
-	scripts/run_cvc_tests.pl $(GRIND_OPTIONS) 2>&1 | tee -a $(GRIND_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
+	scripts/run_cvc_tests.pl $(GRIND_OPTIONS) 2>&1 | tee -a $(GRIND_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(GRIND_LOG)
 	@echo "Output is saved in $(GRIND_LOG)" | tee -a $(GRIND_LOG)
