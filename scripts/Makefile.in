@@ -16,14 +16,8 @@ LIBRARIES=lib/libstp.a
 HEADERS=$(SRC)/c_interface/*.h
 
 .PHONY: all
-all:
-	$(MAKE) -C $(SRC)/AST
-	$(MAKE) -C $(SRC)/STPManager
-	$(MAKE) -C $(SRC)/printer
-	$(MAKE) -C $(SRC)/extlib-constbv
-	$(MAKE) -C $(SRC)/simplifier
-	$(MAKE) -C $(SRC)/absrefine_counterexample
-	$(MAKE) -C $(SRC)/to-sat
+all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv
+
 ifdef CRYPTOMINISAT
 	$(MAKE) -C $(SRC)/sat cryptominisat
 else
@@ -31,7 +25,6 @@ else
 #	$(MAKE) -C $(SRC)/sat simp
 #	$(MAKE) -C $(SRC)/sat unsound
 endif
-	$(MAKE) -C $(SRC)/c_interface
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
 	$(AR) rc libstp.a  $(SRC)/AST/*.o $(SRC)/STPManager/*.o $(SRC)/printer/*.o $(SRC)/absrefine_counterexample/*.o \
@@ -45,6 +38,18 @@ endif
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
 
+#
+# During the build of AST some classes are built that most of the other
+# classes depend upon. So in a parallel make, AST should be made first.
+
+.PHONY: AST
+AST: 
+	$(MAKE) -C $(SRC)/$@
+
+STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv: AST
+	$(MAKE) -C $(SRC)/$@
+
+####
 
 .PHONY: install
 install: all

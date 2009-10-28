@@ -15,18 +15,21 @@ libparser.a: $(OBJS)
 lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
 		$(LEX)  -olexCVC.cpp -Pcvc CVC.lex
 
-parseCVC_defs.h parseCVC.cpp:	CVC.y
-		$(YACC) -p cvc CVC.y
-		@cp y.tab.c parseCVC.cpp
-		@cp y.tab.h parseCVC_defs.h
+#For rules with multiple targets. Make runs the rule once for each target. 
+#These rules are "pattern rules" which only run once (rather than twice).
+parseCV%_defs.h parseCV%.cpp:	CVC.y
+		$(YACC) -o cvc.tab.c -p cvc CVC.y
+		@cp  cvc.tab.c parseCVC.cpp
+		@cp  cvc.tab.h parseCVC_defs.h
 
 lexSMT.cpp:	parseSMT_defs.h smtlib.lex ../AST/AST.h
-		$(LEX) -olexSMT.cpp -Psmt smtlib.lex 
+		$(LEX) -o lexSMT.cpp --prefix smt smtlib.lex 
 
-parseSMT_defs.h parseSMT.cpp:smtlib.y
-		$(YACC) -p smt smtlib.y
-		@cp y.tab.c parseSMT.cpp
-		@cp y.tab.h parseSMT_defs.h
+parseSM%_defs.h parseSM%.cpp:smtlib.y
+		$(YACC) -o smt.tab.c -p smt smtlib.y
+		@cp  smt.tab.c parseSMT.cpp
+		@cp  smt.tab.h parseSMT_defs.h
+
 
 clean:	
-		rm -rf *.o *.a parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser y.tab.* lex.yy.c .#*
+	rm -rf *.o parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser smt.tab.* cvc.tab.* lex.yy.c .#*

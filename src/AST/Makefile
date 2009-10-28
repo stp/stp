@@ -17,9 +17,11 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ bbtest asttest cnftest *.a  ASTKind.cpp ASTKind.h depend .#*
+	rm -rf *.o *~ *.a  ASTKind.cpp ASTKind.h depend .#*
 
-depend: $(SRCS) ASTKind.h ASTKind.cpp
+#If this depended on ASTKind.h & ASTKind.cpp, then ./genkinds.pl
+#would be called each "clean".
+depend: $(SRCS) ASTKind.kinds genkinds.pl
 	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
 
 -include ./depend
