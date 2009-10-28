@@ -110,6 +110,8 @@ namespace BEEV
 
     ~BitBlaster()
     {
+      BBTermMemo.clear();
+      BBFormMemo.clear();
     }
     
 

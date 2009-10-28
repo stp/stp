@@ -124,6 +124,14 @@ namespace BEEV
       _ASTNode_to_SATVar_Map.clear();
       _SATVar_to_AST_Vector.clear();
     }
+
+    ~ToSAT()
+    {
+      _ASTNode_to_SATVar_Map.clear();
+      RepLitMap.clear();
+      CheckBBandCNFMemo.clear();
+      _SATVar_to_AST_Vector.clear();
+    }
   }; //end of class ToSAT
 }; //end of namespace
 

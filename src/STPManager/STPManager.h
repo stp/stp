@@ -375,14 +375,24 @@ namespace BEEV
       PLPrintNodeSet.clear();
       AlreadyPrintedSet.clear();
       StatInfoSet.clear();
-      
-      //DO NOT UNCOMMENT
-      //   _asserts.clear();
-      //   _interior_unique_table.clear();
-      //   _bvconst_unique_table.clear();
-      //   _symbol_unique_table.clear();      
+      TermsAlreadySeenMap.clear();
     } //End of ClearAllTables()
 
+    ~STPMgr()
+    {
+      vector<ASTVec*>::iterator it    = _asserts.begin();
+      vector<ASTVec*>::iterator itend = _asserts.end();
+      for(;it!=itend;it++) 
+	{
+	  ASTVec * j = (*it);
+	  j->clear();
+	}
+      _asserts.clear();
+
+      _interior_unique_table.clear();
+      _bvconst_unique_table.clear();
+      _symbol_unique_table.clear();
+    }
   };//End of Class STPMgr
 };//end of namespace
 #endif

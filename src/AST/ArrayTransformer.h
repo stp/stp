@@ -136,6 +136,18 @@ namespace BEEV
     // Destructor
     ~ArrayTransformer()
     {
+      Arrayread_IteMap->clear();
+      delete Arrayread_IteMap;
+      Introduced_SymbolsSet.clear();
+      ArrayWrite_RemainingAxioms.clear();
+      ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
+      ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
+      for(;it!=itend;it++)
+	{
+	  ((*it).second).clear();
+	}
+      Arrayname_ReadindicesMap->clear();
+      delete Arrayname_ReadindicesMap;
     }
 
     // Takes a formula, transforms it by replacing array reads with

@@ -185,6 +185,12 @@ namespace BEEV
       _ASTNode_to_BitvectorMap.clear();
       ComputeFormulaMap.clear();
     } //End of ClearAllTables()
+
+    ~AbsRefine_CounterExample()
+    {
+      ClearAllTables();
+    } //End of destructor
+
   };//End of Class CounterExample
 
   class CompleteCounterExample
