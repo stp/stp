@@ -62,12 +62,12 @@ namespace BEEV
     ~STP()
     {
       ClearAllTables();
-      // delete bvsolver;
-      //       delete Ctr_Example;
-      //       delete arrayTransformer;            
-      //       delete tosat;
-      //       delete simp;
-      //       delete bm;   
+      delete bvsolver;
+      delete Ctr_Example;
+      delete arrayTransformer;            
+      delete tosat;
+      delete simp;
+//       delete bm;   
     }
 
     /****************************************************************
