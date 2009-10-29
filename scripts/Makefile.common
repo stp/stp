@@ -18,7 +18,6 @@ CRYPTOMINISAT = true
 #CFLAGS_M32   = -m32
 SHELL=/bin/bash
 
-
 # You can compile using make STATIC=true to compile a statically
 # linked executable Note that you should execute liblinks.sh first.
 #STATIC=true
