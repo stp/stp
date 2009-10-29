@@ -3,8 +3,8 @@
  # To make in debug mode, type 'make "OPTIMIZE=-g"
  # To make in optimized mode, type 'make "OPTIMIZE=-O3" 
 
-
-include scripts/Makefile.common scripts/config.info
+include  scripts/Makefile.common
+-include scripts/config.info
 
 BIN_DIR=$(PREFIX)/bin
 LIB_DIR=$(PREFIX)/lib
@@ -92,7 +92,6 @@ clean:
 
 .PHONY: configclean
 configclean:
-	touch scripts/config.info
 	rm -rf scripts/config.info
 
 .PHONY: regressall
