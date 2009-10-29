@@ -92,6 +92,7 @@ clean:
 
 .PHONY: configclean
 configclean:
+	touch scripts/config.info
 	rm -rf scripts/config.info
 
 .PHONY: regressall
