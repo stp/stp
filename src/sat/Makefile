@@ -15,9 +15,7 @@ unsound:
 
 .PHONY: cryptominisat
 cryptominisat:
-	$(MAKE) -C cryptominisat
-	cp cryptominisat/libminisat.a .
-	cp cryptominisat/CMakeFiles/minisat.dir/Solver/*.o .
+	$(MAKE) -C cryptominisat lib all
 
 .PHONY: clean
 clean:
@@ -25,6 +23,5 @@ clean:
 	$(MAKE) -C core    clean
 	$(MAKE) -C simp    clean
 	$(MAKE) -C unsound clean
-ifdef CRYPTOMINISAT
 	$(MAKE) -C cryptominisat clean
-endif
+

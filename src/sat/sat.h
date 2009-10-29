@@ -2,8 +2,8 @@
 #define SAT_H_
 
 #ifdef CRYPTOMINISAT
-#include "cryptominisat/Solver/Solver.h"
-#include "cryptominisat/Solver/SolverTypes.h"
+#include "cryptominisat/Solver.h"
+#include "cryptominisat/SolverTypes.h"
 #else
 #include "core/Solver.h"
 #include "core/SolverTypes.h"
