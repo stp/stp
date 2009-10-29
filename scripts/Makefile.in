@@ -20,10 +20,15 @@ all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interfa
 
 ifdef CRYPTOMINISAT
 	$(MAKE) -C $(SRC)/sat cryptominisat
-else
+endif
+ifdef CORE
 	$(MAKE) -C $(SRC)/sat core
-#	$(MAKE) -C $(SRC)/sat simp
-#	$(MAKE) -C $(SRC)/sat unsound
+endif
+ifdef SIMP
+	$(MAKE) -C $(SRC)/sat simp
+endif
+ifdef UNSOUND
+	$(MAKE) -C $(SRC)/sat unsound
 endif
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main

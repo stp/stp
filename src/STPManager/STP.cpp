@@ -119,10 +119,20 @@ namespace BEEV {
     bm->TermsAlreadySeenMap_Clear();
 
     SOLVER_RETURN_TYPE res;
+    
     //solver instantiated here
+#ifdef CORE
     MINISAT::Solver newS;
-    //MINISAT::SimpSolver newS;
-    //MINISAT::UnsoundSimpSolver newS;
+#endif
+
+#ifdef SIMP
+    MINISAT::SimpSolver newS;
+#endif
+
+#ifdef UNSOUND
+    MINISAT::UnsoundSimpSolver newS;
+#endif
+
     if (bm->UserFlags.arrayread_refinement_flag)
       {
         bm->counterexample_checking_during_refinement = true;

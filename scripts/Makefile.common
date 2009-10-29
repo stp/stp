@@ -12,10 +12,18 @@
 OPTIMIZE      = -g                # Debugging
 OPTIMIZE      = -O3 -DNDEBUG      # Maximum optimization
 #OPTIMIZE     = -O3 -DNDEBUG -DLESSBYTES_PERNODE
-CFLAGS_BASE   = $(OPTIMIZE)
-#CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
-#CRYPTOMINISAT = true
 #CFLAGS_M32   = -m32
+CFLAGS_BASE   = $(OPTIMIZE)
+
+#CRYPTOMINISAT = true
+#CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
+CORE          = true
+CFLAGS_BASE   = $(OPTIMIZE) -DCORE
+#UNSOUND       = true
+#CFLAGS_BASE   = $(OPTIMIZE) -DUNSOUND
+#SIMP          = true
+#CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
+
 SHELL=/bin/bash
 
 # You can compile using make STATIC=true to compile a statically

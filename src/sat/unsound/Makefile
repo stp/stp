@@ -3,7 +3,7 @@ MTL       = ../mtl
 CORE      = ../core
 CHDRS     = $(wildcard *.h) $(wildcard $(MTL)/*.h)
 EXEC      = minisat
-CFLAGS    = -I$(MTL) -I$(CORE) -Wall -ffloat-store $(CFLAGS_M32)
+CFLAGS    = -I$(MTL) -I$(CORE) -ffloat-store $(CFLAGS_M32)
 LFLAGS    = -lz
 
 CSRCS     = $(wildcard *.C)
