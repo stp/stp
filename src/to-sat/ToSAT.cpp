@@ -134,6 +134,8 @@ namespace BEEV
       return false;
   } //end of toSATandSolve()
 
+#if 0
+
   // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
   // assignment.
   ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newS, ASTNode form)
@@ -267,4 +269,5 @@ namespace BEEV
 
     return (CheckBBandCNFMemo[form] = result);
   } //end of CheckBBandCNF_int()
+#endif
 }; //end of namespace BEEV
