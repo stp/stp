@@ -20,16 +20,16 @@ CFLAGS_BASE   = $(OPTIMIZE)
 #CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
 
 # OPTION to compile in MiniSAT
-#CORE          = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DCORE
+CORE          = true
+CFLAGS_BASE   = $(OPTIMIZE) -DCORE
 
 # OPTION to compile in UNSOUND MiniSAT
 #UNSOUND       = true
 #CFLAGS_BASE   = $(OPTIMIZE) -DUNSOUND
 
 # OPTION to compile in Simplifying MiniSAT
-SIMP          = true
-CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
+#SIMP          = true
+#CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
 
 SHELL=/bin/bash
 
