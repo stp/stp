@@ -15,19 +15,19 @@ OPTIMIZE      = -O3 -DNDEBUG      # Maximum optimization
 #CFLAGS_M32   = -m32
 CFLAGS_BASE   = $(OPTIMIZE)
 
-# OPTION to compile in CRYPTOMiniSAT
-#CRYPTOMINISAT = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
+# OPTION to compile CRYPTOMiniSAT
+CRYPTOMINISAT = true
+CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT
 
-# OPTION to compile in MiniSAT
-CORE          = true
-CFLAGS_BASE   = $(OPTIMIZE) -DCORE
+# OPTION to compile MiniSAT
+#CORE          = true
+#CFLAGS_BASE   = $(OPTIMIZE) -DCORE
 
-# OPTION to compile in UNSOUND MiniSAT
+# OPTION to compile UNSOUND MiniSAT
 #UNSOUND       = true
 #CFLAGS_BASE   = $(OPTIMIZE) -DUNSOUND
 
-# OPTION to compile in Simplifying MiniSAT
+# OPTION to compile Simplifying MiniSAT
 #SIMP          = true
 #CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
 
