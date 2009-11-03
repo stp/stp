@@ -28,9 +28,9 @@ BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
 bool cinterface_exprdelete_on_flag = false;
 
-/* GLOBAL FUNCTION: parser
- */
+// GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
+extern int smtparse(void*);
 
 void vc_setFlags(VC vc, char c) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
@@ -958,8 +958,8 @@ Expr vc_bvConstExprFromInt(VC vc,
   unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> 64-n_bits;
   //printf("%ull", max_n_bits);
   if(v > max_n_bits) {
-    printf("CInterface: vc_bvConstExprFromInt: "                        \
-           "Cannot construct a constant %llu >= %d,\n", v, max_n_bits);
+    printf("CInterface: vc_bvConstExprFromInt: "\
+           "Cannot construct a constant %llu >= %llu,\n", v, max_n_bits);
     BEEV::FatalError("FatalError");
   }
   node n = b->CreateBVConst(n_bits, v);
@@ -1709,7 +1709,7 @@ static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
 
 Expr vc_parseExpr(VC vc, const char* infile) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-  extern FILE* cvcin;
+  extern FILE *cvcin, *smtin;
   const char * prog = "stp";
 
   cvcin = fopen(infile,"r");
@@ -1726,7 +1726,17 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   }
 
   BEEV::ASTVec * AssertsQuery = new BEEV::ASTVec;
-  cvcparse((void*)AssertsQuery);
+  if (b->UserFlags.smtlib_parser_flag) 
+    {
+      smtin = cvcin;
+      cvcin = NULL;
+      smtparse((void*)AssertsQuery);
+    } 
+  else
+    {
+      cvcparse((void*)AssertsQuery);
+    }
+
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
   //BEEV::GlobalSTP->TopLevelSTP(asserts, query);

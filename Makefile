@@ -44,6 +44,8 @@ endif
 			   $(SRC)/parser/let-funcs.o  \
 			   $(SRC)/parser/parseCVC.o  \
 			   $(SRC)/parser/lexCVC.o \
+			   $(SRC)/parser/parseSMT.o \
+			   $(SRC)/parser/lexSMT.o \
 			   $(SRC)/main/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
@@ -52,7 +54,6 @@ endif
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
 
-#
 # During the build of AST some classes are built that most of the other
 # classes depend upon. So in a parallel make, AST should be made first.
 

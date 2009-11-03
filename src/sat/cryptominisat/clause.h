@@ -24,7 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <stdint.h>
 #include <cstdio>
 #include <vector>
-#include <sys/types.h>
+//#include <sys/types.h>
 #include "mtl/Vec.h"
 #include "SolverTypes.h"
 
