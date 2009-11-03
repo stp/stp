@@ -1,6 +1,8 @@
+# Some of these tests look for leaks, so place a limit on virtual memory.
+# Big enough leaks will thus cause a segfault.
+
 include ../../scripts/Makefile.common
 CXXFLAGS=-DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib
-
 
 all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	rm -rf *.out
@@ -41,7 +43,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	./a10.out
 11:
 	g++  $(CXXFLAGS)  squares-leak.c -lstp -o a11.out
-#	./a11.out
+	ulimit -v 30000 && ./a11.out
 12:
 	g++  $(CXXFLAGS)  stp-counterex.c -lstp -o a12.out
 	./a12.out
@@ -67,6 +69,10 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 19:
 	g++  -g $(CXXFLAGS)  biosat-rna.cpp  -lstp -o biosat.out
 	./biosat.out AUUGGUAUGUAAGCUACUUCUUCCAAGACCA 800
+
+20:
+	g++  -g $(CXXFLAGS)  leak.c  -lstp -o a20.out
+	ulimit -v 13000 && ./a20.out
 
 
 clean:
