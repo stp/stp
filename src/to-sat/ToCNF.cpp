@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Mike Katelman
  *
  * BEGIN DATE: November, 2005
  *

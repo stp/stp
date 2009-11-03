@@ -24,7 +24,8 @@ namespace BEEV
     //########################################
     // data types
 
-    // for the meaning of control bits, see "utilities for contol bits".
+    // for the meaning of control bits, see "utilities for contol
+    // bits".
     typedef struct
     {
       int control;
@@ -55,7 +56,7 @@ namespace BEEV
     STPMgr *bm;
     ASTNodeToCNFInfoMap info;
     ASTNodeToASTNodePtrMap store;
-
+      
     //########################################
     //########################################
     // utility predicates

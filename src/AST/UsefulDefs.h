@@ -40,6 +40,7 @@
 #include <hash_map>
 #endif
 
+#define MAP          map
 #define HASHMAP      hash_map
 #define HASHSET      hash_set
 #define HASHMULTISET hash_multiset

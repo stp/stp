@@ -79,6 +79,11 @@ namespace BEEV
   
   // Datatype for Clauselists
   typedef vector<ClausePtr> ClauseList;
+
+  //Datatype for ClauseLists
+  typedef MAP<
+    int,
+    ClauseList *> ClauseBuckets;
   
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
