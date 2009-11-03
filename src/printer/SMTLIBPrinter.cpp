@@ -21,6 +21,14 @@ namespace printer
   using std::string;
   using namespace BEEV;
 
+  static string tolower(const char * name)
+  {
+	string s(name);
+	for (size_t i = 0; i < s.size(); ++i)
+	  s[i] = ::tolower(s[i]);
+	return s;
+  }
+  
   string functionToSMTLIBName(const BEEV::Kind k);
   void SMTLIB_Print1(ostream& os, 
                      const BEEV::ASTNode n, 
@@ -32,7 +40,9 @@ namespace printer
     // need to add fake headers into here.
     os << "(" << endl;
     os << "benchmark blah" << endl;
+    os << ":logic QF_BV" << endl;
     printVarDeclsToStream(n.GetSTPMgr(),os);
+    os << ":formula" << endl;
     SMTLIB_Print(os, n, 0);
     os << ")" << endl;
   }
@@ -50,7 +60,8 @@ namespace printer
 
         os << ":extrafuns (( ";
         a.nodeprint(os);
-        os << " bv[" << a.GetValueWidth() << "]";
+        //os << " bv[" << a.GetValueWidth() << "]";
+        os << " BitVec[" << a.GetValueWidth() << "]";
         os << " ))" << endl;
         break;
 
@@ -278,7 +289,8 @@ namespace printer
       case OR:
       case XOR:
       case IFF:
-        return _kind_names[k];
+        //return _kind_names[k];
+        return tolower(_kind_names[k]);
 
       case BVCONCAT:
         return "concat";

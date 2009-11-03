@@ -31,7 +31,6 @@ namespace BEEV
 
   const ASTNode BitBlaster::BBTerm(const ASTNode& term)
   {
-
     //CHANGED TermMemo is now an ASTNodeMap. Based on BBFormMemo
     ASTNodeMap::iterator it = BBTermMemo.find(term);
     if (it != BBTermMemo.end())
