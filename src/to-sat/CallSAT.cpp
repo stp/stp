@@ -8,11 +8,12 @@
  ********************************************************************/
 
 #include "ToSAT.h"
+#define MAX_BUCKET_LIMIT 3
 
 namespace BEEV
 {
-
-  static ClauseBuckets * SortClauseList_IntoBuckets(ClauseList * cl)
+  //Bucketize clauses into buckets of size 1,2,...MAX_BUCKET_LIMIT
+  static ClauseBuckets * Sort_ClauseList_IntoBuckets(ClauseList * cl)
   {
     ClauseBuckets * cb = new ClauseBuckets();
     
@@ -22,7 +23,11 @@ namespace BEEV
       {
 	ClausePtr cptr = *it;
 	int cl_size = cptr->size();
-	
+	if(cl_size >= MAX_BUCKET_LIMIT)
+	  {
+	    cl_size = MAX_BUCKET_LIMIT;
+	  }
+
 	//If no clauses of size cl_size have been seen, then create a
 	//bucket for that size
 	if(cb->find(cl_size) == cb->end())
@@ -41,6 +46,25 @@ namespace BEEV
     return cb;
   } //End of SortClauseList_IntoBuckets()
 
+  bool ToSAT::CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
+				       ClauseBuckets * cb)
+  {
+    ClauseBuckets::iterator it = cb->begin();
+    ClauseBuckets::iterator itend = cb->end();
+    
+    bool sat = false;
+    for(;it!=itend;it++)
+      {
+	ClauseList *cl = (*it).second;
+	sat = toSATandSolve(SatSolver,*cl);
+	if(!sat)
+	  {
+	    return sat;
+	  }
+      }
+    return sat;
+  }
+
   //Call the SAT solver, and check the result before returning. This
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
@@ -55,8 +79,9 @@ namespace BEEV
 
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);
-    ClauseBuckets * cb = SortClauseList_IntoBuckets(cl);
-    bool sat = toSATandSolve(SatSolver, *cl);
+    ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
+    //bool sat = toSATandSolve(SatSolver, *cl);
+    bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
     cm->DELETE(cl);
     delete cm;
     return sat;

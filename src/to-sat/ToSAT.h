@@ -102,6 +102,11 @@ namespace BEEV
     bool CallSAT(MINISAT::Solver& SatSolver, 
                  const ASTNode& modified_input,
                  const ASTNode& original_input);
+
+    //Iteratively goes through the Clause Buckets, and calls
+    //toSATandSolve()
+    bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
+				  ClauseBuckets * cb);
     
     // Converts the clause to SAT and calls SAT solver
     bool toSATandSolve(MINISAT::Solver& S, ClauseList& cll);
