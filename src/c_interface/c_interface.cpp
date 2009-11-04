@@ -26,6 +26,9 @@ typedef BEEV::ASTVec                     nodelist;
 typedef BEEV::CompleteCounterExample*    CompleteCEStar;
 BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
+
+// persist holds a copy of ASTNodes so that the reference count of objects we have pointers to doesn't hit zero.
+vector<BEEV::ASTNode> persist;
 bool cinterface_exprdelete_on_flag = false;
 
 // GLOBAL FUNCTION: parser
@@ -913,9 +916,11 @@ Type vc_bvType(VC vc, int num_bits) {
     }
 
   node e = b->CreateBVConst(32, num_bits);
-  nodestar output = new node(b->CreateNode(BEEV::BITVECTOR,e));
+  node output = (b->CreateNode(BEEV::BITVECTOR,e));
+  int index = persist.size();
+  persist.push_back(output);
   //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return &persist[index];
 }
 
 Type vc_bv32Type(VC vc) {
@@ -1744,6 +1749,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);
   nodestar output = new node(o);
+  delete AssertsQuery;
   return output;
 } //end of vc_parseExpr()
 
@@ -1845,6 +1851,7 @@ void vc_Destroy(VC vc) {
   //     BEEV::ASTNode * aaa = *it;
   //     delete aaa;
   //   }
+  persist.clear();
   delete decls;
   delete (stpstar)vc;
 }

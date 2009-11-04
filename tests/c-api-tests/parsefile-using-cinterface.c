@@ -12,6 +12,7 @@ int main() {
   Expr c = vc_parseExpr(vc,"./t.cvc"); 
   
   vc_printExpr(vc, c);
+  vc_DeleteExpr(c);
   printf("\n");
   vc_Destroy(vc);
 }
