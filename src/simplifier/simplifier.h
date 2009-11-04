@@ -81,6 +81,8 @@ namespace BEEV
       delete SimplifyMap;
       delete SimplifyNegMap;
       delete ReferenceCount;
+      delete SolverMap;
+      delete ReadOverWrite_NewName_Map;
     }
 
     /****************************************************************
