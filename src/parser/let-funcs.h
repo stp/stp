@@ -32,6 +32,11 @@ namespace BEEV
       ASTUndefined = undefined;
     }
 
+    ~LETMgr()
+       {
+         delete _letid_expr_map;
+       }
+
     ASTNode ResolveID(const ASTNode& var);
       
     //Functions that are used to manage LET expressions
