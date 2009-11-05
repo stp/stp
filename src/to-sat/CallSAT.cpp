@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "ToSAT.h"
-#define MAX_BUCKET_LIMIT 3
+#define MAX_BUCKET_LIMIT 2
 
 namespace BEEV
 {
@@ -79,9 +79,27 @@ namespace BEEV
 
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);
+
+#ifdef CRYPTOMINISAT
+    ClauseList* xorcl = cm->ReturnXorClauses();
+#endif
+
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
     //bool sat = toSATandSolve(SatSolver, *cl);
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
+    if(!sat)
+      {
+	return sat;
+      }
+
+#ifdef CRYPTOMINISAT
+    if(!xorcl->empty())
+      {	
+	sat = toSATandSolve(SatSolver, *xorcl, true);
+      }
+    cm->DELETE(xorcl);
+#endif 
+
     cm->DELETE(cl);
     delete cm;
     return sat;

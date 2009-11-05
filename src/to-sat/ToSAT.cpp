@@ -43,7 +43,8 @@ namespace BEEV
    * and calls solve(). If solve returns unsat, then stop and return
    * unsat. else continue.
    */
-  bool ToSAT::toSATandSolve(MINISAT::Solver& newS, ClauseList& cll)
+  bool ToSAT::toSATandSolve(MINISAT::Solver& newS,
+			    ClauseList& cll, bool add_xor_clauses)
   {
     CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
@@ -87,11 +88,18 @@ namespace BEEV
         //          continue;
         //        }
 #ifdef CRYPTOMINISAT
-        newS.addClause(satSolverClause,0,"z");
+	if(add_xor_clauses)
+	  {
+	    newS.addXorClause(satSolverClause, false, 0, "z");
+	  }
+	else 
+	  {
+	    newS.addClause(satSolverClause,0,"z");
+	  }
 #else
         newS.addClause(satSolverClause);
 #endif
-        float percentage=0.6;
+        float percentage=CLAUSAL_ABSTRACTION_CUTOFF;
         if(count++ >= input_clauselist_size*percentage)
           {
             //Arbitrary adding only 60% of the clauses in the hopes of

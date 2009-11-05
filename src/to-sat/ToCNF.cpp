@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Mike Katelman
+ * AUTHORS: Mike Katelman
  *
  * BEGIN DATE: November, 2005
  *
@@ -401,6 +401,13 @@ namespace BEEV
     return psi;
   } //End of SINGLETON()
 
+  static ASTNode GetNodeFrom_SINGLETON(ClauseList *cl)
+  {
+    ClausePtr c = (*cl)[0];
+    const ASTNode * a = (*c)[0];
+    return *a;
+  }
+
   ClauseList* CNFMgr::UNION(const ClauseList& varphi1, 
                             const ClauseList& varphi2)
   {    
@@ -775,6 +782,40 @@ namespace BEEV
     setWasRenamedPos(*x);
   }//End of doRenamingPos
   
+
+  void CNFMgr::doRenamingPosXor(const ASTNode& varphi)
+  {
+    CNFInfo* x = info[varphi];
+    
+    //########################################
+    // step 1, calc new variable
+    //########################################
+    
+    ostringstream oss;
+    oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
+    ASTNode psi = bm->CreateSymbol(oss.str().c_str());
+    
+    //########################################
+    // step 2, add defs
+    //########################################
+    
+    //     ClauseList* cl1;
+    //     cl1 = SINGLETON(bm->CreateNode(NOT, psi));
+    //     ClauseList* cl2 = PRODUCT(*(info[varphi]->clausespos), *cl1);
+    //     defs->insert(defs->end(), cl2->begin(), cl2->end());
+    //     DELETE(info[varphi]->clausespos);
+    //     DELETE(cl1);
+    //     delete cl2;
+    
+    //########################################
+    // step 3, update info[varphi]
+    //########################################
+    
+    x->clausespos = SINGLETON(psi);
+    setWasRenamedPos(*x);
+  }//End of doRenamingPos
+  
+
   void CNFMgr::doRenamingNeg(const ASTNode& varphi, ClauseList* defs)
   {
     CNFInfo* x = info[varphi];
@@ -1219,6 +1260,34 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, 
                                          ClauseList* defs)
   {
+#ifdef CRYPTOMINISAT
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    ClausePtr xor_clause = new vector<const ASTNode*>();
+
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs); // make pos and neg clause set
+
+	//Creating a new variable name for each of the children of the
+	//XOR node
+	doRenamingPos(*it, defs);
+	xor_clause->insert(xor_clause->end(), 
+			   ((*(info[*it]->clausespos))[0])->begin(),
+			   ((*(info[*it]->clausespos))[0])->end());
+      }
+    doRenamingPosXor(varphi);
+    //doRenamingPos(varphi, defs);
+    ASTNode varXorNode = GetNodeFrom_SINGLETON(info[varphi]->clausespos);
+    ASTNode NotVarXorNode = bm->CreateNode(NOT, varXorNode);
+    xor_clause->push_back(ASTNodeToASTNodePtr(NotVarXorNode));
+    clausesxor->push_back(xor_clause);
+
+    ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+    for (; it2 != varphi.GetChildren().end(); it2++){
+      reduceMemoryFootprintPos(*it2);
+      reduceMemoryFootprintNeg(*it2);
+    }
+#else
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     for (; it != varphi.GetChildren().end(); it++)
       {
@@ -1231,13 +1300,13 @@ namespace BEEV
       reduceMemoryFootprintPos(*it2);
       reduceMemoryFootprintNeg(*it2);
     }
+#endif
   } //End of convertFormulaToCNFPosXOR()
 
   ClauseList* CNFMgr::convertFormulaToCNFPosXORAux(const ASTNode& varphi, 
                                                    unsigned int idx, 
                                                    ClauseList* defs)
   {
-
     bool renamesibs;
     ClauseList* psi;
     ClauseList* psi1;
@@ -1246,8 +1315,8 @@ namespace BEEV
     if (idx == varphi.GetChildren().size() - 2)
       {
         //****************************************
-        // (pos) XOR ~> UNION
-        //    (PRODUCT       [idx]   ;     [idx+1])
+        // (pos) XOR ~> UNION (AND)
+        //    (PRODUCT  (OR) [idx]   ;     [idx+1])
         //  ; (PRODUCT NOT   [idx]   ; NOT [idx+1])
         //****************************************
         renamesibs = 
@@ -1738,6 +1807,7 @@ namespace BEEV
   CNFMgr::CNFMgr(STPMgr *bmgr)
   {
     bm = bmgr;
+    clausesxor = new ClauseList();
   }
 
   //########################################
@@ -1749,8 +1819,10 @@ namespace BEEV
     for (; it1 != store.end(); it1++)
       {
         delete it1->second;
-      }    
-    store.clear();    
+      }
+    store.clear();
+    
+    //FIXME: Delete clausesxor
   }
 
   //########################################
@@ -1777,6 +1849,12 @@ namespace BEEV
 
     return defs;
   }//End of convertToCNF()
+
+  //All XOR clauses are stored here. Return it after CNF translation
+  ClauseList* CNFMgr::ReturnXorClauses(void)
+  {
+    return clausesxor;
+  }
 
   void CNFMgr::DELETE(ClauseList* varphi)
   {

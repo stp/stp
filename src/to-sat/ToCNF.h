@@ -37,6 +37,9 @@ namespace BEEV
       };
     } CNFInfo;
 
+    //Collect all XOR Clauses here
+    ClauseList* clausesxor;
+
     typedef HASHMAP<
       ASTNode, 
       CNFInfo*, 
@@ -163,6 +166,8 @@ namespace BEEV
 
     void doRenamingPos(const ASTNode& varphi, ClauseList* defs);    
 
+    void doRenamingPosXor(const ASTNode& varphi);    
+
     void doRenamingNeg(const ASTNode& varphi, ClauseList* defs);    
 
     //########################################
@@ -245,6 +250,8 @@ namespace BEEV
     // top-level conversion function
 
     ClauseList* convertToCNF(const ASTNode& varphi);    
+
+    ClauseList* ReturnXorClauses(void);
 
     void DELETE(ClauseList* varphi);
 

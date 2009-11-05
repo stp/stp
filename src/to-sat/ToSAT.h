@@ -23,6 +23,8 @@
 
 namespace BEEV
 {
+  #define CLAUSAL_ABSTRACTION_CUTOFF 0.6
+
   class ToSAT {
   private:
     /****************************************************************
@@ -109,7 +111,8 @@ namespace BEEV
 				  ClauseBuckets * cb);
     
     // Converts the clause to SAT and calls SAT solver
-    bool toSATandSolve(MINISAT::Solver& S, ClauseList& cll);
+    bool toSATandSolve(MINISAT::Solver& S,
+		       ClauseList& cll, bool add_xor_clauses=false);
     
     // Calls SAT simplifier, array transformer (abstraction
     // refinement), bitvector solver, and SAT solver. Returns the
