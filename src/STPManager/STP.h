@@ -100,7 +100,7 @@ namespace BEEV
       arrayTransformer->ClearAllTables();
       tosat->ClearAllTables();
       Ctr_Example->ClearAllTables();
-      bm->ClearAllTables();
+      //bm->ClearAllTables();
     }
   }; //End of Class STP
 };//end of namespace

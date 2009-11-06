@@ -395,8 +395,8 @@ namespace BEEV
       _asserts.clear();
 
       delete letmgr;
- 	  delete runTimes;
-
+      delete runTimes;
+	  
       _interior_unique_table.clear();
       _bvconst_unique_table.clear();
       _symbol_unique_table.clear();

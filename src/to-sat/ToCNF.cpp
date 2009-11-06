@@ -1821,8 +1821,6 @@ namespace BEEV
         delete it1->second;
       }
     store.clear();
-    
-    delete clausesxor;
   }
 
   //########################################
