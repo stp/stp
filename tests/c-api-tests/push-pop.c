@@ -27,5 +27,8 @@ int main() {
 
   printf("query = %d\n", query);
 
+  vc_DeleteExpr(a_eq_0);
+  vc_DeleteExpr(a);
+
   vc_Destroy(vc);
 }
