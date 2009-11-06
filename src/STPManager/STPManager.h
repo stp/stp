@@ -376,18 +376,26 @@ namespace BEEV
       AlreadyPrintedSet.clear();
       StatInfoSet.clear();
       TermsAlreadySeenMap.clear();
+      NodeLetVarVec.clear();
+      ListOfDeclaredVars.clear();
     } //End of ClearAllTables()
 
     ~STPMgr()
     {
+    	ClearAllTables();
+
       vector<ASTVec*>::iterator it    = _asserts.begin();
       vector<ASTVec*>::iterator itend = _asserts.end();
       for(;it!=itend;it++) 
         {
           ASTVec * j = (*it);
           j->clear();
+          delete j;
         }
       _asserts.clear();
+
+      delete letmgr;
+ 	  delete runTimes;
 
       _interior_unique_table.clear();
       _bvconst_unique_table.clear();

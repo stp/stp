@@ -28,7 +28,7 @@ BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
 
 // persist holds a copy of ASTNodes so that the reference count of objects we have pointers to doesn't hit zero.
-vector<BEEV::ASTNode> persist;
+vector<BEEV::ASTNode*> persist;
 bool cinterface_exprdelete_on_flag = false;
 
 // GLOBAL FUNCTION: parser
@@ -390,6 +390,13 @@ void vc_printQuery(VC vc){
   os << ");" << endl;
 }
 
+nodestar persistNode(node n)
+{
+	persist.push_back(new node(n));
+	return  persist.back();
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // Array-related methods                                                   //
 /////////////////////////////////////////////////////////////////////////////
@@ -411,9 +418,9 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData) {
       BEEV::FatalError("Trying to build an array whose"\
                        "valuetype v is not a BITVECTOR. where a = ",*td);
     }
-  nodestar output = new node(b->CreateNode(BEEV::ARRAY,(*ti)[0],(*td)[0]));
-  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return (Type)output;
+  node output = b->CreateNode(BEEV::ARRAY,(*ti)[0],(*td)[0]);
+
+ return persistNode(output);
 }
 
 //! Create an expression for the value of array at the given index
@@ -917,10 +924,7 @@ Type vc_bvType(VC vc, int num_bits) {
 
   node e = b->CreateBVConst(32, num_bits);
   node output = (b->CreateNode(BEEV::BITVECTOR,e));
-  int index = persist.size();
-  persist.push_back(output);
-  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return &persist[index];
+  return persistNode(output);
 }
 
 Type vc_bv32Type(VC vc) {
@@ -1851,9 +1855,16 @@ void vc_Destroy(VC vc) {
   //     BEEV::ASTNode * aaa = *it;
   //     delete aaa;
   //   }
-  persist.clear();
+
+  for (vector<nodestar>::iterator it = persist.begin(); it!= persist.end();it++)
+	  delete *it;
+ persist.clear();
+
   delete decls;
   delete (stpstar)vc;
+  BEEV::GlobalSTP = NULL;
+  delete  BEEV::ParserBM;
+  BEEV::ParserBM = NULL;
 }
 
 void vc_DeleteExpr(Expr e) {

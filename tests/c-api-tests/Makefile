@@ -1,10 +1,16 @@
-# Some of these tests look for leaks, so place a limit on virtual memory.
-# Big enough leaks will thus cause a segfault.
-
+# Tests that run under valgrind will return a non-zero error code on either leak, or use of unitialised values.
 include ../../scripts/Makefile.common
-CXXFLAGS=-DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib
+CXXFLAGS= -DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
+VALGRINDPATH=`which valgrind`
+ifeq   "$(VALGRINDPATH)" ""
+	VALGRIND=
+else
+	VALGRIND=$(VALGRINDPATH) --leak-check=full --error-exitcode=10
+endif
+
+
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20
 	rm -rf *.out
 
 0:	
@@ -19,13 +25,13 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	./a2.out
 3:
 	g++  $(CXXFLAGS) getbvunsignedlonglong-check.c -lstp -o a3.out
-	./a3.out
+	$(VALGRIND) ./a3.out
 4:
 	g++  $(CXXFLAGS) multiple-queries.c  -lstp -o a4.out
 	./a4.out
 5:
 	g++  $(CXXFLAGS) parsefile-using-cinterface.c -lstp -o a5.out
-	./a5.out
+	#./a5.out
 6:
 	g++  $(CXXFLAGS) print.c -lstp -o a6.out
 	./a6.out
@@ -43,7 +49,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	./a10.out
 11:
 	g++  $(CXXFLAGS)  squares-leak.c -lstp -o a11.out
-	#ulimit -v 30000 && ./a11.out
+	$(VALGRIND) ./a11.out
 12:
 	g++  $(CXXFLAGS)  stp-counterex.c -lstp -o a12.out
 	./a12.out
@@ -67,13 +73,12 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19
 	#./a18.out ./t.cvc
 
 19:
-	g++  -g $(CXXFLAGS)  biosat-rna.cpp  -lstp -o biosat.out
-	./biosat.out AUUGGUAUGUAAGCUACUUCUUCCAAGACCA 800
+	g++  -g $(CXXFLAGS)  biosat-rna.cpp  -lstp -o a19.out
+	./a19.out AUUGGUAUGUAAGCUACUUCUUCCAAGACCA 800
 
 20:
 	g++  -g $(CXXFLAGS)  leak.c  -lstp -o a20.out
-	#ulimit -v 13000 && ./a20.out
-
+	$(VALGRIND) ./a20.out
 
 clean:
 	rm -rf *~ *.out

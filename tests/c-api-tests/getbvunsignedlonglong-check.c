@@ -20,6 +20,8 @@ int main() {
     unsigned long long int print_index = getBVUnsignedLongLong(index_3);
     printf("testing getBVUnsignedLongLong function: %llx \n", print_index);
     printf("\n");
+    vc_DeleteExpr(a);
+    vc_DeleteExpr(index_3);
     vc_Destroy(vc);
   }
 }
