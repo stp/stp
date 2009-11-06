@@ -1276,7 +1276,8 @@ namespace BEEV
 			   ((*(info[*it]->clausespos))[0])->end());
       }
     doRenamingPosXor(varphi);
-    //doRenamingPos(varphi, defs);
+    //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
+    //info[varphi]->clausespos = psi;    
     ASTNode varXorNode = GetNodeFrom_SINGLETON(info[varphi]->clausespos);
     ASTNode NotVarXorNode = bm->CreateNode(NOT, varXorNode);
     xor_clause->push_back(ASTNodeToASTNodePtr(NotVarXorNode));
@@ -1842,7 +1843,9 @@ namespace BEEV
     if (bm->UserFlags.stats_flag)
       {
         cerr << "Number of clauses:" << defs->size() << endl;
-        //PrintClauseList(cout, *defs);
+        PrintClauseList(cout, *defs);
+	cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
+	PrintClauseList(cout, *clausesxor);
       }
 
     return defs;

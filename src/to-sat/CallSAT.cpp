@@ -84,14 +84,13 @@ namespace BEEV
     ClauseList* xorcl = cm->ReturnXorClauses();
 #endif
 
-    ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
+    ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);    
+    bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);    
     //bool sat = toSATandSolve(SatSolver, *cl);
-    bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
 
     for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
-    	delete it->second;
+      delete it->second;
     delete cb;
-
 
     if(!sat)
       {

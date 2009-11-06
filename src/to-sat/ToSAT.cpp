@@ -89,7 +89,8 @@ namespace BEEV
         //        }
 #ifdef CRYPTOMINISAT
 	if(add_xor_clauses)
-	  {
+	  {	    
+	    //cout << "addXorClause:\n";
 	    newS.addXorClause(satSolverClause, false, 0, "z");
 	  }
 	else 
