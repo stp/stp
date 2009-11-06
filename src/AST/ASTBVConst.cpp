@@ -35,7 +35,7 @@ namespace BEEV
   // unique table
   void ASTBVConst::CleanUp()
   {
-    (GlobalSTP->bm)->_bvconst_unique_table.erase(this);
+    (ParserBM)->_bvconst_unique_table.erase(this);
     delete this;
   } //End of Cleanup()
 

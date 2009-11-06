@@ -32,7 +32,7 @@ namespace BEEV
   // unique table
   void ASTSymbol::CleanUp()
   {
-    (GlobalSTP->bm)->_symbol_unique_table.erase(this);
+    (ParserBM)->_symbol_unique_table.erase(this);
     free((char*) this->_name);
     delete this;
   }//End of cleanup()

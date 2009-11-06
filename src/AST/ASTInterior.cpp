@@ -19,7 +19,7 @@ namespace BEEV
   // the unique table
   void ASTInterior::CleanUp()
   {
-    (GlobalSTP->bm)->_interior_unique_table.erase(this);
+    (ParserBM)->_interior_unique_table.erase(this);
     delete this;
   } //End of Cleanup()
 
