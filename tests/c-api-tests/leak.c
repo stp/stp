@@ -1,7 +1,7 @@
 #include "c_interface.h"
 #include <stdio.h>
 int main(){
-    for (int i=0; i < 100000;i++){
+    for (int i=0; i < 10;i++){
 
    
     VC vc;

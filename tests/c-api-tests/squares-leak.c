@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
   /* Do some simple arithmetic by creating an expression involving
      constants and then simplifying it. Since we create and destroy
      a fresh VC each time, we shouldn't leak any memory. */
-  for (i = 1; i <= 100000; i++) {
+  for (i = 1; i <= 100; i++) {
     VC vc = vc_createValidityChecker();
     Expr arg = vc_bvConstExprFromLL(vc, 64, (unsigned long long)i);
     Expr product = vc_bvMultExpr(vc, 64, arg, arg);
