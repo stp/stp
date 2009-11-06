@@ -87,6 +87,12 @@ namespace BEEV
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
     //bool sat = toSATandSolve(SatSolver, *cl);
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
+
+    for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
+    	delete it->second;
+    delete cb;
+
+
     if(!sat)
       {
 	return sat;

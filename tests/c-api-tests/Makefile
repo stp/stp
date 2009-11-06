@@ -61,7 +61,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20
 	./a14.out
 15:
 	g++  $(CXXFLAGS)  x.c  -lstp -o a15.out
-	./a15.out
+	$(VALGRIND) ./a15.out
 16:
 	g++ $(CXXFLAGS)  y.c -lstp -o a16.out
 	./a16.out

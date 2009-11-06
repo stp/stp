@@ -1822,7 +1822,7 @@ namespace BEEV
       }
     store.clear();
     
-    //FIXME: Delete clausesxor
+    delete clausesxor;
   }
 
   //########################################

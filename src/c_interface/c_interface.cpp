@@ -973,9 +973,7 @@ Expr vc_bvConstExprFromInt(VC vc,
   }
   node n = b->CreateBVConst(n_bits, v);
   BVTypeCheck(n);
-  nodestar output = new node(n);
-  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return persistNode(n);
 }
 
 Expr vc_bvConstExprFromLL(VC vc,
