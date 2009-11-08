@@ -11,7 +11,7 @@ COBJS     = $(addsuffix .o, $(basename $(CSRCS))) $(CORE)/Solver.o
 
 
 include ../mtl/template.mk
-all:
+all: libminisat.a
 	ranlib libminisat.a
 	cp *.or ../
 	cp libminisat.a ../
