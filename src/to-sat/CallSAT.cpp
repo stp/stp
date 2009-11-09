@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "ToSAT.h"
-#define MAX_BUCKET_LIMIT 2
+#define MAX_BUCKET_LIMIT 3
 
 namespace BEEV
 {
