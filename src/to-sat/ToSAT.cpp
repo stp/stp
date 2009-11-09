@@ -131,7 +131,10 @@ bool isTseitinVariable(const ASTNode& n) {
             //           << percentage << endl;
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             bm->GetRunTimes()->start(RunTimes::Solving);
-            newS.solve();
+#ifdef CRYPTOMINISAT
+	    if (newS.simplify() == MINISAT::l_Undef)
+#endif
+	      newS.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
             if(!newS.okay())
               {
@@ -155,7 +158,10 @@ bool isTseitinVariable(const ASTNode& n) {
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);
-    newS.solve();
+#ifdef CRYPTOMINISAT
+    if (newS.simplify() == MINISAT::l_Undef)
+#endif
+      newS.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
     bm->PrintStats(newS);
     if (newS.okay())
