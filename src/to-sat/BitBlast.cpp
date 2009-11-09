@@ -748,9 +748,9 @@ namespace BEEV
   {
     // For some unexplained reason, XORs are faster than converting
     // them to cluases at this point
-    ASTNode S0 = _bm->CreateSimpForm(XOR, 
-                                     _bm->CreateSimpForm(XOR, xi, yi), 
-                                     cin);    
+    ASTNode S0 = _bm->CreateSimpForm(XOR,
+                                     _bm->CreateSimpForm(XOR, xi, yi),
+                                     cin);
     return S0;
     // ASTNode S1 = _bm->CreateSimpForm(OR,xi,yi,cin);
     //     ASTNode S2 = _bm->CreateSimpForm(OR,

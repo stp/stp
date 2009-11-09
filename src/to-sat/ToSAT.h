@@ -23,7 +23,7 @@
 
 namespace BEEV
 {
-  #define CLAUSAL_ABSTRACTION_CUTOFF 0.6
+  #define CLAUSAL_ABSTRACTION_CUTOFF 1.1
 
   class ToSAT {
   private:

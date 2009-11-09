@@ -86,6 +86,8 @@ namespace BEEV
     
     bool quick_statistics_flag;
   
+    bool tseitin_are_decision_variables_flag;
+
     //CONSTRUCTOR    
     UserDefinedFlags()
     {  
@@ -152,6 +154,8 @@ namespace BEEV
       division_by_zero_returns_one_flag = false;
       
       quick_statistics_flag=false;
+
+      tseitin_are_decision_variables_flag=true;
     } //End of constructor for UserDefinedFlags
 
   }; //End of struct UserDefinedFlags

@@ -10,10 +10,25 @@
 
 namespace BEEV
 {
-  /* FUNCTION: lookup or create a new MINISAT literal
-   * lookup or create new MINISAT Vars from the global MAP
-   * _ASTNode_to_SATVar.
-   */
+
+bool isTseitinVariable(const ASTNode& n) {
+	if (n.GetKind() == SYMBOL && n.GetType() == BOOLEAN_TYPE) {
+		const char * zz = n.GetName();
+		//if the variables ARE cnf variables then dont make them
+		// decision variables.
+		if (0 == strncmp("cnf", zz, 3))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+	/* FUNCTION: lookup or create a new MINISAT literal
+	   * lookup or create new MINISAT Vars from the global MAP
+	   * _ASTNode_to_SATVar.
+	   */
+
   MINISAT::Var 
   ToSAT::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
   {
@@ -31,7 +46,14 @@ namespace BEEV
         //by 1 each time it is called, and the initial value of a
         //MINISAT::Var is 0.
         _SATVar_to_AST_Vector.push_back(n);
-      }
+
+        // experimental. Don't add Tseitin variables as decision variables.
+        if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
+        {
+        	newS.setDecisionVar(v,false);
+        }
+
+       }
     else
       v = it->second;
     return v;
@@ -103,7 +125,7 @@ namespace BEEV
         float percentage=CLAUSAL_ABSTRACTION_CUTOFF;
         if(count++ >= input_clauselist_size*percentage)
           {
-            //Arbitrary adding only 60% of the clauses in the hopes of
+        	//Arbitrary adding only 60% of the clauses in the hopes of
             //terminating early 
             //      cout << "Percentage clauses added: " 
             //           << percentage << endl;
@@ -132,7 +154,6 @@ namespace BEEV
       } // End of For-loop adding the clauses 
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-    //cout << "Added remaining clauses\n";
     bm->GetRunTimes()->start(RunTimes::Solving);
     newS.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
