@@ -637,9 +637,13 @@ namespace BEEV
       }
     
 #ifdef CRYPTOMINISAT
-    if ((x->clausespos != NULL && x->clausespos->size() > 1) || (doRenamePos(*x) && !wasVisited(*x)))
+    if ((x->clausespos != NULL 
+	 && x->clausespos->size() > 1) 
+	|| (doRenamePos(*x) && !wasVisited(*x)))
       {
-        if (doSibRenamingPos(*x) || sharesPos(*x) > 1 || doRenamePos(*x))
+        if (doSibRenamingPos(*x) 
+	    || sharesPos(*x) > 1 
+	    || doRenamePos(*x))
           {
             doRenamingPos(varphi, defs);
           }
@@ -649,7 +653,8 @@ namespace BEEV
 
     if (x->clausespos != NULL && x->clausespos->size() > 1)
       {
-        if (doSibRenamingPos(*x) || sharesPos(*x) > 1)
+        if (doSibRenamingPos(*x) 
+	    || sharesPos(*x) > 1)
           {
             doRenamingPos(varphi, defs);
           }
@@ -1643,6 +1648,36 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi,
                                          ClauseList* defs)
   {
+#ifdef FALSE
+    //#ifdef CRYPTOMINISAT
+    ASTVec::const_iterator it = varphi.GetChildren().begin();
+    ClausePtr xor_clause = new vector<const ASTNode*>();
+
+    for (; it != varphi.GetChildren().end(); it++)
+      {
+        convertFormulaToCNF(*it, defs); // make pos and neg clause set
+
+	//Creating a new variable name for each of the children of the
+	//XOR node doRenamingPos(*it, defs);
+	doRenamingNeg(*it, defs);
+	xor_clause->insert(xor_clause->end(), 
+			   ((*(info[*it]->clausespos))[0])->begin(),
+			   ((*(info[*it]->clausespos))[0])->end());
+      }
+    doRenamingPosXor(varphi);
+    //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
+    //info[varphi]->clausespos = psi;    
+    ASTNode varXorNode = GetNodeFrom_SINGLETON(info[varphi]->clausespos);
+    ASTNode NotVarXorNode = bm->CreateNode(NOT, varXorNode);
+    xor_clause->push_back(ASTNodeToASTNodePtr(NotVarXorNode));
+    clausesxor->push_back(xor_clause);
+
+    ASTVec::const_iterator it2 = varphi.GetChildren().begin();
+    for (; it2 != varphi.GetChildren().end(); it2++){
+      reduceMemoryFootprintPos(*it2);
+      reduceMemoryFootprintNeg(*it2);
+    }
+#else
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     for (; it != varphi.GetChildren().end(); it++)
       {
@@ -1655,6 +1690,7 @@ namespace BEEV
       reduceMemoryFootprintPos(*it2);
       reduceMemoryFootprintNeg(*it2);
     }
+#endif
   } //End of convertFormulaToCNFNegXOR()
 
   ClauseList* CNFMgr::convertFormulaToCNFNegXORAux(const ASTNode& varphi,
