@@ -247,8 +247,21 @@ int main(int argc, char ** argv) {
     }
   bm->GetRunTimes()->stop(RunTimes::Parsing);
 
+  if(((ASTVec*)AssertsQuery)->empty())
+    {
+      FatalError("Input is Empty. Please enter some asserts and query\n");
+    }
+
+  if(((ASTVec*)AssertsQuery)->size() != 2)
+    {
+      FatalError("Input must contain a query\n");
+    }
+
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
+  //cout << "asserts: " << asserts << endl;
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
+  //cout << "query: " << query << endl;
+
   if(bm->UserFlags.print_STPinput_back_flag)
     {
       if(bm->UserFlags.smtlib_parser_flag)

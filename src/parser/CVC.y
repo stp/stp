@@ -184,7 +184,21 @@ counterexample  :      COUNTEREXAMPLE_TOK ';'
 }                              
 ;
 
-other_cmd       :      other_cmd1
+other_cmd       :
+/* other_cmd1 */
+/* { */
+/*   ASTVec aaa = ParserBM->GetAsserts(); */
+/*   if(aaa.size() == 0) */
+/*     { */
+/*       yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: "); */
+/*     } */
+
+/*   ASTNode asserts =  */
+/*     aaa.size() == 1 ?  */
+/*     aaa[0] : */
+/*     ParserBM->CreateNode(AND, aaa); */
+/*   ((ASTVec*)AssertsQuery)->push_back(asserts);   */
+/* } */
 |      Query 
 { 
   ((ASTVec*)AssertsQuery)->push_back(ParserBM->CreateNode(TRUE));

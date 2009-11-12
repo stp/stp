@@ -811,7 +811,7 @@ namespace BEEV
   void CNFMgr::doRenamingPosXor(const ASTNode& varphi)
   {
     CNFInfo* x = info[varphi];
-    
+
     //########################################
     // step 1, calc new variable
     //########################################
@@ -1650,6 +1650,14 @@ namespace BEEV
   {
 #ifdef FALSE
     //#ifdef CRYPTOMINISAT
+    // CNFInfo * xx = info[varphi];
+    //     if(NULL != xx
+    //        && sharesPos(*xx) > 0
+    //        && sharesNeg(*xx) > 0)
+    //       {
+    // 	return;
+    //       }
+
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     ClausePtr xor_clause = new vector<const ASTNode*>();
 
