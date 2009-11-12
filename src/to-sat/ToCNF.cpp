@@ -463,9 +463,10 @@ namespace BEEV
   //########################################
   //prep. for cnf conversion
 
-  void CNFMgr::scanFormula(const ASTNode& varphi, bool isPos)
+  void CNFMgr::scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild)
   {    
     CNFInfo* x;
+    Kind k = varphi.GetKind();
     
     //########################################
     // step 1, get the info associated with this node
@@ -481,6 +482,13 @@ namespace BEEV
       {
         x = info[varphi];
       }
+
+#ifdef CRYPTOMINISAT
+    if(isXorChild)
+      {
+        setDoRenamePos(*x);
+      }
+#endif
     
     //########################################
     // step 2, we only need to know if shares >= 2
@@ -531,11 +539,11 @@ namespace BEEV
           {
             if (onChildDoPos(varphi, i))
               {
-                scanFormula(varphi[i], isPos);
+                scanFormula(varphi[i], isPos, k == XOR);
               }
             if (onChildDoNeg(varphi, i))
               {
-                scanFormula(varphi[i], !isPos);
+                scanFormula(varphi[i], !isPos, false);
               }
           }
       }
@@ -588,8 +596,8 @@ namespace BEEV
       }
     else if (isITE(varphi))
       {
-        scanFormula(varphi[0], true);
-        scanFormula(varphi[0], false);
+        scanFormula(varphi[0], true, false);
+        scanFormula(varphi[0], false, false);
         scanTerm(varphi[1]);
         scanTerm(varphi[2]);
       }
@@ -628,6 +636,17 @@ namespace BEEV
         convertFormulaToCNFPosCases(varphi, defs);
       }
     
+#ifdef CRYPTOMINISAT
+    if ((x->clausespos != NULL && x->clausespos->size() > 1) || (doRenamePos(*x) && !wasVisited(*x)))
+      {
+        if (doSibRenamingPos(*x) || sharesPos(*x) > 1 || doRenamePos(*x))
+          {
+            doRenamingPos(varphi, defs);
+          }
+      }
+
+#else
+
     if (x->clausespos != NULL && x->clausespos->size() > 1)
       {
         if (doSibRenamingPos(*x) || sharesPos(*x) > 1)
@@ -635,6 +654,7 @@ namespace BEEV
             doRenamingPos(varphi, defs);
           }
       }
+#endif
     
     if (sharesNeg(*x) > 0 && !wasVisited(*x))
       {
@@ -1270,7 +1290,8 @@ namespace BEEV
 
 	//Creating a new variable name for each of the children of the
 	//XOR node
-	doRenamingPos(*it, defs);
+	//doRenamingPos(*it, defs);
+	doRenamingNeg(*it, defs);
 	xor_clause->insert(xor_clause->end(), 
 			   ((*(info[*it]->clausespos))[0])->begin(),
 			   ((*(info[*it]->clausespos))[0])->end());
@@ -1831,7 +1852,7 @@ namespace BEEV
   ClauseList* CNFMgr::convertToCNF(const ASTNode& varphi)
   {
     bm->GetRunTimes()->start(RunTimes::CNFConversion);
-    scanFormula(varphi, true);
+    scanFormula(varphi, true, false);
     ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
     ClauseList* defs = SINGLETON(dummy_true_var);
     convertFormulaToCNF(varphi, defs);

@@ -146,7 +146,7 @@ namespace BEEV
     //########################################
     //prep. for cnf conversion
 
-    void scanFormula(const ASTNode& varphi, bool isPos);    
+    void scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild);    
 
     void scanTerm(const ASTNode& varphi);    
 
