@@ -114,11 +114,6 @@ namespace BEEV
     bool toSATandSolve(MINISAT::Solver& S,
 		       ClauseList& cll, bool add_xor_clauses=false);
     
-    // Calls SAT simplifier, array transformer (abstraction
-    // refinement), bitvector solver, and SAT solver. Returns the
-    // answer to the input query
-    SOLVER_RETURN_TYPE TopLevelSATAux(const ASTNode& query);
-
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
 

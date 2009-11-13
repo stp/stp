@@ -27,7 +27,8 @@ typedef BEEV::CompleteCounterExample*    CompleteCEStar;
 BEEV::ASTVec *decls = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
 
-// persist holds a copy of ASTNodes so that the reference count of objects we have pointers to doesn't hit zero.
+// persist holds a copy of ASTNodes so that the reference count of
+// objects we have pointers to doesn't hit zero.
 vector<BEEV::ASTNode*> persist;
 bool cinterface_exprdelete_on_flag = false;
 
