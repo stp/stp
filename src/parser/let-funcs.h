@@ -33,9 +33,9 @@ namespace BEEV
     }
 
     ~LETMgr()
-       {
-         delete _letid_expr_map;
-       }
+    {
+      delete _letid_expr_map;
+    }
 
     ASTNode ResolveID(const ASTNode& var);
       

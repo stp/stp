@@ -15,15 +15,17 @@ libparser.a: $(OBJS)
 lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
 		$(LEX)  -olexCVC.cpp -Pcvc CVC.lex
 
-#For rules with multiple targets. Make runs the rule once for each target. 
-#These rules are "pattern rules" which only run once (rather than twice).
+#For rules with multiple targets. Make runs the rule once for each
+#target.  These rules are "pattern rules" which only run once (rather
+#than twice).
+
 parseCV%_defs.h parseCV%.cpp:	CVC.y
 		$(YACC) -o cvc.tab.c -p cvc CVC.y
 		@cp  cvc.tab.c parseCVC.cpp
 		@cp  cvc.tab.h parseCVC_defs.h
 
 lexSMT.cpp:	parseSMT_defs.h smtlib.lex ../AST/AST.h
-		$(LEX) -o lexSMT.cpp --prefix smt smtlib.lex 
+		$(LEX) -olexSMT.cpp -Psmt smtlib.lex 
 
 parseSM%_defs.h parseSM%.cpp:smtlib.y
 		$(YACC) -o smt.tab.c -p smt smtlib.y

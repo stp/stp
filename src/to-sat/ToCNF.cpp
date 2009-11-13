@@ -638,12 +638,12 @@ namespace BEEV
     
 #ifdef CRYPTOMINISAT
     if ((x->clausespos != NULL 
-	 && x->clausespos->size() > 1) 
-	|| (doRenamePos(*x) && !wasVisited(*x)))
+         && x->clausespos->size() > 1) 
+        || (doRenamePos(*x) && !wasVisited(*x)))
       {
         if (doSibRenamingPos(*x) 
-	    || sharesPos(*x) > 1 
-	    || doRenamePos(*x))
+            || sharesPos(*x) > 1 
+            || doRenamePos(*x))
           {
             doRenamingPos(varphi, defs);
           }
@@ -654,7 +654,7 @@ namespace BEEV
     if (x->clausespos != NULL && x->clausespos->size() > 1)
       {
         if (doSibRenamingPos(*x) 
-	    || sharesPos(*x) > 1)
+            || sharesPos(*x) > 1)
           {
             doRenamingPos(varphi, defs);
           }
@@ -1293,13 +1293,13 @@ namespace BEEV
       {
         convertFormulaToCNF(*it, defs); // make pos and neg clause set
 
-	//Creating a new variable name for each of the children of the
-	//XOR node
-	//doRenamingPos(*it, defs);
-	doRenamingNeg(*it, defs);
-	xor_clause->insert(xor_clause->end(), 
-			   ((*(info[*it]->clausespos))[0])->begin(),
-			   ((*(info[*it]->clausespos))[0])->end());
+        //Creating a new variable name for each of the children of the
+        //XOR node
+        //doRenamingPos(*it, defs);
+        doRenamingNeg(*it, defs);
+        xor_clause->insert(xor_clause->end(), 
+                           ((*(info[*it]->clausespos))[0])->begin(),
+                           ((*(info[*it]->clausespos))[0])->end());
       }
     doRenamingPosXor(varphi);
     //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
@@ -1655,7 +1655,7 @@ namespace BEEV
     //        && sharesPos(*xx) > 0
     //        && sharesNeg(*xx) > 0)
     //       {
-    // 	return;
+    //  return;
     //       }
 
     ASTVec::const_iterator it = varphi.GetChildren().begin();
@@ -1665,12 +1665,12 @@ namespace BEEV
       {
         convertFormulaToCNF(*it, defs); // make pos and neg clause set
 
-	//Creating a new variable name for each of the children of the
-	//XOR node doRenamingPos(*it, defs);
-	doRenamingNeg(*it, defs);
-	xor_clause->insert(xor_clause->end(), 
-			   ((*(info[*it]->clausespos))[0])->begin(),
-			   ((*(info[*it]->clausespos))[0])->end());
+        //Creating a new variable name for each of the children of the
+        //XOR node doRenamingPos(*it, defs);
+        doRenamingNeg(*it, defs);
+        xor_clause->insert(xor_clause->end(), 
+                           ((*(info[*it]->clausespos))[0])->begin(),
+                           ((*(info[*it]->clausespos))[0])->end());
       }
     doRenamingPosXor(varphi);
     //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
@@ -1909,8 +1909,8 @@ namespace BEEV
       {
         cerr << "Number of clauses:" << defs->size() << endl;
         PrintClauseList(cout, *defs);
-	cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
-	PrintClauseList(cout, *clausesxor);
+        cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
+        PrintClauseList(cout, *clausesxor);
       }
 
     return defs;

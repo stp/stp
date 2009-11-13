@@ -19,35 +19,35 @@ namespace BEEV
     
     //Sort the clauses, and bucketize by the size of the clauses
     for(ClauseList::iterator it = cl->begin(), itend = cl->end(); 
-	it!=itend; it++)
+        it!=itend; it++)
       {
-	ClausePtr cptr = *it;
-	int cl_size = cptr->size();
-	if(cl_size >= MAX_BUCKET_LIMIT)
-	  {
-	    cl_size = MAX_BUCKET_LIMIT;
-	  }
+        ClausePtr cptr = *it;
+        int cl_size = cptr->size();
+        if(cl_size >= MAX_BUCKET_LIMIT)
+          {
+            cl_size = MAX_BUCKET_LIMIT;
+          }
 
-	//If no clauses of size cl_size have been seen, then create a
-	//bucket for that size
-	if(cb->find(cl_size) == cb->end())
-	  {
-	    ClauseList * cllist = new ClauseList();
-	    cllist->push_back(cptr);
-	    (*cb)[cl_size] = cllist;
-	  }
-	else
-	  {
-	    ClauseList * cllist = (*cb)[cl_size];
-	    cllist->push_back(cptr);
-	  }
+        //If no clauses of size cl_size have been seen, then create a
+        //bucket for that size
+        if(cb->find(cl_size) == cb->end())
+          {
+            ClauseList * cllist = new ClauseList();
+            cllist->push_back(cptr);
+            (*cb)[cl_size] = cllist;
+          }
+        else
+          {
+            ClauseList * cllist = (*cb)[cl_size];
+            cllist->push_back(cptr);
+          }
       }
     
     return cb;
   } //End of SortClauseList_IntoBuckets()
 
   bool ToSAT::CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
-				       ClauseBuckets * cb)
+                                       ClauseBuckets * cb)
   {
     ClauseBuckets::iterator it = cb->begin();
     ClauseBuckets::iterator itend = cb->end();
@@ -55,12 +55,12 @@ namespace BEEV
     bool sat = false;
     for(;it!=itend;it++)
       {
-	ClauseList *cl = (*it).second;
-	sat = toSATandSolve(SatSolver,*cl);
-	if(!sat)
-	  {
-	    return sat;
-	  }
+        ClauseList *cl = (*it).second;
+        sat = toSATandSolve(SatSolver,*cl);
+        if(!sat)
+          {
+            return sat;
+          }
       }
     return sat;
   }
@@ -94,13 +94,13 @@ namespace BEEV
 
     if(!sat)
       {
-	return sat;
+        return sat;
       }
 
 #ifdef CRYPTOMINISAT
     if(!xorcl->empty())
-      {	
-	sat = toSATandSolve(SatSolver, *xorcl, true);
+      { 
+        sat = toSATandSolve(SatSolver, *xorcl, true);
       }
     cm->DELETE(xorcl);
 #endif 

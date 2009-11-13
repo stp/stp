@@ -382,7 +382,7 @@ namespace BEEV
 
     ~STPMgr()
     {
-    	ClearAllTables();
+      ClearAllTables();
 
       vector<ASTVec*>::iterator it    = _asserts.begin();
       vector<ASTVec*>::iterator itend = _asserts.end();
@@ -396,7 +396,7 @@ namespace BEEV
 
       delete letmgr;
       delete runTimes;
-	  
+          
       _interior_unique_table.clear();
       _bvconst_unique_table.clear();
       _symbol_unique_table.clear();

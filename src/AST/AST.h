@@ -94,7 +94,12 @@ namespace BEEV
     int,
     ClauseList *,
     ltint> ClauseBuckets;
-  
+
+  typedef MAP<
+    int,
+    ASTVec,
+    ltint> UserGuided_AbsRefine_Asserts;
+
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
 }; // end namespace BEEV

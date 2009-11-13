@@ -11,23 +11,23 @@
 namespace BEEV
 {
 
-bool isTseitinVariable(const ASTNode& n) {
-	if (n.GetKind() == SYMBOL && n.GetType() == BOOLEAN_TYPE) {
-		const char * zz = n.GetName();
-		//if the variables ARE cnf variables then dont make them
-		// decision variables.
-		if (0 == strncmp("cnf", zz, 3))
-		{
-			return true;
-		}
-	}
-	return false;
-}
+  bool isTseitinVariable(const ASTNode& n) {
+    if (n.GetKind() == SYMBOL && n.GetType() == BOOLEAN_TYPE) {
+      const char * zz = n.GetName();
+      //if the variables ARE cnf variables then dont make them
+      // decision variables.
+      if (0 == strncmp("cnf", zz, 3))
+        {
+          return true;
+        }
+    }
+    return false;
+  }
 
-	/* FUNCTION: lookup or create a new MINISAT literal
-	   * lookup or create new MINISAT Vars from the global MAP
-	   * _ASTNode_to_SATVar.
-	   */
+  /* FUNCTION: lookup or create a new MINISAT literal
+   * lookup or create new MINISAT Vars from the global MAP
+   * _ASTNode_to_SATVar.
+   */
 
   MINISAT::Var 
   ToSAT::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
@@ -49,11 +49,11 @@ bool isTseitinVariable(const ASTNode& n) {
 
         // experimental. Don't add Tseitin variables as decision variables.
         if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
-        {
-        	newS.setDecisionVar(v,false);
-        }
+          {
+            newS.setDecisionVar(v,false);
+          }
 
-       }
+      }
     else
       v = it->second;
     return v;
@@ -66,7 +66,7 @@ bool isTseitinVariable(const ASTNode& n) {
    * unsat. else continue.
    */
   bool ToSAT::toSATandSolve(MINISAT::Solver& newS,
-			    ClauseList& cll, bool add_xor_clauses)
+                            ClauseList& cll, bool add_xor_clauses)
   {
     CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
@@ -110,31 +110,31 @@ bool isTseitinVariable(const ASTNode& n) {
         //          continue;
         //        }
 #ifdef CRYPTOMINISAT
-	if(add_xor_clauses)
-	  {	    
-	    //cout << "addXorClause:\n";
-	    newS.addXorClause(satSolverClause, false, 0, "z");
-	  }
-	else 
-	  {
-	    newS.addClause(satSolverClause,0,"z");
-	  }
+        if(add_xor_clauses)
+          {         
+            //cout << "addXorClause:\n";
+            newS.addXorClause(satSolverClause, false, 0, "z");
+          }
+        else 
+          {
+            newS.addClause(satSolverClause,0,"z");
+          }
 #else
         newS.addClause(satSolverClause);
 #endif
         float percentage=CLAUSAL_ABSTRACTION_CUTOFF;
         if(count++ >= input_clauselist_size*percentage)
           {
-        	//Arbitrary adding only 60% of the clauses in the hopes of
+            //Arbitrary adding only 60% of the clauses in the hopes of
             //terminating early 
             //      cout << "Percentage clauses added: " 
             //           << percentage << endl;
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             bm->GetRunTimes()->start(RunTimes::Solving);
 #ifdef CRYPTOMINISAT
-	    if (newS.simplify() == MINISAT::l_Undef)
+            if (newS.simplify() == MINISAT::l_Undef)
 #endif
-	      newS.solve();
+              newS.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
             if(!newS.okay())
               {

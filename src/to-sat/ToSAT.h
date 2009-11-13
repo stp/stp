@@ -23,7 +23,7 @@
 
 namespace BEEV
 {
-  #define CLAUSAL_ABSTRACTION_CUTOFF 0.5
+#define CLAUSAL_ABSTRACTION_CUTOFF 0.5
 
   class ToSAT {
   private:
@@ -108,11 +108,11 @@ namespace BEEV
     //Iteratively goes through the Clause Buckets, and calls
     //toSATandSolve()
     bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
-				  ClauseBuckets * cb);
+                                  ClauseBuckets * cb);
     
     // Converts the clause to SAT and calls SAT solver
     bool toSATandSolve(MINISAT::Solver& S,
-		       ClauseList& cll, bool add_xor_clauses=false);
+                       ClauseList& cll, bool add_xor_clauses=false);
     
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);

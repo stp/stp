@@ -37,20 +37,20 @@ namespace BEEV {
             bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
             simplified_solved_InputToSAT = 
               arrayTransformer->
-	      CreateSubstitutionMap(simplified_solved_InputToSAT);
+              CreateSubstitutionMap(simplified_solved_InputToSAT);
 
             bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
             //printf("##################################################\n");
             bm->ASTNodeStats("after pure substitution: ", 
-			     simplified_solved_InputToSAT);
+                             simplified_solved_InputToSAT);
 
 
             simplified_solved_InputToSAT = 
               simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, 
-					     false);
+                                             false);
 
             bm->ASTNodeStats("after simplification: ", 
-			     simplified_solved_InputToSAT);
+                             simplified_solved_InputToSAT);
           }
 
         if(bm->UserFlags.wordlevel_solve_flag)
@@ -79,16 +79,16 @@ namespace BEEV {
             bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
             simplified_solved_InputToSAT = 
               arrayTransformer->
-	      CreateSubstitutionMap(simplified_solved_InputToSAT);
+              CreateSubstitutionMap(simplified_solved_InputToSAT);
             bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
             bm->ASTNodeStats("after pure substitution: ",
-			     simplified_solved_InputToSAT);
+                             simplified_solved_InputToSAT);
 
             simplified_solved_InputToSAT = 
               simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, 
-					     false);
+                                             false);
             bm->ASTNodeStats("after simplification: ", 
-			     simplified_solved_InputToSAT);
+                             simplified_solved_InputToSAT);
           }
         
         if(bm->UserFlags.wordlevel_solve_flag)

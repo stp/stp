@@ -23,10 +23,10 @@ namespace printer
 
   static string tolower(const char * name)
   {
-	string s(name);
-	for (size_t i = 0; i < s.size(); ++i)
-	  s[i] = ::tolower(s[i]);
-	return s;
+    string s(name);
+    for (size_t i = 0; i < s.size(); ++i)
+      s[i] = ::tolower(s[i]);
+    return s;
   }
   
   string functionToSMTLIBName(const BEEV::Kind k);

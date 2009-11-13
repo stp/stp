@@ -393,8 +393,8 @@ void vc_printQuery(VC vc){
 
 nodestar persistNode(node n)
 {
-	persist.push_back(new node(n));
-	return  persist.back();
+  persist.push_back(new node(n));
+  return  persist.back();
 }
 
 
@@ -421,7 +421,7 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData) {
     }
   node output = b->CreateNode(BEEV::ARRAY,(*ti)[0],(*td)[0]);
 
- return persistNode(output);
+  return persistNode(output);
 }
 
 //! Create an expression for the value of array at the given index
@@ -1856,8 +1856,8 @@ void vc_Destroy(VC vc) {
   //   }
 
   for (vector<nodestar>::iterator it = persist.begin(); it!= persist.end();it++)
-	  delete *it;
- persist.clear();
+    delete *it;
+  persist.clear();
 
   delete decls;
   delete (stpstar)vc;
