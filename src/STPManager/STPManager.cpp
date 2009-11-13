@@ -97,7 +97,8 @@ namespace BEEV
   }
 
   ASTInterior *STPMgr::CreateInteriorNode(Kind kind,
-                                          // children array of this node will be modified.
+                                          // children array of this
+                                          // node will be modified.
                                           ASTInterior *n_ptr,
                                           const ASTVec & back_children)
   {
@@ -111,7 +112,8 @@ namespace BEEV
 
     // check for undefined nodes.
     ASTVec::const_iterator it_end = front_children.end();
-    for (ASTVec::const_iterator it = front_children.begin(); it != it_end; it++)
+    for (ASTVec::const_iterator it = front_children.begin();
+	 it != it_end; it++)
       {
         if (it->IsNull())
           {
@@ -196,11 +198,13 @@ namespace BEEV
   }
 
   //Create a ASTBVConst node
-  ASTNode STPMgr::CreateBVConst(unsigned int width, unsigned long long int bvconst)
+  ASTNode STPMgr::CreateBVConst(unsigned int width, 
+				unsigned long long int bvconst)
   {
     if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
       FatalError("CreateBVConst: "\
-                 "trying to create a bvconst using unsigned long long of width: ", 
+                 "trying to create bvconst using "\
+		 "unsigned long long of width: ", 
                  ASTUndefined, width);
 
     CBV bv = CONSTANTBV::BitVector_Create(width, true);
@@ -232,7 +236,8 @@ namespace BEEV
   {
 
     if (bit_width <= 0)
-      FatalError("CreateBVConst: trying to create a bvconst of width: ", ASTUndefined, bit_width);
+      FatalError("CreateBVConst: trying to create a bvconst of width: ", 
+		 ASTUndefined, bit_width);
 
 
     if (!(2 == base || 10 == base || 16 == base))
@@ -245,15 +250,18 @@ namespace BEEV
     CONSTANTBV::ErrCode e;
     if (2 == base)
       {
-        e = CONSTANTBV::BitVector_from_Bin(bv, (unsigned char*) strval->c_str());
+        e = CONSTANTBV::BitVector_from_Bin(bv,
+					   (unsigned char*) strval->c_str());
       }
     else if (10 == base)
       {
-        e = CONSTANTBV::BitVector_from_Dec(bv, (unsigned char*) strval->c_str());
+        e = CONSTANTBV::BitVector_from_Dec(bv,
+					   (unsigned char*) strval->c_str());
       }
     else if (16 == base)
       {
-        e = CONSTANTBV::BitVector_from_Hex(bv, (unsigned char*) strval->c_str());
+        e = CONSTANTBV::BitVector_from_Hex(bv, 
+					   (unsigned char*) strval->c_str());
       }
     else
       {
@@ -314,7 +322,8 @@ namespace BEEV
     return CreateBVConst(bv, width);
   }
 
-  //FIXME Code currently assumes that it will destroy the bitvector passed to it
+  //FIXME Code currently assumes that it will destroy the bitvector
+  //passed to it
   ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   {
     ASTBVConst temp_bvconst(bv, width);
@@ -373,7 +382,8 @@ namespace BEEV
         ASTBVConst * s_copy = new ASTBVConst(s);
         s_copy->SetNodeNum(NewNodeNum());
 
-        pair<ASTBVConstSet::const_iterator, bool> p = _bvconst_unique_table.insert(s_copy);
+        pair<ASTBVConstSet::const_iterator, bool> p = 
+	  _bvconst_unique_table.insert(s_copy);
         return *p.first;
       }
     else
@@ -406,7 +416,8 @@ namespace BEEV
                              const ASTVec &children)
   {
     if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
+		 ASTUndefined, kind);
     ASTNode n = CreateNode(kind, child0, children);
     n.SetValueWidth(width);
     BVTypeCheck(n);
@@ -420,7 +431,8 @@ namespace BEEV
                              const ASTVec &children)
   {
     if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
+		 ASTUndefined, kind);
     ASTNode n = CreateNode(kind, child0, child1, children);
     n.SetValueWidth(width);
     return n;
@@ -434,7 +446,8 @@ namespace BEEV
                              const ASTVec &children)
   {
     if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
+      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
+		 ASTUndefined, kind);
     ASTNode n = CreateNode(kind, child0, child1, child2, children);
     n.SetValueWidth(width);
     return n;
@@ -464,7 +477,9 @@ namespace BEEV
     return os;
   }
 
-  ostream &LispPrintVecSpecial(ostream &os, const vector<const ASTNode*> &v, int indentation)
+  ostream &LispPrintVecSpecial(ostream &os, 
+			       const vector<const ASTNode*> &v, 
+			       int indentation)
   {
     // Print the children
     vector<const ASTNode*>::const_iterator iend = v.end();
@@ -478,7 +493,8 @@ namespace BEEV
   //add an assertion to the current logical context
   void STPMgr::AddAssert(const ASTNode& assert)
   {
-    if (!(is_Form_kind(assert.GetKind()) && BOOLEAN_TYPE == assert.GetType()))
+    if (!(is_Form_kind(assert.GetKind()) 
+	  && BOOLEAN_TYPE == assert.GetType()))
       {
         FatalError("AddAssert:Trying to assert a non-formula:", assert);
       }
@@ -683,7 +699,8 @@ namespace BEEV
         return true;
       }
 
-    for (ASTVec::const_iterator it = term.begin(), itend = term.end(); it != itend; it++)
+    for (ASTVec::const_iterator it = term.begin(),
+	   itend = term.end(); it != itend; it++)
       {
         if (VarSeenInTerm(var, *it))
           {
