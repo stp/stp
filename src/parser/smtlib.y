@@ -227,6 +227,7 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(assumptions);
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
+  _parser_symbol_table.clear();
   YYACCEPT;
 }
 ;

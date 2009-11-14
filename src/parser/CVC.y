@@ -174,7 +174,13 @@
 %%
 
 cmd             :      other_cmd
+{
+  _parser_symbol_table.clear();
+}
 |      other_cmd counterexample
+{
+  _parser_symbol_table.clear(); 
+}
 ; 
 
 counterexample  :      COUNTEREXAMPLE_TOK ';'
