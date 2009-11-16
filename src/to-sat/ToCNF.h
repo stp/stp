@@ -168,6 +168,8 @@ namespace BEEV
 
     void doRenamingPosXor(const ASTNode& varphi);    
 
+    void doRenamingNegXor(const ASTNode& varphi);    
+
     void doRenamingNeg(const ASTNode& varphi, ClauseList* defs);    
 
     //########################################

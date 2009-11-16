@@ -78,7 +78,8 @@ namespace BEEV
     // logical context is represented by a ptr to a vector of
     // assertions in that logical context. Logical contexts are
     // created by PUSH/POP
-    std::vector<ASTVec *> _asserts;
+    //std::vector<ASTVec *> _asserts;
+    std::vector<IntToASTVecMap *> _asserts;
 
     // Memo table that tracks terms already seen
     ASTNodeMap TermsAlreadySeenMap;
@@ -315,9 +316,9 @@ namespace BEEV
     const ASTNode PopQuery();
     const ASTNode GetQuery();
     const ASTVec GetAsserts(void);
+    //add a query/assertion to the current logical context
     void AddQuery(const ASTNode& q);
-    //add an assertion to the current logical context
-    void AddAssert(const ASTNode& assert);
+    void AddAssert(const ASTNode& assert, int userguided_absrefine=0);
     
     /****************************************************************
      * Toplevel printing and stats functions                        *
@@ -384,11 +385,11 @@ namespace BEEV
     {
       ClearAllTables();
 
-      vector<ASTVec*>::iterator it    = _asserts.begin();
-      vector<ASTVec*>::iterator itend = _asserts.end();
+      vector<IntToASTVecMap*>::iterator it    = _asserts.begin();
+      vector<IntToASTVecMap*>::iterator itend = _asserts.end();
       for(;it!=itend;it++) 
         {
-          ASTVec * j = (*it);
+          IntToASTVecMap * j = (*it);
           j->clear();
           delete j;
         }

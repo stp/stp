@@ -117,8 +117,8 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "LET"            { return LET_TOK;}
 "COUNTEREXAMPLE" { return COUNTEREXAMPLE_TOK;}
 "COUNTERMODEL"   { return COUNTEREXAMPLE_TOK;}
- "PUSH"          { return PUSH_TOK;}
- "POP"           { return POP_TOK;}
+"PUSH"           { return PUSH_TOK;}
+"POP"            { return POP_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
   BEEV::ASTNode nptr = (BEEV::ParserBM)->CreateSymbol(yytext); 

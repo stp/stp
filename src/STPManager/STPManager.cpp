@@ -491,7 +491,7 @@ namespace BEEV
   }
 
   //add an assertion to the current logical context
-  void STPMgr::AddAssert(const ASTNode& assert)
+  void STPMgr::AddAssert(const ASTNode& assert, int assertion_bucket_key)
   {
     if (!(is_Form_kind(assert.GetKind()) 
 	  && BOOLEAN_TYPE == assert.GetType()))
@@ -499,30 +499,57 @@ namespace BEEV
         FatalError("AddAssert:Trying to assert a non-formula:", assert);
       }
 
-    ASTVec * v;
-    //if the stack of ASTVec is not empty, then take the top ASTVec
-    //and add the input assert to it
-    if (!_asserts.empty())
+    IntToASTVecMap * AssertsMap;
+    //if the stack of assertion contexts is not empty, then take the
+    //top ASTVec and add the input assert to it
+    if(!_asserts.empty())
       {
-        v = _asserts.back();
-        //v->push_back(TransformFormula(assert));
-        v->push_back(assert);
+	AssertsMap = _asserts.back();
       }
     else
       {
-        //else create a logical context, and add it to the top of the
-        //stack
-        v = new ASTVec();
-        //v->push_back(TransformFormula(assert));
-        v->push_back(assert);
-        _asserts.push_back(v);
+	AssertsMap = new IntToASTVecMap();
+	_asserts.push_back(AssertsMap);
       }
+
+    ASTVec * v;
+    if(AssertsMap->find(assertion_bucket_key) != AssertsMap->end())
+      {
+	v = (*AssertsMap)[assertion_bucket_key];
+	v->push_back(assert);
+      }
+    else
+      {
+	v = new ASTVec();
+	v->push_back(assert);
+	(*AssertsMap)[assertion_bucket_key] = v;
+      }
+
+    //     //if the stack of ASTVec is not empty, then take the top ASTVec
+    //     //and add the input assert to it
+    //     if (!_asserts.empty())
+    //       {
+    //         v = _asserts.back();
+    //         //v->push_back(TransformFormula(assert));
+    //         v->push_back(assert);
+    //       }
+    //     else
+    //       {
+    //         //else create a logical context, and add it to the top of the
+    //         //stack
+    //         v = new ASTVec();
+    //         //v->push_back(TransformFormula(assert));
+    //         v->push_back(assert);
+    //         _asserts.push_back(v);
+    //       }
   }
 
   void STPMgr::Push(void)
   {
-    ASTVec * v;
-    v = new ASTVec();
+    //     ASTVec * v;
+    //     v = new ASTVec();
+    IntToASTVecMap * v;
+    v = new IntToASTVecMap();
     _asserts.push_back(v);
   }
 
@@ -530,12 +557,24 @@ namespace BEEV
   {
     if (!_asserts.empty())
       {
-        ASTVec * c = _asserts.back();
-        //by calling the clear function we ensure that the ref count is
-        //decremented for the ASTNodes stored in c
-        c->clear();
-        delete c;
-        _asserts.pop_back();
+	IntToASTVecMap * c = _asserts.back();
+	IntToASTVecMap::iterator it = c->begin(), itend = c->end();
+	for(;it!=itend;it++)
+	  {
+	    ASTVec * cc = (*it).second;
+	    cc->clear();
+	    delete cc;
+	  }
+	delete c;
+	_asserts.pop_back();
+	
+        // ASTVec * c = _asserts.back();
+	//         //by calling the clear function we ensure that the
+	//         ref count is //decremented for the ASTNodes stored
+	//         in c
+	//         c->clear();
+	//         delete c;
+	//         _asserts.pop_back();
       }
   }
 
@@ -560,16 +599,36 @@ namespace BEEV
 
   const ASTVec STPMgr::GetAsserts(void)
   {
-    vector<ASTVec *>::iterator it = _asserts.begin();
-    vector<ASTVec *>::iterator itend = _asserts.end();
+    vector<IntToASTVecMap *>::iterator it = _asserts.begin();
+    vector<IntToASTVecMap *>::iterator itend = _asserts.end();
 
     ASTVec v;
-    for (; it != itend; it++)
+    for(; it != itend; it++)
       {
-        if (!(*it)->empty())
-          v.insert(v.end(), (*it)->begin(), (*it)->end());
+	IntToASTVecMap::iterator jt = (*it)->begin();
+	IntToASTVecMap::iterator jtend = (*it)->end();
+	
+	for(; jt != jtend; jt++)
+	  {
+	    ASTVec * cc = (*jt).second; 
+	    if(NULL != cc && !cc->empty())
+	      {
+		v.insert(v.end(), cc->begin(), cc->end());
+	      }
+	  }
       }
+
     return v;
+    // vector<ASTVec *>::iterator it = _asserts.begin();
+    //     vector<ASTVec *>::iterator itend = _asserts.end();
+    
+    //     ASTVec v;
+    //     for (; it != itend; it++)
+    //       {
+    //         if (!(*it)->empty())
+    //           v.insert(v.end(), (*it)->begin(), (*it)->end());
+    //       }
+    //     return v;
   }
 
   // //Create a new variable of ValueWidth 'n'

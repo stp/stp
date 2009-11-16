@@ -97,8 +97,8 @@ namespace BEEV
 
   typedef MAP<
     int,
-    ASTVec,
-    ltint> UserGuided_AbsRefine_Asserts;
+    ASTVec *,
+    ltint> IntToASTVecMap;
 
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
