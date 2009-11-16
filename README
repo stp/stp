@@ -40,6 +40,12 @@ PAPERS
 http://sites.google.com/site/stpfastprover
 
 
+CHECKING YOUR INSTALLATION
+--------------------------
+
+make check
+
+
 REGRESSIONS
 -----------
 

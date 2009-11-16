@@ -104,8 +104,8 @@ configclean:
 regressall:
 	$(MAKE) regresscapi && $(MAKE) regresscvc && $(MAKE) regresssmt && $(MAKE) regressstp && $(MAKE) regressbigarray
 
-.PHONY: regress
-regress:
+.PHONY: check
+check:
 	$(MAKE) regresscvcbasic && $(MAKE) regresssmtbasic
 
 # The higher the level, the more tests are run (3 = all)
