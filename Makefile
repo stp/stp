@@ -104,6 +104,10 @@ configclean:
 regressall:
 	$(MAKE) regresscapi && $(MAKE) regresscvc && $(MAKE) regresssmt && $(MAKE) regressstp && $(MAKE) regressbigarray
 
+.PHONY: regress
+regress:
+	$(MAKE) regresscvcbasic && $(MAKE) regresssmtbasic
+
 # The higher the level, the more tests are run (3 = all)
 REGRESS_LEVEL=4
 REGRESS_TESTS=$(REGRESS_TESTS0)
@@ -188,6 +192,36 @@ regressstp:
 	@echo "Output is saved in $(STP_LOG)" | tee -a $(STP_LOG)
 	@echo "*********************************************************" \
           | tee -a $(STP_LOG)
+
+CVCBASIC_LOG = `date +%Y-%m-%d`"-regress-cvcbasic.log"
+.PHONY: regresscvcbasic
+regresscvcbasic:
+	@echo "*********************************************************" \
+          | tee -a $(CVCBASIC_LOG)
+	@echo "Starting tests at" `date` | tee -a $(CVCBASIC_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(CVCBASIC_LOG)
+	scripts/run_basic_cvctests.pl 2>&1 | tee -a $(CVCBASIC_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(CVCBASIC_LOG)
+	@echo "Output is saved in $(CVCBASIC_LOG)" | tee -a $(CVCBASIC_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(CVCBASIC_LOG)
+
+SMTBASIC_LOG = `date +%Y-%m-%d`"-regress-smtbasic.log"
+.PHONY: regresssmtbasic
+regresssmtbasic:
+	@echo "*********************************************************" \
+          | tee -a $(SMTBASIC_LOG)
+	@echo "Starting tests at" `date` | tee -a $(SMTBASIC_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(SMTBASIC_LOG)
+	scripts/run_basic_smttests.pl 2>&1 | tee -a $(SMTBASIC_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(SMTBASIC_LOG)
+	@echo "Output is saved in $(SMTBASIC_LOG)" | tee -a $(SMTBASIC_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(SMTBASIC_LOG)
 
 
 GRIND_LOG = `date +%Y-%m-%d`"-grind.log"

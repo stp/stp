@@ -67,7 +67,7 @@ my %optionsDefault = ("level" => 4,
 		      "proofs" => 0,
 		      "lang" => "all",
 		      "stppath" => "stp/bin",
-		      "vc" => $pwd . "/bin/stp -d", # Program names
+		      "vc" => $pwd . "/bin/stp -d -m", # Program names
 		      #"vc" => "valgrind --leak-check=full /home/vganesh/stp/bin/stp", # Program names
 		      "pfc" => "true",
 		      "stptestpath" => "stp/test",
@@ -85,7 +85,7 @@ my %options = ();
 # The list of testcases to run
 #
 #my @testcases = "sample-tests";
-my @testcases = ("tests/bio-tests", "tests/histar-big-tests", "tests/sample-tests", "tests/big-test");
+my @testcases = ("tests/sample-smt-tests");
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either

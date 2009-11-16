@@ -1,0 +1,12 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+_fresh_symbolic_value: BITVECTOR(32);
+%----------------------------------------------------
+ASSERT NOT (_fresh_symbolic_value = 
+     0bin00000000000000000000000000000000);
+
+%----------------------------------------------------
+QUERY FALSE;
+COUNTEREXAMPLE;

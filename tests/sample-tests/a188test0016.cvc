@@ -1,0 +1,27 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+buffer_0: BITVECTOR(8);
+buffer_1: BITVECTOR(8);
+%----------------------------------------------------
+ASSERT NOT (SX(buffer_0,32) = 
+     0bin00000000000000000000000000000000);
+ASSERT NOT (SX(buffer_0,32) = 
+     0bin00000000000000000000000000101011);
+ASSERT (SX(buffer_0,32) = 
+ 0bin00000000000000000000000000100101);
+ASSERT NOT (SX(buffer_1,32) = 
+     0bin00000000000000000000000000000000);
+ASSERT NOT (SX(buffer_1,32) = 
+     0bin00000000000000000000000000100101);
+ASSERT NOT (SX(buffer_1,32) = 
+     0bin00000000000000000000000000101101);
+ASSERT NOT (SX(buffer_1,32) = 
+     0bin00000000000000000000000000110000);
+ASSERT NOT SBVLE(0bin00000000000000000000000000110000
+          ,SX(buffer_1,32));
+
+%----------------------------------------------------
+QUERY FALSE;
+COUNTEREXAMPLE;

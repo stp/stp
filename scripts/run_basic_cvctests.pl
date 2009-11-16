@@ -85,7 +85,7 @@ my %options = ();
 # The list of testcases to run
 #
 #my @testcases = "sample-tests";
-my @testcases = ("tests/bio-tests", "tests/histar-big-tests", "tests/sample-tests", "tests/big-test");
+my @testcases = ("tests/sample-tests");
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either

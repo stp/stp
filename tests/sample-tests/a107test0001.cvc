@@ -1,0 +1,9 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+%----------------------------------------------------
+
+%----------------------------------------------------
+QUERY FALSE;
+COUNTEREXAMPLE;

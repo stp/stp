@@ -1,0 +1,12 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+n: BITVECTOR(32);
+c: BITVECTOR(8);
+%----------------------------------------------------
+ASSERT NOT BVLT(n,0bin00000000000000000000000000010000);
+
+%----------------------------------------------------
+QUERY FALSE;
+COUNTEREXAMPLE;

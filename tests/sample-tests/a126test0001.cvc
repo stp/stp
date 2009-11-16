@@ -1,0 +1,11 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+x: BITVECTOR(32);
+y: BITVECTOR(32);
+%----------------------------------------------------
+
+%----------------------------------------------------
+QUERY FALSE;
+COUNTEREXAMPLE;
