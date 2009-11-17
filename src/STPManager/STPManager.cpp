@@ -631,6 +631,25 @@ namespace BEEV
     //     return v;
   }
 
+  const ASTVec STPMgr::GetAsserts_WithKey(int key)
+  {
+    vector<IntToASTVecMap *>::iterator it = _asserts.begin();
+    vector<IntToASTVecMap *>::iterator itend = _asserts.end();
+
+    ASTVec v;
+    for(; it != itend; it++)
+      {
+	IntToASTVecMap * assert_map = (*it);
+	ASTVec * cc = (*assert_map)[key];
+	if(!cc->empty())
+	  {
+	    v.insert(v.end(), cc->begin(), cc->end());
+	  }
+      }
+
+    return v;   
+  }
+
   // //Create a new variable of ValueWidth 'n'
   //   ASTNode STPMgr::NewArrayVar(unsigned int index, unsigned int value)
   //   {
@@ -793,6 +812,8 @@ namespace BEEV
     CurrentSymbol.SetIndexWidth(0);
     return CurrentSymbol;
   } // End of NewParameterized_BooleanVar()
+
+  
 
 }; // end namespace beev
 

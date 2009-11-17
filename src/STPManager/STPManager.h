@@ -316,6 +316,8 @@ namespace BEEV
     const ASTNode PopQuery();
     const ASTNode GetQuery();
     const ASTVec GetAsserts(void);
+    const ASTVec GetAsserts_WithKey(int key);
+
     //add a query/assertion to the current logical context
     void AddQuery(const ASTNode& q);
     void AddAssert(const ASTNode& assert, int userguided_absrefine=0);

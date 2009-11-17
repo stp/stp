@@ -243,7 +243,7 @@ namespace BEEV
     return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayWriteRefinement
   
-  //bm->Creates Array Write Axioms
+  //Creates Array Write Axioms
   ASTNode 
   AbsRefine_CounterExample::Create_ArrayWriteAxioms(const ASTNode& term, 
                                                     const ASTNode& newvar)
@@ -260,6 +260,35 @@ namespace BEEV
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
 
+
+  //UserGuided abstraction refinement
+  SOLVER_RETURN_TYPE
+  AbsRefine_CounterExample::
+  UserGuided_AbsRefine(MINISAT::Solver& SatSolver,
+		       //const ASTNode& modified_input,
+		       const ASTNode& original_input)
+  {
+    ASTVec v = bm->GetAsserts_WithKey(0);
+    if(v.empty())
+      {
+	FatalError("UserGuided_AbsRefine: Something is seriously wrong."\
+		   "The input set is empty");
+      }
+    ASTNode sureAddInput = (v.size() == 1) ? v[0] : bm->CreateNode(AND, v); 
+
+    SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;
+    res = CallSAT_ResultCheck(SatSolver, sureAddInput, original_input);
+    if(SOLVER_UNDECIDED != res)
+      {
+	return res;
+      }
+    
+    //Do refinement here
+    
+
+
+    return res;
+  } //End of UserGuided_AbsRefine()
 
   //   static void ReplaceOrAddToMap(ASTNodeMap * VarToConstMap, 
   //                            const ASTNode& key, const ASTNode& value)
