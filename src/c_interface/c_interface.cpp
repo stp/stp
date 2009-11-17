@@ -36,7 +36,7 @@ bool cinterface_exprdelete_on_flag = false;
 extern int cvcparse(void*);
 extern int smtparse(void*);
 
-void vc_setFlags(VC vc, char c) {
+void vc_setFlags(VC vc, char c, int num_absrefine) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   
   std::string helpstring = 
@@ -88,7 +88,7 @@ void vc_setFlags(VC vc, char c) {
     break;
   case 'f':
     b->UserFlags.num_absrefine_flag = true;
-    //b->UserFlags.num_absrefine = atoi(argv[++i]);
+    b->UserFlags.num_absrefine = num_absrefine;
     break;
   case 'h':
     fprintf(stderr,BEEV::usage,BEEV::prog);
@@ -464,7 +464,7 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue) {
 /////////////////////////////////////////////////////////////////////////////
 //! Assert a new formula in the current context.
 /*! The formula must have Boolean type. */
-void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
+void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num) {
   nodestar a = (nodestar)e;
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
@@ -472,7 +472,7 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_num) {
     BEEV::FatalError("Trying to assert a NON formula: ",*a);
 
   BVTypeCheck(*a);
-  b->AddAssert(*a);
+  b->AddAssert(*a, absrefine_bucket_num);
 }
 
 

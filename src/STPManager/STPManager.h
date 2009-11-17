@@ -181,6 +181,7 @@ namespace BEEV
       letmgr       = new LETMgr(ASTUndefined);
       runTimes     = new RunTimes();
       _current_query = ASTUndefined;
+      UserFlags.num_absrefine = 2;
     }    
 
     //Return ptr to let-variables manager (see parser/let-funcs.h)

@@ -142,6 +142,15 @@ namespace BEEV {
     MINISAT::UnsoundSimpSolver newS;
 #endif
 
+    if(bm->UserFlags.num_absrefine_flag 
+       && !bm->UserFlags.arrayread_refinement_flag)
+      {
+	res =
+	  Ctr_Example->UserGuided_AbsRefine(newS,
+					    orig_input);
+	return res;
+      }
+
     if (bm->UserFlags.arrayread_refinement_flag)
       {
         bm->counterexample_checking_during_refinement = true;

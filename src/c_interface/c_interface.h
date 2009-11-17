@@ -42,7 +42,7 @@ extern "C" {
   // h  : help
   // s  : stats
   // v  : print nodes
-  void vc_setFlags(VC vc, char c);
+  void vc_setFlags(VC vc, char c, int num_absrefine=0);
 
   //! Flags can be NULL
   VC vc_createValidityChecker(void);
@@ -170,7 +170,7 @@ extern "C" {
 
   //! Assert a new formula in the current context.
   /*! The formula must have Boolean type. */
-  void vc_assertFormula(VC vc, Expr e, int absrefine_num=0);
+  void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num=0);
 
   //! Simplify e with respect to the current context
   Expr vc_simplify(VC vc, Expr e);
