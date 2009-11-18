@@ -154,11 +154,6 @@ namespace BEEV
     SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
                                   const ASTNode& orig_input);        
     
-    SOLVER_RETURN_TYPE
-    UserGuided_AbsRefine(MINISAT::Solver& SatSolver,	
-			 const ASTNode& original_input);
-  
-   
     //     SOLVER_RETURN_TYPE
     // SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& newS,
     // const ASTNode& orig_input);
