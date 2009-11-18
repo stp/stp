@@ -19,7 +19,6 @@ namespace BEEV {
     ASTNode original_input = bm->CreateNode(AND, 
 					    inputasserts, 
 					    bm->CreateNode(NOT, query));
-    ASTNode modified_input = original_input;
     
     //solver instantiated here
 #ifdef CORE
@@ -43,7 +42,7 @@ namespace BEEV {
     else 
       {
 	return TopLevelSTPAux(NewSolver, 
-			      modified_input, original_input);
+			      original_input, original_input);
       }
   } //End of TopLevelSTP()
   

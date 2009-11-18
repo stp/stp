@@ -837,42 +837,43 @@ namespace BEEV
     //########################################
     
     x->clausespos = SINGLETON(psi);
-    //x->clausesneg = SINGLETON(psi);
+    x->clausesneg = SINGLETON(bm->CreateNode(NOT, psi));
     setWasRenamedPos(*x);
   }//End of doRenamingPos
   
-  void CNFMgr::doRenamingNegXor(const ASTNode& varphi)
-  {
-    CNFInfo* x = info[varphi];
+//   void CNFMgr::doRenamingNegXor(const ASTNode& varphi)
+//   {
+//     CNFInfo* x = info[varphi];
 
-    //########################################
-    // step 1, calc new variable
-    //########################################
+//     //########################################
+//     // step 1, calc new variable
+//     //########################################
     
-    ostringstream oss;
-    oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
-    ASTNode psi = bm->CreateSymbol(oss.str().c_str());
+//     ostringstream oss;
+//     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
+//     ASTNode psi = bm->CreateSymbol(oss.str().c_str());
     
-    //########################################
-    // step 2, add defs
-    //########################################
+//     //########################################
+//     // step 2, add defs
+//     //########################################
     
-    //     ClauseList* cl1;
-    //     cl1 = SINGLETON(bm->CreateNode(NOT, psi));
-    //     ClauseList* cl2 = PRODUCT(*(info[varphi]->clausespos), *cl1);
-    //     defs->insert(defs->end(), cl2->begin(), cl2->end());
-    //     DELETE(info[varphi]->clausespos);
-    //     DELETE(cl1);
-    //     delete cl2;
+//     //     ClauseList* cl1;
+//     //     cl1 = SINGLETON(bm->CreateNode(NOT, psi));
+//     //     ClauseList* cl2 = PRODUCT(*(info[varphi]->clausespos), *cl1);
+//     //     defs->insert(defs->end(), cl2->begin(), cl2->end());
+//     //     DELETE(info[varphi]->clausespos);
+//     //     DELETE(cl1);
+//     //     delete cl2;
     
-    //########################################
-    // step 3, update info[varphi]
-    //########################################
+//     //########################################
+//     // step 3, update info[varphi]
+//     //########################################
     
-    //x->clausesneg = SINGLETON(bm->CreateNode(NOT,psi));
-    x->clausespos = SINGLETON(bm->CreateNode(NOT,psi));
-    setWasRenamedPos(*x);
-  }//End of doRenamingPos
+//     //x->clausesneg = SINGLETON(bm->CreateNode(NOT,psi));
+//     x->clausespos = SINGLETON(bm->CreateNode(NOT,psi));
+
+//     setWasRenamedPos(*x);
+//   }//End of doRenamingPos
   
   void CNFMgr::doRenamingNeg(const ASTNode& varphi, ClauseList* defs)
   {
@@ -1681,8 +1682,8 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi,
                                          ClauseList* defs)
   {
-#ifdef FALSE
-    //#ifdef CRYPTOMINISAT
+    //#ifdef FALSE
+#ifdef CRYPTOMINISAT
     CNFInfo * xx = info[varphi];
     if(NULL != xx
        && sharesPos(*xx) > 0
@@ -1700,15 +1701,16 @@ namespace BEEV
 
         //Creating a new variable name for each of the children of the
         //XOR node doRenamingPos(*it, defs);
+        //doRenamingPos(*it, defs);
         doRenamingNeg(*it, defs);
         xor_clause->insert(xor_clause->end(), 
                            ((*(info[*it]->clausespos))[0])->begin(),
                            ((*(info[*it]->clausespos))[0])->end());
       }
-    doRenamingNegXor(varphi);
+    doRenamingPosXor(varphi);
     //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
-    //info[varphi]->clausespos = psi;    
-    ASTNode varXorNode = GetNodeFrom_SINGLETON(info[varphi]->clausesneg);
+    //info[varphi]->clausespos = psi;
+    ASTNode varXorNode = GetNodeFrom_SINGLETON(info[varphi]->clausespos);
     ASTNode NotVarXorNode = bm->CreateNode(NOT, varXorNode);
     xor_clause->push_back(ASTNodeToASTNodePtr(NotVarXorNode));
     clausesxor->push_back(xor_clause);
