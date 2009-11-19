@@ -44,11 +44,11 @@ namespace BEEV
                                const ASTNode& inputAlreadyInSAT, 
                                const ASTNode& original_input) {
     //printf("doing array read refinement\n");
-    if (!bm->UserFlags.arrayread_refinement_flag)
-      {
-        FatalError("SATBased_ArrayReadRefinement: "\
-                   "Control should not reach here");
-      }
+    // if (!bm->UserFlags.arrayread_refinement_flag)
+    //       {
+    //         FatalError("SATBased_ArrayReadRefinement: "	\
+    //                    "Control should not reach here");
+    //       }
     ASTVec FalseAxiomsVec, RemainingAxiomsVec;
     RemainingAxiomsVec.push_back(ASTTrue);
     FalseAxiomsVec.push_back(ASTTrue);

@@ -214,10 +214,17 @@ namespace BEEV {
         return res;
       }
 
-    FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
-               "either a divide by zero in the input or a bug in STP");
-    //bogus return to make the compiler shut up
-    return SOLVER_ERROR;
+    if(!bm->UserFlags.num_absrefine_flag)
+      {
+	FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
+		   "either a divide by zero in the input or a bug in STP");
+	//bogus return to make the compiler shut up
+	return SOLVER_ERROR;
+      }
+    else
+      {
+	return res;
+      }
   } //End of TopLevelSTPAux
 
   //UserGuided abstraction refinement
@@ -286,6 +293,14 @@ namespace BEEV {
       (RemainingFormulasVec.size() == 1) ?
       RemainingFormulasVec[0] : bm->CreateNode(AND, RemainingFormulasVec);
     res = TopLevelSTPAux(NewSolver, RemainingFormulas, original_input);
-    return res;
+    
+    if(SOLVER_UNDECIDED != res)
+      {
+	return res;
+      }
+    
+    FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
+	       "either a divide by zero in the input or a bug in STP");    
+    return SOLVER_ERROR;
   } //End of UserGuided_AbsRefine()
 }; //end of namespace
