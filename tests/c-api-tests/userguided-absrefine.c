@@ -107,7 +107,7 @@ int get_pairtype(char * seq, int i, int j) {
  *************************************************************/
 int main(int argc, char** argv) {
   if(argc < 2 || argc > 3) {
-    printf("Usage: biosat <sequence length> <energy lower bound>\n");
+    printf("Usage: biosat <sequence> <energy lower bound>\n");
     printf("Usage to print input back: biosat -b \n");
     exit(-1);
   }
