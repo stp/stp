@@ -940,6 +940,14 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->Reso
 
   delete $1;
 }
+/* |      Expr BVRIGHTSHIFT_TOK Expr */
+/* { */
+/*   //$1 is being shifted by variable shift amount $3 */
+/*   // */
+
+/*   delete $1; */
+/*   delete $3; */
+/* } */
 |      BVPLUS_TOK '(' NUMERAL_TOK ',' Exprs ')' 
 {
   ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVPLUS, $3, *$5));
