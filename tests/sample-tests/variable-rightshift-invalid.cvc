@@ -1,0 +1,10 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+X, Y : BITVECTOR(2);
+
+ASSERT X = 0bin11;
+ASSERT X >> Y = 0bin01;
+
+QUERY FALSE;
