@@ -919,6 +919,70 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->Reso
   $$ = n;
   delete $1;
 }
+/* |      Expr BVLEFTSHIFT_TOK Expr */
+/* { */
+/*   // VARIABLE LEFT SHIFT */
+/*   // */
+/*   // $1 (THEEXPR) is being shifted */
+/*   // */
+/*   // $3 is the variable shift amount */
+/*   ASTNode inputExpr = *$1; */
+/*   ASTNode varShiftAmt = *$3; */
+
+/*   unsigned int exprWidth = $1->GetValueWidth(); */
+/*   unsigned int shiftAmtWidth = $3->GetValueWidth(); */
+/*   ASTNode exprWidthNode = ParserBM->CreateBVConst(shiftAmtWidth, exprWidth); */
+  
+/*   ASTNode cond, thenExpr, elseExpr; */
+/*   unsigned int count = 0; */
+/*   while(count < exprWidth) */
+/*     { */
+/*       if(0 == count) */
+/* 	{ */
+/* 	  // if count is zero then the appropriate rightshift expression is */
+/* 	  // THEEXPR itself */
+/* 	  elseExpr = inputExpr; */
+/* 	} */
+/*       else */
+/* 	{ */
+/* 	  // 1 <= count < exprWidth */
+/* 	  // */
+/* 	  // Construct appropriate conditional */
+/* 	  ASTNode countNode = ParserBM->CreateBVConst(shiftAmtWidth, count); */
+/* 	  cond = ParserBM->CreateNode(EQ, countNode, varShiftAmt); */
+
+/* 	  //Construct the rightshift expression padding @ Expr[hi:low] */
+/* 	  ASTNode low = */
+/* 	    ParserBM->CreateBVConst(32,count); */
+/* 	  ASTNode extract = */
+/* 	    ParserBM->CreateTerm(BVEXTRACT,exprWidth-count,inputExpr,hi,low); */
+/* 	  ASTNode padding = */
+/* 	    ParserBM->CreateZeroConst(count); */
+/* 	  thenExpr = */
+/* 	    ParserBM->CreateTerm(BVCONCAT, exprWidth, padding, extract); */
+/* 	  ASTNode ite = */
+/* 	    ParserBM->CreateTerm(ITE, exprWidth, cond, thenExpr, elseExpr); */
+/* 	  BVTypeCheck(ite); */
+/* 	  elseExpr = ite; */
+/* 	} */
+/*       count++; */
+/*     } //End of while loop */
+
+/*   // if shiftamount is greater than or equal to exprwidth, then */
+/*   // output is zero. */
+/*   cond = ParserBM->CreateNode(BVGE, varShiftAmt, exprWidthNode); */
+/*   thenExpr = ParserBM->CreateZeroConst(exprWidth); */
+/*   ASTNode * ret = */
+/*     new ASTNode(ParserBM->CreateTerm(ITE, */
+/* 				     exprWidth, */
+/* 				     cond, thenExpr, elseExpr)); */
+/*   BVTypeCheck(*ret); */
+/*   //cout << *ret; */
+
+/*   $$ = ret; */
+/*   delete $1; */
+/*   delete $3; */
+/* } */
 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK
 {
   ASTNode len = ParserBM->CreateZeroConst($3);

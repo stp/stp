@@ -15,9 +15,10 @@ $(LIB): $(OBJECTS)
 	rm -f $@
 	ar cq $@ $(OBJECTS)
 	cp $(LIB) ../
+	cp $(OBJECTS) ../
 
 clean:
-	rm $(OBJECTS) $(LIB) ../$(LIB)
+	rm -f $(OBJECTS) $(LIB)
 
 .C.o:
 	$(CC) $(CFLAGS) $< -o $@
