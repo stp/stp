@@ -1,16 +1,23 @@
 include   ../../../scripts/Makefile.common
+
 MTL       = ../mtl
-CORE      = ../core
-CHDRS     = $(wildcard *.h) $(wildcard $(MTL)/*.h)
+SOURCES   = SimpSolver.C ../core/Solver.C
+OBJECTS   = $(SOURCES:.C=.o)
+LIB       = libminisat.a
+CFLAGS    += -I$(MTL) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
 EXEC      = minisat
-CFLAGS    = -I$(MTL) -I$(CORE) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32)
 LFLAGS    = -lz
 
-CSRCS     = $(wildcard *.C)
-COBJS     = $(addsuffix .o, $(basename $(CSRCS))) $(CORE)/Solver.o
+all: $(LIB) #$(EXEC)
+lib: $(LIB)
 
-include ../mtl/template.mk
-all: libminisat.a
-	ranlib libminisat.a
-	cp *.or ../
-	cp libminisat.a ../
+$(LIB): $(OBJECTS)
+	rm -f $@
+	ar cq $@ $(OBJECTS)
+	cp $(LIB) ../
+
+clean:
+	rm $(OBJECTS) $(LIB) ../$(LIB)
+
+.C.o:
+	$(CC) $(CFLAGS) $< -o $@
