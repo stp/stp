@@ -16,5 +16,8 @@ $(LIB): $(OBJECTS)
 	ar cq $@ $(OBJECTS)
 	cp $(LIB) ../
 
+clean:
+	rm $(OBJECTS) $(LIB) ../$(LIB)
+
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@
