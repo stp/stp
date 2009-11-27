@@ -16,9 +16,10 @@ $(LIB): $(OBJECTS)
 	rm -f $@
 	ar cq $@ $(OBJECTS)
 	cp $(LIB) ../
+	cp $(OBJECTS) ../
 
 clean:
-	rm -f $(OBJECTS) $(LIB) ../$(LIB)
+	rm -f $(OBJECTS) $(LIB)
 
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@
