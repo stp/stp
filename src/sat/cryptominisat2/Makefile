@@ -1,0 +1,24 @@
+include   ../../../scripts/Makefile.common
+
+MTL       = ../cryptominisat/mtl
+MTRAND    = ../cryptominisat/MTRand
+SOURCES   = Clause.cpp  Conglomerate.cpp  FindUndef.cpp  Gaussian.cpp  Logger.cpp  MatrixFinder.cpp  PackedRow.cpp  Solver.cpp  VarReplacer.cpp  XorFinder.cpp
+OBJECTS   = $(SOURCES:.cpp=.o)
+LIB       = libminisat.a
+CFLAGS    += -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
+EXEC      = minisat
+LFLAGS    = -lz
+
+all: $(LIB) #$(EXEC)
+lib: $(LIB)
+
+$(LIB): $(OBJECTS)
+	rm -f $@
+	ar cq $@ $(OBJECTS)
+	cp $(LIB) ../
+
+clean:
+	rm -f $(OBJECTS) $(LIB) ../$(LIB)
+
+.cpp.o:
+	$(CC) $(CFLAGS) $< -o $@
