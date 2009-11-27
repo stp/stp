@@ -1,10 +1,11 @@
 include   ../../../scripts/Makefile.common
 
 MTL       = mtl
+MTRAND    = MTRand
 SOURCES   = Solver.cpp  clause.cpp fcopy.cpp Logger.cpp
 OBJECTS   = $(SOURCES:.cpp=.o)
 LIB       = libminisat.a
-CFLAGS    += -I$(MTL) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
+CFLAGS    += -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
 EXEC      = minisat
 LFLAGS    = -lz
 
