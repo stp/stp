@@ -19,6 +19,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GAUSSIANCONFIG_H
 
 #include <sys/types.h>
+#include "PackedRow.h"
+
+namespace MINISAT
+{
+using namespace MINISAT;
 
 class GaussianConfig
 {
@@ -26,19 +31,22 @@ class GaussianConfig
     
     GaussianConfig() :
         only_nth_gauss_save(2)
-        , decision_from(0)
         , decision_until(0)
-        , every_nth_gauss(1)
         , starts_from(3)
     {
+        if (PackedRow::tmp_row == NULL)
+            PackedRow::tmp_row = new uint64_t[1000];
+    }
+    
+    ~GaussianConfig()
+    {
+        delete[] PackedRow::tmp_row;
     }
         
     //tuneable gauss parameters
     uint only_nth_gauss_save;  //save only every n-th gauss matrix
-    uint decision_from; //start from this decision level
     uint decision_until; //do Gauss until this level
-    uint every_nth_gauss; //do Gauss every nth level
     uint starts_from; //Gauss elimination starts from this restart number
 };
-
+};
 #endif //GAUSSIANCONFIG_H

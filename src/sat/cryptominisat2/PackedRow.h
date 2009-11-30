@@ -126,7 +126,7 @@ public:
         xor_clause_inverted = v.xor_clause_inverted();
     }
     
-    void fill(Lit* ps, const vec<lbool>& assigns, const vector<Var>& col_to_var_original) const;
+    void fill(vec<Lit>& tmp_clause, const vec<lbool>& assigns, const vector<Var>& col_to_var_original) const;
     
     inline unsigned long int scan(const unsigned long int var) const
     {
@@ -141,14 +141,14 @@ public:
 
     friend std::ostream& operator << (std::ostream& os, const PackedRow& m);
     
-    static uint64_t *tmp_row;
+    static __thread uint64_t *tmp_row;
 
 private:
     friend class PackedMatrix;
     PackedRow(const uint _size, uint64_t& _xor_clause_inverted, uint64_t*  const _mp) :
         size(_size)
-        , xor_clause_inverted(_xor_clause_inverted)
         , mp(_mp)
+        , xor_clause_inverted(_xor_clause_inverted)
     {}
     
     const uint size;

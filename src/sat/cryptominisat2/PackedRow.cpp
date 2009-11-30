@@ -2,6 +2,8 @@
 namespace MINISAT
 {
 
+__thread uint64_t* PackedRow::tmp_row = NULL;
+
 std::ostream& operator << (std::ostream& os, const PackedRow& m)
 {
     for(uint i = 0; i < m.size*64; i++) {
@@ -125,11 +127,11 @@ PackedRow& PackedRow::operator^=(const PackedRow& b)
     return *this;
 }
 
-void PackedRow::fill(Lit* ps, const vec<lbool>& assigns, const vector<Var>& col_to_var_original) const
+void PackedRow::fill(vec<Lit>& tmp_clause, const vec<lbool>& assigns, const vector<Var>& col_to_var_original) const
 {
     bool final = xor_clause_inverted;
     
-    Lit* ps_first = ps;
+    tmp_clause.clear();
     uint col = 0;
     bool wasundef = false;
     for (uint i = 0; i < size; i++) for (uint i2 = 0; i2 < 64; i2++) {
@@ -137,23 +139,22 @@ void PackedRow::fill(Lit* ps, const vec<lbool>& assigns, const vector<Var>& col_
             const uint& var = col_to_var_original[col];
             assert(var != UINT_MAX);
             
-            const lbool val = assigns[var];
+            const lbool& val = assigns[var];
             const bool val_bool = val.getBool();
-            *ps = Lit(var, val_bool);
+            tmp_clause.push(Lit(var, val_bool));
             final ^= val_bool;
             if (val.isUndef()) {
                 assert(!wasundef);
-                Lit tmp(*ps_first);
-                *ps_first = *ps;
-                *ps = tmp;
+                Lit tmp(tmp_clause[0]);
+                tmp_clause[0] = tmp_clause.last();
+                tmp_clause.last() = tmp;
                 wasundef = true;
             }
-            ps++;
         }
         col++;
     }
     if (wasundef) {
-        *ps_first ^= final;
+        tmp_clause[0] ^= final;
         //assert(ps != ps_first+1);
     } else
         assert(!final);

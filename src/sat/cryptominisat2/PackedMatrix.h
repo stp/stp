@@ -44,8 +44,12 @@ public:
         numRows(b.numRows)
         , numCols(b.numCols)
     {
+        #ifdef DEBUG_MATRIX
+        assert(b.numRows > 0 && b.numCols > 0);
+        #endif
+        
         mp = new uint64_t[numRows*(numCols+1)];
-        std::copy(b.mp, b.mp+numRows*(numCols+1), mp);
+        memcpy(mp, b.mp, sizeof(uint64_t)*numRows*(numCols+1));
     }
     
     ~PackedMatrix()
@@ -66,19 +70,27 @@ public:
     
     void resizeNumRows(const uint num_rows)
     {
+        #ifdef DEBUG_MATRIX
+        assert(num_rows <= numRows);
+        #endif
+        
         numRows = num_rows;
     }
     
     PackedMatrix& operator=(const PackedMatrix& b)
     {
-        if (b.numRows*(b.numCols+1) > numRows*(numCols+1)) {
+        #ifdef DEBUG_MATRIX
+        //assert(b.numRows > 0 && b.numCols > 0);
+        #endif
+        
+        if (numRows*(numCols+1) < b.numRows*(b.numCols+1)) {
             delete[] mp;
             mp = new uint64_t[b.numRows*(b.numCols+1)];
         }
         
         numRows = b.numRows;
         numCols = b.numCols;
-        std::copy(b.mp, b.mp+numRows*(numCols+1), mp);
+        memcpy(mp, b.mp, sizeof(uint64_t)*numRows*(numCols+1));
         
         return *this;
     }
@@ -216,7 +228,7 @@ public:
         return const_iterator(mp+numRows*(numCols+1), numCols);
     }*/
     
-    inline const uint size() const
+    inline const uint getSize() const
     {
         return numRows;
     }

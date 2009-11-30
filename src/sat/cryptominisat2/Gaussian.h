@@ -43,7 +43,7 @@ static const Var unassigned_var = -1;
 class Gaussian
 {
 public:
-    Gaussian(Solver& solver, const GaussianConfig& config, const uint matrix_no);
+    Gaussian(Solver& solver, const GaussianConfig& config, const uint matrix_no, const vector<XorClause*>& xorclauses);
     ~Gaussian();
 
     llbool full_init();
@@ -70,12 +70,14 @@ protected:
     //Gauss high-level configuration
     const GaussianConfig& config;
     const uint matrix_no;
+    vector<XorClause*> xorclauses;
 
     enum gaussian_ret {conflict, unit_conflict, propagation, unit_propagation, nothing};
     gaussian_ret gaussian(Clause*& confl);
 
-    vector<Var> col_to_var_original;
-    BitArray var_is_in;
+    vector<Var> col_to_var_original; //Matches columns to variables
+    BitArray var_is_in; //variable is part of the the matrix. var_is_in's size is _minimal_ so you should check whether var_is_in.getSize() < var before issuing var_is_in[var]
+    uint badlevel;
 
     class matrixset
     {
@@ -83,25 +85,23 @@ protected:
         PackedMatrix matrix; // The matrix, updated to reflect variable assignements
         PackedMatrix varset; // The matrix, without variable assignements. The xor-clause is read from here. This matrix only follows the 'matrix' with its row-swap, row-xor, and row-delete operations.
         BitArray var_is_set;
-        vector<Var> col_to_var; // col_to_var[COL] tells which variable is at a given column in the matrix. Gives UINT_MAX if the COL has been zeroed (i.e. the variable assigned)
+        vector<Var> col_to_var; // col_to_var[COL] tells which variable is at a given column in the matrix. Gives unassigned_var if the COL has been zeroed (i.e. the variable assigned)
         uint16_t num_rows; // number of active rows in the matrix. Unactive rows are rows that contain only zeros (and if they are conflicting, then the conflict has been treated)
         uint num_cols; // number of active columns in the matrix. The columns at the end that have all be zeroed are no longer active
         int least_column_changed; // when updating the matrix, this value contains the smallest column number that has been updated  (Gauss elim. can start from here instead of from column 0)
         uint16_t past_the_end_last_one_in_col;
-        vector<uint16_t> last_one_in_col; //last_one_in_col[COL] tells the last row that has a '1' in that column. Used to reduce the burden of Gauss elim. (it only needs to look until that row)
+        vector<uint16_t> last_one_in_col; //last_one_in_col[COL] tells the last row+1 that has a '1' in that column. Used to reduce the burden of Gauss elim. (it only needs to look until that row)
         uint removeable_cols; // the number of columns that have been zeroed out (i.e. assigned)
     };
 
     //Saved states
     vector<matrixset> matrix_sets; // The matrixsets for depths 'decision_from' + 0,  'decision_from' + only_nth_gaussian_save, 'decision_from' + 2*only_nth_gaussian_save, ... 'decision_from' + 'decision_until'.
-    matrixset origMat; // The matrixset at depth 0 of the search tree
     matrixset cur_matrixset; // The current matrixset, i.e. the one we are working on, or the last one we worked on
 
     //Varibales to keep Gauss state
     bool messed_matrix_vars_since_reversal;
     int gauss_last_level;
     vector<Clause*> matrix_clauses_toclear;
-    bool went_below_decision_from;
     bool disabled; // Gauss is disabled
     
     //State of current elimnation
@@ -115,8 +115,8 @@ protected:
 
     //gauss init functions
     void init(); // Initalise gauss state
-    void fill_matrix(); // Fills the origMat matrix
-    uint select_columnorder(vector<uint16_t>& var_to_col); // Fills var_to_col and col_to_var of the origMat matrix.
+    void fill_matrix(matrixset& origMat); // Fills the origMat matrix
+    uint select_columnorder(vector<uint16_t>& var_to_col, matrixset& origMat); // Fills var_to_col and col_to_var of the origMat matrix.
 
     //Main function
     uint eliminate(matrixset& matrix, uint& conflict_row); //does the actual gaussian elimination
@@ -133,6 +133,7 @@ protected:
     void analyse_confl(const matrixset& m, const uint row, uint& maxlevel, uint& size, uint& best_row) const; // analyse conflcit to find the best conflict. Gets & returns the best one in 'maxlevel', 'size' and 'best row' (these are all UINT_MAX when calling this function first, i.e. when there is no other possible conflict to compare to the new in 'row')
     gaussian_ret handle_matrix_confl(Clause*& confl, const matrixset& m, const uint size, const uint maxlevel, const uint best_row);
     gaussian_ret handle_matrix_prop(matrixset& m, const uint row); // Handle matrix propagation at row 'row'
+    vec<Lit> tmp_clause;
 
     //propagation&conflict handling
     void cancel_until_sublevel(const uint sublevel); // cancels until sublevel 'sublevel'. The var 'sublevel' must NOT go over the current level. I.e. this function is ONLY for moving inside the current level
@@ -153,17 +154,12 @@ private:
     void print_matrix_row(const T& row) const; // Print matrix row 'row'
     template<class T>
     void print_matrix_row_with_assigns(const T& row) const;
-    const bool check_matrix_against_varset(PackedMatrix& matrix, PackedMatrix& varset) const;
+    const bool check_matrix_against_varset(PackedMatrix& matrix, PackedMatrix& varset, const matrixset& m) const;
     const bool check_last_one_in_cols(matrixset& m) const;
     void print_matrix(matrixset& m) const;
     void print_last_one_in_cols(matrixset& m) const;
     static const string lbool_to_string(const lbool toprint);
 };
-
-inline void Gaussian::back_to_level(const uint level)
-{
-    if (level <= config.decision_from) went_below_decision_from = true;
-}
 
 inline bool Gaussian::should_init() const
 {
@@ -174,9 +170,7 @@ inline bool Gaussian::should_check_gauss(const uint decisionlevel, const uint st
 {
     return (!disabled
             && starts >= config.starts_from
-            && decisionlevel < config.decision_until
-            && decisionlevel >= config.decision_from
-            && decisionlevel % config.every_nth_gauss == 0);
+            && decisionlevel < config.decision_until);
 }
 
 inline void Gaussian::canceling(const uint level, const Var var)
@@ -193,27 +187,6 @@ inline void Gaussian::canceling(const uint level, const Var var)
 inline void Gaussian::print_matrix_stats() const
 {
     cout << "matrix size: " << cur_matrixset.num_rows << "  x " << cur_matrixset.num_cols << endl;
-}
-
-inline void Gaussian::set_matrixset_to_cur()
-{
-    /*cout << solver.decisionLevel() << endl;
-    cout << decision_from << endl;
-    cout << matrix_sets.size() << endl;*/
-    
-    if (solver.decisionLevel() == 0) {
-        origMat = cur_matrixset;
-    }
-    
-    if (solver.decisionLevel() >= config.decision_from) {
-        uint level = ((solver.decisionLevel() - config.decision_from) / config.only_nth_gauss_save);
-        
-        assert(level <= matrix_sets.size()); //TODO check if we need this, or HOW we need this in a multi-matrix setting
-        if (level == matrix_sets.size())
-            matrix_sets.push_back(cur_matrixset);
-        else
-            matrix_sets[level] = cur_matrixset;
-    }
 }
 
 std::ostream& operator << (std::ostream& os, const vec<Lit>& v);

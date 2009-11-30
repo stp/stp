@@ -93,19 +93,23 @@ void VarReplacer::replace_set(vec<XorClause*>& cs, const bool need_reattach)
             case 0: {
                 if (!c.xor_clause_inverted())
                     S->ok = false;
-                free(&c);
                 r++;
                 break;
             }
             case 1: {
                 S->uncheckedEnqueue(Lit(c[0].var(), !c.xor_clause_inverted()));
-                free(&c);
                 r++;
                 break;
             }
             default: {
-                S->attachClause(c);
-                *a++ = *r++;
+                if (c.size() == 2) {
+                    S->addBinaryXorClause(c, c.xor_clause_inverted(), c.group);
+                    c.mark(1);
+                    r++;
+                } else {
+                    S->attachClause(c);
+                    *a++ = *r++;
+                }
                 break;
             }
             }
@@ -250,7 +254,7 @@ void VarReplacer::replace(Var var, Lit lit)
         
         //triangular cycle
         if (lit1.var() == lit2.var()) {
-            if (lit1.sign() ^ lit2.sign() != lit.sign()) {
+            if ((lit1.sign() ^ lit2.sign()) != lit.sign()) {
                 #ifdef VERBOSE_DEBUG
                 cout << "Inverted cycle in var-replacement -> UNSAT" << endl;
                 #endif
