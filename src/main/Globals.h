@@ -23,7 +23,7 @@
 namespace MINISAT
 {
   class Solver;
-#if defined(CRYPTOMINISAT)
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
 #else
   typedef int Var;
 #endif

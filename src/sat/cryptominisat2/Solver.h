@@ -25,16 +25,24 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <cstdio>
 #include <string.h>
 
-#include "Vec.h"
-#include "Heap.h"
-#include "Alg.h"
-#include "MersenneTwister.h"
+#include "mtl/Vec.h"
+#include "mtl/Heap.h"
+#include "mtl/Alg.h"
+#include "MTRand/MersenneTwister.h"
 #include "SolverTypes.h"
 #include "Clause.h"
 #include "VarReplacer.h"
 #include "GaussianConfig.h"
 #include "Logger.h"
 #include "constants.h"
+
+#ifdef _MSC_VER
+  #include <ctime>
+#else
+  #include <sys/time.h>
+  #include <sys/resource.h>
+  #include <unistd.h>
+#endif
 
 namespace MINISAT
 {

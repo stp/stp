@@ -715,7 +715,7 @@ namespace BEEV
   {
     if (!UserFlags.stats_flag)
       return;
-#ifdef CRYPTOMINISAT
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
 #else
     double cpu_time = MINISAT::cpuTime();
     uint64_t mem_used = MINISAT::memUsed();

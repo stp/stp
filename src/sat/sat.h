@@ -6,6 +6,11 @@
 #include "cryptominisat/SolverTypes.h"
 #endif
 
+#ifdef CRYPTOMINISAT2
+#include "cryptominisat2/Solver.h"
+#include "cryptominisat2/SolverTypes.h"
+#endif
+
 #ifdef CORE
 #include "core/Solver.h"
 #include "core/SolverTypes.h"

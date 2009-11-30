@@ -24,7 +24,7 @@ namespace BEEV {
 #ifdef CORE
     MINISAT::Solver NewSolver;
 #endif
-#ifdef CRYPTOMINISAT
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
 #endif
 #ifdef SIMP

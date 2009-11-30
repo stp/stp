@@ -16,6 +16,11 @@ unsound:
 cryptominisat:
 	$(MAKE) -C cryptominisat lib all
 
+.PHONY: cryptominisat2
+cryptominisat2:
+	$(MAKE) -C cryptominisat2 lib all
+
+
 .PHONY: clean
 clean:
 	rm -rf *.o *~ libminisat.a
@@ -23,4 +28,5 @@ clean:
 	$(MAKE) -C simp    clean
 	$(MAKE) -C unsound clean
 	$(MAKE) -C cryptominisat clean
+	$(MAKE) -C cryptominisat2 clean
 

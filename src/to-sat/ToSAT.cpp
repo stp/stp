@@ -109,7 +109,7 @@ namespace BEEV
         //        {
         //          continue;
         //        }
-#ifdef CRYPTOMINISAT
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
         if(add_xor_clauses)
           {         
             //cout << "addXorClause:\n";
@@ -131,7 +131,13 @@ namespace BEEV
             //           << percentage << endl;
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             bm->GetRunTimes()->start(RunTimes::Solving);
-#ifdef CRYPTOMINISAT
+
+#if defined CRYPTOMINISAT
+            if (newS.simplify() == MINISAT::l_Undef)
+#endif
+
+#if defined CRYPTOMINISAT2
+	      newS.set_gaussian_decision_until(100);
             if (newS.simplify() == MINISAT::l_Undef)
 #endif
               newS.solve();
@@ -158,7 +164,8 @@ namespace BEEV
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);
-#ifdef CRYPTOMINISAT
+
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     if (newS.simplify() == MINISAT::l_Undef)
 #endif
       newS.solve();
