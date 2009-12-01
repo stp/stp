@@ -84,7 +84,6 @@ public:
 
     // Solving:
     //
-    lbool    simplify    ();                        // Removes already satisfied clauses.
     lbool    solve       (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions.
     lbool    solve       ();                        // Search without assumptions.
     bool    okay         () const;                  // FALSE means solver is in a conflicting state
@@ -241,6 +240,7 @@ protected:
 
     // Main internal methods:
     //
+    lbool    simplify    ();                                                           // Removes already satisfied clauses.
     //int      nbPropagated     (int level);
     void     insertVarOrder   (Var x);                                                 // Insert a variable in the decision order priority queue.
     Lit      pickBranchLit    (int polarity_mode);                                     // Return the next decision variable.
@@ -283,8 +283,6 @@ protected:
     bool     satisfied        (const XorClause& c) const; // Returns TRUE if the clause is satisfied in the current state
     bool     satisfied        (const Clause& c) const; // Returns TRUE if the clause is satisfied in the current state.
     void     reverse_binary_clause(Clause& c) const;   // Binary clauses --- the first Lit has to be true
-    template<class T>
-    inline void addBinaryXorClause(T& ps, const bool xor_clause_inverted, const uint group);  //Adds Binary XOR clause as two normal clauses
 
     // Misc:
     //
@@ -485,23 +483,6 @@ inline void Solver::reverse_binary_clause(Clause& c) const {
         Lit tmp = c[0];
         c[0] =  c[1], c[1] = tmp;
     }
-}
-template<class T>
-inline void Solver::addBinaryXorClause(T& ps, const bool xor_clause_inverted, const uint group) {
-    Clause* c;
-    ps[0] = ps[0].unsign();
-    ps[1] = ps[1].unsign();
-    ps[0] ^= xor_clause_inverted;
-    
-    c = Clause_new(ps, group, false);
-    clauses.push(c);
-    attachClause(*c);
-    
-    ps[0] ^= true;
-    ps[1] ^= true;
-    c = Clause_new(ps, group, false);
-    clauses.push(c);
-    attachClause(*c);
 }
 inline void Solver::removeClause(Clause& c)
 {

@@ -37,13 +37,20 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Conglomerate.h"
 #include "XorFinder.h"
 
+//#define DEBUG_LIB
+
+#ifdef DEBUG_LIB
+#include <sstream>
+FILE* myoutputfile;
+static uint numcalled = 0;
+#endif //DEBUG_LIB
+
 namespace MINISAT
 {
 using namespace MINISAT;
 
 //=================================================================================================
 // Constructor/Destructor:
-
 
 Solver::Solver() :
         // Parameters: (formerly in 'SearchParams')
@@ -90,6 +97,12 @@ Solver::Solver() :
     toReplace = new VarReplacer(this);
     conglomerate = new Conglomerate(this);
     logger.setSolver(this);
+    
+    #ifdef DEBUG_LIB
+    std::stringstream ss;
+    ss << "inputfile" << numcalled << ".cnf";
+    myoutputfile = fopen(ss.str().c_str(), "w");
+    #endif
 }
 
 
@@ -103,6 +116,10 @@ Solver::~Solver()
     gauss_matrixes.clear();
     delete toReplace;
     delete conglomerate;
+    
+    #ifdef DEBUG_LIB
+    fclose(myoutputfile);
+    #endif //DEBUG_LIB
 }
 
 //=================================================================================================
@@ -139,8 +156,14 @@ Var Solver::newVar(bool sign, bool dvar)
 
 bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint group, char* group_name)
 {
-
     assert(decisionLevel() == 0);
+    #ifdef DEBUG_LIB
+    fprintf(myoutputfile, "x");
+    for (uint i = 0; i < ps.size(); i++) {
+        fprintf(myoutputfile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
+    }
+    fprintf(myoutputfile, "0\n");
+    #endif //DEBUG_LIB
 
     if (dynamic_behaviour_analysis) logger.set_group_name(group, group_name);
 
@@ -177,7 +200,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
     }
     case 1: {
         assert(value(ps[0]) == l_Undef);
-        uncheckedEnqueue( (xor_clause_inverted) ? ~ps[0] : ps[0]);
+        uncheckedEnqueue(ps[0] ^ xor_clause_inverted);
         if (dynamic_behaviour_analysis)
             logger.propagation((xor_clause_inverted) ? ~ps[0] : ps[0], Logger::add_clause_type, group);
         return ok = (propagate() == NULL);
@@ -187,8 +210,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         cout << "--> xor is 2-long, replacing var " << ps[0].var()+1 << " with " << (!xor_clause_inverted ? "-" : "") << ps[1].var()+1 << endl;
         #endif
         
-        learnt_clause_group = std::max(group+1, learnt_clause_group);
-        toReplace->replace(ps[0].var(), Lit(ps[1].var(), !xor_clause_inverted));
+        toReplace->replace(ps, xor_clause_inverted, group);
         break;
     }
     default: {
@@ -198,6 +220,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         xorclauses.push(c);
         xorclauses_tofree.push(c);
         attachClause(*c);
+        toReplace->newClause();
         break;
     }
     }
@@ -208,6 +231,13 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
 bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
 {
     assert(decisionLevel() == 0);
+    
+    #ifdef DEBUG_LIB
+    for (int i = 0; i < ps.size(); i++) {
+        fprintf(myoutputfile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
+    }
+    fprintf(myoutputfile, "0\n");
+    #endif //DEBUG_LIB
 
     if (dynamic_behaviour_analysis)
         logger.set_group_name(group, group_name);
@@ -239,11 +269,11 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
         return ok = (propagate() == NULL);
     } else {
         learnt_clause_group = std::max(group+1, learnt_clause_group);
-
         Clause* c = Clause_new(ps, group);
 
         clauses.push(c);
         attachClause(*c);
+        toReplace->newClause();
     }
 
     return true;
@@ -1093,10 +1123,10 @@ void Solver::cleanClauses(vec<XorClause*>& cs)
         if (i-j > 0) useful++;
         
         if (c.size() == 2) {
-            vec<Lit> ps;
-            ps.push(c[0]);
-            ps.push(c[1]);
-            addBinaryXorClause(ps, c.xor_clause_inverted(), c.group);
+            vec<Lit> ps(2);
+            ps[0] = c[0];
+            ps[1] = c[1];
+            toReplace->replace(ps, c.xor_clause_inverted(), c.group);
             removeClause(c);
             s++;
         } else
@@ -1396,12 +1426,15 @@ void Solver::print_gauss_sum_stats() const
 
 lbool Solver::solve(const vec<Lit>& assumps)
 {
+    #ifdef DEBUG_LIB
+    fprintf(myoutputfile, "c Solver::solve() called\n");
+    #endif
+    
     if (dynamic_behaviour_analysis)
         logger.end(Logger::done_adding_clauses);
     
     model.clear();
     conflict.clear();
-    curRestart = 1;
 
     if (!ok) return l_False;
 
@@ -1417,8 +1450,8 @@ lbool Solver::solve(const vec<Lit>& assumps)
             nbclausesbeforereduce = (nClauses() * learntsize_factor)/2;
     }
     
-    toReplace->performReplace();
-    if (!ok) return l_False;
+    //toReplace->performReplace();
+    //if (!ok) return l_False;
 
     if (xorFinder) {
         double time;
@@ -1430,7 +1463,8 @@ lbool Solver::solve(const vec<Lit>& assumps)
             XorFinder xorFinder(this, clauses);
             uint foundXors = xorFinder.doNoPart(sumLengths, 2, 10);
             
-            printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
+            if (verbosity >=1)
+                printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
             if (!ok) return l_False;
         }
         
@@ -1445,7 +1479,8 @@ lbool Solver::solve(const vec<Lit>& assumps)
             removeSatisfied(xorclauses);
             cleanClauses(xorclauses);
             uint foundCong = conglomerate->conglomerateXors();
-            printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
+            if (verbosity >=1)
+                printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
             if (!ok) return l_False;
             
             uint new_total = 0;
@@ -1453,10 +1488,15 @@ lbool Solver::solve(const vec<Lit>& assumps)
             for (uint i = 0; i < xorclauses.size(); i++) {
                 new_total += xorclauses[i]->size();
             }
-            printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
-            printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
+            if (verbosity >=1) {
+                printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
+                printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
+            }
         }
     }
+    
+    //toReplace->performReplace();
+    //if (!ok) return l_False;
     
     if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
         removeSatisfied(xorclauses);
@@ -1464,9 +1504,9 @@ lbool Solver::solve(const vec<Lit>& assumps)
         double time = cpuTime();
         MatrixFinder m(this);
         const uint numMatrixes = m.findMatrixes();
-        printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
+        if (verbosity >=1)
+            printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
     }
-    
 
     if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on)) {
         printf("============================[ Search Statistics ]========================================\n");
