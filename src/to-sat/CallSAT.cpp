@@ -80,7 +80,7 @@ namespace BEEV
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);
 
-#ifdef CRYPTOMINISAT
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     ClauseList* xorcl = cm->ReturnXorClauses();
 #endif
 
@@ -97,7 +97,7 @@ namespace BEEV
         return sat;
       }
 
-#ifdef CRYPTOMINISAT
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     if(!xorcl->empty())
       { 
         sat = toSATandSolve(SatSolver, *xorcl, true);

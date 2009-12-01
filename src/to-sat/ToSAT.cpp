@@ -132,13 +132,8 @@ namespace BEEV
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             bm->GetRunTimes()->start(RunTimes::Solving);
 
-#if defined CRYPTOMINISAT
-            if (newS.simplify() == MINISAT::l_Undef)
-#endif
-
 #if defined CRYPTOMINISAT2
 	      newS.set_gaussian_decision_until(100);
-            if (newS.simplify() == MINISAT::l_Undef)
 #endif
               newS.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
@@ -165,10 +160,7 @@ namespace BEEV
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);
 
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
-    if (newS.simplify() == MINISAT::l_Undef)
-#endif
-      newS.solve();
+    newS.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
     bm->PrintStats(newS);
     if (newS.okay())
