@@ -28,7 +28,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Vec.h"
 #include "Heap.h"
 #include "Alg.h"
-#include "MersenneTwister.h"
+#include "MTRand/MersenneTwister.h"
 #include "SolverTypes.h"
 #include "Clause.h"
 #include "VarReplacer.h"
