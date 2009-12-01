@@ -1942,10 +1942,10 @@ namespace BEEV
     bm->GetRunTimes()->stop(RunTimes::CNFConversion);
     if (bm->UserFlags.stats_flag)
       {
-        cerr << "Number of clauses:" << defs->size() << endl;
-        PrintClauseList(cout, *defs);
-        cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
-        PrintClauseList(cout, *clausesxor);
+//         cerr << "Number of clauses:" << defs->size() << endl;
+//         PrintClauseList(cout, *defs);
+//         cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
+//         PrintClauseList(cout, *clausesxor);
       }
 
     return defs;
