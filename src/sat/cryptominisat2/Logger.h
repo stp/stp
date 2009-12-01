@@ -26,9 +26,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <string>
 #include <map>
 
-#include "mtl/Vec.h"
-#include "mtl/Heap.h"
-#include "mtl/Alg.h"
+#include "Vec.h"
+#include "Heap.h"
+#include "Alg.h"
 #include "SolverTypes.h"
 #include "stdint.h"
 #include "limits.h"
