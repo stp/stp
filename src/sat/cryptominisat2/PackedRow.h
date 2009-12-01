@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <limits.h>
 #include "SolverTypes.h"
-#include "Vec.h"
+#include "mtl/Vec.h"
 #include <string.h>
 #include <iostream>
 #include <algorithm>

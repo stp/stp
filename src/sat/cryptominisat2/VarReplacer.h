@@ -3,7 +3,7 @@
 
 #include "SolverTypes.h"
 #include "Clause.h"
-#include "Vec.h"
+#include "mtl/Vec.h"
 
 #include <sys/types.h>
 #include <map>
