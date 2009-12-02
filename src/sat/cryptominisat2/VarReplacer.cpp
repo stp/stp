@@ -22,6 +22,12 @@ VarReplacer::VarReplacer(Solver *_S) :
 {
 }
 
+VarReplacer::~VarReplacer()
+{
+    for (uint i = 0; i < toRemove.size(); i++)
+        free(toRemove[i]);
+}
+
 void VarReplacer::performReplace()
 {
     #ifdef VERBOSE_DEBUG

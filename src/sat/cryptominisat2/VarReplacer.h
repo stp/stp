@@ -21,6 +21,7 @@ class VarReplacer
 {
     public:
         VarReplacer(Solver* S);
+        ~VarReplacer();
         void replace(vec<Lit>& ps, const bool xor_clause_inverted, const uint group);
         void extendModel() const;
         void performReplace();
