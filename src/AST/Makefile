@@ -3,7 +3,7 @@ include ../../scripts/Makefile.common
 SRCS=$(wildcard  *.cpp)
 OBJS = $(SRCS:.cpp=.o)
 OBJS+= ASTKind.o
-CFLAGS += -I../sat/mtl -I../sat/core
+CFLAGS += -I$(MTL)
 
 #Make the ast library for use by other modules
 libast.a:$(OBJS) depend

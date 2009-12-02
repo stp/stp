@@ -2,7 +2,7 @@ include ../../scripts/Makefile.common
 
 SRCS=$(wildcard  *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I../sat/mtl -I../sat/core
+CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
 #Make the ast library for use by other modules
 libprinter.a:$(OBJS) depend

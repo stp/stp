@@ -1,7 +1,7 @@
 include   ../../../scripts/Makefile.common
 
-MTL       = ../cryptominisat/mtl
-MTRAND    = ../cryptominisat/MTRand
+MTL       = mtl
+MTRAND    = MTRand
 SOURCES   = Conglomerate.cpp  FindUndef.cpp  Gaussian.cpp  Logger.cpp  MatrixFinder.cpp  PackedRow.cpp  Solver.cpp  VarReplacer.cpp  XorFinder.cpp
 OBJECTS   = $(SOURCES:.cpp=.o)
 LIB       = libminisat.a

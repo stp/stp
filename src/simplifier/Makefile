@@ -2,7 +2,7 @@ include ../../scripts/Makefile.common
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I../sat/mtl -I../sat/simp -I../sat/core
+CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
 libsimplifier.a:$(OBJS) depend
 		$(AR) rc $@ $(OBJS)

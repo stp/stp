@@ -1242,7 +1242,7 @@ next:
 
     assert(!failed);
 
-    printf("Verified %d original clauses.\n", clauses.size() + xorclauses.size());
+    //printf("Verified %d original clauses.\n", clauses.size() + xorclauses.size());
 }
 
 

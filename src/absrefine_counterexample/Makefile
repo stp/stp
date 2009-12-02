@@ -2,7 +2,7 @@ include ../../scripts/Makefile.common
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I../sat/mtl -I../sat/simp -I../sat/core
+CFLAGS += -I$(MTL) -I$(MTRAND) -I$(SOLVER_INCLUDE)
 
 libabstractionrefinement.a: 	$(OBJS) depend
 				$(AR) rc $@ $(OBJS)
