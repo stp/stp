@@ -94,6 +94,7 @@ extern "C" {
   Expr vc_andExpr(VC vc, Expr left, Expr right);
   Expr vc_andExprN(VC vc, Expr* children, int numOfChildNodes);
   Expr vc_orExpr(VC vc, Expr left, Expr right);
+  Expr vc_xorExpr(VC vc, Expr left, Expr right);
   Expr vc_orExprN(VC vc, Expr* children, int numOfChildNodes);
   Expr vc_impliesExpr(VC vc, Expr hyp, Expr conc);
   Expr vc_iffExpr(VC vc, Expr left, Expr right);

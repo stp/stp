@@ -765,6 +765,19 @@ Expr vc_orExpr(VC vc, Expr left, Expr right) {
   return output;
 }
 
+Expr vc_xorExpr(VC vc, Expr left, Expr right) {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  nodestar l = (nodestar)left;
+  nodestar r = (nodestar)right;
+
+  node o = b->CreateNode(BEEV::XOR,*l,*r);
+  BVTypeCheck(o);
+  nodestar output = new node(o);
+  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output;
+}
+
+
 Expr vc_andExprN(VC vc, Expr* cc, int n) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar * c = (nodestar *)cc;

@@ -23,7 +23,7 @@ SOLVER_INCLUDE = ../sat/cryptominisat
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
 #CRYPTOMINISAT2 = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DCRYPTOMINISAT2
+#CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
 #MTL            = ../sat/cryptominisat2/mtl
 #SOLVER_INCLUDE = ../sat/cryptominisat2
 

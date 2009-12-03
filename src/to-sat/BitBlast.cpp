@@ -940,7 +940,10 @@ namespace BEEV
     ASTVec bit_comparisons;
     bit_comparisons.push_back(this_compare_bit);
     
-    ASTNode prev_eq_bit = _bm->CreateSimpForm(IFF, *lit, *rit);
+    ASTNode prev_eq_bit = 
+      _bm->CreateSimpForm(XOR, 
+			  _bm->CreateSimpForm(NOT,*lit), 
+			  *rit);
     for(lit++, rit++; lit < litend; lit++, rit++)
       {
         this_compare_bit = 
@@ -953,7 +956,9 @@ namespace BEEV
         // (neg(lit) OR rit)(lit OR neg(rit))
         ASTNode this_eq_bit = 
           _bm->CreateSimpForm(AND,
-                              _bm->CreateSimpForm(IFF,*lit,*rit),
+                              _bm->CreateSimpForm(XOR,
+						  _bm->CreateSimpForm(NOT,*lit),
+						  *rit),
                               prev_eq_bit);
         prev_eq_bit = this_eq_bit;
       }
@@ -966,50 +971,6 @@ namespace BEEV
       _bm->CreateSimpForm(OR, bit_comparisons);
 
     return output;
-    //     // "thisbit" represents BVLE of the suffixes of the BVs
-    //     // from that position .  if R < L, return TRUE, else if L < R
-    //     // return FALSE, else return BVLE of lower-order bits.  MSB is
-    //     // treated separately, because signed comparison is done by
-    //     // complementing the MSB of each BV, then doing an unsigned
-    //     // comparison.    
-    //     ASTVec::const_iterator lit = left.rbegin();
-    //     ASTVec::const_iterator litend = left.rend();
-    //     ASTVec::const_iterator rit = right.rbegin();
-    //     ASTNode prevbit = ASTTrue;
-    //     for (; lit < litend - 1; lit++, rit++)
-    //       {
-    //         ASTNode neglit = _bm->CreateSimpNot(*lit);
-    //         ASTNode thisbit = 
-    //           _bm->CreateSimpForm(OR, 
-    //                               _bm->CreateSimpForm(AND, neglit, *rit),
-    //                               _bm->CreateSimpForm(AND, 
-    //                                                   _bm->CreateSimpForm(OR, 
-    //                                                                       neglit,
-    //                                                                       *rit), 
-    //                                                   prevbit));    
-    //         prevbit = thisbit;
-    //       }
-
-    //     // Handle MSB -- negate MSBs if signed comparison
-    //     // FIXME: make into refs after it's debugged.
-    //     ASTNode lmsb = *lit;
-    //     ASTNode rmsb = *rit;
-    //     if (is_signed)
-    //       {
-    //         lmsb = _bm->CreateSimpNot(*lit);
-    //         rmsb = _bm->CreateSimpNot(*rit);
-    //       }
-
-    //     ASTNode neglmsb = _bm->CreateSimpNot(lmsb);
-    //     ASTNode msb = 
-    //       // TRUE if l < r
-    //       _bm->CreateSimpForm(OR, _bm->CreateSimpForm(AND, neglmsb, rmsb), 
-    //                           _bm->CreateSimpForm(AND, 
-    //                                               _bm->CreateSimpForm(OR, 
-    //                                                                   neglmsb,
-    //                                                                   rmsb),
-    //                                               prevbit)); // else prevbit
-    //     return msb;
   }
 
   // Left shift  within fixed field inserting zeros at LSB.
@@ -1141,7 +1102,9 @@ namespace BEEV
       {
         for (; lit != litend; lit++, rit++)
           {
-            ASTNode biteq = _bm->CreateSimpForm(IFF, *lit, *rit);
+            ASTNode biteq = _bm->CreateSimpForm(XOR, 
+						_bm->CreateSimpForm(NOT,*lit), 
+						*rit);
             // fast path exit
             if (biteq == ASTFalse)
               {
