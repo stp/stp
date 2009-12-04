@@ -21,6 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "Clause.h"
 #include <algorithm>
+using std::ostream;
+using std::cout;
+using std::endl;
 
 #ifdef VERBOSE_DEBUG
 #include <iterator>
@@ -29,10 +32,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace MINISAT
 {
 using namespace MINISAT;
-
-using std::ostream;
-using std::cout;
-using std::endl;
 
 ostream& operator << (ostream& os, const vec<Lit>& v)
 {

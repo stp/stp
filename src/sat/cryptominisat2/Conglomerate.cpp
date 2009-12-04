@@ -4,6 +4,7 @@
 
 #include <utility>
 #include <algorithm>
+using std::make_pair;
 
 //#define VERBOSE_DEBUG
 
@@ -13,7 +14,6 @@ using std::cout;
 using std::endl;
 #endif
 
-using std::make_pair;
 
 namespace MINISAT
 {
@@ -22,6 +22,12 @@ using namespace MINISAT;
 Conglomerate::Conglomerate(Solver *_S) :
     S(_S)
 {}
+
+Conglomerate::~Conglomerate()
+{
+    for(uint i = 0; i < calcAtFinish.size(); i++)
+        free(calcAtFinish[i]);
+}
 
 const vec<XorClause*>& Conglomerate::getCalcAtFinish() const
 {
@@ -49,20 +55,20 @@ void Conglomerate::fillVarToXor()
     for (Lit* it = &(S->trail[0]), *end = it + S->trail.size(); it != end; it++)
         blocked[it->var()] = true;
     
+    const vec<Clause*>& tmp = S->toReplace->getToRemove();
+    for (Clause *const*it = tmp.getData(), *const*end = it + tmp.size(); it != end; it++) {
+        const Clause& c = **it;
+        for (const Lit* a = &c[0], *end = a + c.size(); a != end; a++) {
+            blocked[a->var()] = true;
+        }
+    }
+    
     uint i = 0;
     for (XorClause* const* it = S->xorclauses.getData(), *const*end = it + S->xorclauses.size(); it != end; it++, i++) {
         const XorClause& c = **it;
         for (const Lit * a = &c[0], *end = a + c.size(); a != end; a++) {
             if (!blocked[a->var()])
                 varToXor[a->var()].push_back(make_pair(*it, i));
-        }
-    }
-    
-    const vector<Lit>& replaceTable = S->toReplace->getReplaceTable();
-    for (uint i = 0; i < replaceTable.size(); i++) {
-        if (replaceTable[i] != Lit(i, false)) {
-            blocked[i] = true;
-            blocked[replaceTable[i].var()] = true;
         }
     }
 }
@@ -85,11 +91,15 @@ uint Conglomerate::conglomerateXors()
 {
     if (S->xorclauses.size() == 0)
         return 0;
+    toRemove.clear();
     toRemove.resize(S->xorclauses.size(), false);
     
     #ifdef VERBOSE_DEBUG
     cout << "Finding conglomerate xors started" << endl;
     #endif
+    
+    S->removeSatisfied(S->xorclauses);
+    S->cleanClauses(S->xorclauses);
     
     fillVarToXor();
     
@@ -225,7 +235,6 @@ bool Conglomerate::dealWithNewClause(vec<Lit>& ps, const bool inverted, const ui
             #endif
             
             S->xorclauses.push(newX);
-            S->xorclauses_tofree.push(newX);
             toRemove.push_back(false);
             S->attachClause(*newX);
             for (const Lit * a = &((*newX)[0]), *end = a + newX->size(); a != end; a++) {
@@ -312,6 +321,34 @@ void Conglomerate::doCalcAtFinish()
         }
         S->uncheckedEnqueue(Lit(toAssign[0], final), &c);
     }
+}
+
+void Conglomerate::addRemovedClauses()
+{
+    #ifdef VERBOSE_DEBUG
+    cout << "Executing addRemovedClauses" << endl;
+    #endif
+    
+    char tmp[100];
+    tmp[0] = '\0';
+    vec<Lit> ps;
+    for(uint i = 0; i < calcAtFinish.size(); i++)
+    {
+        XorClause& c = *calcAtFinish[i];
+        #ifdef VERBOSE_DEBUG
+        cout << "readding already removed (conglomerated) clause: ";
+        c.plain_print();
+        #endif
+        
+        ps.clear();
+        for(uint i2 = 0; i2 != c.size() ; i2++) {
+            ps.push(c[i2]);
+            S->setDecisionVar(c[i2].var(), true);
+        }
+        S->addXorClause(ps, c.xor_clause_inverted(), c.group, tmp);
+        free(&c);
+    }
+    calcAtFinish.clear();
 }
 
 };

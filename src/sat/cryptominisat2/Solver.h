@@ -93,7 +93,6 @@ public:
     void    setPolarity    (Var v, bool b); // Declare which polarity the decision heuristic should use for a variable. Requires mode 'polarity_user'.
     void    setDecisionVar (Var v, bool b); // Declare if a variable should be eligible for selection in the decision heuristic.
     void    setSeed (const uint32_t seed);  // Sets the seed to be the given number
-    void    permutateClauses();             // Permutates the clauses using the seed. It updates the seed in mtrand
     void    needRealUnknowns();             // Uses the "real unknowns" set by setRealUnknown
     void    setRealUnknown(const uint var); //sets a variable to be 'real', i.e. to preferentially branch on it during solving (when useRealUnknown it turned on)
     void    setMaxRestarts(const uint num); //sets the maximum number of restarts to given value
@@ -133,10 +132,11 @@ public:
     bool      expensive_ccmin;    // Controls conflict clause minimization.                                                    (default TRUE)
     int       polarity_mode;      // Controls which polarity the decision heuristic chooses. See enum below for allowed modes. (default polarity_false)
     int       verbosity;          // Verbosity level. 0=silent, 1=some progress report                                         (default 0)
-    uint      restrictedPickBranch; // Pick variables to branch on preferentally from the highest [0, restrictedPickBranch]. If set to 0, preferentiality is turned off (i.e. picked randomly between [0, all])
+    Var       restrictedPickBranch; // Pick variables to branch on preferentally from the highest [0, restrictedPickBranch]. If set to 0, preferentiality is turned off (i.e. picked randomly between [0, all])
     bool      useRealUnknowns;    // Whether 'real unknown' optimization should be used. If turned on, VarActivity is only bumped for variables for which the real_unknowns[var] == true
     vector<bool> realUnknowns;    // The important variables. This vector stores 'false' at realUnknowns[var] if the var is not a real unknown, and stores a 'true' if it is a real unkown. If var is larger than realUnkowns.size(), then it is not an important variable
     bool      xorFinder;            // Automatically find xor-clauses and convert them
+    bool      performReplace;       // Should var-replacing be performed?
     friend class FindUndef;
     bool greedyUnbound; //If set to TRUE, then we will greedily unbound variables (set them to l_Undef)
     void set_gaussian_decision_until(const uint to);
@@ -190,8 +190,7 @@ protected:
     //
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     vec<Clause*>        clauses;          // List of problem clauses.
-    vec<XorClause*>     xorclauses;       // List of problem xor-clauses. Will not be freed
-    vec<XorClause*>     xorclauses_tofree;// List of problem xor-clauses. Will be freed
+    vec<XorClause*>     xorclauses;       // List of problem xor-clauses. Will be freed
     vec<Clause*>        learnts;          // List of learnt clauses.
     vec<Clause*>        unitary_learnts;  // List of learnt clauses.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.

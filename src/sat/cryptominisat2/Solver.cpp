@@ -52,6 +52,7 @@ using namespace MINISAT;
 //=================================================================================================
 // Constructor/Destructor:
 
+
 Solver::Solver() :
         // Parameters: (formerly in 'SearchParams')
         var_decay(1 / 0.95), random_var_freq(0.02)
@@ -65,6 +66,7 @@ Solver::Solver() :
         , restrictedPickBranch(0)
         , useRealUnknowns  (false)
         , xorFinder        (true)
+        , performReplace   (true)
         , greedyUnbound    (false)
 
         // Statistics: (formerly in 'SolverStats')
@@ -111,7 +113,7 @@ Solver::~Solver()
     for (int i = 0; i < learnts.size(); i++) free(learnts[i]);
     for (int i = 0; i < unitary_learnts.size(); i++) free(unitary_learnts[i]);
     for (int i = 0; i < clauses.size(); i++) free(clauses[i]);
-    for (int i = 0; i < xorclauses_tofree.size(); i++) free(xorclauses_tofree[i]);
+    for (int i = 0; i < xorclauses.size(); i++) free(xorclauses[i]);
     for (uint i = 0; i < gauss_matrixes.size(); i++) delete gauss_matrixes[i];
     gauss_matrixes.clear();
     delete toReplace;
@@ -175,7 +177,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        //ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         xor_clause_inverted ^= ps[i].sign();
         ps[i] ^= ps[i].sign();
 
@@ -219,7 +221,6 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         XorClause* c = XorClause_new(ps, xor_clause_inverted, group);
         
         xorclauses.push(c);
-        xorclauses_tofree.push(c);
         attachClause(*c);
         toReplace->newClause();
         break;
@@ -251,7 +252,7 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        //ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
@@ -413,24 +414,6 @@ void Solver::cancelUntil(int level)
     #ifdef VERBOSE_DEBUG
     cout << "Canceling finished. (now at level: " << decisionLevel() << " sublevel:" << trail.size()-1 << ")" << endl;
     #endif
-}
-
-//Permutates the clauses in the solver. Very useful to calcuate the average time it takes the solver to solve the prolbem
-void Solver::permutateClauses()
-{
-    for (int i = 0; i < clauses.size(); i++) {
-        int j = mtrand.randInt(i);
-        Clause* tmp = clauses[i];
-        clauses[i] = clauses[j];
-        clauses[j] = tmp;
-    }
-
-    for (int i = 0; i < xorclauses.size(); i++) {
-        int j = mtrand.randInt(i);
-        XorClause* tmp = xorclauses[i];
-        xorclauses[i] = xorclauses[j];
-        xorclauses[j] = tmp;
-    }
 }
 
 void Solver::setRealUnknown(const uint var)
@@ -1452,8 +1435,12 @@ lbool Solver::solve(const vec<Lit>& assumps)
             nbclausesbeforereduce = (nClauses() * learntsize_factor)/2;
     }
     
-    //toReplace->performReplace();
-    //if (!ok) return l_False;
+    conglomerate->addRemovedClauses();
+    
+    if (performReplace) {
+        toReplace->performReplace();
+        if (!ok) return l_False;
+    }
 
     if (xorFinder) {
         double time;
@@ -1464,10 +1451,15 @@ lbool Solver::solve(const vec<Lit>& assumps)
             uint sumLengths = 0;
             XorFinder xorFinder(this, clauses);
             uint foundXors = xorFinder.doNoPart(sumLengths, 2, 10);
+            if (!ok) return l_False;
             
             if (verbosity >=1)
                 printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
-            if (!ok) return l_False;
+            
+            if (performReplace) {
+                toReplace->performReplace();
+                if (!ok) return l_False;
+            }
         }
         
         if (xorclauses.size() > 1) {
@@ -1478,8 +1470,6 @@ lbool Solver::solve(const vec<Lit>& assumps)
             }
             
             time = cpuTime();
-            removeSatisfied(xorclauses);
-            cleanClauses(xorclauses);
             uint foundCong = conglomerate->conglomerateXors();
             if (verbosity >=1)
                 printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
@@ -1494,11 +1484,13 @@ lbool Solver::solve(const vec<Lit>& assumps)
                 printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
                 printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
             }
+            
+            if (performReplace) {
+                toReplace->performReplace();
+                if (!ok) return l_False;
+            }
         }
     }
-    
-    //toReplace->performReplace();
-    //if (!ok) return l_False;
     
     if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
         removeSatisfied(xorclauses);
@@ -1509,6 +1501,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
         if (verbosity >=1)
             printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
     }
+    
 
     if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on)) {
         printf("============================[ Search Statistics ]========================================\n");
@@ -1592,8 +1585,10 @@ bool Solver::verifyXorClauses(const vec<XorClause*>& cs) const
         bool final = c.xor_clause_inverted();
         
         #ifdef VERBOSE_DEBUG
-        std::sort(&c[0], &c[0] + c.size());
-        c.plain_print();
+        XorClause* c2 = XorClause_new(c, c.xor_clause_inverted(), c.group);
+        std::sort(c2->getData(), c2->getData()+ c2->size());
+        c2->plain_print();
+        free(c2);
         #endif
         
         for (uint j = 0; j < c.size(); j++) {
