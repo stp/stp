@@ -78,6 +78,9 @@ const uint MatrixFinder::findMatrixes()
     if (S->xorclauses.size() == 0)
         return 0;
     
+    S->removeSatisfied(S->xorclauses);
+    S->cleanClauses(S->xorclauses);
+    
     for (XorClause** c = S->xorclauses.getData(), **end = c + S->xorclauses.size(); c != end; c++) {
         set<uint> tomerge;
         vector<Var> newSet;

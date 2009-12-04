@@ -166,6 +166,7 @@ void Logger::first_begin()
 
 void Logger::begin()
 {
+    begin_called = true;
     if (proof_graph_on) {
         std::stringstream filename;
         filename << "proofs/" << runid << "-proof" << S->starts << ".dot";
@@ -628,7 +629,7 @@ void Logger::print_learnt_clause_distrib() const
             it->second++;
     }
     
-    learnt_sizes[0] = S->get_unitary_learnts().size();
+    learnt_sizes[0] = S->get_unitary_learnts_num();
     
     uint slice = (maximum+1)/max_print_lines + (bool)((maximum+1)%max_print_lines);
     
@@ -719,7 +720,7 @@ void Logger::print_general_stats() const
     print_line("Number of literals in clauses",S->clauses_literals);
     print_line("Avg. literals per learnt clause",(double)S->learnts_literals/(double)S->nLearnts());
     print_line("Progress estimate (%):", S->progress_estimate*100.0);
-    print_line("All unitary learnts until now", S->unitary_learnts.size());
+    print_line("All unitary learnts until now", S->get_unitary_learnts_num());
     
     print_footer();
 }

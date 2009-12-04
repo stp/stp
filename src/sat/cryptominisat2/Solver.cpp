@@ -37,7 +37,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Conglomerate.h"
 #include "XorFinder.h"
 
-//#define DEBUG_LIB
+#define DEBUG_LIB
 
 #ifdef DEBUG_LIB
 #include <sstream>
@@ -111,11 +111,10 @@ Solver::Solver() :
 Solver::~Solver()
 {
     for (int i = 0; i < learnts.size(); i++) free(learnts[i]);
-    for (int i = 0; i < unitary_learnts.size(); i++) free(unitary_learnts[i]);
     for (int i = 0; i < clauses.size(); i++) free(clauses[i]);
     for (int i = 0; i < xorclauses.size(); i++) free(xorclauses[i]);
     for (uint i = 0; i < gauss_matrixes.size(); i++) delete gauss_matrixes[i];
-    gauss_matrixes.clear();
+    for (uint i = 0; i < freeLater.size(); i++) free(freeLater[i]);
     delete toReplace;
     delete conglomerate;
     
@@ -177,7 +176,8 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        if (toReplace->getNumReplacedLits())
+            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         xor_clause_inverted ^= ps[i].sign();
         ps[i] ^= ps[i].sign();
 
@@ -252,7 +252,8 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        if (toReplace->getNumReplacedLits())
+            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
@@ -396,13 +397,15 @@ void Solver::cancelUntil(int level)
     #endif
     
     if (decisionLevel() > level) {
+        
+        for (Gaussian **gauss = &gauss_matrixes[0], **end= gauss + gauss_matrixes.size(); gauss != end; gauss++)
+            (*gauss)->canceling(trail_lim[level]);
+        
         for (int c = trail.size()-1; c >= trail_lim[level]; c--) {
             Var     x  = trail[c].var();
             #ifdef VERBOSE_DEBUG
             cout << "Canceling var " << x+1 << " sublevel:" << c << endl;
             #endif
-            for (Gaussian **gauss = &gauss_matrixes[0], **end= gauss + gauss_matrixes.size(); gauss != end; gauss++)
-                (*gauss)->canceling(c, x);
             assigns[x] = l_Undef;
             insertVarOrder(x);
         }
@@ -1021,9 +1024,15 @@ const vec<Clause*>& Solver::get_sorted_learnts()
     return learnts;
 }
 
-const vec<Clause*>& Solver::get_unitary_learnts() const
+const vector<Lit> Solver::get_unitary_learnts() const
 {
-    return unitary_learnts;
+    vector<Lit> unitaries;
+    if (decisionLevel() > 0) {
+        for (uint i = 0; i < trail_lim[0]; i++)
+            unitaries.push_back(trail[i]);
+    }
+    
+    return unitaries;
 }
 
 void Solver::dump_sorted_learnts(const char* file)
@@ -1034,8 +1043,10 @@ void Solver::dump_sorted_learnts(const char* file)
         exit(-1);
     }
     
-    for (uint i = 0; i < unitary_learnts.size(); i++)
-        unitary_learnts[i]->plain_print(outfile);
+    if (decisionLevel() > 0) {
+        for (uint i = 0; i < trail_lim[0]; i++)
+            printf("%s%d 0\n", trail[i].sign() ? "-" : "", trail[i].var());
+    }
     
     sort(learnts, reduceDB_lt());
     for (int i = learnts.size()-1; i >= 0 ; i--) {
@@ -1203,8 +1214,6 @@ lbool Solver::search(int nof_conflicts)
         if (ret != l_Nothing) return ret;
     }
 
-    if (dynamic_behaviour_analysis) logger.begin();
-
     for (;;) {
         Clause* confl = propagate();
 
@@ -1334,12 +1343,11 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, Clause* confl, int& conf
     assert(value(learnt_clause[0]) == l_Undef);
     //Unitary learnt
     if (learnt_clause.size() == 1) {
-        Clause* c = Clause_new(learnt_clause, learnt_clause_group++, true);
-        unitary_learnts.push(c);
         uncheckedEnqueue(learnt_clause[0]);
         if (dynamic_behaviour_analysis) {
-            logger.set_group_name(c->group, "unitary learnt clause");
-            logger.propagation(learnt_clause[0], Logger::unit_clause_type, c->group);
+            logger.set_group_name(learnt_clause_group, "unitary learnt clause");
+            logger.propagation(learnt_clause[0], Logger::unit_clause_type, learnt_clause_group);
+            learnt_clause_group++;
         }
         assert(backtrack_level == 0 && "Unit clause learnt, so must cancel until level 0, right?");
         
@@ -1415,9 +1423,6 @@ lbool Solver::solve(const vec<Lit>& assumps)
     fprintf(myoutputfile, "c Solver::solve() called\n");
     #endif
     
-    if (dynamic_behaviour_analysis)
-        logger.end(Logger::done_adding_clauses);
-    
     model.clear();
     conflict.clear();
 
@@ -1492,9 +1497,14 @@ lbool Solver::solve(const vec<Lit>& assumps)
         }
     }
     
+    for (uint i = 0; i < gauss_matrixes.size(); i++)
+        delete gauss_matrixes[i];
+    gauss_matrixes.clear();
+    for (uint i = 0; i < freeLater.size(); i++)
+        free(freeLater[i]);
+    freeLater.clear();
+    
     if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
-        removeSatisfied(xorclauses);
-        cleanClauses(xorclauses);
         double time = cpuTime();
         MatrixFinder m(this);
         const uint numMatrixes = m.findMatrixes();
@@ -1509,6 +1519,9 @@ lbool Solver::solve(const vec<Lit>& assumps)
         printf("|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl | Prop   Confl   On  |\n");
         printf("=========================================================================================\n");
     }
+    
+    if (dynamic_behaviour_analysis)
+        logger.end(Logger::done_adding_clauses);
 
     // Search:
     while (status == l_Undef && starts < maxRestarts) {
@@ -1527,11 +1540,10 @@ lbool Solver::solve(const vec<Lit>& assumps)
         for (Gaussian **gauss = &gauss_matrixes[0], **end= gauss + gauss_matrixes.size(); gauss != end; gauss++)
             (*gauss)->reset_stats();
         
+        if (dynamic_behaviour_analysis)
+            logger.begin();
         status = search((int)nof_conflicts);
         nof_conflicts *= restart_inc;
-        
-        for (Gaussian **gauss = &gauss_matrixes[0], **end= gauss + gauss_matrixes.size(); gauss != end; gauss++)
-            (*gauss)->clear_clauses();
     }
 
     if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on)) {
