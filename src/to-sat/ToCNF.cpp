@@ -1942,7 +1942,7 @@ namespace BEEV
     bm->GetRunTimes()->stop(RunTimes::CNFConversion);
     if (bm->UserFlags.stats_flag)
       {
-	cerr << "\n Printing: After CNF conversion: " << endl;
+	cerr << "\nPrinting: After CNF conversion: " << endl;
 	cerr << "Number of clauses:" << defs->size() << endl;
 //         PrintClauseList(cout, *defs);
 	cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
