@@ -10,9 +10,6 @@
 // Simplifying create methods for Boolean operations.  These are only
 // very simple local simplifications.
 
-// This is somewhat redundant with Vijay's simplifier code.  They need
-// to be merged.  FIXME: control with optimize flag.
-
 static bool _trace_simpbool = 0;
 static bool _disable_simpbool = 0;
 

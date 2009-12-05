@@ -867,7 +867,8 @@ namespace BEEV
         ASTVec notylessxqval = BBITE(yeqx, one, ygtrxqval);
         ASTVec notylessxrval = BBITE(yeqx, BBfill(width, ASTFalse), ygtrxrval);
         // y < x <=> not x >= y.
-        ASTNode ylessx = _bm->CreateSimpNot(BBBVLE(x, y, false));
+        //ASTNode ylessx = _bm->CreateSimpNot(BBBVLE(x, y, false));
+        ASTNode ylessx = BBBVLE(y, x, false, true);
         // final values of q and r
         q = BBITE(ylessx, BBfill(width, ASTFalse), notylessxqval);
         r = BBITE(ylessx, y, notylessxrval);
