@@ -134,6 +134,8 @@ namespace BEEV
 
 #if defined CRYPTOMINISAT2
 	      newS.set_gaussian_decision_until(100);
+	      newS.performReplace = false;
+	      newS.xorFinder = false;
 #endif
               newS.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
@@ -159,7 +161,7 @@ namespace BEEV
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);
-
+    
     newS.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
     bm->PrintStats(newS);

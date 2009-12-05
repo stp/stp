@@ -6,7 +6,6 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-
 #include <cmath>
 #include <cassert>
 #include "../AST/AST.h"
@@ -968,7 +967,7 @@ namespace BEEV
         bit_comparisons.push_back(prev_eq_bit);
       }
     ASTNode output =
-      _bm->CreateSimpForm(OR, bit_comparisons);
+      _bm->CreateSimpForm(XOR, bit_comparisons);
 
     return output;
   }

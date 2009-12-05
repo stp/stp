@@ -37,7 +37,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Conglomerate.h"
 #include "XorFinder.h"
 
-#define DEBUG_LIB
+//#define DEBUG_LIB
 
 #ifdef DEBUG_LIB
 #include <sstream>

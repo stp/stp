@@ -6,7 +6,6 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-
 #include "ToSAT.h"
 #define MAX_BUCKET_LIMIT 3
 
