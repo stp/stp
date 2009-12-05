@@ -74,10 +74,11 @@ namespace BEEV
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
     BitBlaster BB(bm);
     ASTNode BBFormula = BB.BBForm(modified_input);
+    bm->ASTNodeStats("after bitblasting: ", BBFormula);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
     CNFMgr* cm = new CNFMgr(bm);
-    ClauseList* cl = cm->convertToCNF(BBFormula);
+    ClauseList* cl = cm->convertToCNF(BBFormula);    
 
 #if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     ClauseList* xorcl = cm->ReturnXorClauses();
