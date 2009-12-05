@@ -157,6 +157,9 @@ int main(int argc, char ** argv) {
               cout << helpstring;
               return -1;
               break;
+	    case 'i':
+	      bm->UserFlags.rand_bool_polarity_flag = true;
+	      break;
             case 'n':
               bm->UserFlags.print_output_flag = true;
               break;

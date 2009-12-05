@@ -404,7 +404,7 @@ Lit Solver::pickBranchLit(int polarity_mode)
         if (next != var_Undef)
             sign = polarity[next];
         break;
-    case polarity_rnd:
+    case polarity_rnd:        
         sign = mtrand.randInt(1);
         break;
     default:

@@ -60,6 +60,10 @@ namespace BEEV
     //different printer. do not use this printer.
     bool print_arrayval_declaredorder_flag;
     
+    //Flag that determines whether the Boolean SAT solver should
+    //assign random polarity to the Boolean variables
+    bool rand_bool_polarity_flag;
+
     //flag to decide whether to print "valid/invalid" or not
     bool print_output_flag;
     
@@ -130,6 +134,10 @@ namespace BEEV
       //different printer. do not use this printer.
       print_arrayval_declaredorder_flag = false;
       
+      //Flag that determines whether the Boolean SAT solver should
+      //assign random polarity to the Boolean variables
+      rand_bool_polarity_flag = false;
+
       //flag to decide whether to print "valid/invalid" or not
       print_output_flag = false;
       

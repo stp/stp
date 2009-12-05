@@ -30,7 +30,7 @@ namespace BEEV
    */
 
   MINISAT::Var 
-  ToSAT::LookupOrCreateSATVar(MINISAT::Solver& newS, const ASTNode& n)
+  ToSAT::LookupOrCreateSATVar(MINISAT::Solver& newSolver, const ASTNode& n)
   {
     ASTtoSATMap::iterator it;
     MINISAT::Var v;
@@ -39,10 +39,10 @@ namespace BEEV
     //not found, create a S.newVar(), else use the existing one.
     if ((it = _ASTNode_to_SATVar_Map.find(n)) == _ASTNode_to_SATVar_Map.end())
       {
-        v = newS.newVar();
+        v = newSolver.newVar();
         _ASTNode_to_SATVar_Map[n] = v;
 
-        //ASSUMPTION: I am assuming that the newS.newVar() call increments v
+        //ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
         //by 1 each time it is called, and the initial value of a
         //MINISAT::Var is 0.
         _SATVar_to_AST_Vector.push_back(n);
@@ -50,7 +50,7 @@ namespace BEEV
         // experimental. Don't add Tseitin variables as decision variables.
         if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
           {
-            newS.setDecisionVar(v,false);
+            newSolver.setDecisionVar(v,false);
           }
 
       }
@@ -65,7 +65,7 @@ namespace BEEV
    * and calls solve(). If solve returns unsat, then stop and return
    * unsat. else continue.
    */
-  bool ToSAT::toSATandSolve(MINISAT::Solver& newS,
+  bool ToSAT::toSATandSolve(MINISAT::Solver& newSolver,
                             ClauseList& cll, bool add_xor_clauses)
   {
     CountersAndStats("SAT Solver", bm);
@@ -77,9 +77,13 @@ namespace BEEV
       {
         FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);    
       }
-    
+
+    if(bm->UserFlags.rand_bool_polarity_flag)
+      {
+	newSolver.polarity_mode = newSolver.polarity_rnd;
+      }
 #ifdef CRYPTOMINISAT
-    newS.startClauseAdding();
+    newSolver.startClauseAdding();
 #endif
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseList::const_iterator i = cll.begin(), iend = cll.end();    
@@ -98,14 +102,14 @@ namespace BEEV
             //clauseVec.push_back(node);
             bool negate = (NOT == node.GetKind()) ? true : false;
             ASTNode n = negate ? node[0] : node;
-            MINISAT::Var v = LookupOrCreateSATVar(newS, n);
+            MINISAT::Var v = LookupOrCreateSATVar(newSolver, n);
             MINISAT::Lit l(v, negate);
             satSolverClause.push(l);
           }
 
         // ASTNode theClause = bm->CreateNode(OR, clauseVec);
         //      if(flag 
-        //         && ASTTrue == CheckBBandCNF(newS, theClause))
+        //         && ASTTrue == CheckBBandCNF(newSolver, theClause))
         //        {
         //          continue;
         //        }
@@ -113,14 +117,14 @@ namespace BEEV
         if(add_xor_clauses)
           {         
             //cout << "addXorClause:\n";
-            newS.addXorClause(satSolverClause, false, 0, "z");
+            newSolver.addXorClause(satSolverClause, false, 0, "z");
           }
         else 
           {
-            newS.addClause(satSolverClause,0,"z");
+            newSolver.addClause(satSolverClause,0,"z");
           }
 #else
-        newS.addClause(satSolverClause);
+        newSolver.addClause(satSolverClause);
 #endif
         float percentage=CLAUSAL_ABSTRACTION_CUTOFF;
         if(count++ >= input_clauselist_size*percentage)
@@ -133,13 +137,13 @@ namespace BEEV
             bm->GetRunTimes()->start(RunTimes::Solving);
 
 #if defined CRYPTOMINISAT2
-	      newS.set_gaussian_decision_until(100);
-	      newS.performReplace = false;
-	      newS.xorFinder = false;
+	    newSolver.set_gaussian_decision_until(100);
+	    newSolver.performReplace = false;
+	    newSolver.xorFinder = false;
 #endif
-              newS.solve();
+	    newSolver.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
-            if(!newS.okay())
+            if(!newSolver.okay())
               {
                 return false;         
               }
@@ -147,13 +151,13 @@ namespace BEEV
             flag  = 1;
             bm->GetRunTimes()->start(RunTimes::SendingToSAT);
           }
-        if (newS.okay())
+        if (newSolver.okay())
           {
             continue;
           }     
         else
           {
-            bm->PrintStats(newS);
+            bm->PrintStats(newSolver);
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             return false;
           }     
@@ -162,10 +166,10 @@ namespace BEEV
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);
     
-    newS.solve();
+    newSolver.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
-    bm->PrintStats(newS);
-    if (newS.okay())
+    bm->PrintStats(newSolver);
+    if (newSolver.okay())
       return true;
     else
       return false;
@@ -175,10 +179,10 @@ namespace BEEV
 
   // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
   // assignment.
-  ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newS, ASTNode form)
+  ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newSolver, ASTNode form)
   {
     MINISAT::Var satvar = _ASTNode_to_SATVar_Map[form];
-    if (newS.model[satvar] == MINISAT::l_False)
+    if (newSolver.model[satvar] == MINISAT::l_False)
       {
         return ASTFalse;
       }
@@ -197,16 +201,16 @@ namespace BEEV
   // immediately (on the leftmost lowest term).  Use CreateSimpForm to
   // evaluate, even though it's expensive, so that we can use the
   // partial truth assignment.
-  ASTNode ToSAT::CheckBBandCNF(MINISAT::Solver& newS, ASTNode form)
+  ASTNode ToSAT::CheckBBandCNF(MINISAT::Solver& newSolver, ASTNode form)
   {
-    // Clear memo table (in case newS has changed).
+    // Clear memo table (in case newSolver has changed).
     CheckBBandCNFMemo.clear();
     // Call recursive version that does the work.
-    return CheckBBandCNF_int(newS, form);
+    return CheckBBandCNF_int(newSolver, form);
   } //End of CheckBBandCNF()
 
   // Recursive body CheckBBandCNF
-  ASTNode ToSAT::CheckBBandCNF_int(MINISAT::Solver& newS, ASTNode form)
+  ASTNode ToSAT::CheckBBandCNF_int(MINISAT::Solver& newSolver, ASTNode form)
   {
     //     cout << "++++++++++++++++" 
     //   << endl 
@@ -234,7 +238,7 @@ namespace BEEV
       case SYMBOL:
       case BVGETBIT:
         {
-          result = SymbolTruthValue(newS, form);
+          result = SymbolTruthValue(newSolver, form);
 
           //           cout << "================" 
           //                << endl 
@@ -253,7 +257,7 @@ namespace BEEV
           ASTVec::iterator itend = ch.end();
           for (ASTVec::iterator it = ch.begin(); it < itend; it++)
             {
-              eval_children.push_back(CheckBBandCNF_int(newS, *it));
+              eval_children.push_back(CheckBBandCNF_int(newSolver, *it));
             }
           result = bm->CreateSimpForm(k, eval_children);
 
@@ -273,13 +277,13 @@ namespace BEEV
               // Replit is symbol or not symbol.
               if (SYMBOL == replit.GetKind())
                 {
-                  replit_eval = SymbolTruthValue(newS, replit);
+                  replit_eval = SymbolTruthValue(newSolver, replit);
                 }
               else
                 {
                   // It's (NOT sym).  Get value of sym and complement.
                   replit_eval = 
-                    bm->CreateSimpNot(SymbolTruthValue(newS, replit[0]));
+                    bm->CreateSimpNot(SymbolTruthValue(newSolver, replit[0]));
                 }
 
               //               cout << "----------------" 
