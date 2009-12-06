@@ -78,9 +78,17 @@ namespace BEEV
         FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);    
       }
 
-    if(bm->UserFlags.rand_bool_polarity_flag)
+    if(bm->UserFlags.random_seed_flag)
       {
-	newSolver.polarity_mode = newSolver.polarity_rnd;
+	newSolver.setSeed(bm->UserFlags.random_seed);
+	//cerr << "We have set the seed value to "
+	//   << bm->UserFlags.random_seed 
+	//   << endl;
+      }
+
+    if(bm->UserFlags.print_cnf_flag)
+      {
+	#define DEBUG_LIB
       }
 #ifdef CRYPTOMINISAT
     newSolver.startClauseAdding();

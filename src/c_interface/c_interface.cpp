@@ -36,7 +36,7 @@ bool cinterface_exprdelete_on_flag = false;
 extern int cvcparse(void*);
 extern int smtparse(void*);
 
-void vc_setFlags(VC vc, char c, int num_absrefine) {
+void vc_setFlags(VC vc, char c, int param_value) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   
   std::string helpstring = 
@@ -88,13 +88,17 @@ void vc_setFlags(VC vc, char c, int num_absrefine) {
     break;
   case 'f':
     b->UserFlags.num_absrefine_flag = true;
-    b->UserFlags.num_absrefine = num_absrefine;
+    b->UserFlags.num_absrefine = param_value;
     break;
   case 'h':
     fprintf(stderr,BEEV::usage,BEEV::prog);
     cout << helpstring;
     //FatalError("");
     //return -1;
+    break;
+  case 'i':
+    b->UserFlags.random_seed_flag = true;
+    b->UserFlags.random_seed = param_value;
     break;
   case 'n':
     b->UserFlags.print_output_flag = true;

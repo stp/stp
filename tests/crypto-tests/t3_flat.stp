@@ -1,0 +1,28 @@
+
+a,b,c,x,y : BITVECTOR(96);
+
+
+ASSERT(a[0:0] = 0bin1);
+ASSERT(b[0:0] = 0bin1);
+ASSERT(c=0hex0000000000000056E35E38CD);
+ASSERT(a[95:48] = 0hex000000000000);
+ASSERT(b[95:48] = 0hex000000000000);
+
+
+QUERY(
+   NOT (
+     c=BVMULT(96,a,b) AND NOT
+     a=0hex000000000000000000000001
+     AND 
+     NOT
+     b=0hex000000000000000000000001
+     AND NOT
+     a=c
+     AND NOT
+     b=c
+     
+   )
+);
+
+COUNTEREXAMPLE;
+

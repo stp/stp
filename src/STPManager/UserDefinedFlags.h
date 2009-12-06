@@ -62,7 +62,11 @@ namespace BEEV
     
     //Flag that determines whether the Boolean SAT solver should
     //assign random polarity to the Boolean variables
-    bool rand_bool_polarity_flag;
+    bool random_seed_flag;
+    int random_seed;
+
+    //Flag that allows the printing of the DIMACS format of the input
+    bool print_cnf_flag;
 
     //flag to decide whether to print "valid/invalid" or not
     bool print_output_flag;
@@ -128,7 +132,7 @@ namespace BEEV
       //Determines the number of abstraction-refinement loop count for the
       //for-construct
       num_absrefine_flag = false;
-      int num_absrefine = 0;
+      num_absrefine = 0;
             
       //if this option is true then print the way dawson wants using a
       //different printer. do not use this printer.
@@ -136,7 +140,12 @@ namespace BEEV
       
       //Flag that determines whether the Boolean SAT solver should
       //assign random polarity to the Boolean variables
-      rand_bool_polarity_flag = false;
+      random_seed_flag = false;
+      random_seed = 0;
+
+      //Flag that allows the printing of the DIMACS format of the
+      //input
+      print_cnf_flag = false;
 
       //flag to decide whether to print "valid/invalid" or not
       print_output_flag = false;

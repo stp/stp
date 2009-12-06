@@ -158,7 +158,15 @@ int main(int argc, char ** argv) {
               return -1;
               break;
 	    case 'i':
-	      bm->UserFlags.rand_bool_polarity_flag = true;
+	      bm->UserFlags.random_seed_flag = true;
+              bm->UserFlags.random_seed = atoi(argv[++i]);
+	      if(!(0 <= bm->UserFlags.random_seed))
+		{
+		  FatalError("Random Seed should be an integer >= 0\n");
+		}
+	      break;
+	    case 'j':
+	      bm->UserFlags.print_cnf_flag = true;
 	      break;
             case 'n':
               bm->UserFlags.print_output_flag = true;

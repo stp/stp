@@ -44,8 +44,9 @@
 #define HASHMAP      hash_map
 #define HASHSET      hash_set
 #define HASHMULTISET hash_multiset
-#define  INITIAL_TABLE_SIZE 100
+#define INITIAL_TABLE_SIZE 100
 #define CLAUSAL_ABSTRACTION_CUTOFF 0.5
+#define MAX_BUCKET_LIMIT 3
 
 using namespace std;
 namespace BEEV {
