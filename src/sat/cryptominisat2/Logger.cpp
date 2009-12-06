@@ -871,4 +871,5 @@ void Logger::reset_statistics()
     branch_depth_distrib.clear();
     learnt_unitary_clauses = 0;
 }
+
 };

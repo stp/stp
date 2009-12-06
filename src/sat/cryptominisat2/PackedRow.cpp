@@ -2,8 +2,6 @@
 namespace MINISAT
 {
 
-__thread uint64_t* PackedRow::tmp_row = NULL;
-
 std::ostream& operator << (std::ostream& os, const PackedRow& m)
 {
     for(uint i = 0; i < m.size*64; i++) {

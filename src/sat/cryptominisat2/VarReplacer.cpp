@@ -2,6 +2,7 @@
 
 #include "Solver.h"
 #include "Conglomerate.h"
+#include "ClauseCleaner.h"
 
 //#define VERBOSE_DEBUG
 
@@ -24,30 +25,44 @@ VarReplacer::VarReplacer(Solver *_S) :
 
 VarReplacer::~VarReplacer()
 {
-    for (uint i = 0; i < toRemove.size(); i++)
-        free(toRemove[i]);
+    for (uint i = 0; i < clauses.size(); i++)
+        free(clauses[i]);
 }
 
 void VarReplacer::performReplace()
 {
     #ifdef VERBOSE_DEBUG
     cout << "Replacer started." << endl;
-    uint i = 0;
-    for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
-        if (it->var() == i) continue;
-        cout << "Replacing var " << i+1 << " with Lit " << (it->sign() ? "-" : "") <<  it->var()+1 << endl;
+    {
+        uint i = 0;
+        for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
+            if (it->var() == i) continue;
+            cout << "Replacing var " << i+1 << " with Lit " << (it->sign() ? "-" : "") <<  it->var()+1 << endl;
+        }
     }
     #endif
     
+    uint i = 0;
+    const vector<bool>& removedVars = S->conglomerate->getRemovedVars();
+    for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
+        if (it->var() == i) continue;
+        S->setDecisionVar(i, false);
+        if (!removedVars[it->var()])
+            S->setDecisionVar(it->var(), true);
+    }
+
     if (!addedNewClause || replacedVars == 0) return;
     
-    S->removeSatisfied(S->clauses);
-    S->removeSatisfied(S->xorclauses);
-    S->cleanClauses(S->clauses);
-    S->cleanClauses(S->xorclauses);
-    for (uint i = 0; i < toRemove.size(); i++)
-        S->removeClause(*toRemove[i]);
-    toRemove.clear();
+    S->clauseCleaner->removeSatisfied(S->clauses, ClauseCleaner::clauses);
+    S->clauseCleaner->removeSatisfied(S->learnts, ClauseCleaner::learnts);
+    S->clauseCleaner->removeSatisfied(S->xorclauses, ClauseCleaner::xorclauses);
+    
+    S->clauseCleaner->cleanClauses(S->clauses, ClauseCleaner::clauses);
+    S->clauseCleaner->cleanClauses(S->learnts, ClauseCleaner::learnts);
+    S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
+    for (uint i = 0; i < clauses.size(); i++)
+        S->removeClause(*clauses[i]);
+    clauses.clear();
     
     replace_set(S->clauses);
     replace_set(S->learnts);
@@ -98,9 +113,9 @@ void VarReplacer::replace_set(vec<XorClause*>& cs, const bool need_reattach)
                     p = lit_Undef;
                     if (!S->assigns[c[i].var()].isUndef())
                         c.invert(S->assigns[c[i].var()].getBool());
-                } else if (S->value(c[i]) == l_Undef) //just add
+                } else if (S->assigns[c[i].var()].isUndef()) //just add
                     c[j++] = p = c[i];
-                else c.invert(S->value(c[i]) == l_True); //modify xor_clause_inverted instead of adding
+                else c.invert(S->assigns[c[i].var()].getBool()); //modify xor_clause_inverted instead of adding
             }
             c.shrink(i - j);
             
@@ -111,21 +126,21 @@ void VarReplacer::replace_set(vec<XorClause*>& cs, const bool need_reattach)
                 r++;
                 break;
             case 1:
-                S->uncheckedEnqueue(Lit(c[0].var(), !c.xor_clause_inverted()));
+                S->uncheckedEnqueue(c[0] ^ c.xor_clause_inverted());
                 r++;
                 break;
+            case 2: {
+                vec<Lit> ps(2);
+                ps[0] = c[0];
+                ps[1] = c[1];
+                addBinaryXorClause(ps, c.xor_clause_inverted(), c.group, true);
+                c.mark(1);
+                r++;
+                break;
+            }
             default:
-                if (c.size() == 2) {
-                    vec<Lit> ps(2);
-                    ps[0] = c[0];
-                    ps[1] = c[1];
-                    addBinaryXorClause(ps, c.xor_clause_inverted(), c.group, true);
-                    c.mark(1);
-                    r++;
-                } else {
-                    S->attachClause(c);
-                    *a++ = *r++;
-                }
+                S->attachClause(c);
+                *a++ = *r++;
                 break;
             }
         } else {
@@ -193,6 +208,10 @@ bool VarReplacer::handleUpdatedClause(Clause& c, const Lit origLit1, const Lit o
         S->uncheckedEnqueue(c[0]);
         S->detachModifiedClause(origLit1, origLit2, origSize, &c);
         return true;
+    case 2:
+        S->detachModifiedClause(origLit1, origLit2, origSize, &c);
+        S->attachClause(c);
+        return false;
     default:
         if (origLit1 != c[0] || origLit2 != c[1]) {
             S->detachModifiedClause(origLit1, origLit2, origSize, &c);
@@ -228,9 +247,9 @@ const vector<Var> VarReplacer::getReplacingVars() const
     return replacingVars;
 }
 
-const vec<Clause*>& VarReplacer::getToRemove() const
+const vec<Clause*>& VarReplacer::getClauses() const
 {
-    return toRemove;
+    return clauses;
 }
 
 void VarReplacer::extendModel() const
@@ -297,15 +316,12 @@ void VarReplacer::replace(vec<Lit>& ps, const bool xor_clause_inverted, const ui
             setAllThatPointsHereTo(lit1.var(), Lit(lit.var(), lit1.sign()));
             table[lit1.var()] = Lit(lit.var(), lit1.sign());
             reverseTable[lit.var()].push_back(lit1.var());
-            S->setDecisionVar(lit1.var(), false);
             
             setAllThatPointsHereTo(lit2.var(), lit ^ lit2.sign());
             table[lit2.var()] = lit ^ lit2.sign();
             reverseTable[lit.var()].push_back(lit2.var());
-            S->setDecisionVar(lit2.var(), false);
             
             table[lit.var()] = Lit(lit.var(), false);
-            S->setDecisionVar(lit.var(), true);
             return;
         }
     }
@@ -320,7 +336,6 @@ void VarReplacer::replace(vec<Lit>& ps, const bool xor_clause_inverted, const ui
     
     table[var] = lit;
     reverseTable[lit.var()].push_back(var);
-    S->setDecisionVar(var, false);
 }
 
 void VarReplacer::addBinaryXorClause(vec<Lit>& ps, const bool xor_clause_inverted, const uint group, const bool internal)
@@ -334,7 +349,7 @@ void VarReplacer::addBinaryXorClause(vec<Lit>& ps, const bool xor_clause_inverte
     if (internal)
         S->clauses.push(c);
     else
-        toRemove.push(c);
+        clauses.push(c);
     S->attachClause(*c);
     
     ps[0] ^= true;
@@ -343,7 +358,7 @@ void VarReplacer::addBinaryXorClause(vec<Lit>& ps, const bool xor_clause_inverte
     if (internal)
         S->clauses.push(c);
     else
-        toRemove.push(c);
+        clauses.push(c);
     S->attachClause(*c);
 }
 

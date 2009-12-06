@@ -15,36 +15,37 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************************************/
 
-#ifndef GAUSSIANCONFIG_H
-#define GAUSSIANCONFIG_H
+#ifndef CLAUSECLEANER_H
+#define CLAUSECLEANER_H
 
-#include <sys/types.h>
-#include "PackedRow.h"
+#include "Solver.h"
 
 namespace MINISAT
 {
-using namespace MINISAT;
 
-class GaussianConfig
+class ClauseCleaner
 {
     public:
-    
-    GaussianConfig() :
-        only_nth_gauss_save(2)
-        , decision_until(0)
-        , starts_from(3)
-    {
-    }
-    
-    ~GaussianConfig()
-    {
-    }
+        ClauseCleaner(Solver& solver);
         
-    //tuneable gauss parameters
-    uint only_nth_gauss_save;  //save only every n-th gauss matrix
-    uint decision_until; //do Gauss until this level
-    uint starts_from; //Gauss elimination starts from this restart number
+        enum ClauseSetType {clauses, xorclauses, learnts, conglomerate};
+        
+        void cleanClauses(vec<Clause*>& cs, ClauseSetType type);
+        void cleanClauses(vec<XorClause*>& cs, ClauseSetType type);
+        void removeSatisfied(vec<Clause*>& cs, ClauseSetType type);
+        void removeSatisfied(vec<XorClause*>& cs, ClauseSetType type);
+        bool satisfied(const Clause& c) const;
+        bool satisfied(const XorClause& c) const;
+        
+    private:
+        bool cleanClause(Clause& c);
+        
+        uint lastNumUnitarySat[4];
+        uint lastNumUnitaryClean[4];
+        
+        Solver& solver;
 };
 
 };
-#endif //GAUSSIANCONFIG_H
+
+#endif //CLAUSECLEANER_H

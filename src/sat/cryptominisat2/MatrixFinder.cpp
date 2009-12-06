@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Solver.h"
 #include "Gaussian.h"
 #include "GaussianConfig.h"
+#include "ClauseCleaner.h"
 
 #include <set>
 #include <map>
@@ -44,8 +45,6 @@ MatrixFinder::MatrixFinder(Solver *_S) :
     unAssigned(_S->nVars() + 1)
     , S(_S)
 {
-    table.resize(S->nVars(), unAssigned);
-    matrix_no = 0;
 }
 
 inline const Var MatrixFinder::fingerprint(const XorClause& c) const
@@ -75,11 +74,16 @@ inline const bool MatrixFinder::firstPartOfSecond(const XorClause& c1, const Xor
 
 const uint MatrixFinder::findMatrixes()
 {
+    table.clear();
+    table.resize(S->nVars(), unAssigned);
+    reverseTable.clear();
+    matrix_no = 0;
+    
     if (S->xorclauses.size() == 0)
         return 0;
     
-    S->removeSatisfied(S->xorclauses);
-    S->cleanClauses(S->xorclauses);
+    S->clauseCleaner->removeSatisfied(S->xorclauses, ClauseCleaner::xorclauses);
+    S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
     
     for (XorClause** c = S->xorclauses.getData(), **end = c + S->xorclauses.size(); c != end; c++) {
         set<uint> tomerge;

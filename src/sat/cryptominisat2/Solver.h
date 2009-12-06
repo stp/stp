@@ -54,6 +54,7 @@ class Conglomerate;
 class VarReplacer;
 class XorFinder;
 class FindUndef;
+class ClauseCleaner;
 
 //#define VERBOSE_DEBUG_XOR
 //#define VERBOSE_DEBUG
@@ -80,7 +81,7 @@ public:
     //
     Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
     bool    addClause (vec<Lit>& ps, const uint group, char* group_name);  // Add a clause to the solver. NOTE! 'ps' may be shrunk by this method!
-    bool    addXorClause (vec<Lit>& ps, bool xor_clause_inverted, const uint group, char* group_name);  // Add a xor-clause to the solver. NOTE! 'ps' may be shrunk by this method!
+    bool    addXorClause (vec<Lit>& ps, bool xor_clause_inverted, const uint group, char* group_name, const bool internal = false);  // Add a xor-clause to the solver. NOTE! 'ps' may be shrunk by this method!
 
     // Solving:
     //
@@ -255,11 +256,6 @@ protected:
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
-    template<class T>
-    void     removeSatisfied  (vec<T*>& cs);                                           // Shrink 'cs' to contain only non-satisfied clauses.
-    void     cleanClauses     (vec<XorClause*>& cs);
-    bool     cleanClause      (Clause& c);
-    void     cleanClauses     (vec<Clause*>& cs);                                      // Remove TRUE or FALSE variables from the xor clauses and remove the FALSE variables from the normal clauses
     llbool   handle_conflict  (vec<Lit>& learnt_clause, Clause* confl, int& conflictC);// Handles the conflict clause
     llbool   new_decision     (int& nof_conflicts, int& conflictC);                    // Handles the case when all propagations have been made, and now a decision must be made
 
@@ -280,8 +276,6 @@ protected:
     void     removeClause(Clause& c);                  // Detach and free a clause.
     void     removeClause(XorClause& c);               // Detach and free a clause.
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
-    bool     satisfied        (const XorClause& c) const; // Returns TRUE if the clause is satisfied in the current state
-    bool     satisfied        (const Clause& c) const; // Returns TRUE if the clause is satisfied in the current state.
     void     reverse_binary_clause(Clause& c) const;   // Binary clauses --- the first Lit has to be true
 
     // Misc:
@@ -295,8 +289,10 @@ protected:
     friend class Conglomerate;
     friend class MatrixFinder;
     friend class VarReplacer;
+    friend class ClauseCleaner;
     Conglomerate* conglomerate;
     VarReplacer* toReplace;
+    ClauseCleaner* clauseCleaner;
 
     // Debug:
     void     printLit         (const Lit l) const;
@@ -439,19 +435,8 @@ inline const uint Solver::get_unitary_learnts_num() const
 {
     if (decisionLevel() > 0)
         return trail_lim[0];
-    return 0;
-}
-template<class T>
-void Solver::removeSatisfied(vec<T*>& cs)
-{
-    int i,j;
-    for (i = j = 0; i < cs.size(); i++) {
-        if (satisfied(*cs[i]))
-            removeClause(*cs[i]);
-        else
-            cs[j++] = cs[i];
-    }
-    cs.shrink(i - j);
+    else
+        return trail.size();
 }
 template <class T>
 inline void Solver::removeWatchedCl(vec<T> &ws, const Clause *c) {
