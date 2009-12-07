@@ -19,6 +19,7 @@ namespace MINISAT
 VarReplacer::VarReplacer(Solver *_S) :
     replacedLits(0)
     , replacedVars(0)
+    , lastReplacedVars(0)
     , addedNewClause(false)
     , S(_S)
 {
@@ -34,13 +35,6 @@ void VarReplacer::performReplace()
 {
     #ifdef VERBOSE_DEBUG
     cout << "Replacer started." << endl;
-    {
-        uint i = 0;
-        for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
-            if (it->var() == i) continue;
-            cout << "Replacing var " << i+1 << " with Lit " << (it->sign() ? "-" : "") <<  it->var()+1 << endl;
-        }
-    }
     #endif
     
     S->clauseCleaner->removeSatisfied(S->clauses, ClauseCleaner::clauses);
@@ -51,12 +45,25 @@ void VarReplacer::performReplace()
     S->clauseCleaner->cleanClauses(S->learnts, ClauseCleaner::learnts);
     S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
     
-    if (!addedNewClause || replacedVars == 0) return;
+    if (!addedNewClause && replacedVars == lastReplacedVars) return;
+    
+    #ifdef VERBOSE_DEBUG
+    {
+        uint i = 0;
+        for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
+            if (it->var() == i) continue;
+            cout << "Replacing var " << i+1 << " with Lit " << (it->sign() ? "-" : "") <<  it->var()+1 << endl;
+        }
+    }
+    #endif
     
     uint i = 0;
     const vector<bool>& removedVars = S->conglomerate->getRemovedVars();
     for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
         if (it->var() == i) continue;
+        #ifdef VERBOSE_DEBUG
+        cout << "Setting var " << i+1 << " to a non-decision var" << endl;
+        #endif
         S->setDecisionVar(i, false);
         if (!removedVars[it->var()])
             S->setDecisionVar(it->var(), true);
@@ -76,6 +83,7 @@ void VarReplacer::performReplace()
         printf("|  Replacing   %8d vars, replaced %8d lits                          |\n", replacedVars, replacedLits);
     
     addedNewClause = false;
+    lastReplacedVars = replacedVars;
     
     if (S->ok)
         S->ok = (S->propagate() == NULL);
@@ -105,6 +113,7 @@ void VarReplacer::replace_set(vec<XorClause*>& cs, const bool isAttached)
         
         if (isAttached && changed && handleUpdatedClause(c, origVar1, origVar2)) {
             c.mark(1);
+            S->freeLater.push(&c);
             r++;
         } else {
             *a++ = *r++;
@@ -132,6 +141,11 @@ const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, co
         else c.invert(S->assigns[c[i].var()].getBool()); //modify xor_clause_inverted instead of adding
     }
     c.shrink(i - j);
+    
+    #ifdef VERBOSE_DEBUG
+    cout << "xor-clause after replacing: ";
+    c.plain_print();
+    #endif
     
     switch (c.size()) {
     case 0:
@@ -293,7 +307,7 @@ void VarReplacer::extendModel() const
 void VarReplacer::replace(vec<Lit>& ps, const bool xor_clause_inverted, const uint group)
 {
     #ifdef VERBOSE_DEBUG
-    cout << "replace() called with var " << ps[0]+1 << " and var " << ps[1]+1 << " with xor_clause_inverted " << xor_clause_inverted << endl;
+    cout << "replace() called with var " << ps[0].var()+1 << " and var " << ps[1].var()+1 << " with xor_clause_inverted " << xor_clause_inverted << endl;
     #endif
     
     #ifdef DEBUG_REPLACER

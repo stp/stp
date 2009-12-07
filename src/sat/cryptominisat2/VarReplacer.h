@@ -49,6 +49,7 @@ class VarReplacer
         
         uint replacedLits;
         uint replacedVars;
+        uint lastReplacedVars;
         bool addedNewClause;
         Solver* S;
 };

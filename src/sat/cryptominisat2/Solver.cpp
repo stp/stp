@@ -182,12 +182,16 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
+    if (toReplace->getNumReplacedLits()) {
+        for (int i = 0; i != ps.size(); i++) {
+            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        }
+    }
+    
     sort(ps);
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        if (toReplace->getNumReplacedLits())
-            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         xor_clause_inverted ^= ps[i].sign();
         ps[i] ^= ps[i].sign();
 
@@ -259,12 +263,16 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
         return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
+    if (toReplace->getNumReplacedLits()) {
+        for (int i = 0; i != ps.size(); i++) {
+            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+        }
+    }
+    
     sort(ps);
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        if (toReplace->getNumReplacedLits())
-            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
@@ -406,7 +414,7 @@ void Solver::cancelUntil(int level)
         for (int c = trail.size()-1; c >= trail_lim[level]; c--) {
             Var     x  = trail[c].var();
             #ifdef VERBOSE_DEBUG
-            cout << "Canceling var " << x+1 << " sublevel:" << c << endl;
+            cout << "Canceling var " << x+1 << " sublevel: " << c << endl;
             #endif
             assigns[x] = l_Undef;
             insertVarOrder(x);
@@ -417,7 +425,7 @@ void Solver::cancelUntil(int level)
     }
 
     #ifdef VERBOSE_DEBUG
-    cout << "Canceling finished. (now at level: " << decisionLevel() << " sublevel:" << trail.size()-1 << ")" << endl;
+    cout << "Canceling finished. (now at level: " << decisionLevel() << " sublevel: " << trail.size()-1 << ")" << endl;
     #endif
 }
 
@@ -467,7 +475,7 @@ void Solver::set_gaussian_decision_until(const uint to)
 Lit Solver::pickBranchLit(int polarity_mode)
 {
     #ifdef VERBOSE_DEBUG
-    cout << "decision level:" << decisionLevel() << " ";
+    cout << "decision level: " << decisionLevel() << " ";
     #endif
     
     Var next = var_Undef;
@@ -521,6 +529,7 @@ Lit Solver::pickBranchLit(int polarity_mode)
     } else {
         Lit lit(next,sign);
         #ifdef VERBOSE_DEBUG
+        assert(decision_var[lit.var()]);
         cout << "decided on: " << lit.var()+1 << " to set:" << !lit.sign() << endl;
         #endif
         return lit;
@@ -740,7 +749,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
 void Solver::uncheckedEnqueue(Lit p, Clause* from)
 {
     #ifdef VERBOSE_DEBUG
-    cout << "uncheckedEnqueue var " << p.var()+1 << " to " << !p.sign() << " level: " << decisionLevel() << " sublevel:" << trail.size() << endl;
+    cout << "uncheckedEnqueue var " << p.var()+1 << " to " << !p.sign() << " level: " << decisionLevel() << " sublevel: " << trail.size() << endl;
     #endif
     
     assert(value(p) == l_Undef);

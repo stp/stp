@@ -4,6 +4,8 @@ namespace MINISAT
 {
 using namespace MINISAT;
 
+//#define DEBUG_CLEAN
+
 ClauseCleaner::ClauseCleaner(Solver& _solver) :
     solver(_solver)
 {
@@ -15,6 +17,10 @@ ClauseCleaner::ClauseCleaner(Solver& _solver) :
 
 void ClauseCleaner::removeSatisfied(vec<XorClause*>& cs, ClauseSetType type)
 {
+    #ifdef DEBUG_CLEAN
+    assert(solver.decisionLevel() == 0);
+    #endif
+    
     if (lastNumUnitarySat[type] == solver.get_unitary_learnts_num())
         return;
     
@@ -32,6 +38,10 @@ void ClauseCleaner::removeSatisfied(vec<XorClause*>& cs, ClauseSetType type)
 
 void ClauseCleaner::removeSatisfied(vec<Clause*>& cs, ClauseSetType type)
 {
+    #ifdef DEBUG_CLEAN
+    assert(solver.decisionLevel() == 0);
+    #endif
+    
     if (lastNumUnitarySat[type] == solver.get_unitary_learnts_num())
         return;
     
@@ -76,6 +86,10 @@ bool ClauseCleaner::cleanClause(Clause& c)
 
 void ClauseCleaner::cleanClauses(vec<Clause*>& cs, ClauseSetType type)
 {
+    #ifdef DEBUG_CLEAN
+    assert(solver.decisionLevel() == 0);
+    #endif
+    
     if (lastNumUnitaryClean[type] == solver.get_unitary_learnts_num())
         return;
     
@@ -92,6 +106,10 @@ void ClauseCleaner::cleanClauses(vec<Clause*>& cs, ClauseSetType type)
 
 void ClauseCleaner::cleanClauses(vec<XorClause*>& cs, ClauseSetType type)
 {
+    #ifdef DEBUG_CLEAN
+    assert(solver.decisionLevel() == 0);
+    #endif
+    
     if (lastNumUnitaryClean[type] == solver.get_unitary_learnts_num())
         return;
     
