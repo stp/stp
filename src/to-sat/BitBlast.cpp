@@ -1104,6 +1104,7 @@ namespace BEEV
         return n;
       }
     else
-      return _bm->CreateSimpForm(IFF, *lit, *rit);
+      return _bm->CreateSimpForm(XOR, 
+				 _bm->CreateSimpForm(NOT,*lit), *rit);
   }
 } // BEEV namespace

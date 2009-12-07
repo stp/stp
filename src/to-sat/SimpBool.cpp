@@ -49,10 +49,6 @@ namespace BEEV
             break;
           case IFF:
             {
-              // Not sure children can ever be empty, but what the heck.
-              //        if (children.size() == 0) {
-              //          return ASTTrue;
-              //        }
               // Convert IFF to XOR ASAP to simplify flattening.
               children[0] = CreateSimpNot(children[0]);
               return CreateSimpXor(children);
@@ -61,8 +57,8 @@ namespace BEEV
           case XOR:
             return CreateSimpXor(children);
             break;
-            // FIXME: Earlier, check that this only has two arguments
           case IMPLIES:
+            // FIXME: Earlier, check that this only has two arguments
             return CreateSimpAndOr(0, CreateSimpNot(children[0]), children[1]);
             break;
           case ITE:
@@ -485,18 +481,26 @@ namespace BEEV
       {
         retval = CreateSimpAndOr(1, child0, child1);
       }
-    // ITE (x, !y, y) == x XOR y
-    //     else if (NOT == child1.GetKind() && (child1[0] == child2)) {
-    //       retval = CreateSimpXor(child0, child2);
-    //     }
-    //     // ITE (x, y, !y) == x IFF y.  I think other cases are covered
-    //     // by XOR/IFF optimizations
-    //     else if (NOT == child2.GetKind() && (child2[0] == child1)) {
-    //       retval = CreateSimpXor(CreateSimpNot(child0), child2);
-    //     }
+//     //ITE (x, !y, y) == x XOR y
+//     else if (NOT == child1.GetKind() && (child1[0] == child2))
+//       {
+// 	retval = CreateSimpXor(child0, child2);
+//       }
+//     // ITE (x, y, !y) == x IFF y.  I think other cases are covered
+//     // by XOR/IFF optimizations
+//     else if (NOT == child2.GetKind() && (child2[0] == child1)) 
+//       {
+// 	retval = CreateSimpXor(CreateSimpNot(child0), child2);
+//       }
     else
       {
-        retval = CreateNode(ITE, child0, child1, child2);
+	ASTNode left = 
+	  CreateNode(AND, child0, child1);
+	ASTNode right = 
+	  CreateNode(AND,
+		     CreateNode(NOT,child0),
+		     child2);
+        retval = CreateNode(XOR, left, right);
       }
 
     if (_trace_simpbool)
