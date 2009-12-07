@@ -38,7 +38,7 @@ namespace BEEV
           case AND:
             return CreateSimpAndOr(1, children);
             break;
-          case OR:
+          case OR:	    	    
             return CreateSimpAndOr(0, children);
             break;
           case NAND:
@@ -148,10 +148,6 @@ namespace BEEV
       }
   }
 
-  // I don't think this is even called, since it called
-  // CreateSimpAndOr instead of CreateSimpXor until 1/9/07 with no ill
-  // effects.  Calls seem to go to the version that takes a vector of
-  // children.
   ASTNode STPMgr::CreateSimpXor(const ASTNode& form1, const ASTNode& form2)
   {
     ASTVec children;

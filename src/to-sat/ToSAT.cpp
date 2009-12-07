@@ -66,7 +66,9 @@ namespace BEEV
    * unsat. else continue.
    */
   bool ToSAT::toSATandSolve(MINISAT::Solver& newSolver,
-                            ClauseList& cll, bool add_xor_clauses)
+                            ClauseList& cll, 
+			    bool add_xor_clauses,
+			    bool enable_clausal_abstraction)
   {
     CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
@@ -88,7 +90,7 @@ namespace BEEV
 
     if(bm->UserFlags.print_cnf_flag)
       {
-	#define DEBUG_LIB
+	//newSolver.cnfDump = true;
       }
 #ifdef CRYPTOMINISAT
     newSolver.startClauseAdding();
@@ -134,8 +136,8 @@ namespace BEEV
 #else
         newSolver.addClause(satSolverClause);
 #endif
-        float percentage=CLAUSAL_ABSTRACTION_CUTOFF;
-        if(count++ >= input_clauselist_size*percentage)
+        if(enable_clausal_abstraction && 
+	   count++ >= input_clauselist_size*CLAUSAL_ABSTRACTION_CUTOFF)
           {
             //Arbitrary adding only 60% of the clauses in the hopes of
             //terminating early 
@@ -146,8 +148,8 @@ namespace BEEV
 
 #if defined CRYPTOMINISAT2
 	    newSolver.set_gaussian_decision_until(100);
-	    newSolver.performReplace = false;
-	    newSolver.xorFinder = false;
+	    //newSolver.performReplace = true;
+	    //newSolver.xorFinder = true;
 #endif
 	    newSolver.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);

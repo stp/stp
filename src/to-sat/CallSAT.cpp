@@ -10,7 +10,7 @@
 
 namespace BEEV
 {
-  //Bucketize clauses into buckets of size 1,2,...MAX_BUCKET_LIMIT
+  //Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT
   static ClauseBuckets * Sort_ClauseList_IntoBuckets(ClauseList * cl)
   {
     ClauseBuckets * cb = new ClauseBuckets();
@@ -21,9 +21,9 @@ namespace BEEV
       {
         ClausePtr cptr = *it;
         int cl_size = cptr->size();
-        if(cl_size >= MAX_BUCKET_LIMIT)
+        if(cl_size >= CLAUSAL_BUCKET_LIMIT)
           {
-            cl_size = MAX_BUCKET_LIMIT;
+            cl_size = CLAUSAL_BUCKET_LIMIT;
           }
 
         //If no clauses of size cl_size have been seen, then create a
@@ -51,10 +51,17 @@ namespace BEEV
     ClauseBuckets::iterator itend = cb->end();
     
     bool sat = false;
-    for(;it!=itend;it++)
+    for(int count=1;it!=itend;it++, count++)
       {
         ClauseList *cl = (*it).second;
-        sat = toSATandSolve(SatSolver,*cl);
+// 	if(CLAUSAL_BUCKET_LIMIT == count)
+// 	  {
+// 	    sat = toSATandSolve(SatSolver,*cl, false, true);
+// 	  }
+// 	else
+	  {
+	    sat = toSATandSolve(SatSolver,*cl);
+	  }
         if(!sat)
           {
             return sat;

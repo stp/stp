@@ -110,7 +110,9 @@ namespace BEEV
     
     // Converts the clause to SAT and calls SAT solver
     bool toSATandSolve(MINISAT::Solver& S,
-                       ClauseList& cll, bool add_xor_clauses=false);
+                       ClauseList& cll, 
+		       bool add_xor_clauses=false,
+		       bool enable_clausal_abstraction=false);
     
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
