@@ -90,7 +90,7 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-h  : help\n";
   helpstring +=  
-    "-i <random_seed>  : Randomize STP's satisfiable output. Random_seed is an integer >= 0. Needs CRYPTOMINISAT2\n";
+    "-i <random_seed>  : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
   helpstring +=  
     "-m  : use the SMTLIB parser\n";
   helpstring +=  
