@@ -114,10 +114,10 @@ check:
 # The higher the level, the more tests are run (3 = all)
 REGRESS_LEVEL=4
 REGRESS_TESTS=$(REGRESS_TESTS0)
-REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
 PROGNAME=bin/stp
 ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
 
+REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
 .PHONY: regresscvc
 regresscvc:
 	@echo "*********************************************************" \
@@ -225,6 +225,21 @@ regresssmtbasic:
 	@echo "Output is saved in $(SMTBASIC_LOG)" | tee -a $(SMTBASIC_LOG)
 	@echo "*********************************************************" \
           | tee -a $(SMTBASIC_LOG)
+
+SYNTHESIS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
+.PHONY: regresssyn
+regresssyn:
+	@echo "*********************************************************" \
+          | tee -a $(SYNTHESIS_LOG)
+	@echo "Starting tests at" `date` | tee -a $(SYNTHESIS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(SYNTHESIS_LOG)
+	scripts/run_synthesis_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(SYNTHESIS_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
+	@echo "*********************************************************" \
+          | tee -a $(SYNTHESIS_LOG)
+	@echo "Output is saved in $(SYNTHESIS_LOG)" | tee -a $(SYNTHESIS_LOG)
+	@echo "*********************************************************" \
+          | tee -a $(SYNTHESIS_LOG)
 
 
 GRIND_LOG = `date +%Y-%m-%d`"-grind.log"

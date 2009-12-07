@@ -148,8 +148,8 @@ namespace BEEV
 
 #if defined CRYPTOMINISAT2
 	    newSolver.set_gaussian_decision_until(100);
-	    //newSolver.performReplace = true;
-	    //newSolver.xorFinder = true;
+	    newSolver.performReplace = false;
+	    newSolver.xorFinder = false;
 #endif
 	    newSolver.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
