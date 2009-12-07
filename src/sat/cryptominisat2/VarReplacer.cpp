@@ -45,7 +45,7 @@ void VarReplacer::performReplace()
     S->clauseCleaner->cleanClauses(S->learnts, ClauseCleaner::learnts);
     S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
     
-    if (!addedNewClause && replacedVars == lastReplacedVars) return;
+    if (replacedVars == lastReplacedVars) return;
     
     #ifdef VERBOSE_DEBUG
     {
@@ -259,6 +259,11 @@ const uint VarReplacer::getNumReplacedLits() const
 const uint VarReplacer::getNumReplacedVars() const
 {
     return replacedVars;
+}
+
+const uint VarReplacer::getNumLastReplacedVars() const
+{
+    return lastReplacedVars;
 }
 
 const vector<Lit>& VarReplacer::getReplaceTable() const
