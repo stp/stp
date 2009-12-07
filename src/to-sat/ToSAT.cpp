@@ -82,10 +82,12 @@ namespace BEEV
 
     if(bm->UserFlags.random_seed_flag)
       {
+#ifdef CRYPTOMINISAT2
 	newSolver.setSeed(bm->UserFlags.random_seed);
 	//cerr << "We have set the seed value to "
 	//   << bm->UserFlags.random_seed 
 	//   << endl;
+#endif
       }
 
     if(bm->UserFlags.print_cnf_flag)
@@ -147,7 +149,7 @@ namespace BEEV
             bm->GetRunTimes()->start(RunTimes::Solving);
 
 #if defined CRYPTOMINISAT2
-	    newSolver.set_gaussian_decision_until(100);
+	    newSolver.set_gaussian_decision_until(300);
 	    newSolver.performReplace = false;
 	    newSolver.xorFinder = false;
 #endif

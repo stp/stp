@@ -226,7 +226,7 @@ regresssmtbasic:
 	@echo "*********************************************************" \
           | tee -a $(SMTBASIC_LOG)
 
-SYNTHESIS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
+SYNTHESIS_LOG = `date +%Y-%m-%d`"-regress-synthesis.log"
 .PHONY: regresssyn
 regresssyn:
 	@echo "*********************************************************" \
