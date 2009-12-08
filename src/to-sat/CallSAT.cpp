@@ -58,11 +58,11 @@ namespace BEEV
     for(int count=1;it!=itend;it++, count++)
       {
         ClauseList *cl = (*it).second;
-	// if(CLAUSAL_BUCKET_LIMIT == count)
-	// 	  {
-	// 	    sat = toSATandSolve(SatSolver,*cl, false, true);
-	// 	  }
-	// 	else
+	if(CLAUSAL_BUCKET_LIMIT == count)
+	  {
+	    sat = toSATandSolve(SatSolver,*cl, false, true);
+	  }
+	else
 	  {
 	    sat = toSATandSolve(SatSolver,*cl);
 	  }

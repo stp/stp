@@ -136,30 +136,30 @@ namespace BEEV
 #endif
 
 #if defined CRYPTOMINISAT2
-	newSolver.set_gaussian_decision_until(500);
-	newSolver.performReplace = true;
-	newSolver.xorFinder = true;
+	newSolver.set_gaussian_decision_until(50);
+	newSolver.performReplace = false;
+	newSolver.xorFinder = false;
 #endif
 
-	//         if(enable_clausal_abstraction && 
-	// 	   count++ >= input_clauselist_size*CLAUSAL_ABSTRACTION_CUTOFF)
-	//           {
-	//             //Arbitrary adding only x% of the clauses in the hopes of
-	//             //terminating early 
-	//             //      cout << "Percentage clauses added: " 
-	//             //           << percentage << endl;
-	//             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-	//             bm->GetRunTimes()->start(RunTimes::Solving);
-	// 	    newSolver.solve();
-	//             bm->GetRunTimes()->stop(RunTimes::Solving);
-	//             if(!newSolver.okay())
-	//               {
-	//                 return false;         
-	//               }
-	//             count = 0;
-	//             flag  = 1;
-	//             bm->GetRunTimes()->start(RunTimes::SendingToSAT);
-	//           }
+	if(enable_clausal_abstraction && 
+	   count++ >= input_clauselist_size*CLAUSAL_ABSTRACTION_CUTOFF)
+	  {
+	    //Arbitrary adding only x% of the clauses in the hopes of
+	    //terminating early 
+	    //      cout << "Percentage clauses added: " 
+	    //           << percentage << endl;
+	    bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+	    bm->GetRunTimes()->start(RunTimes::Solving);
+	    newSolver.solve();
+	    bm->GetRunTimes()->stop(RunTimes::Solving);
+	    if(!newSolver.okay())
+	      {
+		return false;         
+	      }
+	    count = 0;
+	    flag  = 1;
+	    bm->GetRunTimes()->start(RunTimes::SendingToSAT);
+	  }
         if (newSolver.okay())
           {
             continue;

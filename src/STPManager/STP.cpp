@@ -24,17 +24,20 @@ namespace BEEV {
 #if defined CORE || defined CRYPTOMINISAT
     MINISAT::Solver NewSolver;
 #endif
+
 #if defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
     if(bm->UserFlags.print_cnf_flag)
       {
 	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
       }
-    NewSolver.dynamicRestarts = true;
+    NewSolver.dynamicRestarts = false;
 #endif
+
 #ifdef SIMP
     MINISAT::SimpSolver NewSolver;
 #endif
+
 #ifdef UNSOUND
     MINISAT::UnsoundSimpSolver NewSolver;
 #endif
