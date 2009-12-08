@@ -28,7 +28,7 @@ namespace BEEV {
     MINISAT::Solver NewSolver;
     if(bm->UserFlags.print_cnf_flag)
       {
-	newS.needLibraryCNFFile("output.cnf");
+	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
       }
 
 #endif

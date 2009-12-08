@@ -92,6 +92,8 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-i <random_seed>  : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
   helpstring +=  
+    "-j <filename>  : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
+  helpstring +=  
     "-m  : use the SMTLIB parser\n";
   helpstring +=  
     "-p  : print counterexample\n";
@@ -169,6 +171,7 @@ int main(int argc, char ** argv) {
 	      break;
 	    case 'j':
 	      bm->UserFlags.print_cnf_flag = true;
+	      bm->UserFlags.cnf_dump_filename = argv[++i];
 	      break;
             case 'n':
               bm->UserFlags.print_output_flag = true;
