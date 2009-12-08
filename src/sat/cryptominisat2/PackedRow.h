@@ -217,14 +217,14 @@ public:
 
     friend std::ostream& operator << (std::ostream& os, const PackedRow& m);
 
-private:
-    friend class PackedMatrix;
     PackedRow(const uint _size, uint64_t& _xor_clause_inverted, uint64_t*  const _mp) :
         size(_size)
         , mp(_mp)
         , xor_clause_inverted(_xor_clause_inverted)
     {}
-    
+
+private:
+    friend class PackedMatrix;    
     const uint size;
     uint64_t* const mp;
     uint64_t& xor_clause_inverted;
