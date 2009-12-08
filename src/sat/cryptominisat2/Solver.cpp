@@ -38,14 +38,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "XorFinder.h"
 #include "ClauseCleaner.h"
 
-//#define DEBUG_LIB
-
-#ifdef DEBUG_LIB
-#include <sstream>
-FILE* myoutputfile;
-static uint numcalled = 0;
-#endif //DEBUG_LIB
-
 namespace MINISAT
 {
 using namespace MINISAT;
@@ -96,19 +88,13 @@ Solver::Solver() :
         , maxRestarts(UINT_MAX)
         , MYFLAG           (0)
         , learnt_clause_group(0)
+        , libraryCNFFile   (NULL)
 {
-    toReplace = new VarReplacer(this);
+    varReplacer = new VarReplacer(this);
     conglomerate = new Conglomerate(this);
     clauseCleaner = new ClauseCleaner(*this);
     logger.setSolver(this);
-    
-    #ifdef DEBUG_LIB
-    std::stringstream ss;
-    ss << "inputfile" << numcalled << ".cnf";
-    myoutputfile = fopen(ss.str().c_str(), "w");
-    #endif
 }
-
 
 Solver::~Solver()
 {
@@ -117,13 +103,12 @@ Solver::~Solver()
     for (int i = 0; i < xorclauses.size(); i++) free(xorclauses[i]);
     for (uint i = 0; i < gauss_matrixes.size(); i++) delete gauss_matrixes[i];
     for (uint i = 0; i < freeLater.size(); i++) free(freeLater[i]);
-    delete toReplace;
+    delete varReplacer;
     delete conglomerate;
     delete clauseCleaner;
     
-    #ifdef DEBUG_LIB
-    fclose(myoutputfile);
-    #endif //DEBUG_LIB
+    if (libraryCNFFile)
+        fclose(libraryCNFFile);
 }
 
 //=================================================================================================
@@ -149,16 +134,15 @@ Var Solver::newVar(bool sign, bool dvar)
     polarity  .push_back((char)sign);
 
     decision_var.push_back(dvar);
-    toReplace->newVar();
+    varReplacer->newVar();
     conglomerate->newVar();
 
     insertVarOrder(v);
     if (dynamic_behaviour_analysis)
         logger.new_var(v);
     
-    #ifdef DEBUG_LIB
-    fprintf(myoutputfile, "c Solver::newVar() called\n");
-    #endif //DEBUG_LIB
+    if (libraryCNFFile)
+        fprintf(libraryCNFFile, "c Solver::newVar() called\n");
 
     return v;
 }
@@ -166,15 +150,13 @@ Var Solver::newVar(bool sign, bool dvar)
 bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint group, char* group_name, const bool internal)
 {
     assert(decisionLevel() == 0);
-    #ifdef DEBUG_LIB
-    if (!internal) {
-        fprintf(myoutputfile, "x");
+    if (libraryCNFFile && !internal) {
+        fprintf(libraryCNFFile, "x");
         for (uint i = 0; i < ps.size(); i++) {
-            fprintf(myoutputfile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
+            fprintf(libraryCNFFile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
         }
-        fprintf(myoutputfile, "0\n");
+        fprintf(libraryCNFFile, "0\n");
     }
-    #endif //DEBUG_LIB
 
     if (dynamic_behaviour_analysis) logger.set_group_name(group, group_name);
 
@@ -182,9 +164,9 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
-    if (toReplace->getNumLastReplacedVars()) {
+    if (varReplacer->getNumLastReplacedVars()) {
         for (int i = 0; i != ps.size(); i++) {
-            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+            ps[i] = varReplacer->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         }
     }
     
@@ -227,7 +209,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         cout << "--> xor is 2-long, replacing var " << ps[0].var()+1 << " with " << (!xor_clause_inverted ? "-" : "") << ps[1].var()+1 << endl;
         #endif
         
-        toReplace->replace(ps, xor_clause_inverted, group);
+        varReplacer->replace(ps, xor_clause_inverted, group);
         break;
     }
     default: {
@@ -237,7 +219,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         xorclauses.push(c);
         attachClause(*c);
         if (!internal)
-            toReplace->newClause();
+            varReplacer->newClause();
         break;
     }
     }
@@ -249,12 +231,12 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
 {
     assert(decisionLevel() == 0);
     
-    #ifdef DEBUG_LIB
-    for (int i = 0; i < ps.size(); i++) {
-        fprintf(myoutputfile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
+    if (libraryCNFFile) {
+        for (int i = 0; i < ps.size(); i++) {
+            fprintf(libraryCNFFile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
+        }
+        fprintf(libraryCNFFile, "0\n");
     }
-    fprintf(myoutputfile, "0\n");
-    #endif //DEBUG_LIB
 
     if (dynamic_behaviour_analysis)
         logger.set_group_name(group, group_name);
@@ -263,9 +245,9 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
         return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
-    if (toReplace->getNumLastReplacedVars()) {
+    if (varReplacer->getNumLastReplacedVars()) {
         for (int i = 0; i != ps.size(); i++) {
-            ps[i] = toReplace->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
+            ps[i] = varReplacer->getReplaceTable()[ps[i].var()] ^ ps[i].sign();
         }
     }
     
@@ -296,7 +278,7 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
 
         clauses.push(c);
         attachClause(*c);
-        toReplace->newClause();
+        varReplacer->newClause();
     }
 
     return true;
@@ -441,26 +423,10 @@ void Solver::printLit(const Lit l) const
     printf("%s%d:%c", l.sign() ? "-" : "", l.var()+1, value(l) == l_True ? '1' : (value(l) == l_False ? '0' : 'X'));
 }
 
-
-void Solver::printClause(const Clause& c) const
+void Solver::needLibraryCNFFile(const char* fileName)
 {
-    printf("(group: %d) ", c.group);
-    for (uint i = 0; i < c.size();) {
-        printLit(c[i]);
-        i++;
-        if (i < c.size()) printf(" ");
-    }
-}
-
-void Solver::printClause(const XorClause& c) const
-{
-    printf("(group: %d) ", c.group);
-    if (c.xor_clause_inverted()) printf(" /inverted/ ");
-    for (uint i = 0; i < c.size();) {
-        printLit(c[i].unsign());
-        i++;
-        if (i < c.size()) printf(" + ");
-    }
+    libraryCNFFile = fopen(fileName, "w");
+    assert(libraryCNFFile != NULL);
 }
 
 void Solver::set_gaussian_decision_until(const uint to)
@@ -1061,7 +1027,7 @@ void Solver::dump_sorted_learnts(const char* file)
     
     sort(learnts, reduceDB_lt());
     for (int i = learnts.size()-1; i >= 0 ; i--) {
-        learnts[i]->plain_print(outfile);
+        learnts[i]->plainPrint(outfile);
     }
     fclose(outfile);
 }
@@ -1348,9 +1314,8 @@ void Solver::print_gauss_sum_stats() const
 
 lbool Solver::solve(const vec<Lit>& assumps)
 {
-    #ifdef DEBUG_LIB
-    fprintf(myoutputfile, "c Solver::solve() called\n");
-    #endif
+    if (libraryCNFFile)
+        fprintf(libraryCNFFile, "c Solver::solve() called\n");
     
     model.clear();
     conflict.clear();
@@ -1372,7 +1337,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
     conglomerate->addRemovedClauses();
     
     if (performReplace) {
-        toReplace->performReplace();
+        varReplacer->performReplace();
         if (!ok) return l_False;
     }
 
@@ -1391,7 +1356,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
                 printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
             
             if (performReplace) {
-                toReplace->performReplace();
+                varReplacer->performReplace();
                 if (!ok) return l_False;
             }
         }
@@ -1420,7 +1385,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
             }
             
             if (performReplace) {
-                toReplace->performReplace();
+                varReplacer->performReplace();
                 if (!ok) return l_False;
             }
         }
@@ -1482,7 +1447,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
 
     if (status == l_True) {
         conglomerate->doCalcAtFinish();
-        toReplace->extendModel();
+        varReplacer->extendModel();
         // Extend & copy model:
         model.growTo(nVars());
         for (int i = 0; i < nVars(); i++) model[i] = value(i);
@@ -1538,8 +1503,7 @@ bool Solver::verifyXorClauses(const vec<XorClause*>& cs) const
         }
         if (!final) {
             printf("unsatisfied clause: ");
-            printClause(*xorclauses[i]);
-            printf("\n");
+            xorclauses[i]->plainPrint();
             failed = true;
         }
     }
@@ -1557,8 +1521,7 @@ void Solver::verifyModel()
                 goto next;
 
         printf("unsatisfied clause: ");
-        printClause(*clauses[i]);
-        printf("\n");
+        clauses[i]->plainPrint();
         failed = true;
 next:
         ;

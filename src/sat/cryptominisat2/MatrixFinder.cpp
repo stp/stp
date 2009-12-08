@@ -34,10 +34,8 @@ using std::map;
 
 //#define VERBOSE_DEBUG
 
-#ifdef VERBOSE_DEBUG
 using std::cout;
 using std::endl;
-#endif
 
 //#define PART_FINDING
 
@@ -215,8 +213,8 @@ void MatrixFinder::findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClau
             const Var fingerprint2 = xorFingerprintInMatrix[ai2];
             if (((fingerprint & fingerprint2) == fingerprint) && firstPartOfSecond(**a, **a2)) {
                 cout << "First part of second:" << endl;
-                (*a)->plain_print();
-                (*a2)->plain_print();
+                (*a)->plainPrint();
+                (*a2)->plainPrint();
                 cout << "END" << endl;
             }
         }

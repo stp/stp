@@ -1,3 +1,20 @@
+/***********************************************************************************
+CryptoMiniSat -- Copyright (c) 2009 Mate Soos
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+**************************************************************************************************/
+
 #include "Conglomerate.h"
 #include "Solver.h"
 #include "VarReplacer.h"
@@ -61,7 +78,7 @@ void Conglomerate::fillVarToXor()
     for (Lit* it = &(S->trail[0]), *end = it + S->trail.size(); it != end; it++)
         blocked[it->var()] = true;
     
-    const vec<Clause*>& clauses = S->toReplace->getClauses();
+    const vec<Clause*>& clauses = S->varReplacer->getClauses();
     for (Clause *const*it = clauses.getData(), *const*end = it + clauses.size(); it != end; it++) {
         const Clause& c = **it;
         for (const Lit* a = &c[0], *end = a + c.size(); a != end; a++) {
@@ -227,7 +244,7 @@ bool Conglomerate::dealWithNewClause(vec<Lit>& ps, const bool inverted, const ui
             free(newX);
             #endif
             
-            S->toReplace->replace(ps, inverted, old_group);
+            S->varReplacer->replace(ps, inverted, old_group);
             blocked[ps[0].var()] = true;
             blocked[ps[1].var()] = true;
             break;
