@@ -494,13 +494,12 @@ namespace BEEV
 //       }
     else
       {
-	ASTNode left = 
-	  CreateNode(AND, child0, child1);
-	ASTNode right = 
-	  CreateNode(AND,
-		     CreateNode(NOT,child0),
-		     child2);
-        retval = CreateNode(XOR, left, right);
+	ASTNode left  = CreateNode(AND, child0, child1);
+	ASTNode right = CreateNode(AND, CreateNode(NOT,child0), child2);
+	ASTVec c;
+	c.push_back(left);
+	c.push_back(right);
+        retval = CreateSimpXor(c);
       }
 
     if (_trace_simpbool)

@@ -76,7 +76,7 @@ my %optionsDefault = ("level" => 4,
 		      # when looking for info comments
 		      "maxInfoLines" => 4,
 		      # Runtime limit; 0 = no limit
-		      "time" => 30,
+		      "time" => 60,
 		      # Additional command line options to stp
 		      "stpOptions" => "-d");
 
