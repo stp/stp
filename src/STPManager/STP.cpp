@@ -30,7 +30,7 @@ namespace BEEV {
       {
 	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
       }
-    NewSolver.dynamicRestarts = false;
+    NewSolver.dynamicRestarts = true;
 #endif
 #ifdef SIMP
     MINISAT::SimpSolver NewSolver;
