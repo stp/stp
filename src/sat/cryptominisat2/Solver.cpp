@@ -61,6 +61,7 @@ Solver::Solver() :
         , xorFinder        (true)
         , performReplace   (true)
         , greedyUnbound    (false)
+        , dynamicRestarts  (false)
 
         // Statistics: (formerly in 'SolverStats')
         //
@@ -1131,14 +1132,27 @@ lbool Solver::search(int nof_conflicts)
 
 llbool Solver::new_decision(int& nof_conflicts, int& conflictC)
 {
-    if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
-        // Reached bound on number of conflicts:
-        progress_estimate = progressEstimate();
-        cancelUntil(0);
-        if (dynamic_behaviour_analysis) {
-            logger.end(Logger::restarting);
+    
+    // Reached bound on number of conflicts?
+    if (dynamicRestarts) {
+        if (nbDecisionLevelHistory.isvalid() &&
+            ((nbDecisionLevelHistory.getavg()*0.7) > (totalSumOfDecisionLevel / conf4Stats))) {
+            nbDecisionLevelHistory.fastclear();
+            progress_estimate = progressEstimate();
+            cancelUntil(0);
+            if (dynamic_behaviour_analysis) {
+                logger.end(Logger::restarting);
+            }
+            return l_Undef;
         }
-        return l_Undef;
+    } else {
+        if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
+            progress_estimate = progressEstimate();
+            cancelUntil(0);
+            if (dynamic_behaviour_analysis)
+                logger.end(Logger::restarting);
+            return l_Undef;
+        }
     }
 
     // Simplify the set of problem clauses:
@@ -1223,6 +1237,10 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, Clause* confl, int& conf
     learnt_clause.clear();
     analyze(confl, learnt_clause, backtrack_level, nbLevels);
     conf4Stats++;
+    if (dynamicRestarts) {
+        nbDecisionLevelHistory.push(nbLevels);
+        totalSumOfDecisionLevel += nbLevels;
+    }
     
     if (dynamic_behaviour_analysis)
         logger.conflict(Logger::simple_confl_type, backtrack_level, confl->group, learnt_clause);
@@ -1255,6 +1273,7 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, Clause* confl, int& conf
         learnts.push(c);
         c->setActivity(nbLevels); // LS
         if (nbLevels <= 2) nbDL2++;
+        if (c->size() == 2) nbBin++;
         attachClause(*c);
         uncheckedEnqueue(learnt_clause[0], c);
 
@@ -1319,6 +1338,11 @@ lbool Solver::solve(const vec<Lit>& assumps)
     
     model.clear();
     conflict.clear();
+    if (dynamicRestarts) {
+        nbDecisionLevelHistory.fastclear();
+        nbDecisionLevelHistory.initSize(100);
+        totalSumOfDecisionLevel = 0;
+    }
 
     if (!ok) return l_False;
 

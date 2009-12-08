@@ -36,6 +36,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "GaussianConfig.h"
 #include "Logger.h"
 #include "constants.h"
+#include "BoundedQueue.h"
 
 #ifdef _MSC_VER
   #include <ctime>
@@ -98,6 +99,7 @@ public:
     void    needRealUnknowns();             // Uses the "real unknowns" set by setRealUnknown
     void    setRealUnknown(const uint var); //sets a variable to be 'real', i.e. to preferentially branch on it during solving (when useRealUnknown it turned on)
     void    setMaxRestarts(const uint num); //sets the maximum number of restarts to given value
+    void    set_gaussian_decision_until(const uint to);
     template<class T>
     void    removeWatchedCl(vec<T> &ws, const Clause *c);
     template<class T>
@@ -140,9 +142,8 @@ public:
     bool      xorFinder;            // Automatically find xor-clauses and convert them
     bool      performReplace;       // Should var-replacing be performed?
     friend class FindUndef;
-    bool greedyUnbound; //If set to TRUE, then we will greedily unbound variables (set them to l_Undef)
-    void set_gaussian_decision_until(const uint to);
-    void set_gaussian_decision_from(const uint from);
+    bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
+    bool      dynamicRestarts;      // If set to true, the restart strategy will be dynamic
     
 
     enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3 };
@@ -223,6 +224,8 @@ protected:
     Heap<VarOrderLt>    order_heap;       // A priority queue of variables ordered with respect to the variable activity.
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
+    bqueue<unsigned int> nbDecisionLevelHistory; // Set of last decision level in conflict clauses
+    float               totalSumOfDecisionLevel;
     MTRand mtrand;                        // random number generator
     Logger logger;                       // dynamic logging, statistics
     friend class Logger;
