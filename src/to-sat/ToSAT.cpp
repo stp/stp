@@ -129,11 +129,11 @@ namespace BEEV
         if(add_xor_clauses)
           {         
             //cout << "addXorClause:\n";
-            newSolver.addXorClause(satSolverClause, false, 0, "z");
+            newSolver.addXorClause(satSolverClause, false, 0, (char*)"z");
           }
         else 
           {
-            newSolver.addClause(satSolverClause,0,"z");
+            newSolver.addClause(satSolverClause,0,(char*)"z");
           }
 #else
         newSolver.addClause(satSolverClause);
@@ -150,8 +150,8 @@ namespace BEEV
 
 #if defined CRYPTOMINISAT2
 	    newSolver.set_gaussian_decision_until(300);
-	    newSolver.performReplace = false;
-	    newSolver.xorFinder = false;
+	    newSolver.performReplace = true;
+	    newSolver.xorFinder = true;
 #endif
 	    newSolver.solve();
             bm->GetRunTimes()->stop(RunTimes::Solving);
