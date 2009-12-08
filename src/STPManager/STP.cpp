@@ -21,11 +21,16 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     
     //solver instantiated here
-#ifdef CORE
+#if defined CORE || defined CRYPTOMINISAT
     MINISAT::Solver NewSolver;
 #endif
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
+    if(bm->UserFlags.print_cnf_flag)
+      {
+	newS.needLibraryCNFFile("output.cnf");
+      }
+
 #endif
 #ifdef SIMP
     MINISAT::SimpSolver NewSolver;

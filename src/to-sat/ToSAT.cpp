@@ -90,10 +90,6 @@ namespace BEEV
 #endif
       }
 
-    if(bm->UserFlags.print_cnf_flag)
-      {
-	//newSolver.cnfDump = true;
-      }
 #ifdef CRYPTOMINISAT
     newSolver.startClauseAdding();
 #endif
