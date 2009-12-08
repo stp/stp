@@ -21,10 +21,12 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef BoundedQueue_h
 #define BoundedQueue_h
 
-#include "Vec.h"
+#include "../mtl/Vec.h"
 
 //=================================================================================================
 
+namespace MINISAT
+{
 
 template <class T>
 class bqueue {
@@ -71,6 +73,8 @@ public:
 
     void clear(bool dealloc = false)   { elems.clear(dealloc); first = 0; maxsize=0; queuesize=0;sumofqueue=0;}
 
+
+};
 
 };
 
