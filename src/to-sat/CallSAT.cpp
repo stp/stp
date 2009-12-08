@@ -25,6 +25,10 @@ namespace BEEV
           {
             cl_size = CLAUSAL_BUCKET_LIMIT;
           }
+	else
+	  {
+	    cl_size = CLAUSAL_BUCKET_LIMIT-1;
+	  }
 
         //If no clauses of size cl_size have been seen, then create a
         //bucket for that size
