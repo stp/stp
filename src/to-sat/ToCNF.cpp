@@ -638,23 +638,32 @@ namespace BEEV
     
 #if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     if ((x->clausespos != NULL 
-         && x->clausespos->size() > 1) 
-        || (doRenamePos(*x) && !wasVisited(*x)))
+         && (x->clausespos->size() > 1 
+	     || (renameAllSiblings 
+		 && !(x->clausespos->size()==1)  
+		 && !wasRenamedPos(*x))) 
+	 || (doRenamePos(*x) 
+	     && !wasVisited(*x))))
       {
         if (doSibRenamingPos(*x) 
             || sharesPos(*x) > 1 
-            || doRenamePos(*x))
+            || doRenamePos(*x)
+	    || renameAllSiblings)
           {
             doRenamingPos(varphi, defs);
           }
       }
-
 #else
 
-    if (x->clausespos != NULL && x->clausespos->size() > 1)
+    if (x->clausespos != NULL 
+	&& (x->clausespos->size() > 1
+	    || (renameAllSiblings 
+		&& !(x->clausesneg->size() == 1)  
+		&& !wasRenamedNeg(*x))))
       {
         if (doSibRenamingPos(*x) 
-            || sharesPos(*x) > 1)
+            || sharesPos(*x) > 1
+	    || renameAllSiblings)
           {
             doRenamingPos(varphi, defs);
           }
@@ -666,9 +675,15 @@ namespace BEEV
         convertFormulaToCNFNegCases(varphi, defs);
       }
     
-    if (x->clausesneg != NULL && x->clausesneg->size() > 1)
+    if (x->clausesneg != NULL 
+	&& (x->clausesneg->size() > 1
+	    || (renameAllSiblings
+		&& !(x->clausesneg->size() == 1)
+		&& !wasRenamedNeg(*x))))
       {
-        if (doSibRenamingNeg(*x) || sharesNeg(*x) > 1)
+        if (doSibRenamingNeg(*x) 
+	    || sharesNeg(*x) > 1
+	    || renameAllSiblings)
           {
             doRenamingNeg(varphi, defs);
           }
@@ -676,7 +691,13 @@ namespace BEEV
     
     //########################################
     //mark that we've already done the hard work
-    
+	
+    if(renameAllSiblings)
+      {
+	assert(info[varphi]->clausesneg == NULL 
+	       || info[varphi]->clausesneg->size() ==1);
+      }
+
     setWasVisited(*x);
   } //End of convertFormulaToCNF()
 
@@ -1156,6 +1177,11 @@ namespace BEEV
         reduceMemoryFootprintPos(*it);
       }
     }
+    if (renameAllSiblings)
+      {
+	assert(((unsigned)psi->size()) == varphi.GetChildren().size());
+      }
+
     info[varphi]->clausespos = psi;
   } //End of convertFormulaToCNFPosAND()
 
@@ -1334,6 +1360,11 @@ namespace BEEV
         xor_clause->insert(xor_clause->end(), 
                            ((*(info[*it]->clausespos))[0])->begin(),
                            ((*(info[*it]->clausespos))[0])->end());
+	if(renameAllSiblings)
+          {
+	    assert(info[*it]->clausespos->size() ==1);
+	    assert(info[*it]->clausesneg->size() ==1);
+          }
       }
     doRenamingPosXor(varphi);
     //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
@@ -1909,6 +1940,7 @@ namespace BEEV
   {
     bm = bmgr;
     clausesxor = new ClauseList();
+    renameAllSiblings = true;
   }
 
   //########################################

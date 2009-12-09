@@ -25,10 +25,10 @@ namespace BEEV
           {
             cl_size = CLAUSAL_BUCKET_LIMIT;
           }
-	// else
-	// 	  {
-	// 	    cl_size = CLAUSAL_BUCKET_LIMIT-1;
-	// 	  }
+	else
+	  {
+	    cl_size = CLAUSAL_BUCKET_LIMIT-1;
+	  }
 
         //If no clauses of size cl_size have been seen, then create a
         //bucket for that size
@@ -58,11 +58,11 @@ namespace BEEV
     for(int count=1;it!=itend;it++, count++)
       {
         ClauseList *cl = (*it).second;
-	if(CLAUSAL_BUCKET_LIMIT == count)
-	  {
-	    sat = toSATandSolve(SatSolver,*cl, false, true);
-	  }
-	else
+// 	if(CLAUSAL_BUCKET_LIMIT == count)
+// 	  {
+// 	    sat = toSATandSolve(SatSolver,*cl, false, true);
+// 	  }
+// 	else
 	  {
 	    sat = toSATandSolve(SatSolver,*cl);
 	  }
