@@ -41,6 +41,11 @@ namespace BEEV {
 #ifdef UNSOUND
     MINISAT::UnsoundSimpSolver NewSolver;
 #endif
+
+    if(bm->UserFlags.stats_flag)
+      {
+	NewSolver.verbosity = 1;
+      }
     
     if(bm->UserFlags.num_absrefine_flag)
       {

@@ -676,10 +676,10 @@ namespace BEEV
       }
     
     if (x->clausesneg != NULL 
-	&& (x->clausesneg->size() > 1
-	    || (renameAllSiblings
-		&& !(x->clausesneg->size() == 1)
-		&& !wasRenamedNeg(*x))))
+	&& (x->clausesneg->size() > 1))
+// 	    || (renameAllSiblings
+// 		&& !(x->clausesneg->size() == 1)
+// 		&& !wasRenamedNeg(*x))))
       {
         if (doSibRenamingNeg(*x) 
 	    || sharesNeg(*x) > 1
