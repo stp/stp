@@ -10,23 +10,23 @@
 
 #OPTIMIZE     = -g -pg            # Debugging and gprof-style profiling
 OPTIMIZE      = -g                # Debugging
-OPTIMIZE      = -O3               # Maximum optimization
+OPTIMIZE      = -O3 -fPIC         # Maximum optimization
 #OPTIMIZE      = -O3 -march=native # Maximum optimization
 #OPTIMIZE     = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
 #CFLAGS_M32   = -m32
 CFLAGS_BASE   = $(OPTIMIZE)
 
 # OPTION to compile CRYPTOMiniSAT
-# CRYPTOMINISAT  = true
-# CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT
-# MTL            = ../sat/cryptominisat/mtl
-# SOLVER_INCLUDE = ../sat/cryptominisat
+CRYPTOMINISAT  = true
+CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT
+MTL            = ../sat/cryptominisat/mtl
+SOLVER_INCLUDE = ../sat/cryptominisat
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
-CRYPTOMINISAT2 = true
-CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
-MTL            = ../sat/cryptominisat2/mtl
-SOLVER_INCLUDE = ../sat/cryptominisat2
+# CRYPTOMINISAT2 = true
+# CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
+# MTL            = ../sat/cryptominisat2/mtl
+# SOLVER_INCLUDE = ../sat/cryptominisat2
 
 # OPTION to compile MiniSAT
 #CORE          = true
