@@ -481,17 +481,6 @@ namespace BEEV
       {
         retval = CreateSimpAndOr(1, child0, child1);
       }
-//     //ITE (x, !y, y) == x XOR y
-//     else if (NOT == child1.GetKind() && (child1[0] == child2))
-//       {
-// 	retval = CreateSimpXor(child0, child2);
-//       }
-//     // ITE (x, y, !y) == x IFF y.  I think other cases are covered
-//     // by XOR/IFF optimizations
-//     else if (NOT == child2.GetKind() && (child2[0] == child1)) 
-//       {
-// 	retval = CreateSimpXor(CreateSimpNot(child0), child2);
-//       }
     else
       {
 	ASTNode left  = CreateNode(AND, child0, child1);

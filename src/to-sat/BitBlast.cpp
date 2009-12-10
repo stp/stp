@@ -1034,7 +1034,8 @@ namespace BEEV
         }
       case BVGT:
         {
-          return _bm->CreateSimpNot(BBBVLE(left, right, false));
+          //return _bm->CreateSimpNot(BBBVLE(left, right, false));
+          return BBBVLE(right, left, false, true);
           break;
         }
       case BVLT:
