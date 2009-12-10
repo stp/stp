@@ -37,6 +37,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Conglomerate.h"
 #include "XorFinder.h"
 #include "ClauseCleaner.h"
+#include "RestartTypeChooser.h"
 
 namespace MINISAT
 {
@@ -57,11 +58,10 @@ Solver::Solver() :
         , polarity_mode    (polarity_user)
         , verbosity        (0)
         , restrictedPickBranch(0)
-        , useRealUnknowns  (false)
         , xorFinder        (true)
         , performReplace   (true)
         , greedyUnbound    (false)
-        , dynamicRestarts  (false)
+        , restartType       (static_restart)
 
         // Statistics: (formerly in 'SolverStats')
         //
@@ -102,7 +102,7 @@ Solver::~Solver()
     for (int i = 0; i < learnts.size(); i++) free(learnts[i]);
     for (int i = 0; i < clauses.size(); i++) free(clauses[i]);
     for (int i = 0; i < xorclauses.size(); i++) free(xorclauses[i]);
-    for (uint i = 0; i < gauss_matrixes.size(); i++) delete gauss_matrixes[i];
+    clearGaussMatrixes();
     for (uint i = 0; i < freeLater.size(); i++) free(freeLater[i]);
     delete varReplacer;
     delete conglomerate;
@@ -184,9 +184,10 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
             p = lit_Undef;
             if (!assigns[ps[i].var()].isUndef())
                 xor_clause_inverted ^= assigns[ps[i].var()].getBool();
-        } else if (value(ps[i]) == l_Undef) //just add
+        } else if (assigns[ps[i].var()].isUndef()) //just add
             ps[j++] = p = ps[i];
-        else xor_clause_inverted ^= (value(ps[i]) == l_True); //modify xor_clause_inverted instead of adding
+        else //modify xor_clause_inverted instead of adding
+            xor_clause_inverted ^= (assigns[ps[i].var()].getBool());
     }
     ps.shrink(i - j);
 
@@ -199,7 +200,7 @@ bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted, const uint gro
         return ok = false;
     }
     case 1: {
-        assert(value(ps[0]) == l_Undef);
+        assert(assigns[ps[0].var()].isUndef());
         uncheckedEnqueue(ps[0] ^ xor_clause_inverted);
         if (dynamic_behaviour_analysis)
             logger.propagation((xor_clause_inverted) ? ~ps[0] : ps[0], Logger::add_clause_type, group);
@@ -256,7 +257,7 @@ bool Solver::addClause(vec<Lit>& ps, const uint group, char* group_name)
     Lit p;
     int i, j;
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
-        if (value(ps[i]) == l_True || ps[i] == ~p)
+        if (value(ps[i]).getBool() || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
             ps[j++] = p = ps[i];
@@ -412,13 +413,6 @@ void Solver::cancelUntil(int level)
     #endif
 }
 
-void Solver::setRealUnknown(const uint var)
-{
-    if (realUnknowns.size() < var+1)
-        realUnknowns.resize(var+1, false);
-    realUnknowns[var] = true;
-}
-
 void Solver::printLit(const Lit l) const
 {
     printf("%s%d:%c", l.sign() ? "-" : "", l.var()+1, value(l) == l_True ? '1' : (value(l) == l_False ? '0' : 'X'));
@@ -433,6 +427,13 @@ void Solver::needLibraryCNFFile(const char* fileName)
 void Solver::set_gaussian_decision_until(const uint to)
 {
     gaussconfig.decision_until = to;
+}
+
+void Solver::clearGaussMatrixes()
+{
+    for (uint i = 0; i < gauss_matrixes.size(); i++)
+        delete gauss_matrixes[i];
+    gauss_matrixes.clear();
 }
 
 //=================================================================================================
@@ -543,8 +544,7 @@ void Solver::analyze(Clause* confl, vec<Lit>& out_learnt, int& out_btlevel, int 
             const uint my_var = q.var();
 
             if (!seen[my_var] && level[my_var] > 0) {
-                if (!useRealUnknowns || (my_var < realUnknowns.size() && realUnknowns[my_var]))
-                    varBumpActivity(my_var);
+                varBumpActivity(my_var);
                 seen[my_var] = 1;
                 if (level[my_var] >= decisionLevel()) {
                     pathC++;
@@ -719,7 +719,7 @@ void Solver::uncheckedEnqueue(Lit p, Clause* from)
     cout << "uncheckedEnqueue var " << p.var()+1 << " to " << !p.sign() << " level: " << decisionLevel() << " sublevel: " << trail.size() << endl;
     #endif
     
-    assert(value(p) == l_Undef);
+    assert(assigns[p.var()].isUndef());
     const Var v = p.var();
     assigns [v] = boolToLBool(!p.sign());//lbool(!sign(p));  // <<== abstract but not uttermost effecient
     level   [v] = decisionLevel();
@@ -760,13 +760,12 @@ Clause* Solver::propagate(const bool xor_as_well)
         for(WatchedBin *k = wbin.getData(), *end = k + wbin.size(); k != end; k++) {
             Lit imp = k->impliedLit;
             lbool val = value(imp);
-            if (val == l_False)
-                return k->clause;
-            if (val == l_Undef) {
+            if (val.isUndef()) {
                 uncheckedEnqueue(imp, k->clause);
                 if (dynamic_behaviour_analysis)
                     logger.propagation(imp, Logger::simple_propagation_type, k->clause->group);
-            }
+            } else if (val == l_False)
+                return k->clause;
         }
         
         //Next, propagate normal clauses
@@ -791,7 +790,7 @@ Clause* Solver::propagate(const bool xor_as_well)
                 *j++ = &c;
             } else {
                 // Look for new watch:
-                for (uint k = 2; k != c.size(); k++)
+                for (int k = 2; k != c.size(); k++)
                     if (value(c[k]) != l_False) {
                         c[1] = c[k];
                         c[k] = false_lit;
@@ -1134,7 +1133,8 @@ llbool Solver::new_decision(int& nof_conflicts, int& conflictC)
 {
     
     // Reached bound on number of conflicts?
-    if (dynamicRestarts) {
+    switch (restartType) {
+    case dynamic_restart:
         if (nbDecisionLevelHistory.isvalid() &&
             ((nbDecisionLevelHistory.getavg()*0.7) > (totalSumOfDecisionLevel / conf4Stats))) {
             nbDecisionLevelHistory.fastclear();
@@ -1145,7 +1145,8 @@ llbool Solver::new_decision(int& nof_conflicts, int& conflictC)
             }
             return l_Undef;
         }
-    } else {
+        break;
+    case static_restart:
         if (nof_conflicts >= 0 && conflictC >= nof_conflicts) {
             progress_estimate = progressEstimate();
             cancelUntil(0);
@@ -1153,6 +1154,7 @@ llbool Solver::new_decision(int& nof_conflicts, int& conflictC)
                 logger.end(Logger::restarting);
             return l_Undef;
         }
+        break;
     }
 
     // Simplify the set of problem clauses:
@@ -1237,7 +1239,7 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, Clause* confl, int& conf
     learnt_clause.clear();
     analyze(confl, learnt_clause, backtrack_level, nbLevels);
     conf4Stats++;
-    if (dynamicRestarts) {
+    if (restartType == dynamic_restart) {
         nbDecisionLevelHistory.push(nbLevels);
         totalSumOfDecisionLevel += nbLevels;
     }
@@ -1331,6 +1333,98 @@ void Solver::print_gauss_sum_stats() const
     }
 }
 
+inline void Solver::chooseRestartType(const lbool& status, RestartTypeChooser& restartTypeChooser)
+{
+    if (status.isUndef() && starts > 2 && starts < 8) {
+        RestartType tmp = restartTypeChooser.choose();
+        if (starts == 7) {
+            if (tmp == dynamic_restart) {
+                nbDecisionLevelHistory.fastclear();
+                nbDecisionLevelHistory.initSize(100);
+                totalSumOfDecisionLevel = 0;
+                clearGaussMatrixes();
+                if (verbosity >= 1)
+                    printf("|                           Decided on dynamic restart strategy                         |\n");
+            } else  {
+                if (verbosity >= 1)
+                    printf("|                            Decided on static restart strategy                         |\n");
+            }
+            restartType = tmp;
+        }
+    } else {
+        #ifdef VERBOSE_DEBUG
+        restartTypeChooser.choose();
+        #endif
+    }
+}
+
+inline void Solver::performStepsBeforeSolve()
+{
+    if (performReplace
+        && ((double)varReplacer->getNewToReplaceVars()/(double)order_heap.size()) > PERCENTAGEPERFORMREPLACE) {
+        varReplacer->performReplace();
+    if (!ok) return;
+    }
+    
+    if (xorFinder) {
+        double time;
+        if (clauses.size() < 400000) {
+            time = cpuTime();
+            uint sumLengths = 0;
+            XorFinder xorFinder(this, clauses);
+            uint foundXors = xorFinder.doNoPart(sumLengths, 2, 10);
+            if (!ok) return;
+            
+            if (verbosity >=1)
+                printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
+            
+            if (performReplace
+                && ((double)varReplacer->getNewToReplaceVars()/(double)order_heap.size()) > PERCENTAGEPERFORMREPLACE) {
+                varReplacer->performReplace();
+            if (!ok) return;
+            }
+        }
+        
+        if (xorclauses.size() > 1) {
+            uint orig_total = 0;
+            uint orig_num_cls = xorclauses.size();
+            for (uint i = 0; i < xorclauses.size(); i++) {
+                orig_total += xorclauses[i]->size();
+            }
+            
+            time = cpuTime();
+            uint foundCong = conglomerate->conglomerateXors();
+            if (verbosity >=1)
+                printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
+            if (!ok) return;
+            
+            uint new_total = 0;
+            uint new_num_cls = xorclauses.size();
+            for (uint i = 0; i < xorclauses.size(); i++) {
+                new_total += xorclauses[i]->size();
+            }
+            if (verbosity >=1) {
+                printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
+                printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
+            }
+            
+            if (performReplace
+                && ((double)varReplacer->getNewToReplaceVars()/(double)order_heap.size()) > PERCENTAGEPERFORMREPLACE) {
+                varReplacer->performReplace();
+            if (!ok) return;
+            }
+        }
+    }
+    
+    if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
+        double time = cpuTime();
+        MatrixFinder m(this);
+        const uint numMatrixes = m.findMatrixes();
+        if (verbosity >=1)
+            printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
+    }
+}
+
 lbool Solver::solve(const vec<Lit>& assumps)
 {
     if (libraryCNFFile)
@@ -1338,11 +1432,10 @@ lbool Solver::solve(const vec<Lit>& assumps)
     
     model.clear();
     conflict.clear();
-    if (dynamicRestarts) {
-        nbDecisionLevelHistory.fastclear();
-        nbDecisionLevelHistory.initSize(100);
-        totalSumOfDecisionLevel = 0;
-    }
+    clearGaussMatrixes();
+    restartType = static_restart;
+    conglomerate->addRemovedClauses();
+    starts = 0;
 
     if (!ok) return l_False;
 
@@ -1358,70 +1451,8 @@ lbool Solver::solve(const vec<Lit>& assumps)
             nbclausesbeforereduce = (nClauses() * learntsize_factor)/2;
     }
     
-    conglomerate->addRemovedClauses();
-    
-    if (performReplace) {
-        varReplacer->performReplace();
-        if (!ok) return l_False;
-    }
-
-    if (xorFinder) {
-        double time;
-        if (clauses.size() < 400000) {
-            time = cpuTime();
-            clauseCleaner->removeSatisfied(clauses, ClauseCleaner::clauses);
-            clauseCleaner->cleanClauses(clauses, ClauseCleaner::clauses);
-            uint sumLengths = 0;
-            XorFinder xorFinder(this, clauses);
-            uint foundXors = xorFinder.doNoPart(sumLengths, 2, 10);
-            if (!ok) return l_False;
-            
-            if (verbosity >=1)
-                printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
-            
-            if (performReplace) {
-                varReplacer->performReplace();
-                if (!ok) return l_False;
-            }
-        }
-        
-        if (xorclauses.size() > 1) {
-            uint orig_total = 0;
-            uint orig_num_cls = xorclauses.size();
-            for (uint i = 0; i < xorclauses.size(); i++) {
-                orig_total += xorclauses[i]->size();
-            }
-            
-            time = cpuTime();
-            uint foundCong = conglomerate->conglomerateXors();
-            if (verbosity >=1)
-                printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
-            if (!ok) return l_False;
-            
-            uint new_total = 0;
-            uint new_num_cls = xorclauses.size();
-            for (uint i = 0; i < xorclauses.size(); i++) {
-                new_total += xorclauses[i]->size();
-            }
-            if (verbosity >=1) {
-                printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
-                printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
-            }
-            
-            if (performReplace) {
-                varReplacer->performReplace();
-                if (!ok) return l_False;
-            }
-        }
-    }
-    
-    if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
-        double time = cpuTime();
-        MatrixFinder m(this);
-        const uint numMatrixes = m.findMatrixes();
-        if (verbosity >=1)
-            printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
-    }
+    performStepsBeforeSolve();
+    if (!ok) return l_False;
     
 
     if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on)) {
@@ -1433,28 +1464,24 @@ lbool Solver::solve(const vec<Lit>& assumps)
     
     if (dynamic_behaviour_analysis)
         logger.end(Logger::done_adding_clauses);
-
+    
+    RestartTypeChooser restartTypeChooser(this);
+    
     // Search:
     while (status == l_Undef && starts < maxRestarts) {
-        clauseCleaner->removeSatisfied(clauses, ClauseCleaner::clauses);
-        clauseCleaner->removeSatisfied(xorclauses, ClauseCleaner::xorclauses);
-        clauseCleaner->removeSatisfied(learnts, ClauseCleaner::learnts);
-        
-        clauseCleaner->cleanClauses(clauses, ClauseCleaner::clauses);
-        clauseCleaner->cleanClauses(xorclauses, ClauseCleaner::xorclauses);
-        clauseCleaner->cleanClauses(learnts, ClauseCleaner::learnts);
+        clauseCleaner->removeAndCleanAll();
         
         if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on))  {
             printf("| %9d | %7d %8d %8d | %8d %8d %6.0f |", (int)conflicts, order_heap.size(), nClauses(), (int)clauses_literals, (int)nbclausesbeforereduce*curRestart, nLearnts(), (double)learnts_literals/nLearnts());
             print_gauss_sum_stats();
         }
-        for (Gaussian **gauss = &gauss_matrixes[0], **end= gauss + gauss_matrixes.size(); gauss != end; gauss++)
-            (*gauss)->reset_stats();
         
         if (dynamic_behaviour_analysis)
             logger.begin();
         status = search((int)nof_conflicts);
         nof_conflicts *= restart_inc;
+        
+        chooseRestartType(status, restartTypeChooser);
     }
 
     if (verbosity >= 1 && !(dynamic_behaviour_analysis && logger.statistics_on)) {
@@ -1576,5 +1603,6 @@ void Solver::checkLiteralCount()
         assert((int)clauses_literals == cnt);
     }
 }
+
 
 };

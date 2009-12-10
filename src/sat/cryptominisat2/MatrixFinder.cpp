@@ -80,7 +80,6 @@ const uint MatrixFinder::findMatrixes()
     if (S->xorclauses.size() == 0)
         return 0;
     
-    S->clauseCleaner->removeSatisfied(S->xorclauses, ClauseCleaner::xorclauses);
     S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
     
     for (XorClause** c = S->xorclauses.getData(), **end = c + S->xorclauses.size(); c != end; c++) {
@@ -188,10 +187,10 @@ const uint MatrixFinder::setMatrixes()
             realMatrixNum++;
             
         } else {
-            if (S->verbosity >=1)
+            if (S->verbosity >=1  && numXorInMatrix[a].second >= 20)
                 cout << "|  Unused Matrix ";
         }
-        if (S->verbosity >=1) {
+        if (S->verbosity >=1 && numXorInMatrix[a].second >= 20) {
             cout << std::setw(5) << numXorInMatrix[a].second << " x" << std::setw(5) << reverseTable[i].size();
             cout << "  density:" << std::setw(5) << std::fixed << std::setprecision(1) << density << "%";
             cout << "  xorlen avg:" << std::setw(5) << std::fixed << std::setprecision(2)  << avg;

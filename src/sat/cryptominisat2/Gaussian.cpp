@@ -79,11 +79,11 @@ inline void Gaussian::set_matrixset_to_cur()
 llbool Gaussian::full_init()
 {
     if (!should_init()) return l_Nothing;
+    reset_stats();
     
     bool do_again_gauss = true;
     while (do_again_gauss) {
         do_again_gauss = false;
-        solver.clauseCleaner->removeSatisfied(solver.xorclauses, ClauseCleaner::xorclauses);
         solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
         init();
         Clause* confl;

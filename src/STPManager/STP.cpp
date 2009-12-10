@@ -21,17 +21,15 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     
     //solver instantiated here
-#if defined CORE || defined CRYPTOMINISAT
+#if defined CORE || defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
 #endif
 
 #if defined CRYPTOMINISAT2
-    MINISAT::Solver NewSolver;
     if(bm->UserFlags.print_cnf_flag)
       {
 	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
       }
-    NewSolver.dynamicRestarts = false;
 #endif
 
 #ifdef SIMP

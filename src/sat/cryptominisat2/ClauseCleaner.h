@@ -30,15 +30,17 @@ class ClauseCleaner
         
         enum ClauseSetType {clauses, xorclauses, learnts, conglomerate};
         
-        void cleanClauses(vec<Clause*>& cs, ClauseSetType type);
-        void cleanClauses(vec<XorClause*>& cs, ClauseSetType type);
-        void removeSatisfied(vec<Clause*>& cs, ClauseSetType type);
-        void removeSatisfied(vec<XorClause*>& cs, ClauseSetType type);
+        void cleanClauses(vec<Clause*>& cs, ClauseSetType type, const uint limit = 0);
+        void cleanClauses(vec<XorClause*>& cs, ClauseSetType type, const uint limit = 0);
+        void removeSatisfied(vec<Clause*>& cs, ClauseSetType type, const uint limit = 0);
+        void removeSatisfied(vec<XorClause*>& cs, ClauseSetType type, const uint limit = 0);
+        void removeAndCleanAll();
         bool satisfied(const Clause& c) const;
         bool satisfied(const XorClause& c) const;
         
     private:
-        bool cleanClause(Clause& c);
+        const bool cleanClause(Clause& c);
+        const bool cleanClause(XorClause& c);
         
         uint lastNumUnitarySat[4];
         uint lastNumUnitaryClean[4];
@@ -46,6 +48,15 @@ class ClauseCleaner
         Solver& solver;
 };
 
-};
+inline void ClauseCleaner::removeAndCleanAll()
+{
+    uint limit = (double)solver.order_heap.size() * PERCENTAGEPERFORMREPLACE;
+    
+    cleanClauses(solver.clauses, ClauseCleaner::clauses, limit);
+    cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses, limit);
+    cleanClauses(solver.learnts, ClauseCleaner::learnts, limit);
+}
 
+
+};
 #endif //CLAUSECLEANER_H

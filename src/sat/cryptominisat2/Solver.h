@@ -37,6 +37,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Logger.h"
 #include "constants.h"
 #include "BoundedQueue.h"
+#include "RestartTypeChooser.h"
 
 #ifdef _MSC_VER
   #include <ctime>
@@ -96,8 +97,6 @@ public:
     void    setPolarity    (Var v, bool b); // Declare which polarity the decision heuristic should use for a variable. Requires mode 'polarity_user'.
     void    setDecisionVar (Var v, bool b); // Declare if a variable should be eligible for selection in the decision heuristic.
     void    setSeed (const uint32_t seed);  // Sets the seed to be the given number
-    void    needRealUnknowns();             // Uses the "real unknowns" set by setRealUnknown
-    void    setRealUnknown(const uint var); //sets a variable to be 'real', i.e. to preferentially branch on it during solving (when useRealUnknown it turned on)
     void    setMaxRestarts(const uint num); //sets the maximum number of restarts to given value
     void    set_gaussian_decision_until(const uint to);
     template<class T>
@@ -137,13 +136,11 @@ public:
     int       polarity_mode;      // Controls which polarity the decision heuristic chooses. See enum below for allowed modes. (default polarity_false)
     int       verbosity;          // Verbosity level. 0=silent, 1=some progress report                                         (default 0)
     Var       restrictedPickBranch; // Pick variables to branch on preferentally from the highest [0, restrictedPickBranch]. If set to 0, preferentiality is turned off (i.e. picked randomly between [0, all])
-    bool      useRealUnknowns;    // Whether 'real unknown' optimization should be used. If turned on, VarActivity is only bumped for variables for which the real_unknowns[var] == true
-    vector<bool> realUnknowns;    // The important variables. This vector stores 'false' at realUnknowns[var] if the var is not a real unknown, and stores a 'true' if it is a real unkown. If var is larger than realUnkowns.size(), then it is not an important variable
     bool      xorFinder;            // Automatically find xor-clauses and convert them
     bool      performReplace;       // Should var-replacing be performed?
     friend class FindUndef;
     bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
-    bool      dynamicRestarts;      // If set to true, the restart strategy will be dynamic
+    RestartType restartType;      // If set to true, the restart strategy will be dynamic
     
 
     enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3 };
@@ -169,6 +166,7 @@ protected:
     vector<Gaussian*> gauss_matrixes;
     GaussianConfig gaussconfig;
     void print_gauss_sum_stats() const;
+    void clearGaussMatrixes();
     friend class Gaussian;
     
     
@@ -296,9 +294,12 @@ protected:
     friend class MatrixFinder;
     friend class VarReplacer;
     friend class ClauseCleaner;
+    friend class RestartTypeChooser;
     Conglomerate* conglomerate;
     VarReplacer* varReplacer;
     ClauseCleaner* clauseCleaner;
+    void chooseRestartType(const lbool& status, RestartTypeChooser& restartTypeChooser);
+    void performStepsBeforeSolve();
 
     // Debug:
     void     printLit         (const Lit l) const;
@@ -431,10 +432,6 @@ inline void     Solver::setVariableName(int var, char* name)
     if (dynamic_behaviour_analysis)
         logger.set_variable_name(var, name);
 } // Sets the varible 'var'-s name to 'name' in the logger
-inline void     Solver::needRealUnknowns()
-{
-    useRealUnknowns = true;
-}
 inline const uint Solver::get_unitary_learnts_num() const
 {
     if (decisionLevel() > 0)

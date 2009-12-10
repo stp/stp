@@ -54,10 +54,6 @@ void VarReplacer::performReplace()
     cout << "Replacer started." << endl;
     #endif
     
-    S->clauseCleaner->removeSatisfied(S->clauses, ClauseCleaner::clauses);
-    S->clauseCleaner->removeSatisfied(S->learnts, ClauseCleaner::learnts);
-    S->clauseCleaner->removeSatisfied(S->xorclauses, ClauseCleaner::xorclauses);
-    
     S->clauseCleaner->cleanClauses(S->clauses, ClauseCleaner::clauses);
     S->clauseCleaner->cleanClauses(S->learnts, ClauseCleaner::learnts);
     S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
@@ -281,6 +277,11 @@ const uint VarReplacer::getNumReplacedVars() const
 const uint VarReplacer::getNumLastReplacedVars() const
 {
     return lastReplacedVars;
+}
+
+const uint VarReplacer::getNewToReplaceVars() const
+{
+    return replacedVars-lastReplacedVars;
 }
 
 const vector<Lit>& VarReplacer::getReplaceTable() const
