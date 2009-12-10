@@ -1940,7 +1940,7 @@ namespace BEEV
   {
     bm = bmgr;
     clausesxor = new ClauseList();
-    renameAllSiblings = true;
+    renameAllSiblings = false;
   }
 
   //########################################
