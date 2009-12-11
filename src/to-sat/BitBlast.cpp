@@ -925,6 +925,7 @@ namespace BEEV
     ASTVec bit_comparisons;
     bit_comparisons.push_back(this_compare_bit);
     
+    //(lit IFF rit) is the same as (NOT(lit) XOR rit)
     ASTNode prev_eq_bit = 
       _bm->CreateSimpForm(XOR, 
 			  _bm->CreateSimpForm(NOT,*lit), 
@@ -932,13 +933,14 @@ namespace BEEV
     for(lit++, rit++; lit < litend; lit++, rit++)
       {
         this_compare_bit = 
-          _bm->CreateSimpForm(AND, _bm->CreateSimpNot(*lit), *rit);
+          _bm->CreateSimpForm(AND, 
+			      _bm->CreateSimpNot(*lit), 
+			      *rit);
 
         ASTNode thisbit_output = 
           _bm->CreateSimpForm(AND, this_compare_bit, prev_eq_bit);
         bit_comparisons.push_back(thisbit_output);
-
-        // (neg(lit) OR rit)(lit OR neg(rit))
+  
         ASTNode this_eq_bit = 
           _bm->CreateSimpForm(AND,
                               _bm->CreateSimpForm(XOR,
@@ -1105,7 +1107,9 @@ namespace BEEV
         return n;
       }
     else
-      return _bm->CreateSimpForm(XOR, 
-				 _bm->CreateSimpForm(NOT,*lit), *rit);
+      {
+	return _bm->CreateSimpForm(XOR, 
+				   _bm->CreateSimpForm(NOT,*lit), *rit);
+      }
   }
 } // BEEV namespace
