@@ -139,8 +139,8 @@ namespace BEEV
         }
       default:
         {
-	  //return CreateNode(NOT, form);
-          return CreateNode(XOR, ASTTrue, form);
+	  return CreateNode(NOT, form);
+          //return CreateNode(XOR, ASTTrue, form);
         }
       }
   }
