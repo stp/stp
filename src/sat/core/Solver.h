@@ -100,15 +100,15 @@ public:
 
     // Problem specification:
     //
-    Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
-    bool    addClause (vec<Lit>& ps);                           // Add a clause to the solver. NOTE! 'ps' may be shrunk by this method!
+    virtual Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
+    virtual bool    addClause (vec<Lit>& ps);                           // Add a clause to the solver. NOTE! 'ps' may be shrunk by this method!
 
 
     // Solving:
     //
-    bool    simplify     ();                        // Removes already satisfied clauses.
+    virtual bool    simplify     ();                        // Removes already satisfied clauses.
     bool    solve        (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions.
-    bool    solve        ();                        // Search without assumptions.
+    virtual bool    solve        ();                        // Search without assumptions.
     bool    okay         () const;                  // FALSE means solver is in a conflicting state
 
     // Variable mode:

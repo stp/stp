@@ -98,7 +98,7 @@ class SimpSolver : public Solver {
     // Solving:
     //
     bool    solve     (const vec<Lit>& assumps, bool do_simp = true, bool turn_off_simp = false);
-    bool    solve     (bool do_simp = true, bool turn_off_simp = false);
+    bool    solve     ();
     bool    eliminate (bool turn_off_elim = false);  // Perform variable elimination based simplification. 
 
     // Generate a (possibly simplified) DIMACS file:
@@ -208,7 +208,7 @@ inline vec<Clause*>& SimpSolver::getOccurs(Var x) {
 
 inline bool  SimpSolver::isEliminated (Var v) const { return v < elimtable.size() && elimtable[v].order != 0; }
 inline void  SimpSolver::setFrozen    (Var v, bool b) { frozen[v] = (char)b; if (b) { updateElimHeap(v); } }
-inline bool  SimpSolver::solve        (bool do_simp, bool turn_off_simp) { vec<Lit> tmp; return solve(tmp, do_simp, turn_off_simp); }
+inline bool  SimpSolver::solve        () { vec<Lit> tmp; return solve(tmp, true, false); }
 
 //=================================================================================================
 };
