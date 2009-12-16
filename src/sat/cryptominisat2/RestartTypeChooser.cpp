@@ -27,7 +27,7 @@ using namespace MINISAT;
 RestartTypeChooser::RestartTypeChooser(const Solver* const _S) :
     S(_S)
     , topX(100)
-    , limit(40)
+    , limit(30)
 {
 }
 
@@ -37,7 +37,8 @@ const RestartType RestartTypeChooser::choose()
     calcHeap();
     uint sameIn = 0;
     if (!firstVarsOld.empty()) {
-        for (uint i = 0; i < 100; i++) {
+        uint thisTopX = std::min(firstVarsOld.size(), (size_t)topX);
+        for (uint i = 0; i != thisTopX; i++) {
             if (std::find(firstVars.begin(), firstVars.end(), firstVarsOld[i]) != firstVars.end())
                 sameIn++;
         }
@@ -68,12 +69,13 @@ const double RestartTypeChooser::avg() const
 
 void RestartTypeChooser::calcHeap()
 {
-    firstVars.resize(100);
+    firstVars.resize(topX);
     #ifdef VERBOSE_DEBUG
     std::cout << "First vars:" << std::endl;
     #endif
     Heap<Solver::VarOrderLt> tmp(S->order_heap);
-    for (uint i = 0; i != 100; i++) {
+    uint thisTopX = std::min(S->order_heap.size(), (int)topX);
+    for (uint i = 0; i != thisTopX; i++) {
         #ifdef VERBOSE_DEBUG
         std::cout << tmp.removeMin()+1 << ", ";
         #endif

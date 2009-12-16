@@ -67,6 +67,7 @@ class VarReplacer
         vec<Clause*> clauses;
         
         uint replacedLits;
+        uint lastReplacedLits;
         uint replacedVars;
         uint lastReplacedVars;
         bool addedNewClause;

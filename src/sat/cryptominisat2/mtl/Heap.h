@@ -22,6 +22,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Vec.h"
 #include "string.h"
+#include <stdint.h>
+#define UINT32_MAX ((uint32_t)-1)
 
 namespace MINISAT
 {
@@ -33,18 +35,18 @@ namespace MINISAT
 template<class Comp>
 class Heap {
     Comp     lt;
-    vec<int> heap;     // heap of ints
-    vec<int> indices;  // int -> index in heap
+    vec<uint32_t> heap;     // heap of ints
+    vec<uint32_t> indices;  // int -> index in heap
 
     // Index "traversal" functions
-    static inline int left  (int i) { return i*2+1; }
-    static inline int right (int i) { return (i+1)*2; }
-    static inline int parent(int i) { return (i-1) >> 1; }
+    static inline uint32_t left  (uint32_t i) { return i*2+1; }
+    static inline uint32_t right (uint32_t i) { return (i+1)*2; }
+    static inline uint32_t parent(uint32_t i) { return (i-1) >> 1; }
 
 
     inline void percolateUp(int i)
     {
-        int x = heap[i];
+        uint32_t x = heap[i];
         while (i != 0 && lt(x, heap[parent(i)])){
             heap[i]          = heap[parent(i)];
             indices[heap[i]] = i;
@@ -55,9 +57,9 @@ class Heap {
     }
 
 
-    inline void percolateDown(int i)
+    inline void percolateDown(uint32_t i)
     {
-        int x = heap[i];
+        uint32_t x = heap[i];
         while (left(i) < heap.size()){
             int child = right(i) < heap.size() && lt(heap[right(i)], heap[left(i)]) ? right(i) : left(i);
             if (!lt(heap[child], x)) break;
@@ -70,7 +72,7 @@ class Heap {
     }
 
 
-    bool heapProperty (int i) const {
+    bool heapProperty (uint32_t i) const {
         return i >= heap.size()
             || ((i == 0 || !lt(heap[i], heap[parent(i)])) && heapProperty(left(i)) && heapProperty(right(i))); }
 
@@ -86,18 +88,18 @@ class Heap {
 
     int  size      ()          const { return heap.size(); }
     bool empty     ()          const { return heap.size() == 0; }
-    bool inHeap    (int n)     const { return n < indices.size() && indices[n] >= 0; }
-    int  operator[](int index) const { assert(index < heap.size()); return heap[index]; }
+    bool inHeap    (uint32_t n)     const { return n < indices.size() && indices[n] != UINT32_MAX; }
+    int  operator[](uint32_t index) const { assert(index < heap.size()); return heap[index]; }
 
-    void decrease  (int n) { assert(inHeap(n)); percolateUp(indices[n]); }
+    void decrease  (uint32_t n) { assert(inHeap(n)); percolateUp(indices[n]); }
 
     // RENAME WHEN THE DEPRECATED INCREASE IS REMOVED.
-    void increase_ (int n) { assert(inHeap(n)); percolateDown(indices[n]); }
+    void increase_ (uint32_t n) { assert(inHeap(n)); percolateDown(indices[n]); }
 
 
-    void insert(int n)
+    void insert(uint32_t n)
     {
-        indices.growTo(n+1, -1);
+        indices.growTo(n+1, UINT32_MAX);
         assert(!inHeap(n));
 
         indices[n] = heap.size();
@@ -111,7 +113,7 @@ class Heap {
         int x            = heap[0];
         heap[0]          = heap.last();
         indices[heap[0]] = 0;
-        indices[x]       = -1;
+        indices[x]       = UINT32_MAX;
         heap.pop();
         if (heap.size() > 1) percolateDown(0);
         return x; 
@@ -120,18 +122,18 @@ class Heap {
 
     void clear(bool dealloc = false) 
     { 
-        for (int i = 0; i < heap.size(); i++)
-            indices[heap[i]] = -1;
-#ifdef NDEBUG
-        for (int i = 0; i < indices.size(); i++)
-            assert(indices[i] == -1);
+        for (uint32_t i = 0; i != heap.size(); i++)
+            indices[heap[i]] = UINT32_MAX;
+#ifndef NDEBUG
+        for (uint32_t i = 0; i != indices.size(); i++)
+            assert(indices[i] == UINT32_MAX);
 #endif
         heap.clear(dealloc); 
     }
 
 
     // Fool proof variant of insert/decrease/increase
-    void update (int n)
+    void update (uint32_t n)
     {
         if (!inHeap(n))
             insert(n);
@@ -146,13 +148,13 @@ class Heap {
     // *** this could probaly be replaced with a more general "buildHeap(vec<int>&)" method ***
     template <class F>
     void filter(const F& filt) {
-        int i,j;
-        for (i = j = 0; i < heap.size(); i++)
+        uint32_t i,j;
+        for (i = j = 0; i != heap.size(); i++)
             if (filt(heap[i])){
                 heap[j]          = heap[i];
                 indices[heap[i]] = j++;
             }else
-                indices[heap[i]] = -1;
+                indices[heap[i]] = UINT32_MAX;
 
         heap.shrink(i - j);
         for (int i = heap.size() / 2 - 1; i >= 0; i--)
@@ -168,8 +170,8 @@ class Heap {
 
 
     // COMPAT: should be removed
-    void setBounds (int n) { }
-    void increase  (int n) { decrease(n); }
+    void setBounds (uint32_t n) { }
+    void increase  (uint32_t n) { decrease(n); }
     int  getmin    ()      { return removeMin(); }
 
 };

@@ -48,7 +48,7 @@ void ClauseCleaner::removeSatisfied(vec<XorClause*>& cs, ClauseSetType type, con
         else
             cs[j++] = cs[i];
     }
-    cs.shrink(i - j);
+    cs.shrink_(i - j);
     
     lastNumUnitarySat[type] = solver.get_unitary_learnts_num();
 }
@@ -69,7 +69,7 @@ void ClauseCleaner::removeSatisfied(vec<Clause*>& cs, ClauseSetType type, const 
         else
             cs[j++] = cs[i];
     }
-    cs.shrink(i - j);
+    cs.shrink_(i - j);
     
     lastNumUnitarySat[type] = solver.get_unitary_learnts_num();
 }
@@ -97,8 +97,13 @@ inline const bool ClauseCleaner::cleanClause(Clause& c)
         solver.detachModifiedClause(origLit1, origLit2, c.size(), &c);
         c.shrink(i-j);
         solver.attachClause(c);
-    } else
+    } else {
         c.shrink(i-j);
+        if (c.learnt())
+            solver.learnts_literals -= i-j;
+        else
+            solver.clauses_literals -= i-j;
+    }
     
     return false;
 }
@@ -187,13 +192,14 @@ inline const bool ClauseCleaner::cleanClause(XorClause& c)
             return true;
         }
         default:
+            solver.clauses_literals -= i-j;
             return false;
     }
 }
 
 bool ClauseCleaner::satisfied(const Clause& c) const
 {
-    for (uint i = 0; i < c.size(); i++)
+    for (uint i = 0; i != c.size(); i++)
         if (solver.value(c[i]) == l_True)
             return true;
         return false;
@@ -202,7 +208,7 @@ bool ClauseCleaner::satisfied(const Clause& c) const
 bool ClauseCleaner::satisfied(const XorClause& c) const
 {
     bool final = c.xor_clause_inverted();
-    for (uint k = 0; k < c.size(); k++ ) {
+    for (uint k = 0; k != c.size(); k++ ) {
         const lbool& val = solver.assigns[c[k].var()];
         if (val.isUndef()) return false;
         final ^= val.getBool();

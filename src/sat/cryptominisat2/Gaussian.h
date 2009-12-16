@@ -61,7 +61,7 @@ public:
     void set_disabled(const bool toset);
 
     //functions used throughout the Solver
-    void canceling(const int sublevel);
+    void canceling(const uint sublevel);
 
 protected:
     Solver& solver;
@@ -82,7 +82,6 @@ protected:
     {
     public:
         PackedMatrix matrix; // The matrix, updated to reflect variable assignements
-        PackedMatrix varset; // The matrix, without variable assignements. The xor-clause is read from here. This matrix only follows the 'matrix' with its row-swap, row-xor, and row-delete operations.
         BitArray var_is_set;
         vector<Var> col_to_var; // col_to_var[COL] tells which variable is at a given column in the matrix. Gives unassigned_var if the COL has been zeroed (i.e. the variable assigned)
         uint16_t num_rows; // number of active rows in the matrix. Unactive rows are rows that contain only zeros (and if they are conflicting, then the conflict has been treated)
@@ -173,7 +172,7 @@ inline bool Gaussian::should_check_gauss(const uint decisionlevel, const uint st
             && decisionlevel < config.decision_until);
 }
 
-inline void Gaussian::canceling(const int sublevel)
+inline void Gaussian::canceling(const uint sublevel)
 {
     if (disabled)
         return;
@@ -186,7 +185,7 @@ inline void Gaussian::canceling(const int sublevel)
     
     if (messed_matrix_vars_since_reversal)
         return;
-    int c = std::min(gauss_last_level, solver.trail.size()-1);
+    int c = std::min((int)gauss_last_level, (int)(solver.trail.size())-1);
     for (; c >= sublevel; c--) {
         Var var  = solver.trail[c].var();
         if (var < var_is_in.getSize()

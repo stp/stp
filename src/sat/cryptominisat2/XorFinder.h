@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Clause.h"
 #include <sys/types.h>
 #include "VarReplacer.h"
+#include "ClauseCleaner.h"
 
 namespace MINISAT
 {
@@ -33,8 +34,8 @@ class XorFinder
 {
     public:
         
-        XorFinder(Solver* S, vec<Clause*>& cls);
-        uint doNoPart(uint& sumLengths, const uint minSize, const uint maxSize);
+        XorFinder(Solver* S, vec<Clause*>& cls, ClauseCleaner::ClauseSetType _type);
+        uint doNoPart(const uint minSize, const uint maxSize);
         
     private:
         typedef vector<pair<Clause*, uint> > ClauseTable;
@@ -105,6 +106,7 @@ class XorFinder
         void clearToRemove();
         
         vec<Clause*>& cls;
+        ClauseCleaner::ClauseSetType type;
         
         bool clauseEqual(const Clause& c1, const Clause& c2) const;
         bool impairSigns(const Clause& c) const;

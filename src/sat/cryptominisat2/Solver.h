@@ -59,9 +59,6 @@ class XorFinder;
 class FindUndef;
 class ClauseCleaner;
 
-//#define VERBOSE_DEBUG_XOR
-//#define VERBOSE_DEBUG
-
 #ifdef VERBOSE_DEBUG
 using std::cout;
 using std::endl;
@@ -113,10 +110,10 @@ public:
     lbool   value      (const Var& x) const;       // The current value of a variable.
     lbool   value      (const Lit& p) const;       // The current value of a literal.
     lbool   modelValue (const Lit& p) const;       // The value of a literal in the last model. The last call to solve must have been satisfiable.
-    int     nAssigns   ()      const;       // The current number of assigned literals.
-    int     nClauses   ()      const;       // The current number of original clauses.
-    int     nLearnts   ()      const;       // The current number of learnt clauses.
-    int     nVars      ()      const;       // The current number of variables.
+    uint32_t     nAssigns   ()      const;       // The current number of assigned literals.
+    uint32_t     nClauses   ()      const;       // The current number of original clauses.
+    uint32_t     nLearnts   ()      const;       // The current number of learnt clauses.
+    uint32_t     nVars      ()      const;       // The current number of variables.
 
     // Extra results: (read-only member variable)
     //
@@ -149,12 +146,12 @@ public:
     //
     uint64_t starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t clauses_literals, learnts_literals, max_literals, tot_literals;
-    uint64_t nbDL2, nbBin, nbReduceDB;
+    uint64_t nbDL2, nbBin, lastNbBin, nbReduceDB;
 
     //Logging
     void needStats();              // Prepares the solver to output statistics
     void needProofGraph();         // Prepares the solver to output proof graphs during solving
-    void setVariableName(int var, char* name); // Sets the name of the variable 'var' to 'name'. Useful for statistics and proof logs (i.e. used by 'logger')
+    void setVariableName(Var var, char* name); // Sets the name of the variable 'var' to 'name'. Useful for statistics and proof logs (i.e. used by 'logger')
     const vec<Clause*>& get_sorted_learnts(); //return the set of learned clauses, sorted according to the logic used in MiniSat to distinguish between 'good' and 'bad' clauses
     const vec<Clause*>& get_learnts() const; //Get all learnt clauses that are >1 long
     const vector<Lit> get_unitary_learnts() const; //return the set of unitary learnt clauses
@@ -198,7 +195,7 @@ protected:
     vec<XorClause*>     freeLater;        // List of xorclauses to free at the end (due to matrixes, they cannot be freed immediately)
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
     double              var_inc;          // Amount to bump next variable with.
-    vec<vec<Clause*> >  watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
+    vec<vec<Watched> >  watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     vec<vec<XorClause*> >  xorwatches;    // 'xorwatches[var]' is a list of constraints watching var in XOR clauses.
     vec<vec<WatchedBin> >  binwatches;
     vec<lbool>          assigns;          // The current assignments
@@ -214,9 +211,9 @@ protected:
     #endif
     int64_t             curRestart;
     int64_t             conf4Stats;
-    int                 nbclausesbeforereduce;
-    int                 qhead;            // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
-    int                 simpDB_assigns;   // Number of top-level assignments since last execution of 'simplify()'.
+    uint32_t            nbclausesbeforereduce;
+    uint32_t            qhead;            // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
+    uint32_t            simpDB_assigns;   // Number of top-level assignments since last execution of 'simplify()'.
     int64_t             simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
     vec<Lit>            assumptions;      // Current set of assumptions provided to solve by the user.
     Heap<VarOrderLt>    order_heap;       // A priority queue of variables ordered with respect to the variable activity.
@@ -224,10 +221,12 @@ protected:
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
     bqueue<unsigned int> nbDecisionLevelHistory; // Set of last decision level in conflict clauses
     float               totalSumOfDecisionLevel;
-    MTRand mtrand;                        // random number generator
-    Logger logger;                       // dynamic logging, statistics
+    MTRand mtrand;                        // random number generaton
     friend class Logger;
-    bool dynamic_behaviour_analysis;      //should 'logger' be called whenever a propagation/conflict/decision is made?
+    #ifdef STATS_NEEDED
+    Logger logger;                        // dynamic logging, statistics
+    bool dynamic_behaviour_analysis;      // Is logger running?
+    #endif
     uint                maxRestarts;      // More than this number of restarts will not be performed
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
@@ -284,9 +283,8 @@ protected:
 
     // Misc:
     //
-    int      decisionLevel    ()      const; // Gives the current decisionlevel.
+    uint32_t decisionLevel    ()      const; // Gives the current decisionlevel.
     uint32_t abstractLevel    (const Var& x) const; // Used to represent an abstraction of sets of decision levels.
-    double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     
     //Xor-finding related stuff
     friend class XorFinder;
@@ -301,11 +299,15 @@ protected:
     void chooseRestartType(const lbool& status, RestartTypeChooser& restartTypeChooser);
     void performStepsBeforeSolve();
 
-    // Debug:
+    // Debug & etc:
     void     printLit         (const Lit l) const;
     void     verifyModel      ();
     bool     verifyXorClauses (const vec<XorClause*>& cs) const;
     void     checkLiteralCount();
+    void     printStatHeader  () const;
+    void     printRestartStat () const;
+    void     printEndSearchStat() const;
+    double   progressEstimate () const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
 };
 
 
@@ -326,7 +328,7 @@ inline void Solver::varBumpActivity(Var v)
 {
     if ( (activity[v] += var_inc) > 1e100 ) {
         // Rescale:
-        for (int i = 0; i < nVars(); i++)
+        for (uint32_t i = 0; i != nVars(); i++)
             activity[i] *= 1e-100;
         var_inc *= 1e-100;
     }
@@ -356,7 +358,7 @@ inline void     Solver::newDecisionLevel()
         return trail.size() - trail_lim[level-1] - 1;
     return trail_lim[level] - trail_lim[level-1] - 1;
 }*/
-inline int      Solver::decisionLevel ()      const
+inline uint32_t      Solver::decisionLevel ()      const
 {
     return trail_lim.size();
 }
@@ -376,19 +378,19 @@ inline lbool    Solver::modelValue    (const Lit& p) const
 {
     return model[p.var()] ^ p.sign();
 }
-inline int      Solver::nAssigns      ()      const
+inline uint32_t      Solver::nAssigns      ()      const
 {
     return trail.size();
 }
-inline int      Solver::nClauses      ()      const
+inline uint32_t      Solver::nClauses      ()      const
 {
     return clauses.size() + xorclauses.size();
 }
-inline int      Solver::nLearnts      ()      const
+inline uint32_t      Solver::nLearnts      ()      const
 {
     return learnts.size();
 }
-inline int      Solver::nVars         ()      const
+inline uint32_t      Solver::nVars         ()      const
 {
     return assigns.size();
 }
@@ -416,6 +418,7 @@ inline void     Solver::setSeed (const uint32_t seed)
 {
     mtrand.seed(seed);    // Set seed of the variable-selection and clause-permutation(if applicable)
 }
+#ifdef STATS_NEEDED
 inline void     Solver::needStats()
 {
     dynamic_behaviour_analysis = true;    // Sets the solver and the logger up to generate statistics
@@ -426,12 +429,16 @@ inline void     Solver::needProofGraph()
     dynamic_behaviour_analysis = true;    // Sets the solver and the logger up to generate proof graphs during solving
     logger.proof_graph_on = true;
 }
-inline void     Solver::setVariableName(int var, char* name)
+inline void     Solver::setVariableName(Var var, char* name)
 {
     while (var >= nVars()) newVar();
     if (dynamic_behaviour_analysis)
         logger.set_variable_name(var, name);
 } // Sets the varible 'var'-s name to 'name' in the logger
+#else
+inline void     Solver::setVariableName(Var var, char* name)
+{}
+#endif
 inline const uint Solver::get_unitary_learnts_num() const
 {
     if (decisionLevel() > 0)
@@ -441,15 +448,15 @@ inline const uint Solver::get_unitary_learnts_num() const
 }
 template <class T>
 inline void Solver::removeWatchedCl(vec<T> &ws, const Clause *c) {
-    int j = 0;
-    for (; j < ws.size() && ws[j] != c; j++);
+    uint32_t j = 0;
+    for (; j < ws.size() && ws[j].clause != c; j++);
     assert(j < ws.size());
     for (; j < ws.size()-1; j++) ws[j] = ws[j+1];
     ws.pop();
 }
 template <class T>
 inline void Solver::removeWatchedBinCl(vec<T> &ws, const Clause *c) {
-    int j = 0;
+    uint32_t j = 0;
     for (; j < ws.size() && ws[j].clause != c; j++);
     assert(j < ws.size());
     for (; j < ws.size()-1; j++) ws[j] = ws[j+1];
@@ -458,14 +465,14 @@ inline void Solver::removeWatchedBinCl(vec<T> &ws, const Clause *c) {
 template<class T>
 inline bool Solver::findWatchedCl(vec<T>& ws, const Clause *c)
 {
-    int j = 0;
-    for (; j < ws.size() && ws[j] != c; j++);
+    uint32_t j = 0;
+    for (; j < ws.size() && ws[j].clause != c; j++);
     return j < ws.size();
 }
 template<class T>
 inline bool Solver::findWatchedBinCl(vec<T>& ws, const Clause *c)
 {
-    int j = 0;
+    uint32_t j = 0;
     for (; j < ws.size() && ws[j].clause != c; j++);
     return j < ws.size();
 }
@@ -502,7 +509,7 @@ static inline void logLits(FILE* f, const vec<Lit>& ls)
     fprintf(f, "[ ");
     if (ls.size() > 0) {
         logLit(f, ls[0]);
-        for (int i = 1; i < ls.size(); i++) {
+        for (uint32_t i = 1; i < ls.size(); i++) {
             fprintf(f, ", ");
             logLit(f, ls[i]);
         }

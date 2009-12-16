@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Solver.h"
 #include "VarReplacer.h"
 #include "ClauseCleaner.h"
+#include "time_mem.h"
 
 namespace MINISAT
 {
@@ -38,15 +39,19 @@ using std::endl;
 
 using std::make_pair;
 
-XorFinder::XorFinder(Solver* _S, vec<Clause*>& _cls) :
+XorFinder::XorFinder(Solver* _S, vec<Clause*>& _cls, ClauseCleaner::ClauseSetType _type) :
     cls(_cls)
+    , type(_type)
     , S(_S)
 {
 }
 
-uint XorFinder::doNoPart(uint& sumLengths, const uint minSize, const uint maxSize)
+uint XorFinder::doNoPart(const uint minSize, const uint maxSize)
 {
-    S->clauseCleaner->cleanClauses(S->clauses, ClauseCleaner::clauses);
+    uint sumLengths = 0;
+    double time = cpuTime();
+    
+    S->clauseCleaner->cleanClauses(cls, type);
     
     toRemove.clear();
     toRemove.resize(cls.size(), false);
@@ -61,6 +66,10 @@ uint XorFinder::doNoPart(uint& sumLengths, const uint minSize, const uint maxSiz
     }
     
     uint found = findXors(sumLengths);
+    
+    if (S->verbosity >=1)
+        printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, found, (double)sumLengths/(double)found);
+    
     if (found > 0) {
         clearToRemove();
         
@@ -100,7 +109,7 @@ uint XorFinder::findXors(uint& sumLengths)
         for (ClauseTable::iterator it = begin; it != end; it++)
             if (impairSigns(*it->first) == impair){
             #ifdef VERBOSE_DEBUG
-            it->first->plain_print();
+            it->first->plainPrint();
             #endif
             toRemove[it->second] = true;
             S->removeClause(*it->first);
@@ -113,7 +122,7 @@ uint XorFinder::findXors(uint& sumLengths)
             #ifdef VERBOSE_DEBUG
             XorClause* x = XorClause_new(lits, impair, old_group);
             cout << "- Final 2-long xor-clause: ";
-            x->plain_print();
+            x->plainPrint();
             free(x);
             #endif
             break;
@@ -125,7 +134,7 @@ uint XorFinder::findXors(uint& sumLengths)
             
             #ifdef VERBOSE_DEBUG
             cout << "- Final xor-clause: ";
-            x->plain_print();
+            x->plainPrint();
             #endif
         }
         }

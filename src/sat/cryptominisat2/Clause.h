@@ -57,8 +57,7 @@ protected:
     0th bit         bool            learnt clause
     1st - 2nd bit   2bit int        marking
     3rd bit         bool            inverted xor
-    4th-15th bit    12bit int        matrix number
-    16th -31st bit  16bit int       size
+    4th -31st bit  28bit uint       size
     */
     uint32_t size_etc; 
     union { int act; uint32_t abst; } extra;
@@ -83,11 +82,11 @@ public:
     friend Clause* Clause_new(const T& ps, const uint group, const bool learnt = false);
 
     uint         size        ()      const {
-        return size_etc >> 16;
+        return size_etc >> 4;
     }
     void         shrink      (uint i) {
         assert(i <= size());
-        size_etc = (((size_etc >> 16) - i) << 16) | (size_etc & ((1 << 16)-1));
+        size_etc = (((size_etc >> 4) - i) << 4) | (size_etc & ((1 << 4)-1));
     }
     void         pop         () {
         shrink(1);
@@ -127,8 +126,8 @@ public:
     
     void calcAbstraction() {
         uint32_t abstraction = 0;
-        for (int i = 0; i < size(); i++)
-        abstraction |= 1 << (data[i].var() & 31);
+        for (uint32_t i = 0; i != size(); i++)
+            abstraction |= 1 << (data[i].var() & 31);
         extra.abst = abstraction;
     }
 
@@ -151,7 +150,7 @@ public:
     }
 protected:
     void setSize(uint32_t size) {
-        size_etc = (size_etc & ((1 << 16)-1)) + (size << 16);
+        size_etc = (size_etc & ((1 << 4)-1)) + (size << 4);
     }
     void setLearnt(bool learnt) {
         size_etc = (size_etc & ~1) + learnt;
@@ -181,11 +180,6 @@ public:
     {
         size_etc ^= (uint32_t)b << 3;
     }
-    
-    inline uint32_t getMatrix() const
-    {
-        return ((size_etc >> 4) & ((1 << 12)-1));
-    }
 
     void print() {
         printf("XOR Clause   group: %d, size: %d, learnt:%d, lits:\"", group, size(), learnt());
@@ -205,10 +199,6 @@ public:
     friend class MatrixFinder;
     
 protected:
-    inline void setMatrix   (uint32_t toset) {
-        assert(toset < (1 << 12));
-        size_etc = (size_etc & 15) + (toset << 4) + (size_etc & ~((1 << 16)-1));
-    }
     inline void setInverted(bool inverted)
     {
         size_etc = (size_etc & 7) + ((uint32_t)inverted << 3) + (size_etc & ~15);
@@ -253,9 +243,9 @@ inline Lit Clause::subsumes(const Clause& other) const
     const Lit* c  = this->getData();
     const Lit* d  = other.getData();
     
-    for (int i = 0; i < size(); i++) {
+    for (uint32_t i = 0; i != size(); i++) {
         // search for c[i] or ~c[i]
-        for (int j = 0; j < other.size(); j++)
+        for (uint32_t j = 0; j != other.size(); j++)
             if (c[i] == d[j])
                 goto ok;
             else if (ret == lit_Undef && c[i] == ~d[j]){
@@ -278,6 +268,14 @@ class WatchedBin {
         Lit impliedLit;
         Clause *clause;
 };
+
+class Watched {
+    public:
+        Watched(Clause *_clause, Lit _blockedLit) : blockedLit(_blockedLit), clause(_clause) {};
+        Lit blockedLit;
+        Clause *clause;
+};
+
 };
 
 #endif //CLAUSE_H

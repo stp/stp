@@ -35,6 +35,7 @@ namespace MINISAT
 
 VarReplacer::VarReplacer(Solver *_S) :
     replacedLits(0)
+    , lastReplacedLits(0)
     , replacedVars(0)
     , lastReplacedVars(0)
     , addedNewClause(false)
@@ -44,7 +45,7 @@ VarReplacer::VarReplacer(Solver *_S) :
 
 VarReplacer::~VarReplacer()
 {
-    for (uint i = 0; i < clauses.size(); i++)
+    for (uint i = 0; i != clauses.size(); i++)
         free(clauses[i]);
 }
 
@@ -88,15 +89,16 @@ void VarReplacer::performReplace()
     replace_set(S->xorclauses, true);
     replace_set(S->conglomerate->getCalcAtFinish(), false);
     
-    for (uint i = 0; i < clauses.size(); i++)
+    for (uint i = 0; i != clauses.size(); i++)
         S->removeClause(*clauses[i]);
     clauses.clear();
     
     if (S->verbosity >=1)
-        printf("|  Replacing   %8d vars, replaced %8d lits                          |\n", replacedVars, replacedLits);
+        printf("|  Replacing   %8d vars, replaced %8d lits                          |\n", replacedVars-lastReplacedVars, replacedLits-lastReplacedLits);
     
     addedNewClause = false;
     lastReplacedVars = replacedVars;
+    lastReplacedLits = replacedLits;
     
     if (S->ok)
         S->ok = (S->propagate() == NULL);
@@ -140,8 +142,8 @@ const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, co
     uint origSize = c.size();
     std::sort(c.getData(), c.getData() + c.size());
     Lit p;
-    int i, j;
-    for (i = j = 0, p = lit_Undef; i < c.size(); i++) {
+    uint32_t i, j;
+    for (i = j = 0, p = lit_Undef; i != c.size(); i++) {
         c[i] = c[i].unsign();
         if (c[i] == p) {
             //added, but easily removed
@@ -157,7 +159,7 @@ const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, co
     
     #ifdef VERBOSE_DEBUG
     cout << "xor-clause after replacing: ";
-    c.plain_print();
+    c.plainPrint();
     #endif
     
     switch (c.size()) {
@@ -222,9 +224,9 @@ const bool VarReplacer::handleUpdatedClause(Clause& c, const Lit origLit1, const
     bool satisfied = false;
     std::sort(c.getData(), c.getData() + c.size());
     Lit p;
-    int i, j;
+    uint32_t i, j;
     const uint origSize = c.size();
-    for (i = j = 0, p = lit_Undef; i < origSize; i++) {
+    for (i = j = 0, p = lit_Undef; i != origSize; i++) {
         if (S->value(c[i]) == l_True || c[i] == ~p) {
             satisfied = true;
             break;
@@ -322,7 +324,7 @@ void VarReplacer::extendModel() const
             bool val = (S->assigns[it->var()] == l_False);
             S->uncheckedEnqueue(Lit(i, val ^ it->sign()));
         } else {
-            assert(S->assigns[i].getBool() == S->assigns[it->var()].getBool() ^ it->sign());
+            assert(S->assigns[i].getBool() == (S->assigns[it->var()].getBool() ^ it->sign()));
         }
     }
 }
