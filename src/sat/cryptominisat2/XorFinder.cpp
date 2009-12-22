@@ -39,10 +39,10 @@ using std::endl;
 
 using std::make_pair;
 
-XorFinder::XorFinder(Solver* _S, vec<Clause*>& _cls, ClauseCleaner::ClauseSetType _type) :
+XorFinder::XorFinder(Solver* _s, vec<Clause*>& _cls, ClauseCleaner::ClauseSetType _type) :
     cls(_cls)
     , type(_type)
-    , S(_S)
+    , S(_s)
 {
 }
 
@@ -68,7 +68,7 @@ uint XorFinder::doNoPart(const uint minSize, const uint maxSize)
     uint found = findXors(sumLengths);
     
     if (S->verbosity >=1)
-        printf("|  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, found, (double)sumLengths/(double)found);
+        printf("c |  Finding XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)               |\n", cpuTime()-time, found, (double)sumLengths/(double)found);
     
     if (found > 0) {
         clearToRemove();

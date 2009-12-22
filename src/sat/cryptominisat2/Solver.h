@@ -137,7 +137,7 @@ public:
     bool      performReplace;       // Should var-replacing be performed?
     friend class FindUndef;
     bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
-    RestartType restartType;      // If set to true, the restart strategy will be dynamic
+    RestartType fixRestartType;     // If set, the solver will always choose the given restart strategy
     
 
     enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3 };
@@ -221,11 +221,12 @@ protected:
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
     bqueue<unsigned int> nbDecisionLevelHistory; // Set of last decision level in conflict clauses
     float               totalSumOfDecisionLevel;
-    MTRand mtrand;                        // random number generaton
-    friend class Logger;
+    MTRand              mtrand;           // random number generaton
+    RestartType         restartType;      // Used internally to determine which restart strategy to choose
+    friend class        Logger;
     #ifdef STATS_NEEDED
     Logger logger;                        // dynamic logging, statistics
-    bool dynamic_behaviour_analysis;      // Is logger running?
+    bool                dynamic_behaviour_analysis; // Is logger running?
     #endif
     uint                maxRestarts;      // More than this number of restarts will not be performed
 

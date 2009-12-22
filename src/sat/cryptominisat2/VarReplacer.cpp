@@ -33,13 +33,13 @@ using std::endl;
 namespace MINISAT
 {
 
-VarReplacer::VarReplacer(Solver *_S) :
+VarReplacer::VarReplacer(Solver *_s) :
     replacedLits(0)
     , lastReplacedLits(0)
     , replacedVars(0)
     , lastReplacedVars(0)
     , addedNewClause(false)
-    , S(_S)
+    , S(_s)
 {
 }
 
@@ -94,7 +94,7 @@ void VarReplacer::performReplace()
     clauses.clear();
     
     if (S->verbosity >=1)
-        printf("|  Replacing   %8d vars, replaced %8d lits                          |\n", replacedVars-lastReplacedVars, replacedLits-lastReplacedLits);
+        printf("c |  Replacing   %8d vars, replaced %8d lits                          |\n", replacedVars-lastReplacedVars, replacedLits-lastReplacedLits);
     
     addedNewClause = false;
     lastReplacedVars = replacedVars;

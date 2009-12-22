@@ -100,14 +100,10 @@ public:
             uint64_t tmp = mp[i];
             while(tmp) {
                 popcount += tmp & 1;
-                popcount += tmp & 2;
-                popcount += tmp & 4;
-                popcount += tmp & 8;
-                if (popcount > 1) return false;
-                tmp >>= 4;
+                tmp >>= 1;
             }
         }
-        return popcount;
+        return popcount == 1;
     }
     
     bool popcnt_is_one(uint from) const
@@ -130,10 +126,8 @@ public:
 
     inline const bool isZero() const
     {
-        const uint64_t*  mp2 = (const uint64_t*)mp;
-        
         for (uint i = 0; i != size; i++) {
-            if (mp2[i]) return false;
+            if (mp[i]) return false;
         }
         return true;
     }
@@ -158,29 +152,6 @@ public:
         mp[i/64] |= ((uint64_t)1 << (i%64));
     }
     
-    void swap(PackedRow b)
-    {
-        #ifdef DEBUG_ROW
-        assert(size > 0);
-        assert(b.size > 0);
-        assert(b.size == size);
-        #endif
-        
-        uint64_t * __restrict mp1 = mp-1;
-        uint64_t * __restrict mp2 = b.mp-1;
-        
-        uint i = size+1;
-        
-        while(i != 0) {
-            uint64_t tmp(*mp2);
-            *mp2 = *mp1;
-            *mp1 = tmp;
-            mp1++;
-            mp2++;
-            i--;
-        }
-    }
-    
     void swapBoth(PackedRow b)
     {
         #ifdef DEBUG_ROW
@@ -195,9 +166,7 @@ public:
         uint i = 2*(size+1);
         
         while(i != 0) {
-            uint64_t tmp(*mp2);
-            *mp2 = *mp1;
-            *mp1 = tmp;
+            std::swap(*mp1, *mp2);
             mp1++;
             mp2++;
             i--;

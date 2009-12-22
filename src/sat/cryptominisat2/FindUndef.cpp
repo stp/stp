@@ -23,8 +23,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace MINISAT
 {
 
-FindUndef::FindUndef(Solver& _S) :
-    S(_S)
+FindUndef::FindUndef(Solver& _s) :
+    S(_s)
     , isPotentialSum(0)
 {
     dontLookAtClause.resize(S.clauses.size(), false);

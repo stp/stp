@@ -60,7 +60,7 @@ Solver::Solver() :
         , xorFinder        (true)
         , performReplace   (true)
         , greedyUnbound    (false)
-        , restartType       (static_restart)
+        , fixRestartType   (auto_restart)
 
         // Statistics: (formerly in 'SolverStats')
         //
@@ -83,6 +83,7 @@ Solver::Solver() :
         , progress_estimate(0)
         , remove_satisfied (true)
         , mtrand((unsigned long int)0)
+        , restartType      (static_restart)
         #ifdef STATS_NEEDED
         , logger(verbosity)
         , dynamic_behaviour_analysis(false) //do not document the proof as default
@@ -1323,6 +1324,8 @@ inline void Solver::chooseRestartType(const lbool& status, RestartTypeChooser& r
 {
     if (status.isUndef() && starts > 2 && starts < 8) {
         RestartType tmp = restartTypeChooser.choose();
+        if (fixRestartType != auto_restart)
+            tmp = fixRestartType;
         if (starts == 7) {
             if (tmp == dynamic_restart) {
                 nbDecisionLevelHistory.fastclear();
@@ -1330,10 +1333,10 @@ inline void Solver::chooseRestartType(const lbool& status, RestartTypeChooser& r
                 totalSumOfDecisionLevel = 0;
                 clearGaussMatrixes();
                 if (verbosity >= 1)
-                    printf("|                           Decided on dynamic restart strategy                         |\n");
+                    printf("c |                           Decided on dynamic restart strategy                         |\n");
             } else  {
                 if (verbosity >= 1)
-                    printf("|                            Decided on static restart strategy                         |\n");
+                    printf("c |                            Decided on static restart strategy                         |\n");
             }
             restartType = tmp;
         }
@@ -1376,7 +1379,7 @@ inline void Solver::performStepsBeforeSolve()
             time = cpuTime();
             uint foundCong = conglomerate->conglomerateXors();
             if (verbosity >=1)
-                printf("|  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
+                printf("c |  Conglomerating XORs:  %4.2lf s (removed %6d vars)                         |\n", cpuTime()-time, foundCong);
             if (!ok) return;
             
             uint new_total = 0;
@@ -1385,8 +1388,8 @@ inline void Solver::performStepsBeforeSolve()
                 new_total += xorclauses[i]->size();
             }
             if (verbosity >=1) {
-                printf("|  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
-                printf("|  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
+                printf("c |  Sum xclauses before: %8d, after: %12d                         |\n", orig_num_cls, new_num_cls);
+                printf("c |  Sum xlits before: %11d, after: %12d                         |\n", orig_total, new_total);
             }
             
             if (performReplace
@@ -1402,7 +1405,7 @@ inline void Solver::performStepsBeforeSolve()
         MatrixFinder m(this);
         const uint numMatrixes = m.findMatrixes();
         if (verbosity >=1)
-            printf("|  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
+            printf("c |  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
     }
 }
 
@@ -1477,7 +1480,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
             FindUndef finder(*this);
             const uint unbounded = finder.unRoll();
             if (verbosity >= 1)
-                printf("Greedy unbounding     :%5.2lf s, unbounded: %7d vars\n", cpuTime()-time, unbounded);
+                printf("c Greedy unbounding     :%5.2lf s, unbounded: %7d vars\n", cpuTime()-time, unbounded);
         }
     } if (status == l_False) {
         if (conflict.size() == 0)
@@ -1563,7 +1566,7 @@ next:
     assert(!failed);
 
     if (verbosity >=1)
-        printf("Verified %d clauses.\n", clauses.size() + xorclauses.size() + conglomerate->getCalcAtFinish().size());
+        printf("c Verified %d clauses.\n", clauses.size() + xorclauses.size() + conglomerate->getCalcAtFinish().size());
 }
 
 
@@ -1590,10 +1593,10 @@ void Solver::printStatHeader() const
     #else
     if (verbosity >= 1) {
     #endif
-        printf("============================[ Search Statistics ]========================================\n");
-        printf("| Conflicts |          ORIGINAL         |          LEARNT          |        GAUSS       |\n");
-        printf("|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl | Prop   Confl   On  |\n");
-        printf("=========================================================================================\n");
+        printf("c ============================[ Search Statistics ]========================================\n");
+        printf("c | Conflicts |          ORIGINAL         |          LEARNT          |        GAUSS       |\n");
+        printf("c |           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl | Prop   Confl   On  |\n");
+        printf("c =========================================================================================\n");
     }
 }
 
@@ -1604,7 +1607,7 @@ void Solver::printRestartStat() const
     #else
     if (verbosity >= 1) {
     #endif
-        printf("| %9d | %7d %8d %8d | %8d %8d %6.0f |", (int)conflicts, (int)order_heap.size(), (int)nClauses(), (int)clauses_literals, (int)(nbclausesbeforereduce*curRestart), (int)nLearnts(), (double)learnts_literals/nLearnts());
+        printf("c | %9d | %7d %8d %8d | %8d %8d %6.0f |", (int)conflicts, (int)order_heap.size(), (int)nClauses(), (int)clauses_literals, (int)(nbclausesbeforereduce*curRestart), (int)nLearnts(), (double)learnts_literals/nLearnts());
         print_gauss_sum_stats();
     }
 }
@@ -1616,7 +1619,7 @@ void Solver::printEndSearchStat() const
         #else
         if (verbosity >= 1) {
             #endif
-            printf("====================================================================");
+            printf("c ====================================================================");
             print_gauss_sum_stats();
         }
 }
