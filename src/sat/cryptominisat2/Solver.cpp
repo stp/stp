@@ -697,7 +697,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
 
     seen[p.var()] = 1;
 
-    for (int i = trail.size()-1; i >= trail_lim[0]; i--) {
+    for (int32_t i = (int32_t)trail.size()-1; i >= (int32_t)trail_lim[0]; i--) {
         Var x = trail[i].var();
         if (seen[x]) {
             if (reason[x] == NULL) {
@@ -1163,6 +1163,9 @@ llbool Solver::new_decision(int& nof_conflicts, int& conflictC)
             cancelUntil(0);
             return l_Undef;
         }
+        break;
+    case auto_restart:
+        assert(false);
         break;
     }
 

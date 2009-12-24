@@ -202,15 +202,15 @@ protected:
     vector<bool>        polarity;         // The preferred polarity of each variable.
     vector<bool>        decision_var;     // Declares if a variable is eligible for selection in the decision heuristic.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
-    vec<int32_t>        trail_lim;        // Separator indices for different decision levels in 'trail'.
+    vec<uint32_t>       trail_lim;        // Separator indices for different decision levels in 'trail'.
     vec<Clause*>        reason;           // 'reason[var]' is the clause that implied the variables current value, or 'NULL' if none.
     vec<int32_t>        level;            // 'level[var]' contains the level at which the assignment was made.
     vec<Var>            permDiff;         // LS: permDiff[var] contains the current conflict number... Used to count the number of different decision level variables in learnt clause
     #ifdef UPDATEVARACTIVITY
     vec<Lit>            lastDecisionLevel;
     #endif
-    int64_t             curRestart;
-    int64_t             conf4Stats;
+    uint64_t            curRestart;
+    uint64_t            conf4Stats;
     uint32_t            nbclausesbeforereduce;
     uint32_t            qhead;            // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
     uint32_t            simpDB_assigns;   // Number of top-level assignments since last execution of 'simplify()'.
