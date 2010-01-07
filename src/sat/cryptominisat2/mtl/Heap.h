@@ -23,7 +23,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Vec.h"
 #include "string.h"
 #include <stdint.h>
+#ifndef UINT32_MAX
 #define UINT32_MAX ((uint32_t)-1)
+#endif
 
 namespace MINISAT
 {
