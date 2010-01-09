@@ -725,7 +725,7 @@ void Solver::verifyModel()
 
     assert(!failed);
 
-    reportf("Verified %d original clauses.\n", clauses.size());
+    //reportf("Verified %d original clauses.\n", clauses.size());
 }
 
 

@@ -441,7 +441,7 @@ void SimpSolver::verifyModel()
             }
 
     assert(!failed);
-    reportf("Verified %d eliminated clauses.\n", cnt);
+    //reportf("Verified %d eliminated clauses.\n", cnt);
 }
 
 

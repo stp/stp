@@ -24,16 +24,16 @@ CFLAGS_BASE   = $(OPTIMIZE)
 # SOLVER_INCLUDE = ../sat/cryptominisat
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
-CRYPTOMINISAT2 = true
-CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
-MTL            = ../sat/cryptominisat2/mtl
-SOLVER_INCLUDE = ../sat/cryptominisat2
+#CRYPTOMINISAT2 = true
+#CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
+#MTL            = ../sat/cryptominisat2/mtl
+#SOLVER_INCLUDE = ../sat/cryptominisat2
 
 # OPTION to compile MiniSAT
-#CORE          = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DCORE
-#MTL            = ../sat/mtl
-#SOLVER_INCLUDE = ../sat/core
+CORE          = true
+CFLAGS_BASE   = $(OPTIMIZE) -DCORE
+MTL            = ../sat/mtl
+SOLVER_INCLUDE = ../sat/core
 
 
 # OPTION to compile UNSOUND MiniSAT
@@ -44,11 +44,10 @@ SOLVER_INCLUDE = ../sat/cryptominisat2
 
 
 # OPTION to compile Simplifying MiniSAT
-#SIMP          = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
-#MTL            = ../sat/mtl
-#SOLVER_INCLUDE = ../sat/simp
-
+# SIMP          = true
+# CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
+# MTL            = ../sat/mtl
+# SOLVER_INCLUDE = ../sat/simp
 
 SHELL=/bin/bash
 
