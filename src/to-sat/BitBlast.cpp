@@ -729,19 +729,10 @@ namespace BEEV
     // worth doing explicitly (e.g., a = b, a = ~b, etc.)
     else
       {
-// 	return _bm->CreateSimpForm(OR, 
-// 				   _bm->CreateSimpForm(AND, a, b), 
-// 				   _bm->CreateSimpForm(AND, b, c), 
-// 				   _bm->CreateSimpForm(AND, a, c));
-        return 
-	  _bm->CreateSimpForm(AND, 
-			      _bm->CreateSimpForm(OR, a, b),
-			      //_bm->CreateSimpForm(XOR,a,b)),
-			      _bm->CreateSimpForm(OR, b, c),
-			      //_bm->CreateSimpForm(XOR,b,c)),
-			      _bm->CreateSimpForm(OR, a, c)
-			      //_bm->CreateSimpForm(XOR,a,c)
-			      );      
+	return _bm->CreateSimpForm(OR, 
+				   _bm->CreateSimpForm(AND, a, b), 
+				   _bm->CreateSimpForm(AND, b, c), 
+				   _bm->CreateSimpForm(AND, a, c));
       }
   }
 
@@ -749,11 +740,16 @@ namespace BEEV
                           const ASTNode& yi,
                           const ASTNode& cin)
   {
-    ASTNode S0 = _bm->CreateSimpForm(XOR,
-                                     //_bm->CreateSimpForm(XOR, xi, yi),
-				     xi,
-				     yi,
-                                     cin);
+    ASTNode S0;
+    
+#ifdef CRYPTOMINISAT2
+    S0 = _bm->CreateSimpForm(XOR, xi, yi, cin);
+#else
+    S0 = _bm->CreateSimpForm(XOR,
+			     _bm->CreateSimpForm(XOR, xi, yi),
+			     cin);
+#endif
+
     return S0;
   }
 
@@ -955,8 +951,11 @@ namespace BEEV
         bit_comparisons.push_back(prev_eq_bit);
       }
     ASTNode output =
+#ifdef CRYPTOMINISAT2
       _bm->CreateSimpForm(XOR, bit_comparisons);
-
+#else
+      _bm->CreateSimpForm(OR, bit_comparisons);
+#endif
     return output;
   }
 

@@ -17,17 +17,11 @@ OPTIMIZE      = -O3               # Maximum optimization
 #CFLAGS_M32   = -m32
 CFLAGS_BASE   = $(OPTIMIZE)
 
-# OPTION to compile CRYPTOMiniSAT
-# CRYPTOMINISAT  = true
-# CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT
-# MTL            = ../sat/cryptominisat/mtl
-# SOLVER_INCLUDE = ../sat/cryptominisat
-
 # OPTION to compile CRYPTOMiniSAT version 2.x
-#CRYPTOMINISAT2 = true
-#CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
-#MTL            = ../sat/cryptominisat2/mtl
-#SOLVER_INCLUDE = ../sat/cryptominisat2
+# CRYPTOMINISAT2 = true
+# CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
+# MTL            = ../sat/cryptominisat2/mtl
+# SOLVER_INCLUDE = ../sat/cryptominisat2
 
 # OPTION to compile MiniSAT
 CORE          = true
@@ -35,13 +29,11 @@ CFLAGS_BASE   = $(OPTIMIZE) -DCORE
 MTL            = ../sat/mtl
 SOLVER_INCLUDE = ../sat/core
 
-
 # OPTION to compile UNSOUND MiniSAT
 #UNSOUND       = true
 #CFLAGS_BASE   = $(OPTIMIZE) -DUNSOUND
 #MTL            = ../sat/mtl
 #SOLVER_INCLUDE = ../sat/unsound
-
 
 # OPTION to compile Simplifying MiniSAT
 # SIMP          = true
