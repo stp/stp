@@ -110,6 +110,13 @@ bool SimpSolver::solve(const vec<Lit>& assumps, bool do_simp, bool turn_off_simp
         for (int i = 0; i < extra_frozen.size(); i++)
             setFrozen(extra_frozen[i], false);
 
+    // STP MODIFICATION..
+    // If eliminate(bool) finds that the formula is unsatisfiable. ok may not be set.
+    // We use okay() to check if the function was satisfiable.
+    if (!result)
+		ok=false;
+    // STP MODIFICATION..
+
     return result;
 }
 
