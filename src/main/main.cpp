@@ -299,5 +299,7 @@ int main(int argc, char ** argv) {
       bm->GetRunTimes()->print();
     }
   (GlobalSTP->tosat)->PrintOutput(ret);
+
+  delete AssertsQuery;
   return 0;
 }//end of Main

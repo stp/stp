@@ -96,7 +96,7 @@ public:
     // Constructor/Destructor:
     //
     Solver();
-    ~Solver();
+    virtual ~Solver();
 
     // Problem specification:
     //

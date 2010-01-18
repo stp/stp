@@ -104,7 +104,10 @@ namespace BEEV
 
     if(!sat)
       {
-        return sat;
+        cm->DELETE(cl);
+        delete cm->ReturnXorClauses();
+        delete cm;
+    	return sat;
       }
 
 #if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
@@ -115,7 +118,9 @@ namespace BEEV
     cm->DELETE(xorcl);
 #endif 
 
+
     cm->DELETE(cl);
+    delete cm->ReturnXorClauses();
     delete cm;
     return sat;
   }
