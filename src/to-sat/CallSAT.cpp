@@ -99,13 +99,13 @@ namespace BEEV
     //bool sat = toSATandSolve(SatSolver, *cl);
 
     for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
-      delete it->second;
+    	delete it->second;
     delete cb;
 
     if(!sat)
       {
         cm->DELETE(cl);
-        delete cm->ReturnXorClauses();
+        cm->DELETE(xorcl);
         delete cm;
     	return sat;
       }
@@ -115,12 +115,10 @@ namespace BEEV
       { 
         sat = toSATandSolve(SatSolver, *xorcl, true);
       }
-    cm->DELETE(xorcl);
 #endif 
 
-
     cm->DELETE(cl);
-    delete cm->ReturnXorClauses();
+    cm->DELETE(xorcl);
     delete cm;
     return sat;
   }
