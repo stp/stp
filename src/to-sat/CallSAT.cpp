@@ -90,10 +90,8 @@ namespace BEEV
     CNFMgr* cm = new CNFMgr(bm);
     ClauseList* cl = cm->convertToCNF(BBFormula);    
 
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     ClauseList* xorcl = cm->ReturnXorClauses();
-#endif
-
+ 
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);    
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);    
     //bool sat = toSATandSolve(SatSolver, *cl);
