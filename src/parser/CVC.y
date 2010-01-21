@@ -18,7 +18,7 @@
 #undef __GNUC_MINOR__
   
 #define YYLTYPE_IS_TRIVIAL 1
-#define YYMAXDEPTH 10485760
+#define YYMAXDEPTH 1048576000
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 #define YYPARSE_PARAM AssertsQuery

@@ -164,6 +164,7 @@ int main(int argc, char ** argv) {
 	    case 'i':
 	      bm->UserFlags.random_seed_flag = true;
               bm->UserFlags.random_seed = atoi(argv[++i]);
+	      //cerr << "Random seed is: " << bm->UserFlags.random_seed << endl;
 	      if(!(0 <= bm->UserFlags.random_seed))
 		{
 		  FatalError("Random Seed should be an integer >= 0\n");

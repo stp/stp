@@ -90,10 +90,15 @@ namespace BEEV
                           CounterExampleMap[s] = ASTFalse;
                         else
                           {
-                            int seed = 10000;
-                            srand(seed);
-                            CounterExampleMap[s] = 
-                              (rand() > seed) ? ASTFalse : ASTTrue;
+			    if(bm->UserFlags.random_seed_flag)
+			      {
+				int seed = bm->UserFlags.random_seed;
+				srand(seed);
+				CounterExampleMap[s] = 
+				  (rand() > seed) ? ASTFalse : ASTTrue;
+			      }
+			    else
+			      CounterExampleMap[s] = ASTFalse;
                           }
                       }
                   }

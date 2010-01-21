@@ -84,9 +84,10 @@ namespace BEEV
       {
 #ifdef CRYPTOMINISAT2
 	newSolver.setSeed(bm->UserFlags.random_seed);
-	//cerr << "We have set the seed value to "
-	//   << bm->UserFlags.random_seed 
-	//   << endl;
+	//newSolver.greedyUnbound = true;
+	// 	cerr << "We have set the seed value to "
+	// 	     << bm->UserFlags.random_seed 
+	// 	     << endl;
 #endif
       }
 
