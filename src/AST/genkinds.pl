@@ -59,6 +59,7 @@ sub gen_h_file {
 	"#define TESTKINDS_H\n",
 	"// Generated automatically by genkinds.pl from ASTKind.kinds $now.\n",
 	"// Do not edit\n",
+	"#include <iostream>\n",
 	"namespace BEEV {\n  typedef enum {\n";
 
     for (@kindnames) {

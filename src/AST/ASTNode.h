@@ -8,6 +8,7 @@
  ********************************************************************/
 #ifndef ASTNODE_H
 #define ASTNODE_H
+#include "../AST/NodeFactory/HashingNodeFactory.h"
 
 /********************************************************************
  *  This file gives the class description of the ASTNode class      *
@@ -27,6 +28,7 @@ namespace BEEV
     friend class CNFMgr;
     friend class ASTInterior;
     friend class vector<ASTNode>;
+    friend BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind,	const BEEV::ASTVec & back_children);
 
   private:
     /****************************************************************
@@ -138,6 +140,35 @@ namespace BEEV
           return (n1.GetNodeNum() < n2.GetNodeNum());
         }
     } //end of arithless
+
+    bool isConstant() const
+    {
+    	const Kind k = GetKind();
+    	return (k == BVCONST || k == TRUE || k == FALSE);
+    }
+
+    bool isITE() const
+	{
+		bool result;
+
+		Kind k = GetKind();
+		switch (k)
+		{
+		case ITE:
+		{
+			result = true;
+			break;
+		}
+		default:
+		{
+			result = false;
+			break;
+		}
+		}
+
+		return result;
+	}
+
 
     // For lisp DAG printing.  Has it been printed already, so we can
     // just print the node number?

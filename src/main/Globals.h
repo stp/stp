@@ -92,6 +92,7 @@ namespace BEEV
   // Function that computes various kinds of statistics for the phases
   // of STP
   void CountersAndStats(const char * functionname, STPMgr * bm);
+
 }; //end of namespace BEEV
 
 #endif

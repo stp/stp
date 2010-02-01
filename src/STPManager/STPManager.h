@@ -13,6 +13,7 @@
 #include "UserDefinedFlags.h"
 #include "../AST/AST.h"
 #include "../parser/let-funcs.h"
+#include "../AST/NodeFactory/HashingNodeFactory.h"
 
 namespace BEEV
 {
@@ -20,12 +21,14 @@ namespace BEEV
    * Class STPMgr.  This holds all "global" variables for the system,
    * such as unique tables for the various kinds of nodes.
    *****************************************************************/
+
   class STPMgr
   {
     friend class ASTNode;
     friend class ASTInterior;
     friend class ASTBVConst;
     friend class ASTSymbol;
+    friend BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind,	const BEEV::ASTVec & back_children);
 
   private:
     /****************************************************************
@@ -70,8 +73,13 @@ namespace BEEV
 
     ASTNode dummy_node;
     
+  public:
+    HashingNodeFactory* hashingNodeFactory;
+    NodeFactory *defaultNodeFactory;
+
     //frequently used nodes
     ASTNode ASTFalse, ASTTrue, ASTUndefined;
+  private:
 
     // Stack of Logical Context. each entry in the stack is a logical
     // context. A logical context is a vector of assertions. The
@@ -175,6 +183,10 @@ namespace BEEV
       Begin_RemoveWrites = false;
       SimplifyWrites_InPlace_Flag = false;      
 
+      // Need to initiate the node factories before any nodes are created.
+      hashingNodeFactory = new HashingNodeFactory(*this);
+      defaultNodeFactory= hashingNodeFactory;
+
       ASTFalse     = CreateNode(FALSE);
       ASTTrue      = CreateNode(TRUE); 
       ASTUndefined = CreateNode(UNDEFINED);
@@ -268,44 +280,52 @@ namespace BEEV
      ****************************************************************/
 
     // Create and return an interior ASTNode
-    ASTNode CreateNode(Kind kind, 
-                       const ASTVec &children = _empty_ASTVec);
-    ASTNode CreateNode(Kind kind, 
-                       const ASTNode& child0, 
-                       const ASTVec &children = _empty_ASTVec);
-    ASTNode CreateNode(Kind kind, 
-                       const ASTNode& child0, 
-                       const ASTNode& child1, 
-                       const ASTVec &children = _empty_ASTVec);
-    ASTNode CreateNode(Kind kind, 
-                       const ASTNode& child0, 
-                       const ASTNode& child1, 
-                       const ASTNode& child2, 
-                       const ASTVec &children = _empty_ASTVec);
+    inline BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children = _empty_ASTVec)
+    {
+   	 return defaultNodeFactory->CreateNode(kind,children);
+    }
+
+    inline ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTVec & back_children = _empty_ASTVec)
+    {
+  	   	  return defaultNodeFactory->CreateNode(kind, child0, back_children);
+    }
+
+    inline ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTVec & back_children = _empty_ASTVec)
+    {
+ 	   	  return defaultNodeFactory->CreateNode(kind, child0, child1, back_children);
+    }
+
+    inline   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1, const ASTNode& child2, const ASTVec & back_children = _empty_ASTVec)
+    {
+   	 return defaultNodeFactory->CreateNode(kind, child0, child1, child2, back_children);
+
+    }
 
     /****************************************************************
      * Create Term functions                                        *
      ****************************************************************/
 
     // Create and return an ASTNode for a term
-    ASTNode CreateTerm(Kind kind, 
-                       unsigned int width, 
-                       const ASTVec &children = _empty_ASTVec);    
-    ASTNode CreateTerm(Kind kind,
-                       unsigned int width, 
-                       const ASTNode& child0, 
-                       const ASTVec &children = _empty_ASTVec);    
-    ASTNode CreateTerm(Kind kind, 
-                       unsigned int width, 
-                       const ASTNode& child0, 
-                       const ASTNode& child1, 
-                       const ASTVec &children = _empty_ASTVec);    
-    ASTNode CreateTerm(Kind kind,
-                       unsigned int width,
-                       const ASTNode& child0,
-                       const ASTNode& child1,
-                       const ASTNode& child2,
-                       const ASTVec &children = _empty_ASTVec);
+     inline BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children =_empty_ASTVec)
+     {
+    	 return defaultNodeFactory->CreateTerm(kind,width,children);
+     }
+
+     inline ASTNode CreateTerm(Kind kind, unsigned int width,
+     		const ASTNode& child0, const ASTVec &children = _empty_ASTVec) {
+     	return defaultNodeFactory->CreateTerm(kind, width, child0, children);
+     }
+
+     inline ASTNode CreateTerm(Kind kind, unsigned int width,
+     		const ASTNode& child0, const ASTNode& child1, const ASTVec &children = _empty_ASTVec) {
+     	return defaultNodeFactory->CreateTerm(kind,width, child0, child1,children);
+     }
+
+     inline ASTNode CreateTerm(Kind kind, unsigned int width,
+     		const ASTNode& child0, const ASTNode& child1, const ASTNode& child2,
+     		const ASTVec &children =  _empty_ASTVec) {
+     	return defaultNodeFactory->CreateTerm(kind, width, child0, child1, child2);
+     }
 
 
     /****************************************************************
@@ -404,6 +424,8 @@ namespace BEEV
       _interior_unique_table.clear();
       _bvconst_unique_table.clear();
       _symbol_unique_table.clear();
+
+      delete hashingNodeFactory;
     }
   };//End of Class STPMgr
 };//end of namespace

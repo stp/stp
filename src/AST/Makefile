@@ -1,6 +1,7 @@
 include ../../scripts/Makefile.common
 
 SRCS=$(wildcard  *.cpp)
+SRCS+=$(wildcard  NodeFactory/*.cpp)
 OBJS = $(SRCS:.cpp=.o)
 OBJS+= ASTKind.o
 CFLAGS += -I$(MTL)
@@ -17,7 +18,7 @@ ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ *.a  ASTKind.cpp ASTKind.h depend .#*
+	rm -rf NodeFactory/*.o *.o *~ *.a  ASTKind.cpp ASTKind.h depend .#*
 
 #If this depended on ASTKind.h & ASTKind.cpp, then ./genkinds.pl
 #would be called each "clean".

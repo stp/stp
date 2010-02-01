@@ -74,7 +74,7 @@ ifeq ($(shell uname -s), DarwinX)
 else
   LDFLAGS = $(LDFLAGS_BASE)
   CFLAGS = $(CFLAGS_BASE)		
-  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32)
+  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) -I../AST
 endif
 
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated

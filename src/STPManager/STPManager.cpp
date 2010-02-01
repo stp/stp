@@ -43,58 +43,6 @@ namespace BEEV
 
   
  
-  ////////////////////////////////////////////////////////////////
-  //  STPMgr members
-  ////////////////////////////////////////////////////////////////
-  ASTNode STPMgr::CreateNode(Kind kind, const ASTVec & back_children)
-  {
-    // create a new node.  Children will be modified.
-    ASTInterior *n_ptr = new ASTInterior(kind);
-
-    // insert all of children at end of new_children.
-    ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
-    return n;
-  }
-
-  ASTNode STPMgr::CreateNode(Kind kind, 
-                             const ASTNode& child0, 
-                             const ASTVec & back_children)
-  {
-
-    ASTInterior *n_ptr = new ASTInterior(kind);
-    ASTVec &front_children = n_ptr->_children;
-    front_children.push_back(child0);
-    ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
-    return n;
-  }
-
-  ASTNode STPMgr::CreateNode(Kind kind, 
-                             const ASTNode& child0, 
-                             const ASTNode& child1, 
-                             const ASTVec & back_children)
-  {
-    ASTInterior *n_ptr = new ASTInterior(kind);
-    ASTVec &front_children = n_ptr->_children;
-    front_children.push_back(child0);
-    front_children.push_back(child1);
-    ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
-    return n;
-  }
-
-  ASTNode STPMgr::CreateNode(Kind kind, 
-                             const ASTNode& child0, 
-                             const ASTNode& child1, 
-                             const ASTNode& child2, 
-                             const ASTVec & back_children)
-  {
-    ASTInterior *n_ptr = new ASTInterior(kind);
-    ASTVec &front_children = n_ptr->_children;
-    front_children.push_back(child0);
-    front_children.push_back(child1);
-    front_children.push_back(child2);
-    ASTNode n(CreateInteriorNode(kind, n_ptr, back_children));
-    return n;
-  }
 
   ASTInterior *STPMgr::CreateInteriorNode(Kind kind,
                                           // children array of this
@@ -392,67 +340,6 @@ namespace BEEV
         return *it;
       }
   }
-
-  // Create and return an ASTNode for a term
-  ASTNode STPMgr::CreateTerm(Kind kind, 
-                             unsigned int width, 
-                             const ASTVec &children)
-  {
-    if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:", 
-                 ASTUndefined, kind);
-    ASTNode n = CreateNode(kind, children);
-    n.SetValueWidth(width);
-    
-    //by default we assume that the term is a Bitvector. If
-    //necessary the indexwidth can be changed later
-    n.SetIndexWidth(0);
-    return n;
-  }
-
-  ASTNode STPMgr::CreateTerm(Kind kind, 
-                             unsigned int width, 
-                             const ASTNode& child0, 
-                             const ASTVec &children)
-  {
-    if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
-		 ASTUndefined, kind);
-    ASTNode n = CreateNode(kind, child0, children);
-    n.SetValueWidth(width);
-    BVTypeCheck(n);
-    return n;
-  }
-
-  ASTNode STPMgr::CreateTerm(Kind kind, 
-                             unsigned int width, 
-                             const ASTNode& child0,
-                             const ASTNode& child1, 
-                             const ASTVec &children)
-  {
-    if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
-		 ASTUndefined, kind);
-    ASTNode n = CreateNode(kind, child0, child1, children);
-    n.SetValueWidth(width);
-    return n;
-  }
-  
-  ASTNode STPMgr::CreateTerm(Kind kind,
-                             unsigned int width,
-                             const ASTNode& child0,
-                             const ASTNode& child1,
-                             const ASTNode& child2,
-                             const ASTVec &children)
-  {
-    if (!is_Term_kind(kind))
-      FatalError("CreateTerm:  Illegal kind to CreateTerm:",
-		 ASTUndefined, kind);
-    ASTNode n = CreateNode(kind, child0, child1, child2, children);
-    n.SetValueWidth(width);
-    return n;
-  }
-
 
   ////////////////////////////////////////////////////////////////
   //

@@ -29,6 +29,7 @@ namespace BEEV
     friend class STPMgr;
     friend class ASTNodeHasher;
     friend class ASTNodeEqual;
+    friend class HashingNodeFactory;
 
   private:
     /******************************************************************

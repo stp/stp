@@ -17,5 +17,5 @@ clean:
 depend: $(SRCS)
 	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
 
-#-include ./depend
+-include ./depend
 

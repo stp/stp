@@ -16,6 +16,32 @@ namespace BEEV
    * Universal Helper Functions                                   *
    ****************************************************************/
   
+	bool isCommutative(const Kind k) {
+	switch (k) {
+	case BVOR:
+	case BVAND:
+	case BVXOR:
+	case BVNAND:
+	case BVNOR:
+	case BVXNOR:
+	case BVPLUS:
+	case BVMULT:
+	case EQ:
+	case AND:
+	case OR:
+	case NAND:
+	case NOR:
+	case XOR:
+	case IFF:
+		return true;
+	default:
+		return false;
+	}
+
+	return false;
+}
+
+
   void FatalError(const char * str, const ASTNode& a, int w)
   {
     if (a.GetKind() != UNDEFINED)
