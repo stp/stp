@@ -14,6 +14,7 @@ lib: $(LIB)
 $(LIB): $(OBJECTS)
 	rm -f $@
 	ar cq $@ $(OBJECTS)
+	ranlib $@
 	cp $(LIB) ../
 	cp $(OBJECTS) ../
 
