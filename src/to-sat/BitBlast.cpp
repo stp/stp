@@ -187,7 +187,7 @@ namespace BEEV
           if (result_width == arg_width)
             {
               //nothing to sign extend
-              result = arg;
+              result = bbarg;
               break;
             }
           else
