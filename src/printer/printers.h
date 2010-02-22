@@ -36,6 +36,10 @@ namespace printer
   void SMTLIB_PrintBack(ostream &os, 
                         const BEEV::ASTNode& n );
 
+  ostream& GDL_Print(ostream &os, const BEEV::ASTNode n);
+  ostream& GDL_Print(ostream &os, const ASTNode n, string (*annotate)(const ASTNode&));
+
+  ostream& Bench_Print(ostream &os, const ASTNode n);
 }
 
 #endif /* PRINTERS_H_ */
