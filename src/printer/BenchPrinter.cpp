@@ -1,6 +1,7 @@
 #include "printers.h"
 #include <string>
 #include "ASTKind.h"
+#include <deque>
 
 /*
  * Bench format  which the ABC logic synthesis tool can read.
@@ -42,43 +43,56 @@ string symbolToString(const ASTNode &n)
 
 }
 
-string Bench_Print1(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
+string Bench_Print1(ostream &os, const ASTNode& n,
+		map<ASTNode, string> *alreadyOutput)
 {
-	if (n.GetValueWidth() > 1 && (n.GetKind() != SYMBOL))
-	{
-		// some of the nodes have a width of zero (oddly), but they are probably ok.
-		cerr << "width" << n.GetValueWidth();
-		cerr << n;
-		assert(n.GetValueWidth() == 1);
-	}
 
+	assert(((n.GetKind() == SYMBOL) || (n.GetKind() == BVCONST) || n.GetValueWidth() <= 1));
 	assert(!n.IsNull());
 
-	std::stringstream output;
+	map<ASTNode, string>::iterator it;
+	if ((it = alreadyOutput->find(n)) != alreadyOutput->end())
+		return it->second;
+
 	if (n.GetKind() == BVCONST)
-		return bvconstToString(n);
+	{
+		(*alreadyOutput)[n] = bvconstToString(n);
+		return (*alreadyOutput)[n];
+	}
 
 	if (n.GetKind() == SYMBOL)
-		return symbolToString(n);
+	{
+		(*alreadyOutput)[n] = symbolToString(n);
+		return (*alreadyOutput)[n];
+	}
+
+	if (n.GetKind() == TRUE)
+		{
+		return "vdd";
+		}
+
+	if (n.GetKind() == FALSE)
+		{
+		return "gnd";
+		}
 
 	if (n.GetKind() == BVGETBIT)
 	{
 		assert(n[1].GetKind() == BVCONST);
 		std::stringstream nn;
-		nn << Bench_Print1(os, n[0], alreadyOutput) << "_" << bvconstToString(
-				n[1]);
-		return nn.str();
+		nn << Bench_Print1(os, n[0], alreadyOutput) << "_" << Bench_Print1(os, n[1], alreadyOutput);
+		(*alreadyOutput)[n] = nn.str();
+		return (*alreadyOutput)[n];
 	}
 
-	std::stringstream thisNode;
-	thisNode << "n" << n.GetNodeNum();
+	std::stringstream nodeNameSS;
+	nodeNameSS << "n" << n.GetNodeNum();
 
-	if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
-		return thisNode.str();
-
-	alreadyOutput->insert(n.GetNodeNum());
+	string thisNode = nodeNameSS.str();
+	(*alreadyOutput)[n] = thisNode;
 
 	assert(n.Degree() > 0);
+	std::stringstream output;
 
 	// The bench format doesn't accept propositional ITEs.
 	if (n.GetKind() == ITE)
@@ -88,40 +102,57 @@ string Bench_Print1(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
 		string p1 = Bench_Print1(os, n[1], alreadyOutput);
 		string p2 = Bench_Print1(os, n[2], alreadyOutput);
 
-		os << thisNode.str() << "_1 = AND(" << p << "," << p1 << ")" << endl;
-		os << thisNode.str() << "_2" << " = NOT(" << p << ")," << endl;
-		os << thisNode.str() << "_3" << " = AND(" << thisNode.str() << "_2"
+		os << thisNode << "_1 = AND(" << p << "," << p1 << ")" << endl;
+		os << thisNode << "_2" << " = NOT(" << p << ")," << endl;
+		os << thisNode << "_3" << " = AND(" << thisNode << "_2"
 				<< "," << p2 << ")" << endl;
-		os << thisNode.str() << "=" << "OR(," << thisNode.str() << "_1" << ","
-				<< thisNode.str() << "_3)" << endl;
+		os << thisNode << "=" << "OR(," << thisNode << "_1" << ","
+				<< thisNode << "_3)" << endl;
 	}
 	else
 	{
 		if (n.Degree() > 2)
 		{
-			if(n.GetKind() != AND && n.GetKind() != XOR && n.GetKind() != OR) // must be associative.
+			assert(n.GetKind() == AND || n.GetKind() == XOR || n.GetKind() == OR); // must be associative.
+			deque<string> names;
+
+			for (unsigned i = 0; i < n.Degree(); i++)
+				names.push_back(Bench_Print1(os, n[i], alreadyOutput));
+
+			int id = 0;
+
+			while (names.size() > 2)
 			{
-				cerr << name(n.GetKind());
+				string a = names.front();
+				names.pop_front();
+
+				string b = names.front();
+				names.pop_front();
+
+				std::stringstream thisName;
+				thisName << thisNode << "___" << id++;
+
+				output << thisName.str() << "=" << name(n.GetKind()) << "("
+						<< a << "," << b << ")" << endl;
+
+				names.push_back(thisName.str());
 			}
 
-			output << thisNode.str() << "_1" <<  "=" << name(n.GetKind()) << "(" << Bench_Print1(os, n[0], alreadyOutput)
-					<< "," << Bench_Print1(os, n[1], alreadyOutput) << ")" << endl;
+			assert(names.size() == 2);
+			// last two now.
 
+			string a = names.front();
+			names.pop_front();
+			string b = names.front();
+			names.pop_front();
 
-			for (unsigned i = 2; i < n.Degree()-1/*note minus one.*/; i++)
-			{
-				output << thisNode.str() << "_" << i << "=" << name(n.GetKind()) << "(" << Bench_Print1(os, n[i], alreadyOutput)
-						<< "," << thisNode.str() << "_" << (i-1) << ")" << endl;
-			}
-
-			output << thisNode.str() << "=" << name(n.GetKind()) << "(" << Bench_Print1(os, n[n.Degree()-1], alreadyOutput)
-				    << "," << thisNode.str() << "_" << (n.Degree()-2) << ")" << endl;
-
+			output << thisNode << "=" << name(n.GetKind()) << "(" << a
+					<< "," << b << ")" << endl;
 			os << output.str();
 		}
 		else
 		{
-			output << thisNode.str() << "=" << name(n.GetKind()) << "(";
+			output << thisNode << "=" << name(n.GetKind()) << "(";
 			for (unsigned i = 0; i < n.Degree(); i++)
 			{
 				if (i >= 1)
@@ -132,7 +163,7 @@ string Bench_Print1(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
 			os << output.str() << ")" << endl;
 		}
 	}
-	return thisNode.str();
+	return thisNode;
 }
 
 void OutputInputs(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
@@ -167,13 +198,14 @@ void OutputInputs(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
 
 ostream& Bench_Print(ostream &os, const ASTNode n)
 {
-	hash_set<int> alreadyOutput;
+	hash_set<int> alreadyOutput2;
 
-	OutputInputs(os, n, &alreadyOutput);
-	alreadyOutput.clear();
+	OutputInputs(os, n, &alreadyOutput2);
+
+	map<ASTNode, string> alreadyOutput;
 
 	os << "OUTPUT(" << "n" << n.GetNodeNum() << ")" << endl;
-	string top = Bench_Print1(os, n, &alreadyOutput);
+	Bench_Print1(os, n, &alreadyOutput);
 	return os;
 }
 }
