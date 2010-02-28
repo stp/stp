@@ -82,5 +82,9 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20
 	g++  -g $(CXXFLAGS)  leak.c  -o a20.out $(LIBS)
 	$(VALGRIND) ./a20.out
 
+21:	
+	g++ $(CXXFLAGS) interface-check.c -o a21.out $(LIBS)
+	./a21.out
+
 clean:
 	rm -rf *~ *.out
