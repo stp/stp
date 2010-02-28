@@ -36,6 +36,7 @@ endif
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
 	$(AR) rc libstp.a  $(SRC)/AST/*.o \
+			   $(SRC)/AST/NodeFactory/*.o \
 			   $(SRC)/STPManager/*.o \
 			   $(SRC)/printer/*.o \
 		           $(SRC)/absrefine_counterexample/*.o \

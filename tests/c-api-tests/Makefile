@@ -1,8 +1,8 @@
 # Tests that run under valgrind will return a non-zero error code on
 # either leak, or use of unitialised values.
 include ../../scripts/Makefile.common
-CXXFLAGS= -DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib -L../../src/AST
-LIBS= -lstp -last
+CXXFLAGS= -DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib 
+LIBS= -lstp 
 
 VALGRINDPATH=`which valgrind`
 ifeq   "$(VALGRINDPATH)" ""
