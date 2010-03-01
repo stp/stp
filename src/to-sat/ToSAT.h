@@ -11,7 +11,6 @@
 #define TOSAT_H
 #include <cmath>
 
-#include "BitBlast.h"
 #include "ToCNF.h"
 
 #include "../AST/AST.h"

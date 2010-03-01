@@ -7,6 +7,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 #include "ToSAT.h"
+#include "BitBlastNew.h"
 
 namespace BEEV
 {
@@ -74,6 +75,8 @@ namespace BEEV
     return sat;
   }
 
+
+
   //Call the SAT solver, and check the result before returning. This
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
@@ -82,8 +85,17 @@ namespace BEEV
                       const ASTNode& original_input)
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
+
+#if 1
+    BitBlasterNew BB(bm);
+    BBNodeSet set;
+    ASTNode BBFormula = BB.BBForm(modified_input,set);
+    assert(set.size() == 0); // doesn't yet work.
+#else
     BitBlaster BB(bm);
     ASTNode BBFormula = BB.BBForm(modified_input);
+#endif
+
     bm->ASTNodeStats("after bitblasting: ", BBFormula);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
