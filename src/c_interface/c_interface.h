@@ -349,7 +349,6 @@ extern "C" {
       SBVMOD,
       BVSX,
       BVZX,
-      BOOLVEC,
       ITE,
       BVGETBIT,
       BVLT,

@@ -12,7 +12,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 {
 	// If all the parameters are constant, return the constant value.
 	// The bitblaster calls CreateNode with a boolean vector. We don't try to simplify those.
-	if (kind != BEEV::BOOLVEC && kind != BEEV::UNDEFINED)
+	if (kind != BEEV::UNDEFINED)
 	{
 		bool allConstant = true;
 

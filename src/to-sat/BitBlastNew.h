@@ -84,7 +84,6 @@ class BitBlasterNew {
 
 	// Return formula for majority function of three formulas.
 	BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
-	BBNode Sum(const BBNode& xi, const BBNode& yi, const BBNode& cin);
 
 	// Internal bit blasting routines.
 	BBNode BBBVLE(const BBNodeVec& x, const BBNodeVec& y, bool is_signed,
@@ -93,7 +92,6 @@ class BitBlasterNew {
 	// Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
 	BBNode BBcompare(const ASTNode& form, BBNodeSet& support);
 
-	void BBRSignedShift(BBNodeVec& x, unsigned int shift);
 	void BBLShift(BBNodeVec& x, unsigned int shift);
 	void BBRShift(BBNodeVec& x, unsigned int shift);
 
