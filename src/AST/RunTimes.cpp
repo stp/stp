@@ -45,13 +45,20 @@ void RunTimes::print()
   std::map<Category, long>::const_iterator it2 = times.begin();
 
   while (it1 != counts.end())
-    {
-      result << " " << CategoryNames[it1->first] << ": " << it1->second;
-      if ((it2 = times.find(it1->first)) != times.end())
-        result << " [" << it2->second << "ms]";
-      result << std::endl;
-      it1++;
-    }
+  	{
+  		int time_ms = 0;
+  		if ((it2 = times.find(it1->first)) != times.end())
+  			time_ms = it2->second;
+
+  		if (time_ms!=0)
+  		{
+  			result << " " << CategoryNames[it1->first] << ": " << it1->second;
+  			result << " [" << time_ms << "ms]";
+  			result << std::endl;
+  		}
+  		it1++;
+  	}
+
 
   std::cerr << result.str();
   // iterator
