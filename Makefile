@@ -44,13 +44,15 @@ endif
 			   $(SRC)/sat/*.o \
 			   $(SRC)/simplifier/*.o  \
 			   $(SRC)/extlib-constbv/*.o \
+			   $(SRC)/extlib-abc/*/*/*.o \
 			   $(SRC)/c_interface/*.o \
 			   $(SRC)/parser/let-funcs.o  \
 			   $(SRC)/parser/parseCVC.o  \
 			   $(SRC)/parser/lexCVC.o \
 			   $(SRC)/parser/parseSMT.o \
 			   $(SRC)/parser/lexSMT.o \
-			   $(SRC)/main/*.o
+			   $(SRC)/main/*.o \
+
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
@@ -91,6 +93,7 @@ clean:
 	$(MAKE) clean -C $(SRC)/STPManager	
 	$(MAKE) clean -C $(SRC)/printer
 	$(MAKE) clean -C $(SRC)/extlib-constbv
+	$(MAKE) clean -C $(SRC)/extlib-abc
 	$(MAKE) clean -C $(SRC)/simplifier
 	$(MAKE) clean -C $(SRC)/absrefine_counterexample
 	$(MAKE) clean -C $(SRC)/to-sat
