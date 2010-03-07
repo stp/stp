@@ -51,9 +51,6 @@ namespace BEEV
     // Ptr to STPManager
     STPMgr * bm;
 
-    // Ptr to Simplifier
-    Simplifier * simp;
-
 #if 0
     // Memo table to check the functioning of bitblaster and CNF
     // converter
@@ -105,9 +102,8 @@ namespace BEEV
      ****************************************************************/
     
     // Constructor
-    ToSAT(STPMgr * bm, Simplifier * s) :
-      bm(bm), 
-      simp(s)
+    ToSAT(STPMgr * bm) :
+      bm(bm)
 #if 0
       ,CheckBBandCNFMemo()
 #endif
@@ -119,8 +115,7 @@ namespace BEEV
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
     bool CallSAT(MINISAT::Solver& SatSolver, 
-                 const ASTNode& modified_input,
-                 const ASTNode& original_input);
+                 const ASTNode& input);
 
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
@@ -138,12 +133,11 @@ namespace BEEV
 
     ~ToSAT()
     {
-      _ASTNode_to_SATVar_Map.clear();
+       ClearAllTables();
 #if 0
       RepLitMap.clear();
       CheckBBandCNFMemo.clear();
 #endif
-      _SATVar_to_AST_Vector.clear();
     }
   }; //end of class ToSAT
 }; //end of namespace

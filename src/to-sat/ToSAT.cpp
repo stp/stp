@@ -256,15 +256,14 @@ namespace BEEV
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
   bool ToSAT::CallSAT(MINISAT::Solver& SatSolver,
-                      const ASTNode& modified_input,
-                      const ASTNode& original_input)
+                      const ASTNode& input)
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
 
 
     BitBlasterNew BB(bm);
     BBNodeSet set;
-    ASTNode BBFormula = BB.BBForm(modified_input,set);
+    ASTNode BBFormula = BB.BBForm(input,set);
     assert(set.size() == 0); // doesn't yet work.
 
     bm->ASTNodeStats("after bitblasting: ", BBFormula);
@@ -297,6 +296,7 @@ namespace BEEV
         sat = toSATandSolve(SatSolver, *xorcl, true);
       }
 #endif
+
 
     cm->DELETE(cl);
     cm->DELETE(xorcl);

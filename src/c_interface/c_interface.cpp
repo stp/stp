@@ -158,7 +158,7 @@ VC vc_createValidityChecker(void) {
   BEEV::STPMgr * bm       = new BEEV::STPMgr();
   BEEV::Simplifier * simp  = new BEEV::Simplifier(bm);
   BEEV::BVSolver* bvsolver = new BEEV::BVSolver(bm, simp);
-  BEEV::ToSAT * tosat      = new BEEV::ToSAT(bm, simp);
+  BEEV::ToSAT * tosat      = new BEEV::ToSAT(bm);
   BEEV::ArrayTransformer * arrayTransformer = 
     new BEEV::ArrayTransformer(bm, simp);
   BEEV::AbsRefine_CounterExample * Ctr_Example = 

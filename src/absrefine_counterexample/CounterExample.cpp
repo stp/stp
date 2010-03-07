@@ -993,8 +993,7 @@ namespace BEEV
                       const ASTNode& original_input)
   {
     bool sat = tosat->CallSAT(SatSolver,
-                              modified_input,
-                              original_input);
+                              modified_input);
     if (!sat)
       {
         //PrintOutput(true);

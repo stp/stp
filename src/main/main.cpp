@@ -56,7 +56,7 @@ int main(int argc, char ** argv) {
   Simplifier * simp  = new Simplifier(bm);
   BVSolver* bvsolver = new BVSolver(bm, simp);
   ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
-  ToSAT * tosat      = new ToSAT(bm, simp);
+  ToSAT * tosat      = new ToSAT(bm);
   AbsRefine_CounterExample * Ctr_Example = 
     new AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
   itimerval timeout; 
