@@ -54,12 +54,14 @@ namespace BEEV
     // Ptr to Simplifier
     Simplifier * simp;
 
+#if 0
     // Memo table to check the functioning of bitblaster and CNF
     // converter
     ASTNodeMap CheckBBandCNFMemo;
 
     // Map from formulas to representative literals, for debugging.
     ASTNodeMap RepLitMap;
+#endif
 
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
     
@@ -72,14 +74,30 @@ namespace BEEV
     MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, 
                                       const ASTNode& n);
 
+#if 0
     // Evaluates bitblasted formula in satisfying assignment
     ASTNode CheckBBandCNF(MINISAT::Solver& newS, ASTNode form);
     ASTNode CheckBBandCNF_int(MINISAT::Solver& newS, ASTNode form);
 
+
     // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
     // assignment.  Returns ASTTrue if true, ASTFalse if false or
     // undefined.
+
     ASTNode SymbolTruthValue(MINISAT::Solver &newS, ASTNode form);
+#endif
+
+    //Iteratively goes through the Clause Buckets, and calls
+      //toSATandSolve()
+    bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
+                                    ClauseBuckets * cb);
+
+      // Converts the clause to SAT and calls SAT solver
+      bool toSATandSolve(MINISAT::Solver& S,
+                         ClauseList& cll,
+  		       bool add_xor_clauses=false,
+  		       bool enable_clausal_abstraction=false);
+
 
   public:
     /****************************************************************
@@ -89,8 +107,10 @@ namespace BEEV
     // Constructor
     ToSAT(STPMgr * bm, Simplifier * s) :
       bm(bm), 
-      simp(s),
-      CheckBBandCNFMemo()
+      simp(s)
+#if 0
+      ,CheckBBandCNFMemo()
+#endif
     {
       ASTTrue      = bm->CreateNode(TRUE);
       ASTFalse     = bm->CreateNode(FALSE);
@@ -102,17 +122,6 @@ namespace BEEV
                  const ASTNode& modified_input,
                  const ASTNode& original_input);
 
-    //Iteratively goes through the Clause Buckets, and calls
-    //toSATandSolve()
-    bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
-                                  ClauseBuckets * cb);
-    
-    // Converts the clause to SAT and calls SAT solver
-    bool toSATandSolve(MINISAT::Solver& S,
-                       ClauseList& cll, 
-		       bool add_xor_clauses=false,
-		       bool enable_clausal_abstraction=false);
-    
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
 
@@ -130,8 +139,10 @@ namespace BEEV
     ~ToSAT()
     {
       _ASTNode_to_SATVar_Map.clear();
+#if 0
       RepLitMap.clear();
       CheckBBandCNFMemo.clear();
+#endif
       _SATVar_to_AST_Vector.clear();
     }
   }; //end of class ToSAT
