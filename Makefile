@@ -16,7 +16,7 @@ LIBRARIES=lib/libstp.a
 HEADERS=$(SRC)/c_interface/*.h
 
 .PHONY: all
-all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv
+all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc
 
 ifdef CRYPTOMINISAT
 	$(MAKE) -C $(SRC)/sat cryptominisat
@@ -51,8 +51,7 @@ endif
 			   $(SRC)/parser/lexCVC.o \
 			   $(SRC)/parser/parseSMT.o \
 			   $(SRC)/parser/lexSMT.o \
-			   $(SRC)/main/*.o \
-
+			   $(SRC)/main/*.o
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
@@ -67,7 +66,7 @@ endif
 AST: 
 	$(MAKE) -C $(SRC)/$@
 
-STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv: AST
+STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc: AST
 	$(MAKE) -C $(SRC)/$@
 
 ####
