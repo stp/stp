@@ -260,11 +260,13 @@ namespace BEEV
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
 
-
-    BitBlasterNew BB(bm);
-    BBNodeSet set;
-    ASTNode BBFormula = BB.BBForm(input,set);
-    assert(set.size() == 0); // doesn't yet work.
+    ASTNode BBFormula;
+    {
+    	BitBlasterNew BB(bm);
+    	BBNodeSet set;
+    	BBFormula = BB.BBForm(input,set);
+    	assert(set.size() == 0); // doesn't yet work.
+    }
 
     bm->ASTNodeStats("after bitblasting: ", BBFormula);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
