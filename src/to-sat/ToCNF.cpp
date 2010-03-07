@@ -16,16 +16,18 @@ namespace BEEV
 {
   //############################################################
   //############################################################
-  void DeleteClauseList(ClauseList *cllp)
+
+  void CNFMgr::DeleteClauseList(ClauseList cllp)
   {
-    ClauseList::const_iterator iend = cllp->end();
-    for (ClauseList::const_iterator i = cllp->begin(); i < iend; i++)
+    ClauseList::const_iterator iend = cllp.end();
+    for (ClauseList::const_iterator i = cllp.begin(); i < iend; i++)
       {
         delete *i;
       }
-    delete cllp;
+    cllp.clear();
   } //End of DeleteClauseList
   
+
   bool CNFMgr::isAtom(const ASTNode& varphi)
   {
     bool result;
@@ -1992,12 +1994,7 @@ namespace BEEV
 
   void CNFMgr::DELETE(ClauseList* varphi)
   {
-    ClauseList::const_iterator it = varphi->begin();
-    for (; it != varphi->end(); it++)
-      {
-        delete *it;
-      }
-
+    DeleteClauseList(*varphi);
     delete varphi;
   } //End of DELETE()
 

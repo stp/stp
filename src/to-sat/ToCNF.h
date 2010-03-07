@@ -264,7 +264,10 @@ namespace BEEV
 
     ClauseList* ReturnXorClauses(void);
 
-    void DELETE(ClauseList* varphi);
+    // Destructors that need to be explicitly called...(yuck).
+    // One deletes the thing passed into it.
+    static void DeleteClauseList(ClauseList varphi);
+    static void DELETE(ClauseList* varphi);
 
     void PrintClauseList(ostream& os, ClauseList& cll);
   }; // end of CNFMgr class

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -16,8 +16,6 @@ namespace BEEV
   bool isTseitinVariable(const ASTNode& n) {
     if (n.GetKind() == SYMBOL && n.GetType() == BOOLEAN_TYPE) {
       const char * zz = n.GetName();
-      //if the variables ARE cnf variables then dont make them
-      // decision variables.
       if (0 == strncmp("cnf", zz, 3))
         {
           return true;
@@ -171,9 +169,13 @@ namespace BEEV
           {
             bm->PrintStats(newSolver);
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+            CNFMgr::DeleteClauseList(cll);
             return false;
           }     
       } // End of For-loop adding the clauses 
+
+    // Free the clause list before SAT solving.
+    CNFMgr::DeleteClauseList(cll);
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);    
@@ -201,10 +203,6 @@ namespace BEEV
           {
             cl_size = CLAUSAL_BUCKET_LIMIT;
           }
-// 	else
-// 	  {
-// 	    cl_size = CLAUSAL_BUCKET_LIMIT-1;
-// 	  }
 
         //If no clauses of size cl_size have been seen, then create a
         //bucket for that size
@@ -234,14 +232,8 @@ namespace BEEV
     for(int count=1;it!=itend;it++, count++)
       {
         ClauseList *cl = (*it).second;
-// 	if(CLAUSAL_BUCKET_LIMIT == count)
-// 	  {
-// 	    sat = toSATandSolve(SatSolver,*cl, false, true);
-// 	  }
-// 	else
-	  {
 	    sat = toSATandSolve(SatSolver,*cl);
-	  }
+
         if(!sat)
           {
             return sat;
@@ -271,14 +263,15 @@ namespace BEEV
     bm->ASTNodeStats("after bitblasting: ", BBFormula);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
-    CNFMgr* cm = new CNFMgr(bm);
-    ClauseList* cl = cm->convertToCNF(BBFormula);
+    CNFMgr cm(bm);
+    ClauseList* cl = cm.convertToCNF(BBFormula);
 
-    ClauseList* xorcl = cm->ReturnXorClauses();
+    ClauseList* xorcl = cm.ReturnXorClauses();
 
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
+    cl->clear(); // clause buckets now point to the clauses.
+    delete cl;
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
-    //bool sat = toSATandSolve(SatSolver, *cl);
 
     for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
     	delete it->second;
@@ -286,9 +279,8 @@ namespace BEEV
 
     if(!sat)
       {
-        cm->DELETE(cl);
-        cm->DELETE(xorcl);
-        delete cm;
+        CNFMgr::DeleteClauseList(*xorcl);
+    	delete xorcl;
     	return sat;
       }
 
@@ -300,9 +292,7 @@ namespace BEEV
 #endif
 
 
-    cm->DELETE(cl);
-    cm->DELETE(xorcl);
-    delete cm;
+    delete xorcl;
     return sat;
   }
 
