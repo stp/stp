@@ -911,6 +911,12 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->Reso
 }
 |      Expr BVLEFTSHIFT_TOK NUMERAL_TOK 
 {
+  if (0 == $3)
+  	{
+  	$$ = $1;
+  	}
+  else
+  {
   ASTNode zero_bits = ParserBM->CreateZeroConst($3);
   ASTNode * n = 
     new ASTNode(ParserBM->CreateTerm(BVCONCAT,
@@ -918,6 +924,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->Reso
   BVTypeCheck(*n);
   $$ = n;
   delete $1;
+  }
 }
 /* |      Expr BVLEFTSHIFT_TOK Expr */
 /* { */
