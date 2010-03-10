@@ -75,6 +75,6 @@ namespace BEEV
   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
                                            int decision, int polarity=0);
 
-  void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query);
+  void print_STPInput_Back(const ASTNode& query);
 };// end of namespace BEEV
 #endif

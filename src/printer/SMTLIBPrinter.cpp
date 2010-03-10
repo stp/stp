@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Trevor Hansen, Vijay Ganesh
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: July, 2009
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
@@ -9,17 +9,22 @@
 
 #include "printers.h"
 #include <cassert>
+#include <cctype>
 
-// todo  : fix lets.
-//       : Finish mapping function names from internal names to SMTLIB names.
-//           : build proper headers for PrintBack
-//       : Letize code for each printer should be merged.
+// Outputs in the SMTLIB format. If you want something that can be parsed by other tools call
+// SMTLIB_PrintBack(). SMTLIB_Print() prints just an expression.
+// Wierdly is seems that only terms, not formulas can be LETized.
 
 namespace printer
 {
 
   using std::string;
   using namespace BEEV;
+
+  string functionToSMTLIBName(const BEEV::Kind k);
+  void SMTLIB_Print1(ostream& os, const BEEV::ASTNode n, int indentation,	bool letize);
+  void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
+
 
   static string tolower(const char * name)
   {
@@ -29,42 +34,67 @@ namespace printer
     return s;
   }
   
-  string functionToSMTLIBName(const BEEV::Kind k);
-  void SMTLIB_Print1(ostream& os, 
-                     const BEEV::ASTNode n, 
-                     int indentation, bool letize);
-  void printVarDeclsToStream( const STPMgr* mgr, ostream &os);
+//Map from ASTNodes to LetVars
+ASTNodeMap NodeLetVarMap;
+
+//This is a vector which stores the Node to LetVars pairs. It
+//allows for sorted printing, as opposed to NodeLetVarMap
+std::vector<pair<ASTNode, ASTNode> > NodeLetVarVec;
+
+//a partial Map from ASTNodes to LetVars. Needed in order to
+//correctly print shared subterms inside the LET itself
+ASTNodeMap NodeLetVarMap1;
+
+void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
+		ASTNodeSet& symbols)
+{
+	if (visited.find(n) != visited.end())
+		return; // already visited.
+
+	visited.insert(n);
+
+	if (n.GetKind() == SYMBOL)
+	{
+		symbols.insert(n);
+	}
+
+	for (unsigned i = 0; i < n.GetChildren().size(); i++)
+		buildListOfSymbols(n[i], visited, symbols);
+}
 
   // Initial version intended to print the whole thing back.
-  void SMTLIB_PrintBack(ostream &os, const ASTNode& n) {
-    // need to add fake headers into here.
+void SMTLIB_PrintBack(ostream &os, const ASTNode& n)
+{
     os << "(" << endl;
     os << "benchmark blah" << endl;
-    os << ":logic QF_BV" << endl;
-    printVarDeclsToStream(n.GetSTPMgr(),os);
-    os << ":formula" << endl;
+	os << ":logic QF_AUFBV" << endl;
+	ASTNodeSet visited, symbols;
+	buildListOfSymbols(n, visited, symbols);
+	printVarDeclsToStream(symbols, os);
+	os << ":formula ";
     SMTLIB_Print(os, n, 0);
     os << ")" << endl;
   }
 
-  void printVarDeclsToStream( const STPMgr* mgr, ostream &os) {
-    for(ASTVec::const_iterator i = mgr->ListOfDeclaredVars.begin(),
-          iend=mgr->ListOfDeclaredVars.end();i!=iend;i++) {
+void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
+{
+	for (ASTNodeSet::const_iterator i = symbols.begin(), iend = symbols.end(); i
+			!= iend; i++)
+	{
       const BEEV::ASTNode& a = *i;
 
       // Should be a symbol.
       assert(a.GetKind()== SYMBOL);
 
-      switch(a.GetType()) {
+		switch (a.GetType())
+		{
       case BEEV::BITVECTOR_TYPE:
 
         os << ":extrafuns (( ";
         a.nodeprint(os);
-        //os << " bv[" << a.GetValueWidth() << "]";
         os << " BitVec[" << a.GetValueWidth() << "]";
         os << " ))" << endl;
         break;
-
       case BEEV::ARRAY_TYPE:
         os << ":extrafuns (( ";
         a.nodeprint(os);
@@ -85,7 +115,7 @@ namespace printer
 
   void outputBitVec(const ASTNode n, ostream& os)
   {
-    Kind k = n.GetKind();
+	const Kind k = n.GetKind();
     const ASTVec &c = n.GetChildren();
     ASTNode op;
 
@@ -104,10 +134,8 @@ namespace printer
     // Prepend with zero to convert to unsigned.
 
     os << "bv";
-    CBV unsign = 
-      CONSTANTBV::
-      BitVector_Concat((n.GetSTPMgr())->CreateZeroConst(1).GetBVConst(), 
-                       op.GetBVConst());
+	CBV unsign = CONSTANTBV::BitVector_Concat(
+			n.GetSTPMgr()->CreateZeroConst(1).GetBVConst(), op.GetBVConst());
     unsigned char * str = CONSTANTBV::BitVector_to_Dec(unsign);
     CONSTANTBV::BitVector_Destroy(unsign);
     os << str << "[" << op.GetValueWidth() << "]";
@@ -125,26 +153,24 @@ namespace printer
       }
 
     //if this node is present in the letvar Map, then print the letvar
-    STPMgr * bm = n.GetSTPMgr();
-
     //this is to print letvars for shared subterms inside the printing
     //of "(LET v0 = term1, v1=term1@term2,...
-    if ((bm->NodeLetVarMap1.find(n) != bm->NodeLetVarMap1.end()) && !letize)
+	if ((NodeLetVarMap1.find(n) != NodeLetVarMap1.end()) && !letize)
       {
-        SMTLIB_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize);
+		SMTLIB_Print1(os, (NodeLetVarMap1[n]), indentation, letize);
         return;
       }
 
     //this is to print letvars for shared subterms inside the actual
     //term to be printed
-    if ((bm->NodeLetVarMap.find(n) != bm->NodeLetVarMap.end()) && letize)
+	if ((NodeLetVarMap.find(n) != NodeLetVarMap.end()) && letize)
       {
-        SMTLIB_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize);
+		SMTLIB_Print1(os, (NodeLetVarMap[n]), indentation, letize);
         return;
       }
 
     //otherwise print it normally
-    Kind kind = n.GetKind();
+	const Kind kind = n.GetKind();
     const ASTVec &c = n.GetChildren();
     switch (kind)
       {
@@ -152,7 +178,6 @@ namespace printer
       case BVCONST:
         outputBitVec(n, os);
         break;
-
       case SYMBOL:
         n.nodeprint(os);
         break;
@@ -162,7 +187,6 @@ namespace printer
       case TRUE:
         os << "true";
         break;
-
       case BVSX:
       case BVZX:
         {
@@ -172,7 +196,7 @@ namespace printer
           else
             os << "(sign_extend[";
 
-          os << amount << "]";
+		os << (amount - c[0].GetValueWidth()) << "]";
           SMTLIB_Print1(os, c[0], indentation, letize);
           os << ")";
         }
@@ -203,18 +227,82 @@ namespace printer
       }
   }
 
+void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet)
+{
+	const Kind kind = n.GetKind();
+
+	if (kind == SYMBOL || kind == BVCONST || kind == FALSE || kind == TRUE)
+		return;
+
+	const ASTVec &c = n.GetChildren();
+	for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
+	{
+		const ASTNode& ccc = *it;
+
+		const Kind k = ccc.GetKind();
+		if (k == SYMBOL || k == BVCONST || k == FALSE || k == TRUE)
+			continue;
+
+		if (PLPrintNodeSet.find(ccc) == PLPrintNodeSet.end())
+		{
+			//If branch: if *it is not in NodeSet then,
+			//
+			//1. add it to NodeSet
+			//
+			//2. Letize its childNodes
+			PLPrintNodeSet.insert(ccc);
+			LetizeNode(ccc, PLPrintNodeSet);
+		}
+		else
+		{
+			//0. Else branch: Node has been seen before
+			//
+			//1. Check if the node has a corresponding letvar in the
+			//1. NodeLetVarMap.
+			//
+			//2. if no, then create a new var and add it to the
+			//2. NodeLetVarMap
+			if (ccc.GetType() == BITVECTOR_TYPE && NodeLetVarMap.find(ccc)
+					== NodeLetVarMap.end())
+			{
+				//Create a new symbol. Get some name. if it conflicts with a
+				//declared name, too bad.
+				int sz = NodeLetVarMap.size();
+				ostringstream oss;
+				oss << "?let_k_" << sz;
+
+				ASTNode CurrentSymbol = n.GetSTPMgr()->CreateSymbol(
+						oss.str().c_str());
+				CurrentSymbol.SetValueWidth(n.GetValueWidth());
+				CurrentSymbol.SetIndexWidth(n.GetIndexWidth());
+				/* If for some reason the variable being created here is
+				 * already declared by the user then the printed output will
+				 * not be a legal input to the system. too bad. I refuse to
+				 * check for this.  [Vijay is the author of this comment.]
+				 */
+
+				NodeLetVarMap[ccc] = CurrentSymbol;
+				std::pair<ASTNode, ASTNode>
+						node_letvar_pair(CurrentSymbol, ccc);
+				NodeLetVarVec.push_back(node_letvar_pair);
+			}
+		}
+	}
+} //end of LetizeNode()
+
   // copied from Presentation Langauge printer.
   ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation)
   {
-    // Clear the PrintMap
-    STPMgr* bm = n.GetSTPMgr();
-    bm->PLPrintNodeSet.clear();
-    bm->NodeLetVarMap.clear();
-    bm->NodeLetVarVec.clear();
-    bm->NodeLetVarMap1.clear();
+    // Clear the maps
+	NodeLetVarMap.clear();
+	NodeLetVarVec.clear();
+	NodeLetVarMap1.clear();
 
     //pass 1: letize the node
-    n.LetizeNode();
+	{
+		ASTNodeSet PLPrintNodeSet;
+		LetizeNode(n, PLPrintNodeSet);
+	}
 
     //pass 2:
     //
@@ -224,41 +312,45 @@ namespace printer
     //3. Then print the Node itself, replacing every occurence of
     //3. expr1 with var1, expr2 with var2, ...
     //os << "(";
-    if (0 < bm->NodeLetVarMap.size())
+	if (0 < NodeLetVarMap.size())
       {
-        //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
-        //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator 
-          it = bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator 
-          itend = bm->NodeLetVarVec.end();
+		std::vector<pair<ASTNode, ASTNode> >::iterator it =
+				NodeLetVarVec.begin();
+		const std::vector<pair<ASTNode, ASTNode> >::iterator itend =
+				NodeLetVarVec.end();
 
-        os << "(LET ";
+		os << "(let (";
         //print the let var first
         SMTLIB_Print1(os, it->first, indentation, false);
-        os << " = ";
+		os << " ";
         //print the expr
         SMTLIB_Print1(os, it->second, indentation, false);
+		os << " )";
 
         //update the second map for proper printing of LET
-        bm->NodeLetVarMap1[it->second] = it->first;
+		NodeLetVarMap1[it->second] = it->first;
 
+		string closing = "";
         for (it++; it != itend; it++)
           {
-            os << "," << endl;
+			os << " " << endl;
+			os << "(let (";
             //print the let var first
             SMTLIB_Print1(os, it->first, indentation, false);
-            os << " = ";
+			os << " ";
             //print the expr
             SMTLIB_Print1(os, it->second, indentation, false);
-
+			os << ")";
             //update the second map for proper printing of LET
-            bm->NodeLetVarMap1[it->second] = it->first;
+			NodeLetVarMap1[it->second] = it->first;
+			closing += ")";
           }
 
-        os << " IN " << endl;
+		os << " ( " << endl;
         SMTLIB_Print1(os, n, indentation, true);
-        os << ") ";
+		os << closing;
+		os << " ) ) ";
+
       }
     else
       SMTLIB_Print1(os, n, indentation, false);
@@ -289,8 +381,10 @@ namespace printer
       case OR:
       case XOR:
       case IFF:
-        //return _kind_names[k];
+      case IMPLIES:
+	{
         return tolower(_kind_names[k]);
+	}
 
       case BVCONCAT:
         return "concat";

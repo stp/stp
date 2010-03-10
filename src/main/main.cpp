@@ -289,7 +289,7 @@ int main(int argc, char ** argv) {
         }
       else
         {
-          print_STPInput_Back(asserts, query);
+          print_STPInput_Back(query);
         }
       return 0;
     } //end of PrintBack if

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -12,8 +12,68 @@
 namespace printer
 {
 
-  using std::string;
-  using namespace BEEV;
+using std::string;
+using namespace BEEV;
+
+string functionToCVCName(const Kind k) {
+	switch (k) {
+
+	case BVUMINUS:
+	case NOT:
+	case BVLT:
+	case BVLE:
+	case BVGT:
+	case BVGE:
+	case BVXOR:
+	case BVNAND:
+	case BVNOR:
+	case BVXNOR:
+	case BVMULT:
+	case AND:
+	case OR:
+	case NAND:
+	case NOR:
+	case XOR:
+	case BVSUB:
+	case BVPLUS:
+	case SBVDIV:
+	case SBVREM:
+	case BVDIV:
+	case BVMOD:
+		return _kind_names[k];
+		break;
+	case BVSLT:
+		return "SBVLT";
+	case BVSLE:
+		return "SBVLE";
+	case BVSGT:
+		return "SBVGT";
+	case BVSGE:
+		return "SBVGE";
+	case IFF:
+		return "<=>";
+	case IMPLIES:
+		return "=>";
+	case BVNEG:
+		return "~";
+	case EQ:
+		return "=";
+	case BVCONCAT:
+		return "@";
+	case BVOR:
+		return "|";
+	case BVAND:
+		return "&";
+	case BVRIGHTSHIFT:
+		return ">>";
+	default: {
+		cerr << "Unknown name when outputting:";
+		FatalError(_kind_names[k]);
+		return ""; // to quieten compiler/
+	}
+	}
+}
+
 
   void PL_Print1(ostream& os, const ASTNode& n,int indentation, bool letize)
   {
@@ -45,7 +105,7 @@ namespace printer
       }
 
     //otherwise print it normally
-    Kind kind = n.GetKind();
+    const Kind kind = n.GetKind();
     const ASTVec &c = n.GetChildren();
     switch (kind)
       {
@@ -90,40 +150,14 @@ namespace printer
         os << endl;
         break;
       case BVUMINUS:
-        os << kind << "( ";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ")";
-        break;
       case NOT:
-        os << "NOT(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ") " << endl;
-        break;
       case BVNEG:
-        os << " ~(";
+    	assert(1 == c.size());
+    	os << "( ";
+    	os << functionToCVCName(kind);
+    	os << "( ";
         PL_Print1(os, c[0], indentation, letize);
-        os << ")";
-        break;
-      case BVCONCAT:
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << " @ ";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")" << endl;
-        break;
-      case BVOR:
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << " | ";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")";
-        break;
-      case BVAND:
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << " & ";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")";
+        os << "))";
         break;
       case BVEXTRACT:
         PL_Print1(os, c[0], indentation, letize);
@@ -137,24 +171,26 @@ namespace printer
         os << "(";
         PL_Print1(os, c[0], indentation, letize);
         os << " << ";
+        if (!c[1].isConstant())
+        {
+        	FatalError("PL_Print1: The shift argument to a left shift must be a constant. Found:",c[1]);
+        }
         os << GetUnsignedConst(c[1]);
         os << ")";
+        os << "[";
+        os << (c[0].GetValueWidth()-1);
+        os << " : " << "0]";
+
         break;
-      case BVRIGHTSHIFT:
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << " >> ";
-        os << GetUnsignedConst(c[1]);
-        os << ")";
-        break;
-      case BVMULT:
+
+      case BVMULT:   // variable arity, function name at front, size next, comma separated.
       case BVSUB:
       case BVPLUS:
       case SBVDIV:
       case SBVREM:
       case BVDIV:
       case BVMOD:
-        os << kind << "(";
+    	os << functionToCVCName(kind) << "(";
         os << n.GetValueWidth();
         for (ASTVec::const_iterator
                it = c.begin(), itend = c.end(); it != itend; it++)
@@ -204,7 +240,8 @@ namespace printer
           os << "} \n";
         }
         break;
-      case BVLT:
+
+      case BVLT: // two arity, prefixed function name.
       case BVLE:
       case BVGT:
       case BVGE:
@@ -212,47 +249,28 @@ namespace printer
       case BVNAND:
       case BVNOR:
       case BVXNOR:
-        os << kind << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ",";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")" << endl;
-        break;
       case BVSLT:
-        os << "SBVLT" << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ",";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")" << endl;
-        break;
       case BVSLE:
-        os << "SBVLE" << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ",";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")" << endl;
-        break;
       case BVSGT:
-        os << "SBVGT" << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ",";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")" << endl;
-        break;
       case BVSGE:
-        os << "SBVGE" << "(";
+    	assert(2 == c.size());
+    	os << functionToCVCName(kind) << "(";
         PL_Print1(os, c[0], indentation, letize);
         os << ",";
         PL_Print1(os, c[1], indentation, letize);
         os << ")" << endl;
         break;
+
+      case BVCONCAT:  // two arity, infix function name.
+      case BVOR:
+      case BVAND:
+      case BVRIGHTSHIFT:
       case EQ:
-        PL_Print1(os,c[0], indentation, letize);
-        os << " = ";
-        PL_Print1(os, c[1], indentation, letize);
-        os << endl;
-        break;
-      case AND:
+      case IFF:
+      case IMPLIES:
+    	  assert(2 == c.size());
+    	  // run on.
+      case AND: // variable arity, infix function name.
       case OR:
       case NAND:
       case NOR:
@@ -266,37 +284,13 @@ namespace printer
           it++;
           for (; it != itend; it++)
             {
-              os << " " << kind << " ";
+              os << " " << functionToCVCName(kind) << " ";
               PL_Print1(os, *it, indentation, letize);
               os << endl;
             }
           os << ")";
           break;
         }
-      case IFF:
-        os << "(";
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ")";
-        os << " <=> ";
-        os << "(";
-        PL_Print1(os,c[1], indentation, letize);
-        os << ")";
-        os << ")";
-        os << endl;
-        break;
-      case IMPLIES:
-        os << "(";
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << ")";
-        os << " => ";
-        os << "(";
-        PL_Print1(os, c[1], indentation, letize);
-        os << ")";
-        os << ")";
-        os << endl;
-        break;
       case BVSX:
       case BVZX:
         os << kind << "(";

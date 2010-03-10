@@ -129,7 +129,7 @@ namespace BEEV
     }
   }
 
-  void print_STPInput_Back(const ASTNode& asserts, const ASTNode& query) {
+  void print_STPInput_Back(const ASTNode& query) {
     (BEEV::GlobalSTP->bm)->printVarDeclsToStream(cout);
     (BEEV::GlobalSTP->bm)->printAssertsToStream(cout,0);
     cout << "QUERY(";
