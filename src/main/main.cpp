@@ -19,6 +19,8 @@ using namespace BEEV;
 
 extern int smtparse(void*);
 extern int cvcparse(void*);
+extern int cvclex_destroy(void);
+extern int smtlex_destroy(void);
 
 // callback for SIGALRM.
 void handle_time_out(int parameter){
@@ -317,10 +319,12 @@ int main(int argc, char ** argv) {
   if (bm->UserFlags.smtlib_parser_flag)
     {
       smtparse((void*)AssertsQuery);
+      smtlex_destroy();
     }
   else
     {
       cvcparse((void*)AssertsQuery);
+      cvclex_destroy();
     }
   bm->GetRunTimes()->stop(RunTimes::Parsing);
 
