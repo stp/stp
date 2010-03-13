@@ -33,6 +33,9 @@ namespace BEEV
 	case NOR:
 	case XOR:
 	case IFF:
+	case BVNEG:
+	case NOT:
+	case BVUMINUS:
 		return true;
 	default:
 		return false;

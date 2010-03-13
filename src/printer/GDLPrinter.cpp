@@ -54,6 +54,9 @@ namespace printer
     ASTVec ch = n.GetChildren();
     ASTVec::iterator itend = ch.end();
 
+    //If a node has the child 'TRUE' twice, we only want to output one TRUE node.
+    ASTNodeSet constantOutput;
+
     int i =0;
     for (ASTVec::iterator it = ch.begin(); it < itend; it++)
       {
@@ -62,19 +65,23 @@ namespace printer
     	if (!isCommutative(n.GetKind()))
     		label << " label:\"" << i << "\"";
 
-
     	if (it->isConstant())
     	{
 			std::stringstream ss;
-			os << "node: { title:\"n";
 			ss << n.GetNodeNum() << "_" << it->GetNodeNum();
 
-			os << ss.str() << "\" label: \"";
-			if (it->GetType() == BEEV::BOOLEAN_TYPE)
-				os << _kind_names[it->GetKind()];
-			else
-				outputBitVec(*it, os);
-			os << "\"}" << endl;
+			if (constantOutput.end() == constantOutput.find(*it))
+			{
+				os << "node: { title:\"n";
+
+				os << ss.str() << "\" label: \"";
+				if (it->GetType() == BEEV::BOOLEAN_TYPE)
+					os << _kind_names[it->GetKind()];
+				else
+					outputBitVec(*it, os);
+				os << "\"}" << endl;
+				constantOutput.insert(*it);
+			}
 
 			os << "edge: { source:\"n" << n.GetNodeNum() << "\" target: \"" << "n" << ss.str()  << "\"" << label.str() << "}" << endl;
     	}
