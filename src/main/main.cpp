@@ -26,6 +26,8 @@ void handle_time_out(int parameter){
   exit(0);
 }
 
+bool onePrintBack =false;
+
 
 // Amount of memory to ask for at beginning of main.
 static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
@@ -39,6 +41,9 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 4. Convert to SAT
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
+
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT} OptionType;
+
 int main(int argc, char ** argv) {
   char * infile;
   extern FILE *cvcin;
@@ -77,7 +82,7 @@ int main(int argc, char ** argv) {
     "-a  : switch optimizations off (optimizations are ON by default)\n";
   helpstring +=  
     "-b  : print STP input back to cout\n";
-  helpstring +=  
+  helpstring +=
     "-c  : construct counterexample\n";
   helpstring +=  
     "-d  : check counterexample\n";
@@ -97,6 +102,17 @@ int main(int argc, char ** argv) {
     "-m  : use the SMTLIB parser\n";
   helpstring +=  
     "-p  : print counterexample\n";
+  // I haven't checked that this works so don't want to include it by default.
+  //helpstring +=
+  //    "--print-back-C  : print input as C code (partially works), then exit\n";
+  helpstring +=
+      "--print-back-CVC  : print input in CVC format, then exit\n";
+  helpstring +=
+      "--print-back-SMTLIB  : print input in SMT-LIB format, then exit\n";
+  helpstring +=
+	  "--print-back-GDL : print AiSee's graph format, then exit\n";
+  helpstring +=
+	  "--print-back-dot : print dotty/neato's graph format, then exit\n";
   helpstring +=  
     "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  
@@ -116,7 +132,49 @@ int main(int argc, char ** argv) {
     {
       if(argv[i][0] == '-')
         {
-          if(argv[i][2]) 
+    	  if(argv[i][1] == '-')
+    	  {
+    		  // long options.
+    		  map<string,OptionType> lookup;
+    		  lookup.insert(make_pair("--print-back-C",PRINT_BACK_C));
+			  lookup.insert(make_pair("--print-back-CVC",PRINT_BACK_CVC));
+			  lookup.insert(make_pair("--print-back-SMTLIB",PRINT_BACK_SMTLIB));
+			  lookup.insert(make_pair("--print-back-GDL",PRINT_BACK_GDL));
+			  lookup.insert(make_pair("--print-back-dot",PRINT_BACK_DOT));
+
+			  switch(lookup[argv[i]])
+			  {
+			  case PRINT_BACK_C:
+				  bm->UserFlags.print_STPinput_back_C_flag = true;
+				  onePrintBack = true;
+				  break;
+			  case PRINT_BACK_CVC:
+				  bm->UserFlags.print_STPinput_back_CVC_flag = true;
+				  onePrintBack = true;
+				  break;
+			  case PRINT_BACK_SMTLIB:
+				  bm->UserFlags.print_STPinput_back_SMTLIB_flag = true;
+				  onePrintBack = true;
+				  break;
+			  case PRINT_BACK_GDL:
+				  bm->UserFlags.print_STPinput_back_GDL_flag = true;
+				  onePrintBack = true;
+				  break;
+			  case PRINT_BACK_DOT:
+				  bm->UserFlags.print_STPinput_back_dot_flag = true;
+				  onePrintBack = true;
+				  break;
+
+			  default:
+				  fprintf(stderr,usage,prog);
+	               cout << helpstring;
+	               return -1;
+	               break;
+			  }
+    	  }
+      else
+      {
+    	  if(argv[i][2])
             {
               fprintf(stderr, 
                       "Multiple character options are not allowed.\n");
@@ -132,6 +190,7 @@ int main(int argc, char ** argv) {
               bm->UserFlags.optimize_flag = false;
               break;
             case 'b':
+              onePrintBack = true;
               bm->UserFlags.print_STPinput_back_flag = true;
               break;
             case 'c':
@@ -221,6 +280,7 @@ int main(int argc, char ** argv) {
               return -1;
               break;
             }
+        }
         } else {          
         infile = argv[i];
         if (bm->UserFlags.smtlib_parser_flag)
@@ -275,24 +335,46 @@ int main(int argc, char ** argv) {
     }
 
   ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-  //cout << "asserts: " << asserts << endl;
   ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
-  //cout << "query: " << query << endl;
+
+  if (onePrintBack)
+  {
 
   if(bm->UserFlags.print_STPinput_back_flag)
     {
       if(bm->UserFlags.smtlib_parser_flag)
-        {
-          // don't pass the query. It's not returned by the smtlib
-          // parser.
-          printer::SMTLIB_PrintBack(cout, asserts);
-        }
+    	  bm->UserFlags.print_STPinput_back_SMTLIB_flag = true;
       else
-        {
-          print_STPInput_Back(query);
-        }
-      return 0;
-    } //end of PrintBack if
+    	  bm->UserFlags.print_STPinput_back_CVC_flag = true;
+    }
+
+  if (bm->UserFlags.print_STPinput_back_CVC_flag)
+  {
+	  print_STPInput_Back(query);
+  }
+
+  if (bm->UserFlags.print_STPinput_back_SMTLIB_flag)
+    {
+	  printer::SMTLIB_PrintBack(cout, asserts);
+    }
+
+  if (bm->UserFlags.print_STPinput_back_C_flag)
+    {
+	  printer::C_Print(cout, asserts);
+    }
+
+  if (bm->UserFlags.print_STPinput_back_GDL_flag)
+    {
+	  printer::GDL_Print(cout, asserts);
+    }
+
+  if (bm->UserFlags.print_STPinput_back_dot_flag)
+    {
+	  printer::Dot_Print(cout, asserts);
+    }
+
+  return 0;
+  }
 
   SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
   if (bm->UserFlags.quick_statistics_flag) 

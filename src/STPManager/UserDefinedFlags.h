@@ -87,6 +87,11 @@ namespace BEEV
   
     //print the input back
     bool print_STPinput_back_flag;
+    bool print_STPinput_back_C_flag;
+    bool print_STPinput_back_SMTLIB_flag;
+    bool print_STPinput_back_CVC_flag;
+    bool print_STPinput_back_dot_flag;
+    bool print_STPinput_back_GDL_flag;
     
     //Flag to switch on the smtlib parser
     bool smtlib_parser_flag;
@@ -167,6 +172,11 @@ namespace BEEV
       
       //print the input back
       print_STPinput_back_flag = false;
+      print_STPinput_back_C_flag = false;
+      print_STPinput_back_SMTLIB_flag  = false;
+      print_STPinput_back_CVC_flag  = false;
+      print_STPinput_back_GDL_flag = false;
+      print_STPinput_back_dot_flag = false;
       
       // If enabled. division, mod and remainder by zero will evaluate to
       // 1.
