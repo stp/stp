@@ -344,6 +344,11 @@ int main(int argc, char ** argv) {
   if (onePrintBack)
   {
 
+    ASTNode original_input = bm->CreateNode(AND,
+    		bm->CreateNode(NOT, query),
+    		asserts);
+
+
   if(bm->UserFlags.print_STPinput_back_flag)
     {
       if(bm->UserFlags.smtlib_parser_flag)
@@ -354,27 +359,28 @@ int main(int argc, char ** argv) {
 
   if (bm->UserFlags.print_STPinput_back_CVC_flag)
   {
+	  //needs just the query. Reads the asserts out of the data structure.
 	  print_STPInput_Back(query);
   }
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB_flag)
     {
-	  printer::SMTLIB_PrintBack(cout, asserts);
+	  printer::SMTLIB_PrintBack(cout, original_input);
     }
 
   if (bm->UserFlags.print_STPinput_back_C_flag)
     {
-	  printer::C_Print(cout, asserts);
+	  printer::C_Print(cout, original_input);
     }
 
   if (bm->UserFlags.print_STPinput_back_GDL_flag)
     {
-	  printer::GDL_Print(cout, asserts);
+	  printer::GDL_Print(cout, original_input);
     }
 
   if (bm->UserFlags.print_STPinput_back_dot_flag)
     {
-	  printer::Dot_Print(cout, asserts);
+	  printer::Dot_Print(cout, original_input);
     }
 
   return 0;

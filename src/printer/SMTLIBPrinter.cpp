@@ -45,23 +45,6 @@ std::vector<pair<ASTNode, ASTNode> > NodeLetVarVec;
 //correctly print shared subterms inside the LET itself
 ASTNodeMap NodeLetVarMap1;
 
-void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
-		ASTNodeSet& symbols)
-{
-	if (visited.find(n) != visited.end())
-		return; // already visited.
-
-	visited.insert(n);
-
-	if (n.GetKind() == SYMBOL)
-	{
-		symbols.insert(n);
-	}
-
-	for (unsigned i = 0; i < n.GetChildren().size(); i++)
-		buildListOfSymbols(n[i], visited, symbols);
-}
-
   // Initial version intended to print the whole thing back.
 void SMTLIB_PrintBack(ostream &os, const ASTNode& n)
 {
@@ -102,7 +85,7 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         os << ":" << a.GetValueWidth() << "] ))" << endl;
         break;
       case BEEV::BOOLEAN_TYPE:
-        os << ":extrapred (( ";
+        os << ":extrapreds (( ";
         a.nodeprint(os);
         os << "))" << endl;
         break;
@@ -184,6 +167,15 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
       case FALSE:
         os << "false";
         break;
+      case NAND: // No NAND in smtlib format.
+    	  assert(c.size() ==2);
+    	  os << "(" << "not ";
+    	  os << "(" << "and ";
+    	  SMTLIB_Print1(os, c[0], 0, letize);
+    	  os << " " ;
+    	  SMTLIB_Print1(os, c[1], 0, letize);
+    	  os << "))";
+    	  break;
       case TRUE:
         os << "true";
         break;
@@ -211,19 +203,38 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
           os << ")";
         }
         break;
-      default:
-        {
-          os << "(" << functionToSMTLIBName(kind);
+  	default:
+  	{
+  		// SMT-LIB only allows arithmetic functions to have two parameters.
+  		if (BVPLUS == kind && n.Degree() > 2)
+  		{
+  			string close = "";
 
-          ASTVec::const_iterator iend = c.end();
-          for (ASTVec::const_iterator i = c.begin(); i != iend; i++)
-            {
-              os << " ";
-              SMTLIB_Print1(os, *i, 0, letize);
-            }
+  			for (int i =0; i < c.size()-1; i++)
+  			{
+  				os << "(" << functionToSMTLIBName(kind);
+  				os << " ";
+  				SMTLIB_Print1(os, c[i], 0, letize);
+  				os << " ";
+  				close += ")";
+  			}
+  			SMTLIB_Print1(os, c[c.size()-1], 0, letize);
+  			os << close;
+  		}
+  		else
+  		{
+  			os << "(" << functionToSMTLIBName(kind);
 
-          os << ")";
-        }
+  			ASTVec::const_iterator iend = c.end();
+  			for (ASTVec::const_iterator i = c.begin(); i != iend; i++)
+  			{
+  				os << " ";
+  				SMTLIB_Print1(os, *i, 0, letize);
+  			}
+
+  			os << ")";
+  		}
+  	}
       }
   }
 

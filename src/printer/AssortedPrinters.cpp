@@ -86,8 +86,8 @@ namespace BEEV
   //     cout << endl;
   //   } //end of Convert_MINISATVar_To_ASTNode_Print()
 
-  void STPMgr::printVarDeclsToStream(ostream &os) {
-    for(ASTVec::iterator 
+  void STPMgr::printVarDeclsToStream(ostream &os, ASTNodeSet& ListOfDeclaredVars) {
+    for(ASTNodeSet::iterator
           i = ListOfDeclaredVars.begin(),iend=ListOfDeclaredVars.end();
         i!=iend;i++) 
       {
@@ -113,8 +113,6 @@ namespace BEEV
       }
   } //printVarDeclsToStream
 
-
-
   void STPMgr::printAssertsToStream(ostream &os, int simplify_print) {
     ASTVec v = GetAsserts();
     for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
@@ -130,7 +128,16 @@ namespace BEEV
   }
 
   void print_STPInput_Back(const ASTNode& query) {
-    (BEEV::GlobalSTP->bm)->printVarDeclsToStream(cout);
+
+	  // Determine the symbols in the query and asserts.
+	  ASTNodeSet visited;
+	  ASTNodeSet symbols;
+	  buildListOfSymbols(query,  visited, symbols);
+      ASTVec v = (BEEV::GlobalSTP->bm)->GetAsserts();
+      for(ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++)
+    	buildListOfSymbols(*i,  visited, symbols);
+
+	(BEEV::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
     (BEEV::GlobalSTP->bm)->printAssertsToStream(cout,0);
     cout << "QUERY(";
     query.PL_Print(cout);

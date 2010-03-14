@@ -371,7 +371,7 @@ namespace BEEV
     void ASTNodeStats(const char * c, const ASTNode& a);
 
     // Print variable to the input stream
-    void printVarDeclsToStream(ostream &os);
+    void printVarDeclsToStream(ostream &os, ASTNodeSet& symbols);
 
     // Print assertions to the input stream
     void printAssertsToStream(ostream &os, int simplify);

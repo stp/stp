@@ -51,14 +51,14 @@ namespace printer
     os << "\"}" << endl;
 
     // print the edges to each child.
-    ASTVec ch = n.GetChildren();
-    ASTVec::iterator itend = ch.end();
+    const ASTVec ch = n.GetChildren();
+    const ASTVec::const_iterator itend = ch.end();
 
     //If a node has the child 'TRUE' twice, we only want to output one TRUE node.
     ASTNodeSet constantOutput;
 
     int i =0;
-    for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+    for (ASTVec::const_iterator it = ch.begin(); it < itend; it++)
       {
     	std::stringstream label;
 
@@ -91,7 +91,7 @@ namespace printer
       }
 
     // print each of the children.
-    for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+    for (ASTVec::const_iterator it = ch.begin(); it < itend; it++)
       {
     	if (!it->isConstant())
     		GDL_Print1(os, *it, alreadyOutput,annotate);

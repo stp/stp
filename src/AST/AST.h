@@ -27,7 +27,6 @@ namespace BEEV
   bool isAtomic(Kind k);
   bool isCommutative(const Kind k);
 
-
   // If (a > b) in the termorder, then return 1 elseif (a < b) in the
   // termorder, then return -1 else return 0
   int TermOrder(const ASTNode& a, const ASTNode& b);
@@ -104,5 +103,7 @@ namespace BEEV
 
   // Function to dump contents of ASTNodeMap
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
+
+  void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,ASTNodeSet& symbols);
 }; // end namespace BEEV
 #endif
