@@ -167,10 +167,14 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
       case FALSE:
         os << "false";
         break;
-      case NAND: // No NAND in smtlib format.
+      case NAND: // No NAND, NOR in smtlib format.
+      case NOR:
     	  assert(c.size() ==2);
     	  os << "(" << "not ";
-    	  os << "(" << "and ";
+    	  if (NAND == kind )
+    		  os << "(" << "and ";
+    	  else
+    		  os << "(" << "or ";
     	  SMTLIB_Print1(os, c[0], 0, letize);
     	  os << " " ;
     	  SMTLIB_Print1(os, c[1], 0, letize);
@@ -205,8 +209,8 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         break;
   	default:
   	{
-  		// SMT-LIB only allows arithmetic functions to have two parameters.
-  		if (BVPLUS == kind && n.Degree() > 2)
+  		// SMT-LIB only allows these functions to have two parameters.
+  		if ((BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
   		{
   			string close = "";
 
