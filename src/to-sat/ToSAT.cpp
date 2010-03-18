@@ -9,6 +9,9 @@
 #include "ToSAT.h"
 #include "ToSAT.h"
 #include "BitBlastNew.h"
+#include "../printer/printers.h"
+#include <iostream>
+#include <fstream>
 
 namespace BEEV
 {
@@ -161,7 +164,8 @@ namespace BEEV
 // 	    flag  = 1;
 // 	    bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 // 	  }
-        if (newSolver.okay())
+
+	if (newSolver.okay())
           {
             continue;
           }     
@@ -173,6 +177,48 @@ namespace BEEV
             return false;
           }     
       } // End of For-loop adding the clauses 
+
+    // output a CNF
+    // Because we use the SAT solver incrementally, this may ouput little pieces of the
+    // CNF that need to be joined together. Nicer would be to read it out of the solver each time.
+    	if (bm->UserFlags.output_CNF_flag && true)
+    	{
+			#if defined CRYPTOMINISAT2
+				cerr << "The -j option will give you the xor clauses that this one doesn't" << endl;
+			#endif
+
+    		ofstream file;
+    		stringstream fileName;
+    		fileName << "output_" << CNFFileNameCounter++ << ".cnf";
+    		file.open(fileName.str().c_str());
+
+    		file << "p cnf " << newSolver.nVars() << " " << cll.size() << endl;
+    		i = cll.begin(), iend = cll.end();
+    		for (; i != iend; i++)
+    		{
+    			vector<const ASTNode*>::iterator j = (*i)->begin(), jend =
+    					(*i)->end();
+    			for (; j != jend; j++)
+    			{
+    				const ASTNode& node = *(*j);
+    	            bool negate = (NOT == node.GetKind()) ? true : false;
+    	            ASTNode n = negate ? node[0] : node;
+
+    	            ASTtoSATMap::iterator it =  _ASTNode_to_SATVar_Map.find(n);
+    	            assert(it != _ASTNode_to_SATVar_Map.end());
+
+    	            MINISAT::Var v = it->second;
+
+    				if (negate)
+    					file << -(v + 1) << " ";
+    				else
+    					file << (v + 1) << " ";
+    			}
+    			file << "0" << endl;
+    		}
+    		file.close();
+
+    	}
 
     // Free the clause list before SAT solving.
     CNFMgr::DeleteClauseList(cll);
@@ -262,6 +308,14 @@ namespace BEEV
 
     bm->ASTNodeStats("after bitblasting: ", BBFormula);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+
+    if (bm->UserFlags.output_bench_flag)
+    {
+		ofstream file;
+		stringstream fileName;
+		fileName << "output_" << benchFileNameCounter++ << ".bench";
+		file.open(fileName.str().c_str());
+    }
 
     CNFMgr cm(bm);
     ClauseList* cl = cm.convertToCNF(BBFormula);

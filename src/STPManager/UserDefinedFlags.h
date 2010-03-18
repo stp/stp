@@ -93,6 +93,10 @@ namespace BEEV
     bool print_STPinput_back_dot_flag;
     bool print_STPinput_back_GDL_flag;
     
+    // output flags
+    bool output_CNF_flag;
+    bool output_bench_flag;
+
     //Flag to switch on the smtlib parser
     bool smtlib_parser_flag;
     
@@ -132,6 +136,9 @@ namespace BEEV
       print_counterexample_flag = false;
       print_binary_flag = false;
       
+      output_CNF_flag = false;
+      output_bench_flag = false;
+
       //Expands out the finite for-construct completely
       expand_finitefor_flag = false;
       

@@ -44,7 +44,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile;
@@ -102,6 +102,10 @@ int main(int argc, char ** argv) {
     "-j <filename>  : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
   helpstring +=  
     "-m  : use the SMTLIB parser\n";
+
+  helpstring +=  "--output-CNF : save the CNF into output.cnf\n";
+  helpstring +=  "--output-bench : save in ABC's bench format to output.bench\n";
+
   helpstring +=  
     "-p  : print counterexample\n";
   // I haven't checked that this works so don't want to include it by default.
@@ -143,6 +147,8 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair("--print-back-SMTLIB",PRINT_BACK_SMTLIB));
 			  lookup.insert(make_pair("--print-back-GDL",PRINT_BACK_GDL));
 			  lookup.insert(make_pair("--print-back-dot",PRINT_BACK_DOT));
+			  lookup.insert(make_pair("--output-CNF",OUTPUT_CNF));
+			  lookup.insert(make_pair("--output-bench",OUTPUT_BENCH));
 
 			  switch(lookup[argv[i]])
 			  {
@@ -165,6 +171,13 @@ int main(int argc, char ** argv) {
 			  case PRINT_BACK_DOT:
 				  bm->UserFlags.print_STPinput_back_dot_flag = true;
 				  onePrintBack = true;
+				  break;
+			  case OUTPUT_CNF:
+				  bm->UserFlags.output_CNF_flag = true;
+				  //bm->UserFlags.print_cnf_flag = true;
+				  break;
+			  case OUTPUT_BENCH:
+				  bm->UserFlags.output_bench_flag = true;
 				  break;
 
 			  default:

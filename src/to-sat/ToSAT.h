@@ -50,6 +50,8 @@ namespace BEEV
 
     // Ptr to STPManager
     STPMgr * bm;
+    int CNFFileNameCounter;
+    int benchFileNameCounter;
 
 #if 0
     // Memo table to check the functioning of bitblaster and CNF
@@ -111,6 +113,9 @@ namespace BEEV
       ASTTrue      = bm->CreateNode(TRUE);
       ASTFalse     = bm->CreateNode(FALSE);
       ASTUndefined = bm->CreateNode(UNDEFINED);
+      CNFFileNameCounter = 0;
+      benchFileNameCounter = 0;
+
     }
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
