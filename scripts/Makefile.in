@@ -55,7 +55,9 @@ endif
 			   $(SRC)/parser/lexCVC.o \
 			   $(SRC)/parser/parseSMT.o \
 			   $(SRC)/parser/lexSMT.o \
-			   $(SRC)/main/*.o
+			   $(SRC)/main/Globals.o \
+			   $(SRC)/main/versionString.o
+			   @# N.B.: don't put main/main.o in the library.
 	$(RANLIB) libstp.a
 	@mkdir -p lib
 	@mv libstp.a lib/
