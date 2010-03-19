@@ -276,6 +276,10 @@ void vc_printVarDecls(VC vc) {
   vc_printVarDeclsToStream(vc, cout);
 }
 
+void vc_clearDecls(VC vc) {
+  decls->clear();
+}
+
 static void vc_printAssertsToStream(VC vc, ostream &os, int simplify_print) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   BEEV::ASTVec v = b->GetAsserts();
@@ -611,13 +615,19 @@ WholeCounterExample vc_getWholeCounterExample(VC vc) {
   return c;
 }
 
-Expr vc_getTermFromCounterExample(VC vc, Expr e, CompleteCEStar cc) {
+Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample cc) {
   //bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar n = (nodestar)e;
   CompleteCEStar c = (CompleteCEStar)cc;
 
   nodestar output = new node(c->GetCounterExample(*n));
   return output;
+}
+
+void vc_deleteWholeCounterExample(WholeCounterExample cc) {
+  CompleteCEStar c = (CompleteCEStar)cc;
+
+  delete c;
 }
 
 int vc_getBVLength(VC vc, Expr ex) {

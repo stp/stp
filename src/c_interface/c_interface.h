@@ -146,6 +146,11 @@ extern "C" {
   //! Prints variable declarations to stdout.
   void vc_printVarDecls(VC vc);
 
+  //! Clear the internal list of variables to declare maintained for
+  //  vc_printVarDecls. Do this after you've printed them, or if you
+  //  never want to print them, to prevent a memory leak.
+  void vc_clearDecls(VC vc);
+
   //! Prints asserts to stdout. The flag simplify_print must be set to
   //"1" if you wish simplification to occur dring printing. It must be
   //set to "0" otherwise
@@ -318,6 +323,10 @@ extern "C" {
 
   //Get the value of a term expression from the CounterExample
   Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample c);
+
+
+  // Free the return value of vc_getWholeCounterExample
+  void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
   //Kinds of Expr
   enum exprkind_t{
