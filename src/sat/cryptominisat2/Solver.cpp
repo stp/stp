@@ -25,10 +25,10 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <algorithm>
 #include <limits.h>
 #include <vector>
+#include <time.h>
 
 #include "Clause.h"
 #include "time_mem.h"
-
 #include "VarReplacer.h"
 #include "FindUndef.h"
 #include "Gaussian.h"
@@ -82,7 +82,7 @@ Solver::Solver() :
         , order_heap       (VarOrderLt(activity))
         , progress_estimate(0)
         , remove_satisfied (true)
-        , mtrand((unsigned long int)0)
+        , mtrand((unsigned long int)time(NULL))
         , restartType      (static_restart)
         #ifdef STATS_NEEDED
         , logger(verbosity)
