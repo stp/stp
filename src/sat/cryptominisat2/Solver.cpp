@@ -82,7 +82,8 @@ Solver::Solver() :
         , order_heap       (VarOrderLt(activity))
         , progress_estimate(0)
         , remove_satisfied (true)
-        , mtrand((unsigned long int)time(NULL))
+        , mtrand((unsigned long int)0)
+	//, mtrand((unsigned long int)time(NULL))
         , restartType      (static_restart)
         #ifdef STATS_NEEDED
         , logger(verbosity)
