@@ -1,0 +1,2035 @@
+
+k0,k1,k2,k3 : BITVECTOR(32);
+
+   v_delta, v_delta_0, v0_0, v1_0: BITVECTOR(32);
+
+   % uint32_t delta=0x9e3779b9;                     /* a key schedule constant */
+   ASSERT(v_delta = 0hex9e3779b9);
+
+   ASSERT(v_delta_0=0hex00000000);
+
+   x_delta, x_delta_0, x0_0, x1_0: BITVECTOR(32);
+
+   % uint32_t delta=0x9e3779b9;                     /* a key schedule constant */
+   ASSERT(x_delta = 0hex9e3779b9);
+
+   ASSERT(x_delta_0=0hex00000000);
+
+   % round _1_;
+
+   v0_1,v1_1,v_delta_1 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_1 = BVPLUS(32,v_delta_0,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_1_t1,v0_1_t2,v0_1_t3,v0_1_t4,v0_1_t5,v0_1_t6,v0_1_t7 : BITVECTOR(32);
+   ASSERT(v0_1_t1 = BVMULT(32,v1_0,0hex00000010));
+   ASSERT(v0_1_t2 = BVPLUS(32,v0_1_t1, k0));
+   ASSERT(v0_1_t3 = BVPLUS(32,v1_0,v_delta_1));
+   ASSERT(v0_1_t4 = BVXOR(v0_1_t2,v0_1_t3));
+   ASSERT(v0_1_t5 = v1_0>>5);
+   ASSERT(v0_1_t6 = BVPLUS(32,v0_1_t5,k1));
+   ASSERT(v0_1 = BVXOR(v0_1_t4,v0_1_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_1_t1,v1_1_t2,v1_1_t3,v1_1_t4,v1_1_t5,v1_1_t6,v1_1_t7 : BITVECTOR(32);
+   ASSERT(v1_1_t1 = BVMULT(32,v0_0,0hex00000010));
+   ASSERT(v1_1_t2 = BVPLUS(32,v1_1_t1, k2));
+   ASSERT(v1_1_t3 = BVPLUS(32,v0_0,v_delta_1));
+   ASSERT(v1_1_t4 = BVXOR(v1_1_t2,v1_1_t3));
+   ASSERT(v1_1_t5 = v0_0>>5);
+   ASSERT(v1_1_t6 = BVPLUS(32,v1_1_t5,k3));
+   ASSERT(v1_1 = BVXOR(v1_1_t4,v1_1_t6));
+
+   % round _1_;
+
+   x0_1,x1_1,x_delta_1 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_1 = BVPLUS(32,x_delta_0,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_1_t1,x0_1_t2,x0_1_t3,x0_1_t4,x0_1_t5,x0_1_t6,x0_1_t7 : BITVECTOR(32);
+   ASSERT(x0_1_t1 = BVMULT(32,x1_0,0hex00000010));
+   ASSERT(x0_1_t2 = BVPLUS(32,x0_1_t1, k0));
+   ASSERT(x0_1_t3 = BVPLUS(32,x1_0,x_delta_1));
+   ASSERT(x0_1_t4 = BVXOR(x0_1_t2,x0_1_t3));
+   ASSERT(x0_1_t5 = x1_0>>5);
+   ASSERT(x0_1_t6 = BVPLUS(32,x0_1_t5,k1));
+   ASSERT(x0_1 = BVXOR(x0_1_t4,x0_1_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_1_t1,x1_1_t2,x1_1_t3,x1_1_t4,x1_1_t5,x1_1_t6,x1_1_t7 : BITVECTOR(32);
+   ASSERT(x1_1_t1 = BVMULT(32,x0_0,0hex00000010));
+   ASSERT(x1_1_t2 = BVPLUS(32,x1_1_t1, k2));
+   ASSERT(x1_1_t3 = BVPLUS(32,x0_0,x_delta_1));
+   ASSERT(x1_1_t4 = BVXOR(x1_1_t2,x1_1_t3));
+   ASSERT(x1_1_t5 = x0_0>>5);
+   ASSERT(x1_1_t6 = BVPLUS(32,x1_1_t5,k3));
+   ASSERT(x1_1 = BVXOR(x1_1_t4,x1_1_t6));
+
+   % round _2_;
+
+   v0_2,v1_2,v_delta_2 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_2 = BVPLUS(32,v_delta_1,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_2_t1,v0_2_t2,v0_2_t3,v0_2_t4,v0_2_t5,v0_2_t6,v0_2_t7 : BITVECTOR(32);
+   ASSERT(v0_2_t1 = BVMULT(32,v1_1,0hex00000010));
+   ASSERT(v0_2_t2 = BVPLUS(32,v0_2_t1, k0));
+   ASSERT(v0_2_t3 = BVPLUS(32,v1_1,v_delta_2));
+   ASSERT(v0_2_t4 = BVXOR(v0_2_t2,v0_2_t3));
+   ASSERT(v0_2_t5 = v1_1>>5);
+   ASSERT(v0_2_t6 = BVPLUS(32,v0_2_t5,k1));
+   ASSERT(v0_2 = BVXOR(v0_2_t4,v0_2_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_2_t1,v1_2_t2,v1_2_t3,v1_2_t4,v1_2_t5,v1_2_t6,v1_2_t7 : BITVECTOR(32);
+   ASSERT(v1_2_t1 = BVMULT(32,v0_1,0hex00000010));
+   ASSERT(v1_2_t2 = BVPLUS(32,v1_2_t1, k2));
+   ASSERT(v1_2_t3 = BVPLUS(32,v0_1,v_delta_2));
+   ASSERT(v1_2_t4 = BVXOR(v1_2_t2,v1_2_t3));
+   ASSERT(v1_2_t5 = v0_1>>5);
+   ASSERT(v1_2_t6 = BVPLUS(32,v1_2_t5,k3));
+   ASSERT(v1_2 = BVXOR(v1_2_t4,v1_2_t6));
+
+   % round _2_;
+
+   x0_2,x1_2,x_delta_2 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_2 = BVPLUS(32,x_delta_1,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_2_t1,x0_2_t2,x0_2_t3,x0_2_t4,x0_2_t5,x0_2_t6,x0_2_t7 : BITVECTOR(32);
+   ASSERT(x0_2_t1 = BVMULT(32,x1_1,0hex00000010));
+   ASSERT(x0_2_t2 = BVPLUS(32,x0_2_t1, k0));
+   ASSERT(x0_2_t3 = BVPLUS(32,x1_1,x_delta_2));
+   ASSERT(x0_2_t4 = BVXOR(x0_2_t2,x0_2_t3));
+   ASSERT(x0_2_t5 = x1_1>>5);
+   ASSERT(x0_2_t6 = BVPLUS(32,x0_2_t5,k1));
+   ASSERT(x0_2 = BVXOR(x0_2_t4,x0_2_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_2_t1,x1_2_t2,x1_2_t3,x1_2_t4,x1_2_t5,x1_2_t6,x1_2_t7 : BITVECTOR(32);
+   ASSERT(x1_2_t1 = BVMULT(32,x0_1,0hex00000010));
+   ASSERT(x1_2_t2 = BVPLUS(32,x1_2_t1, k2));
+   ASSERT(x1_2_t3 = BVPLUS(32,x0_1,x_delta_2));
+   ASSERT(x1_2_t4 = BVXOR(x1_2_t2,x1_2_t3));
+   ASSERT(x1_2_t5 = x0_1>>5);
+   ASSERT(x1_2_t6 = BVPLUS(32,x1_2_t5,k3));
+   ASSERT(x1_2 = BVXOR(x1_2_t4,x1_2_t6));
+
+   % round _3_;
+
+   v0_3,v1_3,v_delta_3 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_3 = BVPLUS(32,v_delta_2,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_3_t1,v0_3_t2,v0_3_t3,v0_3_t4,v0_3_t5,v0_3_t6,v0_3_t7 : BITVECTOR(32);
+   ASSERT(v0_3_t1 = BVMULT(32,v1_2,0hex00000010));
+   ASSERT(v0_3_t2 = BVPLUS(32,v0_3_t1, k0));
+   ASSERT(v0_3_t3 = BVPLUS(32,v1_2,v_delta_3));
+   ASSERT(v0_3_t4 = BVXOR(v0_3_t2,v0_3_t3));
+   ASSERT(v0_3_t5 = v1_2>>5);
+   ASSERT(v0_3_t6 = BVPLUS(32,v0_3_t5,k1));
+   ASSERT(v0_3 = BVXOR(v0_3_t4,v0_3_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_3_t1,v1_3_t2,v1_3_t3,v1_3_t4,v1_3_t5,v1_3_t6,v1_3_t7 : BITVECTOR(32);
+   ASSERT(v1_3_t1 = BVMULT(32,v0_2,0hex00000010));
+   ASSERT(v1_3_t2 = BVPLUS(32,v1_3_t1, k2));
+   ASSERT(v1_3_t3 = BVPLUS(32,v0_2,v_delta_3));
+   ASSERT(v1_3_t4 = BVXOR(v1_3_t2,v1_3_t3));
+   ASSERT(v1_3_t5 = v0_2>>5);
+   ASSERT(v1_3_t6 = BVPLUS(32,v1_3_t5,k3));
+   ASSERT(v1_3 = BVXOR(v1_3_t4,v1_3_t6));
+
+   % round _3_;
+
+   x0_3,x1_3,x_delta_3 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_3 = BVPLUS(32,x_delta_2,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_3_t1,x0_3_t2,x0_3_t3,x0_3_t4,x0_3_t5,x0_3_t6,x0_3_t7 : BITVECTOR(32);
+   ASSERT(x0_3_t1 = BVMULT(32,x1_2,0hex00000010));
+   ASSERT(x0_3_t2 = BVPLUS(32,x0_3_t1, k0));
+   ASSERT(x0_3_t3 = BVPLUS(32,x1_2,x_delta_3));
+   ASSERT(x0_3_t4 = BVXOR(x0_3_t2,x0_3_t3));
+   ASSERT(x0_3_t5 = x1_2>>5);
+   ASSERT(x0_3_t6 = BVPLUS(32,x0_3_t5,k1));
+   ASSERT(x0_3 = BVXOR(x0_3_t4,x0_3_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_3_t1,x1_3_t2,x1_3_t3,x1_3_t4,x1_3_t5,x1_3_t6,x1_3_t7 : BITVECTOR(32);
+   ASSERT(x1_3_t1 = BVMULT(32,x0_2,0hex00000010));
+   ASSERT(x1_3_t2 = BVPLUS(32,x1_3_t1, k2));
+   ASSERT(x1_3_t3 = BVPLUS(32,x0_2,x_delta_3));
+   ASSERT(x1_3_t4 = BVXOR(x1_3_t2,x1_3_t3));
+   ASSERT(x1_3_t5 = x0_2>>5);
+   ASSERT(x1_3_t6 = BVPLUS(32,x1_3_t5,k3));
+   ASSERT(x1_3 = BVXOR(x1_3_t4,x1_3_t6));
+
+   % round _4_;
+
+   v0_4,v1_4,v_delta_4 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_4 = BVPLUS(32,v_delta_3,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_4_t1,v0_4_t2,v0_4_t3,v0_4_t4,v0_4_t5,v0_4_t6,v0_4_t7 : BITVECTOR(32);
+   ASSERT(v0_4_t1 = BVMULT(32,v1_3,0hex00000010));
+   ASSERT(v0_4_t2 = BVPLUS(32,v0_4_t1, k0));
+   ASSERT(v0_4_t3 = BVPLUS(32,v1_3,v_delta_4));
+   ASSERT(v0_4_t4 = BVXOR(v0_4_t2,v0_4_t3));
+   ASSERT(v0_4_t5 = v1_3>>5);
+   ASSERT(v0_4_t6 = BVPLUS(32,v0_4_t5,k1));
+   ASSERT(v0_4 = BVXOR(v0_4_t4,v0_4_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_4_t1,v1_4_t2,v1_4_t3,v1_4_t4,v1_4_t5,v1_4_t6,v1_4_t7 : BITVECTOR(32);
+   ASSERT(v1_4_t1 = BVMULT(32,v0_3,0hex00000010));
+   ASSERT(v1_4_t2 = BVPLUS(32,v1_4_t1, k2));
+   ASSERT(v1_4_t3 = BVPLUS(32,v0_3,v_delta_4));
+   ASSERT(v1_4_t4 = BVXOR(v1_4_t2,v1_4_t3));
+   ASSERT(v1_4_t5 = v0_3>>5);
+   ASSERT(v1_4_t6 = BVPLUS(32,v1_4_t5,k3));
+   ASSERT(v1_4 = BVXOR(v1_4_t4,v1_4_t6));
+
+   % round _4_;
+
+   x0_4,x1_4,x_delta_4 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_4 = BVPLUS(32,x_delta_3,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_4_t1,x0_4_t2,x0_4_t3,x0_4_t4,x0_4_t5,x0_4_t6,x0_4_t7 : BITVECTOR(32);
+   ASSERT(x0_4_t1 = BVMULT(32,x1_3,0hex00000010));
+   ASSERT(x0_4_t2 = BVPLUS(32,x0_4_t1, k0));
+   ASSERT(x0_4_t3 = BVPLUS(32,x1_3,x_delta_4));
+   ASSERT(x0_4_t4 = BVXOR(x0_4_t2,x0_4_t3));
+   ASSERT(x0_4_t5 = x1_3>>5);
+   ASSERT(x0_4_t6 = BVPLUS(32,x0_4_t5,k1));
+   ASSERT(x0_4 = BVXOR(x0_4_t4,x0_4_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_4_t1,x1_4_t2,x1_4_t3,x1_4_t4,x1_4_t5,x1_4_t6,x1_4_t7 : BITVECTOR(32);
+   ASSERT(x1_4_t1 = BVMULT(32,x0_3,0hex00000010));
+   ASSERT(x1_4_t2 = BVPLUS(32,x1_4_t1, k2));
+   ASSERT(x1_4_t3 = BVPLUS(32,x0_3,x_delta_4));
+   ASSERT(x1_4_t4 = BVXOR(x1_4_t2,x1_4_t3));
+   ASSERT(x1_4_t5 = x0_3>>5);
+   ASSERT(x1_4_t6 = BVPLUS(32,x1_4_t5,k3));
+   ASSERT(x1_4 = BVXOR(x1_4_t4,x1_4_t6));
+
+   % round _5_;
+
+   v0_5,v1_5,v_delta_5 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_5 = BVPLUS(32,v_delta_4,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_5_t1,v0_5_t2,v0_5_t3,v0_5_t4,v0_5_t5,v0_5_t6,v0_5_t7 : BITVECTOR(32);
+   ASSERT(v0_5_t1 = BVMULT(32,v1_4,0hex00000010));
+   ASSERT(v0_5_t2 = BVPLUS(32,v0_5_t1, k0));
+   ASSERT(v0_5_t3 = BVPLUS(32,v1_4,v_delta_5));
+   ASSERT(v0_5_t4 = BVXOR(v0_5_t2,v0_5_t3));
+   ASSERT(v0_5_t5 = v1_4>>5);
+   ASSERT(v0_5_t6 = BVPLUS(32,v0_5_t5,k1));
+   ASSERT(v0_5 = BVXOR(v0_5_t4,v0_5_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_5_t1,v1_5_t2,v1_5_t3,v1_5_t4,v1_5_t5,v1_5_t6,v1_5_t7 : BITVECTOR(32);
+   ASSERT(v1_5_t1 = BVMULT(32,v0_4,0hex00000010));
+   ASSERT(v1_5_t2 = BVPLUS(32,v1_5_t1, k2));
+   ASSERT(v1_5_t3 = BVPLUS(32,v0_4,v_delta_5));
+   ASSERT(v1_5_t4 = BVXOR(v1_5_t2,v1_5_t3));
+   ASSERT(v1_5_t5 = v0_4>>5);
+   ASSERT(v1_5_t6 = BVPLUS(32,v1_5_t5,k3));
+   ASSERT(v1_5 = BVXOR(v1_5_t4,v1_5_t6));
+
+   % round _5_;
+
+   x0_5,x1_5,x_delta_5 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_5 = BVPLUS(32,x_delta_4,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_5_t1,x0_5_t2,x0_5_t3,x0_5_t4,x0_5_t5,x0_5_t6,x0_5_t7 : BITVECTOR(32);
+   ASSERT(x0_5_t1 = BVMULT(32,x1_4,0hex00000010));
+   ASSERT(x0_5_t2 = BVPLUS(32,x0_5_t1, k0));
+   ASSERT(x0_5_t3 = BVPLUS(32,x1_4,x_delta_5));
+   ASSERT(x0_5_t4 = BVXOR(x0_5_t2,x0_5_t3));
+   ASSERT(x0_5_t5 = x1_4>>5);
+   ASSERT(x0_5_t6 = BVPLUS(32,x0_5_t5,k1));
+   ASSERT(x0_5 = BVXOR(x0_5_t4,x0_5_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_5_t1,x1_5_t2,x1_5_t3,x1_5_t4,x1_5_t5,x1_5_t6,x1_5_t7 : BITVECTOR(32);
+   ASSERT(x1_5_t1 = BVMULT(32,x0_4,0hex00000010));
+   ASSERT(x1_5_t2 = BVPLUS(32,x1_5_t1, k2));
+   ASSERT(x1_5_t3 = BVPLUS(32,x0_4,x_delta_5));
+   ASSERT(x1_5_t4 = BVXOR(x1_5_t2,x1_5_t3));
+   ASSERT(x1_5_t5 = x0_4>>5);
+   ASSERT(x1_5_t6 = BVPLUS(32,x1_5_t5,k3));
+   ASSERT(x1_5 = BVXOR(x1_5_t4,x1_5_t6));
+
+   % round _6_;
+
+   v0_6,v1_6,v_delta_6 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_6 = BVPLUS(32,v_delta_5,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_6_t1,v0_6_t2,v0_6_t3,v0_6_t4,v0_6_t5,v0_6_t6,v0_6_t7 : BITVECTOR(32);
+   ASSERT(v0_6_t1 = BVMULT(32,v1_5,0hex00000010));
+   ASSERT(v0_6_t2 = BVPLUS(32,v0_6_t1, k0));
+   ASSERT(v0_6_t3 = BVPLUS(32,v1_5,v_delta_6));
+   ASSERT(v0_6_t4 = BVXOR(v0_6_t2,v0_6_t3));
+   ASSERT(v0_6_t5 = v1_5>>5);
+   ASSERT(v0_6_t6 = BVPLUS(32,v0_6_t5,k1));
+   ASSERT(v0_6 = BVXOR(v0_6_t4,v0_6_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_6_t1,v1_6_t2,v1_6_t3,v1_6_t4,v1_6_t5,v1_6_t6,v1_6_t7 : BITVECTOR(32);
+   ASSERT(v1_6_t1 = BVMULT(32,v0_5,0hex00000010));
+   ASSERT(v1_6_t2 = BVPLUS(32,v1_6_t1, k2));
+   ASSERT(v1_6_t3 = BVPLUS(32,v0_5,v_delta_6));
+   ASSERT(v1_6_t4 = BVXOR(v1_6_t2,v1_6_t3));
+   ASSERT(v1_6_t5 = v0_5>>5);
+   ASSERT(v1_6_t6 = BVPLUS(32,v1_6_t5,k3));
+   ASSERT(v1_6 = BVXOR(v1_6_t4,v1_6_t6));
+
+   % round _6_;
+
+   x0_6,x1_6,x_delta_6 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_6 = BVPLUS(32,x_delta_5,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_6_t1,x0_6_t2,x0_6_t3,x0_6_t4,x0_6_t5,x0_6_t6,x0_6_t7 : BITVECTOR(32);
+   ASSERT(x0_6_t1 = BVMULT(32,x1_5,0hex00000010));
+   ASSERT(x0_6_t2 = BVPLUS(32,x0_6_t1, k0));
+   ASSERT(x0_6_t3 = BVPLUS(32,x1_5,x_delta_6));
+   ASSERT(x0_6_t4 = BVXOR(x0_6_t2,x0_6_t3));
+   ASSERT(x0_6_t5 = x1_5>>5);
+   ASSERT(x0_6_t6 = BVPLUS(32,x0_6_t5,k1));
+   ASSERT(x0_6 = BVXOR(x0_6_t4,x0_6_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_6_t1,x1_6_t2,x1_6_t3,x1_6_t4,x1_6_t5,x1_6_t6,x1_6_t7 : BITVECTOR(32);
+   ASSERT(x1_6_t1 = BVMULT(32,x0_5,0hex00000010));
+   ASSERT(x1_6_t2 = BVPLUS(32,x1_6_t1, k2));
+   ASSERT(x1_6_t3 = BVPLUS(32,x0_5,x_delta_6));
+   ASSERT(x1_6_t4 = BVXOR(x1_6_t2,x1_6_t3));
+   ASSERT(x1_6_t5 = x0_5>>5);
+   ASSERT(x1_6_t6 = BVPLUS(32,x1_6_t5,k3));
+   ASSERT(x1_6 = BVXOR(x1_6_t4,x1_6_t6));
+
+   % round _7_;
+
+   v0_7,v1_7,v_delta_7 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_7 = BVPLUS(32,v_delta_6,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_7_t1,v0_7_t2,v0_7_t3,v0_7_t4,v0_7_t5,v0_7_t6,v0_7_t7 : BITVECTOR(32);
+   ASSERT(v0_7_t1 = BVMULT(32,v1_6,0hex00000010));
+   ASSERT(v0_7_t2 = BVPLUS(32,v0_7_t1, k0));
+   ASSERT(v0_7_t3 = BVPLUS(32,v1_6,v_delta_7));
+   ASSERT(v0_7_t4 = BVXOR(v0_7_t2,v0_7_t3));
+   ASSERT(v0_7_t5 = v1_6>>5);
+   ASSERT(v0_7_t6 = BVPLUS(32,v0_7_t5,k1));
+   ASSERT(v0_7 = BVXOR(v0_7_t4,v0_7_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_7_t1,v1_7_t2,v1_7_t3,v1_7_t4,v1_7_t5,v1_7_t6,v1_7_t7 : BITVECTOR(32);
+   ASSERT(v1_7_t1 = BVMULT(32,v0_6,0hex00000010));
+   ASSERT(v1_7_t2 = BVPLUS(32,v1_7_t1, k2));
+   ASSERT(v1_7_t3 = BVPLUS(32,v0_6,v_delta_7));
+   ASSERT(v1_7_t4 = BVXOR(v1_7_t2,v1_7_t3));
+   ASSERT(v1_7_t5 = v0_6>>5);
+   ASSERT(v1_7_t6 = BVPLUS(32,v1_7_t5,k3));
+   ASSERT(v1_7 = BVXOR(v1_7_t4,v1_7_t6));
+
+   % round _7_;
+
+   x0_7,x1_7,x_delta_7 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_7 = BVPLUS(32,x_delta_6,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_7_t1,x0_7_t2,x0_7_t3,x0_7_t4,x0_7_t5,x0_7_t6,x0_7_t7 : BITVECTOR(32);
+   ASSERT(x0_7_t1 = BVMULT(32,x1_6,0hex00000010));
+   ASSERT(x0_7_t2 = BVPLUS(32,x0_7_t1, k0));
+   ASSERT(x0_7_t3 = BVPLUS(32,x1_6,x_delta_7));
+   ASSERT(x0_7_t4 = BVXOR(x0_7_t2,x0_7_t3));
+   ASSERT(x0_7_t5 = x1_6>>5);
+   ASSERT(x0_7_t6 = BVPLUS(32,x0_7_t5,k1));
+   ASSERT(x0_7 = BVXOR(x0_7_t4,x0_7_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_7_t1,x1_7_t2,x1_7_t3,x1_7_t4,x1_7_t5,x1_7_t6,x1_7_t7 : BITVECTOR(32);
+   ASSERT(x1_7_t1 = BVMULT(32,x0_6,0hex00000010));
+   ASSERT(x1_7_t2 = BVPLUS(32,x1_7_t1, k2));
+   ASSERT(x1_7_t3 = BVPLUS(32,x0_6,x_delta_7));
+   ASSERT(x1_7_t4 = BVXOR(x1_7_t2,x1_7_t3));
+   ASSERT(x1_7_t5 = x0_6>>5);
+   ASSERT(x1_7_t6 = BVPLUS(32,x1_7_t5,k3));
+   ASSERT(x1_7 = BVXOR(x1_7_t4,x1_7_t6));
+
+   % round _8_;
+
+   v0_8,v1_8,v_delta_8 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_8 = BVPLUS(32,v_delta_7,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_8_t1,v0_8_t2,v0_8_t3,v0_8_t4,v0_8_t5,v0_8_t6,v0_8_t7 : BITVECTOR(32);
+   ASSERT(v0_8_t1 = BVMULT(32,v1_7,0hex00000010));
+   ASSERT(v0_8_t2 = BVPLUS(32,v0_8_t1, k0));
+   ASSERT(v0_8_t3 = BVPLUS(32,v1_7,v_delta_8));
+   ASSERT(v0_8_t4 = BVXOR(v0_8_t2,v0_8_t3));
+   ASSERT(v0_8_t5 = v1_7>>5);
+   ASSERT(v0_8_t6 = BVPLUS(32,v0_8_t5,k1));
+   ASSERT(v0_8 = BVXOR(v0_8_t4,v0_8_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_8_t1,v1_8_t2,v1_8_t3,v1_8_t4,v1_8_t5,v1_8_t6,v1_8_t7 : BITVECTOR(32);
+   ASSERT(v1_8_t1 = BVMULT(32,v0_7,0hex00000010));
+   ASSERT(v1_8_t2 = BVPLUS(32,v1_8_t1, k2));
+   ASSERT(v1_8_t3 = BVPLUS(32,v0_7,v_delta_8));
+   ASSERT(v1_8_t4 = BVXOR(v1_8_t2,v1_8_t3));
+   ASSERT(v1_8_t5 = v0_7>>5);
+   ASSERT(v1_8_t6 = BVPLUS(32,v1_8_t5,k3));
+   ASSERT(v1_8 = BVXOR(v1_8_t4,v1_8_t6));
+
+   % round _8_;
+
+   x0_8,x1_8,x_delta_8 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_8 = BVPLUS(32,x_delta_7,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_8_t1,x0_8_t2,x0_8_t3,x0_8_t4,x0_8_t5,x0_8_t6,x0_8_t7 : BITVECTOR(32);
+   ASSERT(x0_8_t1 = BVMULT(32,x1_7,0hex00000010));
+   ASSERT(x0_8_t2 = BVPLUS(32,x0_8_t1, k0));
+   ASSERT(x0_8_t3 = BVPLUS(32,x1_7,x_delta_8));
+   ASSERT(x0_8_t4 = BVXOR(x0_8_t2,x0_8_t3));
+   ASSERT(x0_8_t5 = x1_7>>5);
+   ASSERT(x0_8_t6 = BVPLUS(32,x0_8_t5,k1));
+   ASSERT(x0_8 = BVXOR(x0_8_t4,x0_8_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_8_t1,x1_8_t2,x1_8_t3,x1_8_t4,x1_8_t5,x1_8_t6,x1_8_t7 : BITVECTOR(32);
+   ASSERT(x1_8_t1 = BVMULT(32,x0_7,0hex00000010));
+   ASSERT(x1_8_t2 = BVPLUS(32,x1_8_t1, k2));
+   ASSERT(x1_8_t3 = BVPLUS(32,x0_7,x_delta_8));
+   ASSERT(x1_8_t4 = BVXOR(x1_8_t2,x1_8_t3));
+   ASSERT(x1_8_t5 = x0_7>>5);
+   ASSERT(x1_8_t6 = BVPLUS(32,x1_8_t5,k3));
+   ASSERT(x1_8 = BVXOR(x1_8_t4,x1_8_t6));
+
+   % round _9_;
+
+   v0_9,v1_9,v_delta_9 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_9 = BVPLUS(32,v_delta_8,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_9_t1,v0_9_t2,v0_9_t3,v0_9_t4,v0_9_t5,v0_9_t6,v0_9_t7 : BITVECTOR(32);
+   ASSERT(v0_9_t1 = BVMULT(32,v1_8,0hex00000010));
+   ASSERT(v0_9_t2 = BVPLUS(32,v0_9_t1, k0));
+   ASSERT(v0_9_t3 = BVPLUS(32,v1_8,v_delta_9));
+   ASSERT(v0_9_t4 = BVXOR(v0_9_t2,v0_9_t3));
+   ASSERT(v0_9_t5 = v1_8>>5);
+   ASSERT(v0_9_t6 = BVPLUS(32,v0_9_t5,k1));
+   ASSERT(v0_9 = BVXOR(v0_9_t4,v0_9_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_9_t1,v1_9_t2,v1_9_t3,v1_9_t4,v1_9_t5,v1_9_t6,v1_9_t7 : BITVECTOR(32);
+   ASSERT(v1_9_t1 = BVMULT(32,v0_8,0hex00000010));
+   ASSERT(v1_9_t2 = BVPLUS(32,v1_9_t1, k2));
+   ASSERT(v1_9_t3 = BVPLUS(32,v0_8,v_delta_9));
+   ASSERT(v1_9_t4 = BVXOR(v1_9_t2,v1_9_t3));
+   ASSERT(v1_9_t5 = v0_8>>5);
+   ASSERT(v1_9_t6 = BVPLUS(32,v1_9_t5,k3));
+   ASSERT(v1_9 = BVXOR(v1_9_t4,v1_9_t6));
+
+   % round _9_;
+
+   x0_9,x1_9,x_delta_9 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_9 = BVPLUS(32,x_delta_8,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_9_t1,x0_9_t2,x0_9_t3,x0_9_t4,x0_9_t5,x0_9_t6,x0_9_t7 : BITVECTOR(32);
+   ASSERT(x0_9_t1 = BVMULT(32,x1_8,0hex00000010));
+   ASSERT(x0_9_t2 = BVPLUS(32,x0_9_t1, k0));
+   ASSERT(x0_9_t3 = BVPLUS(32,x1_8,x_delta_9));
+   ASSERT(x0_9_t4 = BVXOR(x0_9_t2,x0_9_t3));
+   ASSERT(x0_9_t5 = x1_8>>5);
+   ASSERT(x0_9_t6 = BVPLUS(32,x0_9_t5,k1));
+   ASSERT(x0_9 = BVXOR(x0_9_t4,x0_9_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_9_t1,x1_9_t2,x1_9_t3,x1_9_t4,x1_9_t5,x1_9_t6,x1_9_t7 : BITVECTOR(32);
+   ASSERT(x1_9_t1 = BVMULT(32,x0_8,0hex00000010));
+   ASSERT(x1_9_t2 = BVPLUS(32,x1_9_t1, k2));
+   ASSERT(x1_9_t3 = BVPLUS(32,x0_8,x_delta_9));
+   ASSERT(x1_9_t4 = BVXOR(x1_9_t2,x1_9_t3));
+   ASSERT(x1_9_t5 = x0_8>>5);
+   ASSERT(x1_9_t6 = BVPLUS(32,x1_9_t5,k3));
+   ASSERT(x1_9 = BVXOR(x1_9_t4,x1_9_t6));
+
+   % round _10_;
+
+   v0_10,v1_10,v_delta_10 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_10 = BVPLUS(32,v_delta_9,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_10_t1,v0_10_t2,v0_10_t3,v0_10_t4,v0_10_t5,v0_10_t6,v0_10_t7 : BITVECTOR(32);
+   ASSERT(v0_10_t1 = BVMULT(32,v1_9,0hex00000010));
+   ASSERT(v0_10_t2 = BVPLUS(32,v0_10_t1, k0));
+   ASSERT(v0_10_t3 = BVPLUS(32,v1_9,v_delta_10));
+   ASSERT(v0_10_t4 = BVXOR(v0_10_t2,v0_10_t3));
+   ASSERT(v0_10_t5 = v1_9>>5);
+   ASSERT(v0_10_t6 = BVPLUS(32,v0_10_t5,k1));
+   ASSERT(v0_10 = BVXOR(v0_10_t4,v0_10_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_10_t1,v1_10_t2,v1_10_t3,v1_10_t4,v1_10_t5,v1_10_t6,v1_10_t7 : BITVECTOR(32);
+   ASSERT(v1_10_t1 = BVMULT(32,v0_9,0hex00000010));
+   ASSERT(v1_10_t2 = BVPLUS(32,v1_10_t1, k2));
+   ASSERT(v1_10_t3 = BVPLUS(32,v0_9,v_delta_10));
+   ASSERT(v1_10_t4 = BVXOR(v1_10_t2,v1_10_t3));
+   ASSERT(v1_10_t5 = v0_9>>5);
+   ASSERT(v1_10_t6 = BVPLUS(32,v1_10_t5,k3));
+   ASSERT(v1_10 = BVXOR(v1_10_t4,v1_10_t6));
+
+   % round _10_;
+
+   x0_10,x1_10,x_delta_10 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_10 = BVPLUS(32,x_delta_9,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_10_t1,x0_10_t2,x0_10_t3,x0_10_t4,x0_10_t5,x0_10_t6,x0_10_t7 : BITVECTOR(32);
+   ASSERT(x0_10_t1 = BVMULT(32,x1_9,0hex00000010));
+   ASSERT(x0_10_t2 = BVPLUS(32,x0_10_t1, k0));
+   ASSERT(x0_10_t3 = BVPLUS(32,x1_9,x_delta_10));
+   ASSERT(x0_10_t4 = BVXOR(x0_10_t2,x0_10_t3));
+   ASSERT(x0_10_t5 = x1_9>>5);
+   ASSERT(x0_10_t6 = BVPLUS(32,x0_10_t5,k1));
+   ASSERT(x0_10 = BVXOR(x0_10_t4,x0_10_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_10_t1,x1_10_t2,x1_10_t3,x1_10_t4,x1_10_t5,x1_10_t6,x1_10_t7 : BITVECTOR(32);
+   ASSERT(x1_10_t1 = BVMULT(32,x0_9,0hex00000010));
+   ASSERT(x1_10_t2 = BVPLUS(32,x1_10_t1, k2));
+   ASSERT(x1_10_t3 = BVPLUS(32,x0_9,x_delta_10));
+   ASSERT(x1_10_t4 = BVXOR(x1_10_t2,x1_10_t3));
+   ASSERT(x1_10_t5 = x0_9>>5);
+   ASSERT(x1_10_t6 = BVPLUS(32,x1_10_t5,k3));
+   ASSERT(x1_10 = BVXOR(x1_10_t4,x1_10_t6));
+
+   % round _11_;
+
+   v0_11,v1_11,v_delta_11 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_11 = BVPLUS(32,v_delta_10,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_11_t1,v0_11_t2,v0_11_t3,v0_11_t4,v0_11_t5,v0_11_t6,v0_11_t7 : BITVECTOR(32);
+   ASSERT(v0_11_t1 = BVMULT(32,v1_10,0hex00000010));
+   ASSERT(v0_11_t2 = BVPLUS(32,v0_11_t1, k0));
+   ASSERT(v0_11_t3 = BVPLUS(32,v1_10,v_delta_11));
+   ASSERT(v0_11_t4 = BVXOR(v0_11_t2,v0_11_t3));
+   ASSERT(v0_11_t5 = v1_10>>5);
+   ASSERT(v0_11_t6 = BVPLUS(32,v0_11_t5,k1));
+   ASSERT(v0_11 = BVXOR(v0_11_t4,v0_11_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_11_t1,v1_11_t2,v1_11_t3,v1_11_t4,v1_11_t5,v1_11_t6,v1_11_t7 : BITVECTOR(32);
+   ASSERT(v1_11_t1 = BVMULT(32,v0_10,0hex00000010));
+   ASSERT(v1_11_t2 = BVPLUS(32,v1_11_t1, k2));
+   ASSERT(v1_11_t3 = BVPLUS(32,v0_10,v_delta_11));
+   ASSERT(v1_11_t4 = BVXOR(v1_11_t2,v1_11_t3));
+   ASSERT(v1_11_t5 = v0_10>>5);
+   ASSERT(v1_11_t6 = BVPLUS(32,v1_11_t5,k3));
+   ASSERT(v1_11 = BVXOR(v1_11_t4,v1_11_t6));
+
+   % round _11_;
+
+   x0_11,x1_11,x_delta_11 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_11 = BVPLUS(32,x_delta_10,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_11_t1,x0_11_t2,x0_11_t3,x0_11_t4,x0_11_t5,x0_11_t6,x0_11_t7 : BITVECTOR(32);
+   ASSERT(x0_11_t1 = BVMULT(32,x1_10,0hex00000010));
+   ASSERT(x0_11_t2 = BVPLUS(32,x0_11_t1, k0));
+   ASSERT(x0_11_t3 = BVPLUS(32,x1_10,x_delta_11));
+   ASSERT(x0_11_t4 = BVXOR(x0_11_t2,x0_11_t3));
+   ASSERT(x0_11_t5 = x1_10>>5);
+   ASSERT(x0_11_t6 = BVPLUS(32,x0_11_t5,k1));
+   ASSERT(x0_11 = BVXOR(x0_11_t4,x0_11_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_11_t1,x1_11_t2,x1_11_t3,x1_11_t4,x1_11_t5,x1_11_t6,x1_11_t7 : BITVECTOR(32);
+   ASSERT(x1_11_t1 = BVMULT(32,x0_10,0hex00000010));
+   ASSERT(x1_11_t2 = BVPLUS(32,x1_11_t1, k2));
+   ASSERT(x1_11_t3 = BVPLUS(32,x0_10,x_delta_11));
+   ASSERT(x1_11_t4 = BVXOR(x1_11_t2,x1_11_t3));
+   ASSERT(x1_11_t5 = x0_10>>5);
+   ASSERT(x1_11_t6 = BVPLUS(32,x1_11_t5,k3));
+   ASSERT(x1_11 = BVXOR(x1_11_t4,x1_11_t6));
+
+   % round _12_;
+
+   v0_12,v1_12,v_delta_12 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_12 = BVPLUS(32,v_delta_11,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_12_t1,v0_12_t2,v0_12_t3,v0_12_t4,v0_12_t5,v0_12_t6,v0_12_t7 : BITVECTOR(32);
+   ASSERT(v0_12_t1 = BVMULT(32,v1_11,0hex00000010));
+   ASSERT(v0_12_t2 = BVPLUS(32,v0_12_t1, k0));
+   ASSERT(v0_12_t3 = BVPLUS(32,v1_11,v_delta_12));
+   ASSERT(v0_12_t4 = BVXOR(v0_12_t2,v0_12_t3));
+   ASSERT(v0_12_t5 = v1_11>>5);
+   ASSERT(v0_12_t6 = BVPLUS(32,v0_12_t5,k1));
+   ASSERT(v0_12 = BVXOR(v0_12_t4,v0_12_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_12_t1,v1_12_t2,v1_12_t3,v1_12_t4,v1_12_t5,v1_12_t6,v1_12_t7 : BITVECTOR(32);
+   ASSERT(v1_12_t1 = BVMULT(32,v0_11,0hex00000010));
+   ASSERT(v1_12_t2 = BVPLUS(32,v1_12_t1, k2));
+   ASSERT(v1_12_t3 = BVPLUS(32,v0_11,v_delta_12));
+   ASSERT(v1_12_t4 = BVXOR(v1_12_t2,v1_12_t3));
+   ASSERT(v1_12_t5 = v0_11>>5);
+   ASSERT(v1_12_t6 = BVPLUS(32,v1_12_t5,k3));
+   ASSERT(v1_12 = BVXOR(v1_12_t4,v1_12_t6));
+
+   % round _12_;
+
+   x0_12,x1_12,x_delta_12 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_12 = BVPLUS(32,x_delta_11,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_12_t1,x0_12_t2,x0_12_t3,x0_12_t4,x0_12_t5,x0_12_t6,x0_12_t7 : BITVECTOR(32);
+   ASSERT(x0_12_t1 = BVMULT(32,x1_11,0hex00000010));
+   ASSERT(x0_12_t2 = BVPLUS(32,x0_12_t1, k0));
+   ASSERT(x0_12_t3 = BVPLUS(32,x1_11,x_delta_12));
+   ASSERT(x0_12_t4 = BVXOR(x0_12_t2,x0_12_t3));
+   ASSERT(x0_12_t5 = x1_11>>5);
+   ASSERT(x0_12_t6 = BVPLUS(32,x0_12_t5,k1));
+   ASSERT(x0_12 = BVXOR(x0_12_t4,x0_12_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_12_t1,x1_12_t2,x1_12_t3,x1_12_t4,x1_12_t5,x1_12_t6,x1_12_t7 : BITVECTOR(32);
+   ASSERT(x1_12_t1 = BVMULT(32,x0_11,0hex00000010));
+   ASSERT(x1_12_t2 = BVPLUS(32,x1_12_t1, k2));
+   ASSERT(x1_12_t3 = BVPLUS(32,x0_11,x_delta_12));
+   ASSERT(x1_12_t4 = BVXOR(x1_12_t2,x1_12_t3));
+   ASSERT(x1_12_t5 = x0_11>>5);
+   ASSERT(x1_12_t6 = BVPLUS(32,x1_12_t5,k3));
+   ASSERT(x1_12 = BVXOR(x1_12_t4,x1_12_t6));
+
+   % round _13_;
+
+   v0_13,v1_13,v_delta_13 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_13 = BVPLUS(32,v_delta_12,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_13_t1,v0_13_t2,v0_13_t3,v0_13_t4,v0_13_t5,v0_13_t6,v0_13_t7 : BITVECTOR(32);
+   ASSERT(v0_13_t1 = BVMULT(32,v1_12,0hex00000010));
+   ASSERT(v0_13_t2 = BVPLUS(32,v0_13_t1, k0));
+   ASSERT(v0_13_t3 = BVPLUS(32,v1_12,v_delta_13));
+   ASSERT(v0_13_t4 = BVXOR(v0_13_t2,v0_13_t3));
+   ASSERT(v0_13_t5 = v1_12>>5);
+   ASSERT(v0_13_t6 = BVPLUS(32,v0_13_t5,k1));
+   ASSERT(v0_13 = BVXOR(v0_13_t4,v0_13_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_13_t1,v1_13_t2,v1_13_t3,v1_13_t4,v1_13_t5,v1_13_t6,v1_13_t7 : BITVECTOR(32);
+   ASSERT(v1_13_t1 = BVMULT(32,v0_12,0hex00000010));
+   ASSERT(v1_13_t2 = BVPLUS(32,v1_13_t1, k2));
+   ASSERT(v1_13_t3 = BVPLUS(32,v0_12,v_delta_13));
+   ASSERT(v1_13_t4 = BVXOR(v1_13_t2,v1_13_t3));
+   ASSERT(v1_13_t5 = v0_12>>5);
+   ASSERT(v1_13_t6 = BVPLUS(32,v1_13_t5,k3));
+   ASSERT(v1_13 = BVXOR(v1_13_t4,v1_13_t6));
+
+   % round _13_;
+
+   x0_13,x1_13,x_delta_13 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_13 = BVPLUS(32,x_delta_12,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_13_t1,x0_13_t2,x0_13_t3,x0_13_t4,x0_13_t5,x0_13_t6,x0_13_t7 : BITVECTOR(32);
+   ASSERT(x0_13_t1 = BVMULT(32,x1_12,0hex00000010));
+   ASSERT(x0_13_t2 = BVPLUS(32,x0_13_t1, k0));
+   ASSERT(x0_13_t3 = BVPLUS(32,x1_12,x_delta_13));
+   ASSERT(x0_13_t4 = BVXOR(x0_13_t2,x0_13_t3));
+   ASSERT(x0_13_t5 = x1_12>>5);
+   ASSERT(x0_13_t6 = BVPLUS(32,x0_13_t5,k1));
+   ASSERT(x0_13 = BVXOR(x0_13_t4,x0_13_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_13_t1,x1_13_t2,x1_13_t3,x1_13_t4,x1_13_t5,x1_13_t6,x1_13_t7 : BITVECTOR(32);
+   ASSERT(x1_13_t1 = BVMULT(32,x0_12,0hex00000010));
+   ASSERT(x1_13_t2 = BVPLUS(32,x1_13_t1, k2));
+   ASSERT(x1_13_t3 = BVPLUS(32,x0_12,x_delta_13));
+   ASSERT(x1_13_t4 = BVXOR(x1_13_t2,x1_13_t3));
+   ASSERT(x1_13_t5 = x0_12>>5);
+   ASSERT(x1_13_t6 = BVPLUS(32,x1_13_t5,k3));
+   ASSERT(x1_13 = BVXOR(x1_13_t4,x1_13_t6));
+
+   % round _14_;
+
+   v0_14,v1_14,v_delta_14 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_14 = BVPLUS(32,v_delta_13,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_14_t1,v0_14_t2,v0_14_t3,v0_14_t4,v0_14_t5,v0_14_t6,v0_14_t7 : BITVECTOR(32);
+   ASSERT(v0_14_t1 = BVMULT(32,v1_13,0hex00000010));
+   ASSERT(v0_14_t2 = BVPLUS(32,v0_14_t1, k0));
+   ASSERT(v0_14_t3 = BVPLUS(32,v1_13,v_delta_14));
+   ASSERT(v0_14_t4 = BVXOR(v0_14_t2,v0_14_t3));
+   ASSERT(v0_14_t5 = v1_13>>5);
+   ASSERT(v0_14_t6 = BVPLUS(32,v0_14_t5,k1));
+   ASSERT(v0_14 = BVXOR(v0_14_t4,v0_14_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_14_t1,v1_14_t2,v1_14_t3,v1_14_t4,v1_14_t5,v1_14_t6,v1_14_t7 : BITVECTOR(32);
+   ASSERT(v1_14_t1 = BVMULT(32,v0_13,0hex00000010));
+   ASSERT(v1_14_t2 = BVPLUS(32,v1_14_t1, k2));
+   ASSERT(v1_14_t3 = BVPLUS(32,v0_13,v_delta_14));
+   ASSERT(v1_14_t4 = BVXOR(v1_14_t2,v1_14_t3));
+   ASSERT(v1_14_t5 = v0_13>>5);
+   ASSERT(v1_14_t6 = BVPLUS(32,v1_14_t5,k3));
+   ASSERT(v1_14 = BVXOR(v1_14_t4,v1_14_t6));
+
+   % round _14_;
+
+   x0_14,x1_14,x_delta_14 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_14 = BVPLUS(32,x_delta_13,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_14_t1,x0_14_t2,x0_14_t3,x0_14_t4,x0_14_t5,x0_14_t6,x0_14_t7 : BITVECTOR(32);
+   ASSERT(x0_14_t1 = BVMULT(32,x1_13,0hex00000010));
+   ASSERT(x0_14_t2 = BVPLUS(32,x0_14_t1, k0));
+   ASSERT(x0_14_t3 = BVPLUS(32,x1_13,x_delta_14));
+   ASSERT(x0_14_t4 = BVXOR(x0_14_t2,x0_14_t3));
+   ASSERT(x0_14_t5 = x1_13>>5);
+   ASSERT(x0_14_t6 = BVPLUS(32,x0_14_t5,k1));
+   ASSERT(x0_14 = BVXOR(x0_14_t4,x0_14_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_14_t1,x1_14_t2,x1_14_t3,x1_14_t4,x1_14_t5,x1_14_t6,x1_14_t7 : BITVECTOR(32);
+   ASSERT(x1_14_t1 = BVMULT(32,x0_13,0hex00000010));
+   ASSERT(x1_14_t2 = BVPLUS(32,x1_14_t1, k2));
+   ASSERT(x1_14_t3 = BVPLUS(32,x0_13,x_delta_14));
+   ASSERT(x1_14_t4 = BVXOR(x1_14_t2,x1_14_t3));
+   ASSERT(x1_14_t5 = x0_13>>5);
+   ASSERT(x1_14_t6 = BVPLUS(32,x1_14_t5,k3));
+   ASSERT(x1_14 = BVXOR(x1_14_t4,x1_14_t6));
+
+   % round _15_;
+
+   v0_15,v1_15,v_delta_15 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_15 = BVPLUS(32,v_delta_14,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_15_t1,v0_15_t2,v0_15_t3,v0_15_t4,v0_15_t5,v0_15_t6,v0_15_t7 : BITVECTOR(32);
+   ASSERT(v0_15_t1 = BVMULT(32,v1_14,0hex00000010));
+   ASSERT(v0_15_t2 = BVPLUS(32,v0_15_t1, k0));
+   ASSERT(v0_15_t3 = BVPLUS(32,v1_14,v_delta_15));
+   ASSERT(v0_15_t4 = BVXOR(v0_15_t2,v0_15_t3));
+   ASSERT(v0_15_t5 = v1_14>>5);
+   ASSERT(v0_15_t6 = BVPLUS(32,v0_15_t5,k1));
+   ASSERT(v0_15 = BVXOR(v0_15_t4,v0_15_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_15_t1,v1_15_t2,v1_15_t3,v1_15_t4,v1_15_t5,v1_15_t6,v1_15_t7 : BITVECTOR(32);
+   ASSERT(v1_15_t1 = BVMULT(32,v0_14,0hex00000010));
+   ASSERT(v1_15_t2 = BVPLUS(32,v1_15_t1, k2));
+   ASSERT(v1_15_t3 = BVPLUS(32,v0_14,v_delta_15));
+   ASSERT(v1_15_t4 = BVXOR(v1_15_t2,v1_15_t3));
+   ASSERT(v1_15_t5 = v0_14>>5);
+   ASSERT(v1_15_t6 = BVPLUS(32,v1_15_t5,k3));
+   ASSERT(v1_15 = BVXOR(v1_15_t4,v1_15_t6));
+
+   % round _15_;
+
+   x0_15,x1_15,x_delta_15 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_15 = BVPLUS(32,x_delta_14,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_15_t1,x0_15_t2,x0_15_t3,x0_15_t4,x0_15_t5,x0_15_t6,x0_15_t7 : BITVECTOR(32);
+   ASSERT(x0_15_t1 = BVMULT(32,x1_14,0hex00000010));
+   ASSERT(x0_15_t2 = BVPLUS(32,x0_15_t1, k0));
+   ASSERT(x0_15_t3 = BVPLUS(32,x1_14,x_delta_15));
+   ASSERT(x0_15_t4 = BVXOR(x0_15_t2,x0_15_t3));
+   ASSERT(x0_15_t5 = x1_14>>5);
+   ASSERT(x0_15_t6 = BVPLUS(32,x0_15_t5,k1));
+   ASSERT(x0_15 = BVXOR(x0_15_t4,x0_15_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_15_t1,x1_15_t2,x1_15_t3,x1_15_t4,x1_15_t5,x1_15_t6,x1_15_t7 : BITVECTOR(32);
+   ASSERT(x1_15_t1 = BVMULT(32,x0_14,0hex00000010));
+   ASSERT(x1_15_t2 = BVPLUS(32,x1_15_t1, k2));
+   ASSERT(x1_15_t3 = BVPLUS(32,x0_14,x_delta_15));
+   ASSERT(x1_15_t4 = BVXOR(x1_15_t2,x1_15_t3));
+   ASSERT(x1_15_t5 = x0_14>>5);
+   ASSERT(x1_15_t6 = BVPLUS(32,x1_15_t5,k3));
+   ASSERT(x1_15 = BVXOR(x1_15_t4,x1_15_t6));
+
+   % round _16_;
+
+   v0_16,v1_16,v_delta_16 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_16 = BVPLUS(32,v_delta_15,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_16_t1,v0_16_t2,v0_16_t3,v0_16_t4,v0_16_t5,v0_16_t6,v0_16_t7 : BITVECTOR(32);
+   ASSERT(v0_16_t1 = BVMULT(32,v1_15,0hex00000010));
+   ASSERT(v0_16_t2 = BVPLUS(32,v0_16_t1, k0));
+   ASSERT(v0_16_t3 = BVPLUS(32,v1_15,v_delta_16));
+   ASSERT(v0_16_t4 = BVXOR(v0_16_t2,v0_16_t3));
+   ASSERT(v0_16_t5 = v1_15>>5);
+   ASSERT(v0_16_t6 = BVPLUS(32,v0_16_t5,k1));
+   ASSERT(v0_16 = BVXOR(v0_16_t4,v0_16_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_16_t1,v1_16_t2,v1_16_t3,v1_16_t4,v1_16_t5,v1_16_t6,v1_16_t7 : BITVECTOR(32);
+   ASSERT(v1_16_t1 = BVMULT(32,v0_15,0hex00000010));
+   ASSERT(v1_16_t2 = BVPLUS(32,v1_16_t1, k2));
+   ASSERT(v1_16_t3 = BVPLUS(32,v0_15,v_delta_16));
+   ASSERT(v1_16_t4 = BVXOR(v1_16_t2,v1_16_t3));
+   ASSERT(v1_16_t5 = v0_15>>5);
+   ASSERT(v1_16_t6 = BVPLUS(32,v1_16_t5,k3));
+   ASSERT(v1_16 = BVXOR(v1_16_t4,v1_16_t6));
+
+   % round _16_;
+
+   x0_16,x1_16,x_delta_16 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_16 = BVPLUS(32,x_delta_15,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_16_t1,x0_16_t2,x0_16_t3,x0_16_t4,x0_16_t5,x0_16_t6,x0_16_t7 : BITVECTOR(32);
+   ASSERT(x0_16_t1 = BVMULT(32,x1_15,0hex00000010));
+   ASSERT(x0_16_t2 = BVPLUS(32,x0_16_t1, k0));
+   ASSERT(x0_16_t3 = BVPLUS(32,x1_15,x_delta_16));
+   ASSERT(x0_16_t4 = BVXOR(x0_16_t2,x0_16_t3));
+   ASSERT(x0_16_t5 = x1_15>>5);
+   ASSERT(x0_16_t6 = BVPLUS(32,x0_16_t5,k1));
+   ASSERT(x0_16 = BVXOR(x0_16_t4,x0_16_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_16_t1,x1_16_t2,x1_16_t3,x1_16_t4,x1_16_t5,x1_16_t6,x1_16_t7 : BITVECTOR(32);
+   ASSERT(x1_16_t1 = BVMULT(32,x0_15,0hex00000010));
+   ASSERT(x1_16_t2 = BVPLUS(32,x1_16_t1, k2));
+   ASSERT(x1_16_t3 = BVPLUS(32,x0_15,x_delta_16));
+   ASSERT(x1_16_t4 = BVXOR(x1_16_t2,x1_16_t3));
+   ASSERT(x1_16_t5 = x0_15>>5);
+   ASSERT(x1_16_t6 = BVPLUS(32,x1_16_t5,k3));
+   ASSERT(x1_16 = BVXOR(x1_16_t4,x1_16_t6));
+
+   % round _17_;
+
+   v0_17,v1_17,v_delta_17 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_17 = BVPLUS(32,v_delta_16,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_17_t1,v0_17_t2,v0_17_t3,v0_17_t4,v0_17_t5,v0_17_t6,v0_17_t7 : BITVECTOR(32);
+   ASSERT(v0_17_t1 = BVMULT(32,v1_16,0hex00000010));
+   ASSERT(v0_17_t2 = BVPLUS(32,v0_17_t1, k0));
+   ASSERT(v0_17_t3 = BVPLUS(32,v1_16,v_delta_17));
+   ASSERT(v0_17_t4 = BVXOR(v0_17_t2,v0_17_t3));
+   ASSERT(v0_17_t5 = v1_16>>5);
+   ASSERT(v0_17_t6 = BVPLUS(32,v0_17_t5,k1));
+   ASSERT(v0_17 = BVXOR(v0_17_t4,v0_17_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_17_t1,v1_17_t2,v1_17_t3,v1_17_t4,v1_17_t5,v1_17_t6,v1_17_t7 : BITVECTOR(32);
+   ASSERT(v1_17_t1 = BVMULT(32,v0_16,0hex00000010));
+   ASSERT(v1_17_t2 = BVPLUS(32,v1_17_t1, k2));
+   ASSERT(v1_17_t3 = BVPLUS(32,v0_16,v_delta_17));
+   ASSERT(v1_17_t4 = BVXOR(v1_17_t2,v1_17_t3));
+   ASSERT(v1_17_t5 = v0_16>>5);
+   ASSERT(v1_17_t6 = BVPLUS(32,v1_17_t5,k3));
+   ASSERT(v1_17 = BVXOR(v1_17_t4,v1_17_t6));
+
+   % round _17_;
+
+   x0_17,x1_17,x_delta_17 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_17 = BVPLUS(32,x_delta_16,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_17_t1,x0_17_t2,x0_17_t3,x0_17_t4,x0_17_t5,x0_17_t6,x0_17_t7 : BITVECTOR(32);
+   ASSERT(x0_17_t1 = BVMULT(32,x1_16,0hex00000010));
+   ASSERT(x0_17_t2 = BVPLUS(32,x0_17_t1, k0));
+   ASSERT(x0_17_t3 = BVPLUS(32,x1_16,x_delta_17));
+   ASSERT(x0_17_t4 = BVXOR(x0_17_t2,x0_17_t3));
+   ASSERT(x0_17_t5 = x1_16>>5);
+   ASSERT(x0_17_t6 = BVPLUS(32,x0_17_t5,k1));
+   ASSERT(x0_17 = BVXOR(x0_17_t4,x0_17_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_17_t1,x1_17_t2,x1_17_t3,x1_17_t4,x1_17_t5,x1_17_t6,x1_17_t7 : BITVECTOR(32);
+   ASSERT(x1_17_t1 = BVMULT(32,x0_16,0hex00000010));
+   ASSERT(x1_17_t2 = BVPLUS(32,x1_17_t1, k2));
+   ASSERT(x1_17_t3 = BVPLUS(32,x0_16,x_delta_17));
+   ASSERT(x1_17_t4 = BVXOR(x1_17_t2,x1_17_t3));
+   ASSERT(x1_17_t5 = x0_16>>5);
+   ASSERT(x1_17_t6 = BVPLUS(32,x1_17_t5,k3));
+   ASSERT(x1_17 = BVXOR(x1_17_t4,x1_17_t6));
+
+   % round _18_;
+
+   v0_18,v1_18,v_delta_18 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_18 = BVPLUS(32,v_delta_17,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_18_t1,v0_18_t2,v0_18_t3,v0_18_t4,v0_18_t5,v0_18_t6,v0_18_t7 : BITVECTOR(32);
+   ASSERT(v0_18_t1 = BVMULT(32,v1_17,0hex00000010));
+   ASSERT(v0_18_t2 = BVPLUS(32,v0_18_t1, k0));
+   ASSERT(v0_18_t3 = BVPLUS(32,v1_17,v_delta_18));
+   ASSERT(v0_18_t4 = BVXOR(v0_18_t2,v0_18_t3));
+   ASSERT(v0_18_t5 = v1_17>>5);
+   ASSERT(v0_18_t6 = BVPLUS(32,v0_18_t5,k1));
+   ASSERT(v0_18 = BVXOR(v0_18_t4,v0_18_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_18_t1,v1_18_t2,v1_18_t3,v1_18_t4,v1_18_t5,v1_18_t6,v1_18_t7 : BITVECTOR(32);
+   ASSERT(v1_18_t1 = BVMULT(32,v0_17,0hex00000010));
+   ASSERT(v1_18_t2 = BVPLUS(32,v1_18_t1, k2));
+   ASSERT(v1_18_t3 = BVPLUS(32,v0_17,v_delta_18));
+   ASSERT(v1_18_t4 = BVXOR(v1_18_t2,v1_18_t3));
+   ASSERT(v1_18_t5 = v0_17>>5);
+   ASSERT(v1_18_t6 = BVPLUS(32,v1_18_t5,k3));
+   ASSERT(v1_18 = BVXOR(v1_18_t4,v1_18_t6));
+
+   % round _18_;
+
+   x0_18,x1_18,x_delta_18 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_18 = BVPLUS(32,x_delta_17,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_18_t1,x0_18_t2,x0_18_t3,x0_18_t4,x0_18_t5,x0_18_t6,x0_18_t7 : BITVECTOR(32);
+   ASSERT(x0_18_t1 = BVMULT(32,x1_17,0hex00000010));
+   ASSERT(x0_18_t2 = BVPLUS(32,x0_18_t1, k0));
+   ASSERT(x0_18_t3 = BVPLUS(32,x1_17,x_delta_18));
+   ASSERT(x0_18_t4 = BVXOR(x0_18_t2,x0_18_t3));
+   ASSERT(x0_18_t5 = x1_17>>5);
+   ASSERT(x0_18_t6 = BVPLUS(32,x0_18_t5,k1));
+   ASSERT(x0_18 = BVXOR(x0_18_t4,x0_18_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_18_t1,x1_18_t2,x1_18_t3,x1_18_t4,x1_18_t5,x1_18_t6,x1_18_t7 : BITVECTOR(32);
+   ASSERT(x1_18_t1 = BVMULT(32,x0_17,0hex00000010));
+   ASSERT(x1_18_t2 = BVPLUS(32,x1_18_t1, k2));
+   ASSERT(x1_18_t3 = BVPLUS(32,x0_17,x_delta_18));
+   ASSERT(x1_18_t4 = BVXOR(x1_18_t2,x1_18_t3));
+   ASSERT(x1_18_t5 = x0_17>>5);
+   ASSERT(x1_18_t6 = BVPLUS(32,x1_18_t5,k3));
+   ASSERT(x1_18 = BVXOR(x1_18_t4,x1_18_t6));
+
+   % round _19_;
+
+   v0_19,v1_19,v_delta_19 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_19 = BVPLUS(32,v_delta_18,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_19_t1,v0_19_t2,v0_19_t3,v0_19_t4,v0_19_t5,v0_19_t6,v0_19_t7 : BITVECTOR(32);
+   ASSERT(v0_19_t1 = BVMULT(32,v1_18,0hex00000010));
+   ASSERT(v0_19_t2 = BVPLUS(32,v0_19_t1, k0));
+   ASSERT(v0_19_t3 = BVPLUS(32,v1_18,v_delta_19));
+   ASSERT(v0_19_t4 = BVXOR(v0_19_t2,v0_19_t3));
+   ASSERT(v0_19_t5 = v1_18>>5);
+   ASSERT(v0_19_t6 = BVPLUS(32,v0_19_t5,k1));
+   ASSERT(v0_19 = BVXOR(v0_19_t4,v0_19_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_19_t1,v1_19_t2,v1_19_t3,v1_19_t4,v1_19_t5,v1_19_t6,v1_19_t7 : BITVECTOR(32);
+   ASSERT(v1_19_t1 = BVMULT(32,v0_18,0hex00000010));
+   ASSERT(v1_19_t2 = BVPLUS(32,v1_19_t1, k2));
+   ASSERT(v1_19_t3 = BVPLUS(32,v0_18,v_delta_19));
+   ASSERT(v1_19_t4 = BVXOR(v1_19_t2,v1_19_t3));
+   ASSERT(v1_19_t5 = v0_18>>5);
+   ASSERT(v1_19_t6 = BVPLUS(32,v1_19_t5,k3));
+   ASSERT(v1_19 = BVXOR(v1_19_t4,v1_19_t6));
+
+   % round _19_;
+
+   x0_19,x1_19,x_delta_19 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_19 = BVPLUS(32,x_delta_18,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_19_t1,x0_19_t2,x0_19_t3,x0_19_t4,x0_19_t5,x0_19_t6,x0_19_t7 : BITVECTOR(32);
+   ASSERT(x0_19_t1 = BVMULT(32,x1_18,0hex00000010));
+   ASSERT(x0_19_t2 = BVPLUS(32,x0_19_t1, k0));
+   ASSERT(x0_19_t3 = BVPLUS(32,x1_18,x_delta_19));
+   ASSERT(x0_19_t4 = BVXOR(x0_19_t2,x0_19_t3));
+   ASSERT(x0_19_t5 = x1_18>>5);
+   ASSERT(x0_19_t6 = BVPLUS(32,x0_19_t5,k1));
+   ASSERT(x0_19 = BVXOR(x0_19_t4,x0_19_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_19_t1,x1_19_t2,x1_19_t3,x1_19_t4,x1_19_t5,x1_19_t6,x1_19_t7 : BITVECTOR(32);
+   ASSERT(x1_19_t1 = BVMULT(32,x0_18,0hex00000010));
+   ASSERT(x1_19_t2 = BVPLUS(32,x1_19_t1, k2));
+   ASSERT(x1_19_t3 = BVPLUS(32,x0_18,x_delta_19));
+   ASSERT(x1_19_t4 = BVXOR(x1_19_t2,x1_19_t3));
+   ASSERT(x1_19_t5 = x0_18>>5);
+   ASSERT(x1_19_t6 = BVPLUS(32,x1_19_t5,k3));
+   ASSERT(x1_19 = BVXOR(x1_19_t4,x1_19_t6));
+
+   % round _20_;
+
+   v0_20,v1_20,v_delta_20 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_20 = BVPLUS(32,v_delta_19,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_20_t1,v0_20_t2,v0_20_t3,v0_20_t4,v0_20_t5,v0_20_t6,v0_20_t7 : BITVECTOR(32);
+   ASSERT(v0_20_t1 = BVMULT(32,v1_19,0hex00000010));
+   ASSERT(v0_20_t2 = BVPLUS(32,v0_20_t1, k0));
+   ASSERT(v0_20_t3 = BVPLUS(32,v1_19,v_delta_20));
+   ASSERT(v0_20_t4 = BVXOR(v0_20_t2,v0_20_t3));
+   ASSERT(v0_20_t5 = v1_19>>5);
+   ASSERT(v0_20_t6 = BVPLUS(32,v0_20_t5,k1));
+   ASSERT(v0_20 = BVXOR(v0_20_t4,v0_20_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_20_t1,v1_20_t2,v1_20_t3,v1_20_t4,v1_20_t5,v1_20_t6,v1_20_t7 : BITVECTOR(32);
+   ASSERT(v1_20_t1 = BVMULT(32,v0_19,0hex00000010));
+   ASSERT(v1_20_t2 = BVPLUS(32,v1_20_t1, k2));
+   ASSERT(v1_20_t3 = BVPLUS(32,v0_19,v_delta_20));
+   ASSERT(v1_20_t4 = BVXOR(v1_20_t2,v1_20_t3));
+   ASSERT(v1_20_t5 = v0_19>>5);
+   ASSERT(v1_20_t6 = BVPLUS(32,v1_20_t5,k3));
+   ASSERT(v1_20 = BVXOR(v1_20_t4,v1_20_t6));
+
+   % round _20_;
+
+   x0_20,x1_20,x_delta_20 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_20 = BVPLUS(32,x_delta_19,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_20_t1,x0_20_t2,x0_20_t3,x0_20_t4,x0_20_t5,x0_20_t6,x0_20_t7 : BITVECTOR(32);
+   ASSERT(x0_20_t1 = BVMULT(32,x1_19,0hex00000010));
+   ASSERT(x0_20_t2 = BVPLUS(32,x0_20_t1, k0));
+   ASSERT(x0_20_t3 = BVPLUS(32,x1_19,x_delta_20));
+   ASSERT(x0_20_t4 = BVXOR(x0_20_t2,x0_20_t3));
+   ASSERT(x0_20_t5 = x1_19>>5);
+   ASSERT(x0_20_t6 = BVPLUS(32,x0_20_t5,k1));
+   ASSERT(x0_20 = BVXOR(x0_20_t4,x0_20_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_20_t1,x1_20_t2,x1_20_t3,x1_20_t4,x1_20_t5,x1_20_t6,x1_20_t7 : BITVECTOR(32);
+   ASSERT(x1_20_t1 = BVMULT(32,x0_19,0hex00000010));
+   ASSERT(x1_20_t2 = BVPLUS(32,x1_20_t1, k2));
+   ASSERT(x1_20_t3 = BVPLUS(32,x0_19,x_delta_20));
+   ASSERT(x1_20_t4 = BVXOR(x1_20_t2,x1_20_t3));
+   ASSERT(x1_20_t5 = x0_19>>5);
+   ASSERT(x1_20_t6 = BVPLUS(32,x1_20_t5,k3));
+   ASSERT(x1_20 = BVXOR(x1_20_t4,x1_20_t6));
+
+   % round _21_;
+
+   v0_21,v1_21,v_delta_21 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_21 = BVPLUS(32,v_delta_20,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_21_t1,v0_21_t2,v0_21_t3,v0_21_t4,v0_21_t5,v0_21_t6,v0_21_t7 : BITVECTOR(32);
+   ASSERT(v0_21_t1 = BVMULT(32,v1_20,0hex00000010));
+   ASSERT(v0_21_t2 = BVPLUS(32,v0_21_t1, k0));
+   ASSERT(v0_21_t3 = BVPLUS(32,v1_20,v_delta_21));
+   ASSERT(v0_21_t4 = BVXOR(v0_21_t2,v0_21_t3));
+   ASSERT(v0_21_t5 = v1_20>>5);
+   ASSERT(v0_21_t6 = BVPLUS(32,v0_21_t5,k1));
+   ASSERT(v0_21 = BVXOR(v0_21_t4,v0_21_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_21_t1,v1_21_t2,v1_21_t3,v1_21_t4,v1_21_t5,v1_21_t6,v1_21_t7 : BITVECTOR(32);
+   ASSERT(v1_21_t1 = BVMULT(32,v0_20,0hex00000010));
+   ASSERT(v1_21_t2 = BVPLUS(32,v1_21_t1, k2));
+   ASSERT(v1_21_t3 = BVPLUS(32,v0_20,v_delta_21));
+   ASSERT(v1_21_t4 = BVXOR(v1_21_t2,v1_21_t3));
+   ASSERT(v1_21_t5 = v0_20>>5);
+   ASSERT(v1_21_t6 = BVPLUS(32,v1_21_t5,k3));
+   ASSERT(v1_21 = BVXOR(v1_21_t4,v1_21_t6));
+
+   % round _21_;
+
+   x0_21,x1_21,x_delta_21 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_21 = BVPLUS(32,x_delta_20,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_21_t1,x0_21_t2,x0_21_t3,x0_21_t4,x0_21_t5,x0_21_t6,x0_21_t7 : BITVECTOR(32);
+   ASSERT(x0_21_t1 = BVMULT(32,x1_20,0hex00000010));
+   ASSERT(x0_21_t2 = BVPLUS(32,x0_21_t1, k0));
+   ASSERT(x0_21_t3 = BVPLUS(32,x1_20,x_delta_21));
+   ASSERT(x0_21_t4 = BVXOR(x0_21_t2,x0_21_t3));
+   ASSERT(x0_21_t5 = x1_20>>5);
+   ASSERT(x0_21_t6 = BVPLUS(32,x0_21_t5,k1));
+   ASSERT(x0_21 = BVXOR(x0_21_t4,x0_21_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_21_t1,x1_21_t2,x1_21_t3,x1_21_t4,x1_21_t5,x1_21_t6,x1_21_t7 : BITVECTOR(32);
+   ASSERT(x1_21_t1 = BVMULT(32,x0_20,0hex00000010));
+   ASSERT(x1_21_t2 = BVPLUS(32,x1_21_t1, k2));
+   ASSERT(x1_21_t3 = BVPLUS(32,x0_20,x_delta_21));
+   ASSERT(x1_21_t4 = BVXOR(x1_21_t2,x1_21_t3));
+   ASSERT(x1_21_t5 = x0_20>>5);
+   ASSERT(x1_21_t6 = BVPLUS(32,x1_21_t5,k3));
+   ASSERT(x1_21 = BVXOR(x1_21_t4,x1_21_t6));
+
+   % round _22_;
+
+   v0_22,v1_22,v_delta_22 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_22 = BVPLUS(32,v_delta_21,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_22_t1,v0_22_t2,v0_22_t3,v0_22_t4,v0_22_t5,v0_22_t6,v0_22_t7 : BITVECTOR(32);
+   ASSERT(v0_22_t1 = BVMULT(32,v1_21,0hex00000010));
+   ASSERT(v0_22_t2 = BVPLUS(32,v0_22_t1, k0));
+   ASSERT(v0_22_t3 = BVPLUS(32,v1_21,v_delta_22));
+   ASSERT(v0_22_t4 = BVXOR(v0_22_t2,v0_22_t3));
+   ASSERT(v0_22_t5 = v1_21>>5);
+   ASSERT(v0_22_t6 = BVPLUS(32,v0_22_t5,k1));
+   ASSERT(v0_22 = BVXOR(v0_22_t4,v0_22_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_22_t1,v1_22_t2,v1_22_t3,v1_22_t4,v1_22_t5,v1_22_t6,v1_22_t7 : BITVECTOR(32);
+   ASSERT(v1_22_t1 = BVMULT(32,v0_21,0hex00000010));
+   ASSERT(v1_22_t2 = BVPLUS(32,v1_22_t1, k2));
+   ASSERT(v1_22_t3 = BVPLUS(32,v0_21,v_delta_22));
+   ASSERT(v1_22_t4 = BVXOR(v1_22_t2,v1_22_t3));
+   ASSERT(v1_22_t5 = v0_21>>5);
+   ASSERT(v1_22_t6 = BVPLUS(32,v1_22_t5,k3));
+   ASSERT(v1_22 = BVXOR(v1_22_t4,v1_22_t6));
+
+   % round _22_;
+
+   x0_22,x1_22,x_delta_22 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_22 = BVPLUS(32,x_delta_21,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_22_t1,x0_22_t2,x0_22_t3,x0_22_t4,x0_22_t5,x0_22_t6,x0_22_t7 : BITVECTOR(32);
+   ASSERT(x0_22_t1 = BVMULT(32,x1_21,0hex00000010));
+   ASSERT(x0_22_t2 = BVPLUS(32,x0_22_t1, k0));
+   ASSERT(x0_22_t3 = BVPLUS(32,x1_21,x_delta_22));
+   ASSERT(x0_22_t4 = BVXOR(x0_22_t2,x0_22_t3));
+   ASSERT(x0_22_t5 = x1_21>>5);
+   ASSERT(x0_22_t6 = BVPLUS(32,x0_22_t5,k1));
+   ASSERT(x0_22 = BVXOR(x0_22_t4,x0_22_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_22_t1,x1_22_t2,x1_22_t3,x1_22_t4,x1_22_t5,x1_22_t6,x1_22_t7 : BITVECTOR(32);
+   ASSERT(x1_22_t1 = BVMULT(32,x0_21,0hex00000010));
+   ASSERT(x1_22_t2 = BVPLUS(32,x1_22_t1, k2));
+   ASSERT(x1_22_t3 = BVPLUS(32,x0_21,x_delta_22));
+   ASSERT(x1_22_t4 = BVXOR(x1_22_t2,x1_22_t3));
+   ASSERT(x1_22_t5 = x0_21>>5);
+   ASSERT(x1_22_t6 = BVPLUS(32,x1_22_t5,k3));
+   ASSERT(x1_22 = BVXOR(x1_22_t4,x1_22_t6));
+
+   % round _23_;
+
+   v0_23,v1_23,v_delta_23 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_23 = BVPLUS(32,v_delta_22,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_23_t1,v0_23_t2,v0_23_t3,v0_23_t4,v0_23_t5,v0_23_t6,v0_23_t7 : BITVECTOR(32);
+   ASSERT(v0_23_t1 = BVMULT(32,v1_22,0hex00000010));
+   ASSERT(v0_23_t2 = BVPLUS(32,v0_23_t1, k0));
+   ASSERT(v0_23_t3 = BVPLUS(32,v1_22,v_delta_23));
+   ASSERT(v0_23_t4 = BVXOR(v0_23_t2,v0_23_t3));
+   ASSERT(v0_23_t5 = v1_22>>5);
+   ASSERT(v0_23_t6 = BVPLUS(32,v0_23_t5,k1));
+   ASSERT(v0_23 = BVXOR(v0_23_t4,v0_23_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_23_t1,v1_23_t2,v1_23_t3,v1_23_t4,v1_23_t5,v1_23_t6,v1_23_t7 : BITVECTOR(32);
+   ASSERT(v1_23_t1 = BVMULT(32,v0_22,0hex00000010));
+   ASSERT(v1_23_t2 = BVPLUS(32,v1_23_t1, k2));
+   ASSERT(v1_23_t3 = BVPLUS(32,v0_22,v_delta_23));
+   ASSERT(v1_23_t4 = BVXOR(v1_23_t2,v1_23_t3));
+   ASSERT(v1_23_t5 = v0_22>>5);
+   ASSERT(v1_23_t6 = BVPLUS(32,v1_23_t5,k3));
+   ASSERT(v1_23 = BVXOR(v1_23_t4,v1_23_t6));
+
+   % round _23_;
+
+   x0_23,x1_23,x_delta_23 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_23 = BVPLUS(32,x_delta_22,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_23_t1,x0_23_t2,x0_23_t3,x0_23_t4,x0_23_t5,x0_23_t6,x0_23_t7 : BITVECTOR(32);
+   ASSERT(x0_23_t1 = BVMULT(32,x1_22,0hex00000010));
+   ASSERT(x0_23_t2 = BVPLUS(32,x0_23_t1, k0));
+   ASSERT(x0_23_t3 = BVPLUS(32,x1_22,x_delta_23));
+   ASSERT(x0_23_t4 = BVXOR(x0_23_t2,x0_23_t3));
+   ASSERT(x0_23_t5 = x1_22>>5);
+   ASSERT(x0_23_t6 = BVPLUS(32,x0_23_t5,k1));
+   ASSERT(x0_23 = BVXOR(x0_23_t4,x0_23_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_23_t1,x1_23_t2,x1_23_t3,x1_23_t4,x1_23_t5,x1_23_t6,x1_23_t7 : BITVECTOR(32);
+   ASSERT(x1_23_t1 = BVMULT(32,x0_22,0hex00000010));
+   ASSERT(x1_23_t2 = BVPLUS(32,x1_23_t1, k2));
+   ASSERT(x1_23_t3 = BVPLUS(32,x0_22,x_delta_23));
+   ASSERT(x1_23_t4 = BVXOR(x1_23_t2,x1_23_t3));
+   ASSERT(x1_23_t5 = x0_22>>5);
+   ASSERT(x1_23_t6 = BVPLUS(32,x1_23_t5,k3));
+   ASSERT(x1_23 = BVXOR(x1_23_t4,x1_23_t6));
+
+   % round _24_;
+
+   v0_24,v1_24,v_delta_24 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_24 = BVPLUS(32,v_delta_23,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_24_t1,v0_24_t2,v0_24_t3,v0_24_t4,v0_24_t5,v0_24_t6,v0_24_t7 : BITVECTOR(32);
+   ASSERT(v0_24_t1 = BVMULT(32,v1_23,0hex00000010));
+   ASSERT(v0_24_t2 = BVPLUS(32,v0_24_t1, k0));
+   ASSERT(v0_24_t3 = BVPLUS(32,v1_23,v_delta_24));
+   ASSERT(v0_24_t4 = BVXOR(v0_24_t2,v0_24_t3));
+   ASSERT(v0_24_t5 = v1_23>>5);
+   ASSERT(v0_24_t6 = BVPLUS(32,v0_24_t5,k1));
+   ASSERT(v0_24 = BVXOR(v0_24_t4,v0_24_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_24_t1,v1_24_t2,v1_24_t3,v1_24_t4,v1_24_t5,v1_24_t6,v1_24_t7 : BITVECTOR(32);
+   ASSERT(v1_24_t1 = BVMULT(32,v0_23,0hex00000010));
+   ASSERT(v1_24_t2 = BVPLUS(32,v1_24_t1, k2));
+   ASSERT(v1_24_t3 = BVPLUS(32,v0_23,v_delta_24));
+   ASSERT(v1_24_t4 = BVXOR(v1_24_t2,v1_24_t3));
+   ASSERT(v1_24_t5 = v0_23>>5);
+   ASSERT(v1_24_t6 = BVPLUS(32,v1_24_t5,k3));
+   ASSERT(v1_24 = BVXOR(v1_24_t4,v1_24_t6));
+
+   % round _24_;
+
+   x0_24,x1_24,x_delta_24 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_24 = BVPLUS(32,x_delta_23,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_24_t1,x0_24_t2,x0_24_t3,x0_24_t4,x0_24_t5,x0_24_t6,x0_24_t7 : BITVECTOR(32);
+   ASSERT(x0_24_t1 = BVMULT(32,x1_23,0hex00000010));
+   ASSERT(x0_24_t2 = BVPLUS(32,x0_24_t1, k0));
+   ASSERT(x0_24_t3 = BVPLUS(32,x1_23,x_delta_24));
+   ASSERT(x0_24_t4 = BVXOR(x0_24_t2,x0_24_t3));
+   ASSERT(x0_24_t5 = x1_23>>5);
+   ASSERT(x0_24_t6 = BVPLUS(32,x0_24_t5,k1));
+   ASSERT(x0_24 = BVXOR(x0_24_t4,x0_24_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_24_t1,x1_24_t2,x1_24_t3,x1_24_t4,x1_24_t5,x1_24_t6,x1_24_t7 : BITVECTOR(32);
+   ASSERT(x1_24_t1 = BVMULT(32,x0_23,0hex00000010));
+   ASSERT(x1_24_t2 = BVPLUS(32,x1_24_t1, k2));
+   ASSERT(x1_24_t3 = BVPLUS(32,x0_23,x_delta_24));
+   ASSERT(x1_24_t4 = BVXOR(x1_24_t2,x1_24_t3));
+   ASSERT(x1_24_t5 = x0_23>>5);
+   ASSERT(x1_24_t6 = BVPLUS(32,x1_24_t5,k3));
+   ASSERT(x1_24 = BVXOR(x1_24_t4,x1_24_t6));
+
+   % round _25_;
+
+   v0_25,v1_25,v_delta_25 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_25 = BVPLUS(32,v_delta_24,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_25_t1,v0_25_t2,v0_25_t3,v0_25_t4,v0_25_t5,v0_25_t6,v0_25_t7 : BITVECTOR(32);
+   ASSERT(v0_25_t1 = BVMULT(32,v1_24,0hex00000010));
+   ASSERT(v0_25_t2 = BVPLUS(32,v0_25_t1, k0));
+   ASSERT(v0_25_t3 = BVPLUS(32,v1_24,v_delta_25));
+   ASSERT(v0_25_t4 = BVXOR(v0_25_t2,v0_25_t3));
+   ASSERT(v0_25_t5 = v1_24>>5);
+   ASSERT(v0_25_t6 = BVPLUS(32,v0_25_t5,k1));
+   ASSERT(v0_25 = BVXOR(v0_25_t4,v0_25_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_25_t1,v1_25_t2,v1_25_t3,v1_25_t4,v1_25_t5,v1_25_t6,v1_25_t7 : BITVECTOR(32);
+   ASSERT(v1_25_t1 = BVMULT(32,v0_24,0hex00000010));
+   ASSERT(v1_25_t2 = BVPLUS(32,v1_25_t1, k2));
+   ASSERT(v1_25_t3 = BVPLUS(32,v0_24,v_delta_25));
+   ASSERT(v1_25_t4 = BVXOR(v1_25_t2,v1_25_t3));
+   ASSERT(v1_25_t5 = v0_24>>5);
+   ASSERT(v1_25_t6 = BVPLUS(32,v1_25_t5,k3));
+   ASSERT(v1_25 = BVXOR(v1_25_t4,v1_25_t6));
+
+   % round _25_;
+
+   x0_25,x1_25,x_delta_25 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_25 = BVPLUS(32,x_delta_24,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_25_t1,x0_25_t2,x0_25_t3,x0_25_t4,x0_25_t5,x0_25_t6,x0_25_t7 : BITVECTOR(32);
+   ASSERT(x0_25_t1 = BVMULT(32,x1_24,0hex00000010));
+   ASSERT(x0_25_t2 = BVPLUS(32,x0_25_t1, k0));
+   ASSERT(x0_25_t3 = BVPLUS(32,x1_24,x_delta_25));
+   ASSERT(x0_25_t4 = BVXOR(x0_25_t2,x0_25_t3));
+   ASSERT(x0_25_t5 = x1_24>>5);
+   ASSERT(x0_25_t6 = BVPLUS(32,x0_25_t5,k1));
+   ASSERT(x0_25 = BVXOR(x0_25_t4,x0_25_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_25_t1,x1_25_t2,x1_25_t3,x1_25_t4,x1_25_t5,x1_25_t6,x1_25_t7 : BITVECTOR(32);
+   ASSERT(x1_25_t1 = BVMULT(32,x0_24,0hex00000010));
+   ASSERT(x1_25_t2 = BVPLUS(32,x1_25_t1, k2));
+   ASSERT(x1_25_t3 = BVPLUS(32,x0_24,x_delta_25));
+   ASSERT(x1_25_t4 = BVXOR(x1_25_t2,x1_25_t3));
+   ASSERT(x1_25_t5 = x0_24>>5);
+   ASSERT(x1_25_t6 = BVPLUS(32,x1_25_t5,k3));
+   ASSERT(x1_25 = BVXOR(x1_25_t4,x1_25_t6));
+
+   % round _26_;
+
+   v0_26,v1_26,v_delta_26 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_26 = BVPLUS(32,v_delta_25,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_26_t1,v0_26_t2,v0_26_t3,v0_26_t4,v0_26_t5,v0_26_t6,v0_26_t7 : BITVECTOR(32);
+   ASSERT(v0_26_t1 = BVMULT(32,v1_25,0hex00000010));
+   ASSERT(v0_26_t2 = BVPLUS(32,v0_26_t1, k0));
+   ASSERT(v0_26_t3 = BVPLUS(32,v1_25,v_delta_26));
+   ASSERT(v0_26_t4 = BVXOR(v0_26_t2,v0_26_t3));
+   ASSERT(v0_26_t5 = v1_25>>5);
+   ASSERT(v0_26_t6 = BVPLUS(32,v0_26_t5,k1));
+   ASSERT(v0_26 = BVXOR(v0_26_t4,v0_26_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_26_t1,v1_26_t2,v1_26_t3,v1_26_t4,v1_26_t5,v1_26_t6,v1_26_t7 : BITVECTOR(32);
+   ASSERT(v1_26_t1 = BVMULT(32,v0_25,0hex00000010));
+   ASSERT(v1_26_t2 = BVPLUS(32,v1_26_t1, k2));
+   ASSERT(v1_26_t3 = BVPLUS(32,v0_25,v_delta_26));
+   ASSERT(v1_26_t4 = BVXOR(v1_26_t2,v1_26_t3));
+   ASSERT(v1_26_t5 = v0_25>>5);
+   ASSERT(v1_26_t6 = BVPLUS(32,v1_26_t5,k3));
+   ASSERT(v1_26 = BVXOR(v1_26_t4,v1_26_t6));
+
+   % round _26_;
+
+   x0_26,x1_26,x_delta_26 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_26 = BVPLUS(32,x_delta_25,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_26_t1,x0_26_t2,x0_26_t3,x0_26_t4,x0_26_t5,x0_26_t6,x0_26_t7 : BITVECTOR(32);
+   ASSERT(x0_26_t1 = BVMULT(32,x1_25,0hex00000010));
+   ASSERT(x0_26_t2 = BVPLUS(32,x0_26_t1, k0));
+   ASSERT(x0_26_t3 = BVPLUS(32,x1_25,x_delta_26));
+   ASSERT(x0_26_t4 = BVXOR(x0_26_t2,x0_26_t3));
+   ASSERT(x0_26_t5 = x1_25>>5);
+   ASSERT(x0_26_t6 = BVPLUS(32,x0_26_t5,k1));
+   ASSERT(x0_26 = BVXOR(x0_26_t4,x0_26_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_26_t1,x1_26_t2,x1_26_t3,x1_26_t4,x1_26_t5,x1_26_t6,x1_26_t7 : BITVECTOR(32);
+   ASSERT(x1_26_t1 = BVMULT(32,x0_25,0hex00000010));
+   ASSERT(x1_26_t2 = BVPLUS(32,x1_26_t1, k2));
+   ASSERT(x1_26_t3 = BVPLUS(32,x0_25,x_delta_26));
+   ASSERT(x1_26_t4 = BVXOR(x1_26_t2,x1_26_t3));
+   ASSERT(x1_26_t5 = x0_25>>5);
+   ASSERT(x1_26_t6 = BVPLUS(32,x1_26_t5,k3));
+   ASSERT(x1_26 = BVXOR(x1_26_t4,x1_26_t6));
+
+   % round _27_;
+
+   v0_27,v1_27,v_delta_27 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_27 = BVPLUS(32,v_delta_26,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_27_t1,v0_27_t2,v0_27_t3,v0_27_t4,v0_27_t5,v0_27_t6,v0_27_t7 : BITVECTOR(32);
+   ASSERT(v0_27_t1 = BVMULT(32,v1_26,0hex00000010));
+   ASSERT(v0_27_t2 = BVPLUS(32,v0_27_t1, k0));
+   ASSERT(v0_27_t3 = BVPLUS(32,v1_26,v_delta_27));
+   ASSERT(v0_27_t4 = BVXOR(v0_27_t2,v0_27_t3));
+   ASSERT(v0_27_t5 = v1_26>>5);
+   ASSERT(v0_27_t6 = BVPLUS(32,v0_27_t5,k1));
+   ASSERT(v0_27 = BVXOR(v0_27_t4,v0_27_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_27_t1,v1_27_t2,v1_27_t3,v1_27_t4,v1_27_t5,v1_27_t6,v1_27_t7 : BITVECTOR(32);
+   ASSERT(v1_27_t1 = BVMULT(32,v0_26,0hex00000010));
+   ASSERT(v1_27_t2 = BVPLUS(32,v1_27_t1, k2));
+   ASSERT(v1_27_t3 = BVPLUS(32,v0_26,v_delta_27));
+   ASSERT(v1_27_t4 = BVXOR(v1_27_t2,v1_27_t3));
+   ASSERT(v1_27_t5 = v0_26>>5);
+   ASSERT(v1_27_t6 = BVPLUS(32,v1_27_t5,k3));
+   ASSERT(v1_27 = BVXOR(v1_27_t4,v1_27_t6));
+
+   % round _27_;
+
+   x0_27,x1_27,x_delta_27 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_27 = BVPLUS(32,x_delta_26,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_27_t1,x0_27_t2,x0_27_t3,x0_27_t4,x0_27_t5,x0_27_t6,x0_27_t7 : BITVECTOR(32);
+   ASSERT(x0_27_t1 = BVMULT(32,x1_26,0hex00000010));
+   ASSERT(x0_27_t2 = BVPLUS(32,x0_27_t1, k0));
+   ASSERT(x0_27_t3 = BVPLUS(32,x1_26,x_delta_27));
+   ASSERT(x0_27_t4 = BVXOR(x0_27_t2,x0_27_t3));
+   ASSERT(x0_27_t5 = x1_26>>5);
+   ASSERT(x0_27_t6 = BVPLUS(32,x0_27_t5,k1));
+   ASSERT(x0_27 = BVXOR(x0_27_t4,x0_27_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_27_t1,x1_27_t2,x1_27_t3,x1_27_t4,x1_27_t5,x1_27_t6,x1_27_t7 : BITVECTOR(32);
+   ASSERT(x1_27_t1 = BVMULT(32,x0_26,0hex00000010));
+   ASSERT(x1_27_t2 = BVPLUS(32,x1_27_t1, k2));
+   ASSERT(x1_27_t3 = BVPLUS(32,x0_26,x_delta_27));
+   ASSERT(x1_27_t4 = BVXOR(x1_27_t2,x1_27_t3));
+   ASSERT(x1_27_t5 = x0_26>>5);
+   ASSERT(x1_27_t6 = BVPLUS(32,x1_27_t5,k3));
+   ASSERT(x1_27 = BVXOR(x1_27_t4,x1_27_t6));
+
+   % round _28_;
+
+   v0_28,v1_28,v_delta_28 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_28 = BVPLUS(32,v_delta_27,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_28_t1,v0_28_t2,v0_28_t3,v0_28_t4,v0_28_t5,v0_28_t6,v0_28_t7 : BITVECTOR(32);
+   ASSERT(v0_28_t1 = BVMULT(32,v1_27,0hex00000010));
+   ASSERT(v0_28_t2 = BVPLUS(32,v0_28_t1, k0));
+   ASSERT(v0_28_t3 = BVPLUS(32,v1_27,v_delta_28));
+   ASSERT(v0_28_t4 = BVXOR(v0_28_t2,v0_28_t3));
+   ASSERT(v0_28_t5 = v1_27>>5);
+   ASSERT(v0_28_t6 = BVPLUS(32,v0_28_t5,k1));
+   ASSERT(v0_28 = BVXOR(v0_28_t4,v0_28_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_28_t1,v1_28_t2,v1_28_t3,v1_28_t4,v1_28_t5,v1_28_t6,v1_28_t7 : BITVECTOR(32);
+   ASSERT(v1_28_t1 = BVMULT(32,v0_27,0hex00000010));
+   ASSERT(v1_28_t2 = BVPLUS(32,v1_28_t1, k2));
+   ASSERT(v1_28_t3 = BVPLUS(32,v0_27,v_delta_28));
+   ASSERT(v1_28_t4 = BVXOR(v1_28_t2,v1_28_t3));
+   ASSERT(v1_28_t5 = v0_27>>5);
+   ASSERT(v1_28_t6 = BVPLUS(32,v1_28_t5,k3));
+   ASSERT(v1_28 = BVXOR(v1_28_t4,v1_28_t6));
+
+   % round _28_;
+
+   x0_28,x1_28,x_delta_28 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_28 = BVPLUS(32,x_delta_27,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_28_t1,x0_28_t2,x0_28_t3,x0_28_t4,x0_28_t5,x0_28_t6,x0_28_t7 : BITVECTOR(32);
+   ASSERT(x0_28_t1 = BVMULT(32,x1_27,0hex00000010));
+   ASSERT(x0_28_t2 = BVPLUS(32,x0_28_t1, k0));
+   ASSERT(x0_28_t3 = BVPLUS(32,x1_27,x_delta_28));
+   ASSERT(x0_28_t4 = BVXOR(x0_28_t2,x0_28_t3));
+   ASSERT(x0_28_t5 = x1_27>>5);
+   ASSERT(x0_28_t6 = BVPLUS(32,x0_28_t5,k1));
+   ASSERT(x0_28 = BVXOR(x0_28_t4,x0_28_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_28_t1,x1_28_t2,x1_28_t3,x1_28_t4,x1_28_t5,x1_28_t6,x1_28_t7 : BITVECTOR(32);
+   ASSERT(x1_28_t1 = BVMULT(32,x0_27,0hex00000010));
+   ASSERT(x1_28_t2 = BVPLUS(32,x1_28_t1, k2));
+   ASSERT(x1_28_t3 = BVPLUS(32,x0_27,x_delta_28));
+   ASSERT(x1_28_t4 = BVXOR(x1_28_t2,x1_28_t3));
+   ASSERT(x1_28_t5 = x0_27>>5);
+   ASSERT(x1_28_t6 = BVPLUS(32,x1_28_t5,k3));
+   ASSERT(x1_28 = BVXOR(x1_28_t4,x1_28_t6));
+
+   % round _29_;
+
+   v0_29,v1_29,v_delta_29 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_29 = BVPLUS(32,v_delta_28,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_29_t1,v0_29_t2,v0_29_t3,v0_29_t4,v0_29_t5,v0_29_t6,v0_29_t7 : BITVECTOR(32);
+   ASSERT(v0_29_t1 = BVMULT(32,v1_28,0hex00000010));
+   ASSERT(v0_29_t2 = BVPLUS(32,v0_29_t1, k0));
+   ASSERT(v0_29_t3 = BVPLUS(32,v1_28,v_delta_29));
+   ASSERT(v0_29_t4 = BVXOR(v0_29_t2,v0_29_t3));
+   ASSERT(v0_29_t5 = v1_28>>5);
+   ASSERT(v0_29_t6 = BVPLUS(32,v0_29_t5,k1));
+   ASSERT(v0_29 = BVXOR(v0_29_t4,v0_29_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_29_t1,v1_29_t2,v1_29_t3,v1_29_t4,v1_29_t5,v1_29_t6,v1_29_t7 : BITVECTOR(32);
+   ASSERT(v1_29_t1 = BVMULT(32,v0_28,0hex00000010));
+   ASSERT(v1_29_t2 = BVPLUS(32,v1_29_t1, k2));
+   ASSERT(v1_29_t3 = BVPLUS(32,v0_28,v_delta_29));
+   ASSERT(v1_29_t4 = BVXOR(v1_29_t2,v1_29_t3));
+   ASSERT(v1_29_t5 = v0_28>>5);
+   ASSERT(v1_29_t6 = BVPLUS(32,v1_29_t5,k3));
+   ASSERT(v1_29 = BVXOR(v1_29_t4,v1_29_t6));
+
+   % round _29_;
+
+   x0_29,x1_29,x_delta_29 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_29 = BVPLUS(32,x_delta_28,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_29_t1,x0_29_t2,x0_29_t3,x0_29_t4,x0_29_t5,x0_29_t6,x0_29_t7 : BITVECTOR(32);
+   ASSERT(x0_29_t1 = BVMULT(32,x1_28,0hex00000010));
+   ASSERT(x0_29_t2 = BVPLUS(32,x0_29_t1, k0));
+   ASSERT(x0_29_t3 = BVPLUS(32,x1_28,x_delta_29));
+   ASSERT(x0_29_t4 = BVXOR(x0_29_t2,x0_29_t3));
+   ASSERT(x0_29_t5 = x1_28>>5);
+   ASSERT(x0_29_t6 = BVPLUS(32,x0_29_t5,k1));
+   ASSERT(x0_29 = BVXOR(x0_29_t4,x0_29_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_29_t1,x1_29_t2,x1_29_t3,x1_29_t4,x1_29_t5,x1_29_t6,x1_29_t7 : BITVECTOR(32);
+   ASSERT(x1_29_t1 = BVMULT(32,x0_28,0hex00000010));
+   ASSERT(x1_29_t2 = BVPLUS(32,x1_29_t1, k2));
+   ASSERT(x1_29_t3 = BVPLUS(32,x0_28,x_delta_29));
+   ASSERT(x1_29_t4 = BVXOR(x1_29_t2,x1_29_t3));
+   ASSERT(x1_29_t5 = x0_28>>5);
+   ASSERT(x1_29_t6 = BVPLUS(32,x1_29_t5,k3));
+   ASSERT(x1_29 = BVXOR(x1_29_t4,x1_29_t6));
+
+   % round _30_;
+
+   v0_30,v1_30,v_delta_30 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_30 = BVPLUS(32,v_delta_29,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_30_t1,v0_30_t2,v0_30_t3,v0_30_t4,v0_30_t5,v0_30_t6,v0_30_t7 : BITVECTOR(32);
+   ASSERT(v0_30_t1 = BVMULT(32,v1_29,0hex00000010));
+   ASSERT(v0_30_t2 = BVPLUS(32,v0_30_t1, k0));
+   ASSERT(v0_30_t3 = BVPLUS(32,v1_29,v_delta_30));
+   ASSERT(v0_30_t4 = BVXOR(v0_30_t2,v0_30_t3));
+   ASSERT(v0_30_t5 = v1_29>>5);
+   ASSERT(v0_30_t6 = BVPLUS(32,v0_30_t5,k1));
+   ASSERT(v0_30 = BVXOR(v0_30_t4,v0_30_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_30_t1,v1_30_t2,v1_30_t3,v1_30_t4,v1_30_t5,v1_30_t6,v1_30_t7 : BITVECTOR(32);
+   ASSERT(v1_30_t1 = BVMULT(32,v0_29,0hex00000010));
+   ASSERT(v1_30_t2 = BVPLUS(32,v1_30_t1, k2));
+   ASSERT(v1_30_t3 = BVPLUS(32,v0_29,v_delta_30));
+   ASSERT(v1_30_t4 = BVXOR(v1_30_t2,v1_30_t3));
+   ASSERT(v1_30_t5 = v0_29>>5);
+   ASSERT(v1_30_t6 = BVPLUS(32,v1_30_t5,k3));
+   ASSERT(v1_30 = BVXOR(v1_30_t4,v1_30_t6));
+
+   % round _30_;
+
+   x0_30,x1_30,x_delta_30 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_30 = BVPLUS(32,x_delta_29,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_30_t1,x0_30_t2,x0_30_t3,x0_30_t4,x0_30_t5,x0_30_t6,x0_30_t7 : BITVECTOR(32);
+   ASSERT(x0_30_t1 = BVMULT(32,x1_29,0hex00000010));
+   ASSERT(x0_30_t2 = BVPLUS(32,x0_30_t1, k0));
+   ASSERT(x0_30_t3 = BVPLUS(32,x1_29,x_delta_30));
+   ASSERT(x0_30_t4 = BVXOR(x0_30_t2,x0_30_t3));
+   ASSERT(x0_30_t5 = x1_29>>5);
+   ASSERT(x0_30_t6 = BVPLUS(32,x0_30_t5,k1));
+   ASSERT(x0_30 = BVXOR(x0_30_t4,x0_30_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_30_t1,x1_30_t2,x1_30_t3,x1_30_t4,x1_30_t5,x1_30_t6,x1_30_t7 : BITVECTOR(32);
+   ASSERT(x1_30_t1 = BVMULT(32,x0_29,0hex00000010));
+   ASSERT(x1_30_t2 = BVPLUS(32,x1_30_t1, k2));
+   ASSERT(x1_30_t3 = BVPLUS(32,x0_29,x_delta_30));
+   ASSERT(x1_30_t4 = BVXOR(x1_30_t2,x1_30_t3));
+   ASSERT(x1_30_t5 = x0_29>>5);
+   ASSERT(x1_30_t6 = BVPLUS(32,x1_30_t5,k3));
+   ASSERT(x1_30 = BVXOR(x1_30_t4,x1_30_t6));
+
+   % round _31_;
+
+   v0_31,v1_31,v_delta_31 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_31 = BVPLUS(32,v_delta_30,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_31_t1,v0_31_t2,v0_31_t3,v0_31_t4,v0_31_t5,v0_31_t6,v0_31_t7 : BITVECTOR(32);
+   ASSERT(v0_31_t1 = BVMULT(32,v1_30,0hex00000010));
+   ASSERT(v0_31_t2 = BVPLUS(32,v0_31_t1, k0));
+   ASSERT(v0_31_t3 = BVPLUS(32,v1_30,v_delta_31));
+   ASSERT(v0_31_t4 = BVXOR(v0_31_t2,v0_31_t3));
+   ASSERT(v0_31_t5 = v1_30>>5);
+   ASSERT(v0_31_t6 = BVPLUS(32,v0_31_t5,k1));
+   ASSERT(v0_31 = BVXOR(v0_31_t4,v0_31_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_31_t1,v1_31_t2,v1_31_t3,v1_31_t4,v1_31_t5,v1_31_t6,v1_31_t7 : BITVECTOR(32);
+   ASSERT(v1_31_t1 = BVMULT(32,v0_30,0hex00000010));
+   ASSERT(v1_31_t2 = BVPLUS(32,v1_31_t1, k2));
+   ASSERT(v1_31_t3 = BVPLUS(32,v0_30,v_delta_31));
+   ASSERT(v1_31_t4 = BVXOR(v1_31_t2,v1_31_t3));
+   ASSERT(v1_31_t5 = v0_30>>5);
+   ASSERT(v1_31_t6 = BVPLUS(32,v1_31_t5,k3));
+   ASSERT(v1_31 = BVXOR(v1_31_t4,v1_31_t6));
+
+   % round _31_;
+
+   x0_31,x1_31,x_delta_31 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_31 = BVPLUS(32,x_delta_30,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_31_t1,x0_31_t2,x0_31_t3,x0_31_t4,x0_31_t5,x0_31_t6,x0_31_t7 : BITVECTOR(32);
+   ASSERT(x0_31_t1 = BVMULT(32,x1_30,0hex00000010));
+   ASSERT(x0_31_t2 = BVPLUS(32,x0_31_t1, k0));
+   ASSERT(x0_31_t3 = BVPLUS(32,x1_30,x_delta_31));
+   ASSERT(x0_31_t4 = BVXOR(x0_31_t2,x0_31_t3));
+   ASSERT(x0_31_t5 = x1_30>>5);
+   ASSERT(x0_31_t6 = BVPLUS(32,x0_31_t5,k1));
+   ASSERT(x0_31 = BVXOR(x0_31_t4,x0_31_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_31_t1,x1_31_t2,x1_31_t3,x1_31_t4,x1_31_t5,x1_31_t6,x1_31_t7 : BITVECTOR(32);
+   ASSERT(x1_31_t1 = BVMULT(32,x0_30,0hex00000010));
+   ASSERT(x1_31_t2 = BVPLUS(32,x1_31_t1, k2));
+   ASSERT(x1_31_t3 = BVPLUS(32,x0_30,x_delta_31));
+   ASSERT(x1_31_t4 = BVXOR(x1_31_t2,x1_31_t3));
+   ASSERT(x1_31_t5 = x0_30>>5);
+   ASSERT(x1_31_t6 = BVPLUS(32,x1_31_t5,k3));
+   ASSERT(x1_31 = BVXOR(x1_31_t4,x1_31_t6));
+
+   % round _32_;
+
+   v0_32,v1_32,v_delta_32 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_32 = BVPLUS(32,v_delta_31,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_32_t1,v0_32_t2,v0_32_t3,v0_32_t4,v0_32_t5,v0_32_t6,v0_32_t7 : BITVECTOR(32);
+   ASSERT(v0_32_t1 = BVMULT(32,v1_31,0hex00000010));
+   ASSERT(v0_32_t2 = BVPLUS(32,v0_32_t1, k0));
+   ASSERT(v0_32_t3 = BVPLUS(32,v1_31,v_delta_32));
+   ASSERT(v0_32_t4 = BVXOR(v0_32_t2,v0_32_t3));
+   ASSERT(v0_32_t5 = v1_31>>5);
+   ASSERT(v0_32_t6 = BVPLUS(32,v0_32_t5,k1));
+   ASSERT(v0_32 = BVXOR(v0_32_t4,v0_32_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_32_t1,v1_32_t2,v1_32_t3,v1_32_t4,v1_32_t5,v1_32_t6,v1_32_t7 : BITVECTOR(32);
+   ASSERT(v1_32_t1 = BVMULT(32,v0_31,0hex00000010));
+   ASSERT(v1_32_t2 = BVPLUS(32,v1_32_t1, k2));
+   ASSERT(v1_32_t3 = BVPLUS(32,v0_31,v_delta_32));
+   ASSERT(v1_32_t4 = BVXOR(v1_32_t2,v1_32_t3));
+   ASSERT(v1_32_t5 = v0_31>>5);
+   ASSERT(v1_32_t6 = BVPLUS(32,v1_32_t5,k3));
+   ASSERT(v1_32 = BVXOR(v1_32_t4,v1_32_t6));
+
+   % round _32_;
+
+   x0_32,x1_32,x_delta_32 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_32 = BVPLUS(32,x_delta_31,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_32_t1,x0_32_t2,x0_32_t3,x0_32_t4,x0_32_t5,x0_32_t6,x0_32_t7 : BITVECTOR(32);
+   ASSERT(x0_32_t1 = BVMULT(32,x1_31,0hex00000010));
+   ASSERT(x0_32_t2 = BVPLUS(32,x0_32_t1, k0));
+   ASSERT(x0_32_t3 = BVPLUS(32,x1_31,x_delta_32));
+   ASSERT(x0_32_t4 = BVXOR(x0_32_t2,x0_32_t3));
+   ASSERT(x0_32_t5 = x1_31>>5);
+   ASSERT(x0_32_t6 = BVPLUS(32,x0_32_t5,k1));
+   ASSERT(x0_32 = BVXOR(x0_32_t4,x0_32_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_32_t1,x1_32_t2,x1_32_t3,x1_32_t4,x1_32_t5,x1_32_t6,x1_32_t7 : BITVECTOR(32);
+   ASSERT(x1_32_t1 = BVMULT(32,x0_31,0hex00000010));
+   ASSERT(x1_32_t2 = BVPLUS(32,x1_32_t1, k2));
+   ASSERT(x1_32_t3 = BVPLUS(32,x0_31,x_delta_32));
+   ASSERT(x1_32_t4 = BVXOR(x1_32_t2,x1_32_t3));
+   ASSERT(x1_32_t5 = x0_31>>5);
+   ASSERT(x1_32_t6 = BVPLUS(32,x1_32_t5,k3));
+   ASSERT(x1_32 = BVXOR(x1_32_t4,x1_32_t6));
+
+   % round _33_;
+
+   v0_33,v1_33,v_delta_33 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(v_delta_33 = BVPLUS(32,v_delta_32,v_delta));
+
+   % v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+
+   v0_33_t1,v0_33_t2,v0_33_t3,v0_33_t4,v0_33_t5,v0_33_t6,v0_33_t7 : BITVECTOR(32);
+   ASSERT(v0_33_t1 = BVMULT(32,v1_32,0hex00000010));
+   ASSERT(v0_33_t2 = BVPLUS(32,v0_33_t1, k0));
+   ASSERT(v0_33_t3 = BVPLUS(32,v1_32,v_delta_33));
+   ASSERT(v0_33_t4 = BVXOR(v0_33_t2,v0_33_t3));
+   ASSERT(v0_33_t5 = v1_32>>5);
+   ASSERT(v0_33_t6 = BVPLUS(32,v0_33_t5,k1));
+   ASSERT(v0_33 = BVXOR(v0_33_t4,v0_33_t6));
+
+   % v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); 
+
+   v1_33_t1,v1_33_t2,v1_33_t3,v1_33_t4,v1_33_t5,v1_33_t6,v1_33_t7 : BITVECTOR(32);
+   ASSERT(v1_33_t1 = BVMULT(32,v0_32,0hex00000010));
+   ASSERT(v1_33_t2 = BVPLUS(32,v1_33_t1, k2));
+   ASSERT(v1_33_t3 = BVPLUS(32,v0_32,v_delta_33));
+   ASSERT(v1_33_t4 = BVXOR(v1_33_t2,v1_33_t3));
+   ASSERT(v1_33_t5 = v0_32>>5);
+   ASSERT(v1_33_t6 = BVPLUS(32,v1_33_t5,k3));
+   ASSERT(v1_33 = BVXOR(v1_33_t4,v1_33_t6));
+
+   % round _33_;
+
+   x0_33,x1_33,x_delta_33 : BITVECTOR(32);
+
+   % sum += delta;
+
+   ASSERT(x_delta_33 = BVPLUS(32,x_delta_32,x_delta));
+
+   % x0 += ((x1<<4) + k0) ^ (x1 + sum) ^ ((x1>>5) + k1);
+
+   x0_33_t1,x0_33_t2,x0_33_t3,x0_33_t4,x0_33_t5,x0_33_t6,x0_33_t7 : BITVECTOR(32);
+   ASSERT(x0_33_t1 = BVMULT(32,x1_32,0hex00000010));
+   ASSERT(x0_33_t2 = BVPLUS(32,x0_33_t1, k0));
+   ASSERT(x0_33_t3 = BVPLUS(32,x1_32,x_delta_33));
+   ASSERT(x0_33_t4 = BVXOR(x0_33_t2,x0_33_t3));
+   ASSERT(x0_33_t5 = x1_32>>5);
+   ASSERT(x0_33_t6 = BVPLUS(32,x0_33_t5,k1));
+   ASSERT(x0_33 = BVXOR(x0_33_t4,x0_33_t6));
+
+   % x1 += ((x0<<4) + k2) ^ (x0 + sum) ^ ((x0>>5) + k3); 
+
+   x1_33_t1,x1_33_t2,x1_33_t3,x1_33_t4,x1_33_t5,x1_33_t6,x1_33_t7 : BITVECTOR(32);
+   ASSERT(x1_33_t1 = BVMULT(32,x0_32,0hex00000010));
+   ASSERT(x1_33_t2 = BVPLUS(32,x1_33_t1, k2));
+   ASSERT(x1_33_t3 = BVPLUS(32,x0_32,x_delta_33));
+   ASSERT(x1_33_t4 = BVXOR(x1_33_t2,x1_33_t3));
+   ASSERT(x1_33_t5 = x0_32>>5);
+   ASSERT(x1_33_t6 = BVPLUS(32,x1_33_t5,k3));
+   ASSERT(x1_33 = BVXOR(x1_33_t4,x1_33_t6));
+
+QUERY(
+   NOT(
+      %
+      % KEYS 
+      % (All commented out = solve for all key bits)
+      %k0  = 0hex00011111 AND
+      %k1  = 0hex22112222 AND 
+      %k2  = 0hex33444555 AND 
+      %k3  = 0hex11441144 AND
+      %
+      % INITIAL STATE (PLAINTEXT)
+      %
+      v0_0  = 0hexeeaaeeaa AND v0_1 = 0hexdddddddd AND
+      x0_0  = 0hex12312312 AND x0_1 = 0hexdeadbeef AND
+      %
+      % INTERMEDIATE STATE 
+
+      % Solve for 2 rounds of TEA
+      % v0_2  = 0hex7ACD453B  AND v1_2 = 0hex135DF258  AND
+      % x0_2  = 0hex633206CC  AND x1_2 = 0hex1D05F91F   AND
+
+      % Solve for 3 rounds of TEA
+      %v0_3  = 0hexF94878A6 AND v1_3 = 0hexA071500E AND
+      %x0_3  = 0hex053594A1 AND x1_3 = 0hex4FE16098 AND
+
+      % Solve for 4 rounds of TEA
+
+      v0_4  = 0hex394d8ba1 AND v1_4 = 0hexace3c536 AND
+      x0_4  = 0hex123870CB AND x1_4 = 0hexE9E34909 AND
+      %
+      % JUST THERE SO EVERY LINE CAN END WITH AND
+      x0_0=x0_0
+  
+  )
+);
+
+COUNTEREXAMPLE;
+

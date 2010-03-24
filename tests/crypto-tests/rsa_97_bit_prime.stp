@@ -1,0 +1,30 @@
+
+a,b,c,x,y : BITVECTOR(216);
+
+ASSERT(y=BVDIV(216,c,a));
+
+ASSERT(a[0:0] = 0bin1);
+
+QUERY(
+   NOT (
+     c=BVMULT(216,a,b)
+     AND
+     c=0hex16ba81dd77ec5a06e6455f3ff229b23691ec41c536d7e2d4582285
+     AND
+     NOT
+     a=0hex000000000000000000000000000000000000000000000000000001
+     AND 
+     NOT
+     b=0hex000000000000000000000000000000000000000000000000000001
+     AND NOT
+     a=c
+     AND NOT
+     b=c
+     AND NOT
+     BVGT(b,y)
+     
+   )
+);
+
+COUNTEREXAMPLE;
+
