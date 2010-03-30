@@ -385,7 +385,7 @@ extern "C" {
       WRITE,
       ARRAY,
       BITVECTOR,
-      BOOLEAN,
+      BOOLEAN
   } ;
 
   // type of expression
