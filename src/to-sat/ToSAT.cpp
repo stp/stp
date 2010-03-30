@@ -315,6 +315,8 @@ namespace BEEV
 		stringstream fileName;
 		fileName << "output_" << benchFileNameCounter++ << ".bench";
 		file.open(fileName.str().c_str());
+		printer::Bench_Print(file,BBFormula);
+		file.close();
     }
 
     CNFMgr cm(bm);
