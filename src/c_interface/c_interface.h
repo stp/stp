@@ -20,6 +20,12 @@
 #define _cvcl__include__c_interface_h_
 
 #ifdef __cplusplus
+#define _CVCL_DEFAULT_ARG(v) =v
+#else
+#define _CVCL_DEFAULT_ARG(v)
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -42,7 +48,7 @@ extern "C" {
   // h  : help
   // s  : stats
   // v  : print nodes
-  void vc_setFlags(VC vc, char c, int num_absrefine=0);
+  void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
 
   //! Flags can be NULL
   VC vc_createValidityChecker(void);
@@ -154,7 +160,7 @@ extern "C" {
   //! Prints asserts to stdout. The flag simplify_print must be set to
   //"1" if you wish simplification to occur dring printing. It must be
   //set to "0" otherwise
-  void vc_printAsserts(VC vc, int simplify_print=0);
+  void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 
   //! Prints the state of the query to malloc'd buffer '*buf' and
   //stores ! the length of the buffer to '*len'.  It is the
@@ -176,7 +182,7 @@ extern "C" {
 
   //! Assert a new formula in the current context.
   /*! The formula must have Boolean type. */
-  void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num=0);
+  void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num _CVCL_DEFAULT_ARG(0));
 
   //! Simplify e with respect to the current context
   Expr vc_simplify(VC vc, Expr e);
@@ -426,6 +432,8 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#undef _CVCL_DEFAULT_ARG
 
 #endif
 
