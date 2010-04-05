@@ -78,7 +78,7 @@ my %optionsDefault = ("level" => 4,
 		      # Runtime limit; 0 = no limit
 		      "time" => 180,
 		      # Additional command line options to stp
-		      "stpOptions" => "-d -t");
+		      "stpOptions" => "-d -t ");
 
 # Database of command line options.  Initially, they are undefined
 my %options = ();

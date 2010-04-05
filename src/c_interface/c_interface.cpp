@@ -12,6 +12,7 @@
 #include <assert.h>
 #include "fdstream.h"
 #include "../printer/printers.h"
+#include "../parser/ParserInterface.h"
 
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)
@@ -1759,6 +1760,10 @@ Expr vc_parseExpr(VC vc, const char* infile) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
+
+  BEEV::ParserInterface pi(*b, b->defaultNodeFactory);
+  BEEV::parserInterface = &pi;
+
 
   BEEV::ASTVec * AssertsQuery = new BEEV::ASTVec;
   if (b->UserFlags.smtlib_parser_flag) 

@@ -36,6 +36,7 @@
 #include <iostream>
 #include "parser.h"
 #include "parseSMT_defs.h"
+#include "ParserInterface.h"
 
   using namespace std;
   using namespace BEEV;
@@ -81,10 +82,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(ParserBM->CreateOneConst(1));
+		     smtlval.node = new BEEV::ASTNode(parserInterface->CreateOneConst(1));
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(ParserBM->CreateZeroConst(1));
+		     smtlval.node = new BEEV::ASTNode(parserInterface->CreateZeroConst(1));
 		   }
 		   return BITCONST_TOK;
 		};
@@ -221,12 +222,12 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = ParserBM->CreateSymbol(smttext); 
+  BEEV::ASTNode nptr = parserInterface->CreateSymbol(smttext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  smtlval.node = new BEEV::ASTNode((ParserBM->GetLetMgr())->ResolveID(nptr));
+  smtlval.node = new BEEV::ASTNode(parserInterface->letMgr.ResolveID(nptr));
   //smtlval.node = new BEEV::ASTNode(nptr);
   if ((smtlval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

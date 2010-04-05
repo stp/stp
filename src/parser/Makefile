@@ -3,7 +3,7 @@ include ../../scripts/Makefile.common
 LEX=flex
 YACC=bison -d -y --debug -v
 
-SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp let-funcs.cpp
+SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp LetMgr.cpp
 OBJS = $(SRCS:.cpp=.o)
 LIBS = -L../AST -last -L../sat -lminisat -L../simplifier -lsimplifier -L../bitvec -lconsteval -L../constantbv -lconstantbv
 CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
@@ -34,4 +34,4 @@ parseSM%_defs.h parseSM%.cpp:smtlib.y
 
 
 clean:	
-	rm -rf *.o parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser smt.tab.* cvc.tab.* lex.yy.c .#*
+	rm -rf *.o parseCVC_defs.h parseSMT_defs.h *~ lexSMT.cpp parseSMT.cpp lexCVC.cpp parseCVC.cpp *.output parser smt.tab.* cvc.tab.* lex.yy.c libparser.a .#*

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -8,13 +8,9 @@
  ********************************************************************/
 
 #include <stdlib.h>
-#include "let-funcs.h"
+#include "LetMgr.h"
 
 namespace BEEV {
-  //external parser table for declared symbols. Only symbols which are
-  //declared are stored here.
-  ASTNodeSet _parser_symbol_table;
-
   // FUNC: This function maintains a map between LET-var names and
   // LET-expressions
   //
@@ -27,7 +23,7 @@ namespace BEEV {
   //3. otherwise add the <var,letExpr> pair to the _letid_expr table.
   void LETMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr) 
   {
-    ASTNodeMap::iterator it;
+	  ASTNodeMap::iterator it;
     if(((it = _letid_expr_map->find(var)) != _letid_expr_map->end()) && 
        it->second != ASTUndefined) {      
       FatalError("LetExprMgr:The LET-var v has already been defined"\
@@ -39,7 +35,7 @@ namespace BEEV {
                  "cannot redeclare as a letvar: v =", var);
     }
 
-    (*_letid_expr_map)[var] = letExpr;   
+    (*_letid_expr_map)[var] = letExpr;
   }//end of LetExprMgr()
 
   //this function looksup the "var to letexpr map" and returns the
@@ -47,10 +43,7 @@ namespace BEEV {
   //returns the var.
   ASTNode LETMgr::ResolveID(const ASTNode& v) 
   {
-    if (_letid_expr_map == NULL)
-      InitializeLetIDMap();
-
-    if(v.GetKind() != SYMBOL) {
+	if (v.GetKind() != SYMBOL) {
       return v;
     }
 
@@ -64,7 +57,7 @@ namespace BEEV {
         FatalError("ResolveID :: Unresolved Identifier: ",v);
       else
         return it->second;
-    }//end of ResolveID()
+    }
 
     //this is to mark the let-var as undefined. the let var is defined
     //only after the LetExprMgr has completed its work, and until then
@@ -80,11 +73,14 @@ namespace BEEV {
   // This function simply cleans up the LetID -> LetExpr Map.   
   void LETMgr::CleanupLetIDMap(void) 
   { 
-    // ext/hash_map::clear() is very expensive on big empty lists. shortcut. 
+    // ext/hash_map::clear() is very expensive on big empty maps. shortcut.
     if (_letid_expr_map->size()  ==0)
       return;
 
 
+    // I don't know what this does. Commenting it out and all the regression
+    // tests still pass.
+#if 0
     ASTNodeMap::iterator it = _letid_expr_map->begin();
     ASTNodeMap::iterator itend = _letid_expr_map->end();
     for(;it!=itend;it++) {
@@ -93,10 +89,11 @@ namespace BEEV {
         it->first.SetIndexWidth(0);
       }
     }
+#endif
 
     // May contain lots of buckets, so reset.
     delete _letid_expr_map;
-    _letid_expr_map = new ASTNodeMap();
+    InitializeLetIDMap();
   }//end of CleanupLetIDMap()
 
   void LETMgr::InitializeLetIDMap(void)

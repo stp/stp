@@ -10,6 +10,7 @@
 #include <iostream>
 #include "parser.h"
 #include "parseCVC_defs.h"
+#include "ParserInterface.h"
 
   using namespace std;
   using namespace BEEV;  
@@ -127,7 +128,7 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
   cvclval.node = 
-    new BEEV::ASTNode((BEEV::ParserBM->GetLetMgr())->ResolveID(nptr));
+    new BEEV::ASTNode(parserInterface->letMgr.ResolveID(nptr));
   //cvclval.node = new BEEV::ASTNode(nptr);
   if ((cvclval.node)->GetType() == BOOLEAN_TYPE)
     return FORMID_TOK;

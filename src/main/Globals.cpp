@@ -15,9 +15,12 @@ namespace BEEV
 {
   enum inputStatus input_status = NOT_DECLARED;
 
-  //global BEEVMGR for the parser. Use exclusively for parsing
+  //Originally just used by the parser, now used elesewhere.
   STP     * GlobalSTP;
   STPMgr  * ParserBM;
+
+  // Used exclusively for parsing.
+  ParserInterface * parserInterface;
 
   void (*vc_error_hdlr)(const char* err_msg) = NULL;
 

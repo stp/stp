@@ -9,6 +9,7 @@
    ********************************************************************/
   
 #include "parser.h"
+#include "ParserInterface.h"
 
   using namespace std; 
   using namespace BEEV;
@@ -175,11 +176,11 @@
 
 cmd             :      other_cmd
 {
-  _parser_symbol_table.clear();
+  parserInterface->letMgr._parser_symbol_table.clear();
 }
 |      other_cmd counterexample
 {
-  _parser_symbol_table.clear(); 
+  parserInterface->letMgr._parser_symbol_table.clear(); 
 }
 ; 
 
@@ -298,7 +299,7 @@ VarDecls        :      VarDecl ';'
 VarDecl         :      FORM_IDs ':' Type 
 {
   for(ASTVec::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {
-    _parser_symbol_table.insert(*i);
+    parserInterface->letMgr._parser_symbol_table.insert(*i);
     i->SetIndexWidth($3.indexwidth);
     i->SetValueWidth($3.valuewidth);
     ParserBM->ListOfDeclaredVars.push_back(*i);
@@ -319,7 +320,7 @@ VarDecl         :      FORM_IDs ':' Type
     i->SetValueWidth($5->GetValueWidth());
     i->SetIndexWidth($5->GetIndexWidth());
                            
-    ParserBM->GetLetMgr()->LetExprMgr(*i,*$5);
+    parserInterface->letMgr.LetExprMgr(*i,*$5);
     delete $5;
   }
 }
@@ -337,7 +338,7 @@ VarDecl         :      FORM_IDs ':' Type
     i->SetValueWidth($5->GetValueWidth());
     i->SetIndexWidth($5->GetIndexWidth());
                            
-    ParserBM->GetLetMgr()->LetExprMgr(*i,*$5);
+    parserInterface->letMgr.LetExprMgr(*i,*$5);
     delete $5;
   }
 }                
@@ -368,7 +369,7 @@ ForDecl         :      FORMID_TOK ':' Type
 {
   $1->SetIndexWidth($3.indexwidth);
   $1->SetValueWidth($3.valuewidth);
-  _parser_symbol_table.insert(*$1);
+  parserInterface->letMgr._parser_symbol_table.insert(*$1);
   $$ = $1;                      
 }
 
@@ -452,7 +453,7 @@ Formula         :     '(' Formula ')'
 }
 |      FORMID_TOK 
 {  
-  $$ = new ASTNode(ParserBM->GetLetMgr()->ResolveID(*$1)); delete $1;
+  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); delete $1;
 }
 |      FORMID_TOK '(' Expr ')' 
 {
@@ -687,7 +688,7 @@ Formula         :     '(' Formula ')'
 {
   $$ = $4;
   //Cleanup the LetIDToExprMap
-  ParserBM->GetLetMgr()->CleanupLetIDMap();
+  parserInterface->letMgr.CleanupLetIDMap();
 }
 ;
 
@@ -729,7 +730,7 @@ Exprs           :      Expr
 ;
 
 /* Grammar for Expr */
-Expr            :      TERMID_TOK { $$ = new ASTNode(ParserBM->GetLetMgr()->ResolveID(*$1)); delete $1;}
+Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); delete $1;}
 |      '(' Expr ')' { $$ = $2; }
 |      BVCONST_TOK { $$ = $1; }
 |      BOOL_TO_BV_TOK '(' Formula ')'           
@@ -1169,7 +1170,7 @@ LetDecl         :       FORMID_TOK '=' Expr
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$3);
+  parserInterface->letMgr.LetExprMgr(*$1,*$3);
   delete $1;
   delete $3;
 }
@@ -1187,7 +1188,7 @@ LetDecl         :       FORMID_TOK '=' Expr
   $1->SetValueWidth($5->GetValueWidth());
   $1->SetIndexWidth($5->GetIndexWidth());
 
-  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$5);
+  parserInterface->letMgr.LetExprMgr(*$1,*$5);
   delete $1;
   delete $5;
 }
@@ -1201,7 +1202,7 @@ LetDecl         :       FORMID_TOK '=' Expr
   $1->SetIndexWidth($3->GetIndexWidth());
 
   //Do LET-expr management
-  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$3);
+  parserInterface->letMgr.LetExprMgr(*$1,*$3);
   delete $1;
   delete $3;
 }
@@ -1220,7 +1221,7 @@ LetDecl         :       FORMID_TOK '=' Expr
   $1->SetIndexWidth($5->GetIndexWidth());
 
   //Do LET-expr management
-  ParserBM->GetLetMgr()->LetExprMgr(*$1,*$5);
+  parserInterface->letMgr.LetExprMgr(*$1,*$5);
   delete $1;
   delete $5;
 }                

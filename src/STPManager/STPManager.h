@@ -12,7 +12,6 @@
 
 #include "UserDefinedFlags.h"
 #include "../AST/AST.h"
-#include "../parser/let-funcs.h"
 #include "../AST/NodeFactory/HashingNodeFactory.h"
 
 namespace BEEV
@@ -98,9 +97,6 @@ namespace BEEV
     // The query for the current logical context.
     ASTNode _current_query;    
 
-    // Manager for let variables
-    LETMgr * letmgr;
-    
     // Ptr to class that reports on the running time of various parts
     // of the code
     RunTimes * runTimes;
@@ -190,17 +186,10 @@ namespace BEEV
       ASTFalse     = CreateNode(FALSE);
       ASTTrue      = CreateNode(TRUE); 
       ASTUndefined = CreateNode(UNDEFINED);
-      letmgr       = new LETMgr(ASTUndefined);
       runTimes     = new RunTimes();
       _current_query = ASTUndefined;
       UserFlags.num_absrefine = 2;
     }    
-
-    //Return ptr to let-variables manager (see parser/let-funcs.h)
-    LETMgr * GetLetMgr(void)
-    {
-      return letmgr;
-    }
     
     RunTimes * GetRunTimes(void)
     {
@@ -348,6 +337,7 @@ namespace BEEV
      ****************************************************************/
 
     // For printing purposes
+    // Not filled in by the smtlib parser.
     ASTVec ListOfDeclaredVars;
     
     // Table for DAG printing.
@@ -418,7 +408,6 @@ namespace BEEV
         }
       _asserts.clear();
 
-      delete letmgr;
       delete runTimes;
           
       _interior_unique_table.clear();

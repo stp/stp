@@ -11,6 +11,9 @@
 #include "../printer/printers.h"
 #include "../STPManager/STPManager.h"
 #include "../STPManager/STP.h"
+#include "../AST/NodeFactory/TypeChecker.h"
+#include "../AST/NodeFactory/SimplifyingNodeFactory.h"
+#include "../parser/ParserInterface.h"
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
@@ -327,19 +330,38 @@ int main(int argc, char ** argv) {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
-  
+
   bm->GetRunTimes()->start(RunTimes::Parsing);
   if (bm->UserFlags.smtlib_parser_flag)
     {
-      smtparse((void*)AssertsQuery);
+	  // Wrap a typchecking node factory around the default node factory.
+	  // every node created is typechecked.
+	  TypeChecker nf(*bm->defaultNodeFactory,*bm);
+
+	  // Changes need to be made to the constant evaluator to get this working.
+	  //SimplifyingNodeFactory nf3(nf,*bm);
+	  ParserInterface pi(*bm, &nf);
+	  parserInterface = &pi;
+
+	  smtparse((void*)AssertsQuery);
       smtlex_destroy();
+
+      parserInterface = NULL;
+
     }
   else
     {
-      cvcparse((void*)AssertsQuery);
+	  ParserInterface pi(*bm, bm->defaultNodeFactory);
+	  parserInterface = &pi;
+
+
+	  cvcparse((void*)AssertsQuery);
       cvclex_destroy();
+
+      parserInterface = NULL;
     }
   bm->GetRunTimes()->stop(RunTimes::Parsing);
+
 
   if(((ASTVec*)AssertsQuery)->empty())
     {

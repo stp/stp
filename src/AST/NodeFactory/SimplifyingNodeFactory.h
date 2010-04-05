@@ -31,7 +31,7 @@ class SimplifyingNodeFactory: public NodeFactory
 {
 
 private:
-	HashingNodeFactory& hashing;
+	NodeFactory& hashing;
 	BEEV::STPMgr& bm; // Only here until the const evaluator is pulled out.
 
 	const ASTNode& ASTTrue;
@@ -61,7 +61,7 @@ public:
 	virtual BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children);
 
 
-	SimplifyingNodeFactory(HashingNodeFactory& raw_, BEEV::STPMgr& bm_)
+	SimplifyingNodeFactory(NodeFactory& raw_, BEEV::STPMgr& bm_)
 	:hashing(raw_), bm(bm_), ASTTrue(bm.ASTTrue), ASTFalse(bm.ASTFalse), ASTUndefined(bm.ASTUndefined)
 	{
 		simplifier = new Simplifier(&bm);
