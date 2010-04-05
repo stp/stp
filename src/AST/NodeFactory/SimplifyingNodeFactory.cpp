@@ -1,4 +1,20 @@
-// nb. Some of the simplifications are duplicated with minor differences in the STPManager class.
+/* A node factory that:
+ * 	    * Sorts children to increases sharing,
+ *	    * Performs constant evaluation,
+ *	    * performs simplify boolean simplifications,
+ *	    * converts less thans to greater thans.
+ *
+ * NOTE: CreateNode doesn't necessary return a node with the same Kind as what it was called
+ * with. For example: (AND TRUE FALSE) will return FALSE. Which isn't an AND node.
+ *
+ * The intention is to never create nodes that will later be simplified by single level
+ * re-write rules. So we will never create the node (NOT(NOT x)). This is and example of
+ * a multi-level rule that never increases the global number of nodes.
+ *
+ * These rules never increase the total number of nodes.  They are complimented by
+ * multi-level re-write rules that consider the global reference count when simplifying.
+ *
+ */
 
 #include "../../AST/AST.h"
 #include <cassert>
@@ -10,6 +26,9 @@ static bool debug_simplifyingNodeFactory = false;
 
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 {
+
+	assert(kind != BEEV::SYMBOL); // These are created specially.
+
 	// If all the parameters are constant, return the constant value.
 	// The bitblaster calls CreateNode with a boolean vector. We don't try to simplify those.
 	if (kind != BEEV::UNDEFINED)
@@ -27,6 +46,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 		{
 			const ASTNode& hash = hashing.CreateNode(kind, children);
 			const ASTNode& c = simplifier->BVConstEvaluator(hash);
+			assert(c.isConstant());
 			return c;
 		}
 	}
@@ -146,24 +166,15 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 	return CreateSimpleAndOr(IsAnd, children);
 }
 
-// FIXME: Could also handle (AND ... (NOT (OR ...) ...)
 ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 		const ASTVec &children)
 {
 	const Kind k = IsAnd ? BEEV::AND : BEEV::OR;
 
-	// Copy so that it can be sorted. Sort so that identical nodes
-	// occur in sequential runs, followed by their negations.
-
-	ASTVec children_copy = children;
-	SortByExprNum(children_copy);
-
-	assert(children.size() == children_copy.size());
-
 	if (debug_simplifyingNodeFactory)
 	{
 		cout << "========" << endl << "CreateSimpAndOr " << k << " ";
-		lpvec(children_copy);
+		lpvec(children);
 		cout << endl;
 	}
 
@@ -171,10 +182,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 	const ASTNode& identity = (IsAnd ? ASTTrue : ASTFalse);
 
 	ASTNode retval;
-	ASTVec new_children;
 
-	const ASTVec::const_iterator it_end = children_copy.end();
-	for (ASTVec::const_iterator it = children_copy.begin(); it != it_end; it++)
+	const ASTVec::const_iterator it_end = children.end();
+	for (ASTVec::const_iterator it = children.begin(); it != it_end; it++)
 	{
 		ASTVec::const_iterator next_it;
 
@@ -197,43 +207,26 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 		{
 			// just drop it
 		}
-		else if (nextexists && (next_it->GetKind() == BEEV::NOT)
-				&& ((*next_it)[0] == *it))
-		{
-			// form and negation -- return FALSE for AND, TRUE for OR.
-			retval = annihilator;
-			// cout << "X and/or NOT X" << endl;
-			if (debug_simplifyingNodeFactory)
-			{
-				cout << "Annihilator. Not and Equals" << retval << endl;
-			}
-			return retval;
-		}
-		else
-		{
-			// add to children
-			new_children.push_back(*it);
-		}
 	}
 
 	// If we get here, we saw no annihilators, and children should
 	// be only the non-True nodes.
-	if (new_children.size() < 2)
+	if (children.size() < 2)
 	{
-		if (0 == new_children.size())
+		if (0 == children.size())
 		{
 			retval = identity;
 		}
 		else
 		{
 			// there is just one child
-			retval = new_children[0];
+			retval = children[0];
 		}
 	}
 	else
 	{
 		// 2 or more children.  Create a new node.
-		retval = hashing.CreateNode(IsAnd ? BEEV::AND : BEEV::OR, new_children);
+		retval = hashing.CreateNode(IsAnd ? BEEV::AND : BEEV::OR, children);
 	}
 	if (debug_simplifyingNodeFactory)
 	{
@@ -241,6 +234,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 	}
 	return retval;
 }
+
 
 //Tries to simplify the input to TRUE/FALSE. if it fails, then
 //return the constructed equality
@@ -447,6 +441,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined,
 				kind);
 
+	assert(kind != BEEV::BVCONST); // These are created specially.
+	assert(kind != BEEV::SYMBOL); // so are these.
+
 	// If all the parameters are constant, return the constant value.
 	bool allConstant = true;
 	for (unsigned i = 0; i < children.size(); i++)
@@ -462,6 +459,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	{
 		const ASTNode& hash = hashing.CreateTerm(kind, width, children);
 		const ASTNode& c = simplifier->BVConstEvaluator(hash);
+		assert(c.isConstant());
 		return c;
 	}
 
