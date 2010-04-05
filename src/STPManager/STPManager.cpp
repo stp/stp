@@ -629,6 +629,7 @@ namespace BEEV
     c += "_solver_" + ccc;
 
     ASTNode CurrentSymbol = CreateSymbol(c.c_str());
+    assert(0 !=n);
     CurrentSymbol.SetValueWidth(n);
     CurrentSymbol.SetIndexWidth(0);
     return CurrentSymbol;

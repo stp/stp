@@ -469,6 +469,8 @@ namespace BEEV
               return eq;
             }
 
+          if (lhs[0].GetValueWidth() != lhs.GetValueWidth())
+          {
           //if the extract of x[i:0] = t is entered into the solvermap,
           //then also add another entry for x = x1@t
           ASTNode var = lhs[0];
@@ -476,7 +478,9 @@ namespace BEEV
             _bm->NewVar(var.GetValueWidth() - lhs.GetValueWidth());
           newvar = 
             _bm->CreateTerm(BVCONCAT, var.GetValueWidth(), newvar, rhs);
+			  assert(BVTypeCheck(newvar));
           _simp->UpdateSolverMap(var, newvar);
+          }
           output = ASTTrue;
           break;
         }
