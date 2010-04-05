@@ -336,10 +336,11 @@ int main(int argc, char ** argv) {
     {
 	  // Wrap a typchecking node factory around the default node factory.
 	  // every node created is typechecked.
-	  TypeChecker nf(*bm->defaultNodeFactory,*bm);
+	  SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory,*bm);
+	  TypeChecker nf(simpNF,*bm);
 
 	  // Changes need to be made to the constant evaluator to get this working.
-	  //SimplifyingNodeFactory nf3(nf,*bm);
+
 	  ParserInterface pi(*bm, &nf);
 	  parserInterface = &pi;
 

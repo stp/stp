@@ -213,9 +213,7 @@ namespace BEEV
 
     ASTNode ConvertBVSXToITE(const ASTNode& a);
 
-    //accepts constant term and simplifies it to a bvconst
     ASTNode BVConstEvaluator(const ASTNode& t);
-
 
     //checks if the input constant is odd or not
     bool BVConstIsOdd(const ASTNode& c);

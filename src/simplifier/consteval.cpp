@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -21,6 +21,7 @@ namespace BEEV
     FatalError(ss.c_str(), t);
   }
 
+// Const evaluator logical and arithmetic operations.
   ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
   {
     ASTNode OutputNode;
@@ -37,18 +38,31 @@ namespace BEEV
     CBV tmp0 = NULL;
     CBV tmp1 = NULL;
 
+    ASTVec children;
+    children.reserve(t.Degree());
+    for (int i =0; i < t.Degree(); i++)
+    {
+    	if (t[i].isConstant())
+    		children.push_back(t[i]);
+    	else
+    		children.push_back(BVConstEvaluator(t[i]));
+    }
+
+    if ((t.Degree() ==2 || t.Degree() == 1) && t[0].GetType() == BITVECTOR_TYPE)
+    {
     //saving some typing. BVPLUS does not use these variables. if the
     //input BVPLUS has two nodes, then we want to avoid setting these
     //variables.
     if (1 == t.Degree())
       {
-        tmp0 = BVConstEvaluator(t[0]).GetBVConst();
+        tmp0 = children[0].GetBVConst();
       }
     else if (2 == t.Degree() && k != BVPLUS)
       {
-        tmp0 = BVConstEvaluator(t[0]).GetBVConst();
-        tmp1 = BVConstEvaluator(t[1]).GetBVConst();
+        tmp0 = children[0].GetBVConst();
+        tmp1 = children[1].GetBVConst();
       }
+	}
 
     switch (k)
       {
@@ -56,10 +70,9 @@ namespace BEEV
       case READ:
       case WRITE:
       case SYMBOL:
-        FatalError("BVConstEvaluator: term is not a constant-term", t);
+    	    FatalError("BVConstEvaluator: term is not a constant-term", t);
         break;
       case BVCONST:
-        //FIXME Handle this special case better
         OutputNode = t;
         break;
       case BVNEG:
@@ -72,7 +85,6 @@ namespace BEEV
       case BVSX:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          //unsigned * out0 = BVConstEvaluator(t[0]).GetBVConst();
           unsigned t0_width = t[0].GetValueWidth();
           if (inputwidth == t0_width)
             {
@@ -106,7 +118,7 @@ namespace BEEV
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
 
           // Number of bits to shift it.
-          ASTNode shiftNode = BVConstEvaluator(t[1]);
+          ASTNode shiftNode = children[1];
 
           bool msb = CONSTANTBV::BitVector_msb_(tmp0);
 
@@ -186,9 +198,9 @@ namespace BEEV
       case BVEXTRACT:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          tmp0 = BVConstEvaluator(t[0]).GetBVConst();
-          unsigned int hi = GetUnsignedConst(BVConstEvaluator(t[1]));
-          unsigned int low = GetUnsignedConst(BVConstEvaluator(t[2]));
+          tmp0 = children[0].GetBVConst();
+          unsigned int hi = GetUnsignedConst(children[1]);
+          unsigned int low = GetUnsignedConst(children[2]);
           unsigned int len = hi - low + 1;
 
           CONSTANTBV::BitVector_Destroy(output);
@@ -203,8 +215,8 @@ namespace BEEV
         {
           assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          unsigned t0_width = t[0].GetValueWidth();
-          unsigned t1_width = t[1].GetValueWidth();
+          unsigned t0_width = children[0].GetValueWidth();
+          unsigned t1_width = children[1].GetValueWidth();
           CONSTANTBV::BitVector_Destroy(output);
 
           output = CONSTANTBV::BitVector_Concat(tmp0, tmp1);
@@ -234,10 +246,9 @@ namespace BEEV
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           bool carry = false;
-          ASTVec c = t.GetChildren();
-          for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+          for (ASTVec::iterator it = children.begin(), itend = children.end(); it != itend; it++)
             {
-              CBV kk = BVConstEvaluator(*it).GetBVConst();
+              CBV kk = (*it).GetBVConst();
               CONSTANTBV::BitVector_add(output, output, kk, &carry);
               carry = false;
               //CONSTANTBV::BitVector_Destroy(kk);
@@ -468,12 +479,10 @@ namespace BEEV
         }
       case ITE:
         {
-          ASTNode tmp0 = t[0]; // Should this run BVConstEvaluator??
-
-          if (ASTTrue == tmp0)
-            OutputNode = BVConstEvaluator(t[1]);
-          else if (ASTFalse == tmp0)
-            OutputNode = BVConstEvaluator(t[2]);
+          if (ASTTrue == t[0])
+            OutputNode = children[1];
+          else if (ASTFalse == t[0])
+            OutputNode = children[2];
           else
             {
               cerr << tmp0;
@@ -547,6 +556,121 @@ namespace BEEV
             OutputNode = ASTFalse;
           break;
         }
+        
+              case TRUE:
+    	  OutputNode = ASTTrue;
+    	  break;
+      case FALSE:
+    	  OutputNode = ASTFalse;
+          break;
+      case NOT:
+			  if (ASTTrue == t[0])
+				  return ASTFalse;
+			  else if (ASTFalse == t[0])
+				  return ASTTrue;
+			  else
+				  {
+				  cerr << ASTFalse;
+				  cerr << t[0];
+				  FatalError("BVConstEvaluator: unexpected not input", t);
+				  }
+
+      case OR:
+    	  OutputNode = ASTFalse;
+        for (ASTVec::const_iterator it = children.begin(), itend = children.end(); it != itend; it++)
+          if (ASTTrue == *it)
+        	  OutputNode = ASTTrue;
+
+
+        break;
+
+      case NOR:
+       {
+		ASTNode o = ASTFalse;
+		for (ASTVec::const_iterator it = children.begin(), itend =
+				children.end(); it != itend; it++)
+			if (ASTTrue == (*it)) {
+				o = ASTTrue;
+				break;
+			}
+		if (o == ASTTrue)
+			OutputNode = ASTFalse;
+		else
+			OutputNode = ASTTrue;
+		break;
+	}
+
+
+      case XOR:
+      {
+     	bool output = false;
+  		for (ASTVec::const_iterator it = children.begin(), itend =
+  				children.end(); it != itend; it++)
+  		{
+  			if (ASTTrue == *it)
+  				output = !output; //parity.
+  		}
+
+  		if (output)
+  			OutputNode = ASTTrue;
+  		else
+  			OutputNode = ASTFalse;
+
+  		break;
+
+
+      }
+
+      case AND:
+      {
+    	  OutputNode = ASTTrue;
+      for (ASTVec::const_iterator it = children.begin(), itend = children.end(); it != itend; it++)
+              {
+                if (ASTFalse == (*it))
+                  {
+                    OutputNode = ASTFalse;
+                    break;
+                  }
+              }
+            break;
+      }
+
+      case NAND:
+      { OutputNode = ASTFalse;
+      for (ASTVec::const_iterator it = children.begin(), itend = children.end(); it != itend; it++)
+              {
+                if (ASTFalse == (*it))
+                  {
+                    OutputNode = ASTTrue;
+                    break;
+                  }
+              }
+            break;
+      }
+
+
+      case IFF:
+      {
+    	  const ASTNode&  t0 = children[0];
+    	  const ASTNode&  t1 = children[1];
+             if ((ASTTrue == t0 && ASTTrue == t1) || (ASTFalse == t0 && ASTFalse == t1))
+               OutputNode = ASTTrue;
+             else
+               OutputNode = ASTFalse;
+             break;
+      }
+
+      case IMPLIES:
+      {
+		const ASTNode& t0 = children[0];
+		const ASTNode& t1 = children[1];
+		if ((ASTFalse == t0) || (ASTTrue == t0 && ASTTrue == t1))
+			OutputNode = ASTTrue;
+		else
+			OutputNode = ASTFalse;
+		break;
+	}
+        
       default:
         FatalError("BVConstEvaluator: The input kind is not supported yet:", t);
         break;
@@ -561,6 +685,7 @@ namespace BEEV
       cerr<<endl<<"------------------------"<<endl;
       }
     */
+    assert(OutputNode.isConstant());
     UpdateSolverMap(t, OutputNode);
     //UpdateSimplifyMap(t,OutputNode,false);
     return OutputNode;

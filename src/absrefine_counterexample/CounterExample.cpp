@@ -404,9 +404,10 @@ namespace BEEV
         }
       default:
         {
-          ASTVec c = term.GetChildren();
+          const ASTVec& c = term.GetChildren();
           ASTVec o;
-          for (ASTVec::iterator
+		   o.reserve(c.size());
+          for (ASTVec::const_iterator
                  it = c.begin(), itend = c.end(); it != itend; it++)
             {
               ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
@@ -508,8 +509,8 @@ namespace BEEV
   ASTNode 
   AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
   {
-    ASTNode in = form;
-    Kind k = form.GetKind();
+    const ASTNode& in = form;
+    const Kind k = form.GetKind();
     if (!(is_Form_kind(k) && BOOLEAN_TYPE == form.GetType()))
       {
         FatalError(" ComputeConstFormUsingModel: "\
@@ -532,8 +533,7 @@ namespace BEEV
           }
       }
 
-    ASTNode t0, t1;
-    ASTNode output = ASTFalse;
+    ASTNode output = ASTUndefined;
     switch (k)
       {
       case TRUE:
@@ -570,106 +570,60 @@ namespace BEEV
       case BVSLT:
       case BVSLE:
       case BVSGT:
-      case BVSGE:
-        //convert form[0] into a constant term
-        t0 = TermToConstTermUsingModel(form[0], false);
-        //convert form[0] into a constant term
-        t1 = TermToConstTermUsingModel(form[1], false);
-        output = simp->BVConstEvaluator(bm->CreateNode(k, t0, t1));
+      case BVSGE: {
+		ASTVec children;
+		children.reserve(form.Degree());
 
-        //evaluate formula to false if bvdiv execption occurs while
-        //counterexample is being checked during refinement.
-        if (bm->bvdiv_exception_occured 
-            && bm->counterexample_checking_during_refinement)
-          {
-            output = ASTFalse;
-          }
-        break;
+		for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it
+				!= itend; it++) {
+			children.push_back(TermToConstTermUsingModel(*it, false));
+		}
+
+		output = simp->BVConstEvaluator(bm->CreateNode(k, children));
+
+		//evaluate formula to false if bvdiv execption occurs while
+		//counterexample is being checked during refinement.
+		if (bm->bvdiv_exception_occured
+				&& bm->counterexample_checking_during_refinement) {
+			output = ASTFalse;
+		}
+
+	}
+      break;
+
       case NAND:
-        {
-          ASTNode o = ASTTrue;
-          for (ASTVec::const_iterator
-                 it = form.begin(), itend = form.end(); it != itend; it++)
-            if (ASTFalse == ComputeFormulaUsingModel(*it))
-              {
-                o = ASTFalse;
-                break;
-              }
-          if (o == ASTTrue)
-            output = ASTFalse;
-          else
-            output = ASTTrue;
-          break;
-        }
       case NOR:
-        {
-          ASTNode o = ASTFalse;
-          for (ASTVec::const_iterator
-                 it = form.begin(), itend = form.end(); it != itend; it++)
-            if (ASTTrue == ComputeFormulaUsingModel(*it))
-              {
-                o = ASTTrue;
-                break;
-              }
-          if (o == ASTTrue)
-            output = ASTFalse;
-          else
-            output = ASTTrue;
-          break;
-        }
       case NOT:
-        if (ASTTrue == ComputeFormulaUsingModel(form[0]))
-          output = ASTFalse;
-        else
-          output = ASTTrue;
-        break;
-      case OR:
-        for (ASTVec::const_iterator
-               it = form.begin(), itend = form.end(); it != itend; it++)
-          if (ASTTrue == ComputeFormulaUsingModel(*it))
-            output = ASTTrue;
-        break;
       case AND:
-        output = ASTTrue;
-        for (ASTVec::const_iterator
-               it = form.begin(), itend = form.end(); it != itend; it++)
-          {
-            if (ASTFalse == ComputeFormulaUsingModel(*it))
+      case XOR:
+      case IFF:
+      case IMPLIES:
+      case OR:
+    	{
+    		ASTVec children;
+    		children.reserve(form.Degree());
+
+    		for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it != itend; it++)
+    		{
+    			children.push_back( ComputeFormulaUsingModel(*it));
+    		}
+
+            output = simp->BVConstEvaluator(bm->CreateNode(k, children));
+
+            //evaluate formula to false if bvdiv execption occurs while
+            //counterexample is being checked during refinement.
+            if (bm->bvdiv_exception_occured
+                && bm->counterexample_checking_during_refinement)
               {
                 output = ASTFalse;
-                break;
               }
-          }
+
+    	}
         break;
-      case XOR:
-        t0 = ComputeFormulaUsingModel(form[0]);
-        t1 = ComputeFormulaUsingModel(form[1]);
-        if ((ASTTrue == t0 
-             && ASTTrue == t1) 
-            || (ASTFalse == t0 && ASTFalse == t1))
-          output = ASTFalse;
-        else
-          output = ASTTrue;
-        break;
-      case IFF:
-        t0 = ComputeFormulaUsingModel(form[0]);
-        t1 = ComputeFormulaUsingModel(form[1]);
-        if ((ASTTrue == t0 && ASTTrue == t1) 
-            || (ASTFalse == t0 && ASTFalse == t1))
-          output = ASTTrue;
-        else
-          output = ASTFalse;
-        break;
-      case IMPLIES:
-        t0 = ComputeFormulaUsingModel(form[0]);
-        t1 = ComputeFormulaUsingModel(form[1]);
-        if ((ASTFalse == t0) || (ASTTrue == t0 && ASTTrue == t1))
-          output = ASTTrue;
-        else
-          output = ASTFalse;
-        break;
+
       case ITE:
-        t0 = ComputeFormulaUsingModel(form[0]);
+      {
+         ASTNode t0 = ComputeFormulaUsingModel(form[0]);
         if (ASTTrue == t0)
           output = ComputeFormulaUsingModel(form[1]);
         else if (ASTFalse == t0)
@@ -677,6 +631,7 @@ namespace BEEV
         else
           FatalError("ComputeFormulaUsingModel: ITE: "\
                      "something is wrong with the formula: ", form);
+      }
         break;
       case PARAMBOOL:
         output = bm->NewParameterized_BooleanVar(form[0],form[1]);
@@ -687,12 +642,15 @@ namespace BEEV
         output = ASTTrue;
         break;
       default:
+    	  cerr << _kind_names[k];
         FatalError(" ComputeFormulaUsingModel: "\
                    "the kind has not been implemented", ASTUndefined);
         break;
       }
 
     //cout << "ComputeFormulaUsingModel output is:" << output << endl;
+    assert(ASTUndefined != output);
+    assert(output.isConstant());
     ComputeFormulaMap[form] = output;
     return output;
   }
