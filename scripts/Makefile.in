@@ -50,7 +50,7 @@ endif
 			   $(SRC)/extlib-constbv/*.o \
 			   $(SRC)/extlib-abc/*/*/*.o \
 			   $(SRC)/c_interface/*.o \
-			   $(SRC)/parser/let-funcs.o  \
+			   $(SRC)/parser/LetMgr.o  \
 			   $(SRC)/parser/parseCVC.o  \
 			   $(SRC)/parser/lexCVC.o \
 			   $(SRC)/parser/parseSMT.o \

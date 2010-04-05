@@ -13,7 +13,7 @@
 #OPTIMIZE      = -O3 -fPIC         # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
-OPTIMIZE      = -O3 -g               # Maximum optimization
+OPTIMIZE      = -O3               # Maximum optimization
 #CFLAGS_M32   = -m32
 CFLAGS_BASE   = $(OPTIMIZE)
 
