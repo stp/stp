@@ -8,6 +8,8 @@
 # * LICENSE: Please view LICENSE file in the home dir of this Program
 # ********************************************************************/
 
+-include $(TOP)/scripts/config.info
+
 #OPTIMIZE     = -g -pg            # Debugging and gprof-style profiling
 #OPTIMIZE      = -g                # Debugging
 #OPTIMIZE      = -O3 -fPIC         # Maximum optimization
@@ -18,28 +20,36 @@ OPTIMIZE      = -O3               # Maximum optimization
 CFLAGS_BASE   = $(OPTIMIZE)
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
-# CRYPTOMINISAT2 = true
-# CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
-# MTL            = ../sat/cryptominisat2/mtl
-# SOLVER_INCLUDE = ../sat/cryptominisat2
+ifeq ($(SAT),cryptominisat2)
+  CRYPTOMINISAT2 = true
+  CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
+  MTL            = $(TOP)/src/sat/cryptominisat2/mtl
+  SOLVER_INCLUDE = $(TOP)/src/sat/cryptominisat2
+endif
 
 # OPTION to compile MiniSAT
-CORE          = true
-CFLAGS_BASE   = $(OPTIMIZE) -DCORE
-MTL            = ../sat/mtl
-SOLVER_INCLUDE = ../sat/core
+ifeq ($(SAT),minisat)
+  CORE           = true
+  CFLAGS_BASE    = $(OPTIMIZE) -DCORE
+  MTL            = $(TOP)/src/sat/mtl
+  SOLVER_INCLUDE = $(TOP)/src/sat/core
+endif
 
 # OPTION to compile UNSOUND MiniSAT
-#UNSOUND       = true
-#CFLAGS_BASE   = $(OPTIMIZE) -DUNSOUND
-#MTL            = ../sat/mtl
-#SOLVER_INCLUDE = ../sat/unsound
+ifeq ($(SAT),unsound)
+  UNSOUND        = true
+  CFLAGS_BASE    = $(OPTIMIZE) -DUNSOUND
+  MTL            = $(TOP)/src/sat/mtl
+  SOLVER_INCLUDE = $(TOP)/src/sat/unsound
+endif
 
 # OPTION to compile Simplifying MiniSAT
-# SIMP          = true
-# CFLAGS_BASE   = $(OPTIMIZE) -DSIMP
-# MTL            = ../sat/mtl
-# SOLVER_INCLUDE = ../sat/simp
+ifeq ($(SAT),simp)
+  SIMP           = true
+  CFLAGS_BASE    = $(OPTIMIZE) -DSIMP
+  MTL            = $(TOP)/src/sat/mtl
+  SOLVER_INCLUDE = $(TOP)/src/sat/simp
+endif
 
 SHELL=/bin/bash
 

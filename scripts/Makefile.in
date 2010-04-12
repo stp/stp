@@ -7,8 +7,8 @@
  # scripts/Makefile.in. The version at the top level stp directory
  # is automatically copied from there.
 
-include  scripts/Makefile.common
--include scripts/config.info
+TOP=.
+include  $(TOP)/scripts/Makefile.common
 
 BIN_DIR=$(PREFIX)/bin
 LIB_DIR=$(PREFIX)/lib

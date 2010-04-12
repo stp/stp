@@ -1,4 +1,5 @@
-include   ../../../scripts/Makefile.common
+TOP = ../../..
+include $(TOP)/scripts/Makefile.common
 
 MTL       = ../mtl
 SOURCES   = UnsoundSimpSolver.C ../core/Solver.C

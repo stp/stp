@@ -1,4 +1,5 @@
-include ../../scripts/Makefile.common
+TOP = ../..
+include $(TOP)/scripts/Makefile.common
 
 LEX=flex
 YACC=bison -d -y --debug -v

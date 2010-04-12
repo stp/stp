@@ -1,4 +1,5 @@
-include ../../scripts/Makefile.common
+TOP = ../..
+include $(TOP)/scripts/Makefile.common
 
 SRCS=$(wildcard  *.cpp)
 SRCS+=$(wildcard  NodeFactory/*.cpp)

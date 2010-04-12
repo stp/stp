@@ -1,4 +1,5 @@
-include ../../scripts/Makefile.common
+TOP = ../..
+include $(TOP)/scripts/Makefile.common
 
 SRCS=main.cpp versionString.cpp Globals.cpp
 OBJS = $(SRCS:.cpp=.o)

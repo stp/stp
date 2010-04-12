@@ -1,4 +1,5 @@
-include ../../scripts/Makefile.common
+TOP = ../..
+include $(TOP)/scripts/Makefile.common
 
 SRCS = $(wildcard aig/*/*.c)
 #SRCS += $(wildcard aig/cnf/*.c)
