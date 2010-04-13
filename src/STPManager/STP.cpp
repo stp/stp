@@ -36,10 +36,6 @@ namespace BEEV {
     MINISAT::SimpSolver NewSolver;
 #endif
 
-#ifdef UNSOUND
-    MINISAT::UnsoundSimpSolver NewSolver;
-#endif
-
     if(bm->UserFlags.stats_flag)
       {
 	NewSolver.verbosity = 1;

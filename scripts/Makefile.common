@@ -35,14 +35,6 @@ ifeq ($(SAT),minisat)
   SOLVER_INCLUDE = $(TOP)/src/sat/core
 endif
 
-# OPTION to compile UNSOUND MiniSAT
-ifeq ($(SAT),unsound)
-  UNSOUND        = true
-  CFLAGS_BASE    = $(OPTIMIZE) -DUNSOUND
-  MTL            = $(TOP)/src/sat/mtl
-  SOLVER_INCLUDE = $(TOP)/src/sat/unsound
-endif
-
 # OPTION to compile Simplifying MiniSAT
 ifeq ($(SAT),simp)
   SIMP           = true

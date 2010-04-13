@@ -6,8 +6,17 @@
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
-#ifndef TOPLEVEL_H
-#define TOPLEVEL_H
+#ifndef USEFULDEFS_H
+#define USEFULDEFS_H
+
+#ifndef CRYPTOMINISAT2
+#ifndef CORE
+#ifndef SIMP
+#error  "A SAT solver must be specified."
+#endif
+#endif
+#endif
+
 
 #include <stdio.h>
 #include <stdint.h>

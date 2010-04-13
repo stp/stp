@@ -34,9 +34,7 @@ endif
 ifdef SIMP
 	$(MAKE) -C $(SRC)/sat simp
 endif
-ifdef UNSOUND
-	$(MAKE) -C $(SRC)/sat unsound
-endif
+
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
 	$(AR) rc libstp.a  $(SRC)/AST/*.o \

@@ -21,9 +21,4 @@
 #include "core/SolverTypes.h"
 #endif
 
-#ifdef UNSOUND
-#include "unsound/UnsoundSimpSolver.h"
-#include "core/SolverTypes.h"
-#endif
-
 #endif
