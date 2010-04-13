@@ -1,10 +1,6 @@
 .PHONY: core
 core:
 	$(MAKE) -C core lib all	
-
-.PHONY: simp
-simp:
-	$(MAKE) -C core lib all	
 	$(MAKE) -C simp lib all
 
 .PHONY: cryptominisat
@@ -14,7 +10,6 @@ cryptominisat:
 .PHONY: cryptominisat2
 cryptominisat2:
 	$(MAKE) -C cryptominisat2 lib all
-
 
 .PHONY: clean
 clean:

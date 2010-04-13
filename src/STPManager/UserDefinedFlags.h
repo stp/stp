@@ -106,6 +106,15 @@ namespace BEEV
   
     bool tseitin_are_decision_variables_flag;
 
+    // Available back-end SAT solvers.
+    enum SATSolvers
+      {
+        MINISAT_SOLVER =0,
+        SIMPLIFYING_MINISAT_SOLVER
+      };
+
+    enum SATSolvers solver_to_use;
+
     //CONSTRUCTOR    
     UserDefinedFlags()
     {  
@@ -192,6 +201,10 @@ namespace BEEV
       quick_statistics_flag=false;
 
       tseitin_are_decision_variables_flag=true;
+
+      // use minisat by default.
+      solver_to_use = MINISAT_SOLVER;
+
     } //End of constructor for UserDefinedFlags
 
   }; //End of struct UserDefinedFlags

@@ -47,7 +47,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile;
@@ -126,6 +126,12 @@ int main(int argc, char ** argv) {
     "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  
     "-s  : print function statistics\n";
+
+  #if !defined CRYPTOMINISAT && !defined CRYPTOMINISAT2
+  helpstring +=
+    "--simplifying-minisat : use simplifying-minisat rather than minisat\n";
+  #endif
+
   helpstring +=  
     "-t  : print quick statistics\n";
   helpstring +=  
@@ -152,6 +158,8 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair("--print-back-dot",PRINT_BACK_DOT));
 			  lookup.insert(make_pair("--output-CNF",OUTPUT_CNF));
 			  lookup.insert(make_pair("--output-bench",OUTPUT_BENCH));
+			  lookup.insert(make_pair("--simplifying-minisat",USE_SIMPLIFYING_SOLVER));
+
 
 			  switch(lookup[argv[i]])
 			  {
@@ -182,6 +190,13 @@ int main(int argc, char ** argv) {
 			  case OUTPUT_BENCH:
 				  bm->UserFlags.output_bench_flag = true;
 				  break;
+
+#if !defined CRYPTOMINISAT && !defined CRYPTOMINISAT2
+			  case USE_SIMPLIFYING_SOLVER:
+				  bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
+				  break;
+#endif
+
 
 			  default:
 				  fprintf(stderr,usage,prog);

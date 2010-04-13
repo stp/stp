@@ -21,16 +21,13 @@ while [ $# -gt 0 ]; do
 	    echo "Using g++ instead of gcc";;
 	--with-minisat-core)
 	    SAT=minisat;;
-	--with-minisat-simp)
-	    SAT=simp;;
 	--with-cryptominisat2)
 	    SAT=cryptominisat2;;
 	*)
 	    echo "Usage: $0 [options]"
 	    echo "   --with-prefix=/prefix/path   Install STP at the specified path"
 	    echo "   --with-g++=/path/to/g++      Use g++ at the specified path"
-	    echo "   --with-minisat-core          Use core MiniSAT solver (default)"
-	    echo "   --with-minisat-simp          Use simplifying MiniSAT solver"
+	    echo "   --with-minisat-core          Use core MiniSAT solver (default), runtime option to use simplifying"
 	    echo "   --with-cryptominisat2        Use CRYPTOMiniSAT 2.x solver"
 	    echo "$0 failed"
 	    exit 1;;

@@ -21,7 +21,7 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     
     //solver instantiated here
-#if defined CORE || defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
 #endif
 
@@ -32,8 +32,16 @@ namespace BEEV {
       }
 #endif
 
-#ifdef SIMP
-    MINISAT::SimpSolver NewSolver;
+#if defined CORE
+	MINISAT::Solver *newS;
+    if (bm->UserFlags.solver_to_use == UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER)
+		newS = new MINISAT::SimpSolver();
+    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
+		newS = new MINISAT::Solver();
+    else
+    	FatalError("unknown option");
+
+    MINISAT::Solver& NewSolver = *newS;
 #endif
 
     if(bm->UserFlags.stats_flag)
@@ -41,16 +49,24 @@ namespace BEEV {
 	NewSolver.verbosity = 1;
       }
     
+	SOLVER_RETURN_TYPE result;
     if(bm->UserFlags.num_absrefine_flag)
       {
-	return UserGuided_AbsRefine(NewSolver,
+     result =  UserGuided_AbsRefine(NewSolver,
 				    original_input);
       }
     else 
       {
-	return TopLevelSTPAux(NewSolver, 
+	result = TopLevelSTPAux(NewSolver,
 			      original_input, original_input);
       }
+
+#if defined CORE
+    delete newS;
+#endif
+
+    return result;
+
   } //End of TopLevelSTP()
   
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
