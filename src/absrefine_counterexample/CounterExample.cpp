@@ -10,6 +10,8 @@
 #include "../sat/sat.h"
 #include "AbsRefine_CounterExample.h"
 
+const bool debug_counterexample =  false;
+
 namespace BEEV
 {
 
@@ -35,6 +37,8 @@ namespace BEEV
     if (!bm->UserFlags.construct_counterexample_flag)
       return;
 
+    assert(CounterExampleMap.size() == 0);
+
     CopySolverMap_To_CounterExample();
     for (int i = 0; i < newS.nVars(); i++)
       {
@@ -49,8 +53,8 @@ namespace BEEV
             //assemble the counterexample here
             if (s.GetKind() == BVGETBIT && s[0].GetKind() == SYMBOL)
               {
-                ASTNode symbol = s[0];
-                unsigned int symbolWidth = symbol.GetValueWidth();
+                const ASTNode& symbol = s[0];
+                const unsigned int symbolWidth = symbol.GetValueWidth();
 
                 //'v' is the map from bit-index to bit-value
                 HASHMAP<unsigned, bool> * v;
@@ -65,7 +69,7 @@ namespace BEEV
                 v = _ASTNode_to_BitvectorMap[symbol];
 
                 //kk is the index of BVGETBIT
-                unsigned int kk = GetUnsignedConst(s[1]);
+                const unsigned int kk = GetUnsignedConst(s[1]);
 
                 //Collect the bits of 'symbol' and store in v. Store
                 //in reverse order.
@@ -257,11 +261,8 @@ namespace BEEV
               return term;
             }
 
-          //when all else fails set symbol values to some constant by
-          //default. if the variable is queried the second time then add 1
-          //to and return the new value.
-          ASTNode zero = bm->CreateZeroConst(term.GetValueWidth());
-          output = zero;
+          // Has been simplified out. Can take any value.
+          output = bm->CreateZeroConst(term.GetValueWidth());
           break;
         }
       case READ:
@@ -373,11 +374,8 @@ namespace BEEV
             }
           else
             {
-              //when all else fails set symbol values to some constant by
-              //default. if the variable is queried the second time then add 1
-              //to and return the new value.
-              ASTNode zero = bm->CreateZeroConst(modelentry.GetValueWidth());
-              output = zero;
+        	  // Has been simplified out. Can take any value.
+        	  output  = bm->CreateMaxConst(modelentry.GetValueWidth());
             }
           break;
         }
@@ -558,7 +556,7 @@ namespace BEEV
           }
         else
           {
-            CounterExampleMap[form] = ASTFalse;
+            // Has been simplified out. Can take any value.
             output = ASTFalse;
           }
         break;
@@ -672,10 +670,15 @@ namespace BEEV
 
     for (ASTVec::const_iterator
            it = c.begin(), itend = c.end(); it != itend; it++)
+    {
+    	if (debug_counterexample)
+    		cerr << "checking" << *it;
+
       if (ASTFalse == ComputeFormulaUsingModel(*it))
         FatalError("CheckCounterExample:counterexample bogus:"
                    "assert evaluates to FALSE under counterexample: "\
                    "NOT OK", *it);
+    }
 
     if (ASTTrue == ComputeFormulaUsingModel(bm->GetQuery()))
       FatalError("CheckCounterExample:counterexample bogus:"
@@ -717,14 +720,6 @@ namespace BEEV
   // stdout
   void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   {
-    //global command-line option FIXME: This should always print the
-    // counterexample.  If you want to turn it off, check the switch
-    // at the point of call.
-    if (!bm->UserFlags.print_counterexample_flag)
-      {
-        return;
-      }
-
     //input is valid, no counterexample to print
     if (bm->ValidFlag)
       {
@@ -746,13 +741,17 @@ namespace BEEV
         return;
       }
 
+    // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+    // changes it. Which breaks the iterator otherwise.
+    const ASTNodeMap c(CounterExampleMap);
+
     //os << "\nCOUNTEREXAMPLE: \n" << endl;
-    ASTNodeMap::iterator it = CounterExampleMap.begin();
-    ASTNodeMap::iterator itend = CounterExampleMap.end();
+    ASTNodeMap::const_iterator it = c.begin();
+    ASTNodeMap::const_iterator itend = c.end();
     for (; it != itend; it++)
       {
-        ASTNode f = it->first;
-        ASTNode se = it->second;
+        const ASTNode& f = it->first;
+        const ASTNode& se = it->second;
 
         if (ARRAY_TYPE == se.GetType())
           {
@@ -783,7 +782,9 @@ namespace BEEV
               }
             if (BITVECTOR_TYPE == se.GetType())
               {
-                TermToConstTermUsingModel(se, false).PL_Print(os, 0);
+            	ASTNode rhs = TermToConstTermUsingModel(se, false);
+				assert(rhs.isConstant());
+            	rhs.PL_Print(os, 0);
               }
             else
               {
@@ -792,6 +793,7 @@ namespace BEEV
             os << " );" << endl;
           }
       }
+    os.flush();
     //os << "\nEND OF COUNTEREXAMPLE" << endl;
   } //End of PrintCounterExample
 
@@ -910,22 +912,21 @@ namespace BEEV
   AbsRefine_CounterExample::
   BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l)
   {
-    unsigned len = w->size();
-    if (l < len)
+    if (l < (unsigned)w->size())
       FatalError("BoolVectorBVConst : "
                  "length of bitvector does not match HASHMAP size:", 
                  ASTUndefined, l);
-    std::string cc;
+
+    CBV cc = CONSTANTBV::BitVector_Create(l,true);
     for (unsigned int jj = 0; jj < l; jj++)
       {
         if ((*w)[jj] == true)
-          cc += '1';
-        else if ((*w)[jj] == false)
-          cc += '0';
+          CONSTANTBV::BitVector_Bit_On(cc,l-1-jj);
         else
-          cc += '0';
+        	CONSTANTBV::BitVector_Bit_Off(cc,l-1-jj);
       }
-    return bm->CreateBVConst(cc.c_str(), 2);
+
+    return bm->CreateBVConst(cc,l);
   } //end of BoolVectoBVConst()
 
   void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
@@ -975,9 +976,13 @@ namespace BEEV
           {
             if (bm->UserFlags.check_counterexample_flag)
 				CheckCounterExample(SatSolver.okay());
-            //PrintOutput(false);
+
+            if (bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag)
+              {
             PrintCounterExample(SatSolver.okay());
             PrintCounterExample_InOrder(SatSolver.okay());
+              }
+
             return SOLVER_INVALID;
           }
         // counterexample is bogus: flag it
@@ -987,10 +992,7 @@ namespace BEEV
                 && bm->UserFlags.print_nodes_flag)
               {
                 cout << "Supposedly bogus one: \n";
-                bool tmp = bm->UserFlags.print_counterexample_flag;
-                bm->UserFlags.print_counterexample_flag = true;
                 PrintCounterExample(true);
-                bm->UserFlags.print_counterexample_flag = tmp;
               }
 
             return SOLVER_UNDECIDED;
