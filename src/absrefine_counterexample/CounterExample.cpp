@@ -680,7 +680,8 @@ namespace BEEV
                    "NOT OK", *it);
     }
 
-    if (ASTTrue == ComputeFormulaUsingModel(bm->GetQuery()))
+    // The smtlib ones don't have a query defined.
+    if ((bm->GetQuery() != ASTUndefined) && ASTTrue == ComputeFormulaUsingModel(bm->GetQuery()))
       FatalError("CheckCounterExample:counterexample bogus:"
                  "query evaluates to TRUE under counterexample: "\
                  "NOT OK", bm->GetQuery());
