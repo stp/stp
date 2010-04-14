@@ -481,6 +481,8 @@ namespace BEEV
 			  assert(BVTypeCheck(newvar));
           _simp->UpdateSolverMap(var, newvar);
           }
+          else
+        	  _simp->UpdateSolverMap(lhs[0], rhs);
           output = ASTTrue;
           break;
         }
