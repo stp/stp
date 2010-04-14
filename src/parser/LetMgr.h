@@ -18,7 +18,7 @@ namespace BEEV
   {
   private:
 
-    const ASTNode& ASTUndefined;
+    const ASTNode ASTUndefined;
 
 	// MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs
