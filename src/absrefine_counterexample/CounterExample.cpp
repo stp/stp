@@ -657,16 +657,6 @@ namespace BEEV
 
   void AbsRefine_CounterExample::CheckCounterExample(bool t)
   {
-    // FIXME: Code is more useful if enable flags are check OUTSIDE
-    // the method.  If I want to check a counterexample somewhere, I
-    // don't want to have to set the flag in order to make it actualy
-    // happen!
-    printf("checking counterexample\n");
-    if (!bm->UserFlags.check_counterexample_flag)
-      {
-        return;
-      }
-
     //input is valid, no counterexample to check
     if (bm->ValidFlag)
       return;
@@ -676,6 +666,10 @@ namespace BEEV
       FatalError("CheckCounterExample: "\
                  "No CounterExample to check", ASTUndefined);
     const ASTVec c = bm->GetAsserts();
+
+    if (bm->UserFlags.stats_flag)
+    	printf("checking counterexample\n");
+
     for (ASTVec::const_iterator
            it = c.begin(), itend = c.end(); it != itend; it++)
       if (ASTFalse == ComputeFormulaUsingModel(*it))
@@ -979,7 +973,8 @@ namespace BEEV
         // invalid
         if (ASTTrue == orig_result)
           {
-            //CheckCounterExample(SatSolver.okay());
+            if (bm->UserFlags.check_counterexample_flag)
+				CheckCounterExample(SatSolver.okay());
             //PrintOutput(false);
             PrintCounterExample(SatSolver.okay());
             PrintCounterExample_InOrder(SatSolver.okay());
