@@ -21,23 +21,28 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef CLAUSE_H
 #define CLAUSE_H
 
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
 #include <stdint.h>
+#endif //_MSC_VER
 #include <cstdio>
 #include <vector>
 #include <sys/types.h>
-#include "mtl/Vec.h"
+#include "Vec.h"
 #include "SolverTypes.h"
 #include "PackedRow.h"
-
-namespace MINISAT
-{
-
+#include "constants.h"
+//#include "pool.hpp"
 #ifndef uint
 #define uint unsigned int
 #endif
 
 using std::vector;
 
+namespace MINISAT
+{
+using namespace MINISAT;
 
 //=================================================================================================
 // Clause -- a simple class for representing a clause:
@@ -46,59 +51,109 @@ class MatrixFinder;
 
 class Clause
 {
-public:
-    const uint group;
 protected:
-    /**
-    bit-layout of size_etc:
     
-    range           type             meaning
-    --------------------------------------------
-    0th bit         bool            learnt clause
-    1st - 2nd bit   2bit int        marking
-    3rd bit         bool            inverted xor
-    4th -31st bit  28bit uint       size
-    */
-    uint32_t size_etc; 
-    union { int act; uint32_t abst; } extra;
+    #ifdef STATS_NEEDED
+    uint group;
+    #endif
+    
+    uint32_t isLearnt:1;
+    uint32_t strenghtened:1;
+    uint32_t varChanged:1;
+    uint32_t sorted:1;
+    uint32_t invertedXor:1;
+    uint32_t isXorClause:1;
+    uint32_t subsume0Done:1;
+    uint32_t mySize:20;
+    
+    union  {int32_t act; uint32_t abst;} extra;
+    #ifdef _MSC_VER
+    Lit     data[1];
+    #else
     Lit     data[0];
+    #endif //_MSC_VER
 
+#ifdef _MSC_VER
 public:
-
+#endif //_MSC_VER
     template<class V>
-    Clause(const V& ps, const uint _group, const bool learnt) :
-            group(_group)
+    Clause(const V& ps, const uint _group, const bool learnt)
     {
-        size_etc = 0;
-        setSize(ps.size());
-        setLearnt(learnt);
+        isXorClause = false;
+        strenghtened = false;
+        sorted = false;
+        varChanged = true;
+        subsume0Done = false;
+        mySize = ps.size();
+        isLearnt = learnt;
+        setGroup(_group);
         for (uint i = 0; i < ps.size(); i++) data[i] = ps[i];
         if (learnt) extra.act = 0;
         else calcAbstraction();
     }
 
+public:
+    #ifndef _MSC_VER
     // -- use this function instead:
     template<class T>
     friend Clause* Clause_new(const T& ps, const uint group, const bool learnt = false);
+    #endif //_MSC_VER
 
-    uint         size        ()      const {
-        return size_etc >> 4;
+    const uint   size        ()      const {
+        return mySize;
     }
-    void         shrink      (uint i) {
+    void         resize      (const uint size) {
+        mySize = size;
+    }
+    void         shrink      (const uint i) {
         assert(i <= size());
-        size_etc = (((size_etc >> 4) - i) << 4) | (size_etc & ((1 << 4)-1));
+        mySize -= i;
     }
     void         pop         () {
         shrink(1);
     }
-    bool         learnt      ()      const {
-        return size_etc & 1;
+    const bool   isXor       () {
+        return isXorClause;
     }
-    uint32_t     mark        ()      const {
-        return (size_etc >> 1) & 3;
+    const bool   learnt      ()      const {
+        return isLearnt;
     }
-    void         mark        (uint32_t m) {
-        size_etc = (size_etc & ~6) | ((m & 3) << 1);
+    const bool getStrenghtened() const {
+        return strenghtened;
+    }
+    void setStrenghtened() {
+        strenghtened = true;
+        sorted = false;
+        subsume0Done = false;
+    }
+    void unsetStrenghtened() {
+        strenghtened = false;
+    }
+    const bool getVarChanged() const {
+        return varChanged;
+    }
+    void setVarChanged() {
+        varChanged = true;
+        sorted = false;
+        subsume0Done = false;
+    }
+    void unsetVarChanged() {
+        varChanged = false;
+    }
+    const bool getSorted() const {
+        return sorted;
+    }
+    void setSorted() {
+        sorted = true;
+    }
+    void setUnsorted() {
+        sorted = false;
+    }
+    void subsume0Finished() {
+        subsume0Done = 1;
+    }
+    const bool subsume0IsFinished() {
+        return subsume0Done;
     }
 
     Lit&         operator [] (uint32_t i) {
@@ -116,19 +171,33 @@ public:
         return extra.act;
     }
     
-    Lit subsumes (const Clause& other) const;
+    void         makeNonLearnt()  {
+        assert(isLearnt);
+        isLearnt = false;
+        calcAbstraction();
+    }
     
-    inline void strengthen(const Lit p)
+    void         makeLearnt(const uint32_t newActivity)  {
+        extra.act = newActivity;
+        isLearnt = true;
+    }
+    
+    inline void  strengthen(const Lit p)
     {
         remove(*this, p);
+        sorted = false;
         calcAbstraction();
     }
     
     void calcAbstraction() {
-        uint32_t abstraction = 0;
+        extra.abst = 0;
         for (uint32_t i = 0; i != size(); i++)
-            abstraction |= 1 << (data[i].var() & 31);
-        extra.abst = abstraction;
+            extra.abst |= 1 << (data[i].toInt() & 31);
+    }
+    
+    uint32_t getAbst()
+    {
+        return extra.abst;
     }
 
     const Lit*     getData     () const {
@@ -137,8 +206,14 @@ public:
     Lit*    getData     () {
         return data;
     }
+    const Lit*     getDataEnd     () const {
+        return data+size();
+    }
+    Lit*    getDataEnd     () {
+        return data+size();
+    }
     void print() {
-        printf("Clause   group: %d, size: %d, learnt:%d, lits: ", group, size(), learnt());
+        printf("Clause   group: %d, size: %d, learnt:%d, lits: ", getGroup(), size(), learnt());
         plainPrint();
     }
     void plainPrint(FILE* to = stdout) const {
@@ -148,41 +223,69 @@ public:
         }
         fprintf(to, "0\n");
     }
-protected:
-    void setSize(uint32_t size) {
-        size_etc = (size_etc & ((1 << 4)-1)) + (size << 4);
+    #ifdef STATS_NEEDED
+    const uint32_t getGroup() const
+    {
+        return group;
     }
-    void setLearnt(bool learnt) {
-        size_etc = (size_etc & ~1) + learnt;
+    void setGroup(const uint32_t _group)
+    {
+        group = _group;
     }
+    #else
+    const uint getGroup() const
+    {
+        return 0;
+    }
+    void setGroup(const uint32_t _group)
+    {
+        return;
+    }
+    #endif //STATS_NEEDED
 };
 
 class XorClause : public Clause
 {
+    
+#ifdef _MSC_VER
 public:
+#else //_MSC_VER
+protected:
+#endif //_MSC_VER
+
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
     XorClause(const V& ps, const bool inverted, const uint _group) :
         Clause(ps, _group, false)
     {
-        setInverted(inverted);
+        invertedXor = inverted;
+        isXorClause = true;
+        calcXorAbstraction();
     }
 
+public:
+    #ifndef _MSC_VER
     // -- use this function instead:
     template<class V>
     friend XorClause* XorClause_new(const V& ps, const bool inverted, const uint group);
+    #endif //_MSC_VER
 
     inline bool xor_clause_inverted() const
     {
-        return size_etc & 8;
+        return invertedXor;
     }
     inline void invert(bool b)
     {
-        size_etc ^= (uint32_t)b << 3;
+        invertedXor ^= b;
+    }
+    void calcXorAbstraction() {
+        extra.abst = 0;
+        for (uint32_t i = 0; i != size(); i++)
+            extra.abst |= 1 << (data[i].var() & 31);
     }
 
     void print() {
-        printf("XOR Clause   group: %d, size: %d, learnt:%d, lits:\"", group, size(), learnt());
+        printf("XOR Clause   group: %d, size: %d, learnt:%d, lits:\"", getGroup(), size(), learnt());
         plainPrint();
     }
     
@@ -197,18 +300,18 @@ public:
     }
     
     friend class MatrixFinder;
-    
-protected:
-    inline void setInverted(bool inverted)
-    {
-        size_etc = (size_etc & 7) + ((uint32_t)inverted << 3) + (size_etc & ~15);
-    }
 };
+
+//extern boost::pool<> binaryClausePool;
 
 template<class T>
 Clause* Clause_new(const T& ps, const uint group, const bool learnt = false)
 {
-    void* mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
+    void* mem;
+    //if (ps.size() != 2)
+        mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
+    //else
+    //    mem = binaryClausePool.malloc();
     Clause* real= new (mem) Clause(ps, group, learnt);
     return real;
 }
@@ -219,6 +322,13 @@ XorClause* XorClause_new(const T& ps, const bool inverted, const uint group)
     void* mem = malloc(sizeof(XorClause) + sizeof(Lit)*(ps.size()));
     XorClause* real= new (mem) XorClause(ps, inverted, group);
     return real;
+}
+
+inline void clauseFree(Clause* c)
+{
+    //if (binaryClausePool.is_from(c)) binaryClausePool.free(c);
+    //else 
+    free(c);
 }
 
 /*_________________________________________________________________________________________________
@@ -234,7 +344,7 @@ XorClause* XorClause_new(const T& ps, const bool inverted, const uint group)
 |       lit_Undef  - Clause subsumes 'other'
 |       p          - The literal p can be deleted from 'other'
 |________________________________________________________________________________________________@*/
-inline Lit Clause::subsumes(const Clause& other) const
+/*inline Lit Clause::subsumes(const Clause& other) const
 {
     if (other.size() < size() || (extra.abst & ~other.extra.abst) != 0)
         return lit_Error;
@@ -259,23 +369,30 @@ inline Lit Clause::subsumes(const Clause& other) const
     }
     
     return ret;
-}
+}*/
 
+//typedef sptr<Clause> ClausePtr;
+//typedef sptr<XorClause> XorClausePtr;
+typedef Clause* ClausePtr;
+typedef XorClause* XorClausePtr;
 
+#pragma pack(push)
+#pragma pack(1)
 class WatchedBin {
     public:
-        WatchedBin(Clause *_clause, Lit _impliedLit) : impliedLit(_impliedLit), clause(_clause) {};
+        WatchedBin(Clause *_clause, Lit _impliedLit) : clause(_clause), impliedLit(_impliedLit) {};
+        ClausePtr clause;
         Lit impliedLit;
-        Clause *clause;
 };
 
 class Watched {
     public:
-        Watched(Clause *_clause, Lit _blockedLit) : blockedLit(_blockedLit), clause(_clause) {};
+        Watched(Clause *_clause, Lit _blockedLit) : clause(_clause), blockedLit(_blockedLit) {};
+        ClausePtr clause;
         Lit blockedLit;
-        Clause *clause;
 };
+#pragma pack(pop)
 
-};
+}; //NAMESPACE MINISAT
 
 #endif //CLAUSE_H

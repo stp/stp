@@ -18,27 +18,42 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef RESTARTTYPECHOOSER_H
 #define RESTARTTYPECHOOSER_H
 
-#include "SolverTypes.h"
+#include "Solver.h"
 #include <vector>
-#include <sys/types.h>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
+#include "SolverTypes.h"
+
 using std::vector;
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
 class Solver;
 
 class RestartTypeChooser
 {
     public:
-        RestartTypeChooser(const Solver* const S);
+        RestartTypeChooser(const Solver& s);
+        void addInfo();
         const RestartType choose();
+        void reset();
         
     private:
         void calcHeap();
         const double avg() const;
+        const std::pair<double, double> countVarsDegreeStDev() const;
+        const double stdDeviation(vector<uint32_t>& measure) const;
         
-        const Solver* const S;
+        template<class T>
+        void addDegrees(const vec<T*>& cs, vector<uint32_t>& degrees) const;
+        
+        const Solver& solver;
         const uint32_t topX;
         const uint32_t limit;
         vector<Var> sameIns;
@@ -46,6 +61,11 @@ class RestartTypeChooser
         vector<Var> firstVars, firstVarsOld;
 };
 
-};
+inline void RestartTypeChooser::reset()
+{
+    sameIns.clear();
+}
+
+}; //NAMESPACE MINISAT
 
 #endif //RESTARTTYPECHOOSER_H

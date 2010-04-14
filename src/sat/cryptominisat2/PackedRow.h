@@ -21,21 +21,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define DEBUG_ROW
 
 #include <vector>
-#include <limits.h>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
 #include "SolverTypes.h"
-#include "mtl/Vec.h"
+#include "Vec.h"
 #include <string.h>
 #include <iostream>
 #include <algorithm>
-
+#include <limits>
 #ifndef uint
 #define uint unsigned int
 #endif
 
+using std::vector;
+
 namespace MINISAT
 {
-
-using std::vector;
+using namespace MINISAT;
 
 
 class PackedMatrix;
@@ -66,7 +72,7 @@ public:
         assert(b.size == size);
         #endif
         
-        for (uint i = 0; i != size; i++) {
+        for (uint32_t i = 0; i != size; i++) {
             *(mp + i) ^= *(b.mp + i);
         }
         
@@ -82,7 +88,7 @@ public:
         assert(b.size == size);
         #endif
         
-        for (uint i = 0; i != 2*size+1; i++) {
+        for (uint32_t i = 0; i != 2*size+1; i++) {
             *(mp + i) ^= *(b.mp + i);
         }
         
@@ -90,13 +96,13 @@ public:
     }
     
     
-    uint popcnt() const;
-    uint popcnt(uint from) const;
+    uint32_t popcnt() const;
+    uint32_t popcnt(uint32_t from) const;
     
     bool popcnt_is_one() const
     {
         char popcount = 0;
-        for (uint i = 0; i != size; i++) {
+        for (uint32_t i = 0; i != size; i++) {
             uint64_t tmp = mp[i];
             while(tmp) {
                 popcount += tmp & 1;
@@ -106,7 +112,7 @@ public:
         return popcount == 1;
     }
     
-    bool popcnt_is_one(uint from) const
+    bool popcnt_is_one(uint32_t from) const
     {
         from++;
         
@@ -114,7 +120,7 @@ public:
         tmp >>= from%64;
         if (tmp) return false;
         
-        for (uint i = from/64+1; i != size; i++)
+        for (uint32_t i = from/64+1; i != size; i++)
             if (mp[i]) return false;
         return true;
     }
@@ -126,7 +132,7 @@ public:
 
     inline const bool isZero() const
     {
-        for (uint i = 0; i != size; i++) {
+        for (uint32_t i = 0; i != size; i++) {
             if (mp[i]) return false;
         }
         return true;
@@ -137,17 +143,17 @@ public:
         memset(mp, 0, sizeof(uint64_t)*size);
     }
 
-    inline void clearBit(const uint i)
+    inline void clearBit(const uint32_t i)
     {
         mp[i/64] &= ~((uint64_t)1 << (i%64));
     }
 
     inline void invert_is_true(const bool b = true)
     {
-        is_true_internal ^= b;
+        is_true_internal ^= (uint64_t)b;
     }
 
-    inline void setBit(const uint i)
+    inline void setBit(const uint32_t i)
     {
         mp[i/64] |= ((uint64_t)1 << (i%64));
     }
@@ -163,7 +169,7 @@ public:
         uint64_t * __restrict mp1 = mp-1;
         uint64_t * __restrict mp2 = b.mp-1;
         
-        uint i = 2*(size+1);
+        uint32_t i = 2*(size+1);
         
         while(i != 0) {
             std::swap(*mp1, *mp2);
@@ -173,7 +179,7 @@ public:
         }
     }
 
-    inline const bool operator[](const uint& i) const
+    inline const bool operator[](const uint32_t& i) const
     {
         #ifdef DEBUG_ROW
         assert(size*64 > i);
@@ -183,14 +189,14 @@ public:
     }
 
     template<class T>
-    void set(const T& v, const vector<uint16_t>& var_to_col, const uint matrix_size)
+    void set(const T& v, const vector<uint16_t>& var_to_col, const uint32_t matrix_size)
     {
         assert(size == (matrix_size/64) + ((bool)(matrix_size % 64)));
         //mp = new uint64_t[size];
         setZero();
-        for (uint i = 0; i != v.size(); i++) {
-            const uint toset_var = var_to_col[v[i].var()];
-            assert(toset_var != UINT_MAX);
+        for (uint32_t i = 0; i != v.size(); i++) {
+            const uint32_t toset_var = var_to_col[v[i].var()];
+            assert(toset_var != std::numeric_limits<uint32_t>::max());
             
             setBit(toset_var);
         }
@@ -206,28 +212,29 @@ public:
         assert(size > 0);
         #endif
         
-        for(uint i = var; i != size*64; i++)
+        for(uint32_t i = var; i != size*64; i++)
             if (this->operator[](i)) return i;
-        return ULONG_MAX;
+            return std::numeric_limits<unsigned long int>::max();
     }
 
     friend std::ostream& operator << (std::ostream& os, const PackedRow& m);
 
-    PackedRow(const uint _size, uint64_t*  const _mp) :
-        size(_size)
-        , mp(_mp+1)
-        , is_true_internal(*_mp)
-    {}
-
 private:
-    friend class PackedMatrix;    
-    const uint size;
+    friend class PackedMatrix;
+    PackedRow(const uint32_t _size, uint64_t*  const _mp) :
+        mp(_mp+1)
+        , is_true_internal(*_mp)
+        , size(_size)
+    {}
+    
     uint64_t* __restrict const mp;
     uint64_t& is_true_internal;
+    const uint32_t size;
 };
 
 std::ostream& operator << (std::ostream& os, const PackedRow& m);
-};
+
+}; //NAMESPACE MINISAT
 
 #endif //PACKEDROW_H
 

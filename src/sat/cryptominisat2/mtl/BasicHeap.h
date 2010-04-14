@@ -19,11 +19,18 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #ifndef BasicHeap_h
 #define BasicHeap_h
-#include "Vec.h"
 
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VERs
+
+#include "Vec.h"
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
 //=================================================================================================
 // A heap implementation with support for decrease/increase key.
@@ -96,7 +103,7 @@ class BasicHeap {
     int  getmin    ()      { return removeMin(); }
 };
 
-};
+}; //NAMESPACE MINISAT
 
 //=================================================================================================
 #endif

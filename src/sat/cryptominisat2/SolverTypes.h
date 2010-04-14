@@ -23,8 +23,13 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define SOLVERTYPES_H
 
 #include <cassert>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
 #include <stdint.h>
-#include "mtl/Alg.h"
+#endif //_MSC_VER
+
+#include "Alg.h"
 
 namespace MINISAT
 {
@@ -56,10 +61,10 @@ public:
         return Lit(x ^ 1);
     }
     Lit  operator^(const bool b) const {
-        return Lit(x ^ b);
+        return Lit(x ^ (uint32_t)b);
     }
     Lit& operator^=(const bool b) {
-        x ^= b;
+        x ^= (uint32_t)b;
         return *this;
     }
     bool sign() const {
@@ -109,7 +114,7 @@ public:
         return value;
     }
     inline const bool getBool() const {
-        return (value+1) >> 1;
+        return value == 1;
     }
     inline const bool operator==(lbool b) const {
         return value == b.value;
@@ -118,7 +123,7 @@ public:
         return value != b.value;
     }
     lbool operator^(const bool b) const {
-        return lbool(value - value*2*b);
+        return b ? lbool(-value) : lbool(value);
     }
     //lbool operator ^ (const bool b) const { return b ? lbool(-value) : lbool(value); }
 
@@ -165,6 +170,7 @@ const llbool l_Nothing  = toLbool(2);
 const llbool l_Continue = toLbool(3);
 
 lbool::lbool(llbool b) : value(b.value) {};
-};
+
+}; //NAMESPACE MINISAT
 
 #endif //SOLVERTYPES_H

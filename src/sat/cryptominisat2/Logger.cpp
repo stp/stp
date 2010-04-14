@@ -25,6 +25,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <limits>
 using std::cout;
 using std::endl;
 using std::ofstream;
@@ -34,12 +35,13 @@ using std::ofstream;
 #include "Solver.h"
 #include "Gaussian.h"
 
-namespace MINISAT
-{
-
 #define FST_WIDTH 10
 #define SND_WIDTH 35
 #define TRD_WIDTH 10
+
+namespace MINISAT
+{
+using namespace MINISAT;
 
 Logger::Logger(int& _verbosity) :
     proof_graph_on(false)
@@ -83,6 +85,7 @@ void Logger::new_var(const Var var)
         times_var_propagated.resize(var+1, 0);
         times_var_guessed.resize(var+1, 0);
         depths_of_assigns_for_var.resize(var+1);
+        depths_of_assigns_unit.resize(var+1, false);
     }
 }
 
@@ -94,6 +97,7 @@ void Logger::new_group(const uint group)
         times_group_caused_conflict.resize(group+1, 0);
         times_group_caused_propagation.resize(group+1, 0);
         depths_of_propagations_for_group.resize(group+1);
+        depths_of_propagations_unit.resize(group+1, false);
         depths_of_conflicts_for_group.resize(group+1);
     }
 }
@@ -227,18 +231,17 @@ void Logger::conflict(const confl_type type, const uint goback_level, const uint
 
     if (statistics_on) {
         times_group_caused_conflict[group]++;
-        depths_of_conflicts_for_group[group].push_back(S->decisionLevel());
+        depths_of_conflicts_for_group[group].sum += S->decisionLevel();
+        depths_of_conflicts_for_group[group].num ++;
         
         no_conflicts++;
         sum_conflict_depths += S->trail.size() - S->trail_lim[0];
         sum_decisions_on_branches += S->decisionLevel();
         sum_propagations_on_branches += S->trail.size() - S->trail_lim[0] - S->decisionLevel();
         
-        map<uint, uint>::iterator it = branch_depth_distrib.find(S->decisionLevel());
-        if (it == branch_depth_distrib.end())
-            branch_depth_distrib[S->decisionLevel()] = 1;
-        else
-            it->second++;
+        if (branch_depth_distrib.size() <= S->decisionLevel())
+            branch_depth_distrib.resize(S->decisionLevel()+1, 0);
+        branch_depth_distrib[S->decisionLevel()]++;
     }
 }
 
@@ -259,10 +262,10 @@ void Logger::propagation(const Lit lit, Clause* c)
             type = add_clause_type;
         else
             type = guess_type;
-        group = UINT_MAX;
+        group = std::numeric_limits<uint>::max();
     } else {
         type = simple_propagation_type;
-        group = c->group;
+        group = c->getGroup();
     }
 
     //graph
@@ -298,18 +301,23 @@ void Logger::propagation(const Lit lit, Clause* c)
     if (statistics_on) {
         switch (type) {
         case simple_propagation_type:
-            depths_of_propagations_for_group[group].push_back(S->decisionLevel());
+            depths_of_propagations_for_group[group].sum += S->decisionLevel();
+            depths_of_propagations_for_group[group].num ++;
+            if (S->decisionLevel() == 0) depths_of_propagations_unit[group] = true;
             times_group_caused_propagation[group]++;
         case add_clause_type:
             no_propagations++;
             times_var_propagated[lit.var()]++;
-            depths_of_assigns_for_var[lit.var()].push_back(S->decisionLevel());
+            depths_of_assigns_for_var[lit.var()].sum += S->decisionLevel();
+            depths_of_assigns_for_var[lit.var()].num ++;
+            if (S->decisionLevel() == 0) depths_of_assigns_unit[lit.var()] = true;
             break;
         case guess_type:
             no_decisions++;
             times_var_guessed[lit.var()]++;
             
-            depths_of_assigns_for_var[lit.var()].push_back(S->decisionLevel());
+            depths_of_assigns_for_var[lit.var()].sum += S->decisionLevel();
+            depths_of_assigns_for_var[lit.var()].num ++;
             break;
         }
     }
@@ -362,16 +370,10 @@ void Logger::print_assign_var_order() const
 {
     vector<pair<double, uint> > prop_ordered;
     for (uint i = 0; i < depths_of_assigns_for_var.size(); i++) {
-        double avg = 0.0;
-        bool was_unit = false;
-        for (vector<uint>::const_iterator it = depths_of_assigns_for_var[i].begin(); it != depths_of_assigns_for_var[i].end(); it++) {
-            avg += *it;
-            if (*it == 0) was_unit = true;
-        }
-        if (depths_of_assigns_for_var[i].size() > 0 && !was_unit) {
-            avg /= (double) depths_of_assigns_for_var[i].size();
+        double avg = (double)depths_of_assigns_for_var[i].sum
+                    /(double)depths_of_assigns_for_var[i].num;
+        if (depths_of_assigns_for_var[i].num > 0 && !depths_of_assigns_unit[i])
             prop_ordered.push_back(std::make_pair(avg, i));
-        }
     }
 
     if (!prop_ordered.empty()) {
@@ -388,16 +390,10 @@ void Logger::print_prop_order() const
 {
     vector<pair<double, uint> > prop_ordered;
     for (uint i = 0; i < depths_of_propagations_for_group.size(); i++) {
-        double avg = 0.0;
-        bool was_unit = false;
-        for (vector<uint>::const_iterator it = depths_of_propagations_for_group[i].begin(); it != depths_of_propagations_for_group[i].end(); it++) {
-            avg += *it;
-            if (*it == 0) was_unit = true;
-        }
-        if (depths_of_propagations_for_group[i].size() > 0 && !was_unit) {
-            avg /= (double) depths_of_propagations_for_group[i].size();
+        double avg = (double)depths_of_propagations_for_group[i].sum
+                    /(double)depths_of_propagations_for_group[i].num;
+        if (depths_of_propagations_for_group[i].num > 0 && !depths_of_propagations_unit[i])
             prop_ordered.push_back(std::make_pair(avg, i));
-        }
     }
 
     if (!prop_ordered.empty()) {
@@ -414,13 +410,10 @@ void Logger::print_confl_order() const
 {
     vector<pair<double, uint> > confl_ordered;
     for (uint i = 0; i < depths_of_conflicts_for_group.size(); i++) {
-        double avg = 0.0;
-        for (vector<uint>::const_iterator it = depths_of_conflicts_for_group[i].begin(); it != depths_of_conflicts_for_group[i].end(); it++)
-            avg += *it;
-        if (depths_of_conflicts_for_group[i].size() > 0) {
-            avg /= (double) depths_of_conflicts_for_group[i].size();
+        double avg = (double)depths_of_conflicts_for_group[i].sum
+                    /(double)depths_of_conflicts_for_group[i].num;
+        if (depths_of_conflicts_for_group[i].num > 0)
             confl_ordered.push_back(std::make_pair(avg, i));
-        }
     }
 
     if (!confl_ordered.empty()) {
@@ -556,11 +549,10 @@ void Logger::print_branch_depth_distrib() const
     const uint range = 20;
     map<uint, uint> range_stat;
 
-    for (map<uint, uint>::const_iterator it = branch_depth_distrib.begin(); it != branch_depth_distrib.end(); it++) {
-        //cout << it->first << " : " << it->second << endl;
-        range_stat[it->first/range] += it->second;
+    uint i = 0;
+    for (vector<uint>::const_iterator it = branch_depth_distrib.begin(); it != branch_depth_distrib.end(); it++, i++) {
+        range_stat[i/range] += *it;
     }
-    //cout << endl;
 
     print_footer();
     print_simple_line(" No. search branches with branch depth between");
@@ -571,9 +563,9 @@ void Logger::print_branch_depth_distrib() const
     ss << "branch_depths/branch_depth_file" << runid << "-" << S->starts << ".txt";
     ofstream branch_depth_file;
     branch_depth_file.open(ss.str().c_str());
-    uint i = 0;
+    i = 0;
     
-    for (map<uint, uint>::iterator it = range_stat.begin(); it != range_stat.end(); it++) {
+    for (map<uint, uint>::iterator it = range_stat.begin(); it != range_stat.end(); it++, i++) {
         std::stringstream ss2;
         ss2 << it->first*range << " - " << it->first*range + range-1;
         print_line(ss2.str(), it->second);
@@ -586,7 +578,6 @@ void Logger::print_branch_depth_distrib() const
                 branch_depth_file << "\"\"";
             branch_depth_file << endl;
         }
-        i++;
     }
     if (branch_depth_file.is_open())
         branch_depth_file.close();
@@ -713,11 +704,15 @@ void Logger::print_learnt_unitaries(const uint from, const string display) const
     print_footer();
     print_simple_line(display);
     print_header("var", "name", "value");
-    for (uint i = from; i < S->trail.size(); i++) {
+    uint32_t until;
+    if (S->decisionLevel() > 0)
+        until = S->trail_lim[0];
+    else
+        until = S->trail.size();
+    for (uint i = from; i < until; i++) {
         Var var = S->trail[i].var();
-        bool sign = S->trail[i].sign();
-        std::stringstream ss;
-        print_line(var+1, varnames[var], sign);
+        bool value = !(S->trail[i].sign());
+        print_line(var+1, varnames[var], value);
     }
     print_footer();
 }
@@ -850,16 +845,27 @@ void Logger::reset_statistics()
     for (vecit it = props_by_group.begin(); it != props_by_group.end(); it++)
         *it = 0;
 
-    typedef vector<vector<uint> >::iterator vecvecit;
+    typedef vector<MyAvg>::iterator avgIt;
 
-    for (vecvecit it = depths_of_propagations_for_group.begin(); it != depths_of_propagations_for_group.end(); it++)
-        it->clear();
+    for (avgIt it = depths_of_propagations_for_group.begin(); it != depths_of_propagations_for_group.end(); it++) {
+        it->sum = 0;
+        it->num = 0;
+    }
 
-    for (vecvecit it = depths_of_conflicts_for_group.begin(); it != depths_of_conflicts_for_group.end(); it++)
-        it->clear();
+    for (avgIt it = depths_of_conflicts_for_group.begin(); it != depths_of_conflicts_for_group.end(); it++) {
+        it->sum = 0;
+        it->num = 0;
+    }
 
-    for (vecvecit it = depths_of_assigns_for_var.begin(); it != depths_of_assigns_for_var.end(); it++)
-        it->clear();
+    for (avgIt it = depths_of_assigns_for_var.begin(); it != depths_of_assigns_for_var.end(); it++) {
+        it->sum = 0;
+        it->num = 0;
+    }
+    for (uint i = 0; i < depths_of_assigns_unit.size(); i++)
+        depths_of_assigns_unit[i] = false;
+    
+    for (uint i = 0; i < depths_of_propagations_unit.size(); i++)
+        depths_of_propagations_unit[i] = false;
 
     sum_conflict_depths = 0;
     no_conflicts = 0;
@@ -871,4 +877,4 @@ void Logger::reset_statistics()
     last_unitary_learnt_clauses = S->get_unitary_learnts_num();
 }
 
-};
+}; //NAMESPACE MINISAT

@@ -21,14 +21,18 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Heap_h
 
 #include "Vec.h"
+
 #include "string.h"
+#include <limits>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
 #include <stdint.h>
-#ifndef UINT32_MAX
-#define UINT32_MAX ((uint32_t)-1)
-#endif
+#endif //_MSC_VER
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
 //=================================================================================================
 // A heap implementation with support for decrease/increase key.
@@ -87,10 +91,25 @@ class Heap {
         indices.growTo(other.indices.size());
         memcpy(indices.getData(), other.indices.getData(), sizeof(uint32_t)*other.indices.size());
     }
+    
+    void operator=(const Heap<Comp>& other)
+    {
+        if (other.heap.size() > heap.size())
+            heap.growTo(other.heap.size());
+        else
+            heap.shrink(other.heap.size()-heap.size());
+        memcpy(heap.getData(), other.heap.getData(), heap.size()*sizeof(uint32_t));
+        
+        if (other.indices.size() > indices.size())
+            indices.growTo(other.indices.size());
+        else
+            indices.shrink(other.indices.size()-indices.size());
+        memcpy(indices.getData(), other.indices.getData(), indices.size()*sizeof(uint32_t));
+    }
 
     uint32_t  size      ()          const { return heap.size(); }
     bool empty     ()          const { return heap.size() == 0; }
-    bool inHeap    (uint32_t n)     const { return n < indices.size() && indices[n] != UINT32_MAX; }
+    bool inHeap    (uint32_t n)     const { return n < indices.size() && indices[n] != std::numeric_limits<uint32_t>::max(); }
     uint32_t  operator[](uint32_t index) const { assert(index < heap.size()); return heap[index]; }
 
     void decrease  (uint32_t n) { assert(inHeap(n)); percolateUp(indices[n]); }
@@ -101,7 +120,7 @@ class Heap {
 
     void insert(uint32_t n)
     {
-        indices.growTo(n+1, UINT32_MAX);
+        indices.growTo(n+1, std::numeric_limits<uint32_t>::max());
         assert(!inHeap(n));
 
         indices[n] = heap.size();
@@ -115,7 +134,7 @@ class Heap {
         uint32_t x            = heap[0];
         heap[0]          = heap.last();
         indices[heap[0]] = 0;
-        indices[x]       = UINT32_MAX;
+        indices[x]       = std::numeric_limits<uint32_t>::max();
         heap.pop();
         if (heap.size() > 1) percolateDown(0);
         return x; 
@@ -125,10 +144,10 @@ class Heap {
     void clear(bool dealloc = false) 
     { 
         for (uint32_t i = 0; i != heap.size(); i++)
-            indices[heap[i]] = UINT32_MAX;
+            indices[heap[i]] = std::numeric_limits<uint32_t>::max();
 #ifndef NDEBUG
         for (uint32_t i = 0; i != indices.size(); i++)
-            assert(indices[i] == UINT32_MAX);
+            assert(indices[i] == std::numeric_limits<uint32_t>::max());
 #endif
         heap.clear(dealloc); 
     }
@@ -156,7 +175,7 @@ class Heap {
                 heap[j]          = heap[i];
                 indices[heap[i]] = j++;
             }else
-                indices[heap[i]] = UINT32_MAX;
+                indices[heap[i]] = std::numeric_limits<uint32_t>::max();
 
         heap.shrink(i - j);
         for (int i = heap.size() / 2 - 1; i >= 0; i--)
@@ -178,7 +197,8 @@ class Heap {
 
 };
 
-};
-
 //=================================================================================================
+
+}; //NAMESPACE MINISAT
+
 #endif

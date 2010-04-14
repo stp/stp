@@ -26,9 +26,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <map>
 #include <iomanip>
 #include <math.h>
-namespace MINISAT
-{
-
 using std::set;
 using std::map;
 
@@ -37,11 +34,14 @@ using std::map;
 using std::cout;
 using std::endl;
 
+namespace MINISAT
+{
+using namespace MINISAT;
+
 //#define PART_FINDING
 
-MatrixFinder::MatrixFinder(Solver *_s) :
-    unAssigned(_s->nVars() + 1)
-    , S(_s)
+MatrixFinder::MatrixFinder(Solver& _solver) :
+    solver(_solver)
 {
 }
 
@@ -73,20 +73,21 @@ inline const bool MatrixFinder::firstPartOfSecond(const XorClause& c1, const Xor
 const uint MatrixFinder::findMatrixes()
 {
     table.clear();
-    table.resize(S->nVars(), unAssigned);
+    table.resize(solver.nVars(), var_Undef);
     reverseTable.clear();
     matrix_no = 0;
     
-    if (S->xorclauses.size() == 0)
+    if (solver.xorclauses.size() == 0)
         return 0;
     
-    S->clauseCleaner->cleanClauses(S->xorclauses, ClauseCleaner::xorclauses);
+    solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
+    //TODO check for solver.ok == false
     
-    for (XorClause** c = S->xorclauses.getData(), **end = c + S->xorclauses.size(); c != end; c++) {
+    for (XorClause** c = solver.xorclauses.getData(), **end = c + solver.xorclauses.size(); c != end; c++) {
         set<uint> tomerge;
         vector<Var> newSet;
         for (Lit *l = &(**c)[0], *end2 = l + (**c).size(); l != end2; l++) {
-            if (table[l->var()] != unAssigned)
+            if (table[l->var()] != var_Undef)
                 tomerge.insert(table[l->var()]);
             else
                 newSet.push_back(l->var());
@@ -138,7 +139,7 @@ const uint MatrixFinder::setMatrixes()
     vector<vector<Var> > xorFingerprintInMatrix(matrix_no);
     #endif
     
-    for (XorClause** c = S->xorclauses.getData(), **end = c + S->xorclauses.size(); c != end; c++) {
+    for (XorClause** c = solver.xorclauses.getData(), **end = c + solver.xorclauses.size(); c != end; c++) {
         XorClause& x = **c;
         const uint matrix = table[x[0].var()];
         assert(matrix < matrix_no);
@@ -174,23 +175,23 @@ const uint MatrixFinder::setMatrixes()
         double variance = 0.0;
         for (uint i2 = 0; i2 < xorSizesInMatrix[i].size(); i2++)
             variance += pow((double)xorSizesInMatrix[i][i2]-avg, 2);
-        variance /= xorSizesInMatrix.size();
+        variance /= (double)xorSizesInMatrix.size();
         const double stdDeviation = sqrt(variance);
         
         if (numXorInMatrix[a].second >= 20
             && numXorInMatrix[a].second <= 1000
             && realMatrixNum < 3)
         {
-            if (S->verbosity >=1)
+            if (solver.verbosity >=1)
                 cout << "c |  Matrix no " << std::setw(4) << realMatrixNum;
-            S->gauss_matrixes.push_back(new Gaussian(*S, S->gaussconfig, realMatrixNum, xorsInMatrix[i]));
+            solver.gauss_matrixes.push_back(new Gaussian(solver, solver.gaussconfig, realMatrixNum, xorsInMatrix[i]));
             realMatrixNum++;
             
         } else {
-            if (S->verbosity >=1  && numXorInMatrix[a].second >= 20)
+            if (solver.verbosity >=1  /*&& numXorInMatrix[a].second >= 20*/)
                 cout << "c |  Unused Matrix ";
         }
-        if (S->verbosity >=1 && numXorInMatrix[a].second >= 20) {
+        if (solver.verbosity >=1 /*&& numXorInMatrix[a].second >= 20*/) {
             cout << std::setw(5) << numXorInMatrix[a].second << " x" << std::setw(5) << reverseTable[i].size();
             cout << "  density:" << std::setw(5) << std::fixed << std::setprecision(1) << density << "%";
             cout << "  xorlen avg:" << std::setw(5) << std::fixed << std::setprecision(2)  << avg;
@@ -219,4 +220,5 @@ void MatrixFinder::findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClau
         }
     }
 }
-};
+
+}; //NAMESPACE MINISAT

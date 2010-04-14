@@ -20,13 +20,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 //#define DEBUG_BITARRAY
 
-#include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
 
-#ifndef uint
-#define uint unsigned int
-#endif
+namespace MINISAT
+{
+using namespace MINISAT;
 
 class BitArray
 {
@@ -123,6 +127,8 @@ private:
     uint size;
     uint64_t* mp;
 };
+
+}; //NAMESPACE MINISAT
 
 #endif //BITARRAY_H
 

@@ -5,7 +5,8 @@ SRCS=$(wildcard  *.cpp)
 SRCS+=$(wildcard  NodeFactory/*.cpp)
 OBJS = $(SRCS:.cpp=.o)
 OBJS+= ASTKind.o
-CFLAGS += -I$(MTL)
+CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
+
 
 #Make the ast library for use by other modules
 libast.a:$(OBJS) depend

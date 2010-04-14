@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************************************/
 
-#ifndef MATRIXFINDER_H
-#define MATRIXFINDER_H
+#ifndef PARTFINDER_H
+#define PARTFINDER_H
 
 #include <vector>
 #include <map>
@@ -27,7 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif //_MSC_VER
 
 #include "Clause.h"
-#include "Solver.h"
 
 namespace MINISAT
 {
@@ -39,14 +38,21 @@ using std::map;
 using std::vector;
 using std::pair;
 
-class MatrixFinder {
+class PartFinder {
     
     public:
-        MatrixFinder(Solver& solver);
-        const uint findMatrixes();
+        PartFinder(Solver& solver);
+        const bool findParts();
+        
+        const map<uint32_t, vector<Var> >& getReverseTable() const; // part->var
+        const uint32_t getVarPart(const Var var) const;
+        const vector<uint32_t>& getTable() const; //var -> part
+        const vector<Var>& getPartVars(const uint32_t part);
     
     private:
-        const uint setMatrixes();
+        const uint setParts();
+        template<class T>
+        void addToPart(const vec<T*>& cs);
         
         struct mysorter
         {
@@ -56,17 +62,37 @@ class MatrixFinder {
             }
         };
         
-        void findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClause*>& xorsInMatrix);
-        inline const Var fingerprint(const XorClause& c) const;
-        inline const bool firstPartOfSecond(const XorClause& c1, const XorClause& c2) const;
+        //const bool findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClause*>& xorsInMatrix);
+        template<class T>
+        void calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart, vector<uint>& sumLitsInPart);
         
-        map<uint, vector<Var> > reverseTable; //matrix -> vars
-        vector<Var> table; //var -> matrix
-        uint matrix_no;
+        map<uint32_t, vector<Var> > reverseTable; //part -> vars
+        vector<uint32_t> table; //var -> part
+        uint32_t part_no;
         
         Solver& solver;
 };
 
+inline const map<uint32_t, vector<Var> >& PartFinder::getReverseTable() const
+{
+    return reverseTable;
+}
+
+inline const vector<Var>& PartFinder::getTable() const
+{
+    return table;
+}
+
+inline const uint32_t PartFinder::getVarPart(const Var var) const
+{
+    return table[var];
+}
+
+inline const vector<Var>& PartFinder::getPartVars(const uint32_t part)
+{
+    return reverseTable[part];
+}
+
 }; //NAMESPACE MINISAT
 
-#endif //MATRIXFINDER_H
+#endif //PARTFINDER_H

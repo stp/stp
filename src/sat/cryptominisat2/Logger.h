@@ -25,28 +25,40 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <vector>
 #include <string>
 #include <map>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
 
-#include "mtl/Vec.h"
-#include "mtl/Heap.h"
-#include "mtl/Alg.h"
+#include "Vec.h"
+#include "Heap.h"
+#include "Alg.h"
 #include "SolverTypes.h"
-#include "stdint.h"
 #include "limits.h"
 #include "Clause.h"
-
-#ifndef uint
-#define uint unsigned int
-#endif
-
-namespace MINISAT
-{
 
 using std::vector;
 using std::pair;
 using std::string;
 using std::map;
 
+namespace MINISAT
+{
+using namespace MINISAT;
+
 class Solver;
+
+class MyAvg {
+public:
+    MyAvg() :
+        sum(0)
+        , num(0)
+        {}
+    
+    uint sum;
+    uint num;
+};
 
 class Logger
 {
@@ -143,12 +155,14 @@ private:
     vector<uint> times_group_caused_conflict;
     vector<uint> times_group_caused_propagation;
 
-    vector<vector<uint> > depths_of_propagations_for_group;
-    vector<vector<uint> > depths_of_conflicts_for_group;
-    vector<vector<uint> > depths_of_assigns_for_var;
+    vector<MyAvg> depths_of_propagations_for_group;
+    vector<bool>  depths_of_propagations_unit;
+    vector<MyAvg> depths_of_conflicts_for_group;
+    vector<MyAvg> depths_of_assigns_for_var;
+    vector<bool>  depths_of_assigns_unit;
 
     //the distribution of branch depths. first = depth, second = number of occurances
-    map<uint, uint> branch_depth_distrib;
+    vector<uint> branch_depth_distrib;
 
     uint sum_conflict_depths;
     uint no_conflicts;
@@ -168,5 +182,6 @@ private:
     uint proofStarts;
 };
 
-};
+}; //NAMESPACE MINISAT
+
 #endif //LOGGER_H

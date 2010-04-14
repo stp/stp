@@ -18,49 +18,49 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FindUndef.h"
 
 #include "Solver.h"
+#include "VarReplacer.h"
 #include <algorithm>
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
-FindUndef::FindUndef(Solver& _s) :
-    S(_s)
+FindUndef::FindUndef(Solver& _solver) :
+    solver(_solver)
     , isPotentialSum(0)
 {
-    dontLookAtClause.resize(S.clauses.size(), false);
-    isPotential.resize(S.nVars(), false);
-    fillPotential();
-    satisfies.resize(S.nVars(), 0);
 }
 
 void FindUndef::fillPotential()
 {
-    int trail = S.decisionLevel()-1;
+    int trail = solver.decisionLevel()-1;
     
     while(trail > 0) {
-        assert(trail < S.trail_lim.size());
-        uint at = S.trail_lim[trail];
+        assert(trail < solver.trail_lim.size());
+        uint at = solver.trail_lim[trail];
         
         assert(at > 0);
-        Var v = S.trail[at].var();
-        isPotential[v] = true;
-        isPotentialSum++;
+        Var v = solver.trail[at].var();
+        if (solver.assigns[v] != l_Undef) {
+            isPotential[v] = true;
+            isPotentialSum++;
+        }
         
         trail--;
     }
     
-    for (XorClause** it = S.xorclauses.getData(), **end = it + S.xorclauses.size(); it != end; it++) {
+    for (XorClause** it = solver.xorclauses.getData(), **end = it + solver.xorclauses.size(); it != end; it++) {
         XorClause& c = **it;
         for (Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
             if (isPotential[l->var()]) {
                 isPotential[l->var()] = false;
                 isPotentialSum--;
             }
-            assert(!S.value(*l).isUndef());
+            assert(!solver.value(*l).isUndef());
         }
     }
     
-    vector<Var> replacingVars = S.varReplacer->getReplacingVars();
+    vector<Var> replacingVars = solver.varReplacer->getReplacingVars();
     for (Var *it = &replacingVars[0], *end = it + replacingVars.size(); it != end; it++) {
         if (isPotential[*it]) {
             isPotential[*it] = false;
@@ -73,11 +73,35 @@ void FindUndef::unboundIsPotentials()
 {
     for (uint i = 0; i < isPotential.size(); i++)
         if (isPotential[i])
-            S.assigns[i] = l_Undef;
+            solver.assigns[i] = l_Undef;
+}
+
+void FindUndef::moveBinToNormal()
+{
+    binPosition = solver.clauses.size();
+    for (uint i = 0; i != solver.binaryClauses.size(); i++)
+        solver.clauses.push(solver.binaryClauses[i]);
+    solver.binaryClauses.clear();
+}
+
+void FindUndef::moveBinFromNormal()
+{
+    for (uint i = binPosition; i != solver.clauses.size(); i++)
+        solver.binaryClauses.push(solver.clauses[i]);
+    solver.clauses.shrink(solver.clauses.size() - binPosition);
 }
 
 const uint FindUndef::unRoll()
 {
+    if (solver.decisionLevel() == 0) return 0;
+    
+    moveBinToNormal();
+    
+    dontLookAtClause.resize(solver.clauses.size(), false);
+    isPotential.resize(solver.nVars(), false);
+    fillPotential();
+    satisfies.resize(solver.nVars(), 0);
+    
     while(!updateTables()) {
         assert(isPotentialSum > 0);
         
@@ -97,6 +121,7 @@ const uint FindUndef::unRoll()
     }
     
     unboundIsPotentials();
+    moveBinFromNormal();
     
     return isPotentialSum;
 }
@@ -106,16 +131,16 @@ bool FindUndef::updateTables()
     bool allSat = true;
     
     uint i = 0;
-    for (Clause** it = S.clauses.getData(), **end = it + S.clauses.size(); it != end; it++, i++) {
+    for (Clause** it = solver.clauses.getData(), **end = it + solver.clauses.size(); it != end; it++, i++) {
         if (dontLookAtClause[i])
             continue;
         
         Clause& c = **it;
         bool definitelyOK = false;
-        Var v;
+        Var v = var_Undef;
         uint numTrue = 0;
         for (Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
-            if (S.value(*l) == l_True) {
+            if (solver.value(*l) == l_True) {
                 if (!isPotential[l->var()]) {
                     dontLookAtClause[i] = true;
                     definitelyOK = true;
@@ -130,19 +155,22 @@ bool FindUndef::updateTables()
             continue;
         
         if (numTrue == 1) {
+            assert(v != var_Undef);
             isPotential[v] = false;
             isPotentialSum--;
             dontLookAtClause[i] = true;
             continue;
         }
         
+        //numTrue > 1
         allSat = false;
         for (Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
-            if (S.value(*l) == l_True)
+            if (solver.value(*l) == l_True)
                 satisfies[l->var()]++;
         }
     }
     
     return allSat;
 }
-};
+
+}; //NAMESPACE MINISAT

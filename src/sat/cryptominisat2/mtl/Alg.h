@@ -19,13 +19,20 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #ifndef Alg_h
 #define Alg_h
-#include "stdint.h"
+
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
+namespace MINISAT
+{
+using namespace MINISAT;
 
 //=================================================================================================
 // Useful functions on vectors
 
-namespace MINISAT
-{
 
 template<class V, class T>
 static inline void remove(V& ts, const T& t)
@@ -63,6 +70,6 @@ static inline bool findW(V& ts, const T& t)
     return j < ts.size();
 }
 
-};
+}; //NAMESPACE MINISAT
 
 #endif

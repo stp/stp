@@ -62,7 +62,7 @@ Gaussian::Gaussian(Solver& _solver, const GaussianConfig& _config, const uint _m
 Gaussian::~Gaussian()
 {
     for (uint i = 0; i < clauses_toclear.size(); i++)
-        free(clauses_toclear[i].first);
+        clauseFree(clauses_toclear[i].first);
 }
 
 inline void Gaussian::set_matrixset_to_cur()
@@ -85,6 +85,8 @@ llbool Gaussian::full_init()
     while (do_again_gauss) {
         do_again_gauss = false;
         solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
+        if (solver.ok == false)
+            return l_False;
         init();
         Clause* confl;
         gaussian_ret g = gaussian(confl);
@@ -133,16 +135,11 @@ uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col, matrixset& origM
 
     uint num_xorclauses  = 0;
     for (uint32_t i = 0; i != xorclauses.size(); i++) {
-        #ifdef DEBUG_GAUSS
-        assert(xorclauses[i]->mark() || !Solver.cpplauseCleaner->satisfied(*xorclauses[i]));
-        #endif
-        if (!xorclauses[i]->mark()) {
-            num_xorclauses++;
-            XorClause& c = *xorclauses[i];
-            for (uint i2 = 0; i2 < c.size(); i2++) {
-                assert(solver.assigns[c[i2].var()].isUndef());
-                var_to_col[c[i2].var()] = unassigned_col - 1;
-            }
+        num_xorclauses++;
+        XorClause& c = *xorclauses[i];
+        for (uint i2 = 0; i2 < c.size(); i2++) {
+            assert(solver.assigns[c[i2].var()].isUndef());
+            var_to_col[c[i2].var()] = unassigned_col - 1;
         }
     }
     
@@ -223,11 +220,9 @@ void Gaussian::fill_matrix(matrixset& origMat)
     for (uint32_t i = 0; i != xorclauses.size(); i++) {
         const XorClause& c = *xorclauses[i];
 
-        if (!c.mark()) {
-            origMat.matrix.getVarsetAt(matrix_row).set(c, var_to_col, origMat.num_cols);
-            origMat.matrix.getMatrixAt(matrix_row).set(c, var_to_col, origMat.num_cols);
-            matrix_row++;
-        }
+        origMat.matrix.getVarsetAt(matrix_row).set(c, var_to_col, origMat.num_cols);
+        origMat.matrix.getMatrixAt(matrix_row).set(c, var_to_col, origMat.num_cols);
+        matrix_row++;
     }
     assert(origMat.num_rows == matrix_row);
 }
@@ -552,11 +547,11 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_confl(Clause*& confl, const matri
     assert(best_row != UINT_MAX);
 
     m.matrix.getVarsetAt(best_row).fill(tmp_clause, solver.assigns, col_to_var_original);
-    confl = Clause_new(tmp_clause, solver.learnt_clause_group++, false);
+    confl = (Clause*)XorClause_new(tmp_clause, false, solver.learnt_clause_group++);
     Clause& cla = *confl;
     #ifdef STATS_NEEDED
     if (solver.dynamic_behaviour_analysis)
-        solver.logger.set_group_name(confl->group, "learnt gauss clause");
+        solver.logger.set_group_name(confl->getGroup(), "learnt gauss clause");
     #endif
     
     if (cla.size() <= 1)
@@ -571,7 +566,7 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_confl(Clause*& confl, const matri
     if (maxlevel != solver.decisionLevel()) {
         #ifdef STATS_NEEDED
         if (solver.dynamic_behaviour_analysis)
-            solver.logger.conflict(Logger::gauss_confl_type, maxlevel, confl->group, *confl);
+            solver.logger.conflict(Logger::gauss_confl_type, maxlevel, confl->getGroup(), *confl);
         #endif
         solver.cancelUntil(maxlevel);
     }
@@ -668,7 +663,7 @@ void Gaussian::cancel_until_sublevel(const uint sublevel)
     cout << "(" << matrix_no << ")Canceling until sublevel " << sublevel << endl;
     #endif
     
-    for (Gaussian **gauss = &(solver.gauss_matrixes[0]), **end= gauss + solver.gauss_matrixes.size(); gauss != end; gauss++)
+    for (vector<Gaussian*>::iterator gauss = solver.gauss_matrixes.begin(), end= solver.gauss_matrixes.end(); gauss != end; gauss++)
         if (*gauss != this) (*gauss)->canceling(sublevel);
 
     for (int level = solver.trail.size()-1; level >= (int)sublevel; level--) {
@@ -764,7 +759,7 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_prop(matrixset& m, const uint row
     #endif
 
     m.matrix.getVarsetAt(row).fill(tmp_clause, solver.assigns, col_to_var_original);
-    Clause& cla = *Clause_new(tmp_clause, solver.learnt_clause_group++, false);
+    Clause& cla = *(Clause*)XorClause_new(tmp_clause, false, solver.learnt_clause_group++);
     #ifdef VERBOSE_DEBUG
     cout << "(" << matrix_no << ")matrix prop clause: ";
     cla.plainPrint();
@@ -785,7 +780,7 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_prop(matrixset& m, const uint row
     clauses_toclear.push_back(std::make_pair(&cla, solver.trail.size()-1));
     #ifdef STATS_NEEDED
     if (solver.dynamic_behaviour_analysis)
-        solver.logger.set_group_name(cla.group, "gauss prop clause");
+        solver.logger.set_group_name(cla.getGroup(), "gauss prop clause");
     #endif
     solver.uncheckedEnqueue(cla[0], &cla);
 
@@ -796,9 +791,9 @@ void Gaussian::disable_if_necessary()
 {
     if (//nof_conflicts >= 0
         //&& conflictC >= nof_conflicts/8
-        /*&&*/ called > 100
-        && (double)useful_confl/(double)called < 0.1
-        && (double)useful_prop/(double)called < 0.3 )
+        !config.dontDisable
+        && called > 50
+        && useful_confl*2+useful_prop < (uint)((double)called*0.05) )
             disabled = true;
 }
 
@@ -814,8 +809,8 @@ llbool Gaussian::find_truths(vec<Lit>& learnt_clause, int& conflictC)
         switch (g) {
         case conflict: {
             useful_confl++;
-            llbool ret = solver.handle_conflict(learnt_clause, confl, conflictC);
-            free(confl);
+            llbool ret = solver.handle_conflict(learnt_clause, confl, conflictC, true);
+            clauseFree(confl);
             
             if (ret != l_Nothing) return ret;
             return l_Continue;
@@ -834,19 +829,19 @@ llbool Gaussian::find_truths(vec<Lit>& learnt_clause, int& conflictC)
             Lit lit = (*confl)[0];
             #ifdef STATS_NEEDED
             if (solver.dynamic_behaviour_analysis)
-                solver.logger.conflict(Logger::gauss_confl_type, 0, confl->group, *confl);
+                solver.logger.conflict(Logger::gauss_confl_type, 0, confl->getGroup(), *confl);
             #endif
             
             solver.cancelUntil(0);
             
             if (solver.assigns[lit.var()].isDef()) {
-                free(confl);
+                clauseFree(confl);
                 return l_False;
             }
             
             solver.uncheckedEnqueue(lit);
             
-            free(confl);
+            clauseFree(confl);
             return l_Continue;
         }
         case nothing:
@@ -990,7 +985,7 @@ const bool Gaussian::check_last_one_in_cols(matrixset& m) const
     return true;
 }
 
-const bool Gaussian::check_matrix_against_varset(PackedMatrix& matrix, const matrixset& m) const
+void Gaussian::check_matrix_against_varset(PackedMatrix& matrix, const matrixset& m) const
 {
     for (uint i = 0; i < matrix.getSize(); i++) {
         const PackedRow mat_row = matrix.getMatrixAt(i);
@@ -1164,4 +1159,4 @@ void Gaussian::set_disabled(const bool toset)
 #endif
 }*/
 
-};
+}; //NAMESPACE MINISAT

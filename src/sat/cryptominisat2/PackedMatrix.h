@@ -18,25 +18,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef PACKEDMATRIX_H
 #define PACKEDMATRIX_H
 
-#include "PackedRow.h"
 #include <algorithm>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
+#include "PackedRow.h"
 
 //#define DEBUG_MATRIX
 
-#ifndef uint
-#define uint unsigned int
-#endif
-
 namespace MINISAT
 {
+using namespace MINISAT;
 
 class PackedMatrix
 {
 public:
     PackedMatrix() :
-        numRows(0)
+        mp(NULL)
+        , numRows(0)
         , numCols(0)
-        , mp(NULL)
     {
     }
     
@@ -210,11 +213,12 @@ public:
 
 private:
     
+    uint64_t* mp;
     uint numRows;
     uint numCols;
-    uint64_t* mp;
 };
-};
+
+}; //NAMESPACE MINISAT
 
 #endif //PACKEDMATRIX_H
 

@@ -21,52 +21,92 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <map>
 #include <set>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
 #include "Clause.h"
 #include "VarReplacer.h"
+#include "Solver.h"
 
 using std::vector;
 using std::pair;
 using std::map;
 using std::set;
 
-class Solver;
-
 namespace MINISAT
 {
 using namespace MINISAT;
 
+class Solver;
+
 class Conglomerate
 {
 public:
-    Conglomerate(Solver *S);
+    Conglomerate(Solver& solver);
     ~Conglomerate();
-    uint conglomerateXors(); ///<Conglomerate XOR-s that are attached using a variable
-    void addRemovedClauses(); ///<Add clauses that have been removed. Used if solve() is called multiple times
+    const bool conglomerateXorsFull();
+    const bool heuleProcessFull();
+    const bool addRemovedClauses(); ///<Add clauses that have been removed. Used if solve() is called multiple times
     void doCalcAtFinish(); ///<Calculate variables removed during conglomeration
+    
     const vec<XorClause*>& getCalcAtFinish() const;
     vec<XorClause*>& getCalcAtFinish();
     const vector<bool>& getRemovedVars() const;
+    
     void newVar();
     
 private:
     
-    void process_clause(XorClause& x, const uint num, Var remove_var, vec<Lit>& vars);
+    struct ClauseSetSorter {
+        bool operator () (const pair<XorClause*, uint32_t>& a, const pair<XorClause*, uint32_t>& b) {
+            return a.first->size() < b.first->size();
+        }
+    };
+    
+    const bool conglomerateXors();
+    const bool heuleProcess();
+    
+    void fillNewSet(vector<vector<Lit> >& newSet, vector<pair<XorClause*, uint32_t> >& clauseSet) const;
+    
+    void removeVar(const Var var);
+    void processClause(XorClause& x, uint32_t num, Var remove_var);
+    void blockVars();
     void fillVarToXor();
-    void clearDouble(vec<Lit>& ps) const;
+    void clearDouble(vector<Lit>& ps) const;
     void clearToRemove();
     void clearLearntsFromToRemove();
-    bool dealWithNewClause(vec<Lit>& ps, const bool inverted, const uint old_group);
+    bool dealWithNewClause(vector<Lit>& ps, const bool inverted, const uint old_group);
     
-    typedef map<uint, vector<pair<XorClause*, uint> > > varToXorMap;
+    typedef map<uint, vector<pair<XorClause*, uint32_t> > > varToXorMap;
     varToXorMap varToXor; 
     vector<bool> blocked;
     vector<bool> toRemove;
     vector<bool> removedVars;
     
     vec<XorClause*> calcAtFinish;
+    uint found;
     
-    Solver* S;
+    Solver& solver;
 };
-};
+
+inline const vector<bool>& Conglomerate::getRemovedVars() const
+{
+    return removedVars;
+}
+
+inline const vec<XorClause*>& Conglomerate::getCalcAtFinish() const
+{
+    return calcAtFinish;
+}
+
+inline vec<XorClause*>& Conglomerate::getCalcAtFinish()
+{
+    return calcAtFinish;
+}
+
+}; //NAMESPACE MINISAT
 
 #endif //CONGLOMERATE_H

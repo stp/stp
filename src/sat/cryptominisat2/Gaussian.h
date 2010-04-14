@@ -19,15 +19,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GAUSSIAN_H
 
 #include <vector>
+#include <limits>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
 #include "SolverTypes.h"
 #include "Solver.h"
 #include "GaussianConfig.h"
 #include "PackedMatrix.h"
 #include "BitArray.h"
-
-namespace MINISAT
-{
-using namespace MINISAT;
 
 //#define VERBOSE_DEBUG
 //#define DEBUG_GAUSS
@@ -38,10 +41,14 @@ using std::cout;
 using std::endl;
 #endif
 
+namespace MINISAT
+{
+using namespace MINISAT;
+
 class Clause;
 
-static const uint16_t unassigned_col = -1;
-static const Var unassigned_var = -1;
+static const uint16_t unassigned_col = std::numeric_limits<uint16_t>::max();
+static const Var unassigned_var = std::numeric_limits<Var>::max();
 
 class Gaussian
 {
@@ -155,7 +162,7 @@ private:
     void print_matrix_row(const T& row) const; // Print matrix row 'row'
     template<class T>
     void print_matrix_row_with_assigns(const T& row) const;
-    const bool check_matrix_against_varset(PackedMatrix& matrix,const matrixset& m) const;
+    void check_matrix_against_varset(PackedMatrix& matrix,const matrixset& m) const;
     const bool check_last_one_in_cols(matrixset& m) const;
     const void check_first_one_in_row(matrixset& m, const uint j);
     void print_matrix(matrixset& m) const;
@@ -165,13 +172,12 @@ private:
 
 inline bool Gaussian::should_init() const
 {
-    return (solver.starts >= config.starts_from && config.decision_until > 0);
+    return (config.decision_until > 0);
 }
 
 inline bool Gaussian::should_check_gauss(const uint decisionlevel, const uint starts) const
 {
     return (!disabled
-            && starts >= config.starts_from
             && decisionlevel < config.decision_until);
 }
 
@@ -181,7 +187,7 @@ inline void Gaussian::canceling(const uint sublevel)
         return;
     uint a = 0;
     for (int i = clauses_toclear.size()-1; i >= 0 && clauses_toclear[i].second > sublevel; i--) {
-        free(clauses_toclear[i].first);
+        clauseFree(clauses_toclear[i].first);
         a++;
     }
     clauses_toclear.resize(clauses_toclear.size()-a);
@@ -189,7 +195,7 @@ inline void Gaussian::canceling(const uint sublevel)
     if (messed_matrix_vars_since_reversal)
         return;
     int c = std::min((int)gauss_last_level, (int)(solver.trail.size())-1);
-    for (; c >= sublevel; c--) {
+    for (; c >= (int)sublevel; c--) {
         Var var  = solver.trail[c].var();
         if (var < var_is_in.getSize()
             && var_is_in[var]
@@ -201,6 +207,7 @@ inline void Gaussian::canceling(const uint sublevel)
 }
 
 std::ostream& operator << (std::ostream& os, const vec<Lit>& v);
-};
+
+}; //NAMESPACE MINISAT
 
 #endif //GAUSSIAN_H

@@ -19,13 +19,20 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #ifndef Vec_h
 #define Vec_h
+
 #include <cstdlib>
 #include <cassert>
 #include <new>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
 #include <stdint.h>
+#endif //_MSC_VER
 
 namespace MINISAT
 {
+using namespace MINISAT;
+
 //=================================================================================================
 // Automatically resizable arrays
 //
@@ -42,11 +49,13 @@ class vec {
 
     // Don't allow copying (error prone):
     vec<T>&  operator = (vec<T>& other) { assert(0); return *this; }
-             vec        (vec<T>& other) { assert(0); }
+             //vec        (vec<T>& other) { assert(0); }
 
     static inline uint32_t imax(int x, int y) {
         int mask = (y-x) >> (sizeof(int)*8-1);
         return (x&mask) + (y&(~mask)); }
+    
+    void     myCopy (const vec<T>& other);
 
 public:
     // Types:
@@ -58,12 +67,15 @@ public:
     vec(uint32_t size)               : data(NULL) , sz(0)   , cap(0)    { growTo(size); }
     vec(uint32_t size, const T& pad) : data(NULL) , sz(0)   , cap(0)    { growTo(size, pad); }
     vec(T* array, uint32_t size)     : data(array), sz(size), cap(size) { }      // (takes ownership of array -- will be deallocated with 'free()')
+    vec(const vec<T>& other)         : data(NULL) , sz(0)   , cap(0)    { myCopy(other); }
    ~vec(void)                                                      { clear(true); }
 
     // Ownership of underlying array:
     T*       release  (void)           { T* ret = data; data = NULL; sz = 0; cap = 0; return ret; }
     const T* getData() const {return data; }
+    const T* getDataEnd() const {return data + size(); }
     T* getData() {return data; }
+    T* getDataEnd() {return data + size(); }
 
     // Size operations:
     uint32_t size   (void) const       { return sz; }
@@ -76,6 +88,7 @@ public:
     void     capacity (uint32_t size) { grow(size); }
 
     // Stack interface:
+    void     reserve(uint32_t res)     { if (cap < res) {cap = res; data = (T*)realloc(data, cap * sizeof(T));}}
     void     push  (void)              { if (sz == cap) { cap = imax(2, (cap*3+1)>>1); data = (T*)realloc(data, cap * sizeof(T)); } new (&data[sz]) T(); sz++; }
     void     push  (const T& elem)     { if (sz == cap) { cap = imax(2, (cap*3+1)>>1); data = (T*)realloc(data, cap * sizeof(T)); } data[sz++] = elem; }
     void     push_ (const T& elem)     { assert(sz < cap); data[sz++] = elem; }
@@ -113,6 +126,13 @@ void vec<T>::growTo(uint32_t size) {
     grow(size);
     for (uint32_t i = sz; i != size; i++) new (&data[i]) T();
     sz = size; }
+    
+template<class T>
+void vec<T>::myCopy(const vec<T>& other) {
+    assert(sz == 0);
+    grow(other.size());
+    for (uint32_t i = sz; i != other.size(); i++) new (&data[i]) T(other[i]);
+    sz = other.size(); }
 
 template<class T>
 void vec<T>::clear(bool dealloc) {
@@ -121,6 +141,7 @@ void vec<T>::clear(bool dealloc) {
         sz = 0;
         if (dealloc) free(data), data = NULL, cap = 0; } }
 
-};
+
+}; //NAMESPACE MINISAT
 
 #endif

@@ -18,7 +18,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef GAUSSIANCONFIG_H
 #define GAUSSIANCONFIG_H
 
-#include <sys/types.h>
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
+
 #include "PackedRow.h"
 
 namespace MINISAT
@@ -32,15 +37,16 @@ class GaussianConfig
     GaussianConfig() :
         only_nth_gauss_save(2)
         , decision_until(0)
-        , starts_from(2)
+        , dontDisable(false)
     {
     }
         
     //tuneable gauss parameters
     uint only_nth_gauss_save;  //save only every n-th gauss matrix
     uint decision_until; //do Gauss until this level
-    uint starts_from; //Gauss elimination starts from this restart number
+    bool dontDisable; //If activated, gauss elimination is never disabled
 };
 
-};
+}; //NAMESPACE MINISAT
+
 #endif //GAUSSIANCONFIG_H

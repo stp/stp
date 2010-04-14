@@ -18,6 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef FINDUNDEF_H
 #define FINDUNDEF_H
 
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
 #include <vector>
 using std::vector;
 
@@ -25,15 +30,18 @@ using std::vector;
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
 class FindUndef {
     public:
-        FindUndef(Solver& S);
+        FindUndef(Solver& _solver);
         const uint unRoll();
         
     private:
-        Solver& S;
+        Solver& solver;
         
+        void moveBinToNormal();
+        void moveBinFromNormal();
         bool updateTables();
         void fillPotential();
         void unboundIsPotentials();
@@ -42,9 +50,10 @@ class FindUndef {
         vector<uint32_t> satisfies;
         vector<bool> isPotential;
         uint32_t isPotentialSum;
+        uint32_t binPosition;
         
 };
-};
+
+}; //NAMESPACE MINISAT
 
 #endif //
-

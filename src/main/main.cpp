@@ -14,6 +14,8 @@
 #include "../AST/NodeFactory/TypeChecker.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "../parser/ParserInterface.h"
+#include <sys/time.h>
+
 
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;

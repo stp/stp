@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace MINISAT
 {
+using namespace MINISAT;
 
 //=================================================================================================
 
@@ -81,7 +82,8 @@ public:
 //    }
 //};
 
-};
-
 //=================================================================================================
+
+}; //NAMESPACE MINISAT
+
 #endif

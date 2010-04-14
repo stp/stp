@@ -140,9 +140,10 @@ namespace BEEV
 #endif
 
 #if defined CRYPTOMINISAT2
-	newSolver.set_gaussian_decision_until(100);
-	newSolver.performReplace = true;
-	newSolver.xorFinder = false;
+    newSolver.findNormalXors = false;
+    newSolver.doSubsumption = false;
+    newSolver.verbosity = 0;
+    newSolver.doPartHandler = false;
 #endif
 
 // 	if(enable_clausal_abstraction && 

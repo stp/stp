@@ -18,30 +18,40 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef VARREPLACER_H
 #define VARREPLACER_H
 
-#include "SolverTypes.h"
-#include "Clause.h"
-#include "mtl/Vec.h"
+#ifdef _MSC_VER
+#include <msvc/stdint.h>
+#else
+#include <stdint.h>
+#endif //_MSC_VER
 
-#include <sys/types.h>
 #include <map>
 #include <vector>
-
-namespace MINISAT
-{
-
 using std::map;
 using std::vector;
 
-class Solver;
+#include "Solver.h"
+#include "SolverTypes.h"
+#include "Clause.h"
+#include "Vec.h"
+
+namespace MINISAT
+{
+using namespace MINISAT;
 
 class VarReplacer
 {
     public:
-        VarReplacer(Solver* S);
+        VarReplacer(Solver& solver);
         ~VarReplacer();
-        void replace(vec<Lit>& ps, const bool xor_clause_inverted, const uint group);
-        void extendModel() const;
-        void performReplace();
+        const bool performReplace(const bool always = false);
+        const bool needsReplace();
+        template<class T>
+        const bool replace(T& ps, const bool xor_clause_inverted, const uint group);
+        
+        void extendModelPossible() const;
+        void extendModelImpossible(Solver& solver2) const;
+        void reattachInternalClauses();
+        
         const uint getNumReplacedLits() const;
         const uint getNumReplacedVars() const;
         const uint getNumLastReplacedVars() const;
@@ -49,15 +59,19 @@ class VarReplacer
         const vector<Var> getReplacingVars() const;
         const vector<Lit>& getReplaceTable() const;
         const vec<Clause*>& getClauses() const;
-        void newClause();
+        const bool varHasBeenReplaced(const Var var) const;
+        const bool replacingVar(const Var var) const;
         void newVar();
     
     private:
-        void replace_set(vec<Clause*>& set);
-        void replace_set(vec<XorClause*>& cs, const bool isAttached);
+        const bool performReplaceInternal();
+        
+        const bool replace_set(vec<Clause*>& set);
+        const bool replace_set(vec<XorClause*>& cs, const bool isAttached);
         const bool handleUpdatedClause(Clause& c, const Lit origLit1, const Lit origLit2);
         const bool handleUpdatedClause(XorClause& c, const Var origVar1, const Var origVar2);
-        void addBinaryXorClause(vec<Lit>& ps, const bool xor_clause_inverted, const uint group, const bool internal = false);
+        template<class T>
+        void addBinaryXorClause(T& ps, const bool xor_clause_inverted, const uint group, const bool internal = false);
         
         void setAllThatPointsHereTo(const Var var, const Lit lit);
         bool alreadyIn(const Var var, const Lit lit);
@@ -67,11 +81,67 @@ class VarReplacer
         vec<Clause*> clauses;
         
         uint replacedLits;
-        uint lastReplacedLits;
         uint replacedVars;
         uint lastReplacedVars;
-        bool addedNewClause;
-        Solver* S;
+        Solver& solver;
 };
-};
+
+inline const bool VarReplacer::performReplace(const bool always)
+{
+    //uint32_t limit = std::min((uint32_t)((double)solver.order_heap.size()*PERCENTAGEPERFORMREPLACE), FIXCLEANREPLACE);
+    uint32_t limit = (uint32_t)((double)solver.order_heap.size()*PERCENTAGEPERFORMREPLACE);
+    if ((always && getNewToReplaceVars() > 0) || getNewToReplaceVars() > limit)
+        return performReplaceInternal();
+    
+    return true;
+}
+
+inline const bool VarReplacer::needsReplace()
+{
+    uint32_t limit = (uint32_t)((double)solver.order_heap.size()*PERCENTAGEPERFORMREPLACE);
+    return (getNewToReplaceVars() > limit);
+}
+
+inline const uint VarReplacer::getNumReplacedLits() const
+{
+    return replacedLits;
+}
+
+inline const uint VarReplacer::getNumReplacedVars() const
+{
+    return replacedVars;
+}
+
+inline const uint VarReplacer::getNumLastReplacedVars() const
+{
+    return lastReplacedVars;
+}
+
+inline const uint VarReplacer::getNewToReplaceVars() const
+{
+    return replacedVars-lastReplacedVars;
+}
+
+inline const vector<Lit>& VarReplacer::getReplaceTable() const
+{
+    return table;
+}
+
+inline const vec<Clause*>& VarReplacer::getClauses() const
+{
+    return clauses;
+}
+
+inline const bool VarReplacer::varHasBeenReplaced(const Var var) const
+{
+    return table[var].var() != var;
+}
+
+inline const bool VarReplacer::replacingVar(const Var var) const
+{
+    return (reverseTable.find(var) != reverseTable.end());
+}
+
+}; //NAMESPACE MINISAT
+
 #endif //VARREPLACER_H
