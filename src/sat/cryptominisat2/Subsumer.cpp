@@ -825,10 +825,14 @@ const bool Subsumer::simplifyBySubsumption()
     else
         numMaxSubsume0 = 2000000 * (1+numCalls/2);
     
-    if (clauses.size() > 3500000)
-        numMaxSubsume1 = 100000 * (1+numCalls/2);
-    else
-        numMaxSubsume1 = 500000 * (1+numCalls/2);
+    if (solver.doSubsume1) {
+        if (clauses.size() > 3500000)
+            numMaxSubsume1 = 100000 * (1+numCalls/2);
+        else
+            numMaxSubsume1 = 500000 * (1+numCalls/2);
+    } else {
+        numMaxSubsume1 = 0;
+    }
     
     if (clauses.size() > 3500000)
         numMaxElim = (uint32_t)((double)solver.order_heap.size() / 5.0 * (0.8+(double)(numCalls)/4.0));
@@ -913,6 +917,11 @@ const bool Subsumer::simplifyBySubsumption()
         
         #ifdef BIT_MORE_VERBOSITY
         std::cout << "c time until the end of almost_all/smaller: " << cpuTime() - myTime << std::endl;
+        #endif
+        
+        if (!solver.doVarElim) break;
+        
+        #ifdef BIT_MORE_VERBOSITY
         printf("c VARIABLE ELIMINIATION\n");
         std::cout << "c  toucheds list size:" << touched_list.size() << std::endl;
         #endif

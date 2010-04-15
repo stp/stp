@@ -82,6 +82,8 @@ Solver::Solver() :
         , doPartHandler    (true)
         , doHyperBinRes    (true)
         , doBlockedClause  (true)
+        , doVarElim        (true)
+        , doSubsume1       (true)
         , failedVarSearch  (true)
         , libraryUsage     (true)
         , greedyUnbound    (false)
@@ -140,7 +142,6 @@ Solver::~Solver()
     for (uint32_t i = 0; i != binaryClauses.size(); i++) clauseFree(binaryClauses[i]);
     for (uint32_t i = 0; i != xorclauses.size(); i++) free(xorclauses[i]);
     clearGaussMatrixes();
-    for (uint32_t i = 0; i != freeLater.size(); i++) free(freeLater[i]);
     delete varReplacer;
     delete conglomerate;
     delete clauseCleaner;
@@ -350,6 +351,15 @@ Clause* Solver::addClauseInt(T& ps, uint group)
 template Clause* Solver::addClauseInt(Clause& ps, const uint group);
 template Clause* Solver::addClauseInt(vec<Lit>& ps, const uint group);
 
+template<class T>
+bool Solver::addClause(T& ps, const uint group, char* group_name)
+{
+    assert(decisionLevel() == 0);
+    if (ps.size() > (0x01UL << 18)) {
+        std::cout << "Too long clause!" << std::endl;
+        exit(-1);
+    }
+    
 template<class T>
 bool Solver::addClause(T& ps, const uint group, char* group_name)
 {
@@ -1021,6 +1031,7 @@ Clause* Solver::propagate(const bool update)
                     confl = k->clause;
                     //goto EndPropagate;
                 }
+                }
             }
         }
         if (confl != NULL)
@@ -1325,6 +1336,14 @@ void Solver::dumpSortedLearnts(const char* file, const uint32_t maxSize)
         }
     }
     
+    fprintf(outfile, "c clauses from binaryClauses\n");
+    if (maxSize >= 2) {
+        for (uint i = 0; i != binaryClauses.size(); i++) {
+            if (binaryClauses[i]->learnt())
+                binaryClauses[i]->plainPrint(outfile);
+        }
+    }
+    
     fprintf(outfile, "c clauses from learnts\n");
     std::sort(learnts.getData(), learnts.getData()+learnts.size(), reduceDB_lt());
     for (int i = learnts.size()-1; i >= 0 ; i--) {
@@ -1407,6 +1426,8 @@ lbool Solver::simplify()
         lastNbBin = nbBin;
         becameBinary = 0;
     }
+    if (performReplace && varReplacer->performReplace() == false)
+        return l_False;
 
     // Remove satisfied clauses:
     clauseCleaner->removeAndCleanAll();
@@ -1945,11 +1966,11 @@ lbool Solver::solve(const vec<Lit>& assumps)
     assumps.copyTo(assumptions);
 
     int  nof_conflicts = restart_first;
-    int  nof_conflicts_fullrestart = (double)restart_first * (double)FULLRESTART_MULTIPLIER;
+    int  nof_conflicts_fullrestart = (double)restart_first * (double)FULLRESTART_MULTIPLIER + conflicts;
     //nof_conflicts_fullrestart = -1;
     uint    lastFullRestart  = starts;
     lbool   status        = l_Undef;
-    uint64_t nextSimplify = 30000;
+    uint64_t nextSimplify = 30000 + conflicts;
     
     if (nClauses() * learntsize_factor < nbclausesbeforereduce) {
         if (nClauses() * learntsize_factor < nbclausesbeforereduce/2)
@@ -1998,9 +2019,6 @@ lbool Solver::solve(const vec<Lit>& assumps)
     for (uint i = 0; i < gauss_matrixes.size(); i++)
         delete gauss_matrixes[i];
     gauss_matrixes.clear();
-    for (uint i = 0; i < freeLater.size(); i++)
-        free(freeLater[i]);
-    freeLater.clear();
 
     if (status == l_True) {
         if (greedyUnbound) {
@@ -2075,6 +2093,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
 
     cancelUntil(0);
     if (doPartHandler && status != l_False) partHandler->readdRemovedClauses();
+    restartTypeChooser->reset();
     
     return status;
 }
