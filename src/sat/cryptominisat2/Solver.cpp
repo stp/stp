@@ -360,15 +360,6 @@ bool Solver::addClause(T& ps, const uint group, char* group_name)
         exit(-1);
     }
     
-template<class T>
-bool Solver::addClause(T& ps, const uint group, char* group_name)
-{
-    assert(decisionLevel() == 0);
-    if (ps.size() > (0x01UL << 18)) {
-        std::cout << "Too long clause!" << std::endl;
-        exit(-1);
-    }
-    
     if (libraryCNFFile) {
         for (uint32_t i = 0; i != ps.size(); i++) {
             fprintf(libraryCNFFile, "%s%d ", ps[i].sign() ? "-" : "", ps[i].var()+1);
@@ -1031,7 +1022,6 @@ Clause* Solver::propagate(const bool update)
                     confl = k->clause;
                     //goto EndPropagate;
                 }
-                }
             }
         }
         if (confl != NULL)
@@ -1336,14 +1326,6 @@ void Solver::dumpSortedLearnts(const char* file, const uint32_t maxSize)
         }
     }
     
-    fprintf(outfile, "c clauses from binaryClauses\n");
-    if (maxSize >= 2) {
-        for (uint i = 0; i != binaryClauses.size(); i++) {
-            if (binaryClauses[i]->learnt())
-                binaryClauses[i]->plainPrint(outfile);
-        }
-    }
-    
     fprintf(outfile, "c clauses from learnts\n");
     std::sort(learnts.getData(), learnts.getData()+learnts.size(), reduceDB_lt());
     for (int i = learnts.size()-1; i >= 0 ; i--) {
@@ -1426,8 +1408,6 @@ lbool Solver::simplify()
         lastNbBin = nbBin;
         becameBinary = 0;
     }
-    if (performReplace && varReplacer->performReplace() == false)
-        return l_False;
 
     // Remove satisfied clauses:
     clauseCleaner->removeAndCleanAll();

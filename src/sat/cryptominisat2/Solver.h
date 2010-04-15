@@ -564,14 +564,6 @@ inline void Solver::reverse_binary_clause(Clause& c) const {
     }
 }*/
 
-        }
-        if (final)
-            c[0] = c[0].unsign() ^ !assigns[c[0].var()].getBool();
-        
-        c.setUpdateNeeded(false);
-    }
-}*/
-
 template<class T>
 inline void Solver::removeClause(T& c)
 {
