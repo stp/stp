@@ -129,7 +129,7 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-s  : print function statistics\n";
 
-  #if !defined CRYPTOMINISAT && !defined CRYPTOMINISAT2
+  #if !defined CRYPTOMINISAT2
   helpstring +=
     "--simplifying-minisat : use simplifying-minisat rather than minisat\n";
   #endif

@@ -22,9 +22,6 @@ HEADERS=$(SRC)/c_interface/*.h
 .PHONY: all
 all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc
 
-ifdef CRYPTOMINISAT
-	$(MAKE) -C $(SRC)/sat cryptominisat
-endif
 ifdef CRYPTOMINISAT2
 	$(MAKE) -C $(SRC)/sat cryptominisat2
 endif

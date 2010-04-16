@@ -21,7 +21,7 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     
     //solver instantiated here
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
 #endif
 

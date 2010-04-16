@@ -118,7 +118,7 @@ namespace BEEV
         //        {
         //          continue;
         //        }
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
         if(add_xor_clauses)
           {
             newSolver.addXorClause(satSolverClause, false);
@@ -333,7 +333,7 @@ namespace BEEV
     	return sat;
       }
 
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     if(!xorcl->empty())
       {
         sat = toSATandSolve(SatSolver, *xorcl, true);

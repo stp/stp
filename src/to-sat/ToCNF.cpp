@@ -485,7 +485,7 @@ namespace BEEV
         x = info[varphi];
       }
 
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     if(isXorChild)
       {
         setDoRenamePos(*x);
@@ -638,7 +638,7 @@ namespace BEEV
         convertFormulaToCNFPosCases(varphi, defs);
       }
     
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     if ((x->clausespos != NULL 
          && (x->clausespos->size() > 1 
 	     || (renameAllSiblings 
@@ -1347,7 +1347,7 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, 
                                          ClauseList* defs)
   {
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     ClausePtr xor_clause = new vector<const ASTNode*>();
 
@@ -1716,7 +1716,7 @@ namespace BEEV
                                          ClauseList* defs)
   {
     //#ifdef FALSE
-#if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT2
     CNFInfo * xx = info[varphi];
     if(NULL != xx
        && sharesPos(*xx) > 0
