@@ -3,10 +3,6 @@ core:
 	$(MAKE) -C core lib all	
 	$(MAKE) -C simp lib all
 
-.PHONY: cryptominisat
-cryptominisat:
-	$(MAKE) -C cryptominisat lib all
-
 .PHONY: cryptominisat2
 cryptominisat2:
 	$(MAKE) -C cryptominisat2 lib all
@@ -16,6 +12,5 @@ clean:
 	rm -rf *.o *~ libminisat.a
 	$(MAKE) -C core    clean
 	$(MAKE) -C simp    clean
-	$(MAKE) -C cryptominisat clean
 	$(MAKE) -C cryptominisat2 clean
 
