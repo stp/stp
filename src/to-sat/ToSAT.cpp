@@ -87,16 +87,9 @@ namespace BEEV
       {
 #ifdef CRYPTOMINISAT2
 	newSolver.setSeed(bm->UserFlags.random_seed);
-	//newSolver.greedyUnbound = true;
-	// 	cerr << "We have set the seed value to "
-	// 	     << bm->UserFlags.random_seed 
-	// 	     << endl;
 #endif
       }
 
-#ifdef CRYPTOMINISAT
-    newSolver.startClauseAdding();
-#endif
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseList::const_iterator i = cll.begin(), iend = cll.end();    
     for (int count=0, flag=0; i != iend; i++)
@@ -127,13 +120,12 @@ namespace BEEV
         //        }
 #if defined CRYPTOMINISAT || defined CRYPTOMINISAT2
         if(add_xor_clauses)
-          {         
-            //cout << "addXorClause:\n";
-            newSolver.addXorClause(satSolverClause, false, 0, (char*)"z");
+          {
+            newSolver.addXorClause(satSolverClause, false);
           }
         else 
           {
-            newSolver.addClause(satSolverClause,0,(char*)"z");
+            newSolver.addClause(satSolverClause);
           }
 #else
         newSolver.addClause(satSolverClause);

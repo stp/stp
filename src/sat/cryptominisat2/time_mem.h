@@ -22,40 +22,31 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define TIME_MEM_H
 
 #ifdef _MSC_VER
-#include <msvc/stdint.h>
+  #include <ctime>
+  #include <msvc/stdint.h>
 #else
-#include <stdint.h>
-#endif //_MSC_VER
+  #include <sys/time.h>
+  #include <sys/resource.h>
+  #include <unistd.h>
+  #include <stdint.h>
+#endif
 
+namespace MINISAT
+{
+using namespace MINISAT;
+
+/*************************************************************************************/
 #ifdef _MSC_VER
-#include <ctime>
 
-static inline double cpuTime(void)
-{
-    return (double)clock() / CLOCKS_PER_SEC;
-}
-#else //_MSC_VER
-#ifdef CROSS_COMPILE
-#include <ctime>
+static inline double cpuTime(void) {
+    return (double)clock() / CLOCKS_PER_SEC; }
+#else
 
-static inline double cpuTime(void)
-{
-    return (double)clock() / CLOCKS_PER_SEC;
-}
-#else //CROSS_COMPILE
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <unistd.h>
-
-static inline double cpuTime(void)
-{
+static inline double cpuTime(void) {
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
-    return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000;
-}
-#endif //CROSS_COMPILE
-#endif //_MSC_VER
-
+    return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000; }
+#endif
 
 #if defined(__linux__)
 static inline int memReadStat(int field)
@@ -71,26 +62,24 @@ static inline int memReadStat(int field)
     fclose(in);
     return value;
 }
-static inline uint64_t memUsed()
-{
-    return (uint64_t)memReadStat(0) * (uint64_t)getpagesize();
-}
+static inline uint64_t memUsed() { return (uint64_t)memReadStat(0) * (uint64_t)getpagesize(); }
 
 
 #elif defined(__FreeBSD__)
-static inline uint64_t memUsed(void)
-{
+static inline uint64_t memUsed(void) {
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
-    return ru.ru_maxrss*1024;
-}
+    return ru.ru_maxrss*1024; }
 
 
 #else
-static inline uint64_t memUsed()
-{
-    return 0;
-}
+static inline uint64_t memUsed() { return 0; }
 #endif
+
+#if defined(__linux__)
+#include <fpu_control.h>
+#endif
+
+};
 
 #endif //TIME_MEM_H
