@@ -67,6 +67,7 @@ protected:
     uint32_t mySize:20;
     
     union  {int32_t act; uint32_t abst;} extra;
+    float oldActivityInter;
     #ifdef _MSC_VER
     Lit     data[1];
     #else
@@ -88,8 +89,11 @@ public:
         isLearnt = learnt;
         setGroup(_group);
         for (uint i = 0; i < ps.size(); i++) data[i] = ps[i];
-        if (learnt) extra.act = 0;
-        else calcAbstraction();
+        if (learnt) {
+            extra.act = 0;
+            oldActivityInter = 0;
+        } else
+            calcAbstraction();
     }
 
 public:
@@ -118,6 +122,15 @@ public:
     const bool   learnt      ()      const {
         return isLearnt;
     }
+    float&       oldActivity    () {
+        return oldActivityInter;
+    }
+    
+    const float&       oldActivity    () const {
+        return oldActivityInter;
+    }
+    
+    
     const bool getStrenghtened() const {
         return strenghtened;
     }
