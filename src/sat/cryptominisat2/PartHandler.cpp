@@ -286,6 +286,8 @@ void PartHandler::addSavedState()
 
 void PartHandler::readdRemovedClauses()
 {
+    FILE* backup_libraryCNFfile = solver.libraryCNFFile;
+    solver.libraryCNFFile = NULL;
     for (Clause **it = clausesRemoved.getData(), **end = clausesRemoved.getDataEnd(); it != end; it++) {
         solver.addClause(**it, (*it)->getGroup());
         assert(solver.ok);
@@ -300,6 +302,7 @@ void PartHandler::readdRemovedClauses()
         assert(solver.ok);
     }
     xorClausesRemoved.clear();
+    solver.libraryCNFFile = backup_libraryCNFfile;
 }
 
 }; //NAMESPACE MINISAT
