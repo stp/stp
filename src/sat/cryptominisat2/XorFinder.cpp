@@ -60,6 +60,8 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
     
     toRemove.clear();
     toRemove.resize(cls.size(), false);
+    toLeaveInPlace.clear();
+    toLeaveInPlace.resize(cls.size(), false);
     
     table.clear();
     table.reserve(cls.size());
@@ -94,7 +96,10 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
     uint i = 0;
     for (Clause **it = cls.getData(), **end = it + cls.size(); it != end; it++, i++) {
         const uint size = (*it)->size();
-        if ( size > maxSize || size < minSize) continue;
+        if ( size > maxSize || size < minSize) {
+            toLeaveInPlace[i] = true;
+            continue;
+        }
         if ((*it)->getSorted()) sortedTable.push_back(make_pair(*it, i));
         else unsortedTable.push_back(make_pair(*it, i));
     }
@@ -134,9 +139,10 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
     }
     #endif //DEBUG_XORFIND
     
-    if (findXors(sumLengths) == false)
-        return false;
+    if (findXors(sumLengths) == false) goto end;
+    S->ok = (S->propagate() == NULL);
     
+end:
     if (S->verbosity >= 2) {
         if (minSize == maxSize && minSize == 2)
             printf("c |  Finding binary XORs:        %5.2lf s (found: %7d, avg size: %3.1lf)                  |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
@@ -144,20 +150,25 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
             printf("c |  Finding non-binary XORs:    %5.2lf s (found: %7d, avg size: %3.1lf)                  |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
     }
     
-    if (type == ClauseCleaner::binaryClauses) {
-        i = 0;
-        uint j = 0;
-        for (uint size = table.size(); i != size; i++) {
-            if (!toRemove[table[i].second]) {
-                table[i].first->setSorted();
-                cls[j++] = table[i].first;
-            }
+    i = 0;
+    uint32_t j = 0;
+    uint32_t toSkip = 0;
+    for (uint end = cls.size(); i != end; i++) {
+        if (toLeaveInPlace[i]) {
+            cls[j] = cls[i];
+            j++;
+            toSkip++;
+            continue;
         }
-        cls.shrink(i-j);
-    } else if (foundXors > 0)
-        clearToRemove();
+        if (!toRemove[table[i-toSkip].second]) {
+            table[i-toSkip].first->setSorted();
+            cls[j] = table[i-toSkip].first;
+            j++;
+        }
+    }
+    cls.shrink(i-j);
     
-    return S->ok = (S->propagate() == NULL);
+    return S->ok;
 }
 
 const bool XorFinder::findXors(uint& sumLengths)
@@ -195,8 +206,7 @@ const bool XorFinder::findXors(uint& sumLengths)
         
         switch(lits.size()) {
         case 2: {
-            if (S->varReplacer->replace(lits, impair, old_group) == false)
-                return false;
+            S->varReplacer->replace(lits, impair, old_group);
             
             #ifdef VERBOSE_DEBUG
             XorClause* x = XorClause_new(lits, impair, old_group);
@@ -222,7 +232,7 @@ const bool XorFinder::findXors(uint& sumLengths)
         sumLengths += lits.size();
     }
     
-    return true;
+    return S->ok;
 }
 
 void XorFinder::clearToRemove()

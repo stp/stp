@@ -122,6 +122,7 @@ class XorFinder
         
         ClauseTable table;
         vector<bool> toRemove;
+        vector<bool> toLeaveInPlace;
         void clearToRemove();
         uint32_t foundXors;
         

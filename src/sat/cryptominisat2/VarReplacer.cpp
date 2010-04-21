@@ -75,12 +75,8 @@ const bool VarReplacer::performReplaceInternal()
     }*/
     #endif //REPLACE_STATISTICS
     
-    solver.clauseCleaner->cleanClauses(solver.clauses, ClauseCleaner::clauses);
-    solver.clauseCleaner->cleanClauses(solver.learnts, ClauseCleaner::learnts);
-    solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
-    solver.clauseCleaner->removeSatisfied(solver.binaryClauses, ClauseCleaner::binaryClauses);
-    if (solver.ok == false)
-        return false;
+    solver.clauseCleaner->removeAndCleanAll(true);
+    if (solver.ok == false) return false;
     
     #ifdef VERBOSE_DEBUG
     {
@@ -123,19 +119,18 @@ const bool VarReplacer::performReplaceInternal()
     
     lastReplacedVars = replacedVars;
     
-    if (!replace_set(solver.clauses)) return false;
-    if (!replace_set(solver.learnts)) return false;
-    if (!replace_set(solver.binaryClauses)) return false;
+    if (!replace_set(solver.clauses)) goto end;
+    if (!replace_set(solver.learnts)) goto end;
+    if (!replace_set(solver.binaryClauses)) goto end;
+    if (!replace_set(solver.xorclauses)) goto end;
     
-    if (!replace_set(solver.xorclauses, true)) return false;
-    if (!replace_set(solver.conglomerate->getCalcAtFinish(), false)) return false;
-    
+end:
     for (uint i = 0; i != clauses.size(); i++)
         solver.removeClause(*clauses[i]);
     clauses.clear();
     
     if (solver.verbosity >= 2) {
-        std::cout << "     Replaced " <<  std::setw(8) << replacedLits<< " lits"
+        std::cout << "c |  Replaced " <<  std::setw(8) << replacedLits<< " lits"
         << "     Time: " << std::setw(8) << std::fixed << std::setprecision(2) << cpuTime()-time << " s "
         << std::setw(12) <<  " |" << std::endl;
     }
@@ -147,7 +142,7 @@ const bool VarReplacer::performReplaceInternal()
     return solver.ok;
 }
 
-const bool VarReplacer::replace_set(vec<XorClause*>& cs, const bool isAttached)
+const bool VarReplacer::replace_set(vec<XorClause*>& cs)
 {
     XorClause **a = cs.getData();
     XorClause **r = a;
@@ -168,10 +163,9 @@ const bool VarReplacer::replace_set(vec<XorClause*>& cs, const bool isAttached)
             }
         }
         
-        if (isAttached && changed && handleUpdatedClause(c, origVar1, origVar2)) {
+        if (changed && handleUpdatedClause(c, origVar1, origVar2)) {
             if (solver.ok == false) {
-                for(;r != end; r++)
-                    free(*r);
+                for(;r != end; r++) free(*r);
                 cs.shrink(r-a);
                 return false;
             }
@@ -259,8 +253,7 @@ const bool VarReplacer::replace_set(vec<Clause*>& cs)
         
         if (changed && handleUpdatedClause(c, origLit1, origLit2)) {
             if (solver.ok == false) {
-                for(;r != end; r++)
-                    free(*r);
+                for(;r != end; r++) free(*r);
                 cs.shrink(r-a);
                 return false;
             }
