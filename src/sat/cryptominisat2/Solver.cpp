@@ -32,8 +32,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "VarReplacer.h"
 #include "FindUndef.h"
-#include "Gaussian.h"
-#include "MatrixFinder.h"
 #include "Conglomerate.h"
 #include "XorFinder.h"
 #include "ClauseCleaner.h"
@@ -42,6 +40,11 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Subsumer.h"
 #include "PartHandler.h"
 #include "XorSubsumer.h"
+
+#ifdef USE_GAUSS
+#include "Gaussian.h"
+#include "MatrixFinder.h"
+#endif //USE_GAUSS
 
 #ifdef _MSC_VER
 #define __builtin_prefetch(a,b,c)
@@ -143,7 +146,9 @@ Solver::~Solver()
     for (uint32_t i = 0; i != clauses.size(); i++) clauseFree(clauses[i]);
     for (uint32_t i = 0; i != binaryClauses.size(); i++) clauseFree(binaryClauses[i]);
     for (uint32_t i = 0; i != xorclauses.size(); i++) free(xorclauses[i]);
+    #ifdef USE_GAUSS
     clearGaussMatrixes();
+    #endif
     delete varReplacer;
     delete conglomerate;
     delete clauseCleaner;
@@ -509,9 +514,10 @@ void Solver::cancelUntil(int level)
     
     if (decisionLevel() > level) {
         
+        #ifdef USE_GAUSS
         for (vector<Gaussian*>::iterator gauss = gauss_matrixes.begin(), end= gauss_matrixes.end(); gauss != end; gauss++)
             (*gauss)->canceling(trail_lim[level]);
-        
+        #endif //USE_GAUSS
         
         for (int c = trail.size()-1; c >= (int)trail_lim[level]; c--) {
             Var     x  = trail[c].var();
@@ -542,12 +548,14 @@ void Solver::needLibraryCNFFile(const char* fileName)
     assert(libraryCNFFile != NULL);
 }
 
+#ifdef USE_GAUSS
 void Solver::clearGaussMatrixes()
 {
     for (uint i = 0; i < gauss_matrixes.size(); i++)
         delete gauss_matrixes[i];
     gauss_matrixes.clear();
 }
+#endif //USE_GAUSS
 
 inline bool Solver::defaultPolarity()
 {
@@ -1478,10 +1486,12 @@ lbool Solver::search(int nof_conflicts, int nof_conflicts_fullrestart, const boo
     else
         dynStarts++;
     
+    #ifdef USE_GAUSS
     for (vector<Gaussian*>::iterator gauss = gauss_matrixes.begin(), end= gauss_matrixes.end(); gauss != end; gauss++) {
         ret = (*gauss)->full_init();
         if (ret != l_Nothing) return ret;
     }
+    #endif //USE_GAUSS
 
     for (;;) {
         Clause* confl = propagate(update);
@@ -1490,6 +1500,7 @@ lbool Solver::search(int nof_conflicts, int nof_conflicts_fullrestart, const boo
             ret = handle_conflict(learnt_clause, confl, conflictC, update);
             if (ret != l_Nothing) return ret;
         } else {
+            #ifdef USE_GAUSS
             bool at_least_one_continue = false;
             for (vector<Gaussian*>::iterator gauss = gauss_matrixes.begin(), end= gauss_matrixes.end(); gauss != end; gauss++) {
                 ret = (*gauss)->find_truths(learnt_clause, conflictC);
@@ -1497,6 +1508,7 @@ lbool Solver::search(int nof_conflicts, int nof_conflicts_fullrestart, const boo
                 else if (ret != l_Nothing) return ret;
             }
             if (at_least_one_continue) continue;
+            #endif //USE_GAUSS
             ret = new_decision(nof_conflicts, nof_conflicts_fullrestart, conflictC);
             if (ret != l_Nothing) return ret;
         }
@@ -1698,6 +1710,7 @@ double Solver::progressEstimate() const
     return progress / nVars();
 }
 
+#ifdef USE_GAUSS
 void Solver::print_gauss_sum_stats() const
 {
     if (gauss_matrixes.size() == 0) {
@@ -1726,6 +1739,7 @@ void Solver::print_gauss_sum_stats() const
         printf(" %3.0lf%% |\n", 100.0-(double)disabled/(double)gauss_matrixes.size()*100.0);
     }
 }
+#endif //USE_GAUSS
 
 inline void Solver::chooseRestartType(const uint& lastFullRestart)
 {
@@ -1752,7 +1766,8 @@ inline void Solver::chooseRestartType(const uint& lastFullRestart)
                 lastSelectedRestartType = static_restart;
                 if (verbosity >= 2)
                     printf("c |                            Decided on static restart strategy                         |\n");
-                                
+                
+                #ifdef USE_GAUSS
                 if (gaussconfig.decision_until > 0 && xorclauses.size() > 1 && xorclauses.size() < 20000) {
                     double time = cpuTime();
                     MatrixFinder m(*this);
@@ -1760,6 +1775,7 @@ inline void Solver::chooseRestartType(const uint& lastFullRestart)
                     if (verbosity >=1)
                         printf("c |  Finding matrixes :    %4.2lf s (found  %5d)                                |\n", cpuTime()-time, numMatrixes);
                 }
+                #endif //USE_GAUSS
             }
             restartType = tmp;
             restartTypeChooser->reset();
@@ -1867,7 +1883,9 @@ end:
 const bool Solver::checkFullRestart(int& nof_conflicts, int& nof_conflicts_fullrestart, uint& lastFullRestart)
 {
     if (nof_conflicts_fullrestart > 0 && conflicts >= nof_conflicts_fullrestart) {
+        #ifdef USE_GAUSS
         clearGaussMatrixes();
+        #endif //USE_GAUSS
         if (verbosity >= 2)
             printf("c |                                      Fully restarting                                 |\n");
         nof_conflicts = restart_first + (double)restart_first*restart_inc;
@@ -1906,7 +1924,6 @@ inline void Solver::performStepsBeforeSolve()
         && !subsumer->simplifyBySubsumption())
         return;
     
-    const uint32_t lastReplacedVars = varReplacer->getNumReplacedVars();
     if (findBinaryXors && binaryClauses.size() < MAX_CLAUSENUM_XORFIND) {
         XorFinder xorFinder(this, binaryClauses, ClauseCleaner::binaryClauses);
         if (!xorFinder.doNoPart(2, 2)) return;
@@ -1916,7 +1933,7 @@ inline void Solver::performStepsBeforeSolve()
     
     if (findNormalXors && clauses.size() < MAX_CLAUSENUM_XORFIND) {
         XorFinder xorFinder(this, clauses, ClauseCleaner::clauses);
-        if (!xorFinder.doNoPart(3, 10)) return;
+        if (!xorFinder.doNoPart(3, 7)) return;
     }
         
     if (xorclauses.size() > 1) {
@@ -1965,7 +1982,9 @@ lbool Solver::solve(const vec<Lit>& assumps)
     
     model.clear();
     conflict.clear();
+    #ifdef USE_GAUSS
     clearGaussMatrixes();
+    #endif //USE_GAUSS
     setDefaultRestartType();
     totalSumOfDecisionLevel = 0;
     conflictsAtLastSolve = conflicts;
@@ -2028,9 +2047,11 @@ lbool Solver::solve(const vec<Lit>& assumps)
     }
     printEndSearchStat();
     
+    #ifdef USE_GAUSS
     for (uint i = 0; i < gauss_matrixes.size(); i++)
         delete gauss_matrixes[i];
     gauss_matrixes.clear();
+    #endif //USE_GAUSS
 
 #ifdef VERBOSE_DEBUG
     if (status == l_True)
@@ -2096,6 +2117,12 @@ lbool Solver::solve(const vec<Lit>& assumps)
             for (Var var = 0; var < nVars(); var++) {
                 if (assigns[var] == l_Undef && s.model[var] != l_Undef) uncheckedEnqueue(Lit(var, s.model[var] == l_False));
             }
+            ok = (propagate() == NULL);
+            if (!ok) {
+                printf("c ERROR! Extension of model failed!\n");
+                assert(ok);
+                exit(-1);
+            }
         }
 #ifndef NDEBUG
         //checkSolution();
@@ -2103,7 +2130,6 @@ lbool Solver::solve(const vec<Lit>& assumps)
         //Copy model:
         model.growTo(nVars());
         for (Var var = 0; var != nVars(); var++) model[var] = value(var);
-    
     }
     
     if (status == l_False) {
@@ -2248,8 +2274,12 @@ void Solver::printRestartStat() const
     #else
     if (verbosity >= 2) {
     #endif
-    printf("c | %9d | %7d %8d %8d | %8d %8d %6.0f |", (int)conflicts, (int)order_heap.size(), (int)nClauses(), (int)clauses_literals, (int)(nbclausesbeforereduce*curRestart+nbCompensateSubsumer), (int)nLearnts(), (double)learnts_literals/nLearnts());
+        printf("c | %9d | %7d %8d %8d | %8d %8d %6.0f |", (int)conflicts, (int)order_heap.size(), (int)nClauses(), (int)clauses_literals, (int)(nbclausesbeforereduce*curRestart+nbCompensateSubsumer), (int)nLearnts(), (double)learnts_literals/nLearnts());
+        #ifdef USE_GAUSS
         print_gauss_sum_stats();
+        #else //USE_GAUSS
+        printf("                    |\n");
+        #endif //USE_GAUSS
     }
 }
 
@@ -2261,7 +2291,11 @@ void Solver::printEndSearchStat() const
         if (verbosity >= 1) {
             #endif
             printf("c ====================================================================");
+            #ifdef USE_GAUSS
             print_gauss_sum_stats();
+            #else //USE_GAUSS
+            printf("\n");
+            #endif //USE_GAUSS
         }
 }
 

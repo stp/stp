@@ -55,9 +55,8 @@ void Subsumer::extendModel(Solver& solver2)
     vec<Lit> tmp;
     typedef map<Var, vector<vector<Lit> > > elimType;
     for (elimType::iterator it = elimedOutVar.begin(), end = elimedOutVar.end(); it != end; it++) {
-        Var var = it->first;
-        
         #ifdef VERBOSE_DEBUG
+        Var var = it->first;
         std::cout << "Reinserting elimed var: " << var+1 << std::endl;
         #endif
         
@@ -793,7 +792,7 @@ const bool Subsumer::simplifyBySubsumption()
     numVarsElimed = 0;
     blockTime = 0.0;
     
-    //if (solver.clauses.size() < 2000000) addAllXorAsNorm();
+    //if (solver.xorclauses.size() < 30000 && solver.clauses.size() < MAX_CLAUSENUM_XORFIND/10) addAllXorAsNorm();
     
     //For VE
     touched_list.clear();
@@ -933,7 +932,6 @@ const bool Subsumer::simplifyBySubsumption()
         
         for (bool first = true; numMaxElim > 0; first = false){
             uint32_t vars_elimed = 0;
-            int clauses_before = solver.nClauses();
             vec<Var> order;
             
             if (first) {
@@ -978,7 +976,7 @@ const bool Subsumer::simplifyBySubsumption()
             
             numVarsElimed += vars_elimed;
             #ifdef BIT_MORE_VERBOSITY
-            printf("c  #clauses-removed: %-8d #var-elim: %d\n", clauses_before - solver.nClauses(), vars_elimed);
+            printf("c  #var-elim: %d\n", vars_elimed);
             std::cout << "c time until the end of varelim: " << cpuTime() - myTime << std::endl;
             #endif
         }
@@ -1012,10 +1010,10 @@ const bool Subsumer::simplifyBySubsumption()
     
     addBackToSolver();
     solver.nbCompensateSubsumer += origNLearnts-solver.learnts.size();
-    /*if (solver.findNormalXors && solver.clauses.size() < MAX_CLAUSENUM_XORFIND) {
+    if (solver.findNormalXors && solver.clauses.size() < MAX_CLAUSENUM_XORFIND/8) {
         XorFinder xorFinder(&solver, solver.clauses, ClauseCleaner::clauses);
-        if (!xorFinder.doNoPart(3, 4)) return false;
-    }*/
+        if (!xorFinder.doNoPart(3, 7)) return false;
+    }
     
     if (solver.verbosity >= 1) {
         std::cout << "c |  lits-rem: " << std::setw(9) << literals_removed
@@ -1322,7 +1320,7 @@ void Subsumer::orderVarsForElim(vec<Var>& order)
 {
     order.clear();
     vec<pair<int, Var> > cost_var;
-    for (int i = 0; i < touched_list.size(); i++){
+    for (uint32_t i = 0; i < touched_list.size(); i++){
         Var x = touched_list[i];
         touched[x] = 0;
         cost_var.push(std::make_pair( occur[Lit(x, false).toInt()].size() * occur[Lit(x, true).toInt()].size() , x ));
@@ -1331,7 +1329,7 @@ void Subsumer::orderVarsForElim(vec<Var>& order)
     touched_list.clear();
     std::sort(cost_var.getData(), cost_var.getData()+cost_var.size(), myComp());
     
-    for (int x = 0; x < cost_var.size(); x++) {
+    for (uint32_t x = 0; x < cost_var.size(); x++) {
         if (cost_var[x].first != 0)
             order.push(cost_var[x].second);
     }
@@ -1709,7 +1707,9 @@ void Subsumer::addAllXorAsNorm()
         solver.removeClause(**i);
     }
     solver.xorclauses.shrink(i-j);
-    std::cout << "Added XOR as norm:" << added << std::endl;
+    if (solver.verbosity >= 1) {
+        std::cout << "c |  Added XOR as norm:" << added << std::endl;
+    }
 }
 
 void Subsumer::addXorAsNormal3(XorClause& c)
