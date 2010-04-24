@@ -322,6 +322,7 @@ VarDecl         :      FORM_IDs ':' Type
                            
     parserInterface->letMgr.LetExprMgr(*i,*$5);
     delete $5;
+    delete $1;
   }
 }
 |      FORM_IDs ':' Type '=' Formula
@@ -1134,17 +1135,22 @@ ArrayUpdateExpr : Expr WITH_TOK Updates
   BVTypeCheck(*result);
   $$ = result;
   delete $3;
+  delete $1;
 }
 ;
 
 Updates         : '[' Expr ']' ASSIGN_TOK Expr 
 {
   $$ = new ASTNodeMap();
-  (*$$)[*$2] = *$5;                 
+  (*$$)[*$2] = *$5;         
+  delete $2;
+  delete $5;        
 }
 | Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr 
 {                   
   (*$1)[*$4] = *$7;
+  delete $4;
+  delete $7;
 }
 ;
 
