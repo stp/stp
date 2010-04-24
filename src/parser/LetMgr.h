@@ -33,6 +33,11 @@ namespace BEEV
   public:
       
     ASTNodeSet _parser_symbol_table;
+    void cleanupParserSymbolTable()
+    {
+    	_parser_symbol_table.clear();
+    }
+
 
     LETMgr(ASTNode undefined)
     : ASTUndefined(undefined)

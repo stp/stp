@@ -225,7 +225,7 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(assumptions);
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
-  parserInterface->letMgr._parser_symbol_table.clear();
+  parserInterface->letMgr.cleanupParserSymbolTable();
   YYACCEPT;
 }
 ;
@@ -243,6 +243,7 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
   else {
     $$ = NULL;
   }
+  delete $3; //discard the benchmarkname.
 }
 /*   | EOF_TOK */
 /*     { */
@@ -305,6 +306,7 @@ COLON_TOK ASSUMPTION_TOK an_formula
         0 == strcmp($3->GetName(),"QF_AUFBV"))) {
     yyerror("Wrong input logic:");
   }
+  delete $3;
   $$ = NULL;
 }
 | COLON_TOK EXTRAFUNS_TOK LPAREN_TOK var_decls RPAREN_TOK
@@ -418,6 +420,7 @@ LPAREN_TOK FORMID_TOK sort_symbs RPAREN_TOK
   //var
   $2->SetIndexWidth($3.indexwidth);
   $2->SetValueWidth($3.valuewidth);
+  delete $2;
 }
 | LPAREN_TOK FORMID_TOK RPAREN_TOK
 {
@@ -426,6 +429,7 @@ LPAREN_TOK FORMID_TOK sort_symbs RPAREN_TOK
   //var
   $2->SetIndexWidth(0);
   $2->SetValueWidth(0);
+  delete $2;
 }
 ;
 
@@ -484,10 +488,10 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(EQ, *it, *it2)));
+      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(EQ, *it, *it2)));
 
           
-      forms.push_back(*n); 
+      forms.push_back(n); 
     }
   }
 
@@ -925,6 +929,7 @@ BITCONST_TOK { $$ = $1; }
   ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVLEFTSHIFT,w,*$2,*$3));
   $$ = n;
   delete $2;
+  delete $3;
 }
 | BVRIGHTSHIFT_1_TOK an_term an_term 
 {
@@ -933,6 +938,7 @@ BITCONST_TOK { $$ = $1; }
   ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVRIGHTSHIFT,w,*$2,*$3));
   $$ = n;
   delete $2;
+  delete $3;
 }
 |  BVARITHRIGHTSHIFT_TOK an_term an_term
 {
@@ -941,6 +947,7 @@ BITCONST_TOK { $$ = $1; }
   ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVSRSHIFT,w,*$2,*$3));
   $$ = n;
   delete $2;
+  delete $3;
 }
 |  BVROTATE_LEFT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
 {
