@@ -610,7 +610,8 @@ void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 		BBNodeVec notylessxrval = BBITE(yeqx, BBfill(width, nf->getFalse()),
 				ygtrxrval);
 		// y < x <=> not x >= y.
-		BBNode ylessx = BBBVLE(y, x, false, true);
+		//BBNode ylessx = BBBVLE(y, x, false, true);
+		BBNode ylessx = nf->CreateNode(NOT, BBBVLE(x, y, false));
 		// final values of q and r
 		q = BBITE(ylessx, BBfill(width, nf->getFalse()), notylessxqval);
 		r = BBITE(ylessx, y, notylessxrval);
