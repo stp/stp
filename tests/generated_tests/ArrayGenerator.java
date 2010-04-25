@@ -37,7 +37,7 @@ public class ArrayGenerator
 	output.append("benchmark t.smt\n");
 	output.append(":source {automatically generated}\n");
 	output.append(":status unknown\n");
-	output.append(":logic QF_BV\n");
+	output.append(":logic QF_AUFBV\n");
 
 	for (String s : bits)
 	{

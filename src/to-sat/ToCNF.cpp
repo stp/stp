@@ -642,7 +642,7 @@ namespace BEEV
     if ((x->clausespos != NULL 
          && (x->clausespos->size() > 1 
 	     || (renameAllSiblings 
-		 && !(x->clausespos->size()==1)  
+    	    		 && !(x->clausespos->size() == 1 && x->clausespos[0].size() ==1)
 		 && !wasRenamedPos(*x))) 
 	 || (doRenamePos(*x) 
 	     && !wasVisited(*x))))
@@ -657,10 +657,11 @@ namespace BEEV
       }
 #else
 
+    
     if (x->clausespos != NULL 
 	&& (x->clausespos->size() > 1
 	    || (renameAllSiblings 
-		&& !(x->clausesneg->size() == 1)  
+	    && !(x->clausespos->size() == 1 && x->clausespos[0].size() ==1)
 		&& !wasRenamedNeg(*x))))
       {
         if (doSibRenamingPos(*x) 
@@ -678,10 +679,10 @@ namespace BEEV
       }
     
     if (x->clausesneg != NULL 
-	&& (x->clausesneg->size() > 1))
-// 	    || (renameAllSiblings
-// 		&& !(x->clausesneg->size() == 1)
-// 		&& !wasRenamedNeg(*x))))
+	&& (x->clausesneg->size() > 1
+ 	    || (renameAllSiblings
+ 		&& !(x->clausesneg->size() == 1 && x->clausesneg[0].size() ==1)
+ 		&& !wasRenamedNeg(*x))))
       {
         if (doSibRenamingNeg(*x) 
 	    || sharesNeg(*x) > 1
@@ -698,6 +699,9 @@ namespace BEEV
       {
 	assert(info[varphi]->clausesneg == NULL 
 	       || info[varphi]->clausesneg->size() ==1);
+
+	assert(info[varphi]->clausespos == NULL
+		       || info[varphi]->clausespos->size() ==1);
       }
 
     setWasVisited(*x);
@@ -1386,6 +1390,10 @@ namespace BEEV
     for (; it != varphi.GetChildren().end(); it++)
       {
         convertFormulaToCNF(*it, defs); // make pos and neg clause sets
+		if (renameAllSiblings) {
+			assert(info[*it]->clausespos->size() ==1);
+			assert(info[*it]->clausesneg->size() ==1);
+      }
       }
     ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
     info[varphi]->clausespos = psi;
@@ -1942,7 +1950,7 @@ namespace BEEV
   {
     bm = bmgr;
     clausesxor = new ClauseList();
-    renameAllSiblings = false;
+    renameAllSiblings = bm->UserFlags.renameAllInCNF_flag;
   }
 
   //########################################

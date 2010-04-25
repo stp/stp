@@ -106,6 +106,9 @@ namespace BEEV
   
     bool tseitin_are_decision_variables_flag;
 
+    // Create a new Tseitin variable for every intermediate value.
+    bool renameAllInCNF_flag;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -204,6 +207,10 @@ namespace BEEV
 
       // use minisat by default.
       solver_to_use = MINISAT_SOLVER;
+
+      // The special Cryptominisat2 CNF generation with this flag enabled seems to go into an infinite loop.
+      // beware of turning this on if you are using cryptominsat2.
+      renameAllInCNF_flag= false;
 
     } //End of constructor for UserDefinedFlags
 
