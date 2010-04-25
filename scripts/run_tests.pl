@@ -1,5 +1,9 @@
 #!/usr/bin/perl -w
 
+# This is based on the CVC regression test program. Thanks.
+
+
+
 # Run STP regression tests of a given level (default: 0, meaning
 # minimum amount of tests).  The higher the regression level, the more
 # tests to run, and the harder they get.
@@ -26,6 +30,7 @@
 # are not recognized are also ignored.
 
 use strict;
+use Getopt::Long;
 
 my %optionsHelp =
     ("-h" => "Print this help and exit",
@@ -39,11 +44,12 @@ my %optionsHelp =
      "-lang name" => "Use the named input language only (default=all)",
      "-t secs" => "Run each executable for at most 'secs' seconds [0 = no limit]",
      "-vc prog" => "Use \"prog\" to run STP (default=bin/stp)",
-     "-pfc prog" => "Use \"prog\" to run a proof checker (default=true)"
-     );
+     "-pfc prog" => "Use \"prog\" to run a proof checker (default=true)",
+     "-td dir" => "Use \"dir\" as the test directory" 
+    );
 
 my $usageString =
-    "run_tests [ options ] [ test1 test2 ... ] [ -- [ stp options ] ]
+    "run_tests --td=dir [options] 
 
 Run STP Lite regression tests.  Concrete test files or directories
 with test files should be specified by name with a full path or
@@ -63,11 +69,12 @@ chomp $pwd ;
 # Database of default values for options
 my %optionsDefault = ("level" => 4,
 		      "verbose" => 1,
-                      "rt" => 1,
+                      "td" => "../stp-tests/test",
+		      "rt" => 1,
 		      "proofs" => 0,
 		      "lang" => "all",
 		      "stppath" => "stp/bin",
-		      "vc" => $pwd . "/bin/stp -d -m", # Program names
+		      "vc" => $pwd . "/bin/stp -t -d", # Program names
 		      #"vc" => "valgrind --leak-check=full /home/vganesh/stp/bin/stp", # Program names
 		      "pfc" => "true",
 		      "stptestpath" => "stp/test",
@@ -76,16 +83,19 @@ my %optionsDefault = ("level" => 4,
 		      # when looking for info comments
 		      "maxInfoLines" => 4,
 		      # Runtime limit; 0 = no limit
-		      "time" => 30,
+		      "time" => 180,
 		      # Additional command line options to stp
 		      "stpOptions" => "-d");
 
 # Database of command line options.  Initially, they are undefined
+
 my %options = ();
-# The list of testcases to run
-#
-#my @testcases = "sample-tests";
-my @testcases = ("tests/sample-smt-tests");
+
+#td: test directory. Get the "td" parameter from the command line.
+my $td;
+GetOptions("td=s" => \$td);
+
+
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
@@ -143,6 +153,16 @@ my $pfc = getOpt('pfc');
 my $level = getOpt('level');
 my $lang = getOpt('lang');
 my $rt = getOpt('rt');
+
+# The list of testcases to run
+my @testcases;
+if (defined($td))
+{ 
+ @testcases = $td;
+}
+else
+{ @testcases = getOpt('td');
+}
 
 # Read the first 'maxInfoLines' of the testcase and fetch information
 # from the comments
@@ -237,10 +257,17 @@ sub addProblem {
     }
 }
 
-# Total running time
-my $totalTime = time;
 my $defaultDir = `pwd`;
 $defaultDir =~ s/\n//;
+
+ system("echo Copying to /dev/null to fill the disk cache");
+
+ foreach my $testcase (@testcases) {
+  system ("cat " . $testcase . "/*.* > /dev/null");
+}
+
+# Total running time
+my $totalTime = time;
 
 foreach my $testcase (@testcases) {
     chdir $defaultDir or die "Cannot chdir to $defaultDir: $?";
@@ -309,13 +336,17 @@ foreach my $testcase (@testcases) {
 	mkdir $tmpdir or die "Cannot create directory $tmpdir: $?";
 	chdir $tmpdir or die "Cannot chdir to $tmpdir: $?";
 
-	# Compute stp arguments
-	my @stpArgs = ();
+	# If the filename contains ".smt", then tell stp to use the SMT-LIB parser.
+	my $stpArgs ="";
+	if($file =~ m/\.smt/)
+	{
+		$stpArgs = "-m";
+	}	
+
 	# push @stpArgs, ($checkProofs)? "+proofs" : "-proofs";
 	# if($lang ne "all") { push @stpArgs, "-lang $lang"; }
 	# push @stpArgs, $stpOptions;
-	# my $stpArgs = join(" ",  @stpArgs);
-	# Now, run the sucker
+
 	my $timeMax = getOpt('time');
 	my $timeLimit = ($timeMax > 0)? "-t $timeMax" : "";
 	my $limits = "ulimit -c 0; ulimit -d 2000000; ulimit -m 2000000; ulimit -v 2000000; ulimit $timeLimit";
@@ -324,15 +355,12 @@ foreach my $testcase (@testcases) {
 	my $timing = ($verbose)? "time " : "";
 	if($verbose) {
 	    print "***\n";
-	    #print "Running $stp $stpArgs < $file\n";
-	    print "Running $stp < $file\n";
+	    print "Running $stp $stpArgs < $file\n";
 	    print "***\n";
 	}
 	my $time = time;
-	# my $exitVal = system("$limits; $timing $stp $stpArgs "
-	my $exitVal = system("$limits; $timing $stp "
-	#my $exitVal = system("$timing $stp "
-			     . "< $file $logging");
+	# Now, run the sucker
+	my $exitVal = system("$limits; $timing $stp $stpArgs < $file $logging");
 	$time = time - $time;
 	# OK, let's see what happened
 	$testsTotal++;
@@ -365,12 +393,20 @@ foreach my $testcase (@testcases) {
 	    if($result ne "valid" && $str =~ /^(Valid|In[Vv]alid|Unknown)./) {
 		$result=lc $1;
 	    }
+ 	    if($result ne "sat" && $str =~ /^(sat|unsat|Unknown)/) {
+		$result=lc $1;
+	    }
+
 	    # STP exit value may be masked by the shell pipe.  Fish it
 	    # out from the output
 	    if($str =~ /^(Interrupted|Segmentation|Bus error|Floating point exception|.*exception)/) {
 		$exitVal = $1;
 	    }
 	    if($str =~ /^(\*|\s)*((parse\s+)?[Ee]rror)/) {
+		$hasErrors=1;
+	    }
+	    # STP reports if the the SMT-LIB file format has a different actual and expected result.
+	    if($str =~ /Expected/ && $str =~ /FOUND/) {
 		$hasErrors=1;
 	    }
 	}
@@ -381,13 +417,13 @@ foreach my $testcase (@testcases) {
 	    addProblem($name, $lang, 'fail');
 	}
 	# Checking for errors
-	if($hasErrors) {
+	elsif($hasErrors) {
 	    $hasProblem=1;
 	    addProblem($name, $lang, 'error');
 	    print "ERRORS in the test\n";
 	}
 	# Printing result diagnostics
-	if(defined($expResult)) {
+	elsif(defined($expResult)) {
 	    if($expResult ne $result) {
 		$hasProblem=1;
 		if($result eq "") {
@@ -402,9 +438,11 @@ foreach my $testcase (@testcases) {
 		print "Result is correct\n";
 	    }
 	}
-	# else {
-# 	    print "Error: No result\n";
-# 	}
+	 elsif ($result eq "" ) {
+ 	    print "Error: No result\n";
+ 	    addProblem($name, $lang, 'fail');
+		$hasProblem=1
+ 	}
 	$testsProblems += $hasProblem;
 	print("=============== End of testcase ===============\n");
     }
@@ -480,3 +518,4 @@ if($testsProblems > 0 && $verbose) {
 system("/bin/rm -rf $tmpdir");
 
 #exit ($testsProblems > 0 ? 2 : 0);
+

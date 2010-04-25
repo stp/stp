@@ -108,144 +108,82 @@ configclean:
 	rm -rf scripts/config.info
 
 .PHONY: regressall
-regressall:
-	$(MAKE) regresscapi && $(MAKE) regresscvc && $(MAKE) regresssmt && $(MAKE) regressstp && $(MAKE) regressbigarray
+regressall:      
+	$(MAKE) check
+	$(MAKE) regresscapi
+	$(MAKE) regresscvc
+	$(MAKE) regresssyn
+	$(MAKE) regresssmt 
+	$(MAKE) regressbigarray
+	$(MAKE) regressstp
 
+# Runs the basic tests in tests/
 .PHONY: check
 check:
 	$(MAKE) regresscvcbasic && $(MAKE) regresssmtbasic
 
-# The higher the level, the more tests are run (3 = all)
-REGRESS_LEVEL=4
-REGRESS_TESTS=$(REGRESS_TESTS0)
-PROGNAME=bin/stp
-ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
-
-REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvc.log"
-.PHONY: regresscvc
-regresscvc:
+#A generic test target called by the other tests.
+.PHONY: baseTest
+baseTest:
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Starting tests at" `date` | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
-	scripts/run_cvc_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(REGRESS_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
+	$(TO_RUN) 2>&1 | tee -a $(REGRESS_LOG); [ $${PIPESTATUS[0]} -eq 0 ]
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 	@echo "Output is saved in $(REGRESS_LOG)" | tee -a $(REGRESS_LOG)
 	@echo "*********************************************************" \
           | tee -a $(REGRESS_LOG)
 
-# The higher the level, the more tests are run (3 = all)
-BIGARRAY_LOG = `date +%Y-%m-%d`"-regress-bigarray.log"
-PROGNAME=bin/stp
-ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME)
+
+.PHONY: regresscvc
+regresscvc: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)test/
+regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
+regresscvc: baseTest
+
+.PHONY: regresssyn
+regresssyn: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)synthesis-tests/
+regresssyn: REGRESS_LOG = `date +%Y-%m-%d`"-regress-syn.log"
+regresssyn: baseTest
 
 .PHONY: regressbigarray
-regressbigarray:
-	@echo "*********************************************************" \
-          | tee -a $(BIGARRAY_LOG)
-	@echo "Starting tests at" `date` | tee -a $(BIGARRAY_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(BIGARRAY_LOG)
-	scripts/run_bigarray_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(BIGARRAY_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(BIGARRAY_LOG)
-	@echo "Output is saved in $(BIGARRAY_LOG)" | tee -a $(BIGARRAY_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(BIGARRAY_LOG)
+regressbigarray: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)bigarray-test/
+regressbigarray: REGRESS_LOG = `date +%Y-%m-%d`"-regress-bigarray.log"
+regressbigarray: baseTest
 
-SMT_LOG = `date +%Y-%m-%d`"-regress-smt.log"
 .PHONY: regresssmt
-regresssmt:
-	@echo "*********************************************************" \
-          | tee -a $(SMT_LOG)
-	@echo "Starting tests at" `date` | tee -a $(SMT_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SMT_LOG)
-	scripts/run_smt_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(SMT_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(SMT_LOG)
-	@echo "Output is saved in $(SMT_LOG)" | tee -a $(SMT_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SMT_LOG)
+regresssmt: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)smt-test/
+regresssmt: REGRESS_LOG = `date +%Y-%m-%d`"-regress-smt.log"
+regresssmt: baseTest
 
-CAPI_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
 .PHONY: regresscapi
-regresscapi:
-	@echo "*********************************************************" \
-          | tee -a $(CAPI_LOG)
-	@echo "Starting tests at" `date` | tee -a $(CAPI_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(CAPI_LOG)
-	$(MAKE) -C tests/c-api-tests 2>&1 | tee -a $(CAPI_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(CAPI_LOG)
-	@echo "Output is saved in $(CAPI_LOG)" | tee -a $(CAPI_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(CAPI_LOG)
+regresscapi: TO_RUN=$(MAKE) -C tests/c-api-tests
+regresscapi: REGRESS_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
+regresscapi: baseTest
 
-STP_LOG = `date +%Y-%m-%d`"-regress-stp.log"
 .PHONY: regressstp
-regressstp:
-	@echo "*********************************************************" \
-          | tee -a $(STP_LOG)
-	@echo "Starting tests at" `date` | tee -a $(STP_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(STP_LOG)
-	scripts/run_stp_tests.pl 2>&1 | tee -a $(STP_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(STP_LOG)
-	@echo "Output is saved in $(STP_LOG)" | tee -a $(STP_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(STP_LOG)
+regressstp: TO_RUN=scripts/run_stp_tests.pl 2>&1
+regressstp: STP_LOG = `date +%Y-%m-%d`"-regress-stp-api.log"
+regressstp: baseTest
 
-CVCBASIC_LOG = `date +%Y-%m-%d`"-regress-cvcbasic.log"
 .PHONY: regresscvcbasic
-regresscvcbasic:
-	@echo "*********************************************************" \
-          | tee -a $(CVCBASIC_LOG)
-	@echo "Starting tests at" `date` | tee -a $(CVCBASIC_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(CVCBASIC_LOG)
-	scripts/run_basic_cvctests.pl 2>&1 | tee -a $(CVCBASIC_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(CVCBASIC_LOG)
-	@echo "Output is saved in $(CVCBASIC_LOG)" | tee -a $(CVCBASIC_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(CVCBASIC_LOG)
+regresscvcbasic: TO_RUN=scripts/run_tests.pl --td=tests/sample-tests
+regresscvcbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-regresscvcbasic.log"
+regresscvcbasic: baseTest
 
-SMTBASIC_LOG = `date +%Y-%m-%d`"-regress-smtbasic.log"
 .PHONY: regresssmtbasic
-regresssmtbasic:
-	@echo "*********************************************************" \
-          | tee -a $(SMTBASIC_LOG)
-	@echo "Starting tests at" `date` | tee -a $(SMTBASIC_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SMTBASIC_LOG)
-	scripts/run_basic_smttests.pl 2>&1 | tee -a $(SMTBASIC_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(SMTBASIC_LOG)
-	@echo "Output is saved in $(SMTBASIC_LOG)" | tee -a $(SMTBASIC_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SMTBASIC_LOG)
-
-SYNTHESIS_LOG = `date +%Y-%m-%d`"-regress-synthesis.log"
-.PHONY: regresssyn
-regresssyn:
-	@echo "*********************************************************" \
-          | tee -a $(SYNTHESIS_LOG)
-	@echo "Starting tests at" `date` | tee -a $(SYNTHESIS_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SYNTHESIS_LOG)
-	scripts/run_synthesis_tests.pl $(ALL_OPTIONS) 2>&1 | tee -a $(SYNTHESIS_LOG);eval [ $${PIPESTATUS[0]} -eq 0 ]
-	@echo "*********************************************************" \
-          | tee -a $(SYNTHESIS_LOG)
-	@echo "Output is saved in $(SYNTHESIS_LOG)" | tee -a $(SYNTHESIS_LOG)
-	@echo "*********************************************************" \
-          | tee -a $(SYNTHESIS_LOG)
+regresssmtbasic: TO_RUN=scripts/run_tests.pl --td=tests/sample-smt-tests
+regresssmtbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-regresssmtbasic.log"
+regresssmtbasic: baseTest
 
 
+# The higher the level, the more tests are run (3 = all)
+REGRESS_LEVEL=4
+REGRESS_TESTS=$(REGRESS_TESTS0)
+PROGNAME=bin/stp
+ALL_OPTIONS= -l $(REGRESS_LEVEL) $(PROGNAME) $(REGRESS_TESTS)
 GRIND_LOG = `date +%Y-%m-%d`"-grind.log"
 GRINDPROG = valgrind --leak-check=full --undef-value-errors=no
 GRIND_TAR  = $(BIN_DIR)/stp -d
