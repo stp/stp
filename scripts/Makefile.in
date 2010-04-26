@@ -116,6 +116,8 @@ regressall: all
 	$(MAKE) regresssmt 
 	$(MAKE) regressbigarray
 	$(MAKE) regressstp
+	$(MAKE) regressbio
+	$(MAKE) regresscrypto
 
 # Runs the basic tests in tests/
 .PHONY: check
@@ -142,6 +144,17 @@ baseTest:
 regresscvc: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)test/
 regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
 regresscvc: baseTest
+
+.PHONY: regressbio
+regressbio: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)bio-test/
+regressbio: REGRESS_LOG=`date +%Y-%m-%d`"-regress-bio.log"
+regressbio: baseTest
+
+.PHONY: regresscrypto
+regresscrypto: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)crypto-tests/
+regresscrypto: REGRESS_LOG=`date +%Y-%m-%d`"-regress-crypto.log"
+regresscrypto: baseTest
+
 
 .PHONY: regresssyn
 regresssyn: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)synthesis-tests/
