@@ -108,7 +108,7 @@ configclean:
 	rm -rf scripts/config.info
 
 .PHONY: regressall
-regressall:      
+regressall: all
 	$(MAKE) check
 	$(MAKE) regresscapi
 	$(MAKE) regresscvc
@@ -164,8 +164,8 @@ regresscapi: REGRESS_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
 regresscapi: baseTest
 
 .PHONY: regressstp
-regressstp: TO_RUN=scripts/run_stp_tests.pl 2>&1
-regressstp: STP_LOG = `date +%Y-%m-%d`"-regress-stp-api.log"
+regressstp: TO_RUN=scripts/run_stp_tests.pl
+regressstp: REGRESS_LOG = `date +%Y-%m-%d`"-regress-stp.log"
 regressstp: baseTest
 
 .PHONY: regresscvcbasic
