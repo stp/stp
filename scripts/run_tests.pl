@@ -95,7 +95,6 @@ my %options = ();
 my $td;
 GetOptions("td=s" => \$td);
 
-
 # Temporary array for STP options
 my @stpOptions = ();
 # State is either "own" or "stp", meaning that we're reading either
@@ -153,6 +152,11 @@ my $pfc = getOpt('pfc');
 my $level = getOpt('level');
 my $lang = getOpt('lang');
 my $rt = getOpt('rt');
+
+# Print the version of STP we are running.
+system("$stp -? 2>&1 | grep version");
+
+
 
 # The list of testcases to run
 my @testcases;
