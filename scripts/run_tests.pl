@@ -278,7 +278,7 @@ foreach my $testcase (@testcases) {
 	opendir(TESTS, $testcase)
 	    or die "Cannot open directory $testcase: $?";
 	@testcasesTmp = grep {
-	    /[.]([sc]vcl?|li?sp|smt)$/ && -f "$testcase/$_" } readdir(TESTS);
+	    /[.]([sc]vcl?|li?sp|smt|)([.]gz)?$/ && -f "$testcase/$_" } readdir(TESTS);
 	closedir TESTS;
 	@testcasesTmp = map { "$testcase/$_" } @testcasesTmp;
     } else {
@@ -355,12 +355,12 @@ foreach my $testcase (@testcases) {
 	my $timing = ($verbose)? "time " : "";
 	if($verbose) {
 	    print "***\n";
-	    print "Running $stp $stpArgs < $file\n";
+	    print "Running gunzip -f --stdout $file | $timing $stp $stpArgs  $logging \n";
 	    print "***\n";
 	}
 	my $time = time;
 	# Now, run the sucker
-	my $exitVal = system("$limits; $timing $stp $stpArgs < $file $logging");
+	my $exitVal = system("$limits; gunzip -f --stdout $file | $timing $stp $stpArgs  $logging");
 	$time = time - $time;
 	# OK, let's see what happened
 	$testsTotal++;
