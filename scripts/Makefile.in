@@ -146,7 +146,7 @@ regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
 regresscvc: baseTest
 
 .PHONY: regressbio
-regressbio: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)bio-test/
+regressbio: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)bio-tests/
 regressbio: REGRESS_LOG=`date +%Y-%m-%d`"-regress-bio.log"
 regressbio: baseTest
 
