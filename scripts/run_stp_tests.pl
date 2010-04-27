@@ -237,6 +237,13 @@ sub addProblem {
     }
 }
 
+ system("echo Copying to /dev/null to fill the disk cache");
+
+ foreach my $testcase (@testcases) {
+  system ("cat " . $testcase . "/*.* > /dev/null");
+}
+
+
 # Total running time
 my $totalTime = time;
 my $defaultDir = `pwd`;
