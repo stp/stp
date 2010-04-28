@@ -135,9 +135,10 @@ namespace BEEV
 
 #if defined CRYPTOMINISAT2
     newSolver.findNormalXors = false;
-    newSolver.doSubsumption = false;
+    newSolver.doSubsumption = true;
     newSolver.verbosity = 0;
-    newSolver.doPartHandler = false;
+    //newSolver.fixRestartType = static_restart;
+    newSolver.doPartHandler = true;
 #endif
 
 // 	if(enable_clausal_abstraction && 
