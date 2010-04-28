@@ -338,7 +338,7 @@ namespace BEEV
       }
 
 #if defined CRYPTOMINISAT2
-    if(!xorcl->empty())
+    if(!xorcl->asList()->empty())
       {
         sat = toSATandSolve(SatSolver, *xorcl, true);
       }

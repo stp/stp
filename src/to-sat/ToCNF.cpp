@@ -1163,8 +1163,8 @@ namespace BEEV
         //doRenamingPos(*it, defs);
         doRenamingNeg(*it, defs);
         xor_clause->insert(xor_clause->end(), 
-                           ((*(info[*it]->clausespos))[0])->begin(),
-                           ((*(info[*it]->clausespos))[0])->end());
+                           ((*(info[*it]->clausespos)).asList()->front())->begin(),
+                           ((*(info[*it]->clausespos)).asList()->front())->end());
 	if(renameAllSiblings)
           {
 	    assert(info[*it]->clausespos->size() ==1);
@@ -1542,9 +1542,10 @@ namespace BEEV
         //XOR node doRenamingPos(*it, defs);
         //doRenamingPos(*it, defs);
         doRenamingNeg(*it, defs);
+
         xor_clause->insert(xor_clause->end(), 
-                           ((*(info[*it]->clausespos))[0])->begin(),
-                           ((*(info[*it]->clausespos))[0])->end());
+                           ((*(info[*it]->clausespos)).asList()->front())->begin(),
+                           ((*(info[*it]->clausespos)).asList()->front())->end());
       }
     doRenamingPosXor(varphi);
     //ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
