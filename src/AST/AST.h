@@ -75,12 +75,6 @@ namespace BEEV
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeToVecMap;
 
-  // Datatype for clauses
-  typedef vector<const ASTNode*>* ClausePtr;
-  
-  // Datatype for Clauselists
-  typedef vector<ClausePtr> ClauseList;
-
   //Needed for defining the MAP below
   struct ltint
   {
@@ -89,6 +83,8 @@ namespace BEEV
       return s1 < s2;
     }
   };
+
+  class ClauseList;
 
   //Datatype for ClauseLists
   typedef MAP<

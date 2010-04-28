@@ -14,6 +14,7 @@
 #include <cassert>
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include "ClauseList.h"
 
 namespace BEEV
 {
@@ -132,18 +133,8 @@ namespace BEEV
     //########################################
     //utilities for clause sets
 
-    ClauseList* COPY(const ClauseList& varphi);    
 
     ClauseList* SINGLETON(const ASTNode& varphi);    
-
-    ClauseList* UNION(const ClauseList& varphi1, const ClauseList& varphi2);    
-
-    void INPLACE_UNION(ClauseList* varphi1, const ClauseList& varphi2);    
-
-    void NOCOPY_INPLACE_UNION(ClauseList* varphi1, ClauseList* varphi2);   
-
-    ClauseList* PRODUCT(const ClauseList& varphi1, 
-                        const ClauseList& varphi2);    
 
     //########################################
     //########################################
@@ -260,10 +251,10 @@ namespace BEEV
 
     // Destructors that need to be explicitly called...(yuck).
     // One deletes the thing passed into it.
-    static void DeleteClauseList(ClauseList varphi);
+
     static void DELETE(ClauseList* varphi);
 
-    void PrintClauseList(ostream& os, ClauseList& cll);
+    //void PrintClauseList(ostream& os, ClauseList& cll);
   }; // end of CNFMgr class
 };//end of namespace
 #endif

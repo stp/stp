@@ -90,8 +90,10 @@ namespace BEEV
 #endif
       }
 
+	ClauseContainer& cc = *cll.asList();
+
     //iterate through the list (conjunction) of ASTclauses cll
-    ClauseList::const_iterator i = cll.begin(), iend = cll.end();    
+    ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
     for (int count=0, flag=0; i != iend; i++)
       {
         //Clause for the SATSolver
@@ -166,7 +168,7 @@ namespace BEEV
           {
             bm->PrintStats(newSolver);
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-            CNFMgr::DeleteClauseList(cll);
+            cll.deleteJustVectors();
             return false;
           }     
       } // End of For-loop adding the clauses 
@@ -186,7 +188,7 @@ namespace BEEV
     		file.open(fileName.str().c_str());
 
     		file << "p cnf " << newSolver.nVars() << " " << cll.size() << endl;
-    		i = cll.begin(), iend = cll.end();
+    		i = cc.begin(), iend = cc.end();
     		for (; i != iend; i++)
     		{
     			vector<const ASTNode*>::iterator j = (*i)->begin(), jend =
@@ -214,7 +216,7 @@ namespace BEEV
     	}
 
     // Free the clause list before SAT solving.
-    CNFMgr::DeleteClauseList(cll);
+    cll.deleteJustVectors();
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);    
@@ -231,9 +233,10 @@ namespace BEEV
   static ClauseBuckets * Sort_ClauseList_IntoBuckets(ClauseList * cl)
   {
     ClauseBuckets * cb = new ClauseBuckets();
+    ClauseContainer* cc = cl->asList();
 
     //Sort the clauses, and bucketize by the size of the clauses
-    for(ClauseList::iterator it = cl->begin(), itend = cl->end();
+    for(ClauseContainer::iterator it = cc->begin(), itend = cc->end();
         it!=itend; it++)
       {
         ClausePtr cptr = *it;
@@ -318,7 +321,7 @@ namespace BEEV
     ClauseList* xorcl = cm.ReturnXorClauses();
 
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
-    cl->clear(); // clause buckets now point to the clauses.
+    cl->asList()->clear(); // clause buckets now point to the clauses.
     delete cl;
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
 
@@ -328,7 +331,7 @@ namespace BEEV
 
     if(!sat)
       {
-        CNFMgr::DeleteClauseList(*xorcl);
+    	xorcl->deleteJustVectors();
     	delete xorcl;
     	return sat;
       }

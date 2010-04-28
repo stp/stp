@@ -17,16 +17,6 @@ namespace BEEV
   //############################################################
   //############################################################
 
-  void CNFMgr::DeleteClauseList(ClauseList cllp)
-  {
-    ClauseList::const_iterator iend = cllp.end();
-    for (ClauseList::const_iterator i = cllp.begin(); i < iend; i++)
-      {
-        delete *i;
-      }
-    cllp.clear();
-  } //End of DeleteClauseList
-
   bool CNFMgr::onChildDoPos(const ASTNode& varphi, unsigned int idx)
   {
     bool result = true;
@@ -255,20 +245,6 @@ namespace BEEV
   //########################################
   //utilities for clause sets
   
-
-  ClauseList* CNFMgr::COPY(const ClauseList& varphi)
-  {
-    ClauseList* psi = new ClauseList();
-    
-    ClauseList::const_iterator it = varphi.begin();
-    for (; it != varphi.end(); it++)
-      {
-        psi->push_back(new vector<const ASTNode*> (**it));
-      }
-    
-    return psi;
-  } //End of COPY()
-  
   ClauseList* CNFMgr::SINGLETON(const ASTNode& varphi)
   {
     ASTNode* copy = ASTNodeToASTNodePtr(varphi);
@@ -283,61 +259,10 @@ namespace BEEV
 
   static ASTNode GetNodeFrom_SINGLETON(ClauseList *cl)
   {
-    ClausePtr c = (*cl)[0];
+    ClausePtr c = (*(*cl).asList())[0];
     const ASTNode * a = (*c)[0];
     return *a;
   }
-
-  ClauseList* CNFMgr::UNION(const ClauseList& varphi1, 
-                            const ClauseList& varphi2)
-  {    
-    ClauseList* psi1 = COPY(varphi1);
-    ClauseList* psi2 = COPY(varphi2);
-    psi1->insert(psi1->end(), psi2->begin(), psi2->end());
-    delete psi2;
-    
-    return psi1;    
-  } //End of UNION()
-
-  void CNFMgr::INPLACE_UNION(ClauseList* varphi1, 
-                             const ClauseList& varphi2)
-  {    
-    ClauseList* psi2 = COPY(varphi2);
-    varphi1->insert(varphi1->end(), psi2->begin(), psi2->end());
-    delete psi2;
-  } //End of INPLACE_UNION()
-
-  void CNFMgr::NOCOPY_INPLACE_UNION(ClauseList* varphi1, 
-                                    ClauseList* varphi2)
-  {    
-    varphi1->insert(varphi1->end(), varphi2->begin(), varphi2->end());
-    delete varphi2;
-  } //End of NOCOPY_INPLACE_UNION
-
-  ClauseList* CNFMgr::PRODUCT(const ClauseList& varphi1, 
-                              const ClauseList& varphi2)
-  {    
-    ClauseList* psi = new ClauseList();
-    psi->reserve(varphi1.size() * varphi2.size());
-    
-    ClauseList::const_iterator it1 = varphi1.begin();
-    for (; it1 != varphi1.end(); it1++)
-      {
-        ClausePtr clause1 = *it1;
-        ClauseList::const_iterator it2 = varphi2.begin();
-        for (; it2 != varphi2.end(); it2++)
-          {
-            ClausePtr clause2 = *it2;
-            ClausePtr clause = new vector<const ASTNode*> ();
-            clause->reserve(clause1->size() + clause2->size());
-            clause->insert(clause->end(), clause1->begin(), clause1->end());
-            clause->insert(clause->end(), clause2->begin(), clause2->end());
-            psi->push_back(clause);
-          }
-      }
-    
-    return psi;
-  } //End of Product
 
   //########################################
   //########################################
@@ -668,14 +593,14 @@ namespace BEEV
     //########################################
     
     ClauseList* cl1 = SINGLETON(bm->CreateNode(EQ, psi, t1));
-    ClauseList* cl2 = PRODUCT(*(info[varphi[0]]->clausesneg), *cl1);
+    ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi[0]]->clausesneg), *cl1);
     DELETE(cl1);
-    defs->insert(defs->end(), cl2->begin(), cl2->end());
+    defs->insert(cl2);
     
     ClauseList* cl3 = SINGLETON(bm->CreateNode(EQ, psi, t2));
-    ClauseList* cl4 = PRODUCT(*(info[varphi[0]]->clausespos), *cl3);
+    ClauseList* cl4 = ClauseList::PRODUCT(*(info[varphi[0]]->clausespos), *cl3);
     DELETE(cl3);
-    defs->insert(defs->end(), cl4->begin(), cl4->end());
+    defs->insert(cl4);
     
     return ASTNodeToASTNodePtr(psi);
   }//End of doRenameITE()
@@ -698,8 +623,8 @@ namespace BEEV
     
     ClauseList* cl1;
     cl1 = SINGLETON(bm->CreateNode(NOT, psi));
-    ClauseList* cl2 = PRODUCT(*(info[varphi]->clausespos), *cl1);
-    defs->insert(defs->end(), cl2->begin(), cl2->end());
+    ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi]->clausespos), *cl1);
+    defs->insert(cl2);
     DELETE(info[varphi]->clausespos);
     DELETE(cl1);
     delete cl2;
@@ -798,8 +723,8 @@ namespace BEEV
     
     ClauseList* cl1;
     cl1 = SINGLETON(psi);
-    ClauseList* cl2 = PRODUCT(*(info[varphi]->clausesneg), *cl1);
-    defs->insert(defs->end(), cl2->begin(), cl2->end());
+    ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi]->clausesneg), *cl1);
+    defs->insert(cl2);
     DELETE(info[varphi]->clausesneg);
     DELETE(cl1);
     delete cl2;
@@ -1030,7 +955,7 @@ namespace BEEV
                                          ClauseList* defs)
   {
     convertFormulaToCNF(varphi[0], defs);
-    info[varphi]->clausespos = COPY(*(info[varphi[0]]->clausesneg));
+    info[varphi]->clausespos = ClauseList::COPY(*(info[varphi[0]]->clausesneg));
     reduceMemoryFootprintNeg(varphi[0]);
   } //End of convertFormulaToCNFPosNOT()
 
@@ -1042,14 +967,14 @@ namespace BEEV
 
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     convertFormulaToCNF(*it, defs);
-    ClauseList* psi = COPY(*(info[*it]->clausespos));
+    ClauseList* psi = ClauseList::COPY(*(info[*it]->clausespos));
 
     for (it++; it != varphi.GetChildren().end(); it++) {
       convertFormulaToCNF(*it, defs);
       CNFInfo* x = info[*it];
 
       if (sharesPos(*x) == 1) {
-        psi->insert(psi->end(),x->clausespos->begin(), x->clausespos->end());
+        psi->insert(x->clausespos);
         delete (x->clausespos);
         x->clausespos = NULL;
         if (x->clausesneg == NULL) {
@@ -1057,7 +982,7 @@ namespace BEEV
           info.erase(*it);
         }
       } else {
-        INPLACE_UNION(psi, *(x->clausespos));
+    	ClauseList::INPLACE_UNION(psi, *(x->clausespos));
         reduceMemoryFootprintPos(*it);
       }
     }
@@ -1088,7 +1013,7 @@ namespace BEEV
       {
         renamesibs = true;
       }
-    psi = COPY(*clauses);
+    psi = ClauseList::COPY(*clauses);
     reduceMemoryFootprintNeg(*it);
 
     for (it++; it != varphi.GetChildren().end(); it++)
@@ -1104,7 +1029,7 @@ namespace BEEV
             renamesibs = true;
           }
         oldpsi = psi;
-        psi = PRODUCT(*psi, *clauses);
+        psi = ClauseList::PRODUCT(*psi, *clauses);
         reduceMemoryFootprintNeg(*it);
         DELETE(oldpsi);
       }
@@ -1130,7 +1055,7 @@ namespace BEEV
       {
         renamesibs = true;
       }
-    psi = COPY(*clauses);
+    psi = ClauseList::COPY(*clauses);
     reduceMemoryFootprintPos(*it);
 
     for (it++; it != varphi.GetChildren().end(); it++)
@@ -1146,7 +1071,7 @@ namespace BEEV
             renamesibs = true;
           }
         oldpsi = psi;
-        psi = PRODUCT(*psi, *clauses);
+        psi = ClauseList::PRODUCT(*psi, *clauses);
         reduceMemoryFootprintPos(*it);
         DELETE(oldpsi);
       }
@@ -1162,12 +1087,12 @@ namespace BEEV
     //****************************************
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     convertFormulaToCNF(*it, defs);
-    ClauseList* psi = COPY(*(info[*it]->clausesneg));
+    ClauseList* psi = ClauseList::COPY(*(info[*it]->clausesneg));
     reduceMemoryFootprintNeg(*it);
     for (it++; it != varphi.GetChildren().end(); it++)
       {
         convertFormulaToCNF(*it, defs);
-        INPLACE_UNION(psi, *(info[*it]->clausesneg));
+        ClauseList::INPLACE_UNION(psi, *(info[*it]->clausesneg));
         reduceMemoryFootprintNeg(*it);
       }
 
@@ -1188,7 +1113,7 @@ namespace BEEV
         setDoSibRenamingPos(*x1);
       }
     convertFormulaToCNF(varphi[1], defs);
-    ClauseList* psi = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
+    ClauseList* psi = ClauseList::PRODUCT(*(x0->clausesneg), *(x1->clausespos));
     reduceMemoryFootprintNeg(varphi[0]);
     reduceMemoryFootprintPos(varphi[1]);
     info[varphi]->clausespos = psi;
@@ -1215,9 +1140,9 @@ namespace BEEV
         setDoSibRenamingPos(*x2);
       }
     convertFormulaToCNF(varphi[2], defs);
-    ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausespos));
-    ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausespos));
-    NOCOPY_INPLACE_UNION(psi1, psi2);
+    ClauseList* psi1 = ClauseList::PRODUCT(*(x0->clausesneg), *(x1->clausespos));
+    ClauseList* psi2 = ClauseList::PRODUCT(*(x0->clausespos), *(x2->clausespos));
+    ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
     reduceMemoryFootprintNeg(varphi[0]);
     reduceMemoryFootprintPos(varphi[1]);
     reduceMemoryFootprintPos(varphi[0]);
@@ -1313,12 +1238,12 @@ namespace BEEV
           }
 
         psi1 = 
-          PRODUCT(*(info[varphi[idx]]->clausespos), 
+        		ClauseList::PRODUCT(*(info[varphi[idx]]->clausespos),
                   *(info[varphi[idx + 1]]->clausespos));
         psi2 = 
-          PRODUCT(*(info[varphi[idx]]->clausesneg), 
+        		ClauseList::PRODUCT(*(info[varphi[idx]]->clausesneg),
                   *(info[varphi[idx + 1]]->clausesneg));
-        NOCOPY_INPLACE_UNION(psi1, psi2);
+        ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
 
         psi = psi1;
       }
@@ -1344,11 +1269,11 @@ namespace BEEV
             setDoSibRenamingNeg(*info[varphi[idx]]);
           }
 
-        psi1 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta1);
-        psi2 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta2);
+        psi1 = ClauseList::PRODUCT(*(info[varphi[idx]]->clausespos), *theta1);
+        psi2 = ClauseList::PRODUCT(*(info[varphi[idx]]->clausesneg), *theta2);
         DELETE(theta1);
         DELETE(theta2);
-        NOCOPY_INPLACE_UNION(psi1, psi2);
+        ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
 
         psi = psi1;
       }
@@ -1406,7 +1331,7 @@ namespace BEEV
                                          ClauseList* defs)
   {
     convertFormulaToCNF(varphi[0], defs);
-    info[varphi]->clausesneg = COPY(*(info[varphi[0]]->clausespos));
+    info[varphi]->clausesneg = ClauseList::COPY(*(info[varphi[0]]->clausespos));
     reduceMemoryFootprintPos(varphi[0]);
   } //End of convertFormulaToCNFNegNOT()
 
@@ -1429,7 +1354,7 @@ namespace BEEV
       {
         renamesibs = true;
       }
-    psi = COPY(*clauses);
+    psi = ClauseList::COPY(*clauses);
     reduceMemoryFootprintNeg(*it);
 
     for (it++; it != varphi.GetChildren().end(); it++)
@@ -1445,7 +1370,7 @@ namespace BEEV
             renamesibs = true;
           }
         oldpsi = psi;
-        psi = PRODUCT(*psi, *clauses);
+        psi = ClauseList::PRODUCT(*psi, *clauses);
         reduceMemoryFootprintNeg(*it);
         DELETE(oldpsi);
       }
@@ -1461,12 +1386,12 @@ namespace BEEV
     //****************************************
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     convertFormulaToCNF(*it, defs);
-    ClauseList* psi = COPY(*(info[*it]->clausespos));
+    ClauseList* psi = ClauseList::COPY(*(info[*it]->clausespos));
     reduceMemoryFootprintPos(*it);
     for (it++; it != varphi.GetChildren().end(); it++)
       {
         convertFormulaToCNF(*it, defs);
-        INPLACE_UNION(psi, *(info[*it]->clausespos));
+        ClauseList::INPLACE_UNION(psi, *(info[*it]->clausespos));
         reduceMemoryFootprintPos(*it);
       }
 
@@ -1481,19 +1406,18 @@ namespace BEEV
     //****************************************
     ASTVec::const_iterator it = varphi.GetChildren().begin();
     convertFormulaToCNF(*it, defs);
-    ClauseList* psi = COPY(*(info[*it]->clausesneg));
+    ClauseList* psi = ClauseList::COPY(*(info[*it]->clausesneg));
     reduceMemoryFootprintNeg(*it);
     for (it++; it != varphi.GetChildren().end(); it++) {
       convertFormulaToCNF(*it, defs);
       CNFInfo* x = info[*it];
 
       if (sharesNeg(*x) != 1) {
-        INPLACE_UNION(psi, *(x->clausesneg));
+    	  ClauseList::INPLACE_UNION(psi, *(x->clausesneg));
         reduceMemoryFootprintNeg(*it);
       } else {
         // If this is the only use of "clausesneg", no reason to make a copy.
-        psi->insert(psi->end(), x->clausesneg->begin(),
-                    x->clausesneg->end());
+        psi->insert(x->clausesneg);
         // Copied from reduceMemoryFootprintNeg
         delete x->clausesneg;
         x->clausesneg = NULL;
@@ -1526,7 +1450,7 @@ namespace BEEV
       {
         renamesibs = true;
       }
-    psi = COPY(*clauses);
+    psi = ClauseList::COPY(*clauses);
     reduceMemoryFootprintPos(*it);
 
     for (it++; it != varphi.GetChildren().end(); it++)
@@ -1542,7 +1466,7 @@ namespace BEEV
             renamesibs = true;
           }
         oldpsi = psi;
-        psi = PRODUCT(*psi, *clauses);
+        psi = ClauseList::PRODUCT(*psi, *clauses);
         reduceMemoryFootprintPos(*it);
         DELETE(oldpsi);
       }
@@ -1560,7 +1484,7 @@ namespace BEEV
     CNFInfo* x1 = info[varphi[1]];
     convertFormulaToCNF(varphi[0], defs);
     convertFormulaToCNF(varphi[1], defs);
-    ClauseList* psi = UNION(*(x0->clausespos), *(x1->clausesneg));
+    ClauseList* psi = ClauseList::UNION(*(x0->clausespos), *(x1->clausesneg));
     info[varphi]->clausesneg = psi;
     reduceMemoryFootprintPos(varphi[0]);
     reduceMemoryFootprintNeg(varphi[1]);
@@ -1587,9 +1511,9 @@ namespace BEEV
         setDoSibRenamingNeg(*x2);
       }
     convertFormulaToCNF(varphi[2], defs);
-    ClauseList* psi1 = PRODUCT(*(x0->clausesneg), *(x1->clausesneg));
-    ClauseList* psi2 = PRODUCT(*(x0->clausespos), *(x2->clausesneg));
-    NOCOPY_INPLACE_UNION(psi1, psi2);
+    ClauseList* psi1 = ClauseList::PRODUCT(*(x0->clausesneg), *(x1->clausesneg));
+    ClauseList* psi2 = ClauseList::PRODUCT(*(x0->clausespos), *(x2->clausesneg));
+    ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
     reduceMemoryFootprintNeg(varphi[0]);
     reduceMemoryFootprintNeg(varphi[1]);
     reduceMemoryFootprintPos(varphi[0]);
@@ -1689,12 +1613,12 @@ namespace BEEV
           }
 
         psi1 = 
-          PRODUCT(*(info[varphi[idx]]->clausesneg),
+          ClauseList::PRODUCT(*(info[varphi[idx]]->clausesneg),
                   *(info[varphi[idx + 1]]->clausespos));
         psi2 = 
-          PRODUCT(*(info[varphi[idx]]->clausespos),
+        		ClauseList::PRODUCT(*(info[varphi[idx]]->clausespos),
                   *(info[varphi[idx + 1]]->clausesneg));
-        NOCOPY_INPLACE_UNION(psi1, psi2);
+        ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
 
         psi = psi1;
       }
@@ -1722,11 +1646,11 @@ namespace BEEV
             setDoSibRenamingPos(*info[varphi[idx]]);
           }
 
-        psi1 = PRODUCT(*(info[varphi[idx]]->clausesneg), *theta1);
-        psi2 = PRODUCT(*(info[varphi[idx]]->clausespos), *theta2);
+        psi1 = ClauseList::PRODUCT(*(info[varphi[idx]]->clausesneg), *theta1);
+        psi2 = ClauseList::PRODUCT(*(info[varphi[idx]]->clausespos), *theta2);
         DELETE(theta1);
         DELETE(theta2);
-        NOCOPY_INPLACE_UNION(psi1, psi2);
+        ClauseList::NOCOPY_INPLACE_UNION(psi1, psi2);
 
         psi = psi1;
       }
@@ -1856,7 +1780,7 @@ namespace BEEV
     ClauseList* defs = SINGLETON(dummy_true_var);
     convertFormulaToCNF(varphi, defs);
     ClauseList* top = info[varphi]->clausespos;
-    defs->insert(defs->begin() + 1, top->begin(), top->end());
+    defs->insertAtFront(top);
 
     cleanup(varphi);
     bm->GetRunTimes()->stop(RunTimes::CNFConversion);
@@ -1878,13 +1802,16 @@ namespace BEEV
     return clausesxor;
   }
 
+  //
   void CNFMgr::DELETE(ClauseList* varphi)
   {
-    DeleteClauseList(*varphi);
-    delete varphi;
+	 varphi->deleteJustVectors();
+     delete varphi;
+     varphi = NULL;
   } //End of DELETE()
 
 
+  /*
   void CNFMgr::PrintClauseList(ostream& os, ClauseList& cll)
   {
     int num_clauses = cll.size();
@@ -1900,5 +1827,6 @@ namespace BEEV
         os << endl 
            << "-------------------------------------------" << endl;
       }
-  } //end of PrintClauseList()  
+  } //end of PrintClauseList()
+  */
 } // end namespace BEEV
