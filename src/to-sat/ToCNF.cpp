@@ -621,13 +621,11 @@ namespace BEEV
     // step 2, add defs
     //########################################
     
-    ClauseList* cl1;
-    cl1 = SINGLETON(bm->CreateNode(NOT, psi));
-    ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi]->clausespos), *cl1);
-    defs->insert(cl2);
-    DELETE(info[varphi]->clausespos);
-    DELETE(cl1);
-    delete cl2;
+    ASTNode* copy = ASTNodeToASTNodePtr(bm->CreateNode(NOT, psi));
+    ClauseList* cl = info[varphi]->clausespos;
+    cl->appendToAllClauses(copy);
+    defs->insert(cl);
+    delete cl;
     
     //########################################
     // step 3, update info[varphi]
@@ -721,14 +719,12 @@ namespace BEEV
     // step 3, add defs
     //########################################
     
-    ClauseList* cl1;
-    cl1 = SINGLETON(psi);
-    ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi]->clausesneg), *cl1);
-    defs->insert(cl2);
-    DELETE(info[varphi]->clausesneg);
-    DELETE(cl1);
-    delete cl2;
-    
+    ASTNode* copy = ASTNodeToASTNodePtr(psi);
+    ClauseList* cl = info[varphi]->clausesneg;
+    cl->appendToAllClauses(copy);
+    defs->insert(cl);
+    delete cl;
+
     //########################################
     // step 4, update info[varphi]
     //########################################

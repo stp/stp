@@ -12,7 +12,7 @@ void ClauseList::appendToAllClauses(const ASTNode* n) {
 }
 
 // expects varphi2 to be just a single clause.
-void ClauseList::productInPlace(const ClauseList& varphi2) {
+void ClauseList::INPLACE_PRODUCT(const ClauseList& varphi2) {
 	assert(1 == varphi2.size());
 	ClauseList& varphi1 = *this;
 

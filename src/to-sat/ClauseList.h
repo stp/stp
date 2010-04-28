@@ -26,7 +26,7 @@ class ClauseList
   public:
 
 	void appendToAllClauses(const ASTNode* n);
-	void productInPlace(const ClauseList& varphi2);
+	void INPLACE_PRODUCT(const ClauseList& varphi2);
 
 	ClauseContainer* asList() {
 		return &cont;
@@ -105,7 +105,6 @@ class ClauseList
 
     static void INPLACE_UNION(ClauseList* varphi1, const ClauseList& varphi2)
     {
-
       ClauseList* psi2 = ClauseList::COPY(varphi2);
       varphi1->insert( psi2);
       delete psi2;
