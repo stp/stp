@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifdef _MSC_VER
 #include <msvc/stdint.h>
 #else
+#include "SmallPtr.h"
 #include <stdint.h>
 #endif //_MSC_VER
 #include <cstdio>
@@ -384,10 +385,13 @@ inline void clauseFree(Clause* c)
     return ret;
 }*/
 
-//typedef sptr<Clause> ClausePtr;
-//typedef sptr<XorClause> XorClausePtr;
+#ifdef _MSC_VER
 typedef Clause* ClausePtr;
 typedef XorClause* XorClausePtr;
+#else
+typedef sptr<Clause> ClausePtr;
+typedef sptr<XorClause> XorClausePtr;
+#endif //_MSC_VER
 
 #pragma pack(push)
 #pragma pack(1)

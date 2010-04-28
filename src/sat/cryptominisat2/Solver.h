@@ -128,6 +128,7 @@ public:
     // Mode of operation:
     //
     double    random_var_freq;    // The frequency with which the decision heuristic tries to choose a random variable.        (default 0.02)
+    double    clause_decay;       // Inverse of the clause activity decay factor.                                              (1 / 0.999)
     int       restart_first;      // The initial restart limit.                                                                (default 100)
     double    restart_inc;        // The factor with which the restart limit is multiplied in each restart.                    (default 1.5)
     double    learntsize_factor;  // The intitial limit for learnt clauses is a factor of the original clauses.                (default 1 / 3)
@@ -152,7 +153,6 @@ public:
     bool      doSubsume1;           // Perform clause contraction through resolution
     bool      failedVarSearch;      // Should search for failed vars and doulbly propagated vars
     bool      libraryUsage;         // Set true if not used as a library
-    bool      sateliteUsed;         // whether satielite was used on CNF before calling
     friend class FindUndef;
     bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
     RestartType fixRestartType;     // If set, the solver will always choose the given restart strategy
@@ -422,7 +422,11 @@ inline void Solver::claBumpActivity (Clause& c)
         cla_inc *= 1e-20;
     }
 }
-        
+
+inline void Solver::claDecayActivity()
+{
+    cla_inc *= clause_decay;
+}
 
 inline bool     Solver::enqueue         (Lit p, Clause* from)
 {

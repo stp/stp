@@ -84,11 +84,16 @@ const bool Subsumer::unEliminate(const Var var)
     vec<Lit> tmp;
     typedef map<Var, vector<vector<Lit> > > elimType;
     elimType::iterator it = elimedOutVar.find(var);
-    assert(it != elimedOutVar.end());
     
     solver.setDecisionVar(var, true);
     var_elimed[var] = false;
     numElimed--;
+    
+    //If the variable was removed because of
+    //pure literal removal (by blocked clause
+    //elimination, there are no clauses to re-insert
+    if (it == elimedOutVar.end()) return solver.ok;
+    
     FILE* backup_libraryCNFfile = solver.libraryCNFFile;
     solver.libraryCNFFile = NULL;
     for (vector<vector<Lit> >::iterator it2 = it->second.begin(), end2 = it->second.end(); it2 != end2; it2++) {
@@ -100,8 +105,7 @@ const bool Subsumer::unEliminate(const Var var)
     solver.libraryCNFFile = backup_libraryCNFfile;
     elimedOutVar.erase(it);
     
-    if (!solver.ok) return false;
-    return true;
+    return solver.ok;
 }
 
 bool selfSubset(uint32_t A, uint32_t B)
@@ -144,7 +148,6 @@ uint32_t Subsumer::subsume0(Clause& ps)
     #ifdef VERBOSE_DEBUG
     cout << "subsume0 orig clause:";
     ps.plainPrint();
-    cout << "pointer:" << &ps << endl;
     #endif
     
     vec<ClauseSimp> subs;
@@ -532,7 +535,7 @@ void Subsumer::smaller_database()
     registerIteration(s1);
     
     #ifdef BIT_MORE_VERBOSITY
-    printf("  FIXED-POINT\n");
+    printf("c FIXED-POINT\n");
     #endif
     
     // Fixed-point for 1-subsumption:
@@ -548,7 +551,7 @@ void Subsumer::smaller_database()
         assert(solver.qhead == solver.trail.size());
         
         #ifdef BIT_MORE_VERBOSITY
-        printf("s1.size()=%d  cl_touched.size()=%d\n", s1.size(), cl_touched.size());
+        printf("c s1.size()=%d  cl_touched.size()=%d\n", s1.size(), cl_touched.size());
         #endif
         
         for (CSet::iterator it = s1.begin(), end = s1.end(); it != end; ++it) {
@@ -729,8 +732,7 @@ void Subsumer::subsume0LearntSet(vec<Clause*>& cs)
     Clause** a = cs.getData();
     Clause** b = a;
     for (Clause** end = a + cs.size(); a != end; a++) {
-        if (numMaxSubsume0 == 0) break;
-        if (!(*a)->subsume0IsFinished()) {
+        if (numMaxSubsume0 > 0 && !(*a)->subsume0IsFinished()) {
             numMaxSubsume0--;
             uint32_t index = subsume0(**a, calcAbstraction(**a));
             if (index != std::numeric_limits<uint32_t>::max()) {
@@ -751,8 +753,12 @@ void Subsumer::subsume0LearntSet(vec<Clause*>& cs)
                 clauses.push(c);
                 subsume1(c);
                 numMaxSubsume1--;
-                if (!solver.ok)
+                if (!solver.ok) {
+                    for (; a != end; a++)
+                        *b++ = *a;
+                    cs.shrink(a-b);
                     return;
+                }
                 assert(clauses[c.index].clause != NULL);
                 clauses.pop();
                 clauseID--;
@@ -856,6 +862,13 @@ const bool Subsumer::simplifyBySubsumption()
     else
         fullSubsume = false;
     
+    //For debugging post-c32s-gcdm16-22.cnf --- an instance that is turned SAT to UNSAT if a bug is in the code
+    //numMaxBlockToVisit = std::numeric_limits<int64_t>::max();
+    //numMaxElim = std::numeric_limits<uint32_t>::max();
+    //numMaxSubsume0 = std::numeric_limits<uint32_t>::max();
+    //numMaxSubsume1 = std::numeric_limits<uint32_t>::max();
+    //numMaxBlockVars = std::numeric_limits<uint32_t>::max();
+    
     #ifdef BIT_MORE_VERBOSITY
     std::cout << "c  num clauses:" << clauses.size() << std::endl;
     std::cout << "c  time to link in:" << cpuTime()-myTime << std::endl;
@@ -891,10 +904,8 @@ const bool Subsumer::simplifyBySubsumption()
     #endif
     
     if (clauses.size() > 10000000)  goto endSimplifyBySubsumption;
-    
+    if (solver.doBlockedClause && numCalls % 3 == 1) blockedClauseRemoval();
     do{
-        if (solver.doBlockedClause && numCalls % 3 == 1) blockedClauseRemoval();
-        
         #ifdef BIT_MORE_VERBOSITY
         std::cout << "c time before the start of almost_all/smaller: " << cpuTime() - myTime << std::endl;
         #endif
@@ -946,8 +957,8 @@ const bool Subsumer::simplifyBySubsumption()
                     const Var var = touched_list[i];
                     if (!var_elimed[var] && !cannot_eliminate[var] && solver.decision_var[var] && solver.assigns[var] == l_Undef) {
                         order.push(touched_list[i]);
-                        touched[touched_list[i]] = 0;
                     }
+                    touched[var] = 0;
                 }
                 touched_list.clear();
             }
@@ -980,7 +991,7 @@ const bool Subsumer::simplifyBySubsumption()
             std::cout << "c time until the end of varelim: " << cpuTime() - myTime << std::endl;
             #endif
         }
-    }while (cl_added.size() > 100);
+    }while (cl_added.size() > 100 && numMaxElim > 0);
     endSimplifyBySubsumption:
     
     if (!solver.ok) return false;
@@ -990,7 +1001,7 @@ const bool Subsumer::simplifyBySubsumption()
         return false;
     }
     
-    #ifndef DNDEBUG
+    #ifndef NDEBUG
     verifyIntegrity();
     #endif
     
@@ -1010,10 +1021,6 @@ const bool Subsumer::simplifyBySubsumption()
     
     addBackToSolver();
     solver.nbCompensateSubsumer += origNLearnts-solver.learnts.size();
-    if (solver.findNormalXors && solver.clauses.size() < MAX_CLAUSENUM_XORFIND/8) {
-        XorFinder xorFinder(&solver, solver.clauses, ClauseCleaner::clauses);
-        if (!xorFinder.doNoPart(3, 7)) return false;
-    }
     
     if (solver.verbosity >= 1) {
         std::cout << "c |  lits-rem: " << std::setw(9) << literals_removed
@@ -1690,132 +1697,6 @@ const bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
     }
     
     return returnVal;
-}
-
-void Subsumer::addAllXorAsNorm()
-{
-    uint32_t added = 0;
-    XorClause **i = solver.xorclauses.getData(), **j = i;
-    for (XorClause **end = solver.xorclauses.getDataEnd(); i != end; i++) {
-        if ((*i)->size() > 3) {
-            *j++ = *i;
-            continue;
-        }
-        added++;
-        if ((*i)->size() == 3) addXorAsNormal3(**i);
-        //if ((*i)->size() == 4) addXorAsNormal4(**i);
-        solver.removeClause(**i);
-    }
-    solver.xorclauses.shrink(i-j);
-    if (solver.verbosity >= 1) {
-        std::cout << "c |  Added XOR as norm:" << added << std::endl;
-    }
-}
-
-void Subsumer::addXorAsNormal3(XorClause& c)
-{
-    assert(c.size() == 3);
-    Clause *tmp;
-    vec<Var> vars;
-    vec<Lit> vars2(c.size());
-    const bool inverted = c.xor_clause_inverted();
-    
-    for (uint32_t i = 0; i < c.size(); i++) {
-        vars.push(c[i].var());
-    }
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], true ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], true ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-}
-
-void Subsumer::addXorAsNormal4(XorClause& c)
-{
-    assert(c.size() == 4);
-    Clause *tmp;
-    vec<Var> vars;
-    vec<Lit> vars2(c.size());
-    const bool inverted = !c.xor_clause_inverted();
-    
-    for (uint32_t i = 0; i < c.size(); i++) {
-        vars.push(c[i].var());
-    }
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    vars2[3] = Lit(vars[3], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    vars2[3] = Lit(vars[3], false ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    vars2[3] = Lit(vars[3], false ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    vars2[3] = Lit(vars[3], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], false ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    vars2[3] = Lit(vars[3], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], true ^ inverted);
-    vars2[1] = Lit(vars[1], false ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    vars2[3] = Lit(vars[3], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], true ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], false ^ inverted);
-    vars2[3] = Lit(vars[3], true ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
-    
-    vars2[0] = Lit(vars[0], true ^ inverted);
-    vars2[1] = Lit(vars[1], true ^ inverted);
-    vars2[2] = Lit(vars[2], true ^ inverted);
-    vars2[3] = Lit(vars[3], false ^ inverted);
-    tmp = solver.addClauseInt(vars2, c.getGroup());
-    if (tmp) solver.clauses.push(tmp);
 }
 
 /*vector<char> Subsumer::merge()

@@ -3,7 +3,7 @@ include $(TOP)/scripts/Makefile.common
 
 MTL       = mtl
 MTRAND    = MTRand
-SOURCES   = Logger.cpp Solver.cpp PackedRow.cpp XorFinder.cpp Conglomerate.cpp VarReplacer.cpp FindUndef.cpp ClauseCleaner.cpp RestartTypeChooser.cpp Clause.cpp FailedVarSearcher.cpp PartFinder.cpp Subsumer.cpp PartHandler.cpp XorSubsumer.cpp
+SOURCES   = Logger.cpp Solver.cpp PackedRow.cpp XorFinder.cpp Conglomerate.cpp VarReplacer.cpp FindUndef.cpp ClauseCleaner.cpp RestartTypeChooser.cpp Clause.cpp FailedVarSearcher.cpp PartFinder.cpp Subsumer.cpp PartHandler.cpp XorSubsumer.cpp SmallPtr.cpp
 OBJECTS   = $(SOURCES:.cpp=.o)
 LIB       = libminisat.a
 CFLAGS    += -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c

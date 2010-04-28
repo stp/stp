@@ -43,8 +43,9 @@ class XorFinder
 {
     public:
         
-        XorFinder(Solver* S, vec<Clause*>& cls, ClauseCleaner::ClauseSetType _type);
+        XorFinder(Solver& _solver, vec<Clause*>& cls, ClauseCleaner::ClauseSetType _type);
         const bool doNoPart(const uint minSize, const uint maxSize);
+        void addAllXorAsNorm();
         
     private:
         typedef vector<pair<Clause*, uint> > ClauseTable;
@@ -126,6 +127,10 @@ class XorFinder
         void clearToRemove();
         uint32_t foundXors;
         
+        //For adding xor as norm
+        void addXorAsNormal3(XorClause& c);
+        void addXorAsNormal4(XorClause& c);
+        
         vec<Clause*>& cls;
         ClauseCleaner::ClauseSetType type;
         
@@ -134,7 +139,7 @@ class XorFinder
         void countImpairs(const ClauseTable::iterator& begin, const ClauseTable::iterator& end, uint& numImpair, uint& numPair) const;
         bool isXor(const uint32_t size, const ClauseTable::iterator& begin, const ClauseTable::iterator& end, bool& impair);
         
-        Solver* S;
+        Solver& solver;
 };
 
 }; //NAMESPACE MINISAT

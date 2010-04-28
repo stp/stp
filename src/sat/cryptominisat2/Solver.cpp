@@ -65,6 +65,7 @@ using namespace MINISAT;
 Solver::Solver() :
         // Parameters: (formerly in 'SearchParams')
         random_var_freq(0.02)
+        , clause_decay (1 / 0.999)
         , restart_first(100), restart_inc(1.5), learntsize_factor((double)1/(double)3), learntsize_inc(1)
 
         // More parameters:
@@ -529,7 +530,7 @@ void Solver::cancelUntil(int level)
         }
         qhead = trail_lim[level];
         trail.shrink(trail.size() - trail_lim[level]);
-        trail_lim.shrink_(trail_lim.size() - level);
+        trail_lim.shrink(trail_lim.size() - level);
     }
 
     #ifdef VERBOSE_DEBUG
@@ -1119,7 +1120,7 @@ Clause* Solver::propagate(const bool update)
 FoundWatch:
             ;
         }
-        ws.shrink_(i - j);
+        ws.shrink(i - j);
 
         //Finally, propagate XOR-clauses
         if (xorclauses.size() > 0 && !confl) confl = propagate_xors(p);
@@ -1296,7 +1297,7 @@ void Solver::reduceDB()
     for (; i < learnts.size(); i++) {
         learnts[j++] = learnts[i];
     }
-    learnts.shrink_(i - j);
+    learnts.shrink(i - j);
 }
 
 const vec<Clause*>& Solver::get_learnts() const
@@ -1434,7 +1435,7 @@ lbool Solver::simplify()
         if (ok == false)
             return l_False;
     
-        XorFinder xorFinder(this, binaryClauses, ClauseCleaner::binaryClauses);
+        XorFinder xorFinder(*this, binaryClauses, ClauseCleaner::binaryClauses);
         if (xorFinder.doNoPart(2, 2) == false)
             return l_False;
         
@@ -1692,6 +1693,7 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, Clause* confl, int& conf
     }
 
     varDecayActivity();
+    if (update && restartType == static_restart) claDecayActivity();
 
     return l_Nothing;
 }
@@ -1864,6 +1866,17 @@ const lbool Solver::simplifyProblem(const uint32_t numConfls, const uint64_t num
         }
     }
     
+    /*if (findNormalXors && xorclauses.size() > 200 && clauses.size() < MAX_CLAUSENUM_XORFIND/8) {
+        XorFinder xorFinder(*this, clauses, ClauseCleaner::clauses);
+        if (!xorFinder.doNoPart(3, 7)) {
+            status = l_False;
+            goto end;
+        }
+    } else*/ if (xorclauses.size() <= 200 && xorclauses.size() > 0 && nClauses() > 10000) {
+        XorFinder x(*this, clauses, ClauseCleaner::clauses);
+        x.addAllXorAsNorm();
+    }
+    
 end:
     random_var_freq = backup_random_var_freq;
     if (verbosity >= 2)
@@ -1925,14 +1938,14 @@ inline void Solver::performStepsBeforeSolve()
         return;
     
     if (findBinaryXors && binaryClauses.size() < MAX_CLAUSENUM_XORFIND) {
-        XorFinder xorFinder(this, binaryClauses, ClauseCleaner::binaryClauses);
+        XorFinder xorFinder(*this, binaryClauses, ClauseCleaner::binaryClauses);
         if (!xorFinder.doNoPart(2, 2)) return;
         
         if (performReplace && !varReplacer->performReplace(true)) return;
     }
     
     if (findNormalXors && clauses.size() < MAX_CLAUSENUM_XORFIND) {
-        XorFinder xorFinder(this, clauses, ClauseCleaner::clauses);
+        XorFinder xorFinder(*this, clauses, ClauseCleaner::clauses);
         if (!xorFinder.doNoPart(3, 7)) return;
     }
         
