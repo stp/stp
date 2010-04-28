@@ -147,6 +147,7 @@ namespace BEEV
     	return (k == BVCONST || k == TRUE || k == FALSE);
     }
 
+
     bool isITE() const
 	{
 		bool result;
@@ -168,6 +169,104 @@ namespace BEEV
 
 		return result;
 	}
+
+    bool isAtom() const
+    {
+      bool result;
+
+      const Kind k = GetKind();
+      switch (k)
+        {
+        case TRUE:
+          {
+            result = true;
+            break;
+          }
+        case FALSE:
+          {
+            result = true;
+            break;
+          }
+        case SYMBOL:
+          {
+            result = true;
+            break;
+          }
+        case BVCONST:
+          {
+            result = true;
+            break;
+          }
+        default:
+          {
+            result = false;
+            break;
+          }
+        }
+
+      return result;
+    } //End of isAtom()
+
+    bool isPred() const
+    {
+      bool result;
+
+      const Kind k = GetKind();
+      switch (k)
+        {
+        case BVLT:
+          {
+            result = true;
+            break;
+          }
+        case BVLE:
+          {
+            result = true;
+            break;
+          }
+        case BVGT:
+          {
+            result = true;
+            break;
+          }
+        case BVGE:
+          {
+            result = true;
+            break;
+          }
+        case BVSLT:
+          {
+            result = true;
+            break;
+          }
+        case BVSLE:
+          {
+            result = true;
+            break;
+          }
+        case BVSGT:
+          {
+            result = true;
+            break;
+          }
+        case BVSGE:
+          {
+            result = true;
+            break;
+          }
+        case EQ:
+          {
+            result = true;
+            break;
+          }
+        default:
+          {
+            result = false;
+            break;
+          }
+        }
+      return result;
+    } //End of isPred()
 
 
     // For lisp DAG printing.  Has it been printed already, so we can

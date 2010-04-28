@@ -73,12 +73,6 @@ namespace BEEV
     //########################################
     // utility predicates
 
-    bool isAtom(const ASTNode& varphi);
-
-    bool isPred(const ASTNode& varphi);
-
-    bool isITE(const ASTNode& varphi);
-    
     bool onChildDoPos(const ASTNode& varphi, unsigned int idx);
     
     bool onChildDoNeg(const ASTNode& varphi, unsigned int idx);

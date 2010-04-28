@@ -26,128 +26,6 @@ namespace BEEV
       }
     cllp.clear();
   } //End of DeleteClauseList
-  
-
-  bool CNFMgr::isAtom(const ASTNode& varphi)
-  {
-    bool result;
-    
-    Kind k = varphi.GetKind();
-    switch (k)
-      {
-      case TRUE:
-        {
-          result = true;
-          break;
-        }
-      case FALSE:
-        {
-          result = true;
-          break;
-        }
-      case SYMBOL:
-        {
-          result = true;
-          break;
-        }
-      case BVCONST:
-        {
-          result = true;
-          break;
-        }
-      default:
-        {
-          result = false;
-          break;
-        }
-      }
-    
-    return result;
-  } //End of isAtom()
-  
-  bool CNFMgr::isPred(const ASTNode& varphi)
-  {
-    bool result;
-    
-    Kind k = varphi.GetKind();
-    switch (k)
-      {
-      case BVLT:
-        {
-          result = true;
-          break;
-        }
-      case BVLE:
-        {
-          result = true;
-          break;
-        }
-      case BVGT:
-        {
-          result = true;
-          break;
-        }
-      case BVGE:
-        {
-          result = true;
-          break;
-        }
-      case BVSLT:
-        {
-          result = true;
-          break;
-        }
-      case BVSLE:
-        {
-          result = true;
-          break;
-        }
-      case BVSGT:
-        {
-          result = true;
-          break;
-        }
-      case BVSGE:
-        {
-          result = true;
-          break;
-        }
-      case EQ:
-        {
-          result = true;
-          break;
-        }
-      default:
-        {
-          result = false;
-          break;
-        }
-      }
-    
-    return result;
-  } //End of isPred()
-
-  bool CNFMgr::isITE(const ASTNode& varphi)
-  {
-    bool result;
-    
-    Kind k = varphi.GetKind();
-    switch (k)
-      {
-      case ITE:
-        {
-          result = true;
-          break;
-        }
-      default:
-        {
-          result = false;
-          break;
-        }
-      }
-    
-    return result;
-  } //End of isITE()
 
   bool CNFMgr::onChildDoPos(const ASTNode& varphi, unsigned int idx)
   {
@@ -524,11 +402,11 @@ namespace BEEV
     // step 4, recurse over children
     //########################################
     
-    if (isAtom(varphi))
+    if (varphi.isAtom())
       {
         return;
       }
-    else if (isPred(varphi))
+    else if (varphi.isPred())
       {
         for (unsigned int i = 0; i < varphi.GetChildren().size(); i++)
           {
@@ -592,11 +470,11 @@ namespace BEEV
     // step 4, recurse over children
     //########################################
     
-    if (isAtom(varphi))
+    if (varphi.isAtom())
       {
         return;
       }
-    else if (isITE(varphi))
+    else if (varphi.isITE())
       {
         scanFormula(varphi[0], true, false);
         scanFormula(varphi[0], false, false);
@@ -724,14 +602,14 @@ namespace BEEV
     // step 2, ITE's always get renamed
     //########################################
     
-    if (isITE(varphi))
+    if (varphi.isITE())
       {
         x->termforcnf = doRenameITE(varphi, defs);
         reduceMemoryFootprintPos(varphi[0]);
         reduceMemoryFootprintNeg(varphi[0]);
         
       }
-    else if (isAtom(varphi))
+    else if (varphi.isAtom())
       {
         x->termforcnf = ASTNodeToASTNodePtr(varphi);
       }
@@ -941,7 +819,7 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFPosCases(const ASTNode& varphi, 
                                            ClauseList* defs)
   {
-    if (isPred(varphi))
+    if (varphi.isPred())
       {
         convertFormulaToCNFPosPred(varphi, defs);
         return;
@@ -1023,7 +901,7 @@ namespace BEEV
                                            ClauseList* defs)
   {
 
-    if (isPred(varphi))
+    if (varphi.isPred())
       {
         convertFormulaToCNFNegPred(varphi, defs);
         return;
