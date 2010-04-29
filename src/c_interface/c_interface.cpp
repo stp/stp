@@ -1960,3 +1960,67 @@ int getExprID (Expr ex) {
   BEEV::ASTNode q = (*(nodestar)ex);  
   return q.GetNodeNum();
 }
+
+//////////////////////////////////////////////////////////////////////////
+// extended version
+
+
+#if 0
+/#ifndef YY_TYPEDEF_YY_BUFFER_STATE
+struct yy_buffer_state;
+#define YY_TYPEDEF_YY_BUFFER_STATE
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+
+
+extern YY_BUFFER_STATE cvc_scan_string (const char *yy_str  );
+extern void cvc_delete_buffer (YY_BUFFER_STATE  b );
+extern YY_BUFFER_STATE smt_scan_string (const char *yy_str  );
+extern void smt_delete_buffer (YY_BUFFER_STATE  b );
+extern void cvc_switch_to_buffer (YY_BUFFER_STATE new_buffer  );
+extern void smt_switch_to_buffer (YY_BUFFER_STATE new_buffer  );
+#endif
+
+int smt_scan_string(const char *yy_str);
+
+int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+
+#if 0
+ BEEV::GlobalSTP = (stpstar)vc;
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+  if(0 != c) {
+    cout << CONSTANTBV::BitVector_Error(c) << endl;
+    return 0;
+  }
+#endif
+  
+  BEEV::ParserInterface pi(*b, b->defaultNodeFactory);
+  BEEV::parserInterface = &pi;
+
+  BEEV::ASTVec AssertsQuery;
+  if (b->UserFlags.smtlib_parser_flag) 
+    {
+      //YY_BUFFER_STATE bstat = smt_scan_string(s);
+      //smt_switch_to_buffer(bstat);
+      smt_scan_string(s);
+      smtparse((void*)&AssertsQuery);
+      //smt_delete_buffer(bstat);
+    } 
+  else
+    {
+      //YY_BUFFER_STATE bstat = cvc_scan_string(s);
+      //cvc_switch_to_buffer(bstat);
+      smt_scan_string(s);
+      cvcparse((void*)&AssertsQuery);
+      //cvc_delete_buffer(bstat);
+    }
+
+  if ( oquery ) {
+    *(nodestar*) oquery = new node(AssertsQuery[1]);
+  }
+  if ( oasserts ) {
+    *(nodestar*) oasserts = new node(AssertsQuery[0]);
+  }
+  return 1;
+} //end of vc_parseMemExpr()
+

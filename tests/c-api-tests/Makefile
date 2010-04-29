@@ -13,7 +13,7 @@ else
 endif
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22
 	rm -rf *.out
 
 0:	
@@ -86,6 +86,9 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21
 21:	
 	g++ $(CXXFLAGS) interface-check.c -o a21.out $(LIBS)
 	./a21.out
+22:
+	g++ $(CXXFLAGS) parsestring-using-cinterface.c -o a22.out $(LIBS)
+	$(VALGRIND) ./a22.out
 
 clean:
 	rm -rf *~ *.out
