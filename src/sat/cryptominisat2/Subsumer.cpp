@@ -190,9 +190,9 @@ uint32_t Subsumer::subsume0(Clause& ps, uint32_t abs)
         #endif
         
         Clause* tmp = subs[i].clause;
+        retIndex = subs[i].index;
         unlinkClause(subs[i]);
         free(tmp);
-        retIndex = subs[i].index;
     }
     
     return retIndex;
@@ -205,7 +205,7 @@ void Subsumer::unlinkClause(ClauseSimp c, Var elim)
     if (elim != var_Undef) {
         assert(!cl.learnt());
         io_tmp.clear();
-        for (int i = 0; i < cl.size(); i++)
+        for (uint32_t i = 0; i < cl.size(); i++)
             io_tmp.push_back(cl[i]);
         elimedOutVar[elim].push_back(io_tmp);
     }
@@ -605,7 +605,7 @@ void Subsumer::linkInAlreadyClause(ClauseSimp& c)
     Clause& cl = *c.clause;
     
     if (updateOccur(cl)) {
-        for (uint32_t i = 0; i < c.clause->size(); i++) {
+        for (uint32_t i = 0; i < cl.size(); i++) {
             occur[cl[i].toInt()].push(c);
             touch(cl[i].var());
         }
@@ -822,6 +822,11 @@ const bool Subsumer::simplifyBySubsumption()
     cl_added.reserve(solver.clauses.size() + solver.binaryClauses.size());
     cl_touched.reserve(solver.clauses.size() + solver.binaryClauses.size());
     
+    if (clauses.size() < 200000)
+        fullSubsume = true;
+    else
+        fullSubsume = false;
+    
     solver.clauseCleaner->cleanClauses(solver.clauses, ClauseCleaner::clauses);
     addFromSolver(solver.clauses);
     solver.clauseCleaner->cleanClauses(solver.binaryClauses, ClauseCleaner::binaryClauses);
@@ -856,11 +861,6 @@ const bool Subsumer::simplifyBySubsumption()
         numMaxBlockVars = (uint32_t)((double)solver.order_heap.size() / 3.5 * (0.8+(double)(numCalls)/4.0));
     else
         numMaxBlockVars = (uint32_t)((double)solver.order_heap.size() / 1.5 * (0.8+(double)(numCalls)/4.0));
-    
-    if (clauses.size() < 200000)
-        fullSubsume = true;
-    else
-        fullSubsume = false;
     
     //For debugging post-c32s-gcdm16-22.cnf --- an instance that is turned SAT to UNSAT if a bug is in the code
     //numMaxBlockToVisit = std::numeric_limits<int64_t>::max();
@@ -949,16 +949,15 @@ const bool Subsumer::simplifyBySubsumption()
                 //init_order.copyTo(order);
                 for (uint32_t i = 0; i < init_order.size(); i++) {
                     const Var var = init_order[i];
-                    if (!var_elimed[var] && !cannot_eliminate[var] && solver.decision_var[var] && solver.assigns[var] == l_Undef)
-                        order.push(init_order[i]);
+                    if (!cannot_eliminate[var] && solver.decision_var[var])
+                        order.push(var);
                 }
             } else {
                 for (uint32_t i = 0; i < touched_list.size(); i++) {
                     const Var var = touched_list[i];
-                    if (!var_elimed[var] && !cannot_eliminate[var] && solver.decision_var[var] && solver.assigns[var] == l_Undef) {
-                        order.push(touched_list[i]);
-                    }
-                    touched[var] = 0;
+                    if (!cannot_eliminate[var] && solver.decision_var[var])
+                        order.push(var);
+                    touched[var] = false;
                 }
                 touched_list.clear();
             }
@@ -969,11 +968,6 @@ const bool Subsumer::simplifyBySubsumption()
             assert(solver.qhead == solver.trail.size());
             for (uint32_t i = 0; i < order.size() && numMaxElim > 0; i++, numMaxElim--) {
                 if (maybeEliminate(order[i])) {
-                    if (!solver.ok) {
-                        printf("c (contradiction during subsumption)\n");
-                        return false;
-                    }
-                    solver.ok = (solver.propagate() == NULL);
                     if (!solver.ok) {
                         printf("c (contradiction during subsumption)\n");
                         return false;
@@ -1010,12 +1004,12 @@ const bool Subsumer::simplifyBySubsumption()
     removeWrong(solver.binaryClauses);
     
     solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
-    if (solver.doHyperBinRes && clauses.size() < 1000000 && numCalls > 1 && !hyperBinRes())
-        return false;
-    
-    solver.ok = (solver.propagate() == NULL);
-    if (!solver.ok) return false;
-    solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
+//     if (solver.doHyperBinRes && clauses.size() < 1000000 && numCalls > 1 && !hyperBinRes())
+//         return false;
+//     
+//     solver.ok = (solver.propagate() == NULL);
+//     if (!solver.ok) return false;
+//     solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
     
     solver.order_heap.filter(Solver::VarFilter(solver));
     
@@ -1182,8 +1176,8 @@ bool Subsumer::maybeEliminate(const Var x)
     // Count clauses/literals before elimination:
     int before_clauses  = poss.size() + negs.size();
     uint32_t before_literals = 0;
-    for (int i = 0; i < poss.size(); i++) before_literals += poss[i].clause->size();
-    for (int i = 0; i < negs.size(); i++) before_literals += negs[i].clause->size();
+    for (uint32_t i = 0; i < poss.size(); i++) before_literals += poss[i].clause->size();
+    for (uint32_t i = 0; i < negs.size(); i++) before_literals += negs[i].clause->size();
     
     // Heuristic CUT OFF2:
     if ((poss.size() >= 3 && negs.size() >= 3 && before_literals > 300)
@@ -1192,27 +1186,20 @@ bool Subsumer::maybeEliminate(const Var x)
     if ((poss.size() >= 5 && negs.size() >= 5 && before_literals > 400)
         && clauses.size() <= 1500000 && clauses.size() > 200000)
         return false;
-    if ((poss.size() >= 10 && negs.size() >= 10 && before_literals > 700)
+    if ((poss.size() >= 8 && negs.size() >= 8 && before_literals > 700)
         && clauses.size() <= 200000)
         return false;
     
     // Count clauses/literals after elimination:
     int after_clauses  = 0;
-    //int after_literals = 0;
     vec<Lit>  dummy;
-    //vec<ClauseSimp> dummy2;
-    for (int i = 0; i < poss.size(); i++){
-        for (int j = 0; j < negs.size(); j++){
-            // Merge clauses. If 'y' and '~y' exist, clause will not be created.
-            dummy.clear();
-            bool ok = merge(*poss[i].clause, *negs[j].clause, Lit(x, false), Lit(x, true), dummy);
-            if (ok){
-                //findSubsumed(dummy, calcAbstraction(dummy), dummy2);
-                //after_clauses -= (int)dummy2.size();
-                after_clauses++;
-                if (after_clauses > before_clauses) goto Abort;
-                //after_literals += dummy.size();
-            }
+    for (uint32_t i = 0; i < poss.size(); i++) for (uint32_t j = 0; j < negs.size(); j++){
+        // Merge clauses. If 'y' and '~y' exist, clause will not be created.
+        dummy.clear();
+        bool ok = merge(*poss[i].clause, *negs[j].clause, Lit(x, false), Lit(x, true), dummy);
+        if (ok){
+            after_clauses++;
+            if (after_clauses > before_clauses) goto Abort;
         }
     }
     Abort:;
@@ -1221,7 +1208,7 @@ bool Subsumer::maybeEliminate(const Var x)
     if (after_clauses  <= before_clauses) {
         vec<ClauseSimp> ps, ns;
         MigrateToPsNs(poss, negs, ps, ns, x);
-        for (int i = 0; i < ps.size(); i++) for (int j = 0; j < ns.size(); j++){
+        for (uint32_t i = 0; i < ps.size(); i++) for (uint32_t j = 0; j < ns.size(); j++){
             dummy.clear();
             bool ok = merge(*ps[i].clause, *ns[j].clause, Lit(x, false), Lit(x, true), dummy);
             if (ok){
@@ -1229,46 +1216,6 @@ bool Subsumer::maybeEliminate(const Var x)
                 if (cl != NULL) {
                     ClauseSimp c = linkInClause(*cl);
                     subsume0(*cl);
-                    //subsume1(c);
-                }
-                if (!solver.ok) return true;
-            }
-        }
-        DeallocPsNs(ps, ns);
-        goto Eliminated;
-    }
-    
-    after_clauses  = 0;
-    //after_literals = 0;
-    for (int i = 0; i < poss.size(); i++){
-        for (int j = 0; j < negs.size(); j++){
-            // Merge clauses. If 'y' and '~y' exist, clause will not be created.
-            dummy.clear();
-            bool ok = merge(*poss[i].clause, *negs[j].clause, Lit(x, false), Lit(x, true),  dummy);
-            if (ok){
-                //findSubsumed(dummy, calcAbstraction(dummy), dummy2);
-                //after_clauses -= (int)dummy2.size();
-                after_clauses++;
-                if (after_clauses > before_clauses) goto Abort2;
-                //after_literals += dummy.size();
-            }
-        }
-    }
-    Abort2:
-    
-    // Maybe eliminate:
-    if (after_clauses  <= before_clauses) {
-        vec<ClauseSimp> ps, ns;
-        MigrateToPsNs(poss, negs, ps, ns, x);
-        for (int i = 0; i < ps.size(); i++) for (int j = 0; j < ns.size(); j++){
-            dummy.clear();
-            bool ok = merge(*ps[i].clause, *ns[j].clause, Lit(x, false), Lit(x, true), dummy);
-            if (ok){
-                Clause* cl = solver.addClauseInt(dummy, 0);
-                if (cl != NULL) {
-                    ClauseSimp c = linkInClause(*cl);
-                    subsume0(*cl);
-                    //subsume1(c);
                 }
                 if (!solver.ok) return true;
             }
@@ -1637,7 +1584,7 @@ void Subsumer::blockedClauseRemoval()
         VarOcc vo = touchedBlockedVars.top();
         touchedBlockedVars.pop();
         
-        if (var_elimed[vo.var] || solver.assigns[vo.var] != l_Undef || !solver.decision_var[vo.var] || cannot_eliminate[vo.var])
+        if (solver.assigns[vo.var] != l_Undef || !solver.decision_var[vo.var] || cannot_eliminate[vo.var])
             continue;
         touchedBlockedVarsBool[vo.var] = false;
         Lit lit = Lit(vo.var, false);
@@ -1645,9 +1592,9 @@ void Subsumer::blockedClauseRemoval()
         
         numMaxBlockToVisit -= (int64_t)occur[lit.toInt()].size();
         numMaxBlockToVisit -= (int64_t)occur[negLit.toInt()].size();
-        if (!tryOneSetting(lit, negLit)) {
+        //if (!tryOneSetting(lit, negLit)) {
             tryOneSetting(negLit, lit);
-        }
+       // }
     }
     blockTime += cpuTime() - myTime;
     
