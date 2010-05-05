@@ -16,7 +16,7 @@
 #OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
 OPTIMIZE      = -O3               # Maximum optimization
-#CFLAGS_M32   = -m32
+CFLAGS_M32   = -m32
 CFLAGS_BASE   = $(OPTIMIZE)
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
@@ -36,7 +36,7 @@ ifeq ($(SAT),minisat)
 endif
 
 # todo: These should be set by the config script of course..
-TEST_PREFIX=../stp-tests/
+TEST_PREFIX=../../stp-tests/
 SHELL=/bin/bash
 
 

@@ -2304,7 +2304,9 @@ namespace BEEV
               if (WRITE == inputterm[0].GetKind())
                 {
                   //get rid of all writes
+		  //_bm->ASTNodeStats("before RemoveWrites_TopLevel:", inputterm);
                   ASTNode nowrites = RemoveWrites_TopLevel(inputterm);
+		  //_bm->ASTNodeStats("after RemoveWrites_TopLevel:", nowrites);
                   out1 = nowrites;
                 }
               else if (ITE == inputterm[0].GetKind())
