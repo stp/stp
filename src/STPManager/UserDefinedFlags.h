@@ -140,7 +140,7 @@ namespace BEEV
       arraywrite_refinement_flag = true;
       
       //check the counterexample against the original input to STP
-      check_counterexample_flag = false;
+      check_counterexample_flag = true;
       
       //construct the counterexample in terms of original variable based
       //on the counterexample returned by SAT solver
