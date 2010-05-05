@@ -10,17 +10,14 @@
 #ifndef TRANSFORM_H
 #define TRANSFORM_H
 
-#include <cstdlib>
-#include <cstdio>
-#include <cassert>
-#include <iostream>
-#include <sstream>
 #include "AST.h"
 #include "../STPManager/STPManager.h"
-#include "../simplifier/simplifier.h"
+
 
 namespace BEEV
 {
+  class Simplifier;
+
   class ArrayTransformer 
   {
   private:
@@ -69,9 +66,6 @@ namespace BEEV
     // formulas and terms
     ASTNodeMap* TransformMap;
     
-    //Vector of array-write axioms not falsified in refinement
-    ASTVec ArrayWrite_RemainingAxioms;        
-
     // For finiteloop construct. A list of all finiteloop constructs
     // in the input formula
     //
@@ -90,13 +84,15 @@ namespace BEEV
     // code
     RunTimes * runTimes;
 
+    NodeFactory *nf;
+
     /****************************************************************
      * Private Member Functions                                     *
      ****************************************************************/
     
     ASTNode TranslateSignedDivModRem(const ASTNode& in);
     ASTNode TransformTerm(const ASTNode& inputterm);
-    void    assertTransformPostConditions(const ASTNode & term);
+    void assertTransformPostConditions(const ASTNode & term, ASTNodeSet& visited);
         
     /****************************************************************
      * Helper functions to for creating substitution map            *
@@ -106,7 +102,9 @@ namespace BEEV
     //and index is a BVCONST
     void FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1);
 
-    ASTNode TransformArray(const ASTNode& term);
+    ASTNode TransformArrayRead(const ASTNode& term);
+
+    ASTNode TransformFormula(const ASTNode& form);
 
   public:
 
@@ -126,6 +124,7 @@ namespace BEEV
     {
       Arrayread_IteMap = new ASTNodeMap();
       Arrayname_ReadindicesMap = new ASTNodeToVecMap();
+      nf = bm->defaultNodeFactory;
 
       runTimes = bm->GetRunTimes();
       ASTTrue  = bm->CreateNode(TRUE);
@@ -139,7 +138,6 @@ namespace BEEV
       Arrayread_IteMap->clear();
       delete Arrayread_IteMap;
       Introduced_SymbolsSet.clear();
-      ArrayWrite_RemainingAxioms.clear();
       ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
       ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
       for(;it!=itend;it++)
@@ -153,8 +151,6 @@ namespace BEEV
     // Takes a formula, transforms it by replacing array reads with
     // variables, and returns the transformed formula
     ASTNode TransformFormula_TopLevel(const ASTNode& form);
-
-    ASTNode TransformFormula(const ASTNode& form);    
 
     // Create Substitution Map function
     ASTNode CreateSubstitutionMap(const ASTNode& a);

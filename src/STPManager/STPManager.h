@@ -372,6 +372,19 @@ namespace BEEV
     // Create New Variables
     ASTNode NewVar(unsigned int n);
 
+    ASTNode CreateFreshVariable(int indexWidth, int valueWidth, std::string prefix)
+    {
+        char d[32 + prefix.length()];
+        sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
+
+        BEEV::ASTNode CurrentSymbol = CreateSymbol(d);
+        CurrentSymbol.SetValueWidth(valueWidth);
+        CurrentSymbol.SetIndexWidth(indexWidth);
+
+        return CurrentSymbol;
+    }
+
+
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
     ASTNode NewParameterized_BooleanVar(const ASTNode& var,
