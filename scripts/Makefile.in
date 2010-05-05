@@ -110,14 +110,14 @@ configclean:
 .PHONY: regressall
 regressall: all
 	$(MAKE) check
-	$(MAKE) regresscapi
 	$(MAKE) regresscvc
-	$(MAKE) regresssyn
-	$(MAKE) regresssmt 
+	$(MAKE) regresssmt
+	$(MAKE) regresssyn 
 	$(MAKE) regressbigarray
 	$(MAKE) regressstp
 	$(MAKE) regressbio
 	$(MAKE) regresscrypto
+	$(MAKE) regresscapi
 
 # Runs the basic tests in tests/
 .PHONY: check
