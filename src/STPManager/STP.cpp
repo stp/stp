@@ -126,9 +126,7 @@ namespace BEEV {
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
                      simplified_solved_InputToSAT);
 
-    //Vijay
-    //bm->SimplifyWrites_InPlace_Flag = true;
-    bm->SimplifyWrites_InPlace_Flag = false;
+    bm->SimplifyWrites_InPlace_Flag = true;    
     bm->Begin_RemoveWrites = false;
     bm->start_abstracting = false;
     bm->TermsAlreadySeenMap_Clear();
