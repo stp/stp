@@ -563,7 +563,7 @@ ASTVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
 
 		BBNodeVec pprod = BBAndBit(ycopy, *xit);
 		// accumulate in the product.
-		BBPlus2(prod, pprod, ASTFalse);
+		BBPlus2(prod, pprod, nf->getFalse());
 	}
 	return prod;
 }
@@ -641,9 +641,6 @@ BBNodeVec BitBlasterNew::BBITE(const BBNode& cond, const BBNodeVec& thn,
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
 // to this by swapping args or complementing the result bit.
-// FIXME:  If this were done MSB first, it would enable a fast exit sometimes
-// when the MSB is constant, deciding the result without looking at the rest
-// of the bits.
 ASTNode BitBlasterNew::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
 		bool is_signed, bool is_bvlt) {
 	BBNodeVec::const_reverse_iterator lit = left.rbegin();
@@ -678,11 +675,13 @@ ASTNode BitBlasterNew::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
 	if (!is_bvlt) {
 		bit_comparisons.push_back(prev_eq_bit);
 	}
+
+	// Either zero or one of the nodes in bit_comparisons can be true.
 	BBNode output =
 #ifdef CRYPTOMINISAT2
-			_bm->CreateSimpForm(XOR, bit_comparisons);
+			nf->CreateNode(XOR, bit_comparisons);
 #else
-			_bm->CreateSimpForm(OR, bit_comparisons);
+			nf->CreateNode(OR, bit_comparisons);
 #endif
 	return output;
 }
@@ -757,7 +756,7 @@ BBNode BitBlasterNew::BBcompare(const ASTNode& form, BBNodeSet& support) {
 	}
 	default:
 		cerr << "BBCompare: Illegal kind" << form << endl;
-		FatalError("", ASTUndefined);
+		FatalError("", form);
 	}
 }
 

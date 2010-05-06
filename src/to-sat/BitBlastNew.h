@@ -31,9 +31,6 @@ class BitBlasterNew {
 	// bitblasted equivalent
 	BBNodeMap BBFormMemo;
 
-	STPMgr * _bm;
-	ASTNode ASTTrue, ASTFalse, ASTUndefined;
-
 	/****************************************************************
 	 * Private Member Functions                                     *
 	 ****************************************************************/
@@ -108,11 +105,8 @@ public:
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
-	BitBlasterNew(STPMgr * bm) :
-		_bm(bm) {
-		ASTTrue = _bm->CreateNode(TRUE);
-		ASTFalse = _bm->CreateNode(FALSE);
-		ASTUndefined = _bm->CreateNode(UNDEFINED);
+	BitBlasterNew(STPMgr * bm)
+		{
 		nf = new BBNodeManager(bm);
 	}
 
