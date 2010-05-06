@@ -2927,6 +2927,7 @@ namespace BEEV
 
     ASTVec writeIndices, writeValues;
     unsigned int width = term.GetValueWidth();
+    ASTNode original_write = term[0];
     ASTNode write = term[0];
     unsigned indexwidth = write.GetIndexWidth();
     ASTNode readIndex = SimplifyTerm(term[1]);
@@ -2984,7 +2985,6 @@ namespace BEEV
     ASTVec::reverse_iterator itend_values = writeValues.rend();
 
     // May be a symbol, or an ITE.
-
     for (; it_index != itend_index; it_index++, it_values++)
       {
         write = _bm->CreateTerm(WRITE, width, write, *it_index, *it_values);
@@ -2992,6 +2992,13 @@ namespace BEEV
       }
 
     output = _bm->CreateTerm(READ, width, write, readIndex);
+    assert(BVTypeCheck(output));
+    if(ITE == write.GetKind())
+      {
+	output = SimplifyTerm(output, VarConstMap);
+      }
+
+    //UpdateSimplifyMap(original_write, write, false);
     UpdateSimplifyMap(term, output, false);
     return output;
   } //end of SimplifyWrites_In_Place()

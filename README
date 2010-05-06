@@ -51,7 +51,7 @@ REGRESSIONS
 
 Assumes you have downloaded the testcases as follows:
 
-svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests/test
+svn co https://stp-fast-prover.svn.sourceforge.net/svnroot/stp-fast-prover/stp-tests
 
 
 make regresssmt
