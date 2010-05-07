@@ -40,10 +40,10 @@ class BitBlasterNew {
 	void BBPlus2(BBNodeVec& sum, const BBNodeVec& y, BBNode cin);
 
 	// Increment
-	BBNodeVec BBInc(BBNodeVec& x);
+	BBNodeVec BBInc(const BBNodeVec& x);
 
 	// Add one bit to a vector of bits.
-	BBNodeVec BBAddOneBit(BBNodeVec& x, BBNode cin);
+	BBNodeVec BBAddOneBit(const BBNodeVec& x, BBNode cin);
 
 	// Bitwise complement
 	BBNodeVec BBNeg(const BBNodeVec& x);

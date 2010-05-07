@@ -464,7 +464,7 @@ void BitBlasterNew::BBSub(BBNodeVec& result, const BBNodeVec& y,
 }
 
 // Add one bit
-BBNodeVec BitBlasterNew::BBAddOneBit(BBNodeVec& x, BBNode cin) {
+BBNodeVec BitBlasterNew::BBAddOneBit(const BBNodeVec& x, BBNode cin) {
 	BBNodeVec result;
 	result.reserve(x.size());
 	const BBNodeVec::const_iterator itend = x.end();
@@ -477,7 +477,7 @@ BBNodeVec BitBlasterNew::BBAddOneBit(BBNodeVec& x, BBNode cin) {
 }
 
 // Increment bit-blasted vector and return result.
-BBNodeVec BitBlasterNew::BBInc(BBNodeVec& x) {
+BBNodeVec BitBlasterNew::BBInc(const BBNodeVec& x) {
 	return BBAddOneBit(x, nf->getTrue());
 }
 
@@ -568,16 +568,29 @@ ASTVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
 	return prod;
 }
 
+// on factoring12bitsx12.cvc
+// variant1 = t, variant2 = t: 66 seconds
+// variant1 = t, variant2 = f: 37 seconds
+// variant1 = f, variant2 = f: 46 seconds
+// variant1 = f, variant2 = t: 65 seconds
+
+// You can select these with any combination you want of true & false.
+const bool division_variant_1 = true;
+const bool division_variant_2 = false;
+
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
 // recursion depth.
 void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 		BBNodeVec &q, BBNodeVec &r, unsigned int rwidth, BBNodeSet& support) {
 	const unsigned int width = y.size();
+	const BBNodeVec zero = BBfill(width, nf->getFalse());
+	const BBNodeVec one = BBInc(zero);
+
 	if (rwidth == 0) {
 		// When we have shifted the entire width, y is guaranteed to be 0.
-		q = BBfill(width, nf->getFalse());
-		r = BBfill(width, nf->getFalse());
+		q = zero;
+		r = zero;
 	} else {
 		BBNodeVec q1, r1;
 		BBNodeVec yrshift1(y);
@@ -601,19 +614,54 @@ void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 		BBNodeVec ygtrxqval = BBITE(rtoolarge, BBInc(q1lshift1), q1lshift1);
 		BBNodeVec ygtrxrval = BBITE(rtoolarge, rminusx, r1lshift1plusyodd);
 
-		// q & r values when y >= x
-		BBNode yeqx = BBEQ(y, x);
-		// *** Problem: the bbfill for qval is wrong.  Should be 1, not -1.
-		BBNodeVec one = BBfill(width, nf->getFalse());
-		one[0] = nf->getTrue();
-		BBNodeVec notylessxqval = BBITE(yeqx, one, ygtrxqval);
-		BBNodeVec notylessxrval = BBITE(yeqx, BBfill(width, nf->getFalse()),
-				ygtrxrval);
-		// y < x <=> not x >= y.
-		//BBNode ylessx = BBBVLE(y, x, false, true);
-		BBNode ylessx = nf->CreateNode(NOT, BBBVLE(x, y, false));
+		BBNodeVec notylessxqval;
+		BBNodeVec notylessxrval;
+
+
+		/* variant_1 removes the equality check of (x=y). When we get to here I think
+		 that r and q already have the proper values.
+		 Let x =y, so we are solving y/y.
+		 As a first step solve (y/2)/y.
+		 If y != 0, then y/2 < y. (strictly less than).
+		 By the last rule in this block, that will return q=0, r=(y/2)
+		 On return, that will be rightshifted, and the parity bit added back,
+		 giving q = 0, r=y.
+		 By the immediately preceeding rule, 0 <= 0 is true, so q becomes 1,
+		 and r becomes 0.
+		 So q and r are already set correctly when we get here.
+
+		 If y=0 & x=0, then (y/2)/0 will return q=0, r=0.
+		 By the preceeding rule  0 <= 0 is true, so q =1, r=0.
+		 So q and r are already set correctly when we get here.
+		 */
+
+		if (division_variant_1)
+		{
+			notylessxqval = ygtrxqval;
+			notylessxrval = ygtrxrval;
+		}
+		else
+		{
+			// q & r values when y >= x
+			BBNode yeqx = BBEQ(y, x);
+			// *** Problem: the bbfill for qval is wrong.  Should be 1, not -1.
+			notylessxqval = BBITE(yeqx, one, ygtrxqval);
+			notylessxrval = BBITE(yeqx, zero,ygtrxrval);
+		}
+
+		BBNode ylessx;
+		if (division_variant_2)
+		{
+			ylessx = BBBVLE(y, x, false, true);
+		}
+		else
+		{
+			// y < x <=> not x >= y.
+			ylessx = nf->CreateNode(NOT, BBBVLE(x, y, false));
+		}
+
 		// final values of q and r
-		q = BBITE(ylessx, BBfill(width, nf->getFalse()), notylessxqval);
+		q = BBITE(ylessx, zero, notylessxqval);
 		r = BBITE(ylessx, y, notylessxrval);
 	}
 }
