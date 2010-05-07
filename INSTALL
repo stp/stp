@@ -8,13 +8,52 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-1. To install STP on Linux, MacOS or Windows(Cygwin):
+
+DEFAULT INSTALL INSTRUCTION (Linux, MacOS, or Windows (Cygwin))
+===============================================================
 
    ./clean-install.sh
 
 
-2. To run on Windows Natively:
 
-   2.1 Compile STP inside cygwin as above
-   2.2 Add cygwin DLLs to PATH
-   2.3 Run
+INSTALLING STP WITH DIFFERENT SAT SOLVERS
+=========================================
+
+* To compile STP only with MiniSAT:
+
+   ./clean-install.sh --with-minisat-core
+
+* To compile STP only with CryptoMiniSAT:
+
+   ./clean-install.sh --with-cryptominisat2
+
+
+
+COMPILING STP WITH g++ IN A SPECIFIED PATH
+==========================================
+
+   ./clean-install.sh --with-g++ = <path>
+
+
+
+INSTALLING STP IN A DIRECTORY OF YOUR CHOICE
+============================================
+
+   ./clean-install.sh --with-prefix=<dir>
+
+(Note that the install script will create 3 directories in <dir>,
+namely, bin, include and lib. STP executable will be put in the bin
+directory, libstp.a in the lib directory, c_interface.h in the include
+directory)
+
+
+
+RUNNING STP ON WINDOWS USING CYGWIN
+===================================
+
+* To run on Windows Natively:
+
+   * Compile STP inside cygwin as above
+   * Add cygwin DLLs to PATH
+   * Run
+
