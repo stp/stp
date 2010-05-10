@@ -91,14 +91,14 @@ namespace BEEV
       }
 
 	ClauseContainer& cc = *cll.asList();
+    //Clause for the SATSolver
+	MINISAT::vec<MINISAT::Lit> satSolverClause;
 
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
     for (int count=0, flag=0; i != iend; i++)
       {
-        //Clause for the SATSolver
-        MINISAT::vec<MINISAT::Lit> satSolverClause;
-        satSolverClause.capacity((*i)->size());        
+        satSolverClause.clear();
         vector<const ASTNode*>::const_iterator j    = (*i)->begin(); 
         vector<const ASTNode*>::const_iterator jend = (*i)->end();      
         //ASTVec  clauseVec;
