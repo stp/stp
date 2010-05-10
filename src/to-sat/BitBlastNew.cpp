@@ -739,13 +739,12 @@ ASTNode BitBlasterNew::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
 void BitBlasterNew::BBLShift(BBNodeVec& x, unsigned int shift) {
 	// left shift x (destructively) within width.
 	// loop backwards so that copy to self works correctly. (DON'T use STL insert!)
-	const BBNodeVec::iterator xbeg = x.begin();
-	BBNodeVec::iterator xit = x.end() - 1;
-	for (; xit >= xbeg; xit--) {
-		if (xit - shift >= xbeg)
-			*xit = *(xit - shift);
+	for (int i =((int)x.size())-1; i >=0; i--)
+	{
+		if (i-(int)shift >= 0)
+			x[i] = x[i-(int)shift];
 		else
-			*xit = nf->getFalse(); // new LSB is zero.
+			x[i] = nf->getFalse(); // new LSB is zero.
 	}
 }
 
