@@ -321,9 +321,9 @@ VarDecl         :      FORM_IDs ':' Type
     i->SetIndexWidth($5->GetIndexWidth());
                            
     parserInterface->letMgr.LetExprMgr(*i,*$5);
+  }
     delete $5;
     delete $1;
-  }
 }
 |      FORM_IDs ':' Type '=' Formula
 {
@@ -340,8 +340,9 @@ VarDecl         :      FORM_IDs ':' Type
     i->SetIndexWidth($5->GetIndexWidth());
                            
     parserInterface->letMgr.LetExprMgr(*i,*$5);
-    delete $5;
   }
+  delete $5;
+  delete $1;
 }                
 ;
 
