@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cassert>
 #include "BitBlastNew.h"
-#include "../AST/AST.h"
 
 namespace BEEV {
 
@@ -542,8 +541,79 @@ BBNodeVec BitBlasterNew::BBAndBit(const BBNodeVec& y, BBNode b) {
 	return result;
 }
 
+// Uses addition networks explicitly.
+// I've copied this in from my the "trevor" branch r482.
+// I've not measured if this is better than the current variant.
+BBNodeVec BitBlasterNew::BBMult_variant(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support)
+  {
+	 // Make a table of partial products.
+	 const int bitWidth = x.size();
+	 assert(x.size() == y.size());
+
+	 stack<BBNode> products[bitWidth];
+
+	  for (int i =0 ; i < bitWidth; i++)
+	  {
+		  for (int j=0; j<= i; j++)
+			  {
+			  BBNode n = nf->CreateNode(AND, y[j], x[i-j]);
+			  products[i].push(n);
+			  }
+	  }
+	  // I experimented with sorting the partial products to put the known values together.
+	  // But it didn't help.
+
+	  BBNodeVec result;
+
+	  for (int i =0; i < bitWidth;i++)
+	  {
+		  while (products[i].size() >= 2)
+		  {
+			  BBNode c;
+
+			  if (products[i].size() == 2)
+				  c = nf->getFalse();
+			  else
+			  {
+				  c = products[i].top();
+				  products[i].pop();
+			  }
+
+			  const BBNode a = products[i].top();
+			  products[i].pop();
+			  const BBNode b = products[i].top();
+			  products[i].pop();
+
+			  BBNode carry = nf->CreateNode(OR, nf->CreateNode(AND, a, b), nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
+			  // I tested all 6 ternary XORs, and all 12 2 x 2-arity. The formulae with "a" separate were quickest.
+			  BBNode sum = nf->CreateNode(XOR,nf->CreateNode(XOR,c,b),a);
+
+			  bool debug_multiply = false;
+			  if (debug_multiply )
+			  {
+				  cerr << "Column " << i << endl;
+				  cerr << "a" << a;
+				  cerr << "b" << b;
+				  cerr << "c" << c;
+				  cerr << "Carry" << carry;
+				  cerr << "Sum" << sum;
+			  }
+
+			  products[i].push(sum);
+			  if (i+1 != bitWidth)
+				  products[i+1].push(carry);
+		  }
+
+		  assert(1==products[i].size());
+		  result.push_back(products[i].top());
+	  }
+
+	  assert(result.size() == ((unsigned)bitWidth));
+	  return result;
+  }
+
 // Multiply two bitblasted numbers
-ASTVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
+BBNodeVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
 		BBNodeSet& support) {
 	BBNodeVec ycopy(y);
 	const BBNodeVec::const_iterator xend = x.end();
@@ -688,7 +758,7 @@ BBNodeVec BitBlasterNew::BBITE(const BBNode& cond, const BBNodeVec& thn,
 
 
 // On some cases I suspect this is better than the new variant.
-ASTNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_signed, BBNodeManager* nf)
+BBNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_signed, BBNodeManager* nf)
 {
   // "thisbit" represents BVLE of the suffixes of the BVs
   // from that position .  if R < L, return TRUE, else if L < R
@@ -724,7 +794,7 @@ ASTNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_si
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
 // to this by swapping args or complementing the result bit.
-ASTNode BitBlasterNew::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
+BBNode BitBlasterNew::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
 		bool is_signed, bool is_bvlt) {
 	BBNodeVec::const_reverse_iterator lit = left.rbegin();
 	const BBNodeVec::const_reverse_iterator litend = left.rend();

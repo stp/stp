@@ -12,9 +12,7 @@
 
 #include <cmath>
 #include <cassert>
-#include "../AST/AST.h"
 #include "BBNodeManager.h"
-#include "../STPManager/STPManager.h"
 
 namespace BEEV {
 class BitBlasterNew;
@@ -52,7 +50,8 @@ class BitBlasterNew {
 	BBNodeVec BBUminus(const BBNodeVec& x);
 
 	// Multiply.
-	ASTVec BBMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support);
+	BBNodeVec BBMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support);
+	BBNodeVec BBMult_variant(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support);
 
 	BBNodeVec BBAndBit(const BBNodeVec& y, BBNode b);
 
