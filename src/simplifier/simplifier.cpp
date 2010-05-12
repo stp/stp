@@ -19,7 +19,7 @@ namespace BEEV
     ASTNode n = a;
     while (true)
       {
-        ASTNode& nold = n;
+        ASTNode nold = n;
         n = FlattenOneLevel(n);
         if ((n == nold))
           break;
@@ -1348,7 +1348,7 @@ namespace BEEV
   //one level deep flattening
   ASTNode Simplifier::FlattenOneLevel(const ASTNode& a)
   {
-    Kind k = a.GetKind();
+    const Kind k = a.GetKind();
     if (!(BVPLUS == k || AND == k || OR == k
           //|| BVAND == k
           //|| BVOR == k
@@ -1364,14 +1364,14 @@ namespace BEEV
     //       return output;
     //     }
 
-    ASTVec c = a.GetChildren();
+    const ASTVec& c = a.GetChildren();
     ASTVec o;
-    for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
-        ASTNode aaa = *it;
+        const ASTNode& aaa = *it;
         if (k == aaa.GetKind())
           {
-            ASTVec ac = aaa.GetChildren();
+            const ASTVec& ac = aaa.GetChildren();
             o.insert(o.end(), ac.begin(), ac.end());
           }
         else
