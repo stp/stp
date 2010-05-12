@@ -46,19 +46,19 @@ namespace BEEV
     ASTNode(ASTInternal *in);
 
     //Equal iff ASTIntNode pointers are the same.
-    friend bool operator==(const ASTNode node1, const ASTNode node2)
+    friend bool operator==(const ASTNode& node1, const ASTNode& node2)
     {
       return 
         ((size_t) node1._int_node_ptr) == 
         ((size_t) node2._int_node_ptr);
     }
 
-    friend bool operator!=(const ASTNode node1, const ASTNode node2)
+    friend bool operator!=(const ASTNode& node1, const ASTNode& node2)
     {
       return !(node1 == node2);
     }
 
-    friend bool operator<(const ASTNode node1, const ASTNode node2)
+    friend bool operator<(const ASTNode& node1, const ASTNode& node2)
     {
       return 
         ((size_t) node1._int_node_ptr) < 

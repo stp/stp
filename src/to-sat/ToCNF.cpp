@@ -117,13 +117,7 @@ namespace BEEV
   //########################################
   //utilities for control bits.
 
-  void CNFMgr::initializeCNFInfo(CNFInfo& x)
-  {
-    x.control = 0;
-    x.clausespos = NULL;
-    x.clausesneg = NULL;
-  } //End of initlializeCNFInfo()
-  
+
   void CNFMgr::incrementSharesPos(CNFInfo& x)
   {
     x.control += ((x.control & 3) < 2) ? 1 : 0;
@@ -280,7 +274,6 @@ namespace BEEV
     if (info.find(varphi) == info.end())
       {
         x = new CNFInfo();
-        initializeCNFInfo(*x);
         info[varphi] = x;
       }
     else
@@ -366,7 +359,6 @@ namespace BEEV
     if (info.find(varphi) == info.end())
       {
         x = new CNFInfo();
-        initializeCNFInfo(*x);
         info[varphi] = x;
       }
     else
@@ -609,6 +601,8 @@ namespace BEEV
   {
     CNFInfo* x = info[varphi];
     
+    assert(!wasRenamedPos(*x));
+
     //########################################
     // step 1, calc new variable
     //########################################

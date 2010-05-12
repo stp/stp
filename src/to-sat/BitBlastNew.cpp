@@ -686,6 +686,41 @@ BBNodeVec BitBlasterNew::BBITE(const BBNode& cond, const BBNodeVec& thn,
 	return result;
 }
 
+
+// On some cases I suspect this is better than the new variant.
+ASTNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_signed, BBNodeManager* nf)
+{
+  // "thisbit" represents BVLE of the suffixes of the BVs
+  // from that position .  if R < L, return TRUE, else if L < R
+  // return FALSE, else return BVLE of lower-order bits.  MSB is
+  // treated separately, because signed comparison is done by
+  // complementing the MSB of each BV, then doing an unsigned
+  // comparison.
+  BBNodeVec::const_iterator lit = left.begin();
+  BBNodeVec::const_iterator litend = left.end();
+  BBNodeVec::const_iterator rit = right.begin();
+  BBNode prevbit = nf->getTrue();
+  for (; lit < litend - 1; lit++, rit++)
+    {
+      BBNode thisbit = nf->CreateNode(ITE, nf->CreateNode(IFF, *rit, *lit), prevbit, *rit);
+      prevbit = thisbit;
+    }
+
+  // Handle MSB -- negate MSBs if signed comparison
+  BBNode lmsb = *lit;
+  BBNode rmsb = *rit;
+  if (is_signed)
+    {
+      lmsb = nf->CreateNode(NOT, *lit);
+      rmsb = nf->CreateNode(NOT, *rit);
+    }
+
+  BBNode msb = nf->CreateNode(ITE, nf->CreateNode(IFF, rmsb, lmsb), prevbit, rmsb);
+  return msb;
+}
+
+
+
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
 // to this by swapping args or complementing the result bit.

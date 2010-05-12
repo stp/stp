@@ -36,7 +36,7 @@ namespace BEEV
 
     // for the meaning of control bits, see "utilities for contol
     // bits".
-    typedef struct
+    struct CNFInfo
     {
       int control;
       ClauseList* clausespos;
@@ -45,7 +45,14 @@ namespace BEEV
         ClauseList* clausesneg;
         ASTNode* termforcnf;
       };
-    } CNFInfo;
+
+      CNFInfo()
+      {
+    	control = 0;
+    	clausespos = NULL;
+		clausesneg = NULL;
+      }
+    } ;
 
     //Collect all XOR Clauses here
     ClauseList* clausesxor;
