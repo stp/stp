@@ -955,7 +955,8 @@ namespace BEEV
       }
     else if (SatSolver.okay())
       {
-        CounterExampleMap.clear();
+    	bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+    	CounterExampleMap.clear();
         ConstructCounterExample(SatSolver);
         if (bm->UserFlags.stats_flag 
             && bm->UserFlags.print_nodes_flag)
@@ -970,6 +971,8 @@ namespace BEEV
         if (!(ASTTrue == orig_result || ASTFalse == orig_result))
           FatalError("TopLevelSat: Original input must compute to "\
                      "true or false against model");
+
+        bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
         // if the counterexample is indeed a good one, then return
         // invalid
