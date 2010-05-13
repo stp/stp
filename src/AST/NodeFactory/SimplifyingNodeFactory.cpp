@@ -50,7 +50,6 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 			return c;
 		}
 	}
-
 	ASTNode result;
 
 	switch (kind)
@@ -436,7 +435,6 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		const ASTVec &children)
 {
-
 	if (!is_Term_kind(kind))
 		FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined,
 				kind);

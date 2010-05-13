@@ -186,7 +186,7 @@ cmd             :      other_cmd
 
 counterexample  :      COUNTEREXAMPLE_TOK ';'
 {
-  ParserBM->UserFlags.print_counterexample_flag = true;
+  parserInterface->getUserFlags().print_counterexample_flag = true;
   (GlobalSTP->Ctr_Example)->PrintCounterExample(true);
 }                              
 ;
@@ -194,7 +194,7 @@ counterexample  :      COUNTEREXAMPLE_TOK ';'
 other_cmd       :
 /* other_cmd1 */
 /* { */
-/*   ASTVec aaa = ParserBM->GetAsserts(); */
+/*   ASTVec aaa = parserInterface->GetAsserts(); */
 /*   if(aaa.size() == 0) */
 /*     { */
 /*       yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: "); */
@@ -203,24 +203,24 @@ other_cmd       :
 /*   ASTNode asserts =  */
 /*     aaa.size() == 1 ?  */
 /*     aaa[0] : */
-/*     ParserBM->CreateNode(AND, aaa); */
+/*     parserInterface->CreateNode(AND, aaa); */
 /*   ((ASTVec*)AssertsQuery)->push_back(asserts);   */
 /* } */
 |      Query 
 { 
-  ((ASTVec*)AssertsQuery)->push_back(ParserBM->CreateNode(TRUE));
+  ((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
   ((ASTVec*)AssertsQuery)->push_back(*$1);                       
   delete $1;
 }
 |      VarDecls Query 
 { 
-  ((ASTVec*)AssertsQuery)->push_back(ParserBM->CreateNode(TRUE));
+  ((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
   ((ASTVec*)AssertsQuery)->push_back(*$2);
   delete $2;
 }
 |      other_cmd1 Query
 {
-  ASTVec aaa = ParserBM->GetAsserts();
+  ASTVec aaa = parserInterface->GetAsserts();
   if(aaa.size() == 0)
     {
       yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: ");
@@ -229,7 +229,7 @@ other_cmd       :
   ASTNode asserts = 
     aaa.size() == 1 ? 
     aaa[0] :
-    ParserBM->CreateNode(AND, aaa);
+    parserInterface->CreateNode(AND, aaa);
   ((ASTVec*)AssertsQuery)->push_back(asserts);
   ((ASTVec*)AssertsQuery)->push_back(*$2);
   delete $2;
@@ -268,13 +268,13 @@ Asserts         :      Assert
 {
   $$ = new ASTVec;
   $$->push_back(*$1);
-  ParserBM->AddAssert(*$1);
+  parserInterface->AddAssert(*$1);
   delete $1;
 }
 |      Asserts Assert
 {
   $1->push_back(*$2);
-  ParserBM->AddAssert(*$2);
+  parserInterface->AddAssert(*$2);
   $$ = $1;
   delete $2;
 }
@@ -283,7 +283,7 @@ Asserts         :      Assert
 Assert          :      ASSERT_TOK Formula ';' { $$ = $2; }                
 ;
 
-Query           :      QUERY_TOK Formula ';' { ParserBM->AddQuery(*$2); $$ = $2;}
+Query           :      QUERY_TOK Formula ';' { parserInterface->AddQuery(*$2); $$ = $2;}
 ; 
 
 
@@ -418,9 +418,7 @@ IfExpr          :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
   BVTypeCheck(*$2);
   BVTypeCheck(*$4);
   BVTypeCheck(*$5);
-  $$ = new ASTNode(ParserBM->CreateTerm(ITE, width, *$2, *$4, *$5));
-  $$->SetIndexWidth($5->GetIndexWidth());
-  BVTypeCheck(*$$);
+  $$ = new ASTNode(parserInterface->nf->CreateArrayTerm(ITE,$5->GetIndexWidth(), width, *$2, *$4, *$5));
   delete $2;
   delete $4;
   delete $5;
@@ -439,9 +437,7 @@ ElseRestExpr    :      ELSE_TOK Expr ENDIF_TOK  { $$ = $2; }
   BVTypeCheck(*$2);
   BVTypeCheck(*$4);
   BVTypeCheck(*$5);                     
-  $$ = new ASTNode(ParserBM->CreateTerm(ITE, width, *$2, *$4, *$5));
-  $$->SetIndexWidth($5->GetIndexWidth());
-  BVTypeCheck(*$$);
+  $$ = new ASTNode(parserInterface->nf->CreateArrayTerm(ITE, $5->GetIndexWidth(), width, *$2, *$4, *$5));
   delete $2;
   delete $4;
   delete $5;
@@ -459,7 +455,7 @@ Formula         :     '(' Formula ')'
 }
 |      FORMID_TOK '(' Expr ')' 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(PARAMBOOL,*$1,*$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(PARAMBOOL,*$1,*$3));
   delete $1;
   delete $3;
 }
@@ -469,29 +465,26 @@ Formula         :     '(' Formula ')'
   if(width <= (unsigned)$5)
     yyerror("Fatal Error: BOOLEXTRACT: trying to boolextract a bit which beyond range");
                          
-  ASTNode hi  =  ParserBM->CreateBVConst(32, $5);
-  ASTNode low =  ParserBM->CreateBVConst(32, $5);
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVEXTRACT,1,*$3,hi,low));
-  BVTypeCheck(*n);
-  ASTNode zero = ParserBM->CreateBVConst(1,0);                   
-  ASTNode * out = new ASTNode(ParserBM->CreateNode(EQ,*n,zero));
-  BVTypeCheck(*out);
+  ASTNode hi  =  parserInterface->CreateBVConst(32, $5);
+  ASTNode low =  parserInterface->CreateBVConst(32, $5);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVEXTRACT,1,*$3,hi,low));
+  ASTNode zero = parserInterface->CreateBVConst(1,0);                   
+  ASTNode * out = new ASTNode(parserInterface->nf->CreateNode(EQ,*n,zero));
+
 
   $$ = out;
   delete $3;
 }
 |      Expr '=' Expr 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(EQ, *$1, *$3));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(EQ, *$1, *$3));
   $$ = n;
   delete $1;
   delete $3;
 } 
 |      Expr NEQ_TOK Expr 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(NOT, ParserBM->CreateNode(EQ, *$1, *$3)));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(EQ, *$1, *$3)));
   $$ = n;
   delete $1;
   delete $3;
@@ -519,8 +512,7 @@ Formula         :     '(' Formula ')'
   vec.push_back(*$9);
   vec.push_back(*$12);
   vec.push_back(*$15);
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(FOR,vec));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(FOR,vec));
   $$ = n;
   delete $3;
   delete $5;
@@ -550,10 +542,9 @@ Formula         :     '(' Formula ')'
   vec.push_back(*$5);
   vec.push_back(*$7);
   vec.push_back(*$9);
-  vec.push_back(ParserBM->CreateNode(FALSE));
+  vec.push_back(parserInterface->CreateNode(FALSE));
   vec.push_back(*$12);
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(FOR,vec));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(FOR,vec));
   $$ = n;
   delete $3;
   delete $5;
@@ -563,111 +554,103 @@ Formula         :     '(' Formula ')'
 }
 |      NOT_TOK Formula 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(NOT, *$2));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(NOT, *$2));
   delete $2;
 }
 |      Formula OR_TOK Formula %prec OR_TOK 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(OR, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(OR, *$1, *$3));
   delete $1;
   delete $3;
 } 
 |      Formula NOR_TOK Formula
 {
-  $$ = new ASTNode(ParserBM->CreateNode(NOR, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(NOR, *$1, *$3));
   delete $1;
   delete $3;
 } 
 |      Formula AND_TOK Formula %prec AND_TOK 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(AND, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(AND, *$1, *$3));
   delete $1;
   delete $3;
 }
 |      Formula NAND_TOK Formula
 {
-  $$ = new ASTNode(ParserBM->CreateNode(NAND, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(NAND, *$1, *$3));
   delete $1;
   delete $3;
 }
 |      Formula IMPLIES_TOK Formula
 {
-  $$ = new ASTNode(ParserBM->CreateNode(IMPLIES, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(IMPLIES, *$1, *$3));
   delete $1;
   delete $3;
 }
 |      Formula IFF_TOK Formula
 {
-  $$ = new ASTNode(ParserBM->CreateNode(IFF, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(IFF, *$1, *$3));
   delete $1;
   delete $3;
 } 
 |      Formula XOR_TOK Formula
 {
-  $$ = new ASTNode(ParserBM->CreateNode(XOR, *$1, *$3));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(XOR, *$1, *$3));
   delete $1;
   delete $3;
 } 
 |      BVLT_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVLT, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVLT, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVGT_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVGT, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVGT, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVLE_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVLE, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVLE, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVGE_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVGE, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVGE, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVSLT_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSLT, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLT, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVSGT_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSGT, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSGT, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVSLE_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSLE, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLE, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
 }
 |      BVSGE_TOK '(' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateNode(BVSGE, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSGE, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
@@ -675,13 +658,13 @@ Formula         :     '(' Formula ')'
 |      IfForm
 |      TRUELIT_TOK 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(TRUE)); 
+  $$ = new ASTNode(parserInterface->CreateNode(TRUE)); 
   $$->SetIndexWidth(0); 
   $$->SetValueWidth(0);
 }
 |      FALSELIT_TOK 
 { 
-  $$ = new ASTNode(ParserBM->CreateNode(FALSE)); 
+  $$ = new ASTNode(parserInterface->CreateNode(FALSE)); 
   $$->SetIndexWidth(0); 
   $$->SetValueWidth(0);
 }
@@ -697,7 +680,7 @@ Formula         :     '(' Formula ')'
 /*Grammar for ITEs which are Formulas */
 IfForm          :      IF_TOK Formula THEN_TOK Formula ElseRestForm 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(ITE, *$2, *$4, *$5));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(ITE, *$2, *$4, *$5));
   delete $2;
   delete $4;
   delete $5;
@@ -707,7 +690,7 @@ IfForm          :      IF_TOK Formula THEN_TOK Formula ElseRestForm
 ElseRestForm    :      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 |      ELSIF_TOK Formula THEN_TOK Formula ElseRestForm 
 {
-  $$ = new ASTNode(ParserBM->CreateNode(ITE, *$2, *$4, *$5));
+  $$ = new ASTNode(parserInterface->nf->CreateNode(ITE, *$2, *$4, *$5));
   delete $2;
   delete $4;
   delete $5;
@@ -738,37 +721,36 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 |      BOOL_TO_BV_TOK '(' Formula ')'           
 {
   BVTypeCheck(*$3);
-  ASTNode one = ParserBM->CreateBVConst(1,1);
-  ASTNode zero = ParserBM->CreateBVConst(1,0);
+  ASTNode one = parserInterface->CreateBVConst(1,1);
+  ASTNode zero = parserInterface->CreateBVConst(1,0);
 
   //return ITE(*$3, length(1), 0bin1, 0bin0)
-  $$ = new ASTNode(ParserBM->CreateTerm(ITE,1,*$3,one,zero));
+  $$ = new ASTNode(parserInterface->nf->CreateTerm(ITE,1,*$3,one,zero));
   delete $3;
 }
 | NUMERAL_TOK BIN_BASED_NUMBER 
 { 
   std::string* vals = new std::string($2);
-  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 2, $1));
+  $$ = new ASTNode(parserInterface->CreateBVConst(vals, 2, $1));
   free($2); delete vals;
 }
 | NUMERAL_TOK DEC_BASED_NUMBER
 { 
   std::string* vals = new std::string($2);
-  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 10, $1));
+  $$ = new ASTNode(parserInterface->CreateBVConst(vals, 10, $1));
   free($2); delete vals;
 }
 | NUMERAL_TOK HEX_BASED_NUMBER 
 { 
   std::string* vals = new std::string($2);
-  $$ = new ASTNode(ParserBM->CreateBVConst(vals, 16, $1));
+  $$ = new ASTNode(parserInterface->CreateBVConst(vals, 16, $1));
   free($2); delete vals;
 }
 |      Expr '[' Expr ']' 
 {                        
   // valuewidth is same as array, indexwidth is 0.
   unsigned int width = $1->GetValueWidth();
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(READ, width, *$1, *$3));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(READ, width, *$1, *$3));
   $$ = n;
 
   delete $1;
@@ -778,8 +760,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 {
   // valuewidth is same as array, indexwidth is 0.
   unsigned int width = $1->GetValueWidth();
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(READ, width, *$1, *$3));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(READ, width, *$1, *$3));
   $$ = n;
 
   delete $1;
@@ -794,18 +775,16 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if((unsigned)$3 >= $1->GetValueWidth())
     yyerror("Parsing: Wrong width in BVEXTRACT\n");                      
 
-  ASTNode hi  =  ParserBM->CreateBVConst(32, $3);
-  ASTNode low =  ParserBM->CreateBVConst(32, $5);
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVEXTRACT, width, *$1,hi,low));
-  BVTypeCheck(*n);
+  ASTNode hi  =  parserInterface->CreateBVConst(32, $3);
+  ASTNode low =  parserInterface->CreateBVConst(32, $5);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVEXTRACT, width, *$1,hi,low));
   $$ = n;
   delete $1;
 }
 |      BVNEG_TOK Expr 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNEG, width, *$2));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVNEG, width, *$2));
   $$ = n;
   delete $2;
 }
@@ -815,8 +794,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $3->GetValueWidth()) {
     yyerror("Width mismatch in AND");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVAND, width, *$1, *$3));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVAND, width, *$1, *$3));
   $$ = n;
   delete $1;
   delete $3;
@@ -827,8 +805,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $3->GetValueWidth()) {
     yyerror("Width mismatch in OR");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVOR, width, *$1, *$3)); 
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVOR, width, *$1, *$3)); 
   $$ = n;
   delete $1;
   delete $3;
@@ -839,8 +816,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $5->GetValueWidth()) {
     yyerror("Width mismatch in XOR");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVXOR, width, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVXOR, width, *$3, *$5));
   $$ = n;
   delete $3;
   delete $5;
@@ -851,8 +827,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $5->GetValueWidth()) {
     yyerror("Width mismatch in NAND");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNAND, width, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVNAND, width, *$3, *$5));
   $$ = n;
 
   delete $3;
@@ -864,8 +839,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $5->GetValueWidth()) {
     yyerror("Width mismatch in NOR");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVNOR, width, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVNOR, width, *$3, *$5));
   $$ = n;
 
   delete $3;
@@ -877,8 +851,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   if (width != $5->GetValueWidth()) {
     yyerror("Width mismatch in NOR");
   }
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVXNOR, width, *$3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVXNOR, width, *$3, *$5));
   $$ = n;
 
   delete $3;
@@ -894,10 +867,9 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
     $$ = $3;
   }
   else {
-    ASTNode width = ParserBM->CreateBVConst(32,$5);
+    ASTNode width = parserInterface->CreateBVConst(32,$5);
     ASTNode *n =  
-      new ASTNode(ParserBM->CreateTerm(BVSX, $5,*$3,width));
-    BVTypeCheck(*n);
+      new ASTNode(parserInterface->nf->CreateTerm(BVSX, $5,*$3,width));
     $$ = n;
     delete $3;
   }
@@ -905,8 +877,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 |      Expr BVCONCAT_TOK Expr 
 {
   unsigned int width = $1->GetValueWidth() + $3->GetValueWidth();
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVCONCAT, width, *$1, *$3));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT, width, *$1, *$3));
   $$ = n;
                          
   delete $1;
@@ -920,11 +891,10 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   	}
   else
   {
-  ASTNode zero_bits = ParserBM->CreateZeroConst($3);
+  ASTNode zero_bits = parserInterface->CreateZeroConst($3);
   ASTNode * n = 
-    new ASTNode(ParserBM->CreateTerm(BVCONCAT,
+    new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT,
                                      $1->GetValueWidth() + $3, *$1, zero_bits));
-  BVTypeCheck(*n);
   $$ = n;
   delete $1;
   }
@@ -941,7 +911,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 
 /*   unsigned int exprWidth = $1->GetValueWidth(); */
 /*   unsigned int shiftAmtWidth = $3->GetValueWidth(); */
-/*   ASTNode exprWidthNode = ParserBM->CreateBVConst(shiftAmtWidth, exprWidth); */
+/*   ASTNode exprWidthNode = parserInterface->CreateBVConst(shiftAmtWidth, exprWidth); */
   
 /*   ASTNode cond, thenExpr, elseExpr; */
 /*   unsigned int count = 0; */
@@ -958,20 +928,20 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 /* 	  // 1 <= count < exprWidth */
 /* 	  // */
 /* 	  // Construct appropriate conditional */
-/* 	  ASTNode countNode = ParserBM->CreateBVConst(shiftAmtWidth, count); */
-/* 	  cond = ParserBM->CreateNode(EQ, countNode, varShiftAmt); */
+/* 	  ASTNode countNode = parserInterface->CreateBVConst(shiftAmtWidth, count); */
+/* 	  cond = parserInterface->nf->CreateNode(EQ, countNode, varShiftAmt); */
 
 /* 	  //Construct the rightshift expression padding @ Expr[hi:low] */
 /* 	  ASTNode low = */
-/* 	    ParserBM->CreateBVConst(32,count); */
+/* 	    parserInterface->CreateBVConst(32,count); */
 /* 	  ASTNode extract = */
-/* 	    ParserBM->CreateTerm(BVEXTRACT,exprWidth-count,inputExpr,hi,low); */
+/* 	    parserInterface->nf->CreateTerm(BVEXTRACT,exprWidth-count,inputExpr,hi,low); */
 /* 	  ASTNode padding = */
 /* 	    ParserBM->CreateZeroConst(count); */
 /* 	  thenExpr = */
-/* 	    ParserBM->CreateTerm(BVCONCAT, exprWidth, padding, extract); */
+/* 	    parserInterface->nf->CreateTerm(BVCONCAT, exprWidth, padding, extract); */
 /* 	  ASTNode ite = */
-/* 	    ParserBM->CreateTerm(ITE, exprWidth, cond, thenExpr, elseExpr); */
+/* 	    parserInterface->nf->CreateTerm(ITE, exprWidth, cond, thenExpr, elseExpr); */
 /* 	  BVTypeCheck(ite); */
 /* 	  elseExpr = ite; */
 /* 	} */
@@ -980,10 +950,10 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 
 /*   // if shiftamount is greater than or equal to exprwidth, then */
 /*   // output is zero. */
-/*   cond = ParserBM->CreateNode(BVGE, varShiftAmt, exprWidthNode); */
+/*   cond = parserInterface->nf->CreateNode(BVGE, varShiftAmt, exprWidthNode); */
 /*   thenExpr = ParserBM->CreateZeroConst(exprWidth); */
 /*   ASTNode * ret = */
-/*     new ASTNode(ParserBM->CreateTerm(ITE, */
+/*     new ASTNode(parserInterface->nf->CreateTerm(ITE, */
 /* 				     exprWidth, */
 /* 				     cond, thenExpr, elseExpr)); */
 /*   BVTypeCheck(*ret); */
@@ -995,22 +965,21 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 /* } */
 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK
 {
-  ASTNode len = ParserBM->CreateZeroConst($3);
+  ASTNode len = parserInterface->CreateZeroConst($3);
   unsigned int w = $1->GetValueWidth();
 
   //the amount by which you are rightshifting
   //is less-than/equal-to the length of input
   //bitvector
   if((unsigned)$3 < w) {
-    ASTNode hi = ParserBM->CreateBVConst(32,w-1);
-    ASTNode low = ParserBM->CreateBVConst(32,$3);
-    ASTNode extract = ParserBM->CreateTerm(BVEXTRACT,w-$3,*$1,hi,low);
-    ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVCONCAT, w,len, extract));
-    BVTypeCheck(*n);
+    ASTNode hi = parserInterface->CreateBVConst(32,w-1);
+    ASTNode low = parserInterface->CreateBVConst(32,$3);
+    ASTNode extract = parserInterface->nf->CreateTerm(BVEXTRACT,w-$3,*$1,hi,low);
+    ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT, w,len, extract));
     $$ = n;
   }
   else
-    $$ = new ASTNode(ParserBM->CreateZeroConst(w));
+    $$ = new ASTNode(parserInterface->CreateZeroConst(w));
 
   delete $1;
 }
@@ -1022,7 +991,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   //
   // $3 is the variable shift amount
   unsigned int width = $1->GetValueWidth();
-  ASTNode * ret = new ASTNode(ParserBM->CreateTerm(BVRIGHTSHIFT, width, *$1, *$3));
+  ASTNode * ret = new ASTNode(parserInterface->nf->CreateTerm(BVRIGHTSHIFT, width, *$1, *$3));
   BVTypeCheck(*ret);
   //cout << *ret;
 
@@ -1032,16 +1001,14 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 |      BVPLUS_TOK '(' NUMERAL_TOK ',' Exprs ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVPLUS, $3, *$5));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVPLUS, $3, *$5));
   $$ = n;
 
   delete $5;
 }
 |      BVSUB_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVSUB, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVSUB, $3, *$5, *$7));
   $$ = n;
 
   delete $5;
@@ -1050,15 +1017,13 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 |      BVUMINUS_TOK '(' Expr ')' 
 {
   unsigned width = $3->GetValueWidth();
-  ASTNode * n =  new ASTNode(ParserBM->CreateTerm(BVUMINUS,width,*$3));
-  BVTypeCheck(*n);
+  ASTNode * n =  new ASTNode(parserInterface->nf->CreateTerm(BVUMINUS,width,*$3));
   $$ = n;
   delete $3;
 }
 |      BVMULT_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVMULT, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVMULT, $3, *$5, *$7));
   $$ = n;
 
   delete $5;
@@ -1066,8 +1031,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 |      BVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVDIV, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVDIV, $3, *$5, *$7));
   $$ = n;
 
   delete $5;
@@ -1075,8 +1039,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 |      BVMOD_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(BVMOD, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVMOD, $3, *$5, *$7));
   $$ = n;
 
   delete $5;
@@ -1084,8 +1047,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 |      SBVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(SBVDIV, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(SBVDIV, $3, *$5, *$7));
   $$ = n;
 
   delete $5;
@@ -1093,8 +1055,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 |      SBVREM_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
-  ASTNode * n = new ASTNode(ParserBM->CreateTerm(SBVREM, $3, *$5, *$7));
-  BVTypeCheck(*n);
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(SBVREM, $3, *$5, *$7));
   $$ = n;
   delete $5;
   delete $7;
@@ -1104,8 +1065,6 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 |      LET_TOK LetDecls IN_TOK Expr
 {
   $$ = $4;
-  //Cleanup the LetIDToExprMap
-  //ParserBM->CleanupLetIDMap();
 }
 ;
 
@@ -1117,20 +1076,20 @@ ArrayUpdateExpr : Expr WITH_TOK Updates
 
   ASTNodeMap::iterator it = $3->begin();
   ASTNodeMap::iterator itend = $3->end();
-  result = new ASTNode(ParserBM->CreateTerm(WRITE,
+  result = new ASTNode(parserInterface->nf->CreateArrayTerm(WRITE,
+                                            $1->GetIndexWidth(),
                                             width,
                                             *$1,
                                             (*it).first,
                                             (*it).second));
-  result->SetIndexWidth($1->GetIndexWidth());
   BVTypeCheck(*result);
   for(it++;it!=itend;it++) {
-    result = new ASTNode(ParserBM->CreateTerm(WRITE,
+    result = new ASTNode(parserInterface->nf->CreateArrayTerm(WRITE,
+                                              $1->GetIndexWidth(),
                                               width,
                                               *result,
                                               (*it).first,
                                               (*it).second));
-    result->SetIndexWidth($1->GetIndexWidth());
     BVTypeCheck(*result);
   }
   BVTypeCheck(*result);

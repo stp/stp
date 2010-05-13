@@ -349,37 +349,25 @@ int main(int argc, char ** argv) {
   }
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
-  if (bm->UserFlags.smtlib_parser_flag)
-    {
-	  // Wrap a typchecking node factory around the default node factory.
-	  // every node created is typechecked.
-	  SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory,*bm);
-	  TypeChecker nf(simpNF,*bm);
+	{
+		// Wrap a typchecking node factory around the default node factory.
+		// Every node created is typechecked.
+		SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory, *bm);
+		TypeChecker nf(simpNF, *bm);
 
-	  // Changes need to be made to the constant evaluator to get this working.
+		ParserInterface pi(*bm, &nf);
+		parserInterface = &pi;
 
-	  ParserInterface pi(*bm, &nf);
-	  parserInterface = &pi;
-
-	  smtparse((void*)AssertsQuery);
-      smtlex_destroy();
-
-      parserInterface = NULL;
-
-    }
-  else
-    {
-	  ParserInterface pi(*bm, bm->defaultNodeFactory);
-	  parserInterface = &pi;
-
-
-	  cvcparse((void*)AssertsQuery);
-      cvclex_destroy();
-
-      parserInterface = NULL;
-    }
-  bm->GetRunTimes()->stop(RunTimes::Parsing);
-
+		if (bm->UserFlags.smtlib_parser_flag) {
+			smtparse((void*) AssertsQuery);
+			smtlex_destroy();
+		} else {
+			cvcparse((void*) AssertsQuery);
+			cvclex_destroy();
+		}
+		parserInterface = NULL;
+	}
+	bm->GetRunTimes()->stop(RunTimes::Parsing);
 
   if(((ASTVec*)AssertsQuery)->empty())
     {

@@ -14,6 +14,7 @@ namespace BEEV
 {
 using BEEV::STPMgr;
 
+
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
 
 class ParserInterface
@@ -35,6 +36,11 @@ public:
 	const ASTVec GetAsserts(void)
 	{
 		return bm.GetAsserts();
+	}
+
+	UserDefinedFlags& getUserFlags()
+	{
+		return bm.UserFlags;
 	}
 
 	void AddAssert(const ASTNode& assert)

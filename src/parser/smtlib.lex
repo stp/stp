@@ -44,8 +44,6 @@
   extern char *smttext;
   extern int smterror (const char *msg);
 
-  //BeevMgr * ParserBM = GlobalSTP->bm;  
-
   // File-static (local to this file) variables and functions
   static std::string _string_lit;  
   static char escapeChar(char c) {

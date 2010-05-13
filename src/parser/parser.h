@@ -17,6 +17,6 @@
 namespace BEEV 
 {
   //external parser table for declared symbols.
-  extern ASTNodeSet _parser_symbol_table;
+  //extern ASTNodeSet _parser_symbol_table;
 }; //end of namespace
 #endif
