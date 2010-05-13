@@ -43,18 +43,6 @@ namespace BEEV
     // Read-Over-Write terms
     ASTNodeMap NewName_ReadOverWrite_Map;
 
-      
-    // The number of direct parents of each node. i.e. the number
-    // of times the pointer is in "children".  When we simplify we
-    // want to be careful sometimes about using the context of a
-    // node. For example, given ((x + 23) = 2), the obvious
-    // simplification is to join the constants. However, if there
-    // are lots of references to the plus node. Then each time we
-    // simplify, we'll create an additional plus.
-    // nextpoweroftwo064.smt is the motivating benchmark. The
-    // splitting increased the number of pluses from 1 to 65.
-    ASTNodeCountMap *ReferenceCount;
-      
     //Ptr to STP Manager
     STPMgr * _bm;
 
@@ -69,7 +57,6 @@ namespace BEEV
       SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
       SolverMap      = new ASTNodeMap(INITIAL_TABLE_SIZE);
       ReadOverWrite_NewName_Map = new ASTNodeMap();
-      ReferenceCount = new ASTNodeCountMap();
 
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
@@ -80,7 +67,6 @@ namespace BEEV
     {
       delete SimplifyMap;
       delete SimplifyNegMap;
-      delete ReferenceCount;
       delete SolverMap;
       delete ReadOverWrite_NewName_Map;
     }
@@ -143,7 +129,6 @@ namespace BEEV
     void CheckSimplifyInvariant(const ASTNode& a, 
                                 const ASTNode& output);
 
-    void BuildReferenceCountMap(const ASTNode& b);
 
     ASTNode SimplifyAtomicFormula(const ASTNode& a, 
                                   bool pushNeg, 
@@ -251,7 +236,6 @@ namespace BEEV
       NewName_ReadOverWrite_Map.clear();
       AlwaysTrueFormMap.clear();
       MultInverseMap.clear();
-      ReferenceCount->clear();
     }
   };//end of class Simplifier
 }; //end of namespace

@@ -80,7 +80,6 @@ namespace BEEV
     return false;
   }
 
-  // Push any reference count used by the key to the value.
   void Simplifier::UpdateSimplifyMap(const ASTNode& key, 
                                      const ASTNode& value, 
                                      bool pushNeg, ASTNodeMap* VarConstMap)
@@ -95,20 +94,6 @@ namespace BEEV
     if (0 == key.Degree())
       return;
     
-    // If there are references to the key, add them to the references
-    // of the value.
-    ASTNodeCountMap::const_iterator itKey, itValue;
-    itKey = ReferenceCount->find(key);
-    if (itKey != ReferenceCount->end())
-      {
-        itValue = ReferenceCount->find(value);
-        if (itValue != ReferenceCount->end())
-          (*ReferenceCount)[value] = itValue->second + itKey->second;
-        else
-          (*ReferenceCount)[value] = itKey->second;
-      }
-
-
     if (pushNeg)
       (*SimplifyNegMap)[key] = value;
     else
@@ -215,33 +200,6 @@ namespace BEEV
     return out;
   }
 
-  void Simplifier::BuildReferenceCountMap(const ASTNode& b)
-  {
-    if (b.GetChildren().size() == 0)
-      return;
-
-    ASTNodeCountMap::iterator it, itend;
-
-    it = ReferenceCount->find(b);
-    if (it == ReferenceCount->end())
-      {
-        (*ReferenceCount)[b] = 1;
-      }
-    else
-      {
-        (*ReferenceCount)[b] = it->second + 1;
-        return;
-      }
-
-    const ASTVec& c = b.GetChildren();
-    ASTVec::const_iterator itC = c.begin();
-    ASTVec::const_iterator itendC = c.end();
-    for (; itC != itendC; itC++)
-      {
-        BuildReferenceCountMap(*itC);
-      }
-  }
-
   // The SimplifyMaps on entry to the topLevel functions may contain
   // useful entries.  E.g. The BVSolver calls SimplifyTerm()
   ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, 
@@ -249,8 +207,6 @@ namespace BEEV
                                                ASTNodeMap* VarConstMap)
   {
     _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
-    if (_bm->UserFlags.smtlib_parser_flag)
-      BuildReferenceCountMap(b);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ResetSimplifyMaps();
     _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
@@ -2609,13 +2565,6 @@ namespace BEEV
         swap_flag = true;
       }
 
-    ASTNodeCountMap::const_iterator it;
-    it = ReferenceCount->find(lhs);
-    if (it != ReferenceCount->end())
-      {
-        if (it->second > 1)
-          return eq;
-      }
 
     unsigned int len = lhs.GetValueWidth();
     ASTNode zero = _bm->CreateZeroConst(len);
@@ -3287,22 +3236,16 @@ namespace BEEV
     //SimplifyNegMap->clear();
     delete SimplifyNegMap;
     SimplifyNegMap = new ASTNodeMap();
-
-    //ReferenceCount->clear();
-    delete ReferenceCount;
-    ReferenceCount = new ASTNodeCountMap();
   }
 
   void Simplifier::printCacheStatus()
   {
     cerr << SimplifyMap->size() << endl;
     cerr << SimplifyNegMap->size() << endl;
-    cerr << ReferenceCount->size() << endl;
     //cerr << TermsAlreadySeenMap.size() << endl;
   
     cerr << SimplifyMap->bucket_count() << endl;
     cerr << SimplifyNegMap->bucket_count() << endl;
-    cerr << ReferenceCount->bucket_count() << endl;
     //cerr << TermsAlreadySeenMap.bucket_count() << endl;
   } //printCacheStatus()
 };//end of namespace
