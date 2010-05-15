@@ -28,7 +28,23 @@ namespace BEEV
     return n;
   }
 
-
+  // is it ITE(p,bv0[1], bv1[1])  OR  ITE(p,bv0[0], bv1[0])
+  bool isPropositionToTerm(const ASTNode& n)
+  {
+  	if (n.GetType() != BITVECTOR_TYPE)
+  		return false;
+  	if (n.GetValueWidth() != 1)
+  		return false;
+  	if (n.GetKind() != ITE)
+  		return false;
+  	if (!n[1].isConstant())
+  		return false;
+  	if (!n[2].isConstant())
+  		return false;
+  	if (n[1] == n[0])
+  		return false;
+  	return true;
+  }
 
   bool Simplifier::CheckMap(ASTNodeMap* VarConstMap, 
                             const ASTNode& key, ASTNode& output)
@@ -2109,6 +2125,41 @@ namespace BEEV
                 }
               break;
             }
+
+          // This don't make it faster, just makes the graphs easier to understand.
+          		if (output.GetKind() == BVAND)
+          		{
+          			assert(output.Degree() != 0);
+          			bool allconv = true;
+          			for (ASTVec::const_iterator it = output.begin(), itend =
+          					output.end(); it != itend; it++)
+          			{
+          				if (!isPropositionToTerm(*it))
+          				{
+          					allconv = false;
+          					break;
+          				}
+          			}
+          			if (allconv)
+          			{
+          				const ASTNode zero = _bm->CreateZeroConst(1);
+          				ASTVec children;
+          				for (ASTVec::const_iterator it = output.begin(), itend =
+          						output.end(); it != itend; it++)
+          				{
+          					const ASTNode& n = *it;
+
+          					if (n[1] == zero)
+          						children.push_back(_bm->CreateNode(NOT, n[0]));
+          					else
+          						children.push_back(n[0]);
+          				}
+          				output = _bm->CreateTerm(ITE, 1,
+          						_bm->CreateNode(AND, children), _bm->CreateOneConst(1),
+          						zero);
+          				assert(BVTypeCheck(output));
+          			}
+          		}
           break;
         }
       case BVCONCAT:

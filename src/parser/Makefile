@@ -10,6 +10,7 @@ LIBS = -L../AST -last -L../sat -lminisat -L../simplifier -lsimplifier -L../bitve
 CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
 libparser.a: $(OBJS)
+	rm -f $@
 	$(AR) rc $@ $^
 	$(RANLIB) $@
 

@@ -221,6 +221,12 @@ namespace BEEV
 
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);    
+
+    #ifdef CORE
+    // The call to simplify() was removed. I'm guessing because it didn't work well with cryptominisat.
+    // so I'm only enabling it for just minisat.
+		newSolver.simplify();
+	#endif
     newSolver.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
     bm->PrintStats(newSolver);
