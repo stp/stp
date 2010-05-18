@@ -49,7 +49,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile;
@@ -119,7 +119,9 @@ int main(int argc, char ** argv) {
   helpstring +=
       "--print-back-CVC  : print input in CVC format, then exit\n";
   helpstring +=
-      "--print-back-SMTLIB  : print input in SMT-LIB format, then exit\n";
+      "--print-back-SMTLIB  : print input in SMT-LIB2 format, then exit\n";
+  helpstring +=
+      "--print-back-SMTLIB1  : print input in SMT-LIB1 format, then exit\n";
   helpstring +=
 	  "--print-back-GDL : print AiSee's graph format, then exit\n";
   helpstring +=
@@ -156,6 +158,7 @@ int main(int argc, char ** argv) {
     		  lookup.insert(make_pair("--print-back-C",PRINT_BACK_C));
 			  lookup.insert(make_pair("--print-back-CVC",PRINT_BACK_CVC));
 			  lookup.insert(make_pair("--print-back-SMTLIB",PRINT_BACK_SMTLIB));
+			  lookup.insert(make_pair("--print-back-SMTLIB1",PRINT_BACK_SMTLIB1));
 			  lookup.insert(make_pair("--print-back-GDL",PRINT_BACK_GDL));
 			  lookup.insert(make_pair("--print-back-dot",PRINT_BACK_DOT));
 			  lookup.insert(make_pair("--output-CNF",OUTPUT_CNF));
@@ -175,6 +178,10 @@ int main(int argc, char ** argv) {
 				  break;
 			  case PRINT_BACK_SMTLIB:
 				  bm->UserFlags.print_STPinput_back_SMTLIB_flag = true;
+				  onePrintBack = true;
+				  break;
+			  case PRINT_BACK_SMTLIB1:
+				  bm->UserFlags.print_STPinput_back_SMTLIB1_flag = true;
 				  onePrintBack = true;
 				  break;
 			  case PRINT_BACK_GDL:
@@ -404,9 +411,14 @@ int main(int argc, char ** argv) {
 	  print_STPInput_Back(query);
   }
 
+  if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
+    {
+	  printer::SMTLIB1_PrintBack(cout, original_input);
+   }
+
   if (bm->UserFlags.print_STPinput_back_SMTLIB_flag)
     {
-	  printer::SMTLIB_PrintBack(cout, original_input);
+	  printer::SMTLIB2_PrintBack(cout, original_input);
     }
 
   if (bm->UserFlags.print_STPinput_back_C_flag)

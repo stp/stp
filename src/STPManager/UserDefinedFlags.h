@@ -89,6 +89,7 @@ namespace BEEV
     bool print_STPinput_back_flag;
     bool print_STPinput_back_C_flag;
     bool print_STPinput_back_SMTLIB_flag;
+    bool print_STPinput_back_SMTLIB1_flag;
     bool print_STPinput_back_CVC_flag;
     bool print_STPinput_back_dot_flag;
     bool print_STPinput_back_GDL_flag;
@@ -193,6 +194,7 @@ namespace BEEV
       print_STPinput_back_flag = false;
       print_STPinput_back_C_flag = false;
       print_STPinput_back_SMTLIB_flag  = false;
+      print_STPinput_back_SMTLIB1_flag = false;
       print_STPinput_back_CVC_flag  = false;
       print_STPinput_back_GDL_flag = false;
       print_STPinput_back_dot_flag = false;

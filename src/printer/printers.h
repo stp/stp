@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -17,14 +17,11 @@
 #include "../AST/ASTKind.h"
 #include "../STPManager/STP.h"
 
-//using namespace std;
 namespace printer
 {
   ostream& Dot_Print(ostream &os, const BEEV::ASTNode n);
 
-  ostream& SMTLIB_Print(ostream &os, 
-                        const BEEV::ASTNode n, const int indentation = 0);
-  ostream& C_Print(ostream &os, 
+  ostream& C_Print(ostream &os,
                    const BEEV::ASTNode n, const int indentation = 0);
   ostream& PL_Print(ostream &os, 
                     const BEEV::ASTNode& n, int indentation=0);
@@ -33,8 +30,14 @@ namespace printer
                       const BEEV::ASTNode& n,  int indentation=0);
   ostream& Lisp_Print_indent(ostream &os,  
                              const BEEV::ASTNode& n,int indentation=0);
-  void SMTLIB_PrintBack(ostream &os, 
+
+  // The "PrintBack" functions also define all the variables that are used.
+  void SMTLIB1_PrintBack(ostream &os,
                         const BEEV::ASTNode& n );
+
+  void SMTLIB2_PrintBack(ostream &os,
+                        const BEEV::ASTNode& n );
+
 
   ostream& GDL_Print(ostream &os, const BEEV::ASTNode n);
   ostream& GDL_Print(ostream &os, const ASTNode n, string (*annotate)(const ASTNode&));

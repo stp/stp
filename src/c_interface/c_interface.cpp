@@ -195,7 +195,7 @@ void vc_printExpr(VC vc, Expr e) {
 char * vc_printSMTLIB(VC vc, Expr e)
 {
   stringstream ss;
-  printer::SMTLIB_Print(ss,*((nodestar)e), 0);
+  printer::SMTLIB1_PrintBack(ss,*((nodestar)e));
   string s = ss.str();
   char *copy = strdup(s.c_str());
   return copy;
