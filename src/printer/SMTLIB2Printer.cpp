@@ -197,7 +197,7 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
 
   			for (int i =0; i < c.size()-1; i++)
   			{
-  				os << "(" << functionToSMTLIBName(kind);
+  				os << "(" << functionToSMTLIBName(kind,false);
   				os << " ";
   				SMTLIB2_Print1(os, c[i], 0, letize);
   				os << " ";
@@ -208,7 +208,7 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
   		}
   		else
   		{
-  			os << "(" << functionToSMTLIBName(kind);
+  			os << "(" << functionToSMTLIBName(kind,false);
 
   			ASTVec::const_iterator iend = c.end();
   			for (ASTVec::const_iterator i = c.begin(); i != iend; i++)

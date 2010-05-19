@@ -17,7 +17,7 @@ namespace printer
 	//correctly print shared subterms inside the LET itself
 	extern BEEV::ASTNodeMap NodeLetVarMap1;
 
-	string functionToSMTLIBName(const Kind k);
+	string functionToSMTLIBName(const Kind k, bool smtlib1);
 
 	void LetizeNode(const ASTNode& n, BEEV::ASTNodeSet& PLPrintNodeSet);
 

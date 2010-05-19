@@ -164,10 +164,20 @@ using namespace BEEV;
 		}
 	} //end of LetizeNode()
 
-  string functionToSMTLIBName(const Kind k)
+  string functionToSMTLIBName(const Kind k, bool smtlib1)
   {
     switch (k)
       {
+    case IFF:
+    	if (smtlib1)
+			return "iff";
+    	else
+    		return "=";
+    case IMPLIES:
+    	if (smtlib1)
+    		return "implies";
+    	 else
+    	    return "=>";
       case AND:
       case BVAND:
       case BVNAND:
@@ -185,8 +195,6 @@ using namespace BEEV;
       case NOT:
       case OR:
       case XOR:
-      case IFF:
-      case IMPLIES:
 	{
         return tolower(_kind_names[k]);
 	}
