@@ -39,7 +39,7 @@ void SMTLIB2_PrintBack(ostream &os, const ASTNode& n)
 	buildListOfSymbols(n, visited, symbols);
 	printVarDeclsToStream(symbols, os);
 	os << "(assert ";
-    SMTLIB_Print(os, n, 0, &SMTLIB2_Print1);
+    SMTLIB_Print(os, n, 0, &SMTLIB2_Print1, false);
     os << ")" << endl;
     os << "(check-sat)" << endl;
     os << "(exit)" << endl;
@@ -56,24 +56,27 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
       // Should be a symbol.
       assert(a.GetKind()== SYMBOL);
       a.nodeprint(os);
-      os << " () (";
+
 
 		switch (a.GetType())
 		{
       case BEEV::BITVECTOR_TYPE:
-        os << "_ BitVec " << a.GetValueWidth() << ")";
+    	  os << " () (";
+    	  os << "_ BitVec " << a.GetValueWidth() << ")";
+
         break;
       case BEEV::ARRAY_TYPE:
-        os << "Array (_ BitVec " << a.GetIndexWidth()  << ") (_BitVec " << a.GetValueWidth() << ") )";
+    	  os << " () (";
+    	  os << "Array (_ BitVec " << a.GetIndexWidth()  << ") (_ BitVec " << a.GetValueWidth() << ") )";
         break;
       case BEEV::BOOLEAN_TYPE:
-        os << " Bool ";
+        os << " () Bool ";
         break;
       default:
         BEEV::FatalError("printVarDeclsToStream: Unsupported type",a);
         break;
       }
-		os << ")\n";
+  	  os << ")\n";
     }
   } //printVarDeclsToStream
 
@@ -169,9 +172,9 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         {
           unsigned int amount = GetUnsignedConst(c[1]);
           if (BVZX == kind)
-            os << "(_ zero_extend ";
+            os << "((_ zero_extend ";
           else
-            os << "(_ sign_extend ";
+            os << "((_ sign_extend ";
 
           os << (amount - c[0].GetValueWidth()) << ") ";
           SMTLIB2_Print1(os, c[0], indentation, letize);
@@ -183,7 +186,7 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
           unsigned int upper = GetUnsignedConst(c[1]);
           unsigned int lower = GetUnsignedConst(c[2]);
           assert(upper >= lower);
-          os << "((_ extract" << upper << " " << lower << ") ";
+          os << "((_ extract " << upper << " " << lower << ") ";
           SMTLIB2_Print1(os, c[0], indentation, letize);
           os << ")";
         }

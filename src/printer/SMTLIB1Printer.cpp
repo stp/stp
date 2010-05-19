@@ -42,7 +42,7 @@ namespace printer
 	buildListOfSymbols(n, visited, symbols);
 	printSMTLIB1VarDeclsToStream(symbols, os);
 	os << ":formula ";
-    SMTLIB_Print(os, n, 0, &SMTLIB1_Print1);
+    SMTLIB_Print(os, n, 0, &SMTLIB1_Print1,true);
     os << ")" << endl;
   }
 

@@ -23,17 +23,8 @@ using namespace BEEV;
 		return true;
 	}
 
-
-	static string tolower(const char * name)
-	{
-	  string s(name);
-	  for (size_t i = 0; i < s.size(); ++i)
-		s[i] = ::tolower(s[i]);
-	  return s;
-	}
-
 	  // copied from Presentation Langauge printer.
-	  ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation, void (*SMTLIB1_Print1)(ostream&, const ASTNode , int , bool ))
+	  ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation, void (*SMTLIB1_Print1)(ostream&, const ASTNode , int , bool ), bool smtlib1)
 	  {
 	    // Clear the maps
 		NodeLetVarMap.clear();
@@ -62,12 +53,17 @@ using namespace BEEV;
 					NodeLetVarVec.end();
 
 			os << "(let (";
+			if (!smtlib1)
+				os << "(";
 	        //print the let var first
 	        SMTLIB1_Print1(os, it->first, indentation, false);
 			os << " ";
 	        //print the expr
 	        SMTLIB1_Print1(os, it->second, indentation, false);
 			os << " )";
+			if (!smtlib1)
+				os << ")";
+
 
 	        //update the second map for proper printing of LET
 			NodeLetVarMap1[it->second] = it->first;
@@ -77,12 +73,17 @@ using namespace BEEV;
 	          {
 				os << " " << endl;
 				os << "(let (";
+				if (!smtlib1)
+						os << "(";
 	            //print the let var first
 	            SMTLIB1_Print1(os, it->first, indentation, false);
 				os << " ";
 	            //print the expr
 	            SMTLIB1_Print1(os, it->second, indentation, false);
 				os << ")";
+				if (!smtlib1)
+						os << ")";
+
 	            //update the second map for proper printing of LET
 				NodeLetVarMap1[it->second] = it->first;
 				closing += ")";
