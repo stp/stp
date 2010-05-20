@@ -7,6 +7,15 @@ namespace printer
 {
 using namespace BEEV;
 
+static string tolower(const char * name)
+{
+  string s(name);
+  for (size_t i = 0; i < s.size(); ++i)
+	s[i] = ::tolower(s[i]);
+  return s;
+}
+
+
 	//Map from ASTNodes to LetVars
 	BEEV::ASTNodeMap NodeLetVarMap;
 
