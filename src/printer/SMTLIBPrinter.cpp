@@ -247,6 +247,8 @@ static string tolower(const char * name)
         return "bvsdiv";
       case SBVREM:
         return "bvsrem";
+      case SBVMOD:
+        return "bvsmod";
 
       default:
         {

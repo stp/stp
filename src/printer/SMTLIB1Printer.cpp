@@ -37,6 +37,14 @@ namespace printer
 	else
 		os << ":logic QF_BV" << endl;
 
+	if (input_status == TO_BE_SATISFIABLE) {
+		os << ":status sat" << endl;
+	}
+	else if (input_status == TO_BE_UNSATISFIABLE) {
+		os << ":status unsat" << endl;
+	}
+	else
+		os << ":status unknown" << endl;
 
 	ASTNodeSet visited, symbols;
 	buildListOfSymbols(n, visited, symbols);
@@ -196,6 +204,11 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         break;
   	default:
   	{
+  	    if ((kind == AND  || kind == OR|| kind == XOR) && n.Degree() != 2)
+  	    {
+  	    	FatalError("Wrong number of arguments to operation (must be two).", n);
+  	    }
+
   		// SMT-LIB only allows these functions to have two parameters.
   		if ((BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
   		{
