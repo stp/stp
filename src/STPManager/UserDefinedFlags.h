@@ -88,7 +88,7 @@ namespace BEEV
     //print the input back
     bool print_STPinput_back_flag;
     bool print_STPinput_back_C_flag;
-    bool print_STPinput_back_SMTLIB_flag;
+    bool print_STPinput_back_SMTLIB2_flag;
     bool print_STPinput_back_SMTLIB1_flag;
     bool print_STPinput_back_CVC_flag;
     bool print_STPinput_back_dot_flag;
@@ -99,7 +99,8 @@ namespace BEEV
     bool output_bench_flag;
 
     //Flag to switch on the smtlib parser
-    bool smtlib_parser_flag;
+    bool smtlib1_parser_flag;
+    bool smtlib2_parser_flag;
     
     bool division_by_zero_returns_one_flag;
     
@@ -188,12 +189,13 @@ namespace BEEV
       xor_flatten_flag = false;
       
       //Flag to switch on the smtlib parser
-      smtlib_parser_flag = false;
+      smtlib1_parser_flag = false;
+      smtlib2_parser_flag = false;
       
       //print the input back
       print_STPinput_back_flag = false;
       print_STPinput_back_C_flag = false;
-      print_STPinput_back_SMTLIB_flag  = false;
+      print_STPinput_back_SMTLIB2_flag  = false;
       print_STPinput_back_SMTLIB1_flag = false;
       print_STPinput_back_CVC_flag  = false;
       print_STPinput_back_GDL_flag = false;

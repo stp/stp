@@ -23,9 +23,11 @@ using namespace __gnu_cxx;
 using namespace BEEV;
 
 extern int smtparse(void*);
+extern int smt2parse(void*);
 extern int cvcparse(void*);
 extern int cvclex_destroy(void);
 extern int smtlex_destroy(void);
+extern int smt2lex_destroy(void);
 
 // callback for SIGALRM.
 void handle_time_out(int parameter){
@@ -34,6 +36,16 @@ void handle_time_out(int parameter){
 }
 
 bool onePrintBack =false;
+
+
+static string tolower(const char * name)
+{
+  string s(name);
+  for (size_t i = 0; i < s.size(); ++i)
+	s[i] = ::tolower(s[i]);
+  return s;
+}
+
 
 
 // Amount of memory to ask for at beginning of main.
@@ -49,12 +61,13 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT} OptionType;
 
 int main(int argc, char ** argv) {
-  char * infile;
+  char * infile = NULL;
   extern FILE *cvcin;
   extern FILE *smtin;
+  extern FILE *smt2in;
 
   // Grab some memory from the OS upfront to reduce system time when
   // individual hash tables are being allocated
@@ -106,7 +119,7 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-j <filename>  : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
   helpstring +=  
-    "-m  : use the SMTLIB parser\n";
+    "-m  : use the SMTLIB1 parser\n";
 
   helpstring +=  "--output-CNF : save the CNF into output.cnf\n";
   helpstring +=  "--output-bench : save in ABC's bench format to output.bench\n";
@@ -119,7 +132,7 @@ int main(int argc, char ** argv) {
   helpstring +=
       "--print-back-CVC  : print input in CVC format, then exit\n";
   helpstring +=
-      "--print-back-SMTLIB  : print input in SMT-LIB2 format, then exit\n";
+      "--print-back-SMTLIB2  : print input in SMT-LIB2 format, then exit\n";
   helpstring +=
       "--print-back-SMTLIB1  : print input in SMT-LIB1 format, then exit\n";
   helpstring +=
@@ -130,12 +143,14 @@ int main(int argc, char ** argv) {
     "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  
     "-s  : print function statistics\n";
-
-  #if !defined CRYPTOMINISAT2
+#if !defined CRYPTOMINISAT2
+helpstring +=
+  "--simplifying-minisat : use simplifying-minisat rather than minisat\n";
+#endif
   helpstring +=
-    "--simplifying-minisat : use simplifying-minisat rather than minisat\n";
-  #endif
-
+	"--SMTLIB1 : use the SMT-LIB1 format parser\n";
+  helpstring +=
+	"--SMTLIB2 : use the SMT-LIB2 format parser\n";
   helpstring +=  
     "-t  : print quick statistics\n";
   helpstring +=  
@@ -155,18 +170,19 @@ int main(int argc, char ** argv) {
     	  {
     		  // long options.
     		  map<string,OptionType> lookup;
-    		  lookup.insert(make_pair("--print-back-C",PRINT_BACK_C));
-			  lookup.insert(make_pair("--print-back-CVC",PRINT_BACK_CVC));
-			  lookup.insert(make_pair("--print-back-SMTLIB",PRINT_BACK_SMTLIB));
-			  lookup.insert(make_pair("--print-back-SMTLIB1",PRINT_BACK_SMTLIB1));
-			  lookup.insert(make_pair("--print-back-GDL",PRINT_BACK_GDL));
-			  lookup.insert(make_pair("--print-back-dot",PRINT_BACK_DOT));
-			  lookup.insert(make_pair("--output-CNF",OUTPUT_CNF));
-			  lookup.insert(make_pair("--output-bench",OUTPUT_BENCH));
-			  lookup.insert(make_pair("--simplifying-minisat",USE_SIMPLIFYING_SOLVER));
+    		  lookup.insert(make_pair(tolower("--print-back-C"),PRINT_BACK_C));
+			  lookup.insert(make_pair(tolower("--print-back-CVC"),PRINT_BACK_CVC));
+			  lookup.insert(make_pair(tolower("--print-back-SMTLIB2"),PRINT_BACK_SMTLIB2));
+			  lookup.insert(make_pair(tolower("--print-back-SMTLIB1"),PRINT_BACK_SMTLIB1));
+			  lookup.insert(make_pair(tolower("--print-back-GDL"),PRINT_BACK_GDL));
+			  lookup.insert(make_pair(tolower("--print-back-dot"),PRINT_BACK_DOT));
+			  lookup.insert(make_pair(tolower("--output-CNF"),OUTPUT_CNF));
+			  lookup.insert(make_pair(tolower("--output-bench"),OUTPUT_BENCH));
+			  lookup.insert(make_pair(tolower("--simplifying-minisat"),USE_SIMPLIFYING_SOLVER));
+			  lookup.insert(make_pair(tolower("--SMTLIB2"),SMT_LIB2_FORMAT));
+			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
 
-
-			  switch(lookup[argv[i]])
+			  switch(lookup[tolower(argv[i])])
 			  {
 			  case PRINT_BACK_C:
 				  bm->UserFlags.print_STPinput_back_C_flag = true;
@@ -176,8 +192,8 @@ int main(int argc, char ** argv) {
 				  bm->UserFlags.print_STPinput_back_CVC_flag = true;
 				  onePrintBack = true;
 				  break;
-			  case PRINT_BACK_SMTLIB:
-				  bm->UserFlags.print_STPinput_back_SMTLIB_flag = true;
+			  case PRINT_BACK_SMTLIB2:
+				  bm->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
 				  onePrintBack = true;
 				  break;
 			  case PRINT_BACK_SMTLIB1:
@@ -199,6 +215,19 @@ int main(int argc, char ** argv) {
 			  case OUTPUT_BENCH:
 				  bm->UserFlags.output_bench_flag = true;
 				  break;
+			  case SMT_LIB2_FORMAT:
+				  bm->UserFlags.smtlib2_parser_flag = true;
+				  bm->UserFlags.division_by_zero_returns_one_flag = true;
+				  if (bm->UserFlags.smtlib1_parser_flag)
+					  FatalError("Can't use both the smtlib and smtlib2 parsers");
+				  break;
+			  case SMT_LIB1_FORMAT:
+				  bm->UserFlags.smtlib1_parser_flag = true;
+				  bm->UserFlags.division_by_zero_returns_one_flag = true;
+				  if (bm->UserFlags.smtlib2_parser_flag)
+					  FatalError("Can't use both the smtlib and smtlib2 parsers");
+				  break;
+
 
 #if !defined CRYPTOMINISAT && !defined CRYPTOMINISAT2
 			  case USE_SIMPLIFYING_SOLVER:
@@ -275,12 +304,15 @@ int main(int argc, char ** argv) {
 	      bm->UserFlags.print_cnf_flag = true;
 	      bm->UserFlags.cnf_dump_filename = argv[++i];
 	      break;
+            case 'm':
+              bm->UserFlags.smtlib1_parser_flag=true;
+              bm->UserFlags.division_by_zero_returns_one_flag = true;
+			  if (bm->UserFlags.smtlib2_parser_flag)
+				  FatalError("Can't use both the smtlib and smtlib2 parsers");
+
+              break;
             case 'n':
               bm->UserFlags.print_output_flag = true;
-              break;
-            case 'm':
-              bm->UserFlags.smtlib_parser_flag=true;
-              bm->UserFlags.division_by_zero_returns_one_flag = true;
               break;
             case 'p':
               bm->UserFlags.print_counterexample_flag = true;
@@ -324,27 +356,62 @@ int main(int argc, char ** argv) {
             }
         }
         } else {          
-        infile = argv[i];
-        if (bm->UserFlags.smtlib_parser_flag)
-          {
-            smtin = fopen(infile,"r");
-            if(smtin == NULL)
-              {
-                fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-                FatalError("");
-              }
-          }
-        else
-          {
-            cvcin = fopen(infile,"r");
-            if(cvcin == NULL)
-              {
-                fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-                FatalError("");
-              }
-          }
+        	if (NULL != infile)
+				FatalError("One input file only.");
+        	infile = argv[i];
       }
     }
+
+  if (!bm->UserFlags.smtlib1_parser_flag &&  !bm->UserFlags.smtlib2_parser_flag)
+  {
+	  // No parser is explicity requested.
+	  if (NULL != infile && strlen(infile)>=5)
+	  {
+		  string f(infile);
+		  if (!f.compare(f.length()-4, 4,".smt"))
+		  {
+			  bm->UserFlags.smtlib1_parser_flag = true;
+		  }
+		  if (!f.compare(f.length()-5, 5,".smt2"))
+		  {
+			  bm->UserFlags.smtlib2_parser_flag = true;
+		  }
+	  }
+  }
+
+  // If we're not reading the file from stdin.
+  if (infile != NULL)
+  {
+  if (bm->UserFlags.smtlib1_parser_flag)
+    {
+      smtin = fopen(infile,"r");
+      if(smtin == NULL)
+        {
+          fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+          FatalError("");
+        }
+    } else
+        if (bm->UserFlags.smtlib2_parser_flag)
+          {
+            smt2in = fopen(infile,"r");
+            if(smt2in == NULL)
+              {
+                fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+                FatalError("");
+              }
+          }
+
+  else
+    {
+      cvcin = fopen(infile,"r");
+      if(cvcin == NULL)
+        {
+          fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
+          FatalError("");
+        }
+    }
+  }
+
 
   //want to print the output always from the commandline.
   bm->UserFlags.print_output_flag = true;
@@ -357,17 +424,28 @@ int main(int argc, char ** argv) {
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
 	{
-		// Wrap a typchecking node factory around the default node factory.
-		// Every node created is typechecked.
-		SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory, *bm);
-		TypeChecker nf(simpNF, *bm);
+ 	    SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory, *bm);
+		TypeChecker nfTypeCheckSimp(simpNF, *bm);
+		TypeChecker nfTypeCheckDefault(*bm->defaultNodeFactory, *bm);
 
-		ParserInterface pi(*bm, &nf);
-		parserInterface = &pi;
+		ParserInterface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
+		ParserInterface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
 
-		if (bm->UserFlags.smtlib_parser_flag) {
+		// If you are converting formats, you probably don't want it simplifying (at least I dont).
+		if (false && onePrintBack)
+		{
+			parserInterface = &piTypeCheckDefault;
+		}
+		else
+			parserInterface = &piTypeCheckSimp;
+
+
+		if (bm->UserFlags.smtlib1_parser_flag) {
 			smtparse((void*) AssertsQuery);
 			smtlex_destroy();
+		} else if (bm->UserFlags.smtlib2_parser_flag) {
+			smt2parse((void*) AssertsQuery);
+			smt2lex_destroy();
 		} else {
 			cvcparse((void*) AssertsQuery);
 			cvclex_destroy();
@@ -399,8 +477,8 @@ int main(int argc, char ** argv) {
 
   if(bm->UserFlags.print_STPinput_back_flag)
     {
-      if(bm->UserFlags.smtlib_parser_flag)
-    	  bm->UserFlags.print_STPinput_back_SMTLIB_flag = true;
+      if(bm->UserFlags.smtlib1_parser_flag)
+    	  bm->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
       else
     	  bm->UserFlags.print_STPinput_back_CVC_flag = true;
     }
@@ -416,7 +494,7 @@ int main(int argc, char ** argv) {
 	  printer::SMTLIB1_PrintBack(cout, original_input);
    }
 
-  if (bm->UserFlags.print_STPinput_back_SMTLIB_flag)
+  if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
     {
 	  printer::SMTLIB2_PrintBack(cout, original_input);
     }

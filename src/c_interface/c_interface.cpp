@@ -105,7 +105,7 @@ void vc_setFlags(VC vc, char c, int param_value) {
     b->UserFlags.print_output_flag = true;
     break;
   case 'm':
-    b->UserFlags.smtlib_parser_flag=true;
+    b->UserFlags.smtlib1_parser_flag=true;
     b->UserFlags.division_by_zero_returns_one_flag = true;
     break;
   case 'p':
@@ -1766,7 +1766,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
 
 
   BEEV::ASTVec * AssertsQuery = new BEEV::ASTVec;
-  if (b->UserFlags.smtlib_parser_flag) 
+  if (b->UserFlags.smtlib1_parser_flag) 
     {
       smtin = cvcin;
       cvcin = NULL;
@@ -1998,7 +1998,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
   BEEV::parserInterface = &pi;
 
   BEEV::ASTVec AssertsQuery;
-  if (b->UserFlags.smtlib_parser_flag) 
+  if (b->UserFlags.smtlib1_parser_flag) 
     {
       //YY_BUFFER_STATE bstat = smt_scan_string(s);
       //smt_switch_to_buffer(bstat);
