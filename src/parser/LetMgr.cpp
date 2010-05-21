@@ -77,10 +77,9 @@ namespace BEEV {
     if (_letid_expr_map->size()  ==0)
       return;
 
-
-    // I don't know what this does. Commenting it out and all the regression
-    // tests still pass.
-//#if 0
+    // If ?v0 is encountered and is set with a bitwidth of 6 (say),
+    // when it's next encountered in another let, then we want it to
+    // have a formula type.
     ASTNodeMap::iterator it = _letid_expr_map->begin();
     ASTNodeMap::iterator itend = _letid_expr_map->end();
     for(;it!=itend;it++) {
@@ -89,7 +88,7 @@ namespace BEEV {
         it->first.SetIndexWidth(0);
       }
     }
-//#endif
+
 
     // May contain lots of buckets, so reset.
     delete _letid_expr_map;

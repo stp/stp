@@ -33,14 +33,10 @@
    * <hr>
    ********************************************************************/
   // -*- c++ -*-L
-#include <iostream>
 #include "parser.h"
 #include "parse2SMT_defs.h"
 #include "ParserInterface.h"
 
-  using namespace std;
-  using namespace BEEV;
-  
   extern char *smt2text;
   extern int smt2error (const char *msg);
 
@@ -63,7 +59,7 @@
 
 %x	COMMENT
 %x	STRING_LITERAL
-%x      USER_VALUE
+%x  USER_VALUE
 
 LETTER	([a-zA-Z])
 DIGIT	([0-9])
@@ -72,22 +68,12 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
 [ \n\t\r\f]	{ /* sk'ip whitespace */ }
+
 {DIGIT}+	{ smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
 
-
-	 bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_TOK; }
-
-bit{DIGIT}+     {
-  		   char c = smt2text[3];
-		   if (c == '1') {
-		     smt2lval.node = new BEEV::ASTNode(parserInterface->CreateOneConst(1));
-		   }
-		   else {
-		     smt2lval.node = new BEEV::ASTNode(parserInterface->CreateZeroConst(1));
-		   }
-		   return BITCONST_TOK;
-		};
-
+bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
+#b{DIGIT}+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
+#x(DIGIT|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
 
 ";"		{ BEGIN COMMENT; }
 <COMMENT>"\n"	{ BEGIN INITIAL; /* return to normal mode */}
@@ -147,9 +133,9 @@ bit{DIGIT}+     {
 "extrasorts"    { return EXTRASORTS_TOK; }
 "extrapreds"    { return EXTRAPREDS_TOK; }
 "language"      { return LANGUAGE_TOK; }
+
+ /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 ":"             { return COLON_TOK; }
-"\["            { return LBRACKET_TOK; }
-"\]"            { return RBRACKET_TOK; }
 "("             { return LPAREN_TOK; }
 ")"             { return RPAREN_TOK; }
 "$"             { return DOLLAR_TOK; }
@@ -252,14 +238,14 @@ bit{DIGIT}+     {
 
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = parserInterface->CreateSymbol(smt2text); 
+  BEEV::ASTNode nptr = BEEV::parserInterface->CreateSymbol(smt2text); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
-  smt2lval.node = new BEEV::ASTNode(parserInterface->letMgr.ResolveID(nptr));
+  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
   //smt2lval.node = new BEEV::ASTNode(nptr);
-  if ((smt2lval.node)->GetType() == BOOLEAN_TYPE)
+  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
     return FORMID_TOK;
   else 
     return TERMID_TOK;

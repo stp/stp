@@ -94,14 +94,18 @@
 %type <vec> bench_attributes an_formulas an_terms
 
 %type <node> benchmark bench_name bench_attribute
-%type <node> an_term an_nonbvconst_term an_formula 
+%type <node> an_term  an_formula 
 
 %type <node> var fvar logic_name
 %type <str> user_value
 
 %token <uintval> NUMERAL_TOK
-%token <str> BVCONST_TOK
-%token <node> BITCONST_TOK
+
+%token <str> BVCONST_DECIMAL_TOK
+%token <str> BVCONST_BINARY_TOK
+%token <str> BVCONST_HEXIDECIMAL_TOK
+
+ /*%token <node> BITCONST_TOK*/
 %token <node> FORMID_TOK TERMID_TOK 
 %token <str> STRING_TOK
 %token <str> USER_VAL_TOK
@@ -139,8 +143,6 @@
 %token PIPE_TOK
 %token DOT_TOK
 %token COLON_TOK
-%token LBRACKET_TOK
-%token RBRACKET_TOK
 %token LPAREN_TOK
 %token RPAREN_TOK
 
@@ -210,8 +212,6 @@
 // COMMANDS
 %token EXIT_TOK
 %token CHECK_SAT_TOK
-
-%left LBRACKET_TOK RBRACKET_TOK
 
  /* Functions for QF_AUFBV. */
 %token SELECT_TOK;
@@ -734,22 +734,9 @@ an_terms an_term
 }
 ;
 
-an_term:
-BVCONST_TOK
-{
-  $$ = new ASTNode(parserInterface->CreateBVConst($1, 10, 32));
-}
-| BVCONST_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
-{
-  $$ = new ASTNode(parserInterface->CreateBVConst($1,10,$3));
-  delete $1;
-}
-| an_nonbvconst_term
-;
 
-an_nonbvconst_term: 
-BITCONST_TOK { $$ = $1; }
-| var
+an_term: 
+var
 {
   $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
   delete $1;
@@ -1090,30 +1077,44 @@ BITCONST_TOK { $$ = $1; }
   $$ = n;
       
 }
-   |  BVREPEAT_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
-    {
-	  unsigned count = $3;
+| LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
+{
+	  unsigned count = $4;
 	  if (count < 1)
 	  	FatalError("One or more repeats please");
 
-	  unsigned w = $5->GetValueWidth();  
-      ASTNode n =  *$5;
+	  unsigned w = $7->GetValueWidth();  
+      ASTNode n =  *$7;
       
       for (unsigned i =1; i < count; i++)
       {
-      	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$5);
+      	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$7);
       }
       $$ = new ASTNode(n);
-    }
-| UNDERSCORE_TOK BVCONST_TOK NUMERAL_TOK
+}
+| UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
 	$$ = new ASTNode(parserInterface->CreateBVConst($2, 10, $3));
     $$->SetValueWidth($3);
 }
+| BVCONST_HEXIDECIMAL_TOK
+{
+	unsigned width = $1->length()*4;
+	$$ = new ASTNode(parserInterface->CreateBVConst($1, 16, width));
+    $$->SetValueWidth(width);
+}
+| BVCONST_BINARY_TOK
+{
+	unsigned width = $1->length();
+	$$ = new ASTNode(parserInterface->CreateBVConst($1, 2, width));
+    $$->SetValueWidth(width);
+}
+
 ;
-  
+
+ 
 sort_symb:
-BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
+BITVEC_TOK LPAREN_TOK NUMERAL_TOK RPAREN_TOK
 {
   // Just return BV width.  If sort is BOOL, width is 0.
   // Otherwise, BITVEC[w] returns w. 
