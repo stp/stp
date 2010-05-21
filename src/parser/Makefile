@@ -1,7 +1,8 @@
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
-LEX=flex
+#`From the flex manual>: -Cfe' is often a good compromise between speed and size for production scanners.
+LEX=flex -Cfe
 YACC=bison -d -y --debug -v
 
 SRCS = lexCVC.cpp parseCVC.cpp parseSMT.cpp lexSMT.cpp LetMgr.cpp parse2SMT.cpp lex2SMT.cpp
