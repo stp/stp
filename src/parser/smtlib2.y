@@ -116,6 +116,7 @@
 %token DIFFICULTY_TOK
 %token VERSION_TOK
 
+%token  DECIMAL_TOK
 
 %token NOTES_TOK
 %token CVC_COMMAND_TOK
@@ -137,11 +138,9 @@
 
  /* ASCII Symbols */
 %token DOLLAR_TOK
-%token QUESTION_TOK
 %token SEMICOLON_TOK
 %token UNDERSCORE_TOK
 %token PIPE_TOK
-%token DOT_TOK
 %token COLON_TOK
 %token LPAREN_TOK
 %token RPAREN_TOK
@@ -261,7 +260,7 @@ cmdi:
 	{}
 |	LPAREN_TOK NOTES_TOK attribute FORMID_TOK RPAREN_TOK
 	{}
-|	LPAREN_TOK NOTES_TOK attribute NUMERAL_TOK DOT_TOK NUMERAL_TOK RPAREN_TOK
+|	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
 	{}
 |	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
 	{}
@@ -672,11 +671,11 @@ lets: let lets
 | let
 {};
 
-let: LPAREN_TOK QUESTION_TOK FORMID_TOK an_formula RPAREN_TOK
+let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
 {
   //set the valuewidth of the identifier
-  $3->SetValueWidth($4->GetValueWidth());
-  $3->SetIndexWidth($4->GetIndexWidth());
+  $2->SetValueWidth($3->GetValueWidth());
+  $2->SetIndexWidth($3->GetIndexWidth());
       
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
@@ -686,16 +685,16 @@ let: LPAREN_TOK QUESTION_TOK FORMID_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$3,*$4);
+  parserInterface->letMgr.LetExprMgr(*$2,*$3);
   
   //delete $5;
   //delete $6;      
 }
-| LPAREN_TOK QUESTION_TOK FORMID_TOK an_term RPAREN_TOK
+| LPAREN_TOK FORMID_TOK an_term RPAREN_TOK
 {
   //set the valuewidth of the identifier
-  $3->SetValueWidth($4->GetValueWidth());
-  $3->SetIndexWidth($4->GetIndexWidth());
+  $2->SetValueWidth($3->GetValueWidth());
+  $2->SetIndexWidth($3->GetIndexWidth());
       
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
@@ -705,7 +704,7 @@ let: LPAREN_TOK QUESTION_TOK FORMID_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$3,*$4);
+  parserInterface->letMgr.LetExprMgr(*$2,*$3);
   
   //delete $5;
   //delete $6;      
@@ -1077,18 +1076,18 @@ var
   $$ = n;
       
 }
-| LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
+| LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
 	  unsigned count = $4;
 	  if (count < 1)
 	  	FatalError("One or more repeats please");
 
-	  unsigned w = $7->GetValueWidth();  
-      ASTNode n =  *$7;
+	  unsigned w = $6->GetValueWidth();  
+      ASTNode n =  *$6;
       
       for (unsigned i =1; i < count; i++)
       {
-      	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$7);
+      	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
       }
       $$ = new ASTNode(n);
 }
@@ -1137,10 +1136,6 @@ TERMID_TOK
   $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
   delete $1;
 }
-| QUESTION_TOK TERMID_TOK
-{
-  $$ = $2;
-}
 ;
 
 fvar:
@@ -1153,9 +1148,5 @@ DOLLAR_TOK FORMID_TOK
   $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); 
   delete $1;      
 }
-| QUESTION_TOK FORMID_TOK
-{
-  $$ = $2;
-}   
 ;
 %%

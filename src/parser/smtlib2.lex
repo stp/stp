@@ -48,7 +48,23 @@
     case 't': return '\t';
     default: return c;
     }
-  }      
+  }    
+   
+  static int lookup(const char* s)
+  {
+    BEEV::ASTNode nptr = BEEV::parserInterface->CreateSymbol(s); 
+
+  // Check valuesize to see if it's a prop var.  I don't like doing
+  // type determination in the lexer, but it's easier than rewriting
+  // the whole grammar to eliminate the term/formula distinction.  
+  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
+  //smt2lval.node = new BEEV::ASTNode(nptr);
+  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+    return FORMID_TOK;
+  else 
+    return TERMID_TOK;
+   }
+   
 %}
 
 %option noyywrap
@@ -63,7 +79,8 @@
 
 LETTER	([a-zA-Z])
 DIGIT	([0-9])
-OPCHAR	(['\.\_]) 
+OPCHAR	([~!@$%^&*\_\-+=<>\.?/]) 
+
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
@@ -74,6 +91,8 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x(DIGIT|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
+
+{DIGIT}+"."{DIGIT}+ { return DECIMAL_TOK;}
 
 ";"		{ BEGIN COMMENT; }
 <COMMENT>"\n"	{ BEGIN INITIAL; /* return to normal mode */}
@@ -91,15 +110,6 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
                           return STRING_TOK; }
 
 <STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smt2text); }                           
-
-<INITIAL>"|"		{ BEGIN USER_VALUE;
-                          _string_lit.erase(_string_lit.begin(),
-                                            _string_lit.end()); }
-<USER_VALUE>"|"	        { BEGIN INITIAL; /* return to normal mode */
-			  smt2lval.str = new std::string(_string_lit);
-                          return USER_VAL_TOK; }
-<USER_VALUE>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
-<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
 
 
  /*
@@ -139,10 +149,8 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "("             { return LPAREN_TOK; }
 ")"             { return RPAREN_TOK; }
 "$"             { return DOLLAR_TOK; }
-"?"             { return QUESTION_TOK; }
+ /*"?"             { return QUESTION_TOK; }*/
 "_"             { return UNDERSCORE_TOK; }
-"\|"             { return PIPE_TOK; }
-"."             { return DOT_TOK; }
 
  /* Set info types */
 "source"        { return SOURCE_TOK;}
@@ -230,26 +238,30 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "sign_extend"   { return BVSX_TOK;}  
 "repeat"        { return BVREPEAT_TOK;}  
 "rotate_left"   { return BVROTATE_LEFT_TOK;} 
-"rotate_right"   { return BVROTATE_RIGHT_TOK;}  
+"rotate_right"  { return BVROTATE_RIGHT_TOK;}  
 
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }
 "store"         { return STORE_TOK; }
 
 
-(({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = BEEV::parserInterface->CreateSymbol(smt2text); 
-
-  // Check valuesize to see if it's a prop var.  I don't like doing
-  // type determination in the lexer, but it's easier than rewriting
-  // the whole grammar to eliminate the term/formula distinction.  
-  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
-  //smt2lval.node = new BEEV::ASTNode(nptr);
-  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
-    return FORMID_TOK;
-  else 
-    return TERMID_TOK;
- 
+({LETTER}|{OPCHAR})({ANYTHING})*	{
+	return lookup(smt2text);
 }
+
+<INITIAL>"|"		{ BEGIN USER_VALUE;
+                          _string_lit.erase(_string_lit.begin(),
+                                            _string_lit.end());
+                         _string_lit.insert(_string_lit.end(),'|');
+                     }
+<USER_VALUE>"|"	        { BEGIN INITIAL; /* return to normal mode */
+			  			  _string_lit.insert(_string_lit.end(),'|');
+			  			  smt2lval.str = new std::string(_string_lit);
+                          return lookup(_string_lit.c_str()); 
+                        }
+
+<USER_VALUE>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
+<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
+
 . { smt2error("Illegal input character."); }
 %%
