@@ -89,59 +89,34 @@
 
 %start cmd
 
-%type <indexvaluewidth> sort_symb sort_symbs
 %type <node> status
-%type <vec> bench_attributes an_formulas an_terms
+%type <vec> an_formulas an_terms
 
-%type <node> benchmark bench_name bench_attribute
 %type <node> an_term  an_formula 
 
-%type <node> var fvar logic_name
-%type <str> user_value
 
 %token <uintval> NUMERAL_TOK
-
 %token <str> BVCONST_DECIMAL_TOK
 %token <str> BVCONST_BINARY_TOK
 %token <str> BVCONST_HEXIDECIMAL_TOK
 
- /*%token <node> BITCONST_TOK*/
+ /* We have this so we can parse :smt-lib-version 2.0 */
+%token  DECIMAL_TOK
+
 %token <node> FORMID_TOK TERMID_TOK 
 %token <str> STRING_TOK
-%token <str> USER_VAL_TOK
+
 
  /* set-info tokens */
 %token SOURCE_TOK
 %token CATEGORY_TOK
 %token DIFFICULTY_TOK
 %token VERSION_TOK
-
-%token  DECIMAL_TOK
-
-%token NOTES_TOK
-%token CVC_COMMAND_TOK
-%token SORTS_TOK
-%token FUNS_TOK
-%token PREDS_TOK
-%token EXTENSIONS_TOK
-%token DEFINITION_TOK
-%token AXIOMS_TOK
-%token LOGIC_TOK
-%token ASSUMPTION_TOK
-%token FORMULA_TOK
 %token STATUS_TOK
-%token BENCHMARK_TOK
-%token EXTRASORTS_TOK
-%token DECLARE_FUNCTION_TOK
-%token EXTRAPREDS_TOK
-%token LANGUAGE_TOK
 
  /* ASCII Symbols */
-%token DOLLAR_TOK
-%token SEMICOLON_TOK
+ /* Semicolons (comments) are ignored by the lexer */
 %token UNDERSCORE_TOK
-%token PIPE_TOK
-%token COLON_TOK
 %token LPAREN_TOK
 %token RPAREN_TOK
 
@@ -211,6 +186,10 @@
 // COMMANDS
 %token EXIT_TOK
 %token CHECK_SAT_TOK
+%token LOGIC_TOK
+%token NOTES_TOK
+%token DECLARE_FUNCTION_TOK
+%token FORMULA_TOK
 
  /* Functions for QF_AUFBV. */
 %token SELECT_TOK;
@@ -248,7 +227,7 @@ cmdi:
 		commands.push_back("check-sat");
 	}
 |
-	LPAREN_TOK LOGIC_TOK logic_name RPAREN_TOK
+	LPAREN_TOK LOGIC_TOK FORMID_TOK RPAREN_TOK
 	{
 	  if (!(0 == strcmp($3->GetName(),"QF_BV") ||
 	        0 == strcmp($3->GetName(),"QF_AUFBV"))) {
@@ -256,8 +235,6 @@ cmdi:
 	  }
 	  delete $3;
 	}
-|	LPAREN_TOK NOTES_TOK attribute user_value RPAREN_TOK
-	{}
 |	LPAREN_TOK NOTES_TOK attribute FORMID_TOK RPAREN_TOK
 	{}
 |	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
@@ -273,97 +250,6 @@ cmdi:
 	assertionsSMT2.push_back(*$3);
 	}
 |
-benchmark
-{
-  ASTNode assumptions;
-  if($1 == NULL) 
-    {
-      assumptions = parserInterface->CreateNode(TRUE);
-    } 
-  else 
-    {
-      assumptions = *$1;
-    }
-}
-;
-
-benchmark:
-LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
-{
-  if($4 != NULL){
-    if($4->size() > 1) 
-      $$ = new ASTNode(parserInterface->nf->CreateNode(AND,*$4));
-    else
-      $$ = new ASTNode((*$4)[0]);         
-    delete $4;
-  }
-  else {
-    $$ = NULL;
-  }
-  delete $3; //discard the benchmarkname.
-}
-;
-
-bench_name:
-FORMID_TOK
-{
-}
-;
-
-bench_attributes:
-bench_attribute
-{
-  $$ = new ASTVec;
-  if ($1 != NULL) {
-    $$->push_back(*$1);
-    parserInterface->AddAssert(*$1);
-    delete $1;
-  }
-}
-| bench_attributes bench_attribute
-{
-  if ($1 != NULL && $2 != NULL) {
-    $1->push_back(*$2);
-    parserInterface->AddAssert(*$2);
-    $$ = $1;
-    delete $2;
-  }
-}
-;
-
-bench_attribute:
-COLON_TOK ASSUMPTION_TOK an_formula
-{
-  //assumptions are like asserts
-  $$ = $3;
-}
-| COLON_TOK FORMULA_TOK an_formula
-{
-  // Previously this would call AddQuery() on the negation.
-  // But if multiple formula were (eroneously) present
-  // it discarded all but the last formula. Allowing multiple 
-  // formula and taking the conjunction of them along with all
-  // the assumptions is what the other solvers do.  
-
-  //assumptions are like asserts
-  $$ = $3;
-}
-
-| COLON_TOK EXTRAPREDS_TOK LPAREN_TOK var_decls RPAREN_TOK
-{
-  $$ = NULL;
-}
-| annotation 
-{
-  $$ = NULL;
-}
-;
-
-logic_name:
-FORMID_TOK
-{
-  $$ = $1;
-}
 ;
 
 status:
@@ -382,59 +268,17 @@ SAT_TOK {
 }
 ;
 
-annotation:
-attribute 
-{
-}
-| attribute user_value 
-{
-}
-;
-
-user_value:
-USER_VAL_TOK
-{
-  //cerr << "Printing user_value: " << *$1 << endl;
-}
-;
-
 attribute:
-COLON_TOK SOURCE_TOK
-{
-}
-| COLON_TOK CATEGORY_TOK
+SOURCE_TOK
 {}
-| COLON_TOK DIFFICULTY_TOK
+| CATEGORY_TOK
 {}
-| COLON_TOK VERSION_TOK
+| DIFFICULTY_TOK
 {}
-| COLON_TOK STATUS_TOK status
+| VERSION_TOK
+{}
+| STATUS_TOK status
 {} 
-;
-
-sort_symbs:
-sort_symb 
-{
-  //a single sort symbol here means either a BitVec or a Boolean
-  $$.indexwidth = $1.indexwidth;
-  $$.valuewidth = $1.valuewidth;
-}
-| sort_symb sort_symb
-{
-  //two sort symbols mean f: type --> type
-  $$.indexwidth = $1.valuewidth;
-  $$.valuewidth = $2.valuewidth;
-}
-;
-
-var_decls:
-var_decl
-{
-}
-|
-var_decls var_decl
-{
-}
 ;
 
 var_decl:
@@ -455,15 +299,6 @@ FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   //delete $2;
-}
-| LPAREN_TOK FORMID_TOK sort_symbs RPAREN_TOK
-{
-  parserInterface->letMgr._parser_symbol_table.insert(*$2);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  $2->SetIndexWidth($3.indexwidth);
-  $2->SetValueWidth($3.valuewidth);
-  delete $2;
 }
 | FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
@@ -520,9 +355,10 @@ TRUE_TOK
   assert(0 == $$->GetIndexWidth()); 
   assert(0 == $$->GetValueWidth());
 }
-| fvar
+| FORMID_TOK
 {
-  $$ = $1;
+  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); 
+  delete $1;      
 }
 | LPAREN_TOK EQ_TOK an_term an_term RPAREN_TOK
 {
@@ -573,7 +409,6 @@ TRUE_TOK
   delete $4;      
 }
 | LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
-  //| LPAREN_TOK BVSGT_TOK an_term an_term annotations RPAREN_TOK
 {
   ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSGT, *$3, *$4));
   $$ = n;
@@ -735,13 +570,12 @@ an_terms an_term
 
 
 an_term: 
-var
+TERMID_TOK
 {
   $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
   delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
-  //| LPAREN_TOK an_term annotations RPAREN_TOK
 {
   $$ = $2;
   //$$ = new ASTNode(parserInterface->SimplifyTerm(*$2));
@@ -868,8 +702,8 @@ var
   delete $2;
   delete $3;
 }
-  | BVXNOR_TOK an_term an_term
-  {
+| BVXNOR_TOK an_term an_term
+{
 //   (bvxnor s t) abbreviates (bvor (bvand s t) (bvand (bvnot s) (bvnot t)))
 
 	
@@ -886,9 +720,9 @@ var
       delete $2;
       delete $3;
   
-  }
-  |  BVCOMP_TOK an_term an_term
-  {
+}
+|  BVCOMP_TOK an_term an_term
+{
 	
 
   	ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(ITE, 1, 
@@ -899,9 +733,7 @@ var
       $$ = n;
       delete $2;
       delete $3;
-  }
-  
-    
+}
 |  BVSUB_TOK an_term an_term 
 {
   const unsigned int width = $2->GetValueWidth();
@@ -927,7 +759,6 @@ var
   delete $2;
   delete $3;
 }
-
 |      BVDIV_TOK an_term an_term  
 {
   unsigned int width = $2->GetValueWidth();
@@ -1016,7 +847,6 @@ var
 }
 | LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
-      
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
   unsigned rotate = $4;
@@ -1043,11 +873,9 @@ var
     }
       
   $$ = n;
-      
 }
 | LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK  NUMERAL_TOK  RPAREN_TOK an_term 
 {
-      
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
   unsigned rotate = $4;
@@ -1074,7 +902,6 @@ var
     }
       
   $$ = n;
-      
 }
 | LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
@@ -1108,45 +935,6 @@ var
 	$$ = new ASTNode(parserInterface->CreateBVConst($1, 2, width));
     $$->SetValueWidth(width);
 }
-
 ;
 
- 
-sort_symb:
-BITVEC_TOK LPAREN_TOK NUMERAL_TOK RPAREN_TOK
-{
-  // Just return BV width.  If sort is BOOL, width is 0.
-  // Otherwise, BITVEC[w] returns w. 
-  //
-  //((indexwidth is 0) && (valuewidth>0)) iff type is BV
-  $$.indexwidth = 0;
-  unsigned int length = $3;
-  if(length > 0) {
-    $$.valuewidth = length;
-  }
-  else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-}
-;
-
-var:
-TERMID_TOK
-{
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
-  delete $1;
-}
-;
-
-fvar:
-DOLLAR_TOK FORMID_TOK
-{
-  $$ = $2; 
-}
-| FORMID_TOK
-{
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); 
-  delete $1;      
-}
-;
 %%

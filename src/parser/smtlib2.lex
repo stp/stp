@@ -75,7 +75,7 @@
 
 %x	COMMENT
 %x	STRING_LITERAL
-%x  USER_VALUE
+%x  SYMBOL
 
 LETTER	([a-zA-Z])
 DIGIT	([0-9])
@@ -86,6 +86,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 %%
 [ \n\t\r\f]	{ /* sk'ip whitespace */ }
 
+ /* We limit numerals to maxint, in the specification they are arbitary precision.*/
 {DIGIT}+	{ smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
 
 bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
@@ -104,59 +105,27 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 <STRING_LITERAL>"\\".	{ /* escape characters (like \n or \") */
                           _string_lit.insert(_string_lit.end(),
                                              escapeChar(smt2text[1])); }
-
-  <STRING_LITERAL>"\""	{ BEGIN INITIAL; 
+<STRING_LITERAL>"\""	{ BEGIN INITIAL; 
 			  smt2lval.str = new std::string(_string_lit);
                           return STRING_TOK; }
-
 <STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smt2text); }                           
 
-
- /*
-	<INITIAL>"{"		{ BEGIN USER_VALUE;
-	                          _string_lit.erase(_string_lit.begin(),
-	                                            _string_lit.end()); }
-	<USER_VALUE>"\\"[{}] { 
-	                          _string_lit.insert(_string_lit.end(),smt2text[1]); }
-	
-	<USER_VALUE>"}"	        { BEGIN INITIAL; 
-				  smt2lval.str = new std::string(_string_lit);
-	                          return USER_VAL_TOK; }
-	<USER_VALUE>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
-	<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
-*/
-
-"notes"         { return NOTES_TOK; }
-"sorts"         { return SORTS_TOK; }
-"funs"          { return FUNS_TOK; }
-"preds"         { return PREDS_TOK; }
-"extensions"    { return EXTENSIONS_TOK; }
-"definition"    { return DEFINITION_TOK; }
-"axioms"        { return AXIOMS_TOK; }
 "sat"           { return SAT_TOK; }
 "unsat"         { return UNSAT_TOK; }
 "unknown"       { return UNKNOWN_TOK; }
-"assumption"    { return ASSUMPTION_TOK; }
-"status"        { return STATUS_TOK; }
-
-"benchmark"     { return BENCHMARK_TOK; }
-"extrasorts"    { return EXTRASORTS_TOK; }
-"extrapreds"    { return EXTRAPREDS_TOK; }
-"language"      { return LANGUAGE_TOK; }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
-":"             { return COLON_TOK; }
 "("             { return LPAREN_TOK; }
 ")"             { return RPAREN_TOK; }
-"$"             { return DOLLAR_TOK; }
- /*"?"             { return QUESTION_TOK; }*/
 "_"             { return UNDERSCORE_TOK; }
 
  /* Set info types */
-"source"        { return SOURCE_TOK;}
-"category"      { return CATEGORY_TOK;} 
-"difficulty"    { return DIFFICULTY_TOK; }
-"smt-lib-version"  { return VERSION_TOK; }
+ /* This is a very restricted set of the possible keywords */
+":source"        { return SOURCE_TOK;}
+":category"      { return CATEGORY_TOK;} 
+":difficulty"    { return DIFFICULTY_TOK; }
+":smt-lib-version"  { return VERSION_TOK; }
+":status"        { return STATUS_TOK; }
 
  /* COMMANDS */
 "set-logic"         { return LOGIC_TOK; }  
@@ -249,19 +218,19 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 	return lookup(smt2text);
 }
 
-<INITIAL>"|"		{ BEGIN USER_VALUE;
+<INITIAL>"|"		{ BEGIN SYMBOL;
                           _string_lit.erase(_string_lit.begin(),
                                             _string_lit.end());
                          _string_lit.insert(_string_lit.end(),'|');
                      }
-<USER_VALUE>"|"	        { BEGIN INITIAL; /* return to normal mode */
+<SYMBOL>"|"	        { BEGIN INITIAL; /* return to normal mode */
 			  			  _string_lit.insert(_string_lit.end(),'|');
 			  			  smt2lval.str = new std::string(_string_lit);
                           return lookup(_string_lit.c_str()); 
                         }
 
-<USER_VALUE>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
-<USER_VALUE>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
+<SYMBOL>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
+<SYMBOL>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
 
 . { smt2error("Illegal input character."); }
 %%
