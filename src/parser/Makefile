@@ -35,7 +35,7 @@ parseSM%_defs.h parseSM%.cpp:smtlib.y
 		@cp  smt.tab.c parseSMT.cpp
 		@cp  smt.tab.h parseSMT_defs.h
 
-lex2SMT.cpp: parseSMT2_defs.h smtlib2.lex ../AST/AST.h
+lex2SMT.cpp: parse2SMT_defs.h smtlib2.lex ../AST/AST.h
 		$(LEX) -olex2SMT.cpp -Psmt2 smtlib2.lex 
 
 parse2SM%_defs.h parse2SM%.cpp:smtlib2.y

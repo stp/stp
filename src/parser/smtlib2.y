@@ -249,7 +249,6 @@ cmdi:
 	{
 	assertionsSMT2.push_back(*$3);
 	}
-|
 ;
 
 status:
