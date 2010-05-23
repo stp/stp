@@ -1,12 +1,22 @@
 %{
   /********************************************************************
-   * AUTHORS: Trevor Hansen, Vijay Ganesh
+   * AUTHORS:  Trevor Hansen
+   *
+   * BEGIN DATE: May, 2010
+   *
+   * This file is modified version of the STP's smtlib.y file. Please
+   * see CVCL license below
+   ********************************************************************/
+
+  /********************************************************************
+   * AUTHORS: Vijay Ganesh, Trevor Hansen
    *
    * BEGIN DATE: July, 2006
    *
    * This file is modified version of the CVCL's smtlib.y file. Please
    * see CVCL license below
    ********************************************************************/
+
   
   /********************************************************************
    *
@@ -66,21 +76,7 @@
   %}
 
 %union {  
-  // FIXME: Why is this not an UNSIGNED int?
-  int uintval;                  /* for numerals in types. */
-
-  // for BV32 BVCONST 
-  unsigned long long ullval;
-
-  struct {
-    //stores the indexwidth and valuewidth
-    //indexwidth is 0 iff type is bitvector. positive iff type is
-    //array, and stores the width of the indexing bitvector
-    unsigned int indexwidth;
-    //width of the bitvector type
-    unsigned int valuewidth;
-  } indexvaluewidth;
-
+  unsigned uintval;                  /* for numerals in types. */
   //ASTNode,ASTVec
   BEEV::ASTNode *node;
   BEEV::ASTVec *vec;
@@ -93,7 +89,6 @@
 %type <vec> an_formulas an_terms
 
 %type <node> an_term  an_formula 
-
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -236,11 +231,15 @@ cmdi:
 	  delete $3;
 	}
 |	LPAREN_TOK NOTES_TOK attribute FORMID_TOK RPAREN_TOK
-	{}
+	{
+	delete $4;
+	}
 |	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
 	{}
 |	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
-	{}
+	{
+	delete $4;
+	}
 |	LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
 	{}
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
@@ -248,6 +247,7 @@ cmdi:
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
 	{
 	assertionsSMT2.push_back(*$3);
+	delete $3;
 	}
 ;
 
@@ -295,9 +295,7 @@ FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   $1->SetIndexWidth(0);
   $1->SetValueWidth(0);
   parserInterface->letMgr._parser_symbol_table.insert(*$1);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  //delete $2;
+  delete $1;
 }
 | FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
@@ -317,8 +315,8 @@ FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   else {
     FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
+  delete $1;
 }
-
 ;
 
 an_formulas:
@@ -392,7 +390,6 @@ TRUE_TOK
 
   delete $3;
 }
-
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
 {
   ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLT, *$3, *$4));
@@ -521,8 +518,8 @@ let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
   //2. defined more than once
   parserInterface->letMgr.LetExprMgr(*$2,*$3);
   
-  //delete $5;
-  //delete $6;      
+  delete $2;
+  delete $3;
 }
 | LPAREN_TOK FORMID_TOK an_term RPAREN_TOK
 {
@@ -540,12 +537,11 @@ let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
   //2. defined more than once
   parserInterface->letMgr.LetExprMgr(*$2,*$3);
   
-  //delete $5;
-  //delete $6;      
+  delete $2;
+  delete $3;
+
 }
 ;
-
-
  
 an_terms: 
 an_term
@@ -567,7 +563,6 @@ an_terms an_term
 }
 ;
 
-
 an_term: 
 TERMID_TOK
 {
@@ -577,8 +572,6 @@ TERMID_TOK
 | LPAREN_TOK an_term RPAREN_TOK
 {
   $$ = $2;
-  //$$ = new ASTNode(parserInterface->SimplifyTerm(*$2));
-  //delete $2;
 }
 | SELECT_TOK an_term an_term
 {
@@ -621,7 +614,7 @@ TERMID_TOK
   ASTNode output = parserInterface->nf->CreateTerm(BVEXTRACT, width, *$7,hi,low);
   ASTNode * n = new ASTNode(output);
   $$ = n;
-  //delete $7;
+  delete $7;
 }
 | LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term 
 {
@@ -631,7 +624,7 @@ TERMID_TOK
       ASTNode leading_zeroes = parserInterface->CreateZeroConst($4);
       ASTNode *n =  new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT,w,leading_zeroes,*$6));
       $$ = n;
-      //delete $5;
+      delete $6;
     }
   else
     $$ = $6;
@@ -642,7 +635,7 @@ TERMID_TOK
   ASTNode width = parserInterface->CreateBVConst(32,w);
   ASTNode *n =  new ASTNode(parserInterface->nf->CreateTerm(BVSX,w,*$6,width));
   $$ = n;
-  //delete $5;
+  delete $6;
 }
 
 |  ITE_TOK an_formula an_term an_term 
@@ -704,8 +697,6 @@ TERMID_TOK
 | BVXNOR_TOK an_term an_term
 {
 //   (bvxnor s t) abbreviates (bvor (bvand s t) (bvand (bvnot s) (bvnot t)))
-
-	
       unsigned int width = $2->GetValueWidth();
       ASTNode * n = new ASTNode(
       parserInterface->nf->CreateTerm( BVOR, width,
@@ -718,12 +709,9 @@ TERMID_TOK
       $$ = n;
       delete $2;
       delete $3;
-  
 }
 |  BVCOMP_TOK an_term an_term
 {
-	
-
   	ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(ITE, 1, 
   	parserInterface->nf->CreateNode(EQ, *$2, *$3),
   	parserInterface->CreateOneConst(1),
@@ -916,23 +904,27 @@ TERMID_TOK
       	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
       }
       $$ = new ASTNode(n);
+      delete $6;
 }
 | UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
 	$$ = new ASTNode(parserInterface->CreateBVConst($2, 10, $3));
     $$->SetValueWidth($3);
+    delete $2;
 }
 | BVCONST_HEXIDECIMAL_TOK
 {
 	unsigned width = $1->length()*4;
 	$$ = new ASTNode(parserInterface->CreateBVConst($1, 16, width));
     $$->SetValueWidth(width);
+    delete $1;
 }
 | BVCONST_BINARY_TOK
 {
 	unsigned width = $1->length();
 	$$ = new ASTNode(parserInterface->CreateBVConst($1, 2, width));
     $$->SetValueWidth(width);
+    delete $1;
 }
 ;
 

@@ -1,5 +1,14 @@
 %{
   /********************************************************************
+   * AUTHORS:  Trevor Hansen
+   *
+   * BEGIN DATE: May, 2010
+   *
+   * This file is modified version of the STP's smtlib.lex file. Please
+   * see CVCL license below
+   ********************************************************************/
+
+  /********************************************************************
    * AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
    *
    * BEGIN DATE: July, 2006
@@ -58,7 +67,6 @@
   // type determination in the lexer, but it's easier than rewriting
   // the whole grammar to eliminate the term/formula distinction.  
   smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
-  //smt2lval.node = new BEEV::ASTNode(nptr);
   if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
     return FORMID_TOK;
   else 
@@ -213,24 +221,8 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "select"        { return SELECT_TOK; }
 "store"         { return STORE_TOK; }
 
-
-({LETTER}|{OPCHAR})({ANYTHING})*	{
-	return lookup(smt2text);
-}
-
-<INITIAL>"|"		{ BEGIN SYMBOL;
-                          _string_lit.erase(_string_lit.begin(),
-                                            _string_lit.end());
-                         _string_lit.insert(_string_lit.end(),'|');
-                     }
-<SYMBOL>"|"	        { BEGIN INITIAL; /* return to normal mode */
-			  			  _string_lit.insert(_string_lit.end(),'|');
-			  			  smt2lval.str = new std::string(_string_lit);
-                          return lookup(_string_lit.c_str()); 
-                        }
-
-<SYMBOL>"\n"        { _string_lit.insert(_string_lit.end(),'\n');}
-<SYMBOL>.	        { _string_lit.insert(_string_lit.end(),*smt2text); }
+({LETTER}|{OPCHAR})({ANYTHING})*	{return lookup(smt2text);}
+\|([^\|]|\n)*\| {return lookup(smt2text);}
 
 . { smt2error("Illegal input character."); }
 %%
