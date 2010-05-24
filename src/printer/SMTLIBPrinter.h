@@ -19,7 +19,7 @@ namespace printer
 
 	string functionToSMTLIBName(const Kind k, bool smtlib1);
 
-	void LetizeNode(const ASTNode& n, BEEV::ASTNodeSet& PLPrintNodeSet);
+	void LetizeNode(const ASTNode& n, BEEV::ASTNodeSet& PLPrintNodeSet, bool smtlib1);
 
 	ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation, void (*SMTLIB_Print1)(ostream&, const ASTNode , int , bool ), bool smtlib1);
 

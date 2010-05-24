@@ -14,7 +14,6 @@
 
 // Outputs in the SMTLIB format. If you want something that can be parsed by other tools call
 // SMTLIB_PrintBack(). SMTLIB_Print() prints just an expression.
-// Wierdly is seems that only terms, not formulas can be LETized.
 
 namespace printer
 {
@@ -201,13 +200,13 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         break;
   	default:
   	{
-  	    if ((kind == AND  || kind == OR|| kind == XOR) && n.Degree() != 2)
+  	    if ((kind == AND  || kind == OR|| kind == XOR) && n.Degree() == 1)
   	    {
-  	    	FatalError("Wrong number of arguments to operation (must be two).", n);
+  	    	FatalError("Wrong number of arguments to operation (must be >1).", n);
   	    }
 
   		// SMT-LIB only allows these functions to have two parameters.
-  		if ((BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
+  		if ((kind == AND  || kind == OR|| kind == XOR || BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
   		{
   			string close = "";
 

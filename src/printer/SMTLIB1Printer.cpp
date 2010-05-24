@@ -204,13 +204,13 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         break;
   	default:
   	{
-  	    if ((kind == AND  || kind == OR|| kind == XOR) && n.Degree() != 2)
+  	    if ((kind == AND  || kind == OR|| kind == XOR) && n.Degree() == 1)
   	    {
-  	    	FatalError("Wrong number of arguments to operation (must be two).", n);
+  	    	FatalError("Wrong number of arguments to operation (must be >1).", n);
   	    }
 
   		// SMT-LIB only allows these functions to have two parameters.
-  		if ((BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
+  	    if ((kind == AND  || kind == OR|| kind == XOR || BVPLUS == kind || kind == BVOR || kind == BVAND)  && n.Degree() > 2)
   		{
   			string close = "";
 

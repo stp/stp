@@ -43,7 +43,7 @@ static string tolower(const char * name)
 	    //pass 1: letize the node
 		{
 			ASTNodeSet PLPrintNodeSet;
-			LetizeNode(n, PLPrintNodeSet);
+			LetizeNode(n, PLPrintNodeSet, smtlib1);
 		}
 
 	    //pass 2:
@@ -111,7 +111,7 @@ static string tolower(const char * name)
 	    return os;
 	  }
 
-	void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet)
+	void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
 	{
 		const Kind kind = n.GetKind();
 
@@ -135,7 +135,7 @@ static string tolower(const char * name)
 				//
 				//2. Letize its childNodes
 				PLPrintNodeSet.insert(ccc);
-				LetizeNode(ccc, PLPrintNodeSet);
+				LetizeNode(ccc, PLPrintNodeSet, smtlib1);
 			}
 			else
 			{
@@ -146,7 +146,7 @@ static string tolower(const char * name)
 				//
 				//2. if no, then create a new var and add it to the
 				//2. NodeLetVarMap
-				if (ccc.GetType() == BITVECTOR_TYPE && NodeLetVarMap.find(ccc)
+				if ((!smtlib1 || ccc.GetType() == BITVECTOR_TYPE) && NodeLetVarMap.find(ccc)
 						== NodeLetVarMap.end())
 				{
 					//Create a new symbol. Get some name. if it conflicts with a
