@@ -730,24 +730,29 @@ namespace BEEV
           const ASTNode& thn = arrName[1];
           const ASTNode& els = arrName[2];
 
+		  //(READ thn j)
+		  ASTNode thnRead = nf->CreateTerm(READ, width, thn, readIndex);
+		  assert(BVTypeCheck(thnRead));
+
+		  //(READ els j)
+		  ASTNode elsRead = nf->CreateTerm(READ, width, els, readIndex);
+		  assert(BVTypeCheck(elsRead));
+
+		  /* We try to call TransformArrayRead only if necessary, because it
+		   * introduces a new symbol for each read. The amount of work we
+		   * need to do later is based on the square of the number of symbols.
+		   */
           if (ASTTrue == cond)
           {
-        	  result = TransformTerm(thn);
+			  result = TransformArrayRead(thnRead);
           }
           else if (ASTFalse == cond)
           {
-        	  result = TransformTerm(els);
+			  result = TransformArrayRead(elsRead);
           }
           else
           {
-			  //(READ thn j)
-			  ASTNode thnRead = nf->CreateTerm(READ, width, thn, readIndex);
-			  assert(BVTypeCheck(thnRead));
 			  thnRead = TransformArrayRead(thnRead);
-
-			  //(READ els j)
-			  ASTNode elsRead = nf->CreateTerm(READ, width, els, readIndex);
-			  assert(BVTypeCheck(elsRead));
 			  elsRead = TransformArrayRead(elsRead);
 
 			  //(ITE cond (READ thn j) (READ els j))
