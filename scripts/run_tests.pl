@@ -282,7 +282,7 @@ foreach my $testcase (@testcases) {
 	opendir(TESTS, $testcase)
 	    or die "Cannot open directory $testcase: $?";
 	@testcasesTmp = grep {
-	    /[.]([sc]vcl?|li?sp|smt|)([.]gz)?$/ && -f "$testcase/$_" } readdir(TESTS);
+	    /[.]([sc]vcl?|li?sp|smt|smt2)([.]gz)?$/ && -f "$testcase/$_" } readdir(TESTS);
 	closedir TESTS;
 	@testcasesTmp = map { "$testcase/$_" } @testcasesTmp;
     } else {
@@ -340,11 +340,15 @@ foreach my $testcase (@testcases) {
 	mkdir $tmpdir or die "Cannot create directory $tmpdir: $?";
 	chdir $tmpdir or die "Cannot chdir to $tmpdir: $?";
 
-	# If the filename contains ".smt", then tell stp to use the SMT-LIB parser.
+	# If the filename contains ".smt.gz", then tell stp to use the SMT-LIB parser.
 	my $stpArgs ="";
-	if($file =~ m/\.smt/)
+	if($file =~ m/\.smt(\.gz)?$/)
 	{
-		$stpArgs = "-m";
+		$stpArgs = "--SMTLIB1";
+	}	
+	if($file =~ m/\.smt2(\.gz)?$/)
+	{
+		$stpArgs = "--SMTLIB2";
 	}	
 
 	# push @stpArgs, ($checkProofs)? "+proofs" : "-proofs";
