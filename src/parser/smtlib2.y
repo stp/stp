@@ -390,6 +390,30 @@ TRUE_TOK
 
   delete $3;
 }
+| LPAREN_TOK DISTINCT_TOK an_formulas RPAREN_TOK
+{
+  using namespace BEEV;
+
+  ASTVec terms = *$3;
+  ASTVec forms;
+
+  for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
+      it!=itend; it++) {
+    for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
+      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(IFF, *it, *it2)));
+      forms.push_back(n); 
+    }
+  }
+
+  if(forms.size() == 0) 
+    FatalError("empty distinct");
+ 
+  $$ = (forms.size() == 1) ?
+    new ASTNode(forms[0]) :
+    new ASTNode(parserInterface->nf->CreateNode(AND, forms));
+
+  delete $3;
+}
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
 {
   ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLT, *$3, *$4));
