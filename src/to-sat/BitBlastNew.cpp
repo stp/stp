@@ -242,9 +242,9 @@ const BBNodeVec BitBlasterNew::BBTerm(const ASTNode& term, BBNodeSet& support) {
 		//This is needed because t0 an t1 must be const
 		if ((BVCONST != t0.GetKind()) && (BVCONST == t1.GetKind())) {
 
-			result = BBMult(mpcd2, mpcd1, support);
+			result = BBMult(mpcd2, mpcd1, support,t1,t0);
 		} else {
-			result = BBMult(mpcd1, mpcd2, support);
+			result = BBMult(mpcd1, mpcd2, support,t0,t1);
 		}
 		break;
 	}
@@ -541,16 +541,246 @@ BBNodeVec BitBlasterNew::BBAndBit(const BBNodeVec& y, BBNode b) {
 	return result;
 }
 
+typedef enum {SYMBOL_MT, ZERO_MT, ONE_MT, MINUS_ONE_MT} mult_type;
+
+void printP(mult_type* m, int width)
+{
+	for (int i =width-1; i >=0;i--)
+	{
+		if (m[i] == SYMBOL_MT)
+		cerr << "s";
+		else if (m[i] == ZERO_MT)
+			cerr << "0";
+		else if (m[i] == ONE_MT)
+					cerr << "1";
+		else if (m[i] == MINUS_ONE_MT)
+					cerr << "-1";
+	}
+}
+
+void convert(const BBNodeVec& v, BBNodeManager*nf, mult_type* result)
+{
+	const BBNode& BBTrue = nf->getTrue();
+	const BBNode& BBFalse = nf->getFalse();
+
+	for (int i =0; i < v.size(); i++)
+	{
+		if (v[i] == BBTrue)
+			result[i] = ONE_MT;
+		else if (v[i] == BBFalse)
+			result[i] = ZERO_MT;
+		else
+			result[i] = SYMBOL_MT;
+	}
+
+	// find runs of ones.
+	int lastOne=-1;
+	for (int i =0; i < v.size(); i++)
+	{
+		assert(result[i] != MINUS_ONE_MT);
+
+		if (result[i] == ONE_MT && lastOne == -1)
+			lastOne = i;
+
+		if (result[i] != ONE_MT && lastOne != -1 && (i-lastOne >=3))
+		{
+			result[lastOne] = MINUS_ONE_MT;
+			for (int j = lastOne+1; j<i;j++)
+				result[j] = ZERO_MT;
+			// Should this be lastOne = i?
+			lastOne = i;
+			result[i] = ONE_MT;
+		} else 	if (result[i] != ONE_MT)
+			lastOne = -1;
+	}
+
+	// finished with a one.
+	if (lastOne != -1 && (v.size() -lastOne >1))
+	{
+		result[lastOne] = MINUS_ONE_MT;
+		for (int j = lastOne+1; j< v.size();j++)
+			result[j] = ZERO_MT;
+	}
+}
+
+// Multiply "multiplier" by y[start ... bitWidth].
+void pushP(stack<BBNode> *products, const int start, const BBNodeVec& y, const BBNode& multiplier, BBNodeManager*nf)
+{
+	const int bitWidth = y.size();
+
+	int c = 0;
+	for (int i = start; i < bitWidth; i++)
+	{
+		BBNode n = nf->CreateNode(AND, y[c], multiplier);
+		products[i].push(n);
+		c++;
+	}
+}
+
+const bool debug_multiply = false;
+
+BBNodeVec BitBlasterNew::pairWiseAdd(stack<BBNode>* products,
+		const int bitWidth)
+{
+	const BBNode& BBFalse  = nf->getFalse();
+	BBNodeVec prod = BBfill(bitWidth, BBFalse);
+
+	bool finished = false;
+	while (!finished) {
+		finished = true;
+		BBNodeVec a;
+		for (int i = 0; i < bitWidth; i++)
+		{
+			if (products[i].empty())
+				a.push_back(BBFalse);
+			else
+			{
+				BBNode t = products[i].top();
+				a.push_back(t);
+				products[i].pop();
+				finished = false;
+			}
+		}
+		BBPlus2(prod, a, nf->getFalse());
+	}
+
+	return prod;
+}
+
+
+
+// Use full adders to create an addition network that adds together each of the
+// partial products.
+BBNodeVec buildAdditionNetworkResult(stack<BBNode>* products,
+		const int bitWidth, BBNodeManager* nf) {
+	int adderCount = 0;
+
+	// I experimented with sorting the partial products to put the known values together.
+	// But it didn't help.
+
+	BBNodeVec result;
+
+	for (int i = 0; i < bitWidth; i++) {
+		while (products[i].size() >= 2) {
+			BBNode c;
+
+			if (products[i].size() == 2)
+				c = nf->getFalse();
+			else {
+				c = products[i].top();
+				products[i].pop();
+			}
+
+			const BBNode a = products[i].top();
+			products[i].pop();
+			const BBNode b = products[i].top();
+			products[i].pop();
+
+			BBNode carry = nf->CreateNode(OR, nf->CreateNode(AND, a, b),
+					nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
+			// I tested all 6 ternary XORs, and all 12 2 x 2-arity. The formulae with "a" separate were quickest.
+			BBNode sum = nf->CreateNode(XOR, nf->CreateNode(XOR, c, b), a);
+			adderCount++;
+
+			if (debug_multiply) {
+				cerr << "Column " << i << endl;
+				cerr << "a" << a;
+				cerr << "b" << b;
+				cerr << "c" << c;
+				cerr << "Carry" << carry;
+				cerr << "Sum" << sum;
+			}
+
+			products[i].push(sum);
+			if (i + 1 != bitWidth)
+				products[i + 1].push(carry);
+		}
+
+		assert(1==products[i].size());
+		result.push_back(products[i].top());
+	}
+
+	if (debug_multiply)
+		cerr << "adder count" << adderCount << endl;
+	assert(result.size() == ((unsigned)bitWidth));
+	return result;
+}
+
+void BitBlasterNew::mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support, const ASTNode& xN, const ASTNode& yN, stack<BBNode> * products)
+{
+	 const int bitWidth = x_i.size();
+	 assert(x_i.size() == y_i.size());
+
+	 const BBNodeVec& x = x_i;
+	 const BBNodeVec& y = y_i;
+
+	 const BBNode& BBTrue = nf->getTrue();
+	 const BBNode& BBFalse = nf->getFalse();
+
+
+	 for (int i =0 ; i < bitWidth;i++)
+	 {
+		 products[i].push(BBFalse);
+	 }
+
+	 BBNodeVec notY;
+	 for (int i =0 ; i < y.size();i++)
+	 {
+		 notY.push_back(nf->CreateNode(NOT,y[i]));
+	 }
+
+
+	 mult_type xt[x.size()];
+	 convert(x,nf,xt);
+
+	 if (debug_multiply)
+	 {
+		 cerr << "--------" << endl;
+		 cerr << "x:";
+		 printP(xt,x.size());
+		 cerr << xN << endl;
+	 }
+
+	 mult_type yt[x.size()];
+	 convert(y,nf,yt);
+
+	 if (debug_multiply)
+	 {
+		 cerr << "y:";
+		 printP(yt,y.size());
+		 cerr << yN << endl;
+	 }
+
+	 for (int i =0; i < bitWidth;i++)
+	 {
+		 if (x[i] != BBTrue && x[i] != BBFalse)
+		 {
+			 pushP(products,i,y,x[i],nf);
+		 }
+
+		 if (xt[i] == MINUS_ONE_MT)
+		 {
+			 pushP(products,i,notY,BBTrue,nf);
+			 products[i].push(BBTrue);
+		 }
+
+		 if (xt[i] == ONE_MT)
+		 {
+			 pushP(products,i,y,BBTrue,nf);
+		 }
+	 }
+  }
+
+
 // Uses addition networks explicitly.
 // I've copied this in from my the "trevor" branch r482.
 // I've not measured if this is better than the current variant.
-BBNodeVec BitBlasterNew::BBMult_variant(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support)
+void BitBlasterNew::mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support, stack<BBNode> * products)
   {
 	 // Make a table of partial products.
 	 const int bitWidth = x.size();
 	 assert(x.size() == y.size());
 
-	 stack<BBNode> products[bitWidth];
 
 	  for (int i =0 ; i < bitWidth; i++)
 	  {
@@ -562,59 +792,11 @@ BBNodeVec BitBlasterNew::BBMult_variant(const BBNodeVec& x, const BBNodeVec& y, 
 	  }
 	  // I experimented with sorting the partial products to put the known values together.
 	  // But it didn't help.
-
-	  BBNodeVec result;
-
-	  for (int i =0; i < bitWidth;i++)
-	  {
-		  while (products[i].size() >= 2)
-		  {
-			  BBNode c;
-
-			  if (products[i].size() == 2)
-				  c = nf->getFalse();
-			  else
-			  {
-				  c = products[i].top();
-				  products[i].pop();
-			  }
-
-			  const BBNode a = products[i].top();
-			  products[i].pop();
-			  const BBNode b = products[i].top();
-			  products[i].pop();
-
-			  BBNode carry = nf->CreateNode(OR, nf->CreateNode(AND, a, b), nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
-			  // I tested all 6 ternary XORs, and all 12 2 x 2-arity. The formulae with "a" separate were quickest.
-			  BBNode sum = nf->CreateNode(XOR,nf->CreateNode(XOR,c,b),a);
-
-			  bool debug_multiply = false;
-			  if (debug_multiply )
-			  {
-				  cerr << "Column " << i << endl;
-				  cerr << "a" << a;
-				  cerr << "b" << b;
-				  cerr << "c" << c;
-				  cerr << "Carry" << carry;
-				  cerr << "Sum" << sum;
-			  }
-
-			  products[i].push(sum);
-			  if (i+1 != bitWidth)
-				  products[i+1].push(carry);
-		  }
-
-		  assert(1==products[i].size());
-		  result.push_back(products[i].top());
-	  }
-
-	  assert(result.size() == ((unsigned)bitWidth));
-	  return result;
   }
 
-// Multiply two bitblasted numbers
-BBNodeVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
-		BBNodeSet& support) {
+
+BBNodeVec BitBlasterNew::mult_normal(const BBNodeVec& x,
+		const BBNodeVec& y, BBNodeSet& support) {
 	BBNodeVec ycopy(y);
 	const BBNodeVec::const_iterator xend = x.end();
 	BBNodeVec::const_iterator xit = x.begin();
@@ -636,6 +818,37 @@ BBNodeVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
 		BBPlus2(prod, pprod, nf->getFalse());
 	}
 	return prod;
+}
+
+// ONLY SELECT ONE OF THESE!
+const bool multiplication_variant1 = false; // multiplication with repeat addition.
+const bool multiplication_variant2 = false; // multiplication with partial products.
+const bool multiplication_variant3 = true; // multiplication with booth recoding.
+
+// Multiply two bitblasted numbers
+BBNodeVec BitBlasterNew::BBMult(const BBNodeVec& x, const BBNodeVec& y,
+		BBNodeSet& support, const ASTNode& xN, const ASTNode& yN) {
+
+	if (multiplication_variant1) {
+		return mult_normal(x, y, support);
+	}
+
+	if (multiplication_variant2) {
+		const int bitWidth = x.size();
+		stack<BBNode> products[bitWidth];
+		mult_allPairs(x, y, support,products);
+		return buildAdditionNetworkResult(products,bitWidth,nf);
+	}
+
+	if (multiplication_variant3) {
+		const int bitWidth = x.size();
+		stack<BBNode> products[bitWidth];
+		mult_Booth(x, y, support,xN,yN,products);
+		//return pairWiseAdd(products,bitWidth);
+		return buildAdditionNetworkResult(products,bitWidth,nf);
+	}
+
+	FatalError("sda44f");
 }
 
 // on factoring12bitsx12.cvc

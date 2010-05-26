@@ -50,8 +50,16 @@ class BitBlasterNew {
 	BBNodeVec BBUminus(const BBNodeVec& x);
 
 	// Multiply.
-	BBNodeVec BBMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support);
-	BBNodeVec BBMult_variant(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support);
+	BBNodeVec BBMult(const BBNodeVec& x, const BBNodeVec& y,
+			BBNodeSet& support, const ASTNode& xN, const ASTNode& yN);
+	void mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support, stack<BBNode> * products);
+	void mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, stack<BBNode> * products);
+	BBNodeVec mult_normal(const BBNodeVec& x,	const BBNodeVec& y, BBNodeSet& support);
+
+
+	BBNodeVec pairWiseAdd(stack<BBNode>* products,
+			const int bitWidth);
+
 
 	BBNodeVec BBAndBit(const BBNodeVec& y, BBNode b);
 
