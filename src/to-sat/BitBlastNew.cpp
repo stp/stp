@@ -33,6 +33,49 @@ BBNodeVec _empty_BBNodeVec;
 // bitvector term.  Result is a ref to a vector of formula nodes
 // representing the boolean formula.
 
+// This prints out each constant expression that the bitblaster
+// discovers. I use this to check that the expressions that are
+// reaching the bitblaster don't have obvious simplifications
+// that should have already been applied.
+const bool debug_do_check = false;
+
+void check(const BBNode& x, const ASTNode& n, BBNodeManager* nf)
+{
+	if (n.isConstant())
+		return;
+
+	const BBNode& BBTrue = nf->getTrue();
+	const BBNode& BBFalse = nf->getFalse();
+
+
+		if (x != BBTrue && x != BBFalse)
+			return;
+
+
+		cerr << "Non constant is constant:" ;
+		cerr << n << endl;
+}
+
+
+
+void check(const BBNodeVec& x, const ASTNode& n, BBNodeManager* nf)
+{
+	if (n.isConstant())
+		return;
+
+	const BBNode& BBTrue = nf->getTrue();
+	const BBNode& BBFalse = nf->getFalse();
+
+	for (int i =0; i < x.size(); i++)
+	{
+		if (x[i] != BBTrue && x[i] != BBFalse)
+			return;
+	}
+
+		cerr << "Non constant is constant:" ;
+		cerr << n << endl;
+}
+
 
 const BBNodeVec BitBlasterNew::BBTerm(const ASTNode& term, BBNodeSet& support) {
 	BBNodeVecMap::iterator it = BBTermMemo.find(term);
@@ -345,6 +388,9 @@ const BBNodeVec BitBlasterNew::BBTerm(const ASTNode& term, BBNodeSet& support) {
 
 	assert(result.size() == term.GetValueWidth());
 
+	if (debug_do_check)
+		check(result, term,nf);
+
 	return (BBTermMemo[term] = result);
 }
 
@@ -437,6 +483,9 @@ const BBNode BitBlasterNew::BBForm(const ASTNode& form, BBNodeSet& support) {
 	}
 
 	assert(!result.IsNull());
+
+	if (debug_do_check)
+		check(result, form,nf);
 
 	return (BBFormMemo[form] = result);
 }

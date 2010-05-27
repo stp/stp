@@ -459,6 +459,9 @@ namespace BEEV
                     nf->CreateTerm(ITE, inputValueWidth,
                                    nf->CreateNode(EQ, zero, bottom),
                                    one, result);
+
+                  //return result;
+                  return simp->SimplifyTerm_TopLevel(result);
                 }
             }
         }

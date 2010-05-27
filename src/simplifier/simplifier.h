@@ -152,7 +152,7 @@ namespace BEEV
                                        const ASTNode& in1, 
                                        const ASTNode& in2);
 
-    ASTNode CreateSimplifiedINEQ(Kind k, 
+    ASTNode CreateSimplifiedINEQ(const Kind k,
                                  const ASTNode& a0, 
                                  const ASTNode& a1, bool pushNeg);
 

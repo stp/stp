@@ -412,8 +412,6 @@ namespace BEEV
       case BVSGT:
       case BVSGE:
         {
-          //output = _bm->CreateNode(kind,left,right);
-          //output = pushNeg ? _bm->CreateNode(NOT,output) : output;
           output = CreateSimplifiedINEQ(kind, left, right, pushNeg);
           break;
         }
@@ -428,11 +426,57 @@ namespace BEEV
     return output;
   } //end of SimplifyAtomicFormula()
 
-  ASTNode Simplifier::CreateSimplifiedINEQ(Kind k, 
-                                           const ASTNode& left, 
-                                           const ASTNode& right, bool pushNeg)
+  // number of constant bits in the most significant places.
+  int mostSignificantConstants(const ASTNode& n)
   {
-    ASTNode output;
+	  if (n.isConstant())
+		  return n.GetValueWidth();
+	  if (n.GetKind() == BVCONCAT)
+		  return mostSignificantConstants(n[0]);
+	  return 0;
+  }
+
+    int getConstantBit(const ASTNode& n, const int i)
+    {
+    	if (n.GetKind() == BVCONST)
+  		  {
+    		  assert(n.GetValueWidth()-1-i >=0);
+			  return CONSTANTBV::BitVector_bit_test(n.GetBVConst(), n.GetValueWidth()-1-i) ? 1:0;
+  		  }
+  	  if (n.GetKind() == BVCONCAT)
+  		  return getConstantBit(n[0],i);
+
+  	  assert(false);
+    }
+
+
+  ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i,
+                                           const ASTNode& left_i,
+                                           const ASTNode& right_i, bool pushNeg)
+  {
+
+	  // We reduce down to four possible inequalities.
+	  // NB. If the simplifying node factory is enabled, it will have done this already.
+	bool swap = false;
+	if (k_i == BVLT || k_i == BVLE || k_i == BVSLT || k_i == BVSLE)
+		swap = true;
+
+	const ASTNode& left = (swap) ? right_i : left_i;
+	const ASTNode& right = (swap) ? left_i : right_i;
+
+	Kind k = k_i;
+	if (k == BVLT)
+		k = BVGT;
+	else if (k == BVLE)
+		k = BVGE;
+	else if (k == BVSLT)
+		k = BVSGT;
+	else if (k == BVSLE)
+		k = BVSGE;
+
+	assert (k == BVGT || k == BVGE || k== BVSGT || k == BVSGE);
+
+   ASTNode output;
     if (BVCONST == left.GetKind() && BVCONST == right.GetKind())
       {
         output = BVConstEvaluator(_bm->CreateNode(k, left, right));
@@ -440,69 +484,81 @@ namespace BEEV
         return output;
       }
 
-    unsigned len = left.GetValueWidth();
-    ASTNode zero = _bm->CreateZeroConst(len);
-    ASTNode one = _bm->CreateOneConst(len);
-    ASTNode max = _bm->CreateMaxConst(len);
+    if (k == BVLT || k ==BVGT || k == BVSLT || k == BVSGT)
+    {
+    	if (left == right)
+			return pushNeg ? ASTTrue : ASTFalse;
+    }
+
+    if (k == BVLE || k ==BVGE || k == BVSLE || k == BVSGE)
+    {
+    	if (left == right)
+    		return pushNeg ? ASTFalse : ASTTrue;
+    }
+
+    const unsigned len = left.GetValueWidth();
+
+    const int constStart = std::min(mostSignificantConstants(left),mostSignificantConstants(right));
+    int comparator =0;
+
+    for (int i = 0; i < constStart; i++) {
+		const int a = getConstantBit(left, i);
+		const int b = getConstantBit(right, i);
+		assert(a==1 || a==0);
+		assert(b==1 || b==0);
+
+		if (a < b) {
+			comparator = -1;
+			break;
+		} else if (a > b) {
+			comparator = +1;
+			break;
+		}
+	}
+
+    if (comparator!=0 && (k == BVGT || k == BVGE))
+    {
+    	ASTNode status = (comparator ==1)? ASTTrue: ASTFalse;
+    	return pushNeg ?  _bm->CreateNode(NOT, status) : status;
+    }
+
+    if (comparator!=0 && (k == BVSGT || k == BVSGE))
+    {
+    	// one is bigger than the other.
+		int sign_a = getConstantBit(left, 0);
+		int sign_b = getConstantBit(right, 0);
+		if (sign_a < sign_b)
+		{
+			comparator =1; // a > b.
+		}
+		if (sign_a > sign_b)
+			comparator =-1;
+
+    	ASTNode status = (comparator ==1)? ASTTrue: ASTFalse;
+    	return pushNeg ?  _bm->CreateNode(NOT, status) : status;
+    }
+
+    const ASTNode unsigned_min = _bm->CreateZeroConst(len);
+    const ASTNode one = _bm->CreateOneConst(len);
+    const ASTNode unsigned_max = _bm->CreateMaxConst(len);
+
+
     switch (k)
       {
-      case BVLT:
-        if (right == zero)
-          {
-            output = pushNeg ? ASTTrue : ASTFalse;
-          }
-        else if (left == right)
-          {
-            output = pushNeg ? ASTTrue : ASTFalse;
-          }
-        else if (one == right)
-          {
-            output = CreateSimplifiedEQ(left, zero);
-            output = pushNeg ? _bm->CreateNode(NOT, output) : output;
-          }
-        else
-          {
-            output = 
-              pushNeg ? 
-              _bm->CreateNode(BVLE, right, left) : 
-              _bm->CreateNode(BVLT, left, right);
-          }
-        break;
-      case BVLE:
-        if (left == zero)
-          {
-            output = pushNeg ? ASTFalse : ASTTrue;
-          }
-        else if (left == right)
-          {
-            output = pushNeg ? ASTFalse : ASTTrue;
-          }
-        else if (max == right)
-          {
-            output = pushNeg ? ASTFalse : ASTTrue;
-          }
-        else if (zero == right)
-          {
-            output = CreateSimplifiedEQ(left, zero);
-            output = pushNeg ? _bm->CreateNode(NOT, output) : output;
-          }
-        else
-          {
-            output = 
-              pushNeg ? 
-              _bm->CreateNode(BVLT, right, left) : 
-              _bm->CreateNode(BVLE, left, right);
-          }
-        break;
       case BVGT:
-        if (left == zero)
+        if (left == unsigned_min)
           {
             output = pushNeg ? ASTTrue : ASTFalse;
           }
-        else if (left == right)
+        else if (one == left)
           {
-            output = pushNeg ? ASTTrue : ASTFalse;
+            output = CreateSimplifiedEQ(right, unsigned_min);
+            output = pushNeg ? _bm->CreateNode(NOT, output) : output;
           }
+        else if (right == unsigned_max)
+        {
+          output = pushNeg ? ASTTrue : ASTFalse;
+        }
         else
           {
             output = 
@@ -512,13 +568,18 @@ namespace BEEV
           }
         break;
       case BVGE:
-        if (right == zero)
+        if (right == unsigned_min)
           {
             output = pushNeg ? ASTFalse : ASTTrue;
           }
-        else if (left == right)
+        else if (unsigned_max == left)
           {
             output = pushNeg ? ASTFalse : ASTTrue;
+          }
+        else if (unsigned_min == left)
+          {
+            output = CreateSimplifiedEQ(right, unsigned_min);
+            output = pushNeg ? _bm->CreateNode(NOT, output) : output;
           }
         else
           {
@@ -528,20 +589,23 @@ namespace BEEV
               _bm->CreateNode(BVLE, right, left);
           }
         break;
-      case BVSLT:
-      case BVSLE:
       case BVSGE:
+      {
+        output = _bm->CreateNode(k, left, right);
+        output = pushNeg ? _bm->CreateNode(NOT, output) : output;
+      }
+
+    	  break;
       case BVSGT:
-        {
-          output = _bm->CreateNode(k, left, right);
-          output = pushNeg ? _bm->CreateNode(NOT, output) : output;
-        }
+			output = _bm->CreateNode(k, left, right);
+			output = pushNeg ? _bm->CreateNode(NOT, output) : output;
         break;
       default:
         FatalError("Wrong Kind");
         break;
       }
 
+    assert(!output.IsNull());
     return output;
   }
 
@@ -716,13 +780,8 @@ namespace BEEV
   ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   {
     CountersAndStats("CreateSimplifiedEQ", _bm);
-    Kind k1 = in1.GetKind();
-    Kind k2 = in2.GetKind();
-
-    // if (!optimize_flag)
-    //  {
-    //          return CreateNode(EQ, in1, in2);
-    //  }
+    const Kind k1 = in1.GetKind();
+    const Kind k2 = in2.GetKind();
 
     if (in1 == in2)
       //terms are syntactically the same
@@ -732,6 +791,21 @@ namespace BEEV
     //semantically equal.
     if (BVCONST == k1 && BVCONST == k2)
       return ASTFalse;
+
+	// Check if some of the leading constant bits are different. Fancier code would check
+    // each bit, not just the leading bits.
+    const int constStart = std::min(mostSignificantConstants(in1),mostSignificantConstants(in2));
+
+    for (int i = 0; i < constStart; i++) {
+		const int a = getConstantBit(in1, i);
+		const int b = getConstantBit(in2, i);
+		assert(a==1 || a==0);
+		assert(b==1 || b==0);
+
+		if (a != b)
+			return ASTFalse;
+	}
+
 
     //last resort is to CreateNode
     return _bm->CreateNode(EQ, in1, in2);
@@ -2102,10 +2176,26 @@ namespace BEEV
                   return output;
                 }
 
+              if (o.size() > 0 && o.back() == aaa)
+              {
+            	  continue; // duplicate.
+              }
+
+              // nb: There's no guarantee that the bvneg will immediately follow
+              // the thing it's negating if the degree > 2.
+              if (o.size() > 0 && aaa.GetKind() == BVNEG && o.back() == aaa[0])
+              {
+            	  output = annihilator;
+            	  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+                  return output;
+              }
+
+
               if (aaa != identity)
                 {
                   o.push_back(aaa);
                 }
+
             }
 
           switch (o.size())
@@ -2268,6 +2358,10 @@ namespace BEEV
                     }
                 }
             }
+          else if (a == _bm->CreateZeroConst(width))
+          {
+        	  output = _bm->CreateZeroConst(width);
+          }
           else
             output = _bm->CreateTerm(k, width, a, b);
         }
@@ -2275,6 +2369,14 @@ namespace BEEV
 
 
       case BVXOR:
+    	  {
+    		  if (inputterm.Degree() ==2 && inputterm[0] == inputterm[1])
+    		  {
+    			  output = _bm->CreateZeroConst(inputterm.GetValueWidth());
+    			  break;
+    		  }
+    	  }
+    	  //run on.
       case BVXNOR:
       case BVNAND:
       case BVNOR:
