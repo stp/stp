@@ -190,9 +190,10 @@
 %token SELECT_TOK;
 %token STORE_TOK; 
 
+%token END 0 "end of file"
 
 %%
-cmd: commands
+cmd: commands END
 {
 	if(querysmt2.IsNull()) 
     {
