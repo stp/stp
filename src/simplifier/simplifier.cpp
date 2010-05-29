@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -13,6 +13,11 @@
 
 namespace BEEV
 {
+
+ // If enabled, simplifyTerm will simplify all the arguments to a function before attempting
+ // the simplification of that function. Without this option the case will be selected for
+ // each kind, and that case needs to simplify the arguments.
+ const bool simplify_upfront = false;
 
   ASTNode Simplifier::Flatten(const ASTNode& a)
   {
@@ -104,6 +109,7 @@ namespace BEEV
       {
         return;
       }
+    assert(!value.IsNull());
 
     // Don't add leaves. Leaves are easy to recalculate, no need
     // to cache.
@@ -310,6 +316,7 @@ namespace BEEV
       }
 
     //memoize
+    UpdateSimplifyMap(b, output, pushNeg, VarConstMap);
     UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
@@ -789,10 +796,10 @@ namespace BEEV
         return output;
       }
 
-    ASTNode in1 = in[0];
-    ASTNode in2 = in[1];
-    Kind k1 = in1.GetKind();
-    Kind k2 = in2.GetKind();
+    const ASTNode& in1 = in[0];
+    const ASTNode& in2 = in[1];
+    const Kind k1 = in1.GetKind();
+    const Kind k2 = in2.GetKind();
     if (in1 == in2)
       {
         //terms are syntactically the same
@@ -800,8 +807,7 @@ namespace BEEV
       }
     else if (BVCONST == k1 && BVCONST == k2)
       {
-        //here the terms are definitely not syntactically equal but may
-        //be semantically equal.
+        assert(in1!=in2);
         output = ASTFalse;
       }
     else if (ITE == k1 && 
@@ -819,12 +825,12 @@ namespace BEEV
         //
         //similarly ITE(cond,d,c) = d <=> NOT(cond)
         ASTNode cond = in1[0];
-        if (in1[1] == in2)
+        if (in1[1] == in2 && (in2 != in1[2]))
           {
             //ITE(cond, c, d) = c <=> cond
             output = cond;
           }
-        else if (in1[2] == in2)
+        else if (in1[2] == in2 && (in2 != in1[1]))
           {
             cond = SimplifyFormula(cond, true, VarConstMap);
             output = cond;
@@ -840,12 +846,12 @@ namespace BEEV
              BVCONST == in2[2].GetKind() && BVCONST == k1)
       {
         ASTNode cond = in2[0];
-        if (in2[1] == in1)
+        if (in2[1] == in1 && (in1 != in2[2]))
           {
             //ITE(cond, c, d) = c <=> cond
             output = cond;
           }
-        else if (in2[2] == in1)
+        else if (in2[2] == in1 && (in1 != in2[1]))
           {
             cond = SimplifyFormula(cond, true, VarConstMap);
             output = cond;
@@ -907,9 +913,9 @@ namespace BEEV
                                               const ASTNode& in1, 
                                               const ASTNode& in2)
   {
-    ASTNode t0 = in0;
-    ASTNode t1 = in1;
-    ASTNode t2 = in2;
+    const ASTNode& t0 = in0;
+    const ASTNode& t1 = in1;
+    const ASTNode& t2 = in2;
     CountersAndStats("CreateSimplifiedITE", _bm);
     if (!_bm->UserFlags.optimize_flag)
       {
@@ -953,9 +959,9 @@ namespace BEEV
   CreateSimplifiedFormulaITE(const ASTNode& in0,
                              const ASTNode& in1, const ASTNode& in2)
   {
-    ASTNode t0 = in0;
-    ASTNode t1 = in1;
-    ASTNode t2 = in2;
+    const ASTNode& t0 = in0;
+    const ASTNode& t1 = in1;
+    const ASTNode& t2 = in2;
     CountersAndStats("CreateSimplifiedFormulaITE", _bm);
 
     if (_bm->UserFlags.optimize_flag)
@@ -978,7 +984,7 @@ namespace BEEV
           }
       }
     ASTNode result = _bm->CreateNode(ITE, t0, t1, t2);
-    BVTypeCheck(result);
+    assert(BVTypeCheck(result));
     return result;
   }
 
@@ -992,13 +998,17 @@ namespace BEEV
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
-    ASTVec c, outvec;
-    c = a.GetChildren();
     ASTNode flat = Flatten(a);
+    ASTVec c, outvec;
     c = flat.GetChildren();
     SortByArith(c);
-
     Kind k = a.GetKind();
+
+    // If the simplifying node factory is enabled, a
+    // constant may be returned by Flatten.
+    if (AND !=k && OR !=k)
+    	return SimplifyFormula(flat,pushNeg, VarConstMap);
+
     bool isAnd = (k == AND) ? true : false;
 
     ASTNode annihilator = 
@@ -1520,9 +1530,7 @@ namespace BEEV
     else
       output = _bm->CreateTerm(k, a.GetValueWidth(), o);
 
-    //UpdateSimplifyMap(a,output,false);
     return output;
-    //memoize
   } //end of flattenonelevel()
 
   //This function simplifies terms based on their kind
@@ -1567,6 +1575,53 @@ namespace BEEV
 
     unsigned int inputValueWidth = inputterm.GetValueWidth();
 
+    if (simplify_upfront)
+    {
+		if (k != BVCONST && k != SYMBOL) // const and symbols need to be created specially.
+		{
+			ASTVec v;
+			for (unsigned i = 0; i < actualInputterm.Degree(); i++)
+				if (inputterm[i].GetType() == BITVECTOR_TYPE)
+					v.push_back(SimplifyTerm(inputterm[i], VarConstMap));
+				else if (inputterm[i].GetType() == BOOLEAN_TYPE)
+					v.push_back(SimplifyFormula(inputterm[i], VarConstMap));
+				else
+					v.push_back(inputterm[i]);
+
+			// TODO: Should check if the children arrays are different and only
+			// create then.
+			output = _bm->CreateTerm(k, inputValueWidth, v);
+			output.SetIndexWidth(actualInputterm.GetIndexWidth());
+
+			if (inputterm != output) {
+				UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+				inputterm = output;
+			}
+		}
+
+		const ASTVec& children = inputterm.GetChildren();
+		k = inputterm.GetKind();
+
+		// Perform constant propagation if possible.
+		if (k != BEEV::UNDEFINED && k != BEEV::SYMBOL) {
+			bool allConstant = true;
+
+			for (unsigned i = 0; i < children.size(); i++)
+				if (!children[i].isConstant()) {
+					allConstant = false;
+					break;
+				}
+
+			if (allConstant) {
+				const ASTNode& c = BVConstEvaluator(inputterm);
+				assert(c.isConstant());
+				UpdateSimplifyMap(inputterm, c, false, VarConstMap);
+				return c;
+			}
+		}
+    }
+
+
     inputterm = PullUpITE(inputterm);
     k = inputterm.GetKind(); // pull up ITE can change the kind of the node
 
@@ -1587,88 +1642,22 @@ namespace BEEV
         output = inputterm;
         break;
       case BVMULT:
-        {
-          if (2 != inputterm.Degree())
-            {
-              FatalError("SimplifyTerm: We assume that BVMULT is binary",
-                         inputterm);
-            }
 
-          // Described nicely by Warren, Hacker's Delight pg 135.
-          // Turn sequences of one bits into subtractions.  28*x ==
-          // 32x - 4x (two instructions), rather than 16x+ 8x+ 4x.
-          // When fully implemented. I.e. supporting sequences of 1
-          // anywhere.  Other simplifications will try to fold these
-          // back in. So need to be careful about when the
-          // simplifications are applied. But in this version it won't
-          // be simplified down by anything else.
-
-
-          // This (temporary) version only simplifies if all the left
-          // most bits are set.  All the leftmost bits being set
-          // simplifies very nicely down.
-          const ASTNode& n0 = inputterm.GetChildren()[0];
-          const ASTNode& n1 = inputterm.GetChildren()[1];
-
-          // This implementation has two problems.  1) It causes a
-          // segfault for cmu-model15,16,17 2) It doesn't count the
-          // number of bits saved, so if there is a single leading bit
-          // it will invert it. Even though that will take more shifts
-          // and adds when it's finally done.
-
-          // disabled.
-          if (false 
-              && (BVCONST == n0.GetKind()) 
-              ^ (BVCONST == n1.GetKind()))
-            {
-              CBV constant = 
-                (BVCONST == n0.GetKind()) ? 
-                n0.GetBVConst() : 
-                n1.GetBVConst();
-              ASTNode other = 
-                (BVCONST == n0.GetKind()) ? 
-                n1 : 
-                n0;
-
-              int startSequence = 0;
-              for (unsigned int i = 0; i < inputValueWidth; i++)
-                {
-                  if (!CONSTANTBV::BitVector_bit_test(constant, i))
-                    startSequence = i;
-                }
-
-              if ((inputValueWidth - startSequence) > 3)
-                {
-                  // turn off all bits from "startSequence to the
-                  // end", then add one.
-                  CBV maskedPlusOne = 
-                    CONSTANTBV::BitVector_Create(inputValueWidth, true);
-                  for (int i = 0; i < startSequence; i++)
-                    {
-                      if (!CONSTANTBV::BitVector_bit_test(constant, i)) // swap
-                        CONSTANTBV::BitVector_Bit_On(maskedPlusOne, i);
-                    }
-                  CONSTANTBV::BitVector_increment(maskedPlusOne);
-                  ASTNode temp = 
-                    _bm->CreateTerm(BVMULT, inputValueWidth, 
-                                    _bm->CreateBVConst(maskedPlusOne, 
-                                                       inputValueWidth), 
-                                    other);
-                  output = _bm->CreateTerm(BVNEG, inputValueWidth, temp);
-                }
-            }
-
-        }
-        if (output.IsNull())
-          break;
-
+			assert(2 == inputterm.Degree());
+			// follow on.
       case BVPLUS:
-        {
-          ASTVec c = Flatten(inputterm).GetChildren();
+            {
+    		const ASTNode &n = Flatten(inputterm);
+
+    		// Flatten may create a new node. If we're using a simplifying node factory,
+    		// this node might get simplified down to constant.
+    		if (n.GetKind() == BVCONST) {
+    			output = n;
+    			break;
+                }
+    		ASTVec c = n.GetChildren();
           SortByArith(c);
           ASTVec constkids, nonconstkids;
-
-
 
           //go through the childnodes, and separate constant and
           //nonconstant nodes. combine the constant nodes using the
@@ -1946,7 +1935,12 @@ namespace BEEV
           //it is important to take care of wordlevel transformation in
           //BVEXTRACT. it exposes oppurtunities for later simplification
           //and solving (variable elimination)
-          ASTNode a0 = SimplifyTerm(inputterm[0], VarConstMap);
+          ASTNode a0;
+          if (!simplify_upfront)
+        	  a0 = SimplifyTerm(inputterm[0], VarConstMap);
+          else
+        	  a0 = inputterm[0];
+
           Kind k1 = a0.GetKind();
           unsigned int a_len = inputValueWidth;
 
@@ -1961,7 +1955,10 @@ namespace BEEV
 
           // a0[i:0] and len(a0)=i+1, then return a0
           if (0 == j_val && a_len == a0.GetValueWidth())
-            return a0;
+            {
+        	  output = a0;
+        	  break;
+            }
 
           switch (k1)
             {
@@ -2056,6 +2053,7 @@ namespace BEEV
             case BVOR:
             case BVXOR:
               {
+            	assert(a0.Degree() == 2);
                 //assumes these operators are binary
                 //
                 // (t op u)[i:j] <==> t[i:j] op u[i:j]
@@ -2130,13 +2128,17 @@ namespace BEEV
             case BVNEG:
               output = a0[0];
               break;
-              // case ITE: { ASTNode cond = a0[0]; ASTNode thenpart =
-              //        SimplifyTerm(_bm->CreateTerm(BVNEG,len,a0[1]),
-              //        VarConstMap); ASTNode elsepart =
-              //        SimplifyTerm(_bm->CreateTerm(BVNEG,len,a0[2]),
-              //        VarConstMap); output =
-              //        _bm->CreateSimplifiedTermITE(cond,thenpart,elsepart);
-              //        break; }
+            case ITE:
+			   if (a0[1].isConstant() && a0[2].isConstant()) {
+					ASTNode t = _bm->CreateTerm(BVNEG, inputValueWidth,
+							a0[1]);
+					ASTNode f = _bm->CreateTerm(BVNEG, inputValueWidth,
+							a0[2]);
+					output = _bm->CreateTerm(ITE, inputValueWidth, a0[0],
+							BVConstEvaluator(t), BVConstEvaluator(f));
+					break;
+			   }
+			   //follow on
             default:
               output = _bm->CreateTerm(BVNEG, len, a0);
               break;
@@ -2171,7 +2173,7 @@ namespace BEEV
               break;
             case BVAND:
             case BVOR:
-              //assuming BVAND and BVOR are binary
+              assert(a0.Degree() == 2);
               output = 
                 _bm->CreateTerm(a0.GetKind(), len, 
                                 _bm->CreateTerm(BVSX, len, a0[0], a1), 
@@ -2579,9 +2581,12 @@ namespace BEEV
     //cerr << "SimplifyTerm: output" << output << endl;
     // CheckSimplifyInvariant(inputterm,output);
 
+	assert(!output.IsNull());
+	assert(inputterm.GetValueWidth() == output.GetValueWidth());
+	assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
+
     return output;
   } //end of SimplifyTerm()
-
 
   //At the end of each simplification call, we want the output to be
   //always smaller or equal to the input in size.
@@ -2602,6 +2607,7 @@ namespace BEEV
         //  from lhs to rhs: ",ASTUndefined);
       }
   }
+
 
   //this function assumes that the input is a vector of childnodes of
   //a BVPLUS term. it combines like terms and returns a bvplus
@@ -2778,8 +2784,8 @@ namespace BEEV
 
     ASTNode lhs = eq[0];
     ASTNode rhs = eq[1];
-    Kind k_lhs = lhs.GetKind();
-    Kind k_rhs = rhs.GetKind();
+    const Kind k_lhs = lhs.GetKind();
+    const Kind k_rhs = rhs.GetKind();
     //either the lhs has to be a BVPLUS or the rhs has to be a
     //BVPLUS
     if (!(BVPLUS == k_lhs 
@@ -2800,13 +2806,13 @@ namespace BEEV
 
     //if the lhs is not a BVPLUS, but the rhs is a BVPLUS, then swap
     //the lhs and rhs
-    bool swap_flag = false;
+    //bool swap_flag = false;
     if (BVPLUS != k_lhs && BVPLUS == k_rhs)
       {
         ASTNode swap = lhs;
         lhs = rhs;
         rhs = swap;
-        swap_flag = true;
+       // swap_flag = true;
       }
 
 
@@ -2835,8 +2841,7 @@ namespace BEEV
       }
     else
       {
-        //Control should never reach here
-        FatalError("LhsMinusRhs: Control should never reach here\n");
+    	lhsplusrhs = _bm->CreateTerm(BVPLUS, len, lhs, rhs);
       }
 
     //combine like terms
@@ -3120,7 +3125,7 @@ namespace BEEV
 
     ASTVec writeIndices, writeValues;
     unsigned int width = term.GetValueWidth();
-    ASTNode original_write = term[0];
+    //ASTNode original_write = term[0];
     ASTNode write = term[0];
     unsigned indexwidth = write.GetIndexWidth();
     ASTNode readIndex = SimplifyTerm(term[1]);
@@ -3475,11 +3480,11 @@ namespace BEEV
 
     //SimplifyMap->clear();
     delete SimplifyMap;
-    SimplifyMap = new ASTNodeMap();
+    SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
 
     //SimplifyNegMap->clear();
     delete SimplifyNegMap;
-    SimplifyNegMap = new ASTNodeMap();
+    SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
   }
 
   void Simplifier::printCacheStatus()
