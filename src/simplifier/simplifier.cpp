@@ -450,6 +450,62 @@ namespace BEEV
     }
 
 
+    bool getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 15)
+    {
+    	if (maxCount <=0)
+    		return false;
+
+    	ASTNodeSet::iterator it = visited.find(n);
+    	if (it != visited.end())
+    		return true;
+    	visited.insert(n);
+
+    	if (n.GetKind() == BVCONST)
+    	{
+    		found.push_back(n);
+    		return true;
+    	}
+
+    	if (n.GetKind() == ITE)
+    	{
+    		bool a = getPossibleValues(n[1],visited,found,maxCount-1);
+    		if (!a)
+				return a;
+
+    		bool b = getPossibleValues(n[2],visited,found,maxCount-1);
+    		if (!b)
+				return b;
+    		return true;
+    	}
+
+    	return false;
+    }
+
+
+    bool unsignedGreaterThan(const ASTNode& n1, const ASTNode& n2)
+    {
+		assert(n1.isConstant());
+		assert(n2.isConstant());
+		assert(n1.GetValueWidth() == n2.GetValueWidth());
+
+		int comp = CONSTANTBV::BitVector_Lexicompare(n1.GetBVConst(),
+				n2.GetBVConst());
+		return comp == 1;
+	}
+
+     bool signedGreaterThan(const ASTNode& n1, const ASTNode& n2)
+    {
+		assert(n1.isConstant());
+		assert(n2.isConstant());
+		assert(n1.GetValueWidth() == n2.GetValueWidth());
+
+		int comp = CONSTANTBV::BitVector_Compare(n1.GetBVConst(),
+				n2.GetBVConst());
+		return comp == 1;
+	}
+
+
+
   ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i,
                                            const ASTNode& left_i,
                                            const ASTNode& right_i, bool pushNeg)
@@ -537,6 +593,41 @@ namespace BEEV
     	ASTNode status = (comparator ==1)? ASTTrue: ASTFalse;
     	return pushNeg ?  _bm->CreateNode(NOT, status) : status;
     }
+
+    {
+		ASTNodeSet visited0, visited1;
+		vector<ASTNode> l0,l1;
+
+		// Sound overapproximation. Doesn't consider the equalities.
+		if (getPossibleValues(left, visited0, l0) && getPossibleValues(right,visited1, l1))
+		{
+			{
+				bool (*comp)(const ASTNode&, const ASTNode&);
+				if (k == BVSGT || k == BVSGE)
+					comp = signedGreaterThan;
+				else
+					comp = unsignedGreaterThan;
+				{
+					ASTNode minLHS = *max_element(l0.begin(), l0.end(),
+							comp);
+					ASTNode maxRHS = *min_element(l1.begin(), l1.end(),
+							comp);
+
+					if (comp(minLHS, maxRHS))
+						return pushNeg ? ASTFalse : ASTTrue;
+				}
+				{
+					ASTNode maxLHS = *min_element(l0.begin(), l0.end(),
+							comp);
+					ASTNode minRHS = *max_element(l1.begin(), l1.end(),
+							comp);
+
+					if (comp(minRHS, maxLHS))
+						return pushNeg ? ASTTrue : ASTFalse;
+				}
+			}
+		}
+	}
 
     const ASTNode unsigned_min = _bm->CreateZeroConst(len);
     const ASTNode one = _bm->CreateOneConst(len);
