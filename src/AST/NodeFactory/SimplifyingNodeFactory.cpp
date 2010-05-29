@@ -19,6 +19,7 @@
 #include "../../AST/AST.h"
 #include <cassert>
 #include "SimplifyingNodeFactory.h"
+#include "../../simplifier/simplifier.h"
 
 using BEEV::Kind;
 
@@ -45,7 +46,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 		if (allConstant)
 		{
 			const ASTNode& hash = hashing.CreateNode(kind, children);
-			const ASTNode& c = simplifier->BVConstEvaluator(hash);
+			const ASTNode& c = NonMemberBVConstEvaluator(hash);
 			assert(c.isConstant());
 			return c;
 		}
@@ -456,7 +457,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	if (allConstant)
 	{
 		const ASTNode& hash = hashing.CreateTerm(kind, width, children);
-		const ASTNode& c = simplifier->BVConstEvaluator(hash);
+		const ASTNode& c = NonMemberBVConstEvaluator(hash);
 		assert(c.isConstant());
 		return c;
 	}

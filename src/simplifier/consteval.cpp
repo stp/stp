@@ -22,13 +22,15 @@ namespace BEEV
   }
 
 // Const evaluator logical and arithmetic operations.
-  ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
+  ASTNode NonMemberBVConstEvaluator(const ASTNode& t)
   {
     ASTNode OutputNode;
     Kind k = t.GetKind();
 
-    if (CheckSolverMap(t, OutputNode))
-      return OutputNode;
+    STPMgr* _bm = t.GetSTPMgr();
+    ASTNode& ASTTrue = _bm->ASTTrue;
+    ASTNode& ASTFalse = _bm->ASTFalse;
+
     OutputNode = t;
 
     unsigned int inputwidth = t.GetValueWidth();
@@ -45,7 +47,7 @@ namespace BEEV
     	if (t[i].isConstant())
     		children.push_back(t[i]);
     	else
-    		children.push_back(BVConstEvaluator(t[i]));
+    		children.push_back(NonMemberBVConstEvaluator(t[i]));
     }
 
     if ((t.Degree() ==2 || t.Degree() == 1) && t[0].GetType() == BITVECTOR_TYPE)
@@ -686,8 +688,19 @@ namespace BEEV
       }
     */
     assert(OutputNode.isConstant());
-    UpdateSolverMap(t, OutputNode);
     //UpdateSimplifyMap(t,OutputNode,false);
     return OutputNode;
   } //End of BVConstEvaluator
+
+  ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
+  {
+	  ASTNode OutputNode;
+
+	  if (CheckSolverMap(t, OutputNode))
+	      return OutputNode;
+
+	  OutputNode = NonMemberBVConstEvaluator(t);
+	  UpdateSolverMap(t, OutputNode);
+	  return OutputNode;
+  }
 }; //end of namespace BEEV

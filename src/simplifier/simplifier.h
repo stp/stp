@@ -12,9 +12,12 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 
 namespace BEEV
 {
+  ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
+
   class Simplifier
   {
     friend class counterexample;
@@ -62,7 +65,8 @@ namespace BEEV
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
       ASTUndefined = bm->CreateNode(UNDEFINED);
-      nf = bm->defaultNodeFactory;
+
+      nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
     }
       
     ~Simplifier()
@@ -71,6 +75,7 @@ namespace BEEV
       delete SimplifyNegMap;
       delete SolverMap;
       delete ReadOverWrite_NewName_Map;
+      delete nf;
     }
 
     /****************************************************************

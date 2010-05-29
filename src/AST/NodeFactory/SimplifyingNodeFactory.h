@@ -21,11 +21,9 @@
 
 #include "NodeFactory.h"
 #include "../../STPManager/STPManager.h"
-#include "../../simplifier/simplifier.h"
 
 using BEEV::ASTNode;
 using BEEV::ASTVec;
-using BEEV::Simplifier;
 
 class SimplifyingNodeFactory: public NodeFactory
 {
@@ -51,9 +49,6 @@ private:
 	SimplifyingNodeFactory(const SimplifyingNodeFactory& );
 	SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&);
 
-	// Just here to access the Constant Evaluator.
-	Simplifier * simplifier;
-
 
 public:
 
@@ -64,12 +59,10 @@ public:
 	SimplifyingNodeFactory(NodeFactory& raw_, BEEV::STPMgr& bm_)
 	:hashing(raw_), bm(bm_), ASTTrue(bm.ASTTrue), ASTFalse(bm.ASTFalse), ASTUndefined(bm.ASTUndefined)
 	{
-		simplifier = new Simplifier(&bm);
 	}
 	;
 	~SimplifyingNodeFactory()
 	{
-		delete simplifier;
 	}
 
 };
