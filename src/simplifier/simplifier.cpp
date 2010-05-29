@@ -17,7 +17,15 @@ namespace BEEV
  // If enabled, simplifyTerm will simplify all the arguments to a function before attempting
  // the simplification of that function. Without this option the case will be selected for
  // each kind, and that case needs to simplify the arguments.
- const bool simplify_upfront = false;
+
+ // Longer term, this means that each function doesn't need to worry about calling simplify
+// on it's arguments (I suspect some paths don't call simplify on their arguments). But it
+// does mean that we can't short cut, for example, if the first argument to a BVOR is all trues,
+// then all the other arguments have already been simplified, so won't be short-cutted.
+
+// I tried enabling it on the formulae, but it interferred with the bvsolver (sometime),
+// so that's disabled.
+  const bool simplify_upfront = true;
 
   ASTNode Simplifier::Flatten(const ASTNode& a)
   {
@@ -274,6 +282,34 @@ namespace BEEV
     ASTNode output;
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
+
+    kind = a.GetKind();
+
+    if (false && simplify_upfront)
+    {
+    		if (!a.isConstant() && kind != SYMBOL) // const and symbols need to be created specially.
+    		{
+    			assert(a.Degree() > 0);
+    			ASTVec v;
+    			v.reserve(a.Degree());
+    			for (unsigned i = 0; i < a.Degree(); i++)
+    				if (a[i].GetType() == BITVECTOR_TYPE)
+    					v.push_back(SimplifyTerm(a[i], VarConstMap));
+    				else if (a[i].GetType() == BOOLEAN_TYPE)
+    					v.push_back(SimplifyFormula(a[i], VarConstMap));
+    				else
+    					v.push_back(a[i]);
+
+    			// TODO: Should check if the children arrays are different and only
+    			// create then.
+    			ASTNode output = nf->CreateNode(kind, v);
+
+    			if (a != output) {
+    				UpdateSimplifyMap(a, output, false, VarConstMap);
+    				a = output;
+    			}
+    		}
+    }
 
     a = PullUpITE(a);
     kind = a.GetKind(); // pullUpITE can change the Kind of the node.
@@ -1655,6 +1691,7 @@ namespace BEEV
     			output = n;
     			break;
                 }
+    		assert(n.GetKind() == BVPLUS || n.GetKind() == BVMULT);
     		ASTVec c = n.GetChildren();
           SortByArith(c);
           ASTVec constkids, nonconstkids;
