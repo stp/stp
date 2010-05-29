@@ -2158,8 +2158,21 @@ namespace BEEV
           if (a0.GetValueWidth() == len)
             {
               //nothing to signextend
-              return a0;
+              output =  a0;
+              break;
             }
+
+          // If the msb is known. Then puts 0's or the 1's infront.
+          if (mostSignificantConstants(a0) > 0)
+          {
+        	  if (getConstantBit(a0,0) == 0)
+        		  output = _bm->CreateTerm(BVCONCAT, len, _bm->CreateZeroConst(len-a0.GetValueWidth()), a0);
+        	  else
+        		  output = _bm->CreateTerm(BVCONCAT, len, _bm->CreateMaxConst(len-a0.GetValueWidth()), a0);
+
+        	  break;
+          }
+
 
           switch (a0.GetKind())
             {

@@ -46,6 +46,7 @@ namespace BEEV
     //Ptr to STP Manager
     STPMgr * _bm;
 
+    NodeFactory * nf;
   public:
       
     /****************************************************************
@@ -61,6 +62,7 @@ namespace BEEV
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
       ASTUndefined = bm->CreateNode(UNDEFINED);
+      nf = bm->defaultNodeFactory;
     }
       
     ~Simplifier()
