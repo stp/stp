@@ -117,6 +117,7 @@ regressall: all
 	$(MAKE) regressstp
 	$(MAKE) regressbio
 	$(MAKE) regresseric
+	$(MAKE) regresshistar
 	$(MAKE) regresscrypto
 	$(MAKE) regresscapi
 
@@ -166,6 +167,12 @@ regresssyn: baseTest
 regresseric: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)eric-test/
 regresseric: REGRESS_LOG = `date +%Y-%m-%d`"-regress-eric.log"
 regresseric: baseTest
+
+.PHONY: regresshistar
+regresshistar: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)histar-big-tests/
+regresshistar: REGRESS_LOG = `date +%Y-%m-%d`"-regress-histar-big-tests.log"
+regresshistar: baseTest
+
 
 .PHONY: regressbigarray
 regressbigarray: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)bigarray-test/
