@@ -42,7 +42,7 @@ class CountOfSymbols {
 		case SYMBOL:
 			//cerr << "debugging: symbol added: " << term << endl;
 			Vars[term]++;
-			break;
+			return;
 		case READ:
 			//skip the arrayname, provided the arrayname is a SYMBOL
 			//But we don't skip it if it's a WRITE function??

@@ -202,7 +202,7 @@ namespace BEEV
       case SYMBOL:
         //cerr << "debugging: symbol added: " << term << endl;
         Vars.insert(term);
-        break;
+        return;
       case READ:
         //skip the arrayname, provided the arrayname is a SYMBOL
         if (SYMBOL == term[0].GetKind())
