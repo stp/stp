@@ -1359,10 +1359,16 @@ namespace BEEV
           {
             renamesibs = true;
           }
-        oldpsi = psi;
-        psi = ClauseList::PRODUCT(*psi, *clauses);
+
+        if (clauses->size() ==1)
+        	psi->INPLACE_PRODUCT(*clauses);
+        else
+        {
+            oldpsi = psi;
+        	psi = ClauseList::PRODUCT(*psi, *clauses);
+        	DELETE(oldpsi);
+        }
         reduceMemoryFootprintNeg(*it);
-        DELETE(oldpsi);
       }
 
     info[varphi]->clausesneg = psi;
