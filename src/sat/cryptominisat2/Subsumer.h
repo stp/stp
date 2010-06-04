@@ -26,21 +26,35 @@ class ClauseCleaner;
 class Subsumer
 {
 public:
-    
+
+    //Construct-destruct
     Subsumer(Solver& S2);
     ~Subsumer();
+
+    //Called from main
     const bool simplifyBySubsumption();
+    const bool subsumeWithBinaries(const bool startUp);
+    void newVar();
+
+    //Used by cleaner
     void unlinkModifiedClause(vec<Lit>& origClause, ClauseSimp c);
     void unlinkModifiedClauseNoDetachNoNULL(vec<Lit>& origClause, ClauseSimp c);
     void unlinkClause(ClauseSimp cc, Var elim = var_Undef);
     ClauseSimp linkInClause(Clause& cl);
     void linkInAlreadyClause(ClauseSimp& c);
     void updateClause(ClauseSimp c);
-    void newVar();
+
+
+    //UnElimination
     void extendModel(Solver& solver2);
     const bool unEliminate(const Var var);
+
+
+    //Get-functions
     const vec<char>& getVarElimed() const;
     const uint32_t getNumElimed() const;
+    const bool checkElimedUnassigned() const;
+    const double getTotalTime() const;
     
 private:
     
@@ -56,17 +70,18 @@ private:
     vec<vec<ClauseSimp> >  occur;          // 'occur[index(lit)]' is a list of constraints containing 'lit'.
     vec<vec<ClauseSimp>* > iter_vecs;      // Vectors currently used for iterations. Removed clauses will be looked up and replaced by 'Clause_NULL'.
     vec<CSet* >            iter_sets;      // Sets currently used for iterations.
-    Solver&                solver;         // The Solver
-    
-    
-    vec<char>              var_elimed;     // 'eliminated[var]' is TRUE if variable has been eliminated.
     vec<char>              cannot_eliminate;//
-    map<Var, vector<vector<Lit> > > elimedOutVar;
+
+    //Global stats
+    Solver& solver;
+    vec<char> var_elimed; //TRUE if var has been eliminated
+    double totalTime;
+    uint32_t numElimed;
+    map<Var, vector<Clause*> > elimedOutVar;
     
     // Temporaries (to reduce allocation overhead):
     //
     vec<char>           seen_tmp;       // (used in various places)
-    vector<Lit>         io_tmp;         // (used for reading/writing clauses from/to disk)
     
     
     //Limits
@@ -78,14 +93,14 @@ private:
     uint32_t numMaxBlockVars;
     
     //Start-up
-    void addFromSolver(vec<Clause*>& cs);
+    template<bool UseCL>
+    void addFromSolver(vec<Clause*>& cs, bool alsoLearnt = false);
     void addBackToSolver();
     void removeWrong(vec<Clause*>& cs);
+    void removeAssignedVarsFromEliminated();
     void fillCannotEliminate();
     const bool treatLearnts();
-    void addAllXorAsNorm();
-    void addXorAsNormal3(XorClause& c);
-    void addXorAsNormal4(XorClause& c);
+    void clearAll();
     
     //Iterations
     void registerIteration  (CSet& iter_set) { iter_sets.push(&iter_set); }
@@ -96,13 +111,14 @@ private:
     // Subsumption:
     void touch(const Var x);
     void touch(const Lit p);
-    bool updateOccur(Clause& c);
-    void findSubsumed(Clause& ps, vec<ClauseSimp>& out_subsumed);
-    void findSubsumed(const vec<Lit>& ps, const uint32_t abst, vec<ClauseSimp>& out_subsumed);
-    void findSubsumed(Clause& ps, uint32_t abs, vec<ClauseSimp>& out_subsumed);
+    template<class T>
+    void findSubsumed(const T& ps, const uint32_t abst, vec<ClauseSimp>& out_subsumed);
     bool isSubsumed(Clause& ps);
-    uint32_t subsume0(Clause& ps);
-    uint32_t subsume0(Clause& ps, uint32_t abs);
+    template<class T>
+    uint32_t subsume0(T& ps, uint32_t abs);
+    template<class T>
+    uint32_t subsume0Orig(const T& ps, uint32_t abs);
+    void subsume0BIN(const Lit lit, const vec<char>& lits);
     void subsume0LearntSet(vec<Clause*>& cs);
     void subsume1(ClauseSimp& ps);
     void smaller_database();
@@ -116,13 +132,30 @@ private:
     bool maybeEliminate(Var x);
     void MigrateToPsNs(vec<ClauseSimp>& poss, vec<ClauseSimp>& negs, vec<ClauseSimp>& ps, vec<ClauseSimp>& ns, const Var x);
     void DeallocPsNs(vec<ClauseSimp>& ps, vec<ClauseSimp>& ns);
-    bool merge(Clause& ps, Clause& qs, Lit without_p, Lit without_q, vec<Lit>& out_clause);
-    
+    bool merge(const Clause& ps, const Clause& qs, const Lit without_p, const Lit without_q, vec<Lit>& out_clause);
+
+    //Subsume with Nonexistent Bins
+    const bool subsWNonExistBinsFull(const bool startUp);
+    const bool subsWNonExistBins(const Lit& lit, const bool startUp);
+    template<class T>
+    void subsume1Partial(const T& ps);
+    uint32_t subsNonExistentNum;
+    uint32_t subsNonExistentumFailed;
+    bool subsNonExistentFinish;
+    double subsNonExistentTime;
+    uint32_t subsNonExistentLitsRemoved;
+    vec<Clause*> addBinaryClauses;
+    uint32_t doneNum;
+    vec<ClauseSimp> subsume1PartialSubs;
+    vec<Lit> subsume1PartialQs;
+    vec<Lit> toVisit;
+    vec<char> toVisitAll;
+    vec<Lit> ps2;
     
     //hyperBinRes
     void addFromSolverAll(vec<Clause*>& cs);
     const bool hyperBinRes();
-    const bool hyperUtility(vec<ClauseSimp>& iter, const Lit lit, BitArray& inside, vec<ClauseSimp>& addToClauses, uint32_t& hyperBinAdded, uint32_t& hyperBinUnitary);
+    const bool hyperUtility(vec<ClauseSimp>& iter, const Lit lit, BitArray& inside, vec<Clause*>& addToClauses);
     
     //merging
     //vector<char> merge();
@@ -163,7 +196,6 @@ private:
     uint32_t numCalls;
     bool fullSubsume;
     uint32_t clauseID;
-    uint32_t numElimed;
 };
 
 template <class T, class T2>
@@ -192,11 +224,6 @@ inline void Subsumer::touchBlockedVar(const Var x)
 inline void Subsumer::touch(const Lit p)
 {
     touch(p.var());
-}
-
-inline bool Subsumer::updateOccur(Clause& c)
-{
-    return !c.learnt();
 }
 
 inline bool Subsumer::subsetAbst(uint32_t A, uint32_t B)
@@ -242,6 +269,11 @@ inline const vec<char>& Subsumer::getVarElimed() const
 inline const uint32_t Subsumer::getNumElimed() const
 {
     return numElimed;
+}
+
+inline const double Subsumer::getTotalTime() const
+{
+    return totalTime;
 }
 
 }; //NAMESPACE MINISAT

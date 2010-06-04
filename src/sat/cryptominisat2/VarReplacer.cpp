@@ -19,7 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <iostream>
 #include <iomanip>
 
-#include "Conglomerate.h"
 #include "ClauseCleaner.h"
 #include "PartHandler.h"
 #include "time_mem.h"
@@ -49,8 +48,7 @@ VarReplacer::VarReplacer(Solver& _solver) :
 VarReplacer::~VarReplacer()
 {
     for (uint i = 0; i != clauses.size(); i++)
-        //binaryClausePool.free(clauses[i]);
-        free(clauses[i]);
+        clauseFree(clauses[i]);
 }
 
 const bool VarReplacer::performReplaceInternal()
@@ -76,7 +74,8 @@ const bool VarReplacer::performReplaceInternal()
     #endif //REPLACE_STATISTICS
     
     solver.clauseCleaner->removeAndCleanAll(true);
-    if (solver.ok == false) return false;
+    if (!solver.ok) return false;
+    solver.testAllClauseAttach();
     
     #ifdef VERBOSE_DEBUG
     {
@@ -89,7 +88,7 @@ const bool VarReplacer::performReplaceInternal()
     #endif
     
     Var var = 0;
-    const vec<bool>& removedVars = solver.conglomerate->getRemovedVars();
+    const vec<char>& removedVars = solver.xorSubsumer->getVarElimed();
     const vec<lbool>& removedVars2 = solver.partHandler->getSavedState();
     const vec<char>& removedVars3 = solver.subsumer->getVarElimed();
     for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, var++) {
@@ -119,10 +118,12 @@ const bool VarReplacer::performReplaceInternal()
     
     lastReplacedVars = replacedVars;
     
-    if (!replace_set(solver.clauses)) goto end;
-    if (!replace_set(solver.learnts)) goto end;
-    if (!replace_set(solver.binaryClauses)) goto end;
+    solver.testAllClauseAttach();
+    if (!replace_set(solver.binaryClauses, true)) goto end;
+    if (!replace_set(solver.clauses, false)) goto end;
+    if (!replace_set(solver.learnts, false)) goto end;
     if (!replace_set(solver.xorclauses)) goto end;
+    solver.testAllClauseAttach();
     
 end:
     for (uint i = 0; i != clauses.size(); i++)
@@ -152,6 +153,7 @@ const bool VarReplacer::replace_set(vec<XorClause*>& cs)
         bool changed = false;
         Var origVar1 = c[0].var();
         Var origVar2 = c[1].var();
+        
         for (Lit *l = &c[0], *end2 = l + c.size(); l != end2; l++) {
             Lit newlit = table[l->var()];
             if (newlit.var() != l->var()) {
@@ -164,11 +166,13 @@ const bool VarReplacer::replace_set(vec<XorClause*>& cs)
         }
         
         if (changed && handleUpdatedClause(c, origVar1, origVar2)) {
-            if (solver.ok == false) {
-                for(;r != end; r++) free(*r);
+            if (!solver.ok) {
+                for(;r != end; r++) clauseFree(*r);
                 cs.shrink(r-a);
                 return false;
             }
+            c.setRemoved();
+            solver.freeLater.push(&c);
         } else {
             *a++ = *r;
         }
@@ -181,18 +185,16 @@ const bool VarReplacer::replace_set(vec<XorClause*>& cs)
 const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, const Var origVar2)
 {
     uint origSize = c.size();
-    std::sort(c.getData(), c.getData() + c.size());
+    std::sort(c.getData(), c.getDataEnd());
     Lit p;
     uint32_t i, j;
     for (i = j = 0, p = lit_Undef; i != c.size(); i++) {
-        c[i] = c[i].unsign();
-        if (c[i] == p) {
+        if (c[i].var() == p.var()) {
             //added, but easily removed
             j--;
             p = lit_Undef;
             if (!solver.assigns[c[i].var()].isUndef())
                 c.invert(solver.assigns[c[i].var()].getBool());
-            solver.clauses_literals -= 2;
         } else if (solver.assigns[c[i].var()].isUndef()) //just add
             c[j++] = p = c[i];
         else c.invert(solver.assigns[c[i].var()].getBool()); //modify xor_clause_inverted instead of adding
@@ -212,15 +214,14 @@ const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, co
         return true;
     case 1:
         solver.detachModifiedClause(origVar1, origVar2, origSize, &c);
-        solver.uncheckedEnqueue(c[0] ^ c.xor_clause_inverted());
+        solver.uncheckedEnqueue(Lit(c[0].var(), c.xor_clause_inverted()));
         solver.ok = (solver.propagate() == NULL);
         return true;
     case 2: {
         solver.detachModifiedClause(origVar1, origVar2, origSize, &c);
-        vec<Lit> ps(2);
-        ps[0] = c[0];
-        ps[1] = c[1];
-        addBinaryXorClause(ps, c.xor_clause_inverted(), c.getGroup(), true);
+        c[0] = c[0].unsign();
+        c[1] = c[1].unsign();
+        addBinaryXorClause(c, c.xor_clause_inverted(), c.getGroup(), true);
         return true;
     }
     default:
@@ -233,7 +234,7 @@ const bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1, co
     return false;
 }
 
-const bool VarReplacer::replace_set(vec<Clause*>& cs)
+const bool VarReplacer::replace_set(vec<Clause*>& cs, const bool binClauses)
 {
     Clause **a = cs.getData();
     Clause **r = a;
@@ -252,13 +253,17 @@ const bool VarReplacer::replace_set(vec<Clause*>& cs)
         }
         
         if (changed && handleUpdatedClause(c, origLit1, origLit2)) {
-            if (solver.ok == false) {
-                for(;r != end; r++) free(*r);
+            if (!solver.ok) {
+                for(;r != end; r++) clauseFree(*r);
                 cs.shrink(r-a);
                 return false;
             }
         } else {
-            *a++ = *r;
+            if (!binClauses && c.size() == 2) {
+                solver.becameBinary++;
+                solver.binaryClauses.push(&c);
+            } else
+                *a++ = *r;
         }
     }
     cs.shrink(r-a);
@@ -322,6 +327,9 @@ const vector<Var> VarReplacer::getReplacingVars() const
 
 void VarReplacer::extendModelPossible() const
 {
+    #ifdef VERBOSE_DEBUG
+    std::cout << "extendModelPossible() called" << std::endl;
+    #endif //VERBOSE_DEBUG
     uint i = 0;
     for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {
         if (it->var() == i) continue;
@@ -347,6 +355,11 @@ void VarReplacer::extendModelPossible() const
 
 void VarReplacer::extendModelImpossible(Solver& solver2) const
 {
+
+    #ifdef VERBOSE_DEBUG
+    std::cout << "extendModelImpossible() called" << std::endl;
+    #endif //VERBOSE_DEBUG
+    
     vec<Lit> tmpClause;
     uint i = 0;
     for (vector<Lit>::const_iterator it = table.begin(); it != table.end(); it++, i++) {

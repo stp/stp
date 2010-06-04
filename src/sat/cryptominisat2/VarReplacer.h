@@ -56,6 +56,7 @@ class VarReplacer
         const uint getNumReplacedVars() const;
         const uint getNumLastReplacedVars() const;
         const uint getNewToReplaceVars() const;
+        const uint32_t getNumTrees() const;
         const vector<Var> getReplacingVars() const;
         const vector<Lit>& getReplaceTable() const;
         const vec<Clause*>& getClauses() const;
@@ -66,7 +67,7 @@ class VarReplacer
     private:
         const bool performReplaceInternal();
         
-        const bool replace_set(vec<Clause*>& set);
+        const bool replace_set(vec<Clause*>& cs, const bool binClauses);
         const bool replace_set(vec<XorClause*>& cs);
         const bool handleUpdatedClause(Clause& c, const Lit origLit1, const Lit origLit2);
         const bool handleUpdatedClause(XorClause& c, const Var origVar1, const Var origVar2);
@@ -140,6 +141,11 @@ inline const bool VarReplacer::varHasBeenReplaced(const Var var) const
 inline const bool VarReplacer::replacingVar(const Var var) const
 {
     return (reverseTable.find(var) != reverseTable.end());
+}
+
+inline const uint32_t VarReplacer::getNumTrees() const
+{
+    return reverseTable.size();
 }
 
 }; //NAMESPACE MINISAT

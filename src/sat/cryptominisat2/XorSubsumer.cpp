@@ -17,11 +17,9 @@ Substantially modified by: Mate Soos (2010)
 
 //#define VERBOSE_DEBUG
 #ifdef VERBOSE_DEBUG
+#define VERBOSE_DEBUGSUBSUME0
 #define BIT_MORE_VERBOSITY
 #endif
-
-//#define BIT_MORE_VERBOSITY
-//#define TOUCH_LESS
 
 #ifdef VERBOSE_DEBUG
 using std::cout;
@@ -34,17 +32,18 @@ using namespace MINISAT;
 
 XorSubsumer::XorSubsumer(Solver& s):
     solver(s)
+    , totalTime(0.0)
+    , numElimed(0)
+    , localSubstituteUseful(0)
 {
 };
 
 // Will put NULL in 'cs' if clause removed.
 void XorSubsumer::subsume0(XorClauseSimp& ps)
 {
-    assert(solver.xorclauses.size() ==  0);
-    #ifdef VERBOSE_DEBUG
+    #ifdef VERBOSE_DEBUGSUBSUME0
     cout << "subsume0 orig clause:";
     ps.clause->plainPrint();
-    cout << "pointer:" << &ps << endl;
     #endif
     
     vec<Lit> origClause(ps.clause->size());
@@ -57,19 +56,18 @@ void XorSubsumer::subsume0(XorClauseSimp& ps)
     vec<XorClauseSimp> subs;
     findSubsumed(*ps.clause, subs);
     for (uint32_t i = 0; i < subs.size(); i++){
-        #ifdef VERBOSE_DEBUG
-        cout << "subsume0 removing:";
-        subs[i].clause->plainPrint();
-        #endif
-        
         XorClause* tmp = subs[i].clause;
         findUnMatched(origClause, *tmp, unmatchedPart);
         if (unmatchedPart.size() == 0) {
+            #ifdef VERBOSE_DEBUGSUBSUME0
+            cout << "subsume0 removing:";
+            subs[i].clause->plainPrint();
+            #endif
             clauses_subsumed++;
             assert(tmp->size() == origClause.size());
             if (origClauseInverted == tmp->xor_clause_inverted()) {
                 unlinkClause(subs[i]);
-                free(tmp);
+                clauseFree(tmp);
             } else {
                 solver.ok = false;
                 return;
@@ -77,21 +75,25 @@ void XorSubsumer::subsume0(XorClauseSimp& ps)
         } else {
             assert(unmatchedPart.size() > 0);
             clauses_cut++;
-            //XorClause *c = solver.addXorClauseInt(unmatchedPart, tmp->xor_clause_inverted() ^ origClauseInverted, tmp->getGroup());
-            if (!solver.ok) return;
-            //if (c != NULL) {
-                //linkInClause(*c);
+            #ifdef VERBOSE_DEBUG
+            std::cout << "Cutting xor-clause:";
+            subs[i].clause->plainPrint();
+            #endif //VERBOSE_DEBUG
+            XorClause *c = solver.addXorClauseInt(unmatchedPart, tmp->xor_clause_inverted() ^ !origClauseInverted, tmp->getGroup());
+            if (c != NULL) {
+                linkInClause(*c);
                 needUnlinkPS = true;
-            //}
+            }
+            if (!solver.ok) return;
         }
         unmatchedPart.clear();
     }
     
-    /*if (needUnlinkPS) {
+    if (needUnlinkPS) {
         XorClause* tmp = ps.clause;
         unlinkClause(ps);
-        free(tmp);
-    }*/
+        clauseFree(tmp);
+    }
 }
 
 void XorSubsumer::findUnMatched(vec<Lit>& A, XorClause& B, vec<Lit>& unmatchedPart)
@@ -108,13 +110,16 @@ void XorSubsumer::findUnMatched(vec<Lit>& A, XorClause& B, vec<Lit>& unmatchedPa
     }
 }
 
-void XorSubsumer::unlinkClause(XorClauseSimp c)
+void XorSubsumer::unlinkClause(XorClauseSimp c, const Var elim)
 {
     XorClause& cl = *c.clause;
     
     for (uint32_t i = 0; i < cl.size(); i++) {
         maybeRemove(occur[cl[i].var()], &cl);
     }
+    
+    if (elim != var_Undef)
+        elimedOutVar[elim].push_back(c.clause);
     
     solver.detachClause(cl);
     
@@ -161,6 +166,8 @@ void XorSubsumer::linkInAlreadyClause(XorClauseSimp& c)
 
 void XorSubsumer::addFromSolver(vec<XorClause*>& cs)
 {
+    clauseID = 0;
+    clauses.clear();
     XorClause **i = cs.getData();
     for (XorClause **end = i + cs.size(); i !=  end; i++) {
         if (i+1 != end)
@@ -171,10 +178,12 @@ void XorSubsumer::addFromSolver(vec<XorClause*>& cs)
             (*i)->calcXorAbstraction();
     }
     cs.clear();
+    cs.push(NULL); //HACK --to force xor-propagation
 }
 
 void XorSubsumer::addBackToSolver()
 {
+    solver.xorclauses.pop(); //HACK --to force xor-propagation
     for (uint32_t i = 0; i < clauses.size(); i++) {
         if (clauses[i].clause != NULL) {
             solver.xorclauses.push(clauses[i].clause);
@@ -189,6 +198,236 @@ void XorSubsumer::addBackToSolver()
     clauseID = 0;
 }
 
+void XorSubsumer::fillCannotEliminate()
+{
+    std::fill(cannot_eliminate.getData(), cannot_eliminate.getDataEnd(), false);
+    for (uint32_t i = 0; i < solver.clauses.size(); i++)
+        addToCannotEliminate(solver.clauses[i]);
+
+    for (uint32_t i = 0; i < solver.binaryClauses.size(); i++)
+        if (!(*solver.binaryClauses[i]).learnt()) addToCannotEliminate(solver.binaryClauses[i]);
+    
+    const vec<Clause*>& tmp = solver.varReplacer->getClauses();
+    for (uint32_t i = 0; i < tmp.size(); i++)
+        addToCannotEliminate(tmp[i]);
+    
+    #ifdef VERBOSE_DEBUG
+    uint32_t tmpNum = 0;
+    for (uint32_t i = 0; i < cannot_eliminate.size(); i++)
+        if (cannot_eliminate[i])
+            tmpNum++;
+        std::cout << "Cannot eliminate num:" << tmpNum << std::endl;
+    #endif
+}
+
+void XorSubsumer::extendModel(Solver& solver2)
+{
+    assert(checkElimedUnassigned());
+    vec<Lit> tmp;
+    typedef map<Var, vector<XorClause*> > elimType;
+    for (elimType::iterator it = elimedOutVar.begin(), end = elimedOutVar.end(); it != end; it++) {
+        #ifdef VERBOSE_DEBUG
+        Var var = it->first;
+        std::cout << "Reinserting elimed var: " << var+1 << std::endl;
+        #endif
+        
+        for (vector<XorClause*>::iterator it2 = it->second.begin(), end2 = it->second.end(); it2 != end2; it2++) {
+            XorClause& c = **it2;
+            #ifdef VERBOSE_DEBUG
+            std::cout << "Reinserting Clause: ";
+            c.plainPrint();
+            #endif
+            tmp.clear();
+            tmp.growTo(c.size());
+            std::copy(c.getData(), c.getDataEnd(), tmp.getData());
+            bool inverted = c.xor_clause_inverted();
+            solver2.addXorClause(tmp, inverted);
+            assert(solver2.ok);
+        }
+    }
+}
+
+const bool XorSubsumer::localSubstitute()
+{
+    vec<Lit> tmp;
+    for (Var var = 0; var < occur.size(); var++) {
+        vec<XorClauseSimp>& occ = occur[var];
+
+        if (occ.size() <= 1) continue;
+        for (uint32_t i = 0; i < occ.size(); i++) {
+            XorClause& c1 = *occ[i].clause;
+            for (uint32_t i2 = i+1; i2 < occ.size(); i2++) {
+                XorClause& c2 = *occ[i2].clause;
+                tmp.clear();
+                tmp.growTo(c1.size() + c2.size());
+                std::copy(c1.getData(), c1.getDataEnd(), tmp.getData());
+                std::copy(c2.getData(), c2.getDataEnd(), tmp.getData() + c1.size());
+                clearDouble(tmp);
+                if (tmp.size() <= 2) {
+                    #ifdef VERBOSE_DEBUG
+                    std::cout << "Local substiuting. Clause1:"; c1.plainPrint();
+                    std::cout << "Clause 2:"; c2.plainPrint();
+                    #endif //VERBOSE_DEBUG
+                    localSubstituteUseful++;
+                    uint32_t lastSize = solver.varReplacer->getClauses().size();
+                    solver.addXorClauseInt(tmp, c1.xor_clause_inverted() ^ !c2.xor_clause_inverted(), c1.getGroup());
+                    for (uint32_t i = lastSize; i  < solver.varReplacer->getClauses().size(); i++)
+                        addToCannotEliminate(solver.varReplacer->getClauses()[i]);
+                    if (!solver.ok) {
+                        #ifdef VERBOSE_DEBUG
+                        std::cout << "solver.ok is false after local substitution" << std::endl;
+                        #endif //VERBOSE_DEBUG
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    
+    return true;
+}
+
+void XorSubsumer::clearDouble(vec<Lit>& ps) const
+{
+    std::sort(ps.getData(), ps.getDataEnd());
+    Lit p;
+    uint32_t i, j;
+    for (i = j = 0, p = lit_Undef; i != ps.size(); i++) {
+        if (ps[i].var() == p.var()) {
+            //added, but easily removed
+            j--;
+            p = lit_Undef;
+        } else
+            ps[j++] = p = ps[i];
+    }
+    ps.shrink(i - j);
+}
+
+void XorSubsumer::removeWrong(vec<Clause*>& cs)
+{
+    Clause **i = cs.getData();
+    Clause **j = i;
+    for (Clause **end =  i + cs.size(); i != end; i++) {
+        Clause& c = **i;
+        if (!c.learnt())  {
+            *j++ = *i;
+            continue;
+        }
+        bool remove = false;
+        for (Lit *l = c.getData(), *end2 = l+c.size(); l != end2; l++) {
+            if (var_elimed[l->var()]) {
+                remove = true;
+                solver.detachClause(c);
+                clauseFree(&c);
+                break;
+            }
+        }
+        if (!remove)
+            *j++ = *i;
+    }
+    cs.shrink(i-j);
+}
+
+
+const bool XorSubsumer::removeDependent()
+{
+    for (Var var = 0; var < occur.size(); var++) {
+        if (cannot_eliminate[var] || !solver.decision_var[var] || solver.assigns[var] != l_Undef) continue;
+        vec<XorClauseSimp>& occ = occur[var];
+
+        if (occ.size() == 1) {
+            #ifdef VERBOSE_DEBUG
+            std::cout << "Eliminating dependent var " << var + 1 << std::endl;
+            std::cout << "-> Removing dependent clause "; occ[0].clause->plainPrint();
+            #endif //VERBOSE_DEBUG
+            unlinkClause(occ[0], var);
+            solver.setDecisionVar(var, false);
+            var_elimed[var] = true;
+            numElimed++;
+        } else if (occ.size() == 2) {
+            vec<Lit> lits;
+            XorClause& c1 = *(occ[0].clause);
+            lits.growTo(c1.size());
+            std::copy(c1.getData(), c1.getDataEnd(), lits.getData());
+            bool inverted = c1.xor_clause_inverted();
+            
+            XorClause& c2 = *(occ[1].clause);
+            lits.growTo(lits.size() + c2.size());
+            std::copy(c2.getData(), c2.getDataEnd(), lits.getData() + c1.size());
+            inverted ^= !c2.xor_clause_inverted();
+            uint32_t group = c2.getGroup();
+
+            #ifdef VERBOSE_DEBUG
+            std::cout << "Eliminating var " << var + 1 << " present in 2 xor-clauses" << std::endl;
+            std::cout << "-> Removing xor clause "; occ[0].clause->plainPrint();
+            std::cout << "-> Removing xor clause "; occ[1].clause->plainPrint();
+            #endif //VERBOSE_DEBUG
+            XorClauseSimp toUnlink0 = occ[0];
+            XorClauseSimp toUnlink1 = occ[1];
+            unlinkClause(toUnlink0);
+            clauseFree(toUnlink0.clause);
+            unlinkClause(toUnlink1, var);
+            solver.setDecisionVar(var, false);
+            var_elimed[var] = true;
+            numElimed++;
+            
+            uint32_t lastSize =  solver.varReplacer->getClauses().size();
+            XorClause* c = solver.addXorClauseInt(lits, inverted, group);
+            #ifdef VERBOSE_DEBUG
+            if (c != NULL) {
+                std::cout << "-> Added combined xor clause:"; c->plainPrint();
+            } else
+                std::cout << "-> Combined xor clause is NULL" << std::endl;
+            #endif
+            if (c != NULL) linkInClause(*c);
+            for (uint32_t i = lastSize; i  < solver.varReplacer->getClauses().size(); i++)
+                addToCannotEliminate(solver.varReplacer->getClauses()[i]);
+            if (!solver.ok) {
+                #ifdef VERBOSE_DEBUG
+                std::cout << "solver.ok is false after var-elim through xor" << std::endl;
+                #endif //VERBOSE_DEBUG
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+inline void XorSubsumer::addToCannotEliminate(Clause* it)
+{
+    const Clause& c = *it;
+    for (uint32_t i2 = 0; i2 < c.size(); i2++)
+        cannot_eliminate[c[i2].var()] = true;
+}
+
+const bool XorSubsumer::unEliminate(const Var var)
+{
+    assert(var_elimed[var]);
+    typedef map<Var, vector<XorClause*> > elimType;
+    elimType::iterator it = elimedOutVar.find(var);
+
+    //MUST set to decision, since it would never have been eliminated
+    //had it not been decision var
+    solver.setDecisionVar(var, true);
+    var_elimed[var] = false;
+    numElimed--;
+    assert(it != elimedOutVar.end());
+    
+    FILE* backup_libraryCNFfile = solver.libraryCNFFile;
+    solver.libraryCNFFile = NULL;
+    for (vector<XorClause*>::iterator it2 = it->second.begin(), end2 = it->second.end(); it2 != end2; it2++) {
+        XorClause& c = **it2;
+        solver.addXorClause(c, c.xor_clause_inverted());
+        clauseFree(&c);
+    }
+    solver.libraryCNFFile = backup_libraryCNFfile;
+    elimedOutVar.erase(it);
+    
+    return solver.ok;
+}
+
+
 const bool XorSubsumer::simplifyBySubsumption(const bool doFullSubsume)
 {
     double myTime = cpuTime();
@@ -196,19 +435,21 @@ const bool XorSubsumer::simplifyBySubsumption(const bool doFullSubsume)
     clauses_subsumed = 0;
     clauses_cut = 0;
     clauseID = 0;
-    
-    for (Var var = 0; var < solver.nVars(); var++) {
-        //occur[var].clear(true);
-        newVar();
-    }
-    
+    uint32_t lastNumElimed = numElimed;
+    localSubstituteUseful = 0;
     while (solver.performReplace && solver.varReplacer->needsReplace()) {
         if (!solver.varReplacer->performReplace())
             return false;
     }
     
+    for (Var var = 0; var < solver.nVars(); var++) {
+        occur[var].clear();
+    }
+    solver.findAllAttach();
+    
     solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
     if (!solver.ok) return false;
+    solver.testAllClauseAttach();
     
     clauses.clear();
     clauses.reserve(solver.xorclauses.size());
@@ -231,20 +472,37 @@ const bool XorSubsumer::simplifyBySubsumption(const bool doFullSubsume)
         for (uint32_t i = 0; i < clauses.size(); i++) {
             if (clauses[i].clause != NULL) {
                 subsume0(clauses[i]);
-                if (!solver.ok) return false;
+                if (!solver.ok) {
+                    addBackToSolver();
+                    return false;
+                }
             }
         }
         
-        if (solver.qhead != solver.trail.size()) propagated = true;
-        solver.ok = solver.propagate() == NULL;
+        propagated =  (solver.qhead != solver.trail.size());
+        solver.ok = (solver.propagate() == NULL);
         if (!solver.ok) {
             std::cout << "c (contradiction during subsumption)" << std::endl;
             return false;
         }
         solver.clauseCleaner->cleanXorClausesBewareNULL(clauses, ClauseCleaner::xorSimpClauses, *this);
         if (!solver.ok) return false;
-        
-        if (solver.performReplace && solver.varReplacer->needsReplace()) {
+        testAllClauseAttach();
+
+        fillCannotEliminate();
+        if (solver.conglomerateXors && !removeDependent()) {
+            addBackToSolver();
+            return false;
+        }
+        testAllClauseAttach();
+
+        if (solver.heuleProcess && !localSubstitute()) {
+            addBackToSolver();
+            return false;
+        }
+        testAllClauseAttach();
+
+        /*if (solver.performReplace && solver.varReplacer->needsReplace()) {
             addBackToSolver();
             while (solver.performReplace && solver.varReplacer->needsReplace()) {
                 replaced = true;
@@ -252,28 +510,55 @@ const bool XorSubsumer::simplifyBySubsumption(const bool doFullSubsume)
                     return false;
             }
             addFromSolver(solver.xorclauses);
-        }
+        }*/
     }
-    
-    if (solver.trail.size() - origTrailSize > 0)
-        solver.order_heap.filter(Solver::VarFilter(solver));
-    
+
+    solver.order_heap.filter(Solver::VarFilter(solver));
+
+    removeWrong(solver.learnts);
+    removeWrong(solver.binaryClauses);
     addBackToSolver();
     
     if (solver.verbosity >= 1) {
-        std::cout << "c | xorclauses-subsumed: " << std::setw(9) << clauses_subsumed
-        << " xorclauses-cut: " << std::setw(9) << clauses_cut
-        << " vars fixed: " << std::setw(3) <<solver.trail.size() - origTrailSize
-        << " time: " << std::setw(5) << std::setprecision(2) << (cpuTime() - myTime)
-        << "  |" << std::endl;
+        std::cout << "c |  x-sub: " << std::setw(5) << clauses_subsumed
+        << " x-cut: " << std::setw(6) << clauses_cut
+        << " vfix: " << std::setw(6) <<solver.trail.size() - origTrailSize
+        << " v-elim: " <<std::setw(6) << numElimed - lastNumElimed
+        << " locsubst:" << std::setw(6) << localSubstituteUseful
+        << " time: " << std::setw(6) << std::setprecision(2) << (cpuTime() - myTime)
+        << std::setw(3) << " |" << std::endl;
     }
+    totalTime += cpuTime() - myTime;
     
+    solver.testAllClauseAttach();
     return true;
 }
 
+#ifdef DEBUG_ATTACH
+void XorSubsumer::testAllClauseAttach() const
+{
+    for (const XorClauseSimp *it = clauses.getData(), *end = clauses.getDataEnd(); it != end; it++) {
+        if (it->clause == NULL) continue;
+        const XorClause& c = *it->clause;
+        assert(find(solver.xorwatches[c[0].var()], &c));
+        assert(find(solver.xorwatches[c[1].var()], &c));
+        if (solver.assigns[c[0].var()]!=l_Undef || solver.assigns[c[1].var()]!=l_Undef) {
+            for (uint i = 0; i < c.size();i++) {
+                assert(solver.assigns[c[i].var()] != l_Undef);
+            }
+        }
+    }
+}
+#else
+inline void XorSubsumer::testAllClauseAttach() const
+{
+    return;
+}
+#endif //DEBUG_ATTACH
+
 void XorSubsumer::findSubsumed(XorClause& ps, vec<XorClauseSimp>& out_subsumed)
 {
-    #ifdef VERBOSE_DEBUG
+    #ifdef VERBOSE_DEBUGSUBSUME0
     cout << "findSubsumed: ";
     for (uint32_t i = 0; i < ps.size(); i++) {
         if (ps[i].sign()) printf("-");
@@ -295,12 +580,24 @@ void XorSubsumer::findSubsumed(XorClause& ps, vec<XorClauseSimp>& out_subsumed)
         
         if (it->clause != &ps && subsetAbst(ps.getAbst(), it->clause->getAbst()) && ps.size() <= it->clause->size() && subset(ps, *it->clause)) {
             out_subsumed.push(*it);
-            #ifdef VERBOSE_DEBUG
+            #ifdef VERBOSE_DEBUGSUBSUME0
             cout << "subsumed: ";
             it->clause->plainPrint();
             #endif
         }
     }
+}
+
+const bool XorSubsumer::checkElimedUnassigned() const
+{
+    for (uint32_t i = 0; i < var_elimed.size(); i++) {
+        if (var_elimed[i]) {
+            assert(solver.assigns[i] == l_Undef);
+            if (solver.assigns[i] != l_Undef) return false;
+        }
+    }
+
+    return true;
 }
 
 }; //NAMESPACE MINISAT

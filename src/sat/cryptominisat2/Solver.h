@@ -56,10 +56,13 @@ class FindUndef;
 class ClauseCleaner;
 class FailedVarSearcher;
 class Subsumer;
+class XorSubsumer;
 class PartHandler;
 class RestartTypeChooser;
+class StateSaver;
 
 #ifdef VERBOSE_DEBUG
+#define DEBUG_UNCHECKEDENQUEUE_LEVEL0
 using std::cout;
 using std::endl;
 #endif
@@ -152,6 +155,12 @@ public:
     bool      doVarElim;            // Perform variable elimination
     bool      doSubsume1;           // Perform clause contraction through resolution
     bool      failedVarSearch;      // Should search for failed vars and doulbly propagated vars
+    bool      readdOldLearnts;      // Should re-add old learnts for failed variable searching
+    bool      addExtraBins;         // Should add extra binaries in failed literal probing
+    bool      removeUselessBins;    // Should try to remove useless binary clauses
+    bool      regularRemoveUselessBins; // Should try to remove useless binary clauses regularly
+    bool      subsumeWithNonExistBinaries;
+    bool      regularSubsumeWithNonExistBinaries;
     bool      libraryUsage;         // Set true if not used as a library
     friend class FindUndef;
     bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
@@ -159,7 +168,7 @@ public:
     GaussianConfig gaussconfig;
     
 
-    enum { polarity_true = 0, polarity_false = 1, polarity_rnd = 3, polarity_auto = 4, polarity_manual = 5};
+    enum { polarity_true = 0, polarity_false = 1, polarity_rnd = 3, polarity_auto = 4};
 
     // Statistics: (read-only member variable)
     //
@@ -179,13 +188,34 @@ public:
     void dumpSortedLearnts(const char* file, const uint32_t maxSize); // Dumps all learnt clauses (including unitary ones) into the file
     void needLibraryCNFFile(const char* fileName); //creates file in current directory with the filename indicated, and puts all calls from the library into the file.
 
+    #ifdef USE_GAUSS
+    const uint32_t get_sum_gauss_called() const;
+    const uint32_t get_sum_gauss_confl() const;
+    const uint32_t get_sum_gauss_prop() const;
+    const uint32_t get_sum_gauss_unit_truths() const;
+    #endif //USE_GAUSS
+
+    //Printing statistics
+    const uint32_t getNumElimSubsume() const; // Get variable elimination stats from Subsumer
+    const uint32_t getNumElimXorSubsume() const; // Get variable elimination stats from XorSubsumer
+    const uint32_t getNumXorTrees() const; // Get the number of trees built from 2-long XOR-s. This is effectively the number of variables that replace other variables
+    const uint32_t getNumXorTreesCrownSize() const; // Get the number of variables being replaced by other variables
+    const double getTotalTimeSubsumer() const;
+    const double getTotalTimeXorSubsumer() const;
+    
 protected:
     #ifdef USE_GAUSS
-    void print_gauss_sum_stats() const;
+    void print_gauss_sum_stats();
     void clearGaussMatrixes();
     vector<Gaussian*> gauss_matrixes;
-    #endif //USE_GAUSS
+
+    //stats
+    uint32_t sum_gauss_called;
+    uint32_t sum_gauss_confl;
+    uint32_t sum_gauss_prop;
+    uint32_t sum_gauss_unit_truths;
     friend class Gaussian;
+    #endif //USE_GAUSS
     
     template <class T>
     Clause* addClauseInt(T& ps, uint group);
@@ -196,11 +226,11 @@ protected:
     template<class T>
     void    removeWatchedCl(vec<T> &ws, const Clause *c);
     template<class T>
-    bool    findWatchedCl(vec<T>& ws, const Clause *c);
+    bool    findWatchedCl(const vec<T>& ws, const Clause *c) const;
     template<class T>
     void    removeWatchedBinCl(vec<T> &ws, const Clause *c);
     template<class T>
-    bool    findWatchedBinCl(vec<T>& ws, const Clause *c);
+    bool    findWatchedBinCl(const vec<T>& ws, const Clause *c) const;
     
     // Helper structures:
     //
@@ -228,6 +258,8 @@ protected:
     vec<Clause*>        binaryClauses;    // Binary clauses are regularly moved here
     vec<XorClause*>     xorclauses;       // List of problem xor-clauses. Will be freed
     vec<Clause*>        learnts;          // List of learnt clauses.
+    vec<Clause*>        removedLearnts;   // Clauses that have been learnt, then removed
+    vec<XorClause*>     freeLater;        // xor clauses that need to be freed later due to Gauss
     vec<uint32_t>       activity;         // A heuristic measurement of the activity of a variable.
     uint32_t            var_inc;          // Amount to bump next variable with.
     double              cla_inc;          // Amount to bump learnt clause oldActivity with
@@ -236,15 +268,14 @@ protected:
     vec<vec<WatchedBin> >  binwatches;
     vec<lbool>          assigns;          // The current assignments
     vector<bool>        polarity;         // The preferred polarity of each variable.
+    #ifdef USE_OLD_POLARITIES
+    vector<bool>        oldPolarity;      // The polarity before the last setting. Good for unsetting polairties that have been changed since the last conflict
+    #endif //USE_OLD_POLARITIES
     vector<bool>        decision_var;     // Declares if a variable is eligible for selection in the decision heuristic.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
     vec<uint32_t>       trail_lim;        // Separator indices for different decision levels in 'trail'.
     vec<ClausePtr>      reason;           // 'reason[var]' is the clause that implied the variables current value, or 'NULL' if none.
     vec<int32_t>        level;            // 'level[var]' contains the level at which the assignment was made.
-    vec<Var>            permDiff;         // LS: permDiff[var] contains the current conflict number... Used to count the number of different decision level variables in learnt clause
-    #ifdef UPDATEVARACTIVITY
-    vec<Lit>            lastDecisionLevel;
-    #endif
     uint64_t            curRestart;
     uint32_t            nbclausesbeforereduce;
     uint32_t            nbCompensateSubsumer; // Number of learnt clauses that subsumed normal clauses last time subs. was executed
@@ -258,7 +289,9 @@ protected:
     bqueue<uint>        nbDecisionLevelHistory; // Set of last decision level in conflict clauses
     double              totalSumOfDecisionLevel;
     uint64_t            conflictsAtLastSolve;
+    #ifdef RANDOM_LOOKAROUND_SEARCHSPACE
     bqueue<uint>        avgBranchDepth; // Avg branch depth
+    #endif //RANDOM_LOOKAROUND_SEARCHSPACE
     MTRand              mtrand;           // random number generaton
     RestartType         restartType;      // Used internally to determine which restart strategy to choose
     RestartType         lastSelectedRestartType; //the last selected restart type
@@ -276,7 +309,15 @@ protected:
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
-    unsigned long int   MYFLAG;
+
+    
+    uint64_t MYFLAG;
+    template<class T>
+    const uint32_t calcNBLevels(const T& ps);
+    vec<uint64_t> permDiff; // LS: permDiff[var] contains the current conflict number... Used to count the number of different decision level variables in learnt clause
+    #ifdef UPDATEVARACTIVITY
+    vec<Var> lastDecisionLevel;
+    #endif
 
     //Logging
     uint                learnt_clause_group; //the group number of learnt clauses. Incremented at each added learnt clause
@@ -284,17 +325,25 @@ protected:
 
     // Main internal methods:
     //
-    lbool    simplify    ();                                                           // Removes already satisfied clauses.
+    const bool simplify    ();                                                           // Removes already satisfied clauses.
     //int      nbPropagated     (int level);
     void     insertVarOrder   (Var x);                                                 // Insert a variable in the decision order priority queue.
     Lit      pickBranchLit    ();                                                      // Return the next decision variable.
     void     newDecisionLevel ();                                                      // Begins a new decision level.
     void     uncheckedEnqueue (Lit p, ClausePtr from = (Clause*)NULL);                 // Enqueue a literal. Assumes value of literal is undefined.
+    void     uncheckedEnqueueLight (const Lit p);
     bool     enqueue          (Lit p, Clause* from = NULL);                            // Test if fact 'p' contradicts current state, enqueue otherwise.
     Clause*  propagate        (const bool update = true);                         // Perform unit propagation. Returns possibly conflicting clause.
+    Clause*  propagateLight();
+    Clause*  propagateBin();
+    Clause*  propagateBinNoLearnts();
+    template<bool dontCareLearnt>
+    Clause*  propagateBinExcept(const Lit& exceptLit);
+    template<bool dontCareLearnt>
+    Clause*  propagateBinOneLevel();
     Clause*  propagate_xors   (const Lit& p);
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
-    Clause*  analyze          (Clause* confl, vec<Lit>& out_learnt, int& out_btlevel, int &nblevels, const bool update); // (bt = backtrack)
+    Clause*  analyze          (Clause* confl, vec<Lit>& out_learnt, int& out_btlevel, uint32_t &nblevels, const bool update); // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts, int nof_conflicts_fullrestart, const bool update = true);      // Search for a given number of conflicts.
@@ -321,6 +370,10 @@ protected:
     void     removeClause(T& c);                       // Detach and free a clause.
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     void     reverse_binary_clause(Clause& c) const;   // Binary clauses --- the first Lit has to be true
+    void     testAllClauseAttach() const;
+    void     findAllAttach() const;
+    const bool findClause(XorClause* c) const;
+    const bool findClause(Clause* c) const;
 
     // Misc:
     //
@@ -339,18 +392,21 @@ protected:
     friend class Subsumer;
     friend class XorSubsumer;
     friend class PartHandler;
+    friend class StateSaver;
     Conglomerate* conglomerate;
     VarReplacer* varReplacer;
     ClauseCleaner* clauseCleaner;
     FailedVarSearcher* failedVarSearcher;
     PartHandler* partHandler;
     Subsumer* subsumer;
+    XorSubsumer* xorSubsumer;
     RestartTypeChooser* restartTypeChooser;
-    void chooseRestartType(const uint& lastFullRestart);
+    MatrixFinder* matrixFinder;
+    const bool chooseRestartType(const uint& lastFullRestart);
     void setDefaultRestartType();
     const bool checkFullRestart(int& nof_conflicts, int& nof_conflicts_fullrestart, uint& lastFullRestart);
     void performStepsBeforeSolve();
-    const lbool simplifyProblem(const uint32_t numConfls, const uint64_t numProps);
+    const lbool simplifyProblem(const uint32_t numConfls);
     bool simplifying;
 
     // Debug & etc:
@@ -361,15 +417,16 @@ protected:
     void     checkSolution();
     void     checkLiteralCount();
     void     printStatHeader  () const;
-    void     printRestartStat () const;
-    void     printEndSearchStat() const;
+    void     printRestartStat ();
+    void     printEndSearchStat();
     double   progressEstimate () const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
+    const bool noLearntBinaries() const;
     
     // Polarity chooser
-    vector<bool> defaultPolarities; //The default polarity to set the var polarity when doing a full restart
-    const lbool  calculateDefaultPolarities(); //Calculates the default polarity for each var, and fills defaultPolarities[] with it
-    bool         defaultPolarity(); //if polarity_mode is not polarity_auto, this returns the default polarity of the variable
-    void         setDefaultPolarities(); //sets the polarity[] to that indicated by defaultPolarities[]
+    void calculateDefaultPolarities(); //Calculates the default polarity for each var, and fills defaultPolarities[] with it
+    bool defaultPolarity(); //if polarity_mode is not polarity_auto, this returns the default polarity of the variable
+    void tallyVotes(const vec<Clause*>& cs, vector<double>& votes) const;
+    void tallyVotes(const vec<XorClause*>& cs, vector<double>& votes) const;
 };
 
 
@@ -425,7 +482,7 @@ inline void Solver::claBumpActivity (Clause& c)
 
 inline void Solver::claDecayActivity()
 {
-    cla_inc *= clause_decay;
+    //cla_inc *= clause_decay;
 }
 
 inline bool     Solver::enqueue         (Lit p, Clause* from)
@@ -534,6 +591,28 @@ inline void     Solver::setVariableName(Var var, char* name)
 {}
 #endif
 
+#ifdef USE_GAUSS
+inline const uint32_t Solver::get_sum_gauss_unit_truths() const
+{
+    return sum_gauss_unit_truths;
+}
+
+inline const uint32_t Solver::get_sum_gauss_called() const
+{
+    return sum_gauss_called;
+}
+
+inline const uint32_t Solver::get_sum_gauss_confl() const
+{
+    return sum_gauss_confl;
+}
+
+inline const uint32_t Solver::get_sum_gauss_prop() const
+{
+    return sum_gauss_prop;
+}
+#endif
+
 inline const uint Solver::get_unitary_learnts_num() const
 {
     if (decisionLevel() > 0)
@@ -558,14 +637,14 @@ inline void Solver::removeWatchedBinCl(vec<T> &ws, const Clause *c) {
     ws.pop();
 }
 template<class T>
-inline bool Solver::findWatchedCl(vec<T>& ws, const Clause *c)
+inline bool Solver::findWatchedCl(const vec<T>& ws, const Clause *c) const
 {
     uint32_t j = 0;
     for (; j < ws.size() && ws[j].clause != c; j++);
     return j < ws.size();
 }
 template<class T>
-inline bool Solver::findWatchedBinCl(vec<T>& ws, const Clause *c)
+inline bool Solver::findWatchedBinCl(const vec<T>& ws, const Clause *c) const
 {
     uint32_t j = 0;
     for (; j < ws.size() && ws[j].clause != c; j++);
@@ -574,8 +653,7 @@ inline bool Solver::findWatchedBinCl(vec<T>& ws, const Clause *c)
 inline void Solver::reverse_binary_clause(Clause& c) const {
     if (c.size() == 2 && value(c[0]) == l_False) {
         assert(value(c[1]) == l_True);
-        Lit tmp = c[0];
-        c[0] =  c[1], c[1] = tmp;
+        std::swap(c[0], c[1]);
     }
 }
 /*inline void Solver::calculate_xor_clause(Clause& c2) const {
@@ -602,7 +680,6 @@ inline void Solver::removeClause(T& c)
     detachClause(c);
     clauseFree(&c);
 }
-
 
 //=================================================================================================
 // Debug + etc:
@@ -635,6 +712,23 @@ static inline const char* showBool(bool b)
 static inline void check(bool expr)
 {
     assert(expr);
+}
+
+#ifndef DEBUG_ATTACH
+inline void Solver::testAllClauseAttach() const
+{
+    return;
+}
+inline void Solver::findAllAttach() const
+{
+    return;
+}
+#endif //DEBUG_ATTACH
+
+inline void Solver::uncheckedEnqueueLight(const Lit p)
+{
+    assigns [p.var()] = boolToLBool(!p.sign());//lbool(!sign(p));  // <<== abstract but not uttermost effecient
+    trail.push(p);
 }
 
 //=================================================================================================
