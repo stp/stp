@@ -617,19 +617,25 @@ namespace BEEV
     else
       c = input.GetChildren();
     ASTVec eveneqns;
-    ASTNode solved = ASTFalse;
+    bool any_solved = false;
     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
         //_bm->ASTNodeStats("Printing before calling simplifyformula
         //inside the solver:", *it);
-        ASTNode aaa = 
-          (ASTTrue == solved 
-           && EQ == it->GetKind()) ? 
-          _simp->SimplifyFormula(*it, false) : 
-          *it;              
+
+    	// Calling simplifyFormula makes the required substitutions. For instance, if
+    	// first was : v = x,
+    	// then if the next formula is: x = v
+    	// calling simplify on the second formula will convert it into "true", avoiding a cycle.
+    	ASTNode aaa =
+          (any_solved
+           && EQ == it->GetKind()) ?
+          _simp->SimplifyFormula(*it, false) :
+          *it;
         //_bm->ASTNodeStats("Printing after calling simplifyformula
         //inside the solver:", aaa);
         aaa = BVSolve_Odd(aaa);
+
         //_bm->ASTNodeStats("Printing after oddsolver:", aaa);
         bool even = false;
         aaa = CheckEvenEqn(aaa, even);
@@ -644,7 +650,8 @@ namespace BEEV
                 o.push_back(aaa);
               }
           }
-        solved = aaa;
+        if (ASTTrue == aaa)
+        	any_solved=true;
       }
 
     ASTNode evens;
