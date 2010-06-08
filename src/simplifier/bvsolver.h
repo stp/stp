@@ -105,7 +105,10 @@ namespace BEEV
     //Refer STP's CAV 2007 (or Clark Barrett's 1998 paper on
     //bit-vector arithmetic published in DAC 1998) paper for precise
     //understanding of the algorithm
-    ASTNode SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, 
+    void SplitEven_into_Oddnum_PowerOf2(const ASTNode& in,
+                                           unsigned int& number_shifts);
+
+    ASTNode SplitEven_into_Oddnum_PowerOf2_OLD(const ASTNode& in,
                                            unsigned int& number_shifts);
 
     //Once a formula has been solved, then update the alreadysolvedmap

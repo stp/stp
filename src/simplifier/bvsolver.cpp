@@ -57,11 +57,31 @@ namespace BEEV
     FormulasAlreadySolvedMap[key] = value;
   } //end of UpdateAlreadySolvedMap()
 
+  //accepts an even number "in", and returns the location of
+  // the lowest bit that is turned on in that number.
+  void BVSolver::SplitEven_into_Oddnum_PowerOf2(const ASTNode& in,
+  		unsigned int& number_shifts) {
+  	assert (BVCONST == in.GetKind() && !_simp->BVConstIsOdd(in));
+
+  	// location of the least significant bit turned on.
+  	for (number_shifts = 0; number_shifts < in.GetValueWidth()
+  			&& !CONSTANTBV::BitVector_bit_test(in.GetBVConst(), number_shifts); number_shifts++) {
+  	};
+  	assert(number_shifts >0); // shouldn't be odd.
+
+#ifndef NDEBUG
+    // check that old == new.
+  	unsigned t_number_shifts=0;
+  	SplitEven_into_Oddnum_PowerOf2_OLD(in,t_number_shifts);
+  	assert(number_shifts == t_number_shifts);
+#endif
+  }
+
   //FIXME This is doing way more arithmetic than it needs to.
   //accepts an even number "in", and splits it into an odd number and
   //a power of 2. i.e " in = b.(2^k) ". returns the odd number, and
   //the power of two by reference
-  ASTNode BVSolver::SplitEven_into_Oddnum_PowerOf2(const ASTNode& in, 
+  ASTNode BVSolver::SplitEven_into_Oddnum_PowerOf2_OLD(const ASTNode& in,
                                                    unsigned int& number_shifts)
   {
     if (BVCONST != in.GetKind() || _simp->BVConstIsOdd(in))
@@ -767,7 +787,7 @@ namespace BEEV
           }
 
         ASTVec lhs_c = lhs.GetChildren();
-        ASTNode odd;
+        //ASTNode odd;
         for (ASTVec::iterator 
                it = lhs_c.begin(), itend = lhs_c.end(); 
              it != itend; it++)
@@ -789,7 +809,7 @@ namespace BEEV
             //we are gauranteed that if control is here then the monomial is
             //of the form 'a*x' or 'a', where 'a' is even
             ASTNode coeff = (BVCONST == itk) ? aaa : aaa[0];
-            odd = SplitEven_into_Oddnum_PowerOf2(coeff, power_of_2);
+            SplitEven_into_Oddnum_PowerOf2(coeff, power_of_2);
             if (power_of_2 < power_of_2_lowest)
               {
                 power_of_2_lowest = power_of_2;
