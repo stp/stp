@@ -926,14 +926,30 @@ namespace BEEV
         && WRITE == term[0].GetKind() 
         && !_bm->GetRemoveWritesFlag())
       {
-        return false;
+    	/*
+		Trevor: This used to return false. But fails on the below input.
+		I don't know why the case of read-over-write was handled specially.
+
+
+		Printing: after simplification:
+		30:(EQ
+		  12:b3
+		  26:(READ
+			22:(WRITE
+			  14:a3
+			  18:0b0000000000
+			  18:0b0000000000)
+			12:b3))
+    	 */
+
+    	//return false;
       }
 
     if (READ == term.GetKind() 
         && WRITE == term[0].GetKind() 
         && _bm->GetRemoveWritesFlag())
       {
-        return true;
+        //return true;
       }
 
     ASTNodeMap::iterator it;
