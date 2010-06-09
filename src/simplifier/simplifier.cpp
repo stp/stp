@@ -3227,6 +3227,16 @@ namespace BEEV
         write = write[0];
       } while (WRITE == write.GetKind());
 
+    // todo write[1] and write[2] should be simplified too.
+    if(ITE == write.GetKind())
+      {
+    	ASTNode prop = SimplifyFormula(write[0],false, VarConstMap);
+    	int indexW = write.GetIndexWidth();
+    	write = nf->CreateTerm(ITE, write.GetValueWidth(), prop,write[1],write[2]);
+    	write.SetIndexWidth(indexW);
+      }
+
+
     ASTVec::reverse_iterator it_index = writeIndices.rbegin();
     ASTVec::reverse_iterator itend_index = writeIndices.rend();
     ASTVec::reverse_iterator it_values = writeValues.rbegin();
@@ -3241,10 +3251,6 @@ namespace BEEV
 
     output = nf->CreateTerm(READ, width, write, readIndex);
     assert(BVTypeCheck(output));
-    if(ITE == write.GetKind())
-      {
-	output = SimplifyTerm(output, VarConstMap);
-      }
 
     //UpdateSimplifyMap(original_write, write, false);
     UpdateSimplifyMap(term, output, false);
