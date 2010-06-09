@@ -824,16 +824,16 @@ namespace BEEV
         //READ(Arr,index) and index is a BVCONST
         ASTVec c = a.GetChildren();
         SortByArith(c);
-        FillUp_ArrReadIndex_Vec(c[0], c[1]);
-
         ASTNode c1 = simp->SimplifyTerm(c[1]);
+        FillUp_ArrReadIndex_Vec(c[0], c1);
+
         if (SYMBOL == c[0].GetKind() 
             && bm->VarSeenInTerm(c[0], c1))
           {
             return a;
           }
 
-        if (1 == TermOrder(c[0], c[1]) 
+        if (1 == TermOrder(c[0], c1)
             && READ == c[0].GetKind() 
             && bm->VarSeenInTerm(c[0][1], c1))
           {
