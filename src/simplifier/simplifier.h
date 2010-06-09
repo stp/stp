@@ -218,6 +218,9 @@ namespace BEEV
     ASTNode RemoveWrites(const ASTNode& term);
     ASTNode SimplifyWrites_InPlace(const ASTNode& term, 
                                    ASTNodeMap* VarConstMap=NULL);
+
+    ASTNode SimplifyArrayTerm(const ASTNode& term,ASTNodeMap* VarConstMap);
+
     ASTNode ReadOverWrite_To_ITE(const ASTNode& term, 
                                  ASTNodeMap* VarConstMap=NULL);
 

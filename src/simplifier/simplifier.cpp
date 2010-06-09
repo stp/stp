@@ -3155,6 +3155,54 @@ namespace BEEV
       }
   } //end of RemoveWrites_TopLevel()
 
+
+  // recursively simplify things that are of type array.
+
+  ASTNode Simplifier::SimplifyArrayTerm(const ASTNode& term,
+		ASTNodeMap* VarConstMap) {
+
+	assert(term.GetIndexWidth() > 0);
+
+	ASTNode output;
+	if (CheckSimplifyMap(term, output, false)) {
+		return output;
+	}
+
+	switch (term.GetKind()) {
+	case SYMBOL:
+		return term;
+	case ITE: {
+		unsigned iw = term.GetIndexWidth();
+		output = CreateSimplifiedTermITE(
+				SimplifyFormula(term[0],VarConstMap),
+				SimplifyArrayTerm(term[1], VarConstMap),
+				SimplifyArrayTerm(term[2], VarConstMap));
+		output.SetIndexWidth(iw);
+	}
+		break;
+	case WRITE: {
+		unsigned iw = term.GetIndexWidth();
+		ASTNode array = SimplifyArrayTerm(term[0], VarConstMap);
+		ASTNode idx = SimplifyTerm(term[1]);
+		ASTNode val = SimplifyTerm(term[2]);
+
+		output = nf->CreateTerm(WRITE, term.GetValueWidth(), array, idx, val);
+		output.SetIndexWidth(iw); // save the value and set, otherwise it sometimes fails.
+	}
+
+		break;
+	default:
+		FatalError("2313456331");
+	}
+
+	UpdateSimplifyMap(term, output, false);
+	assert(term.GetIndexWidth() == output.GetIndexWidth());
+	assert(BVTypeCheck(output));
+	return output;
+}
+
+
+
   ASTNode Simplifier::SimplifyWrites_InPlace(const ASTNode& term,
                                              ASTNodeMap* VarConstMap)
   {
@@ -3182,7 +3230,7 @@ namespace BEEV
 
     do
       {
-        ASTNode writeIndex = SimplifyTerm(write[1]);
+     	 ASTNode writeIndex = SimplifyTerm(write[1]);
         ASTNode writeVal = SimplifyTerm(write[2]);
 
         //compare the readIndex and the current writeIndex and see if they
@@ -3226,14 +3274,13 @@ namespace BEEV
         //Setup the write for the new iteration, one level inner write
         write = write[0];
       } while (WRITE == write.GetKind());
+    assert(BVTypeCheck(write));
+    assert(write.GetIndexWidth() >0);
 
     // todo write[1] and write[2] should be simplified too.
     if(ITE == write.GetKind())
       {
-    	ASTNode prop = SimplifyFormula(write[0],false, VarConstMap);
-    	int indexW = write.GetIndexWidth();
-    	write = nf->CreateTerm(ITE, write.GetValueWidth(), prop,write[1],write[2]);
-    	write.SetIndexWidth(indexW);
+    	write = SimplifyArrayTerm(write,VarConstMap);
       }
 
 
@@ -3254,6 +3301,7 @@ namespace BEEV
 
     if (ITE == write.GetKind()) {
 		output = SimplifyTerm(output, VarConstMap);
+		assert(BVTypeCheck(output));
 	}
 
 
