@@ -3,15 +3,13 @@
 
 #include "../AST/AST.h"
 #include <cassert>
-#include "simplifier.h"
+
+// Count the number of times each symbol appears in the input term.
+// This can be expensive to build for large terms, so it's built lazily.
 
 namespace BEEV
 {
 class CountOfSymbols {
-
-
-	//collect all the vars in the lhs and rhs
-	//Build this only if it's needed.
 
 	typedef hash_map<ASTNode, int, ASTNode::ASTNodeHasher,
 			ASTNode::ASTNodeEqual> ASTNodeToIntMap;
@@ -20,20 +18,11 @@ class CountOfSymbols {
 	const ASTNode& top;
 	bool loaded;
 
-	ASTNodeSet TermsAlreadySeenMap;
+	ASTNodeSet visited;
 
-	//collects the vars in the term 'lhs' into the multiset Vars
-	void VarsInTheTerm_TopLevel(const ASTNode& lhs) {
-		TermsAlreadySeenMap.clear();
-		VarsInTheTerm(lhs);
-	}
-
-	//collects the vars in the term 'lhs' into the multiset Vars
 	void VarsInTheTerm(const ASTNode& term) {
-		ASTNodeSet::const_iterator it;
-		bool inserted = (TermsAlreadySeenMap.insert(term).second);
 
-		if (!inserted)
+		if (visited.find(term) != visited.end())
 			return;
 
 		switch (term.GetKind()) {
@@ -63,8 +52,7 @@ class CountOfSymbols {
 		}
 		}
 
-		//ensures that you don't double count. if you have seen the term
-		//once, then memoize
+		visited.insert(term);
 		return;
 	} //end of VarsInTheTerm()
 
@@ -78,8 +66,9 @@ public:
 	bool single(const ASTNode &m) {
 		if (!loaded)
 		{
-			VarsInTheTerm_TopLevel(top);
+			VarsInTheTerm(top);
 			loaded = true;
+			visited.clear();
 		}
 
 		ASTNodeToIntMap::const_iterator it = Vars.find(m);

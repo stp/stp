@@ -11,6 +11,7 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "bvsolver.h"
+#include "CountOfSymbols.h"
 
 //This file contains the implementation of member functions of
 //bvsolver class, which represents the bitvector arithmetic linear
@@ -196,63 +197,6 @@ namespace BEEV
     return false;
   } //end of UpdateSolverMap()
 
-  //collects the vars in the term 'lhs' into the multiset Vars
-  void BVSolver::VarsInTheTerm_TopLevel(const ASTNode& lhs, 
-                                        ASTNodeMultiSet& Vars)
-  {
-    TermsAlreadySeenMap.clear();
-    VarsInTheTerm(lhs, Vars);
-  }
-
-  //collects the vars in the term 'lhs' into the multiset Vars
-  void BVSolver::VarsInTheTerm(const ASTNode& term, ASTNodeMultiSet& Vars)
-  {
-    ASTNode a = term;
-    ASTNodeMap::iterator it;
-    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
-      {
-        //if the term has been seen, then simply return
-        return;
-      }
-
-    switch (term.GetKind())
-      {
-      case BVCONST:
-        return;
-      case SYMBOL:
-        //cerr << "debugging: symbol added: " << term << endl;
-        Vars.insert(term);
-        return;
-      case READ:
-        //skip the arrayname, provided the arrayname is a SYMBOL
-        if (SYMBOL == term[0].GetKind())
-          {
-            VarsInTheTerm(term[1], Vars);
-          }
-        else
-          {
-            VarsInTheTerm(term[0], Vars);
-            VarsInTheTerm(term[1], Vars);
-          }
-        break;
-      default:
-        {
-          ASTVec c = term.GetChildren();
-          for (ASTVec::iterator
-                 it = c.begin(), itend = c.end(); it != itend; it++)
-            {
-              VarsInTheTerm(*it, Vars);
-            }
-          break;
-        }
-      }
-
-    //ensures that you don't double count. if you have seen the term
-    //once, then memoize
-    TermsAlreadySeenMap[term] = ASTTrue;
-    return;
-  } //end of VarsInTheTerm()
-
   bool BVSolver::DoNotSolveThis(const ASTNode& var)
   {
     if (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end())
@@ -275,8 +219,7 @@ namespace BEEV
     ASTNode zero = _bm->CreateZeroConst(32);
 
     //collect all the vars in the lhs and rhs
-    ASTNodeMultiSet Vars;
-    VarsInTheTerm_TopLevel(lhs, Vars);
+    CountOfSymbols count(lhs);
 
     //handle BVPLUS case
     ASTVec c = lhs.GetChildren();
@@ -290,19 +233,22 @@ namespace BEEV
       {
         ASTNode monom = *it;
         if (SYMBOL == monom.GetKind() 
-            && Vars.count(monom) == 1 
-            && !VarSeenInTerm(monom, rhs) 
-            && !DoNotSolveThis(monom) && !chosen_symbol)
+            && !chosen_symbol
+       		&& !DoNotSolveThis(monom)
+            && count.single(monom)
+            && !VarSeenInTerm(monom, rhs)
+        )
           {
             outmonom = monom;
             chosen_symbol = true;
           }
         else if (BVUMINUS == monom.GetKind() 
-                 && SYMBOL == monom[0].GetKind() 
-                 && Vars.count(monom[0]) == 1 
-                 && !DoNotSolveThis(monom[0])
-                 && !VarSeenInTerm(monom[0], rhs) 
-                 && !chosen_symbol)
+         		&& SYMBOL == monom[0].GetKind()
+           		&& !chosen_symbol
+        		&& !DoNotSolveThis(monom[0])
+                && count.single(monom[0])
+                && !VarSeenInTerm(monom[0], rhs)
+                 )
           {
             //cerr << "Chosen Monom: " << monom << endl;
             outmonom = monom;
@@ -330,17 +276,18 @@ namespace BEEV
             if (BVMULT == monom.GetKind() 
                 && BVCONST == monom[0].GetKind() 
                 && _simp->BVConstIsOdd(monom[0]) 
+                && !chosen_odd
+                && !DoNotSolveThis(var)
                 && ((SYMBOL == var.GetKind() 
-                     && Vars.count(var) == 1) 
+                     && count.single(var))
                     || (BVEXTRACT == var.GetKind() 
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
-                        && !VarSeenInTerm(var[0], rhs) 
-                        && !DoNotSolveThis(var[0]))) 
-                && !DoNotSolveThis(var) 
+                        && !DoNotSolveThis(var[0])
+                        && !VarSeenInTerm(var[0], rhs)))
                 && !VarSeenInTerm(var, rhs)
-                && !chosen_odd)
+                )
               {
                 //monom[0] is odd.
                 outmonom = monom;
