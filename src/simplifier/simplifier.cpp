@@ -3252,6 +3252,11 @@ namespace BEEV
     output = nf->CreateTerm(READ, width, write, readIndex);
     assert(BVTypeCheck(output));
 
+    if (ITE == write.GetKind()) {
+		output = SimplifyTerm(output, VarConstMap);
+	}
+
+
     //UpdateSimplifyMap(original_write, write, false);
     UpdateSimplifyMap(term, output, false);
     return output;
