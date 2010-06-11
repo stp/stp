@@ -130,58 +130,37 @@ namespace BEEV
       (*SimplifyMap)[key] = value;
   }
 
+  // Substitution Map methods....
+
+  ASTNode Simplifier::CreateSubstitutionMap(const ASTNode& a,
+		ArrayTransformer* at) {
+	  _bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
+	  ASTNode result = substitutionMap.CreateSubstitutionMap(a, at);
+	  _bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
+	  return result;
+	 }
+
+  bool Simplifier::UpdateSolverMap(const ASTNode& key, const ASTNode& value)
+  {
+	  return substitutionMap.UpdateSolverMap(key,value);
+  }
+
   bool Simplifier::CheckSubstitutionMap(const ASTNode& key, ASTNode& output)
   {
-    ASTNode k = key;
-    ASTNodeMap::iterator it = SolverMap->find(key);
-    if (it != SolverMap->end())
-      {
-        output = it->second;
-        return true;
-      }
-    return false;
+	  return substitutionMap.CheckSubstitutionMap(key,output);
   }
 
   bool Simplifier::CheckSubstitutionMap(const ASTNode& key)
   {
-    if (SolverMap->find(key) != SolverMap->end())
-      return true;
-    else
-      return false;
+	  return substitutionMap.CheckSubstitutionMap(key);
   }
 
   bool Simplifier::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
   {
-    int i = TermOrder(e0, e1);
-    if (0 == i)
-      return false;
-
-    assert(e0 != e1); // One side should be a variable, the other a constant.
-
-    //e0 is of the form READ(Arr,const), and e1 is const, or
-    //e0 is of the form var, and e1 is const
-    if (1 == i && !CheckSubstitutionMap(e0))
-      {
-        assert((e1.GetKind() == TRUE) || 
-               (e1.GetKind() == FALSE) || 
-               (e1.GetKind() == BVCONST));
-        (*SolverMap)[e0] = e1;
-        return true;
-      }
-
-    //e1 is of the form READ(Arr,const), and e0 is const, or
-    //e1 is of the form var, and e0 is const
-    if (-1 == i && !CheckSubstitutionMap(e1))
-      {
-        assert((e0.GetKind() == TRUE)  || 
-               (e0.GetKind() == FALSE) || 
-               (e0.GetKind() == BVCONST));
-        (*SolverMap)[e1] = e0;
-        return true;
-      }
-
-    return false;
+	  return substitutionMap.UpdateSubstitutionMap(e0,e1);
   }
+  // --- Substitution Map methods....
+
 
   bool Simplifier::CheckMultInverseMap(const ASTNode& key, ASTNode& output)
   {
@@ -426,7 +405,7 @@ namespace BEEV
         output = pushNeg ? ASTTrue : ASTFalse;
         break;
       case SYMBOL:
-        if (!CheckSolverMap(a, output))
+        if (!CheckSubstitutionMap(a, output))
           {
             output = a;
           }
@@ -1710,7 +1689,7 @@ namespace BEEV
           {
             return output;
           }
-        if (CheckSolverMap(inputterm, output))
+        if (CheckSubstitutionMap(inputterm, output))
           {
             return SimplifyTerm(output, VarConstMap);
           }

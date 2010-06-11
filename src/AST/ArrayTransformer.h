@@ -98,15 +98,17 @@ namespace BEEV
      * Helper functions to for creating substitution map            *
      ****************************************************************/      
         
-    //fill the arrayname_readindices vector if e0 is a READ(Arr,index)
-    //and index is a BVCONST
-    void FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1);
 
     ASTNode TransformArrayRead(const ASTNode& term);
 
     ASTNode TransformFormula(const ASTNode& form);
 
   public:
+
+    //fill the arrayname_readindices vector if e0 is a READ(Arr,index)
+    //and index is a BVCONST
+    void FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1);
+
 
     /****************************************************************
      * Public Member Functions                                      *
@@ -151,9 +153,6 @@ namespace BEEV
     // Takes a formula, transforms it by replacing array reads with
     // variables, and returns the transformed formula
     ASTNode TransformFormula_TopLevel(const ASTNode& form);
-
-    // Create Substitution Map function
-    ASTNode CreateSubstitutionMap(const ASTNode& a);
 
     const ASTNodeToVecMap * ArrayName_ReadIndicesMap()
     {

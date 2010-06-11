@@ -13,6 +13,7 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
+#include "SubstitutionMap.h"
 
 namespace BEEV
 {
@@ -34,7 +35,6 @@ namespace BEEV
     // value is simplified node.
     ASTNodeMap * SimplifyMap;
     ASTNodeMap * SimplifyNegMap;
-    ASTNodeMap * SolverMap;
     ASTNodeSet AlwaysTrueFormMap;
     ASTNodeMap MultInverseMap;
 
@@ -51,17 +51,19 @@ namespace BEEV
 
     NodeFactory * nf;
 
+    SubstitutionMap substitutionMap;
+
     void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
   public:
       
     /****************************************************************
      * Public Member Functions                                      *
      ****************************************************************/      
-    Simplifier(STPMgr * bm) : _bm(bm) 
+    Simplifier(STPMgr * bm) : _bm(bm),
+    substitutionMap(this,bm)
     {
       SimplifyMap    = new ASTNodeMap(INITIAL_TABLE_SIZE);
       SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      SolverMap      = new ASTNodeMap(INITIAL_TABLE_SIZE);
       ReadOverWrite_NewName_Map = new ASTNodeMap();
 
       ASTTrue  = bm->CreateNode(TRUE);
@@ -75,7 +77,6 @@ namespace BEEV
     {
       delete SimplifyMap;
       delete SimplifyNegMap;
-      delete SolverMap;
       delete ReadOverWrite_NewName_Map;
       delete nf;
     }
@@ -88,10 +89,6 @@ namespace BEEV
     bool CheckMap(ASTNodeMap* VarConstMap, 
                   const ASTNode& key, ASTNode& output);
 
-    //substitution
-    bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
-    bool CheckSubstitutionMap(const ASTNode& a);
-    bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
       
     //functions for checking and updating simplifcation map
     bool CheckSimplifyMap(const ASTNode& key, 
@@ -106,9 +103,15 @@ namespace BEEV
     void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
       
     //Map for solved variables
-    bool CheckSolverMap(const ASTNode& a, ASTNode& output);
-    bool CheckSolverMap(const ASTNode& a);
     bool UpdateSolverMap(const ASTNode& e0, const ASTNode& e1);     
+    ASTNode CreateSubstitutionMap(const ASTNode& a,
+  		ArrayTransformer *at);
+
+    //substitution
+    bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
+    bool CheckSubstitutionMap(const ASTNode& a);
+    bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
+
 
     void ResetSimplifyMaps(void);
 
@@ -236,18 +239,18 @@ namespace BEEV
       
     const ASTNodeMap * Return_SolverMap()
     {
-      return SolverMap;
+    	return substitutionMap.Return_SolverMap();
     } // End of SolverMap()
 
     void ClearAllTables(void) 
     {
       SimplifyMap->clear();
       SimplifyNegMap->clear();
-      SolverMap->clear();
       ReadOverWrite_NewName_Map->clear();
       NewName_ReadOverWrite_Map.clear();
       AlwaysTrueFormMap.clear();
       MultInverseMap.clear();
+      substitutionMap.clear();
     }
   };//end of class Simplifier
 }; //end of namespace

@@ -164,39 +164,6 @@ namespace BEEV
     return false;
   } //end of CheckForArrayReads()
 
-  //check the solver map for 'key'. If key is present, then return the
-  //value by reference in the argument 'output'
-  bool Simplifier::CheckSolverMap(const ASTNode& key, ASTNode& output)
-  {
-    ASTNodeMap::iterator it;
-    if ((it = SolverMap->find(key)) != SolverMap->end())
-      {
-        output = it->second;
-        return true;
-      }
-    return false;
-  } //end of CheckSolverMap()
-
-  bool Simplifier::CheckSolverMap(const ASTNode& key)
-  {
-    if (SolverMap->find(key) != SolverMap->end())
-      return true;
-    else
-      return false;
-  } //end of CheckSolverMap()
-
-  //update solvermap with (key,value) pair
-  bool Simplifier::UpdateSolverMap(const ASTNode& key, const ASTNode& value)
-  {
-    ASTNode var = (BVEXTRACT == key.GetKind()) ? key[0] : key;
-    if (!CheckSolverMap(var) && key != value)
-      {
-        (*SolverMap)[key] = value;
-        return true;
-      }
-    return false;
-  } //end of UpdateSolverMap()
-
   bool BVSolver::DoNotSolveThis(const ASTNode& var)
   {
     if (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end())

@@ -696,7 +696,7 @@ namespace BEEV
   {
 	  ASTNode OutputNode;
 
-	  if (CheckSolverMap(t, OutputNode))
+	  if (CheckSubstitutionMap(t, OutputNode))
 	      return OutputNode;
 
 	  OutputNode = NonMemberBVConstEvaluator(t);

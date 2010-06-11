@@ -94,12 +94,10 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-            bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
-            simplified_solved_InputToSAT = 
-              arrayTransformer->
-              CreateSubstitutionMap(simplified_solved_InputToSAT);
 
-            bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
+            simplified_solved_InputToSAT = 
+            	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+
             //printf("##################################################\n");
             bm->ASTNodeStats("after pure substitution: ", 
                              simplified_solved_InputToSAT);
@@ -136,11 +134,9 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-            bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
             simplified_solved_InputToSAT = 
-              arrayTransformer->
-              CreateSubstitutionMap(simplified_solved_InputToSAT);
-            bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
+            	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+
             bm->ASTNodeStats("after pure substitution: ",
                              simplified_solved_InputToSAT);
 
