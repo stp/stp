@@ -469,6 +469,7 @@ namespace BEEV
     return output;
   } //end of SimplifyAtomicFormula()
 
+
   // number of constant bits in the most significant places.
   int mostSignificantConstants(const ASTNode& n)
   {
@@ -522,6 +523,18 @@ namespace BEEV
     	}
 
     	return false;
+    }
+
+    int numberOfLeadingZeroes(const ASTNode& n)
+    {
+  	  int c = mostSignificantConstants( n);
+  	  if (c<=0)
+  		  return 0;
+
+  	  for (int i =0; i < c;i++)
+  		  if (getConstantBit(n,i)!=0)
+  			  return i;
+  	  return c;
     }
 
 
@@ -2391,6 +2404,32 @@ namespace BEEV
           						nf->CreateNode(AND, children), _bm->CreateOneConst(1),
           						zero);
           				assert(BVTypeCheck(output));
+          			}
+
+
+          			// If the leading bits are zero. Replace it by a concat with zero.
+          			int i;
+          			if (output.GetKind() == BVAND && output.Degree() ==2 && ((i=numberOfLeadingZeroes(output[0])) > 0) )
+          			{
+					// i contains the number of leading zeroes.
+						output = nf->CreateTerm(BVCONCAT,
+								output.GetValueWidth(),
+								_bm->CreateZeroConst(i),
+								nf->CreateTerm(BVAND, output.GetValueWidth() - i,
+								nf->CreateTerm(BVEXTRACT,
+										output.GetValueWidth() - i,
+										output[0],
+										_bm->CreateBVConst(32,output.GetValueWidth() - i-1),
+										_bm->CreateBVConst(32,0)
+										),
+								nf->CreateTerm(BVEXTRACT,
+										output.GetValueWidth() - i,
+										output[1],
+										_bm->CreateBVConst(32,output.GetValueWidth() - i-1),
+										_bm->CreateBVConst(32,0)
+										))
+								);
+						assert(BVTypeCheck(output));
           			}
           		}
           break;
