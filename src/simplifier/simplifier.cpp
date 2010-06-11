@@ -230,6 +230,31 @@ namespace BEEV
     return out;
   }
 
+  // I like simplify to have been run on all the nodes.
+  void Simplifier::checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited)
+  {
+	  if (n.isConstant() || (n.GetKind() == SYMBOL))
+		  return;
+
+	  if (visited.find(n) != visited.end())
+		  return;
+
+	  if (SimplifyMap->find(n) == SimplifyMap->end())
+	  {
+		  cerr << "not found";
+		  cerr << n;
+		  assert(false);
+	  }
+
+	  for(int i =0; i < n.Degree();i++)
+	  {
+		  checkIfInSimplifyMap(n[i],visited);
+	  }
+
+	  visited.insert(n);
+  }
+
+
   // The SimplifyMaps on entry to the topLevel functions may contain
   // useful entries.  E.g. The BVSolver calls SimplifyTerm()
   ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, 
@@ -238,6 +263,8 @@ namespace BEEV
   {
     _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
+    ASTNodeSet visited;
+    //checkIfInSimplifyMap(out,visited);
     ResetSimplifyMaps();
     _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
     return out;
@@ -351,7 +378,6 @@ namespace BEEV
         break;
       }
 
-    //memoize
     UpdateSimplifyMap(b, output, pushNeg, VarConstMap);
     UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
@@ -2665,6 +2691,8 @@ namespace BEEV
       }
     assert(!output.IsNull());
 
+    if (inputterm != output)
+    	output = SimplifyTerm(output);
     //memoize
     UpdateSimplifyMap(inputterm, output, false, VarConstMap);
     //cerr << "SimplifyTerm: output" << output << endl;

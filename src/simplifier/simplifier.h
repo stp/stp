@@ -50,6 +50,8 @@ namespace BEEV
     STPMgr * _bm;
 
     NodeFactory * nf;
+
+    void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
   public:
       
     /****************************************************************
