@@ -69,7 +69,7 @@ namespace BEEV
                 v = _ASTNode_to_BitvectorMap[symbol];
 
                 //kk is the index of BVGETBIT
-                const unsigned int kk = GetUnsignedConst(s[1]);
+                const unsigned int kk = s[1].GetUnsignedConst();
 
                 //Collect the bits of 'symbol' and store in v. Store
                 //in reverse order.
@@ -868,7 +868,7 @@ namespace BEEV
                   GetCounterExample(t, readexpr);
                 //cout << "ASSERT( ";
                 //cout << " = ";
-                out_int.push_back(GetUnsignedConst(val));
+                out_int.push_back(val.GetUnsignedConst());
                 //cout << "\n";
               }
           }

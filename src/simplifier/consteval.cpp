@@ -135,7 +135,7 @@ namespace BEEV
               // the shift is destructive, get a copy.
               CONSTANTBV::BitVector_Interval_Copy(output, tmp0, 0, 0, inputwidth);
 
-              unsigned int shift = GetUnsignedConst(shiftNode);
+              unsigned int shift = shiftNode.GetUnsignedConst();
 
               if (k == BVLEFTSHIFT)
                 CONSTANTBV::BitVector_Move_Left(output, shift);
@@ -201,8 +201,8 @@ namespace BEEV
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           tmp0 = children[0].GetBVConst();
-          unsigned int hi = GetUnsignedConst(children[1]);
-          unsigned int low = GetUnsignedConst(children[2]);
+          unsigned int hi = children[1].GetUnsignedConst();
+          unsigned int low = children[2].GetUnsignedConst();
           unsigned int len = hi - low + 1;
 
           CONSTANTBV::BitVector_Destroy(output);

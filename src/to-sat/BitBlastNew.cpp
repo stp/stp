@@ -223,8 +223,8 @@ const BBNodeVec BitBlasterNew::BBTerm(const ASTNode& term, BBNodeSet& support) {
 		// with memo-ization.
 
 		const BBNodeVec& bbkids = BBTerm(term[0], support);
-		const unsigned int high = GetUnsignedConst(term[1]);
-		const unsigned int low = GetUnsignedConst(term[2]);
+		const unsigned int high = term[1].GetUnsignedConst();
+		const unsigned int low = term[2].GetUnsignedConst();
 
 		BBNodeVec::const_iterator bbkfit = bbkids.begin();
 		// I should have used pointers to BBNodeVec, to avoid this crock

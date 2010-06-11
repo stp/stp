@@ -262,9 +262,9 @@ namespace BEEV
               FatalError("BVTypeCheck: should have exactly 3 args\n", n);
             if (!(BVCONST == n[1].GetKind() && BVCONST == n[2].GetKind()))
               FatalError("BVTypeCheck: indices should be BVCONST\n", n);
-            if (n.GetValueWidth() != GetUnsignedConst(n[1]) - GetUnsignedConst(n[2]) + 1)
+            if (n.GetValueWidth() != n[1].GetUnsignedConst() - n[2].GetUnsignedConst() + 1)
               FatalError("BVTypeCheck: length mismatch\n", n);
-            if (GetUnsignedConst(n[1]) >= n[0].GetValueWidth())
+            if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
               FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
             break;
           case BVLEFTSHIFT:
@@ -351,30 +351,6 @@ namespace BEEV
     return true;
   } //End of TypeCheck function
 
-  //Return the unsigned constant value of the input 'n'
-  unsigned int GetUnsignedConst(const ASTNode n)
-  {
-    if(BVCONST != n.GetKind()){
-      FatalError("GetUnsignedConst: cannot extract an "\
-                 "unsigned value from a non-bvconst");
-    }
-
-    if (sizeof(unsigned int) * 8 <= n.GetValueWidth())
-      {
-        // It may only contain a small value in a bit type,
-        // which fits nicely into an unsigned int.  This is
-        // common for functions like: bvshl(bv1[128],
-        // bv1[128]) where both operands have the same type.
-        signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
-        if (maxBit >= ((signed long) sizeof(unsigned int)) * 8)
-          {
-            n.LispPrint(cerr); //print the node so they can find it.
-            FatalError("GetUnsignedConst: cannot convert bvconst "\
-                       "of length greater than 32 to unsigned int");
-          }
-      }
-    return (unsigned int) *((unsigned int *) n.GetBVConst());
-  } //end of GetUnsignedConst
 
   //if a is READ(Arr,const) or SYMBOL, and b is BVCONST then return 1
   //if b is READ(Arr,const) or SYMBOL, and a is BVCONST then return -1

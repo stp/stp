@@ -162,9 +162,9 @@ string functionToCVCName(const Kind k) {
       case BVEXTRACT:
         PL_Print1(os, c[0], indentation, letize);
         os << "[";
-        os << GetUnsignedConst(c[1]);
+        os << c[1].GetUnsignedConst();
         os << ":";
-        os << GetUnsignedConst(c[2]);
+        os << c[2].GetUnsignedConst();
         os << "]";
         break;
       case BVLEFTSHIFT:
@@ -175,7 +175,7 @@ string functionToCVCName(const Kind k) {
         {
         	FatalError("PL_Print1: The shift argument to a left shift must be a constant. Found:",c[1]);
         }
-        os << GetUnsignedConst(c[1]);
+        os << c[1].GetUnsignedConst();
         os << ")";
         os << "[";
         os << (c[0].GetValueWidth()-1);

@@ -149,8 +149,8 @@ namespace printer
         // we only accept indices that are byte-aligned
         // (e.g., [15:8], [23:16])
         // and round down to byte indices rather than bit indices
-        upper = GetUnsignedConst(c[1]);
-        lower = GetUnsignedConst(c[2]);
+        upper = c[1].GetUnsignedConst();
+        lower = c[2].GetUnsignedConst();
         assert(upper > lower);
         assert(lower % 8 == 0);
         assert((upper + 1) % 8 == 0);
@@ -178,7 +178,7 @@ namespace printer
         os << "(";
         C_Print1(os, c[0], indentation, letize);
         os << " << ";
-        os << GetUnsignedConst(c[1]);
+        os << c[1].GetUnsignedConst();
         os << ")";
         break;
       case BVRIGHTSHIFT:
@@ -187,7 +187,7 @@ namespace printer
         os << "(";
         C_Print1(os, c[0], indentation, letize);
         os << " >> ";
-        os << GetUnsignedConst(c[1]);
+        os << c[1].GetUnsignedConst();
         os << ")";
         break;
       case BVMULT:
@@ -308,14 +308,14 @@ namespace printer
         // comparison
         if (LHSkind == BVEXTRACT)
           {
-            upper = GetUnsignedConst(c[0].GetChildren()[1]);
-            lower = GetUnsignedConst(c[0].GetChildren()[2]);
+            upper = c[0].GetChildren()[1].GetUnsignedConst();
+            lower = c[0].GetChildren()[2].GetUnsignedConst();
             num_bytes = (upper - lower + 1) / 8;
           }
         else if (RHSkind == BVEXTRACT)
           {
-            upper = GetUnsignedConst(c[1].GetChildren()[1]);
-            lower = GetUnsignedConst(c[1].GetChildren()[2]);
+            upper = c[1].GetChildren()[1].GetUnsignedConst();
+            lower = c[1].GetChildren()[2].GetUnsignedConst();
             num_bytes = (upper - lower + 1) / 8;
           }
 
@@ -478,8 +478,8 @@ namespace printer
             // see if it's a BVEXTRACT, and if so, whether it's multi-byte
             if (it->second.GetKind() == BVEXTRACT)
               {
-                upper = GetUnsignedConst(it->second.GetChildren()[1]);
-                lower = GetUnsignedConst(it->second.GetChildren()[2]);
+                upper = it->second.GetChildren()[1].GetUnsignedConst();
+                lower = it->second.GetChildren()[2].GetUnsignedConst();
                 num_bytes = (upper - lower + 1) / 8;
                 assert(num_bytes > 0);
               }

@@ -159,6 +159,31 @@ namespace BEEV
     return ((ASTBVConst *) _int_node_ptr)->GetBVConst();
   } //End of GetBVConst()
 
+  unsigned int ASTNode::GetUnsignedConst() const
+  {
+	const ASTNode& n = *this;
+    assert(BVCONST == n.GetKind());
+
+    if (sizeof(unsigned int) * 8 < n.GetValueWidth())
+      {
+        // It may only contain a small value in a bit type,
+        // which fits nicely into an unsigned int.  This is
+        // common for functions like: bvshl(bv1[128],
+        // bv1[128]) where both operands have the same type.
+        signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
+        if (maxBit >= ((signed long) sizeof(unsigned int)) * 8)
+          {
+            n.LispPrint(cerr); //print the node so they can find it.
+            FatalError("GetUnsignedConst: cannot convert bvconst "\
+                       "of length greater than 32 to unsigned int");
+          }
+      }
+    return (unsigned int) *((unsigned int *) n.GetBVConst());
+  } //end of GetUnsignedConst
+
+
+
+
   void ASTNode::NFASTPrint(int l, int max, int prefix) const
   {
     //****************************************

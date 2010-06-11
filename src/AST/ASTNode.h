@@ -335,6 +335,9 @@ namespace BEEV
     //Get the BVCONST value.
     CBV GetBVConst() const;
 
+    unsigned int GetUnsignedConst() const;
+
+
     /*******************************************************************
      * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
      * ASTNode is of type ARRAY   <==> ((indexwidth>0)&&(valuewidth>0))*

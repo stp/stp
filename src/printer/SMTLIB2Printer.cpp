@@ -177,7 +177,7 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
       case BVSX:
       case BVZX:
         {
-          unsigned int amount = GetUnsignedConst(c[1]);
+          unsigned int amount = c[1].GetUnsignedConst();
           if (BVZX == kind)
             os << "((_ zero_extend ";
           else
@@ -190,8 +190,8 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
         break;
       case BVEXTRACT:
         {
-          unsigned int upper = GetUnsignedConst(c[1]);
-          unsigned int lower = GetUnsignedConst(c[2]);
+          unsigned int upper = c[1].GetUnsignedConst();
+          unsigned int lower = c[2].GetUnsignedConst();
           assert(upper >= lower);
           os << "((_ extract " << upper << " " << lower << ") ";
           SMTLIB2_Print1(os, c[0], indentation, letize);

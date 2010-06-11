@@ -2005,8 +2005,8 @@ namespace BEEV
           ASTNode zero = _bm->CreateBVConst(32, 0);
           //recall that the indices of BVEXTRACT are always 32 bits
           //long. therefore doing a GetBVUnsigned is ok.
-          unsigned int i_val = GetUnsignedConst(i);
-          unsigned int j_val = GetUnsignedConst(j);
+          unsigned int i_val = i.GetUnsignedConst();
+          unsigned int j_val = j.GetUnsignedConst();
 
           // a0[i:0] and len(a0)=i+1, then return a0
           if (0 == j_val && a_len == a0.GetValueWidth())
@@ -2502,7 +2502,7 @@ namespace BEEV
                 }
               else
                 {
-                  const unsigned int shift = GetUnsignedConst(b);
+                  const unsigned int shift = b.GetUnsignedConst();
                   if (shift >= width)
                     {
                       output = _bm->CreateZeroConst(width);
