@@ -69,14 +69,15 @@ namespace BEEV
    * unsat. else continue.
    */
   bool ToSAT::toSATandSolve(MINISAT::Solver& newSolver,
-                            ClauseList& cll, 
-			    bool add_xor_clauses,
+                            ClauseList& cll,
+                            bool final,
+                            CNFMgr*& cm,
+                            bool add_xor_clauses,
 			    bool enable_clausal_abstraction)
   {
     CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
-    
     int input_clauselist_size = cll.size();
     if (cll.size() == 0)
       {
@@ -219,6 +220,24 @@ namespace BEEV
     // Free the clause list before SAT solving.
     cll.deleteJustVectors();
 
+    // Remove references to Tseitin variables.
+    // Delete the cnf generator.
+    if (final)
+    {
+    	for (int i =0; i < _SATVar_to_AST_Vector.size();i++)
+    	{
+    		ASTNode n = _SATVar_to_AST_Vector[i];
+    		if (!n.IsNull() && isTseitinVariable(n))
+    		{
+    			_ASTNode_to_SATVar_Map.erase(n);
+    			_SATVar_to_AST_Vector[i] = ASTNode();
+    		}
+    	}
+    	delete cm;
+    	cm = NULL;
+    }
+
+
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);    
 
@@ -272,7 +291,7 @@ namespace BEEV
   } //End of SortClauseList_IntoBuckets()
 
   bool ToSAT::CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
-                                       ClauseBuckets * cb)
+                                       ClauseBuckets * cb, CNFMgr*& cm)
   {
     ClauseBuckets::iterator it = cb->begin();
     ClauseBuckets::iterator itend = cb->end();
@@ -281,7 +300,7 @@ namespace BEEV
     for(int count=1;it!=itend;it++, count++)
       {
         ClauseList *cl = (*it).second;
-	    sat = toSATandSolve(SatSolver,*cl);
+	    sat = toSATandSolve(SatSolver,*cl, count==cb->size(),cm);
 
         if(!sat)
           {
@@ -322,15 +341,17 @@ namespace BEEV
 		file.close();
     }
 
-    CNFMgr cm(bm);
-    ClauseList* cl = cm.convertToCNF(BBFormula);
+    // The CNFMgr is deleted inside the CallSAT_On_ClauseBuckets,
+    // just before the final call to the SAT solver.
 
-    ClauseList* xorcl = cm.ReturnXorClauses();
+    CNFMgr* cm = new CNFMgr(bm);
+    ClauseList* cl = cm->convertToCNF(BBFormula);
+    ClauseList* xorcl = cm->ReturnXorClauses();
 
     ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
     cl->asList()->clear(); // clause buckets now point to the clauses.
     delete cl;
-    bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb);
+    bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb, cm);
 
     for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
     	delete it->second;
@@ -340,6 +361,8 @@ namespace BEEV
       {
     	xorcl->deleteJustVectors();
     	delete xorcl;
+    	if (NULL != cm)
+    		delete cm;
     	return sat;
       }
 
@@ -350,8 +373,9 @@ namespace BEEV
       }
 #endif
 
-
     delete xorcl;
+	if (NULL != cm)
+		delete cm;
     return sat;
   }
 

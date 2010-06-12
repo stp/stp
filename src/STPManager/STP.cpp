@@ -188,6 +188,12 @@ namespace BEEV {
         bm->counterexample_checking_during_refinement = true;
       }
 
+    if(bm->UserFlags.stats_flag)
+    	simp->printCacheStatus();
+
+    simp->ClearCaches();
+    bm->ClearAllTables();
+
     res = 
       Ctr_Example->CallSAT_ResultCheck(NewSolver, 
                                        simplified_solved_InputToSAT, 

@@ -53,6 +53,7 @@ namespace BEEV
 
     // insert back_children at end of front_children
     ASTVec &front_children = n_ptr->_children;
+	front_children.reserve(front_children.size()+ back_children.size());
 
     front_children.insert(front_children.end(), 
                           back_children.begin(), 
@@ -591,8 +592,8 @@ namespace BEEV
       return 1;
 
     unsigned newn = 1;
-    ASTVec c = a.GetChildren();
-    for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+    const ASTVec& c = a.GetChildren();
+    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
       newn += NodeSize(*it);
     return newn;
   }

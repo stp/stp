@@ -89,11 +89,16 @@ namespace BEEV
     //Iteratively goes through the Clause Buckets, and calls
       //toSATandSolve()
     bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
-                                    ClauseBuckets * cb);
+                                    ClauseBuckets * cb
+                                    , CNFMgr*& cm);
+
 
       // Converts the clause to SAT and calls SAT solver
       bool toSATandSolve(MINISAT::Solver& S,
                          ClauseList& cll,
+                         bool final,
+                         CNFMgr*& cm,
+
   		       bool add_xor_clauses=false,
   		       bool enable_clausal_abstraction=false);
 

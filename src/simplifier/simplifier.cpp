@@ -3644,12 +3644,13 @@ namespace BEEV
 
   void Simplifier::printCacheStatus()
   {
-    cerr << SimplifyMap->size() << endl;
-    cerr << SimplifyNegMap->size() << endl;
-    //cerr << TermsAlreadySeenMap.size() << endl;
-  
-    cerr << SimplifyMap->bucket_count() << endl;
-    cerr << SimplifyNegMap->bucket_count() << endl;
-    //cerr << TermsAlreadySeenMap.bucket_count() << endl;
+    cerr << "SimplifyMap:" << SimplifyMap->size() << ":" << SimplifyMap->bucket_count() << endl;
+    cerr << "SimplifyNegMap:" << SimplifyNegMap->size() << ":" << SimplifyNegMap->bucket_count() << endl;
+    cerr << "AlwaysTrueFormMap" << AlwaysTrueFormMap.size() << ":" << AlwaysTrueFormMap.bucket_count() << endl;
+    cerr << "MultInverseMap" << MultInverseMap.size() << ":" << MultInverseMap.bucket_count() << endl;
+    cerr << "ReadOverWrite_NewName_Map" << ReadOverWrite_NewName_Map->size() << ":" << ReadOverWrite_NewName_Map->bucket_count() << endl;
+    cerr << "NewName_ReadOverWrite_Map" << NewName_ReadOverWrite_Map.size() << ":" << NewName_ReadOverWrite_Map.bucket_count() << endl;
+    cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":" << substitutionMap.Return_SolverMap()->bucket_count() << endl;
+
   } //printCacheStatus()
 };//end of namespace

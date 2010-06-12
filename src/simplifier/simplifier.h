@@ -252,6 +252,16 @@ namespace BEEV
       MultInverseMap.clear();
       substitutionMap.clear();
     }
+
+    // These can be cleared (to save memory) without changing the answer.
+    void ClearCaches()
+    {
+        AlwaysTrueFormMap.clear();
+        MultInverseMap.clear();
+        SimplifyMap->clear();
+        SimplifyNegMap->clear();
+    }
+
   };//end of class Simplifier
 }; //end of namespace
 #endif

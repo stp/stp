@@ -51,7 +51,7 @@ namespace BEEV
             ASTNode s = tosat->SATVar_to_ASTMap(i);
 
             //assemble the counterexample here
-            if (s.GetKind() == BVGETBIT && s[0].GetKind() == SYMBOL)
+            if (!s.IsNull() && s.GetKind() == BVGETBIT && s[0].GetKind() == SYMBOL)
               {
                 const ASTNode& symbol = s[0];
                 const unsigned int symbolWidth = symbol.GetValueWidth();
@@ -80,7 +80,7 @@ namespace BEEV
               }
             else
               {
-                if (s.GetKind() == SYMBOL && s.GetType() == BOOLEAN_TYPE)
+                if (!s.IsNull() && s.GetKind() == SYMBOL && s.GetType() == BOOLEAN_TYPE)
                   {
                     const char * zz = s.GetName();
                     //if the variables are not cnf variables then add
@@ -895,14 +895,16 @@ namespace BEEV
     cout << "Satisfying assignment: " << endl;
     for (int i = 0; i < num_vars; i++)
       {
-        if (newS.model[i] == MINISAT::l_True)
+        ASTNode s = tosat->SATVar_to_ASTMap(i);
+        if (s.IsNull())
+        	continue;
+
+    	if (newS.model[i] == MINISAT::l_True)
           {
-            ASTNode s = tosat->SATVar_to_ASTMap(i);
             cout << s << endl;
           }
         else if (newS.model[i] == MINISAT::l_False)
           {
-            ASTNode s = tosat->SATVar_to_ASTMap(i);
             cout << bm->CreateNode(NOT, s) << endl;
           }
       }
