@@ -672,11 +672,11 @@ Expr vc_varExpr(VC vc, const char * name, Type type) {
   switch(a->GetKind()) {
   case BEEV::BITVECTOR:
     o.SetIndexWidth(0);
-    o.SetValueWidth(GetUnsignedConst((*a)[0]));
+    o.SetValueWidth((*a)[0].GetUnsignedConst());
     break;
   case BEEV::ARRAY:
-    o.SetIndexWidth(GetUnsignedConst((*a)[0]));
-    o.SetValueWidth(GetUnsignedConst((*a)[1]));
+    o.SetIndexWidth((*a)[0].GetUnsignedConst());
+    o.SetValueWidth((*a)[1].GetUnsignedConst());
     break;
   case BEEV::BOOLEAN:
     o.SetIndexWidth(0);
@@ -1586,7 +1586,7 @@ int getBVInt(Expr e) {
                        "extract int value from a NON-constant BITVECTOR: ",
                        *a);
     }
-  return (int)GetUnsignedConst(*a);
+  return (int)a->GetUnsignedConst();
 }
 
 //! Return an unsigned int from a constant bitvector expression
@@ -1600,7 +1600,7 @@ unsigned int getBVUnsigned(Expr e) {
                        "value from a NON-constant BITVECTOR: ",
                        *a);
     }
-  return (unsigned int)GetUnsignedConst(*a);
+  return (unsigned int)a->GetUnsignedConst();
 }
 
 //! Return an unsigned long long int from a constant bitvector expression
