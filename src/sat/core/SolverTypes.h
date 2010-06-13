@@ -23,8 +23,13 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <cassert>
 #include <stdint.h>
+#define ONLY_MSPACES 1
+#include "dlmalloc.h"
 
 namespace MINISAT{
+
+void*  tlmalloc(size_t bytes);
+void  tlfree(void* mem);
 
 //=================================================================================================
 // Variables, literals, lifted booleans, clauses:
@@ -124,7 +129,7 @@ public:
     friend Clause* Clause_new(const V& ps, bool learnt = false) {
         assert(sizeof(Lit)      == sizeof(uint32_t));
         assert(sizeof(float)    == sizeof(uint32_t));
-        void* mem = malloc(sizeof(Clause) + sizeof(uint32_t)*(ps.size()));
+        void* mem = tlmalloc(sizeof(Clause) + sizeof(uint32_t)*(ps.size()));
         return new (mem) Clause(ps, learnt); }
 
     int          size        ()      const   { return size_etc >> 3; }

@@ -2,22 +2,11 @@ TOP = ../../..
 include $(TOP)/scripts/Makefile.common
 
 MTL       = ../mtl
-SOURCES   = Solver.C
-OBJECTS   = $(SOURCES:.C=.o)
-LIB       = libminisat.a
+SOURCES   = Solver.C dlmalloc.c
+OBJECTS   = Solver.o dlmalloc.o
 CFLAGS    += -I$(MTL) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
-EXEC      = minisat
-LFLAGS    = -lz
 
-all: $(LIB) #$(EXEC)
-lib: $(LIB)
-
-$(LIB): $(OBJECTS)
-	rm -f $@
-	ar cq $@ $(OBJECTS)
-	ranlib $@
-	cp $(LIB) ../
-	cp $(OBJECTS) ../
+all: $(OBJECTS)
 
 clean:
 	rm -f $(OBJECTS) $(LIB)

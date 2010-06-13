@@ -74,6 +74,8 @@ else
   CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) -I../AST
 endif
 
+CFLAGS += -DONLY_MSPACES -DMSPACES
+
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wextra -DEXT_HASH_MAP -Wno-deprecated
 CXXFLAGS = $(CFLAGS) -DEXT_HASH_MAP -Wno-deprecated

@@ -23,6 +23,26 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace MINISAT {
 
+/// This creates a separate "memory space" for the clauses built by minisat. This
+/// stops the clauses being mixed in with the rest of STPs data (like ASTNodes).
+/// The memory spaces are separate heaps. More memory is used, but the SAT solver's
+/// clauses are all lumped together in memory so there are fewer data cache misses.
+#if 1
+mspace tlms =0;
+
+void*  tlmalloc(size_t bytes) {
+	if (tlms == 0) tlms = create_mspace(0, 0);
+      return mspace_malloc(tlms, bytes);
+    }
+
+void  tlfree(void* mem) { mspace_free(tlms, mem); }
+#else
+	void*  tlmalloc(size_t bytes) { return malloc(bytes);}
+	void   tlfree(void* mem) { free(tlms); }
+#endif
+///
+
+
 //=================================================================================================
 // Constructor/Destructor:
 
@@ -58,8 +78,8 @@ Solver::Solver() :
 
 Solver::~Solver()
 {
-    for (int i = 0; i < learnts.size(); i++) free(learnts[i]);
-    for (int i = 0; i < clauses.size(); i++) free(clauses[i]);
+    for (int i = 0; i < learnts.size(); i++) tlfree(learnts[i]);
+    for (int i = 0; i < clauses.size(); i++) tlfree(clauses[i]);
 }
 
 
@@ -143,7 +163,7 @@ void Solver::detachClause(Clause& c) {
 
 void Solver::removeClause(Clause& c) {
     detachClause(c);
-    free(&c); }
+    tlfree(&c); }
 
 
 bool Solver::satisfied(const Clause& c) const {
