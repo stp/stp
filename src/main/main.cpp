@@ -370,10 +370,12 @@ helpstring +=
 		  string f(infile);
 		  if (!f.compare(f.length()-4, 4,".smt"))
 		  {
+			  bm->UserFlags.division_by_zero_returns_one_flag = true;
 			  bm->UserFlags.smtlib1_parser_flag = true;
 		  }
 		  if (!f.compare(f.length()-5, 5,".smt2"))
 		  {
+			  bm->UserFlags.division_by_zero_returns_one_flag = true;
 			  bm->UserFlags.smtlib2_parser_flag = true;
 		  }
 	  }
