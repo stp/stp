@@ -352,10 +352,12 @@ void vc_printCounterExampleToBuffer(VC vc, char **buf, unsigned long *len) {
 
   // formate the state of the query
   std::ostringstream os;
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
   b->UserFlags.print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true,os);
   os << "COUNTEREXAMPLE END: \n";
+  b->UserFlags.print_counterexample_flag = currentPrint;
 
   // convert to a c buffer
   string s = os.str();
@@ -572,10 +574,12 @@ void vc_printCounterExample(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);
 
-  b->UserFlags.print_counterexample_flag = true;
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
+    b->UserFlags.print_counterexample_flag = true;
   cout << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
+  b->UserFlags.print_counterexample_flag = currentPrint;
 }
 
 // //! Return the counterexample after a failed query.
@@ -1946,10 +1950,12 @@ void vc_printCounterExampleFile(VC vc, int fd) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
   
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
   b->UserFlags.print_counterexample_flag = true;
   os << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true, os);
   os << "COUNTEREXAMPLE END: \n";
+  b->UserFlags.print_counterexample_flag = currentPrint;
 }
 
 const char* exprName(Expr e){
