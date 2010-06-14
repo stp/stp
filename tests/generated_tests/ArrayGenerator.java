@@ -14,9 +14,8 @@ public class ArrayGenerator
     public static List<String> arrays = new ArrayList<String>();
     static Random r = new Random();
 
-    // When we get to a nesting of 5, start to return leaf nodes (like symbols).
-    static int MAX_DEPTH = 8;
-    
+    static int MAX_DEPTH;
+
     public static void main(String[] args)
     {
 	bits.add("b1");
@@ -26,6 +25,9 @@ public class ArrayGenerator
 	arrays.add("a1");
 	arrays.add("a2");
 	arrays.add("a3");
+
+	// When we get to the nesting depth, start to return leaf nodes (like symbols).
+	MAX_DEPTH = r.nextInt(15) +1;
 
 	randomGenerate();
     }
@@ -41,15 +43,16 @@ public class ArrayGenerator
 
 	for (String s : bits)
 	{
-	    output.append(":extrafuns (( " + s + " BitVec[10]))\n");
+	    output.append(":extrafuns (( " + s + " BitVec[4]))\n");
 	}
 
 	for (String s : arrays)
 	{
-	    output.append(":extrafuns (( " + s + " Array[10:10]))\n");
+	    output.append(":extrafuns (( " + s + " Array[4:4]))\n");
 	}
 
-	for (int i = 0; i < 10; i++)
+	int top = r.nextInt(10);
+	for (int i = 0; i < top+1; i++)
 	    output.append(":assumption " + generateProp(0) + "\n");
 
 	output.append(":formula true \n )\n");
@@ -127,7 +130,7 @@ public class ArrayGenerator
 	case 1:
 	    return "(= " + generateBit(depth) + " " + generateBit(depth) + " )";
 	case 2: 
-	    return "(and " + generateProp(depth) + " " + generateProp(depth) + " )";
+	    return "(or " + generateProp(depth) + " " + generateProp(depth) + " )";
 	case 3: 
 	    return "(bvslt " + generateBit(depth) + " " + generateBit(depth) + " )";
 	case 4: 

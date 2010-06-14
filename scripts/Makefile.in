@@ -119,8 +119,14 @@ regressall: all
 	$(MAKE) regresseric
 	$(MAKE) regresshistar
 	$(MAKE) regresscrypto
+	$(MAKE) unit_test
 	$(MAKE) regresscapi
+	
 
+# Checks that simplifications are working.
+.PHONY: unit_test
+unit_test:
+	cd unit_test ; ./unit_test.sh
 
 # Runs the basic tests in tests/
 .PHONY: check
