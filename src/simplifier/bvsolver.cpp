@@ -932,36 +932,6 @@ namespace BEEV
 
   bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   {
-    if (READ == term.GetKind() 
-        && WRITE == term[0].GetKind() 
-        && !_bm->GetRemoveWritesFlag())
-      {
-    	/*
-		Trevor: This used to return false. But fails on the below input.
-		I don't know why the case of read-over-write was handled specially.
-
-
-		Printing: after simplification:
-		30:(EQ
-		  12:b3
-		  26:(READ
-			22:(WRITE
-			  14:a3
-			  18:0b0000000000
-			  18:0b0000000000)
-			12:b3))
-    	 */
-
-    	//return false;
-      }
-
-    if (READ == term.GetKind() 
-        && WRITE == term[0].GetKind() 
-        && _bm->GetRemoveWritesFlag())
-      {
-        //return true;
-      }
-
     ASTNodeMap::iterator it;
     if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
       {
@@ -976,6 +946,9 @@ namespace BEEV
         return true;
       }
 
+    if (term.isConstant())
+    	return false;
+
     for (ASTVec::const_iterator 
            it = term.begin(), itend = term.end();
          it != itend; it++)
@@ -983,10 +956,6 @@ namespace BEEV
         if (VarSeenInTerm(var, *it))
           {
             return true;
-          }
-        else
-          {
-            TermsAlreadySeenMap[*it] = var;
           }
       }
 
