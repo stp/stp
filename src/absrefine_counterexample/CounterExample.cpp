@@ -9,6 +9,7 @@
 
 #include "../sat/sat.h"
 #include "AbsRefine_CounterExample.h"
+#include "../printer/printers.h"
 
 const bool debug_counterexample =  false;
 
@@ -742,6 +743,11 @@ namespace BEEV
         return;
       }
 
+    bm->PLPrintNodeSet.clear();
+    bm->NodeLetVarMap.clear();
+    bm->NodeLetVarVec.clear();
+    bm->NodeLetVarMap1.clear();
+
     // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
     // changes it. Which breaks the iterator otherwise.
     const ASTNodeMap c(CounterExampleMap);
@@ -772,7 +778,7 @@ namespace BEEV
              f[1].GetKind() == BVCONST))
           {
             os << "ASSERT( ";
-            f.PL_Print(os,0);
+            printer::PL_Print1(os,f,0,false);
             if(BOOLEAN_TYPE == f.GetType()) 
               {
                 os << "<=>";
@@ -785,11 +791,11 @@ namespace BEEV
               {
             	ASTNode rhs = TermToConstTermUsingModel(se, false);
 				assert(rhs.isConstant());
-            	rhs.PL_Print(os, 0);
+				printer::PL_Print1(os,rhs,0,false);
               }
             else
               {
-                se.PL_Print(os, 0);
+            	printer::PL_Print1(os,se,0,false);
               }
             os << " );" << endl;
           }

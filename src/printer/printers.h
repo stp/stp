@@ -26,6 +26,9 @@ namespace printer
   ostream& PL_Print(ostream &os, 
                     const BEEV::ASTNode& n, int indentation=0);
 
+  void PL_Print1(ostream& os, const ASTNode& n,int indentation, bool letize);
+
+
   ostream& Lisp_Print(ostream &os, 
                       const BEEV::ASTNode& n,  int indentation=0);
   ostream& Lisp_Print_indent(ostream &os,  
