@@ -309,6 +309,9 @@ namespace BEEV
         return output;
       }
 
+    // ChooseMonom makes sure that the the LHS is not contained on the RHS, so we
+    // set this "single" to true in the branch that runs checkMonomial.
+    bool single = false;
 
     if (BVPLUS == lhs.GetKind())
       {
@@ -334,6 +337,7 @@ namespace BEEV
         rhs =
           _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
         lhs = chosen_monom;
+        single = true;
       } //end of if(BVPLUS ...)
 
     if (BVUMINUS == lhs.GetKind())
@@ -349,13 +353,14 @@ namespace BEEV
       {
       case SYMBOL:
         {
+            DoNotSolve_TheseVars.insert(lhs);
+
           //input is of the form x = rhs first make sure that the lhs
           //symbol does not occur on the rhs or that it has not been
           //solved for
-          if (VarSeenInTerm(lhs, rhs))
+          if (!single && VarSeenInTerm(lhs, rhs))
             {
               //found the lhs in the rhs. Abort!
-              DoNotSolve_TheseVars.insert(lhs);
               return eq;
             }
 
@@ -365,7 +370,6 @@ namespace BEEV
           //            return eq;
           //       }
 
-          DoNotSolve_TheseVars.insert(lhs);
           if (!_simp->UpdateSolverMap(lhs, rhs))
             {
               return eq;

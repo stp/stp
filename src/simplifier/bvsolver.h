@@ -61,7 +61,7 @@ namespace BEEV
     //identifying variables in the those terms. Prevents double
     //counting.
     ASTNodeMap TermsAlreadySeenMap;
-    ASTNodeMap TermsAlreadySeenMap_ForArrays;
+    //ASTNodeMap TermsAlreadySeenMap_ForArrays;
 
     //solved variables list: If a variable has been solved for then do
     //not solve for it again
@@ -88,8 +88,8 @@ namespace BEEV
 
     //Checks for arrayreads in a term. if yes then returns true, else
     //return false
-    bool CheckForArrayReads(const ASTNode& term);
-    bool CheckForArrayReads_TopLevel(const ASTNode& term);
+    //bool CheckForArrayReads(const ASTNode& term);
+    //bool CheckForArrayReads_TopLevel(const ASTNode& term);
 
     //Creates new variables used in solving
     ASTNode NewVar(unsigned int n);
@@ -146,7 +146,7 @@ namespace BEEV
         TermsAlreadySeenMap.clear();
         DoNotSolve_TheseVars.clear();
         FormulasAlreadySolvedMap.clear();
-        TermsAlreadySeenMap_ForArrays.clear();
+        //TermsAlreadySeenMap_ForArrays.clear();
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the
@@ -157,7 +157,7 @@ namespace BEEV
     {
       DoNotSolve_TheseVars.clear();
       FormulasAlreadySolvedMap.clear();
-      TermsAlreadySeenMap_ForArrays.clear();
+      //TermsAlreadySeenMap_ForArrays.clear();
     } //End of ClearAllTables()
 
   }; //end of class bvsolver
