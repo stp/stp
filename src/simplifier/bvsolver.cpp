@@ -234,7 +234,6 @@ namespace BEEV
     if (!chosen_symbol)
       {
         ASTNode zero = _bm->CreateZeroConst(32);
-        bool chosen_odd = false;
 
     	o.clear();
         for (ASTVec::const_iterator
@@ -249,22 +248,24 @@ namespace BEEV
             if (BVMULT == monom.GetKind() 
                 && BVCONST == monom[0].GetKind() 
                 && _simp->BVConstIsOdd(monom[0]) 
-                && !chosen_odd
+                && !chosen_symbol
                 && !DoNotSolveThis(var)
                 && ((SYMBOL == var.GetKind() 
-                     && count.single(var))
+                     && count.single(var)
+                     && !VarSeenInTerm(var, rhs)
+                    )
                     || (BVEXTRACT == var.GetKind() 
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
                         && !DoNotSolveThis(var[0])
                         && !VarSeenInTerm(var[0], rhs)))
-                && !VarSeenInTerm(var, rhs)
+
                 )
               {
                 //monom[0] is odd.
                 outmonom = monom;
-                chosen_odd = true;
+                chosen_symbol = true;
               }
             else
               {
@@ -277,7 +278,7 @@ namespace BEEV
       (o.size() > 1) ? 
       _bm->CreateTerm(BVPLUS, lhs.GetValueWidth(), o) : 
       o[0];
-    return outmonom;
+    return outmonom; // can be SYMBOL or (BVUMINUS SYMBOL).
   } //end of choosemonom()
 
   //solver function which solves for variables with odd coefficient
