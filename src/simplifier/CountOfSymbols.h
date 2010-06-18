@@ -20,40 +20,47 @@ class CountOfSymbols {
 
 	ASTNodeSet visited;
 
-	void VarsInTheTerm(const ASTNode& term) {
+	// If no variables are found in "term", then it's cached---we don't need to visit there
+	// again. However, if it's true, we need to revisit (and hence recount), the next time it's
+	// encountered.
+
+	bool VarsInTheTerm(const ASTNode& term) {
 
 		if (visited.find(term) != visited.end())
-			return;
+			return false;
+
+		bool found = false;
 
 		switch (term.GetKind()) {
 		case BVCONST:
-			return;
+			return false;
 		case SYMBOL:
 			//cerr << "debugging: symbol added: " << term << endl;
 			Vars[term]++;
-			return;
+			return true;
 		case READ:
 			//skip the arrayname, provided the arrayname is a SYMBOL
 			//But we don't skip it if it's a WRITE function??
 			if (SYMBOL == term[0].GetKind()) {
-				VarsInTheTerm(term[1]);
+				found |= VarsInTheTerm(term[1]);
 			} else {
-				VarsInTheTerm(term[0]);
-				VarsInTheTerm(term[1]);
+				found |= VarsInTheTerm(term[0]);
+				found |= VarsInTheTerm(term[1]);
 			}
 			break;
 		default: {
 			const ASTVec& c = term.GetChildren();
 			for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it
 					!= itend; it++) {
-				VarsInTheTerm(*it);
+				found |= VarsInTheTerm(*it);
 			}
 			break;
 		}
 		}
 
-		visited.insert(term);
-		return;
+		if (!found)
+			visited.insert(term);
+		return found;
 	} //end of VarsInTheTerm()
 
 public:
