@@ -861,12 +861,12 @@ TERMID_TOK
 {
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4;
+  unsigned rotate = $4 % width;
   if (0 == rotate)
     {
       n = $6;
     }
-  else if (rotate < width)
+  else 
     {
       ASTNode high = parserInterface->CreateBVConst(32,width-1);
       ASTNode zero = parserInterface->CreateBVConst(32,0);
@@ -878,11 +878,6 @@ TERMID_TOK
       n =  new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
       delete $6;
     }
-  else
-    {
-      n = NULL; // remove gcc warning.
-      yyerror("Rotate must be strictly less than the width.");
-    }
       
   $$ = n;
 }
@@ -890,12 +885,12 @@ TERMID_TOK
 {
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4;
+  unsigned rotate = $4 % width;
   if (0 == rotate)
     {
       n = $6;
     }
-  else if (rotate < width)
+  else 
     {
       ASTNode high = parserInterface->CreateBVConst(32,width-1);
       ASTNode zero = parserInterface->CreateBVConst(32,0);
@@ -906,11 +901,6 @@ TERMID_TOK
       ASTNode top =  parserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,high,cut);
       n =  new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
       delete $6;
-    }
-  else
-    {
-      n = NULL; // remove gcc warning.
-      yyerror("Rotate must be strictly less than the width.");
     }
       
   $$ = n;
