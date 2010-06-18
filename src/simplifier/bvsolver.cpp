@@ -190,7 +190,7 @@ namespace BEEV
     const ASTNode& rhs = eq[1];
 
     //collect all the vars in the lhs and rhs
-    CountOfSymbols count(lhs);
+    CountOfSymbols count(eq);
 
     //handle BVPLUS case
     const ASTVec& c = lhs.GetChildren();
@@ -206,7 +206,6 @@ namespace BEEV
             && !chosen_symbol
        		&& !DoNotSolveThis(monom)
             && count.single(monom)
-            && !VarSeenInTerm(monom, rhs)
         )
           {
             outmonom = monom;
@@ -217,7 +216,6 @@ namespace BEEV
            		&& !chosen_symbol
         		&& !DoNotSolveThis(monom[0])
                 && count.single(monom[0])
-                && !VarSeenInTerm(monom[0], rhs)
                  )
           {
             //cerr << "Chosen Monom: " << monom << endl;
@@ -252,15 +250,14 @@ namespace BEEV
                 && !DoNotSolveThis(var)
                 && ((SYMBOL == var.GetKind() 
                      && count.single(var)
-                     && !VarSeenInTerm(var, rhs)
                     )
                     || (BVEXTRACT == var.GetKind() 
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
                         && !DoNotSolveThis(var[0])
-                        && !VarSeenInTerm(var[0], rhs)))
-
+                        && count.single(var[0])
+                        ))
                 )
               {
                 //monom[0] is odd.
@@ -278,7 +275,10 @@ namespace BEEV
       (o.size() > 1) ? 
       _bm->CreateTerm(BVPLUS, lhs.GetValueWidth(), o) : 
       o[0];
-    return outmonom; // can be SYMBOL or (BVUMINUS SYMBOL).
+
+    // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or
+    // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO))
+    return outmonom;
   } //end of choosemonom()
 
   //solver function which solves for variables with odd coefficient
@@ -311,7 +311,7 @@ namespace BEEV
       }
 
     // ChooseMonom makes sure that the the LHS is not contained on the RHS, so we
-    // set this "single" to true in the branch that runs checkMonomial.
+    // set this "single" to true in the branch that runs chooseMonomial.
     bool single = false;
 
     if (BVPLUS == lhs.GetKind())
@@ -333,7 +333,7 @@ namespace BEEV
         //construct:  rhs - (lhs without the chosen monom)
         unsigned int len = lhs.GetValueWidth();
         leftover_lhs = 
-          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS, 
+          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS,
                                                        len, leftover_lhs));
         rhs =
           _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
