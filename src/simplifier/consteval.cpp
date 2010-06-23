@@ -24,7 +24,10 @@ namespace BEEV
 // Const evaluator logical and arithmetic operations.
   ASTNode NonMemberBVConstEvaluator(const ASTNode& t)
   {
-    ASTNode OutputNode;
+    if (t.isConstant())
+	 	return t;
+
+	ASTNode OutputNode;
     Kind k = t.GetKind();
 
     STPMgr* _bm = t.GetSTPMgr();
@@ -694,6 +697,9 @@ namespace BEEV
 
   ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
   {
+	  if (t.isConstant())
+		return t;
+
 	  ASTNode OutputNode;
 
 	  if (CheckSubstitutionMap(t, OutputNode))
