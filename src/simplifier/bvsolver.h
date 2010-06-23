@@ -158,17 +158,27 @@ namespace BEEV
     }
     ;
 
+	  void ClearAllCaches()
+	  {
+	  TermsAlreadySeenMap.clear();
+	  DoNotSolve_TheseVars.clear();
+	  FormulasAlreadySolvedMap.clear();
+	  //TermsAlreadySeenMap_ForArrays.clear();
+	  set<Symbols*> deleted;
+	  for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
+	  {
+		  if (deleted.find(it->second) == deleted.end())
+		  {
+			  deleted.insert(it->second);
+			  delete it->second;
+		  }
+	  }
+	  }
+
     //Destructor
     ~BVSolver()
       {
-        TermsAlreadySeenMap.clear();
-        DoNotSolve_TheseVars.clear();
-        FormulasAlreadySolvedMap.clear();
-        //TermsAlreadySeenMap_ForArrays.clear();
-        for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
-         {
-            	delete it->second;
-        }
+    	ClearAllCaches();
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the
