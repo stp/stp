@@ -204,31 +204,49 @@ namespace BEEV
     for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
     	const ASTNode& monom = *it;
-        if (SYMBOL == monom.GetKind() 
+        if (
+        	(
+        	SYMBOL == monom.GetKind()
             && !chosen_symbol
        		&& !DoNotSolveThis(monom)
-            && count.single(monom)
-        )
-          {
-            outmonom = monom;
-            chosen_symbol = true;
-          }
-        else if (BVUMINUS == monom.GetKind() 
-         		&& SYMBOL == monom[0].GetKind()
-           		&& !chosen_symbol
-        		&& !DoNotSolveThis(monom[0])
-                && count.single(monom[0])
-                 )
-          {
-            //cerr << "Chosen Monom: " << monom << endl;
-            outmonom = monom;
-            chosen_symbol = true;
-          }
-        else
-          {
-            o.push_back(monom);
-          }
-      }
+            && !VarSeenInTerm(monom,rhs)
+            )
+            ||
+            (
+             BVUMINUS == monom.GetKind()
+             && SYMBOL == monom[0].GetKind()
+             && !chosen_symbol
+             && !DoNotSolveThis(monom[0])
+             && !VarSeenInTerm(monom[0],rhs)
+            )
+           )
+        {
+        	// Look through all the children of the BVPLUS and check
+        	// that the variable appears in none of them.
+
+        	ASTNode var = (SYMBOL == monom.GetKind())? monom: monom[0];
+        	bool duplicated = false;
+        	for (ASTVec::const_iterator it2 = c.begin(); it2 != itend; it2++)
+			{
+				if (it2 == it)
+					continue;
+				if (VarSeenInTerm(var,*it2))
+				{
+					duplicated = true;
+					break;
+				}
+			}
+			if (!duplicated)
+			{
+				outmonom = monom; //nb. monom not var.
+				chosen_symbol = true;
+			}
+			else
+				o.push_back(monom);
+        }
+    	else
+    		o.push_back(monom);
+	}
 
     //try to choose only odd coeffed variables first
     if (!chosen_symbol)

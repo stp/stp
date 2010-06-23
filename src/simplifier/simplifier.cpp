@@ -2743,7 +2743,7 @@ namespace BEEV
     for (ASTVec::const_iterator
            it = c.begin(), itend = c.end(); it != itend; it++)
       {
-        ASTNode aaa = *it;
+        const ASTNode& aaa = *it;
         if (SYMBOL == aaa.GetKind())
           {
             vars_to_consts[aaa].push_back(one);
@@ -2808,7 +2808,7 @@ namespace BEEV
            it = vars_to_consts.begin(), itend = vars_to_consts.end();
          it != itend; it++)
       {
-        ASTVec ccc = it->second;
+        const ASTVec& ccc = it->second;
 
         ASTNode constant;
         if (1 < ccc.size())
