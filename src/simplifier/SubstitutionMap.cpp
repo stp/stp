@@ -16,7 +16,50 @@ SubstitutionMap::~SubstitutionMap()
 }
 
 
-//The big substitution function
+//if a is READ(Arr,const) or SYMBOL, and b is BVCONST then return 1
+//if b is READ(Arr,const) or SYMBOL, and a is BVCONST then return -1
+//
+//else return 0 by default
+int TermOrder(const ASTNode& a, const ASTNode& b)
+{
+  Kind k1 = a.GetKind();
+  Kind k2 = b.GetKind();
+
+  //a is of the form READ(Arr,const), and b is const, or
+  //a is of the form var, and b is const
+  if ((k1 == READ
+       && a[0].GetKind() == SYMBOL
+       && a[1].GetKind() == BVCONST
+       && (k2 == BVCONST)))
+    // || k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind()
+    // == BVCONST)))
+    return 1;
+
+  if (SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2))
+    return 1;
+
+  //b is of the form READ(Arr,const), and a is const, or
+  //b is of the form var, and a is const
+  if ((k1 == BVCONST)
+      && ((k2 == READ
+           && b[0].GetKind() == SYMBOL
+           && b[1].GetKind() == BVCONST)))
+    return -1;
+
+  if (SYMBOL == k2
+      && (BVCONST == k1
+          || TRUE == k1
+          || FALSE == k1))
+    return -1;
+
+  return 0;
+} //End of TermOrder()
+
+
+//This finds everything which is (= SYMBOL BVCONST) and everything that is (READ SYMBOL BVCONST).
+//i.e. anything that has a termorder of 1 or -1.
+// The bvsolver puts expressions of the form (= SYMBOL TERM) into the solverMap.
+
 ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransformer*at
 )
 {
@@ -67,7 +110,12 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       ASTVec c = a.GetChildren();
       SortByArith(c);
       ASTNode c1 = simp->SimplifyTerm(c[1]);
-      at->FillUp_ArrReadIndex_Vec(c[0], c1);
+
+      int to;
+      if ((to =TermOrder(c[0],c1))==1 && c[0].GetKind() == READ)
+    	  at->FillUp_ArrReadIndex_Vec(c[0], c1);
+      else if (to ==-1 && c1.GetKind() == READ)
+		at->FillUp_ArrReadIndex_Vec(c1,c[0]);
 
       if (SYMBOL == c[0].GetKind()
           && bm->VarSeenInTerm(c[0], c1))

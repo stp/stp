@@ -791,28 +791,22 @@ namespace BEEV
   void ArrayTransformer::FillUp_ArrReadIndex_Vec(const ASTNode& e0, 
                                                  const ASTNode& e1)
   {
-    int i = TermOrder(e0, e1);
-    if (0 == i)
-      return;
+	  assert(e0.GetKind() == READ);
+	  assert(e1.GetKind() == BVCONST);
 
-    if (1 == i 
-        && e0.GetKind() != SYMBOL 
-        && !simp->CheckSubstitutionMap(e0))
+	  if (e0[0].GetKind() != SYMBOL)
+		  return;
+	  if (e0[1].GetKind() != BVCONST)
+		  return;
+
+    if (!simp->CheckSubstitutionMap(e0))
       {
         (*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
         //e0 is the array read : READ(A,i) and e1 is a bvconst
         Arrayread_SymbolMap[e0] = e1;
         return;
       }
-    if (-1 == i 
-        && e1.GetKind() != SYMBOL 
-        && !simp->CheckSubstitutionMap(e1))
-      {
-        (*Arrayname_ReadindicesMap)[e1[0]].push_back(e1[1]);
-        //e0 is the array read : READ(A,i) and e1 is a bvconst
-        Arrayread_SymbolMap[e1] = e0;
-        return;
-      }
+
   } //End of Fillup
 
 

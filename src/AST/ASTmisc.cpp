@@ -351,44 +351,4 @@ namespace BEEV
     return true;
   } //End of TypeCheck function
 
-
-  //if a is READ(Arr,const) or SYMBOL, and b is BVCONST then return 1
-  //if b is READ(Arr,const) or SYMBOL, and a is BVCONST then return -1
-  //
-  //else return 0 by default
-  int TermOrder(const ASTNode& a, const ASTNode& b)
-  {
-    Kind k1 = a.GetKind();
-    Kind k2 = b.GetKind();
-
-    //a is of the form READ(Arr,const), and b is const, or
-    //a is of the form var, and b is const
-    if ((k1 == READ 
-         && a[0].GetKind() == SYMBOL 
-         && a[1].GetKind() == BVCONST 
-         && (k2 == BVCONST)))
-      // || k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind()
-      // == BVCONST)))
-      return 1;
-
-    if (SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2))
-      return 1;
-
-    //b is of the form READ(Arr,const), and a is const, or
-    //b is of the form var, and a is const
-    if ((k1 == BVCONST) 
-        && ((k2 == READ 
-             && b[0].GetKind() == SYMBOL 
-             && b[1].GetKind() == BVCONST)))
-      return -1;
-
-    if (SYMBOL == k2 
-        && (BVCONST == k1 
-            || TRUE == k1 
-            || FALSE == k1))
-      return -1;
-
-    return 0;
-  } //End of TermOrder()
-
 };//end of namespace
