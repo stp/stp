@@ -11,6 +11,7 @@
 #define BVSOLVER_H
 
 #include "simplifier.h"
+#include "Symbols.h"
 
 namespace BEEV
 {
@@ -60,8 +61,14 @@ namespace BEEV
     //this map is useful while traversing terms and uniquely
     //identifying variables in the those terms. Prevents double
     //counting.
-    ASTNodeMap TermsAlreadySeenMap;
-    //ASTNodeMap TermsAlreadySeenMap_ForArrays;
+	typedef HASHMAP<
+	  Symbols*,
+	  ASTNode,
+	  SymbolPtrHasher
+	  > SymbolPtrToNode;
+	SymbolPtrToNode TermsAlreadySeenMap;
+
+       //ASTNodeMap TermsAlreadySeenMap_ForArrays;
 
     //solved variables list: If a variable has been solved for then do
     //not solve for it again
@@ -97,6 +104,8 @@ namespace BEEV
     //this function return true if the var occurs in term, else the
     //function returns false
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
+	bool VarSeenInTerm(const ASTNode& var, Symbols* term);
+
 
     //takes an even number "in" as input, and returns an odd number
     //(return value) and a power of 2 (as number_shifts by reference),
@@ -130,6 +139,15 @@ namespace BEEV
     //else returns FALSE
     bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
 
+	typedef HASHMAP<
+	  ASTNode,
+	  Symbols*,
+	  ASTNode::ASTNodeHasher,
+	  ASTNode::ASTNodeEqual> ASTNodeToNodes;
+	  ASTNodeToNodes symbol_graph;
+
+	  Symbols* BuildSymbolGraph(const ASTNode& n);
+
   public:
     //constructor
   BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)       
@@ -147,6 +165,10 @@ namespace BEEV
         DoNotSolve_TheseVars.clear();
         FormulasAlreadySolvedMap.clear();
         //TermsAlreadySeenMap_ForArrays.clear();
+        for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
+         {
+            	delete it->second;
+        }
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the

@@ -190,7 +190,9 @@ namespace BEEV
     const ASTNode& rhs = eq[1];
 
     //collect all the vars in the lhs and rhs
-    CountOfSymbols count(eq);
+
+    BuildSymbolGraph(eq);
+    CountOfSymbols count(symbol_graph[eq]);
 
     //handle BVPLUS case
     const ASTVec& c = lhs.GetChildren();
@@ -935,36 +937,84 @@ namespace BEEV
     return output;
   } //end of BVSolve_Even()
 
-  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
-  {
-    ASTNodeMap::iterator it;
-    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
-      {
-        if (it->second == var)
-          {
-            return false;
-          }
-      }
 
-    if (var == term)
-      {
-        return true;
-      }
+	// This builds a reduced version of a graph, where there
+    // is only a new node if the number of non-array SYMBOLS
+    // in the descendents changes. For example (EXTRACT 0 1 n)
+    // will have the same "Symbols" node as n, because there is
+    // no new symbols are introduced.
+	Symbols* BVSolver::BuildSymbolGraph(const ASTNode& n)
+	{
+	if (symbol_graph.find(n) != symbol_graph.end())
+	{
+		return symbol_graph[n];
+	}
 
-    if (term.isConstant())
-    	return false;
+	Symbols* node;
 
-    for (ASTVec::const_iterator 
-           it = term.begin(), itend = term.end();
-         it != itend; it++)
-      {
-        if (VarSeenInTerm(var, *it))
-          {
-            return true;
-          }
-      }
+	// Note we skip array variables. We never solve for them so
+	// can ignore them.
+	if (n.GetKind() == SYMBOL && n.GetIndexWidth() == 0) {
+		node = new Symbols(n);
+		symbol_graph.insert(make_pair(n, node));
+		return node;
+	}
 
-    TermsAlreadySeenMap[term] = var;
-    return false;
-  }//End of VarSeenInTerm
+	vector<Symbols*> children;
+	for (int i = 0; i < n.Degree(); i++) {
+		Symbols* v = BuildSymbolGraph(n[i]);
+		if (!v->empty())
+			children.push_back(v);
+	}
+
+	if (children.size() == 1) {
+		// If there is only a single child with a symbol. Then jump to it.
+		node = children.back();
+	}
+	else
+		node = new Symbols(children);
+
+	symbol_graph.insert(make_pair(n, node));
+
+	return node;
+	}
+
+
+	  bool BVSolver::VarSeenInTerm(const ASTNode& var, Symbols* term)
+	  {
+		  SymbolPtrToNode::iterator it;
+	    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
+	      {
+	        if (it->second == var)
+	          {
+	        	return false;
+	          }
+	      }
+
+	    if (var == term->found)
+	      {
+	        return true;
+	      }
+
+	    for (vector<Symbols*>::const_iterator
+	           it = term->children.begin(), itend = term->children.end();
+	         it != itend; it++)
+	      {
+	        if (VarSeenInTerm(var, *it))
+	          {
+	            return true;
+	          }
+	      }
+
+	    TermsAlreadySeenMap[term] = var;
+	    return false;
+	  }//End of VarSeenInTerm
+
+	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
+	  {
+		  BuildSymbolGraph(term);
+		  return VarSeenInTerm(var,symbol_graph[term]);
+	  }
+
+
 };//end of namespace BEEV
