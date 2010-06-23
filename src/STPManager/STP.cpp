@@ -193,6 +193,9 @@ namespace BEEV {
 
     simp->ClearCaches();
     bm->ClearAllTables();
+    // Deleting it clears out all the buckets associated with hashmaps etc. too.
+    delete bvsolver;
+    bvsolver = new BVSolver(bm,simp);
 
     res = 
       Ctr_Example->CallSAT_ResultCheck(NewSolver, 
