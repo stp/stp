@@ -15,6 +15,9 @@ SubstitutionMap::~SubstitutionMap()
 	delete SolverMap;
 }
 
+// if false. Don't simplify while creating the substitution map.
+// This makes it easier to spot how long is spent in the simplifier.
+const bool simplify_during_create_subM = false;
 
 //if a is READ(Arr,const) or SYMBOL, and b is BVCONST then return 1
 //if b is READ(Arr,const) or SYMBOL, and a is BVCONST then return -1
@@ -93,9 +96,9 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 
       ASTNode c1;
       if (EQ == k)
-    	  c1 = simp->SimplifyTerm(c[1]);
+    	  c1 = simplify_during_create_subM ? simp->SimplifyTerm(c[1]) : c[1];
       else// (IFF == k )
-    	  c1= simp->SimplifyFormula_NoRemoveWrites(c[1], false);
+    	  c1= simplify_during_create_subM ?  simp->SimplifyFormula_NoRemoveWrites(c[1], false) : c[1];
 
       //fill the arrayname readindices vector if e0 is a
       //READ(Arr,index) and index is a BVCONST
