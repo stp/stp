@@ -46,12 +46,12 @@ SimpSolver::SimpSolver() :
 
 SimpSolver::~SimpSolver()
 {
-    free(bwdsub_tmpunit);
+    tlfree(bwdsub_tmpunit);
 
     // NOTE: elimtable.size() might be lower than nVars() at the moment
     for (int i = 0; i < elimtable.size(); i++)
         for (int j = 0; j < elimtable[i].eliminated.size(); j++)
-            free(elimtable[i].eliminated[j]);
+            tlfree(elimtable[i].eliminated[j]);
 }
 
 
@@ -529,7 +529,7 @@ void SimpSolver::remember(Var v)
 
         remembered_clauses++;
         check(addClause(clause));
-        free(&c);
+        tlfree(&c);
     }
 
     elimtable[v].eliminated.clear();
@@ -662,7 +662,7 @@ void SimpSolver::cleanUpClauses()
 
     for (i = j = 0; i < clauses.size(); i++)
         if (clauses[i]->mark() == 1)
-            free(clauses[i]);
+            tlfree(clauses[i]);
         else
             clauses[j++] = clauses[i];
     clauses.shrink(i - j);
