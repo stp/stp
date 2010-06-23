@@ -941,7 +941,7 @@ namespace BEEV
 	// This builds a reduced version of a graph, where there
     // is only a new node if the number of non-array SYMBOLS
     // in the descendents changes. For example (EXTRACT 0 1 n)
-    // will have the same "Symbols" node as n, because there is
+    // will have the same "Symbols" node as n, because
     // no new symbols are introduced.
 	Symbols* BVSolver::BuildSymbolGraph(const ASTNode& n)
 	{
@@ -1012,6 +1012,8 @@ namespace BEEV
 
 	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 	  {
+		  // This only returns true if we are searching for variables that aren't arrays.
+		  assert(var.GetKind() == SYMBOL && var.GetIndexWidth() == 0);
 		  BuildSymbolGraph(term);
 		  return VarSeenInTerm(var,symbol_graph[term]);
 	  }
