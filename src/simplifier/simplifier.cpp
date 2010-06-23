@@ -1592,7 +1592,10 @@ namespace BEEV
   Simplifier::SimplifyTerm(const ASTNode& actualInputterm, 
                            ASTNodeMap* VarConstMap)
   {
-    ASTNode inputterm(actualInputterm); // mutable local copy.
+    if (actualInputterm.isConstant())
+    	return actualInputterm;
+
+	ASTNode inputterm(actualInputterm); // mutable local copy.
 
     //cout << "SimplifyTerm: input: " << a << endl;
     // if (!optimize_flag)
