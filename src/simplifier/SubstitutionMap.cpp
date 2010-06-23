@@ -86,49 +86,25 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       return output;
     }
 
-  if (IFF == k)
+  if (IFF == k || EQ == k)
     {
       ASTVec c = a.GetChildren();
       SortByArith(c);
-      if (SYMBOL != c[0].GetKind() ||
-          bm->VarSeenInTerm(c[0],
-                            simp->SimplifyFormula_NoRemoveWrites(c[1], false)))
-        {
-          return a;
-        }
-      bool updated =
-        UpdateSubstitutionMap(c[0],
-                                    simp->SimplifyFormula(c[1], false));
-      output = updated ? ASTTrue : a;
-      return output;
-    }
 
-  if (EQ == k)
-    {
+      ASTNode c1;
+      if (EQ == k)
+    	  c1 = simp->SimplifyTerm(c[1]);
+      else// (IFF == k )
+    	  c1= simp->SimplifyFormula_NoRemoveWrites(c[1], false);
+
       //fill the arrayname readindices vector if e0 is a
       //READ(Arr,index) and index is a BVCONST
-      ASTVec c = a.GetChildren();
-      SortByArith(c);
-      ASTNode c1 = simp->SimplifyTerm(c[1]);
-
       int to;
       if ((to =TermOrder(c[0],c1))==1 && c[0].GetKind() == READ)
     	  at->FillUp_ArrReadIndex_Vec(c[0], c1);
       else if (to ==-1 && c1.GetKind() == READ)
 		at->FillUp_ArrReadIndex_Vec(c1,c[0]);
 
-      if (SYMBOL == c[0].GetKind()
-          && bm->VarSeenInTerm(c[0], c1))
-        {
-          return a;
-        }
-
-      if (1 == TermOrder(c[0], c1)
-          && READ == c[0].GetKind()
-          && bm->VarSeenInTerm(c[0][1], c1))
-        {
-          return a;
-        }
       bool updated = UpdateSubstitutionMap(c[0], c1);
       output = updated ? ASTTrue : a;
       return output;
