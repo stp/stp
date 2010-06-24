@@ -149,7 +149,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	ASTNodeMap cache;
-	return replace(n,SolverMap,cache);
+	return replace(n,*SolverMap,cache);
 }
 
 // NOTE the fromTo map is changed as we traverse downwards.
