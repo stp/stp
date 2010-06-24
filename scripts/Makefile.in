@@ -196,11 +196,8 @@ regresscapi: REGRESS_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
 regresscapi: baseTest
 
 .PHONY: regressstp
-regressstp: TO_RUN=scripts/run_tests.pl --td=tests/bio-tests
-regressstp: REGRESS_LOG = `date +%Y-%m-%d`"-regress-stp-bio.log"
-regressstp: baseTest
 regressstp: TO_RUN=scripts/run_tests.pl --td=tests/big-test
-regressstp: REGRESS_LOG = `date +%Y-%m-%d`"-regress-stp-big-test.log"
+regressstp: REGRESS_LOG = `date +%Y-%m-%d`"-regress-stp.log"
 regressstp: baseTest
 
 .PHONY: regresscvcbasic
