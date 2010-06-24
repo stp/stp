@@ -81,6 +81,8 @@ public:
 			return false;
 
 		assert(e0 != e1); // One side should be a variable, the other a constant.
+		assert(e0.GetValueWidth() == e1.GetValueWidth());
+		assert(e0.GetIndexWidth() == e1.GetIndexWidth());
 
 		//e0 is of the form READ(Arr,const), and e1 is const, or
 		//e0 is of the form var, and e1 is const
@@ -107,6 +109,11 @@ public:
 
 	ASTNode CreateSubstitutionMap(const ASTNode& a,   ArrayTransformer*at);
 
+	ASTNode applySubstitutionMap(const ASTNode& n);
+
+	// Replace any nodes in "n" that exist in the fromTo map.
+	// NB the fromTo map is changed.
+	ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
 };
 
 }

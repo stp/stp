@@ -145,4 +145,99 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   return output;
 } //end of CreateSubstitutionMap()
 
+
+ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
+{
+	ASTNodeMap cache;
+	return replace(n,SolverMap,cache);
+}
+
+// NOTE the fromTo map is changed as we traverse downwards.
+// We call replace on each of the things in the fromTo map aswell.
+// This is in case we have a fromTo map: (x maps to y), (y maps to 5),
+// and pass the replace() function the node "x" to replace, then it
+// will return 5, rather than y.
+
+ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
+		ASTNodeMap& cache)
+{
+	ASTNodeMap::const_iterator it;
+	if ((it = cache.find(n)) != cache.end())
+		return it->second;
+
+	if ((it = fromTo.find(n)) != fromTo.end())
+	{
+		if (n.GetIndexWidth() != 0)
+		{
+			const ASTNode& r = it->second;
+			r.SetIndexWidth(n.GetIndexWidth());
+			assert(BVTypeCheck(r));
+			ASTNode replaced = replace(r, fromTo, cache);
+			if (replaced != r)
+				fromTo[n] = replaced;
+
+			return replaced;
+		}
+		ASTNode replaced = replace(it->second, fromTo, cache);
+		if (replaced != it->second)
+			fromTo[n] = replaced;
+
+		return replaced;
+	}
+
+	// These can't be created like regular nodes are. Skip 'em for now.
+	if (n.isConstant() || n.GetKind() == SYMBOL /*|| n.GetKind() == WRITE*/)
+		return n;
+
+	ASTVec children;
+	children.reserve(n.GetChildren().size());
+	for (unsigned i = 0; i < n.GetChildren().size(); i++)
+	{
+		children.push_back(replace(n[i], fromTo, cache));
+	}
+
+	// This code short-cuts if the children are the same. Nodes with the same children,
+	// won't have necessarily given the same node if the simplifyingNodeFactory is enabled
+	// now, but wasn't enabled when the node was created. Shortcutting saves lots of time.
+
+	ASTNode result;
+	if (n.GetType() == BOOLEAN_TYPE)
+	{
+		assert(children.size() > 0);
+		if (children != n.GetChildren()) // short-cut.
+		{
+			result = bm->CreateNode(n.GetKind(), children);
+		}
+		else
+			result = n;
+	}
+	else
+	{
+		assert(children.size() > 0);
+		if (children != n.GetChildren()) // short-cut.
+		{
+			// If the index and value width aren't saved, they are reset sometimes (??)
+			const unsigned int indexWidth = n.GetIndexWidth();
+			const unsigned int valueWidth = n.GetValueWidth();
+			result = bm->CreateTerm(n.GetKind(), n.GetValueWidth(),
+					children);
+			result.SetValueWidth(valueWidth);
+			result.SetIndexWidth(indexWidth);
+		}
+		else
+			result = n;
+	}
+
+	if (n != result)
+	{
+		assert(BVTypeCheck(result));
+		assert(result.GetValueWidth() == n.GetValueWidth());
+		assert(result.GetIndexWidth() == n.GetIndexWidth());
+	}
+
+	cache[n] = result;
+	return result;
+}
+
+
 };
