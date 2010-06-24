@@ -61,9 +61,10 @@ namespace BEEV
     //this map is useful while traversing terms and uniquely
     //identifying variables in the those terms. Prevents double
     //counting.
-	typedef HASHMAP<
+
+    typedef HASHMAP<
 	  Symbols*,
-	  ASTNode,
+	  ASTNodeSet,
 	  SymbolPtrHasher
 	  > SymbolPtrToNode;
 	SymbolPtrToNode TermsAlreadySeenMap;
@@ -77,11 +78,6 @@ namespace BEEV
     //checks if var has been solved for or not. if yes, then return
     //true else return false
     bool DoNotSolveThis(const ASTNode& var);
-
-    //traverses a term, and creates a multiset of all variables in the
-    //term. Does memoization to avoid double counting.
-    void VarsInTheTerm(const ASTNode& lhs, ASTNodeMultiSet& v);
-    void VarsInTheTerm_TopLevel(const ASTNode& lhs, ASTNodeMultiSet& v);
 
     //choose a suitable var from the term
     ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm);
@@ -98,13 +94,13 @@ namespace BEEV
     //bool CheckForArrayReads(const ASTNode& term);
     //bool CheckForArrayReads_TopLevel(const ASTNode& term);
 
-    //Creates new variables used in solving
-    ASTNode NewVar(unsigned int n);
+    typedef HASHSET<Symbols*,SymbolPtrHasher> SymbolPtrSet;
 
     //this function return true if the var occurs in term, else the
     //function returns false
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
-	bool VarSeenInTerm(const ASTNode& var, Symbols* term);
+
+    void VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av);
 
 
     //takes an even number "in" as input, and returns an odd number
@@ -115,9 +111,6 @@ namespace BEEV
     //bit-vector arithmetic published in DAC 1998) paper for precise
     //understanding of the algorithm
     void SplitEven_into_Oddnum_PowerOf2(const ASTNode& in,
-                                           unsigned int& number_shifts);
-
-    ASTNode SplitEven_into_Oddnum_PowerOf2_OLD(const ASTNode& in,
                                            unsigned int& number_shifts);
 
     //Once a formula has been solved, then update the alreadysolvedmap
@@ -155,30 +148,12 @@ namespace BEEV
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);
       ASTUndefined = _bm->CreateNode(UNDEFINED);
-    }
-    ;
+    };
 
-	  void ClearAllCaches()
-	  {
-	  TermsAlreadySeenMap.clear();
-	  DoNotSolve_TheseVars.clear();
-	  FormulasAlreadySolvedMap.clear();
-	  //TermsAlreadySeenMap_ForArrays.clear();
-	  set<Symbols*> deleted;
-	  for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
-	  {
-		  if (deleted.find(it->second) == deleted.end())
-		  {
-			  deleted.insert(it->second);
-			  delete it->second;
-		  }
-	  }
-	  }
-
-    //Destructor
+     //Destructor
     ~BVSolver()
       {
-    	ClearAllCaches();
+    	ClearAllTables();
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the
@@ -187,9 +162,18 @@ namespace BEEV
 
     void ClearAllTables(void)
     {
-      DoNotSolve_TheseVars.clear();
-      FormulasAlreadySolvedMap.clear();
-      //TermsAlreadySeenMap_ForArrays.clear();
+  	  TermsAlreadySeenMap.clear();
+  	  DoNotSolve_TheseVars.clear();
+  	  FormulasAlreadySolvedMap.clear();
+  	  set<Symbols*> deleted;
+  	  for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
+  	  {
+  		  if (deleted.find(it->second) == deleted.end())
+  		  {
+  			  deleted.insert(it->second);
+  			  delete it->second;
+  		  }
+  	  }
     } //End of ClearAllTables()
 
   }; //end of class bvsolver

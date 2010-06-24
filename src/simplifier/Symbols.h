@@ -8,7 +8,6 @@ class Symbols {
 		Symbols& operator =(const Symbols& other) { /*..*/}
 		Symbols(const Symbols& other) {/*..*/}
 
-//		pair<ASTNode,bool> cache;
 	public:
 
 		const ASTNode found;
@@ -19,6 +18,7 @@ class Symbols {
 
 		Symbols(const ASTNode& n): found(n)
 		{
+			assert(BEEV::SYMBOL == n.GetKind());
 		}
 
 		// This will create an "empty" node if the array is empty.
@@ -34,30 +34,14 @@ class Symbols {
 			assert(children.size() != 1);
 		}
 
-		bool isContained(const ASTNode& n) {
-//			if (cache.first == n)
-//				return cache.second;
-
-			bool result = false;
-			if (!found.IsNull())
-				result =  (found == n);
-			else {
-				for (int i = 0; i < children.size(); i++)
-					if (children[i]->isContained(n))
-					{
-						result =  true;
-						break;
-					}
-			}
-//			cache = make_pair(n,result);
-			return result;
+		bool isLeaf()
+		{
+			return !found.IsNull();
 		}
 
 		bool empty() const {
 			return (found.IsNull() && children.size() == 0);
 		}
-
-
 	};
 
 class SymbolPtrHasher

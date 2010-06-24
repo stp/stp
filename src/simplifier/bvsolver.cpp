@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -38,6 +38,7 @@
 //4. Outside the solver, Substitute and Re-normalize the input DAG
 namespace BEEV
 {
+	//experimental options. Don't curerntly work.
 	const bool flatten_ands = false;
 	const bool sort_extracts_last = false;
 
@@ -72,44 +73,8 @@ namespace BEEV
   			&& !CONSTANTBV::BitVector_bit_test(in.GetBVConst(), number_shifts); number_shifts++) {
   	};
   	assert(number_shifts >0); // shouldn't be odd.
-
-#ifndef NDEBUG
-    // check that old == new.
-  	unsigned t_number_shifts=0;
-  	SplitEven_into_Oddnum_PowerOf2_OLD(in,t_number_shifts);
-  	assert(number_shifts == t_number_shifts);
-#endif
   }
 
-  //FIXME This is doing way more arithmetic than it needs to.
-  //accepts an even number "in", and splits it into an odd number and
-  //a power of 2. i.e " in = b.(2^k) ". returns the odd number, and
-  //the power of two by reference
-  ASTNode BVSolver::SplitEven_into_Oddnum_PowerOf2_OLD(const ASTNode& in,
-                                                   unsigned int& number_shifts)
-  {
-    if (BVCONST != in.GetKind() || _simp->BVConstIsOdd(in))
-      {
-        FatalError("BVSolver:SplitNum_Odd_PowerOf2: "\
-                   "input must be a BVCONST and even\n", in);
-      }
-
-    unsigned int len = in.GetValueWidth();
-    ASTNode zero = _bm->CreateZeroConst(len);
-    ASTNode two = _bm->CreateTwoConst(len);
-    ASTNode div_by_2 = in;
-    ASTNode mod_by_2 = 
-      _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
-    while (mod_by_2 == zero)
-      {
-        div_by_2 = 
-          _simp->BVConstEvaluator(_bm->CreateTerm(BVDIV, len, div_by_2, two));
-        number_shifts++;
-        mod_by_2 = 
-          _simp->BVConstEvaluator(_bm->CreateTerm(BVMOD, len, div_by_2, two));
-      }
-    return div_by_2;
-  } //end of SplitEven_into_Oddnum_PowerOf2()
 
 #if 0
   //Checks if there are any ARRAYREADS in the term, after the
@@ -997,35 +962,41 @@ namespace BEEV
 	return node;
 	}
 
-
-	  bool BVSolver::VarSeenInTerm(const ASTNode& var, Symbols* term)
+	// Builds a set of the SYMBOLS that were found under the "term". The symbols are the union of "found" and
+	// all the sets : TermsAlreadySeen(av[0]) union ... TermsAlreadySeen(av[n])".
+	  void BVSolver::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av)
 	  {
-		  SymbolPtrToNode::iterator it;
+		  if (visited.find(term) != visited.end())
+		  {
+			  return;
+		  }
+		SymbolPtrToNode::const_iterator it;
 	    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
 	      {
-	        if (it->second == var)
-	          {
-	        	return false;
-	          }
+	    	// We've previously built the set of variables below this "symbols".
+	    	// It's not added into "found" because its sometimes 70k variables
+	    	// big, and if there are no other symbols discovered it's a terrible
+	    	// waste to create a copy of the set. Instead we store (in effect)
+	    	// a pointer to the set.
+	    	av.push_back(term);
+	    	return;
 	      }
 
-	    if (var == term->found)
-	      {
-	        return true;
-	      }
+	    if (term->isLeaf())
+	    {
+	    	found.insert(term->found);
+	    	return;
+	    }
 
 	    for (vector<Symbols*>::const_iterator
 	           it = term->children.begin(), itend = term->children.end();
 	         it != itend; it++)
 	      {
-	        if (VarSeenInTerm(var, *it))
-	          {
-	            return true;
-	          }
+	        VarSeenInTerm(*it,visited,found,av);
 	      }
 
-	    TermsAlreadySeenMap[term] = var;
-	    return false;
+	    visited.insert(term);
+	    return;
 	  }//End of VarSeenInTerm
 
 	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
@@ -1033,7 +1004,31 @@ namespace BEEV
 		  // This only returns true if we are searching for variables that aren't arrays.
 		  assert(var.GetKind() == SYMBOL && var.GetIndexWidth() == 0);
 		  BuildSymbolGraph(term);
-		  return VarSeenInTerm(var,symbol_graph[term]);
+
+		  SymbolPtrSet visited;
+		  ASTNodeSet symbols;
+		  vector<Symbols*> av;
+		  VarSeenInTerm(symbol_graph[term],visited,symbols,av);
+
+		  bool result = (symbols.count(var) !=0);
+		  for (int i =0 ; i < av.size();i++)
+		  {
+			  if (result)
+				  break;
+			  const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
+			  result |= (sym.find(var) !=sym.end());
+		  }
+
+		  if (visited.size() > 50) // No use caching it, unless we've done some work.
+		  {
+			  for (int i =0 ; i < av.size();i++)
+			  {
+				  const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
+				  symbols.insert(sym.begin(), sym.end());
+			  }
+			  TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
+		  }
+		  return result;
 	  }
 
 
