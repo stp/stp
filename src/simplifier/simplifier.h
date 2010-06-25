@@ -112,6 +112,7 @@ namespace BEEV
     bool CheckSubstitutionMap(const ASTNode& a);
     bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
 
+    ASTNode applySubstitutionMap(const ASTNode& n);
 
     void ResetSimplifyMaps(void);
 

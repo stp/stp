@@ -8,6 +8,7 @@
  ********************************************************************/
 
 #include "STP.h"
+#include "DifficultyScore.h"
 
 namespace BEEV {
 
@@ -81,6 +82,9 @@ namespace BEEV {
     bm->ASTNodeStats("input asserts and query: ", inputToSAT);
 
     ASTNode simplified_solved_InputToSAT = inputToSAT;
+
+    long initial_difficulty_score = DifficultyScore::score(original_input);
+
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
@@ -177,10 +181,41 @@ namespace BEEV {
     bm->SimplifyWrites_InPlace_Flag = false;
     bm->Begin_RemoveWrites = false;
 
+
+    long final_difficulty_score = DifficultyScore::score(simplified_solved_InputToSAT);
+    if (bm->UserFlags.stats_flag)
+    {
+    	cerr << "Initial Difficulty Score:" << initial_difficulty_score <<endl;
+    	cerr << "Final Difficulty Score:" << final_difficulty_score <<endl;
+    }
+
+    bool optimize_enabled = bm->UserFlags.optimize_flag;
+    if (final_difficulty_score > 2 *initial_difficulty_score  && !containsArrayOps(orig_input))
+    {
+    	// If the simplified problem is harder, than the
+    	// initial problem we revert back to the initial
+    	// problem.
+
+    	if (bm->UserFlags.stats_flag)
+    		cerr << "simplification made the problem harder, reverting."<<endl;
+    	simplified_solved_InputToSAT = original_input;
+
+    	// I do this to clear the substitution/solver map.
+    	// Not sure what would happen if it contained simplifications
+    	// that haven't been applied.
+    	simp->ClearAllTables();
+
+    	// The arrayTransformer calls simplify. We don't want
+    	// it to put back in all the bad simplifications.
+    	bm->UserFlags.optimize_flag = false;
+    }
+
     simplified_solved_InputToSAT = 
       arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
     bm->ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
     bm->TermsAlreadySeenMap_Clear();
+
+	bm->UserFlags.optimize_flag = optimize_enabled;
 
     SOLVER_RETURN_TYPE res;
     if (bm->UserFlags.arrayread_refinement_flag)

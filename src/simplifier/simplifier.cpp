@@ -150,6 +150,11 @@ namespace BEEV
 	  return substitutionMap.CheckSubstitutionMap(key,output);
   }
 
+  ASTNode Simplifier::applySubstitutionMap(const ASTNode& n)
+  {
+	return substitutionMap.applySubstitutionMap(n);
+  }
+
   bool Simplifier::CheckSubstitutionMap(const ASTNode& key)
   {
 	  return substitutionMap.CheckSubstitutionMap(key);
@@ -263,8 +268,7 @@ namespace BEEV
   Simplifier::SimplifyFormula(const ASTNode& b, 
                               bool pushNeg, ASTNodeMap* VarConstMap)
   {
-    //     if (!optimize_flag)
-    //       return b;
+	  assert(_bm->UserFlags.optimize_flag);
 
     Kind kind = b.GetKind();
     if (BOOLEAN_TYPE != b.GetType())
@@ -1592,7 +1596,9 @@ namespace BEEV
   Simplifier::SimplifyTerm(const ASTNode& actualInputterm, 
                            ASTNodeMap* VarConstMap)
   {
-    if (actualInputterm.isConstant())
+	  assert(_bm->UserFlags.optimize_flag);
+
+	  if (actualInputterm.isConstant())
     	return actualInputterm;
 
 	ASTNode inputterm(actualInputterm); // mutable local copy.
