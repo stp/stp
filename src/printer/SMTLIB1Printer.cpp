@@ -32,7 +32,7 @@ namespace printer
 {
     os << "(" << endl;
     os << "benchmark blah" << endl;
-	if (containsAnyArrayOps(n))
+	if (containsArrayOps(n))
 	    os << ":logic QF_AUFBV" << endl;
 	else
 		os << ":logic QF_BV" << endl;

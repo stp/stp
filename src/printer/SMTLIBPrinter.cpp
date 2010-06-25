@@ -27,11 +27,6 @@ static string tolower(const char * name)
 	//correctly print shared subterms inside the LET itself
 	BEEV::ASTNodeMap NodeLetVarMap1;
 
-	bool containsAnyArrayOps(const ASTNode& n)
-	{
-		return true;
-	}
-
 	  // copied from Presentation Langauge printer.
 	  ostream& SMTLIB_Print(ostream &os, const ASTNode n, const int indentation, void (*SMTLIB1_Print1)(ostream&, const ASTNode , int , bool ), bool smtlib1)
 	  {
