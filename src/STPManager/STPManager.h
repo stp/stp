@@ -127,6 +127,11 @@ namespace BEEV
     // Called by ASTNode constructors to uniqueify ASTBVConst
     ASTBVConst *LookupOrCreateBVConst(ASTBVConst& s);
   
+    // Cache of zero/one/max BVConsts of different widths.
+    ASTVec zeroes;
+    ASTVec ones;
+    ASTVec max;
+
   public:
     
     /****************************************************************

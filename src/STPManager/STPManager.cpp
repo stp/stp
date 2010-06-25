@@ -285,16 +285,43 @@ namespace BEEV
 
   ASTNode STPMgr::CreateZeroConst(unsigned width)
   {
-    CBV z = CONSTANTBV::BitVector_Create(width, true);
-    return CreateBVConst(z, width);
+	  assert(width > 0);
+	  if (zeroes.size() == 0)
+	  {
+		  zeroes.push_back(ASTNode()); // null
+		  for (int i =1; i < 65;i++)
+			  zeroes.push_back(CreateZeroConst(i));
+	  }
+
+	if (width < zeroes.size())
+		return zeroes[width];
+	else
+	{
+		CBV z = CONSTANTBV::BitVector_Create(width, true);
+		return CreateBVConst(z, width);
+	}
   }
+
 
   ASTNode STPMgr::CreateOneConst(unsigned width)
   {
-    CBV o = CONSTANTBV::BitVector_Create(width, true);
-    CONSTANTBV::BitVector_increment(o);
+	  assert(width > 0);
+	  if (ones.size() == 0)
+	  {
+		  ones.push_back(ASTNode()); // null
+		  for (int i =1; i < 65;i++)
+			  ones.push_back(CreateOneConst(i));
+	  }
 
-    return CreateBVConst(o, width);
+	if (width < ones.size())
+		return ones[width];
+	else
+	{
+	    CBV o = CONSTANTBV::BitVector_Create(width, true);
+	    CONSTANTBV::BitVector_increment(o);
+
+	    return CreateBVConst(o, width);
+	}
   }
 
   ASTNode STPMgr::CreateTwoConst(unsigned width)
@@ -308,10 +335,23 @@ namespace BEEV
 
   ASTNode STPMgr::CreateMaxConst(unsigned width)
   {
-    CBV max = CONSTANTBV::BitVector_Create(width, false);
-    CONSTANTBV::BitVector_Fill(max);
+	  assert(width > 0);
+	  if (max.size() == 0)
+	  {
+		  max.push_back(ASTNode()); // null
+		  for (int i =1; i < 65;i++)
+			  max.push_back(CreateMaxConst(i));
+	  }
 
-    return CreateBVConst(max, width);
+	if (width < max.size())
+		return max[width];
+	else
+	{
+		  CBV max = CONSTANTBV::BitVector_Create(width, false);
+	    CONSTANTBV::BitVector_Fill(max);
+
+	    return CreateBVConst(max, width);
+	}
   }
 
   //To ensure unique BVConst nodes, lookup the node in unique-table

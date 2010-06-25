@@ -301,7 +301,7 @@ namespace BEEV
     ;
 
     // Get indexth childNode.
-    const ASTNode operator[](size_t index) const
+    const ASTNode& operator[](size_t index) const
     {
       return GetChildren()[index];
     }

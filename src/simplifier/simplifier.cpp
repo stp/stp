@@ -1640,9 +1640,11 @@ namespace BEEV
 
     if (simplify_upfront)
     {
-		if (k != BVCONST && k != SYMBOL) // const and symbols need to be created specially.
+    	assert(k != BVCONST);
+		if (k != SYMBOL) // const and symbols need to be created specially.
 		{
 			ASTVec v;
+			v.reserve(actualInputterm.Degree());
 			for (unsigned i = 0; i < actualInputterm.Degree(); i++)
 				if (inputterm[i].GetType() == BITVECTOR_TYPE)
 					v.push_back(SimplifyTerm(inputterm[i], VarConstMap));
@@ -1651,10 +1653,14 @@ namespace BEEV
 				else
 					v.push_back(inputterm[i]);
 
-			// TODO: Should check if the children arrays are different and only
-			// create then.
-			output = nf->CreateTerm(k, inputValueWidth, v);
-			output.SetIndexWidth(actualInputterm.GetIndexWidth());
+			assert(v.size() > 0);
+			if (v != actualInputterm.GetChildren()) // short-cut.
+			{
+				output = nf->CreateTerm(k, inputValueWidth, v);
+				output.SetIndexWidth(actualInputterm.GetIndexWidth());
+			}
+			else
+				output = actualInputterm;
 
 			if (inputterm != output) {
 				UpdateSimplifyMap(inputterm, output, false, VarConstMap);
@@ -2011,7 +2017,8 @@ namespace BEEV
           //indices for BVEXTRACT
           ASTNode i = inputterm[1];
           ASTNode j = inputterm[2];
-          ASTNode zero = _bm->CreateBVConst(32, 0);
+          ASTNode zero = _bm->CreateZeroConst(32);
+
           //recall that the indices of BVEXTRACT are always 32 bits
           //long. therefore doing a GetBVUnsigned is ok.
           unsigned int i_val = i.GetUnsignedConst();
@@ -2160,7 +2167,7 @@ namespace BEEV
               //        } break; }
             case ITE:
               {
-                ASTNode t0 = a0[0];
+                const ASTNode& t0 = a0[0];
                 ASTNode t1 = 
                   SimplifyTerm(nf->CreateTerm(BVEXTRACT,
                                                a_len, a0[1], i, j), 
@@ -2526,7 +2533,7 @@ namespace BEEV
                         {
                           ASTNode zero = _bm->CreateZeroConst(shift);
                           ASTNode hi = _bm->CreateBVConst(32, width - shift -1);
-                          ASTNode low = _bm->CreateBVConst(32, 0);
+                          ASTNode low = _bm->CreateZeroConst(32);
                           ASTNode extract = 
                             nf->CreateTerm(BVEXTRACT, width - shift,
                                             a, hi, low);
