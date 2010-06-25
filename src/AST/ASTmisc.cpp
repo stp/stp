@@ -15,7 +15,28 @@ namespace BEEV
   /****************************************************************
    * Universal Helper Functions                                   *
    ****************************************************************/
-  
+
+bool containsArrayOps(const ASTNode& n, ASTNodeSet& visited)
+{
+	if (visited.find(n) != visited.end())
+		return false;
+	if (n.GetType() == ARRAY_TYPE)
+		return true;
+
+	for (int i =0; i < n.Degree();i++)
+		if (containsArrayOps(n[i],visited))
+			return true;
+
+	visited.insert(n);
+	return false;
+}
+
+bool containsArrayOps(const ASTNode&n)
+{
+	ASTNodeSet visited;
+	return containsArrayOps(n, visited);
+}
+
 	bool isCommutative(const Kind k) {
 	switch (k) {
 	case BVOR:
@@ -130,6 +151,17 @@ namespace BEEV
   }
 
 
+  void checkChildrenAreBV(const ASTVec& v, const ASTNode&n) {
+	for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
+		if (BITVECTOR_TYPE != it->GetType()) {
+			cerr << "The type is: " << it->GetType() << endl;
+			FatalError(
+					"BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n",
+					n);
+		}
+}
+
+
   /* FUNCTION: Typechecker for terms and formulas
    *
    * TypeChecker: Assumes that the immediate Children of the input
@@ -157,7 +189,9 @@ namespace BEEV
           case SYMBOL:
             return true;
           case ITE:
-            if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
+  			if (n.Degree() != 3)
+  				FatalError("BVTypeCheck: should have exactly 3 args\n", n);
+        	if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
               FatalError("BVTypeCheck: The term t does not typecheck, where t = \n", n);
             if (n[1].GetValueWidth() != n[2].GetValueWidth())
               FatalError("BVTypeCheck: length of THENbranch != length of ELSEbranch in the term t = \n", n);
@@ -193,20 +227,34 @@ namespace BEEV
               FatalError("Third parameter to read should be a bitvector", n[2]);
 
             break;
+
+          case BVDIV:
+          case BVMOD:
+          case BVSUB:
+
+          case SBVDIV:
+          case SBVREM:
+          case SBVMOD:
+
+          case BVLEFTSHIFT:
+          case BVRIGHTSHIFT:
+          case BVSRSHIFT:
+          case BVVARSHIFT:
+        	  if (n.Degree() != 2)
+        		  FatalError("BVTypeCheck: should have exactly 2 args\n", n);
+        	  // run on.
           case BVOR:
           case BVAND:
           case BVXOR:
           case BVNOR:
           case BVNAND:
           case BVXNOR:
+
           case BVPLUS:
           case BVMULT:
-          case BVDIV:
-          case BVMOD:
-          case BVSUB:
             {
               if (!(v.size() >= 2))
-                FatalError("BVTypeCheck:bitwise Booleans and BV arith operators must have atleast two arguments\n", n);
+                FatalError("BVTypeCheck:bitwise Booleans and BV arith operators must have at least two arguments\n", n);
               unsigned int width = n.GetValueWidth();
               for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
                 {
@@ -224,60 +272,52 @@ namespace BEEV
               break;
             }
           case BVSX:
-            //in BVSX(n[0],len), the length of the BVSX term must be
-            //greater than the length of n[0]
-            if (n[0].GetValueWidth() > n.GetValueWidth())
-              {
-                FatalError("BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n", n);
-              }
-            if ((v.size() != 2))
-              FatalError("BVTypeCheck:BVSX must have two arguments. The second is the new width\n", n);
-            break;
+			//in BVSX(n[0],len), the length of the BVSX term must be
+			//greater than the length of n[0]
+			if (n[0].GetValueWidth() > n.GetValueWidth()) {
+				FatalError(
+						"BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n",
+						n);
+			}
+			if ((v.size() != 2))
+				FatalError(
+						"BVTypeCheck:BVSX must have two arguments. The second is the new width\n",
+						n);
+			break;
 
-          default:
-            for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend; it++)
-              if (BITVECTOR_TYPE != it->GetType())
-                {
-                  cerr << "The type is: " << it->GetType() << endl;
-                  FatalError("BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n", n);
-                }
-            break;
-          }
-
-        switch (k)
-          {
-          case BVCONCAT:
-            if (n.Degree() != 2)
-              FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-            if (n.GetValueWidth() != n[0].GetValueWidth() + n[1].GetValueWidth())
-              FatalError("BVTypeCheck:BVCONCAT: lengths do not add up\n", n);
-            break;
-          case BVUMINUS:
-          case BVNEG:
-            if (n.Degree() != 1)
-              FatalError("BVTypeCheck: should have exactly 1 args\n", n);
-            break;
-          case BVEXTRACT:
-            if (n.Degree() != 3)
-              FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-            if (!(BVCONST == n[1].GetKind() && BVCONST == n[2].GetKind()))
-              FatalError("BVTypeCheck: indices should be BVCONST\n", n);
-            if (n.GetValueWidth() != n[1].GetUnsignedConst() - n[2].GetUnsignedConst() + 1)
-              FatalError("BVTypeCheck: length mismatch\n", n);
-            if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
-              FatalError("BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n", n);
-            break;
-          case BVLEFTSHIFT:
-          case BVRIGHTSHIFT:
-            if (n.Degree() != 2)
-              FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-            break;
-            //case BVVARSHIFT:
-            //case BVSRSHIFT:
-            //break;
-          default:
-            break;
-          }
+		case BVCONCAT:
+			checkChildrenAreBV(v, n);
+			if (n.Degree() != 2)
+				FatalError("BVTypeCheck: should have exactly 2 args\n", n);
+			if (n.GetValueWidth() != n[0].GetValueWidth()
+					+ n[1].GetValueWidth())
+				FatalError("BVTypeCheck:BVCONCAT: lengths do not add up\n", n);
+			break;
+		case BVUMINUS:
+		case BVNEG:
+			checkChildrenAreBV(v, n);
+			if (n.Degree() != 1)
+				FatalError("BVTypeCheck: should have exactly 1 args\n", n);
+			break;
+		case BVEXTRACT:
+			checkChildrenAreBV(v, n);
+			if (n.Degree() != 3)
+				FatalError("BVTypeCheck: should have exactly 3 args\n", n);
+			if (!(BVCONST == n[1].GetKind() && BVCONST == n[2].GetKind()))
+				FatalError("BVTypeCheck: indices should be BVCONST\n", n);
+			if (n.GetValueWidth() != n[1].GetUnsignedConst()
+					- n[2].GetUnsignedConst() + 1)
+				FatalError("BVTypeCheck: length mismatch\n", n);
+			if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
+				FatalError(
+						"BVTypeCheck: Top index of select is greater or equal to the bitwidth.\n",
+						n);
+			break;
+		default:
+			cerr << _kind_names[k];
+			FatalError("No type checking for type");
+			break;
+		}
       }
     else
       {
@@ -294,7 +334,9 @@ namespace BEEV
               FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);
             break;
           case EQ:
-            if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
+  			if (n.Degree() != 2)
+  				FatalError("BVTypeCheck: should have exactly 2 args\n", n);
+        	if (!(n[0].GetValueWidth() == n[1].GetValueWidth() && n[0].GetIndexWidth() == n[1].GetIndexWidth()))
               {
                 cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
                 cerr << "valuewidth of rhs of EQ: " << n[1].GetValueWidth() << endl;
@@ -311,6 +353,8 @@ namespace BEEV
           case BVSLE:
           case BVSGT:
           case BVSGE:
+  			if (n.Degree() != 2)
+  				FatalError("BVTypeCheck: should have exactly 2 args\n", n);
             if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())
               FatalError("BVTypeCheck: terms in atomic formulas must be bitvectors", n);
             if (n[0].GetValueWidth() != n[1].GetValueWidth())
@@ -343,7 +387,6 @@ namespace BEEV
             //FIXME: Todo
             break;
           default:
-            
             FatalError("BVTypeCheck: Unrecognized kind: ");
             break;
           }
