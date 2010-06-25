@@ -26,6 +26,7 @@ namespace BEEV
   bool arithless(const ASTNode n1, const ASTNode n2);
   bool isAtomic(Kind k);
   bool isCommutative(const Kind k);
+  bool containsArrayOps(const ASTNode&n);
 
   // If (a > b) in the termorder, then return 1 elseif (a < b) in the
   // termorder, then return -1 else return 0

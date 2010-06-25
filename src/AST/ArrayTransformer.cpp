@@ -101,7 +101,10 @@ namespace BEEV
                          modnode);
 
         //put everything together, simplify, and return
-        return simp->SimplifyTerm_TopLevel(n);
+        if (bm->UserFlags.optimize_flag)
+            return simp->SimplifyTerm_TopLevel(n);
+        else
+        	return n;
       }
 
     // This is the modulus of dividing rounding to -infinity.
@@ -151,7 +154,10 @@ namespace BEEV
                          nf->CreateTerm(BVPLUS, len, rev_node, divisor),
                          rev_node);
 
-        return simp->SimplifyTerm_TopLevel(n);
+        if (bm->UserFlags.optimize_flag)
+            return simp->SimplifyTerm_TopLevel(n);
+        else
+        	return n;
       }
     else if (SBVDIV == in.GetKind())
       {
@@ -194,7 +200,10 @@ namespace BEEV
                          nf->CreateTerm(BVUMINUS, len, divnode),
                          divnode);
 
-        return simp->SimplifyTerm_TopLevel(n);
+        if (bm->UserFlags.optimize_flag)
+            return simp->SimplifyTerm_TopLevel(n);
+        else
+        	return n;
       }
 
     FatalError("TranslateSignedDivModRem:"\
@@ -461,7 +470,11 @@ namespace BEEV
                                    one, result);
 
                   //return result;
-                  return simp->SimplifyTerm_TopLevel(result);
+                  if (bm->UserFlags.optimize_flag)
+                      return simp->SimplifyTerm_TopLevel(result);
+                  else
+                  	return result;
+
                 }
             }
         }
