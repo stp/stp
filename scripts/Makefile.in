@@ -202,12 +202,12 @@ regressstp: baseTest
 
 .PHONY: regresscvcbasic
 regresscvcbasic: TO_RUN=scripts/run_tests.pl --td=tests/sample-tests
-regresscvcbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-regresscvcbasic.log"
+regresscvcbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-cvcbasic.log"
 regresscvcbasic: baseTest
 
 .PHONY: regresssmtbasic
 regresssmtbasic: TO_RUN=scripts/run_tests.pl --td=tests/sample-smt-tests
-regresssmtbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-regresssmtbasic.log"
+regresssmtbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-smtbasic.log"
 regresssmtbasic: baseTest
 
 
