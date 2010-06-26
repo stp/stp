@@ -3,7 +3,7 @@
 #Each file should be simplified down to either true or false, so the CNF generated should
 #be very small if simplifications are working as they should.
 
-rm output_*.cnf
+rm -f output_*.cnf
 
 files=`ls -1 -S *.smt2`
 for f in $files; do

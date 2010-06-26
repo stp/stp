@@ -435,8 +435,13 @@ namespace BEEV
               o.push_back(TransformTerm(*it));
             }
 
-          result = nf->CreateTerm(k, width, o);
-          result.SetIndexWidth(indexwidth);
+          if (c!=o)
+          {
+        	  result = nf->CreateTerm(k, width, o);
+			  result.SetIndexWidth(indexwidth);
+          }
+          else
+        	  result = term;
 
           const Kind k = result.GetKind();
 

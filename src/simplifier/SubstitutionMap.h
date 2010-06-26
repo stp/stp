@@ -84,11 +84,21 @@ public:
 		assert(e0.GetValueWidth() == e1.GetValueWidth());
 		assert(e0.GetIndexWidth() == e1.GetIndexWidth());
 
+		if (SYMBOL == e1.GetKind() && CheckSubstitutionMap(e1))
+		{
+			// if we didn't check this, scenarios like:
+			// a <-> b
+			// b <-> a
+			// would cause a loop.
+			return false;
+		}
+
 		//e0 is of the form READ(Arr,const), and e1 is const, or
 		//e0 is of the form var, and e1 is const
 		if (1 == i && !CheckSubstitutionMap(e0)) {
 			assert((e1.GetKind() == TRUE) ||
 					(e1.GetKind() == FALSE) ||
+					(e1.GetKind() == SYMBOL) ||
 					(e1.GetKind() == BVCONST));
 			(*SolverMap)[e0] = e1;
 			return true;
@@ -99,6 +109,7 @@ public:
 		if (-1 == i && !CheckSubstitutionMap(e1)) {
 			assert((e0.GetKind() == TRUE) ||
 					(e0.GetKind() == FALSE) ||
+					(e0.GetKind() == SYMBOL) ||
 					(e0.GetKind() == BVCONST));
 			(*SolverMap)[e1] = e0;
 			return true;
