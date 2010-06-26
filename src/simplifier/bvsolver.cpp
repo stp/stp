@@ -282,9 +282,12 @@ namespace BEEV
     ASTNode lhs = eq[0];
     ASTNode rhs = eq[1];
 
-	// if only one side is a constant, it should be on the RHS.
-	if (((BVCONST == lhs.GetKind()) ^ (BVCONST == rhs.GetKind()))
-			&& (lhs.GetKind() == BVCONST)) {
+
+	if (
+			((BVCONST == lhs.GetKind()) && (BVCONST != rhs.GetKind()))  || // if only one side is a constant, it should be on the RHS.
+			((SYMBOL == rhs.GetKind()) &&  (SYMBOL != lhs.GetKind()))  // If there is only one variable. It should be on the left.
+	)
+			{
 		lhs = eq[1];
 		rhs = eq[0];
 		eq = _bm->CreateNode(EQ, lhs, rhs); // If "return eq" is called, return the arguments in the correct order.
@@ -318,7 +321,7 @@ namespace BEEV
         //construct:  rhs - (lhs without the chosen monom)
         unsigned int len = lhs.GetValueWidth();
         leftover_lhs = 
-          _simp->SimplifyTerm_TopLevel(_bm->CreateTerm(BVUMINUS,
+          _simp->SimplifyTerm(_bm->CreateTerm(BVUMINUS,
                                                        len, leftover_lhs));
         rhs =
           _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
@@ -616,17 +619,32 @@ namespace BEEV
     bool any_solved = false;
     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
-        //_bm->ASTNodeStats("Printing before calling simplifyformula
-        //inside the solver:", *it);
 
-    	// Calling simplifyFormula makes the required substitutions. For instance, if
-    	// first was : v = x,
-    	// then if the next formula is: x = v
-    	// calling simplify on the second formula will convert it into "true", avoiding a cycle.
+		 /*
+    	 Calling simplifyFormula makes the required substitutions. For instance, if
+    	 first was : v = x,
+    	 then if the next formula is: x = v
+    	 calling simplify on the second formula will convert it into "true", avoiding a cycle.
+
+    	 The problem with this is that Simplify___() doesn't normally simplify into array
+    	 operations. So given something like :
+    	 a = b
+    	 b = write(A,a,a)
+
+    	 It will replace (a=b) with true, and store (a=b) in the solverMap. Then it will
+    	 store b = write(A,a,a) in the solver map. Which is wrong. What it should do is
+    	 rewrite a=b through the second expression, giving:
+    	 b = write(A,b,b),
+    	 which shouldn't be simplified.
+
+    	 Simplifying through arrays is very expensive though. I know how to fix it, but
+    	 don't have time. Trev.
+		  */
+
     	ASTNode aaa =
           (any_solved
            && EQ == it->GetKind()) ?
-          _simp->SimplifyFormula(*it, false) :
+          _simp->SimplifyFormula_TopLevel(*it, false) :
           *it;
         //_bm->ASTNodeStats("Printing after calling simplifyformula
         //inside the solver:", aaa);
