@@ -21,7 +21,7 @@ BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind,	const BEEV::ASTVec
 	ASTVec children(back_children);
 	// The Bitvector solver seems to expect constants on the RHS, variables on the LHS.
 	// We leave the order of equals children as we find them.
-	if (BEEV::isCommutative(kind) && kind != BEEV::EQ && kind != BEEV::AND)
+	if (BEEV::isCommutative(kind) && kind != BEEV::AND)
 	{
 		SortByArith(children);
 	}

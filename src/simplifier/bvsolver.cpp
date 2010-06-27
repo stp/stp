@@ -145,16 +145,18 @@ namespace BEEV
   //chooses a variable in the lhs and returns the chosen variable
   ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs)
   {
-    if (!(EQ == eq.GetKind() && BVPLUS == eq[0].GetKind()))
-      {
-        FatalError("ChooseMonom: input must be a EQ", eq);
-      }
+	  assert(EQ == eq.GetKind());
+	  assert(BVPLUS == eq[0].GetKind() || BVPLUS== eq[1].GetKind());
 
-    const ASTNode& lhs = eq[0];
-    const ASTNode& rhs = eq[1];
+	// Unfortunately, the bvsolver is written to expect nodes in the
+	// reverse order to how the simplifying node factory produces them.
+	// That is, the simplifying node factory sorts by arithless, i.e.
+	// with constants or symbols on the left.
+    const bool lhsIsPlus = (BVPLUS == eq[0].GetKind());
+    const ASTNode& lhs = lhsIsPlus? eq[0] : eq[1];
+    const ASTNode& rhs = lhsIsPlus? eq[1] : eq[0];
 
     //collect all the vars in the lhs and rhs
-
     BuildSymbolGraph(eq);
     CountOfSymbols count(symbol_graph[eq]);
 
@@ -711,10 +713,13 @@ namespace BEEV
         return eq;
       }
 
-    ASTNode lhs = eq[0];
-    ASTNode rhs = eq[1];
-    const ASTNode zero = _bm->CreateZeroConst(rhs.GetValueWidth());
+    const ASTNode zero = _bm->CreateZeroConst(eq[0].GetValueWidth());
+
     //lhs must be a BVPLUS, and rhs must be a BVCONST
+	const bool lhsIsPlus = (BVPLUS == eq[0].GetKind());
+	 ASTNode lhs = lhsIsPlus? eq[0] : eq[1];
+	 ASTNode rhs = lhsIsPlus? eq[1] : eq[0];
+
     if (!(BVPLUS == lhs.GetKind() && zero == rhs))
       {
         evenflag = false;
@@ -803,8 +808,12 @@ namespace BEEV
       {
         ASTNode eq = *jt;
         assert(EQ == eq.GetKind());
-        ASTNode lhs = eq[0];
-        ASTNode rhs = eq[1];
+
+  	  const bool lhsIsPlus = (BVPLUS == eq[0].GetKind());
+       ASTNode lhs = lhsIsPlus? eq[0] : eq[1];
+       ASTNode rhs = lhsIsPlus? eq[1] : eq[0];
+
+
         ASTNode zero = _bm->CreateZeroConst(rhs.GetValueWidth());
         //lhs must be a BVPLUS, and rhs must be a BVCONST
         if (!(BVPLUS == lhs.GetKind() && zero == rhs))
@@ -855,8 +864,12 @@ namespace BEEV
            jt = input_c.begin(), jtend = input_c.end(); jt != jtend; jt++)
       {
         ASTNode eq = *jt;
-        ASTNode lhs = eq[0];
-        ASTNode rhs = eq[1];
+
+        // Want the plus on the lhs.
+      	  const bool lhsIsPlus = (BVPLUS == eq[0].GetKind());
+          ASTNode lhs = lhsIsPlus? eq[0] : eq[1];
+          ASTNode rhs = lhsIsPlus? eq[1] : eq[0];
+
         ASTNode zero = _bm->CreateZeroConst(rhs.GetValueWidth());
         //lhs must be a BVPLUS, and rhs must be a BVCONST
         if (!(BVPLUS == lhs.GetKind() && zero == rhs))
