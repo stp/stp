@@ -2165,9 +2165,15 @@ namespace BEEV
               //        nf->CreateTerm(BVSX,a_len,t,
               //                        _bm->CreateBVConst(32,a_len));
               //        } break; }
+
+              /*
+               * On deeply nested ITES, this can cause an exponential number
+               * of nodes to be produced. Especially if there are different
+               * extracts over the same node.
+               *
             case ITE:
               {
-                const ASTNode& t0 = a0[0];
+            	 const ASTNode& t0 = a0[0];
                 ASTNode t1 = 
                   SimplifyTerm(nf->CreateTerm(BVEXTRACT,
                                                a_len, a0[1], i, j), 
@@ -2179,6 +2185,7 @@ namespace BEEV
                 output = CreateSimplifiedTermITE(t0, t1, t2);
                 break;
               }
+              */
             default:
               {
                 output = nf->CreateTerm(BVEXTRACT, a_len, a0, i, j);
