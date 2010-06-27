@@ -267,7 +267,7 @@ $defaultDir =~ s/\n//;
  system("echo Copying to /dev/null to fill the disk cache");
 
  foreach my $testcase (@testcases) {
-  system ("cat " . $testcase . "/*.* > /dev/null");
+  system ("bash", "-c", "cat " . $testcase . "/*.* > /dev/null");
 }
 
 # Total running time
@@ -368,7 +368,7 @@ foreach my $testcase (@testcases) {
 	}
 	my $time = time;
 	# Now, run the sucker
-	my $exitVal = system("$limits; gunzip -f --stdout $file | $timing $stp $stpArgs  $logging");
+	my $exitVal = system("bash", "-c", "$limits; gunzip -f --stdout $file | $timing $stp $stpArgs  $logging");
 	$time = time - $time;
 	# OK, let's see what happened
 	$testsTotal++;
