@@ -38,8 +38,7 @@
 //4. Outside the solver, Substitute and Re-normalize the input DAG
 namespace BEEV
 {
-	//experimental options. Don't curerntly work.
-	const bool flatten_ands = false;
+	const bool flatten_ands = true;
 	const bool sort_extracts_last = false;
 
   //check the solver map for 'key'. If key is present, then return the
@@ -601,6 +600,12 @@ namespace BEEV
 			{
 				return n;
 			}
+
+	    if (CheckAlreadySolvedMap(input, output))
+	      {
+	        //output is TRUE. The formula is thus dropped
+	        return output;
+	      }
 		}
     }
 
@@ -619,7 +624,6 @@ namespace BEEV
     bool any_solved = false;
     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
-
 		 /*
     	 Calling simplifyFormula makes the required substitutions. For instance, if
     	 first was : v = x,
