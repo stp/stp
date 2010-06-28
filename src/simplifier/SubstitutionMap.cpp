@@ -125,6 +125,38 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       return output;
     }
 
+  if (XOR == k)
+  {
+	  if (a.Degree() !=2)
+		  return output;
+
+	  int to = TermOrder(a[0],a[1]);
+	  if (0 == to)
+		  return output;
+
+	  ASTNode symbol,rhs;
+	  if (to==1)
+	  {
+		  symbol = a[0];
+		  rhs = a[1];
+	  }
+	  else
+	  {
+		  symbol = a[0];
+		  rhs = a[1];
+	  }
+
+	  assert(symbol.GetKind() == SYMBOL);
+
+	  // If either side is already solved for.
+	  if (CheckSubstitutionMap(symbol) || CheckSubstitutionMap(rhs))
+		  return output;
+
+	  (*SolverMap)[symbol] = bm->CreateNode(NOT,rhs);
+      return ASTTrue;
+  }
+
+
   if (AND == k)
     {
       ASTVec o;

@@ -10,6 +10,7 @@ for f in $files; do
 	stp --simplifying-minisat --output-CNF $f
 	cnf=`cat output_*.cnf  | wc -l`
 	if [ $cnf -gt 3 ] ; then
+		echo --fail
 		exit 10
 	fi
 
