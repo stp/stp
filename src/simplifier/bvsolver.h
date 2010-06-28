@@ -102,6 +102,8 @@ namespace BEEV
 
     void VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av);
 
+    ASTNode solveForXOR(const ASTNode& n);
+    ASTNode solveForAndOfXOR(const ASTNode& n);
 
     //takes an even number "in" as input, and returns an odd number
     //(return value) and a power of 2 (as number_shifts by reference),

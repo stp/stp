@@ -560,6 +560,91 @@ namespace BEEV
   	}
   }
 
+  // Solve for XORs.
+  // to do. Flatten the XOR.
+  ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
+  {
+     if (xorNode.GetKind() != XOR)
+      {
+       return xorNode;
+      }
+
+    ASTVec children =  FlattenKind(XOR, xorNode.GetChildren());
+
+    bool foundSymbol = false;
+    for (ASTVec::const_iterator symbol = children.begin(), node_end =
+        children.end(); symbol != node_end; symbol++)
+      {
+        // Find a symbol in it.
+        if ((*symbol).GetKind() != SYMBOL)
+          {
+            continue;
+          }
+
+        bool duplicated = false;
+
+        for (ASTVec::const_iterator it2 = children.begin(); it2
+            != node_end; it2++)
+          {
+            if (it2 == symbol)
+              continue;
+            if (VarSeenInTerm(*symbol, *it2))
+              {
+                duplicated = true;
+                break;
+              }
+          }
+        foundSymbol = false;
+        if (!duplicated)
+          {
+            ASTVec rhs;
+            for (ASTVec::const_iterator it2 = children.begin(); it2
+                != node_end; it2++)
+              {
+              if (it2 != symbol)
+                rhs.push_back(*it2); // omit the symbol.
+              }
+
+            foundSymbol = _simp->UpdateSolverMap(*symbol, _bm->CreateNode(
+                NOT, _bm->CreateNode(XOR, rhs)));
+          }
+        if (foundSymbol)
+          break;
+      }
+    if (foundSymbol)
+      return ASTTrue;
+    else
+      return xorNode;
+}
+
+  // Solve for XORs.
+   // to do. Flatten the XOR.
+   ASTNode
+  BVSolver::solveForAndOfXOR(const ASTNode& n)
+  {
+    if (n.GetKind() != AND)
+      return n;
+
+    ASTVec output_children;
+
+    ASTVec c =  FlattenKind(AND, n.GetChildren());
+    bool changed=false;
+    //_simp->ResetSimplifyMaps();
+
+    for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child
+        != and_end; and_child++)
+      {
+      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula_TopLevel(*and_child,false));
+      if (r!=*and_child)
+        changed=true;
+      output_children.push_back(r);
+      }
+
+    return _bm->CreateNode(AND, output_children);
+
+  }
+
+
   //The toplevel bvsolver(). Checks if the formula has already been
   //solved. If not, the solver() is invoked. If yes, then simply drop
   //the formula
@@ -571,11 +656,7 @@ namespace BEEV
     //       }
 	  ASTNode input = _input;
 
-    Kind k = input.GetKind();
-    if (!(EQ == k || AND == k))
-      {
-        return input;
-      }
+
 
     ASTNode output = input;
     if (CheckAlreadySolvedMap(input, output))
@@ -583,6 +664,20 @@ namespace BEEV
         //output is TRUE. The formula is thus dropped
         return output;
       }
+
+    Kind k = input.GetKind();
+    if (XOR ==k)
+    {
+    	ASTNode output = solveForXOR(_input);
+    	UpdateAlreadySolvedMap(_input, output);
+    	return output;
+    }
+
+    if (!(EQ == k || AND == k))
+      {
+        return input;
+      }
+
 
     if (flatten_ands && AND == k)
     {
@@ -697,6 +792,8 @@ namespace BEEV
        o[0]) : 
       ASTTrue;
     output = _bm->CreateNode(AND, output, evens);
+
+    output = solveForAndOfXOR(output);
 
     UpdateAlreadySolvedMap(_input, output);
     _bm->GetRunTimes()->stop(RunTimes::BVSolver);

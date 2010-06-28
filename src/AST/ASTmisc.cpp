@@ -162,6 +162,33 @@ bool containsArrayOps(const ASTNode&n)
 }
 
 
+  // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
+  // This is local to this file.
+  ASTVec FlattenKind(Kind k, const ASTVec &children)
+  {
+    ASTVec flat_children;
+
+    ASTVec::const_iterator ch_end = children.end();
+    for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
+      {
+        Kind ck = it->GetKind();
+        const ASTVec &gchildren = it->GetChildren();
+        if (k == ck)
+          {
+            // append grandchildren to children
+            flat_children.insert(flat_children.end(),
+                                 gchildren.begin(), gchildren.end());
+          }
+        else
+          {
+            flat_children.push_back(*it);
+          }
+      }
+
+    return flat_children;
+  }
+
+
   /* FUNCTION: Typechecker for terms and formulas
    *
    * TypeChecker: Assumes that the immediate Children of the input

@@ -153,51 +153,6 @@ namespace BEEV
     return CreateSimpXor(children);
   }
 
-  // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
-  // This is local to this file.
-  ASTVec FlattenKind(Kind k, ASTVec &children)
-  {
-
-    ASTVec flat_children;
-
-    ASTVec::const_iterator ch_end = children.end();
-
-    bool fflag = 0; // ***Temp debugging
-
-    // Experimental flattening code.
-
-    for (ASTVec::iterator it = children.begin(); it != ch_end; it++)
-      {
-        Kind ck = it->GetKind();
-        const ASTVec &gchildren = it->GetChildren();
-        if (k == ck)
-          {
-            fflag = 1; // For selective debug printing (below).
-            // append grandchildren to children
-            flat_children.insert(flat_children.end(), 
-                                 gchildren.begin(), gchildren.end());
-          }
-        else
-          {
-            flat_children.push_back(*it);
-          }
-      }
-
-    if (_trace_simpbool && fflag)
-      {
-        cout << "========" << endl;
-        cout << "Flattening " << k << ":" << endl;
-        lpvec(children);
-
-        cout << "--------" << endl;
-        cout << "Flattening result: " << endl;
-        lpvec(flat_children);
-      }
-
-    // FIXME: This unnecessarily copies the array.
-    return flat_children;
-  }
-
   ASTNode STPMgr::CreateSimpAndOr(bool IsAnd, 
                                   const ASTNode& form1, const ASTNode& form2)
   {
