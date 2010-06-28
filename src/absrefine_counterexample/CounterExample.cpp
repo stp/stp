@@ -24,7 +24,7 @@ namespace BEEV
    * step2: Iterate over the map from ASTNodes->Vector-of-Bools and
    * populate the CounterExampleMap data structure (ASTNode -> BVConst)
    */
-  void 
+  void
   AbsRefine_CounterExample::ConstructCounterExample(MINISAT::Solver& newS)
   {
     //iterate over MINISAT counterexample and construct a map from AST
@@ -41,71 +41,63 @@ namespace BEEV
     assert(CounterExampleMap.size() == 0);
 
     CopySolverMap_To_CounterExample();
-    for (int i = 0; i < newS.nVars(); i++)
-      {
-        //Make sure that the MINISAT::Var is defined
-        if (newS.model[i] != MINISAT::l_Undef)
-          {
 
-            //mapping from MINISAT::Vars to ASTNodes. We do not need to
-            //print MINISAT vars or CNF vars.
-            ASTNode s = tosat->SATVar_to_ASTMap(i);
+    ToSAT::ASTNodeToVar m = tosat->SATVar_to_SymbolIndexMap();
+
+    for (ToSAT::ASTNodeToVar::const_iterator it = m.begin(); it != m.end(); it++)
+      {
+        const ASTNode& symbol = it->first;
+        const vector<unsigned>& v = it->second;
+
+        for (int index = 0; index < v.size(); index++)
+          {
+            const unsigned sat_variable_index = v[index];
+
+            if (sat_variable_index == ~((unsigned) 0)) // not sent to the sat solver.
+              continue;
+
+            if (newS.model[sat_variable_index] == MINISAT::l_Undef)
+              continue;
 
             //assemble the counterexample here
-            if (!s.IsNull() && s.GetKind() == BVGETBIT && s[0].GetKind() == SYMBOL)
+            if (symbol.GetType() == BITVECTOR_TYPE)
               {
-                const ASTNode& symbol = s[0];
                 const unsigned int symbolWidth = symbol.GetValueWidth();
 
                 //'v' is the map from bit-index to bit-value
                 HASHMAP<unsigned, bool> * v;
-                if (_ASTNode_to_BitvectorMap.find(symbol) == 
-                    _ASTNode_to_BitvectorMap.end())
+                if (_ASTNode_to_BitvectorMap.find(symbol)
+                    == _ASTNode_to_BitvectorMap.end())
                   {
-                    _ASTNode_to_BitvectorMap[symbol] = 
-                      new HASHMAP<unsigned, bool> (symbolWidth);
+                    _ASTNode_to_BitvectorMap[symbol] = new HASHMAP<unsigned,
+                        bool> (symbolWidth);
                   }
 
                 //v holds the map from bit-index to bit-value
                 v = _ASTNode_to_BitvectorMap[symbol];
 
-                //kk is the index of BVGETBIT
-                const unsigned int kk = s[1].GetUnsignedConst();
-
                 //Collect the bits of 'symbol' and store in v. Store
                 //in reverse order.
-                if (newS.model[i] == MINISAT::l_True)
-                  (*v)[(symbolWidth - 1) - kk] = true;
+                if (newS.model[sat_variable_index] == MINISAT::l_True)
+                  (*v)[(symbolWidth - 1) - index] = true;
                 else
-                  (*v)[(symbolWidth - 1) - kk] = false;
+                  (*v)[(symbolWidth - 1) - index] = false;
               }
             else
               {
-                if (!s.IsNull() && s.GetKind() == SYMBOL && s.GetType() == BOOLEAN_TYPE)
+                assert (symbol.GetType() == BOOLEAN_TYPE);
+                const char * zz = symbol.GetName();
+                //if the variables are not cnf variables then add
+                //them to the counterexample
+                if (0 != strncmp("cnf", zz, 3) && 0
+                    != strcmp("*TrueDummy*", zz))
                   {
-                    const char * zz = s.GetName();
-                    //if the variables are not cnf variables then add
-                    //them to the counterexample
-                    if (0 != strncmp("cnf", zz, 3) 
-                        && 0 != strcmp("*TrueDummy*", zz))
-                      {
-                        if (newS.model[i] == MINISAT::l_True)
-                          CounterExampleMap[s] = ASTTrue;
-                        else if (newS.model[i] == MINISAT::l_False)
-                          CounterExampleMap[s] = ASTFalse;
-                        else
-                          {
-			    if(bm->UserFlags.random_seed_flag)
-			      {
-				int seed = bm->UserFlags.random_seed;
-				srand(seed);
-				CounterExampleMap[s] = 
-				  (rand() > seed) ? ASTFalse : ASTTrue;
-			      }
-			    else
-			      CounterExampleMap[s] = ASTFalse;
-                          }
-                      }
+                    if (newS.model[sat_variable_index] == MINISAT::l_True)
+                      CounterExampleMap[symbol] = ASTTrue;
+                    else if (newS.model[sat_variable_index] == MINISAT::l_False)
+                      CounterExampleMap[symbol] = ASTFalse;
+                    else
+                      FatalError("never heres.");
                   }
               }
           }
@@ -890,30 +882,36 @@ namespace BEEV
   {
     if (!newS.okay())
       FatalError("PrintSATModel: NO COUNTEREXAMPLE TO PRINT", ASTUndefined);
-    // FIXME: Don't put tests like this in the print functions.  The
-    // print functions should print unconditionally.  Put a
-    // conditional around the call if you don't want them to print
-    if (!(bm->UserFlags.stats_flag 
+    if (!(bm->UserFlags.stats_flag
           && bm->UserFlags.print_nodes_flag))
       return;
 
-    int num_vars = newS.nVars();
-    cout << "Satisfying assignment: " << endl;
-    for (int i = 0; i < num_vars; i++)
-      {
-        ASTNode s = tosat->SATVar_to_ASTMap(i);
-        if (s.IsNull())
-        	continue;
+    ToSAT::ASTNodeToVar m = tosat->SATVar_to_SymbolIndexMap();
 
-    	if (newS.model[i] == MINISAT::l_True)
+    cout << "Satisfying assignment: " << endl;
+    for (ToSAT::ASTNodeToVar::const_iterator it= m.begin(); it != m.end();it++)
+    {
+      ASTNode symbol = it->first;
+      vector<unsigned> v = it->second;
+
+      for (int i =0 ; i < v.size();i++)
+        {
+        if (v[i] == ~((unsigned)0)) // nb. special value.
+          continue;
+
+        if (newS.model[v[i]] == MINISAT::l_True)
           {
-            cout << s << endl;
+            it->first.nodeprint(cout);
+            cout << " {" << i << "}"  << endl;
           }
-        else if (newS.model[i] == MINISAT::l_False)
+        else if (newS.model[v[i]] == MINISAT::l_False)
           {
-            cout << bm->CreateNode(NOT, s) << endl;
+          cout << "NOT ";
+          it->first.nodeprint(cout);
+          cout << " {" << i << "}"  << endl;
           }
-      }
+        }
+    }
   } //end of PrintSATModel()
 
   //FUNCTION: this function accepts a boolvector and returns a BVConst

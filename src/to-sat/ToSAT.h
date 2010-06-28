@@ -23,6 +23,14 @@
 namespace BEEV
 {
   class ToSAT {
+
+  public:
+    typedef HASHMAP<
+    ASTNode,
+    vector<unsigned>,
+    ASTNode::ASTNodeHasher,
+    ASTNode::ASTNodeEqual> ASTNodeToVar;
+
   private:
     /****************************************************************
      * Private Typedefs and Data                                    *
@@ -41,12 +49,12 @@ namespace BEEV
     ASTNode::ASTNodeEqual> ASTtoSATMap;
     ASTtoSATMap _ASTNode_to_SATVar_Map;
 
-    // MAP: This is a map from MINISAT::Vars to ASTNodes
+    // MAP: This is a map from  ASTNodes to MINISAT::Vars for SYMBOLS>
     //
     // Reverse map used in building counterexamples. MINISAT returns a
     // model in terms of MINISAT Vars, and this map helps us convert
     // it to a model over ASTNode variables.
-    vector<ASTNode> _SATVar_to_AST_Vector;
+    ASTNodeToVar SATVar_to_SymbolIndex;
 
     // Ptr to STPManager
     STPMgr * bm;
@@ -130,15 +138,15 @@ namespace BEEV
     //print the STP solver output
     void PrintOutput(SOLVER_RETURN_TYPE ret);
 
-    ASTNode SATVar_to_ASTMap(int i)
+    ASTNodeToVar& SATVar_to_SymbolIndexMap()
     {
-      return _SATVar_to_AST_Vector[i];
+      return SATVar_to_SymbolIndex;
     }
 
     void ClearAllTables(void)
     {
       _ASTNode_to_SATVar_Map.clear();
-      _SATVar_to_AST_Vector.clear();
+      SATVar_to_SymbolIndex.clear();
     }
 
     ~ToSAT()

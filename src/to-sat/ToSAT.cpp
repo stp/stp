@@ -48,7 +48,26 @@ namespace BEEV
         //ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
         //by 1 each time it is called, and the initial value of a
         //MINISAT::Var is 0.
-        _SATVar_to_AST_Vector.push_back(n);
+
+        // Copies the symbol into the map that is used to build the counter example.
+        // For boolean we create a vector of size 1.
+        if (n.GetKind() == BVGETBIT && n[0].GetKind() == SYMBOL || (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
+          {
+            const ASTNode& symbol = n.GetKind() == BVGETBIT ? n[0] : n;
+            const unsigned index = n.GetKind() == BVGETBIT ? n[1].GetUnsignedConst() : 0;
+            const unsigned width = n.GetKind() == BVGETBIT ? symbol.GetValueWidth(): 1;
+
+            if (SATVar_to_SymbolIndex.find(symbol) == SATVar_to_SymbolIndex.end())
+              {
+                // In the SAT solver these are signed...
+                vector<unsigned> vec(width,~((unsigned)0));
+                SATVar_to_SymbolIndex.insert(make_pair(symbol, vec));
+              }
+            assert(index < width);
+            assert(SATVar_to_SymbolIndex[symbol].size() > index);
+
+            SATVar_to_SymbolIndex[symbol][index] = v;
+          }
 
         // experimental. Don't add Tseitin variables as decision variables.
         if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
@@ -224,17 +243,21 @@ namespace BEEV
     // Delete the cnf generator.
     if (final)
     {
-    	for (int i =0; i < _SATVar_to_AST_Vector.size();i++)
-    	{
-    		ASTNode n = _SATVar_to_AST_Vector[i];
-    		if (!n.IsNull() && isTseitinVariable(n))
-    		{
-    			_ASTNode_to_SATVar_Map.erase(n);
-    			_SATVar_to_AST_Vector[i] = ASTNode();
-    		}
-    	}
-    	delete cm;
-    	cm = NULL;
+      ASTVec toDelete;
+
+      ASTtoSATMap::const_iterator it =_ASTNode_to_SATVar_Map.begin();
+      for (;it!=_ASTNode_to_SATVar_Map.end();it++)
+        {
+        ASTNode n = it->first;
+        if (!n.IsNull() && isTseitinVariable(n))
+          toDelete.push_back(n);
+        }
+
+      for (ASTVec::iterator it = toDelete.begin(); it!= toDelete.end();it++)
+        _ASTNode_to_SATVar_Map.erase(*it);
+
+      delete cm;
+      cm = NULL;
     }
 
 
