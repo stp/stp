@@ -937,14 +937,23 @@ void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 		BBNodeVec r1lshift1(r1);
 		BBLShift(r1lshift1, 1);
 
-		BBNodeVec r1lshift1plusyodd = BBAddOneBit(r1lshift1, y[0]);
-		BBNodeVec rminusx(r1lshift1plusyodd);
-		BBSub(rminusx, x, support);
+		BBNodeVec r1lshift1plusyodd(r1lshift1);
+		r1lshift1plusyodd[0] = y[0];
 
-		// Adjusted q, r values when when r is too large.
-		BBNode rtoolarge = BBBVLE(x, r1lshift1plusyodd, false);
-		BBNodeVec ygtrxqval = BBITE(rtoolarge, BBInc(q1lshift1), q1lshift1);
-		BBNodeVec ygtrxrval = BBITE(rtoolarge, rminusx, r1lshift1plusyodd);
+                // By extending rminusx by one bit, we can use that top-bit
+                // to check whether r>=x. We need to compute rminusx anyway,
+                // so this saves having a separate compare circut.
+                BBNodeVec rminusx(r1lshift1plusyodd);
+                rminusx.push_back(nf->getFalse());
+                BBNodeVec xCopy(x);
+                xCopy.push_back(nf->getFalse());
+                BBSub(rminusx, xCopy, support);
+                BBNode sign = rminusx[width];
+                rminusx.pop_back();
+
+                // Adjusted q, r values when when r is too large.
+                BBNodeVec ygtrxqval = BBITE(sign, q1lshift1, BBInc(q1lshift1));
+                BBNodeVec ygtrxrval = BBITE(sign, r1lshift1plusyodd, rminusx );
 
 		BBNodeVec notylessxqval;
 		BBNodeVec notylessxrval;
@@ -981,6 +990,7 @@ void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 			notylessxrval = BBITE(yeqx, zero,ygtrxrval);
 		}
 
+		/****************/
 		BBNode ylessx;
 		if (division_variant_2)
 		{
@@ -995,6 +1005,17 @@ void BitBlasterNew::BBDivMod(const BBNodeVec &y, const BBNodeVec &x,
 		// final values of q and r
 		q = BBITE(ylessx, zero, notylessxqval);
 		r = BBITE(ylessx, y, notylessxrval);
+
+                // The above does nothing. This gives the correct answer too:
+                //q = notylessxqval;
+                //r = notylessxrval;
+
+                // But, it's about 30% slower on factoring12x12.
+                // Either these help during solving, or, the CNF generation
+                // generates nicer code with them present.
+
+
+		/****************/
 	}
 }
 
