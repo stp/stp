@@ -5,16 +5,17 @@ SRCS=main.cpp versionString.cpp Globals.cpp
 OBJS = $(SRCS:.cpp=.o)
 CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
-LIBS = 	-L../to-sat -ltosat \
-	-L../STPManager -lstpmgr \
+LIBS = 	-L../STPManager -lstpmgr \
 	-L../absrefine_counterexample -labstractionrefinement \
+	-L../to-sat -ltosat \
 	-L../simplifier -lsimplifier \
 	-L../printer -lprinter \
 	-L../AST -last \
 	-L../extlib-constbv -lconstantbv \
 	-L../sat -lminisat  \
-	-L../parser -lparser
-
+	-L../parser -lparser \
+	-L../extlib-abc -labc 	
+	
 # This rebuilds each time, because the target "parser" is not created
 # Until the dependencies on each of the libraries is included, that's safest.
 parser:  $(OBJS) depend

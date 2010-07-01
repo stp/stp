@@ -116,7 +116,7 @@ namespace BEEV
 
   STPMgr* ASTNode::GetSTPMgr() const
   {
-    return GlobalSTP->bm;
+    return ParserBM;
   } //End of GetSTPMgr()
 
   // Checks if the node has alreadybeen printed or not

@@ -12,22 +12,28 @@
 
 #include <cmath>
 #include <cassert>
-#include "BBNodeManager.h"
+#include <map>
+#include "../STPManager/STPManager.h"
 
 namespace BEEV {
-class BitBlasterNew;
 
+class ASTNode;
+typedef std::vector<ASTNode> ASTVec;
+
+template <class BBNode, class BBNodeManagerT> class BitBlasterNew;
+
+template <class BBNode, class BBNodeManagerT>
 class BitBlasterNew {
-
+private:
 	// Memo table for bit blasted terms.  If a node has already been
 	// bitblasted, it is mapped to a vector of Boolean formulas for
 	// the
-	BBNodeVecMap BBTermMemo;
+        std::map<ASTNode, vector<BBNode> > BBTermMemo;
 
 	// Memo table for bit blasted formulas.  If a node has already
 	// been bitblasted, it is mapped to a node representing the
 	// bitblasted equivalent
-	BBNodeMap BBFormMemo;
+	map<ASTNode, BBNode> BBFormMemo;
 
 	/****************************************************************
 	 * Private Member Functions                                     *
@@ -35,76 +41,78 @@ class BitBlasterNew {
 
 	// Get vector of Boolean formulas for sum of two
 	// vectors of Boolean formulas
-	void BBPlus2(BBNodeVec& sum, const BBNodeVec& y, BBNode cin);
+	void BBPlus2(vector<BBNode>& sum, const vector<BBNode>& y, BBNode cin);
 
 	// Increment
-	BBNodeVec BBInc(const BBNodeVec& x);
+	vector<BBNode> BBInc(const vector<BBNode>& x);
 
 	// Add one bit to a vector of bits.
-	BBNodeVec BBAddOneBit(const BBNodeVec& x, BBNode cin);
+	vector<BBNode> BBAddOneBit(const vector<BBNode>& x, BBNode cin);
 
 	// Bitwise complement
-	BBNodeVec BBNeg(const BBNodeVec& x);
+	vector<BBNode> BBNeg(const vector<BBNode>& x);
 
 	// Unary minus
-	BBNodeVec BBUminus(const BBNodeVec& x);
+	vector<BBNode> BBUminus(const vector<BBNode>& x);
 
 	// Multiply.
-	BBNodeVec BBMult(const BBNodeVec& x, const BBNodeVec& y,
-			BBNodeSet& support, const ASTNode& xN, const ASTNode& yN);
-	void mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support, stack<BBNode> * products);
-	void mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, stack<BBNode> * products);
-	BBNodeVec mult_normal(const BBNodeVec& x,	const BBNodeVec& y, BBNodeSet& support);
+	vector<BBNode> BBMult(const vector<BBNode>& x, const vector<BBNode>& y,
+			set<BBNode>& support, const ASTNode& xN, const ASTNode& yN);
+	void mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, stack<BBNode> * products);
+	void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, stack<BBNode> * products);
+	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support);
 
 
-	BBNodeVec pairWiseAdd(stack<BBNode>* products,
+	vector<BBNode> pairWiseAdd(stack<BBNode>* products,
 			const int bitWidth);
 
 
-	BBNodeVec BBAndBit(const BBNodeVec& y, BBNode b);
+	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
 
 	// AND each bit of vector y with single bit b and return the result.
 	// (used in BBMult)
-	//BBNodeVec BBAndBit(const BBNodeVec& y, ASTNode b);
+	//vector<BBNode> BBAndBit(const vector<BBNode>& y, ASTNode b);
 
-	// Returns BBNodeVec for result - y.  This destroys "result".
-	void BBSub(BBNodeVec& result, const BBNodeVec& y, BBNodeSet& support);
+	// Returns vector<BBNode> for result - y.  This destroys "result".
+	void BBSub(vector<BBNode>& result, const vector<BBNode>& y, set<BBNode>& support);
 
 	// build ITE's (ITE cond then[i] else[i]) for each i.
-	BBNodeVec BBITE(const BBNode& cond, const BBNodeVec& thn,
-			const BBNodeVec& els);
+	vector<BBNode> BBITE(const BBNode& cond, const vector<BBNode>& thn,
+			const vector<BBNode>& els);
 
 	// Build a vector of zeros.
-	BBNodeVec BBfill(unsigned int width, BBNode fillval);
+	vector<BBNode> BBfill(unsigned int width, BBNode fillval);
 
 	// build an EQ formula
-	BBNode BBEQ(const BBNodeVec& left, const BBNodeVec& right);
+	BBNode BBEQ(const vector<BBNode>& left, const vector<BBNode>& right);
 
 	// This implements a variant of binary long division.
 	// q and r are "out" parameters.  rwidth puts a bound on the
 	// recursion depth.   Unsigned only, for now.
-	void BBDivMod(const BBNodeVec &y, const BBNodeVec &x, BBNodeVec &q,
-			BBNodeVec &r, unsigned int rwidth, BBNodeSet& support);
+public:
+	void BBDivMod(const vector<BBNode> &y, const vector<BBNode> &x, vector<BBNode> &q,
+			vector<BBNode> &r, unsigned int rwidth, set<BBNode>& support);
 
 	// Return formula for majority function of three formulas.
 	BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
 
 	// Internal bit blasting routines.
-	BBNode BBBVLE(const BBNodeVec& x, const BBNodeVec& y, bool is_signed,
+	BBNode BBBVLE(const vector<BBNode>& x, const vector<BBNode>& y, bool is_signed,
 			bool is_bvlt = false);
 
 	// Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
-	BBNode BBcompare(const ASTNode& form, BBNodeSet& support);
+	BBNode BBcompare(const ASTNode& form, set<BBNode>& support);
 
-	void BBLShift(BBNodeVec& x, unsigned int shift);
-	void BBRShift(BBNodeVec& x, unsigned int shift);
+	void BBLShift(vector<BBNode>& x, unsigned int shift);
+	void BBRShift(vector<BBNode>& x, unsigned int shift);
 
-	BBNodeManager* nf;
+public:
+	BBNodeManagerT* nf;
 
 	// Bit blast a bitvector term.  The term must have a kind for a
 	// bitvector term.  Result is a ref to a vector of formula nodes
 	// representing the boolean formula.
-	const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support);
+	const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
 
 public:
 
@@ -114,7 +122,7 @@ public:
 
 	BitBlasterNew(STPMgr * bm)
 		{
-		nf = new BBNodeManager(bm);
+		nf = new BBNodeManagerT(bm);
 	}
 
 	~BitBlasterNew() {
@@ -124,7 +132,7 @@ public:
 	}
 
 	//Bitblast a formula
-	const BBNode BBForm(const ASTNode& form, BBNodeSet& support);
+	const BBNode BBForm(const ASTNode& form, set<BBNode>& support);
 
 }; //end of class BitBlaster
 }

@@ -9,27 +9,18 @@
 
 #ifndef TOSAT_H
 #define TOSAT_H
-#include <cmath>
 
 #include "ToCNF.h"
 
 #include "../AST/AST.h"
 #include "../sat/sat.h"
-#include "../AST/RunTimes.h"
-#include "../simplifier/bvsolver.h"
 #include "../STPManager/STPManager.h"
-#include "../simplifier/simplifier.h"
+#include "ToSATBase.h"
 
 namespace BEEV
 {
-  class ToSAT {
-
-  public:
-    typedef HASHMAP<
-    ASTNode,
-    vector<unsigned>,
-    ASTNode::ASTNodeHasher,
-    ASTNode::ASTNodeEqual> ASTNodeToVar;
+  class ToSAT :public ToSATBase
+  {
 
   private:
     /****************************************************************
@@ -56,22 +47,9 @@ namespace BEEV
     // it to a model over ASTNode variables.
     ASTNodeToVar SATVar_to_SymbolIndex;
 
-    // Ptr to STPManager
-    STPMgr * bm;
     int CNFFileNameCounter;
     int benchFileNameCounter;
 
-#if 0
-    // Memo table to check the functioning of bitblaster and CNF
-    // converter
-    ASTNodeMap CheckBBandCNFMemo;
-
-    // Map from formulas to representative literals, for debugging.
-    ASTNodeMap RepLitMap;
-#endif
-
-    ASTNode ASTTrue, ASTFalse, ASTUndefined;
-    
     /****************************************************************
      * Private Member Functions                                     *
      ****************************************************************/
@@ -81,18 +59,6 @@ namespace BEEV
     MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, 
                                       const ASTNode& n);
 
-#if 0
-    // Evaluates bitblasted formula in satisfying assignment
-    ASTNode CheckBBandCNF(MINISAT::Solver& newS, ASTNode form);
-    ASTNode CheckBBandCNF_int(MINISAT::Solver& newS, ASTNode form);
-
-
-    // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
-    // assignment.  Returns ASTTrue if true, ASTFalse if false or
-    // undefined.
-
-    ASTNode SymbolTruthValue(MINISAT::Solver &newS, ASTNode form);
-#endif
 
     //Iteratively goes through the Clause Buckets, and calls
       //toSATandSolve()
@@ -106,7 +72,6 @@ namespace BEEV
                          ClauseList& cll,
                          bool final,
                          CNFMgr*& cm,
-
   		       bool add_xor_clauses=false,
   		       bool enable_clausal_abstraction=false);
 
@@ -118,25 +83,16 @@ namespace BEEV
     
     // Constructor
     ToSAT(STPMgr * bm) :
-      bm(bm)
-#if 0
-      ,CheckBBandCNFMemo()
-#endif
+      ToSATBase(bm)
     {
-      ASTTrue      = bm->CreateNode(TRUE);
-      ASTFalse     = bm->CreateNode(FALSE);
-      ASTUndefined = bm->CreateNode(UNDEFINED);
       CNFFileNameCounter = 0;
       benchFileNameCounter = 0;
 
     }
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
-    bool CallSAT(MINISAT::Solver& SatSolver, 
+    bool CallSAT(MINISAT::Solver& SatSolver,
                  const ASTNode& input);
-
-    //print the STP solver output
-    void PrintOutput(SOLVER_RETURN_TYPE ret);
 
     ASTNodeToVar& SATVar_to_SymbolIndexMap()
     {
@@ -149,13 +105,10 @@ namespace BEEV
       SATVar_to_SymbolIndex.clear();
     }
 
+
     ~ToSAT()
     {
        ClearAllTables();
-#if 0
-      RepLitMap.clear();
-      CheckBBandCNFMemo.clear();
-#endif
     }
   }; //end of class ToSAT
 }; //end of namespace

@@ -7,11 +7,11 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 #include "ToSAT.h"
-#include "ToSAT.h"
 #include "BitBlastNew.h"
 #include "../printer/printers.h"
 #include <iostream>
 #include <fstream>
+#include "BBNodeManagerASTNode.h"
 
 namespace BEEV
 {
@@ -345,8 +345,8 @@ namespace BEEV
 
     ASTNode BBFormula;
     {
-    	BitBlasterNew BB(bm);
-    	BBNodeSet set;
+    	BitBlasterNew<ASTNode,BBNodeManagerASTNode> BB(bm);
+    	set<ASTNode> set;
     	BBFormula = BB.BBForm(input,set);
     	assert(set.size() == 0); // doesn't yet work.
     }
@@ -409,53 +409,7 @@ namespace BEEV
    * Helper Functions
    *******************************************************************/
 
-  //This function prints the output of the STP solver
-  void ToSAT::PrintOutput(SOLVER_RETURN_TYPE ret)
-  {
-    bool true_iff_valid = (SOLVER_VALID == ret);
 
-    if (bm->UserFlags.print_output_flag)
-      {
-        if (bm->UserFlags.smtlib1_parser_flag || bm->UserFlags.smtlib2_parser_flag)
-          {
-            if (true_iff_valid &&
-                (input_status == TO_BE_SATISFIABLE))
-              {
-                cerr << "Warning. Expected satisfiable,"\
-                  " FOUND unsatisfiable" << endl;
-              }
-            else if (!true_iff_valid &&
-                     (input_status == TO_BE_UNSATISFIABLE))
-              {
-                cerr << "Warning. Expected unsatisfiable,"\
-                  " FOUND satisfiable" << endl;
-              }
-          }
-      }
-
-    if (true_iff_valid)
-      {
-        bm->ValidFlag = true;
-        if (bm->UserFlags.print_output_flag)
-          {
-            if (bm->UserFlags.smtlib1_parser_flag || bm->UserFlags.smtlib2_parser_flag)
-              cout << "unsat\n";
-            else
-              cout << "Valid.\n";
-          }
-      }
-    else
-      {
-        bm->ValidFlag = false;
-        if (bm->UserFlags.print_output_flag)
-          {
-            if (bm->UserFlags.smtlib1_parser_flag || bm->UserFlags.smtlib2_parser_flag)
-              cout << "sat\n";
-            else
-              cout << "Invalid.\n";
-          }
-      }
-  } //end of PrintOutput()
 
 #if 0
 
