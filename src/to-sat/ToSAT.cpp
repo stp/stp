@@ -7,7 +7,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 #include "ToSAT.h"
-#include "BitBlastNew.h"
+#include "BitBlaster.h"
 #include "../printer/printers.h"
 #include <iostream>
 #include <fstream>
@@ -345,7 +345,7 @@ namespace BEEV
 
     ASTNode BBFormula;
     {
-    	BitBlasterNew<ASTNode,BBNodeManagerASTNode> BB(bm);
+    	BitBlaster<ASTNode,BBNodeManagerASTNode> BB(bm);
     	set<ASTNode> set;
     	BBFormula = BB.BBForm(input,set);
     	assert(set.size() == 0); // doesn't yet work.

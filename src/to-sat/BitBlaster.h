@@ -20,10 +20,10 @@ namespace BEEV {
 class ASTNode;
 typedef std::vector<ASTNode> ASTVec;
 
-template <class BBNode, class BBNodeManagerT> class BitBlasterNew;
+template <class BBNode, class BBNodeManagerT> class BitBlaster;
 
 template <class BBNode, class BBNodeManagerT>
-class BitBlasterNew {
+class BitBlaster {
 private:
 	// Memo table for bit blasted terms.  If a node has already been
 	// bitblasted, it is mapped to a vector of Boolean formulas for
@@ -120,12 +120,12 @@ public:
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
-	BitBlasterNew(STPMgr * bm)
+	BitBlaster(STPMgr * bm)
 		{
 		nf = new BBNodeManagerT(bm);
 	}
 
-	~BitBlasterNew() {
+	~BitBlaster() {
 		BBTermMemo.clear();
 		BBFormMemo.clear();
 		delete nf;

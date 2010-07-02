@@ -16,7 +16,7 @@
 #include "../AST/AST.h"
 #include "../AST/RunTimes.h"
 #include "../STPManager/STPManager.h"
-#include "BitBlastNew.h"
+#include "BitBlaster.h"
 #include "BBNodeManagerAIG.h"
 
 namespace BEEV
