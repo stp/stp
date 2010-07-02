@@ -24,7 +24,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifdef _MSC_VER
 #include <msvc/stdint.h>
 #else
-#include "SmallPtr.h"
 #include <stdint.h>
 #endif //_MSC_VER
 
