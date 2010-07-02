@@ -6,7 +6,7 @@ MTRAND    = MTRand
 SOURCES   = Logger.cpp Solver.cpp PackedRow.cpp \
 	    XorFinder.cpp VarReplacer.cpp \
 	    FindUndef.cpp ClauseCleaner.cpp RestartTypeChooser.cpp \
-	    Clause.cpp FailedVarSearcher.cpp PartFinder.cpp \
+	    FailedVarSearcher.cpp PartFinder.cpp \
 	    Subsumer.cpp PartHandler.cpp XorSubsumer.cpp \
 	    Gaussian.cpp MatrixFinder.cpp StateSaver.cpp \
 	    ClauseAllocator.cpp UselessBinRemover.cpp \
