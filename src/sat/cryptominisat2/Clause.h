@@ -24,9 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifdef _MSC_VER
 #include <msvc/stdint.h>
 #else
-#include "SmallPtr.h"
 #include <stdint.h>
 #endif //_MSC_VER
+
 #include <cstdio>
 #include <vector>
 #include <sys/types.h>
@@ -34,17 +34,15 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "SolverTypes.h"
 #include "PackedRow.h"
 #include "constants.h"
-#include "SmallPtr.h"
-#ifdef USE_POOLS
-#include "pool.hpp"
-#endif //USE_POOLS
-#ifndef uint
-#define uint unsigned int
-#endif
+#include "ClauseAllocator.h"
 
-//#define USE_4POOLS
-
-using std::vector;
+template <class T>
+uint32_t calcAbstraction(const T& ps) {
+    uint32_t abstraction = 0;
+    for (uint32_t i = 0; i != ps.size(); i++)
+        abstraction |= 1 << (ps[i].toInt() & 31);
+    return abstraction;
+}
 
 namespace MINISAT
 {
@@ -71,13 +69,8 @@ protected:
     uint32_t isXorClause:1;
     uint32_t subsume0Done:1;
     uint32_t isRemoved:1;
-    #ifdef USE_POOLS
-    uint32_t wasTriOriginallyInt:1;
-    uint32_t wasBinOriginallyInt:1;
-    #ifdef USE_4POOLS
-    uint32_t wasQuadOriginallyInt:1;
-    #endif //USE_4POOLS
-    #endif //USE_POOLS
+    uint32_t isFreed:1;
+    uint32_t wasBinInternal:1;
     uint32_t mySize:20;
     
     union  {uint32_t act; uint32_t abst;} extra;
@@ -94,6 +87,8 @@ public:
     template<class V>
     Clause(const V& ps, const uint _group, const bool learnt)
     {
+        wasBinInternal = (ps.size() == 2);
+        isFreed = false;
         isXorClause = false;
         strenghtened = false;
         sorted = false;
@@ -103,25 +98,17 @@ public:
         isLearnt = learnt;
         isRemoved = false;
         setGroup(_group);
-        #ifdef USE_POOLS
-        setAllocSize();
-        #endif //USE_POOLS
 
-        for (uint i = 0; i < ps.size(); i++) data[i] = ps[i];
+        memcpy(data, ps.getData(), ps.size()*sizeof(Lit));
         if (learnt) {
             extra.act = 0;
             oldActivityInter = 0;
         } else
-            calcAbstraction();
+            calcAbstractionClause();
     }
 
 public:
-    #ifndef _MSC_VER
-    // -- use this function instead:
-    template<class T>
-    friend Clause* Clause_new(const T& ps, const uint group, const bool learnt = false);
-    friend Clause* Clause_new(Clause& c);
-    #endif //_MSC_VER
+    friend class ClauseAllocator;
 
     const uint   size        ()      const {
         return mySize;
@@ -149,7 +136,6 @@ public:
     const float&       oldActivity    () const {
         return oldActivityInter;
     }
-    
     
     const bool getStrenghtened() const {
         return strenghtened;
@@ -189,14 +175,14 @@ public:
         return subsume0Done;
     }
 
-    Lit&         operator [] (uint32_t i) {
+    Lit& operator [] (uint32_t i) {
         return data[i];
     }
-    const Lit&   operator [] (uint32_t i) const {
+    const Lit& operator [] (uint32_t i) const {
         return data[i];
     }
 
-    void         setActivity(uint32_t i)  {
+    void setActivity(uint32_t i)  {
         extra.act = i;
     }
     
@@ -204,13 +190,13 @@ public:
         return extra.act;
     }
     
-    void         makeNonLearnt()  {
+    void makeNonLearnt()  {
         assert(isLearnt);
         isLearnt = false;
-        calcAbstraction();
+        calcAbstractionClause();
     }
     
-    void         makeLearnt(const uint32_t newActivity)  {
+    void makeLearnt(const uint32_t newActivity)  {
         extra.act = newActivity;
         oldActivityInter = 0;
         isLearnt = true;
@@ -220,19 +206,20 @@ public:
     {
         remove(*this, p);
         sorted = false;
-        calcAbstraction();
+        calcAbstractionClause();
     }
     
-    void calcAbstraction() {
+    void calcAbstractionClause() {
         assert(!learnt());
-        extra.abst = 0;
-        for (uint32_t i = 0; i != size(); i++)
-            extra.abst |= 1 << (data[i].toInt() & 31);
+        extra.abst = calcAbstraction(*this);;
     }
     
     uint32_t getAbst()
     {
-        return extra.abst;
+        if (learnt())
+            return calcAbstraction(*this);
+        else
+            return extra.abst;
     }
 
     const Lit*     getData     () const {
@@ -284,57 +271,27 @@ public:
     const bool removed() const {
         return isRemoved;
     }
-    #ifdef USE_POOLS
-    const bool wasTriOriginally() const
-    {
-        return wasTriOriginallyInt;
+
+    void setFreed() {
+        isFreed = true;
     }
-    const bool wasBinOriginally() const
-    {
-        return wasBinOriginallyInt;
+
+    const bool freed() const {
+        return isFreed;
     }
-    #ifdef USE_4POOLS
-    const bool wasQuadOriginally() const
-    {
-        return wasQuadOriginallyInt;
+
+    const bool wasBin() const {
+        return wasBinInternal;
     }
-    #endif //USE_4POOLS
-    void setAllocSize()
-    {
-        wasTriOriginallyInt = false;
-        wasBinOriginallyInt = false;
-        #ifdef USE_4POOLS
-        wasQuadOriginallyInt = false;
-        #endif //USE_4POOLS
-        switch(size()) {
-            case 2:
-                wasBinOriginallyInt = true;
-                break;
-            case 3:
-                wasTriOriginallyInt = true;
-                break;
-            #ifdef USE_4POOLS
-            case 4:
-                wasQuadOriginallyInt = true;
-                break;
-            case 5:
-                wasQuadOriginallyInt = true;
-                break;
-            #endif //USE_4POOLS
-        }
+
+    void setWasBin(const bool toSet) {
+        wasBinInternal = toSet;
     }
-    #endif //USE_POOLS
 };
 
 class XorClause : public Clause
 {
-    
-#ifdef _MSC_VER
-public:
-#else //_MSC_VER
 protected:
-#endif //_MSC_VER
-
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
     XorClause(const V& ps, const bool inverted, const uint _group) :
@@ -346,11 +303,7 @@ protected:
     }
 
 public:
-    #ifndef _MSC_VER
-    // -- use this function instead:
-    template<class V>
-    friend XorClause* XorClause_new(const V& ps, const bool inverted, const uint group);
-    #endif //_MSC_VER
+    friend class ClauseAllocator;
 
     inline bool xor_clause_inverted() const
     {
@@ -384,109 +337,18 @@ public:
     friend class MatrixFinder;
 };
 
-#ifdef USE_POOLS
-extern boost::pool<> clausePoolTri;
-extern boost::pool<> clausePoolBin;
-#ifdef USE_4POOLS
-extern boost::pool<> clausePoolQuad;
-#endif //USE_4POOLS
-#endif //USE_POOLS
-
-template<class T>
-inline void* allocEnough(const T& ps)
-{
-    void* mem;
-    switch(ps.size()) {
-        #ifdef USE_POOLS
-        case 2:
-            mem = clausePoolBin.malloc();
-            break;
-        case 3:
-            mem = clausePoolTri.malloc();
-            break;
-        #ifdef USE_4POOLS
-        case 4:
-            mem = clausePoolQuad.malloc();
-            break;
-        case 5:
-            mem = clausePoolQuad.malloc();
-            break;
-        #endif //USE_4POOLS
-        #endif //USE_POOLS
-        default:
-            mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
-            break;
-    }
-
-    return mem;
-}
-
-template<class T>
-Clause* Clause_new(const T& ps, const uint group, const bool learnt = false)
-{
-    void* mem = allocEnough(ps);
-    Clause* real= new (mem) Clause(ps, group, learnt);
-    return real;
-}
-
-template<class T>
-XorClause* XorClause_new(const T& ps, const bool inverted, const uint group)
-{
-    void* mem = allocEnough(ps);
-    XorClause* real= new (mem) XorClause(ps, inverted, group);
-    return real;
-}
-
-inline Clause* Clause_new(Clause& c)
-{
-    void* mem = allocEnough(c);
-    //Clause* real= new (mem) Clause(ps, group, learnt);
-    memcpy(mem, &c, sizeof(Clause)+sizeof(Lit)*c.size());
-    Clause& c2 = *(Clause*)mem;
-    #ifdef USE_POOLS
-    c2.setAllocSize();
-    #endif //USE_POOLS
-
-    return &c2;
-}
-
-inline void clauseFree(Clause* c)
-{
-    #ifdef USE_POOLS
-    if (c->wasTriOriginally())
-        clausePoolTri.free(c);
-    else if (c->wasBinOriginally())
-        clausePoolBin.free(c);
-    #ifdef USE_4POOLS
-    else if (c->wasQuadOriginally())
-        clausePoolQuad.free(c);
-    #endif //USE_4POOLS
-    else
-        #endif //USE_POOLS
-        free(c);
-}
-
-#ifdef _MSC_VER
-typedef Clause* ClausePtr;
-typedef XorClause* XorClausePtr;
-#else
-typedef sptr<Clause> ClausePtr;
-typedef sptr<XorClause> XorClausePtr;
-#endif //_MSC_VER
-
-#pragma pack(push)
-#pragma pack(1)
 class WatchedBin {
     public:
-        WatchedBin(Clause *_clause, Lit _impliedLit) : clause(_clause), impliedLit(_impliedLit) {};
-        ClausePtr clause;
+        WatchedBin(Lit _impliedLit) : impliedLit(_impliedLit) {};
         Lit impliedLit;
 };
 
+#pragma pack(push)
+#pragma pack(1)
 class Watched {
     public:
-        Watched(Clause *_clause, Lit _blockedLit) : clause(_clause), blockedLit(_blockedLit) {};
-        ClausePtr clause;
+        Watched(ClauseOffset _clause, Lit _blockedLit) : clause(_clause), blockedLit(_blockedLit) {};
+        ClauseOffset clause;
         Lit blockedLit;
 };
 #pragma pack(pop)

@@ -142,7 +142,7 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
     #endif //DEBUG_XORFIND
     
     if (findXors(sumLengths) == false) goto end;
-    solver.ok = (solver.propagate() == NULL);
+    solver.ok = (solver.propagate().isNULL());
     
 end:
     if (minSize == maxSize && minSize == 2) {
@@ -222,7 +222,7 @@ const bool XorFinder::findXors(uint& sumLengths)
             break;
         }
         default: {
-            XorClause* x = XorClause_new(lits, impair, old_group);
+            XorClause* x = solver.clauseAllocator.XorClause_new(lits, impair, old_group);
             solver.xorclauses.push(x);
             solver.attachClause(*x);
             

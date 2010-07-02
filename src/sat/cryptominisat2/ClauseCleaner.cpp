@@ -99,7 +99,7 @@ void ClauseCleaner::cleanClauses(vec<Clause*>& cs, ClauseSetType type, const uin
         if (s+1 != end)
             __builtin_prefetch(*(s+1), 1, 0);
         if (cleanClause(*s)) {
-            clauseFree(*s);
+            solver.clauseAllocator.clauseFree(*s);
             s++;
         } else if (type != ClauseCleaner::binaryClauses && (*s)->size() == 2) {
             solver.binaryClauses.push(*s);
@@ -145,8 +145,8 @@ inline const bool ClauseCleaner::cleanClause(Clause*& cc)
         c.setStrenghtened();
         if (c.size() == 2) {
             solver.detachModifiedClause(origLit1, origLit2, origSize, &c);
-            Clause *c2 = Clause_new(c);
-            clauseFree(&c);
+            Clause *c2 = solver.clauseAllocator.Clause_new(c);
+            solver.clauseAllocator.clauseFree(&c);
             cc = c2;
             solver.attachClause(*c2);
         /*} else if (c.size() == 3) {
@@ -287,8 +287,8 @@ inline const bool ClauseCleaner::cleanClauseBewareNULL(ClauseSimp cc, Subsumer& 
         }
         
         if (val == l_True) {
-            subs.unlinkModifiedClause(origClause, cc);
-            clauseFree(cc.clause);
+            subs.unlinkModifiedClause(origClause, cc, true);
+            solver.clauseAllocator.clauseFree(cc.clause);
             return true;
         }
     }
@@ -296,21 +296,21 @@ inline const bool ClauseCleaner::cleanClauseBewareNULL(ClauseSimp cc, Subsumer& 
     if (i != j) {
         c.setStrenghtened();
         if (origClause.size() > 2 && origClause.size()-(i-j) == 2) {
-            subs.unlinkModifiedClause(origClause, cc);
+            subs.unlinkModifiedClause(origClause, cc, true);
             subs.clauses[cc.index] = cc;
             c.shrink(i-j);
             solver.attachClause(c);
             subs.linkInAlreadyClause(cc);
         } else {
             c.shrink(i-j);
-            subs.unlinkModifiedClauseNoDetachNoNULL(origClause, cc);
+            subs.unlinkModifiedClause(origClause, cc, false);
             subs.linkInAlreadyClause(cc);
             if (c.learnt())
                 solver.learnts_literals -= i-j;
             else
                 solver.clauses_literals -= i-j;
         }
-        c.calcAbstraction();
+        if (!c.learnt()) c.calcAbstractionClause();
         subs.updateClause(cc);
     }
     
@@ -357,7 +357,7 @@ inline const bool ClauseCleaner::cleanXorClauseBewareNULL(XorClauseSimp cc, XorS
     switch(c.size()) {
         case 0: {
             subs.unlinkModifiedClause(origClause, cc);
-            clauseFree(cc.clause);
+            solver.clauseAllocator.clauseFree(cc.clause);
             return true;
         }
         case 2: {
@@ -366,7 +366,7 @@ inline const bool ClauseCleaner::cleanXorClauseBewareNULL(XorClauseSimp cc, XorS
             ps[1] = c[1].unsign();
             solver.varReplacer->replace(ps, c.xor_clause_inverted(), c.getGroup());
             subs.unlinkModifiedClause(origClause, cc);
-            clauseFree(cc.clause);
+            solver.clauseAllocator.clauseFree(cc.clause);
             return true;
         }
         default:
@@ -410,9 +410,14 @@ void ClauseCleaner::moveBinClausesToBinClauses()
         if (s+1 != end)
             __builtin_prefetch(*(s+1), 1, 0);
 
-        if ((**s).size() == 2)
-            solver.binaryClauses.push(*s);
-        else
+        if ((**s).size() == 2) {
+            solver.detachClause(**s);
+            Clause *c2 = solver.clauseAllocator.Clause_new(**s);
+            solver.clauseAllocator.clauseFree(*s);
+            solver.attachClause(*c2);
+            solver.becameBinary++;
+            solver.binaryClauses.push(c2);
+        } else
             *ss++ = *s;
     }
     cs.shrink(s-ss);

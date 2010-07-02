@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "VarReplacer.h"
 #include <iostream>
 #include <assert.h>
+#include <iomanip>
 
 //#define VERBOSE_DEBUG
 
@@ -85,6 +86,13 @@ const bool PartHandler::handle()
         newSolver.fixRestartType = solver.fixRestartType;
         newSolver.var_inc = solver.var_inc;
         newSolver.polarity_mode = solver.polarity_mode;
+
+        //Memory-usage reduction
+        newSolver.schedSimplification = false;
+        newSolver.doSubsumption = false;
+        newSolver.doXorSubsumption = false;
+        newSolver.doPartHandler = false;
+
         std::sort(vars.begin(), vars.end());
         uint32_t i2 = 0;
         for (Var var = 0; var < solver.nVars(); var++) {
@@ -137,7 +145,7 @@ const bool PartHandler::handle()
         for (uint32_t i = 0; i < newSolver.trail.size(); i++) {
             solver.uncheckedEnqueue(newSolver.trail[i]);
         }
-        solver.ok = (solver.propagate() == NULL);
+        solver.ok = (solver.propagate().isNULL());
         assert(solver.ok);
         
         for (Var var = 0; var < newSolver.nVars(); var++) {
@@ -156,7 +164,8 @@ const bool PartHandler::handle()
             std::cout << "c Solved part" << std::endl;
     }
     if (solver.verbosity >= 1)
-        std::cout << "c Coming back to original instance" << std::endl;
+        std::cout << "c Coming back to original instance"
+        << std::setw(57) << " |" << std::endl;
     
     solver.order_heap.filter(Solver::VarFilter(solver));
     
@@ -279,7 +288,7 @@ void PartHandler::moveLearntClauses(vec<Clause*>& cs, Solver& newSolver, const u
             
             solver.detachClause(c);
             newSolver.addLearntClause(c, c.getGroup(), c.activity());
-            clauseFree(&c);
+            solver.clauseAllocator.clauseFree(&c);
         } else {
             #ifdef VERBOSE_DEBUG
             std::cout << "Learnt clause in other part:"; c.plainPrint();

@@ -86,7 +86,7 @@ const bool PartFinder::findParts()
     if (solver.verbosity >= 2 || (solver.verbosity >=1 && parts > 1)) {
         std::cout << "c | Found parts: " << std::setw(10) <<  parts
         << " time: " << std::setprecision(2) << std::setw(4) << cpuTime() - time
-        << " s" << std::setw(28) << " |" << std::endl;
+        << " s" << std::setw(51) << " |" << std::endl;
     }
     
     return true;
@@ -147,7 +147,8 @@ const uint PartFinder::setParts()
             std::cout << "c | Found part " << std::setw(8) << i
             << " vars: " << std::setw(10) << reverseTable[i].size()
             << " clauses:" << std::setw(10) << numClauseInPart[i]
-            << " lits size:" << std::setw(10) << sumLitsInPart[i]  << std::endl;
+            << " lits size:" << std::setw(10) << sumLitsInPart[i]
+            << std::setw(12) << " | " << std::endl;
         }
         parts++;
     }
