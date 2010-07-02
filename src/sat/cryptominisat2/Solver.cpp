@@ -213,7 +213,7 @@ Var Solver::newVar(bool dvar)
     
     varReplacer->newVar();
     if (doPartHandler) partHandler->newVar();
-    if (doSubsumption) subsumer->newVar();
+    if (doSubsumption || subsumeWithNonExistBinaries || regularSubsumeWithNonExistBinaries) subsumer->newVar();
     if (doXorSubsumption) xorSubsumer->newVar();
 
     insertVarOrder(v);
