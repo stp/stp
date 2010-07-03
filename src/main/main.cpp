@@ -83,7 +83,7 @@ int main(int argc, char ** argv) {
   ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
   ToSAT * tosat      = new ToSAT(bm);
   AbsRefine_CounterExample * Ctr_Example = 
-    new AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
+    new AbsRefine_CounterExample(bm, simp, arrayTransformer);
   itimerval timeout; 
 
   ParserBM          = bm;

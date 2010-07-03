@@ -9,6 +9,7 @@
 
 #include "STP.h"
 #include "DifficultyScore.h"
+#include "../to-sat/AIG/ToSATAIG.h"
 
 namespace BEEV {
 
@@ -189,8 +190,9 @@ namespace BEEV {
     	cerr << "Final Difficulty Score:" << final_difficulty_score <<endl;
     }
 
+    const bool arrayops = containsArrayOps(original_input);
     bool optimize_enabled = bm->UserFlags.optimize_flag;
-    if (final_difficulty_score > 2 *initial_difficulty_score  && !containsArrayOps(orig_input))
+    if (final_difficulty_score > 2 *initial_difficulty_score  && !arrayops)
     {
     	// If the simplified problem is harder, than the
     	// initial problem we revert back to the initial
@@ -232,15 +234,25 @@ namespace BEEV {
     delete bvsolver;
     bvsolver = new BVSolver(bm,simp);
 
+    {
+    ToSATAIG toSATAIG(bm);
+
+    // If it doesn't contain array operations, use ABC's CNF generation.
     res = 
       Ctr_Example->CallSAT_ResultCheck(NewSolver, 
                                        simplified_solved_InputToSAT, 
-                                       orig_input);
+                                       orig_input,
+                                       (arrayops ? ((ToSATBase*)tosat): ((ToSATBase*)&toSATAIG))
+                                       );
+    }
+
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats", bm);
         return res;
       }
+
+    assert(arrayops); // should only go to abstraction refinement if there are array ops.
 
     // res = SATBased_AllFiniteLoops_Refinement(NewSolver, orig_input);
     //     if (SOLVER_UNDECIDED != res)
@@ -252,7 +264,8 @@ namespace BEEV {
     res = 
       Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
                                                 simplified_solved_InputToSAT, 
-                                                orig_input);
+                                                orig_input,
+                                                tosat);
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats", bm);
@@ -260,7 +273,7 @@ namespace BEEV {
       }
 
     res = 
-      Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, orig_input);
+      Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, orig_input,tosat);
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats", bm);
@@ -270,7 +283,7 @@ namespace BEEV {
     res = 
       Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
                                                 simplified_solved_InputToSAT,
-                                                orig_input);
+                                                orig_input,tosat);
     if (SOLVER_UNDECIDED != res)
       {
         CountersAndStats("print_func_stats", bm);

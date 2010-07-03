@@ -13,6 +13,10 @@ class BBNodeManagerASTNode {
 	ASTNode ASTTrue, ASTFalse;
 	STPMgr *stp;
 
+	//no copy, no assign.
+	BBNodeManagerASTNode&  operator = (const BBNodeManagerASTNode& other);
+	BBNodeManagerASTNode(const BBNodeManagerASTNode& other);
+
 public:
 
 	BBNodeManagerASTNode(STPMgr *_stp) {

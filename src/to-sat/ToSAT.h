@@ -45,7 +45,7 @@ namespace BEEV
     // Reverse map used in building counterexamples. MINISAT returns a
     // model in terms of MINISAT Vars, and this map helps us convert
     // it to a model over ASTNode variables.
-    ASTNodeToVar SATVar_to_SymbolIndex;
+    ASTNodeToSATVar SATVar_to_SymbolIndex;
 
     int CNFFileNameCounter;
     int benchFileNameCounter;
@@ -94,7 +94,7 @@ namespace BEEV
     bool CallSAT(MINISAT::Solver& SatSolver,
                  const ASTNode& input);
 
-    ASTNodeToVar& SATVar_to_SymbolIndexMap()
+    ASTNodeToSATVar& SATVar_to_SymbolIndexMap()
     {
       return SATVar_to_SymbolIndex;
     }

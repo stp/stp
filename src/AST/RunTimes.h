@@ -28,7 +28,8 @@ public:
       BVSolver, 
       CreateSubstitutionMap, 
       SendingToSAT,
-      CounterExampleGeneration
+      CounterExampleGeneration,
+      SATSimplifying
     };
 
   static std::string CategoryNames[];

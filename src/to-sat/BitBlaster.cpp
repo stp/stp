@@ -1263,6 +1263,12 @@ BBNode BitBlaster<BBNode,BBNodeManagerT>::BBEQ(const BBNodeVec& left, const BBNo
 template class BitBlaster<ASTNode, BBNodeManagerASTNode>;
 template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 
+std::ostream& operator<<(std::ostream& output, const BBNodeAIG& h)
+{
+  FatalError("This isn't implemented  yet sorry;");
+  return output;
+}
+
 #undef BBNodeVec
 #undef BBNodeVecMap
 #undef BBNodeSet

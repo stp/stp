@@ -89,7 +89,7 @@ private:
 	// This implements a variant of binary long division.
 	// q and r are "out" parameters.  rwidth puts a bound on the
 	// recursion depth.   Unsigned only, for now.
-public:
+
 	void BBDivMod(const vector<BBNode> &y, const vector<BBNode> &x, vector<BBNode> &q,
 			vector<BBNode> &r, unsigned int rwidth, set<BBNode>& support);
 
@@ -106,6 +106,11 @@ public:
 	void BBLShift(vector<BBNode>& x, unsigned int shift);
 	void BBRShift(vector<BBNode>& x, unsigned int shift);
 
+	// no copy, no assign.
+	BitBlaster&  operator = (const BitBlaster& other);
+	BitBlaster(const BitBlaster& other);
+
+
 public:
 	BBNodeManagerT* nf;
 
@@ -114,21 +119,19 @@ public:
 	// representing the boolean formula.
 	const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
 
-public:
-
 	/****************************************************************
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
-	BitBlaster(STPMgr * bm)
+        BitBlaster(BBNodeManagerT* bnm)
 		{
-		nf = new BBNodeManagerT(bm);
+          nf = bnm;
 	}
+
 
 	~BitBlaster() {
 		BBTermMemo.clear();
 		BBFormMemo.clear();
-		delete nf;
 	}
 
 	//Bitblast a formula

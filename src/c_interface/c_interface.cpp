@@ -165,8 +165,8 @@ VC vc_createValidityChecker(void) {
   BEEV::AbsRefine_CounterExample * Ctr_Example = 
     new BEEV::AbsRefine_CounterExample(bm, 
                                        simp, 
-                                       arrayTransformer, 
-                                       tosat);
+                                       arrayTransformer
+                                       );
 
   BEEV::ParserBM = bm;
   stpstar stp =

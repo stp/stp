@@ -345,7 +345,8 @@ namespace BEEV
 
     ASTNode BBFormula;
     {
-    	BitBlaster<ASTNode,BBNodeManagerASTNode> BB(bm);
+        BBNodeManagerASTNode nm(bm);
+        BitBlaster<ASTNode,BBNodeManagerASTNode> BB(&nm);
     	set<ASTNode> set;
     	BBFormula = BB.BBForm(input,set);
     	assert(set.size() == 0); // doesn't yet work.

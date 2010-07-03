@@ -71,9 +71,14 @@ class BBNodeManagerAIG
                 return t(aigMgr, a, b);
         }
 
+        // no copy. no assignment.
+        BBNodeManagerAIG&  operator = (const BBNodeManagerAIG& other);
+        BBNodeManagerAIG(const BBNodeManagerAIG& other);
+
+
 public:
 
-        BBNodeManagerAIG(STPMgr*& _stp)
+        BBNodeManagerAIG()
         {
                 aigMgr = Aig_ManStart(0);
                 // fancier strashing.
@@ -87,27 +92,16 @@ public:
 
         BBNodeAIG getTrue()
         {
-                return BBNodeAIG((aigMgr->pConst1));
+                return BBNodeAIG(Aig_ManConst1(aigMgr));
         }
 
         BBNodeAIG getFalse()
         {
-                return BBNodeAIG(Aig_Not(aigMgr->pConst1));
+                return BBNodeAIG(Aig_ManConst0(aigMgr));
         }
 
-        void
-        toCNF(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToVar& nodeToVar)
+        void toCNF_experimental(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar)
         {
-          assert(cnfData == NULL);
-
-          Aig_Man_t *aigMgr;
-
-          Aig_ObjCreatePo(aigMgr, top.n);
-          Aig_ManCleanup( aigMgr); // remove nodes not connected to the PO.
-          Aig_ManCheck(aigMgr); // check that AIG looks ok.
-
-          assert(Aig_ManPoNum(aigMgr) == 1);
-
           //cerr << "SAFDASDF";
 
           // copied from darScript.c: Aig_Man_t * Dar_ManRewriteDefault( Aig_Man_t * pAig )
@@ -134,9 +128,22 @@ public:
           //Dar_RwrPar_t  pPars;
           //Dar_ManDefaultRwrParams( &pPars );
           //Dar_ManRewrite( aigMgr, &pPars );
+        }
 
+        void
+        toCNF(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar)
+        {
+          assert(cnfData == NULL);
+          assert(nodeToVar.size() ==0);
 
-          // Cnf_Derive seems more advanced, but gives assertion errors sometimes.
+          Aig_ObjCreatePo(aigMgr, top.n);
+          Aig_ManCleanup( aigMgr); // remove nodes not connected to the PO.
+          Aig_ManCheck(aigMgr); // check that AIG looks ok.
+
+          assert(Aig_ManPoNum(aigMgr) == 1);
+
+          // Cnf_Derive gives errors sometimes.
+          //cnfData = Cnf_DeriveSimple(aigMgr, 0);
           cnfData = Cnf_Derive(aigMgr, 0);
 
           BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
@@ -157,6 +164,7 @@ public:
               vector<unsigned>& v = nodeToVar[n];
               for (unsigned i = 0; i < b.size(); i++)
                 {
+                  if (!b[i].IsNull())
                   v[i] = cnfData->pVarNums[b[i].n->Id];
                 }
             }
@@ -194,11 +202,14 @@ public:
         BBNodeAIG CreateNode(Kind kind, vector<BBNodeAIG>& children)
         {
                 Aig_Obj_t * pNode;
+                assert (children.size() != 0);
+
+                for (int i =0; i < children.size();i++)
+                  assert(!children[i].IsNull());
 
                 switch (kind)
                 {
                 case AND:
-                        assert (children.size() != 0);
                         if (children.size() == 1)
                                 pNode = children[0].n;
                         else if (children.size() == 2)
@@ -208,7 +219,9 @@ public:
                         break;
 
                 case OR:
-                        if (children.size() == 2)
+                        if (children.size() == 1)
+                                pNode = children[0].n;
+                        else if (children.size() == 2)
                                 pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
                         else
                                 pNode = makeTower(Aig_Or, children);
@@ -233,8 +246,10 @@ public:
                         pNode = Aig_Not(pNode);
                         break;
                 case XOR:
-                        assert(children.size() ==2);
+                        if (children.size() == 2)
                         pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
+                        else
+                                pNode = makeTower(Aig_Exor, children);
                         break;
                 case IFF:
                         assert(children.size() ==2);

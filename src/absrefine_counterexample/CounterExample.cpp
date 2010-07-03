@@ -10,6 +10,7 @@
 #include "../sat/sat.h"
 #include "AbsRefine_CounterExample.h"
 #include "../printer/printers.h"
+#include "../to-sat/AIG/ToSATAIG.h"
 
 const bool debug_counterexample =  false;
 
@@ -25,7 +26,8 @@ namespace BEEV
    * populate the CounterExampleMap data structure (ASTNode -> BVConst)
    */
   void
-  AbsRefine_CounterExample::ConstructCounterExample(MINISAT::Solver& newS)
+  AbsRefine_CounterExample::ConstructCounterExample(MINISAT::Solver& newS,
+      ToSATBase::ASTNodeToSATVar& satVarToSymbol)
   {
     //iterate over MINISAT counterexample and construct a map from AST
     //terms to vector of bools. We need this iteration step because
@@ -42,9 +44,8 @@ namespace BEEV
 
     CopySolverMap_To_CounterExample();
 
-    ToSAT::ASTNodeToVar m = tosat->SATVar_to_SymbolIndexMap();
-
-    for (ToSAT::ASTNodeToVar::const_iterator it = m.begin(); it != m.end(); it++)
+    for (ToSATBase::ASTNodeToSATVar::const_iterator it = satVarToSymbol.begin(); it
+        != satVarToSymbol.end(); it++)
       {
         const ASTNode& symbol = it->first;
         const vector<unsigned>& v = it->second;
@@ -106,7 +107,7 @@ namespace BEEV
     //iterate over the ASTNode_to_Bitvector data-struct and construct
     //the the aggregate value of the bitvector, and populate the
     //CounterExampleMap datastructure
-    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_BitvectorMap.begin(), 
+    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_BitvectorMap.begin(),
            itend = _ASTNode_to_BitvectorMap.end(); it != itend; it++)
       {
         ASTNode var = it->first;
@@ -114,8 +115,8 @@ namespace BEEV
         //cerr << var;
         if (SYMBOL != var.GetKind())
           {
-            FatalError("ConstructCounterExample:"\
-                       "error while constructing counterexample: "\
+            FatalError("ConstructCounterExample:"
+              "error while constructing counterexample: "
                        "not a variable: ", var);
           }
         //construct the bitvector value
@@ -132,10 +133,9 @@ namespace BEEV
 
     //In this loop, we compute the value of each array read, the
     //corresponding ITE against the counterexample generated above.
-    for (ASTNodeMap::const_iterator 
-           it = ArrayTransform->ArrayRead_IteMap()->begin(), 
-           itend = ArrayTransform->ArrayRead_IteMap()->end(); 
-         it != itend; it++)
+    for (ASTNodeMap::const_iterator it =
+        ArrayTransform->ArrayRead_IteMap()->begin(), itend =
+        ArrayTransform->ArrayRead_IteMap()->end(); it != itend; it++)
       {
         //the array read
         ASTNode arrayread = it->first;
@@ -146,8 +146,7 @@ namespace BEEV
         //construct the appropriate array-read and store it in the
         //counterexample
         ASTNode arrayread_index = TermToConstTermUsingModel(arrayread[1]);
-        ASTNode key = bm->CreateTerm(READ, 
-                                     arrayread.GetValueWidth(), 
+        ASTNode key = bm->CreateTerm(READ, arrayread.GetValueWidth(),
                                      arrayread[0], arrayread_index);
 
         //Get the ITE corresponding to the array-read and convert it
@@ -181,9 +180,9 @@ namespace BEEV
   //4. If (the boolean variable 'ArrayReadFlag' is false) && ArrayRead
   //4. doesn't have a value in the counterexample then return 0 as the
   //4. value of the arrayread.
-  ASTNode 
-  AbsRefine_CounterExample::
-  TermToConstTermUsingModel(const ASTNode& t, bool ArrayReadFlag)
+  ASTNode
+  AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& t,
+      bool ArrayReadFlag)
   {
     bm->Begin_RemoveWrites = false;
     bm->SimplifyWrites_InPlace_Flag = false;
@@ -194,21 +193,18 @@ namespace BEEV
     //cerr << "Input to TermToConstTermUsingModel: " << term << endl;
     if (!is_Term_kind(k))
       {
-        FatalError("TermToConstTermUsingModel: "\
-                   "The input is not a term: ", 
-                   term);
+        FatalError("TermToConstTermUsingModel: "
+          "The input is not a term: ", term);
       }
     if (k == WRITE)
       {
-        FatalError("TermToConstTermUsingModel: "\
-                   "The input has wrong kind: WRITE : ", 
-                   term);
+        FatalError("TermToConstTermUsingModel: "
+          "The input has wrong kind: WRITE : ", term);
       }
     if (k == SYMBOL && BOOLEAN_TYPE == term.GetType())
       {
-        FatalError("TermToConstTermUsingModel: "\
-                   "The input has wrong kind: Propositional variable : ", 
-                   term);
+        FatalError("TermToConstTermUsingModel: "
+          "The input has wrong kind: Propositional variable : ", term);
       }
 
     ASTNodeMap::iterator it1;
@@ -228,10 +224,9 @@ namespace BEEV
             //the value part of the map
             if (term == val)
               {
-                FatalError("TermToConstTermUsingModel: "\
+                FatalError("TermToConstTermUsingModel: "
                            "The input term is stored as-is "
-                           "in the CounterExample: Not ok: ", 
-                           term);
+                  "in the CounterExample: Not ok: ", term);
               }
             return TermToConstTermUsingModel(val, ArrayReadFlag);
           }
@@ -264,64 +259,53 @@ namespace BEEV
           ASTNode index = term[1];
           if (0 == arrName.GetIndexWidth())
             {
-              FatalError("TermToConstTermUsingModel: "\
+            FatalError("TermToConstTermUsingModel: "
                          "array has 0 index width: ", arrName);
             }
 
-
           if (WRITE == arrName.GetKind()) //READ over a WRITE
             {
-              ASTNode wrtterm = 
-                Expand_ReadOverWrite_UsingModel(term, ArrayReadFlag);
+            ASTNode wrtterm = Expand_ReadOverWrite_UsingModel(term,
+                ArrayReadFlag);
               if (wrtterm == term)
                 {
-                  FatalError("TermToConstTermUsingModel: "\
-                             "Read_Over_Write term must be expanded "\
+                FatalError("TermToConstTermUsingModel: "
+                  "Read_Over_Write term must be expanded "
                              "into an ITE", term);
                 }
-              ASTNode rtterm = 
-                TermToConstTermUsingModel(wrtterm, ArrayReadFlag);
+            ASTNode rtterm = TermToConstTermUsingModel(wrtterm, ArrayReadFlag);
               assert(ArrayReadFlag || (BVCONST == rtterm.GetKind()));
               return rtterm;
             }
           else if (ITE == arrName.GetKind()) //READ over an ITE
             {
               // The "then" and "else" branch are arrays.
-              ASTNode indexVal = 
-                TermToConstTermUsingModel(index, ArrayReadFlag);
+            ASTNode indexVal = TermToConstTermUsingModel(index, ArrayReadFlag);
 
-              ASTNode condcompute = 
-                ComputeFormulaUsingModel(arrName[0]); // Get the truth value.
+            ASTNode condcompute = ComputeFormulaUsingModel(arrName[0]); // Get the truth value.
               unsigned int wid = arrName.GetValueWidth();
               if (ASTTrue == condcompute)
                 {
-                  const ASTNode & result = 
-                    TermToConstTermUsingModel(bm->CreateTerm(READ, 
-                                                             wid,
-                                                             arrName[1], 
-                                                             indexVal), 
+                const ASTNode & result = TermToConstTermUsingModel(
+                    bm->CreateTerm(READ, wid, arrName[1], indexVal),
                                               ArrayReadFlag);
                   assert(ArrayReadFlag || (BVCONST == result.GetKind()));
                   return result;
                 }
               else if (ASTFalse == condcompute)
                 {
-                  const ASTNode & result = 
-                    TermToConstTermUsingModel(bm->CreateTerm(READ, 
-                                                             wid,
-                                                             arrName[2], 
-                                                             indexVal), 
+                const ASTNode & result = TermToConstTermUsingModel(
+                    bm->CreateTerm(READ, wid, arrName[2], indexVal),
                                               ArrayReadFlag);
                   assert(ArrayReadFlag || (BVCONST == result.GetKind()));
                   return result;
                 }
               else
                 {
-                  cerr << "TermToConstTermUsingModel: termITE: "\
+                cerr << "TermToConstTermUsingModel: termITE: "
                     "value of conditional is wrong: " << condcompute << endl;
-                  FatalError(" TermToConstTermUsingModel: termITE: "\
-                             "cannot compute ITE conditional against model: ",
-                             term);
+                FatalError(" TermToConstTermUsingModel: termITE: "
+                  "cannot compute ITE conditional against model: ", term);
                 }
               FatalError("bn23143 Never Here");
             }
@@ -331,24 +315,21 @@ namespace BEEV
             {
               //index has a const value in the CounterExampleMap
               //ASTNode indexVal = CounterExampleMap[index];
-              ASTNode indexVal = 
-                TermToConstTermUsingModel(CounterExampleMap[index], 
-                                          ArrayReadFlag);
-              modelentry = 
-                bm->CreateTerm(READ, arrName.GetValueWidth(), 
-                               arrName, indexVal);
+            ASTNode indexVal = TermToConstTermUsingModel(
+                CounterExampleMap[index], ArrayReadFlag);
+            modelentry = bm->CreateTerm(READ, arrName.GetValueWidth(), arrName,
+                indexVal);
             }
           else
             {
               //index does not have a const value in the
               //CounterExampleMap. compute it.
-              ASTNode indexconstval = 
-                TermToConstTermUsingModel(index, ArrayReadFlag);
+            ASTNode indexconstval = TermToConstTermUsingModel(index,
+                ArrayReadFlag);
               //update model with value of the index
               //CounterExampleMap[index] = indexconstval;
-              modelentry = 
-                bm->CreateTerm(READ, arrName.GetValueWidth(), 
-                               arrName, indexconstval);
+            modelentry = bm->CreateTerm(READ, arrName.GetValueWidth(), arrName,
+                indexconstval);
             }
           //modelentry is now an arrayread over a constant index
           BVTypeCheck(modelentry);
@@ -356,8 +337,7 @@ namespace BEEV
           //if a value exists in the CounterExampleMap then return it
           if (CounterExampleMap.find(modelentry) != CounterExampleMap.end())
             {
-              output = 
-                TermToConstTermUsingModel(CounterExampleMap[modelentry], 
+            output = TermToConstTermUsingModel(CounterExampleMap[modelentry],
                                           ArrayReadFlag);
             }
           else if (ArrayReadFlag)
@@ -367,8 +347,8 @@ namespace BEEV
             }
           else
             {
-        	  // Has been simplified out. Can take any value.
-        	  output  = bm->CreateMaxConst(modelentry.GetValueWidth());
+                  // Has been simplified out. Can take any value.
+                  output  = bm->CreateMaxConst(modelentry.GetValueWidth());
             }
           break;
         }
@@ -386,9 +366,8 @@ namespace BEEV
           else
             {
               cerr << "TermToConstTermUsingModel: termITE: "
-                   << "value of conditional is wrong: " 
-                   << condcompute << endl;
-              FatalError(" TermToConstTermUsingModel: termITE: cannot "\
+                << "value of conditional is wrong: " << condcompute << endl;
+            FatalError(" TermToConstTermUsingModel: termITE: cannot "
                          "compute ITE conditional against model: ", term);
             }
           break;
@@ -397,9 +376,9 @@ namespace BEEV
         {
           const ASTVec& c = term.GetChildren();
           ASTVec o;
-		   o.reserve(c.size());
-          for (ASTVec::const_iterator
-                 it = c.begin(), itend = c.end(); it != itend; it++)
+                   o.reserve(c.size());
+        for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it
+            != itend; it++)
             {
               ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
               o.push_back(ff);
@@ -432,11 +411,10 @@ namespace BEEV
   //every writeindex until, either it evaluates to TRUE or all
   //(readIndex=writeIndex) evaluate to FALSE
   ASTNode
-  AbsRefine_CounterExample::
-  Expand_ReadOverWrite_UsingModel(const ASTNode& term, bool arrayread_flag)
+  AbsRefine_CounterExample::Expand_ReadOverWrite_UsingModel(
+      const ASTNode& term, bool arrayread_flag)
   {
-    if (READ != term.GetKind() 
-        || WRITE != term[0].GetKind())
+    if (READ != term.GetKind() || WRITE != term[0].GetKind())
       {
         FatalError("RemovesWrites: Input must be a READ over a WRITE", term);
       }
@@ -453,7 +431,7 @@ namespace BEEV
             //of a key in the substitutionmap is always a constant.
             if (term == val)
               {
-                FatalError("TermToConstTermUsingModel: The input term is "\
+                FatalError("TermToConstTermUsingModel: The input term is "
                            "stored as-is "
                            "in the CounterExample: Not ok: ", term);
               }
@@ -483,7 +461,8 @@ namespace BEEV
           }
 
         write = write[0];
-      } while (WRITE == write.GetKind());
+      }
+    while (WRITE == write.GetKind());
 
     const unsigned int width = term.GetValueWidth();
     newRead = bm->CreateTerm(READ, width, write, readIndex);
@@ -497,14 +476,14 @@ namespace BEEV
   /* FUNCTION: accepts a non-constant formula, and checks if the
    * formula is ASTTrue or ASTFalse w.r.t to a model
    */
-  ASTNode 
+  ASTNode
   AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
   {
     const ASTNode& in = form;
     const Kind k = form.GetKind();
     if (!(is_Form_kind(k) && BOOLEAN_TYPE == form.GetType()))
       {
-        FatalError(" ComputeConstFormUsingModel: "\
+        FatalError(" ComputeConstFormUsingModel: "
                    "The input is a non-formula: ", form);
       }
 
@@ -519,7 +498,7 @@ namespace BEEV
           }
         else
           {
-            FatalError("ComputeFormulaUsingModel: "\
+            FatalError("ComputeFormulaUsingModel: "
                        "The value of a formula must be TRUE or FALSE:", form);
           }
       }
@@ -533,7 +512,7 @@ namespace BEEV
         break;
       case SYMBOL:
         if (BOOLEAN_TYPE != form.GetType())
-          FatalError(" ComputeFormulaUsingModel: "\
+        FatalError(" ComputeFormulaUsingModel: "
                      "Non-Boolean variables are not formulas", form);
         if (CounterExampleMap.find(form) != CounterExampleMap.end())
           {
@@ -561,25 +540,28 @@ namespace BEEV
       case BVSLT:
       case BVSLE:
       case BVSGT:
-      case BVSGE: {
-		ASTVec children;
-		children.reserve(form.Degree());
+    case BVSGE:
+      {
+                ASTVec children;
+                children.reserve(form.Degree());
 
-		for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it
-				!= itend; it++) {
-			children.push_back(TermToConstTermUsingModel(*it, false));
-		}
+                for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it
+            != itend; it++)
+          {
+                        children.push_back(TermToConstTermUsingModel(*it, false));
+                }
 
-		output = simp->BVConstEvaluator(bm->CreateNode(k, children));
+                output = simp->BVConstEvaluator(bm->CreateNode(k, children));
 
-		//evaluate formula to false if bvdiv execption occurs while
-		//counterexample is being checked during refinement.
-		if (bm->bvdiv_exception_occured
-				&& bm->counterexample_checking_during_refinement) {
-			output = ASTFalse;
-		}
+                //evaluate formula to false if bvdiv execption occurs while
+                //counterexample is being checked during refinement.
+                if (bm->bvdiv_exception_occured
+            && bm->counterexample_checking_during_refinement)
+          {
+                        output = ASTFalse;
+                }
 
-	}
+        }
       break;
 
       case NAND:
@@ -590,14 +572,15 @@ namespace BEEV
       case IFF:
       case IMPLIES:
       case OR:
-    	{
-    		ASTVec children;
-    		children.reserve(form.Degree());
+        {
+                ASTVec children;
+                children.reserve(form.Degree());
 
-    		for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it != itend; it++)
-    		{
-    			children.push_back( ComputeFormulaUsingModel(*it));
-    		}
+        for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it
+            != itend; it++)
+                {
+                        children.push_back( ComputeFormulaUsingModel(*it));
+                }
 
             output = simp->BVConstEvaluator(bm->CreateNode(k, children));
 
@@ -609,7 +592,7 @@ namespace BEEV
                 output = ASTFalse;
               }
 
-    	}
+        }
         break;
 
       case ITE:
@@ -620,7 +603,7 @@ namespace BEEV
         else if (ASTFalse == t0)
           output = ComputeFormulaUsingModel(form[2]);
         else
-          FatalError("ComputeFormulaUsingModel: ITE: "\
+          FatalError("ComputeFormulaUsingModel: ITE: "
                      "something is wrong with the formula: ", form);
       }
         break;
@@ -629,12 +612,12 @@ namespace BEEV
         output = ComputeFormulaUsingModel(output);
         break;
       case FOR:
-        //output = Check_FiniteLoop_UsingModel(form);   
+        //output = Check_FiniteLoop_UsingModel(form);
         output = ASTTrue;
         break;
       default:
-    	  cerr << _kind_names[k];
-        FatalError(" ComputeFormulaUsingModel: "\
+          cerr << _kind_names[k];
+      FatalError(" ComputeFormulaUsingModel: "
                    "the kind has not been implemented", ASTUndefined);
         break;
       }
@@ -646,7 +629,8 @@ namespace BEEV
     return output;
   }
 
-  void AbsRefine_CounterExample::CheckCounterExample(bool t)
+  void
+  AbsRefine_CounterExample::CheckCounterExample(bool t)
   {
     //input is valid, no counterexample to check
     if (bm->ValidFlag)
@@ -654,36 +638,36 @@ namespace BEEV
 
     //t is true if SAT solver generated a counterexample, else it is false
     if (!t)
-      FatalError("CheckCounterExample: "\
+      FatalError("CheckCounterExample: "
                  "No CounterExample to check", ASTUndefined);
     const ASTVec c = bm->GetAsserts();
 
     if (bm->UserFlags.stats_flag)
-    	printf("checking counterexample\n");
+        printf("checking counterexample\n");
 
-    for (ASTVec::const_iterator
-           it = c.begin(), itend = c.end(); it != itend; it++)
+    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
     {
-    	if (debug_counterexample)
-    		cerr << "checking" << *it;
+        if (debug_counterexample)
+                cerr << "checking" << *it;
 
       if (ASTFalse == ComputeFormulaUsingModel(*it))
         FatalError("CheckCounterExample:counterexample bogus:"
-                   "assert evaluates to FALSE under counterexample: "\
+            "assert evaluates to FALSE under counterexample: "
                    "NOT OK", *it);
     }
 
     // The smtlib ones don't have a query defined.
-    if ((bm->GetQuery() != ASTUndefined) && ASTTrue == ComputeFormulaUsingModel(bm->GetQuery()))
+    if ((bm->GetQuery() != ASTUndefined) && ASTTrue
+        == ComputeFormulaUsingModel(bm->GetQuery()))
       FatalError("CheckCounterExample:counterexample bogus:"
-                 "query evaluates to TRUE under counterexample: "\
+        "query evaluates to TRUE under counterexample: "
                  "NOT OK", bm->GetQuery());
   }
 
   /* FUNCTION: queries the CounterExampleMap object with 'expr' and
    * returns the corresponding counterexample value.
    */
-  ASTNode 
+  ASTNode
   AbsRefine_CounterExample::GetCounterExample(bool t, const ASTNode& expr)
   {
     //input is valid, no counterexample to get
@@ -712,7 +696,8 @@ namespace BEEV
   // FUNCTION: prints a counterexample for INVALID inputs.  iterate
   // through the CounterExampleMap data structure and print it to
   // stdout
-  void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
+  void
+  AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   {
     //input is valid, no counterexample to print
     if (bm->ValidFlag)
@@ -754,40 +739,38 @@ namespace BEEV
 
         if (ARRAY_TYPE == se.GetType())
           {
-            FatalError("TermToConstTermUsingModel: "\
+            FatalError("TermToConstTermUsingModel: "
                        "entry in counterexample is an arraytype. bogus:", se);
           }
 
         //skip over introduced variables
-        if (f.GetKind() == SYMBOL && 
-            (ArrayTransform->FoundIntroducedSymbolSet(f)))
+        if (f.GetKind() == SYMBOL && (ArrayTransform->FoundIntroducedSymbolSet(
+            f)))
           {
             continue;
           }
-        if (f.GetKind() == SYMBOL     || 
-            (f.GetKind() == READ      && 
-             f[0].GetKind() == SYMBOL && 
-             f[1].GetKind() == BVCONST))
+        if (f.GetKind() == SYMBOL || (f.GetKind() == READ && f[0].GetKind()
+            == SYMBOL && f[1].GetKind() == BVCONST))
           {
             os << "ASSERT( ";
             printer::PL_Print1(os,f,0,false);
-            if(BOOLEAN_TYPE == f.GetType()) 
+            if(BOOLEAN_TYPE == f.GetType())
               {
                 os << "<=>";
               }
-            else 
+            else
               {
                 os << " = ";
               }
             if (BITVECTOR_TYPE == se.GetType())
               {
-            	ASTNode rhs = TermToConstTermUsingModel(se, false);
-				assert(rhs.isConstant());
-				printer::PL_Print1(os,rhs,0,false);
+                ASTNode rhs = TermToConstTermUsingModel(se, false);
+                                assert(rhs.isConstant());
+                                printer::PL_Print1(os,rhs,0,false);
               }
             else
               {
-            	printer::PL_Print1(os,se,0,false);
+                printer::PL_Print1(os,se,0,false);
               }
             os << " );" << endl;
           }
@@ -804,7 +787,8 @@ namespace BEEV
    * not print anything. This function was specifically written for
    * Dawson Engler's group (bug finding research group at Stanford)
    */
-  void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
+  void
+  AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
   {
     //global command-line option to print counterexample. we do not
     //want both counterexample printers to print at the sametime.
@@ -833,8 +817,8 @@ namespace BEEV
     //vector to store the integer values
     std::vector<int> out_int;
     cout << "% ";
-    for (ASTVec::iterator it = bm->ListOfDeclaredVars.begin(), 
-           itend = bm->ListOfDeclaredVars.end(); it != itend; it++)
+    for (ASTVec::iterator it = bm->ListOfDeclaredVars.begin(), itend =
+        bm->ListOfDeclaredVars.end(); it != itend; it++)
       {
         if (ARRAY_TYPE == it->GetType())
           {
@@ -858,12 +842,10 @@ namespace BEEV
             it->PL_Print(cout, 2);
             for (int j = 0; j < n; j++)
               {
-                ASTNode index = 
-                  bm->CreateBVConst(it->GetIndexWidth(), j);
-                ASTNode readexpr = 
-                  bm->CreateTerm(READ, it->GetValueWidth(), *it, index);
-                ASTNode val = 
-                  GetCounterExample(t, readexpr);
+                ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);
+                ASTNode readexpr = bm->CreateTerm(READ, it->GetValueWidth(),
+                    *it, index);
+                ASTNode val = GetCounterExample(t, readexpr);
                 //cout << "ASSERT( ";
                 //cout << " = ";
                 out_int.push_back(val.GetUnsignedConst());
@@ -878,18 +860,17 @@ namespace BEEV
   } //End of PrintCounterExample_InOrder
 
   // Prints Satisfying assignment directly, for debugging.
-  void AbsRefine_CounterExample::PrintSATModel(MINISAT::Solver& newS)
+  void
+  AbsRefine_CounterExample::PrintSATModel(MINISAT::Solver& newS,
+      ToSATBase::ASTNodeToSATVar& m)
   {
     if (!newS.okay())
       FatalError("PrintSATModel: NO COUNTEREXAMPLE TO PRINT", ASTUndefined);
-    if (!(bm->UserFlags.stats_flag
-          && bm->UserFlags.print_nodes_flag))
+    if (!(bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag))
       return;
 
-    ToSAT::ASTNodeToVar m = tosat->SATVar_to_SymbolIndexMap();
-
     cout << "Satisfying assignment: " << endl;
-    for (ToSAT::ASTNodeToVar::const_iterator it= m.begin(); it != m.end();it++)
+    for (ToSATBase::ASTNodeToSATVar::const_iterator it = m.begin(); it != m.end(); it++)
     {
       ASTNode symbol = it->first;
       vector<unsigned> v = it->second;
@@ -915,14 +896,13 @@ namespace BEEV
   } //end of PrintSATModel()
 
   //FUNCTION: this function accepts a boolvector and returns a BVConst
-  ASTNode 
-  AbsRefine_CounterExample::
-  BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l)
+  ASTNode
+  AbsRefine_CounterExample::BoolVectoBVConst(HASHMAP<unsigned, bool> * w,
+      unsigned int l)
   {
     if (l < (unsigned)w->size())
       FatalError("BoolVectorBVConst : "
-                 "length of bitvector does not match HASHMAP size:", 
-                 ASTUndefined, l);
+        "length of bitvector does not match HASHMAP size:", ASTUndefined, l);
 
     CBV cc = CONSTANTBV::BitVector_Create(l,true);
     for (unsigned int jj = 0; jj < l; jj++)
@@ -930,30 +910,30 @@ namespace BEEV
         if ((*w)[jj] == true)
           CONSTANTBV::BitVector_Bit_On(cc,l-1-jj);
         else
-        	CONSTANTBV::BitVector_Bit_Off(cc,l-1-jj);
+                CONSTANTBV::BitVector_Bit_Off(cc,l-1-jj);
       }
 
     return bm->CreateBVConst(cc,l);
   } //end of BoolVectoBVConst()
 
-  void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
+  void
+  AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
   {
-    
+
     if (!simp->Return_SolverMap()->empty())
       {
-        CounterExampleMap.insert(simp->Return_SolverMap()->begin(), 
+        CounterExampleMap.insert(simp->Return_SolverMap()->begin(),
                                  simp->Return_SolverMap()->end());
       }
   }
 
-  SOLVER_RETURN_TYPE 
-  AbsRefine_CounterExample::
-  CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
-                      const ASTNode& modified_input,
-                      const ASTNode& original_input)
+  SOLVER_RETURN_TYPE
+  AbsRefine_CounterExample::CallSAT_ResultCheck(MINISAT::Solver& SatSolver,
+      const ASTNode& modified_input, const ASTNode& original_input, ToSATBase* tosat)
   {
-    bool sat = tosat->CallSAT(SatSolver,
-                              modified_input);
+
+    bool sat = tosat->CallSAT(SatSolver, modified_input);
+
     if (!sat)
       {
         //PrintOutput(true);
@@ -961,13 +941,16 @@ namespace BEEV
       }
     else if (SatSolver.okay())
       {
-    	bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
-    	CounterExampleMap.clear();
-        ConstructCounterExample(SatSolver);
-        if (bm->UserFlags.stats_flag 
-            && bm->UserFlags.print_nodes_flag)
+        bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+        CounterExampleMap.clear();
+
+        ToSAT::ASTNodeToSATVar satVarToSymbol =
+            tosat->SATVar_to_SymbolIndexMap();
+        ConstructCounterExample(SatSolver, satVarToSymbol);
+        if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
           {
-            PrintSATModel(SatSolver);
+            ToSAT::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
+            PrintSATModel(SatSolver, m);
           }
         //check if the counterexample is good or not
         ComputeFormulaMap.clear();
@@ -975,7 +958,7 @@ namespace BEEV
           bm->bvdiv_exception_occured = false;
         ASTNode orig_result = ComputeFormulaUsingModel(original_input);
         if (!(ASTTrue == orig_result || ASTFalse == orig_result))
-          FatalError("TopLevelSat: Original input must compute to "\
+          FatalError("TopLevelSat: Original input must compute to "
                      "true or false against model");
 
         bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
@@ -985,21 +968,20 @@ namespace BEEV
         if (ASTTrue == orig_result)
           {
             if (bm->UserFlags.check_counterexample_flag)
-				CheckCounterExample(SatSolver.okay());
+                                CheckCounterExample(SatSolver.okay());
 
-            if (bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag)
+            if (bm->UserFlags.stats_flag
+                || bm->UserFlags.print_counterexample_flag)
               {
             PrintCounterExample(SatSolver.okay());
             PrintCounterExample_InOrder(SatSolver.okay());
               }
-
             return SOLVER_INVALID;
           }
         // counterexample is bogus: flag it
         else
           {
-            if (bm->UserFlags.stats_flag 
-                && bm->UserFlags.print_nodes_flag)
+            if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
               {
                 cout << "Supposedly bogus one: \n";
                 PrintCounterExample(true);
@@ -1015,4 +997,5 @@ namespace BEEV
         return SOLVER_ERROR;
       }
   } //end of CALLSAT_ResultCheck()     
-};
+}
+;

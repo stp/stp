@@ -14,7 +14,7 @@
 #include "../STPManager/STPManager.h"
 #include "../simplifier/simplifier.h"
 #include "../AST/ArrayTransformer.h"
-#include "../to-sat/ToSAT.h"
+#include "../to-sat/ToSATBase.h"
 
 namespace BEEV
 {
@@ -52,7 +52,7 @@ namespace BEEV
     ArrayTransformer * ArrayTransform;
       
     // Ptr to ToSAT
-    ToSAT * tosat;
+    //ToSATBase * tosat;
 
     // Checks if the counterexample is good. In order for the
     // counterexample to be ok, every assert must evaluate to true
@@ -73,14 +73,21 @@ namespace BEEV
     //Converts a vector of bools to a BVConst
     ASTNode BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l);
 
+    //Converts MINISAT counterexample into an AST memotable (i.e. the
+    //function populates the datastructure CounterExampleMap)
+    void ConstructCounterExample(MINISAT::Solver& newS, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
+
+    // Prints MINISAT assigment one bit at a time, for debugging.
+    void PrintSATModel(MINISAT::Solver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
+
+
   public:
 
     // Constructor
     AbsRefine_CounterExample(STPMgr * b, 
                              Simplifier * s, 
-                             ArrayTransformer * at,
-                             ToSAT * t) : 
-      bm(b), simp(s), ArrayTransform(at), tosat(t)
+                             ArrayTransformer * at) :
+      bm(b), simp(s), ArrayTransform(at)
     {
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
@@ -97,9 +104,6 @@ namespace BEEV
       ComputeFormulaMap.clear();
     }
 
-    //Converts MINISAT counterexample into an AST memotable (i.e. the
-    //function populates the datastructure CounterExampleMap)
-    void ConstructCounterExample(MINISAT::Solver& S);
       
     //Prints the counterexample to stdout
     void PrintCounterExample(bool t, std::ostream& os = cout);
@@ -128,16 +132,15 @@ namespace BEEV
     ASTNode ComputeFormulaUsingModel(const ASTNode& form);
 
 
-    // Prints MINISAT assigment one bit at a time, for debugging.
-    void PrintSATModel(MINISAT::Solver& S);
-
     /****************************************************************
      * Array Refinement functions                                   *
      ****************************************************************/      
     SOLVER_RETURN_TYPE
     CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
                         const ASTNode& modified_input,
-                        const ASTNode& original_input);  
+                        const ASTNode& original_input,
+                        ToSATBase* tosat);
+
     //creates array write axiom only for the input term or formula, if
     //necessary. If there are no axioms to produce then it simply
     //generates TRUE
@@ -148,11 +151,13 @@ namespace BEEV
     SOLVER_RETURN_TYPE 
     SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
                                  const ASTNode& modified_input, 
-                                 const ASTNode& original_input);
+                                 const ASTNode& original_input,
+                                 ToSATBase* tosat);
 
     SOLVER_RETURN_TYPE 
     SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
-                                  const ASTNode& orig_input);        
+                                  const ASTNode& orig_input,
+                                  ToSATBase *tosat);
     
     //     SOLVER_RETURN_TYPE
     // SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& newS,

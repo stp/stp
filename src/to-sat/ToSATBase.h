@@ -20,7 +20,7 @@ namespace BEEV
     ASTNode,
     vector<unsigned>,
     ASTNode::ASTNodeHasher,
-    ASTNode::ASTNodeEqual> ASTNodeToVar;
+    ASTNode::ASTNodeEqual> ASTNodeToSATVar;
 
     // Constructor
     ToSATBase(STPMgr * bm) :
@@ -40,7 +40,7 @@ namespace BEEV
     // Bitblasts, CNF conversion and calls toSATandSolve()
     virtual bool CallSAT(MINISAT::Solver& SatSolver, const ASTNode& input) =0;
 
-    virtual ASTNodeToVar& SATVar_to_SymbolIndexMap()= 0;
+    virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap()= 0;
 
     virtual void ClearAllTables(void)  =0;
   };

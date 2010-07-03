@@ -42,7 +42,8 @@ namespace BEEV
   AbsRefine_CounterExample::
   SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
                                const ASTNode& inputAlreadyInSAT, 
-                               const ASTNode& original_input) {
+                               const ASTNode& original_input,
+                               ToSATBase* tosat) {
     //printf("doing array read refinement\n");
     // if (!bm->UserFlags.arrayread_refinement_flag)
     //       {
@@ -153,7 +154,8 @@ namespace BEEV
                 res2 = 
                   CallSAT_ResultCheck(SatSolver, 
                                       FalseAxioms, 
-                                      original_input);
+                                      original_input,
+                                      tosat);
                 oldFalseAxiomsSize = FalseAxiomsVec.size();
               }
             //printf("spot 02, res2 = %d\n", res2);
@@ -169,7 +171,8 @@ namespace BEEV
     bm->ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
     return CallSAT_ResultCheck(SatSolver, 
                                RemainingAxioms, 
-                               original_input);
+                               original_input,
+                               tosat);
   } //end of SATBased_ArrayReadRefinement
 
 
@@ -181,7 +184,9 @@ namespace BEEV
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
   SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, 
-                                const ASTNode& original_input)
+                                const ASTNode& original_input,
+                                ToSATBase *tosat
+                              )
   {
     ASTNode writeAxiom;
     ASTNodeMap::const_iterator it = simp->ReadOverWriteMap()->begin();
@@ -219,7 +224,8 @@ namespace BEEV
       {
         res2 = CallSAT_ResultCheck(SatSolver, 
                                    writeAxiom, 
-                                   original_input);
+                                   original_input,
+                                   tosat);
         oldFalseAxiomsSize = FalseAxioms.size();
       }
     if (SOLVER_UNDECIDED != res2)
@@ -233,7 +239,8 @@ namespace BEEV
     bm->ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
     res2 = CallSAT_ResultCheck(SatSolver, 
                                writeAxiom, 
-                               original_input);
+                               original_input,
+                               tosat);
     if (SOLVER_UNDECIDED != res2)
       {
         return res2;
