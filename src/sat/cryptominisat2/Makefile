@@ -13,7 +13,7 @@ SOURCES   = Logger.cpp Solver.cpp PackedRow.cpp \
 	    OnlyNonLearntBins.cpp
 OBJECTS   = $(SOURCES:.cpp=.o)
 LIB       = libminisat.a
-CFLAGS    += -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c
+CFLAGS    += -I../.. -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_M32) -c 
 EXEC      = minisat
 LFLAGS    = -lz
 

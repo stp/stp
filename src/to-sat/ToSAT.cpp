@@ -140,7 +140,7 @@ namespace BEEV
         //        {
         //          continue;
         //        }
-#if defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT__2
         if(add_xor_clauses)
           {
             newSolver.addXorClause(satSolverClause, false);
@@ -153,7 +153,7 @@ namespace BEEV
         newSolver.addClause(satSolverClause);
 #endif
 
-#if defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT__2
     newSolver.findNormalXors = false;
     newSolver.doSubsumption = true;
     newSolver.verbosity = 0;
@@ -390,10 +390,10 @@ namespace BEEV
     	return sat;
       }
 
-#if defined CRYPTOMINISAT2
+#if defined CRYPTOMINISAT__2
     if(!xorcl->asList()->empty())
       {
-        sat = toSATandSolve(SatSolver, *xorcl, true);
+        sat = toSATandSolve(SatSolver, *xorcl, true, cm, true,false);
       }
 #endif
 

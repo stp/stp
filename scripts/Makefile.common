@@ -16,13 +16,14 @@
 #OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
 OPTIMIZE      = -O3               # Maximum optimization
-CFLAGS_M32   = -m32
+CFLAGS_M32   = -m32 -g 
+#-fno-inline
 CFLAGS_BASE   = $(OPTIMIZE)
 
 # OPTION to compile CRYPTOMiniSAT version 2.x
 ifeq ($(SAT),cryptominisat2)
   CRYPTOMINISAT2 = true
-  CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2
+  CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2 -I$(TOP)/src/
   MTL            = $(TOP)/src/sat/cryptominisat2/mtl
   SOLVER_INCLUDE = $(TOP)/src/sat/cryptominisat2
 endif

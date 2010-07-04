@@ -229,7 +229,7 @@ helpstring +=
 				  break;
 
 
-#if !defined CRYPTOMINISAT && !defined CRYPTOMINISAT2
+#if !defined CRYPTOMINISAT2
 			  case USE_SIMPLIFYING_SOLVER:
 				  bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
 				  break;

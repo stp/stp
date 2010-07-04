@@ -98,13 +98,18 @@ namespace BEEV
       Cnf_ClearMemory();
       Cnf_DataFree(cnfData);
 
+      // cryptominisat treats simplify() as protected.
+#ifndef CRYPTOMINISAT2
       bm->GetRunTimes()->start(RunTimes::SATSimplifying);
       if (!satSolver.simplify())
         {
         bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
-      return false;
+        return false;
         }
       bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
+#endif
+
+
 
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();

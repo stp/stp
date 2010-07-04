@@ -1143,11 +1143,15 @@ BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE(const BBNodeVec& left, const BB
 	}
 
 	// Either zero or one of the nodes in bit_comparisons can be true.
-	BBNode output =
-#ifdef CRYPTOMINISAT2
-			nf->CreateNode(XOR, bit_comparisons);
+
+	BBNode output;
+#ifdef CRYPTOMINISAT__2
+	    if (bit_comparisons.size() > 1)
+	      output = nf->CreateNode(XOR, bit_comparisons);
+	    else
+             output = bit_comparisons[0];
 #else
-			nf->CreateNode(OR, bit_comparisons);
+			output = nf->CreateNode(OR, bit_comparisons);
 #endif
 	return output;
 }

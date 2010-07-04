@@ -25,9 +25,7 @@ namespace BEEV {
     //solver instantiated here
 #if defined CRYPTOMINISAT2
     MINISAT::Solver NewSolver;
-#endif
 
-#if defined CRYPTOMINISAT2
     if(bm->UserFlags.print_cnf_flag)
       {
 	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
