@@ -16,7 +16,8 @@
 #OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
 OPTIMIZE      = -O3               # Maximum optimization
-CFLAGS_M32   = -m32 -g 
+CFLAGS_M32   = -g
+
 #-fno-inline
 CFLAGS_BASE   = $(OPTIMIZE)
 

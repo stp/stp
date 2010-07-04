@@ -85,9 +85,16 @@ public:
                 aigMgr->fAddStrash = 1;
         }
 
+        void stop()
+        {
+          if (aigMgr !=NULL)
+            Aig_ManStop(aigMgr);
+          aigMgr = NULL;
+        }
+
         ~BBNodeManagerAIG()
         {
-                Aig_ManStop(aigMgr);
+          stop();
         }
 
         BBNodeAIG getTrue()

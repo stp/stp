@@ -70,6 +70,10 @@ namespace BEEV
 
       mgr.toCNF(BBFormula, cnfData, nodeToSATVar);
 
+      // Free the memory in the AIGs.
+      BBFormula = BBNodeAIG(); // null node
+      mgr.stop();
+
       bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
       for (int i = 0; i < cnfData->nVars; i++)
