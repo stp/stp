@@ -61,7 +61,14 @@
    
   static int lookup(const char* s)
   {
-    BEEV::ASTNode nptr = BEEV::parserInterface->CreateSymbol(s); 
+    string str(s);
+  
+    // The SMTLIB2 specifications sez that the outter bars aren't part of the
+    // name. This means that we can create an empty string symbol name.
+    if (s[0] == '|' && s[str.size()-1] == '|')
+    	str = str.substr(1,str.length()-2);
+    
+    BEEV::ASTNode nptr = BEEV::parserInterface->CreateSymbol(str.c_str()); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting
