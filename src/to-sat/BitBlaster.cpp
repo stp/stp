@@ -944,9 +944,20 @@ void BitBlaster<BBNode,BBNodeManagerT>::BBDivMod(const BBNodeVec &y, const BBNod
 		BBNodeVec &q, BBNodeVec &r, unsigned int rwidth, BBNodeSet& support) {
 	const unsigned int width = y.size();
 	const BBNodeVec zero = BBfill(width, nf->getFalse());
-	const BBNodeVec one = BBInc(zero);
+	BBNodeVec one = zero;
+	one[0] = nf->getTrue();
 
-	if (rwidth == 0) {
+	// check if y is already zero.
+	bool isZero=true;
+	for (int i =0; i < rwidth;i++)
+          if (y[i] != nf->getFalse())
+          {
+            isZero = false;
+            break;
+            }
+
+
+	if (isZero || rwidth == 0) {
 		// When we have shifted the entire width, y is guaranteed to be 0.
 		q = zero;
 		r = zero;
