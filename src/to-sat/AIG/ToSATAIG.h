@@ -59,7 +59,9 @@ namespace BEEV
       BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr);
       set<BBNodeAIG> support;
 
+      bm->GetRunTimes()->start(RunTimes::BitBlasting);
       BBNodeAIG BBFormula = bb.BBForm(input, support);
+      bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
       assert(support.size() ==0); // hot handled yet..
       assert(satSolver.nVars() ==0);
