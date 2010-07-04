@@ -141,6 +141,7 @@ inline const bool ClauseCleaner::cleanClause(Clause*& cc)
     }
     c.shrink(i-j);
 
+    assert(c.size() != 1);
     if (i != j) {
         c.setStrenghtened();
         if (c.size() == 2) {
@@ -149,12 +150,6 @@ inline const bool ClauseCleaner::cleanClause(Clause*& cc)
             solver.clauseAllocator.clauseFree(&c);
             cc = c2;
             solver.attachClause(*c2);
-        /*} else if (c.size() == 3) {
-            solver.detachModifiedClause(origLit1, origLit2, origSize, &c);
-            Clause *c2 = Clause_new(c);
-            clauseFree(&c);
-            cc = c2;
-            solver.attachClause(*c2);*/
         } else {
             if (c.learnt())
                 solver.learnts_literals -= i-j;
