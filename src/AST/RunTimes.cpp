@@ -15,7 +15,7 @@
 #include "RunTimes.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
-std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification"};
+std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification", "Constant Bit Propagation"};
 
 namespace BEEV
 {

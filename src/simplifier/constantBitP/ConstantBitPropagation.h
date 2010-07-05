@@ -6,6 +6,7 @@
 #include <map>
 #include "FixedBits.h"
 #include "../../AST/AST.h"
+#include "NodeToFixedBitsMap.h"
 
 namespace BEEV
 {
@@ -58,7 +59,11 @@ namespace simplifier
     public:
 
       NodeToFixedBitsMap* fixedMap;
-      //MultiplicationStatsMap* multiplicationStats;
+
+#ifdef WITHCBITP
+      MultiplicationStatsMap* multiplicationStats;
+#endif
+
       WorkList *workList;
       Dependencies * dependents;
       Simplifier *simplifier;
@@ -75,6 +80,8 @@ namespace simplifier
 
       ~ConstantBitPropagation()
       {
+        if (fixedMap != NULL)
+          delete fixedMap;
       }
       ;
 

@@ -61,7 +61,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile = NULL;
@@ -107,6 +107,8 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-d  : check counterexample\n";
   helpstring +=  
+      "--disable-cbitp  : disable constant bit propagation\n";
+  helpstring +=
     "-e  : expand finite-for construct\n";
   helpstring +=  
     "-f  : number of abstraction-refinement loops\n";
@@ -181,9 +183,13 @@ helpstring +=
 			  lookup.insert(make_pair(tolower("--simplifying-minisat"),USE_SIMPLIFYING_SOLVER));
 			  lookup.insert(make_pair(tolower("--SMTLIB2"),SMT_LIB2_FORMAT));
 			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
+			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
 
 			  switch(lookup[tolower(argv[i])])
 			  {
+			  case DISABLE_CBITP:
+                                  bm->UserFlags.bitConstantProp_flag = false;
+                                  break;
 			  case PRINT_BACK_C:
 				  bm->UserFlags.print_STPinput_back_C_flag = true;
 				  onePrintBack = true;

@@ -132,6 +132,8 @@ class BitBlaster {
         void updateTerm(const ASTNode&n, vector<BBNode>& bb, set<BBNode>& support);
         void updateForm(const ASTNode&n, BBNode& bb, set<BBNode>& support);
 
+        const BBNode BBForm(const ASTNode& form, set<BBNode>& support);
+
 public:
 	BBNodeManagerT* nf;
 
@@ -169,7 +171,7 @@ public:
 	}
 
 	//Bitblast a formula
-	const BBNode BBForm(const ASTNode& form, set<BBNode>& support);
+	const BBNode BBForm(const ASTNode& form);
 
 }; //end of class BitBlaster
 }

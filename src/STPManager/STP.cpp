@@ -10,6 +10,8 @@
 #include "STP.h"
 #include "DifficultyScore.h"
 #include "../to-sat/AIG/ToSATAIG.h"
+#include "../simplifier/constantBitP/ConstantBitPropagation.h"
+#include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
 
 namespace BEEV {
 
@@ -124,6 +126,22 @@ namespace BEEV {
       } 
     while (inputToSAT != simplified_solved_InputToSAT);
 
+#ifdef WITHCBITP
+    if (bm->UserFlags.bitConstantProp_flag)
+      {
+        bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
+            simplified_solved_InputToSAT);
+
+        bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory
+            );
+        simplified_solved_InputToSAT = cb.topLevelBothWays(
+            simplified_solved_InputToSAT);
+        bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+      }
+#endif
+
+
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
                      simplified_solved_InputToSAT);
 
@@ -232,17 +250,47 @@ namespace BEEV {
     delete bvsolver;
     bvsolver = new BVSolver(bm,simp);
 
-    {
-    ToSATAIG toSATAIG(bm);
-
     // If it doesn't contain array operations, use ABC's CNF generation.
-    res = 
-      Ctr_Example->CallSAT_ResultCheck(NewSolver, 
-                                       simplified_solved_InputToSAT, 
+    if (!arrayops)
+    {
+      simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
+
+#ifdef WITHCBITP
+    if (bm->UserFlags.bitConstantProp_flag)
+      {
+        bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
+            simplified_solved_InputToSAT);
+
+        bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+
+        cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory);
+        cb->getFixedMap(simplified_solved_InputToSAT);
+
+        bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+      }
+#endif
+
+    ToSATAIG toSATAIG(bm,cb);
+
+    res =
+      Ctr_Example->CallSAT_ResultCheck(NewSolver,
+                                       simplified_solved_InputToSAT,
                                        orig_input,
-                                       (arrayops ? ((ToSATBase*)tosat): ((ToSATBase*)&toSATAIG))
+                                       &toSATAIG
                                        );
+
+    delete cb;
     }
+    else
+      {
+      res =
+        Ctr_Example->CallSAT_ResultCheck(NewSolver,
+                                         simplified_solved_InputToSAT,
+                                         orig_input,
+                                         tosat
+                                         );
+
+      }
 
     if (SOLVER_UNDECIDED != res)
       {

@@ -29,7 +29,8 @@ public:
       CreateSubstitutionMap, 
       SendingToSAT,
       CounterExampleGeneration,
-      SATSimplifying
+      SATSimplifying,
+      ConstantBitPropagation
     };
 
   static std::string CategoryNames[];

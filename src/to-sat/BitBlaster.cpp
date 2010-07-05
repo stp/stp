@@ -32,7 +32,7 @@ namespace BEEV {
  * the vector corresponds to bit 0 -- the low-order bit.
  ********************************************************************/
 
-  using simplifier::constantBitP::FixedBits;
+using simplifier::constantBitP::FixedBits;
 
 #define BBNodeVec vector<BBNode>
 #define BBNodeVecMap map<ASTNode, vector<BBNode> >
@@ -123,6 +123,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateForm(const ASTNode&n, BBNode& bb, 
         v.reserve(1);
         v.push_back(bb);
         bb = v[0];
+        updateTerm(n, v, support);
 }
 
 template <class BBNode, class BBNodeManagerT>
@@ -491,7 +492,19 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 	if (debug_do_check)
 		check(result, term);
 
+	updateTerm(term,result,support);
 	return (BBTermMemo[term] = result);
+}
+
+template <class BBNode, class BBNodeManagerT>
+const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form)
+{
+    BBNodeSet support;
+    BBNode r= BBForm(form,support);
+    vector<BBNode> v;
+    v.insert(v.end(), support.begin(), support.end());
+    v.push_back(r);
+    return nf->CreateNode(AND,v);
 }
 
 // bit blast a formula (boolean term).  Result is one bit wide,
@@ -587,6 +600,8 @@ const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form, BBNo
 
 	if (debug_do_check)
 		check(result, form);
+
+	updateForm(form,result,support);
 
 	return (BBFormMemo[form] = result);
 }

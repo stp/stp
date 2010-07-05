@@ -26,6 +26,7 @@ namespace BEEV
   private:
 
     ASTNodeToSATVar nodeToSATVar;
+    simplifier::constantBitP::ConstantBitPropagation* cb;
 
     // don't assign or copy construct.
     ToSATAIG&  operator = (const ToSATAIG& other);
@@ -36,7 +37,15 @@ namespace BEEV
     ToSATAIG(STPMgr * bm) :
       ToSATBase(bm)
     {
+      cb = NULL;
     }
+
+    ToSATAIG(STPMgr * bm, simplifier::constantBitP::ConstantBitPropagation* cb_) :
+      ToSATBase(bm)
+    {
+      cb = cb_;
+    }
+
 
     void
     ClearAllTables()
@@ -56,17 +65,16 @@ namespace BEEV
     CallSAT(MINISAT::Solver& satSolver, const ASTNode& input)
     {
       BBNodeManagerAIG mgr;
-      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr);
-      set<BBNodeAIG> support;
+      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb);
 
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
-      BBNodeAIG BBFormula = bb.BBForm(input, support);
+      BBNodeAIG BBFormula = bb.BBForm(input);
       bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
-      assert(support.size() ==0); // hot handled yet..
       assert(satSolver.nVars() ==0);
 
       Cnf_Dat_t* cnfData = NULL;
+
 
       mgr.toCNF(BBFormula, cnfData, nodeToSATVar);
 
