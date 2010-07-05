@@ -205,7 +205,9 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 		ASTNodeMap& cache)
 {
-	ASTNodeMap::const_iterator it;
+        STPMgr *bm = n.GetSTPMgr();
+
+        ASTNodeMap::const_iterator it;
 	if ((it = cache.find(n)) != cache.end())
 		return it->second;
 

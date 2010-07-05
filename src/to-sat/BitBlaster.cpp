@@ -12,6 +12,9 @@
 #include "BitBlaster.h"
 #include "AIG/BBNodeManagerAIG.h"
 #include "BBNodeManagerASTNode.h"
+#include "../simplifier/constantBitP/FixedBits.h"
+#include "../simplifier/constantBitP/ConstantBitPropagation.h"
+#include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
 
 namespace BEEV {
 
@@ -29,6 +32,8 @@ namespace BEEV {
  * the vector corresponds to bit 0 -- the low-order bit.
  ********************************************************************/
 
+  using simplifier::constantBitP::FixedBits;
+
 #define BBNodeVec vector<BBNode>
 #define BBNodeVecMap map<ASTNode, vector<BBNode> >
 #define BBNodeSet set<BBNode>
@@ -44,46 +49,131 @@ vector<BBNodeAIG> _empty_BBNodeAIGVec;
 // reaching the bitblaster don't have obvious simplifications
 // that should have already been applied.
 const bool debug_do_check = false;
-
-
-template <class BBNode, class BBNodeManagerT>
-void check(const BBNode& x, const ASTNode& n, BBNodeManagerT* nf)
-{
-	if (n.isConstant())
-		return;
-
-	const BBNode& BBTrue = nf->getTrue();
-	const BBNode& BBFalse = nf->getFalse();
-
-
-		if (x != BBTrue && x != BBFalse)
-			return;
-
-
-		cerr << "Non constant is constant:" ;
-		cerr << n << endl;
-}
-
+const bool debug_bitblaster = false;
 
 template <class BBNode, class BBNodeManagerT>
-void check(BBNodeVec& x, const ASTNode& n, BBNodeManagerT* nf)
-{
-	if (n.isConstant())
-		return;
+void BitBlaster<BBNode,BBNodeManagerT>::commonCheck(const ASTNode& n) {
+        cerr << "Non constant is constant:";
+        cerr << n << endl;
 
-	const BBNode& BBTrue = nf->getTrue();
-	const BBNode& BBFalse = nf->getFalse();
+        if (cb == NULL)
+                return;
+        if (debug_bitblaster && cb->fixedMap->map->find(n) != cb->fixedMap->map->end()) {
+                FixedBits* b = cb->fixedMap->map->find(n)->second;
+                if (debug_bitblaster)
+                        cerr <<"fixed bits are:"<< *b << endl;
+        }
 
-	for (int i =0; i < x.size(); i++)
-	{
-		if (x[i] != BBTrue && x[i] != BBFalse)
-			return;
-	}
-
-		cerr << "Non constant is constant:" ;
-		cerr << n << endl;
 }
 
+// If x isn't a constant, and the bit-blasted version is. Print out the
+// AST nodes and the fixed bits.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode,BBNodeManagerT>::check(const BBNode& x, const ASTNode& n) {
+        if (n.isConstant())
+                return;
+
+        if (x != BBTrue && x != BBFalse)
+                return;
+
+        commonCheck(n);
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode,BBNodeManagerT>::check(const vector<BBNode>& x, const ASTNode& n) {
+        if (n.isConstant())
+                return;
+
+        for (int i = 0; i < (int) x.size(); i++) {
+                if (x[i] != BBTrue && x[i] != BBFalse)
+                        return;
+        }
+
+        commonCheck(n);
+}
+
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode,BBNodeManagerT>::update(const ASTNode&n, const int i, simplifier::constantBitP::FixedBits* b, BBNode& bb,  BBNodeSet& support)
+{
+        if (b->isFixed(i) && (!(bb == BBTrue || bb == BBFalse)))
+        {
+                //We have a fixed bit, but the bitblasted values aren't constant true or false.
+
+                if (b->getValue(i))
+                        support.insert(bb);
+                else
+                        support.insert(nf->CreateNode(NOT,bb));
+
+                bb = b->getValue(i) ? BBTrue : BBFalse;
+        }
+        else if (!b->isFixed(i) && (bb == BBTrue || bb == BBFalse))
+        {
+                b->setFixed(i,true);
+                b->setValue(i,bb == BBTrue ? true : false);
+                return true; // Need to propagate.
+        }
+
+        return false;
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode,BBNodeManagerT>::updateForm(const ASTNode&n, BBNode& bb, BBNodeSet& support)
+{
+        BBNodeVec v;
+        v.reserve(1);
+        v.push_back(bb);
+        bb = v[0];
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& bb, BBNodeSet& support) {
+
+        if (cb == NULL || n.isConstant())
+                return;
+
+        bool bbFixed  = false;
+        for (int i =0; i < (int)bb.size(); i++)
+        {
+                if (bb[i] == BBTrue || bb[i] == BBFalse)
+                {
+                        bbFixed = true;
+                        break;
+                }
+        }
+
+        FixedBits * b = NULL;
+
+        simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it;
+        if ((it = cb->fixedMap->map->find(n)) == cb->fixedMap->map->end())
+        {
+                if (bbFixed)
+                {
+                        b = new FixedBits(n.GetType() == BOOLEAN_TYPE? 1:n.GetValueWidth(),n.GetType() == BOOLEAN_TYPE);
+                        cb->fixedMap->map->insert(pair<ASTNode, FixedBits*> (n, b));
+                        if (debug_bitblaster)
+                                cerr << "inserting" << n.GetNodeNum() << endl;
+                }
+                else
+                        return; // nothing to update.
+        }
+        else
+                b = it->second;
+
+        assert(b != NULL);
+
+        bool changed = false;
+        for (int i = 0; i < (int)bb.size(); i++)
+                changed = changed ||  update(n,i, b, bb[i], support);
+        if (changed) {
+                //cerr <<  "NN" << n.GetNodeNum() << endl;
+                //cerr << *fixedBits;
+                cb->schedule(n);
+                cb->scheduleUp(n);
+                //cerr << "##!" << endl;
+                cb->prop();
+                //cerr << "##!!" << endl;
+        }
+}
 
 
 template <class BBNode, class BBNodeManagerT>
@@ -399,7 +489,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 	assert(result.size() == term.GetValueWidth());
 
 	if (debug_do_check)
-		check(result, term,nf);
+		check(result, term);
 
 	return (BBTermMemo[term] = result);
 }
@@ -496,7 +586,7 @@ const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form, BBNo
 	assert(!result.IsNull());
 
 	if (debug_do_check)
-		check(result, form,nf);
+		check(result, form);
 
 	return (BBFormMemo[form] = result);
 }

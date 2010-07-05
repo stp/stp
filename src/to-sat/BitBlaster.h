@@ -15,6 +15,15 @@
 #include <map>
 #include "../STPManager/STPManager.h"
 
+namespace simplifier
+{
+  namespace constantBitP
+  {
+    class ConstantBitPropagation;
+    class FixedBits;
+  }
+}
+
 namespace BEEV {
 
 class ASTNode;
@@ -24,7 +33,11 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster;
 
 template <class BBNode, class BBNodeManagerT>
 class BitBlaster {
-private:
+        BBNode BBTrue, BBFalse;
+
+
+        simplifier::constantBitP::ConstantBitPropagation* cb;
+
 	// Memo table for bit blasted terms.  If a node has already been
 	// bitblasted, it is mapped to a vector of Boolean formulas for
 	// the
@@ -110,6 +123,14 @@ private:
 	BitBlaster&  operator = (const BitBlaster& other);
 	BitBlaster(const BitBlaster& other);
 
+	// Checks for constants.
+        void commonCheck(const ASTNode& n);
+        void check(const BBNode& x, const ASTNode& n);
+        void check(const vector<BBNode>& x, const ASTNode& n);
+
+        bool update(const ASTNode&n, const int i, simplifier::constantBitP::FixedBits*b, BBNode& bb,  set<BBNode>& support);
+        void updateTerm(const ASTNode&n, vector<BBNode>& bb, set<BBNode>& support);
+        void updateForm(const ASTNode&n, BBNode& bb, set<BBNode>& support);
 
 public:
 	BBNodeManagerT* nf;
@@ -123,9 +144,22 @@ public:
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
+        BitBlaster(BBNodeManagerT* bnm  , simplifier::constantBitP::ConstantBitPropagation *cb_)
+                {
+          nf = bnm;
+          cb = cb_;
+          BBTrue = nf->getTrue();
+          BBFalse = nf->getFalse();
+        }
+
+
+
         BitBlaster(BBNodeManagerT* bnm)
 		{
           nf = bnm;
+          BBTrue = nf->getTrue();
+          BBFalse = nf->getFalse();
+          cb = NULL;
 	}
 
 

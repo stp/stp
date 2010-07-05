@@ -111,6 +111,8 @@ namespace BEEV
     // Create a new Tseitin variable for every intermediate value.
     bool renameAllInCNF_flag;
 
+    bool bitConstantProp_flag;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -215,6 +217,9 @@ namespace BEEV
       // The special Cryptominisat2 CNF generation with this flag enabled seems to go into an infinite loop.
       // beware of turning this on if you are using cryptominsat2.
       renameAllInCNF_flag= false;
+
+      // Should constant bit propagation be enabled?
+      bitConstantProp_flag = true;
 
     } //End of constructor for UserDefinedFlags
 
