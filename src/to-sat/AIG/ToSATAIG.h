@@ -107,7 +107,7 @@ namespace BEEV
       bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
 
       if (bm->UserFlags.output_CNF_flag)
-         Cnf_DataWriteIntoFile(cnfData, "output.cnf", 0);
+         Cnf_DataWriteIntoFile(cnfData, "output_0.cnf", 0);
 
       Cnf_ClearMemory();
       Cnf_DataFree(cnfData);
