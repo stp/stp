@@ -1060,7 +1060,7 @@ namespace BEEV
     ASTVec c, outvec;
     c = flat.GetChildren();
     SortByArith(c);
-    Kind k = a.GetKind();
+    Kind k = flat.GetKind();
 
     // If the simplifying node factory is enabled, a
     // constant may be returned by Flatten.
