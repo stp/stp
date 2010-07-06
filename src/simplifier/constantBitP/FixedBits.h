@@ -11,7 +11,7 @@ namespace BEEV
 {
   class ASTNode;
   typedef unsigned int * CBV;
-  extern bool disable_bitConstantProp;
+  void FatalError(const char * str);
 }
 
 namespace simplifier

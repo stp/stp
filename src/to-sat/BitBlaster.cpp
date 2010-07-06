@@ -280,7 +280,9 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 		break;
 	}
 
-	case BVSX: {
+	case BVSX:
+	case BVZX:
+	  {
 		// Replicate high-order bit as many times as necessary.
 		// Arg 0 is expression to be sign extended.
 		const ASTNode& arg = term[0];
@@ -294,7 +296,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 			break;
 		} else {
 			//we need to sign extend
-			const BBNode& msb = bbarg.back();
+			const BBNode& msb = (k == BVSX) ?bbarg.back() : BBFalse;
 
 			BBNodeVec tmp_res(result_width);
 

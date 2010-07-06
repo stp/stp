@@ -299,16 +299,17 @@ bool containsArrayOps(const ASTNode&n)
               break;
             }
           case BVSX:
+          case BVZX:
 			//in BVSX(n[0],len), the length of the BVSX term must be
 			//greater than the length of n[0]
 			if (n[0].GetValueWidth() > n.GetValueWidth()) {
 				FatalError(
-						"BVTypeCheck: BVSX(t,bvsx_len) : length of 't' must be <= bvsx_len\n",
+						"BVTypeCheck: BV[SZ]X(t,bv[sz]x_len) : length of 't' must be <= bv[sz]x_len\n",
 						n);
 			}
 			if ((v.size() != 2))
 				FatalError(
-						"BVTypeCheck:BVSX must have two arguments. The second is the new width\n",
+						"BVTypeCheck:BV[SZ]X must have two arguments. The second is the new width\n",
 						n);
 			break;
 

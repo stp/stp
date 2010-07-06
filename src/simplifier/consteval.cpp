@@ -88,6 +88,7 @@ namespace BEEV
           break;
         }
       case BVSX:
+      case BVZX:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           unsigned t0_width = t[0].GetValueWidth();
@@ -98,7 +99,7 @@ namespace BEEV
             }
           else
             {
-              bool topbit_sign = (CONSTANTBV::BitVector_Sign(tmp0) < 0);
+              bool topbit_sign = (k == BVSX)?(CONSTANTBV::BitVector_Sign(tmp0) < 0): false;
 
               if (topbit_sign)
                 {

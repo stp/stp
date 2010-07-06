@@ -113,6 +113,9 @@ namespace BEEV
 
     bool bitConstantProp_flag;
 
+
+    bool cBitP_propagateForDivisionByZero;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -220,6 +223,9 @@ namespace BEEV
 
       // Should constant bit propagation be enabled?
       bitConstantProp_flag = true;
+
+      // given a/b = c, propagates that c<=a even if b may be zero.
+      cBitP_propagateForDivisionByZero =true;
 
     } //End of constructor for UserDefinedFlags
 

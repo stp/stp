@@ -1,6 +1,10 @@
 #include "../../AST/AST.h"
 #include "FixedBits.h"
-//#include "../../utility/MersenneTwister.h"
+
+#ifdef WITHCBITP
+  #include "MersenneTwister.h"
+#endif
+
 #include "ConstantBitP_Utility.h"
 
 // To reduce the memory I tried using the constantbv stuff. But because it is not
@@ -150,7 +154,7 @@ namespace simplifier
       return result;
     }
 
-#if 0
+#ifdef WITHCBITP
     // Getting a new random number is expensive. Not sure why.
     FixedBits FixedBits::createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
       {
@@ -193,7 +197,7 @@ namespace simplifier
                     result.setValue(i, true);
                     break;
                     default:
-                    throw std::runtime_error(LOCATION "never.");
+                    BEEV::FatalError(LOCATION "never.");
 
                   }
                 randomV >>= 1;

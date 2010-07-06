@@ -37,6 +37,10 @@ ifeq ($(SAT),minisat)
   SOLVER_INCLUDE = $(TOP)/src/sat/core
 endif
 
+ifeq ($(WITHCBITP),yes)
+	CFLAGS_BASE += -DWITHCBITP
+endif
+
 # todo: These should be set by the config script of course..
 TEST_PREFIX=../../stp-tests/
 SHELL=/bin/bash
