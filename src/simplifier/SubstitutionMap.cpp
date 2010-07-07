@@ -193,7 +193,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	ASTNodeMap cache;
-	return replace(n,*SolverMap,cache);
+	return replace(n,*SolverMap,cache,bm->defaultNodeFactory);
 }
 
 // NOTE the fromTo map is changed as we traverse downwards.
@@ -203,9 +203,8 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 // will return 5, rather than y.
 
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-		ASTNodeMap& cache)
+		ASTNodeMap& cache, NodeFactory * nf)
 {
-        STPMgr *bm = n.GetSTPMgr();
 
         ASTNodeMap::const_iterator it;
 	if ((it = cache.find(n)) != cache.end())
@@ -218,13 +217,13 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 			const ASTNode& r = it->second;
 			r.SetIndexWidth(n.GetIndexWidth());
 			assert(BVTypeCheck(r));
-			ASTNode replaced = replace(r, fromTo, cache);
+			ASTNode replaced = replace(r, fromTo, cache,nf);
 			if (replaced != r)
 				fromTo[n] = replaced;
 
 			return replaced;
 		}
-		ASTNode replaced = replace(it->second, fromTo, cache);
+		ASTNode replaced = replace(it->second, fromTo, cache,nf);
 		if (replaced != it->second)
 			fromTo[n] = replaced;
 
@@ -239,7 +238,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 	children.reserve(n.GetChildren().size());
 	for (unsigned i = 0; i < n.GetChildren().size(); i++)
 	{
-		children.push_back(replace(n[i], fromTo, cache));
+		children.push_back(replace(n[i], fromTo, cache,nf));
 	}
 
 	// This code short-cuts if the children are the same. Nodes with the same children,
@@ -252,7 +251,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 		assert(children.size() > 0);
 		if (children != n.GetChildren()) // short-cut.
 		{
-			result = bm->CreateNode(n.GetKind(), children);
+			result = nf->CreateNode(n.GetKind(), children);
 		}
 		else
 			result = n;
@@ -265,7 +264,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 			// If the index and value width aren't saved, they are reset sometimes (??)
 			const unsigned int indexWidth = n.GetIndexWidth();
 			const unsigned int valueWidth = n.GetValueWidth();
-			result = bm->CreateTerm(n.GetKind(), n.GetValueWidth(),
+			result = nf->CreateTerm(n.GetKind(), n.GetValueWidth(),
 					children);
 			result.SetValueWidth(valueWidth);
 			result.SetIndexWidth(indexWidth);

@@ -29,6 +29,7 @@ namespace simplifier
       virtual
       ~NodeToFixedBitsMap()
       {
+        clear();
         delete map;
       }
 
@@ -38,7 +39,7 @@ namespace simplifier
         NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator itD = map->begin();
         for (; itD != map->end(); itD++)
           delete itD->second;
-
+        map->clear();
       }
     };
   }

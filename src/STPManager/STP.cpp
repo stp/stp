@@ -133,11 +133,14 @@ namespace BEEV {
             simplified_solved_InputToSAT);
 
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory
-            );
-        simplified_solved_InputToSAT = cb.topLevelBothWays(
-            simplified_solved_InputToSAT);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory,simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT);
+
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+        if (cb.isUnsatisfiable())
+          simplified_solved_InputToSAT = bm->ASTFalse;
+
       }
 #endif
 
@@ -263,10 +266,12 @@ namespace BEEV {
 
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
 
-        cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory);
-        cb->getFixedMap(simplified_solved_InputToSAT);
+        cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory,simplified_solved_InputToSAT);
 
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+        if (cb->isUnsatisfiable())
+           simplified_solved_InputToSAT = bm->ASTFalse;
       }
 #endif
 

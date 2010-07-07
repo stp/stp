@@ -58,12 +58,10 @@ void BitBlaster<BBNode,BBNodeManagerT>::commonCheck(const ASTNode& n) {
 
         if (cb == NULL)
                 return;
-        if (debug_bitblaster && cb->fixedMap->map->find(n) != cb->fixedMap->map->end()) {
+        if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end()) {
                 FixedBits* b = cb->fixedMap->map->find(n)->second;
-                if (debug_bitblaster)
-                        cerr <<"fixed bits are:"<< *b << endl;
+                cerr <<"fixed bits are:"<< *b << endl;
         }
-
 }
 
 // If x isn't a constant, and the bit-blasted version is. Print out the
@@ -99,10 +97,10 @@ bool BitBlaster<BBNode,BBNodeManagerT>::update(const ASTNode&n, const int i, sim
         {
                 //We have a fixed bit, but the bitblasted values aren't constant true or false.
 
-                if (b->getValue(i))
-                        support.insert(bb);
-                else
-                        support.insert(nf->CreateNode(NOT,bb));
+                //if (b->getValue(i))
+                        //support.insert(bb);
+                //else
+                  //      support.insert(nf->CreateNode(NOT,bb));
 
                 bb = b->getValue(i) ? BBTrue : BBFalse;
         }
@@ -119,18 +117,33 @@ bool BitBlaster<BBNode,BBNodeManagerT>::update(const ASTNode&n, const int i, sim
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::updateForm(const ASTNode&n, BBNode& bb, BBNodeSet& support)
 {
-        BBNodeVec v;
-        v.reserve(1);
-        v.push_back(bb);
-        bb = v[0];
-        updateTerm(n, v, support);
+  if (cb == NULL || n.isConstant())
+          return;
+
+  BBNodeVec v(1,bb);
+  updateTerm(n, v, support);
+  bb = v[0];
 }
 
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& bb, BBNodeSet& support) {
 
-        if (cb == NULL || n.isConstant())
+        if (cb == NULL)
                 return;
+
+        if (n.isConstant())
+          {
+              simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it;
+              it = cb->fixedMap->map->find(n);
+              if(it == cb->fixedMap->map->end())
+                {
+                cerr << n;
+                assert(it != cb->fixedMap->map->end());
+                }
+              assert(it->second->isTotallyFixed());
+              return;
+          }
+
 
         bool bbFixed  = false;
         for (int i =0; i < (int)bb.size(); i++)
@@ -164,14 +177,15 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& b
 
         bool changed = false;
         for (int i = 0; i < (int)bb.size(); i++)
-                changed = changed ||  update(n,i, b, bb[i], support);
+                if(update(n,i, b, bb[i], support))
+                  changed = true; // don't break, we want to run update(..) on each bit.
         if (changed) {
                 //cerr <<  "NN" << n.GetNodeNum() << endl;
                 //cerr << *fixedBits;
-                cb->schedule(n);
+                cb->scheduleNode(n);
                 cb->scheduleUp(n);
                 //cerr << "##!" << endl;
-                cb->prop();
+                cb->propagate();
                 //cerr << "##!!" << endl;
         }
 }
@@ -503,10 +517,19 @@ const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form)
 {
     BBNodeSet support;
     BBNode r= BBForm(form,support);
-    vector<BBNode> v;
-    v.insert(v.end(), support.begin(), support.end());
-    v.push_back(r);
-    return nf->CreateNode(AND,v);
+    //vector<BBNode> v;
+    //v.insert(v.end(), support.begin(), support.end());
+    //v.push_back(r);
+    assert(support.size() ==0);
+
+
+    if (cb != NULL && !cb->isUnsatisfiable())
+      {
+      ASTNodeSet visited;
+      assert(cb->checkAtFixedPoint(form,visited));
+      }
+    //    return nf->CreateNode(AND,v);
+    return r;
 }
 
 // bit blast a formula (boolean term).  Result is one bit wide,

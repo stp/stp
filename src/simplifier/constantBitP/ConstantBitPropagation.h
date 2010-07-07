@@ -1,12 +1,10 @@
 #ifndef CONSTANTBITPROPAGATION_H_
 #define CONSTANTBITPROPAGATION_H_
 
-#include <vector>
-#include <list>
-#include <map>
 #include "FixedBits.h"
-#include "../../AST/AST.h"
+#include "Dependencies.h"
 #include "NodeToFixedBitsMap.h"
+#include "WorkList.h"
 
 namespace BEEV
 {
@@ -15,16 +13,11 @@ namespace BEEV
   class Simplifier;
 }
 
-class NodeFactory;
-
-using std::vector;
-
 namespace simplifier
 {
   namespace constantBitP
   {
 
-    class FixedBits;
     enum Direction
     {
       UPWARDS_ONLY, BOTH_WAYS
@@ -42,46 +35,70 @@ namespace simplifier
       NO_CHANGE = 1, CHANGED, CONFLICT, NOT_IMPLEMENTED
     };
 
-    class NodeToFixedBitsMap;
     class MultiplicationStatsMap;
     class WorkList;
-    class Dependencies;
 
     using BEEV::ASTNode;
     using BEEV::Simplifier;
 
     class ConstantBitPropagation
     {
-      void
-      printNodeWithFixings();
       NodeFactory *nf;
 
-    public:
-
-      NodeToFixedBitsMap* fixedMap;
-
-#ifdef WITHCBITP
-      MultiplicationStatsMap* multiplicationStats;
-#endif
-
+      Result status;
       WorkList *workList;
       Dependencies * dependents;
       Simplifier *simplifier;
 
+#ifdef WITHCBITP
+      MultiplicationStatsMap* msm;
+#endif
+
+      void
+      printNodeWithFixings();
+
+      FixedBits*
+      getUpdatedFixedBits(const ASTNode& n);
+
+      FixedBits*
+      getCurrentFixedBits(const ASTNode& n);
+
+      void
+      scheduleDown(const ASTNode& n);
+
+public:
+      NodeToFixedBitsMap* fixedMap;
+
+      bool isUnsatisfiable()
+      {
+        return status == CONFLICT;
+      }
+
+      // propagates.
+      ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf, const ASTNode & top);
+
+      /*
       ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf)
       {
+        status = NO_CHANGE;
+
+        workList = NULL;
+        dependents = NULL;
+        fixedMap = NULL; // ASTNodes mapped to which of their bits are fixed.
+        msm = NULL;
+
         simplifier = _sm;
         nf = _nf;
-        fixedMap = NULL; // ASTNodes mapped to which of their bits are fixed.
-        //multiplicationStats = NULL;
-        dependents = NULL;
       }
       ;
+       */
+
 
       ~ConstantBitPropagation()
       {
-        if (fixedMap != NULL)
           delete fixedMap;
+          delete dependents;
+          delete workList;
       }
       ;
 
@@ -89,28 +106,23 @@ namespace simplifier
       BEEV::ASTNode
       topLevelBothWays(const BEEV::ASTNode& top);
 
-      NodeToFixedBitsMap*
-      getFixedMap(const ASTNode & top);
-      MultiplicationStatsMap*
-      getMultiplicationStats();
 
-      void
+
+      bool
       checkAtFixedPoint(const ASTNode& n, BEEV::ASTNodeSet & visited);
 
       void
+      propagate();
+
+      void
       scheduleUp(const ASTNode& n);
-      void
-      scheduleDown(const ASTNode& n);
-      void
-      schedule(const ASTNode& n);
 
       void
-      initialiseWorklist(const ASTNode& top);
+      scheduleNode(const ASTNode& n);
 
       void
-      prop();
+      setNodeToTrue(const ASTNode& top);
     };
-
   }
 }
 

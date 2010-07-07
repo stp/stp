@@ -42,7 +42,8 @@ endif
 			   $(SRC)/to-sat/*.o \
 			   $(SRC)/sat/*.o \
 			   $(SRC)/simplifier/*.o  \
-		           $(SRC)/simplifier/constantBitP/*.o  \
+		       $(SRC)/simplifier/constantBitP/*.o  \
+		       $(SRC)/simplifier/AIG/*.o  \
 			   $(SRC)/extlib-constbv/*.o \
 			   $(SRC)/extlib-abc/*/*/*.o \
 			   $(SRC)/c_interface/*.o \

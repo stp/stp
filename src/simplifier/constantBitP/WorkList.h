@@ -8,7 +8,7 @@ namespace simplifier
 
     class WorkList
     {
-      /* Rough worklist. Constraint Programming people probably have lovely structures to do this
+      /* Rough worklist. Constraint Programming people have lovely structures to do this
        * The set (on my machine), is implemented by red-black trees. Deleting just from one end may unbalance the tree??
        */
 
@@ -19,9 +19,38 @@ namespace simplifier
       WorkList&
       operator=(const WorkList&);
 
+      // We add to the worklist any node that immediately depends on a constant.
+       void
+       addToWorklist(const ASTNode& n, ASTNodeSet& visited)
+       {
+         if (n.isConstant())
+             return;
+
+         if (visited.find(n) != visited.end())
+           return;
+
+         visited.insert(n);
+
+         bool alreadyAdded = false;
+
+         for (unsigned i = 0; i < n.GetChildren().size(); i++)
+           {
+             if (!alreadyAdded && n[i].isConstant())
+               {
+                 alreadyAdded = true;
+                 push(n);
+               }
+             addToWorklist(n[i], visited);
+           }
+       }
+
     public:
-      WorkList()
+      // Add to the worklist any node that immediately depends on a constant.
+
+      WorkList(const ASTNode& top)
       {
+        ASTNodeSet visited;
+        addToWorklist(top, visited);
       }
 
       void
@@ -63,9 +92,7 @@ namespace simplifier
 
       }
     };
-
   };
-
 };
 
 #endif /* WORKLIST_H_ */

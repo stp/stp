@@ -124,7 +124,7 @@ public:
 
 	// Replace any nodes in "n" that exist in the fromTo map.
 	// NB the fromTo map is changed.
-	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
+	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf);
 };
 
 }

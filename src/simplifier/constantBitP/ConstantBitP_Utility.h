@@ -14,7 +14,6 @@ using std::cerr;
 using std::cout;
 using std::endl;
 using std::pair;
-using std::list;
 
 Result makeEqual(FixedBits& a, FixedBits& b, int from, int to);
 void setSignedMinMax(FixedBits& v, BEEV::CBV min, BEEV::CBV max);

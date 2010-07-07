@@ -46,7 +46,6 @@ namespace BEEV
       cb = cb_;
     }
 
-
     void
     ClearAllTables()
     {
@@ -61,79 +60,8 @@ namespace BEEV
     }
 
     // Can not be used with abstraction refinement.
-    bool
-    CallSAT(MINISAT::Solver& satSolver, const ASTNode& input)
-    {
-      BBNodeManagerAIG mgr;
-      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb);
+    bool  CallSAT(MINISAT::Solver& satSolver, const ASTNode& input);
 
-      bm->GetRunTimes()->start(RunTimes::BitBlasting);
-      BBNodeAIG BBFormula = bb.BBForm(input);
-      bm->GetRunTimes()->stop(RunTimes::BitBlasting);
-
-      assert(satSolver.nVars() ==0);
-
-      Cnf_Dat_t* cnfData = NULL;
-
-
-      mgr.toCNF(BBFormula, cnfData, nodeToSATVar);
-
-      // Free the memory in the AIGs.
-      BBFormula = BBNodeAIG(); // null node
-      mgr.stop();
-
-      bm->GetRunTimes()->start(RunTimes::SendingToSAT);
-
-      for (int i = 0; i < cnfData->nVars; i++)
-        satSolver.newVar();
-
-      MINISAT::vec<MINISAT::Lit> satSolverClause;
-      for (int i = 0; i < cnfData->nClauses; i++)
-        {
-          satSolverClause.clear();
-          for (int * pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i
-              + 1]; pLit < pStop; pLit++)
-            {
-              Var var = (*pLit) >> 1;
-              assert(var < satSolver.nVars());
-              MINISAT::Lit l(var, (*pLit) & 1);
-              satSolverClause.push(l);
-            }
-
-          satSolver.addClause(satSolverClause);
-          if (!satSolver.okay())
-            break;
-        }
-      bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-
-      if (bm->UserFlags.output_CNF_flag)
-         Cnf_DataWriteIntoFile(cnfData, "output_0.cnf", 0);
-
-      Cnf_ClearMemory();
-      Cnf_DataFree(cnfData);
-
-      // cryptominisat treats simplify() as protected.
-#ifndef CRYPTOMINISAT2
-      bm->GetRunTimes()->start(RunTimes::SATSimplifying);
-      if (!satSolver.simplify())
-        {
-        bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
-        return false;
-        }
-      bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
-#endif
-
-
-
-      bm->GetRunTimes()->start(RunTimes::Solving);
-      satSolver.solve();
-      bm->GetRunTimes()->stop(RunTimes::Solving);
-
-      if (bm->UserFlags.stats_flag)
-        bm->PrintStats(satSolver);
-
-      return satSolver.okay();
-    }
   };
 }
 
