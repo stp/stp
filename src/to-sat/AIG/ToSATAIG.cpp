@@ -41,7 +41,8 @@ namespace BEEV
       */
 
       //Clear out all the constant bit stuff before sending the SAT.
-      cb->clearTables();
+      if (cb != NULL)
+    	  cb->clearTables();
 
       bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
