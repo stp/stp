@@ -49,10 +49,7 @@ namespace simplifier
       WorkList *workList;
       Dependencies * dependents;
       Simplifier *simplifier;
-
-#ifdef WITHCBITP
       MultiplicationStatsMap* msm;
-#endif
 
       void
       printNodeWithFixings();

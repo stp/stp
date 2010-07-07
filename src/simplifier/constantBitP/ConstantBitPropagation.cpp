@@ -159,6 +159,7 @@ namespace simplifier
       fixedMap = new NodeToFixedBitsMap(1000); // better to use the function that returns the number of nodes.. whatever that is.
       workList = new WorkList(top);
       dependents = new Dependencies(top); // List of the parents of a node.
+      msm = NULL;
       //msm = new MultiplicationStatsMap();
 
 
@@ -576,7 +577,7 @@ namespace simplifier
 
       assert(status != CONFLICT);
       status = dispatchToTransferFunctions(k, children, *output, n, msm);
-      //result = dispatchToMaximallyPrecise(k, children, *output, n);
+      //result = dispatchToMaximallyPrecise(k, children, *output, n,msm);
 
       assert(((unsigned)output->getWidth()) == n.GetValueWidth() || output->getWidth() ==1);
 
