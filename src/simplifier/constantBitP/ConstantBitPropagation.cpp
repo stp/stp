@@ -1,11 +1,10 @@
+#include "ConstantBitPropagation.h"
 #include "../../AST/AST.h"
 #include "../../extlib-constbv/constantbv.h"
 #include "../../printer/printers.h"
-#include "ConstantBitPropagation.h"
 #include "../../AST/NodeFactory/NodeFactory.h"
 #include "../../simplifier/simplifier.h"
 #include "ConstantBitP_Utility.h"
-#include "MultiplicationStats.h"
 
 #ifdef WITHCBITP
   #include "ConstantBitP_TransferFunctions.h"
@@ -166,6 +165,13 @@ namespace simplifier
       // not fixing the topnode.
       propagate();
 
+      if (debug_cBitProp_messages)
+        {
+          cerr << "status:" << status <<endl;
+          cerr << "ended propagation" << endl;
+          printNodeWithFixings();
+        }
+
       // is there are good reason to clear out some of them??
 #if 0
       // remove constants, and things with nothing fixed.
@@ -212,16 +218,16 @@ namespace simplifier
 
       if (debug_cBitProp_messages)
         {
-          cout << "Number removed by bottom UP:" << fromTo.size() << endl;
+          cerr << "Number removed by bottom UP:" << fromTo.size() << endl;
         }
 
       setNodeToTrue(top);
 
       if (debug_cBitProp_messages)
         {
-          cout << "starting propagation" << endl;
+          cerr << "starting propagation" << endl;
           printNodeWithFixings();
-          cout << "Initial Tree:" << endl;
+          cerr << "Initial Tree:" << endl;
           cerr << top;
         }
 
@@ -346,10 +352,9 @@ namespace simplifier
     notHandled(const Kind& k)
     {
       if (READ != k && WRITE != k)
-      //if (debug_cBitProp_messages)
-
+      if (debug_cBitProp_messages)
         {
-          cout << "!" << k << endl;
+          cerr << "!" << k << endl;
         }
     }
 

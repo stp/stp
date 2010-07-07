@@ -5,6 +5,7 @@
 #include "Dependencies.h"
 #include "NodeToFixedBitsMap.h"
 #include "WorkList.h"
+#include "MultiplicationStats.h"
 
 namespace BEEV
 {
@@ -18,18 +19,6 @@ namespace simplifier
   namespace constantBitP
   {
 
-    enum Direction
-    {
-      UPWARDS_ONLY, BOTH_WAYS
-    };
-
-    // This is used for very specific purposes.
-    enum Type
-    {
-      BOOL_TYPE, VALUE_TYPE
-    };
-
-    // The only status that's correctly maintained at present is the conflict status.
     enum Result
     {
       NO_CHANGE = 1, CHANGED, CONFLICT, NOT_IMPLEMENTED
@@ -44,11 +33,11 @@ namespace simplifier
     class ConstantBitPropagation
     {
       NodeFactory *nf;
+      Simplifier *simplifier;
 
       Result status;
       WorkList *workList;
       Dependencies * dependents;
-      Simplifier *simplifier;
       MultiplicationStatsMap* msm;
 
       void
@@ -74,28 +63,9 @@ public:
       // propagates.
       ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf, const ASTNode & top);
 
-      /*
-      ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf)
-      {
-        status = NO_CHANGE;
-
-        workList = NULL;
-        dependents = NULL;
-        fixedMap = NULL; // ASTNodes mapped to which of their bits are fixed.
-        msm = NULL;
-
-        simplifier = _sm;
-        nf = _nf;
-      }
-      ;
-       */
-
-
       ~ConstantBitPropagation()
       {
-          delete fixedMap;
-          delete dependents;
-          delete workList;
+        clearTables();
       }
       ;
 
@@ -104,6 +74,17 @@ public:
       topLevelBothWays(const BEEV::ASTNode& top);
 
 
+      void clearTables()
+      {
+        delete fixedMap;
+        fixedMap = NULL;
+        delete dependents;
+        dependents = NULL;
+        delete workList;
+        workList = NULL;
+        delete msm;
+        msm = NULL;
+      }
 
       bool
       checkAtFixedPoint(const ASTNode& n, BEEV::ASTNodeSet & visited);

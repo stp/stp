@@ -106,8 +106,12 @@ int main(int argc, char ** argv) {
     "-c  : construct counterexample\n";
   helpstring +=  
     "-d  : check counterexample\n";
+
+#ifdef WITHCBITP
   helpstring +=  
       "--disable-cbitp  : disable constant bit propagation\n";
+#endif WITHCBITP
+
   helpstring +=
     "-e  : expand finite-for construct\n";
   helpstring +=  

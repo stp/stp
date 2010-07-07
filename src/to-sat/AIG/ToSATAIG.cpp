@@ -40,6 +40,9 @@ namespace BEEV
         }
       */
 
+      //Clear out all the constant bit stuff before sending the SAT.
+      cb->clearTables();
+
       bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
       for (int i = 0; i < cnfData->nVars; i++)

@@ -2577,8 +2577,25 @@ namespace BEEV
         }
         break;
 
+      case BVDIV:
+      if (inputterm[0] == inputterm[1])
+        {
+          output = _bm->CreateOneConst(inputValueWidth);
+          break;
+        }
+      output = inputterm;
+      break;
 
-      case BVXOR:
+    case BVMOD:
+      if (inputterm[0] == inputterm[1])
+        {
+          output = _bm->CreateZeroConst(inputValueWidth);
+          break;
+        }
+      output = inputterm;
+      break;
+
+    case BVXOR:
     	  {
     		  if (inputterm.Degree() ==2 && inputterm[0] == inputterm[1])
     		  {
@@ -2592,8 +2609,6 @@ namespace BEEV
       case BVNOR:
       case BVVARSHIFT:
       case BVSRSHIFT:
-      case BVDIV:
-      case BVMOD:
         {
           ASTVec c = inputterm.GetChildren();
           ASTVec o;
@@ -2670,9 +2685,25 @@ namespace BEEV
           break;
         }
       case SBVREM:
-      case SBVDIV:
       case SBVMOD:
         {
+          if (inputterm[0] == inputterm[1])
+          {
+            output = _bm->CreateZeroConst(inputValueWidth);
+            break;
+          }
+
+          // run on.
+        }
+      case SBVDIV:
+        {
+          if (inputterm[0] == inputterm[1])
+          {
+            output = _bm->CreateOneConst(inputValueWidth);
+            break;
+          }
+
+
           ASTVec c = inputterm.GetChildren();
           ASTVec o;
           for (ASTVec::iterator
