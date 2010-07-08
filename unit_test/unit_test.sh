@@ -7,8 +7,8 @@ rm -f output_*.cnf
 
 files=`ls -1 -S *.smt2`
 for f in $files; do
-	stp --simplifying-minisat --output-CNF $f
-	cnf=`cat output_*.cnf  | wc -l`
+	stp --output-CNF $f
+	cnf=`cat output_*.cnf  | grep -v "^c" | grep -v "^$" |  wc -l`
 	if [ $cnf -gt 3 ] ; then
 		echo --fail
 		exit 10
