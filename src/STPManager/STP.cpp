@@ -116,7 +116,7 @@ namespace BEEV {
                              simplified_solved_InputToSAT);
           }
 
-        if(bm->UserFlags.wordlevel_solve_flag)
+        if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT = 
               bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
@@ -171,7 +171,11 @@ namespace BEEV {
                              simplified_solved_InputToSAT);
           }
         
-        if(bm->UserFlags.wordlevel_solve_flag)
+        // The word level solver uses the simplifier to apply the rewrites it makes,
+        // without optimisations enabled. It will enter infinite loops on some input.
+        // Instead it could use the apply function of the substitution map, but it
+        // doesn't yet...
+        if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT = 
               bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
