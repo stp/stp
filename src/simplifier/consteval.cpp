@@ -281,6 +281,8 @@ namespace BEEV
             {
               // Expecting a division by zero. Just return one.
               OutputNode = _bm->CreateOneConst(outputwidth);
+              CONSTANTBV::BitVector_Destroy(remainder);
+              CONSTANTBV::BitVector_Destroy(quotient);
             }
           else
             {
@@ -338,7 +340,7 @@ namespace BEEV
             {
               // Expecting a division by zero. Just return one.
               OutputNode = _bm->CreateOneConst(outputwidth);
-
+              CONSTANTBV::BitVector_Destroy(remainder);
             }
           else
             {

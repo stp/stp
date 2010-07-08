@@ -373,6 +373,7 @@ user_value:
 USER_VAL_TOK
 {
   //cerr << "Printing user_value: " << *$1 << endl;
+  delete $1;
 }
 ;
 
@@ -681,6 +682,7 @@ an_term:
 BVCONST_TOK
 {
   $$ = new ASTNode(parserInterface->CreateBVConst($1, 10, 32));
+  delete $1;
 }
 | BVCONST_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
 {
@@ -688,6 +690,9 @@ BVCONST_TOK
   delete $1;
 }
 | an_nonbvconst_term
+{
+$$ = $1;
+}
 ;
 
 an_nonbvconst_term: 
@@ -1024,6 +1029,7 @@ BITCONST_TOK { $$ = $1; }
       {
       	  n = parserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$5);
       }
+       delete $5;
       $$ = new ASTNode(n);
     }
 |  BVSX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
