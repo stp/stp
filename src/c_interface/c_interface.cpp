@@ -31,7 +31,7 @@ BEEV::ASTVec *decls = NULL;
 // persist holds a copy of ASTNodes so that the reference count of
 // objects we have pointers to doesn't hit zero.
 vector<BEEV::ASTNode*> persist;
-bool cinterface_exprdelete_on_flag = false;
+bool cinterface_exprdelete_on_flag = true;
 
 // GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
@@ -144,6 +144,17 @@ void vc_setFlags(VC vc, char c, int param_value) {
       "vc_setFlags: Unrecognized commandline flag:\n";
     s += helpstring;
     BEEV::FatalError(s.c_str());
+    break;
+  }
+}
+
+void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {
+  switch (f) {
+  case EXPRDELETE:
+    cinterface_exprdelete_on_flag = param_value != 0;
+    break;
+  default:
+    BEEV::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
     break;
   }
 }
@@ -404,8 +415,10 @@ void vc_printQuery(VC vc){
 
 nodestar persistNode(node n)
 {
-  persist.push_back(new node(n));
-  return  persist.back();
+  nodestar np = new node(n);
+  if (cinterface_exprdelete_on_flag)
+    persist.push_back(np);
+  return np;
 }
 
 
@@ -1891,9 +1904,11 @@ void vc_Destroy(VC vc) {
   //     delete aaa;
   //   }
 
-  for (vector<nodestar>::iterator it = persist.begin(); it!= persist.end();it++)
-    delete *it;
-  persist.clear();
+  if (cinterface_exprdelete_on_flag) {
+    for (vector<nodestar>::iterator it = persist.begin(); it!= persist.end();it++)
+      delete *it;
+    persist.clear();
+  }
 
   delete decls;
   delete (stpstar)vc;

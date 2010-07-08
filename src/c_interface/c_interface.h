@@ -50,6 +50,17 @@ extern "C" {
   // v  : print nodes
   void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
 
+  //! Interface-only flags.
+  enum ifaceflag_t {
+  /*! EXPRDELETE: boolean, default true. For objects created by
+    vc_arrayType, vc_bvType, vc_bv32Type, vc_bvConstExprFromInt, if
+    this flag is set both at the time the objects are created and at
+    the time that vc_Destroy is called, vc_Destroy will automatically
+    delete them. */
+    EXPRDELETE
+  };
+  void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
+
   //! Flags can be NULL
   VC vc_createValidityChecker(void);
 
