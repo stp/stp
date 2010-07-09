@@ -124,6 +124,7 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 			  smt2lval.str = new std::string(_string_lit);
                           return STRING_TOK; }
 <STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smt2text); }                           
+<STRING_LITERAL>"\n"	{ _string_lit.insert(_string_lit.end(),*smt2text); }
 
 "sat"           { return SAT_TOK; }
 "unsat"         { return UNSAT_TOK; }
@@ -232,4 +233,5 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 \|([^\|]|\n)*\| {return lookup(smt2text);}
 
 . { smt2error("Illegal input character."); }
+"\n" { smt2error("Illegal input character."); }
 %%
