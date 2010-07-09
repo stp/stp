@@ -74,6 +74,9 @@ namespace BEEV
       Cnf_ClearMemory();
       Cnf_DataFree(cnfData);
 
+      if (bm->UserFlags.exit_after_CNF)
+        exit(0);
+
       // cryptominisat treats simplify() as protected.
 #ifndef CRYPTOMINISAT2
       bm->GetRunTimes()->start(RunTimes::SATSimplifying);

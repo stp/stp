@@ -61,7 +61,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile = NULL;
@@ -110,7 +110,9 @@ int main(int argc, char ** argv) {
 #ifdef WITHCBITP
   helpstring +=  
       "--disable-cbitp  : disable constant bit propagation\n";
-#endif WITHCBITP
+#endif
+
+  helpstring +=  "--exit-after-CNF : exit after the CNF has been generated\n";
 
   helpstring +=
     "-e  : expand finite-for construct\n";
@@ -183,16 +185,21 @@ helpstring +=
 			  lookup.insert(make_pair(tolower("--print-back-GDL"),PRINT_BACK_GDL));
 			  lookup.insert(make_pair(tolower("--print-back-dot"),PRINT_BACK_DOT));
 			  lookup.insert(make_pair(tolower("--output-CNF"),OUTPUT_CNF));
+                          lookup.insert(make_pair(tolower("--exit-after-CNF"),EXIT_AFTER_CNF));
 			  lookup.insert(make_pair(tolower("--output-bench"),OUTPUT_BENCH));
 			  lookup.insert(make_pair(tolower("--simplifying-minisat"),USE_SIMPLIFYING_SOLVER));
 			  lookup.insert(make_pair(tolower("--SMTLIB2"),SMT_LIB2_FORMAT));
 			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
 			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
 
+
 			  switch(lookup[tolower(argv[i])])
 			  {
 			  case DISABLE_CBITP:
                                   bm->UserFlags.bitConstantProp_flag = false;
+                                  break;
+			  case EXIT_AFTER_CNF:
+                                  bm->UserFlags.exit_after_CNF = true;
                                   break;
 			  case PRINT_BACK_C:
 				  bm->UserFlags.print_STPinput_back_C_flag = true;

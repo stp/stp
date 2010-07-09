@@ -113,8 +113,9 @@ namespace BEEV
 
     bool bitConstantProp_flag;
 
-
     bool cBitP_propagateForDivisionByZero;
+
+    bool exit_after_CNF;
 
     // Available back-end SAT solvers.
     enum SATSolvers
@@ -226,6 +227,8 @@ namespace BEEV
 
       // given a/b = c, propagates that c<=a even if b may be zero.
       cBitP_propagateForDivisionByZero =true;
+
+      exit_after_CNF=false;
 
     } //End of constructor for UserDefinedFlags
 
