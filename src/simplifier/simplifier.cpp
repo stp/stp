@@ -2120,12 +2120,19 @@ namespace BEEV
                   }
                 break;
               }
+
+          // This can increase the number of nodes exponentially.
+          // If turned on bitrev2048 will blow out main memory, with
+          // this disabled it takes 12MB.
+              #if 0
+
             case BVAND:
             case BVOR:
             case BVXOR:
               {
             	assert(a0.Degree() == 2);
-                //assumes these operators are binary
+
+            	//assumes these operators are binary
                 //
                 // (t op u)[i:j] <==> t[i:j] op u[i:j]
                 ASTNode t = a0[0];
@@ -2140,9 +2147,12 @@ namespace BEEV
                                VarConstMap);
                 BVTypeCheck(t);
                 BVTypeCheck(u);
-                output = nf->CreateTerm(k1, a_len, t, u);
+                //output = nf->CreateTerm(k1, a_len, t, u);
+
+                output = inputterm;
                 break;
               }
+          #endif
             case BVNEG:
               {
                 // (~t)[i:j] <==> ~(t[i:j])
