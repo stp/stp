@@ -226,6 +226,7 @@ cmdi:
 	LPAREN_TOK LOGIC_TOK FORMID_TOK RPAREN_TOK
 	{
 	  if (!(0 == strcmp($3->GetName(),"QF_BV") ||
+	        0 == strcmp($3->GetName(),"QF_ABV") ||
 	        0 == strcmp($3->GetName(),"QF_AUFBV"))) {
 	    yyerror("Wrong input logic:");
 	  }

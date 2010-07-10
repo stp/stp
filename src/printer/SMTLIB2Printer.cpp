@@ -27,7 +27,7 @@ namespace printer
 void SMTLIB2_PrintBack(ostream &os, const ASTNode& n)
 {
 	if (containsArrayOps(n))
-		os << "(set-logic QF_AUFBV)" << endl;
+		os << "(set-logic QF_ABV)" << endl;
 	else
 		os << "(set-logic QF_BV)"<< endl;
 
