@@ -1554,7 +1554,7 @@ namespace BEEV
   ASTNode Simplifier::FlattenOneLevel(const ASTNode& a)
   {
     const Kind k = a.GetKind();
-    if (!(BVPLUS == k || AND == k || OR == k
+    if (!(BVPLUS == k || AND == k || OR == k || BVMULT == k
           //|| BVAND == k
           //|| BVOR == k
           ))
@@ -1590,6 +1590,40 @@ namespace BEEV
 
     return output;
   } //end of flattenonelevel()
+
+
+  ASTNode
+  Simplifier::makeTower(const Kind k, const BEEV::ASTVec &children)
+  {
+    deque<ASTNode> names;
+
+    for (unsigned i = 0; i < children.size(); i++)
+      names.push_back(children[i]);
+
+    while (names.size() > 2)
+      {
+        ASTNode a = names.front();
+        names.pop_front();
+
+        ASTNode b = names.front();
+        names.pop_front();
+
+        ASTNode n = nf->CreateTerm(k, a.GetValueWidth(), a, b);
+        names.push_back(n);
+      }
+
+    // last two now.
+    assert(names.size() == 2);
+
+    ASTNode a = names.front();
+    names.pop_front();
+
+    ASTNode b = names.front();
+    names.pop_front();
+
+    return nf->CreateTerm(k, a.GetValueWidth(), a, b);
+  }
+
 
   //This function simplifies terms based on their kind
   ASTNode 
@@ -1711,9 +1745,7 @@ namespace BEEV
         output = inputterm;
         break;
       case BVMULT:
-
-			assert(2 == inputterm.Degree());
-			// follow on.
+        // follow on.
       case BVPLUS:
             {
     		const ASTNode &n = Flatten(inputterm);
@@ -1852,9 +1884,11 @@ namespace BEEV
                 }
             }
 
-
-
-          if (BVMULT == output.GetKind() || BVPLUS == output.GetKind())
+          if (BVMULT == output.GetKind())
+            {
+              output = makeTower(BVMULT,output.GetChildren());
+            }
+          else  if ( BVPLUS == output.GetKind())
             {
               ASTVec d = output.GetChildren();
               SortByArith(d);

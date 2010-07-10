@@ -54,6 +54,9 @@ namespace BEEV
     SubstitutionMap substitutionMap;
 
     void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
+
+    ASTNode makeTower(const Kind k , const ASTVec& children);
+
   public:
       
     /****************************************************************
