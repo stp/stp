@@ -762,16 +762,19 @@ namespace BEEV
               {
                 os << " = ";
               }
+
+            ASTNode rhs;
             if (BITVECTOR_TYPE == se.GetType())
               {
-                ASTNode rhs = TermToConstTermUsingModel(se, false);
-                                assert(rhs.isConstant());
-                                printer::PL_Print1(os,rhs,0,false);
+                rhs = TermToConstTermUsingModel(se, false);
               }
             else
               {
-                printer::PL_Print1(os,se,0,false);
+                rhs = ComputeFormulaUsingModel(se);
               }
+            assert(rhs.isConstant());
+            printer::PL_Print1(os, rhs, 0, false);
+
             os << " );" << endl;
           }
       }
