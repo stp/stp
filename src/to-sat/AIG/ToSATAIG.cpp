@@ -75,7 +75,11 @@ namespace BEEV
       Cnf_DataFree(cnfData);
 
       if (bm->UserFlags.exit_after_CNF)
+      {
+        if (bm->UserFlags.quick_statistics_flag)
+          bm->GetRunTimes()->print();
         exit(0);
+      }
 
       // cryptominisat treats simplify() as protected.
 #ifndef CRYPTOMINISAT2

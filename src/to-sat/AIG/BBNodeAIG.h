@@ -11,9 +11,12 @@
 #define BBNODEAIG_H_
 
 #include "../../extlib-abc/aig.h"
+#include <iostream>
 
 namespace BEEV
 {
+  using std::cerr;
+  using std::endl;
 
   // This class wraps around a pointer to an AIG (provided by the ABC tool).
   // uses the default copy constructor and assignment operator.
