@@ -5,6 +5,8 @@
 #include "../../AST/NodeFactory/NodeFactory.h"
 #include "../../simplifier/simplifier.h"
 #include "ConstantBitP_Utility.h"
+#include <iostream>
+#include <fstream>
 
 #ifdef WITHCBITP
   #include "ConstantBitP_TransferFunctions.h"
@@ -38,8 +40,9 @@ namespace simplifier
     dispatchToMaximallyPrecise(const Kind k, vector<FixedBits*>& children,
         FixedBits& output, const ASTNode n);
 
-    const bool debug_cBitProp_messages = true;
-    const bool output_mult_like = true;
+    const bool debug_cBitProp_messages = false;
+    const bool output_mult_like = false;
+    const bool debug_print_graph_after = false;
 
     ////////////////////
 
@@ -108,7 +111,7 @@ namespace simplifier
 
     // Put anything that's entirely fixed into a from->to map.
     ASTNodeMap
-    getAllFixed(NodeToFixedBitsMap* fixedMap)
+    ConstantBitPropagation::getAllFixed()
     {
       NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it;
 
@@ -140,6 +143,9 @@ namespace simplifier
     void
     ConstantBitPropagation::setNodeToTrue(const ASTNode& top)
     {
+      assert(!topFixed);
+      topFixed = true;
+
       FixedBits & topFB = *getCurrentFixedBits(top);
       topFB.setFixed(0, true);
       topFB.setValue(0, true);
@@ -195,6 +201,7 @@ namespace simplifier
         }
 #endif
 
+      topFixed = false;
     }
 
     // Both way propagation. Initialising the top to "true".
@@ -214,7 +221,7 @@ namespace simplifier
       status = NO_CHANGE;
 
       //Determine what must always be true.
-      ASTNodeMap fromTo = getAllFixed(fixedMap);
+      ASTNodeMap fromTo = getAllFixed();
 
       if (debug_cBitProp_messages)
         {
@@ -342,6 +349,17 @@ namespace simplifier
         {
           result = nf->CreateNode(AND, result, toConjoin); // conjoin the new conditions.
         }
+
+
+  	if (debug_print_graph_after)
+		{
+			ofstream file;
+			file.open("afterCbitp.gdl");
+			PrintingHackfixedMap = fixedMap;
+			printer::GDL_Print(file,top,&toString);
+			file.close();
+		}
+
 
       assert(BVTypeCheck(result));
       assert(status != CONFLICT); // conflict should have been seen earlier.

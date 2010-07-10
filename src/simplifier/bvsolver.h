@@ -99,6 +99,7 @@ namespace BEEV
     //this function return true if the var occurs in term, else the
     //function returns false
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
+    void SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols);
 
     void VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av);
 

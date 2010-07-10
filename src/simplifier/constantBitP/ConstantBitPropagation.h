@@ -40,6 +40,8 @@ namespace simplifier
       Dependencies * dependents;
       MultiplicationStatsMap* msm;
 
+      bool topFixed;
+
       void
       printNodeWithFixings();
 
@@ -100,6 +102,9 @@ public:
 
       void
       setNodeToTrue(const ASTNode& top);
+
+      ASTNodeMap
+      getAllFixed();
     };
   }
 }
