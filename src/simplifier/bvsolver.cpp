@@ -742,11 +742,49 @@ namespace BEEV
     	 don't have time. Trev.
 		  */
 
-    	ASTNode aaa =
-          (any_solved
-           && EQ == it->GetKind()) ?
-          _simp->SimplifyFormula_TopLevel(*it, false) :
-          *it;
+#if 1
+      ASTNode aaa =
+              (any_solved
+               && EQ == it->GetKind()) ?
+              _simp->SimplifyFormula_TopLevel(*it, false) :
+              *it;
+
+#else
+
+
+    	ASTNode aaa = *it;
+
+    	if (any_solved && EQ == aaa.GetKind())
+          {
+            bool done = false;
+            {
+                ASTNodeSet lhs;
+                SetofVarsSeenInTerm(aaa[0], lhs);
+
+                for (ASTNodeSet::const_iterator it = lhs.begin(); it != lhs.end(); it++)
+                  if (_simp->CheckSubstitutionMap(*it))
+                    {
+                      aaa = _simp->applySubstitutionMap(aaa);
+                      done = true;
+                      break;
+                    }
+              }
+            if (!done)
+              {
+                ASTNodeSet rhs;
+                SetofVarsSeenInTerm(aaa[1], rhs);
+
+                for (ASTNodeSet::const_iterator it = rhs.begin(); it != rhs.end(); it++)
+                  if (_simp->CheckSubstitutionMap(*it))
+                    {
+                      aaa = _simp->applySubstitutionMap(aaa);
+                      done = true;
+                      break;
+                    }
+              }
+          }
+#endif
+
         //_bm->ASTNodeStats("Printing after calling simplifyformula
         //inside the solver:", aaa);
         aaa = BVSolve_Odd(aaa);
@@ -1130,6 +1168,30 @@ namespace BEEV
 	    visited.insert(term);
 	    return;
 	  }//End of VarSeenInTerm
+
+	  void BVSolver::SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols)
+	  {
+            assert(symbols.size() ==0);
+
+            BuildSymbolGraph(term);
+
+            SymbolPtrSet visited;
+
+            vector<Symbols*> av;
+            VarSeenInTerm(symbol_graph[term],visited,symbols,av);
+
+            for (int i =0 ; i < av.size();i++)
+            {
+                    const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
+                    symbols.insert(sym.begin(), sym.end());
+            }
+
+
+            if (visited.size() > 50) // No use caching it, unless we've done some work.
+            {
+                    TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
+            }
+          }
 
 	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 	  {
