@@ -33,6 +33,7 @@ namespace BEEV {
  ********************************************************************/
 
 using simplifier::constantBitP::FixedBits;
+using simplifier::constantBitP::NodeToFixedBitsMap;
 
 #define BBNodeVec vector<BBNode>
 #define BBNodeVecMap map<ASTNode, vector<BBNode> >
@@ -50,6 +51,8 @@ vector<BBNodeAIG> _empty_BBNodeAIGVec;
 // that should have already been applied.
 const bool debug_do_check = false;
 const bool debug_bitblaster = false;
+
+const bool conjoin_to_top = true;
 
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::commonCheck(const ASTNode& n) {
@@ -96,11 +99,13 @@ bool BitBlaster<BBNode,BBNodeManagerT>::update(const ASTNode&n, const int i, sim
         if (b->isFixed(i) && (!(bb == BBTrue || bb == BBFalse)))
         {
                 //We have a fixed bit, but the bitblasted values aren't constant true or false.
-
-                //if (b->getValue(i))
-                        //support.insert(bb);
-                //else
-                  //      support.insert(nf->CreateNode(NOT,bb));
+            if (conjoin_to_top && (fixedFromBottom.find(n) == fixedFromBottom.end()))
+            {
+              if (b->getValue(i))
+                support.insert(bb);
+              else
+                support.insert(nf->CreateNode(NOT, bb));
+            }
 
                 bb = b->getValue(i) ? BBTrue : BBFalse;
         }
@@ -391,6 +396,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 	}
 	case BVMULT: {
 		assert(BVTypeCheck(term));
+		assert(term.Degree() == 2);
 
 		const ASTNode& t0 = term[0];
 		const ASTNode& t1 = term[1];
@@ -515,21 +521,39 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 template <class BBNode, class BBNodeManagerT>
 const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form)
 {
+
+      if (conjoin_to_top && cb != NULL)
+        {
+          ASTNodeMap n =  cb->getAllFixed();
+          for (ASTNodeMap::const_iterator it = n.begin(); it != n.end(); it++)
+            fixedFromBottom.insert(it->first);
+
+          // Mark the top node as true.
+          cb->setNodeToTrue(form);
+          cb->propagate();
+        }
+
     BBNodeSet support;
     BBNode r= BBForm(form,support);
-    //vector<BBNode> v;
-    //v.insert(v.end(), support.begin(), support.end());
-    //v.push_back(r);
-    assert(support.size() ==0);
 
+    vector<BBNode> v;
+    v.insert(v.end(), support.begin(), support.end());
+    v.push_back(r);
+
+    if (!conjoin_to_top)
+        {
+          assert(support.size() ==0);
+        }
 
     if (cb != NULL && !cb->isUnsatisfiable())
       {
       ASTNodeSet visited;
       assert(cb->checkAtFixedPoint(form,visited));
       }
-    //    return nf->CreateNode(AND,v);
-    return r;
+    if (v.size() == 1)
+        return v[0];
+      else
+        return nf->CreateNode(AND, v);
 }
 
 // bit blast a formula (boolean term).  Result is one bit wide,

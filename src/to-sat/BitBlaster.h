@@ -134,6 +134,10 @@ class BitBlaster {
 
         const BBNode BBForm(const ASTNode& form, set<BBNode>& support);
 
+        // Nodes in this set can be replaced by their constant values, without being
+        // conjoined to the top..
+        ASTNodeSet fixedFromBottom;
+
 public:
 	BBNodeManagerT* nf;
 
