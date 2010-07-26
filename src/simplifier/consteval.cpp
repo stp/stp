@@ -167,6 +167,7 @@ namespace BEEV
 
       case BVAND:
         {
+          assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_Intersection(output, tmp0, tmp1);
           OutputNode = _bm->CreateBVConst(output, outputwidth);
@@ -174,6 +175,7 @@ namespace BEEV
         }
       case BVOR:
         {
+          assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_Union(output, tmp0, tmp1);
           OutputNode = _bm->CreateBVConst(output, outputwidth);
@@ -181,6 +183,7 @@ namespace BEEV
         }
       case BVXOR:
         {
+          assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::Set_ExclusiveOr(output, tmp0, tmp1);
           OutputNode = _bm->CreateBVConst(output, outputwidth);
@@ -188,6 +191,7 @@ namespace BEEV
         }
       case BVSUB:
         {
+          assert(2==t.Degree());
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
           bool carry = false;
           CONSTANTBV::BitVector_sub(output, tmp0, tmp1, &carry);
@@ -233,21 +237,28 @@ namespace BEEV
         }
       case BVMULT:
         {
-          output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          CBV tmp = CONSTANTBV::BitVector_Create(2* inputwidth , true);
-          CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(tmp, tmp0, tmp1);
+        output = CONSTANTBV::BitVector_Create(inputwidth, true);
+        CONSTANTBV::BitVector_increment(output);
 
-          if (0 != e)
-            {
-              BVConstEvaluatorError(e, t);
-            }
-          //FIXME WHAT IS MY OUTPUT???? THE SECOND HALF of tmp?
-          //CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, inputwidth, inputwidth);
-          CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, 0, inputwidth);
-          OutputNode = _bm->CreateBVConst(output, outputwidth);
-          CONSTANTBV::BitVector_Destroy(tmp);
-          break;
-        }
+        CBV tmp = CONSTANTBV::BitVector_Create(2 * inputwidth, true);
+
+        for (ASTVec::iterator it = children.begin(), itend = children.end(); it != itend; it++)
+          {
+            CBV kk = (*it).GetBVConst();
+            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(tmp, output, kk);
+
+            if (0 != e)
+              {
+                BVConstEvaluatorError(e, t);
+              }
+            CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, 0, inputwidth);
+
+          }
+
+        OutputNode = _bm->CreateBVConst(output, outputwidth);
+        CONSTANTBV::BitVector_Destroy(tmp);
+        break;
+      }
       case BVPLUS:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);
@@ -257,7 +268,6 @@ namespace BEEV
               CBV kk = (*it).GetBVConst();
               CONSTANTBV::BitVector_add(output, output, kk, &carry);
               carry = false;
-              //CONSTANTBV::BitVector_Destroy(kk);
             }
           OutputNode = _bm->CreateBVConst(output, outputwidth);
           break;
@@ -273,6 +283,7 @@ namespace BEEV
       case SBVDIV:
       case SBVREM:
         {
+          assert(2==t.Degree());
           CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
           CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
@@ -312,6 +323,7 @@ namespace BEEV
 
       case SBVMOD:
         {
+          assert(2==t.Degree());
           /* Definition taken from the SMTLIB website
              (bvsmod s t) abbreviates
              (let (?msb_s (extract[|m-1|:|m-1|] s))
@@ -431,6 +443,7 @@ namespace BEEV
       case BVDIV:
       case BVMOD:
         {
+          assert(2==t.Degree());
           CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
           CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
@@ -499,12 +512,14 @@ namespace BEEV
         }
         break;
       case EQ:
+        assert(2==t.Degree());
         if (CONSTANTBV::BitVector_equal(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
           OutputNode = ASTFalse;
         break;
       case BVLT:
+        assert(2==t.Degree());
         if (-1 == CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
@@ -512,6 +527,7 @@ namespace BEEV
         break;
       case BVLE:
         {
+          assert(2==t.Degree());
           int comp = CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1);
           if (comp <= 0)
             OutputNode = ASTTrue;
@@ -520,6 +536,7 @@ namespace BEEV
           break;
         }
       case BVGT:
+        assert(2==t.Degree());
         if (1 == CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
@@ -527,6 +544,7 @@ namespace BEEV
         break;
       case BVGE:
         {
+          assert(2==t.Degree());
           int comp = CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1);
           if (comp >= 0)
             OutputNode = ASTTrue;
@@ -535,6 +553,7 @@ namespace BEEV
           break;
         }
       case BVSLT:
+        assert(2==t.Degree());
         if (-1 == CONSTANTBV::BitVector_Compare(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
@@ -542,6 +561,7 @@ namespace BEEV
         break;
       case BVSLE:
         {
+          assert(2==t.Degree());
           signed int comp = CONSTANTBV::BitVector_Compare(tmp0, tmp1);
           if (comp <= 0)
             OutputNode = ASTTrue;
@@ -550,6 +570,7 @@ namespace BEEV
           break;
         }
       case BVSGT:
+        assert(2==t.Degree());
         if (1 == CONSTANTBV::BitVector_Compare(tmp0, tmp1))
           OutputNode = ASTTrue;
         else
@@ -557,6 +578,7 @@ namespace BEEV
         break;
       case BVSGE:
         {
+          assert(2==t.Degree());
           int comp = CONSTANTBV::BitVector_Compare(tmp0, tmp1);
           if (comp >= 0)
             OutputNode = ASTTrue;
@@ -659,7 +681,8 @@ namespace BEEV
 
       case IFF:
       {
-    	  const ASTNode&  t0 = children[0];
+        assert(2==t.Degree());
+        const ASTNode&  t0 = children[0];
     	  const ASTNode&  t1 = children[1];
              if ((ASTTrue == t0 && ASTTrue == t1) || (ASTFalse == t0 && ASTFalse == t1))
                OutputNode = ASTTrue;
@@ -670,7 +693,8 @@ namespace BEEV
 
       case IMPLIES:
       {
-		const ASTNode& t0 = children[0];
+        assert(2==t.Degree());
+        const ASTNode& t0 = children[0];
 		const ASTNode& t1 = children[1];
 		if ((ASTFalse == t0) || (ASTTrue == t0 && ASTTrue == t1))
 			OutputNode = ASTTrue;
