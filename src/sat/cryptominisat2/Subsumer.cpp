@@ -619,7 +619,6 @@ void Subsumer::almost_all_database()
     assert(solver.ok);
     solver.ok = (solver.propagate().isNULL());
     if (!solver.ok) {
-        std::cout << "c (contradiction during subsumption)" << std::endl;
         return;
     }
     solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
@@ -653,7 +652,6 @@ void Subsumer::almost_all_database()
         if (!solver.ok) return;
         solver.ok = (solver.propagate().isNULL());
         if (!solver.ok) {
-            printf("c (contradiction during subsumption)\n");
             unregisterIteration(s1);
             return;
         }
@@ -740,7 +738,6 @@ void Subsumer::smaller_database()
         if (!solver.ok) return;
         solver.ok = (solver.propagate().isNULL());
         if (!solver.ok){
-            printf("c (contradiction during subsumption)\n");
             unregisterIteration(s1);
             unregisterIteration(s0);
             return; 
@@ -1090,6 +1087,7 @@ const bool Subsumer::subsWNonExistBins(const Lit& lit, OnlyNonLearntBins* onlyNo
         }
     } else {
         subsume0BIN(~lit, toVisitAll);
+        if (!solver.ok) goto end;
     }
 
     end:
@@ -1252,7 +1250,6 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
         assert(solver.ok);
         solver.ok = (solver.propagate().isNULL());
         if (!solver.ok) {
-            printf("c (contradiction during subsumption)\n");
             return false;
         }
         solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
@@ -1298,7 +1295,6 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
             for (uint32_t i = 0; i < order.size() && numMaxElim > 0; i++, numMaxElim--) {
                 if (maybeEliminate(order[i])) {
                     if (!solver.ok) {
-                        printf("c (contradiction during subsumption)\n");
                         return false;
                     }
                     vars_elimed++;
@@ -1320,7 +1316,6 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     if (!solver.ok) return false;
     solver.ok = (solver.propagate().isNULL());
     if (!solver.ok) {
-        printf("c (contradiction during subsumption)\n");
         return false;
     }
     
