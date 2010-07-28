@@ -1080,15 +1080,35 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& x, const BB
 	FatalError("sda44f");
 }
 
-// on factoring12bitsx12.cvc
-// variant1 = t, variant2 = t: 66 seconds
-// variant1 = t, variant2 = f: 37 seconds
-// variant1 = f, variant2 = f: 46 seconds
-// variant1 = f, variant2 = t: 65 seconds
+//======
+// on factoring12bitsx12.cvc with CMS2.
+// variant1 = t, variant2 = t, variant3 = f:  7.3 seconds
+// variant1 = t, variant2 = f, variant3 = f:  3.7 seconds <---
+// variant1 = f, variant2 = f, variant3 = f:  6.1 seconds
+// variant1 = f, variant2 = t, variant3 = f:  9.2 seconds
+
+// variant1 = t, variant2 = t, variant3 = t:  7.0 seconds
+// variant1 = t, variant2 = f, variant3 = t:  6.9 seconds
+// variant1 = f, variant2 = f, variant3 = t:  9.9 seconds
+// variant1 = f, variant2 = t, variant3 = t:  7.3 seconds
+//======
+// on factoring12bitsx12.cvc with MINISAT2.
+// variant1 = t, variant2 = t, variant3 = f: 10.6 seconds
+// variant1 = t, variant2 = f, variant3 = f: 7.8 seconds
+// variant1 = f, variant2 = f, variant3 = f: 10.1 seconds
+// variant1 = f, variant2 = t, variant3 = f: 11.6 seconds
+
+// variant1 = t, variant2 = t, variant3 = t: 10.6 seconds
+// variant1 = t, variant2 = f, variant3 = t: 10.7 seconds
+// variant1 = f, variant2 = f, variant3 = t: 11.8 seconds
+// variant1 = f, variant2 = t, variant3 = t: 11.2 seconds
+//======
+
 
 // You can select these with any combination you want of true & false.
 const bool division_variant_1 = true;
 const bool division_variant_2 = false;
+const bool division_variant_3 = false;
 
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
@@ -1144,7 +1164,9 @@ void BitBlaster<BBNode,BBNodeManagerT>::BBDivMod(const BBNodeVec &y, const BBNod
                 rminusx.pop_back();
 
                 // Adjusted q, r values when when r is too large.
-                BBNodeVec ygtrxqval = BBITE(sign, q1lshift1, BBInc(q1lshift1));
+                //q1lshift1 has zero in the least significant digit.
+                //BBNodeVec ygtrxqval = BBITE(sign, q1lshift1, BBInc(q1lshift1));
+                q1lshift1[0] = nf->CreateNode(NOT,sign);
                 BBNodeVec ygtrxrval = BBITE(sign, r1lshift1plusyodd, rminusx );
 
 		BBNodeVec notylessxqval;
@@ -1170,7 +1192,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::BBDivMod(const BBNodeVec &y, const BBNod
 
 		if (division_variant_1)
 		{
-			notylessxqval = ygtrxqval;
+			notylessxqval = q1lshift1;
 			notylessxrval = ygtrxrval;
 		}
 		else
@@ -1178,7 +1200,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::BBDivMod(const BBNodeVec &y, const BBNod
 			// q & r values when y >= x
 			BBNode yeqx = BBEQ(y, x);
 			// *** Problem: the bbfill for qval is wrong.  Should be 1, not -1.
-			notylessxqval = BBITE(yeqx, one, ygtrxqval);
+			notylessxqval = BBITE(yeqx, one, q1lshift1);
 			notylessxrval = BBITE(yeqx, zero,ygtrxrval);
 		}
 
@@ -1194,20 +1216,18 @@ void BitBlaster<BBNode,BBNodeManagerT>::BBDivMod(const BBNodeVec &y, const BBNod
 			ylessx = nf->CreateNode(NOT, BBBVLE(x, y, false));
 		}
 
-		// final values of q and r
-		q = BBITE(ylessx, zero, notylessxqval);
-		r = BBITE(ylessx, y, notylessxrval);
-
-                // The above does nothing. This gives the correct answer too:
-                //q = notylessxqval;
-                //r = notylessxrval;
-
-                // But, it's about 30% slower on factoring12x12.
-                // Either these help during solving, or, the CNF generation
-                // generates nicer code with them present.
-
-
-		/****************/
+		if (division_variant_3)
+		  {
+                     q = notylessxqval;
+                     r = notylessxrval;
+		  }
+		else
+		  {
+                      // This variant often helps somehow. I don't know why.
+                      // Even though it uses more memory..
+                      q = BBITE(ylessx, zero, notylessxqval);
+                      r = BBITE(ylessx, y, notylessxrval);
+            }
 	}
 }
 
