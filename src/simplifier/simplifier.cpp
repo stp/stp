@@ -1845,6 +1845,7 @@ namespace BEEV
                       output = 
                         nf->CreateTerm(k, inputValueWidth, nonconstkids);
                       output = Flatten(output);
+                      output = makeTower(k,output.GetChildren());
                       output = DistributeMultOverPlus(output, true);
                       output = CombineLikeTerms(output);
                     }
@@ -3073,6 +3074,8 @@ namespace BEEV
     Kind k = a.GetKind();
     if (BVMULT != k)
       return a;
+
+    assert(a.Degree() == 2);
 
     ASTNode left = a[0];
     ASTNode right = a[1];
