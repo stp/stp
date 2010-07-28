@@ -256,7 +256,7 @@ namespace BEEV
      ****************************************************************/
 
     // Create and return an ASTNode for a symbol
-    ASTNode CreateSymbol(const char * const name);
+    ASTNode LookupOrCreateSymbol(const char * const name);
 
     // Create and return an ASTNode for a symbol Width is number of
     // bits.
@@ -272,6 +272,12 @@ namespace BEEV
     /****************************************************************
      * Create Node functions                                        *
      ****************************************************************/
+
+    inline ASTNode CreateSymbol(const char * const name, unsigned indexWidth, unsigned valueWidth)
+    {
+      return defaultNodeFactory->CreateSymbol(name,indexWidth,valueWidth);
+    }
+
 
     // Create and return an interior ASTNode
     inline BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children = _empty_ASTVec)
@@ -303,6 +309,11 @@ namespace BEEV
      inline BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children =_empty_ASTVec)
      {
     	 return defaultNodeFactory->CreateTerm(kind,width,children);
+     }
+
+     inline BEEV::ASTNode CreateArrayTerm(BEEV::Kind kind, unsigned int indexWidth, unsigned int width, const BEEV::ASTVec &children =_empty_ASTVec)
+     {
+         return defaultNodeFactory->CreateArrayTerm(kind,indexWidth, width,children);
      }
 
      inline ASTNode CreateTerm(Kind kind, unsigned int width,
@@ -382,10 +393,7 @@ namespace BEEV
         char d[32 + prefix.length()];
         sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
 
-        BEEV::ASTNode CurrentSymbol = CreateSymbol(d);
-        CurrentSymbol.SetValueWidth(valueWidth);
-        CurrentSymbol.SetIndexWidth(indexWidth);
-
+        BEEV::ASTNode CurrentSymbol = CreateSymbol(d,indexWidth,valueWidth);
         return CurrentSymbol;
     }
 

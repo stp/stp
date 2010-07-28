@@ -418,7 +418,7 @@ namespace BEEV
         	  els = TransformTerm(els);
         	  result = simp->CreateSimplifiedTermITE(cond, thn, els);
           }
-          result.SetIndexWidth(term.GetIndexWidth());
+          assert(result.GetIndexWidth() ==term.GetIndexWidth());
           break;
         }
       default:
@@ -437,8 +437,7 @@ namespace BEEV
 
           if (c!=o)
           {
-        	  result = nf->CreateTerm(k, width, o);
-			  result.SetIndexWidth(indexwidth);
+        	  result = nf->CreateArrayTerm(k,indexwidth, width, o);
           }
           else
         	  result = term;

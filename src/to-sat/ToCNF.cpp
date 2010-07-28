@@ -561,15 +561,9 @@ namespace BEEV
     
     ostringstream oss;
     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
-    psi = bm->CreateSymbol(oss.str().c_str());
+    psi = bm->CreateSymbol(oss.str().c_str(),varphi.GetIndexWidth(),varphi.GetValueWidth());
     
-    //########################################
-    // step 2, set widths appropriately
-    //########################################
-    
-    psi.SetValueWidth(varphi.GetValueWidth());
-    psi.SetIndexWidth(varphi.GetIndexWidth());
-    
+
     //########################################
     // step 3, recurse over children
     //########################################
@@ -609,7 +603,7 @@ namespace BEEV
     
     ostringstream oss;
     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
-    ASTNode psi = bm->CreateSymbol(oss.str().c_str());
+    ASTNode psi = bm->CreateSymbol(oss.str().c_str(),0,0);
     
     //########################################
     // step 2, add defs
@@ -640,7 +634,7 @@ namespace BEEV
     
     ostringstream oss;
     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
-    ASTNode psi = bm->CreateSymbol(oss.str().c_str());
+    ASTNode psi = bm->CreateSymbol(oss.str().c_str(),0,0);
     
     //########################################
     // step 2, add defs
@@ -707,7 +701,7 @@ namespace BEEV
     
     ostringstream oss;
     oss << "cnf" << "{" << varphi.GetNodeNum() << "}";
-    ASTNode psi = bm->CreateSymbol(oss.str().c_str());
+    ASTNode psi = bm->CreateSymbol(oss.str().c_str(),0,0);
     
     //########################################
     // step 3, add defs
@@ -918,14 +912,14 @@ namespace BEEV
                                            ClauseList* defs)
   {
     ASTNode dummy_false_var = 
-      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
+      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*",0,0));
     info[varphi]->clausespos = SINGLETON(dummy_false_var);
   } //End of convertFormulaToCNFPosFALSE()
 
   void CNFMgr::convertFormulaToCNFPosTRUE(const ASTNode& varphi, 
                                           ClauseList* defs)
   {
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     info[varphi]->clausespos = SINGLETON(dummy_true_var);
   } //End of convertFormulaToCNFPosTRUE
 
@@ -1292,7 +1286,7 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFNegFALSE(const ASTNode& varphi, 
                                            ClauseList* defs)
   {
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     info[varphi]->clausesneg = SINGLETON(dummy_true_var);
   } //End of convertFormulaToCNFNegFALSE()
 
@@ -1300,7 +1294,7 @@ namespace BEEV
                                           ClauseList* defs)
   {
     ASTNode dummy_false_var = 
-      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*"));
+      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*",0,0));
     info[varphi]->clausesneg = SINGLETON(dummy_false_var);
   } //End of convertFormulaToCNFNegTRUE()
 
@@ -1773,7 +1767,7 @@ namespace BEEV
   {
     bm->GetRunTimes()->start(RunTimes::CNFConversion);
     scanFormula(varphi, true, false);
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*");
+    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     ClauseList* defs = SINGLETON(dummy_true_var);
     convertFormulaToCNF(varphi, defs);
     ClauseList* top = info[varphi]->clausespos;

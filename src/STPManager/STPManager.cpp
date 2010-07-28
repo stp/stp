@@ -89,11 +89,11 @@ namespace BEEV
   ////////////////////////////////////////////////////////////////
   // STPMgr member functions to create ASTSymbol and ASTBVConst
   ////////////////////////////////////////////////////////////////
-  ASTNode STPMgr::CreateSymbol(const char * const name)
+  ASTNode STPMgr::LookupOrCreateSymbol(const char * const name)
   {
-    ASTSymbol temp_sym(name);    
+    ASTSymbol temp_sym(name);
     ASTNode n(LookupOrCreateSymbol(temp_sym));
-    return n;
+   return n;
   }
 
   // FIXME: _name is now a constant field, and this assigns to it
@@ -666,10 +666,8 @@ namespace BEEV
     std::string ccc(d);
     c += "_solver_" + ccc;
 
-    ASTNode CurrentSymbol = CreateSymbol(c.c_str());
+    ASTNode CurrentSymbol = CreateSymbol(c.c_str(),0,n);
     assert(0 !=n);
-    CurrentSymbol.SetValueWidth(n);
-    CurrentSymbol.SetIndexWidth(0);
     return CurrentSymbol;
   } //end of NewVar()
 
@@ -733,9 +731,7 @@ namespace BEEV
     str += "(";
     str += outNum.str();
     str += ")";
-    ASTNode CurrentSymbol = CreateSymbol(str.c_str());
-    CurrentSymbol.SetValueWidth(0);
-    CurrentSymbol.SetIndexWidth(0);
+    ASTNode CurrentSymbol = CreateSymbol(str.c_str(),0,0);
     return CurrentSymbol;
   } // End of NewParameterized_BooleanVar()
 

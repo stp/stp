@@ -215,7 +215,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 		if (n.GetIndexWidth() != 0)
 		{
 			const ASTNode& r = it->second;
-			r.SetIndexWidth(n.GetIndexWidth());
+			assert(r.GetIndexWidth() == n.GetIndexWidth());
 			assert(BVTypeCheck(r));
 			ASTNode replaced = replace(r, fromTo, cache,nf);
 			if (replaced != r)
@@ -264,10 +264,10 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 			// If the index and value width aren't saved, they are reset sometimes (??)
 			const unsigned int indexWidth = n.GetIndexWidth();
 			const unsigned int valueWidth = n.GetValueWidth();
-			result = nf->CreateTerm(n.GetKind(), n.GetValueWidth(),
+			result = nf->CreateArrayTerm(n.GetKind(),indexWidth, n.GetValueWidth(),
 					children);
-			result.SetValueWidth(valueWidth);
-			result.SetIndexWidth(indexWidth);
+			assert(result.GetValueWidth() == valueWidth);
+
 		}
 		else
 			result = n;

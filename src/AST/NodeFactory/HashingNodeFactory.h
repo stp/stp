@@ -11,10 +11,9 @@ namespace BEEV
 
 class HashingNodeFactory : public NodeFactory
 {
-	BEEV::STPMgr& bm;
 public:
 	HashingNodeFactory(BEEV::STPMgr& bm_)
-	: bm(bm_)
+	:NodeFactory(bm_)
 	{
 	}
 

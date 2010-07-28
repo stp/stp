@@ -266,9 +266,7 @@ namespace BEEV
                 ostringstream oss;
                 oss << "let_k_" << sz;
 
-                ASTNode CurrentSymbol = bm->CreateSymbol(oss.str().c_str());
-                CurrentSymbol.SetValueWidth(this->GetValueWidth());
-                CurrentSymbol.SetIndexWidth(this->GetIndexWidth());
+                ASTNode CurrentSymbol = bm->CreateSymbol(oss.str().c_str(),this->GetIndexWidth(),this->GetValueWidth());
                 /* If for some reason the variable being created here is
                  * already declared by the user then the printed output will
                  * not be a legal input to the system. too bad. I refuse to

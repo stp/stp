@@ -966,6 +966,7 @@ namespace BEEV
     return nf->CreateNode(EQ, in1, in2);
   }
 
+  // nb. this is sometimes used to build array terms.
   //accepts cond == t1, then part is t2, and else part is t3
   ASTNode Simplifier::CreateSimplifiedTermITE(const ASTNode& in0, 
                                               const ASTNode& in1, 
@@ -989,7 +990,7 @@ namespace BEEV
             FatalError("CreateSimplifiedTermITE: "\
                        "the lengths of the two branches don't match", t1);
           }
-        return nf->CreateTerm(ITE, t1.GetValueWidth(), t0, t1, t2);
+        return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(),t1.GetValueWidth(), t0, t1, t2);
       }
 
     if (t0 == ASTTrue)
@@ -1009,7 +1010,7 @@ namespace BEEV
         return t2;
       }
 
-    return nf->CreateTerm(ITE, t1.GetValueWidth(), t0, t1, t2);
+    return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(),t1.GetValueWidth(), t0, t1, t2);
   }
 
   ASTNode 
@@ -1690,8 +1691,7 @@ namespace BEEV
 			assert(v.size() > 0);
 			if (v != actualInputterm.GetChildren()) // short-cut.
 			{
-				output = nf->CreateTerm(k, inputValueWidth, v);
-				output.SetIndexWidth(actualInputterm.GetIndexWidth());
+				output = nf->CreateArrayTerm(k,actualInputterm.GetIndexWidth(), inputValueWidth, v);
 			}
 			else
 				output = actualInputterm;
@@ -3321,7 +3321,7 @@ namespace BEEV
 				SimplifyFormula(term[0],VarConstMap),
 				SimplifyArrayTerm(term[1], VarConstMap),
 				SimplifyArrayTerm(term[2], VarConstMap));
-		output.SetIndexWidth(iw);
+		assert(output.GetIndexWidth() == iw);
 	}
 		break;
 	case WRITE: {
@@ -3330,8 +3330,7 @@ namespace BEEV
 		ASTNode idx = SimplifyTerm(term[1]);
 		ASTNode val = SimplifyTerm(term[2]);
 
-		output = nf->CreateTerm(WRITE, term.GetValueWidth(), array, idx, val);
-		output.SetIndexWidth(iw); // save the value and set, otherwise it sometimes fails.
+		output = nf->CreateArrayTerm(WRITE,iw, term.GetValueWidth(), array, idx, val);
 	}
 
 		break;

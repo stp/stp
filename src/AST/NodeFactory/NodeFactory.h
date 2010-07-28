@@ -10,6 +10,7 @@ namespace BEEV
 class ASTNode;
 typedef std::vector<ASTNode> ASTVec;
 extern ASTVec _empty_ASTVec;
+class STPMgr;
 }
 
 using BEEV::ASTNode;
@@ -19,7 +20,12 @@ using BEEV::_empty_ASTVec;
 
 class NodeFactory
 {
+protected:
+        BEEV::STPMgr& bm;
+
 public:
+        NodeFactory(BEEV::STPMgr& bm_) : bm(bm_){}
+
 	virtual ~NodeFactory();
 
 	virtual BEEV::ASTNode CreateTerm(Kind kind, unsigned int width,
@@ -31,6 +37,7 @@ public:
 	virtual BEEV::ASTNode CreateNode(Kind kind,
 			const BEEV::ASTVec& children) =0;
 
+	ASTNode CreateSymbol(const char * const name, unsigned indexWidth, unsigned valueWidth);
 
 	ASTNode CreateTerm(Kind kind, unsigned int width, const ASTNode& child0,
 			const ASTVec &children = _empty_ASTVec);

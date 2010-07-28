@@ -668,9 +668,7 @@ Expr vc_varExpr1(VC vc, const char* name,
                  int indexwidth, int valuewidth) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
-  node o = b->CreateSymbol(name);
-  o.SetIndexWidth(indexwidth);
-  o.SetValueWidth(valuewidth);
+  node o = b->CreateSymbol(name,indexwidth,valuewidth);
 
   nodestar output = new node(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -685,24 +683,29 @@ Expr vc_varExpr(VC vc, const char * name, Type type) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar a = (nodestar)type;
 
-  node o = b->CreateSymbol(name);
+  unsigned indexWidth;
+  unsigned valueWidth;
+
   switch(a->GetKind()) {
   case BEEV::BITVECTOR:
-    o.SetIndexWidth(0);
-    o.SetValueWidth((*a)[0].GetUnsignedConst());
+    indexWidth = 0;
+    valueWidth = (*a)[0].GetUnsignedConst();
     break;
   case BEEV::ARRAY:
-    o.SetIndexWidth((*a)[0].GetUnsignedConst());
-    o.SetValueWidth((*a)[1].GetUnsignedConst());
+    indexWidth = (*a)[0].GetUnsignedConst();
+    valueWidth = (*a)[1].GetUnsignedConst();
     break;
   case BEEV::BOOLEAN:
-    o.SetIndexWidth(0);
-    o.SetValueWidth(0);
+    indexWidth = 0;
+    valueWidth = 0;
     break;
   default:
     BEEV::FatalError("CInterface: vc_varExpr: Unsupported type",*a);
     break;
+
   }
+  node o = b->CreateSymbol(name,indexWidth,valueWidth);
+
   nodestar output = new node(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
   BVTypeCheck(*output);

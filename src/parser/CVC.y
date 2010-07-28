@@ -659,14 +659,14 @@ Formula         :     '(' Formula ')'
 |      TRUELIT_TOK 
 {
   $$ = new ASTNode(parserInterface->CreateNode(TRUE)); 
-  $$->SetIndexWidth(0); 
-  $$->SetValueWidth(0);
+  assert($$->GetIndexWidth() == 0);
+  assert($$->GetValueWidth() == 0);
 }
 |      FALSELIT_TOK 
 { 
   $$ = new ASTNode(parserInterface->CreateNode(FALSE)); 
-  $$->SetIndexWidth(0); 
-  $$->SetValueWidth(0);
+  assert($$->GetIndexWidth() == 0);
+  assert($$->GetValueWidth() == 0);
 }
 
 |      LET_TOK LetDecls IN_TOK Formula

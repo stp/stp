@@ -220,7 +220,7 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = parserInterface->CreateSymbol(smttext); 
+  BEEV::ASTNode nptr = parserInterface->LookupOrCreateSymbol(smttext); 
 
   // Check valuesize to see if it's a prop var.  I don't like doing
   // type determination in the lexer, but it's easier than rewriting

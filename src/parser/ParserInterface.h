@@ -87,9 +87,9 @@ public:
     	return bm.CreateBVConst(width, bvconst);
     }
 
-    ASTNode CreateSymbol(const char * const name)
+    ASTNode LookupOrCreateSymbol(const char * const name)
     {
-    	return bm.CreateSymbol(name);
+    	return bm.LookupOrCreateSymbol(name);
     }
 };
 }
