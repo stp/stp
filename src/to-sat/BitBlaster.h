@@ -112,6 +112,11 @@ class BitBlaster {
 	// Internal bit blasting routines.
 	BBNode BBBVLE(const vector<BBNode>& x, const vector<BBNode>& y, bool is_signed,
 			bool is_bvlt = false);
+        BBNode BBBVLE_variant1(const vector<BBNode>& x, const vector<BBNode>& y, bool is_signed,
+                        bool is_bvlt = false);
+        BBNode BBBVLE_variant2(const vector<BBNode>& x, const vector<BBNode>& y, bool is_signed,
+                        bool is_bvlt = false);
+
 
 	// Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
 	BBNode BBcompare(const ASTNode& form, set<BBNode>& support);

@@ -1252,11 +1252,37 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBITE(const BBNode& cond, const BBN
 	return result;
 }
 
+//  smt-test/transitive400.smt2
+// Cryptominsat 2:  bbbvle_variant1 = true.  220ms
+// Cryptominsat 2:  bbbvle_variant1 = false. 15 sec
 
-// On some cases I suspect this is better than the new variant.
+// Minisat 2:  bbbvle_variant1 = true. 13 ms
+// Minisat 2:  bbbvle_variant1 = false. 48 sec
+
+
+const bool bbbvle_variant1 = true;
+const bool bbbvle_variant2 = !bbbvle_variant1;
+
+// Workhorse for comparison routines.  This does a signed BVLE if is_signed
+// is true, else it's unsigned.  All other comparison operators can be reduced
+// to this by swapping args or complementing the result bit.
 template <class BBNode, class BBNodeManagerT>
-BBNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_signed, BBNodeManagerASTNode* nf)
+BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
+                bool is_signed, bool is_bvlt)
 {
+  if (bbbvle_variant1)
+    return BBBVLE_variant1(left,right,is_signed,is_bvlt);
+  else
+    return BBBVLE_variant2(left,right,is_signed,is_bvlt);
+}
+
+
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE_variant1(const BBNodeVec& left_, const BBNodeVec& right_, bool is_signed, bool is_bvlt)
+{
+  const BBNodeVec& left = !is_bvlt? left_: right_;
+  const BBNodeVec& right = !is_bvlt? right_: left_;
+
   // "thisbit" represents BVLE of the suffixes of the BVs
   // from that position .  if R < L, return TRUE, else if L < R
   // return FALSE, else return BVLE of lower-order bits.  MSB is
@@ -1283,16 +1309,16 @@ BBNode BBBVLE_variant(const BBNodeVec& left, const BBNodeVec& right, bool is_sig
     }
 
   BBNode msb = nf->CreateNode(ITE, nf->CreateNode(IFF, rmsb, lmsb), prevbit, rmsb);
+
+  if (is_bvlt)
+    {
+      msb = nf->CreateNode(NOT, msb);
+    }
   return msb;
 }
 
-
-
-// Workhorse for comparison routines.  This does a signed BVLE if is_signed
-// is true, else it's unsigned.  All other comparison operators can be reduced
-// to this by swapping args or complementing the result bit.
 template <class BBNode, class BBNodeManagerT>
-BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
+BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE_variant2(const BBNodeVec& left, const BBNodeVec& right,
 		bool is_signed, bool is_bvlt) {
 	typename BBNodeVec::const_reverse_iterator lit = left.rbegin();
 	const typename BBNodeVec::const_reverse_iterator litend = left.rend();
