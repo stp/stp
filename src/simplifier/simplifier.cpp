@@ -1845,7 +1845,8 @@ namespace BEEV
                       output = 
                         nf->CreateTerm(k, inputValueWidth, nonconstkids);
                       output = Flatten(output);
-                      output = makeTower(k,output.GetChildren());
+                      if (k == BVMULT && output.Degree() > 2)
+                        output = makeTower(k,output.GetChildren());
                       output = DistributeMultOverPlus(output, true);
                       output = CombineLikeTerms(output);
                     }
