@@ -23,7 +23,9 @@ namespace BEEV
 
       Cnf_Dat_t* cnfData = NULL;
 
+      bm->GetRunTimes()->start(RunTimes::CNFConversion);
       mgr.toCNF(BBFormula, cnfData, nodeToSATVar);
+      bm->GetRunTimes()->stop(RunTimes::CNFConversion);
 
       // Free the memory in the AIGs.
       BBFormula = BBNodeAIG(); // null node
