@@ -741,49 +741,43 @@ namespace BEEV
     	 Simplifying through arrays is very expensive though. I know how to fix it, but
     	 don't have time. Trev.
 		  */
-
 #if 1
-      ASTNode aaa =
-              (any_solved
-               && EQ == it->GetKind()) ?
-              _simp->SimplifyFormula_TopLevel(*it, false) :
-              *it;
-
+      ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->applySubstitutionMapUntilArrays(*it) : *it;
 #else
+          ASTNode aaa = *it;
 
-
-    	ASTNode aaa = *it;
-
-    	if (any_solved && EQ == aaa.GetKind())
+          if (any_solved && EQ == aaa.GetKind())
           {
-            bool done = false;
-            {
-                ASTNodeSet lhs;
-                SetofVarsSeenInTerm(aaa[0], lhs);
+            bool found = false;
 
-                for (ASTNodeSet::const_iterator it = lhs.begin(); it != lhs.end(); it++)
-                  if (_simp->CheckSubstitutionMap(*it))
-                    {
-                      aaa = _simp->applySubstitutionMap(aaa);
-                      done = true;
-                      break;
-                    }
-              }
-            if (!done)
+            ASTNodeSet var;
+            SetofVarsSeenInTerm(aaa[0], var);
+
+            for (ASTNodeSet::const_iterator it = var.begin(); it != var.end(); it++)
+            if (_simp->CheckSubstitutionMap(*it))
               {
-                ASTNodeSet rhs;
-                SetofVarsSeenInTerm(aaa[1], rhs);
-
-                for (ASTNodeSet::const_iterator it = rhs.begin(); it != rhs.end(); it++)
-                  if (_simp->CheckSubstitutionMap(*it))
-                    {
-                      aaa = _simp->applySubstitutionMap(aaa);
-                      done = true;
-                      break;
-                    }
+                found = true;
+                break;
               }
+
+            if (!found)
+              {
+                var.clear();
+                SetofVarsSeenInTerm(aaa[1], var);
+
+                for (ASTNodeSet::const_iterator it = var.begin(); it != var.end(); it++)
+                if (_simp->CheckSubstitutionMap(*it))
+                  {
+                    found = true;
+                    break;
+                  }
+              }
+            if (found)
+              aaa = _simp->applySubstitutionMapUntilArrays(aaa);
           }
+
 #endif
+
 
         //_bm->ASTNodeStats("Printing after calling simplifyformula
         //inside the solver:", aaa);
@@ -804,7 +798,9 @@ namespace BEEV
               }
           }
         if (ASTTrue == aaa)
-        	any_solved=true;
+        	{
+                    any_solved=true;
+        	}
       }
 
     ASTNode evens;
@@ -832,6 +828,10 @@ namespace BEEV
     output = _bm->CreateNode(AND, output, evens);
 
     output = solveForAndOfXOR(output);
+
+    // Imagine in the last conjunct A is replaced by B. But there could
+    // be variable A's in the first conjunct. This gets rid of 'em.
+    output = _simp->applySubstitutionMapUntilArrays(output);
 
     UpdateAlreadySolvedMap(_input, output);
     _bm->GetRunTimes()->stop(RunTimes::BVSolver);

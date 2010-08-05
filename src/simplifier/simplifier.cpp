@@ -155,6 +155,12 @@ namespace BEEV
 	return substitutionMap.applySubstitutionMap(n);
   }
 
+  ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
+  {
+        return substitutionMap.applySubstitutionMapUntilArrays(n);
+  }
+
+
   bool Simplifier::CheckSubstitutionMap(const ASTNode& key)
   {
 	  return substitutionMap.CheckSubstitutionMap(key);
@@ -1719,7 +1725,7 @@ namespace BEEV
 			else
 				output = actualInputterm;
 
-			inputterm = output;
+                       inputterm = output;
 		}
 
 		const ASTVec& children = inputterm.GetChildren();
@@ -2863,12 +2869,13 @@ namespace BEEV
     //memoize
     UpdateSimplifyMap(inputterm, output, false, VarConstMap);
     UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
+
     //cerr << "SimplifyTerm: output" << output << endl;
     // CheckSimplifyInvariant(inputterm,output);
 
-	assert(!output.IsNull());
-	assert(inputterm.GetValueWidth() == output.GetValueWidth());
-	assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
+    assert(!output.IsNull());
+    assert(inputterm.GetValueWidth() == output.GetValueWidth());
+    assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
 
     return output;
   } //end of SimplifyTerm()

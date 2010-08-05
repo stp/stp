@@ -193,7 +193,19 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	ASTNodeMap cache;
-	return replace(n,*SolverMap,cache,bm->defaultNodeFactory);
+	return replace(n,*SolverMap,cache,bm->defaultNodeFactory, false);
+}
+
+ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
+{
+        ASTNodeMap cache;
+        return replace(n,*SolverMap,cache,bm->defaultNodeFactory, true);
+}
+
+ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
+                ASTNodeMap& cache, NodeFactory * nf)
+{
+    return replace(n,fromTo,cache,nf,false);
 }
 
 // NOTE the fromTo map is changed as we traverse downwards.
@@ -203,7 +215,7 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 // will return 5, rather than y.
 
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-		ASTNodeMap& cache, NodeFactory * nf)
+		ASTNodeMap& cache, NodeFactory * nf, bool stopAtArrays)
 {
 
         ASTNodeMap::const_iterator it;
@@ -217,13 +229,13 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 			const ASTNode& r = it->second;
 			assert(r.GetIndexWidth() == n.GetIndexWidth());
 			assert(BVTypeCheck(r));
-			ASTNode replaced = replace(r, fromTo, cache,nf);
+			ASTNode replaced = replace(r, fromTo, cache,nf,stopAtArrays);
 			if (replaced != r)
 				fromTo[n] = replaced;
 
 			return replaced;
 		}
-		ASTNode replaced = replace(it->second, fromTo, cache,nf);
+		ASTNode replaced = replace(it->second, fromTo, cache,nf,stopAtArrays);
 		if (replaced != it->second)
 			fromTo[n] = replaced;
 
@@ -234,11 +246,16 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 	if (n.isConstant() || n.GetKind() == SYMBOL /*|| n.GetKind() == WRITE*/)
 		return n;
 
+         if (stopAtArrays && n.GetType() == ARRAY_TYPE)
+            {
+           return n;
+            }
+
 	ASTVec children;
 	children.reserve(n.GetChildren().size());
 	for (unsigned i = 0; i < n.GetChildren().size(); i++)
 	{
-		children.push_back(replace(n[i], fromTo, cache,nf));
+		children.push_back(replace(n[i], fromTo, cache,nf,stopAtArrays));
 	}
 
 	// This code short-cuts if the children are the same. Nodes with the same children,
