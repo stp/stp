@@ -134,9 +134,8 @@ namespace BEEV
                             bool pushNeg, 
                             ASTNodeMap* VarConstMap=NULL);
 
-    bool
-    hasBeenSimplified(ASTNode n);
 
+    bool hasBeenSimplified(const ASTNode& n);
 
     ASTNode SimplifyTerm(const ASTNode& inputterm, 
                          ASTNodeMap* VarConstMap=NULL);

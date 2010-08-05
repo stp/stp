@@ -1625,9 +1625,10 @@ namespace BEEV
     return nf->CreateTerm(k, a.GetValueWidth(), a, b);
   }
 
-
+  // If a node is not a leaf, it has only been simplified  if it
+  // maps to itself in the simplifyMap.
   bool
-  Simplifier::hasBeenSimplified(ASTNode n)
+  Simplifier::hasBeenSimplified(const ASTNode& n)
   {
     //n has been simplified if, it's a constant:
     if (n.isConstant())
@@ -1640,8 +1641,12 @@ namespace BEEV
     if (n.GetKind() == SYMBOL)
        return true;
 
+    ASTNodeMap::const_iterator it;
     //If it's in the simplification map, it has been simplified.
-    return  (SimplifyMap->find(n) != SimplifyMap->end());
+    if ((it = SimplifyMap->find(n)) == SimplifyMap->end())
+      return false;
+
+    return (it->second == n);
   }
 
   //This function simplifies terms based on their kind
@@ -1656,7 +1661,7 @@ namespace BEEV
 
 	ASTNode inputterm(actualInputterm); // mutable local copy.
 
-    //cout << "SimplifyTerm: input: " << a << endl;
+    //cout << "SimplifyTerm: input: " << actualInputterm << endl;
     // if (!optimize_flag)
     //       {
     //         return inputterm;
@@ -1714,10 +1719,7 @@ namespace BEEV
 			else
 				output = actualInputterm;
 
-			if (inputterm != output) {
-				UpdateSimplifyMap(inputterm, output, false, VarConstMap);
-				inputterm = output;
-			}
+			inputterm = output;
 		}
 
 		const ASTVec& children = inputterm.GetChildren();
@@ -2860,6 +2862,7 @@ namespace BEEV
     	output = SimplifyTerm(output);
     //memoize
     UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+    UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
     //cerr << "SimplifyTerm: output" << output << endl;
     // CheckSimplifyInvariant(inputterm,output);
 
