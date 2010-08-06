@@ -1725,13 +1725,18 @@ namespace BEEV
 			else
 				output = actualInputterm;
 
-                       inputterm = output;
+                       if (inputterm != output)
+                         {
+                             UpdateSimplifyMap(inputterm,output,false);
+                             inputterm = output;
+                         }
 		}
 
 		const ASTVec& children = inputterm.GetChildren();
 		k = inputterm.GetKind();
 
 		// Perform constant propagation if possible.
+		// This should do nothing if the simplifyingnodefactory is used.
 		if (k != BEEV::UNDEFINED && k != BEEV::SYMBOL) {
 			bool allConstant = true;
 
@@ -1755,6 +1760,7 @@ namespace BEEV
     if (pulledUp != inputterm)
       {
         ASTNode r = SimplifyTerm(pulledUp);
+        UpdateSimplifyMap(actualInputterm,r,NULL);
         UpdateSimplifyMap(inputterm,r,NULL);
         return r;
       }
@@ -2464,6 +2470,7 @@ namespace BEEV
                   output = annihilator;
                   //memoize
                   UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+                  UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
                   //cerr << "output of SimplifyTerm: " << output << endl;
                   return output;
                 }
@@ -2479,6 +2486,7 @@ namespace BEEV
               {
             	  output = annihilator;
             	  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+            	  UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
                   return output;
               }
 
@@ -2876,6 +2884,7 @@ namespace BEEV
     assert(!output.IsNull());
     assert(inputterm.GetValueWidth() == output.GetValueWidth());
     assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
+    assert(hasBeenSimplified(output));
 
     return output;
   } //end of SimplifyTerm()
