@@ -226,7 +226,7 @@ namespace BEEV
     	            MINISAT::Var v = it->second;
 
     				if (negate)
-    					file << -(v + 1) << " ";
+    					file << "-" << (v + 1) << " ";
     				else
     					file << (v + 1) << " ";
     			}
