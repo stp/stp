@@ -79,6 +79,7 @@ class BitBlaster {
 	vector<BBNode> pairWiseAdd(stack<BBNode>* products,
 			const int bitWidth);
 
+	vector<BBNode> buildAdditionNetworkResult(stack<BBNode>* products, const int bitWidth);
 
 	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
 

@@ -871,13 +871,25 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::pairWiseAdd(stack<BBNode>* products
 	return prod;
 }
 
-
+/* Cryptominisat2. 5641x5693.smt.   SAT Solving time only!
+ * adder_variant1 = true.    Solving: 12.3s, 12.1s
+ * adder_variant1 = false.   Solving: 26.5s, 26.0s
+ *
+ * Cryptominisat2. mult63bit.smt2.
+ * adder_variant1 = true.    Solving: 8.1s, 8.2s
+ * adder_variant1 = false.   Solving: 11.1s, 11.0s
+ *
+ * Cryptominisat2. conscram2.smt2.
+ * adder_variant1 = true.   Solving:115s, 103s, 303s
+ * adder_variant1 = false.  Solving:181s, 471s, 215s
+ * */
+bool const adder_variant1 = true;
 
 // Use full adders to create an addition network that adds together each of the
 // partial products.
 template <class BBNode, class BBNodeManagerT>
-BBNodeVec buildAdditionNetworkResult(stack<BBNode>* products,
-		const int bitWidth, BBNodeManagerT* nf) {
+BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products,
+		const int bitWidth) {
 	int adderCount = 0;
 
 	// I experimented with sorting the partial products to put the known values together.
@@ -901,10 +913,20 @@ BBNodeVec buildAdditionNetworkResult(stack<BBNode>* products,
 			const BBNode b = products[i].top();
 			products[i].pop();
 
-			BBNode carry = nf->CreateNode(OR, nf->CreateNode(AND, a, b),
-					nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
-			// I tested all 6 ternary XORs, and all 12 2 x 2-arity. The formulae with "a" separate were quickest.
-			BBNode sum = nf->CreateNode(XOR, nf->CreateNode(XOR, c, b), a);
+			BBNode carry, sum;
+
+                        if (adder_variant1)
+                          {
+                            carry = Majority(a, b, c);
+                            sum = nf->CreateNode(XOR, a, b, c);
+                          }
+                        else
+                          {
+                            carry = nf->CreateNode(OR, nf->CreateNode(AND, a, b), nf->CreateNode(AND, b, c), nf->CreateNode(AND,
+                                a, c));
+                            sum = nf->CreateNode(XOR, nf->CreateNode(XOR, c, b), a);
+                          }
+
 			adderCount++;
 
 			if (debug_multiply) {
@@ -1065,7 +1087,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& x, const BB
 		const int bitWidth = x.size();
 		stack<BBNode> products[bitWidth];
 		mult_allPairs(x, y, support,products);
-		return buildAdditionNetworkResult(products,bitWidth,nf);
+		return buildAdditionNetworkResult(products,bitWidth);
 	}
 
 	if (multiplication_variant3) {
@@ -1073,7 +1095,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& x, const BB
 		stack<BBNode> products[bitWidth];
 		mult_Booth(x, y, support,xN,yN,products);
 		//return pairWiseAdd(products,bitWidth);
-		return buildAdditionNetworkResult(products,bitWidth,nf);
+		return buildAdditionNetworkResult(products,bitWidth);
 	}
 
 	FatalError("sda44f");
