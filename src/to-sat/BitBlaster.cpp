@@ -405,7 +405,6 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 		const BBNodeVec& mpcd2 = BBTerm(t1, support);
 		assert(mpcd1.size() == mpcd2.size());
 		//Revereses the order of the nodes w/out the need for temporaries
-		//This is needed because t0 an t1 must be const
 		if ((BVCONST != t0.GetKind()) && (BVCONST == t1.GetKind())) {
 
 			result = BBMult(mpcd2, mpcd1, support,t1,t0);
