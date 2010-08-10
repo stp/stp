@@ -26,9 +26,9 @@ namespace BEEV {
  * BVPLUS or BVXOR (or a BV variable or constant).  A formula (form)
  * represents a boolean value, such as EQ or BVLE.  Bit blasting a
  * term representing an n-bit bitvector with BBTerm yields a vector
- * of n boolean formulas (returning ASTVec).  Bit blasting a formula
- * returns a single boolean formula (type ASTNode).  A bitblasted
- * term is a vector of ASTNodes for formulas.  The 0th element of
+ * of n boolean formulas (returning BBNodeVec).  Bit blasting a formula
+ * returns a single boolean formula (type BBNode).  A bitblasted
+ * term is a vector of BBNodes for formulas.  The 0th element of
  * the vector corresponds to bit 0 -- the low-order bit.
  ********************************************************************/
 
@@ -842,35 +842,6 @@ void pushP(stack<BBNode> *products, const int start, const BBNodeVec& y, const B
 
 const bool debug_multiply = false;
 
-template <class BBNode, class BBNodeManagerT>
-BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::pairWiseAdd(stack<BBNode>* products,
-		const int bitWidth)
-{
-	const BBNode& BBFalse  = nf->getFalse();
-	BBNodeVec prod = BBfill(bitWidth, BBFalse);
-
-	bool finished = false;
-	while (!finished) {
-		finished = true;
-		BBNodeVec a;
-		for (int i = 0; i < bitWidth; i++)
-		{
-			if (products[i].empty())
-				a.push_back(BBFalse);
-			else
-			{
-				BBNode t = products[i].top();
-				a.push_back(t);
-				products[i].pop();
-				finished = false;
-			}
-		}
-		BBPlus2(prod, a, nf->getFalse());
-	}
-
-	return prod;
-}
-
 /* Cryptominisat2. 5641x5693.smt.   SAT Solving time only!
  * adder_variant1 = true.    Solving: 12.3s, 12.1s
  * adder_variant1 = false.   Solving: 26.5s, 26.0s
@@ -938,6 +909,8 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
 				cerr << "Sum" << sum;
 			}
 
+			// I experimented with making products[] a deque and accessing the front and back of the queue.
+			// As a stack is works considerably better.
 			products[i].push(sum);
 			if (i + 1 != bitWidth)
 				products[i + 1].push(carry);
@@ -1094,7 +1067,6 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& x, const BB
 		const int bitWidth = x.size();
 		stack<BBNode> products[bitWidth];
 		mult_Booth(x, y, support,xN,yN,products);
-		//return pairWiseAdd(products,bitWidth);
 		return buildAdditionNetworkResult(products,bitWidth);
 	}
 

@@ -75,10 +75,6 @@ class BitBlaster {
 	void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, stack<BBNode> * products);
 	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support);
 
-
-	vector<BBNode> pairWiseAdd(stack<BBNode>* products,
-			const int bitWidth);
-
 	vector<BBNode> buildAdditionNetworkResult(stack<BBNode>* products, const int bitWidth);
 
 	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
