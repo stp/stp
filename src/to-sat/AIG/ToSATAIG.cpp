@@ -73,6 +73,9 @@ namespace BEEV
       if (bm->UserFlags.output_CNF_flag)
          Cnf_DataWriteIntoFile(cnfData, "output_0.cnf", 0);
 
+      if (bm->UserFlags.output_bench_flag)
+        cerr << "Converting to CNF via ABC's AIG package can't yet print out bench format" << endl;
+
       Cnf_ClearMemory();
       Cnf_DataFree(cnfData);
 
