@@ -1042,33 +1042,105 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 	return prod;
 }
 
+
+  template<class BBNode, class BBNodeManagerT>
+    void
+    BitBlaster<BBNode, BBNodeManagerT>::mult_SortingNetwork(const BBNodeVec& x_i, const BBNodeVec& y_i,
+        BBNodeSet& support, const ASTNode& xN, const ASTNode& yN, stack<BBNode> * products, int i)
+    {
+      const int width = products[i].size();
+      const int bitWidth = xN.GetValueWidth();
+
+      vector<BBNode> sorted(width, nf->getFalse());
+
+      for (int l = 0; l < width; l++)
+        {
+          vector<BBNode> oldSorted(sorted);
+          BBNode c = products[i].top();
+          products[i].pop();
+          sorted[0] = nf->CreateNode(OR, oldSorted[0], c);
+
+          for (int j = 1; j <= std::min(l, width - 1); j++)
+            {
+              sorted[j] = nf->CreateNode(OR, nf->CreateNode(AND, oldSorted[j - 1], c), oldSorted[j]);
+            }
+        }
+
+      for (int k = 0; k < width; k++)
+        assert(!sorted[k].IsNull());
+
+      assert(products[i].size() == 0);
+
+      // Add to next up columns.
+      if (i + 1 != bitWidth)
+        {
+          for (int k = 1; k < width; k += 2)
+            {
+              products[i + 1].push(sorted[k]);
+            }
+        }
+
+      BBNode resultNode = nf->getFalse();
+
+      // Constrain to equal the result
+      for (int k = 1; k < width; k += 2)
+        {
+          BBNode part = nf->CreateNode(AND, nf->CreateNode(NOT, sorted[k]), sorted[k - 1]);
+          resultNode = nf->CreateNode(OR, resultNode, part);
+        }
+
+      // constraint the all '1's case.
+      if (width % 2 == 1)
+        resultNode = nf->CreateNode(OR, resultNode, sorted.at(width - 1));
+
+      products[i].push(resultNode);
+    }
+
+
 // ONLY SELECT ONE OF THESE!
 const bool multiplication_variant1 = false; // multiplication with repeat addition.
 const bool multiplication_variant2 = false; // multiplication with partial products.
 const bool multiplication_variant3 = true; // multiplication with booth recoding.
+const bool multiplication_variant4 = false;  // multiplication via sorting networks.
+
 
 // Multiply two bitblasted numbers
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& x, const BBNodeVec& y,
 		BBNodeSet& support, const ASTNode& xN, const ASTNode& yN) {
 
+        const int bitWidth = x.size();
+
 	if (multiplication_variant1) {
 		return mult_normal(x, y, support);
 	}
 
+	stack<BBNode> products[bitWidth];
+
 	if (multiplication_variant2) {
-		const int bitWidth = x.size();
-		stack<BBNode> products[bitWidth];
 		mult_allPairs(x, y, support,products);
 		return buildAdditionNetworkResult(products,bitWidth);
 	}
 
 	if (multiplication_variant3) {
-		const int bitWidth = x.size();
-		stack<BBNode> products[bitWidth];
 		mult_Booth(x, y, support,xN,yN,products);
 		return buildAdditionNetworkResult(products,bitWidth);
 	}
+
+        if (multiplication_variant4)
+        {
+          mult_Booth(x, y, support,xN,yN,products);
+          for (int i = 0; i < bitWidth; i++)
+            {
+              if (products[i].size() < 6)
+                {
+                    mult_SortingNetwork(x, y, support, xN, yN, products, i);
+                    assert(products[i].size() == 1);
+                }
+            }
+          return buildAdditionNetworkResult(products, bitWidth);
+        }
+
 
 	FatalError("sda44f");
 }
