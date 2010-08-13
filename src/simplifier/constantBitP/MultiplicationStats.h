@@ -112,7 +112,7 @@ namespace simplifier
       void
       print()
       {
-        ostream& log = std::cout;
+        ostream& log = std::cerr;
 
         log << x << " * " << y << "=" << r << endl;
 

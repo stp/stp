@@ -210,6 +210,7 @@ namespace BEEV
     ASTNode FlattenAndOr(const ASTNode& a);
 
     ASTNode CombineLikeTerms(const ASTNode& a);
+    ASTNode CombineLikeTerms(const ASTVec& a);
 
     ASTNode LhsMinusRhs(const ASTNode& eq);
 

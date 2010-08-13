@@ -1884,10 +1884,11 @@ namespace BEEV
                   else // pluss.
                     {
                       assert(BVPLUS == k);
-                      SortByArith(nonconstkids);
-                      output = nf->CreateTerm(k, inputValueWidth, nonconstkids);
-                      output = Flatten(output);
-                      output = CombineLikeTerms(output);
+                      //SortByArith(nonconstkids);
+                      //output = nf->CreateTerm(k, inputValueWidth, nonconstkids);
+                      //output = Flatten(output);
+                      //output = CombineLikeTerms(output);
+                      output = CombineLikeTerms(nonconstkids);
                   }
                 }
               else
@@ -2926,8 +2927,13 @@ namespace BEEV
         return output;
       }
 
-    const ASTVec& c = a.GetChildren();
-    //map from variables to vector of constants
+    return CombineLikeTerms(a.GetChildren());
+  }
+
+    ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
+    {
+      ASTNode output;
+      //map from variables to vector of constants
     ASTNodeToVecMap vars_to_consts;
     //vector to hold constants
     ASTVec constkids;

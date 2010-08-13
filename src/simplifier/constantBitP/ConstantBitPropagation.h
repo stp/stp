@@ -38,7 +38,6 @@ namespace simplifier
       Result status;
       WorkList *workList;
       Dependencies * dependents;
-      MultiplicationStatsMap* msm;
 
       bool topFixed;
 
@@ -56,6 +55,7 @@ namespace simplifier
 
 public:
       NodeToFixedBitsMap* fixedMap;
+      MultiplicationStatsMap* msm;
 
       bool isUnsatisfiable()
       {

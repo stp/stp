@@ -164,8 +164,7 @@ namespace simplifier
       fixedMap = new NodeToFixedBitsMap(1000); // better to use the function that returns the number of nodes.. whatever that is.
       workList = new WorkList(top);
       dependents = new Dependencies(top); // List of the parents of a node.
-      msm = NULL;
-      //msm = new MultiplicationStatsMap();
+      msm = new MultiplicationStatsMap();
 
 
       // not fixing the topnode.
@@ -689,11 +688,10 @@ namespace simplifier
       // safe approximation to no overflow multiplication.
       if (k == BVMULT)
         {
-          //MultiplicationStats ms;
-          //result = bvMultiplyBothWays(children, output, n.GetSTPMgr(),&ms);
-          result = bvMultiplyBothWays(children, output, n.GetSTPMgr());
-          //		if (CONFLICT != result)
-          //			msm->map[n] = ms;
+          MultiplicationStats ms;
+          result = bvMultiplyBothWays(children, output, n.GetSTPMgr(),&ms);
+          		if (CONFLICT != result)
+          			msm->map[n] = ms;
           mult_like=true;
         }
       else if (k == BVDIV)
