@@ -163,7 +163,6 @@ bool containsArrayOps(const ASTNode&n)
 
 
   // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
-  // This is local to this file.
   ASTVec FlattenKind(Kind k, const ASTVec &children)
   {
     ASTVec flat_children;
@@ -172,9 +171,10 @@ bool containsArrayOps(const ASTNode&n)
     for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
       {
         Kind ck = it->GetKind();
-        const ASTVec &gchildren = it->GetChildren();
         if (k == ck)
           {
+            const ASTVec gchildren = FlattenKind(k,it->GetChildren());
+            //const ASTVec gchildren =  it->GetChildren();
             // append grandchildren to children
             flat_children.insert(flat_children.end(),
                                  gchildren.begin(), gchildren.end());
