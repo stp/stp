@@ -70,17 +70,26 @@ class BitBlaster {
 
 	// Multiply.
 	vector<BBNode> BBMult(const vector<BBNode>& x, const vector<BBNode>& y,
-			set<BBNode>& support, const ASTNode& xN, const ASTNode& yN);
+			set<BBNode>& support, const ASTNode& n);
 	void mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, stack<BBNode> * products);
 	void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, stack<BBNode> * products);
 	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support);
 
-        void mult_SortingNetwork(const vector<BBNode>& x_i, const vector<BBNode>& y_i,
-            set<BBNode>& support, const ASTNode& xN, const ASTNode& yN, stack<BBNode> * products, int i);
+        vector<BBNode> multWithBounds(const ASTNode&n, stack<BBNode>* products, set<BBNode>& toConjoinToTop);
 
-	vector<BBNode> buildAdditionNetworkResult(stack<BBNode>* products, const int bitWidth);
+
+        void
+        mult_SortingNetwork(
+            set<BBNode>& support, const int bitWidth, const int width, stack<BBNode> * products, int i, const int minTrue, const int maxTrue );
+
+
+	void buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support, const int bitWidth, const int index, const int minTrue, const int maxTrue );
+	vector<BBNode> buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support, int bitWidth);
 
 	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
+
+	void
+	  checkFixed(const vector<BBNode>& v, const ASTNode& n);
 
 	// AND each bit of vector y with single bit b and return the result.
 	// (used in BBMult)
