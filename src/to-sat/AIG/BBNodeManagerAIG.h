@@ -141,7 +141,6 @@ public:
         toCNF(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar)
         {
           assert(cnfData == NULL);
-          assert(nodeToVar.size() ==0);
 
           Aig_ObjCreatePo(aigMgr, top.n);
           Aig_ManCleanup( aigMgr); // remove nodes not connected to the PO.
@@ -157,23 +156,23 @@ public:
 
           assert(nodeToVar.size() ==0);
 
+          // Each symbol maps to a vector of CNF variables.
           for (it = symbolToBBNode.begin(); it != symbolToBBNode.end(); it++)
             {
               const ASTNode& n = it->first;
               const vector<BBNodeAIG> &b = it->second;
-              if (nodeToVar.find(n) == nodeToVar.end())
-                {
-                  const int width = (n.GetType() == BOOLEAN_TYPE) ? 1: n.GetValueWidth();
-                  vector<unsigned> v(width, ~((unsigned) 0));
-                  nodeToVar.insert(make_pair(n, v));
-                }
+              assert (nodeToVar.find(n) == nodeToVar.end());
 
-              vector<unsigned>& v = nodeToVar[n];
+              const int width = (n.GetType() == BOOLEAN_TYPE) ? 1: n.GetValueWidth();
+              vector<unsigned> v(width, ~((unsigned) 0));
+
               for (unsigned i = 0; i < b.size(); i++)
                 {
                   if (!b[i].IsNull())
-                  v[i] = cnfData->pVarNums[b[i].n->Id];
+                    v[i] = cnfData->pVarNums[b[i].n->Id];
                 }
+
+              nodeToVar.insert(make_pair(n, v));
             }
           assert(cnfData != NULL);
         }
