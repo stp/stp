@@ -76,6 +76,8 @@ class BitBlaster {
 	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support);
 
         vector<BBNode> multWithBounds(const ASTNode&n, stack<BBNode>* products, set<BBNode>& toConjoinToTop);
+        bool
+        statsFound(const ASTNode& n);
 
 
         void

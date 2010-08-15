@@ -201,7 +201,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
         typename BBNodeVecMap::iterator it = BBTermMemo.find(term);
 	if (it != BBTermMemo.end()) {
                 // Constant bit propagation may have updated something.
-                //updateTerm(term,it->second,support);
+                updateTerm(term,it->second,support);
                 return it->second;
 	}
 
@@ -524,8 +524,8 @@ const BBNode BitBlaster<BBNode,BBNodeManagerT>::BBForm(const ASTNode& form)
           cb->propagate();
         }
 
-    BBNodeSet support;
-    BBNode r= BBForm(form,support);
+      BBNodeSet support;
+      BBNode r= BBForm(form,support);
 
     vector<BBNode> v;
     v.insert(v.end(), support.begin(), support.end());
@@ -852,6 +852,7 @@ template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
                 const int bitWidth)
 {
+
   BBNodeVec results;
   for (int i = 0; i < bitWidth; i++)
     {
@@ -871,7 +872,6 @@ template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
 		const int bitWidth, const int i, const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 )
 {
-
       while (products[i].size() >= 2) {
               BBNode c;
 
@@ -910,61 +910,84 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
                       cerr << "Sum" << sum;
               }
 
-              // I experimented with making products[] a deque and accessing the front and back of the queue.
-              // As a stack is works considerably better.
-              products[i].push(sum);
-
              // If we know the carry must be less than 2.
              // Constraint each of the carries to zero.
-             if (maxTrue < 2)
+             if (conjoin_to_top && maxTrue ==0)
+               {
+                     support.insert(nf->CreateNode(NOT, a));
+                     support.insert(nf->CreateNode(NOT, b));
+                     support.insert(nf->CreateNode(NOT, c));
+               }
+             else
+               {
+               // I experimented with making products[] a deque and accessing the front and back of the queue.
+               // As a stack is works considerably better.
+               products[i].push(sum);
+               }
+             if (conjoin_to_top && maxTrue ==1)
              {
-                     support.insert(nf->CreateNode(NOT, carry));
+               support.insert(nf->CreateNode(NOT, carry));
              }
              else if (i + 1 != bitWidth)
+             {
                      products[i + 1].push(carry);
+             }
       }
 
       assert(1==products[i].size());
 }
 
 
-const bool debug_bounds = true;
+const bool debug_bounds = false;
+
+  template<class BBNode, class BBNodeManagerT>
+    bool
+    BitBlaster<BBNode, BBNodeManagerT>::statsFound(const ASTNode& n)
+    {
+      if (NULL == cb)
+        return false;
+
+      if (NULL == cb->msm)
+        return false;
+
+      simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::const_iterator it;
+      it = cb->msm->map.find(n);
+      return (it != cb->msm->map.end());
+    }
 
 // Make sure x and y are the parameters in the correct order. THIS ISNT COMMUTATIVE.
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, stack<BBNode>* products, BBNodeSet& toConjoinToTop)
 {
-        bool statsFound = false;
+
         simplifier::constantBitP::MultiplicationStats ms;
 
         const int bitWidth = n.GetValueWidth();
 
+        assert(statsFound(n));
+
         assert (NULL != cb);
         assert (NULL != cb->msm);
-        {
-                simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::const_iterator
-                                it;
-                it = cb->msm->map.find(n);
-                if (it != cb->msm->map.end())
-                {
-                        //it->second->print();
-                        ms = it->second;
-                        statsFound = true;
 
-                        assert(ms.x.getWidth() == ms.y.getWidth());
-                        assert(ms.r.getWidth() == ms.y.getWidth());
-                        assert(ms.r.getWidth() == (int)ms.bitWidth);
-                        assert(ms.r.getWidth() == bitWidth);
-                }
-        }
+            simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::const_iterator it;
+            it = cb->msm->map.find(n);
+            if (it != cb->msm->map.end())
+              {
+                //it->second->print();
+                ms = it->second;
 
-        if (!statsFound)
-          return buildAdditionNetworkResult(products, toConjoinToTop, bitWidth);
+
+                assert(ms.x.getWidth() == ms.y.getWidth());
+                assert(ms.r.getWidth() == ms.y.getWidth());
+                assert(ms.r.getWidth() == (int)ms.bitWidth);
+                assert(ms.r.getWidth() == bitWidth);
+
+              }
 
         // If all of the partial products in the column must be zero, then replace
         for (int i = 0; i < bitWidth; i++)
         {
-          if (ms.columnH[i] == 0)
+          if (conjoin_to_top && ms.columnH[i] == 0)
             {
               while (products[i].size() > 0)
                 {
@@ -986,13 +1009,12 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, sta
         for (int i = 0; i < bitWidth; i++)
         {
                 if (debug_bounds)
-                        cerr << "  " << products[i].size();
-                if (statsFound)
-                {
+                  {
+                  cerr << "  " << products[i].size();
                         cerr << "["<< ms.columnL[i] << ":"<< ms.columnH[i] << "]["<< ms.sumL[i] << ":" << ms.sumH[i] << "]";
                 }
 
-                if ((products[i].size() > ms.sumH[i]) && ms.sumH[i] < 6)
+                if ((products[i].size() > ms.sumH[i]) && ms.sumH[i] < 10)
                 {
                         if (debug_bounds)
                                 cerr << "S";
@@ -1176,16 +1198,19 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 
       assert(products[i].size() == 0);
 
-      for (int j = 0; j < minTrue; j++)
+      if (conjoin_to_top)
         {
-          support.insert(sorted[j]);
-          sorted[j] = BBTrue;
-        }
+          for (int j = 0; j < minTrue; j++)
+            {
+              support.insert(sorted[j]);
+              sorted[j] = BBTrue;
+            }
 
-      for (int j = width-1; j >= maxTrue; j--)
-        {
-          support.insert(nf->CreateNode(NOT,sorted[j]));
-          sorted[j] = BBFalse;
+          for (int j = width - 1; j >= maxTrue; j--)
+            {
+              support.insert(nf->CreateNode(NOT, sorted[j]));
+              sorted[j] = BBFalse;
+            }
         }
 
       // Add to next up columns.
@@ -1310,10 +1335,18 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
         return buildAdditionNetworkResult(products,support, bitWidth);
       }
 
-      if (multiplication_variant5) {
-              mult_allPairs(x, y, support,products);
-              return multWithBounds(n,products,support);
-      }
+      if (multiplication_variant5)
+        {
+
+          if (!statsFound(n))
+            {
+              mult_Booth(_x, _y, support, n[0], n[1], products);
+              return buildAdditionNetworkResult(products, support, bitWidth);
+            }
+
+          mult_allPairs(x, y, support, products);
+          return multWithBounds(n, products, support);
+        }
 
       FatalError("sda44f");
 }
