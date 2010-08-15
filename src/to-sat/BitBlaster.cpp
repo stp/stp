@@ -98,7 +98,7 @@ bool BitBlaster<BBNode,BBNodeManagerT>::update(const ASTNode&n, const int i, sim
 {
         if (b->isFixed(i) && (!(bb == BBTrue || bb == BBFalse)))
         {
-                //We have a fixed bit, but the bitblasted values aren't constant true or false.
+          //We have a fixed bit, but the bitblasted values aren't constant true or false.
             if (conjoin_to_top && (fixedFromBottom.find(n) == fixedFromBottom.end()))
             {
               if (b->getValue(i))
@@ -193,7 +193,25 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& b
                 cb->propagate();
                 //cerr << "##!!" << endl;
         }
+
+        if (!cb->isUnsatisfiable())
+          for (int i = 0; i < (int) bb.size(); i++)
+          {
+            if (b->isFixed(i) && b->getValue(i))
+              assert(bb[i] == BBTrue);
+
+            if (b->isFixed(i) && !b->getValue(i))
+              assert(bb[i] == BBFalse);
+
+            if (bb[i] == BBFalse)
+              assert( b->isFixed(i) && !b->getValue(i));
+
+            if (bb[i] == BBTrue)
+              assert( b->isFixed(i) && b->getValue(i));
+          }
 }
+
+
 
 
 template <class BBNode, class BBNodeManagerT>
@@ -399,8 +417,9 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 		assert(BVTypeCheck(term));
 		assert(term.Degree() == 2);
 
-		const BBNodeVec& mpcd1 = BBTerm(term[0], support);
-		const BBNodeVec& mpcd2 = BBTerm(term[1], support);
+               const BBNodeVec& mpcd1 = BBTerm(term[0], support);
+               const BBNodeVec& mpcd2 = BBTerm(term[1], support);
+
 		assert(mpcd1.size() == mpcd2.size());
 		result = BBMult(mpcd1, mpcd2, support,term);
 		break;
@@ -1245,6 +1264,9 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
   BitBlaster<BBNode,BBNodeManagerT>::checkFixed(const BBNodeVec& v, const ASTNode& n)
   {
     if (cb == NULL)
+      return;
+
+    if (cb->isUnsatisfiable())
       return;
 
     if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end())
