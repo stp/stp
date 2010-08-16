@@ -59,6 +59,9 @@ public:
     // If the pointer is odd. Then it's the NOT of the pointer one less.
 	Aig_Obj_t * n;
 
+	// After dag aware rewriting the symbol stays at the same position in the vector of PIs.
+	// To get it's CNF variable number we get the node at the same position.
+	int symbol_index;
 
 	BBNodeAIG()
 	{
@@ -100,12 +103,10 @@ public:
 		return n < other.n;
 	}
 
-
-
 	void print() const
-{
+	{
           print(n);
-}
+	}
 
 };
 }

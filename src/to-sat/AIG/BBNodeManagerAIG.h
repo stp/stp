@@ -107,75 +107,7 @@ public:
                 return BBNodeAIG(Aig_ManConst0(aigMgr));
         }
 
-        void toCNF_experimental(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar)
-        {
-          //cerr << "SAFDASDF";
-
-          // copied from darScript.c: Aig_Man_t * Dar_ManRewriteDefault( Aig_Man_t * pAig )
-          /*
-           Dar_LibStart();
-           Aig_Man_t * pTemp1, *pTemp2;
-           Dar_RwrPar_t Pars, * pPars = &Pars;
-           Dar_ManDefaultRwrParams( pPars );
-           Dar_ManRewrite( aigMgr, pPars );
-           Aig_ManCheck(aigMgr); // check that AIG looks ok.
-           Dar_LibStop();
-           */
-
-          //assert(Aig_ManPoNum(aigMgr) == 1);
-
-          //Aig_NtkReassignIds( aigMgr );
-          // fix the levels
-          //Aig_ManUpdateLevel( aigMgr, Aig_ManPo(aigMgr,0));
-          //Aig_ManVerifyLevel( aigMgr );
-
-
-          // assert(Aig_ManPoNum(aigMgr) == 1);
-
-          //Dar_RwrPar_t  pPars;
-          //Dar_ManDefaultRwrParams( &pPars );
-          //Dar_ManRewrite( aigMgr, &pPars );
-        }
-
-        void
-        toCNF(BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar)
-        {
-          assert(cnfData == NULL);
-
-          Aig_ObjCreatePo(aigMgr, top.n);
-          Aig_ManCleanup( aigMgr); // remove nodes not connected to the PO.
-          Aig_ManCheck(aigMgr); // check that AIG looks ok.
-
-          assert(Aig_ManPoNum(aigMgr) == 1);
-
-          // Cnf_Derive gives errors sometimes.
-          //cnfData = Cnf_DeriveSimple(aigMgr, 0);
-          cnfData = Cnf_Derive(aigMgr, 0);
-
-          BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
-
-          assert(nodeToVar.size() ==0);
-
-          // Each symbol maps to a vector of CNF variables.
-          for (it = symbolToBBNode.begin(); it != symbolToBBNode.end(); it++)
-            {
-              const ASTNode& n = it->first;
-              const vector<BBNodeAIG> &b = it->second;
-              assert (nodeToVar.find(n) == nodeToVar.end());
-
-              const int width = (n.GetType() == BOOLEAN_TYPE) ? 1: n.GetValueWidth();
-              vector<unsigned> v(width, ~((unsigned) 0));
-
-              for (unsigned i = 0; i < b.size(); i++)
-                {
-                  if (!b[i].IsNull())
-                    v[i] = cnfData->pVarNums[b[i].n->Id];
-                }
-
-              nodeToVar.insert(make_pair(n, v));
-            }
-          assert(cnfData != NULL);
-        }
+        void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar, const UserDefinedFlags& uf);
 
         // The same symbol always needs to return the same AIG node,
         // if it doesn't you will get the wrong answer.
@@ -201,7 +133,7 @@ public:
                         return it->second[i];
 
                 it->second[i] = BBNodeAIG(Aig_ObjCreatePi(aigMgr));
-
+                it->second[i].symbol_index = aigMgr->vPis->nSize-1;
                 return it->second[i];
         }
 

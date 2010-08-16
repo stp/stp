@@ -117,6 +117,8 @@ namespace BEEV
 
     bool exit_after_CNF;
 
+    bool enable_AIG_rewrites_flag;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -229,6 +231,8 @@ namespace BEEV
       cBitP_propagateForDivisionByZero =true;
 
       exit_after_CNF=false;
+
+      enable_AIG_rewrites_flag = false;
 
     } //End of constructor for UserDefinedFlags
 
