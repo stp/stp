@@ -179,35 +179,36 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& b
                 b = it->second;
 
         assert(b != NULL);
+        FixedBits old(*b);
 
         bool changed = false;
         for (int i = 0; i < (int)bb.size(); i++)
                 if(update(n,i, b, bb[i], support))
                   changed = true; // don't break, we want to run update(..) on each bit.
         if (changed) {
-                //cerr <<  "NN" << n.GetNodeNum() << endl;
-                //cerr << *fixedBits;
                 cb->scheduleNode(n);
                 cb->scheduleUp(n);
-                //cerr << "##!" << endl;
                 cb->propagate();
-                //cerr << "##!!" << endl;
         }
 
-        if (!cb->isUnsatisfiable())
+        //If it's changed, the propagation may have caused new bits to be fixed.
+        if (changed && !FixedBits::equals(*b,old))
+          {
+          updateTerm(n,bb,support);
+          return;
+          }
+
+        // There may be a conflict between the AIGs and the constant bits (if the problem is unsatisfiable).
+        // So we can't ensure that if one is fixed to true (say), that the other should be true also.
+
+         if (!cb->isUnsatisfiable())
           for (int i = 0; i < (int) bb.size(); i++)
           {
-            if (b->isFixed(i) && b->getValue(i))
-              assert(bb[i] == BBTrue);
+            if (b->isFixed(i))
+              assert(bb[i] == BBTrue || bb[i] == BBFalse);
 
-            if (b->isFixed(i) && !b->getValue(i))
-              assert(bb[i] == BBFalse);
-
-            if (bb[i] == BBFalse)
-              assert( b->isFixed(i) && !b->getValue(i));
-
-            if (bb[i] == BBTrue)
-              assert( b->isFixed(i) && b->getValue(i));
+            if (bb[i] == BBFalse || bb[i] == BBTrue)
+              assert( b->isFixed(i));
           }
 }
 
@@ -417,8 +418,9 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, B
 		assert(BVTypeCheck(term));
 		assert(term.Degree() == 2);
 
-               const BBNodeVec& mpcd1 = BBTerm(term[0], support);
+               BBNodeVec mpcd1 = BBTerm(term[0], support);
                const BBNodeVec& mpcd2 = BBTerm(term[1], support);
+               updateTerm(term[0],mpcd1,support);
 
 		assert(mpcd1.size() == mpcd2.size());
 		result = BBMult(mpcd1, mpcd2, support,term);
@@ -1288,7 +1290,8 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
                       {
                         cerr << *b;
                         cerr << i << endl;
-                        cerr << n;
+                        cerr << n ;
+                        cerr <<( v[i] == BBTrue) << endl;
                         //v2->print();
                       }
                   }
