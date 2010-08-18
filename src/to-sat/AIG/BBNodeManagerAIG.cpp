@@ -28,10 +28,24 @@ namespace BEEV
           Aig_Man_t * pTemp;
           Dar_RwrPar_t Pars, * pPars = &Pars;
           Dar_ManDefaultRwrParams( pPars );
-          //pPars->fUpdateLevel =0;
-          //pPars->fUseZeros = 1;
 
-          for (int i=0; i < 3;i++)
+          // Assertion errors occur with this enabled.
+          // pPars->fUseZeros = 1;
+
+          // For mul63bit.smt2 with iterations =3 & nCutsMax = 8
+          // CNF generation was taking 139 seconds, solving 10 seconds.
+
+          // With nCutsMax =2, CNF generation takes 16 seconds, solving 10 seconds.
+          // The rewriting doesn't remove as many nodes of course..
+          int iterations = 3;
+          if (nodeCount > 1000000)
+          {
+            iterations =1;
+            pPars->nCutsMax=2;
+          }
+
+
+          for (int i=0; i < iterations;i++)
           {
             aigMgr = Aig_ManDup( pTemp = aigMgr, 0 );
             Aig_ManStop( pTemp );
