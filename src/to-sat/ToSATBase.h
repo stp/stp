@@ -38,7 +38,7 @@ namespace BEEV
     void PrintOutput(SOLVER_RETURN_TYPE ret);
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
-    virtual bool CallSAT(MINISAT::Solver& SatSolver, const ASTNode& input) =0;
+    virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input) =0;
 
     virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap()= 0;
 

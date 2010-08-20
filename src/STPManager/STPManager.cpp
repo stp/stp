@@ -8,10 +8,11 @@
  ********************************************************************/
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#define __STDC_FORMAT_MACROS
+#ifndef __STDC_FORMAT_MACROS
+  #define __STDC_FORMAT_MACROS
+#endif
 #include <inttypes.h>
 #include <cmath>
-#include "../sat/sat.h"
 #include "../STPManager/STPManager.h"
 
 namespace BEEV
@@ -637,25 +638,6 @@ namespace BEEV
       newn += NodeSize(*it);
     return newn;
   }
-
-  // GLOBAL FUNCTION: Prints statistics from the MINISAT Solver
-  void STPMgr::PrintStats(MINISAT::Solver& s)
-  {
-    if (!UserFlags.stats_flag)
-      return;
-    double cpu_time = MINISAT::cpuTime();
-    uint64_t mem_used = MINISAT::memUsed();
-    printf("restarts              : %"PRIu64"\n",                      s.starts);
-    printf("conflicts             : %"PRIu64"   (%.0f /sec)\n",        s.conflicts   , s.conflicts   /cpu_time);
-    printf("decisions             : %"PRIu64"   (%.0f /sec)\n",        s.decisions   , s.decisions   /cpu_time);
-    printf("propagations          : %"PRIu64"   (%.0f /sec)\n",        s.propagations, s.propagations/cpu_time);
-    printf("conflict literals     : %"PRIu64"   (%4.2f %% deleted)\n", s.tot_literals,
-            (s.max_literals - s.tot_literals)*100 / (double)s.max_literals);
-    if (mem_used != 0)
-        printf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
-    printf("CPU time              : %g s\n", cpu_time);
-  } //end of PrintStats()
-
 
   //Create a new variable of ValueWidth 'n'
   ASTNode STPMgr::NewVar(unsigned int n)

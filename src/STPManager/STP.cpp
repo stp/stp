@@ -12,6 +12,9 @@
 #include "../to-sat/AIG/ToSATAIG.h"
 #include "../simplifier/constantBitP/ConstantBitPropagation.h"
 #include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
+#include "../sat/SimplifyingMinisat.h"
+#include "../sat/MinisatCore.h"
+#include "../sat/CryptoMinisat.h"
 
 namespace BEEV {
 
@@ -25,30 +28,32 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     
     //solver instantiated here
-#if defined CRYPTOMINISAT2
-    MINISAT::Solver NewSolver;
+//#if defined CRYPTOMINISAT2
+    //MINISAT::Solver NewSolver;
 
-    if(bm->UserFlags.print_cnf_flag)
-      {
-	NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
-      }
-#endif
+    //if(bm->UserFlags.print_cnf_flag)
+      //{
+	//NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
+      //}
+//#endif
 
-#if defined CORE
-	MINISAT::Solver *newS;
+
+    SATSolver *newS;
     if (bm->UserFlags.solver_to_use == UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER)
-		newS = new MINISAT::SimpSolver();
-    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
-		newS = new MINISAT::Solver();
+		newS = new SimplifyingMinisat();
+    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::CRYPTOMINISAT_SOLVER)
+                    newS = new CryptoMinisat();
     else
-    	FatalError("unknown option");
+      newS = new MinisatCore<Minisat::Solver>();
 
-    MINISAT::Solver& NewSolver = *newS;
-#endif
+
+
+    SATSolver& NewSolver = *newS;
+
 
     if(bm->UserFlags.stats_flag)
       {
-	NewSolver.verbosity = 1;
+	NewSolver.setVerbosity(1);
       }
     
 	SOLVER_RETURN_TYPE result;
@@ -63,9 +68,7 @@ namespace BEEV {
 			      original_input, original_input);
       }
 
-#if defined CORE
     delete newS;
-#endif
 
     return result;
 
@@ -74,7 +77,7 @@ namespace BEEV {
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
   //if returned 0 then input is INVALID if returned 1 then input is
   //VALID if returned 2 then UNDECIDED
-  SOLVER_RETURN_TYPE STP::TopLevelSTPAux(MINISAT::Solver& NewSolver,
+  SOLVER_RETURN_TYPE STP::TopLevelSTPAux(SATSolver& NewSolver,
 					 const ASTNode& modified_input,
 					 const ASTNode& original_input)
   {
@@ -361,7 +364,7 @@ namespace BEEV {
   //UserGuided abstraction refinement
   SOLVER_RETURN_TYPE
   STP::
-  UserGuided_AbsRefine(MINISAT::Solver& NewSolver,
+  UserGuided_AbsRefine(SATSolver& NewSolver,
 		       const ASTNode& original_input)
   {
     ASTVec v = bm->GetAsserts_WithKey(0);

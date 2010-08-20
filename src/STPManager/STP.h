@@ -83,12 +83,12 @@ namespace BEEV
     // returns VALID, else returns INVALID. Automatically constructs
     // counterexample for invalid queries, and prints them upon
     // request.
-    SOLVER_RETURN_TYPE TopLevelSTPAux(MINISAT::Solver& NewSolver,
+    SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
 				      const ASTNode& modified_input,
 				      const ASTNode& original_input);
 
     SOLVER_RETURN_TYPE
-    UserGuided_AbsRefine(MINISAT::Solver& SatSolver,
+    UserGuided_AbsRefine(SATSolver& SatSolver,
 			 const ASTNode& original_input);
          
     void ClearAllTables(void)

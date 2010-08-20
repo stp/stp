@@ -9,15 +9,6 @@
 #ifndef USEFULDEFS_H
 #define USEFULDEFS_H
 
-#ifndef CRYPTOMINISAT2
-#ifndef CORE
-#ifndef SIMP
-#error  "A SAT solver must be specified."
-#endif
-#endif
-#endif
-
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -59,7 +50,6 @@
 
 using namespace std;
 namespace BEEV {
-  using namespace MINISAT;
 #ifdef EXT_HASH_MAP
   using namespace __gnu_cxx;
 #endif
@@ -128,7 +118,7 @@ namespace BEEV {
 #else
   typedef HASHMAP<const char*,
                   int,
-                  hash<char *>,
+                  BEEV::hash<char *>,
                   eqstr> function_counters;
 #endif
 }; //end of namespace

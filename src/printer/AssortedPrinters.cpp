@@ -9,10 +9,11 @@
 
 #include "printers.h"
 #include "AssortedPrinters.h"
-#include "../sat/sat.h"
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#define __STDC_FORMAT_MACROS
+#ifndef __STDC_FORMAT_MACROS
+  #define __STDC_FORMAT_MACROS
+#endif
 #include <inttypes.h>
 //#undef __STDC_FORMAT_MACROS
 

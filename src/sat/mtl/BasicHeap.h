@@ -20,9 +20,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef BasicHeap_h
 #define BasicHeap_h
 
-#include "Vec.h"
+#include "../Vec.h"
 
-namespace MINISAT {
+namespace Minisat {
 
 //=================================================================================================
 // A heap implementation with support for decrease/increase key.

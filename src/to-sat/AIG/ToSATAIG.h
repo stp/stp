@@ -60,7 +60,7 @@ namespace BEEV
     }
 
     // Can not be used with abstraction refinement.
-    bool  CallSAT(MINISAT::Solver& satSolver, const ASTNode& input);
+    bool  CallSAT(SATSolver& satSolver, const ASTNode& input);
 
   };
 }

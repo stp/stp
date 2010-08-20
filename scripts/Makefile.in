@@ -22,16 +22,7 @@ HEADERS=$(SRC)/c_interface/*.h
 .PHONY: all
 all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc
 
-ifdef CRYPTOMINISAT2
-	$(MAKE) -C $(SRC)/sat cryptominisat2
-endif
-ifdef CORE
 	$(MAKE) -C $(SRC)/sat core
-endif
-ifdef SIMP
-	$(MAKE) -C $(SRC)/sat simp
-endif
-
 	$(MAKE) -C $(SRC)/parser
 	$(MAKE) -C $(SRC)/main
 	$(AR) rc libstp.a  $(SRC)/AST/*.o \
@@ -42,6 +33,9 @@ endif
 			   $(SRC)/to-sat/*.o \
 		       $(SRC)/to-sat/AIG/*.o  \
 			   $(SRC)/sat/*.o \
+			   $(SRC)/sat/core/*.o? \
+			   $(SRC)/sat/simp/*.o? \
+			   $(SRC)/sat/utils/*.o \
 			   $(SRC)/simplifier/*.o  \
 		       $(SRC)/simplifier/constantBitP/*.o  \
 			   $(SRC)/extlib-constbv/*.o \

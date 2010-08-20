@@ -61,7 +61,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile = NULL;
@@ -105,6 +105,9 @@ int main(int argc, char ** argv) {
   helpstring +=
     "-c  : construct counterexample\n";
   helpstring +=  
+      "--cryptominisat : use cryptominisat2 as the solver\n";
+
+  helpstring +=
     "-d  : check counterexample\n";
 
 #ifdef WITHCBITP
@@ -129,6 +132,9 @@ int main(int argc, char ** argv) {
   helpstring +=  
     "-m  : use the SMTLIB1 parser\n";
 
+  helpstring +=
+      "--minisat : use minisat 2.2 as the solver\n";
+
   helpstring +=  "--output-CNF : save the CNF into output.cnf\n";
   helpstring +=  "--output-bench : save in ABC's bench format to output.bench\n";
 
@@ -151,10 +157,8 @@ int main(int argc, char ** argv) {
     "-r  : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  
     "-s  : print function statistics\n";
-#if !defined CRYPTOMINISAT2
 helpstring +=
-  "--simplifying-minisat : use simplifying-minisat rather than minisat\n";
-#endif
+  "--simplifying-minisat : use simplifying-minisat 2.2 as the solver\n";
   helpstring +=
 	"--SMTLIB1 : use the SMT-LIB1 format parser\n";
   helpstring +=
@@ -179,7 +183,10 @@ helpstring +=
     		  // long options.
     		  map<string,OptionType> lookup;
     		  lookup.insert(make_pair(tolower("--print-back-C"),PRINT_BACK_C));
-			  lookup.insert(make_pair(tolower("--print-back-CVC"),PRINT_BACK_CVC));
+    		  lookup.insert(make_pair(tolower("--cryptominisat"),USE_CRYPTOMINISAT_SOLVER));
+    		lookup.insert(make_pair(tolower("--minisat"),USE_MINISAT_SOLVER));
+
+                          lookup.insert(make_pair(tolower("--print-back-CVC"),PRINT_BACK_CVC));
 			  lookup.insert(make_pair(tolower("--print-back-SMTLIB2"),PRINT_BACK_SMTLIB2));
 			  lookup.insert(make_pair(tolower("--print-back-SMTLIB1"),PRINT_BACK_SMTLIB1));
 			  lookup.insert(make_pair(tolower("--print-back-GDL"),PRINT_BACK_GDL));
@@ -244,15 +251,15 @@ helpstring +=
 				  if (bm->UserFlags.smtlib2_parser_flag)
 					  FatalError("Can't use both the smtlib and smtlib2 parsers");
 				  break;
-
-
-#if !defined CRYPTOMINISAT2
 			  case USE_SIMPLIFYING_SOLVER:
 				  bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
 				  break;
-#endif
-
-
+                          case USE_CRYPTOMINISAT_SOLVER:
+                                  bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT_SOLVER;
+                                  break;
+                          case USE_MINISAT_SOLVER:
+                                  bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
+                                  break;
 			  default:
 				  fprintf(stderr,usage,prog);
 	               cout << helpstring;

@@ -7,7 +7,6 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-#include "../sat/sat.h"
 #include "AbsRefine_CounterExample.h"
 #include "../printer/printers.h"
 #include "../to-sat/AIG/ToSATAIG.h"
@@ -16,6 +15,8 @@ const bool debug_counterexample =  false;
 
 namespace BEEV
 {
+
+
 
   /*FUNCTION: constructs counterexample from MINISAT counterexample
    * step1 : iterate through MINISAT counterexample and assemble the
@@ -26,7 +27,7 @@ namespace BEEV
    * populate the CounterExampleMap data structure (ASTNode -> BVConst)
    */
   void
-  AbsRefine_CounterExample::ConstructCounterExample(MINISAT::Solver& newS,
+  AbsRefine_CounterExample::ConstructCounterExample(SATSolver& newS,
       ToSATBase::ASTNodeToSATVar& satVarToSymbol)
   {
     //iterate over MINISAT counterexample and construct a map from AST
@@ -57,7 +58,7 @@ namespace BEEV
             if (sat_variable_index == ~((unsigned) 0)) // not sent to the sat solver.
               continue;
 
-            if (newS.model[sat_variable_index] == MINISAT::l_Undef)
+            if (newS.modelValue(sat_variable_index) == newS.undef_literal())
               continue;
 
             //assemble the counterexample here
@@ -79,7 +80,7 @@ namespace BEEV
 
                 //Collect the bits of 'symbol' and store in v. Store
                 //in reverse order.
-                if (newS.model[sat_variable_index] == MINISAT::l_True)
+                if (newS.modelValue(sat_variable_index) == newS.true_literal() )
                   (*v)[(symbolWidth - 1) - index] = true;
                 else
                   (*v)[(symbolWidth - 1) - index] = false;
@@ -93,9 +94,9 @@ namespace BEEV
                 if (0 != strncmp("cnf", zz, 3) && 0
                     != strcmp("*TrueDummy*", zz))
                   {
-                    if (newS.model[sat_variable_index] == MINISAT::l_True)
+                  if (newS.modelValue(sat_variable_index) == newS.true_literal())
                       CounterExampleMap[symbol] = ASTTrue;
-                    else if (newS.model[sat_variable_index] == MINISAT::l_False)
+                    else if (newS.modelValue(sat_variable_index) == newS.false_literal())
                       CounterExampleMap[symbol] = ASTFalse;
                     else
                       FatalError("never heres.");
@@ -864,7 +865,7 @@ namespace BEEV
 
   // Prints Satisfying assignment directly, for debugging.
   void
-  AbsRefine_CounterExample::PrintSATModel(MINISAT::Solver& newS,
+  AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
       ToSATBase::ASTNodeToSATVar& m)
   {
     if (!newS.okay())
@@ -883,12 +884,13 @@ namespace BEEV
         if (v[i] == ~((unsigned)0)) // nb. special value.
           continue;
 
-        if (newS.model[v[i]] == MINISAT::l_True)
+
+        if (newS.modelValue(v[i]) == newS.true_literal())
           {
             it->first.nodeprint(cout);
             cout << " {" << i << "}"  << endl;
           }
-        else if (newS.model[v[i]] == MINISAT::l_False)
+        else if (newS.modelValue(v[i]) == newS.false_literal())
           {
           cout << "NOT ";
           it->first.nodeprint(cout);
@@ -931,7 +933,7 @@ namespace BEEV
   }
 
   SOLVER_RETURN_TYPE
-  AbsRefine_CounterExample::CallSAT_ResultCheck(MINISAT::Solver& SatSolver,
+  AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       const ASTNode& modified_input, const ASTNode& original_input, ToSATBase* tosat)
   {
 

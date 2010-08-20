@@ -75,10 +75,10 @@ namespace BEEV
 
     //Converts MINISAT counterexample into an AST memotable (i.e. the
     //function populates the datastructure CounterExampleMap)
-    void ConstructCounterExample(MINISAT::Solver& newS, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
+    void ConstructCounterExample(SATSolver& newS, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
     // Prints MINISAT assigment one bit at a time, for debugging.
-    void PrintSATModel(MINISAT::Solver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
+    void PrintSATModel(SATSolver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
 
   public:
@@ -136,7 +136,7 @@ namespace BEEV
      * Array Refinement functions                                   *
      ****************************************************************/      
     SOLVER_RETURN_TYPE
-    CallSAT_ResultCheck(MINISAT::Solver& SatSolver, 
+    CallSAT_ResultCheck(SATSolver& SatSolver,
                         const ASTNode& modified_input,
                         const ASTNode& original_input,
                         ToSATBase* tosat);
@@ -149,21 +149,21 @@ namespace BEEV
                             const ASTNode& array_newname);
     
     SOLVER_RETURN_TYPE 
-    SATBased_ArrayReadRefinement(MINISAT::Solver& newS, 
+    SATBased_ArrayReadRefinement(SATSolver& newS,
                                  const ASTNode& modified_input, 
                                  const ASTNode& original_input,
                                  ToSATBase* tosat);
 
     SOLVER_RETURN_TYPE 
-    SATBased_ArrayWriteRefinement(MINISAT::Solver& newS,
+    SATBased_ArrayWriteRefinement(SATSolver& newS,
                                   const ASTNode& orig_input,
                                   ToSATBase *tosat);
     
     //     SOLVER_RETURN_TYPE
-    // SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& newS,
+    // SATBased_AllFiniteLoops_Refinement(SATSolver& newS,
     // const ASTNode& orig_input);
       
-    //     ASTVec SATBased_FiniteLoop_Refinement(MINISAT::Solver&
+    //     ASTVec SATBased_FiniteLoop_Refinement(SATSolver&
     // SatSolver, const ASTNode& original_input, const ASTNode&
     // finiteloop, ASTNodeMap* ParamToCurrentValMap, bool
     // absrefine_flag=false);

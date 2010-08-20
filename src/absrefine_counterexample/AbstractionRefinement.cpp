@@ -40,7 +40,7 @@ namespace BEEV
    *****************************************************************/
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
-  SATBased_ArrayReadRefinement(MINISAT::Solver& SatSolver, 
+  SATBased_ArrayReadRefinement(SATSolver& SatSolver,
                                const ASTNode& inputAlreadyInSAT, 
                                const ASTNode& original_input,
                                ToSATBase* tosat) {
@@ -183,7 +183,7 @@ namespace BEEV
    *****************************************************************/
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
-  SATBased_ArrayWriteRefinement(MINISAT::Solver& SatSolver, 
+  SATBased_ArrayWriteRefinement(SATSolver& SatSolver,
                                 const ASTNode& original_input,
                                 ToSATBase *tosat
                               )
@@ -301,7 +301,7 @@ namespace BEEV
   //    *****************************************************************/
   //   SOLVER_RETURN_TYPE 
   //   AbsRefine_CounterExample::
-  //   SATBased_AllFiniteLoops_Refinement(MINISAT::Solver& SatSolver, 
+  //   SATBased_AllFiniteLoops_Refinement(SATSolver& SatSolver,
   //                                          const ASTNode& original_input)
   //   {
   //     cout << "The number of abs-refinement limit is " 
@@ -399,7 +399,7 @@ namespace BEEV
   //   //formulas to the SAT solver
   //   ASTVec
   //   AbsRefine_CounterExample::
-  //   SATBased_FiniteLoop_Refinement(MINISAT::Solver& SatSolver, 
+  //   SATBased_FiniteLoop_Refinement(SATSolver& SatSolver,
   //                                      const ASTNode& original_input,
   //                                      const ASTNode& finiteloop,
   //                                      ASTNodeMap* ParamToCurrentValMap,

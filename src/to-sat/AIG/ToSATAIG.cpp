@@ -1,13 +1,12 @@
 #include "ToSATAIG.h"
 #include "../../simplifier/constantBitP/ConstantBitPropagation.h"
-#include "../../sat/sat.h"
 
 namespace BEEV
 {
 
     // Can not be used with abstraction refinement.
     bool
-    ToSATAIG::CallSAT(MINISAT::Solver& satSolver, const ASTNode& input)
+    ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input)
     {
       if (cb != NULL  && cb->isUnsatisfiable())
         return false;
@@ -51,16 +50,16 @@ namespace BEEV
       for (int i = 0; i < cnfData->nVars; i++)
         satSolver.newVar();
 
-      MINISAT::vec<MINISAT::Lit> satSolverClause;
+      SATSolver::vec_literals satSolverClause;
       for (int i = 0; i < cnfData->nClauses; i++)
         {
           satSolverClause.clear();
           for (int * pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i
               + 1]; pLit < pStop; pLit++)
             {
-              Var var = (*pLit) >> 1;
+              SATSolver::Var var = (*pLit) >> 1;
               assert(var < satSolver.nVars());
-              MINISAT::Lit l(var, (*pLit) & 1);
+              Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
               satSolverClause.push(l);
             }
 
@@ -86,25 +85,12 @@ namespace BEEV
         exit(0);
       }
 
-      // cryptominisat treats simplify() as protected.
-#ifndef CRYPTOMINISAT2
-      bm->GetRunTimes()->start(RunTimes::SATSimplifying);
-      if (!satSolver.simplify())
-        {
-        bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
-        return false;
-        }
-      bm->GetRunTimes()->stop(RunTimes::SATSimplifying);
-#endif
-
-
-
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
       bm->GetRunTimes()->stop(RunTimes::Solving);
 
-      if (bm->UserFlags.stats_flag)
-        bm->PrintStats(satSolver);
+      if(bm->UserFlags.stats_flag)
+        satSolver.printStats();
 
       return satSolver.okay();
     }

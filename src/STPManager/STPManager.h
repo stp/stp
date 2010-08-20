@@ -13,6 +13,7 @@
 #include "UserDefinedFlags.h"
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/HashingNodeFactory.h"
+#include "../sat/SATSolver.h"
 
 namespace BEEV
 {
@@ -382,9 +383,6 @@ namespace BEEV
     // Print assertions to the input stream
     void printAssertsToStream(ostream &os, int simplify);
 
-    // Prints SAT solver statistics
-    void PrintStats(MINISAT::Solver& stats);
-    
     // Create New Variables
     ASTNode NewVar(unsigned int n);
 

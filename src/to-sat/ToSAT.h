@@ -13,7 +13,6 @@
 #include "ToCNF.h"
 
 #include "../AST/AST.h"
-#include "../sat/sat.h"
 #include "../STPManager/STPManager.h"
 #include "ToSATBase.h"
 
@@ -27,20 +26,20 @@ namespace BEEV
      * Private Typedefs and Data                                    *
      ****************************************************************/
 
-    // MAP: This is a map from ASTNodes to MINISAT::Vars.
+    // MAP: This is a map from ASTNodes to SATSolver::Vars.
     //
     // The map is populated while ASTclauses are read from the AST
     // ClauseList returned by CNF converter. For every new boolean
-    // variable in ASTClause a new MINISAT::Var is created (these vars
+    // variable in ASTClause a new SATSolver::Var is created (these vars
     // typedefs for ints)
     typedef HASHMAP<
     ASTNode, 
-    MINISAT::Var, 
+    SATSolver::Var,
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTtoSATMap;
     ASTtoSATMap _ASTNode_to_SATVar_Map;
 
-    // MAP: This is a map from  ASTNodes to MINISAT::Vars for SYMBOLS>
+    // MAP: This is a map from  ASTNodes to SATSolver::Vars for SYMBOLS>
     //
     // Reverse map used in building counterexamples. MINISAT returns a
     // model in terms of MINISAT Vars, and this map helps us convert
@@ -56,19 +55,19 @@ namespace BEEV
 
     //looksup a MINISAT var from the minisat-var memo-table. if none
     //exists, then creates one.  Treat the result as const.
-    MINISAT::Var LookupOrCreateSATVar(MINISAT::Solver& S, 
+    SATSolver::Var LookupOrCreateSATVar(SATSolver& S,
                                       const ASTNode& n);
 
 
     //Iteratively goes through the Clause Buckets, and calls
       //toSATandSolve()
-    bool CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
+    bool CallSAT_On_ClauseBuckets(SATSolver& SatSolver,
                                     ClauseBuckets * cb
                                     , CNFMgr*& cm);
 
 
       // Converts the clause to SAT and calls SAT solver
-      bool toSATandSolve(MINISAT::Solver& S,
+      bool toSATandSolve(SATSolver& S,
                          ClauseList& cll,
                          bool final,
                          CNFMgr*& cm,
@@ -91,7 +90,7 @@ namespace BEEV
     }
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
-    bool CallSAT(MINISAT::Solver& SatSolver,
+    bool CallSAT(SATSolver& SatSolver,
                  const ASTNode& input);
 
     ASTNodeToSATVar& SATVar_to_SymbolIndexMap()

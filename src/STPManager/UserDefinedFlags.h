@@ -123,7 +123,8 @@ namespace BEEV
     enum SATSolvers
       {
         MINISAT_SOLVER =0,
-        SIMPLIFYING_MINISAT_SOLVER
+        SIMPLIFYING_MINISAT_SOLVER,
+        CRYPTOMINISAT_SOLVER
       };
 
     enum SATSolvers solver_to_use;

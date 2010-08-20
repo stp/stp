@@ -32,11 +32,11 @@ namespace BEEV
    * _ASTNode_to_SATVar.
    */
 
-  MINISAT::Var 
-  ToSAT::LookupOrCreateSATVar(MINISAT::Solver& newSolver, const ASTNode& n)
+  SATSolver::Var
+  ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
   {
     ASTtoSATMap::iterator it;
-    MINISAT::Var v;
+    SATSolver::Var v;
 
     //look for the symbol in the global map from ASTNodes to ints. if
     //not found, create a S.newVar(), else use the existing one.
@@ -47,7 +47,7 @@ namespace BEEV
 
         //ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
         //by 1 each time it is called, and the initial value of a
-        //MINISAT::Var is 0.
+        //SATSolver::Var is 0.
 
         // Copies the symbol into the map that is used to build the counter example.
         // For boolean we create a vector of size 1.
@@ -70,10 +70,10 @@ namespace BEEV
           }
 
         // experimental. Don't add Tseitin variables as decision variables.
-        if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
-          {
-            newSolver.setDecisionVar(v,false);
-          }
+        //if (!bm->UserFlags.tseitin_are_decision_variables_flag && isTseitinVariable(n))
+          //{
+//            newSolver.setDecisionVar(v,false);
+  //        }
 
       }
     else
@@ -87,7 +87,7 @@ namespace BEEV
    * and calls solve(). If solve returns unsat, then stop and return
    * unsat. else continue.
    */
-  bool ToSAT::toSATandSolve(MINISAT::Solver& newSolver,
+  bool ToSAT::toSATandSolve(SATSolver& newSolver,
                             ClauseList& cll,
                             bool final,
                             CNFMgr*& cm,
@@ -105,14 +105,12 @@ namespace BEEV
 
     if(bm->UserFlags.random_seed_flag)
       {
-#ifdef CRYPTOMINISAT2
 	newSolver.setSeed(bm->UserFlags.random_seed);
-#endif
       }
 
 	ClauseContainer& cc = *cll.asList();
     //Clause for the SATSolver
-	MINISAT::vec<MINISAT::Lit> satSolverClause;
+	SATSolver::vec_literals satSolverClause;
 
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
@@ -129,8 +127,8 @@ namespace BEEV
             //clauseVec.push_back(node);
             bool negate = (NOT == node.GetKind()) ? true : false;
             ASTNode n = negate ? node[0] : node;
-            MINISAT::Var v = LookupOrCreateSATVar(newSolver, n);
-            MINISAT::Lit l(v, negate);
+            SATSolver::Var v = LookupOrCreateSATVar(newSolver, n);
+            Minisat::Lit l = SATSolver::mkLit(v, negate);
             satSolverClause.push(l);
           }
 
@@ -187,7 +185,8 @@ namespace BEEV
           }     
         else
           {
-            bm->PrintStats(newSolver);
+            if(bm->UserFlags.stats_flag)
+              newSolver.printStats();
             bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
             cll.deleteJustVectors();
             return false;
@@ -199,10 +198,6 @@ namespace BEEV
     // CNF that need to be joined together. Nicer would be to read it out of the solver each time.
     	if (bm->UserFlags.output_CNF_flag && true)
     	{
-			#if defined CRYPTOMINISAT2
-				cerr << "The -j option will give you the xor clauses that this one doesn't" << endl;
-			#endif
-
     		ofstream file;
     		stringstream fileName;
     		fileName << "output_" << CNFFileNameCounter++ << ".cnf";
@@ -223,7 +218,7 @@ namespace BEEV
     	            ASTtoSATMap::iterator it =  _ASTNode_to_SATVar_Map.find(n);
     	            assert(it != _ASTNode_to_SATVar_Map.end());
 
-    	            MINISAT::Var v = it->second;
+    	            SATSolver::Var v = it->second;
 
     				if (negate)
     					file << "-" << (v + 1) << " ";
@@ -264,14 +259,10 @@ namespace BEEV
     bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
     bm->GetRunTimes()->start(RunTimes::Solving);    
 
-    #ifdef CORE
-    // The call to simplify() was removed. I'm guessing because it didn't work well with cryptominisat.
-    // so I'm only enabling it for just minisat.
-		newSolver.simplify();
-	#endif
     newSolver.solve();
     bm->GetRunTimes()->stop(RunTimes::Solving);
-    bm->PrintStats(newSolver);
+    if(bm->UserFlags.stats_flag)
+      newSolver.printStats();
     if (newSolver.okay())
       return true;
     else
@@ -313,7 +304,7 @@ namespace BEEV
     return cb;
   } //End of SortClauseList_IntoBuckets()
 
-  bool ToSAT::CallSAT_On_ClauseBuckets(MINISAT::Solver& SatSolver,
+  bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver,
                                        ClauseBuckets * cb, CNFMgr*& cm)
   {
     ClauseBuckets::iterator it = cb->begin();
@@ -338,7 +329,7 @@ namespace BEEV
   //Call the SAT solver, and check the result before returning. This
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
-  bool ToSAT::CallSAT(MINISAT::Solver& SatSolver,
+  bool ToSAT::CallSAT(SATSolver& SatSolver,
                       const ASTNode& input)
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
@@ -414,10 +405,10 @@ namespace BEEV
 
   // Looks up truth value of ASTNode SYMBOL in MINISAT satisfying
   // assignment.
-  ASTNode ToSAT::SymbolTruthValue(MINISAT::Solver &newSolver, ASTNode form)
+  ASTNode ToSAT::SymbolTruthValue(SATSolver &newSolver, ASTNode form)
   {
-    MINISAT::Var satvar = _ASTNode_to_SATVar_Map[form];
-    if (newSolver.model[satvar] == MINISAT::l_False)
+    SATSolver::Var satvar = _ASTNode_to_SATVar_Map[form];
+    if (newSolver.model[satvar] == SATSolver::l_False)
       {
         return ASTFalse;
       }
@@ -436,7 +427,7 @@ namespace BEEV
   // immediately (on the leftmost lowest term).  Use CreateSimpForm to
   // evaluate, even though it's expensive, so that we can use the
   // partial truth assignment.
-  ASTNode ToSAT::CheckBBandCNF(MINISAT::Solver& newSolver, ASTNode form)
+  ASTNode ToSAT::CheckBBandCNF(SATSolver& newSolver, ASTNode form)
   {
     // Clear memo table (in case newSolver has changed).
     CheckBBandCNFMemo.clear();
@@ -445,7 +436,7 @@ namespace BEEV
   } //End of CheckBBandCNF()
 
   // Recursive body CheckBBandCNF
-  ASTNode ToSAT::CheckBBandCNF_int(MINISAT::Solver& newSolver, ASTNode form)
+  ASTNode ToSAT::CheckBBandCNF_int(SATSolver& newSolver, ASTNode form)
   {
     //     cout << "++++++++++++++++" 
     //   << endl 

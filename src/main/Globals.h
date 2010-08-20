@@ -20,11 +20,6 @@
 #include <unistd.h>
 #include <vector>
 
-namespace MINISAT
-{
-  class Solver;
-}
-
 namespace BEEV
 {  
   class STPMgr;

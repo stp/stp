@@ -20,22 +20,8 @@ CFLAGS_M32   = -m32
 
 #-fno-inline
 CFLAGS_BASE   = $(OPTIMIZE)
+CFLAGS_BASE    = $(OPTIMIZE) 
 
-# OPTION to compile CRYPTOMiniSAT version 2.x
-ifeq ($(SAT),cryptominisat2)
-  CRYPTOMINISAT2 = true
-  CFLAGS_BASE    = $(OPTIMIZE) -DCRYPTOMINISAT2 -I$(TOP)/src/
-  MTL            = $(TOP)/src/sat/cryptominisat2/mtl
-  SOLVER_INCLUDE = $(TOP)/src/sat/cryptominisat2
-endif
-
-# OPTION to compile MiniSAT
-ifeq ($(SAT),minisat)
-  CORE           = true
-  CFLAGS_BASE    = $(OPTIMIZE) -DCORE
-  MTL            = $(TOP)/src/sat/mtl
-  SOLVER_INCLUDE = $(TOP)/src/sat/core
-endif
 
 ifeq ($(WITHCBITP),yes)
 	CFLAGS_BASE += -DWITHCBITP
@@ -80,7 +66,11 @@ else
   CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) -I../AST
 endif
 
-CFLAGS += -DONLY_MSPACES -DMSPACES
+# Used by Doug Lea's malloc that I added into minisat2.
+#CFLAGS += -DONLY_MSPACES -DMSPACES
+
+#Required my minisat2.2
+CFLAGS += -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS
 
 #CXXFLAGS = $(CFLAGS) -Wall -Wextra -DEXT_HASH_MAP -Wno-deprecated
 #CXXFLAGS = $(CFLAGS) -Wextra -DEXT_HASH_MAP -Wno-deprecated

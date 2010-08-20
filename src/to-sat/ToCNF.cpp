@@ -9,7 +9,6 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
-#include "../sat/sat.h"
 #include "ToCNF.h"
 
 namespace BEEV
