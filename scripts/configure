@@ -19,10 +19,16 @@ while [ $# -gt 0 ]; do
 	    arg=`expr "x$1" : 'x[^=]*=\(.*\)'`    
 	    CXX=$arg
 	    echo "Using g++ instead of gcc";;
+	--with-minisat-core)
+	    SAT=minisat;;
+	--with-cryptominisat2)
+	    SAT=cryptominisat2;;
 	*)
 	    echo "Usage: $0 [options]"
 	    echo "   --with-prefix=/prefix/path   Install STP at the specified path"
 	    echo "   --with-g++=/path/to/g++      Use g++ at the specified path"
+	    echo "   --with-minisat-core          Use core MiniSAT solver (default), runtime option to use simplifying"
+	    echo "   --with-cryptominisat2        Use CRYPTOMiniSAT 2.x solver"
 	    echo "$0 failed"
 	    exit 1;;
     esac
