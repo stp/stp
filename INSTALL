@@ -15,25 +15,10 @@ DEFAULT INSTALL INSTRUCTION (Linux, MacOS, or Windows (Cygwin))
    ./clean-install.sh
 
 
-
-INSTALLING STP WITH DIFFERENT SAT SOLVERS
-=========================================
-
-* To compile STP only with MiniSAT:
-
-   ./clean-install.sh --with-minisat-core
-
-* To compile STP only with CryptoMiniSAT:
-
-   ./clean-install.sh --with-cryptominisat2
-
-
-
 COMPILING STP WITH g++ IN A SPECIFIED PATH
 ==========================================
 
    ./clean-install.sh --with-g++ = <path>
-
 
 
 INSTALLING STP IN A DIRECTORY OF YOUR CHOICE
@@ -45,7 +30,6 @@ INSTALLING STP IN A DIRECTORY OF YOUR CHOICE
 namely, bin, include and lib. STP executable will be put in the bin
 directory, libstp.a in the lib directory, c_interface.h in the include
 directory)
-
 
 
 RUNNING STP ON WINDOWS USING CYGWIN
