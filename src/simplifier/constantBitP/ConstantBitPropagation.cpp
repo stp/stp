@@ -339,14 +339,19 @@ namespace simplifier
             }
         }
 
-
      // Write the constants into the main graph.
       ASTNodeMap cache;
       ASTNode result = SubstitutionMap::replace(top, fromTo, cache,nf);
 
       if (0 != toConjoin.size())
         {
-          result = nf->CreateNode(AND, result, toConjoin); // conjoin the new conditions.
+          // It doesn't happen very often. But the "toConjoin" might contain a variable
+          // that was added to the substitution map (because the value was determined just now
+          // during propagation.
+          ASTNode conjunct = (1 == toConjoin.size())? toConjoin[0]: nf->CreateNode(AND,toConjoin);
+          conjunct = simplifier->applySubstitutionMap(conjunct);
+
+          result = nf->CreateNode(AND, result, conjunct); // conjoin the new conditions.
         }
 
 

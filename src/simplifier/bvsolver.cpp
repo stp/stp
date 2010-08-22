@@ -40,6 +40,7 @@ namespace BEEV
 {
 	const bool flatten_ands = true;
 	const bool sort_extracts_last = false;
+	const bool debug_bvsolver = false;
 
   //check the solver map for 'key'. If key is present, then return the
   //value by reference in the argument 'output'
@@ -261,6 +262,13 @@ namespace BEEV
       (o.size() > 1) ? 
       _bm->CreateTerm(BVPLUS, lhs.GetValueWidth(), o) : 
       o[0];
+
+    if (debug_bvsolver)
+      {
+        cerr << "Initial:" << eq;
+        cerr << "Chosen Monomial:" << outmonom;
+        cerr << "Output LHS:" << modifiedlhs;
+      }
 
     // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or
     // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO))
@@ -742,8 +750,8 @@ namespace BEEV
     	 don't have time. Trev.
 		  */
 #if 1
-      ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->applySubstitutionMapUntilArrays(*it) : *it;
-#else
+        ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
+      #else
           ASTNode aaa = *it;
 
           if (any_solved && EQ == aaa.GetKind())
@@ -871,6 +879,8 @@ namespace BEEV
 
         if (BVCONST == itk)
           {
+            assert(savetheconst == rhs); // Returns the wrong result if there are >1 constants.
+
             //check later if the constant is even or not
             savetheconst = aaa;
             continue;
