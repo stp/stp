@@ -1285,15 +1285,10 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
                 {
                   if (v[i] != BBFalse)
                   {
-                    const BBNodeAIG* v2 = reinterpret_cast<const BBNodeAIG*> (&(v[i]));
-                    if (v2 != 0)
-                      {
-                        cerr << *b;
-                        cerr << i << endl;
-                        cerr << n ;
-                        cerr <<( v[i] == BBTrue) << endl;
-                        //v2->print();
-                      }
+                    cerr << *b;
+                    cerr << i << endl;
+                    cerr << n ;
+                    cerr <<( v[i] == BBTrue) << endl;
                   }
 
                   assert(v[i]== BBFalse);
@@ -1315,9 +1310,6 @@ template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const BBNodeVec& _y,
 		BBNodeSet& support, const ASTNode& n) {
 
-
-  checkFixed(_x,n[0]);
-  checkFixed(_y,n[1]);
 
   BBNodeVec x = _x;
   BBNodeVec y = _y;
