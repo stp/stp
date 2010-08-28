@@ -450,7 +450,11 @@ namespace BEEV
               || SBVREM == k 
               || SBVMOD == k)
             {
-              const ASTNode& bottom = result[1];
+
+              // I had this as a reference, but that was wrong. Because
+              // "result" gets over-written in the next block, result[1], may
+              // get a reference count of zero, so be garbage collected.
+              const ASTNode bottom = result[1];
 
               if (SBVDIV == result.GetKind() 
                   || SBVREM == result.GetKind() 
