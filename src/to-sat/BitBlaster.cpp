@@ -364,6 +364,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
                    }
                    // Propagate through all the parents of term.
                    cb->scheduleUp(term);
+                   cb->scheduleNode(term);
                    cb->propagate();
                    // Now we've propagated.
                 }
