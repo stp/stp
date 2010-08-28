@@ -119,6 +119,8 @@ namespace BEEV
 
     bool enable_AIG_rewrites_flag;
 
+    bool simplify_during_BB_flag;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -234,6 +236,9 @@ namespace BEEV
       exit_after_CNF=false;
 
       enable_AIG_rewrites_flag = false;
+
+      // If the bit-blaster discovers new constants, should the term simplifier be re-run.
+      simplify_during_BB_flag=false;
 
     } //End of constructor for UserDefinedFlags
 

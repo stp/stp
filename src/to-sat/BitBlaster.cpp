@@ -269,7 +269,7 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
 	// call SimplifyTerm on ite(true,y,z), which will do the expected simplification.
 	// Then the term that we bitblast will by "y".
 
-	if (uf !=NULL && uf->optimize_flag)
+	if (uf !=NULL && uf->optimize_flag && uf->simplify_during_BB_flag)
 	{
           const int numberOfChildren = term.Degree();
           vector<BBNodeVec> ch;
