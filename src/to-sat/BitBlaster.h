@@ -14,6 +14,7 @@
 #include <cassert>
 #include <map>
 #include "../STPManager/STPManager.h"
+//#include "../STPManager/UserDefinedFlags.h"
 
 namespace simplifier
 {
@@ -26,6 +27,7 @@ namespace simplifier
 
 namespace BEEV {
 
+class Simplifier;
 class ASTNode;
 typedef std::vector<ASTNode> ASTVec;
 
@@ -150,12 +152,19 @@ class BitBlaster {
 
         const BBNode BBForm(const ASTNode& form, set<BBNode>& support);
 
+        bool isConstant(const vector<BBNode>& v);
+        ASTNode getConstant(const vector<BBNode>& v, const ASTNode&n );
+
         // Nodes in this set can be replaced by their constant values, without being
         // conjoined to the top..
         ASTNodeSet fixedFromBottom;
 
+        UserDefinedFlags *uf;
+        NodeFactory* ASTNF;
+        Simplifier* simp;
+        BBNodeManagerT* nf;
+
 public:
-	BBNodeManagerT* nf;
 
 	// Bit blast a bitvector term.  The term must have a kind for a
 	// bitvector term.  Result is a ref to a vector of formula nodes
@@ -166,28 +175,39 @@ public:
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
-        BitBlaster(BBNodeManagerT* bnm  , simplifier::constantBitP::ConstantBitPropagation *cb_)
+        BitBlaster(BBNodeManagerT* bnm  , simplifier::constantBitP::ConstantBitPropagation *cb_, Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf)
                 {
           nf = bnm;
           cb = cb_;
           BBTrue = nf->getTrue();
           BBFalse = nf->getFalse();
+          simp = _simp;
+          ASTNF = astNodeF;
+          uf = _uf;
         }
 
 
 
-        BitBlaster(BBNodeManagerT* bnm)
+        BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory *astNodeF)
 		{
           nf = bnm;
           BBTrue = nf->getTrue();
           BBFalse = nf->getFalse();
           cb = NULL;
+          simp = _simp;
+          ASTNF = astNodeF;
+          uf = NULL;
 	}
 
 
+        void ClearAllTables()
+        {
+          BBTermMemo.clear();
+          BBFormMemo.clear();
+        }
+
 	~BitBlaster() {
-		BBTermMemo.clear();
-		BBFormMemo.clear();
+	  ClearAllTables();
 	}
 
 	//Bitblast a formula

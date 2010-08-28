@@ -15,6 +15,7 @@
 #include "../simplifier/constantBitP/FixedBits.h"
 #include "../simplifier/constantBitP/ConstantBitPropagation.h"
 #include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
+#include "../simplifier/simplifier.h"
 
 namespace BEEV {
 
@@ -136,6 +137,9 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& b
         if (cb == NULL)
                 return;
 
+        if (cb->isUnsatisfiable())
+          return;
+
         if (n.isConstant())
           {
               simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it;
@@ -212,17 +216,168 @@ void BitBlaster<BBNode,BBNodeManagerT>::updateTerm(const ASTNode&n, BBNodeVec& b
           }
 }
 
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode,BBNodeManagerT>::isConstant(const BBNodeVec& v)
+{
+  for (int i =0; i < v.size();i++)
+    {
+        if (v[i] != nf->getTrue() && v[i] != nf->getFalse())
+          return false;
+    }
 
+  return true;
+}
 
 
 template <class BBNode, class BBNodeManagerT>
-const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& term, BBNodeSet& support) {
-        typename BBNodeVecMap::iterator it = BBTermMemo.find(term);
+ASTNode BitBlaster<BBNode,BBNodeManagerT>::getConstant(const BBNodeVec& v, const ASTNode&n )
+{
+  if (n.GetType() == BOOLEAN_TYPE)
+    {
+      if (v[0] == nf->getTrue())
+        return ASTNF->getTrue();
+      else
+        return ASTNF->getFalse();
+    }
+
+  CBV bv = CONSTANTBV::BitVector_Create(v.size(),true);
+
+  for (int i =0; i < v.size();i++)
+      if (v[i] == nf->getTrue())
+        CONSTANTBV::BitVector_Bit_On(bv,i);
+
+  return ASTNF->CreateConstant(bv,v.size());
+
+}
+
+template <class BBNode, class BBNodeManagerT>
+const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, BBNodeSet& support) {
+      ASTNode term = _term; // mutable local copy.
+
+      typename BBNodeVecMap::iterator it = BBTermMemo.find(term);
 	if (it != BBTermMemo.end()) {
                 // Constant bit propagation may have updated something.
                 updateTerm(term,it->second,support);
                 return it->second;
 	}
+
+	// This block checks if the bitblasting/fixed bits have discovered
+	// any new constants. If they've discovered a new constant, then
+	// the simplification function is called on a new term with the constant
+	// value replacing what used to be a variable child. For instance, if
+	// the term is ite(x,y,z), and we now know that x is true. Then we will
+	// call SimplifyTerm on ite(true,y,z), which will do the expected simplification.
+	// Then the term that we bitblast will by "y".
+
+	if (uf !=NULL && uf->optimize_flag)
+	{
+          const int numberOfChildren = term.Degree();
+          vector<BBNodeVec> ch;
+          ch.reserve(numberOfChildren);
+
+          for (int i = 0; i < numberOfChildren; i++)
+            {
+              if (term[i].GetType() == BITVECTOR_TYPE)
+                {
+                  ch.push_back(BBTerm(term[i],support));
+                }
+              else if (term[i].GetType() == BOOLEAN_TYPE)
+                {
+                  BBNodeVec t;
+                  t.push_back(BBForm(term[i],support));
+                  ch.push_back(t);
+                }
+              else
+                throw "sdfssfa";
+            }
+
+          bool newConst = false;
+          for (int i = 0; i < numberOfChildren; i++)
+            {
+                if (term[i].isConstant())
+                    continue;
+
+                if (isConstant(ch[i]))
+                    {
+                      // it's only interesting if the child isn't a constant,
+                      // but the bitblasted version is.
+                      newConst = true;
+                      break;
+                    }
+            }
+
+          // Something is now constant that didn't used to be.
+          if (newConst)
+            {
+              ASTVec new_ch;
+              new_ch.reserve(numberOfChildren);
+              for (int i = 0; i < numberOfChildren; i++)
+                {
+                  if (!term[i].isConstant() && isConstant(ch[i]))
+                    new_ch.push_back(getConstant(ch[i], term[i]));
+                  else
+                    new_ch.push_back(term[i]);
+                }
+
+
+              ASTNode n_term = simp->SimplifyTerm(ASTNF->CreateTerm(term.GetKind(),term.GetValueWidth(),new_ch));
+              assert(BVTypeCheck(n_term));
+              // n_term is the potentially simplified version of term.
+
+              if (cb!= NULL)
+                {
+                  // Add all the nodes to the worklist that have a constant as a child.
+                  cb->initWorkList(n_term);
+
+                  simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it;
+                  it = cb->fixedMap->map->find(n_term) ;
+                  FixedBits* nBits;
+                  if (it == cb->fixedMap->map->end())
+                  {
+                      nBits = new FixedBits(std::max((unsigned)1,n_term.GetValueWidth()), term.GetType() == BOOLEAN_TYPE);
+                      cb->fixedMap->map->insert(pair<ASTNode, FixedBits*> (n_term, nBits));
+                  }else
+                      nBits = it->second;
+
+                  if (n_term.isConstant())
+                    {
+                      // It's assumed elsewhere that constants map to themselves in the fixed map.
+                      // That doesn't happen here unless it's added explicitly.
+                      *nBits = FixedBits::concreteToAbstract(n_term);
+                    }
+
+                   it = cb->fixedMap->map->find(term);
+                   if (it != cb->fixedMap->map->end())
+                   {
+                     // Copy over to the (potentially) new node. Everything we know about the old node.
+                     nBits->mergeIn(*(it->second));
+
+                   }
+                   cb->propagate();
+
+                   it = cb->fixedMap->map->find(term);
+                   if (it != cb->fixedMap->map->end())
+                   {
+                     // Copy to the old node, all we know about the new node. This means that
+                     // all the parents of the old node get the (potentially) updated fixings.
+                     it->second->mergeIn(*nBits);
+                   }
+                   // Propagate through all the parents of term.
+                   cb->scheduleUp(term);
+                   cb->propagate();
+                   // Now we've propagated.
+                }
+              term = n_term;
+
+              // check if we've already done the simplified one.
+                 it = BBTermMemo.find(term);
+                 if (it != BBTermMemo.end()) {
+                          // Constant bit propagation may have updated something.
+                          updateTerm(term,it->second,support);
+                          return it->second;
+                  }
+            }
+        }
 
 	BBNodeVec result;
 
@@ -1305,6 +1460,7 @@ const bool multiplication_variant3 = true; // multiplication with booth recoding
 const bool multiplication_variant4 = false;  // multiplication via sorting networks.
 const bool multiplication_variant5 = false;  // Using bounds.
 
+
 // Multiply two bitblasted numbers
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const BBNodeVec& _y,
@@ -1323,23 +1479,27 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
       const int bitWidth = x.size();
 
       if (multiplication_variant1) {
+              //cout << "v1";
               return mult_normal(x, y, support);
       }
 
       stack<BBNode> products[bitWidth];
 
       if (multiplication_variant2) {
+              //cout << "v2";
               mult_allPairs(x, y, support,products);
               return buildAdditionNetworkResult(products,support, bitWidth);
       }
 
       if (multiplication_variant3) {
+              //cout << "v3";
               mult_Booth(_x, _y, support,n[0],n[1],products);
               return buildAdditionNetworkResult(products,support,bitWidth);
       }
 
       if (multiplication_variant4)
       {
+        //cout << "v4";
         mult_Booth(_x, _y, support,n[0],n[1],products);
         for (int i = 0; i < bitWidth; i++)
           {
@@ -1354,7 +1514,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
 
       if (multiplication_variant5)
         {
-
+        //cout << "v5";
           if (!statsFound(n))
             {
               mult_Booth(_x, _y, support, n[0], n[1], products);

@@ -11,6 +11,7 @@ class ASTNode;
 typedef std::vector<ASTNode> ASTVec;
 extern ASTVec _empty_ASTVec;
 class STPMgr;
+typedef unsigned int * CBV;
 }
 
 using BEEV::ASTNode;
@@ -59,6 +60,11 @@ public:
 	ASTNode CreateArrayTerm(Kind kind, unsigned int index, unsigned int width, const ASTNode& child0,
 			const ASTNode& child1, const ASTNode& child2,
 			const ASTVec &children = _empty_ASTVec);
+
+	ASTNode getTrue();
+	ASTNode getFalse();
+
+	ASTNode CreateConstant(BEEV::CBV cbv, unsigned width);
 
 };
 

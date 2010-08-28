@@ -49,9 +49,16 @@ namespace simplifier
 
       WorkList(const ASTNode& top)
       {
-        ASTNodeSet visited;
-        addToWorklist(top, visited);
+        initWorkList(top);
       }
+
+      void
+      initWorkList(const ASTNode&n)
+      {
+        ASTNodeSet visited;
+        addToWorklist(n, visited);
+      }
+
 
       void
       push(const BEEV::ASTNode& n)

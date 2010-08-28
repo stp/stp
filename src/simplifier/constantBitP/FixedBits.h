@@ -279,6 +279,21 @@ namespace simplifier
       void
       getUnsignedMinMax(unsigned &minShift, unsigned &maxShift) const;
 
+      void
+      mergeIn(const FixedBits& a)
+      {
+        assert(a.getWidth() == getWidth());
+        for (int i= 0; i < width;i++)
+          {
+          if (a.isFixed(i) && !isFixed(i))
+            {
+            setFixed(i,true);
+            setValue(i,a.getValue(i));
+            }
+          }
+      }
+
+
       static FixedBits
       meet(const FixedBits& a, const FixedBits& b);
 

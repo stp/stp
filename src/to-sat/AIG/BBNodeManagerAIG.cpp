@@ -18,12 +18,13 @@ namespace BEEV
     // Rewriting is sometimes very slow. Can it be configured to be faster?
     // What about refactoring???
 
-    if (uf.enable_AIG_rewrites_flag)
-      {
-          int nodeCount = aigMgr->nObjs[AIG_OBJ_AND];
-          if (uf.stats_flag)
-            cerr << "Nodes before AIG rewrite:" << nodeCount <<endl;
+    int nodeCount = aigMgr->nObjs[AIG_OBJ_AND];
+    if (uf.stats_flag)
+      cerr << "Nodes before AIG rewrite:" << nodeCount <<endl;
 
+
+    if (uf.enable_AIG_rewrites_flag && aigMgr->nObjs[AIG_OBJ_AND] < 5000)
+      {
           Dar_LibStart();
           Aig_Man_t * pTemp;
           Dar_RwrPar_t Pars, * pPars = &Pars;
@@ -38,12 +39,6 @@ namespace BEEV
           // With nCutsMax =2, CNF generation takes 16 seconds, solving 10 seconds.
           // The rewriting doesn't remove as many nodes of course..
           int iterations = 3;
-          if (nodeCount > 1000000)
-          {
-            iterations =1;
-            pPars->nCutsMax=2;
-          }
-
 
           for (int i=0; i < iterations;i++)
           {

@@ -1,5 +1,6 @@
 #include "ToSATAIG.h"
 #include "../../simplifier/constantBitP/ConstantBitPropagation.h"
+#include "../../simplifier/simplifier.h"
 
 namespace BEEV
 {
@@ -12,13 +13,19 @@ namespace BEEV
         return false;
 
       BBNodeManagerAIG mgr;
-      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb);
+      Simplifier simp(bm);
+      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb,&simp,bm->defaultNodeFactory,&bm->UserFlags);
 
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
       BBNodeAIG BBFormula = bb.BBForm(input);
       bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+      bb.ClearAllTables();
 
       assert(satSolver.nVars() ==0);
+
+      // Oddly the substitution map, which is necessary to output a model is kept in the simplifier.
+      // The bitblaster should never enter anything into the solver map.
+      //assert(simp.Return_SolverMap()->size() ==0);
 
       Cnf_Dat_t* cnfData = NULL;
 
@@ -29,17 +36,6 @@ namespace BEEV
       // Free the memory in the AIGs.
       BBFormula = BBNodeAIG(); // null node
       mgr.stop();
-
-      // make the result true, see if a contradiction arises.
-      /*
-      if (cb != NULL)
-        {
-        cb->setNodeToTrue(input);
-        cb->propagate();
-        if (cb->isUnsatisfiable())
-          return false;
-        }
-      */
 
       //Clear out all the constant bit stuff before sending the SAT.
       if (cb != NULL)

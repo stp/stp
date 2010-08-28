@@ -105,6 +105,12 @@ public:
 
       ASTNodeMap
       getAllFixed();
+
+      void initWorkList(const ASTNode n)
+      {
+        workList->initWorkList(n);
+      }
+
     };
   }
 }
