@@ -351,11 +351,12 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
                    {
                      // Copy over to the (potentially) new node. Everything we know about the old node.
                      nBits->mergeIn(*(it->second));
-
                    }
+
+                   cb->scheduleUp(n_term);
+                   cb->scheduleNode(n_term);
                    cb->propagate();
 
-                   it = cb->fixedMap->map->find(term);
                    if (it != cb->fixedMap->map->end())
                    {
                      // Copy to the old node, all we know about the new node. This means that
