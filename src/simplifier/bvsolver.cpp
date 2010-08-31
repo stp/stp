@@ -299,7 +299,9 @@ namespace BEEV
       }
 
     // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or
-    // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO))
+    // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO)) or
+    // BVUMINUS (EXTRACT SYMBOL BV_CONST ZERO) or
+    // (EXTRACT SYMBOL BV_CONST ZERO)
     return outmonom;
   } //end of choosemonom()
 
