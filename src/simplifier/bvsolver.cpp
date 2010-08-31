@@ -251,7 +251,35 @@ namespace BEEV
                 outmonom = monom;
                 chosen_symbol = true;
               }
+            else if (
+                !chosen_symbol
+                && monom.GetKind() == BVEXTRACT
+                && SYMBOL == monom[0].GetKind()
+                && BVCONST == monom[1].GetKind()
+                && zero == monom[2]
+                && !DoNotSolveThis(monom[0])
+                && count.single(monom[0])
+            )
+              {
+              outmonom = monom;
+              chosen_symbol = true;
+              }
+            else if (
+                       !chosen_symbol
+                       && monom.GetKind() == BVUMINUS
+                       && monom[0].GetKind() == BVEXTRACT
+                       && SYMBOL == monom[0][0].GetKind()
+                       && BVCONST == monom[0][1].GetKind()
+                       && zero == monom[0][2]
+                       && !DoNotSolveThis(monom[0][0])
+                       && count.single(monom[0][0])
+                   )
+                     {
+                     outmonom = monom;
+                     chosen_symbol = true;
+                     }
             else
+
               {
                 o.push_back(monom);
               }
@@ -833,7 +861,8 @@ namespace BEEV
        _bm->CreateNode(AND, o) : 
        o[0]) : 
       ASTTrue;
-    output = _bm->CreateNode(AND, output, evens);
+    if (evens != ASTTrue)
+      output = _bm->CreateNode(AND, output, evens);
 
     output = solveForAndOfXOR(output);
 

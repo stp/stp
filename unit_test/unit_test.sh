@@ -5,12 +5,12 @@
 
 rm -f output_*.cnf
 
-files=`ls -1 -S *.smt2`
+files=`ls -1 -S *.smt2 *.smt`
 for f in $files; do
 	stp --output-CNF $f
 	cnf=`cat output_*.cnf  | grep -v "^c" | grep -v "^$" |  wc -l`
 	if [ $cnf -gt 3 ] ; then
-		echo --fail
+		echo --fail $f
 		exit 10
 	fi
 
