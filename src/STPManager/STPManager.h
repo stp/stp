@@ -133,6 +133,9 @@ namespace BEEV
     ASTVec ones;
     ASTVec max;
 
+    // Set of new symbols introduced that replace the array read terms
+    ASTNodeSet Introduced_SymbolsSet;
+
   public:
     
     /****************************************************************
@@ -383,17 +386,27 @@ namespace BEEV
     // Print assertions to the input stream
     void printAssertsToStream(ostream &os, int simplify);
 
-    // Create New Variables
-    ASTNode NewVar(unsigned int n);
-
+    // Variables are added automatically to the introduced_symbolset. Variables
+    // in the set aren't printed out as part of the counter example.
     ASTNode CreateFreshVariable(int indexWidth, int valueWidth, std::string prefix)
     {
         char d[32 + prefix.length()];
         sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
 
         BEEV::ASTNode CurrentSymbol = CreateSymbol(d,indexWidth,valueWidth);
+        Introduced_SymbolsSet.insert(CurrentSymbol);
         return CurrentSymbol;
     }
+
+    bool FoundIntroducedSymbolSet(const ASTNode& in)
+    {
+      if(Introduced_SymbolsSet.find(in) != Introduced_SymbolsSet.end())
+        {
+          return true;
+        }
+      return false;
+    } // End of IntroduceSymbolSet
+
 
 
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
@@ -406,6 +419,8 @@ namespace BEEV
       TermsAlreadySeenMap.clear();
     }
 
+    // This is called before SAT solving, so only junk that isn't needed
+    // after SAT solving should be cleaned out.
     void ClearAllTables(void) 
     {
       NodeLetVarMap.clear();

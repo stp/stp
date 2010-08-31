@@ -745,7 +745,7 @@ namespace BEEV
           }
 
         //skip over introduced variables
-        if (f.GetKind() == SYMBOL && (ArrayTransform->FoundIntroducedSymbolSet(
+        if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(
             f)))
           {
             continue;

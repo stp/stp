@@ -55,9 +55,7 @@ namespace BEEV
     // Read(A,j) is replaced with the following ITE: ITE(i=j,v1,v2)
     ASTNodeMap * Arrayread_IteMap;
           
-    // Set of new symbols introduced that replace the array read terms
-    ASTNodeSet Introduced_SymbolsSet;
-    
+
     // Count to keep track of new symbolic constants introduced
     // corresponding to Array Reads
     unsigned int _symbol_count;
@@ -117,7 +115,6 @@ namespace BEEV
     // Constructor
     ArrayTransformer(STPMgr * bm, Simplifier* s) : 
       Arrayread_SymbolMap(),
-      Introduced_SymbolsSet(),
       bm(bm), 
       simp(s), 
       debug_transform(0),
@@ -139,7 +136,6 @@ namespace BEEV
     {
       Arrayread_IteMap->clear();
       delete Arrayread_IteMap;
-      Introduced_SymbolsSet.clear();
       ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
       ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
       for(;it!=itend;it++)
@@ -175,14 +171,6 @@ namespace BEEV
       return (*Arrayread_IteMap)[arrread];
     } //End of ArrayRead_Ite
 
-    bool FoundIntroducedSymbolSet(const ASTNode& in)
-    {
-      if(Introduced_SymbolsSet.find(in) != Introduced_SymbolsSet.end())
-        {
-          return true;
-        }
-      return false;
-    } // End of IntroduceSymbolSet
 
     void ClearAllTables(void)
     {
@@ -198,7 +186,6 @@ namespace BEEV
       Arrayname_ReadindicesMap->clear();
       Arrayread_SymbolMap.clear();
       Arrayread_IteMap->clear();
-      Introduced_SymbolsSet.clear();
     }
   }; //end of class Transformer
 

@@ -587,7 +587,6 @@ namespace BEEV
         			  "array_" + string(arrName.GetName()));
 
         	  Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
-              Introduced_SymbolsSet.insert(CurrentSymbol);
             }
 
           ASTNode ite = CurrentSymbol;

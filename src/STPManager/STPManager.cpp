@@ -639,20 +639,6 @@ namespace BEEV
     return newn;
   }
 
-  //Create a new variable of ValueWidth 'n'
-  ASTNode STPMgr::NewVar(unsigned int n)
-  {
-    std::string c("v");
-    char d[32];
-    sprintf(d, "%d", _symbol_count++);
-    std::string ccc(d);
-    c += "_solver_" + ccc;
-
-    ASTNode CurrentSymbol = CreateSymbol(c.c_str(),0,n);
-    assert(0 !=n);
-    return CurrentSymbol;
-  } //end of NewVar()
-
   bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   {
     if (READ == term.GetKind() 

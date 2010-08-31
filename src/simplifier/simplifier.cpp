@@ -3597,7 +3597,7 @@ namespace BEEV
         ASTNode newVar;
         if (!CheckSimplifyMap(input, newVar, false))
           {
-            newVar = _bm->NewVar(input.GetValueWidth());
+            newVar = _bm->CreateFreshVariable(0,input.GetValueWidth(),"v_solver");
             (*ReadOverWrite_NewName_Map)[input] = newVar;
             NewName_ReadOverWrite_Map[newVar] = input;
 

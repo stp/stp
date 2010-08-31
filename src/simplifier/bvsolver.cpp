@@ -457,7 +457,7 @@ namespace BEEV
           //then also add another entry for x = x1@t
           ASTNode var = lhs[0];
           ASTNode newvar = 
-            _bm->NewVar(var.GetValueWidth() - lhs.GetValueWidth());
+            _bm->CreateFreshVariable(0, var.GetValueWidth() - lhs.GetValueWidth(), "v_solver");
           newvar = 
             _bm->CreateTerm(BVCONCAT, var.GetValueWidth(), newvar, rhs);
 			  assert(BVTypeCheck(newvar));
@@ -528,8 +528,9 @@ namespace BEEV
           if (ChosenVar_Is_Extract)
             {
               const ASTNode& var = lhs[1][0];
+
               ASTNode newvar = 
-                _bm->NewVar(var.GetValueWidth() - lhs[1].GetValueWidth());
+                  _bm->CreateFreshVariable(0, var.GetValueWidth() - lhs[1].GetValueWidth(), "v_solver");
               newvar = 
                 _bm->CreateTerm(BVCONCAT, 
                                 var.GetValueWidth(), 
