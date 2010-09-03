@@ -97,82 +97,82 @@ int main(int argc, char ** argv) {
   
   //populate the help string
   helpstring += 
-    "STP version: " + version + "\n\n";
+    "STP version : " + version + "\n\n";
   helpstring +=  
-    "-a  : switch optimizations off (optimizations are ON by default)\n";
+    "-a                     : switch optimizations off (optimizations are ON by default)\n";
   helpstring +=  
-    "-b  : print STP input back to cout\n";
+    "-b                     : print STP input back to cout\n";
   helpstring +=
-    "-c  : construct counterexample\n";
+    "-c                     : construct counterexample\n";
   helpstring +=  
-      "--cryptominisat : use cryptominisat2 as the solver\n";
+    "--cryptominisat        : use cryptominisat2 as the solver\n";
 
   helpstring +=
-    "-d  : check counterexample\n";
+    "-d                     : check counterexample\n";
 
 #ifdef WITHCBITP
   helpstring +=  
-      "--disable-cbitp  : disable constant bit propagation\n";
+    "--disable-cbitp        : disable constant bit propagation\n";
 #endif
 
-  helpstring +=  "--exit-after-CNF : exit after the CNF has been generated\n";
-
+  helpstring +=  
+    "--exit-after-CNF       : exit after the CNF has been generated\n";
   helpstring +=
-    "-e  : expand finite-for construct\n";
+    "-e                     : expand finite-for construct\n";
   helpstring +=  
-    "-f  : number of abstraction-refinement loops\n";
+    "-f                     : number of abstraction-refinement loops\n";
   helpstring +=  
-    "-g  : timeout (seconds until STP gives up)\n";
+    "-g                     : timeout (seconds until STP gives up)\n";
   helpstring +=  
-    "-h  : help\n";
+    "-h                     : help\n";
   helpstring +=  
-    "-i <random_seed>  : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
+    "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
   helpstring +=  
-    "-j <filename>  : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
+    "-j <filename>          : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
   helpstring +=  
-    "-m  : use the SMTLIB1 parser\n";
-
+    "-m                     : use the SMTLIB1 parser\n";
   helpstring +=
-      "--minisat : use minisat 2.2 as the solver\n";
-
-  helpstring +=  "--output-CNF : save the CNF into output.cnf\n";
-  helpstring +=  "--output-bench : save in ABC's bench format to output.bench\n";
+    "--minisat              : use minisat 2.2 as the solver\n";
 
   helpstring +=  
-    "-p  : print counterexample\n";
+    "--output-CNF           : save the CNF into output.cnf\n";
+  helpstring +=  
+    "--output-bench         : save in ABC's bench format to output.bench\n";
+  helpstring +=  
+    "-p                     : print counterexample\n";
   // I haven't checked that this works so don't want to include it by default.
   //helpstring +=
-  //    "--print-back-C  : print input as C code (partially works), then exit\n";
+  //  "--print-back-C         : print input as C code (partially works), then exit\n";
   helpstring +=
-      "--print-back-CVC  : print input in CVC format, then exit\n";
+    "--print-back-CVC       : print input in CVC format, then exit\n";
   helpstring +=
-      "--print-back-SMTLIB2  : print input in SMT-LIB2 format, then exit\n";
+    "--print-back-SMTLIB2   : print input in SMT-LIB2 format, then exit\n";
   helpstring +=
-      "--print-back-SMTLIB1  : print input in SMT-LIB1 format, then exit\n";
+    "--print-back-SMTLIB1   : print input in SMT-LIB1 format, then exit\n";
   helpstring +=
-	  "--print-back-GDL : print AiSee's graph format, then exit\n";
+    "--print-back-GDL       : print AiSee's graph format, then exit\n";
   helpstring +=
-	  "--print-back-dot : print dotty/neato's graph format, then exit\n";
+    "--print-back-dot       : print dotty/neato's graph format, then exit\n";
   helpstring +=  
-    "-r  : switch refinement off (optimizations are ON by default)\n";
+    "-r                     : switch refinement off (optimizations are ON by default)\n";
   helpstring +=  
-    "-s  : print function statistics\n";
-helpstring +=
-  "--simplifying-minisat : use simplifying-minisat 2.2 as the solver\n";
+    "-s                     : print function statistics\n";
   helpstring +=
-	"--SMTLIB1 : use the SMT-LIB1 format parser\n";
+    "--simplifying-minisat  : use simplifying-minisat 2.2 as the solver\n";
   helpstring +=
-	"--SMTLIB2 : use the SMT-LIB2 format parser\n";
+    "--SMTLIB1              : use the SMT-LIB1 format parser\n";
+  helpstring +=
+    "--SMTLIB2              : use the SMT-LIB2 format parser\n";
   helpstring +=  
-    "-t  : print quick statistics\n";
+    "-t                     : print quick statistics\n";
   helpstring +=  
-    "-v  : print nodes \n";
+    "-v                     : print nodes \n";
   helpstring +=  
-    "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
+    "-w                     : switch wordlevel solver off (optimizations are ON by default)\n";
   helpstring +=  
-    "-x  : flatten nested XORs\n";
+    "-x                     : flatten nested XORs\n";
   helpstring +=  
-    "-y  : print counterexample in binary\n";
+    "-y                     : print counterexample in binary\n";
 
   for(int i=1; i < argc;i++)
     {
