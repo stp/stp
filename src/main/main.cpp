@@ -97,7 +97,7 @@ int main(int argc, char ** argv) {
   
   //populate the help string
   helpstring += 
-    "STP version : " + version + "\n\n";
+    "STP version            : " + version + "\n\n";
   helpstring +=  
     "-a                     : switch optimizations off (optimizations are ON by default)\n";
   helpstring +=  
