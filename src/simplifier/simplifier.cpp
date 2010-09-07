@@ -1465,7 +1465,7 @@ namespace BEEV
       }
     else
       {
-        output = nf->CreateNode(IFF, c0, c1);
+        output = nf->CreateNode(XOR, nf->CreateNode(NOT,c0), c1);
       }
 
     //memoize
