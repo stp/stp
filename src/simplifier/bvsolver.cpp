@@ -611,11 +611,22 @@ namespace BEEV
     ASTVec children =  FlattenKind(XOR, xorNode.GetChildren());
 
     bool foundSymbol = false;
-    for (ASTVec::const_iterator symbol = children.begin(), node_end =
-        children.end(); symbol != node_end; symbol++)
+    for (ASTVec::const_iterator symbol_iterator = children.begin(), node_end =
+        children.end(); symbol_iterator != node_end; symbol_iterator++)
       {
         // Find a symbol in it.
-        if ((*symbol).GetKind() != SYMBOL)
+        ASTNode symbol =(*symbol_iterator);
+        bool isNot = false;
+
+        if (symbol.GetKind() == SYMBOL)
+          {
+          }
+        else if  (symbol.GetKind()== NOT && symbol[0].GetKind() == SYMBOL)
+          {
+            symbol = symbol[0];
+            isNot = true;
+          }
+        else
           {
             continue;
           }
@@ -625,9 +636,9 @@ namespace BEEV
         for (ASTVec::const_iterator it2 = children.begin(); it2
             != node_end; it2++)
           {
-            if (it2 == symbol)
+            if (it2 == symbol_iterator)
               continue;
-            if (VarSeenInTerm(*symbol, *it2))
+            if (VarSeenInTerm(symbol, *it2))
               {
                 duplicated = true;
                 break;
@@ -640,18 +651,34 @@ namespace BEEV
             for (ASTVec::const_iterator it2 = children.begin(); it2
                 != node_end; it2++)
               {
-              if (it2 != symbol)
+              if (it2 != symbol_iterator)
                 rhs.push_back(*it2); // omit the symbol.
               }
 
-            foundSymbol = _simp->UpdateSolverMap(*symbol, _bm->CreateNode(
-                NOT, _bm->CreateNode(XOR, rhs)));
+            assert(rhs.size() >=1);
+            if (rhs.size() ==1)
+              {
+              foundSymbol = _simp->UpdateSolverMap(symbol,
+                  isNot? rhs[0]:
+                         _bm->CreateNode(NOT, rhs[0]));
+              }
+            else
+              {
+              foundSymbol = _simp->UpdateSolverMap(symbol,
+                  isNot? _bm->CreateNode(XOR, rhs):
+                         _bm->CreateNode(NOT, _bm->CreateNode(XOR, rhs)));
+
+              }
+
+
           }
         if (foundSymbol)
           break;
       }
     if (foundSymbol)
+      {
       return ASTTrue;
+      }
     else
       return xorNode;
 }
@@ -673,7 +700,8 @@ namespace BEEV
     for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child
         != and_end; and_child++)
       {
-      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula_TopLevel(*and_child,false));
+
+      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*and_child),false,NULL));
       if (r!=*and_child)
         changed=true;
       output_children.push_back(r);
