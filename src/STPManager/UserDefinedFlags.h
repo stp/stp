@@ -121,6 +121,8 @@ namespace BEEV
 
     bool simplify_during_BB_flag;
 
+    bool solve_for_XORS_flag;
+
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -239,6 +241,8 @@ namespace BEEV
 
       // If the bit-blaster discovers new constants, should the term simplifier be re-run.
       simplify_during_BB_flag=false;
+
+      solve_for_XORS_flag = true;
 
     } //End of constructor for UserDefinedFlags
 

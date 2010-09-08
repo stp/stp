@@ -603,7 +603,9 @@ namespace BEEV
   // to do. Flatten the XOR.
   ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
   {
-     if (xorNode.GetKind() != XOR)
+    assert(_bm->UserFlags.solve_for_XORS_flag);
+
+    if (xorNode.GetKind() != XOR)
       {
        return xorNode;
       }
@@ -688,6 +690,8 @@ namespace BEEV
    ASTNode
   BVSolver::solveForAndOfXOR(const ASTNode& n)
   {
+    assert(_bm->UserFlags.solve_for_XORS_flag);
+
     if (n.GetKind() != AND)
       return n;
 
@@ -733,7 +737,7 @@ namespace BEEV
       }
 
     Kind k = input.GetKind();
-    if (XOR ==k)
+    if (XOR ==k && _bm->UserFlags.solve_for_XORS_flag)
     {
     	ASTNode output = solveForXOR(_input);
     	UpdateAlreadySolvedMap(_input, output);
@@ -748,29 +752,19 @@ namespace BEEV
 
     if (flatten_ands && AND == k)
     {
-		ASTNode n = input;
-		while (true) {
-			ASTNode nold = n;
-			n = _simp->FlattenOneLevel(n);
-			if ((n == nold))
-				break;
-		}
+        ASTVec c = FlattenKind(AND,input.GetChildren());
+        input = _bm->CreateNode(AND,c);
 
-		input = n;
+        // When flattening simplifications will be applied to the node, potentially changing it's type:
+        // (AND x (ANY (not x) y)) gives us FALSE.
+       if (!(EQ == input.GetKind() || AND == input.GetKind()))
+           return input;
 
-		// When flattening simplifications will be applied to the node, potentially changing it's type:
-		// (AND x (ANY (not x) y)) gives us FALSE.
-		if (!(EQ == n.GetKind() || AND == n.GetKind())) {
-			{
-				return n;
-			}
-
-	    if (CheckAlreadySolvedMap(input, output))
-	      {
-	        //output is TRUE. The formula is thus dropped
-	        return output;
-	      }
-		}
+          if (CheckAlreadySolvedMap(input, output))
+            {
+              //output is TRUE. The formula is thus dropped
+              return output;
+            }
     }
 
     _bm->GetRunTimes()->start(RunTimes::BVSolver);
@@ -895,7 +889,8 @@ namespace BEEV
     if (evens != ASTTrue)
       output = _bm->CreateNode(AND, output, evens);
 
-    output = solveForAndOfXOR(output);
+    if (_bm->UserFlags.solve_for_XORS_flag)
+      output = solveForAndOfXOR(output);
 
     // Imagine in the last conjunct A is replaced by B. But there could
     // be variable A's in the first conjunct. This gets rid of 'em.
