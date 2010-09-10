@@ -56,7 +56,10 @@ namespace BEEV
               break;
           }
       }
-    cnfData = Cnf_Derive(aigMgr, 0);
+    if (aigMgr->nObjs[AIG_OBJ_AND] < 10000000)
+      cnfData = Cnf_Derive(aigMgr, 0);
+    else
+      cnfData = Cnf_DeriveSimple(aigMgr, 0);
 
     BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
 
