@@ -1005,7 +1005,8 @@ void pushP(stack<BBNode> *products, const int start, const BBNodeVec& y, const B
 	for (int i = start; i < bitWidth; i++)
 	{
 		BBNode n = nf->CreateNode(AND, y[c], multiplier);
-		products[i].push(n);
+		if (n!= nf->getFalse())
+		  products[i].push(n);
 		c++;
 	}
 }
@@ -1106,7 +1107,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
              {
                support.insert(nf->CreateNode(NOT, carry));
              }
-             else if (i + 1 != bitWidth)
+             else if (i + 1 != bitWidth && carry != BBFalse)
              {
                      products[i + 1].push(carry);
              }
@@ -1236,7 +1237,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 
 	 for (int i =0 ; i < bitWidth;i++)
 	 {
-		 products[i].push(BBFalse);
+		 assert(products[i].size() == 0);
 	 }
 
 	 BBNodeVec notY;
@@ -1274,16 +1275,19 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 			 pushP(products,i,y,x[i],nf);
 		 }
 
-		 if (xt[i] == MINUS_ONE_MT)
+		 else if (xt[i] == MINUS_ONE_MT)
 		 {
 			 pushP(products,i,notY,BBTrue,nf);
 			 products[i].push(BBTrue);
 		 }
 
-		 if (xt[i] == ONE_MT)
+		 else if (xt[i] == ONE_MT)
 		 {
 			 pushP(products,i,y,BBTrue,nf);
 		 }
+
+		 else if (products[i].size() == 0)
+		   products[i].push(BBFalse);
 	 }
   }
 
