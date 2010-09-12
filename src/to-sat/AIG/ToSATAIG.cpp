@@ -13,13 +13,27 @@ namespace BEEV
         return false;
 
       BBNodeManagerAIG mgr;
-      Simplifier simp(bm);
-      BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb,&simp,bm->defaultNodeFactory,&bm->UserFlags);
+      Simplifier *simp = new Simplifier(bm);
+      BitBlaster<BBNodeAIG, BBNodeManagerAIG> *bb = new BitBlaster<BBNodeAIG, BBNodeManagerAIG>(&mgr,cb,simp,bm->defaultNodeFactory,&bm->UserFlags);
+
+      // Even if we cleared the tables we could still have the hash table's buckets sitting around.
+      delete simp;
+      simp = NULL;
 
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
-      BBNodeAIG BBFormula = bb.BBForm(input);
+      BBNodeAIG BBFormula = bb->BBForm(input);
       bm->GetRunTimes()->stop(RunTimes::BitBlasting);
-      bb.ClearAllTables();
+      delete bb;
+      bb = NULL;
+
+      //Clear out all the constant bit stuff before sending the SAT.
+      if (cb != NULL)
+        {
+          delete cb;
+          cb = NULL;
+        }
+
+
 
       assert(satSolver.nVars() ==0);
 
@@ -36,10 +50,6 @@ namespace BEEV
       // Free the memory in the AIGs.
       BBFormula = BBNodeAIG(); // null node
       mgr.stop();
-
-      //Clear out all the constant bit stuff before sending the SAT.
-      if (cb != NULL)
-    	  cb->clearTables();
 
       bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 

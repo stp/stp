@@ -1277,7 +1277,8 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 			 pushP(products,i,y,x[i],nf);
 		 }
 
-		 else if (xt[i] == MINUS_ONE_MT)
+		 // A bit can not be true or false, as well as one of these two.
+		 if (xt[i] == MINUS_ONE_MT)
 		 {
 			 pushP(products,i,notY,BBTrue,nf);
 			 products[i].push(BBTrue);
@@ -1288,7 +1289,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 			 pushP(products,i,y,BBTrue,nf);
 		 }
 
-		 else if (products[i].size() == 0)
+		 if (products[i].size() == 0)
 		   products[i].push(BBFalse);
 	 }
   }

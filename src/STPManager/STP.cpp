@@ -291,7 +291,6 @@ namespace BEEV {
                                        &toSATAIG
                                        );
 
-    delete cb;
     }
     else
       {
