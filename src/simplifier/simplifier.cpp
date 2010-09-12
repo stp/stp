@@ -967,6 +967,14 @@ namespace BEEV
 			return ASTFalse;
 	}
 
+    // If both the children are concats split them apart.
+    // nb. This doesn't cover the case when the children are organised differently:
+    // (concat (concat A B) C) == (concat A (concat B C))
+    if (k1 == BVCONCAT && k2 == BVCONCAT && in1[0].GetValueWidth() == in2[0].GetValueWidth())
+    {
+      return nf->CreateNode(AND, nf->CreateNode(EQ, in1[0], in2[0]), nf->CreateNode(EQ, in1[1], in2[1]));
+    }
+
 
     //last resort is to CreateNode
     return nf->CreateNode(EQ, in1, in2);
@@ -2626,6 +2634,15 @@ namespace BEEV
                 {
                   output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
                 }
+            }
+          else if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT && false)
+            {
+
+              /// This makes the left hand child of every concat not a concat.
+              ASTNode left= t[0];
+              ASTNode bottom = nf->CreateTerm(BVCONCAT, t[1].GetValueWidth() + u.GetValueWidth(), t[1], u);
+              output = nf->CreateTerm(BVCONCAT, inputValueWidth, left, bottom);
+              assert(BVTypeCheck(output));
             }
           else
             {
