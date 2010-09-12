@@ -1112,6 +1112,8 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
                      products[i + 1].push(carry);
              }
       }
+      if (0==products[i].size())
+        products[i].push(BBFalse);
 
       assert(1==products[i].size());
 }
