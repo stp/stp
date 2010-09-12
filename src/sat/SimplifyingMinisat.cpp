@@ -63,7 +63,6 @@ namespace BEEV
 
   void SimplifyingMinisat::printStats()
   {
-#if 0
     double cpu_time = Minisat::cpuTime();
     double mem_used = Minisat::memUsedPeak();
     printf("restarts              : %"PRIu64"\n", s->starts);
@@ -73,7 +72,6 @@ namespace BEEV
     printf("conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", s->tot_literals, (s->max_literals - s->tot_literals)*100 / (double)s->max_literals);
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("CPU time              : %g s\n", cpu_time);
-
-#endif
   }
+
 };
