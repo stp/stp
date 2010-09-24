@@ -2451,6 +2451,15 @@ namespace BEEV
       case BVAND:
       case BVOR:
         {
+          // turn BVAND(CONCAT CONCAT) into concat(BVAND() BVAND()). i.e. push ops through concat.
+          if (inputterm.Degree() ==2 && inputterm[0].GetKind() == BVCONCAT && inputterm[1].GetKind() == BVCONCAT && inputterm[0][0].GetValueWidth() ==inputterm[1][0].GetValueWidth() )
+          {
+                output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
+                    nf->CreateTerm(k,inputterm[0][0].GetValueWidth(), inputterm[0][0],inputterm[1][0]),
+                    nf->CreateTerm(k,inputterm[0][1].GetValueWidth(),inputterm[0][1],inputterm[1][1]));
+                break;
+          }
+
           ASTNode max = _bm->CreateMaxConst(inputValueWidth);
           ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
 
@@ -2755,6 +2764,18 @@ namespace BEEV
     			  output = _bm->CreateZeroConst(inputterm.GetValueWidth());
     			  break;
     		  }
+    		  if (inputterm.Degree() ==2 && inputterm[0].GetKind() == BVCONCAT && inputterm[1].GetKind() == BVCONCAT && inputterm[0][0].GetValueWidth() ==inputterm[1][0].GetValueWidth() )
+  		  {
+    		        output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
+    		            nf->CreateTerm(k,inputterm[0][0].GetValueWidth(), inputterm[0][0],inputterm[1][0]),
+    		            nf->CreateTerm(k,inputterm[0][1].GetValueWidth(),inputterm[0][1],inputterm[1][1]));
+    		        break;
+    		  }
+    		  if (inputterm.Degree() ==2 && inputterm[0] == _bm->CreateZeroConst(inputterm.GetValueWidth()))
+    		    {
+    		      output = inputterm[1];
+    		      break;
+    		    }
     	  }
     	  //run on.
       case BVXNOR:
