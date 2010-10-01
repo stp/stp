@@ -450,8 +450,14 @@ namespace BEEV
           if (_bm->UserFlags.division_by_zero_returns_one_flag 
               && CONSTANTBV::BitVector_is_empty(tmp1))
             {
-              // Expecting a division by zero. Just return one.
-              OutputNode = _bm->CreateOneConst(outputwidth);
+              // a = bq + r, where b!=0 implies r < b. q is quotient, r remainder. i.e. a/b = q.
+              // It doesn't matter what q is when b=0, but r needs to be 0.
+              if (k == BVMOD)
+                OutputNode = _bm->CreateZeroConst(outputwidth);
+              else
+                OutputNode = _bm->CreateOneConst(outputwidth);
+                // Expecting a division by zero. Just return one.
+
             }
           else
             {
