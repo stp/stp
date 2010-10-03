@@ -2644,7 +2644,7 @@ namespace BEEV
                   output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
                 }
             }
-          else if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT && false)
+          else if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT)
             {
 
               /// This makes the left hand child of every concat not a concat.
