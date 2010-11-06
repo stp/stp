@@ -6,7 +6,7 @@ namespace BEEV
 {
   SimplifyingMinisat::SimplifyingMinisat()
   {
-    s = new Minisat::SimpSolver();
+	 s = new Minisat::SimpSolver();
   }
 
   SimplifyingMinisat::~SimplifyingMinisat()
@@ -32,6 +32,8 @@ namespace BEEV
     if (!s->simplify())
       return false;
 
+    // Without the eliminate(true) call. Calling solve() multiple times returns the wrong answer.
+	s->eliminate(true);
     return s->solve();
   }
 
