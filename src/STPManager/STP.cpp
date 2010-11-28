@@ -129,7 +129,6 @@ namespace BEEV {
       } 
     while (inputToSAT != simplified_solved_InputToSAT);
 
-#ifdef WITHCBITP
     if (bm->UserFlags.bitConstantProp_flag)
       {
         bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
@@ -145,7 +144,6 @@ namespace BEEV {
           simplified_solved_InputToSAT = bm->ASTFalse;
 
       }
-#endif
 
 
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
