@@ -8,8 +8,8 @@
 #include <iostream>
 #include <fstream>
 
-#ifdef WITHCBITP
   #include "ConstantBitP_TransferFunctions.h"
+#ifdef WITHCBITP
   #include "ConstantBitP_MaxPrecision.h"
 #endif
 
