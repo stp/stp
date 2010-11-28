@@ -16,7 +16,15 @@
 #OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
 #OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
 OPTIMIZE      = -O3  -g            # Maximum optimization
-CFLAGS_M32   = -m32
+
+
+#When solving array problems STP creates lots of objects during the conversion to CNF. If STP is compiled 
+#as a 32-bit executable, then these objects are about half the size than they are if STP is compiled as a 64-bit
+#program. That's because lots of the data in the objects are pointers to other objects.  So, if you meet the 
+#following criteria you may want to enable -m32 on your 64-bit machine:
+#1) You are solving array problems. Problems without arrays use another CNF conversion scheme.
+#2) You need STP to use about half the memory.
+#CFLAGS_M32   = -m32
 
 #-fno-inline
 CFLAGS_BASE   = $(OPTIMIZE)
