@@ -263,7 +263,6 @@ namespace BEEV {
     {
       simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
 
-#ifdef WITHCBITP
     if (bm->UserFlags.bitConstantProp_flag)
       {
         bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
@@ -278,7 +277,6 @@ namespace BEEV {
         if (cb->isUnsatisfiable())
            simplified_solved_InputToSAT = bm->ASTFalse;
       }
-#endif
 
     ToSATAIG toSATAIG(bm,cb);
 
