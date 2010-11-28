@@ -56,7 +56,7 @@ namespace BEEV
               break;
           }
       }
-    if (aigMgr->nObjs[AIG_OBJ_AND] < 10000000)
+    if (aigMgr->nObjs[AIG_OBJ_AND] < 2000000)
       cnfData = Cnf_Derive(aigMgr, 0);
     else
       cnfData = Cnf_DeriveSimple(aigMgr, 0);
