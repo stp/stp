@@ -27,4 +27,4 @@ clean:
 	$(MAKE) -C cryptominisat2 clean
 
 CryptoMinisat.o: CryptoMinisat.cpp
-	$(CC) $(CFLAGS) -Icryptominisat2/mtl -Imtl CryptoMinisat.cpp -c 
+	$(CC) $(CFLAGS) -Icryptominisat2/mtl -Imtl CryptoMinisat.cpp -c -I$(TOP)/src
