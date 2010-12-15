@@ -338,7 +338,7 @@ namespace BEEV
     {
         BBNodeManagerASTNode nm(bm);
         Simplifier simp(bm);
-        BitBlaster<ASTNode,BBNodeManagerASTNode> BB(&nm,&simp, bm->defaultNodeFactory);
+        BitBlaster<ASTNode,BBNodeManagerASTNode> BB(&nm,&simp, bm->defaultNodeFactory,&bm->UserFlags);
     	BBFormula = BB.BBForm(input);
     }
 

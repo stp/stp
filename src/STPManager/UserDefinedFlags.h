@@ -9,8 +9,13 @@
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
+#include <map>
+#include <string>
+#include <assert.h>
+#include <iostream>
 namespace BEEV
 {
+	using std::string;
 
   /******************************************************************
    * Struct UserDefFlags:
@@ -133,10 +138,44 @@ namespace BEEV
 
     enum SATSolvers solver_to_use;
 
+    std::map<string,string> config_options;
+
+    void set(string n, string v)
+    {
+    	assert(n.size() > 0);
+    	assert(v.size() > 0);
+    	assert(config_options.find(n) == config_options.end());
+    	config_options[n] = v;
+    }
+
+    string get(string n)
+    {
+    	return get(n,"");
+    }
+
+    string get(string n, string def)
+    {
+    	if (config_options.empty())
+    		return def;
+
+    	string result;
+    	std::map<string,string>::iterator it = config_options.find(n);
+    	if (it == config_options.end())
+    		result = def;
+    	else
+    		result = it->second;
+
+    	if (stats_flag)
+    		std::cout << n << ":"  << result << std::endl;
+
+    	return result;
+    }
+
     //CONSTRUCTOR    
     UserDefinedFlags()
     {  
-      //collect statistics on certain functions
+
+    	//collect statistics on certain functions
       stats_flag = false;
       
       //print DAG nodes

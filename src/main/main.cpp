@@ -197,6 +197,28 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
 			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
 
+			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
+			  {
+				  // Must contain an equals.
+				  // Must contain a name >=1 character long.
+				  // Must contain a value >=1 char.
+				  string s(argv[i]);
+				  size_t a = s.find("_");
+				  size_t b = s.find("=");
+				  if (a== string::npos || b == string::npos || b < a || b==a+1 || b==s.length()-1)
+				  {
+					   fprintf(stderr,usage,prog);
+		               cout << helpstring;
+		               return -1;
+		               break;
+				  }
+
+				  string name = s.substr(a+1,b-a-1);
+				  string value = s.substr(b+1);
+
+				  bm->UserFlags.set(name,value);
+			  }
+			  else
 
 			  switch(lookup[tolower(argv[i])])
 			  {

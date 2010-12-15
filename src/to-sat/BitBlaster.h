@@ -186,9 +186,7 @@ public:
           uf = _uf;
         }
 
-
-
-        BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory *astNodeF)
+        BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf)
 		{
           nf = bnm;
           BBTrue = nf->getTrue();
@@ -196,8 +194,8 @@ public:
           cb = NULL;
           simp = _simp;
           ASTNF = astNodeF;
-          uf = NULL;
-	}
+          uf = _uf;
+		}
 
 
         void ClearAllTables()

@@ -1462,14 +1462,6 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
   }
 
 
-// ONLY SELECT ONE OF THESE!
-const bool multiplication_variant1 = false; // multiplication with repeat addition.
-const bool multiplication_variant2 = false; // multiplication with partial products.
-const bool multiplication_variant3 = true; // multiplication with booth recoding.
-const bool multiplication_variant4 = false;  // multiplication via sorting networks.
-const bool multiplication_variant5 = false;  // Using bounds.
-
-
 // Multiply two bitblasted numbers
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const BBNodeVec& _y,
@@ -1485,28 +1477,27 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
         y = _x;
       }
 
+  	  string mv = uf->get("multiplication_variant","3");
+
       const int bitWidth = x.size();
-
-      if (multiplication_variant1) {
-              //cout << "v1";
-              return mult_normal(x, y, support);
-      }
-
       stack<BBNode> products[bitWidth];
 
-      if (multiplication_variant2) {
+      if (mv == "1") {
+              //cerr << "v1";
+              return mult_normal(x, y, support);
+      }
+      else   if (mv == "2") {
               //cout << "v2";
               mult_allPairs(x, y, support,products);
               return buildAdditionNetworkResult(products,support, bitWidth);
       }
 
-      if (multiplication_variant3) {
-              //cout << "v3";
+      else   if (mv == "3") {
+              //cout << "v3" << endl;
               mult_Booth(_x, _y, support,n[0],n[1],products);
               return buildAdditionNetworkResult(products,support,bitWidth);
       }
-
-      if (multiplication_variant4)
+      else   if (mv == "4")
       {
         //cout << "v4";
         mult_Booth(_x, _y, support,n[0],n[1],products);
@@ -1520,8 +1511,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
           }
         return buildAdditionNetworkResult(products,support, bitWidth);
       }
-
-      if (multiplication_variant5)
+      else   if (mv == "5")
         {
         //cout << "v5";
           if (!statsFound(n))
@@ -1533,8 +1523,8 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
           mult_allPairs(x, y, support, products);
           return multWithBounds(n, products, support);
         }
-
-      FatalError("sda44f");
+      else
+    	  FatalError("sda44f");
 }
 
 //======
