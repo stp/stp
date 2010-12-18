@@ -137,9 +137,13 @@ static inline void * Vec_AttFree( Vec_Att_t * p, int fFreeMan )
         int i;
         if ( p->pArrayInt )
         {
+            /* This code would not work on a 64-bit platform,
+               so let's hope it's unused. Though I've added a (long)
+               cast below to silence a relevant GCC warning. */
+            assert(sizeof(int) == sizeof(void *));
             for ( i = 0; i < p->nCap; i++ )
                 if ( p->pArrayInt[i] )
-                    p->pFuncFreeObj( p->pMan, (void *)p->pArrayInt[i] );
+                    p->pFuncFreeObj( p->pMan, (void *)(long)p->pArrayInt[i] );
         }
         else
         {
@@ -177,10 +181,15 @@ static inline void Vec_AttClear( Vec_Att_t * p )
         int i;
         if ( p->pArrayInt )
         {
-            if ( p->pFuncFreeObj )
+            if ( p->pFuncFreeObj ) {
+                /* This code would not work on a 64-bit platform,
+                   so let's hope it's unused. Though I've added a (long)
+                   cast below to silence a relevant GCC warning. */
+                assert(sizeof(int) == sizeof(void *));
                 for ( i = 0; i < p->nCap; i++ )
                     if ( p->pArrayInt[i] )
-                        p->pFuncFreeObj( p->pMan, (void *)p->pArrayInt[i] );
+                        p->pFuncFreeObj( p->pMan, (void *)(long)p->pArrayInt[i] );
+            }
         }
         else
         {
@@ -214,8 +223,13 @@ static inline void Vec_AttFreeEntry( Vec_Att_t * p, int i )
         return;
     if ( p->pMan )
     {
-        if ( p->pArrayInt[i] && p->pFuncFreeObj )
-            p->pFuncFreeObj( p->pMan, (void *)p->pArrayInt[i] );
+        if ( p->pArrayInt[i] && p->pFuncFreeObj ) {
+            /* This code would not work on a 64-bit platform,
+               so let's hope it's unused. Though I've added a (long)
+               cast below to silence a relevant GCC warning. */
+            assert(sizeof(int) == sizeof(void *));
+            p->pFuncFreeObj( p->pMan, (void *)(long)p->pArrayInt[i] );
+        }
         if ( p->pArrayPtr[i] && p->pFuncFreeObj )
             p->pFuncFreeObj( p->pMan, (void *)p->pArrayPtr[i] );
     }
