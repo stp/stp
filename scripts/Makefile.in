@@ -33,8 +33,8 @@ all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interfa
 			   $(SRC)/to-sat/*.o \
 		       $(SRC)/to-sat/AIG/*.o  \
 			   $(SRC)/sat/*.o \
-			   $(SRC)/sat/core/*.o? \
-			   $(SRC)/sat/simp/*.o? \
+			   $(SRC)/sat/core/Solver.or \
+			   $(SRC)/sat/simp/SimpSolver.or \
 			   $(SRC)/sat/utils/*.o \
 			   $(SRC)/simplifier/*.o  \
 		       $(SRC)/simplifier/constantBitP/*.o  \
@@ -118,7 +118,7 @@ regressall: all
 	$(MAKE) regresscrypto
 	$(MAKE) unit_test
 	$(MAKE) regresscapi
-	
+
 
 # Checks that simplifications are working.
 .PHONY: unit_test

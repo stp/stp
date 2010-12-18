@@ -2,8 +2,9 @@
 # either leak, or use of unitialised values.
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
-CXXFLAGS= -DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface -L../../lib 
-LIBS= -lstp 
+CXXFLAGS= -DEXT_HASH_MAP $(CFLAGS) -I../../src/c_interface
+LDFLAGS=-L../../lib
+LIBS=$(LDFLAGS) -lstp 
 
 VALGRINDPATH=`which valgrind`
 ifeq   "$(VALGRINDPATH)" ""
@@ -13,7 +14,7 @@ else
 endif
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23
 	rm -rf *.out
 
 0:	
@@ -89,6 +90,15 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22
 22:
 	g++ $(CXXFLAGS) parsestring-using-cinterface.c -o a22.out $(LIBS)
 	./a22.out
+
+# Test 23 is the same as test 0, except linked in a different order.
+# This is meant to catch problems in which libstp.a contains a
+# main() function or has extra dependencies.
+23:
+	g++ $(CXXFLAGS) -o a23.out \
+         ../../lib/libstp.a array-cvcl-02.c ../../lib/libstp.a
+	./a23.out
+
 
 clean:
 	rm -rf *~ *.out

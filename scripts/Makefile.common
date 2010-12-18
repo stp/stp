@@ -26,6 +26,11 @@ OPTIMIZE      = -O3  -g            # Maximum optimization
 #2) You need STP to use about half the memory.
 #CFLAGS_M32   = -m32
 
+# If you're compiling a 64-bit version of STP, and you want to use
+# libstp.a in a shared library, you need the -fPIC option.
+#CFLAGS_FPIC = -fPIC
+CFLAGS_FPIC =
+
 #-fno-inline
 CFLAGS_BASE   = $(OPTIMIZE)
 CFLAGS_BASE    = $(OPTIMIZE) 
@@ -70,8 +75,7 @@ ifeq ($(shell uname -s), DarwinX)
   CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
 else
   LDFLAGS = $(LDFLAGS_BASE)
-  CFLAGS = $(CFLAGS_BASE)		
-  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) -I../AST
+  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) $(CFLAGS_FPIC) -I../AST
 endif
 
 # Used by Doug Lea's malloc that I added into minisat2.
