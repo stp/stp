@@ -147,6 +147,19 @@ namespace BEEV
       return true;
   }
 
+  bool STPMgr::LookupSymbol(const char * const name)
+  {
+    ASTSymbol s(name);
+    ASTSymbol* s_ptr = &s; // it's a temporary key.
+
+    if (_symbol_unique_table.find(s_ptr) ==
+        _symbol_unique_table.end())
+      return false;
+    else
+      return true;
+  }
+
+
   //Create a ASTBVConst node
   ASTNode STPMgr::CreateBVConst(unsigned int width, 
 				unsigned long long int bvconst)

@@ -139,6 +139,8 @@ namespace BEEV
     CBV CreateBVConstVal;
 
   public:
+
+    bool LookupSymbol(const char * const name);
     
     /****************************************************************
      * Public Flags                                                 *
@@ -395,6 +397,7 @@ namespace BEEV
     {
         char d[32 + prefix.length()];
         sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
+        assert(!LookupSymbol(d));
 
         BEEV::ASTNode CurrentSymbol = CreateSymbol(d,indexWidth,valueWidth);
         Introduced_SymbolsSet.insert(CurrentSymbol);
