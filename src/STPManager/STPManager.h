@@ -136,6 +136,8 @@ namespace BEEV
     // Set of new symbols introduced that replace the array read terms
     ASTNodeSet Introduced_SymbolsSet;
 
+    CBV CreateBVConstVal;
+
   public:
     
     /****************************************************************
@@ -198,6 +200,7 @@ namespace BEEV
       runTimes     = new RunTimes();
       _current_query = ASTUndefined;
       UserFlags.num_absrefine = 2;
+      CreateBVConstVal = NULL;
     }    
     
     RunTimes * GetRunTimes(void)

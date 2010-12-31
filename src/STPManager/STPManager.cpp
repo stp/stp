@@ -157,7 +157,13 @@ namespace BEEV
 		 "unsigned long long of width: ", 
                  ASTUndefined, width);
 
-    CBV bv = CONSTANTBV::BitVector_Create(width, true);
+
+    // We create a single bvconst that gets reused.
+    if (NULL == CreateBVConstVal)
+      CreateBVConstVal = CONSTANTBV::BitVector_Create(65, true);
+    CreateBVConstVal  = CONSTANTBV::BitVector_Resize(CreateBVConstVal,width);
+    CONSTANTBV::BitVector_Empty(CreateBVConstVal);
+
     unsigned long c_val = (~((unsigned long) 0)) & bvconst;
     unsigned int copied = 0;
 
@@ -170,16 +176,19 @@ namespace BEEV
     //number of bits in unsigned long. The variable "copied" keeps
     //track of the number of chunks copied so far
 
-    int shift_amount = (sizeof(unsigned long) << 3);
-    while (copied + (sizeof(unsigned long) << 3) < width)
+    const int shift_amount = (sizeof(unsigned long) << 3);
+    while (copied + shift_amount < width)
       {
-        CONSTANTBV::BitVector_Chunk_Store(bv, shift_amount, copied, c_val);
+        CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, shift_amount, copied, c_val);
         bvconst = bvconst >> shift_amount;
         c_val = (~((unsigned long) 0)) & bvconst;
         copied += shift_amount;
       }
-    CONSTANTBV::BitVector_Chunk_Store(bv, width - copied, copied, c_val);
-    return CreateBVConst(bv, width);
+    CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, width - copied, copied, c_val);
+
+    ASTBVConst temp_bvconst(CreateBVConstVal, width,ASTBVConst::CBV_MANAGED_OUTSIDE);
+    return  ASTNode(LookupOrCreateBVConst(temp_bvconst));
+
   }
 
   ASTNode STPMgr::CreateBVConst(string*& strval, int base, int bit_width)
