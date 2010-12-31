@@ -492,7 +492,7 @@ int main(int argc, char ** argv) {
 		ParserInterface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
 
 		// If you are converting formats, you probably don't want it simplifying (at least I dont).
-		if (false && onePrintBack)
+		if (onePrintBack)
 		{
 			parserInterface = &piTypeCheckDefault;
 		}
