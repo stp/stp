@@ -34,7 +34,10 @@ namespace BEEV
     //CBV is actually an unsigned*. The bitvector constant is
     //represented using an external library in extlib-bvconst.
     CBV _bvconst;
-  
+
+    // If the CBV is managed outside of this class. Then a defensive copy isn't taken.
+    bool cbv_managed_outside;
+
     /****************************************************************
      * Class ASTBVConstHasher:                                      *
      *                                                              *
@@ -46,6 +49,8 @@ namespace BEEV
       size_t operator()(const ASTBVConst * bvc) const;
     }; //End of class ASTBVConstHahser
     
+
+
     /****************************************************************
      * Class ASTBVConstEqual:                                       *
      *                                                              *
@@ -61,8 +66,19 @@ namespace BEEV
     /****************************************************************
      * Private Functions (virtual defs and friends)                 *
      ****************************************************************/
+
     //Constructor
     ASTBVConst(CBV bv, unsigned int width);
+
+    enum CBV_LIFETIME {CBV_MANAGED_OUTSIDE};
+
+    ASTBVConst(CBV bv, unsigned int width, enum CBV_LIFETIME l )
+    :  ASTInternal(BVCONST)
+    {
+      _bvconst = (bv);
+      _value_width = width;
+      cbv_managed_outside =true;
+    }
 
     // Copy constructor.
     ASTBVConst(const ASTBVConst &sym);  
@@ -94,7 +110,8 @@ namespace BEEV
     //Destructor. Call the external destructor
     virtual ~ASTBVConst()
     {
-      CONSTANTBV::BitVector_Destroy(_bvconst);
+      if (!cbv_managed_outside)
+        CONSTANTBV::BitVector_Destroy(_bvconst);
     } //End of destructor
 
     // Return the bvconst. It is a const-value
