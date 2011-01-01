@@ -203,11 +203,6 @@ namespace BEEV
     ASTNode SimplifyForFormula(const ASTNode& a,
                                bool pushNeg, ASTNodeMap* VarConstMap=NULL);
 
-    ASTNode Flatten(const ASTNode& a);
-
-    ASTNode FlattenOneLevel(const ASTNode& a);
-
-    ASTNode FlattenAndOr(const ASTNode& a);
 
     ASTNode CombineLikeTerms(const ASTNode& a);
     ASTNode CombineLikeTerms(const ASTVec& a);

@@ -161,30 +161,28 @@ bool containsArrayOps(const ASTNode&n)
 		}
 }
 
-
-  // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
-  ASTVec FlattenKind(Kind k, const ASTVec &children)
+  void FlattenKind(const Kind k, const ASTVec &children, ASTVec & flat_children)
   {
-    ASTVec flat_children;
-
     ASTVec::const_iterator ch_end = children.end();
     for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
       {
         Kind ck = it->GetKind();
         if (k == ck)
           {
-            const ASTVec gchildren = FlattenKind(k,it->GetChildren());
-            //const ASTVec gchildren =  it->GetChildren();
-            // append grandchildren to children
-            flat_children.insert(flat_children.end(),
-                                 gchildren.begin(), gchildren.end());
+            FlattenKind(k,it->GetChildren(), flat_children);
           }
         else
           {
             flat_children.push_back(*it);
           }
       }
+  }
 
+  // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
+  ASTVec FlattenKind(Kind k, const ASTVec &children)
+  {
+    ASTVec flat_children;
+    FlattenKind(k,children,flat_children);
     return flat_children;
   }
 

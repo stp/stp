@@ -27,20 +27,6 @@ namespace BEEV
 // so that's disabled.
   const bool simplify_upfront = true;
 
-  ASTNode Simplifier::Flatten(const ASTNode& a)
-  {
-    ASTNode n = a;
-    while (true)
-      {
-        ASTNode nold = n;
-        n = FlattenOneLevel(n);
-        if ((n == nold))
-          break;
-      }
-        
-    return n;
-  }
-
   // is it ITE(p,bv0[1], bv1[1])  OR  ITE(p,bv0[0], bv1[0])
   bool isPropositionToTerm(const ASTNode& n)
   {
@@ -1071,16 +1057,9 @@ namespace BEEV
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
-    ASTNode flat = Flatten(a);
-    ASTVec c, outvec;
-    c = flat.GetChildren();
+    ASTVec c = FlattenKind(a.GetKind(),a.GetChildren());
     SortByArith(c);
-    Kind k = flat.GetKind();
-
-    // If the simplifying node factory is enabled, a
-    // constant may be returned by Flatten.
-    if (AND !=k && OR !=k)
-    	return SimplifyFormula(flat,pushNeg, VarConstMap);
+    Kind k = a.GetKind();
 
     bool isAnd = (k == AND) ? true : false;
 
@@ -1093,6 +1072,8 @@ namespace BEEV
       isAnd ? 
       (pushNeg ? ASTFalse : ASTTrue) : 
       (pushNeg ? ASTTrue : ASTFalse);
+
+    ASTVec outvec;
 
     //do the work
     ASTVec::const_iterator next_it;
@@ -1168,7 +1149,6 @@ namespace BEEV
             (pushNeg ? 
              nf->CreateNode(AND, outvec) :
              nf->CreateNode(OR,outvec));
-          //output = FlattenOneLevel(output);
           break;
         }
       }
@@ -1564,47 +1544,6 @@ namespace BEEV
     UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
     return output;
   }
-
-  //one level deep flattening
-  ASTNode Simplifier::FlattenOneLevel(const ASTNode& a)
-  {
-    const Kind k = a.GetKind();
-    if (!(BVPLUS == k || AND == k || OR == k
-          //|| BVAND == k
-          //|| BVOR == k
-          ))
-      {
-        return a;
-      }
-
-    ASTNode output;
-    // if(CheckSimplifyMap(a,output,false)) {
-    //       //check memo table
-    //       //cerr << "output of SimplifyTerm Cache: " << output << endl;
-    //       return output;
-    //     }
-
-    const ASTVec& c = a.GetChildren();
-    ASTVec o;
-    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
-      {
-        const ASTNode& aaa = *it;
-        if (k == aaa.GetKind())
-          {
-            const ASTVec& ac = aaa.GetChildren();
-            o.insert(o.end(), ac.begin(), ac.end());
-          }
-        else
-          o.push_back(aaa);
-      }
-
-    if (is_Form_kind(k))
-      output = nf->CreateNode(k, o);
-    else
-      output = nf->CreateTerm(k, a.GetValueWidth(), o);
-
-    return output;
-  } //end of flattenonelevel()
 
 
   ASTNode
@@ -2465,10 +2404,10 @@ namespace BEEV
 
           ASTNode identity = (BVAND == k) ? max : zero;
           ASTNode annihilator = (BVAND == k) ? zero : max;
-          ASTVec c = Flatten(inputterm).GetChildren();
+          ASTVec c = FlattenKind(inputterm.GetKind(), inputterm.GetChildren());
           SortByArith(c);
+          ASTVec constants;
           ASTVec o;
-          bool constant = true;
           for (ASTVec::iterator
                  it = c.begin(), itend = c.end(); it != itend; it++)
             {
@@ -2476,12 +2415,6 @@ namespace BEEV
             if (!simplify_upfront)
               aaa = SimplifyTerm(aaa);
             assert(hasBeenSimplified(aaa));
-
-
-              if (BVCONST != aaa.GetKind())
-                {
-                  constant = false;
-                }
 
               if (aaa == annihilator)
                 {
@@ -2508,13 +2441,30 @@ namespace BEEV
                   return output;
               }
 
-
-              if (aaa != identity)
+              if (BVCONST == aaa.GetKind())
+                {
+                  constants.push_back(aaa);
+                }
+              else
                 {
                   o.push_back(aaa);
                 }
-
             }
+
+          while(constants.size() >=2)
+          {
+        	  ASTNode a = constants.back();
+        	  constants.pop_back();
+        	  ASTNode b = constants.back();
+        	  constants.pop_back();
+
+        	  ASTNode c = BVConstEvaluator(nf->CreateTerm(inputterm.GetKind(),inputterm.GetValueWidth(), a,b));
+
+        	  constants.push_back(c);
+
+          }
+          if (constants.size() != 0 && constants.back() != identity)
+        	  o.push_back(constants.back());
 
           switch (o.size())
             {
@@ -2526,11 +2476,7 @@ namespace BEEV
               break;
             default:
               SortByArith(o);
-              output = nf->CreateTerm(k, inputValueWidth, o);
-              if (constant)
-                {
-                  output = BVConstEvaluator(output);
-                }
+              output = makeTower(inputterm.GetKind(),o );
               break;
             }
 
@@ -2597,7 +2543,7 @@ namespace BEEV
 						assert(BVTypeCheck(output));
           			}
           		}
-          break;
+          		break;
         }
       case BVCONCAT:
         {
