@@ -28,17 +28,6 @@ namespace BEEV
     // Data structure that holds the counterexample
     ASTNodeMap CounterExampleMap;
             
-    // This map for building/printing counterexamples. MINISAT
-    // returns values for each bit (a BVGETBIT Node), and this maps
-    // allows us to assemble the bits into bitvectors.
-    typedef HASHMAP<
-      ASTNode, 
-      HASHMAP<unsigned int, bool> *, 
-      ASTNode::ASTNodeHasher, 
-      ASTNode::ASTNodeEqual> ASTtoBitvectorMap;
-
-    ASTtoBitvectorMap _ASTNode_to_BitvectorMap;
-
     // This memo map is used by the ComputeFormulaUsingModel()
     ASTNodeMap ComputeFormulaMap;
       
@@ -71,7 +60,7 @@ namespace BEEV
     void CopySolverMap_To_CounterExample(void);
 
     //Converts a vector of bools to a BVConst
-    ASTNode BoolVectoBVConst(HASHMAP<unsigned, bool> * w, unsigned int l);
+    ASTNode BoolVectoBVConst(const vector<bool> * w, const unsigned int l);
 
     //Converts MINISAT counterexample into an AST memotable (i.e. the
     //function populates the datastructure CounterExampleMap)
@@ -179,15 +168,6 @@ namespace BEEV
     void ClearAllTables(void)
     {
       CounterExampleMap.clear();
-      for (ASTtoBitvectorMap::iterator
-             it    = _ASTNode_to_BitvectorMap.begin(), 
-             itend = _ASTNode_to_BitvectorMap.end(); 
-           it != itend; it++)
-        {
-          (it->second)->clear();
-          delete (it->second);
-        }
-      _ASTNode_to_BitvectorMap.clear();
       ComputeFormulaMap.clear();
     } //End of ClearAllTables()
 

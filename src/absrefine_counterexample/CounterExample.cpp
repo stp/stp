@@ -30,13 +30,7 @@ namespace BEEV
   AbsRefine_CounterExample::ConstructCounterExample(SATSolver& newS,
       ToSATBase::ASTNodeToSATVar& satVarToSymbol)
   {
-    //iterate over MINISAT counterexample and construct a map from AST
-    //terms to vector of bools. We need this iteration step because
-    //MINISAT might return the various bits of a term out of
-    //order. Therfore, we need to collect all the bits and assemble
-    //them properly
-
-    if (!newS.okay())
+   if (!newS.okay())
       return;
     if (!bm->UserFlags.construct_counterexample_flag)
       return;
@@ -51,6 +45,10 @@ namespace BEEV
         const ASTNode& symbol = it->first;
         const vector<unsigned>& v = it->second;
 
+        const unsigned int symbolWidth = symbol.GetValueWidth();
+        assert(symbol.GetKind() == SYMBOL);
+        vector<bool>  bitVector_array(symbolWidth,false);
+
         for (int index = 0; index < v.size(); index++)
           {
             const unsigned sat_variable_index = v[index];
@@ -64,35 +62,18 @@ namespace BEEV
             //assemble the counterexample here
             if (symbol.GetType() == BITVECTOR_TYPE)
               {
-                const unsigned int symbolWidth = symbol.GetValueWidth();
-
-                //'v' is the map from bit-index to bit-value
-                HASHMAP<unsigned, bool> * v;
-                if (_ASTNode_to_BitvectorMap.find(symbol)
-                    == _ASTNode_to_BitvectorMap.end())
-                  {
-                    _ASTNode_to_BitvectorMap[symbol] = new HASHMAP<unsigned,
-                        bool> (symbolWidth);
-                  }
-
-                //v holds the map from bit-index to bit-value
-                v = _ASTNode_to_BitvectorMap[symbol];
-
                 //Collect the bits of 'symbol' and store in v. Store
                 //in reverse order.
-                if (newS.modelValue(sat_variable_index) == newS.true_literal() )
-                  (*v)[(symbolWidth - 1) - index] = true;
-                else
-                  (*v)[(symbolWidth - 1) - index] = false;
+                bitVector_array[(symbolWidth - 1) - index] = (newS.modelValue(sat_variable_index) == newS.true_literal() );
               }
             else
               {
                 assert (symbol.GetType() == BOOLEAN_TYPE);
-                const char * zz = symbol.GetName();
+                //const char * zz = symbol.GetName();
                 //if the variables are not cnf variables then add
                 //them to the counterexample
-                if (0 != strncmp("cnf", zz, 3) && 0
-                    != strcmp("*TrueDummy*", zz))
+                //if (0 != strncmp("cnf", zz, 3) && 0
+                //  != strcmp("*TrueDummy*", zz))
                   {
                   if (newS.modelValue(sat_variable_index) == newS.true_literal())
                       CounterExampleMap[symbol] = ASTTrue;
@@ -103,33 +84,11 @@ namespace BEEV
                   }
               }
           }
-      }
 
-    //iterate over the ASTNode_to_Bitvector data-struct and construct
-    //the the aggregate value of the bitvector, and populate the
-    //CounterExampleMap datastructure
-    for (ASTtoBitvectorMap::iterator it = _ASTNode_to_BitvectorMap.begin(),
-           itend = _ASTNode_to_BitvectorMap.end(); it != itend; it++)
-      {
-        ASTNode var = it->first;
-        //debugging
-        //cerr << var;
-        if (SYMBOL != var.GetKind())
-          {
-            FatalError("ConstructCounterExample:"
-              "error while constructing counterexample: "
-                       "not a variable: ", var);
-          }
-        //construct the bitvector value
-        HASHMAP<unsigned, bool> * w = it->second;
-        ASTNode value = BoolVectoBVConst(w, var.GetValueWidth());
-        //debugging
-        //cerr << value;
-
-        //populate the counterexample datastructure. add only scalars
-        //variables which were declared in the input and newly
-        //introduced variables for array reads
-        CounterExampleMap[var] = value;
+        if (symbol.GetType() == BITVECTOR_TYPE)
+        {
+			CounterExampleMap[symbol] = BoolVectoBVConst(&bitVector_array, symbol.GetValueWidth());
+        }
       }
 
     //In this loop, we compute the value of each array read, the
@@ -902,20 +861,16 @@ namespace BEEV
 
   //FUNCTION: this function accepts a boolvector and returns a BVConst
   ASTNode
-  AbsRefine_CounterExample::BoolVectoBVConst(HASHMAP<unsigned, bool> * w,
-      unsigned int l)
+  AbsRefine_CounterExample::BoolVectoBVConst(const vector<bool> * w,
+      const unsigned int l)
   {
-    if (l < (unsigned)w->size())
-      FatalError("BoolVectorBVConst : "
-        "length of bitvector does not match HASHMAP size:", ASTUndefined, l);
+    assert (l == (unsigned)w->size());
 
     CBV cc = CONSTANTBV::BitVector_Create(l,true);
     for (unsigned int jj = 0; jj < l; jj++)
       {
         if ((*w)[jj] == true)
           CONSTANTBV::BitVector_Bit_On(cc,l-1-jj);
-        else
-                CONSTANTBV::BitVector_Bit_Off(cc,l-1-jj);
       }
 
     return bm->CreateBVConst(cc,l);
