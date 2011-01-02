@@ -1655,14 +1655,22 @@ namespace BEEV
 		if (k != SYMBOL) // const and symbols need to be created specially.
 		{
 			ASTVec v;
-			v.reserve(actualInputterm.Degree());
-			for (unsigned i = 0; i < actualInputterm.Degree(); i++)
-				if (inputterm[i].GetType() == BITVECTOR_TYPE)
-					v.push_back(SimplifyTerm(inputterm[i], VarConstMap));
-				else if (inputterm[i].GetType() == BOOLEAN_TYPE)
-					v.push_back(SimplifyFormula(inputterm[i], VarConstMap));
+			ASTVec toProcess = actualInputterm.GetChildren();
+			if (actualInputterm.GetKind() == BVAND || actualInputterm.GetKind() == BVOR)
+			{
+				// If we didn't flatten these, then we'd start flattening each of these
+				// from the bottom up. Potentially creating tons of the nodes along the way.
+				toProcess = FlattenKind(actualInputterm.GetKind(), toProcess);
+			}
+
+			v.reserve(toProcess.size());
+			for (unsigned i = 0; i < toProcess.size(); i++)
+				if (toProcess[i].GetType() == BITVECTOR_TYPE)
+					v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
+				else if (toProcess[i].GetType() == BOOLEAN_TYPE)
+					v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
 				else
-					v.push_back(inputterm[i]);
+					v.push_back(toProcess[i]);
 
 			assert(v.size() > 0);
 			if (v != actualInputterm.GetChildren()) // short-cut.
@@ -2317,11 +2325,16 @@ namespace BEEV
               break;
             case BVAND:
             case BVOR:
-              assert(a0.Degree() == 2);
-              output = 
-                nf->CreateTerm(a0.GetKind(), len,
-                                nf->CreateTerm(BVSX, len, a0[0], a1),
-                                nf->CreateTerm(BVSX, len, a0[1], a1));
+            {
+              ASTVec c = a0.GetChildren();
+              ASTVec newChildren;
+              for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+			  {
+				  newChildren.push_back(nf->CreateTerm(BVSX, len, *it, a1));
+			  }
+
+              output =  nf->CreateTerm(a0.GetKind(), len, newChildren );
+            }
               break;
             case BVPLUS:
               {
@@ -2476,7 +2489,7 @@ namespace BEEV
               break;
             default:
               SortByArith(o);
-              output = makeTower(inputterm.GetKind(),o );
+              output = nf->CreateTerm(inputterm.GetKind(),inputterm.GetValueWidth(), o );
               break;
             }
 

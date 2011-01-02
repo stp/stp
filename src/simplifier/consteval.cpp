@@ -167,19 +167,34 @@ namespace BEEV
 
       case BVAND:
         {
-          assert(2==t.Degree());
-          output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          CONSTANTBV::Set_Intersection(output, tmp0, tmp1);
-          OutputNode = _bm->CreateBVConst(output, outputwidth);
-          break;
+        	assert(1 <= t.Degree());
+
+        	output = CONSTANTBV::BitVector_Create(inputwidth, true);
+        	CONSTANTBV::BitVector_Fill(output);
+
+            for (ASTVec::iterator it = children.begin(), itend = children.end(); it != itend; it++)
+              {
+                CBV kk = (*it).GetBVConst();
+                CONSTANTBV::Set_Intersection(output, output, kk);
+              }
+
+            OutputNode = _bm->CreateBVConst(output, outputwidth);
+            break;
         }
       case BVOR:
         {
-          assert(2==t.Degree());
-          output = CONSTANTBV::BitVector_Create(inputwidth, true);
-          CONSTANTBV::Set_Union(output, tmp0, tmp1);
-          OutputNode = _bm->CreateBVConst(output, outputwidth);
-          break;
+        	assert(1 <= t.Degree());
+
+        	output = CONSTANTBV::BitVector_Create(inputwidth, true);
+
+            for (ASTVec::iterator it = children.begin(), itend = children.end(); it != itend; it++)
+              {
+                CBV kk = (*it).GetBVConst();
+                CONSTANTBV::Set_Union(output, output, kk);
+              }
+
+            OutputNode = _bm->CreateBVConst(output, outputwidth);
+            break;
         }
       case BVXOR:
         {
