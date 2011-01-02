@@ -236,6 +236,8 @@ namespace BEEV
 
     void cleanup(const ASTNode& varphi);    
 
+    ASTNode dummy_true_var;
+
   public:
 
     //########################################

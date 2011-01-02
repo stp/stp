@@ -911,14 +911,13 @@ namespace BEEV
                                            ClauseList* defs)
   {
     ASTNode dummy_false_var = 
-      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*",0,0));
+      bm->CreateNode(NOT, dummy_true_var);
     info[varphi]->clausespos = SINGLETON(dummy_false_var);
   } //End of convertFormulaToCNFPosFALSE()
 
   void CNFMgr::convertFormulaToCNFPosTRUE(const ASTNode& varphi, 
                                           ClauseList* defs)
   {
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     info[varphi]->clausespos = SINGLETON(dummy_true_var);
   } //End of convertFormulaToCNFPosTRUE
 
@@ -1285,7 +1284,6 @@ namespace BEEV
   void CNFMgr::convertFormulaToCNFNegFALSE(const ASTNode& varphi, 
                                            ClauseList* defs)
   {
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     info[varphi]->clausesneg = SINGLETON(dummy_true_var);
   } //End of convertFormulaToCNFNegFALSE()
 
@@ -1293,7 +1291,7 @@ namespace BEEV
                                           ClauseList* defs)
   {
     ASTNode dummy_false_var = 
-      bm->CreateNode(NOT, bm->CreateSymbol("*TrueDummy*",0,0));
+      bm->CreateNode(NOT, dummy_true_var);
     info[varphi]->clausesneg = SINGLETON(dummy_false_var);
   } //End of convertFormulaToCNFNegTRUE()
 
@@ -1743,6 +1741,7 @@ namespace BEEV
     bm = bmgr;
     clausesxor = new ClauseList();
     renameAllSiblings = bm->UserFlags.renameAllInCNF_flag;
+    dummy_true_var = bmgr->CreateFreshVariable(0,0,"*TrueDummy*");
   }
 
   //########################################
@@ -1766,7 +1765,6 @@ namespace BEEV
   {
     bm->GetRunTimes()->start(RunTimes::CNFConversion);
     scanFormula(varphi, true, false);
-    ASTNode dummy_true_var = bm->CreateSymbol("*TrueDummy*",0,0);
     ClauseList* defs = SINGLETON(dummy_true_var);
     convertFormulaToCNF(varphi, defs);
     ClauseList* top = info[varphi]->clausespos;
