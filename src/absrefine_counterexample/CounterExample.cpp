@@ -66,19 +66,13 @@ namespace BEEV
             else
               {
                 assert (symbol.GetType() == BOOLEAN_TYPE);
-                //const char * zz = symbol.GetName();
-                //if the variables are not cnf variables then add
-                //them to the counterexample
-                //if (0 != strncmp("cnf", zz, 3) && 0
-                //  != strcmp("*TrueDummy*", zz))
-                  {
-                  if (newS.modelValue(sat_variable_index) == newS.true_literal())
-                      CounterExampleMap[symbol] = ASTTrue;
-                    else if (newS.modelValue(sat_variable_index) == newS.false_literal())
-                      CounterExampleMap[symbol] = ASTFalse;
-                    else
-                      FatalError("never heres.");
-                  }
+ 			    if (newS.modelValue(sat_variable_index) == newS.true_literal())
+				  CounterExampleMap[symbol] = ASTTrue;
+				else if (newS.modelValue(sat_variable_index) == newS.false_literal())
+				  CounterExampleMap[symbol] = ASTFalse;
+				else
+				  FatalError("never heres.");
+
               }
           }
 
@@ -339,7 +333,7 @@ namespace BEEV
     //when this flag is false, we should compute the arrayread to a
     //constant. this constant is stored in the counter_example
     //datastructure
-    if (!ArrayReadFlag)
+    //if (!ArrayReadFlag)
       {
         CounterExampleMap[term] = output;
       }
