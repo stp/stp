@@ -40,9 +40,6 @@ namespace BEEV
     // Ptr to ArrayTransformer
     ArrayTransformer * ArrayTransform;
       
-    // Ptr to ToSAT
-    //ToSATBase * tosat;
-
     // Checks if the counterexample is good. In order for the
     // counterexample to be ok, every assert must evaluate to true
     // w.r.t couner_example, and the query must evaluate to
@@ -83,20 +80,19 @@ namespace BEEV
       ASTUndefined = bm->CreateNode(UNDEFINED);
     }
 
+    //Prints the counterexample to stdout
+    void PrintCounterExample(bool t, std::ostream& os = cout);
+      
     void ClearCounterExampleMap(void)
     {
       CounterExampleMap.clear();
     }
 
-    void ClearComputeFormulaMap(void) 
+    void ClearComputeFormulaMap(void)
     {
       ComputeFormulaMap.clear();
     }
 
-      
-    //Prints the counterexample to stdout
-    void PrintCounterExample(bool t, std::ostream& os = cout);
-      
     //Prints the counterexample to stdout
     void PrintCounterExample_InOrder(bool t);
       
@@ -147,23 +143,6 @@ namespace BEEV
     SATBased_ArrayWriteRefinement(SATSolver& newS,
                                   const ASTNode& orig_input,
                                   ToSATBase *tosat);
-    
-    //     SOLVER_RETURN_TYPE
-    // SATBased_AllFiniteLoops_Refinement(SATSolver& newS,
-    // const ASTNode& orig_input);
-      
-    //     ASTVec SATBased_FiniteLoop_Refinement(SATSolver&
-    // SatSolver, const ASTNode& original_input, const ASTNode&
-    // finiteloop, ASTNodeMap* ParamToCurrentValMap, bool
-    // absrefine_flag=false);
-      
-    //     ASTNode Check_FiniteLoop_UsingModel(const ASTNode&
-    // finiteloop, ASTNodeMap* ParamToCurrentValMap, bool
-    // CheckUsingModel_Or_Expand);
-    //
-    //     ASTNode Expand_FiniteLoop_TopLevel(const ASTNode&
-    //     finiteloop); ASTNode Check_FiniteLoop_UsingModel(const
-    //     ASTNode& finiteloop);
 
     void ClearAllTables(void)
     {

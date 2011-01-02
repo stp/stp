@@ -15,9 +15,6 @@ const bool debug_counterexample =  false;
 
 namespace BEEV
 {
-
-
-
   /*FUNCTION: constructs counterexample from MINISAT counterexample
    * step1 : iterate through MINISAT counterexample and assemble the
    * bits for each AST term. Store it in a map from ASTNode to vector
@@ -141,36 +138,22 @@ namespace BEEV
   //4. doesn't have a value in the counterexample then return 0 as the
   //4. value of the arrayread.
   ASTNode
-  AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& t,
+  AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       bool ArrayReadFlag)
   {
-    bm->Begin_RemoveWrites = false;
-    bm->SimplifyWrites_InPlace_Flag = false;
-    //ASTNode term = SimplifyTerm(t);
-    ASTNode term = t;
-    Kind k = term.GetKind();
+    if (term.GetKind() == BVCONST)
+    	return term;
 
-    //cerr << "Input to TermToConstTermUsingModel: " << term << endl;
-    if (!is_Term_kind(k))
-      {
-        FatalError("TermToConstTermUsingModel: "
-          "The input is not a term: ", term);
-      }
-    if (k == WRITE)
-      {
-        FatalError("TermToConstTermUsingModel: "
-          "The input has wrong kind: WRITE : ", term);
-      }
-    if (k == SYMBOL && BOOLEAN_TYPE == term.GetType())
-      {
-        FatalError("TermToConstTermUsingModel: "
-          "The input has wrong kind: Propositional variable : ", term);
-      }
+    const Kind k = term.GetKind();
 
-    ASTNodeMap::iterator it1;
+    assert (is_Term_kind(k));
+    assert (k != WRITE);
+    assert (BOOLEAN_TYPE != term.GetType());
+
+    ASTNodeMap::const_iterator it1;
     if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
       {
-        ASTNode val = it1->second;
+        const ASTNode& val = it1->second;
         if (BVCONST != val.GetKind())
           {
             //CounterExampleMap has two maps rolled into
@@ -336,19 +319,17 @@ namespace BEEV
         {
           const ASTVec& c = term.GetChildren();
           ASTVec o;
-                   o.reserve(c.size());
+          o.reserve(c.size());
         for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it
             != itend; it++)
             {
               ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
               o.push_back(ff);
             }
-          output = bm->CreateTerm(k, term.GetValueWidth(), o);
+          output = bm->hashingNodeFactory->CreateTerm(k, term.GetValueWidth(), o);
           //output is a CONST expression. compute its value and store it
           //in the CounterExampleMap
-          ASTNode oo = simp->BVConstEvaluator(output);
-          //the return value
-          output = oo;
+          output = simp->BVConstEvaluator(output);
           break;
         }
       }
