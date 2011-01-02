@@ -59,7 +59,8 @@ namespace BEEV
   void BVSolver::UpdateAlreadySolvedMap(const ASTNode& key, 
                                         const ASTNode& value)
   {
-    FormulasAlreadySolvedMap[key] = value;
+    assert(key.GetType() == BOOLEAN_TYPE);
+	  FormulasAlreadySolvedMap[key] = value;
   } //end of UpdateAlreadySolvedMap()
 
   //accepts an even number "in", and returns the location of
@@ -75,72 +76,9 @@ namespace BEEV
   	assert(number_shifts >0); // shouldn't be odd.
   }
 
-
-#if 0
-  //Checks if there are any ARRAYREADS in the term, after the
-  //alreadyseenmap is cleared, i.e. traversing a new term altogether
-  bool BVSolver::CheckForArrayReads_TopLevel(const ASTNode& term)
-  {
-    TermsAlreadySeenMap.clear();
-    return CheckForArrayReads(term);
-  }
-
-  //Checks if there are any ARRAYREADS in the term
-  bool BVSolver::CheckForArrayReads(const ASTNode& term)
-  {
-    ASTNode a = term;
-    ASTNodeMap::iterator it;
-    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
-      {
-        //if the term has been seen, then _simply return true, else
-        //return false
-        if (ASTTrue == (it->second))
-          {
-            return true;
-          }
-        else
-          {
-            return false;
-          }
-      }
-
-    switch (term.GetKind())
-      {
-      case READ:
-        //an array read has been seen. Make an entry in the map and
-        //return true
-        TermsAlreadySeenMap[term] = ASTTrue;
-        return true;
-      default:
-        {
-          ASTVec c = term.GetChildren();
-          for (ASTVec::iterator 
-                 it = c.begin(), itend = c.end(); it != itend; it++)
-            {
-              if (CheckForArrayReads(*it))
-                {
-                  return true;
-                }
-            }
-          break;
-        }
-      }
-
-    //If control is here, then it means that no arrayread was seen for
-    //the input 'term'. Make an entry in the map with the term as key
-    //and FALSE as value.
-    TermsAlreadySeenMap[term] = ASTFalse;
-    return false;
-  } //end of CheckForArrayReads()
-#endif
-
   bool BVSolver::DoNotSolveThis(const ASTNode& var)
   {
-    if (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end())
-      {
-        return true;
-      }
-    return false;
+    return (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end());
   }
 
   //chooses a variable in the lhs and returns the chosen variable
@@ -157,12 +95,14 @@ namespace BEEV
     const ASTNode& lhs = lhsIsPlus? eq[0] : eq[1];
     const ASTNode& rhs = lhsIsPlus? eq[1] : eq[0];
 
+    assert(BVPLUS == lhs.GetKind());
+
     //collect all the vars in the lhs and rhs
     BuildSymbolGraph(eq);
     CountOfSymbols count(symbol_graph[eq]);
 
     //handle BVPLUS case
-    const ASTVec& c = lhs.GetChildren();
+    ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
     ASTVec o;
     ASTNode outmonom = ASTUndefined;
     bool chosen_symbol = false;

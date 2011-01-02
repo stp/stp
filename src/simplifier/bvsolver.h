@@ -53,24 +53,6 @@ namespace BEEV
     //
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
-    //Those formulas which have already been solved. If the same
-    //formula occurs twice then do not solve the second occurence, and
-    //instead drop it
-    ASTNodeMap FormulasAlreadySolvedMap;
-
-    //this map is useful while traversing terms and uniquely
-    //identifying variables in the those terms. Prevents double
-    //counting.
-
-    typedef HASHMAP<
-	  Symbols*,
-	  ASTNodeSet,
-	  SymbolPtrHasher
-	  > SymbolPtrToNode;
-	SymbolPtrToNode TermsAlreadySeenMap;
-
-       //ASTNodeMap TermsAlreadySeenMap_ForArrays;
-
     //solved variables list: If a variable has been solved for then do
     //not solve for it again
     ASTNodeSet DoNotSolve_TheseVars;
@@ -89,19 +71,40 @@ namespace BEEV
     ASTNode BVSolve_Even(const ASTNode& eq);
     ASTNode CheckEvenEqn(const ASTNode& input, bool& evenflag);
 
-    //Checks for arrayreads in a term. if yes then returns true, else
-    //return false
-    //bool CheckForArrayReads(const ASTNode& term);
-    //bool CheckForArrayReads_TopLevel(const ASTNode& term);
-
+    /////////////////////////
+    // When solving, we're interested in whether variables appear multiple times.
     typedef HASHSET<Symbols*,SymbolPtrHasher> SymbolPtrSet;
+
+	typedef HASHMAP<
+	  ASTNode,
+	  Symbols*,
+	  ASTNode::ASTNodeHasher,
+	  ASTNode::ASTNodeEqual> ASTNodeToNodes;
+	  ASTNodeToNodes symbol_graph;
+
+	  Symbols* BuildSymbolGraph(const ASTNode& n);
+
+	    //this map is useful while traversing terms and uniquely
+	    //identifying variables in the those terms. Prevents double
+	    //counting.
+
+	    typedef HASHMAP<
+		  Symbols*,
+		  ASTNodeSet,
+		  SymbolPtrHasher
+		  > SymbolPtrToNode;
+		SymbolPtrToNode TermsAlreadySeenMap;
 
     //this function return true if the var occurs in term, else the
     //function returns false
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
     void SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols);
-
     void VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av);
+
+
+    /////////////////////////
+
+
 
     ASTNode solveForXOR(const ASTNode& n);
     ASTNode solveForAndOfXOR(const ASTNode& n);
@@ -115,6 +118,12 @@ namespace BEEV
     //understanding of the algorithm
     void SplitEven_into_Oddnum_PowerOf2(const ASTNode& in,
                                            unsigned int& number_shifts);
+
+
+    //Those formulas which have already been solved. If the same
+    //formula occurs twice then do not solve the second occurence, and
+    //instead drop it
+    ASTNodeMap FormulasAlreadySolvedMap;
 
     //Once a formula has been solved, then update the alreadysolvedmap
     //with the formula, and the solved value. The solved value can be
@@ -135,14 +144,6 @@ namespace BEEV
     //else returns FALSE
     bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
 
-	typedef HASHMAP<
-	  ASTNode,
-	  Symbols*,
-	  ASTNode::ASTNodeHasher,
-	  ASTNode::ASTNodeEqual> ASTNodeToNodes;
-	  ASTNodeToNodes symbol_graph;
-
-	  Symbols* BuildSymbolGraph(const ASTNode& n);
 
   public:
     //constructor
