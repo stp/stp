@@ -388,7 +388,7 @@ int main(int argc, char ** argv) {
               bm->UserFlags.quick_statistics_flag = true;
               break;
             case 'u':
-              bm->UserFlags.arraywrite_refinement_flag = false;
+              //bm->UserFlags.arraywrite_refinement_flag = false;
               break;
             case 'v' :
               bm->UserFlags.print_nodes_flag = true;

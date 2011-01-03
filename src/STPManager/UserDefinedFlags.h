@@ -42,7 +42,7 @@ namespace BEEV
     bool arrayread_refinement_flag;
     
     //switch to control write refinements
-    bool arraywrite_refinement_flag;
+    //bool arraywrite_refinement_flag;
     
     //check the counterexample against the original input to STP
     bool check_counterexample_flag;
@@ -191,7 +191,7 @@ namespace BEEV
       arrayread_refinement_flag = true;
   
       //flag to control write refinement
-      arraywrite_refinement_flag = true;
+      //arraywrite_refinement_flag = true;
       
       //check the counterexample against the original input to STP
       check_counterexample_flag = true;

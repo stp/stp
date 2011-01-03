@@ -121,7 +121,7 @@ void vc_setFlags(VC vc, char c, int param_value) {
     b->UserFlags.stats_flag = true;
     break;
   case 'u':
-    b->UserFlags.arraywrite_refinement_flag = false;
+    //b->UserFlags.arraywrite_refinement_flag = false;
     break;
   case 'v' :
     b->UserFlags.print_nodes_flag = true;

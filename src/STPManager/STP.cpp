@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -187,21 +187,8 @@ namespace BEEV {
     bm->ASTNodeStats("After SimplifyWrites_Inplace: ", 
                      simplified_solved_InputToSAT);
 
-    bm->start_abstracting = 
-      (bm->UserFlags.arraywrite_refinement_flag) ? true : false;
-    bm->SimplifyWrites_InPlace_Flag = false;
-    bm->Begin_RemoveWrites = (bm->start_abstracting) ? false : true;
-    if (bm->start_abstracting)
-      {
-        bm->ASTNodeStats("before abstraction round begins: ", 
-                         simplified_solved_InputToSAT);
-      }
-
     bm->TermsAlreadySeenMap_Clear();
-    if (bm->start_abstracting)
-      {
-        bm->ASTNodeStats("After abstraction: ", simplified_solved_InputToSAT);
-      }
+
     bm->start_abstracting = false;
     bm->SimplifyWrites_InPlace_Flag = false;
     bm->Begin_RemoveWrites = false;
@@ -259,7 +246,7 @@ namespace BEEV {
     bvsolver = new BVSolver(bm,simp);
 
     // If it doesn't contain array operations, use ABC's CNF generation.
-    if (!arrayops)
+    if (!arrayops || !bm->UserFlags.arrayread_refinement_flag)
     {
       simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
 
@@ -306,13 +293,7 @@ namespace BEEV {
       }
 
     assert(arrayops); // should only go to abstraction refinement if there are array ops.
-
-    // res = SATBased_AllFiniteLoops_Refinement(NewSolver, orig_input);
-    //     if (SOLVER_UNDECIDED != res)
-    //       {
-    //  CountersAndStats("print_func_stats");
-    //         return res;      
-    //       }
+    assert(bm->UserFlags.arrayread_refinement_flag); // Refinement must be enabled too.
 
     res = 
       Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
