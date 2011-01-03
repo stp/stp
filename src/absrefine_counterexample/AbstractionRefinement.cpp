@@ -44,16 +44,8 @@ namespace BEEV
                                const ASTNode& inputAlreadyInSAT, 
                                const ASTNode& original_input,
                                ToSATBase* tosat) {
-    //printf("doing array read refinement\n");
-    // if (!bm->UserFlags.arrayread_refinement_flag)
-    //       {
-    //         FatalError("SATBased_ArrayReadRefinement: "	\
-    //                    "Control should not reach here");
-    //       }
-    ASTVec FalseAxiomsVec, RemainingAxiomsVec;
-    RemainingAxiomsVec.push_back(ASTTrue);
-    FalseAxiomsVec.push_back(ASTTrue);
-    unsigned int oldFalseAxiomsSize = 0;
+
+	ASTVec FalseAxiomsVec, RemainingAxiomsVec;
 
     //in these loops we try to construct Leibnitz axioms and add it to
     //the solve(). We add only those axioms that are false in the
@@ -66,103 +58,82 @@ namespace BEEV
            iset_end = ArrayTransform->ArrayName_ReadIndicesMap()->end(); 
          iset != iset_end; iset++)
       {
-        ASTVec listOfIndices = iset->second;
+    	const ASTNode& ArrName = iset->first;
+    	const ASTVec& listOfIndices = iset->second;
+
+    	// Make a vector of the read symbols.
+    	ASTVec read_node_symbols;
+    	read_node_symbols.reserve(listOfIndices.size());
+    	for (int i = 0; i < listOfIndices.size(); i++)
+    	{
+        	const ASTNode& the_index = listOfIndices[i];
+
+        	ASTNode arr_read =
+              bm->CreateTerm(READ, ArrName.GetValueWidth(), ArrName, the_index);
+
+        	ASTNode arrsym = ArrayTransform->ArrayRead_SymbolMap(arr_read);
+        	assert ((SYMBOL == arrsym.GetKind() || BVCONST == arrsym.GetKind()));
+
+        	read_node_symbols.push_back(arrsym);
+    	}
+
         //loop over the list of indices for the array and create LA,
         //and add to inputAlreadyInSAT
-        for (ASTVec::iterator it = listOfIndices.begin(),
-               itend = listOfIndices.end(); it != itend; it++)
+        for (int i = 0; i < listOfIndices.size(); i++)
           {
-            if (BVCONST == it->GetKind())
-              {
-                continue;
-              }
+        	const ASTNode& index_i = listOfIndices[i];
 
-            ASTNode the_index = *it;
-            //get the arrayname
-            ASTNode ArrName = iset->first;
-            // if(SYMBOL != ArrName.GetKind())
-            //        FatalError("SATBased_ArrayReadRefinement: "\
-            // "arrname is not a SYMBOL",ArrName);
-            ASTNode arr_read1 = 
-              bm->CreateTerm(READ, ArrName.GetValueWidth(), ArrName, the_index);
-            //get the variable corresponding to the array_read1
-            //ASTNode arrsym1 = _arrayread_symbol[arr_read1];
-            ASTNode arrsym1 = ArrayTransform->ArrayRead_SymbolMap(arr_read1);
-            if (!(SYMBOL == arrsym1.GetKind() || BVCONST == arrsym1.GetKind()))
-              FatalError("TopLevelSAT: refinementloop:"
-                         "term arrsym1 corresponding to READ must be a var", 
-                         arrsym1);
-
-            //we have nonconst index here. create Leibnitz axiom for it
-            //w.r.t every index in listOfIndices
-            for (ASTVec::iterator it1 = listOfIndices.begin(), 
-                   itend1 = listOfIndices.end(); it1 != itend1; it1++)
+            // Create all distinct pairs of indexes.
+            for (int j = i+1; j < listOfIndices.size(); j++)
               {
-                ASTNode compare_index = *it1;
-                //do not compare with yourself
-                if (the_index == compare_index)
-                  continue;
+            	const ASTNode& index_j = listOfIndices[j];
+
+            	// We assume there are no duplicate constant indexes in the list of readindexes,
+            	// so "i" and "j" will never be equal.
+            	if (BVCONST == index_i.GetKind() && index_j.GetKind() == BVCONST)
+            		continue;
 
                 //prepare for SAT LOOP
                 //first construct the antecedent for the LA axiom
                 ASTNode eqOfIndices = 
-                  (exprless(the_index, compare_index)) ? 
-                  simp->CreateSimplifiedEQ(the_index, compare_index) : 
-                  simp->CreateSimplifiedEQ(compare_index, the_index);
+                  (exprless(index_i, index_j)) ? 
+                  simp->CreateSimplifiedEQ(index_i, index_j) : 
+                  simp->CreateSimplifiedEQ(index_j, index_i);
 
-                ASTNode arr_read2 = 
-                  bm->CreateTerm(READ, ArrName.GetValueWidth(),
-                                 ArrName, compare_index);
-                //get the variable corresponding to the array_read2
-                //ASTNode arrsym2 = _arrayread_symbol[arr_read2];
-                ASTNode arrsym2 = 
-                  ArrayTransform->ArrayRead_SymbolMap(arr_read2);
-                if (!(SYMBOL == arrsym2.GetKind() 
-                      || BVCONST == arrsym2.GetKind()))
-                  {
-                    FatalError("TopLevelSAT: refinement loop:"
-                               "term arrsym2 corresponding to "\
-                               "READ must be a var", arrsym2);
-                  }
+                if (ASTFalse == eqOfIndices)
+                	continue; // shortuct.
 
-                ASTNode eqOfReads = simp->CreateSimplifiedEQ(arrsym1, arrsym2);
+                ASTNode eqOfReads = simp->CreateSimplifiedEQ(read_node_symbols[i], read_node_symbols[j]);
                 //construct appropriate Leibnitz axiom
                 ASTNode LeibnitzAxiom = 
                   bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
                 if (ASTFalse == ComputeFormulaUsingModel(LeibnitzAxiom))
                   {
-                    //FalseAxioms =
-                    //bm->CreateNode(AND,FalseAxioms,LeibnitzAxiom);
                     FalseAxiomsVec.push_back(LeibnitzAxiom);
                   }
                 else
                   {
-                    //RemainingAxioms =
-                    //bm->CreateNode(AND,RemainingAxioms,LeibnitzAxiom);
                     RemainingAxiomsVec.push_back(LeibnitzAxiom);
                   }
               }
-            ASTNode FalseAxioms = 
-              (FalseAxiomsVec.size() > 1) ? 
-              bm->CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
-            bm->ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
-            //printf("spot 01\n");
-            SOLVER_RETURN_TYPE res2 = SOLVER_UNDECIDED;
-            //if (FalseAxiomsVec.size() > 0)
-            if (FalseAxiomsVec.size() > oldFalseAxiomsSize)
-              {
-                res2 = 
-                  CallSAT_ResultCheck(SatSolver, 
-                                      FalseAxioms, 
-                                      original_input,
-                                      tosat);
-                oldFalseAxiomsSize = FalseAxiomsVec.size();
-              }
-            //printf("spot 02, res2 = %d\n", res2);
-            if (SOLVER_UNDECIDED != res2)
-              {
-                return res2;
-              }
+            if (FalseAxiomsVec.size() > 0)
+            {
+				ASTNode FalseAxioms =
+				  (FalseAxiomsVec.size() > 1) ?
+				  bm->CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
+				bm->ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
+				SOLVER_RETURN_TYPE res2;
+				res2 =  CallSAT_ResultCheck(SatSolver,
+									  FalseAxioms,
+									  original_input,
+									  tosat);
+				FalseAxiomsVec.clear();
+
+				if (SOLVER_UNDECIDED != res2)
+				  {
+					return res2;
+				  }
+				}
           }
       }
     ASTNode RemainingAxioms = 
