@@ -136,14 +136,16 @@ namespace BEEV
 				}
           }
       }
-    ASTNode RemainingAxioms = 
-      (RemainingAxiomsVec.size() > 1) ? 
-      bm->CreateNode(AND, RemainingAxiomsVec) : RemainingAxiomsVec[0];
-    bm->ASTNodeStats("adding remaining readaxioms to SAT: ", RemainingAxioms);
-    return CallSAT_ResultCheck(SatSolver, 
-                               RemainingAxioms, 
-                               original_input,
-                               tosat);
+    if (RemainingAxiomsVec.size() > 0)
+    {
+		ASTNode RemainingAxioms =
+				(RemainingAxiomsVec.size() > 1) ? bm->CreateNode(AND,
+						RemainingAxiomsVec) : RemainingAxiomsVec[0];
+		bm->ASTNodeStats("adding remaining readaxioms to SAT: ",
+				RemainingAxioms);
+		return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input,
+				tosat);
+	}
   } //end of SATBased_ArrayReadRefinement
 
 
