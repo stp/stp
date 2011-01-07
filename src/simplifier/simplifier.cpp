@@ -260,14 +260,14 @@ namespace BEEV
   Simplifier::SimplifyFormula(const ASTNode& b, 
                               bool pushNeg, ASTNodeMap* VarConstMap)
   {
-	  assert(_bm->UserFlags.optimize_flag);
+	assert(_bm->UserFlags.optimize_flag);
+    assert (BOOLEAN_TYPE == b.GetType());
+
+    ASTNode output;
+    if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
+      return output;
 
     Kind kind = b.GetKind();
-    if (BOOLEAN_TYPE != b.GetType())
-      {
-        FatalError(" SimplifyFormula: "\
-                   "You have input a nonformula kind: ", ASTUndefined, kind);
-      }
 
     ASTNode a = b;
     ASTVec ca = a.GetChildren();
@@ -277,13 +277,11 @@ namespace BEEV
           PARAMBOOL==kind ||
           isAtomic(kind)))
       {
-        SortByArith(ca);
-        a = nf->CreateNode(kind, ca);
+    	SortByArith(ca);
+    	if (ca != a.GetChildren())
+    		a = nf->CreateNode(kind, ca);
       }
 
-    ASTNode output;
-    if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-      return output;
 
     kind = a.GetKind();
 
@@ -1057,33 +1055,33 @@ namespace BEEV
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
-    ASTVec c = FlattenKind(a.GetKind(),a.GetChildren());
+    const Kind k = a.GetKind();
+    ASTVec c = FlattenKind(k,a.GetChildren());
     SortByArith(c);
-    Kind k = a.GetKind();
 
-    bool isAnd = (k == AND) ? true : false;
+    const bool isAnd = (k == AND) ? true : false;
 
-    ASTNode annihilator = 
+    const ASTNode annihilator =
       isAnd ? 
       (pushNeg ? ASTTrue : ASTFalse) : 
       (pushNeg ? ASTFalse : ASTTrue);
 
-    ASTNode identity = 
+    const ASTNode identity =
       isAnd ? 
       (pushNeg ? ASTFalse : ASTTrue) : 
       (pushNeg ? ASTTrue : ASTFalse);
 
     ASTVec outvec;
+    outvec.reserve(c.size());
 
     //do the work
     ASTVec::const_iterator next_it;
     for (ASTVec::const_iterator i = c.begin(), iend = c.end(); i != iend; i++)
       {
-        ASTNode aaa = *i;
         next_it = i + 1;
         bool nextexists = (next_it < iend);
 
-        aaa = SimplifyFormula(aaa, pushNeg, VarConstMap);
+        const ASTNode aaa = SimplifyFormula(*i, pushNeg, VarConstMap);
         if (annihilator == aaa)
           {
             //memoize
@@ -1092,7 +1090,7 @@ namespace BEEV
             //cerr << "annihilator1: output:\n" << annihilator << endl;
             return annihilator;
           }
-        ASTNode bbb = ASTFalse;
+        ASTNode bbb;
         if (nextexists)
           {
             bbb = SimplifyFormula(*next_it, pushNeg, VarConstMap);
@@ -1112,14 +1110,6 @@ namespace BEEV
           {
             // //drop identites
           }
-        else if ((!isAnd && !pushNeg) || (isAnd && pushNeg))
-          {
-            outvec.push_back(aaa);
-          }
-        else if ((isAnd && !pushNeg) || (!isAnd && pushNeg))
-          {
-            outvec.push_back(aaa);
-          }
         else
           {
             outvec.push_back(aaa);
@@ -1136,7 +1126,7 @@ namespace BEEV
         }
       case 1:
         {
-          output = SimplifyFormula(outvec[0], false, VarConstMap);
+          output = outvec[0];
           break;
         }
       default:
@@ -1152,10 +1142,6 @@ namespace BEEV
           break;
         }
       }
-
-    // I haven't verified this is useful.
-    //if (output.GetKind() == AND)
-    //  output = RemoveContradictionsFromAND(output);
 
     //memoize
     UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
