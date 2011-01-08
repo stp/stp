@@ -325,7 +325,7 @@ Cnf_Dat_t * Cnf_DeriveSimple_Additional( Aig_Man_t * p, Cnf_Dat_t * old )
 {
     Aig_Obj_t * pObj;
     Cnf_Dat_t * pCnf;
-    int OutVar, PoVar, pVars[32], * pLits, ** pClas;
+    int OutVar, pVars[32], * pLits, ** pClas;
     int i, nLiterals, nClauses;
 
     // calculate the worst case number of literals and clauses
@@ -348,7 +348,7 @@ Cnf_Dat_t * Cnf_DeriveSimple_Additional( Aig_Man_t * p, Cnf_Dat_t * old )
     //Copy over the prior allocation of variables to the new variables
     memcpy(pCnf->pVarNums, old->pVarNums, sizeof(int) * old->nVars);
 
-    assert (pCnf->pVarNums[Aig_ManConst1(p)->Id] ==1);
+    assert (pCnf->pVarNums[Aig_ManConst1(p)->Id] !=-1);
     int Number = old->nVars+1;
 
     // assign variables to the PIs
