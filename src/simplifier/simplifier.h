@@ -18,6 +18,7 @@
 namespace BEEV
 {
   ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
+  ASTNode NonMemberBVConstEvaluator(STPMgr* _bm , const Kind k, const ASTVec& input_children, unsigned int inputwidth);
 
   class Simplifier
   {

@@ -90,7 +90,7 @@ namespace BEEV
 
 	    typedef HASHMAP<
 		  Symbols*,
-		  ASTNodeSet,
+		  ASTNodeSet*,
 		  SymbolPtrHasher
 		  > SymbolPtrToNode;
 		SymbolPtrToNode TermsAlreadySeenMap;
@@ -178,6 +178,11 @@ namespace BEEV
   			  delete it->second;
   		  }
   	  }
+
+  	  for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin(); it != TermsAlreadySeenMap.end() ; it++)
+  		  delete (it->second);
+
+
     } //End of ClearAllTables()
 
   }; //end of class bvsolver

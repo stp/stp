@@ -1174,6 +1174,7 @@ namespace BEEV
 	    return;
 	  }//End of VarSeenInTerm
 
+#if 0
 	  void BVSolver::SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols)
 	  {
             assert(symbols.size() ==0);
@@ -1187,7 +1188,7 @@ namespace BEEV
 
             for (int i =0 ; i < av.size();i++)
             {
-                    const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
+                    const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
                     symbols.insert(sym.begin(), sym.end());
             }
 
@@ -1197,35 +1198,48 @@ namespace BEEV
                     TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
             }
           }
+#endif
 
 	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 	  {
 		  // This only returns true if we are searching for variables that aren't arrays.
 		  assert(var.GetKind() == SYMBOL && var.GetIndexWidth() == 0);
+		  if (term.isConstant())
+			  return false;
+
 		  BuildSymbolGraph(term);
 
 		  SymbolPtrSet visited;
-		  ASTNodeSet symbols;
+		  ASTNodeSet *symbols = new ASTNodeSet();
 		  vector<Symbols*> av;
-		  VarSeenInTerm(symbol_graph[term],visited,symbols,av);
+		  VarSeenInTerm(symbol_graph[term],visited,*symbols,av);
 
-		  bool result = (symbols.count(var) !=0);
-		  for (int i =0 ; i < av.size();i++)
-		  {
-			  if (result)
-				  break;
-			  const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
-			  result |= (sym.find(var) !=sym.end());
-		  }
+		  bool result = (symbols->count(var) !=0);
+
+		  //cerr << "visited:" << visited.size() << endl;
+		  //cerr << "av:" << av.size() << endl;
+		  //cerr << "Term is const" << term.isConstant() << endl;
 
 		  if (visited.size() > 50) // No use caching it, unless we've done some work.
 		  {
 			  for (int i =0 ; i < av.size();i++)
 			  {
-				  const ASTNodeSet& sym = TermsAlreadySeenMap.find(av[i])->second;
-				  symbols.insert(sym.begin(), sym.end());
+				  const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
+				  symbols->insert(sym.begin(), sym.end());
 			  }
 			  TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
+			  result = (symbols->count(var) !=0);
+		  }
+		  else
+		  {
+			  const int size = av.size();
+			  for (int i =0 ; i < size;i++)
+			  {
+				  if (result)
+					  break;
+				  const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
+				  result |= (sym.find(var) !=sym.end());
+			  }
 		  }
 		  return result;
 	  }
