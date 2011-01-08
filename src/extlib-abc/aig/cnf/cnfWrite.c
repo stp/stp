@@ -318,6 +318,97 @@ Cnf_Dat_t * Cnf_ManWriteCnf( Cnf_Man_t * p, Vec_Ptr_t * vMapped, int nOutputs )
     return pCnf;
 }
 
+// Create a new partial CNF with just the extra bits versus the old CNF.
+// This uses the Tseitin transform of Cnf_DeriveSimple
+// NB. We assume there will only be one more PO than last time.
+Cnf_Dat_t * Cnf_DeriveSimple_Additional( Aig_Man_t * p, Cnf_Dat_t * old )
+{
+    Aig_Obj_t * pObj;
+    Cnf_Dat_t * pCnf;
+    int OutVar, PoVar, pVars[32], * pLits, ** pClas;
+    int i, nLiterals, nClauses;
+
+    // calculate the worst case number of literals and clauses
+    nLiterals = 1 + 7 * Aig_ManNodeNum(p) + Aig_ManPoNum( p );
+    nClauses = 1 + 3 * Aig_ManNodeNum(p) + Aig_ManPoNum( p );
+
+    // allocate CNF
+    pCnf = ALLOC( Cnf_Dat_t, 1 );
+    memset( pCnf, 0, sizeof(Cnf_Dat_t) );
+    pCnf->pClauses = ALLOC( int *, nClauses + 1 );
+    pCnf->pClauses[0] = ALLOC( int, nLiterals );
+
+    // create room for variable numbers
+    pCnf->pVarNums = ALLOC( int, Aig_ManObjNumMax(p) );
+    memset( pCnf->pVarNums, 0xff, sizeof(int) * Aig_ManObjNumMax(p) );
+
+    // This is the index of the highest CNF variable number.
+    //printf("Old number of vars: %d\n", old->nVars);
+
+    //Copy over the prior allocation of variables to the new variables
+    memcpy(pCnf->pVarNums, old->pVarNums, sizeof(int) * old->nVars);
+
+    assert (pCnf->pVarNums[Aig_ManConst1(p)->Id] ==1);
+    int Number = old->nVars+1;
+
+    // assign variables to the PIs
+    int newPI = 0;
+    Aig_ManForEachPi( p, pObj, i )
+    	if (pCnf->pVarNums[pObj->Id] == -1) // new!
+    		pCnf->pVarNums[pObj->Id] = Number++;
+
+    //printf("new PI Nodes: %d\n", Number - (old->nVars+1));
+
+    // assign the clauses
+    pLits = pCnf->pClauses[0];
+    pClas = pCnf->pClauses;
+    Aig_ManForEachNode( p, pObj, i )
+    {
+        OutVar = pCnf->pVarNums[ pObj->Id ];
+
+        if (pCnf->pVarNums[pObj->Id] == -1)
+        {
+        	OutVar = Number++;
+        	pCnf->pVarNums[pObj->Id] = OutVar;
+        }
+        else
+		{
+	        // This skips over variables that have already been generated.
+			continue;
+		}
+
+        pVars[0] = pCnf->pVarNums[ Aig_ObjFanin0(pObj)->Id ];
+        pVars[1] = pCnf->pVarNums[ Aig_ObjFanin1(pObj)->Id ];
+
+        // positive phase
+        *pClas++ = pLits;
+        *pLits++ = 2 * OutVar;
+        *pLits++ = 2 * pVars[0] + !Aig_ObjFaninC0(pObj);
+        *pLits++ = 2 * pVars[1] + !Aig_ObjFaninC1(pObj);
+        // negative phase
+        *pClas++ = pLits;
+        *pLits++ = 2 * OutVar + 1;
+        *pLits++ = 2 * pVars[0] + Aig_ObjFaninC0(pObj);
+        *pClas++ = pLits;
+        *pLits++ = 2 * OutVar + 1;
+        *pLits++ = 2 * pVars[1] + Aig_ObjFaninC1(pObj);
+    }
+
+    pCnf->nVars = Number;
+    //printf("New number of vars: %d\n",  pCnf->nVars);
+
+    // WE ASSUME THERE WILL ONLY BE ONE NEW PO.
+    pObj = Vec_PtrEntry(p->vPos, Vec_PtrSize(p->vPos)-1);
+    OutVar = pCnf->pVarNums[ Aig_ObjFanin0(pObj)->Id ];
+    *pClas++ = pLits;
+    *pLits++ = 2 * OutVar + Aig_ObjFaninC0(pObj);
+
+    pCnf->nClauses = pClas - pCnf->pClauses;
+    pCnf->pClauses[pCnf->nClauses] = pLits;
+    pCnf->nLiterals = -1; // not maintained.
+
+    return pCnf;
+}
 
 /**Function*************************************************************
 
