@@ -166,7 +166,6 @@ namespace BEEV
 
     void ClearAllTables(void)
     {
-  	  TermsAlreadySeenMap.clear();
   	  DoNotSolve_TheseVars.clear();
   	  FormulasAlreadySolvedMap.clear();
   	  set<Symbols*> deleted;
