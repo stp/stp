@@ -1240,6 +1240,7 @@ namespace BEEV
 				  const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
 				  result |= (sym.find(var) !=sym.end());
 			  }
+			  delete symbols;
 		  }
 		  return result;
 	  }
