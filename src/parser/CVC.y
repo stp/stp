@@ -467,10 +467,9 @@ Formula         :     '(' Formula ')'
                          
   ASTNode hi  =  parserInterface->CreateBVConst(32, $5);
   ASTNode low =  parserInterface->CreateBVConst(32, $5);
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVEXTRACT,1,*$3,hi,low));
+  ASTNode n = parserInterface->nf->CreateTerm(BVEXTRACT,1,*$3,hi,low);
   ASTNode one = parserInterface->CreateBVConst(1,1);                   
-  ASTNode * out = new ASTNode(parserInterface->nf->CreateNode(EQ,*n,one));
-
+  ASTNode * out = new ASTNode(parserInterface->nf->CreateNode(EQ,n,one));
 
   $$ = out;
   delete $3;
