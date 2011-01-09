@@ -457,8 +457,6 @@ namespace BEEV
       case BVMOD:
         {
           assert(2==number_of_children);
-          CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
-          CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
           if (_bm->UserFlags.division_by_zero_returns_one_flag 
               && CONSTANTBV::BitVector_is_empty(tmp1))
@@ -474,6 +472,8 @@ namespace BEEV
             }
           else
             {
+              CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
+              CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
               // tmp0 is dividend, tmp1 is the divisor All parameters
               //to BitVector_Div_Pos must be distinct unlike
@@ -487,7 +487,9 @@ namespace BEEV
 
               if (0 != e)
                 {
-                  //error printing
+            	  CONSTANTBV::BitVector_Destroy(quotient);
+            	  CONSTANTBV::BitVector_Destroy(remainder);
+            	  //error printing
                   if (_bm->counterexample_checking_during_refinement)
                     {
                       output = CONSTANTBV::BitVector_Create(inputwidth, true);
