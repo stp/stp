@@ -723,12 +723,12 @@ namespace BEEV
     for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
       {
 		 /*
-    	 Calling simplifyFormula makes the required substitutions. For instance, if
+    	 Calling applySubstitutionMapUntilArrays makes the required substitutions. For instance, if
     	 first was : v = x,
     	 then if the next formula is: x = v
-    	 calling simplify on the second formula will convert it into "true", avoiding a cycle.
+    	 calling applySubstitutionMapUntilArrays on the second formula will convert it into "true", avoiding a cycle.
 
-    	 The problem with this is that Simplify___() doesn't normally simplify into array
+    	 The problem with this is that applySubstitutionMapUntilArrays() doesn't normally simplify into array
     	 operations. So given something like :
     	 a = b
     	 b = write(A,a,a)
@@ -738,53 +738,14 @@ namespace BEEV
     	 rewrite a=b through the second expression, giving:
     	 b = write(A,b,b),
     	 which shouldn't be simplified.
-
-    	 Simplifying through arrays is very expensive though. I know how to fix it, but
-    	 don't have time. Trev.
-		  */
-#if 1
+  	   */
         ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
-      #else
-          ASTNode aaa = *it;
 
-          if (any_solved && EQ == aaa.GetKind())
-          {
-            bool found = false;
+        if (ASTFalse == aaa)
+        	return ASTFalse; // shortcut. It's unsatisfiable.
 
-            ASTNodeSet var;
-            SetofVarsSeenInTerm(aaa[0], var);
-
-            for (ASTNodeSet::const_iterator it = var.begin(); it != var.end(); it++)
-            if (_simp->CheckSubstitutionMap(*it))
-              {
-                found = true;
-                break;
-              }
-
-            if (!found)
-              {
-                var.clear();
-                SetofVarsSeenInTerm(aaa[1], var);
-
-                for (ASTNodeSet::const_iterator it = var.begin(); it != var.end(); it++)
-                if (_simp->CheckSubstitutionMap(*it))
-                  {
-                    found = true;
-                    break;
-                  }
-              }
-            if (found)
-              aaa = _simp->applySubstitutionMapUntilArrays(aaa);
-          }
-
-#endif
-
-
-        //_bm->ASTNodeStats("Printing after calling simplifyformula
-        //inside the solver:", aaa);
         aaa = BVSolve_Odd(aaa);
 
-        //_bm->ASTNodeStats("Printing after oddsolver:", aaa);
         bool even = false;
         aaa = CheckEvenEqn(aaa, even);
         if (even)
@@ -800,7 +761,7 @@ namespace BEEV
           }
         if (ASTTrue == aaa)
         	{
-                    any_solved=true;
+               any_solved=true;
         	}
       }
 
