@@ -146,6 +146,7 @@ namespace BEEV
 		return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input,
 				tosat);
 	}
+    return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayReadRefinement
 
 
