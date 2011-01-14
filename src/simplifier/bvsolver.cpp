@@ -742,8 +742,10 @@ namespace BEEV
         ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
 
         if (ASTFalse == aaa)
+        {
+        	_bm->GetRunTimes()->stop(RunTimes::BVSolver);
         	return ASTFalse; // shortcut. It's unsatisfiable.
-
+        }
         aaa = BVSolve_Odd(aaa);
 
         bool even = false;
