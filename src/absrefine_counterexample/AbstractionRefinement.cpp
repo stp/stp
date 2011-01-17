@@ -91,7 +91,10 @@ namespace BEEV
             	// We assume there are no duplicate constant indexes in the list of readindexes,
             	// so "i" and "j" will never be equal.
             	if (BVCONST == index_i.GetKind() && index_j.GetKind() == BVCONST)
+            	{
+            		assert(index_i != index_j);
             		continue;
+            	}
 
                 //prepare for SAT LOOP
                 //first construct the antecedent for the LA axiom

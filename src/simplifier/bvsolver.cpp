@@ -11,7 +11,6 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "bvsolver.h"
-#include "CountOfSymbols.h"
 
 //This file contains the implementation of member functions of
 //bvsolver class, which represents the bitvector arithmetic linear
@@ -99,7 +98,6 @@ namespace BEEV
 
     //collect all the vars in the lhs and rhs
     BuildSymbolGraph(eq);
-    CountOfSymbols count(symbol_graph[eq]);
 
     //handle BVPLUS case
     ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
@@ -176,14 +174,14 @@ namespace BEEV
                 && !chosen_symbol
                 && !DoNotSolveThis(var)
                 && ((SYMBOL == var.GetKind() 
-                     && count.single(var)
+                     && !VarSeenInTerm(var,rhs)
                     )
                     || (BVEXTRACT == var.GetKind() 
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
                         && !DoNotSolveThis(var[0])
-                        && count.single(var[0])
+                        && !VarSeenInTerm(var[0],rhs)
                         ))
                 )
               {
@@ -198,7 +196,7 @@ namespace BEEV
                 && BVCONST == monom[1].GetKind()
                 && zero == monom[2]
                 && !DoNotSolveThis(monom[0])
-                && count.single(monom[0])
+                && !VarSeenInTerm(monom[0],rhs)
             )
               {
               outmonom = monom;
@@ -212,7 +210,7 @@ namespace BEEV
                        && BVCONST == monom[0][1].GetKind()
                        && zero == monom[0][2]
                        && !DoNotSolveThis(monom[0][0])
-                       && count.single(monom[0][0])
+                       && !VarSeenInTerm(monom[0][0],rhs)
                    )
                      {
                      outmonom = monom;
