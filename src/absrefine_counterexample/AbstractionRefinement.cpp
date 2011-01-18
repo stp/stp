@@ -88,13 +88,14 @@ namespace BEEV
               {
             	const ASTNode& index_j = listOfIndices[j];
 
-            	// We assume there are no duplicate constant indexes in the list of readindexes,
-            	// so "i" and "j" will never be equal.
-            	if (BVCONST == index_i.GetKind() && index_j.GetKind() == BVCONST)
+            	// If the index is a constant, and different, then there's no reason to check.
+            	// Sometimes we get the same index stored multiple times in the array. Not sure why...
+            	if (BVCONST == index_i.GetKind() && index_j.GetKind() == BVCONST && index_i != index_j)
             	{
             		assert(index_i != index_j);
             		continue;
             	}
+
 
                 //prepare for SAT LOOP
                 //first construct the antecedent for the LA axiom
