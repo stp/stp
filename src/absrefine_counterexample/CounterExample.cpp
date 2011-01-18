@@ -96,7 +96,7 @@ namespace BEEV
         //counter-example. First convert the index into a constant. then
         //construct the appropriate array-read and store it in the
         //counterexample
-        ASTNode arrayread_index = TermToConstTermUsingModel(arrayread[1]);
+        ASTNode arrayread_index = TermToConstTermUsingModel(arrayread[1],false);
         ASTNode key = bm->CreateTerm(READ, arrayread.GetValueWidth(),
                                      arrayread[0], arrayread_index);
 
