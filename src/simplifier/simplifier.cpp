@@ -1697,15 +1697,16 @@ namespace BEEV
     }
 
 
-    ASTNode pulledUp = PullUpITE(inputterm);
-    if (pulledUp != inputterm)
-      {
-        ASTNode r = SimplifyTerm(pulledUp);
-        UpdateSimplifyMap(actualInputterm,r,NULL);
-        UpdateSimplifyMap(inputterm,r,NULL);
-        return r;
-      }
-
+    {
+		ASTNode pulledUp = PullUpITE(inputterm);
+		if (pulledUp != inputterm)
+		  {
+			ASTNode r = SimplifyTerm(pulledUp);
+			UpdateSimplifyMap(actualInputterm,r,NULL);
+			UpdateSimplifyMap(inputterm,r,NULL);
+			return r;
+		  }
+    }
 
     switch (k)
       {
