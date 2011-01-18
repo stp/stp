@@ -181,6 +181,8 @@ namespace BEEV
   	  for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin(); it != TermsAlreadySeenMap.end() ; it++)
   		  delete (it->second);
 
+  	symbol_graph.clear();
+  	TermsAlreadySeenMap.clear();
 
     } //End of ClearAllTables()
 
