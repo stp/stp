@@ -115,11 +115,7 @@
 %token LPAREN_TOK
 %token RPAREN_TOK
 
- /* Status */
-%token SAT_TOK
-%token UNSAT_TOK
-%token UNKNOWN_TOK
-  
+ 
  /*BV SPECIFIC TOKENS*/
 %token BVLEFTSHIFT_1_TOK
 %token BVRIGHTSHIFT_1_TOK 
@@ -253,17 +249,19 @@ cmdi:
 ;
 
 status:
-SAT_TOK { 
-  input_status = TO_BE_SATISFIABLE; 
-  $$ = NULL; 
-}
-| UNSAT_TOK { 
-  input_status = TO_BE_UNSATISFIABLE; 
-  $$ = NULL; 
-  }
-| UNKNOWN_TOK 
-{ 
-  input_status = TO_BE_UNKNOWN; 
+STRING_TOK { 
+ 
+ std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
+  
+  if (0 == strcmp($1->c_str(), "sat"))
+  	input_status = TO_BE_SATISFIABLE;
+  else if (0 == strcmp($1->c_str(), "unsat"))
+    input_status = TO_BE_UNSATISFIABLE;
+  else if (0 == strcmp($1->c_str(), "unknown"))
+  	input_status = TO_BE_UNKNOWN; 
+  else 
+  	yyerror($1->c_str());
+  delete $1;
   $$ = NULL; 
 }
 ;

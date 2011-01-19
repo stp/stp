@@ -147,10 +147,6 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 <STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smt2text); }                           
 <STRING_LITERAL>"\n"	{ _string_lit.insert(_string_lit.end(),*smt2text); }
 
-"sat"           { return SAT_TOK; }
-"unsat"         { return UNSAT_TOK; }
-"unknown"       { return UNKNOWN_TOK; }
-
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
 ")"             { return RPAREN_TOK; }
