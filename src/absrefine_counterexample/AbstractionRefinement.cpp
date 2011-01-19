@@ -169,13 +169,8 @@ namespace BEEV
     ASTNode writeAxiom;
     ASTNodeMap::const_iterator it = simp->ReadOverWriteMap()->begin();
     ASTNodeMap::const_iterator itend = simp->ReadOverWriteMap()->end();
-    unsigned int oldFalseAxiomsSize = 0;
-    //int count = 0;
-    //int num_write_axioms = ReadOverWrite_NewName_Map.size();
 
     ASTVec FalseAxioms, RemainingAxioms;
-    FalseAxioms.push_back(ASTTrue);
-    RemainingAxioms.push_back(ASTTrue);
     for (; it != itend; it++)
       {
         //Guided refinement starts here
@@ -193,38 +188,32 @@ namespace BEEV
           }
       }
 
-    writeAxiom = 
-      (FalseAxioms.size() != 1) ? 
-      bm->CreateNode(AND, FalseAxioms) : FalseAxioms[0];
-    bm->ASTNodeStats("adding false writeaxiom to SAT: ", writeAxiom);
     SOLVER_RETURN_TYPE res2 = SOLVER_UNDECIDED;
-    if (FalseAxioms.size() > oldFalseAxiomsSize)
-      {
-        res2 = CallSAT_ResultCheck(SatSolver, 
-                                   writeAxiom, 
-                                   original_input,
-                                   tosat);
-        oldFalseAxiomsSize = FalseAxioms.size();
-      }
+    if (FalseAxioms.size() > 0)
+    {
+		writeAxiom = (FalseAxioms.size() != 1) ? bm->CreateNode(AND,
+				FalseAxioms) : FalseAxioms[0];
+		bm->ASTNodeStats("adding false writeaxiom to SAT: ", writeAxiom);
+		res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input, tosat);
+	}
+
     if (SOLVER_UNDECIDED != res2)
       {
         return res2;
       }
 
-    writeAxiom = 
-      (RemainingAxioms.size() != 1) ? 
-      bm->CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
-    bm->ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
-    res2 = CallSAT_ResultCheck(SatSolver, 
-                               writeAxiom, 
-                               original_input,
-                               tosat);
-    if (SOLVER_UNDECIDED != res2)
-      {
-        return res2;
-      }
-
-    return SOLVER_UNDECIDED;
+    if (RemainingAxioms.size() > 0)
+    {
+		writeAxiom =
+		  (RemainingAxioms.size() != 1) ?
+		  bm->CreateNode(AND, RemainingAxioms) : RemainingAxioms[0];
+		bm->ASTNodeStats("adding remaining writeaxiom to SAT: ", writeAxiom);
+		res2 = CallSAT_ResultCheck(SatSolver,
+								   writeAxiom,
+								   original_input,
+								   tosat);
+    }
+    return res2;
   } //end of SATBased_ArrayWriteRefinement
   
   //Creates Array Write Axioms
