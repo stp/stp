@@ -91,6 +91,17 @@ public:
     {
     	return bm.LookupOrCreateSymbol(name);
     }
+
+    ASTNode LookupOrCreateSymbol(string name)
+    {
+    	return bm.LookupOrCreateSymbol(name.c_str());
+    }
+
+
+    bool isSymbolAlreadyDeclared(string name)
+        {
+            return bm.LookupSymbol(name.c_str());
+        }
 };
 }
 

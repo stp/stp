@@ -11,33 +11,52 @@
 #define LETMGR_H
 
 #include "../AST/AST.h"
+
+  // Hash function for the hash_map of a string..
+  _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+  template <>
+        struct hash<std::string> {
+                size_t operator() (const std::string& x) const {
+                        return hash<const char*>()(x.c_str());
+                }
+        };
+  };
+
 namespace BEEV
 {
   //LET Management
   class LETMgr 
   {
   private:
-
     const ASTNode ASTUndefined;
 
-	// MAP: This map is from bound IDs that occur in LETs to
+    typedef hash_map<string,ASTNode, __gnu_cxx::hash<std::string> > MapType;
+
+    // MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs
     // with the corresponding expressions. As soon as the brackets
-	// that close a let expression is reached, it is emptied by
+    // that close a let expression is reached, it is emptied by
     // a call to CleanupLetIDMap().
-    ASTNodeMap *_letid_expr_map;
+    MapType *_letid_expr_map;
 
     //Allocate LetID map
     void InitializeLetIDMap(void);
 
-  public:
-      
+ public:
+
+    // I think this keeps a reference to symbols so they don't get garbage collected.
     ASTNodeSet _parser_symbol_table;
+
+    // A let with this name has already been declared.
+    bool isLetDeclared(string s)
+    {
+      return _letid_expr_map->find(s) !=_letid_expr_map->end();
+    }
+
     void cleanupParserSymbolTable()
     {
     	_parser_symbol_table.clear();
     }
-
 
     LETMgr(ASTNode undefined)
     : ASTUndefined(undefined)
@@ -59,8 +78,6 @@ namespace BEEV
     //Delete Letid Map. Called when we move onto the expression after (let ... )
     void CleanupLetIDMap(void);
 
-    //Substitute Let-vars with LetExprs
-    //ASTNode SubstituteLetExpr(ASTNode inExpr);
   };// End of class LETMgr
 }; //end of namespace
 

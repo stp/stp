@@ -68,18 +68,39 @@
     if (s[0] == '|' && s[str.size()-1] == '|')
     	str = str.substr(1,str.length()-2);
     
-    BEEV::ASTNode nptr = BEEV::parserInterface->LookupOrCreateSymbol(str.c_str()); 
+    BEEV::ASTNode nptr;
+    bool found = false;
+    
+    if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    {
+    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	found = true;
+    }
+    else if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
+    {
+    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	nptr = BEEV::parserInterface->letMgr.ResolveID(nptr);
+    	found = true;
+    }
 
-  // Check valuesize to see if it's a prop var.  I don't like doing
-  // type determination in the lexer, but it's easier than rewriting
-  // the whole grammar to eliminate the term/formula distinction.  
-  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
-  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
-    return FORMID_TOK;
-  else 
-    return TERMID_TOK;
-   }
-   
+	if (found)
+	{
+	  // Check valuesize to see if it's a prop var.  I don't like doing
+	  // type determination in the lexer, but it's easier than rewriting
+	  // the whole grammar to eliminate the term/formula distinction.  
+	  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
+	  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	    return FORMID_TOK;
+	  else 
+	    return TERMID_TOK;
+	   }
+	else
+	{
+		// it has not been seen before.
+		smt2lval.str = new std::string(str);
+		return STRING_TOK;
+	}
+	}
 %}
 
 %option noyywrap

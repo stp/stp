@@ -226,25 +226,21 @@ cmdi:
 		commands.push_back("check-sat");
 	}
 |
-	LPAREN_TOK LOGIC_TOK FORMID_TOK RPAREN_TOK
+	LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
 	{
-	  if (!(0 == strcmp($3->GetName(),"QF_BV") ||
-	        0 == strcmp($3->GetName(),"QF_ABV") ||
-	        0 == strcmp($3->GetName(),"QF_AUFBV"))) {
+	  if (!(0 == strcmp($3->c_str(),"QF_BV") ||
+	        0 == strcmp($3->c_str(),"QF_ABV") ||
+	        0 == strcmp($3->c_str(),"QF_AUFBV"))) {
 	    yyerror("Wrong input logic:");
 	  }
 	  delete $3;
 	}
-|	LPAREN_TOK NOTES_TOK attribute FORMID_TOK RPAREN_TOK
+|	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
 	{
 	delete $4;
 	}
 |	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
 	{}
-|	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
-	{
-	delete $4;
-	}
 |	LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
 	{}
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
@@ -286,36 +282,39 @@ SOURCE_TOK
 ;
 
 var_decl:
-FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  parserInterface->letMgr._parser_symbol_table.insert(*$1);
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str()); 
+  parserInterface->letMgr._parser_symbol_table.insert(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  $1->SetIndexWidth(0);
-  $1->SetValueWidth($7);
+  s.SetIndexWidth(0);
+  s.SetValueWidth($7);
   delete $1;
 }
-| FORMID_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
-  $1->SetIndexWidth(0);
-  $1->SetValueWidth(0);
-  parserInterface->letMgr._parser_symbol_table.insert(*$1);
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
+  parserInterface->letMgr._parser_symbol_table.insert(s);
   delete $1;
 }
-| FORMID_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  parserInterface->letMgr._parser_symbol_table.insert(*$1);
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str());
+  parserInterface->letMgr._parser_symbol_table.insert(s);
   unsigned int index_len = $9;
   unsigned int value_len = $14;
   if(index_len > 0) {
-    $1->SetIndexWidth($9);
+    s.SetIndexWidth($9);
   }
   else {
     FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
 
   if(value_len > 0) {
-    $1->SetValueWidth($14);
+    s.SetValueWidth($14);
   }
   else {
     FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
@@ -531,11 +530,13 @@ lets: let lets
 | let
 {};
 
-let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
+let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
 {
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
+
   //set the valuewidth of the identifier
-  $2->SetValueWidth($3->GetValueWidth());
-  $2->SetIndexWidth($3->GetIndexWidth());
+  s.SetValueWidth($3->GetValueWidth());
+  s.SetIndexWidth($3->GetIndexWidth());
       
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
@@ -545,16 +546,18 @@ let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  parserInterface->letMgr.LetExprMgr(s,*$3);
   
   delete $2;
   delete $3;
 }
-| LPAREN_TOK FORMID_TOK an_term RPAREN_TOK
+| LPAREN_TOK STRING_TOK an_term RPAREN_TOK
 {
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
+
   //set the valuewidth of the identifier
-  $2->SetValueWidth($3->GetValueWidth());
-  $2->SetIndexWidth($3->GetIndexWidth());
+  s.SetValueWidth($3->GetValueWidth());
+  s.SetIndexWidth($3->GetIndexWidth());
       
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
@@ -564,7 +567,7 @@ let: LPAREN_TOK FORMID_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  parserInterface->letMgr.LetExprMgr(s,*$3);
   
   delete $2;
   delete $3;
