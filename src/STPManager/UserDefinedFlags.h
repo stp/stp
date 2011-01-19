@@ -153,6 +153,12 @@ namespace BEEV
     	return get(n,"");
     }
 
+    // "1" is set.
+    bool isSet(string n, string def)
+    {
+    	return (get(n,def) == string("1"));
+    }
+
     string get(string n, string def)
     {
     	if (config_options.empty())

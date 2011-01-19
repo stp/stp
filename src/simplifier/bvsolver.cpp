@@ -643,7 +643,8 @@ namespace BEEV
         != and_end; and_child++)
       {
 
-      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*and_child),false,NULL));
+      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula(completelySubstitute? _simp->applySubstitutionMap(*and_child)
+    		  : _simp->applySubstitutionMapUntilArrays(*and_child),false,NULL));
       if (r!=*and_child)
         changed=true;
       output_children.push_back(r);
@@ -659,13 +660,9 @@ namespace BEEV
   //the formula
   ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input)
   {
-    //    if (!wordlevel_solve_flag)
-    //       {
-    //         return input;
-    //       }
+      completelySubstitute = _bm->UserFlags.isSet("full_bvsolve","0");
+      assert (_bm->UserFlags.wordlevel_solve_flag);
 	  ASTNode input = _input;
-
-
 
     ASTNode output = input;
     if (CheckAlreadySolvedMap(input, output))
@@ -673,6 +670,10 @@ namespace BEEV
         //output is TRUE. The formula is thus dropped
         return output;
       }
+
+    if (completelySubstitute)
+    	input = _simp->applySubstitutionMap(input);
+
 
     Kind k = input.GetKind();
     if (XOR ==k && _bm->UserFlags.solve_for_XORS_flag)
@@ -737,7 +738,10 @@ namespace BEEV
     	 b = write(A,b,b),
     	 which shouldn't be simplified.
   	   */
-        ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
+
+    	ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula
+    			(completelySubstitute ? _simp->applySubstitutionMap(*it):
+    			_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
 
         if (ASTFalse == aaa)
         {
@@ -795,7 +799,11 @@ namespace BEEV
 
     // Imagine in the last conjunct A is replaced by B. But there could
     // be variable A's in the first conjunct. This gets rid of 'em.
-    output = _simp->applySubstitutionMapUntilArrays(output);
+    if (completelySubstitute)
+    	output = _simp->applySubstitutionMap(output);
+    else
+    	output = _simp->applySubstitutionMapUntilArrays(output);
+
 
     UpdateAlreadySolvedMap(_input, output);
     _bm->GetRunTimes()->stop(RunTimes::BVSolver);
