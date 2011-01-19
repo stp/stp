@@ -200,7 +200,10 @@ cmd: commands END
       querysmt2 = parserInterface->CreateNode(FALSE);
     }  
         
-      ((ASTVec*)AssertsQuery)->push_back(parserInterface->nf->CreateNode(AND,assertionsSMT2));
+       if (assertionsSMT2.size() > 0)
+      	((ASTVec*)AssertsQuery)->push_back(parserInterface->nf->CreateNode(AND,assertionsSMT2));
+      	else
+      	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
   	  ((ASTVec*)AssertsQuery)->push_back(querysmt2);
        parserInterface->letMgr.cleanupParserSymbolTable();
        YYACCEPT;

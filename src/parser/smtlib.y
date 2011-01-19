@@ -236,8 +236,10 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
   if($4 != NULL){
     if($4->size() > 1) 
       $$ = new ASTNode(parserInterface->nf->CreateNode(AND,*$4));
-    else
-      $$ = new ASTNode((*$4)[0]);         
+    else if($4->size() ==1)
+      $$ = new ASTNode((*$4)[0]);
+     else
+      $$ = new ASTNode(parserInterface->CreateNode(TRUE));     
     delete $4;
   }
   else {
