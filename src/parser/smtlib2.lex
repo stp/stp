@@ -254,5 +254,4 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 \|([^\|]|\n)*\| {return lookup(smt2text);}
 
 . { smt2error("Illegal input character."); }
-"\n" { smt2error("Illegal input character."); }
 %%

@@ -852,22 +852,20 @@ BITCONST_TOK { $$ = $1; }
   delete $2;
   delete $3;
 }
-|  BVPLUS_TOK an_term an_term 
+|  BVPLUS_TOK an_terms 
 {
-  const unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVPLUS, width, *$2, *$3));
+  const unsigned int width = (*$2)[0].GetValueWidth();
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVPLUS, width, *$2));
   $$ = n;
   delete $2;
-  delete $3;
 
 }
-|  BVMULT_TOK an_term an_term 
+|  BVMULT_TOK an_terms 
 {
-  const unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVMULT, width, *$2, *$3));
+  const unsigned int width = (*$2)[0].GetValueWidth();
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVMULT, width, *$2));
   $$ = n;
   delete $2;
-  delete $3;
 }
 
 |      BVDIV_TOK an_term an_term  
