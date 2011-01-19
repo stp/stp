@@ -139,15 +139,15 @@ int main(int argc, char ** argv) {
     "-h                     : help\n";
   helpstring +=  
     "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
-  helpstring +=  
-    "-j <filename>          : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
+  //helpstring +=
+  //    "-j <filename>          : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
   helpstring +=  
     "-m                     : use the SMTLIB1 parser\n";
   helpstring +=
     "--minisat              : use minisat 2.2 as the solver\n";
 
   helpstring +=  
-    "--output-CNF           : save the CNF into output.cnf\n";
+    "--output-CNF           : save the CNF into output_[0..n].cnf\n";
   helpstring +=  
     "--output-bench         : save in ABC's bench format to output.bench\n";
   helpstring +=  
@@ -359,8 +359,9 @@ int main(int argc, char ** argv) {
 		}
 	      break;
 	    case 'j':
-	      bm->UserFlags.print_cnf_flag = true;
-	      bm->UserFlags.cnf_dump_filename = argv[++i];
+	      // Used to output the CNF. No longer does.
+	      //bm->UserFlags.print_cnf_flag = true;
+	      //bm->UserFlags.cnf_dump_filename = argv[++i];
 	      break;
             case 'm':
               bm->UserFlags.smtlib1_parser_flag=true;
