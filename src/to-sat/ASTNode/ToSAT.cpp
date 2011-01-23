@@ -7,12 +7,12 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 #include "ToSAT.h"
-#include "BitBlaster.h"
-#include "../printer/printers.h"
+#include "../BitBlaster.h"
+#include "../../printer/printers.h"
 #include <iostream>
 #include <fstream>
 #include "BBNodeManagerASTNode.h"
-#include "../STPManager/UserDefinedFlags.h"
+#include "../../STPManager/UserDefinedFlags.h"
 
 namespace BEEV
 {

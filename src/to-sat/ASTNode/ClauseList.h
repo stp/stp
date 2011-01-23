@@ -1,7 +1,7 @@
 #ifndef CLAUSELIST_H_
 #define CLAUSELIST_H_
 
-#include "../AST/AST.h"
+#include "../../AST/AST.h"
 #include <cassert>
 
 namespace BEEV

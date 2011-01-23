@@ -12,9 +12,9 @@
 
 #include "ToCNF.h"
 
-#include "../AST/AST.h"
-#include "../STPManager/STPManager.h"
-#include "ToSATBase.h"
+#include "../../AST/AST.h"
+#include "../../STPManager/STPManager.h"
+#include "../ToSATBase.h"
 
 namespace BEEV
 {

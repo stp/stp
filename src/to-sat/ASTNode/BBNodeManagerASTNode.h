@@ -1,7 +1,10 @@
 #ifndef BBNodeManager_H_
 #define BBNodeManager_H_
 
-#include "../STPManager/STPManager.h"
+// We can bitblast either via ASTNodes, or via AIG nodes. The AIG nodes use less memory, and produce better CNFs. The ASTNodes are the
+// traditional way of doing it.
+
+#include "../../STPManager/STPManager.h"
 
 namespace BEEV {
 class ASTNode;

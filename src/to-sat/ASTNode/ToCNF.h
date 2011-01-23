@@ -12,8 +12,8 @@
 
 #include <cmath>
 #include <cassert>
-#include "../AST/AST.h"
-#include "../STPManager/STPManager.h"
+#include "../../AST/AST.h"
+#include "../../STPManager/STPManager.h"
 #include "ClauseList.h"
 
 namespace BEEV

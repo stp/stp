@@ -11,7 +11,7 @@
 #include <cassert>
 #include "BitBlaster.h"
 #include "AIG/BBNodeManagerAIG.h"
-#include "BBNodeManagerASTNode.h"
+#include "ASTNode/BBNodeManagerASTNode.h"
 #include "../simplifier/constantBitP/FixedBits.h"
 #include "../simplifier/constantBitP/ConstantBitPropagation.h"
 #include "../simplifier/constantBitP/NodeToFixedBitsMap.h"

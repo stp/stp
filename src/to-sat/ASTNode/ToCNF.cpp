@@ -7,8 +7,8 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
-#include "../AST/AST.h"
-#include "../STPManager/STPManager.h"
+#include "../../AST/AST.h"
+#include "../../STPManager/STPManager.h"
 #include "ToCNF.h"
 
 namespace BEEV

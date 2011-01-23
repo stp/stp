@@ -1,5 +1,5 @@
 #include "ClauseList.h"
-#include "../AST/AST.h"
+#include "../../AST/AST.h"
 
 namespace BEEV
 {

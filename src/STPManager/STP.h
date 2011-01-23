@@ -15,7 +15,7 @@
 #include "../STPManager/STPManager.h"
 #include "../simplifier/bvsolver.h"
 #include "../simplifier/simplifier.h"
-#include "../to-sat/ToSAT.h"
+#include "../to-sat/ASTNode/ToSAT.h"
 #include "../parser/LetMgr.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
 
