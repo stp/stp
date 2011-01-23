@@ -103,12 +103,23 @@ namespace BEEV {
         if(bm->UserFlags.optimize_flag) 
           {
 
+        	int initialSize = simp->Return_SolverMap()->size();
+
             simplified_solved_InputToSAT = 
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
 
-            //printf("##################################################\n");
             bm->ASTNodeStats("after pure substitution: ", 
                              simplified_solved_InputToSAT);
+
+            // Imagine:
+            // The simplifier simplifies (0 + T) to T
+            // Then bvsolve introduces (0 + T)
+            // Then CreateSubstitutionMap decides T maps to a constant, but leaving another (0+T).
+            // When we go to simplify (0 + T) will still be in the simplify cache, so will be mapped to T.
+            // But it shouldn't be T, it should be a constant.
+            // Applying the substitution map fixes this unusual case... expensively...
+           // if (initialSize != simp->Return_SolverMap()->size())
+            //	simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
 
 
             simplified_solved_InputToSAT = 
