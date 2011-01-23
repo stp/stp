@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -45,8 +45,6 @@
 #define HASHSET      hash_set
 #define HASHMULTISET hash_multiset
 #define INITIAL_TABLE_SIZE 100
-#define CLAUSAL_ABSTRACTION_CUTOFF 0.5
-#define CLAUSAL_BUCKET_LIMIT 3
 
 using namespace std;
 namespace BEEV {

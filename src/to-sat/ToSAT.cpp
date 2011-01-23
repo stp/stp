@@ -12,6 +12,7 @@
 #include <iostream>
 #include <fstream>
 #include "BBNodeManagerASTNode.h"
+#include "../STPManager/UserDefinedFlags.h"
 
 namespace BEEV
 {
@@ -94,7 +95,7 @@ namespace BEEV
                             bool add_xor_clauses,
 			    bool enable_clausal_abstraction)
   {
-    CountersAndStats("SAT Solver", bm);
+	  CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
     int input_clauselist_size = cll.size();
@@ -270,7 +271,7 @@ namespace BEEV
   } //end of toSATandSolve()
 
   //Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT
-  static ClauseBuckets * Sort_ClauseList_IntoBuckets(ClauseList * cl)
+  ClauseBuckets * ToSAT::Sort_ClauseList_IntoBuckets(ClauseList * cl, int clause_bucket_size)
   {
     ClauseBuckets * cb = new ClauseBuckets();
     ClauseContainer* cc = cl->asList();
@@ -281,9 +282,9 @@ namespace BEEV
       {
         ClausePtr cptr = *it;
         int cl_size = cptr->size();
-        if(cl_size >= CLAUSAL_BUCKET_LIMIT)
+        if(cl_size >= clause_bucket_size)
           {
-            cl_size = CLAUSAL_BUCKET_LIMIT;
+            cl_size = clause_bucket_size;
           }
 
         //If no clauses of size cl_size have been seen, then create a
@@ -355,6 +356,16 @@ namespace BEEV
 		file.close();
     }
 
+    //  I suspect that we can't use clause buckets with the simplifying solvers
+    // (simplifying minisat & Cryptominsat).
+    //  Because sometimes simplifying removes a variable that later clauses depend on.
+    //  But when I set the clause_bucket_size to 1 for the other solvers, errors down.
+    int clause_bucket_size;
+    if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
+  	  clause_bucket_size=3;
+    else
+  	  clause_bucket_size=3;
+
     // The CNFMgr is deleted inside the CallSAT_On_ClauseBuckets,
     // just before the final call to the SAT solver.
 
@@ -362,7 +373,7 @@ namespace BEEV
     ClauseList* cl = cm->convertToCNF(BBFormula);
     ClauseList* xorcl = cm->ReturnXorClauses();
 
-    ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl);
+    ClauseBuckets * cb = Sort_ClauseList_IntoBuckets(cl,clause_bucket_size);
     cl->asList()->clear(); // clause buckets now point to the clauses.
     delete cl;
     bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb, cm);

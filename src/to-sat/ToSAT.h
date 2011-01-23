@@ -75,6 +75,9 @@ namespace BEEV
   		       bool enable_clausal_abstraction=false);
 
 
+    ClauseBuckets * Sort_ClauseList_IntoBuckets(ClauseList * cl, int clause_bucket_size);
+
+
   public:
     /****************************************************************
      * Public Member Functions                                      *
@@ -86,7 +89,6 @@ namespace BEEV
     {
       CNFFileNameCounter = 0;
       benchFileNameCounter = 0;
-
     }
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
