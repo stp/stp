@@ -118,8 +118,8 @@ namespace BEEV {
             // When we go to simplify (0 + T) will still be in the simplify cache, so will be mapped to T.
             // But it shouldn't be T, it should be a constant.
             // Applying the substitution map fixes this unusual case... expensively...
-           // if (initialSize != simp->Return_SolverMap()->size())
-            //	simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
+            if (initialSize != simp->Return_SolverMap()->size())
+            	simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
 
 
             simplified_solved_InputToSAT = 
