@@ -1642,7 +1642,7 @@ namespace BEEV
 		{
 			ASTVec v;
 			ASTVec toProcess = actualInputterm.GetChildren();
-			if (actualInputterm.GetKind() == BVAND || actualInputterm.GetKind() == BVOR)
+			if (actualInputterm.GetKind() == BVAND || actualInputterm.GetKind() == BVOR || actualInputterm.GetKind() == BVPLUS)
 			{
 				// If we didn't flatten these, then we'd start flattening each of these
 				// from the bottom up. Potentially creating tons of the nodes along the way.
