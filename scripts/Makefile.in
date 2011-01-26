@@ -32,6 +32,7 @@ all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interfa
 		           $(SRC)/absrefine_counterexample/*.o \
 			   $(SRC)/to-sat/*.o \
 		       $(SRC)/to-sat/AIG/*.o  \
+		       $(SRC)/to-sat/ASTNode/*.o  \
 			   $(SRC)/sat/*.o \
 			   $(SRC)/sat/core/Solver.or \
 			   $(SRC)/sat/simp/SimpSolver.or \
