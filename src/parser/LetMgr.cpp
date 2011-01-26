@@ -76,6 +76,6 @@ namespace BEEV {
 
   void LETMgr::InitializeLetIDMap(void)
   {
-    _letid_expr_map = new hash_map<string,ASTNode>();
+    _letid_expr_map = new hash_map<string,ASTNode, hashF<std::string> >();
   } //end of InitializeLetIDMap()
 };

@@ -12,25 +12,25 @@
 
 #include "../AST/AST.h"
 
-  // Hash function for the hash_map of a string..
-  _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
-  template <>
-        struct hash<std::string> {
-                size_t operator() (const std::string& x) const {
-                        return hash<const char*>()(x.c_str());
-                }
-        };
-  };
-
 namespace BEEV
 {
-  //LET Management
+
+//LET Management
   class LETMgr 
   {
   private:
+
+	  // Hash function for the hash_map of a string..
+	template <class T>
+	struct hashF {
+				  size_t operator() (const T & x) const {
+						  return __gnu_cxx::hash<const char*>()(x.c_str());
+				  }
+		  };
+
     const ASTNode ASTUndefined;
 
-    typedef hash_map<string,ASTNode, __gnu_cxx::hash<std::string> > MapType;
+    typedef hash_map<string,ASTNode, hashF<std::string> > MapType;
 
     // MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs
