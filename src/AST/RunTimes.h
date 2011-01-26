@@ -30,7 +30,8 @@ public:
       SendingToSAT,
       CounterExampleGeneration,
       SATSimplifying,
-      ConstantBitPropagation
+      ConstantBitPropagation,
+      ArrayReadRefinement
     };
 
   static std::string CategoryNames[];

@@ -47,6 +47,10 @@ namespace BEEV
 
 	ASTVec FalseAxiomsVec, RemainingAxiomsVec;
 
+	// NB. Because we stop this timer before entering the SAT solver, the count
+	// it produces isn't the number of times Array Read Refinement was entered.
+	bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+
     //in these loops we try to construct Leibnitz axioms and add it to
     //the solve(). We add only those axioms that are false in the
     //current counterexample. we keep adding the axioms until there
@@ -64,6 +68,17 @@ namespace BEEV
     	// Make a vector of the read symbols.
     	ASTVec read_node_symbols;
     	read_node_symbols.reserve(listOfIndices.size());
+
+    	vector<Kind> jKind;
+    	jKind.reserve(listOfIndices.size());
+
+    	vector<ASTNode> concreteIndexes;
+    	concreteIndexes.reserve(listOfIndices.size());
+
+    	vector<ASTNode> concreteValues;
+    	concreteValues.reserve(listOfIndices.size());
+
+
     	for (int i = 0; i < listOfIndices.size(); i++)
     	{
         	const ASTNode& the_index = listOfIndices[i];
@@ -75,6 +90,10 @@ namespace BEEV
         	assert ((SYMBOL == arrsym.GetKind() || BVCONST == arrsym.GetKind()));
 
         	read_node_symbols.push_back(arrsym);
+        	jKind.push_back(listOfIndices[i].GetKind());
+
+        	concreteIndexes.push_back(TermToConstTermUsingModel(the_index));
+        	concreteValues.push_back(TermToConstTermUsingModel(arrsym));
     	}
 
         //loop over the list of indices for the array and create LA,
@@ -82,6 +101,7 @@ namespace BEEV
         for (int i = 0; i < listOfIndices.size(); i++)
           {
         	const ASTNode& index_i = listOfIndices[i];
+        	const Kind iKind = index_i.GetKind();
 
             // Create all distinct pairs of indexes.
             for (int j = i+1; j < listOfIndices.size(); j++)
@@ -90,14 +110,12 @@ namespace BEEV
 
             	// If the index is a constant, and different, then there's no reason to check.
             	// Sometimes we get the same index stored multiple times in the array. Not sure why...
-            	if (BVCONST == index_i.GetKind() && index_j.GetKind() == BVCONST && index_i != index_j)
+            	if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
             	{
-            		assert(index_i != index_j);
             		continue;
             	}
 
-
-                //prepare for SAT LOOP
+            	//prepare for SAT LOOP
                 //first construct the antecedent for the LA axiom
                 ASTNode eqOfIndices = 
                   (exprless(index_i, index_j)) ? 
@@ -111,9 +129,12 @@ namespace BEEV
                 //construct appropriate Leibnitz axiom
                 ASTNode LeibnitzAxiom = 
                   bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
-                if (ASTFalse == ComputeFormulaUsingModel(LeibnitzAxiom))
+                if (concreteIndexes[i] == concreteIndexes[j] && concreteValues[i] != concreteValues[j])
                   {
                     FalseAxiomsVec.push_back(LeibnitzAxiom);
+                    //cerr << "index:" << index_i << " " <<  index_j;
+                    //cerr << read_node_symbols[i];
+                    //cerr << read_node_symbols[j];
                   }
                 else
                   {
@@ -127,6 +148,7 @@ namespace BEEV
 				  bm->CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
 				bm->ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
 				SOLVER_RETURN_TYPE res2;
+				bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
 				res2 =  CallSAT_ResultCheck(SatSolver,
 									  FalseAxioms,
 									  original_input,
@@ -137,7 +159,8 @@ namespace BEEV
 				  {
 					return res2;
 				  }
-				}
+				bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+            }
           }
       }
     if (RemainingAxiomsVec.size() > 0)
@@ -147,9 +170,11 @@ namespace BEEV
 						RemainingAxiomsVec) : RemainingAxiomsVec[0];
 		bm->ASTNodeStats("adding remaining readaxioms to SAT: ",
 				RemainingAxioms);
+		bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
 		return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input,
 				tosat);
 	}
+	bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
     return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayReadRefinement
 
