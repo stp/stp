@@ -12,6 +12,7 @@
 
 #include "simplifier.h"
 #include "Symbols.h"
+#include "VariablesInExpression.h"
 
 namespace BEEV
 {
@@ -71,38 +72,6 @@ namespace BEEV
     ASTNode BVSolve_Even(const ASTNode& eq);
     ASTNode CheckEvenEqn(const ASTNode& input, bool& evenflag);
 
-    /////////////////////////
-    // When solving, we're interested in whether variables appear multiple times.
-    typedef HASHSET<Symbols*,SymbolPtrHasher> SymbolPtrSet;
-
-	typedef HASHMAP<
-	  ASTNode,
-	  Symbols*,
-	  ASTNode::ASTNodeHasher,
-	  ASTNode::ASTNodeEqual> ASTNodeToNodes;
-	  ASTNodeToNodes symbol_graph;
-
-	  Symbols* BuildSymbolGraph(const ASTNode& n);
-
-	    //this map is useful while traversing terms and uniquely
-	    //identifying variables in the those terms. Prevents double
-	    //counting.
-
-	    typedef HASHMAP<
-		  Symbols*,
-		  ASTNodeSet*,
-		  SymbolPtrHasher
-		  > SymbolPtrToNode;
-		SymbolPtrToNode TermsAlreadySeenMap;
-
-    //this function return true if the var occurs in term, else the
-    //function returns false
-    bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
-    void SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols);
-    void VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av);
-
-
-    /////////////////////////
 
 
 
@@ -149,9 +118,11 @@ namespace BEEV
     // With this option enabled, it will do it properly. And slowly!!
     bool completelySubstitute;
 
+    VariablesInExpression vars;
+
   public:
     //constructor
-  BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)       
+  BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)
     {
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);
@@ -172,21 +143,7 @@ namespace BEEV
     {
   	  DoNotSolve_TheseVars.clear();
   	  FormulasAlreadySolvedMap.clear();
-  	  set<Symbols*> deleted;
-  	  for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
-  	  {
-  		  if (deleted.find(it->second) == deleted.end())
-  		  {
-  			  deleted.insert(it->second);
-  			  delete it->second;
-  		  }
-  	  }
-
-  	  for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin(); it != TermsAlreadySeenMap.end() ; it++)
-  		  delete (it->second);
-
-  	symbol_graph.clear();
-  	TermsAlreadySeenMap.clear();
+  	  //TermsAlreadySeenMap.clear();
 
     } //End of ClearAllTables()
 

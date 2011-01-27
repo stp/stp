@@ -97,7 +97,7 @@ namespace BEEV
     assert(BVPLUS == lhs.GetKind());
 
     //collect all the vars in the lhs and rhs
-    BuildSymbolGraph(eq);
+    vars.BuildSymbolGraph(eq);
 
     //handle BVPLUS case
     ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
@@ -114,7 +114,7 @@ namespace BEEV
         	SYMBOL == monom.GetKind()
             && !chosen_symbol
        		&& !DoNotSolveThis(monom)
-            && !VarSeenInTerm(monom,rhs)
+            && !vars.VarSeenInTerm(monom,rhs)
             )
             ||
             (
@@ -122,7 +122,7 @@ namespace BEEV
              && SYMBOL == monom[0].GetKind()
              && !chosen_symbol
              && !DoNotSolveThis(monom[0])
-             && !VarSeenInTerm(monom[0],rhs)
+             && !vars.VarSeenInTerm(monom[0],rhs)
             )
            )
         {
@@ -135,7 +135,7 @@ namespace BEEV
 			{
 				if (it2 == it)
 					continue;
-				if (VarSeenInTerm(var,*it2))
+				if (vars.VarSeenInTerm(var,*it2))
 				{
 					duplicated = true;
 					break;
@@ -174,14 +174,14 @@ namespace BEEV
                 && !chosen_symbol
                 && !DoNotSolveThis(var)
                 && ((SYMBOL == var.GetKind() 
-                     && !VarSeenInTerm(var,rhs)
+                     && !vars.VarSeenInTerm(var,rhs)
                     )
                     || (BVEXTRACT == var.GetKind() 
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
                         && !DoNotSolveThis(var[0])
-                        && !VarSeenInTerm(var[0],rhs)
+                        && !vars.VarSeenInTerm(var[0],rhs)
                         ))
                 )
               {
@@ -196,7 +196,7 @@ namespace BEEV
                 && BVCONST == monom[1].GetKind()
                 && zero == monom[2]
                 && !DoNotSolveThis(monom[0])
-                && !VarSeenInTerm(monom[0],rhs)
+                && !vars.VarSeenInTerm(monom[0],rhs)
             )
               {
               outmonom = monom;
@@ -210,7 +210,7 @@ namespace BEEV
                        && BVCONST == monom[0][1].GetKind()
                        && zero == monom[0][2]
                        && !DoNotSolveThis(monom[0][0])
-                       && !VarSeenInTerm(monom[0][0],rhs)
+                       && !vars.VarSeenInTerm(monom[0][0],rhs)
                    )
                      {
                      outmonom = monom;
@@ -324,7 +324,7 @@ namespace BEEV
           //input is of the form x = rhs first make sure that the lhs
           //symbol does not occur on the rhs or that it has not been
           //solved for
-          if (!single && VarSeenInTerm(lhs, rhs))
+          if (!single && vars.VarSeenInTerm(lhs, rhs))
             {
               //found the lhs in the rhs. Abort!
               return eq;
@@ -371,13 +371,13 @@ namespace BEEV
           if (!(SYMBOL == lhs[0].GetKind() 
                 && BVCONST == lhs[1].GetKind() 
                 && zero == lhs[2] 
-                && !VarSeenInTerm(lhs[0], rhs) 
+                && !vars.VarSeenInTerm(lhs[0], rhs)
                 && !DoNotSolveThis(lhs[0])))
             {
               return eq;
             }
 
-          if (VarSeenInTerm(lhs[0], rhs))
+          if (vars.VarSeenInTerm(lhs[0], rhs))
             {
               DoNotSolve_TheseVars.insert(lhs[0]);
               return eq;
@@ -442,7 +442,7 @@ namespace BEEV
                                                 a, rhs));
 
           //if chosenvar is seen in chosenvar_value then abort
-          if (VarSeenInTerm(chosenvar, chosenvar_value))
+          if (vars.VarSeenInTerm(chosenvar, chosenvar_value))
             {
               //abort solving
               DoNotSolve_TheseVars.insert(lhs);
@@ -578,7 +578,7 @@ namespace BEEV
           {
             if (it2 == symbol_iterator)
               continue;
-            if (VarSeenInTerm(symbol, *it2))
+            if (vars.VarSeenInTerm(symbol, *it2))
               {
                 duplicated = true;
                 break;
@@ -1065,154 +1065,6 @@ namespace BEEV
   } //end of BVSolve_Even()
 
 
-	// This builds a reduced version of a graph, where there
-    // is only a new node if the number of non-array SYMBOLS
-    // in the descendents changes. For example (EXTRACT 0 1 n)
-    // will have the same "Symbols" node as n, because
-    // no new symbols are introduced.
-	Symbols* BVSolver::BuildSymbolGraph(const ASTNode& n)
-	{
-	if (symbol_graph.find(n) != symbol_graph.end())
-	{
-		return symbol_graph[n];
-	}
-
-	Symbols* node;
-
-	// Note we skip array variables. We never solve for them so
-	// can ignore them.
-	if (n.GetKind() == SYMBOL && n.GetIndexWidth() == 0) {
-		node = new Symbols(n);
-		symbol_graph.insert(make_pair(n, node));
-		return node;
-	}
-
-	vector<Symbols*> children;
-	for (int i = 0; i < n.Degree(); i++) {
-		Symbols* v = BuildSymbolGraph(n[i]);
-		if (!v->empty())
-			children.push_back(v);
-	}
-
-	if (children.size() == 1) {
-		// If there is only a single child with a symbol. Then jump to it.
-		node = children.back();
-	}
-	else
-		node = new Symbols(children);
-
-	symbol_graph.insert(make_pair(n, node));
-
-	return node;
-	}
-
-	// Builds a set of the SYMBOLS that were found under the "term". The symbols are the union of "found" and
-	// all the sets : TermsAlreadySeen(av[0]) union ... TermsAlreadySeen(av[n])".
-	  void BVSolver::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited, ASTNodeSet& found, vector<Symbols*>& av)
-	  {
-		  if (visited.find(term) != visited.end())
-		  {
-			  return;
-		  }
-		SymbolPtrToNode::const_iterator it;
-	    if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
-	      {
-	    	// We've previously built the set of variables below this "symbols".
-	    	// It's not added into "found" because its sometimes 70k variables
-	    	// big, and if there are no other symbols discovered it's a terrible
-	    	// waste to create a copy of the set. Instead we store (in effect)
-	    	// a pointer to the set.
-	    	av.push_back(term);
-	    	return;
-	      }
-
-	    if (term->isLeaf())
-	    {
-	    	found.insert(term->found);
-	    	return;
-	    }
-
-	    for (vector<Symbols*>::const_iterator
-	           it = term->children.begin(), itend = term->children.end();
-	         it != itend; it++)
-	      {
-	        VarSeenInTerm(*it,visited,found,av);
-	      }
-
-	    visited.insert(term);
-	    return;
-	  }//End of VarSeenInTerm
-
-#if 0
-	  void BVSolver::SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols)
-	  {
-            assert(symbols.size() ==0);
-
-            BuildSymbolGraph(term);
-
-            SymbolPtrSet visited;
-
-            vector<Symbols*> av;
-            VarSeenInTerm(symbol_graph[term],visited,symbols,av);
-
-            for (int i =0 ; i < av.size();i++)
-            {
-                    const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
-                    symbols.insert(sym.begin(), sym.end());
-            }
-
-
-            if (visited.size() > 50) // No use caching it, unless we've done some work.
-            {
-                    TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
-            }
-          }
-#endif
-
-	  bool BVSolver::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
-	  {
-		  // This only returns true if we are searching for variables that aren't arrays.
-		  assert(var.GetKind() == SYMBOL && var.GetIndexWidth() == 0);
-		  if (term.isConstant())
-			  return false;
-
-		  BuildSymbolGraph(term);
-
-		  SymbolPtrSet visited;
-		  ASTNodeSet *symbols = new ASTNodeSet();
-		  vector<Symbols*> av;
-		  VarSeenInTerm(symbol_graph[term],visited,*symbols,av);
-
-		  bool result = (symbols->count(var) !=0);
-
-		  //cerr << "visited:" << visited.size() << endl;
-		  //cerr << "av:" << av.size() << endl;
-		  //cerr << "Term is const" << term.isConstant() << endl;
-
-		  if (visited.size() > 50) // No use caching it, unless we've done some work.
-		  {
-			  for (int i =0 ; i < av.size();i++)
-			  {
-				  const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
-				  symbols->insert(sym.begin(), sym.end());
-			  }
-			  TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
-			  result = (symbols->count(var) !=0);
-		  }
-		  else
-		  {
-			  const int size = av.size();
-			  for (int i =0 ; i < size;i++)
-			  {
-				  if (result)
-					  break;
-				  const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
-				  result |= (sym.find(var) !=sym.end());
-			  }
-			  delete symbols;
-		  }
-		  return result;
-	  }
 
 
 };//end of namespace BEEV
