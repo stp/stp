@@ -13,6 +13,7 @@
 #include <iostream>
 #include <utility>
 #include "RunTimes.h"
+#include "../sat/utils/System.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
 std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification", "Constant Bit Propagation","Array Read Refinement"};
@@ -44,6 +45,8 @@ void RunTimes::print()
   std::map<Category, int>::const_iterator it1 = counts.begin();
   std::map<Category, long>::const_iterator it2 = times.begin();
 
+  int cummulative_ms = 0;
+
   while (it1 != counts.end())
   	{
   		int time_ms = 0;
@@ -55,12 +58,18 @@ void RunTimes::print()
   			result << " " << CategoryNames[it1->first] << ": " << it1->second;
   			result << " [" << time_ms << "ms]";
   			result << std::endl;
+  			cummulative_ms += time_ms;
   		}
   		it1++;
   	}
-
-
   std::cerr << result.str();
+  std::cerr << std::fixed;
+  std::cerr.precision(2);
+  std::cerr << "Statistics Total: " << ((double)cummulative_ms)/1000 << "s" << std::endl;
+  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << Minisat::memUsedPeak() << "MB" << std::endl;
+
+
   // iterator
 }
 
