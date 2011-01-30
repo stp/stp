@@ -97,7 +97,7 @@ namespace BEEV
     assert(BVPLUS == lhs.GetKind());
 
     //collect all the vars in the lhs and rhs
-    vars.BuildSymbolGraph(eq);
+    vars.getSymbol(eq);
 
     //handle BVPLUS case
     ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
@@ -733,7 +733,7 @@ namespace BEEV
     	 which shouldn't be simplified.
   	   */
 
-    	ASTNode aaa = (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula
+    	ASTNode aaa =  (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula
     			(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
 
         if (ASTFalse == aaa)
@@ -793,7 +793,7 @@ namespace BEEV
     // Imagine in the last conjunct A is replaced by B. But there could
     // be variable A's in the first conjunct. This gets rid of 'em.
    	output = _simp->applySubstitutionMapUntilArrays(output);
-
+   	_simp->haveAppliedSubstitutionMap();
 
     UpdateAlreadySolvedMap(_input, output);
     _bm->GetRunTimes()->stop(RunTimes::BVSolver);

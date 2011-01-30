@@ -113,11 +113,11 @@ namespace BEEV
     //else returns FALSE
     bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
 
-    VariablesInExpression vars;
+    VariablesInExpression& vars;
 
   public:
     //constructor
-  BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp)
+  BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp), vars(simp->getVariablesInExpression())
     {
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);
@@ -138,8 +138,6 @@ namespace BEEV
     {
   	  DoNotSolve_TheseVars.clear();
   	  FormulasAlreadySolvedMap.clear();
-  	  //TermsAlreadySeenMap.clear();
-
     } //End of ClearAllTables()
 
   }; //end of class bvsolver

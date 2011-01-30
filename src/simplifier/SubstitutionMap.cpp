@@ -19,26 +19,29 @@ SubstitutionMap::~SubstitutionMap()
 // This makes it easier to spot how long is spent in the simplifier.
 const bool simplify_during_create_subM = false;
 
-//if a is READ(Arr,const) or SYMBOL, and b is BVCONST then return 1
-//if b is READ(Arr,const) or SYMBOL, and a is BVCONST then return -1
+//if a is READ(Arr,const) and b is BVCONST then return 1.
+//if a is a symbol SYMBOL, return 1.
+//if b is READ(Arr,const) and a is BVCONST then return -1
+// if b is a symbol return -1.
 //
 //else return 0 by default
 int TermOrder(const ASTNode& a, const ASTNode& b)
 {
-  Kind k1 = a.GetKind();
-  Kind k2 = b.GetKind();
+  const Kind k1 = a.GetKind();
+  const Kind k2 = b.GetKind();
+
+  if (k1 == SYMBOL)
+  	return 1;
+
+  if (k2 == SYMBOL)
+  	return -1;
+
 
   //a is of the form READ(Arr,const), and b is const, or
-  //a is of the form var, and b is const
   if ((k1 == READ
        && a[0].GetKind() == SYMBOL
        && a[1].GetKind() == BVCONST
        && (k2 == BVCONST)))
-    // || k2 == READ && b[0].GetKind() == SYMBOL && b[1].GetKind()
-    // == BVCONST)))
-    return 1;
-
-  if (SYMBOL == k1 && (BVCONST == k2 || TRUE == k2 || FALSE == k2 || SYMBOL ==k2))
     return 1;
 
   //b is of the form READ(Arr,const), and a is const, or
@@ -49,31 +52,19 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
            && b[1].GetKind() == BVCONST)))
     return -1;
 
-  if (SYMBOL == k2
-      && (BVCONST == k1
-          || TRUE == k1
-          || FALSE == k1
-          || SYMBOL == k1
-      ))
-    return -1;
-
   return 0;
 } //End of TermOrder()
 
 
-//This finds everything which is: (= SYMBOL BVCONST), (READ SYMBOL BVCONST),
+
+//This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ SYMBOL BVCONST)),
 // (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
 // or (=SYMBOL BVCONST).
-// The bvsolver goes to a lot more trouble to make similar substitutions, the
-// main advantage that the below function has is that it doesn't need to check
-// (much) if the symbol being substituted for is on the RHS.
-//The UpdateSubstitionMap() function does all the checking that's needed.
-//
-//i.e. anything that has a termorder of 1 or -1.
+// It tries to remove the conjunct, storing it in the substitutionmap. It replaces it in the
+// formula by true.
 // The bvsolver puts expressions of the form (= SYMBOL TERM) into the solverMap.
 
-ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransformer*at
-)
+ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransformer*at)
 {
   if (!bm->UserFlags.wordlevel_solve_flag)
     return a;
@@ -152,8 +143,10 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 	  if (CheckSubstitutionMap(symbol) || CheckSubstitutionMap(rhs))
 		  return output;
 
-	  (*SolverMap)[symbol] = bm->CreateNode(NOT,rhs);
-      return ASTTrue;
+	  if (UpdateSolverMap(symbol, bm->CreateNode(NOT, rhs)))
+			return ASTTrue;
+		else
+			return output;
   }
 
 

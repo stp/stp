@@ -50,6 +50,8 @@ private:
   long getCurrentTime();
   void addTime(Category c, long milliseconds);
   
+  long lastTime;
+
 public:
   
   void addCount(Category c);
@@ -57,7 +59,17 @@ public:
   void stop(Category c);
   void print();
   
-  RunTimes(){}
+  void difference()
+  {
+	  long val = getCurrentTime();
+	  std::cout << (val -  lastTime) << "ms" << std::endl;
+	  lastTime = val;
+  }
+
+  RunTimes()
+  {
+	  lastTime = getCurrentTime();
+  }
   
   void clear()
   {

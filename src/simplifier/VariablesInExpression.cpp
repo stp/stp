@@ -12,21 +12,13 @@ VariablesInExpression::VariablesInExpression() {
 }
 
 VariablesInExpression::~VariablesInExpression() {
-	  set<Symbols*> deleted;
-	  for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it != symbol_graph.end(); it++)
-	  {
-		  if (deleted.find(it->second) == deleted.end())
-		  {
-			  deleted.insert(it->second);
-			  delete it->second;
-		  }
-	  }
+	ClearAllTables();
+}
 
-	  for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin(); it != TermsAlreadySeenMap.end() ; it++)
-		  delete (it->second);
-
-	symbol_graph.clear();
-
+void VariablesInExpression::insert(const ASTNode& n, Symbols *s)
+{
+	assert (s!= NULL);
+	symbol_graph.insert(make_pair(n.GetNodeNum(), s));
 }
 
 // This builds a reduced version of a graph, where there
@@ -34,9 +26,9 @@ VariablesInExpression::~VariablesInExpression() {
 // in the descendents changes. For example (EXTRACT 0 1 n)
 // will have the same "Symbols" node as n, because
 // no new symbols are introduced.
-Symbols* VariablesInExpression::BuildSymbolGraph(const ASTNode& n) {
-	if (symbol_graph.find(n) != symbol_graph.end()) {
-		return symbol_graph[n];
+Symbols* VariablesInExpression::getSymbol(const ASTNode& n) {
+	if (symbol_graph.find(n.GetNodeNum()) != symbol_graph.end()) {
+		return symbol_graph[n.GetNodeNum()];
 	}
 
 	Symbols* node;
@@ -45,13 +37,13 @@ Symbols* VariablesInExpression::BuildSymbolGraph(const ASTNode& n) {
 	// can ignore them.
 	if (n.GetKind() == SYMBOL && n.GetIndexWidth() == 0) {
 		node = new Symbols(n);
-		symbol_graph.insert(make_pair(n, node));
+		insert(n, node);
 		return node;
 	}
 
 	vector<Symbols*> children;
 	for (int i = 0; i < n.Degree(); i++) {
-		Symbols* v = BuildSymbolGraph(n[i]);
+		Symbols* v = getSymbol(n[i]);
 		if (!v->empty())
 			children.push_back(v);
 	}
@@ -62,7 +54,7 @@ Symbols* VariablesInExpression::BuildSymbolGraph(const ASTNode& n) {
 	} else
 		node = new Symbols(children);
 
-	symbol_graph.insert(make_pair(n, node));
+	insert(n, node);
 
 	return node;
 }
@@ -99,30 +91,41 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
 	return;
 }//End of VarSeenInTerm
 
-#if 0
-void VariablesInExpression::SetofVarsSeenInTerm(const ASTNode& term, ASTNodeSet& symbols)
+ASTNodeSet * VariablesInExpression::SetofVarsSeenInTerm(Symbols* symbol, bool& destruct)
 {
-	assert(symbols.size() ==0);
+	assert(symbol != NULL);
 
-	BuildSymbolGraph(term);
+	SymbolPtrToNode::iterator it = TermsAlreadySeenMap.find(symbol);
+
+	if ( it != TermsAlreadySeenMap.end())
+		{
+		destruct = false;
+		return it->second;
+		}
 
 	SymbolPtrSet visited;
 
+	ASTNodeSet *symbols = new ASTNodeSet();
 	vector<Symbols*> av;
-	VarSeenInTerm(symbol_graph[term],visited,symbols,av);
+	VarSeenInTerm(symbol,visited,*symbols,av);
 
 	for (int i =0; i < av.size();i++)
 	{
 		const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
-		symbols.insert(sym.begin(), sym.end());
+		symbols->insert(sym.begin(), sym.end());
 	}
 
-	if (visited.size() > 50) // No use caching it, unless we've done some work.
-	{
-		TermsAlreadySeenMap.insert(make_pair(symbol_graph[term],symbols));
-	}
+	destruct = true;
+	//TermsAlreadySeenMap.insert(make_pair(symbol,symbols));
+
+	return symbols;
 }
-#endif
+
+ASTNodeSet * VariablesInExpression::SetofVarsSeenInTerm(const ASTNode& term, bool& destruct)
+{
+	getSymbol(term);
+	return SetofVarsSeenInTerm(symbol_graph[term.GetNodeNum()],  destruct);
+}
 
 bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 		const ASTNode& term) {
@@ -131,12 +134,12 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 	if (term.isConstant())
 		return false;
 
-	BuildSymbolGraph(term);
+	getSymbol(term);
 
 	SymbolPtrSet visited;
 	ASTNodeSet *symbols = new ASTNodeSet();
 	vector<Symbols*> av;
-	VarSeenInTerm(symbol_graph[term], visited, *symbols, av);
+	VarSeenInTerm(symbol_graph[term.GetNodeNum()], visited, *symbols, av);
 
 	bool result = (symbols->count(var) != 0);
 
@@ -144,13 +147,23 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 	//cerr << "av:" << av.size() << endl;
 	//cerr << "Term is const" << term.isConstant() << endl;
 
-	if (visited.size() > 50) // No use caching it, unless we've done some work.
+
+	if (visited.size() > 150) // No use caching it, unless we've done some work.
 	{
+		sort(av.begin(), av.end());
+
+		//cout << "===" << endl;
 		for (int i = 0; i < av.size(); i++) {
+			if (i!=0 && av[i] == av[i-1])
+				continue;
+
 			const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
+			cout << "set: " << i << " " << sym.size() << endl;
 			symbols->insert(sym.begin(), sym.end());
 		}
-		TermsAlreadySeenMap.insert(make_pair(symbol_graph[term], symbols));
+		TermsAlreadySeenMap.insert(make_pair(symbol_graph[term.GetNodeNum()], symbols));
+		//cout << "finish" << symbols->size() << endl;
+		//cout << "===" << endl;
 		result = (symbols->count(var) != 0);
 	} else {
 		const int size = av.size();

@@ -108,19 +108,23 @@ namespace BEEV {
             simplified_solved_InputToSAT = 
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
 
+            // Imagine:
+			// The simplifier simplifies (0 + T) to T
+			// Then bvsolve introduces (0 + T)
+			// Then CreateSubstitutionMap decides T maps to a constant, but leaving another (0+T).
+			// When we go to simplify (0 + T) will still be in the simplify cache, so will be mapped to T.
+			// But it shouldn't be T, it should be a constant.
+			// Applying the substitution map fixes this case.
+            //
+			if (initialSize != simp->Return_SolverMap()->size())
+			{
+				simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
+				simp->haveAppliedSubstitutionMap();
+			}
+
+
             bm->ASTNodeStats("after pure substitution: ", 
                              simplified_solved_InputToSAT);
-
-            // Imagine:
-            // The simplifier simplifies (0 + T) to T
-            // Then bvsolve introduces (0 + T)
-            // Then CreateSubstitutionMap decides T maps to a constant, but leaving another (0+T).
-            // When we go to simplify (0 + T) will still be in the simplify cache, so will be mapped to T.
-            // But it shouldn't be T, it should be a constant.
-            // Applying the substitution map fixes this unusual case... expensively...
-            if (initialSize != simp->Return_SolverMap()->size())
-            	simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
-
 
             simplified_solved_InputToSAT = 
               simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, 
@@ -247,14 +251,20 @@ namespace BEEV {
         bm->counterexample_checking_during_refinement = true;
       }
 
-    if(bm->UserFlags.stats_flag)
-    	simp->printCacheStatus();
-
+    // We are about to solve. Clear out all the memory associated with caches
+    // that we won't need again.
     simp->ClearCaches();
+    simp->haveAppliedSubstitutionMap();
     bm->ClearAllTables();
+
+
     // Deleting it clears out all the buckets associated with hashmaps etc. too.
     delete bvsolver;
     bvsolver = new BVSolver(bm,simp);
+
+    if(bm->UserFlags.stats_flag)
+    	simp->printCacheStatus();
+
 
     // If it doesn't contain array operations, use ABC's CNF generation.
     if (!arrayops || !bm->UserFlags.arrayread_refinement_flag)
@@ -337,7 +347,7 @@ namespace BEEV {
 
     if(!bm->UserFlags.num_absrefine_flag)
       {
-	FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
+    	FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
 		   "either a divide by zero in the input or a bug in STP");
 	//bogus return to make the compiler shut up
 	return SOLVER_ERROR;

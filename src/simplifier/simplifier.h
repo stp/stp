@@ -59,7 +59,7 @@ namespace BEEV
     ASTNode makeTower(const Kind k , const ASTVec& children);
 
   public:
-      
+
     /****************************************************************
      * Public Member Functions                                      *
      ****************************************************************/      
@@ -247,6 +247,12 @@ namespace BEEV
     	return substitutionMap.Return_SolverMap();
     } // End of SolverMap()
 
+    void haveAppliedSubstitutionMap()
+    {
+    	substitutionMap.haveAppliedSubstitutionMap();
+    }
+
+
     void ClearAllTables(void) 
     {
       SimplifyMap->clear();
@@ -258,6 +264,7 @@ namespace BEEV
       substitutionMap.clear();
     }
 
+
     // These can be cleared (to save memory) without changing the answer.
     void ClearCaches()
     {
@@ -265,6 +272,12 @@ namespace BEEV
         MultInverseMap.clear();
         SimplifyMap->clear();
         SimplifyNegMap->clear();
+        getVariablesInExpression().ClearAllTables();
+    }
+
+    VariablesInExpression& getVariablesInExpression()
+    {
+    	return substitutionMap.vars;
     }
 
   };//end of class Simplifier
