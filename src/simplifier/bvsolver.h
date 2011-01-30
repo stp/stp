@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -112,11 +112,6 @@ namespace BEEV
     //
     //else returns FALSE
     bool CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output);
-
-    // If array terms contain variables that have been substituted for, then , it breaks.
-    // However, completely substituting is extremely expensive to do. And only rarely necessary.
-    // With this option enabled, it will do it properly. And slowly!!
-    bool completelySubstitute;
 
     VariablesInExpression vars;
 
