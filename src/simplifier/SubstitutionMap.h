@@ -33,6 +33,10 @@ class SubstitutionMap {
 
 	int loopCount;
 
+	void buildDepends(const ASTNode& n0, const ASTNode& n1);
+	void loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>& visited);
+	bool loops(const ASTNode& n0, const ASTNode& n1);
+
 public:
 
 	// When the substitutionMap has been applied globally, then,
@@ -43,7 +47,6 @@ public:
 		rhs.clear();
 		rhs_visited.clear();
 	}
-
 
 	VariablesInExpression vars;
 
@@ -78,121 +81,6 @@ public:
 		return false;
 	}
 
-	// Adds to the dependency graph that n0 depends on the variables in n1.
-	// It's not the transitive closure of the dependencies. Just the variables in the expression "n1".
-	// This is only needed as long as all the substitution rules haven't been written through.
-	void buildDepends(const ASTNode& n0, const ASTNode& n1)
-	{
-		if (n0.GetKind() != SYMBOL)
-			return;
-
-		if (n1.isConstant())
-			return;
-
-		vector<Symbols*> av;
-		vars.VarSeenInTerm(vars.getSymbol(n1), rhs_visited, rhs, av);
-
-		sort(av.begin(), av.end());
-		for (int i =0; i < av.size();i++)
-		{
-			if (i!=0 && av[i] == av[i-1])
-				continue; // Treat it like a set of Symbol* in effect.
-			const ASTNodeSet& sym = *(vars.TermsAlreadySeenMap.find(av[i])->second);
-			rhs.insert(sym.begin(), sym.end());
-		}
-
-		assert (dependsOn.find(n0) == dependsOn.end());
-		dependsOn.insert(make_pair(n0,vars.getSymbol(n1)));
-	}
-
-	// Take the transitive closure of the varsToCheck. Storing the result in visited.
-	void loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>& visited)
-	{
-		set<ASTNode>::const_iterator visitedIt = visited.begin();
-
-		set<ASTNode> toVisit;
-		vector<ASTNode> visitedN;
-
-		// for each variable.
-		for (set<ASTNode>::const_iterator varIt = varsToCheck.begin(); varIt != varsToCheck.end(); varIt++)
-		{
-			while (*visitedIt < *varIt && visitedIt != visited.end())
-				visitedIt++;
-
-			if (*visitedIt == *varIt)
-				continue;
-
-			visitedN.push_back(*varIt);
-			DependsType::iterator it;
-			if ((it = dependsOn.find(*varIt)) != dependsOn.end())
-			{
-				Symbols* s= it->second;
-				bool destruct;
-				ASTNodeSet* varsSeen = vars.SetofVarsSeenInTerm(s,destruct);
-				toVisit.insert(varsSeen->begin(), varsSeen->end());
-
-				if (destruct)
-					delete varsSeen;
-			}
-		}
-
-		visited.insert(visitedN.begin(), visitedN.end());
-
-		visitedN.clear();
-
-		if (toVisit.size() !=0)
-			loops_helper(toVisit, visited);
-	}
-
-	// If n0 is replaced by n1 in the substitution map. Will it cause a loop?
-	// i.e. will the dependency graph be an acyclic graph still.
-	// For example, if we have x = F(y,z,w), it would make the substitutionMap loop
-	// if there's already z = F(x).
-	bool loops(const ASTNode& n0, const ASTNode& n1)
-		{
-		if (n0.GetKind() != SYMBOL)
-			return false; // sometimes this function is called with constants on the lhs.
-
-		if (n1.isConstant())
-			return false; // constants contain no variables. Can't loop.
-
-		// We are adding an edge FROM n0, so unless there is already an edge TO n0,
-		// there is no change it can loop. Unless adding this would add a TO and FROM edge.
-		if (rhs.find(n0) == rhs.end())
-		{
-			return vars.VarSeenInTerm(n0,n1);
-		}
-
-		if (n1.GetKind() == SYMBOL && dependsOn.find(n1) == dependsOn.end() )
-			return false; // The rhs is a symbol and doesn't appear.
-
-		if (debug_substn)
-			cout << loopCount++  << endl;
-
-		bool destruct = true;
-		ASTNodeSet* dependN = vars.SetofVarsSeenInTerm(n1,destruct);
-
-		if (debug_substn)
-		{
-			cout << n0 << " " <<  n1.GetNodeNum(); //<< " Expression size:" << bm->NodeSize(n1,true);
-			cout << "Variables in expression: "<< dependN->size() << endl;
-		}
-
-		set<ASTNode> depend(dependN->begin(), dependN->end());
-
-		if (destruct)
-			delete dependN;
-
-		set<ASTNode> visited;
-		loops_helper(depend,visited);
-
-		bool loops = visited.find(n0) != visited.end();
-
-		if (debug_substn)
-			cout << "Visited:" << visited.size() << "Loops:" << loops << endl;
-
-		return (loops);
-		}
 
 	//update solvermap with (key,value) pair
 	bool UpdateSolverMap(const ASTNode& key, const ASTNode& value) {
@@ -214,8 +102,6 @@ public:
 	const ASTNodeMap * Return_SolverMap() {
 		return SolverMap;
 	} // End of SolverMap()
-
-
 
 	bool CheckSubstitutionMap(const ASTNode& key) {
 		if (SolverMap->find(key) != SolverMap->end())
@@ -284,7 +170,8 @@ public:
 	// Replace any nodes in "n" that exist in the fromTo map.
 	// NB the fromTo map is changed.
 	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf);
-    static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf, bool stopAtArrays);
+	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf, bool stopAtArrays);
+
 
 };
 

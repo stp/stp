@@ -31,7 +31,8 @@ public:
       CounterExampleGeneration,
       SATSimplifying,
       ConstantBitPropagation,
-      ArrayReadRefinement
+      ArrayReadRefinement,
+      ApplyingSubstitutions
     };
 
   static std::string CategoryNames[];
