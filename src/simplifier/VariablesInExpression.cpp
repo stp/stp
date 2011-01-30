@@ -158,7 +158,7 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 				continue;
 
 			const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
-			cout << "set: " << i << " " << sym.size() << endl;
+			//cout << "set: " << i << " " << sym.size() << endl;
 			symbols->insert(sym.begin(), sym.end());
 		}
 		TermsAlreadySeenMap.insert(make_pair(symbol_graph[term.GetNodeNum()], symbols));

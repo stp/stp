@@ -16,7 +16,7 @@ namespace BEEV {
 class Simplifier;
 class ArrayTransformer;
 
-const bool debug_substn = true;
+const bool debug_substn = false;
 
 class SubstitutionMap {
 
