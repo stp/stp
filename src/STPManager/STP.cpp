@@ -118,7 +118,7 @@ namespace BEEV {
             //
 			if (initialSize != simp->Return_SolverMap()->size())
 			{
-				simplified_solved_InputToSAT = simp->applySubstitutionMapUntilArrays(simplified_solved_InputToSAT);
+				simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
 				simp->haveAppliedSubstitutionMap();
 			}
 
