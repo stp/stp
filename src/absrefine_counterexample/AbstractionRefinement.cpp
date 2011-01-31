@@ -196,6 +196,7 @@ namespace BEEV
     ASTNodeMap::const_iterator itend = simp->ReadOverWriteMap()->end();
 
     ASTVec FalseAxioms, RemainingAxioms;
+    RemainingAxioms.push_back(ASTTrue);
     for (; it != itend; it++)
       {
         //Guided refinement starts here
