@@ -196,8 +196,10 @@ cmd: commands END
       querysmt2 = parserInterface->CreateNode(FALSE);
     }  
         
-       if (assertionsSMT2.size() > 0)
+       if (assertionsSMT2.size() > 1)
       	((ASTVec*)AssertsQuery)->push_back(parserInterface->nf->CreateNode(AND,assertionsSMT2));
+      	else if (assertionsSMT2.size() > 0)
+      	((ASTVec*)AssertsQuery)->push_back((assertionsSMT2[0]));
       	else
       	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
   	  ((ASTVec*)AssertsQuery)->push_back(querysmt2);
