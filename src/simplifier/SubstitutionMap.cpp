@@ -319,8 +319,18 @@ void SubstitutionMap::buildDepends(const ASTNode& n0, const ASTNode& n1)
 	{
 		if (i!=0 && av[i] == av[i-1])
 			continue; // Treat it like a set of Symbol* in effect.
-		const ASTNodeSet& sym = *(vars.TermsAlreadySeenMap.find(av[i])->second);
-		rhs.insert(sym.begin(), sym.end());
+
+		ASTNodeSet* sym = (vars.TermsAlreadySeenMap.find(av[i])->second);
+		if(rhsAlreadyAdded.find(sym) != rhsAlreadyAdded.end())
+			continue;
+		rhsAlreadyAdded.insert(sym);
+
+		//cout << loopCount++ << " ";
+		//cout << "initial" << rhs.size() << " Adding: " <<sym->size();
+		rhs.insert(sym->begin(), sym->end());
+		//cout << "final:" << rhs.size();
+		//cout << "added:" << sym << endl;
+
 	}
 
 	assert (dependsOn.find(n0) == dependsOn.end());

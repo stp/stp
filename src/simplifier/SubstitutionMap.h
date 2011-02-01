@@ -29,6 +29,7 @@ class SubstitutionMap {
 	typedef hash_map<ASTNode, Symbols*,ASTNode::ASTNodeHasher> DependsType;
 	DependsType dependsOn; // The lhs depends on the variables in the rhs.
 	ASTNodeSet rhs; // All the rhs that have been seeen.
+	set<ASTNodeSet*> rhsAlreadyAdded;
 	VariablesInExpression::SymbolPtrSet rhs_visited; // the rhs contains all the variables in here already.
 
 	int loopCount;
@@ -46,6 +47,7 @@ public:
 		dependsOn.clear();
 		rhs.clear();
 		rhs_visited.clear();
+		rhsAlreadyAdded.clear();
 	}
 
 	VariablesInExpression vars;
