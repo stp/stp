@@ -66,6 +66,14 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
 	if (visited.find(term) != visited.end()) {
 		return;
 	}
+
+	if (term->isLeaf()) {
+		found.insert(term->found);
+		return;
+	}
+
+	visited.insert(term);
+
 	SymbolPtrToNode::const_iterator it;
 	if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end()) {
 		// We've previously built the set of variables below this "symbols".
@@ -77,17 +85,11 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
 		return;
 	}
 
-	if (term->isLeaf()) {
-		found.insert(term->found);
-		return;
-	}
-
 	for (vector<Symbols*>::const_iterator it = term->children.begin(), itend =
 			term->children.end(); it != itend; it++) {
 		VarSeenInTerm(*it, visited, found, av);
 	}
 
-	visited.insert(term);
 	return;
 }//End of VarSeenInTerm
 
@@ -148,7 +150,7 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 	//cerr << "Term is const" << term.isConstant() << endl;
 
 
-	if (visited.size() > 150) // No use caching it, unless we've done some work.
+	if (visited.size() > 250) // No use caching it, unless we've done some work.
 	{
 		sort(av.begin(), av.end());
 
