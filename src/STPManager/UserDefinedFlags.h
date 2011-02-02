@@ -228,11 +228,6 @@ namespace BEEV
       random_seed_flag = false;
       random_seed = 0;
 
-      //Flag that allows the printing of the DIMACS format of the
-      //input
-      print_cnf_flag = false;
-      cnf_dump_filename = (char*)"stp-input.cnf";
-
       //flag to decide whether to print "valid/invalid" or not
       print_output_flag = false;
       
