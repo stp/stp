@@ -69,8 +69,8 @@ void RunTimes::print()
   std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
   std::cerr << "Peak Memory Used: " << Minisat::memUsedPeak() << "MB" << std::endl;
 
+  clear();
 
-  // iterator
 }
 
 void RunTimes::addTime(Category c, long milliseconds)

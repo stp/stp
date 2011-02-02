@@ -413,8 +413,6 @@ namespace BEEV
       return false;
     } // End of IntroduceSymbolSet
 
-
-
     bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
     ASTNode NewParameterized_BooleanVar(const ASTNode& var,
@@ -427,7 +425,7 @@ namespace BEEV
 
     // This is called before SAT solving, so only junk that isn't needed
     // after SAT solving should be cleaned out.
-    void ClearAllTables(void) 
+    void ClearAllTables(void)
     {
       NodeLetVarMap.clear();
       NodeLetVarMap1.clear();
@@ -440,8 +438,50 @@ namespace BEEV
     } //End of ClearAllTables()
 
     ~STPMgr()
+        {}
+
+    // The ASTNodes are garbage collected. This object can only be deleted, when every node has been
+    // cleaned up already. Unfortunately, some references are remaining somewhere to nodes. The
+    // destructor will look like this.
+    void cleanup()
     {
-      ClearAllTables();
+      delete runTimes;
+      runTimes = NULL;
+      ASTFalse     = ASTNode(0);
+      ASTTrue      = ASTNode(0);
+      ASTUndefined = ASTNode(0);
+      _current_query = ASTNode(0);
+      dummy_node =  ASTNode(0);
+
+      zeroes.clear();
+      ones.clear();
+      max.clear();
+
+      Introduced_SymbolsSet.clear();
+      NodeLetVarMap.clear();
+      NodeLetVarMap1.clear();
+      PLPrintNodeSet.clear();
+      AlreadyPrintedSet.clear();
+      StatInfoSet.clear();
+      TermsAlreadySeenMap.clear();
+      NodeLetVarVec.clear();
+      ListOfDeclaredVars.clear();
+      _symbol_unique_table.clear();
+
+      vector<IntToASTVecMap*>::iterator it    = _asserts.begin();
+      vector<IntToASTVecMap*>::iterator itend = _asserts.end();
+      for(;it!=itend;it++)
+        {
+          IntToASTVecMap * j = (*it);
+          j->clear();
+          delete j;
+        }
+      _asserts.clear();
+
+   	  delete hashingNodeFactory;
+    }
+    	/*
+    	ClearAllTables();
 
       vector<IntToASTVecMap*>::iterator it    = _asserts.begin();
       vector<IntToASTVecMap*>::iterator itend = _asserts.end();
@@ -463,7 +503,8 @@ namespace BEEV
         CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
 
       delete hashingNodeFactory;
-    }
+      */
+    //}
   };//End of Class STPMgr
 };//end of namespace
 #endif

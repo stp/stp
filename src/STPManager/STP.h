@@ -64,10 +64,10 @@ namespace BEEV
       ClearAllTables();
       delete bvsolver;
       delete Ctr_Example;
-      delete arrayTransformer;            
+      delete arrayTransformer;
       delete tosat;
       delete simp;
-      //       delete bm;   
+      delete bm;
     }
 
     /****************************************************************

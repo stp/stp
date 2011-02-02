@@ -15,6 +15,7 @@
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "../parser/ParserInterface.h"
 #include <sys/time.h>
+#include <memory>
 
 
 #ifdef EXT_HASH_MAP
@@ -92,12 +93,21 @@ int main(int argc, char ** argv) {
 
 
   STPMgr * bm       = new STPMgr();
+
   Simplifier * simp  = new Simplifier(bm);
+  auto_ptr<Simplifier> simpCleaner(simp);
+
   BVSolver* bvsolver = new BVSolver(bm, simp);
+
   ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
+  auto_ptr<ArrayTransformer> atClearner(arrayTransformer);
+
   ToSAT * tosat      = new ToSAT(bm);
-  AbsRefine_CounterExample * Ctr_Example = 
-    new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+  auto_ptr<ToSAT> tosatCleaner(tosat);
+
+  AbsRefine_CounterExample * Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+  auto_ptr<AbsRefine_CounterExample> ctrCleaner(Ctr_Example);
+
   itimerval timeout; 
 
   ParserBM          = bm;
@@ -109,6 +119,7 @@ int main(int argc, char ** argv) {
             tosat, 
             Ctr_Example);
   
+
   //populate the help string
   helpstring += 
     "STP version            : " + version + "\n\n";
@@ -579,12 +590,18 @@ int main(int argc, char ** argv) {
   }
 
   SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
-  if (bm->UserFlags.quick_statistics_flag) 
+  if (bm->UserFlags.quick_statistics_flag)
     {
       bm->GetRunTimes()->print();
     }
   (GlobalSTP->tosat)->PrintOutput(ret);
 
+  AssertsQuery->clear();
   delete AssertsQuery;
+  asserts = ASTNode();
+  query = ASTNode();
+  bm->cleanup();
+
+
   return 0;
 }//end of Main
