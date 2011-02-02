@@ -174,8 +174,16 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-            simplified_solved_InputToSAT = 
+        	int initialSize = simp->Return_SolverMap()->size();
+
+        	simplified_solved_InputToSAT =
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+
+			if (initialSize != simp->Return_SolverMap()->size())
+			{
+				simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+				simp->haveAppliedSubstitutionMap();
+			}
 
             bm->ASTNodeStats("after pure substitution: ",
                              simplified_solved_InputToSAT);
