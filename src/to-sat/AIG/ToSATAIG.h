@@ -16,11 +16,11 @@
 #include "../STPManager/STPManager.h"
 #include "../BitBlaster.h"
 #include "BBNodeManagerAIG.h"
+#include "ToCNFAIG.h"
 
 namespace BEEV
 {
 
-  // NB You can't use this with abstraction refinement!!!
   class ToSATAIG : public ToSATBase
   {
   private:
@@ -32,19 +32,47 @@ namespace BEEV
     ToSATAIG&  operator = (const ToSATAIG& other);
     ToSATAIG(const ToSATAIG& other);
 
+	int count;
+	bool first;
+	BitBlaster<BBNodeAIG, BBNodeManagerAIG> *bb;
+	int CNFFileNameCounter;
+	BBNodeManagerAIG mgr;
+	Simplifier *simp;
+
+    ToCNFAIG toCNF;
+
+    void init()
+    {
+        count = 0;
+        first = true;
+        bb = NULL;
+        CNFFileNameCounter =0;
+        simp = NULL;
+    }
+
   public:
 
+    bool cbIsDestructed()
+    {
+    	return cb == NULL;
+    }
+
+
     ToSATAIG(STPMgr * bm) :
-      ToSATBase(bm)
+      ToSATBase(bm), toCNF(bm->UserFlags)
     {
       cb = NULL;
+      init();
     }
 
     ToSATAIG(STPMgr * bm, simplifier::constantBitP::ConstantBitPropagation* cb_) :
-      ToSATBase(bm)
+    	ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
     {
       cb = cb_;
+      init();
     }
+
+    ~ToSATAIG();
 
     void
     ClearAllTables()
@@ -59,8 +87,7 @@ namespace BEEV
       return nodeToSATVar;
     }
 
-    // Can not be used with abstraction refinement.
-    bool  CallSAT(SATSolver& satSolver, const ASTNode& input);
+    bool  CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef);
 
   };
 }

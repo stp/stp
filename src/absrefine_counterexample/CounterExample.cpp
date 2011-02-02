@@ -169,7 +169,7 @@ namespace BEEV
           }
         else
           {
-            return val;
+        	return val;
           }
       }
 
@@ -239,8 +239,6 @@ namespace BEEV
                 }
               else
                 {
-                cerr << "TermToConstTermUsingModel: termITE: "
-                    "value of conditional is wrong: " << condcompute << endl;
                 FatalError(" TermToConstTermUsingModel: termITE: "
                   "cannot compute ITE conditional against model: ", term);
                 }
@@ -302,8 +300,6 @@ namespace BEEV
             }
           else
             {
-              cerr << "TermToConstTermUsingModel: termITE: "
-                << "value of conditional is wrong: " << condcompute << endl;
             FatalError(" TermToConstTermUsingModel: termITE: cannot "
                          "compute ITE conditional against model: ", term);
             }
@@ -320,11 +316,9 @@ namespace BEEV
               ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
               o.push_back(ff);
             }
-          output = bm->hashingNodeFactory->CreateTerm(k, term.GetValueWidth(), o);
-          //output is a CONST expression. compute its value and store it
-          //in the CounterExampleMap
-          output = simp->BVConstEvaluator(output);
-          break;
+
+        output =  NonMemberBVConstEvaluator(term.GetSTPMgr() , k, o, term.GetValueWidth());
+        break;
         }
       }
 
@@ -414,7 +408,6 @@ namespace BEEV
   ASTNode
   AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
   {
-    const ASTNode& in = form;
     const Kind k = form.GetKind();
     if (!(is_Form_kind(k) && BOOLEAN_TYPE == form.GetType()))
       {
@@ -423,10 +416,10 @@ namespace BEEV
       }
 
     //cerr << "Input to ComputeFormulaUsingModel:" << form << endl;
-    ASTNodeMap::iterator it1;
+    ASTNodeMap::const_iterator it1;
     if ((it1 = ComputeFormulaMap.find(form)) != ComputeFormulaMap.end())
       {
-        ASTNode res = it1->second;
+        const ASTNode& res = it1->second;
         if (ASTTrue == res || ASTFalse == res)
           {
             return res;
@@ -482,11 +475,11 @@ namespace BEEV
 
                 for (ASTVec::const_iterator it = form.begin(), itend = form.end(); it
             != itend; it++)
-          {
+                {
                         children.push_back(TermToConstTermUsingModel(*it, false));
                 }
 
-                output = simp->BVConstEvaluator(bm->CreateNode(k, children));
+                output =  NonMemberBVConstEvaluator(form.GetSTPMgr() , k, children, form.GetValueWidth());
 
                 //evaluate formula to false if bvdiv execption occurs while
                 //counterexample is being checked during refinement.
@@ -517,7 +510,7 @@ namespace BEEV
                         children.push_back( ComputeFormulaUsingModel(*it));
                 }
 
-            output = simp->BVConstEvaluator(bm->CreateNode(k, children));
+        output =  NonMemberBVConstEvaluator(form.GetSTPMgr() , k, children, form.GetValueWidth());
 
             //evaluate formula to false if bvdiv execption occurs while
             //counterexample is being checked during refinement.
@@ -557,7 +550,6 @@ namespace BEEV
         break;
       }
 
-    //cout << "ComputeFormulaUsingModel output is:" << output << endl;
     assert(ASTUndefined != output);
     assert(output.isConstant());
     ComputeFormulaMap[form] = output;
@@ -864,10 +856,10 @@ namespace BEEV
 
   SOLVER_RETURN_TYPE
   AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
-      const ASTNode& modified_input, const ASTNode& original_input, ToSATBase* tosat)
+      const ASTNode& modified_input, const ASTNode& original_input, ToSATBase* tosat, bool refinement)
   {
 
-    bool sat = tosat->CallSAT(SatSolver, modified_input);
+    bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
     if (!sat)
       {

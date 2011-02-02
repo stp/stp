@@ -15,6 +15,7 @@
 #include "../sat/SimplifyingMinisat.h"
 #include "../sat/MinisatCore.h"
 #include "../sat/CryptoMinisat.h"
+#include <memory>
 
 namespace BEEV {
 
@@ -169,8 +170,8 @@ namespace BEEV {
     bm->start_abstracting = false;
     bm->TermsAlreadySeenMap_Clear();
     do
-      {
-        inputToSAT = simplified_solved_InputToSAT;
+    {
+    	inputToSAT = simplified_solved_InputToSAT;
 
         if(bm->UserFlags.optimize_flag) 
           {
@@ -194,7 +195,7 @@ namespace BEEV {
             bm->ASTNodeStats("after simplification: ", 
                              simplified_solved_InputToSAT);
           }
-        
+
         // The word level solver uses the simplifier to apply the rewrites it makes,
         // without optimisations enabled. It will enter infinite loops on some input.
         // Instead it could use the apply function of the substitution map, but it
@@ -205,8 +206,8 @@ namespace BEEV {
               bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
             bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
           }
-      } while (inputToSAT != simplified_solved_InputToSAT);
-    
+    } while (inputToSAT != simplified_solved_InputToSAT);
+
     bm->ASTNodeStats("After SimplifyWrites_Inplace: ", 
                      simplified_solved_InputToSAT);
 
@@ -273,83 +274,92 @@ namespace BEEV {
     if(bm->UserFlags.stats_flag)
     	simp->printCacheStatus();
 
+    const bool useAIGToCNF = !arrayops || !bm->UserFlags.arrayread_refinement_flag || bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER;
+    const bool maybeRefinement = arrayops && bm->UserFlags.arrayread_refinement_flag;
 
-    // If it doesn't contain array operations, use ABC's CNF generation.
-    if (!arrayops || !bm->UserFlags.arrayread_refinement_flag)
-    {
-      simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
+    simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
+    std::auto_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
     if (bm->UserFlags.bitConstantProp_flag)
-      {
-        bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
-            simplified_solved_InputToSAT);
+    {
+		bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
+			simplified_solved_InputToSAT);
 
-        bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+    	bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+    	cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory,simplified_solved_InputToSAT);
+    	cleaner.reset(cb);
+		bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
-        cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory,simplified_solved_InputToSAT);
-
-        bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
-
-        if (cb->isUnsatisfiable())
-           simplified_solved_InputToSAT = bm->ASTFalse;
-      }
+		if (cb->isUnsatisfiable())
+		   simplified_solved_InputToSAT = bm->ASTFalse;
+    }
 
     ToSATAIG toSATAIG(bm,cb);
 
+    ToSATBase* satBase =  useAIGToCNF? ((ToSAT*)&toSATAIG) : tosat;
+
+    // If it doesn't contain array operations, use ABC's CNF generation.
     res =
       Ctr_Example->CallSAT_ResultCheck(NewSolver,
                                        simplified_solved_InputToSAT,
                                        orig_input,
-                                       &toSATAIG
-                                       );
-
-    }
-    else
-      {
-      res =
-        Ctr_Example->CallSAT_ResultCheck(NewSolver,
-                                         simplified_solved_InputToSAT,
-                                         orig_input,
-                                         tosat
-                                         );
-
-      }
+                                       satBase,
+                                       maybeRefinement);
 
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats", bm);
+    	// If the aig converter knows that it is never going to be called again,
+    	// it deletes the constant bit stuff before calling the SAT solver.
+    	if (toSATAIG.cbIsDestructed())
+    		cleaner.release();
+
+    	CountersAndStats("print_func_stats", bm);
         return res;
       }
 
     assert(arrayops); // should only go to abstraction refinement if there are array ops.
     assert(bm->UserFlags.arrayread_refinement_flag); // Refinement must be enabled too.
 
+    // Unfortunately how I implemented the incremental CNF generator in ABC means that
+    // cryptominisat and simplifying minisat may simplify away variables that we later need.
+
     res = 
       Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
                                                 simplified_solved_InputToSAT, 
                                                 orig_input,
-                                                tosat);
+                                                satBase);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats", bm);
+    	if (toSATAIG.cbIsDestructed())
+    		cleaner.release();
+
+    	CountersAndStats("print_func_stats", bm);
         return res;
       }
 
     res = 
-      Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, orig_input,tosat);
+      Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, orig_input,satBase);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats", bm);
+    	if (toSATAIG.cbIsDestructed())
+    		cleaner.release();
+
+    	CountersAndStats("print_func_stats", bm);
         return res;
       }
 
     res = 
       Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
                                                 simplified_solved_InputToSAT,
-                                                orig_input,tosat);
+                                                orig_input,
+                                                satBase);
     if (SOLVER_UNDECIDED != res)
       {
-        CountersAndStats("print_func_stats", bm);
+    	if (toSATAIG.cbIsDestructed())
+    		cleaner.release();
+
+
+    	CountersAndStats("print_func_stats", bm);
         return res;
       }
 

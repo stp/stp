@@ -90,10 +90,12 @@ namespace BEEV
         	assert ((SYMBOL == arrsym.GetKind() || BVCONST == arrsym.GetKind()));
 
         	read_node_symbols.push_back(arrsym);
+
         	jKind.push_back(listOfIndices[i].GetKind());
 
         	concreteIndexes.push_back(TermToConstTermUsingModel(the_index));
         	concreteValues.push_back(TermToConstTermUsingModel(arrsym));
+
     	}
 
         //loop over the list of indices for the array and create LA,
@@ -152,7 +154,8 @@ namespace BEEV
 				res2 =  CallSAT_ResultCheck(SatSolver,
 									  FalseAxioms,
 									  original_input,
-									  tosat);
+									  tosat,
+									  true);
 				FalseAxiomsVec.clear();
 
 				if (SOLVER_UNDECIDED != res2)
@@ -172,9 +175,11 @@ namespace BEEV
 				RemainingAxioms);
 		bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
 		return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input,
-				tosat);
+				tosat,true);
 	}
+
 	bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+
     return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayReadRefinement
 
@@ -220,7 +225,7 @@ namespace BEEV
 		writeAxiom = (FalseAxioms.size() != 1) ? bm->CreateNode(AND,
 				FalseAxioms) : FalseAxioms[0];
 		bm->ASTNodeStats("adding false writeaxiom to SAT: ", writeAxiom);
-		res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input, tosat);
+		res2 = CallSAT_ResultCheck(SatSolver, writeAxiom, original_input, tosat,true);
 	}
 
     if (SOLVER_UNDECIDED != res2)
@@ -237,7 +242,7 @@ namespace BEEV
 		res2 = CallSAT_ResultCheck(SatSolver,
 								   writeAxiom,
 								   original_input,
-								   tosat);
+								   tosat, true);
     }
     return res2;
   } //end of SATBased_ArrayWriteRefinement

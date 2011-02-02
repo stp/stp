@@ -124,7 +124,8 @@ namespace BEEV
     CallSAT_ResultCheck(SATSolver& SatSolver,
                         const ASTNode& modified_input,
                         const ASTNode& original_input,
-                        ToSATBase* tosat);
+                        ToSATBase* tosat,
+                        bool refinement);
 
     //creates array write axiom only for the input term or formula, if
     //necessary. If there are no axioms to produce then it simply

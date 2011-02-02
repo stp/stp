@@ -93,7 +93,7 @@ namespace BEEV
 
     // Bitblasts, CNF conversion and calls toSATandSolve()
     bool CallSAT(SATSolver& SatSolver,
-                 const ASTNode& input);
+                 const ASTNode& input, bool refinement);
 
     ASTNodeToSATVar& SATVar_to_SymbolIndexMap()
     {

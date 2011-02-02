@@ -331,7 +331,7 @@ namespace BEEV
   //can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
   //SOLVER_UNDECIDED
   bool ToSAT::CallSAT(SATSolver& SatSolver,
-                      const ASTNode& input)
+		  	 const ASTNode& input, bool refinement)
   {
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
 

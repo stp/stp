@@ -38,8 +38,6 @@ class BitBlaster {
         BBNode BBTrue, BBFalse;
 
 
-        simplifier::constantBitP::ConstantBitPropagation* cb;
-
 	// Memo table for bit blasted terms.  If a node has already been
 	// bitblasted, it is mapped to a vector of Boolean formulas for
 	// the
@@ -165,6 +163,8 @@ class BitBlaster {
         BBNodeManagerT* nf;
 
 public:
+
+        simplifier::constantBitP::ConstantBitPropagation* cb;
 
 	// Bit blast a bitvector term.  The term must have a kind for a
 	// bitvector term.  Result is a ref to a vector of formula nodes

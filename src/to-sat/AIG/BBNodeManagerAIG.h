@@ -31,12 +31,14 @@ extern vector<BBNodeAIG> _empty_BBNodeAIGVec;
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
 class BBNodeManagerAIG
 {
+public:
         Aig_Man_t *aigMgr;
 
         // Map from symbols to their AIG nodes.
         typedef map<ASTNode, vector<BBNodeAIG> > SymbolToBBNode;
-        SymbolToBBNode symbolToBBNode;
 
+        SymbolToBBNode symbolToBBNode;
+private:
         // AIGs can only take two parameters. This makes a log_2 height
         // tower of varadic inputs.
         Aig_Obj_t * makeTower(Aig_Obj_t * (*t)(Aig_Man_t *, Aig_Obj_t *,
@@ -107,13 +109,11 @@ public:
                 return BBNodeAIG(Aig_ManConst0(aigMgr));
         }
 
-        void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData, ToSATBase::ASTNodeToSATVar& nodeToVar, const UserDefinedFlags& uf);
-
         // The same symbol always needs to return the same AIG node,
         // if it doesn't you will get the wrong answer.
         BBNodeAIG CreateSymbol(const ASTNode& n, unsigned i)
         {
-                assert(n.GetKind() == SYMBOL);
+        		assert(n.GetKind() == SYMBOL);
 
                 // booleans have width 0.
                 const unsigned width = std::max((unsigned)1, n.GetValueWidth());
