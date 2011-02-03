@@ -67,7 +67,7 @@ namespace BEEV
       delete arrayTransformer;
       delete tosat;
       delete simp;
-      delete bm;
+      //delete bm;
     }
 
     /****************************************************************

@@ -270,7 +270,7 @@ namespace BEEV {
     // Deleting it clears out all the buckets associated with hashmaps etc. too.
     delete bvsolver;
     bvsolver = new BVSolver(bm,simp);
-    auto_ptr<BVSolver> bvCleaner(bvsolver);
+    //auto_ptr<BVSolver> bvCleaner(bvsolver);
 
     if(bm->UserFlags.stats_flag)
     	simp->printCacheStatus();
