@@ -90,6 +90,9 @@ namespace BEEV {
 
     long initial_difficulty_score = DifficultyScore::score(original_input);
 
+    // A heap object so I can easily control its lifetime.
+    BVSolver* bvSolver = new BVSolver(bm,simp);
+
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
@@ -138,7 +141,7 @@ namespace BEEV {
         if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT = 
-              bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+              bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
             bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
           }
 
@@ -203,7 +206,7 @@ namespace BEEV {
         if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT = 
-              bvsolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+              bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
             bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
           }
     } while (inputToSAT != simplified_solved_InputToSAT);
@@ -268,9 +271,8 @@ namespace BEEV {
 
 
     // Deleting it clears out all the buckets associated with hashmaps etc. too.
-    delete bvsolver;
-    bvsolver = new BVSolver(bm,simp);
-    //auto_ptr<BVSolver> bvCleaner(bvsolver);
+    delete bvSolver;
+    bvSolver = NULL;
 
     if(bm->UserFlags.stats_flag)
     	simp->printCacheStatus();

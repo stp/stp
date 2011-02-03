@@ -34,7 +34,6 @@ namespace BEEV
      ****************************************************************/
     STPMgr * bm;
     Simplifier * simp;
-    BVSolver * bvsolver;
     ArrayTransformer * arrayTransformer;
     ToSAT * tosat;
     AbsRefine_CounterExample * Ctr_Example;
@@ -42,6 +41,21 @@ namespace BEEV
     /****************************************************************
      * Constructor and Destructor                                   *
      ****************************************************************/
+
+    //Constructor
+    STP(STPMgr* b,
+        Simplifier* s,
+        ArrayTransformer * a,
+        ToSAT * ts,
+        AbsRefine_CounterExample * ce)
+    {
+      bm   = b;
+      simp = s;
+      tosat = ts;
+      arrayTransformer = a;
+      Ctr_Example = ce;
+    }// End of constructor
+
 
     //Constructor
     STP(STPMgr* b,
@@ -54,7 +68,7 @@ namespace BEEV
       bm   = b;
       simp = s;
       tosat = ts;
-      bvsolver = bsolv;
+      delete bsolv; // Remove from the constructor later..
       arrayTransformer = a;
       Ctr_Example = ce;
     }// End of constructor
@@ -62,7 +76,6 @@ namespace BEEV
     ~STP()
     {
       ClearAllTables();
-      delete bvsolver;
       delete Ctr_Example;
       delete arrayTransformer;
       delete tosat;
@@ -94,7 +107,6 @@ namespace BEEV
     void ClearAllTables(void)
     {
       simp->ClearAllTables();
-      bvsolver->ClearAllTables();
       arrayTransformer->ClearAllTables();
       tosat->ClearAllTables();
       Ctr_Example->ClearAllTables();

@@ -97,8 +97,6 @@ int main(int argc, char ** argv) {
   Simplifier * simp  = new Simplifier(bm);
   auto_ptr<Simplifier> simpCleaner(simp);
 
-  BVSolver* bvsolver = new BVSolver(bm, simp);
-
   ArrayTransformer * arrayTransformer = new ArrayTransformer(bm, simp);
   auto_ptr<ArrayTransformer> atClearner(arrayTransformer);
 
@@ -114,7 +112,6 @@ int main(int argc, char ** argv) {
   GlobalSTP         = 
     new STP(bm, 
             simp, 
-            bvsolver, 
             arrayTransformer, 
             tosat, 
             Ctr_Example);
