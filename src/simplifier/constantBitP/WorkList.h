@@ -14,7 +14,10 @@ namespace simplifier
 
     private:
 
-      set<BEEV::ASTNode> workList; // Nodes to work on.
+      // select nodes from the cheap_worklist first.
+      set<BEEV::ASTNode> cheap_workList; // Nodes to work on.
+      set<BEEV::ASTNode> expensive_workList; // Nodes to work on.
+
       WorkList(const WorkList&); // Shouldn't needed to copy or assign.
       WorkList&
       operator=(const WorkList&);
@@ -52,6 +55,11 @@ namespace simplifier
         initWorkList(top);
       }
 
+      int size()
+      {
+        return cheap_workList.size() + expensive_workList.size();
+      }
+
       void
       initWorkList(const ASTNode&n)
       {
@@ -67,34 +75,56 @@ namespace simplifier
           return;
 
         //cerr << "WorkList Inserting:" << n.GetNodeNum() << endl;
-        workList.insert(n);
+        if (n.GetKind() == BVMULT || n.GetKind() == BVPLUS || n.GetKind() == BVDIV)
+          expensive_workList.insert(n);
+        else
+          cheap_workList.insert(n);
+
       }
 
       BEEV::ASTNode
       pop()
       {
         assert(!isEmpty());
-        ASTNode ret = *workList.begin();
-        workList.erase(workList.begin());
-        return ret;
+        if (cheap_workList.size() > 0)
+          {
+            ASTNode ret = *cheap_workList.begin();
+            cheap_workList.erase(cheap_workList.begin());
+            return ret;
+          }
+        else
+          {
+            assert (expensive_workList.size() > 0);
+            ASTNode ret = *expensive_workList.begin();
+            expensive_workList.erase(expensive_workList.begin());
+            return ret;
+          }
       }
 
       bool
       isEmpty()
       {
-        return workList.empty();
+        return cheap_workList.empty() && expensive_workList.empty();
       }
 
       void
       print()
       {
         cerr << "+Worklist" << endl;
-        set<BEEV::ASTNode>::const_iterator it = workList.begin();
-        while (it != workList.end())
+        set<BEEV::ASTNode>::const_iterator it = cheap_workList.begin();
+        while (it != cheap_workList.end())
           {
             cerr << *it << " ";
             it++;
           }
+
+        it = expensive_workList.begin();
+        while (it != expensive_workList.end())
+          {
+            cerr << *it << " ";
+            it++;
+          }
+
         cerr << "-Worklist" << endl;
 
       }

@@ -464,7 +464,7 @@ namespace simplifier
 
           if (debug_cBitProp_messages)
             {
-              cerr << "working on" << n.GetNodeNum() << endl;
+              cerr << "[" << workList->size() << "]working on" << n.GetNodeNum() << endl;
             }
 
           // get a copy of the current fixing from the cache.

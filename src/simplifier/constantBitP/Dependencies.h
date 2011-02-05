@@ -14,8 +14,7 @@ namespace simplifier
     {
     private:
 
-      typedef hash_map<BEEV::ASTNode, set<BEEV::ASTNode>*,
-          BEEV::ASTNode::ASTNodeHasher, BEEV::ASTNode::ASTNodeEqual>
+      typedef hash_map<BEEV::ASTNode, set<BEEV::ASTNode>*, BEEV::ASTNode::ASTNodeHasher, BEEV::ASTNode::ASTNodeEqual>
           NodeToDependentNodeMap;
       NodeToDependentNodeMap dependents;
 
@@ -122,6 +121,17 @@ namespace simplifier
         const set<ASTNode> *s = getDependents(lower);
         return s->count(higher) > 0;
       }
+
+      void
+      getAllVariables(ASTVec& v)
+      {
+        for (NodeToDependentNodeMap::const_iterator it = dependents.begin(); it != dependents. end(); it++)
+          {
+            if (it->first.GetKind() == SYMBOL)
+              v.push_back(it->first);
+          }
+      }
+
     };
 
   }
