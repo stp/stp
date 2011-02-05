@@ -75,6 +75,31 @@ namespace simplifier
           }
       }
 
+      // The "toRemove" node is being removed. Used by unconstrained elimination.
+      void removeNode(const ASTNode& toRemove, ASTVec& variables)
+      {
+        for (unsigned i = 0; i < toRemove.GetChildren().size(); i++)
+          {
+            const ASTNode child = toRemove.GetChildren()[i];
+
+            NodeToDependentNodeMap::const_iterator it = dependents.find(child);
+            if (it == dependents.end())
+              continue;
+
+            it->second->erase(toRemove);
+            if (it->second->size() == 0)
+              {
+                removeNode(child,variables);
+                continue;
+              }
+
+            if (child.GetKind() == SYMBOL && it->second->size() ==1)
+              {
+                variables.push_back(child);
+              }
+          }
+      }
+
       void
       print() const
       {

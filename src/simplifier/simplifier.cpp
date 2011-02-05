@@ -2691,6 +2691,11 @@ namespace BEEV
           output = _bm->CreateOneConst(inputValueWidth);
           break;
         }
+      if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
+      {
+    	  	 output = inputterm[0];
+    	  	 break;
+      }
       output = inputterm;
       break;
 
