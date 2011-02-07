@@ -290,6 +290,12 @@ foreach my $testcase (@testcases) {
 	      "no such file or directory\n");
     }
 
+	# Create a temporary dir, but first delete it; there may be
+	# junk there
+	system("/bin/rm -rf $tmpdir");
+	mkdir $tmpdir or die "Cannot create directory $tmpdir: $?";
+	chdir $tmpdir or die "Cannot chdir to $tmpdir: $?";
+
     for(my $i=0; $i<=$#testcasesTmp; $i++) {
 	my $name = $testcasesTmp[$i];
 	my $file = "$defaultDir/$name";
@@ -334,11 +340,6 @@ foreach my $testcase (@testcases) {
 		print("STP options: ", $stpOptions, "\n");
 	    }
 	}
-	# Create a temporary dir, but first delete it; there may be
-	# junk there
-	system("/bin/rm -rf $tmpdir");
-	mkdir $tmpdir or die "Cannot create directory $tmpdir: $?";
-	chdir $tmpdir or die "Cannot chdir to $tmpdir: $?";
 
 	# If the filename contains ".smt.gz", then tell stp to use the SMT-LIB parser.
 	my $stpArgs ="";
