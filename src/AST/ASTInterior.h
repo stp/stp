@@ -29,7 +29,7 @@ namespace BEEV
     friend class STPMgr;
     friend class ASTNodeHasher;
     friend class ASTNodeEqual;
-    friend class HashingNodeFactory;
+    friend BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind, const BEEV::ASTVec & back_children);
 
   private:
     /******************************************************************

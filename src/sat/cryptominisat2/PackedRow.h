@@ -219,14 +219,22 @@ public:
 
     friend std::ostream& operator << (std::ostream& os, const PackedRow& m);
 
+#if defined(__GNUC__) && (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ == 0))
+// Workaround for GCC 4.0 which doesn't extend friendship to nested classes. See
+// http://stackoverflow.com/questions/3584385/friend-access-to-protected-nested-class
+// for details.
+public:
+#else
 private:
     friend class PackedMatrix;
+#endif
     PackedRow(const uint32_t _size, uint64_t*  const _mp) :
         mp(_mp+1)
         , is_true_internal(*_mp)
         , size(_size)
     {}
-    
+
+private:
     uint64_t* __restrict const mp;
     uint64_t& is_true_internal;
     const uint32_t size;
