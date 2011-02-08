@@ -60,10 +60,10 @@ $(EXEC)_debug:		$(DCOBJS)
 $(EXEC)_release:	$(RCOBJS)
 $(EXEC)_static:		$(RCOBJS)
 
-lib$(LIB)_standard.a:	$(filter-out */Main.o,  $(COBJS))
-lib$(LIB)_profile.a:	$(filter-out */Main.op, $(PCOBJS))
-lib$(LIB)_debug.a:	$(filter-out */Main.od, $(DCOBJS))
-lib$(LIB)_release.a:	$(filter-out */Main.or, $(RCOBJS))
+lib$(LIB)_standard.a:	$(filter-out %/Main.o,  $(COBJS))
+lib$(LIB)_profile.a:	$(filter-out %/Main.op, $(PCOBJS))
+lib$(LIB)_debug.a:	$(filter-out %/Main.od, $(DCOBJS))
+lib$(LIB)_release.a:	$(filter-out %/Main.or, $(RCOBJS))
 
 
 ## Build rule
