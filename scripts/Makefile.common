@@ -55,28 +55,10 @@ else
     LDFLAGS_BASE = -lstdc++ 
 endif
 
-# PKT: support for universal binaries
-# NB: static libraries are poorly supported in Mac OS X. More
-# specifically -static has different semantics than on ELF based
-# systems Also, building mac os x universal binaries is a tad tricky
-# 1. you cannot use ar on a library after calling ranlib 2. -MM
-# dependency tracking does not work
 
-# the architectures to compile for
-UNIVERSAL_ARCH = -arch i386 -arch ppc -arch ppc64
+LDFLAGS = $(LDFLAGS_BASE)
+CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32)
 
-# the system root (SDK), needed for cross architecture builds
-UNIVERSAL_SDK = /Developer/SDKs/MacOSX10.4u.sdk
-
-
-# use the darmin test as a proxy for detecting Mac OS X
-ifeq ($(shell uname -s), DarwinX)
-  LDFLAGS = -Wl,-syslibroot,$(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(LDFLAGS_BASE)
-  CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
-else
-  LDFLAGS = $(LDFLAGS_BASE)
-  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) $(CFLAGS_FPIC)
-endif
 
 # Used by Doug Lea's malloc that I added into minisat2.
 #CFLAGS += -DONLY_MSPACES -DMSPACES
