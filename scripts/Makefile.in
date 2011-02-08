@@ -29,16 +29,17 @@ all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interfa
 			   $(SRC)/AST/NodeFactory/*.o \
 			   $(SRC)/STPManager/*.o \
 			   $(SRC)/printer/*.o \
-		           $(SRC)/absrefine_counterexample/*.o \
+			   $(SRC)/absrefine_counterexample/*.o \
 			   $(SRC)/to-sat/*.o \
-		       $(SRC)/to-sat/AIG/*.o  \
-		       $(SRC)/to-sat/ASTNode/*.o  \
+			   $(SRC)/to-sat/AIG/*.o  \
+			   $(SRC)/to-sat/ASTNode/*.o  \
 			   $(SRC)/sat/*.o \
 			   $(SRC)/sat/core/Solver.or \
 			   $(SRC)/sat/simp/SimpSolver.or \
-			   $(SRC)/sat/utils/*.o \
+			   $(SRC)/sat/utils/System.or \
+			   $(SRC)/sat/cryptominisat2/*.o \
 			   $(SRC)/simplifier/*.o  \
-		       $(SRC)/simplifier/constantBitP/*.o  \
+			   $(SRC)/simplifier/constantBitP/*.o  \
 			   $(SRC)/extlib-constbv/*.o \
 			   $(SRC)/extlib-abc/*/*/*.o \
 			   $(SRC)/c_interface/*.o \

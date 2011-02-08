@@ -1,30 +1,38 @@
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
-SRCS=$(wildcard  *.cpp)
+SRCS=$(wildcard *.cpp)
 OBJS=$(SRCS:.cpp=.o)
-SRCS+=utils/System.cc
-OBJS+=utils/System.o
 LIB=libminisat.a
-COPTIMIZE="-O3 -m32"
+
+# exported variables override those set in recursive makefiles.
+export COPTIMIZE=$(CFLAGS_M32) $(CFLAGS_FPIC) -O3
 
 .PHONY:core
-core: $(OBJS)
-	@ #Command line variables override those set in the makefile.
-	$(MAKE) -C core libr COPTIMIZE="$(CFLAGS_M32) $(CFLAGS_FPIC) -O3"
-	$(MAKE) -C simp libr COPTIMIZE="$(CFLAGS_M32) $(CFLAGS_FPIC) -O3"
+core: $(LIB)
+
+# $(LIB) depends on */lib_release.a and will be rebuilt only if they have been updated
+$(LIB): core/lib_release.a simp/lib_release.a utils/lib_release.a cryptominisat2/libminisat.a $(OBJS)
+	$(RM) $@
+	$(AR) cq $@ $(filter-out %/Main.or,$(wildcard core/*.or simp/*.or utils/*.or cryptominisat2/*.o)) $(OBJS)
+	$(RANLIB) $@
+
+core/lib_release.a: FORCE
+	$(MAKE) -C core libr
+simp/lib_release.a: FORCE
+	$(MAKE) -C simp libr
+utils/lib_release.a: FORCE
+	$(MAKE) -C utils libr
+cryptominisat2/libminisat.a: FORCE
 	$(MAKE) -C cryptominisat2 lib all
-	@#
-	rm -f $(LIB)
-	ar cq $(LIB) ./core/*.or ./simp/*.or *.o utils/*.o *.o
-	ranlib $(LIB)
+FORCE:
 
 .PHONY: clean
 clean:
-	rm -rf *.o core/*.o *~ $(LIB)
+	$(RM) *.o *~ $(LIB)
 	$(MAKE) -C core    clean
 	$(MAKE) -C simp    clean
+	$(MAKE) -C utils   clean
 	$(MAKE) -C cryptominisat2 clean
 
-CryptoMinisat.o: CryptoMinisat.cpp
-	$(CC) $(CFLAGS) -Icryptominisat2/mtl -Imtl CryptoMinisat.cpp -c -I$(TOP)/src
+CryptoMinisat.o: CFLAGS += -Icryptominisat2/mtl -Imtl -I$(TOP)/src
