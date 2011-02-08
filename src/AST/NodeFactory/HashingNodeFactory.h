@@ -3,7 +3,7 @@
 #define HASHINGNODEFACTORY_H_
 
 #include "NodeFactory.h"
-#include "ASTKind.h"
+#include "../ASTKind.h"
 namespace BEEV
 {
 	class STPMgr;

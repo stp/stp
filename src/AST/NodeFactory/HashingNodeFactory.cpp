@@ -1,6 +1,6 @@
 #include "HashingNodeFactory.h"
-#include "AST.h"
-#include "../STPManager/STP.h"
+#include "../AST.h"
+#include "../../STPManager/STP.h"
 
 using BEEV::Kind;
 using BEEV::ASTInterior;

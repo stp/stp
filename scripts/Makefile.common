@@ -75,7 +75,7 @@ ifeq ($(shell uname -s), DarwinX)
   CFLAGS = -isysroot $(UNIVERSAL_SDK) $(UNIVERSAL_ARCH) $(CFLAGS_BASE)
 else
   LDFLAGS = $(LDFLAGS_BASE)
-  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) $(CFLAGS_FPIC) -I../AST
+  CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32) $(CFLAGS_FPIC)
 endif
 
 # Used by Doug Lea's malloc that I added into minisat2.

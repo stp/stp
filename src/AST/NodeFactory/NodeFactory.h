@@ -3,7 +3,7 @@
 #define NODEFACTORY_H
 
 #include <vector>
-#include "ASTKind.h"
+#include "../ASTKind.h"
 
 namespace BEEV
 {

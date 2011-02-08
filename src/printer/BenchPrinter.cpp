@@ -1,6 +1,6 @@
 #include "printers.h"
 #include <string>
-#include "ASTKind.h"
+#include "../AST/ASTKind.h"
 #include <deque>
 
 /*

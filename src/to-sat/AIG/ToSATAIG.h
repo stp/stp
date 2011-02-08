@@ -11,9 +11,9 @@
 #define TOSATAIG_H
 #include <cmath>
 
-#include "../AST/AST.h"
-#include "../AST/RunTimes.h"
-#include "../STPManager/STPManager.h"
+#include "../../AST/AST.h"
+#include "../../AST/RunTimes.h"
+#include "../../STPManager/STPManager.h"
 #include "../BitBlaster.h"
 #include "BBNodeManagerAIG.h"
 #include "ToCNFAIG.h"

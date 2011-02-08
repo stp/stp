@@ -8,7 +8,7 @@
  ********************************************************************/
 #ifndef ASTNODE_H
 #define ASTNODE_H
-#include "../AST/NodeFactory/HashingNodeFactory.h"
+#include "NodeFactory/HashingNodeFactory.h"
 
 /********************************************************************
  *  This file gives the class description of the ASTNode class      *

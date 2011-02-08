@@ -6,7 +6,7 @@
 #define TYPECHECKER_H_
 
 #include "NodeFactory.h"
-#include "../STPManager/STPManager.h"
+#include "../../STPManager/STPManager.h"
 
 namespace BEEV
 {
