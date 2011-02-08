@@ -17,13 +17,18 @@ CFLAGS    += -I../.. -I$(MTL) -I$(MTRAND) -DEXT_HASH_MAP -ffloat-store $(CFLAGS_
 EXEC      = minisat
 LFLAGS    = -lz
 
+
 all: $(LIB) #$(EXEC)
 lib: $(LIB)
 
 $(LIB): $(OBJECTS)
 	$(RM) $@
-	$(AR) cq $@ $^
-	$(RANLIB) $@
+	$(AR) qcs $@ $^
 
 clean:
-	$(RM) $(OBJECTS) $(LIB)
+	$(RM) *.o *~ *.a  .#* depend
+
+depend: $(SOURCES)
+	@$(call makedepend,$@,$(SOURCES))
+
+-include depend

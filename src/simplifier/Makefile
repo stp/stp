@@ -5,17 +5,16 @@ SRCS = $(wildcard *.cpp)
 SRCS += $(wildcard constantBitP/*.cpp)
 OBJS = $(SRCS:.cpp=.o)
 
-CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
-libsimplifier.a:$(OBJS) depend
-		$(AR) rc $@ $(OBJS)
-		$(RANLIB) $@
+libsimplifier.a: $(OBJS)
+	$(RM) $@
+	$(AR) qcs $@ $^
 
 .PHONY: clean
-clean:	
-	rm -rf *.o *~ *.a .#* depend constantBitP/*.o
+clean:
+	$(RM) *.o */*.o *~ *.a .#* depend
 
 depend: $(SRCS)
-	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+	@$(call makedepend,$@,$(SRCS))
 
 -include depend

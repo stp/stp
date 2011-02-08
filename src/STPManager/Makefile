@@ -3,17 +3,17 @@ include $(TOP)/scripts/Makefile.common
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
 
-libstpmgr.a: 	$(OBJS) depend
-		$(AR) rc $@ $(OBJS)
-		$(RANLIB) $@
+
+libstpmgr.a: $(OBJS)
+	$(RM) $@
+	$(AR) qcs $@ $^
 
 .PHONY: clean
-clean:	
-	rm -rf *.o *~ *.a .#* depend
+clean:
+	$(RM) *.o *~ *.a .#* depend
 
 depend: $(SRCS)
-	@$(CXX) -MM $(CXXFLAGS) $(SRCS) > $@
+	@$(call makedepend,$@,$(SRCS))
 
 -include depend

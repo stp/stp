@@ -1,31 +1,27 @@
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
-SRCS=$(wildcard  *.cpp)
-SRCS+=$(wildcard  NodeFactory/*.cpp)
+SRCS = $(wildcard  *.cpp)
+SRCS += $(wildcard  NodeFactory/*.cpp)
 OBJS = $(SRCS:.cpp=.o)
-OBJS+= ASTKind.o
-CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
+OBJS += ASTKind.o
 
 
 #Make the ast library for use by other modules
-libast.a:$(OBJS) depend
-	-rm -rf $@
-	$(AR) rc $@ $(OBJS)
-	$(RANLIB) $@
+libast.a: $(OBJS)
+	$(RM) $@
+	$(AR) qcs $@ $^
 
 # ASTKind.h and ASTKind.cpp are automatically generated
-ASTKind.h ASTKind.cpp:	ASTKind.kinds genkinds.pl
+ASTKind.h ASTKind.cpp: ASTKind.kinds genkinds.pl
 	./genkinds.pl
 
 .PHONY: clean
 clean:
-	rm -rf NodeFactory/*.o *.o *~ *.a  ASTKind.cpp ASTKind.h depend .#*
+	$(RM) *.o */*.o *~ *.a  .#* depend ASTKind.cpp ASTKind.h
 
-#If this depended on ASTKind.h & ASTKind.cpp, then ./genkinds.pl
-#would be called each "clean".
-depend: $(SRCS) ASTKind.kinds genkinds.pl
-	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
+depend: $(SRCS)
+	@$(call makedepend,$@,$(SRCS))
 
--include ./depend
+-include depend
 

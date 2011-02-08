@@ -1,12 +1,13 @@
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
-SRCS=$(wildcard *.cpp)
-OBJS=$(SRCS:.cpp=.o)
-LIB=libminisat.a
+SRCS = $(wildcard *.cpp)
+OBJS = $(SRCS:.cpp=.o)
+LIB = libminisat.a
 
 # exported variables override those set in recursive makefiles.
 export COPTIMIZE=$(CFLAGS_M32) $(CFLAGS_FPIC) -O3
+
 
 .PHONY:core
 core: $(LIB)
@@ -14,8 +15,8 @@ core: $(LIB)
 # $(LIB) depends on */lib_release.a and will be rebuilt only if they have been updated
 $(LIB): core/lib_release.a simp/lib_release.a utils/lib_release.a cryptominisat2/libminisat.a $(OBJS)
 	$(RM) $@
-	$(AR) cq $@ $(filter-out %/Main.or,$(wildcard core/*.or simp/*.or utils/*.or cryptominisat2/*.o)) $(OBJS)
-	$(RANLIB) $@
+	$(call arcat,$@,$(filter %.a,$^))
+	$(AR) qcs $@ $(filter %.o,$^)
 
 core/lib_release.a: FORCE
 	$(MAKE) -C core libr
@@ -29,7 +30,7 @@ FORCE:
 
 .PHONY: clean
 clean:
-	$(RM) *.o *~ $(LIB)
+	$(RM) *.o *~ *.a .#*
 	$(MAKE) -C core    clean
 	$(MAKE) -C simp    clean
 	$(MAKE) -C utils   clean

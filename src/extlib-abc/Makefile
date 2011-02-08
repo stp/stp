@@ -2,22 +2,19 @@ TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
 SRCS = $(wildcard aig/*/*.c)
-#SRCS += $(wildcard aig/cnf/*.c)
-#SRCS += $(wildcard aig/kit/*.c)
-#SRCS += $(wildcard aig/dar/*.c)
-
 OBJS = $(SRCS:.c=.o)
 CFLAGS += -I.
 
-libabc.a: 	$(OBJS) 
-		$(AR) rc $@ $(OBJS)
-		$(RANLIB) $@
+
+libabc.a: $(OBJS)
+	$(RM) $@
+	$(AR) qcs $@ $^
 
 .PHONY: clean
-clean:	
-		rm -rf *.o *~ *.a .#* depend $(OBJS)
+clean:
+	$(RM) $(OBJS) *~ *.a .#* depend
 
 depend: $(SRCS)
-	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
+	@$(call makedepend,$@,$(SRCS))
 
--include depend		
+-include depend

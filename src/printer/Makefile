@@ -1,22 +1,21 @@
 TOP = ../..
 include $(TOP)/scripts/Makefile.common
 
-SRCS=$(wildcard  *.cpp)
+SRCS = $(wildcard  *.cpp)
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -I$(MTL) -I$(SOLVER_INCLUDE)
+
 
 #Make the ast library for use by other modules
-libprinter.a:$(OBJS) depend
-	-rm -rf $@
-	$(AR) rc $@ $(OBJS)
-	$(RANLIB) $@
+libprinter.a: $(OBJS)
+	$(RM) $@
+	$(AR) qcs $@ $^
 
 .PHONY: clean
 clean:
-	rm -rf *.o *~ *.a depend
+	$(RM) *.o *~ *.a .#* depend
 
 depend: $(SRCS)
-	@$(CXX) -MM -MG $(CXXFLAGS) $(SRCS) > $@
+	@$(call makedepend,$@,$(SRCS))
 
--include ./depend
+-include depend
 

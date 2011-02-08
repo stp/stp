@@ -20,53 +20,46 @@ LIBRARIES=lib/libstp.a
 HEADERS=$(SRC)/c_interface/*.h
 
 .PHONY: all
-all: AST STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc
-
-	$(MAKE) -C $(SRC)/sat core
-	$(MAKE) -C $(SRC)/parser
-	$(MAKE) -C $(SRC)/main
-	$(AR) rc libstp.a  $(SRC)/AST/*.o \
-			   $(SRC)/AST/NodeFactory/*.o \
-			   $(SRC)/STPManager/*.o \
-			   $(SRC)/printer/*.o \
-			   $(SRC)/absrefine_counterexample/*.o \
-			   $(SRC)/to-sat/*.o \
-			   $(SRC)/to-sat/AIG/*.o  \
-			   $(SRC)/to-sat/ASTNode/*.o  \
-			   $(SRC)/sat/*.o \
-			   $(SRC)/sat/core/Solver.or \
-			   $(SRC)/sat/simp/SimpSolver.or \
-			   $(SRC)/sat/utils/System.or \
-			   $(SRC)/sat/cryptominisat2/*.o \
-			   $(SRC)/simplifier/*.o  \
-			   $(SRC)/simplifier/constantBitP/*.o  \
-			   $(SRC)/extlib-constbv/*.o \
-			   $(SRC)/extlib-abc/*/*/*.o \
-			   $(SRC)/c_interface/*.o \
-			   $(SRC)/parser/LetMgr.o  \
-			   $(SRC)/parser/parseCVC.o  \
-			   $(SRC)/parser/lexCVC.o \
-			   $(SRC)/parser/parseSMT.o \
-			   $(SRC)/parser/lexSMT.o \
-			   $(SRC)/main/Globals.o \
-			   $(SRC)/main/versionString.o
-			   @# N.B.: don't put main/main.o in the library.
-	$(RANLIB) libstp.a
-	@mkdir -p lib
-	@mv libstp.a lib/
+all: bin/stp lib/libstp.a
 	@echo ""
 	@echo "Compilation successful."
 	@echo "Type 'make install' to install STP."
 
+# An up-to-date $(SRC)/X/libX.a file also means that its constituent
+# object files are also up-to-date: the following rules use this fact to
+# remake only when necessary.
+
+bin/stp: $(SRC)/main/main.o lib/libstp.a
+	mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
+
+lib/libstp.a: $(addprefix $(SRC)/, \
+		AST/libast.a STPManager/libstpmgr.a printer/libprinter.a \
+		absrefine_counterexample/libabstractionrefinement.a \
+		to-sat/libtosat.a sat/libminisat.a simplifier/libsimplifier.a \
+		extlib-constbv/libconstantbv.a extlib-abc/libabc.a \
+		c_interface/libcinterface.a parser/libparser.a main/libmain.a)
+	mkdir -p $(@D)
+	$(RM) $@
+	$(call arcat,$@,$^)
+
 # During the build of AST some classes are built that most of the other
 # classes depend upon. So in a parallel make, AST should be made first.
+$(addprefix $(SRC)/, \
+	STPManager/libstpmgr.a printer/libprinter.a \
+	absrefine_counterexample/libabstractionrefinement.a \
+	to-sat/libtosat.a simplifier/libsimplifier.a c_interface/libcinterface.a \
+	extlib-constbv/libconstantbv.a extlib-abc/libabc.a parser/libparser.a \
+	main/libmain.a main/main.o): $(SRC)/AST/libast.a
 
-.PHONY: AST
-AST: 
-	$(MAKE) -C $(SRC)/$@
+$(SRC)/sat/libminisat.a: MAKEGOALS=core
 
-STPManager absrefine_counterexample to-sat simplifier printer c_interface extlib-constbv extlib-abc: AST
-	$(MAKE) -C $(SRC)/$@
+# main.o is automatically built alongside libmain.a
+$(SRC)/main/main.o : $(SRC)/main/libmain.a ;
+
+$(SRC)/%: FORCE
+	$(MAKE) -C $(@D) $(MAKEGOALS)
+FORCE:
 
 ####
 
@@ -101,9 +94,9 @@ clean:
 	$(MAKE) clean -C $(SRC)/main
 	$(MAKE) clean -C tests/c-api-tests
 
-.PHONY: configclean
-configclean:
-	rm -rf scripts/config.info
+.PHONY: distclean configclean
+distclean configclean: clean
+	$(RM) scripts/config.info Makefile
 
 .PHONY: regressall
 regressall: all
