@@ -65,6 +65,9 @@ FORCE:
 
 .PHONY: install
 install: all
+	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(LIB_DIR)
+	@mkdir -p $(INCLUDE_DIR)
 	@cp -f $(BINARIES) $(BIN_DIR)
 	@cp -f $(LIBRARIES) $(LIB_DIR)
 	@cp -f $(HEADERS) $(INCLUDE_DIR)

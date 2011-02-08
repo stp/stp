@@ -26,11 +26,6 @@ OPTIMIZE      = -O3  -g            # Maximum optimization
 #2) You need STP to use about half the memory.
 #CFLAGS_M32   = -m32
 
-# If you're compiling a 64-bit version of STP, and you want to use
-# libstp.a in a shared library, you need the -fPIC option.
-#CFLAGS_FPIC = -fPIC
-CFLAGS_FPIC =
-
 CFLAGS_BASE   = $(OPTIMIZE)
 
 
