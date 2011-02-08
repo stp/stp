@@ -72,7 +72,7 @@ public:
     	 return bm.CreateOneConst(width);
     }
 
-    ASTNode CreateBVConst(string*& strval, int base, int bit_width)
+    ASTNode CreateBVConst(string& strval, int base, int bit_width)
     {
     	return bm.CreateBVConst(strval, base, bit_width);
     }

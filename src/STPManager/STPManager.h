@@ -275,7 +275,7 @@ namespace BEEV
     ASTNode CreateZeroConst(unsigned int width);
     ASTNode CreateBVConst(CBV bv, unsigned width);
     ASTNode CreateBVConst(const char *strval, int base);
-    ASTNode CreateBVConst(string*& strval, int base, int bit_width);    
+    ASTNode CreateBVConst(string& strval, int base, int bit_width);    
     ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
     
     /****************************************************************

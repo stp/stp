@@ -729,21 +729,21 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
 }
 | NUMERAL_TOK BIN_BASED_NUMBER 
 { 
-  std::string* vals = new std::string($2);
+  std::string vals($2);
   $$ = new ASTNode(parserInterface->CreateBVConst(vals, 2, $1));
-  free($2); delete vals;
+  free($2);
 }
 | NUMERAL_TOK DEC_BASED_NUMBER
 { 
-  std::string* vals = new std::string($2);
+  std::string vals($2);
   $$ = new ASTNode(parserInterface->CreateBVConst(vals, 10, $1));
-  free($2); delete vals;
+  free($2);
 }
 | NUMERAL_TOK HEX_BASED_NUMBER 
 { 
-  std::string* vals = new std::string($2);
+  std::string vals($2);
   $$ = new ASTNode(parserInterface->CreateBVConst(vals, 16, $1));
-  free($2); delete vals;
+  free($2);
 }
 |      Expr '[' Expr ']' 
 {                        

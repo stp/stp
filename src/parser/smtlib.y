@@ -683,12 +683,12 @@ an_terms an_term
 an_term:
 BVCONST_TOK
 {
-  $$ = new ASTNode(parserInterface->CreateBVConst($1, 10, 32));
+  $$ = new ASTNode(parserInterface->CreateBVConst(*$1, 10, 32));
   delete $1;
 }
 | BVCONST_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
 {
-  $$ = new ASTNode(parserInterface->CreateBVConst($1,10,$3));
+  $$ = new ASTNode(parserInterface->CreateBVConst(*$1,10,$3));
   delete $1;
 }
 | an_nonbvconst_term

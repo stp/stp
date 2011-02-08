@@ -930,21 +930,21 @@ TERMID_TOK
 }
 | UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
-	$$ = new ASTNode(parserInterface->CreateBVConst($2, 10, $3));
+	$$ = new ASTNode(parserInterface->CreateBVConst(*$2, 10, $3));
     $$->SetValueWidth($3);
     delete $2;
 }
 | BVCONST_HEXIDECIMAL_TOK
 {
 	unsigned width = $1->length()*4;
-	$$ = new ASTNode(parserInterface->CreateBVConst($1, 16, width));
+	$$ = new ASTNode(parserInterface->CreateBVConst(*$1, 16, width));
     $$->SetValueWidth(width);
     delete $1;
 }
 | BVCONST_BINARY_TOK
 {
 	unsigned width = $1->length();
-	$$ = new ASTNode(parserInterface->CreateBVConst($1, 2, width));
+	$$ = new ASTNode(parserInterface->CreateBVConst(*$1, 2, width));
     $$->SetValueWidth(width);
     delete $1;
 }

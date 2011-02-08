@@ -204,7 +204,7 @@ namespace BEEV
 
   }
 
-  ASTNode STPMgr::CreateBVConst(string*& strval, int base, int bit_width)
+  ASTNode STPMgr::CreateBVConst(string& strval, int base, int bit_width)
   {
 
     if (bit_width <= 0)
@@ -223,17 +223,17 @@ namespace BEEV
     if (2 == base)
       {
         e = CONSTANTBV::BitVector_from_Bin(bv,
-					   (unsigned char*) strval->c_str());
+					   (unsigned char*) strval.c_str());
       }
     else if (10 == base)
       {
         e = CONSTANTBV::BitVector_from_Dec(bv,
-					   (unsigned char*) strval->c_str());
+					   (unsigned char*) strval.c_str());
       }
     else if (16 == base)
       {
         e = CONSTANTBV::BitVector_from_Hex(bv, 
-					   (unsigned char*) strval->c_str());
+					   (unsigned char*) strval.c_str());
       }
     else
       {

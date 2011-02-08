@@ -981,18 +981,14 @@ Type vc_bv32Type(VC vc) {
 }
 
 Expr vc_bvConstExprFromDecStr(VC vc, 
-                              const size_t width, 
+                              int width, 
                               const char* decimalInput ) 
 {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-
-  string *param = new string(decimalInput);
-  // funny type to get it to compile. fix later when I
-  // understand what this does.
-  node n = b->CreateBVConst((string*&)param, (int)10,(int)width);
+  string str(decimalInput);
+  node n = b->CreateBVConst(str, 10, width);
   BVTypeCheck(n);
   nodestar output = new node(n);
-  delete param;
   return output;
 }
 
