@@ -35,7 +35,7 @@
   // -*- c++ -*-
 #include <iostream>
 #include "parser.h"
-#include "parseSMT_defs.h"
+#include "parsesmt.hpp"
 #include "ParserInterface.h"
 
   using namespace std;

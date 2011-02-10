@@ -9,7 +9,7 @@
 
 #include <iostream>
 #include "parser.h"
-#include "parseCVC_defs.h"
+#include "parsecvc.hpp"
 #include "ParserInterface.h"
 
   using namespace std;

@@ -43,7 +43,7 @@
    ********************************************************************/
   // -*- c++ -*-L
 #include "parser.h"
-#include "parse2SMT_defs.h"
+#include "parsesmt2.hpp"
 #include "ParserInterface.h"
 
   extern char *smt2text;
