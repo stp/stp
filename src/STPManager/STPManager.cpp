@@ -14,6 +14,7 @@
 #include <inttypes.h>
 #include <cmath>
 #include "../STPManager/STPManager.h"
+#include "../printer/SMTLIBPrinter.h"
 
 namespace BEEV
 {
@@ -726,6 +727,50 @@ namespace BEEV
   } // End of NewParameterized_BooleanVar()
 
   
+  //If ASTNode remain with references (somewhere), this will segfault.
+  STPMgr::~STPMgr() {
+ 		ClearAllTables();
 
+ 		  printer::NodeLetVarMap.clear();
+ 		  printer::NodeLetVarVec.clear();
+ 		  printer::NodeLetVarMap1.clear();
+
+ 		delete runTimes;
+ 		runTimes = NULL;
+ 		ASTFalse = ASTNode(0);
+ 		ASTTrue = ASTNode(0);
+ 		ASTUndefined = ASTNode(0);
+ 		_current_query = ASTNode(0);
+ 		dummy_node = ASTNode(0);
+
+ 		zeroes.clear();
+ 		ones.clear();
+ 		max.clear();
+
+ 		if (NULL != CreateBVConstVal)
+ 			CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
+
+ 		Introduced_SymbolsSet.clear();
+ 		_symbol_unique_table.clear();
+ 		_bvconst_unique_table.clear();
+
+ 		vector<IntToASTVecMap*>::iterator it = _asserts.begin();
+ 		vector<IntToASTVecMap*>::iterator itend = _asserts.end();
+
+ 		for (; it != itend; it++) {
+ 			IntToASTVecMap * j = (*it);
+ 			for (IntToASTVecMap::iterator it2 = j->begin(); it2 != j->end(); it2++) {
+ 				it2->second->clear();
+ 				delete (it2->second);
+ 			}
+ 			j->clear();
+ 			delete j;
+ 		}
+ 		_asserts.clear();
+
+ 		delete hashingNodeFactory;
+
+ 		_interior_unique_table.clear();
+ 	}
 }; // end namespace beev
 

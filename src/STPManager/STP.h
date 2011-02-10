@@ -77,9 +77,13 @@ namespace BEEV
     {
       ClearAllTables();
       delete Ctr_Example;
+      Ctr_Example = NULL;
       delete arrayTransformer;
+      arrayTransformer = NULL;
       delete tosat;
+      tosat = NULL;
       delete simp;
+      simp = NULL;
       //delete bm;
     }
 
@@ -106,12 +110,16 @@ namespace BEEV
          
     void ClearAllTables(void)
     {
-      simp->ClearAllTables();
-      arrayTransformer->ClearAllTables();
-      tosat->ClearAllTables();
-      Ctr_Example->ClearAllTables();
-      //bm->ClearAllTables();
-    }
+		if (simp != NULL)
+			simp->ClearAllTables();
+		if (arrayTransformer != NULL)
+			arrayTransformer->ClearAllTables();
+		if (tosat != NULL)
+			tosat->ClearAllTables();
+		if (Ctr_Example != NULL)
+			Ctr_Example->ClearAllTables();
+		//bm->ClearAllTables();
+	}
   }; //End of Class STP
 };//end of namespace
 #endif

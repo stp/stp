@@ -1,3 +1,4 @@
+
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -597,7 +598,17 @@ int main(int argc, char ** argv) {
   delete AssertsQuery;
   asserts = ASTNode();
   query = ASTNode();
-  bm->cleanup();
+  _empty_ASTVec.clear();
+
+  simpCleaner.release();
+  atClearner.release();
+  tosatCleaner.release();
+  ctrCleaner.release();
+
+  delete GlobalSTP;
+  delete ParserBM;
+
+
 
 
   return 0;

@@ -437,67 +437,8 @@ namespace BEEV
       ListOfDeclaredVars.clear();
     } //End of ClearAllTables()
 
+    ~STPMgr();
 
-    // This will exit cleanly even if nodes remain around in memory.
-    // So it's a partial safe destructor.
-    void cleanup()
-	{
-	  ClearAllTables();
-
-	  delete runTimes;
-	  runTimes = NULL;
-	  ASTFalse     = ASTNode(0);
-	  ASTTrue      = ASTNode(0);
-	  ASTUndefined = ASTNode(0);
-	  _current_query = ASTNode(0);
-	  dummy_node =  ASTNode(0);
-
-	  zeroes.clear();
-	  ones.clear();
-	  max.clear();
-
-	  Introduced_SymbolsSet.clear();
-	  _symbol_unique_table.clear();
-
-	  vector<IntToASTVecMap*>::iterator it    = _asserts.begin();
-	  vector<IntToASTVecMap*>::iterator itend = _asserts.end();
-	  for(;it!=itend;it++)
-		{
-		  IntToASTVecMap * j = (*it);
-		  j->clear();
-		  delete j;
-		}
-	  _asserts.clear();
-
-	  delete hashingNodeFactory;
-	}
-
-    // If ASTNode remain with references (somewhere), this will segfault.
-    ~STPMgr()
-    {
-      ClearAllTables();
-
-      vector<IntToASTVecMap*>::iterator it    = _asserts.begin();
-      vector<IntToASTVecMap*>::iterator itend = _asserts.end();
-      for(;it!=itend;it++) 
-        {
-          IntToASTVecMap * j = (*it);
-          j->clear();
-          delete j;
-        }
-      _asserts.clear();
-
-      delete runTimes;
-          
-      _interior_unique_table.clear();
-      _bvconst_unique_table.clear();
-      _symbol_unique_table.clear();
-
-      if (NULL != CreateBVConstVal)
-        CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
-
-      delete hashingNodeFactory;
-    }
   };//End of Class STPMgr
 };//end of namespace
 #endif
