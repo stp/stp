@@ -23,7 +23,7 @@ while [ $# -gt 0 ]; do
 	    echo "   --with-prefix=/prefix/path   Install STP at the specified path"
 	    echo "   --with-gcc=/path/to/gcc      Use gcc at the specified path"
 	    echo "   --with-g++=/path/to/g++      Use g++ at the specified path"
-	    echo "   --with-pic                   Required to build 64-bit shared libraries."
+	    echo "   --with-fpic                  Required to build 64-bit shared libraries."
 	    echo "$0 failed"
 	    exit 1;;
     esac
