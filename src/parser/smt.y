@@ -226,6 +226,7 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
   parserInterface->letMgr.cleanupParserSymbolTable();
+  query = ASTNode();
   YYACCEPT;
 }
 ;

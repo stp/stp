@@ -204,6 +204,8 @@ cmd: commands END
       	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
   	  ((ASTVec*)AssertsQuery)->push_back(querysmt2);
        parserInterface->letMgr.cleanupParserSymbolTable();
+       querysmt2 = ASTNode();
+       assertionsSMT2.clear();
        YYACCEPT;
 }
 ;
