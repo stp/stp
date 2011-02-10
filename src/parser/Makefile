@@ -13,15 +13,15 @@ libparser.a: $(OBJS)
 	$(RM) $@
 	$(AR) qcs $@ $^
 
-lexCVC.cpp:	CVC.lex parseCVC_defs.h ../AST/AST.h
-		$(LEX)  -olexCVC.cpp -Pcvc CVC.lex
+lexCVC.cpp:	cvclib.lex parseCVC_defs.h ../AST/AST.h
+		$(LEX)  -olexCVC.cpp -Pcvc cvclib.lex
 
 #For rules with multiple targets. Make runs the rule once for each
 #target.  These rules are "pattern rules" which only run once (rather
 #than twice).
 
-parseCV%_defs.h parseCV%.cpp:	CVC.y
-		$(YACC) -o cvc.tab.c -p cvc CVC.y
+parseCV%_defs.h parseCV%.cpp:	cvclib.y
+		$(YACC) -o cvc.tab.c -p cvc cvclib.y
 		@cp  cvc.tab.c parseCVC.cpp
 		@cp  cvc.tab.h parseCVC_defs.h
 
