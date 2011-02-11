@@ -32,7 +32,9 @@ public:
       SATSimplifying,
       ConstantBitPropagation,
       ArrayReadRefinement,
-      ApplyingSubstitutions
+      ApplyingSubstitutions,
+      RemoveUnconstrained,
+      PureLiterals
     };
 
   static std::string CategoryNames[];
