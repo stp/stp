@@ -67,8 +67,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 	if (uf.stats_flag)
 		cerr << "Nodes before AIG rewrite:" << nodeCount << endl;
 
-	if (!needAbsRef && uf.enable_AIG_rewrites_flag
-			&& mgr.aigMgr->nObjs[AIG_OBJ_AND] < 5000) {
+	if (!needAbsRef && uf.isSet("aig_rewrite","0")) {
 		Dar_LibStart();
 		Aig_Man_t * pTemp;
 		Dar_RwrPar_t Pars, *pPars = &Pars;
@@ -100,7 +99,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 				break;
 		}
 	}
-	if (!needAbsRef && mgr.aigMgr->nObjs[AIG_OBJ_AND] < 2000000) {
+	if (!needAbsRef && mgr.aigMgr->nObjs[AIG_OBJ_AND] < 2000000 && !uf.isSet("simple-cnf","0")) {
 		cnfData = Cnf_Derive(mgr.aigMgr, 0);
 	} else {
 		cnfData = Cnf_DeriveSimple(mgr.aigMgr, 0);
