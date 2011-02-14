@@ -1,0 +1,52 @@
+/*
+ * RemoveUnconstrained.h
+ *
+ *  Unconstrained variable elination.
+ */
+
+#ifndef REMOVEUNCONSTRAINED_H_
+#define REMOVEUNCONSTRAINED_H_
+#include "../AST/AST.h"
+#include "../STPManager/STPManager.h"
+#include "constantBitP/Dependencies.h"
+#include "simplifier.h"
+#include "MutableASTNode.h"
+
+namespace BEEV
+{
+  using simplifier::constantBitP::Dependencies;
+
+  class RemoveUnconstrained
+  {
+    STPMgr& bm;
+
+    ASTNode replaceParentWithFresh(MutableASTNode& mute, vector<MutableASTNode*>& variables);
+
+    ASTNode
+    topLevel_other(const ASTNode &n, Simplifier *simplifier);
+
+    void
+    replace(MutableASTNode* from, const ASTNode to);
+
+
+    void
+    replace(const ASTNode& from, const ASTNode to);
+
+    NodeFactory* nf;
+
+  public:
+
+
+    RemoveUnconstrained(STPMgr& bm);
+    virtual
+    ~RemoveUnconstrained();
+
+    ASTNode
+    topLevel(const ASTNode &n, Simplifier *s);
+
+  };
+
+}
+;
+
+#endif /* REMOVEUNCONSTRAINED_H_ */
