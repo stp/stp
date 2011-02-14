@@ -126,8 +126,6 @@ namespace BEEV
 
     bool simplify_during_BB_flag;
 
-    bool solve_for_XORS_flag;
-
     // Available back-end SAT solvers.
     enum SATSolvers
       {
@@ -148,24 +146,24 @@ namespace BEEV
     	config_options[n] = v;
     }
 
-    string get(string n)
+    string get(string n) const
     {
     	return get(n,"");
     }
 
     // "1" is set.
-    bool isSet(string n, string def)
+    bool isSet(string n, string def) const
     {
     	return (get(n,def) == string("1"));
     }
 
-    string get(string n, string def)
+    string get(string n, string def) const
     {
     	if (config_options.empty())
     		return def;
 
     	string result;
-    	std::map<string,string>::iterator it = config_options.find(n);
+    	std::map<string,string>::const_iterator it = config_options.find(n);
     	if (it == config_options.end())
     		result = def;
     	else
@@ -281,8 +279,6 @@ namespace BEEV
 
       // If the bit-blaster discovers new constants, should the term simplifier be re-run.
       simplify_during_BB_flag=false;
-
-      solve_for_XORS_flag = true;
 
     } //End of constructor for UserDefinedFlags
 
