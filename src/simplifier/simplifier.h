@@ -115,6 +115,7 @@ namespace BEEV
     bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
     bool CheckSubstitutionMap(const ASTNode& a);
     bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
+    bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
 
     ASTNode applySubstitutionMap(const ASTNode& n);
     ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);

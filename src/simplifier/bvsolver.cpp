@@ -541,7 +541,7 @@ namespace BEEV
   // to do. Flatten the XOR.
   ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
   {
-    assert(_bm->UserFlags.solve_for_XORS_flag);
+    assert(_bm->UserFlags.isSet("xor-solve","1"));
 
     if (xorNode.GetKind() != XOR)
       {
@@ -628,7 +628,7 @@ namespace BEEV
    ASTNode
   BVSolver::solveForAndOfXOR(const ASTNode& n)
   {
-    assert(_bm->UserFlags.solve_for_XORS_flag);
+    assert(_bm->UserFlags.isSet("xor-solve","1"));
 
     if (n.GetKind() != AND)
       return n;
@@ -670,7 +670,7 @@ namespace BEEV
       }
 
     Kind k = input.GetKind();
-    if (XOR ==k && _bm->UserFlags.solve_for_XORS_flag)
+    if (XOR ==k && _bm->UserFlags.isSet("xor-solve","1"))
     {
     	ASTNode output = solveForXOR(_input);
     	UpdateAlreadySolvedMap(_input, output);
@@ -787,7 +787,7 @@ namespace BEEV
     if (evens != ASTTrue)
       output = _bm->CreateNode(AND, output, evens);
 
-    if (_bm->UserFlags.solve_for_XORS_flag)
+    if (_bm->UserFlags.isSet("xor-solve","1"))
       output = solveForAndOfXOR(output);
 
     // Imagine in the last conjunct A is replaced by B. But there could

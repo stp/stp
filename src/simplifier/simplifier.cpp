@@ -151,6 +151,10 @@ namespace BEEV
   {
 	  return substitutionMap.CheckSubstitutionMap(key);
   }
+  bool Simplifier::UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1)
+  {
+          return substitutionMap.UpdateSubstitutionMapFewChecks(e0,e1);
+  }
 
   bool Simplifier::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
   {
@@ -609,6 +613,9 @@ namespace BEEV
 
     const unsigned len = left.GetValueWidth();
 
+    if(_bm->UserFlags.isSet("inequality-simplifications","1"))
+    {
+
     const int constStart = std::min(mostSignificantConstants(left),mostSignificantConstants(right));
     int comparator =0;
 
@@ -633,56 +640,54 @@ namespace BEEV
     	return pushNeg ?  nf->CreateNode(NOT, status) : status;
     }
 
-    if (comparator!=0 && (k == BVSGT || k == BVSGE))
-    {
-    	// one is bigger than the other.
-		int sign_a = getConstantBit(left, 0);
-		int sign_b = getConstantBit(right, 0);
-		if (sign_a < sign_b)
-		{
-			comparator =1; // a > b.
-		}
-		if (sign_a > sign_b)
-			comparator =-1;
+    if (comparator != 0 && (k == BVSGT || k == BVSGE))
+          {
+            // one is bigger than the other.
+            int sign_a = getConstantBit(left, 0);
+            int sign_b = getConstantBit(right, 0);
+            if (sign_a < sign_b)
+              {
+                comparator = 1; // a > b.
+              }
+            if (sign_a > sign_b)
+              comparator = -1;
 
-    	ASTNode status = (comparator ==1)? ASTTrue: ASTFalse;
-    	return pushNeg ?  nf->CreateNode(NOT, status) : status;
-    }
+            ASTNode status = (comparator == 1) ? ASTTrue : ASTFalse;
+            return pushNeg ? nf->CreateNode(NOT, status) : status;
+          }
 
-    {
-		ASTNodeSet visited0, visited1;
-		vector<ASTNode> l0,l1;
+          {
+            ASTNodeSet visited0, visited1;
+            vector<ASTNode> l0, l1;
 
-		// Sound overapproximation. Doesn't consider the equalities.
-		if (getPossibleValues(left, visited0, l0) && getPossibleValues(right,visited1, l1))
-		{
-			{
-				bool (*comp)(const ASTNode&, const ASTNode&);
-				if (k == BVSGT || k == BVSGE)
-					comp = signedGreaterThan;
-				else
-					comp = unsignedGreaterThan;
-				{
-					ASTNode minLHS = *max_element(l0.begin(), l0.end(),
-							comp);
-					ASTNode maxRHS = *min_element(l1.begin(), l1.end(),
-							comp);
+            // Sound overapproximation. Doesn't consider the equalities.
+            if (getPossibleValues(left, visited0, l0) && getPossibleValues(right, visited1, l1))
+              {
+                  {
+                    bool
+                    (*comp)(const ASTNode&, const ASTNode&);
+                    if (k == BVSGT || k == BVSGE)
+                      comp = signedGreaterThan;
+                    else
+                      comp = unsignedGreaterThan;
+                      {
+                        ASTNode minLHS = *max_element(l0.begin(), l0.end(), comp);
+                        ASTNode maxRHS = *min_element(l1.begin(), l1.end(), comp);
 
-					if (comp(minLHS, maxRHS))
-						return pushNeg ? ASTFalse : ASTTrue;
-				}
-				{
-					ASTNode maxLHS = *min_element(l0.begin(), l0.end(),
-							comp);
-					ASTNode minRHS = *max_element(l1.begin(), l1.end(),
-							comp);
+                        if (comp(minLHS, maxRHS))
+                          return pushNeg ? ASTFalse : ASTTrue;
+                      }
+                      {
+                        ASTNode maxLHS = *min_element(l0.begin(), l0.end(), comp);
+                        ASTNode minRHS = *max_element(l1.begin(), l1.end(), comp);
 
-					if (comp(minRHS, maxLHS))
-						return pushNeg ? ASTTrue : ASTFalse;
-				}
-			}
-		}
-	}
+                        if (comp(minRHS, maxLHS))
+                          return pushNeg ? ASTTrue : ASTFalse;
+                      }
+                  }
+              }
+          }
+      }
 
     const ASTNode unsigned_min = _bm->CreateZeroConst(len);
     const ASTNode one = _bm->CreateOneConst(len);
@@ -1784,15 +1789,15 @@ namespace BEEV
             {
               output = zero;
             }
-          else if (BVMULT == k 
-                   && 1 == nonconstkids.size() 
+          else if (BVMULT == k
+                   && 1 == nonconstkids.size()
                    && constoutput == max)
             {
               //useful special case opt: when input is BVMULT(max_const,t),
               //then output = BVUMINUS(t). this is easier on the bitblaster
-              output = 
+             output =
                 nf->CreateTerm(BVUMINUS, inputValueWidth, nonconstkids);
-            }
+           }
           else
             {
               if (0 < nonconstkids.size())

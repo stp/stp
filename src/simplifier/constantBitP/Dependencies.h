@@ -20,6 +20,7 @@ namespace simplifier
 
       const set<ASTNode> empty;
 
+    public:
       // All the nodes that depend on the value of a particular node.
       void
       build(const ASTNode & current, const ASTNode & prior)
@@ -73,6 +74,18 @@ namespace simplifier
             //set<BEEV::ASTNode>*
             delete it->second;
           }
+      }
+
+      void replaceFresh(const ASTNode& old, const ASTNode& newN, set<ASTNode> *newNDepends,
+                        ASTVec& variables)
+      {
+        NodeToDependentNodeMap::const_iterator it = dependents.find(old);
+        if (it == dependents.end())
+          return;
+
+        it->second->erase(old);
+        dependents.insert(make_pair(newN,newNDepends));
+        variables.push_back(newN);
       }
 
       // The "toRemove" node is being removed. Used by unconstrained elimination.
@@ -147,6 +160,17 @@ namespace simplifier
         return s->count(higher) > 0;
       }
 
+      bool isUnconstrained(const ASTNode& n)
+      {
+        if (n.GetKind() != SYMBOL)
+          return false;
+
+        NodeToDependentNodeMap::const_iterator it = dependents.find(n);
+        assert(it != dependents.end());
+        return it->second->size() ==1;
+      }
+
+#if 0
       void
       getAllVariables(ASTVec& v)
       {
@@ -156,6 +180,7 @@ namespace simplifier
               v.push_back(it->first);
           }
       }
+#endif
 
     };
 

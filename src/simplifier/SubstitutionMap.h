@@ -112,6 +112,18 @@ public:
 			return false;
 	}
 
+	// It's depressingly expensive to perform all of the loop checks etc.
+	// If you use this function you are promising:
+	// 1) That UpdateSubstitutionMap(e0,e1) would have returned true.
+	// 2) That all of the substitutions will be written in fully before other code
+        bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1)
+        {
+          assert(e0.GetKind() == SYMBOL);
+          assert (!CheckSubstitutionMap(e0));
+          (*SolverMap)[e0] = e1;
+          return true;
+        }
+
 	// The substitutionMap will be updated, given x <-> f(w,z,y), iff,
 	// 1) x doesn't appear in the rhs.
 	// 2) x hasn't already been stored in the substitution map.
