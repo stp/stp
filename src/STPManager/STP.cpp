@@ -15,6 +15,8 @@
 #include "../sat/SimplifyingMinisat.h"
 #include "../sat/MinisatCore.h"
 #include "../sat/CryptoMinisat.h"
+#include "../simplifier/RemoveUnconstrained.h"
+#include "../simplifier/FindPureLiterals.h"
 #include <memory>
 
 namespace BEEV {
@@ -93,6 +95,14 @@ namespace BEEV {
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm,simp);
 
+    if (bm->UserFlags.isSet("enable-unconstrained","1"))
+        {
+          // Remove unconstrained.
+          RemoveUnconstrained r1(*bm);
+          simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
+          bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
+        }
+
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
@@ -106,8 +116,7 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-
-        	int initialSize = simp->Return_SolverMap()->size();
+            int initialSize = simp->Return_SolverMap()->size();
 
             simplified_solved_InputToSAT = 
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
@@ -164,6 +173,17 @@ namespace BEEV {
 
       }
 
+    // Find pure literals.
+        if (bm->UserFlags.isSet("pure-literals","1"))
+        {
+          FindPureLiterals fpl;
+          bool changed = fpl.topLevel(simplified_solved_InputToSAT, simp,bm);
+          if (changed)
+            {
+              simplified_solved_InputToSAT  = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+              simp->haveAppliedSubstitutionMap();
+            }
+        }
 
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
                      simplified_solved_InputToSAT);
@@ -214,6 +234,15 @@ namespace BEEV {
     bm->ASTNodeStats("After SimplifyWrites_Inplace: ", 
                      simplified_solved_InputToSAT);
 
+    if (bm->UserFlags.isSet("enable-unconstrained","1"))
+      {
+    // Remove unconstrained.
+    RemoveUnconstrained r(*bm);
+    simplified_solved_InputToSAT = r.topLevel(simplified_solved_InputToSAT, simp);
+    bm->ASTNodeStats("After Unconstrained Remove begins: ",
+            simplified_solved_InputToSAT);
+      }
+
     bm->TermsAlreadySeenMap_Clear();
 
     bm->start_abstracting = false;
@@ -250,12 +279,12 @@ namespace BEEV {
     	bm->UserFlags.optimize_flag = false;
     }
 
-    simplified_solved_InputToSAT = 
+    simplified_solved_InputToSAT =
       arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
     bm->ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
     bm->TermsAlreadySeenMap_Clear();
 
-	bm->UserFlags.optimize_flag = optimize_enabled;
+    bm->UserFlags.optimize_flag = optimize_enabled;
 
     SOLVER_RETURN_TYPE res;
     if (bm->UserFlags.arrayread_refinement_flag)
@@ -277,7 +306,8 @@ namespace BEEV {
     if(bm->UserFlags.stats_flag)
     	simp->printCacheStatus();
 
-    const bool useAIGToCNF = !arrayops || !bm->UserFlags.arrayread_refinement_flag || bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER;
+    const bool useAIGToCNF = (!arrayops || !bm->UserFlags.arrayread_refinement_flag || bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER) && !bm->UserFlags.isSet("traditional-cnf","0");
+
     const bool maybeRefinement = arrayops && bm->UserFlags.arrayread_refinement_flag;
 
     simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
