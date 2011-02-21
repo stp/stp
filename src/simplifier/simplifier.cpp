@@ -964,7 +964,9 @@ namespace BEEV
 
         ASTNode lhs =  nf->CreateTerm(BVEXTRACT,newWidth, in1,_bm->CreateBVConst(32,newWidth-1) ,zero);
         ASTNode rhs =  nf->CreateTerm(BVEXTRACT,newWidth, in2,_bm->CreateBVConst(32,newWidth-1) ,zero);
-        return nf->CreateNode(EQ, lhs,rhs);
+        ASTNode r=  nf->CreateNode(EQ, lhs,rhs);
+        assert(BVTypeCheck(r));
+        return r;
       }
 
     // If both the children are concats split them apart.
@@ -983,10 +985,15 @@ namespace BEEV
         ASTNode zero = _bm->CreateZeroConst(32);
 
         // split the constant.
-        ASTNode top =  nf->CreateTerm(BVEXTRACT,bottomW, in1,_bm->CreateBVConst(32,width-1) ,_bm->CreateBVConst(32,bottomW));
-        ASTNode bottom =  nf->CreateTerm(BVEXTRACT,width-bottomW, in1,_bm->CreateBVConst(32,bottomW-1) ,zero);
+        ASTNode top =  nf->CreateTerm(BVEXTRACT,width-bottomW, in1,_bm->CreateBVConst(32,width-1) ,_bm->CreateBVConst(32,bottomW));
+        ASTNode bottom =  nf->CreateTerm(BVEXTRACT,bottomW, in1,_bm->CreateBVConst(32,bottomW-1) ,zero);
+        assert(BVTypeCheck(top));
+        assert(BVTypeCheck(bottom));
 
-        return nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]), nf->CreateNode(EQ, bottom, in2[1]));
+        ASTNode r =  nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]), nf->CreateNode(EQ, bottom, in2[1]));
+
+        return r;
+
     }
 
 
