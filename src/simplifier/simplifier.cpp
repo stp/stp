@@ -956,12 +956,37 @@ namespace BEEV
 			return ASTFalse;
 	}
 
+    // The above loop has determined that the leading bits are the same.
+    if (constStart > 0)
+      {
+        int newWidth = in1.GetValueWidth() - constStart;
+        ASTNode zero = _bm->CreateZeroConst(32);
+
+        ASTNode lhs =  nf->CreateTerm(BVEXTRACT,newWidth, in1,_bm->CreateBVConst(32,newWidth-1) ,zero);
+        ASTNode rhs =  nf->CreateTerm(BVEXTRACT,newWidth, in2,_bm->CreateBVConst(32,newWidth-1) ,zero);
+        return nf->CreateNode(EQ, lhs,rhs);
+      }
+
     // If both the children are concats split them apart.
     // nb. This doesn't cover the case when the children are organised differently:
     // (concat (concat A B) C) == (concat A (concat B C))
     if (k1 == BVCONCAT && k2 == BVCONCAT && in1[0].GetValueWidth() == in2[0].GetValueWidth())
     {
       return nf->CreateNode(AND, nf->CreateNode(EQ, in1[0], in2[0]), nf->CreateNode(EQ, in1[1], in2[1]));
+    }
+
+    // If the rhs is a concat, and the lhs is a constant. Split.
+    if (k1== BVCONST && k2 == BVCONCAT)
+    {
+        int width = in1.GetValueWidth();
+        int bottomW = in2[1].GetValueWidth();
+        ASTNode zero = _bm->CreateZeroConst(32);
+
+        // split the constant.
+        ASTNode top =  nf->CreateTerm(BVEXTRACT,bottomW, in1,_bm->CreateBVConst(32,width-1) ,_bm->CreateBVConst(32,bottomW));
+        ASTNode bottom =  nf->CreateTerm(BVEXTRACT,width-bottomW, in1,_bm->CreateBVConst(32,bottomW-1) ,zero);
+
+        return nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]), nf->CreateNode(EQ, bottom, in2[1]));
     }
 
 
