@@ -17,6 +17,7 @@
 #include "../sat/CryptoMinisat.h"
 #include "../simplifier/RemoveUnconstrained.h"
 #include "../simplifier/FindPureLiterals.h"
+#include "../simplifier/EstablishIntervals.h"
 #include <memory>
 
 namespace BEEV {
@@ -170,8 +171,13 @@ namespace BEEV {
 
         if (cb.isUnsatisfiable())
           simplified_solved_InputToSAT = bm->ASTFalse;
-
       }
+
+    {
+      EstablishIntervals intervals(*bm);
+      simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT );
+    }
+
 
     // Find pure literals.
         if (bm->UserFlags.isSet("pure-literals","1"))
@@ -212,7 +218,7 @@ namespace BEEV {
             bm->ASTNodeStats("after pure substitution: ",
                              simplified_solved_InputToSAT);
 
-            simplified_solved_InputToSAT = 
+            simplified_solved_InputToSAT =
               simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, 
                                              false);
             bm->ASTNodeStats("after simplification: ", 
@@ -236,12 +242,13 @@ namespace BEEV {
 
     if (bm->UserFlags.isSet("enable-unconstrained","1"))
       {
-    // Remove unconstrained.
-    RemoveUnconstrained r(*bm);
-    simplified_solved_InputToSAT = r.topLevel(simplified_solved_InputToSAT, simp);
-    bm->ASTNodeStats("After Unconstrained Remove begins: ",
-            simplified_solved_InputToSAT);
+        // Remove unconstrained.
+        RemoveUnconstrained r(*bm);
+        simplified_solved_InputToSAT = r.topLevel(simplified_solved_InputToSAT, simp);
+        bm->ASTNodeStats("After Unconstrained Remove begins: ",
+                simplified_solved_InputToSAT);
       }
+
 
     bm->TermsAlreadySeenMap_Clear();
 
