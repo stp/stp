@@ -26,6 +26,9 @@ namespace BEEV
     topLevel_other(const ASTNode &n, Simplifier *simplifier);
 
     void
+    splitExtractOnly(vector<MutableASTNode*> extracts);
+
+    void
     replace(MutableASTNode* from, const ASTNode to);
 
 

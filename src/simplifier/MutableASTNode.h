@@ -16,10 +16,11 @@ namespace BEEV
   {
     static vector<MutableASTNode*> all;
 
+  public:
     typedef set<MutableASTNode *> ParentsType;
     ParentsType parents;
 
-
+private:
     MutableASTNode(const MutableASTNode&); // No definition
     MutableASTNode&
     operator=(const MutableASTNode &); // No definition
@@ -170,10 +171,65 @@ namespace BEEV
         }
     }
 
+    // Variables that have >1 disjoint extract parents.
+    static void
+    getDisjointExtractVariables(vector<MutableASTNode*> & result)
+    {
+      const int size = all.size();
+      for (int i = size-1; i >=0 ; i--)
+        {
+          if (!all[i]->isSymbol())
+            continue;
+
+          ParentsType* p = &(all[i]->parents);
+
+          if (p->size() ==1 )
+            continue; // the regular case. Don't consider here.
+
+          ASTNode& node = all[i]->n;
+          bool found[node.GetValueWidth()];
+          for (int j=0; j <node.GetValueWidth();j++)
+            found[j] = false;
+
+          ParentsType::const_iterator it;
+          for (it = p->begin(); it!= p->end();it++)
+            {
+              ASTNode& parent_node = (*it)->n;
+               if (parent_node.GetKind() != BVEXTRACT)
+                  break;
+
+               const int lb = parent_node[2].GetUnsignedConst();
+               const int ub = parent_node[1].GetUnsignedConst();
+               assert(lb<=ub);
+
+               int j;
+               for (j =lb ; j <=ub;j++)
+                 {
+                   if (found[j])
+                       break;
+                   found[j] = true;
+                 }
+
+               // if didn't make it to the finish. Then it overlaps.
+               if (j<= ub)
+                 {
+                   break;
+                 }
+            }
+
+          if (it != p->end())
+            continue;
+
+          // All are extracts that don't overlap.
+          result.push_back(all[i]);
+        }
+      return;
+    }
+
     // Visit the parent before children. So that we hopefully prune parts of the
     // tree. Ie given  ( F(x_1,... x_10000) = v), where v is unconstrained,
     // we don't spend time exploring F(..), but chop it out.
-    void
+    static void
     getAllUnconstrainedVariables(vector<MutableASTNode*> & result)
     {
       const int size = all.size();
