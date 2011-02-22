@@ -13,14 +13,14 @@ struct DifficultyScore
 {
 private:
          // maps from nodeNumber to the previously calculated difficulty score..
-        static map<int, int> cache;
+        map<int, int> cache;
 
 	static bool isLikeDivision(const Kind& k)
 	{
 		return k == BVMULT || k == BVDIV || k == BVMOD || k == SBVDIV || k == SBVREM || k == SBVMOD;
 	}
 
-	static int visit(const ASTNode& b, ASTNodeSet& visited)
+	int visit(const ASTNode& b, ASTNodeSet& visited)
 	{
 		if (b.isAtom())
 		  return 0;
@@ -56,7 +56,7 @@ private:
 	}
 
 public:
-	static int score(const ASTNode& top)
+	int score(const ASTNode& top)
 	{
 	        if (cache.find(top.GetNodeNum()) != cache.end())
 	          return cache.find(top.GetNodeNum())->second;

@@ -15,6 +15,8 @@ namespace BEEV
 
   class EstablishIntervals
   {
+  private:
+
   public:
     struct IntervalType
     {
@@ -32,8 +34,8 @@ namespace BEEV
       }
     };
 
-    static vector<IntervalType * > toDeleteLater;
-    static vector<CBV> likeAutoPtr;
+    vector<EstablishIntervals::IntervalType * > toDeleteLater;
+    vector<CBV> likeAutoPtr;
 
 private:
 
@@ -44,7 +46,7 @@ private:
       return it;
     }
 
-    static IntervalType * createInterval(CBV min, CBV max)
+    IntervalType * createInterval(CBV min, CBV max)
     {
       IntervalType *it = new IntervalType(min,max);
       toDeleteLater.push_back(it);

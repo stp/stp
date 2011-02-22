@@ -91,7 +91,8 @@ namespace BEEV {
 
     ASTNode simplified_solved_InputToSAT = inputToSAT;
 
-    long initial_difficulty_score = DifficultyScore::score(original_input);
+    DifficultyScore difficulty;
+    long initial_difficulty_score = difficulty.score(original_input);
 
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm,simp);
@@ -257,7 +258,7 @@ namespace BEEV {
     bm->Begin_RemoveWrites = false;
 
 
-    long final_difficulty_score = DifficultyScore::score(simplified_solved_InputToSAT);
+    long final_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
     if (bm->UserFlags.stats_flag)
     {
     	cerr << "Initial Difficulty Score:" << initial_difficulty_score <<endl;
