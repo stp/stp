@@ -83,12 +83,9 @@ namespace BEEV
     // array reads in the input Read(A,i) and Read(A,j). Then
     // Read(A,i) is replaced with a symbolic constant, say v1, and
     // Read(A,j) is replaced with the following ITE: ITE(i=j,v1,v2)
+  public:
     ASTNodeMap * Arrayread_IteMap;
-          
-
-    // Count to keep track of new symbolic constants introduced
-    // corresponding to Array Reads
-    unsigned int _symbol_count;
+  private:
         
     // Memo table used by the transformer while it is transforming the
     // formulas and terms
@@ -148,8 +145,7 @@ namespace BEEV
       bm(bm), 
       simp(s), 
       debug_transform(0),
-      TransformMap(NULL),
-      _symbol_count(0)
+      TransformMap(NULL)
     {
       Arrayread_IteMap = new ASTNodeMap();
       Arrayname_ReadindicesMap = new ASTNodeToVecMap();
@@ -191,10 +187,6 @@ namespace BEEV
       return symbol;
     } //End of ArrayRead_SymbolMap
     
-    const ASTNodeMap * ArrayRead_IteMap()
-    {
-      return Arrayread_IteMap;
-    } //End of ArrayRead_IteMap
 
     ASTNode ArrayRead_Ite(const ASTNode& arrread)
     {

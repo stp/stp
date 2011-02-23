@@ -85,12 +85,12 @@ namespace BEEV
     //In this loop, we compute the value of each array read, the
     //corresponding ITE against the counterexample generated above.
     for (ASTNodeMap::const_iterator it =
-        ArrayTransform->ArrayRead_IteMap()->begin(), itend =
-        ArrayTransform->ArrayRead_IteMap()->end(); it != itend; it++)
+        ArrayTransform->Arrayread_IteMap->begin(), itend =
+        ArrayTransform->Arrayread_IteMap->end(); it != itend; it++)
       {
         //the array read
-        ASTNode arrayread = it->first;
-        ASTNode value_ite = ArrayTransform->ArrayRead_Ite(arrayread);
+        const ASTNode& arrayread = it->first;
+        const ASTNode& value_ite = it->second;
 
         //convert it to a constant array-read and store it in the
         //counter-example. First convert the index into a constant. then

@@ -637,6 +637,9 @@ namespace BEEV
           (*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
           //save the ite corresponding to 'processedTerm'
           (*Arrayread_IteMap)[processedTerm] = result;
+
+          assert(arrName.GetType() == ARRAY_TYPE);
+          assert(result.GetValueWidth() == CurrentSymbol.GetValueWidth());
           arrayToIndexToRead[arrName].insert(make_pair(readIndex,ArrayRead (result, CurrentSymbol)));
           break;
         } //end of READ over a SYMBOL
