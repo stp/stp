@@ -81,21 +81,21 @@ namespace BEEV
     	vector<ASTNode> concreteValues;
     	concreteValues.reserve(mapper.size());
 
-    	int i =0;
     	for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =mapper.begin() ; it != mapper.end();it++)
     	{
-
     	    const ASTNode& the_index = it->first;
-            listOfIndices.push_back(it->first);
+            listOfIndices.push_back(the_index);
 
             ASTNode arrsym = it->second.symbol;
             read_node_symbols.push_back(arrsym);
+
+			assert(read_node_symbols[0].GetValueWidth() == arrsym.GetValueWidth());
+			assert(listOfIndices[0].GetValueWidth() == the_index.GetValueWidth());
 
             jKind.push_back(the_index.GetKind());
 
             concreteIndexes.push_back(TermToConstTermUsingModel(the_index));
             concreteValues.push_back(TermToConstTermUsingModel(arrsym));
-            i++;
     	}
 
     	assert(listOfIndices.size() == mapper.size());
