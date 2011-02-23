@@ -637,6 +637,7 @@ namespace BEEV
           (*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
           //save the ite corresponding to 'processedTerm'
           (*Arrayread_IteMap)[processedTerm] = result;
+          arrayToIndexToRead[arrName].insert(make_pair(readIndex,ArrayRead (result, CurrentSymbol)));
           break;
         } //end of READ over a SYMBOL
       case WRITE:
@@ -824,6 +825,7 @@ namespace BEEV
         (*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
         //e0 is the array read : READ(A,i) and e1 is a bvconst
         Arrayread_SymbolMap[e0] = e1;
+        arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e0[1], e0[1])));
         return;
       }
 

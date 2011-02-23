@@ -20,6 +20,36 @@ namespace BEEV
 
   class ArrayTransformer 
   {
+  public:
+
+      // These map from array and index to ITE and Symbol.
+      struct ArrayRead
+      {
+        ArrayRead(ASTNode _ite, ASTNode _symbol)
+        {
+          assert(! _symbol.IsNull());
+          assert ((SYMBOL == _symbol.GetKind() || BVCONST == _symbol.GetKind()));
+
+          ite = _ite;
+          symbol = _symbol;
+        }
+
+        ASTNode ite;  // if not using refinement this will be the ITE for the read. Otherwise == symbol.
+        ASTNode symbol; // each read is allocated a distinct fresh variable.
+      };
+
+      // MAP: This maps from arrays to their indexes.
+      // This map is used by the TransformArray()
+      // function ,as well as the counter example, and refinement.
+      // This map is useful in converting array reads into
+      // nested ITE constructs. Suppose there are two array reads in the
+      // input Read(A,i) and Read(A,j). Then Read(A,i) is replaced with
+      // a symbolic constant, say v1, and Read(A,j) is replaced with the
+      // following ITE: ITE(i=j,v1,v2)
+
+      typedef map<ASTNode, map<ASTNode, ArrayRead> > ArrType ;
+      ArrType arrayToIndexToRead;
+
   private:
 
     /****************************************************************

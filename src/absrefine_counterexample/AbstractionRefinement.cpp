@@ -57,46 +57,48 @@ namespace BEEV
     //are no more axioms to add
     //
     //for each array, fetch its list of indices seen so far
-    for (ASTNodeToVecMap::const_iterator 
-           iset = ArrayTransform->ArrayName_ReadIndicesMap()->begin(),
-           iset_end = ArrayTransform->ArrayName_ReadIndicesMap()->end(); 
+    for (ArrayTransformer::ArrType::const_iterator
+           iset = ArrayTransform->arrayToIndexToRead.begin(),
+           iset_end = ArrayTransform->arrayToIndexToRead.end();
          iset != iset_end; iset++)
       {
     	const ASTNode& ArrName = iset->first;
-    	const ASTVec& listOfIndices = iset->second;
+    	const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
+
+        vector<ASTNode> listOfIndices;
+        listOfIndices.reserve(mapper.size());
 
     	// Make a vector of the read symbols.
     	ASTVec read_node_symbols;
     	read_node_symbols.reserve(listOfIndices.size());
 
     	vector<Kind> jKind;
-    	jKind.reserve(listOfIndices.size());
+    	jKind.reserve(mapper.size());
 
     	vector<ASTNode> concreteIndexes;
-    	concreteIndexes.reserve(listOfIndices.size());
+    	concreteIndexes.reserve(mapper.size());
 
     	vector<ASTNode> concreteValues;
-    	concreteValues.reserve(listOfIndices.size());
+    	concreteValues.reserve(mapper.size());
 
-
-    	for (int i = 0; i < listOfIndices.size(); i++)
+    	int i =0;
+    	for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =mapper.begin() ; it != mapper.end();it++)
     	{
-        	const ASTNode& the_index = listOfIndices[i];
 
-        	ASTNode arr_read =
-              bm->CreateTerm(READ, ArrName.GetValueWidth(), ArrName, the_index);
+    	    const ASTNode& the_index = it->first;
+            listOfIndices.push_back(it->first);
 
-        	ASTNode arrsym = ArrayTransform->ArrayRead_SymbolMap(arr_read);
-        	assert ((SYMBOL == arrsym.GetKind() || BVCONST == arrsym.GetKind()));
+            ASTNode arrsym = it->second.symbol;
+            read_node_symbols.push_back(arrsym);
 
-        	read_node_symbols.push_back(arrsym);
+            jKind.push_back(the_index.GetKind());
 
-        	jKind.push_back(listOfIndices[i].GetKind());
-
-        	concreteIndexes.push_back(TermToConstTermUsingModel(the_index));
-        	concreteValues.push_back(TermToConstTermUsingModel(arrsym));
-
+            concreteIndexes.push_back(TermToConstTermUsingModel(the_index));
+            concreteValues.push_back(TermToConstTermUsingModel(arrsym));
+            i++;
     	}
+
+    	assert(listOfIndices.size() == mapper.size());
 
         //loop over the list of indices for the array and create LA,
         //and add to inputAlreadyInSAT
