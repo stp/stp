@@ -74,7 +74,7 @@ namespace BEEV
     
     // MAP: This is a map from array-reads to symbolic constants. This
     // map is used by the TransformArray()     
-    ASTNodeMap Arrayread_SymbolMap;
+    //ASTNodeMap Arrayread_SymbolMap;
         
     // MAP: This is a map from Array Names to nested ITE constructs,
     // which are built as described below. This map is used by the
@@ -141,7 +141,7 @@ namespace BEEV
     
     // Constructor
     ArrayTransformer(STPMgr * bm, Simplifier* s) : 
-      Arrayread_SymbolMap(),
+      //Arrayread_SymbolMap(),
       bm(bm), 
       simp(s), 
       debug_transform(0),
@@ -182,11 +182,11 @@ namespace BEEV
 //      return Arrayname_ReadindicesMap;
   //  } //End of ArrayName_ReadIndicesMap
 
-    const ASTNode ArrayRead_SymbolMap(const ASTNode& arrread) 
-    {
-      ASTNode symbol = Arrayread_SymbolMap[arrread];
-      return symbol;
-    } //End of ArrayRead_SymbolMap
+    //const ASTNode ArrayRead_SymbolMap(const ASTNode& arrread)
+    //{
+      //ASTNode symbol = Arrayread_SymbolMap[arrread];
+      //return symbol;
+  //  } //End of ArrayRead_SymbolMap
     
     void ClearAllTables(void)
     {
@@ -201,7 +201,7 @@ namespace BEEV
 
       Arrayname_ReadindicesMap->clear();
 */
-      Arrayread_SymbolMap.clear();
+      //Arrayread_SymbolMap.clear();
       //Arrayread_IteMap->clear();
       arrayToIndexToRead.clear();
     }

@@ -560,7 +560,7 @@ namespace BEEV
               }
           }
 
-          //  Recursively transform read index, which may also contain reads.
+          //  The read index has already been recursively transformed.
           ASTNode processedTerm = 
             nf->CreateTerm(READ, width, arrName, readIndex);
 
@@ -583,14 +583,14 @@ namespace BEEV
           // constant value in the substitution map.
           if (simp->CheckSubstitutionMap(processedTerm, CurrentSymbol))
             {
-              Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
+              //Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
             }
           // Check if it already has an abstract variable.
-          else if ((it1 = Arrayread_SymbolMap.find(processedTerm)) 
-                   != Arrayread_SymbolMap.end())
-            {
-              CurrentSymbol = it1->second;
-            }
+          //else if ((it1 = Arrayread_SymbolMap.find(processedTerm))
+                //   != Arrayread_SymbolMap.end())
+       //     {
+        //      CurrentSymbol = it1->second;
+       //     }
           else
             {
               // Make up a new abstract variable. Build symbolic name
@@ -602,16 +602,15 @@ namespace BEEV
         			  processedTerm.GetValueWidth(),
         			  "array_" + string(arrName.GetName()));
 
-        	  Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
+        	  //Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
             }
 
-          ASTNode ite = CurrentSymbol;
+          result = CurrentSymbol;
 
           if (bm->UserFlags.arrayread_refinement_flag)
             {
               // ite is really a variable here; it is an ite in the
               // else-branch
-              result = ite;
             }
           else
             {
@@ -625,29 +624,14 @@ namespace BEEV
               map<ASTNode, ArrayRead>::const_iterator it2end = new_read_Indices.end();
               for (; it2 != it2end; it2++)
                 {
-                  ASTNode cond = 
-                    simp->CreateSimplifiedEQ(readIndex, it2->first);
+                  ASTNode cond =  simp->CreateSimplifiedEQ(readIndex, it2->first);
                   if (ASTFalse == cond)
                     continue;
 
-				  // This could be made faster by storing these, rather than
-                  // creating each one n times.
-                   ASTNode arrRead =
-                    nf->CreateTerm(READ, width, arrName, it2->first);
-                  assert(BVTypeCheck(arrRead));
-
-                  const ASTNode& arrayreadSymbol = it2->second.ite;
-                  if (arrayreadSymbol.IsNull())
-                    {
-                      FatalError("TransformArray:"\
-                                 "symbolic variable for processedTerm, p,"\
-                                 "does not exist:p = ", arrRead);
-                    }
-                  ite = 
-                    simp->CreateSimplifiedTermITE(cond, arrayreadSymbol, ite);
+                  result =
+                    simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
                 }
-              result = ite;
-              //}
+
             }
 
           //(*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
@@ -843,7 +827,7 @@ namespace BEEV
       {
         //(*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
         //e0 is the array read : READ(A,i) and e1 is a bvconst
-        Arrayread_SymbolMap[e0] = e1;
+        //Arrayread_SymbolMap[e0] = e1;
         arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e1, e1)));
         return;
       }
