@@ -28,6 +28,7 @@ namespace BEEV
         ArrayRead(ASTNode _ite, ASTNode _symbol)
         {
           assert(! _symbol.IsNull());
+          assert(_ite.GetValueWidth() == _symbol.GetValueWidth());
           assert ((SYMBOL == _symbol.GetKind() || BVCONST == _symbol.GetKind()));
 
           ite = _ite;
@@ -47,7 +48,8 @@ namespace BEEV
       // a symbolic constant, say v1, and Read(A,j) is replaced with the
       // following ITE: ITE(i=j,v1,v2)
 
-      typedef map<ASTNode, map<ASTNode, ArrayRead> > ArrType ;
+      typedef map<ASTNode, ArrayRead> arrTypeMap;
+      typedef map<ASTNode, arrTypeMap > ArrType ;
       ArrType arrayToIndexToRead;
 
   private:
@@ -58,44 +60,12 @@ namespace BEEV
     
     // Handy defs
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
-    
-    // MAP: This is a map from Array Names to list of array-read
-    // indices in the input. This map is used by the TransformArray()
-    // function. This map is useful in converting array reads into
-    // nested ITE constructs. Suppose there are two array reads in the
-    // input Read(A,i) and Read(A,j). Then Read(A,i) is replaced with
-    // a symbolic constant, say v1, and Read(A,j) is replaced with the
-    // following ITE: ITE(i=j,v1,v2)
-    //
-    // CAUTION: I tried using a set instead of vector for read
-    // indicies. for some odd reason the performance went down
-    // considerably. this is totally inexplicable.
-    //ASTNodeToVecMap * Arrayname_ReadindicesMap;
-    
-    // MAP: This is a map from array-reads to symbolic constants. This
-    // map is used by the TransformArray()     
-    //ASTNodeMap Arrayread_SymbolMap;
-        
-    // MAP: This is a map from Array Names to nested ITE constructs,
-    // which are built as described below. This map is used by the
-    // TransformArray() function. This map is useful in converting
-    // array reads into nested ITE constructs. Suppose there are two
-    // array reads in the input Read(A,i) and Read(A,j). Then
-    // Read(A,i) is replaced with a symbolic constant, say v1, and
-    // Read(A,j) is replaced with the following ITE: ITE(i=j,v1,v2)
-
-    //ASTNodeMap * Arrayread_IteMap;
 
         
     // Memo table used by the transformer while it is transforming the
     // formulas and terms
     ASTNodeMap* TransformMap;
     
-    // For finiteloop construct. A list of all finiteloop constructs
-    // in the input formula
-    //
-    // ASTVec GlobalList_Of_FiniteLoops;
-
     // Flag for debuggin the transformer
     const bool debug_transform;
 
@@ -118,11 +88,6 @@ namespace BEEV
     ASTNode TranslateSignedDivModRem(const ASTNode& in);
     ASTNode TransformTerm(const ASTNode& inputterm);
     void assertTransformPostConditions(const ASTNode & term, ASTNodeSet& visited);
-        
-    /****************************************************************
-     * Helper functions to for creating substitution map            *
-     ****************************************************************/      
-        
 
     ASTNode TransformArrayRead(const ASTNode& term);
 
@@ -141,14 +106,11 @@ namespace BEEV
     
     // Constructor
     ArrayTransformer(STPMgr * bm, Simplifier* s) : 
-      //Arrayread_SymbolMap(),
       bm(bm), 
       simp(s), 
       debug_transform(0),
       TransformMap(NULL)
     {
-      //Arrayread_IteMap = new ASTNodeMap();
-      //Arrayname_ReadindicesMap = new ASTNodeToVecMap();
       nf = bm->defaultNodeFactory;
 
       runTimes = bm->GetRunTimes();
@@ -157,52 +119,12 @@ namespace BEEV
       ASTUndefined = bm->CreateNode(UNDEFINED);
     }
 
-    // Destructor
-    ~ArrayTransformer()
-    {
-      //Arrayread_IteMap->clear();
-      //delete Arrayread_IteMap;
-      /*ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
-      ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
-      for(;it!=itend;it++)
-        {
-          ((*it).second).clear();
-        }
-      Arrayname_ReadindicesMap->clear();
-      delete Arrayname_ReadindicesMap;
-      */
-    }
-
     // Takes a formula, transforms it by replacing array reads with
     // variables, and returns the transformed formula
     ASTNode TransformFormula_TopLevel(const ASTNode& form);
 
-    //const ASTNodeToVecMap * ArrayName_ReadIndicesMap()
-    //{
-//      return Arrayname_ReadindicesMap;
-  //  } //End of ArrayName_ReadIndicesMap
-
-    //const ASTNode ArrayRead_SymbolMap(const ASTNode& arrread)
-    //{
-      //ASTNode symbol = Arrayread_SymbolMap[arrread];
-      //return symbol;
-  //  } //End of ArrayRead_SymbolMap
-    
     void ClearAllTables(void)
     {
-
-      /*for (ASTNodeToVecMap::iterator
-             iset = Arrayname_ReadindicesMap->begin(), 
-             iset_end = Arrayname_ReadindicesMap->end(); 
-           iset != iset_end; iset++)
-        {
-          iset->second.clear();
-        }
-
-      Arrayname_ReadindicesMap->clear();
-*/
-      //Arrayread_SymbolMap.clear();
-      //Arrayread_IteMap->clear();
       arrayToIndexToRead.clear();
     }
   }; //end of class Transformer

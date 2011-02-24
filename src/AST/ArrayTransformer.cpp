@@ -560,68 +560,32 @@ namespace BEEV
               }
           }
 
-          //  The read index has already been recursively transformed.
-          ASTNode processedTerm = 
-            nf->CreateTerm(READ, width, arrName, readIndex);
+          // Make up a new abstract variable. Build symbolic name
+          // corresponding to array read. The symbolic name has 2
+          // components: stringname, and a count
 
-          //check if the 'processedTerm' has a corresponding ITE construct
-          //already. if so, return it. else continue processing.
-          /*
-          ASTNodeMap::const_iterator it;
-          if ((it = Arrayread_IteMap->find(processedTerm))
-              != Arrayread_IteMap->end())
-            {
-              result = it->second;
-              break;
-            }
-            */
-
-          //Constructing Symbolic variable corresponding to 'processedTerm'
-          ASTNode CurrentSymbol;
-          ASTNodeMap::const_iterator it1;
-          // First, check if read index is constant and it has a
-          // constant value in the substitution map.
-          if (simp->CheckSubstitutionMap(processedTerm, CurrentSymbol))
-            {
-              //Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
-            }
-          // Check if it already has an abstract variable.
-          //else if ((it1 = Arrayread_SymbolMap.find(processedTerm))
-                //   != Arrayread_SymbolMap.end())
-       //     {
-        //      CurrentSymbol = it1->second;
-       //     }
-          else
-            {
-              // Make up a new abstract variable. Build symbolic name
-              // corresponding to array read. The symbolic name has 2
-              // components: stringname, and a count
-
-        	  CurrentSymbol = bm->CreateFreshVariable(
-        			  processedTerm.GetIndexWidth(),
-        			  processedTerm.GetValueWidth(),
-        			  "array_" + string(arrName.GetName()));
-
-        	  //Arrayread_SymbolMap[processedTerm] = CurrentSymbol;
-            }
+          ASTNode CurrentSymbol = bm->CreateFreshVariable(
+                          term.GetIndexWidth(),
+                          term.GetValueWidth(),
+                          "array_" + string(arrName.GetName()));
 
           result = CurrentSymbol;
 
           if (bm->UserFlags.arrayread_refinement_flag)
             {
-              // ite is really a variable here; it is an ite in the
+              // result is a variable here; it is an ite in the
               // else-branch
             }
           else
             {
+              // Full Array transform if we're not doing read refinement.
+
               //list of array-read indices corresponding to arrName, seen while
               //traversing the AST tree. we need this list to construct the ITEs
-              // Dill: we hope to make this irrelevant.  Harmless for now.
-              const map<ASTNode, ArrayRead>& new_read_Indices = arrayToIndexToRead[arrName];
+              const arrTypeMap& new_read_Indices = arrayToIndexToRead[arrName];
 
-              // Full Array transform if we're not doing read refinement.
-              map<ASTNode, ArrayRead>::const_iterator it2 = new_read_Indices.begin();
-              map<ASTNode, ArrayRead>::const_iterator it2end = new_read_Indices.end();
+              arrTypeMap::const_iterator it2 = new_read_Indices.begin();
+              arrTypeMap::const_iterator it2end = new_read_Indices.end();
               for (; it2 != it2end; it2++)
                 {
                   ASTNode cond =  simp->CreateSimplifiedEQ(readIndex, it2->first);
@@ -631,15 +595,9 @@ namespace BEEV
                   result =
                     simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
                 }
-
             }
 
-          //(*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
-          //save the ite corresponding to 'processedTerm'
-          //(*Arrayread_IteMap)[processedTerm] = result;
-
           assert(arrName.GetType() == ARRAY_TYPE);
-          assert(result.GetValueWidth() == CurrentSymbol.GetValueWidth());
           arrayToIndexToRead[arrName].insert(make_pair(readIndex,ArrayRead (result, CurrentSymbol)));
           break;
         } //end of READ over a SYMBOL
@@ -800,13 +758,6 @@ namespace BEEV
   } //end of TransformArray()
 
 
-  //This function records all the const-indices seen so far for each
-  //array. It populates the map 'Arrayname_ReadindicesMap' whose key is
-  //the arrayname, and vlaue is a vector of read-indices.
-  //
-  //fill the arrayname_readindices vector if e0 is a READ(Arr,index)
-  //and index is a BVCONST.
-  //
   //Since these arrayreads are being nuked and recorded in the
   //substitutionmap, we have to also record the fact that each
   //arrayread (e0 is of the form READ(Arr,const) here is represented
@@ -815,24 +766,14 @@ namespace BEEV
   void ArrayTransformer::FillUp_ArrReadIndex_Vec(const ASTNode& e0, 
                                                  const ASTNode& e1)
   {
-	  assert(e0.GetKind() == READ);
-	  assert(e1.GetKind() == BVCONST);
+      assert (e0.GetKind() == READ);
+      assert (e0[0].GetKind() == SYMBOL);
+      assert (e0[1].GetKind() == BVCONST);
+      assert (e1.GetKind() == BVCONST);
+      assert(arrayToIndexToRead[e0[0]].find(e0[1]) ==arrayToIndexToRead[e0[0]].end());
 
-	  if (e0[0].GetKind() != SYMBOL)
-		  return;
-	  if (e0[1].GetKind() != BVCONST)
-		  return;
-
-    if (!simp->CheckSubstitutionMap(e0))
-      {
-        //(*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
-        //e0 is the array read : READ(A,i) and e1 is a bvconst
-        //Arrayread_SymbolMap[e0] = e1;
-        arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e1, e1)));
-        return;
-      }
-
-  } //End of Fillup
+      arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e1, e1)));
+  }
 
 
 } //end of namespace BEEV
