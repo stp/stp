@@ -70,7 +70,7 @@ namespace BEEV
     // CAUTION: I tried using a set instead of vector for read
     // indicies. for some odd reason the performance went down
     // considerably. this is totally inexplicable.
-    ASTNodeToVecMap * Arrayname_ReadindicesMap;
+    //ASTNodeToVecMap * Arrayname_ReadindicesMap;
     
     // MAP: This is a map from array-reads to symbolic constants. This
     // map is used by the TransformArray()     
@@ -148,7 +148,7 @@ namespace BEEV
       TransformMap(NULL)
     {
       //Arrayread_IteMap = new ASTNodeMap();
-      Arrayname_ReadindicesMap = new ASTNodeToVecMap();
+      //Arrayname_ReadindicesMap = new ASTNodeToVecMap();
       nf = bm->defaultNodeFactory;
 
       runTimes = bm->GetRunTimes();
@@ -162,7 +162,7 @@ namespace BEEV
     {
       //Arrayread_IteMap->clear();
       //delete Arrayread_IteMap;
-      ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
+      /*ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
       ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
       for(;it!=itend;it++)
         {
@@ -170,16 +170,17 @@ namespace BEEV
         }
       Arrayname_ReadindicesMap->clear();
       delete Arrayname_ReadindicesMap;
+      */
     }
 
     // Takes a formula, transforms it by replacing array reads with
     // variables, and returns the transformed formula
     ASTNode TransformFormula_TopLevel(const ASTNode& form);
 
-    const ASTNodeToVecMap * ArrayName_ReadIndicesMap()
-    {
-      return Arrayname_ReadindicesMap;
-    } //End of ArrayName_ReadIndicesMap
+    //const ASTNodeToVecMap * ArrayName_ReadIndicesMap()
+    //{
+//      return Arrayname_ReadindicesMap;
+  //  } //End of ArrayName_ReadIndicesMap
 
     const ASTNode ArrayRead_SymbolMap(const ASTNode& arrread) 
     {
@@ -190,7 +191,7 @@ namespace BEEV
     void ClearAllTables(void)
     {
 
-      for (ASTNodeToVecMap::iterator
+      /*for (ASTNodeToVecMap::iterator
              iset = Arrayname_ReadindicesMap->begin(), 
              iset_end = Arrayname_ReadindicesMap->end(); 
            iset != iset_end; iset++)
@@ -199,6 +200,7 @@ namespace BEEV
         }
 
       Arrayname_ReadindicesMap->clear();
+*/
       Arrayread_SymbolMap.clear();
       //Arrayread_IteMap->clear();
       arrayToIndexToRead.clear();

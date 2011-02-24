@@ -618,25 +618,25 @@ namespace BEEV
               //list of array-read indices corresponding to arrName, seen while
               //traversing the AST tree. we need this list to construct the ITEs
               // Dill: we hope to make this irrelevant.  Harmless for now.
-              const ASTVec & readIndices = (*Arrayname_ReadindicesMap)[arrName];
+              const map<ASTNode, ArrayRead>& new_read_Indices = arrayToIndexToRead[arrName];
 
-        	  // Full Array transform if we're not doing read refinement.
-              ASTVec::const_reverse_iterator it2 = readIndices.rbegin();
-              ASTVec::const_reverse_iterator it2end = readIndices.rend();
+              // Full Array transform if we're not doing read refinement.
+              map<ASTNode, ArrayRead>::const_iterator it2 = new_read_Indices.begin();
+              map<ASTNode, ArrayRead>::const_iterator it2end = new_read_Indices.end();
               for (; it2 != it2end; it2++)
                 {
                   ASTNode cond = 
-                    simp->CreateSimplifiedEQ(readIndex, *it2);
+                    simp->CreateSimplifiedEQ(readIndex, it2->first);
                   if (ASTFalse == cond)
                     continue;
 
 				  // This could be made faster by storing these, rather than
                   // creating each one n times.
                    ASTNode arrRead =
-                    nf->CreateTerm(READ, width, arrName, *it2);
+                    nf->CreateTerm(READ, width, arrName, it2->first);
                   assert(BVTypeCheck(arrRead));
 
-                  const ASTNode& arrayreadSymbol = Arrayread_SymbolMap[arrRead];
+                  const ASTNode& arrayreadSymbol = it2->second.ite;
                   if (arrayreadSymbol.IsNull())
                     {
                       FatalError("TransformArray:"\
@@ -650,7 +650,7 @@ namespace BEEV
               //}
             }
 
-          (*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
+          //(*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
           //save the ite corresponding to 'processedTerm'
           //(*Arrayread_IteMap)[processedTerm] = result;
 
@@ -841,7 +841,7 @@ namespace BEEV
 
     if (!simp->CheckSubstitutionMap(e0))
       {
-        (*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
+        //(*Arrayname_ReadindicesMap)[e0[0]].push_back(e0[1]);
         //e0 is the array read : READ(A,i) and e1 is a bvconst
         Arrayread_SymbolMap[e0] = e1;
         arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e1, e1)));
