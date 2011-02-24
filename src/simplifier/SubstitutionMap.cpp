@@ -103,16 +103,20 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       else// (IFF == k )
     	  c1= simplify_during_create_subM ?  simp->SimplifyFormula_NoRemoveWrites(c[1], false) : c[1];
 
-      //fill the arrayname readindices vector if e0 is a
-      //READ(Arr,index) and index is a BVCONST
-      int to;
-      if ((to =TermOrder(c[0],c1))==1 && c[0].GetKind() == READ)
-    	  at->FillUp_ArrReadIndex_Vec(c[0], c1);
-      else if (to ==-1 && c1.GetKind() == READ)
-		at->FillUp_ArrReadIndex_Vec(c1,c[0]);
-
       bool updated = UpdateSubstitutionMap(c[0], c1);
       output = updated ? ASTTrue : a;
+
+      if (updated)
+        {
+          //fill the arrayname readindices vector if e0 is a
+          //READ(Arr,index) and index is a BVCONST
+          int to;
+          if ((to =TermOrder(c[0],c1))==1 && c[0].GetKind() == READ)
+              at->FillUp_ArrReadIndex_Vec(c[0], c1);
+          else if (to ==-1 && c1.GetKind() == READ)
+                    at->FillUp_ArrReadIndex_Vec(c1,c[0]);
+        }
+
       return output;
     }
 
