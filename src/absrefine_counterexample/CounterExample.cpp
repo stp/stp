@@ -82,30 +82,32 @@ namespace BEEV
         }
       }
 
-    //In this loop, we compute the value of each array read, the
-    //corresponding ITE against the counterexample generated above.
-    for (ASTNodeMap::const_iterator it =
-        ArrayTransform->Arrayread_IteMap->begin(), itend =
-        ArrayTransform->Arrayread_IteMap->end(); it != itend; it++)
+        for (ArrayTransformer::ArrType::const_iterator it = ArrayTransform->arrayToIndexToRead.begin(), itend =
+        ArrayTransform->arrayToIndexToRead.end(); it != itend; it++)
       {
-        //the array read
-        const ASTNode& arrayread = it->first;
-        const ASTNode& value_ite = it->second;
+        const ASTNode& array = it->first;
+        const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = it->second;
 
-        //convert it to a constant array-read and store it in the
-        //counter-example. First convert the index into a constant. then
-        //construct the appropriate array-read and store it in the
-        //counterexample
-        ASTNode arrayread_index = TermToConstTermUsingModel(arrayread[1],false);
-        ASTNode key = bm->CreateTerm(READ, arrayread.GetValueWidth(),
-                                     arrayread[0], arrayread_index);
+        for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it2 = mapper.begin(), it2end = mapper.end(); it2
+            != it2end; it2++)
+          {
+            const ASTNode& index = it2->first;
+            const ASTNode& value_ite = it2->second.ite;
 
-        //Get the ITE corresponding to the array-read and convert it
-        //to a constant against the model
-        ASTNode value = TermToConstTermUsingModel(value_ite);
-        //save the result in the counter_example
-        if (!simp->CheckSubstitutionMap(key))
-          CounterExampleMap[key] = value;
+            //convert it to a constant array-read and store it in the
+            //counter-example. First convert the index into a constant. then
+            //construct the appropriate array-read and store it in the
+            //counterexample
+            ASTNode arrayread_index = TermToConstTermUsingModel(index, false);
+            ASTNode key = bm->CreateTerm(READ, array.GetValueWidth(), array, arrayread_index);
+
+            //Get the ITE corresponding to the array-read and convert it
+            //to a constant against the model
+            ASTNode value = TermToConstTermUsingModel(value_ite);
+            //save the result in the counter_example
+            if (!simp->CheckSubstitutionMap(key))
+              CounterExampleMap[key] = value;
+          }
       }
   } //End of ConstructCounterExample
 

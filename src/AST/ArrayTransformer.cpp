@@ -547,12 +547,26 @@ namespace BEEV
            *                        .....
            */
 
+          {
+            ArrType::const_iterator it;
+            if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
+              {
+                map<ASTNode, ArrayRead>::const_iterator it2;
+                  if ((it2 = it->second.find(readIndex)) != it->second.end())
+                    {
+                      result = it2->second.ite;
+                      break;
+                    }
+              }
+          }
+
           //  Recursively transform read index, which may also contain reads.
           ASTNode processedTerm = 
             nf->CreateTerm(READ, width, arrName, readIndex);
 
           //check if the 'processedTerm' has a corresponding ITE construct
           //already. if so, return it. else continue processing.
+          /*
           ASTNodeMap::const_iterator it;
           if ((it = Arrayread_IteMap->find(processedTerm))
               != Arrayread_IteMap->end())
@@ -560,6 +574,8 @@ namespace BEEV
               result = it->second;
               break;
             }
+            */
+
           //Constructing Symbolic variable corresponding to 'processedTerm'
           ASTNode CurrentSymbol;
           ASTNodeMap::const_iterator it1;
@@ -636,7 +652,7 @@ namespace BEEV
 
           (*Arrayname_ReadindicesMap)[arrName].push_back(readIndex);
           //save the ite corresponding to 'processedTerm'
-          (*Arrayread_IteMap)[processedTerm] = result;
+          //(*Arrayread_IteMap)[processedTerm] = result;
 
           assert(arrName.GetType() == ARRAY_TYPE);
           assert(result.GetValueWidth() == CurrentSymbol.GetValueWidth());

@@ -83,9 +83,9 @@ namespace BEEV
     // array reads in the input Read(A,i) and Read(A,j). Then
     // Read(A,i) is replaced with a symbolic constant, say v1, and
     // Read(A,j) is replaced with the following ITE: ITE(i=j,v1,v2)
-  public:
-    ASTNodeMap * Arrayread_IteMap;
-  private:
+
+    //ASTNodeMap * Arrayread_IteMap;
+
         
     // Memo table used by the transformer while it is transforming the
     // formulas and terms
@@ -147,7 +147,7 @@ namespace BEEV
       debug_transform(0),
       TransformMap(NULL)
     {
-      Arrayread_IteMap = new ASTNodeMap();
+      //Arrayread_IteMap = new ASTNodeMap();
       Arrayname_ReadindicesMap = new ASTNodeToVecMap();
       nf = bm->defaultNodeFactory;
 
@@ -160,8 +160,8 @@ namespace BEEV
     // Destructor
     ~ArrayTransformer()
     {
-      Arrayread_IteMap->clear();
-      delete Arrayread_IteMap;
+      //Arrayread_IteMap->clear();
+      //delete Arrayread_IteMap;
       ASTNodeToVecMap::iterator it= Arrayname_ReadindicesMap->begin();
       ASTNodeToVecMap::iterator itend= Arrayname_ReadindicesMap->end();
       for(;it!=itend;it++)
@@ -187,13 +187,6 @@ namespace BEEV
       return symbol;
     } //End of ArrayRead_SymbolMap
     
-
-    ASTNode ArrayRead_Ite(const ASTNode& arrread)
-    {
-      return (*Arrayread_IteMap)[arrread];
-    } //End of ArrayRead_Ite
-
-
     void ClearAllTables(void)
     {
 
@@ -207,7 +200,8 @@ namespace BEEV
 
       Arrayname_ReadindicesMap->clear();
       Arrayread_SymbolMap.clear();
-      Arrayread_IteMap->clear();
+      //Arrayread_IteMap->clear();
+      arrayToIndexToRead.clear();
     }
   }; //end of class Transformer
 
