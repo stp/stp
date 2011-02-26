@@ -1249,29 +1249,36 @@ namespace BEEV
     if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
       return output;
 
-    if (a.GetChildren().size() > 2)
+    assert(a.GetChildren().size() > 0);
+
+    if (a.GetChildren().size()==1)
       {
-        FatalError("Simplify got an XOR with more than two children.");
+        output = a[0];
       }
-
-    ASTNode a0 = SimplifyFormula(a[0], false, VarConstMap);
-    ASTNode a1 = SimplifyFormula(a[1], false, VarConstMap);
-    output = 
-      pushNeg ? 
-      nf->CreateNode(IFF, a0, a1) :
-      nf->CreateNode(XOR, a0, a1);
-
-    if (XOR == output.GetKind())
+    else  if (a.GetChildren().size()==2)
       {
-        a0 = output[0];
-        a1 = output[1];
+        ASTNode a0 = SimplifyFormula(a[0], false, VarConstMap);
+        ASTNode a1 = SimplifyFormula(a[1], false, VarConstMap);
+        if (pushNeg)
+          a0 = nf->CreateNode(NOT, a0);
+        output = nf->CreateNode(XOR, a0, a1);
+
         if (a0 == a1)
           output = ASTFalse;
-        else if ((a0 == ASTTrue 
-                  && a1 == ASTFalse) 
-                 || (a0 == ASTFalse 
-                     && a1 == ASTTrue))
+        else if ((a0 == ASTTrue && a1 == ASTFalse) || (a0 == ASTFalse && a1 == ASTTrue))
           output = ASTTrue;
+      }
+    else
+      {
+       ASTVec newC;
+       for (int i = 0;i < a.GetChildren().size(); i++)
+         {
+             newC.push_back(SimplifyFormula(a[i], false, VarConstMap));
+         }
+       if (pushNeg)
+         newC[0] = nf->CreateNode(NOT,newC[0]);
+
+       output = nf->CreateNode(XOR, newC);
       }
 
     //memoize
