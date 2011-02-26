@@ -60,7 +60,7 @@ public:
     stp->GetRunTimes()->start(RunTimes::PureLiterals);
 
     build(n , truePolarity);
-    bool changed;
+    bool changed = false;
 
     map<ASTNode, int>::const_iterator it = nodeToPolarity.begin();
     while (it != nodeToPolarity.end())
@@ -69,11 +69,13 @@ public:
         const int polarity = it->second;
         if (n.GetType() == BOOLEAN_TYPE && n.GetKind() == SYMBOL && polarity != bothPolarity)
           {
-            //cerr << "--> Pure Literal" << n.GetName() << " " << polarity << endl;
-            if (polarity == truePolarity)
-              simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTTrue);
-            if (polarity == falsePolarity)
-              simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTFalse);
+              if (polarity == truePolarity)
+                simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTTrue);
+              else
+              {
+                assert (polarity == falsePolarity);
+                simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTFalse);
+              }
             changed = true;
           }
         it++;
@@ -88,14 +90,15 @@ public:
     if (n.isConstant())
       return;
 
-    map<ASTNode, int>::const_iterator it = nodeToPolarity.find(n);
+    map<ASTNode, int>::iterator it = nodeToPolarity.find(n);
     if (it != nodeToPolarity.end())
       {
         int lookupPolarity = it->second;
-        if (polarity & lookupPolarity !=0 )
+        if ((polarity & lookupPolarity) !=0 )
           return; // already traversed.
+
         lookupPolarity |= polarity;
-        nodeToPolarity.insert(make_pair(n,lookupPolarity));
+        it->second = lookupPolarity;
       }
     else
       {
