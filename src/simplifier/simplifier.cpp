@@ -1746,8 +1746,8 @@ namespace BEEV
 		if (pulledUp != inputterm)
 		  {
 			ASTNode r = SimplifyTerm(pulledUp);
-			UpdateSimplifyMap(actualInputterm,r,NULL);
-			UpdateSimplifyMap(inputterm,r,NULL);
+			UpdateSimplifyMap(actualInputterm,r,false,NULL);
+			UpdateSimplifyMap(inputterm,r,false,NULL);
 			return r;
 		  }
     }
