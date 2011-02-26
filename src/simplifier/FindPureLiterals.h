@@ -94,11 +94,10 @@ public:
     if (it != nodeToPolarity.end())
       {
         int lookupPolarity = it->second;
-        if ((polarity & lookupPolarity) !=0 )
+        if ((polarity | lookupPolarity) == lookupPolarity )
           return; // already traversed.
 
-        lookupPolarity |= polarity;
-        it->second = lookupPolarity;
+        it->second |= polarity;
       }
     else
       {
