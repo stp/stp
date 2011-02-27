@@ -107,7 +107,6 @@ namespace BEEV
       ASTNodeSet context;
       ASTNode result= visit(n,visited,context);
       runtimes->stop(RunTimes::UseITEContext);
-      cout << "from" << n << "to" << result;
       return result;
     }
 
