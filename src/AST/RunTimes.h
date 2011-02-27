@@ -34,7 +34,8 @@ public:
       ArrayReadRefinement,
       ApplyingSubstitutions,
       RemoveUnconstrained,
-      PureLiterals
+      PureLiterals,
+      UseITEContext
     };
 
   static std::string CategoryNames[];

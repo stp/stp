@@ -18,6 +18,7 @@
 #include "../simplifier/RemoveUnconstrained.h"
 #include "../simplifier/FindPureLiterals.h"
 #include "../simplifier/EstablishIntervals.h"
+#include "../simplifier/UseITEContext.h"
 #include <memory>
 
 namespace BEEV {
@@ -190,6 +191,12 @@ namespace BEEV {
               simplified_solved_InputToSAT  = simp->applySubstitutionMap(simplified_solved_InputToSAT);
               simp->haveAppliedSubstitutionMap();
             }
+        }
+
+        // Simplify using Ite context
+        {
+          UseITEContext iteC(bm);
+          simplified_solved_InputToSAT  = iteC.topLevel(simplified_solved_InputToSAT);
         }
 
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
