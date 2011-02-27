@@ -48,14 +48,14 @@ namespace BEEV
     }
 
     ASTNode
-    visit(const ASTNode &n, ASTNodeMap& visited, ASTNodeSet& context)
+    visit(const ASTNode &n, ASTNodeSet& visited, ASTNodeSet& context)
     {
       if (n.isConstant())
         return n;
 
-      ASTNodeMap::iterator it;
-      if ((it = visited.find(n)) != visited.end())
-        return it->second;
+      ASTNodeSet::iterator it;
+      if (context.size() == 0 && ((it = visited.find(n)) != visited.end()))
+        return n;
 
       if (context.find(n) != context.end())
         return ASTTrue;
@@ -92,7 +92,7 @@ namespace BEEV
       else
         result = n;
 
-      visited.insert(make_pair(n,result));
+      visited.insert(n);
       return result;
 
     }
@@ -103,10 +103,11 @@ namespace BEEV
     topLevel(const ASTNode& n)
     {
       runtimes->start(RunTimes::UseITEContext);
-      ASTNodeMap visited;
+      ASTNodeSet visited;
       ASTNodeSet context;
       ASTNode result= visit(n,visited,context);
       runtimes->stop(RunTimes::UseITEContext);
+      cout << "from" << n << "to" << result;
       return result;
     }
 
