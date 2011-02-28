@@ -37,25 +37,22 @@ namespace BEEV
         }
       else
         context.insert(n);
-
-        //ASTNodeSet::iterator it = context.begin();
-        //cout << "NEW CONTEXT";
-        //while(it!=context.end())
-        //  {
-         //   cout << *it;
-         //   it++;
-         // }
     }
 
+    // Unfortunately there can be a lot of paths through a small formula.
+    // So we limit how often each node is visited.
+
     ASTNode
-    visit(const ASTNode &n, ASTNodeSet& visited, ASTNodeSet& context)
+    visit(const ASTNode &n, map<ASTNode,int>& visited, ASTNodeSet& visited_empty, ASTNodeSet& context)
     {
       if (n.isConstant())
         return n;
 
-      ASTNodeSet::iterator it;
-      if (context.size() == 0 && ((it = visited.find(n)) != visited.end()))
+      if (context.size() == 0 && visited_empty.find(n) != visited_empty.end())
         return n;
+
+      if (context.size() == 0)
+        visited_empty.insert(n);
 
       if (context.find(n) != context.end())
         return ASTTrue;
@@ -66,21 +63,26 @@ namespace BEEV
       if (n.isAtom())
         return n;
 
+      {
+          if (visited[n]++ > 10)
+            return n;
+      }
+
       ASTVec new_children;
 
       if (n.GetKind() == ITE)
         {
-            ASTNodeSet lhsContext(context), rhsContext(context);
+          ASTNodeSet lhsContext(context), rhsContext(context);
             addToContext(n[0],lhsContext);
             addToContext(nf->CreateNode(NOT,n[0]),rhsContext);
-            new_children.push_back(visit(n[0], visited,context));
-            new_children.push_back(visit(n[1], visited,lhsContext));
-            new_children.push_back(visit(n[2], visited,rhsContext));
+            new_children.push_back(visit(n[0], visited,visited_empty, context));
+            new_children.push_back(visit(n[1], visited,visited_empty, lhsContext));
+            new_children.push_back(visit(n[2], visited,visited_empty, rhsContext));
         }
       else
         {
           for (int i = 0; i < n.GetChildren().size(); i++)
-            new_children.push_back(visit(n[i], visited, context));
+            new_children.push_back(visit(n[i], visited, visited_empty, context));
         }
 
       ASTNode result;
@@ -92,9 +94,7 @@ namespace BEEV
       else
         result = n;
 
-      visited.insert(n);
       return result;
-
     }
 
   public:
@@ -103,9 +103,10 @@ namespace BEEV
     topLevel(const ASTNode& n)
     {
       runtimes->start(RunTimes::UseITEContext);
-      ASTNodeSet visited;
+      map<ASTNode,int> visited;
       ASTNodeSet context;
-      ASTNode result= visit(n,visited,context);
+      ASTNodeSet empty;
+      ASTNode result= visit(n,visited,empty,context);
       runtimes->stop(RunTimes::UseITEContext);
       return result;
     }
