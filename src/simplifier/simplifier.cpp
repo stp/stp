@@ -993,9 +993,24 @@ namespace BEEV
         ASTNode r =  nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]), nf->CreateNode(EQ, bottom, in2[1]));
 
         return r;
-
     }
 
+    {
+      // If it can only evaluate to constants on the LHS and the RHS, and those constants are never equal,
+      // then it must be false. e.g.   ite( f, 10 , 20 ) = ite (g, 30 ,12)
+      ASTNodeSet visited0, visited1;
+      vector<ASTNode> l0, l1;
+
+      if  (getPossibleValues(in1, visited0, l0) && getPossibleValues(in2, visited1, l1))
+        {
+            sort(l0.begin(), l0.end());
+            sort(l1.begin(), l1.end());
+            vector<ASTNode> result(l0.size() + l1.size());
+            vector<ASTNode>::iterator it = set_intersection(l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
+            if (it == result.begin())
+              return ASTFalse;
+        }
+    }
 
     //last resort is to CreateNode
     return nf->CreateNode(EQ, in1, in2);
