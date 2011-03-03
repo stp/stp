@@ -36,7 +36,7 @@ namespace BEEV
     // value is simplified node.
     ASTNodeMap * SimplifyMap;
     ASTNodeMap * SimplifyNegMap;
-    ASTNodeSet AlwaysTrueFormMap;
+    HASHSET<int> AlwaysTrueHashSet;
     ASTNodeMap MultInverseMap;
 
     // For ArrayWrite Abstraction: map from read-over-write term to
@@ -101,8 +101,8 @@ namespace BEEV
     void UpdateSimplifyMap(const ASTNode& key, 
                            const ASTNode& value, 
                            bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    bool CheckAlwaysTrueFormMap(const ASTNode& key);
-    void UpdateAlwaysTrueFormMap(const ASTNode& val);
+    bool CheckAlwaysTrueFormSet(const ASTNode& key);
+    void UpdateAlwaysTrueFormSet(const ASTNode& val);
     bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
     void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
       
@@ -260,7 +260,7 @@ namespace BEEV
       SimplifyNegMap->clear();
       ReadOverWrite_NewName_Map->clear();
       NewName_ReadOverWrite_Map.clear();
-      AlwaysTrueFormMap.clear();
+      AlwaysTrueHashSet.clear();
       MultInverseMap.clear();
       substitutionMap.clear();
     }
@@ -269,7 +269,7 @@ namespace BEEV
     // These can be cleared (to save memory) without changing the answer.
     void ClearCaches()
     {
-        AlwaysTrueFormMap.clear();
+        AlwaysTrueHashSet.clear();
         MultInverseMap.clear();
         SimplifyMap->clear();
         SimplifyNegMap->clear();

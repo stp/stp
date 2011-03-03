@@ -26,6 +26,12 @@ BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind,	const BEEV::ASTVec
 		SortByArith(children);
 	}
 
+	// We can't create NOT(NOT (..)) nodes because of how the numbering scheme we use works.
+	// So you can't trust the hashiing node factory even to return nodes of the same kind that
+	// you ask for.
+	if (kind == BEEV::NOT && children[0].GetKind() == BEEV::NOT)
+	  return children[0][0];
+
 	// insert all of children at end of new_children.
 	ASTNode n(bm.CreateInteriorNode(kind, n_ptr, children));
 	return n;

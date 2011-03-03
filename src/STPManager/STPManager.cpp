@@ -27,7 +27,11 @@ namespace BEEV
         // have alpha.nodenum + 1.
         if (n_ptr->GetKind() == NOT)
           {
-            n_ptr->SetNodeNum(n_ptr->GetChildren()[0].GetNodeNum() + 1);
+        	// The internal node can't be a NOT, because then we'd add
+        	// 1 to the NOT's node number, meaning we'd hit an even number,
+        	// which could duplicate the next newNodeNum().
+        	assert(n_ptr->GetChildren()[0].GetKind() != NOT);
+       		n_ptr->SetNodeNum(n_ptr->GetChildren()[0].GetNodeNum() + 1);
           }
         else
           {

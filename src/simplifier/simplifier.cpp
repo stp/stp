@@ -180,24 +180,17 @@ namespace BEEV
     MultInverseMap[key] = value;
   }
 
-  bool Simplifier::CheckAlwaysTrueFormMap(const ASTNode& key)
+  bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key)
   {
-    ASTNodeSet::iterator it = AlwaysTrueFormMap.find(key);
-    ASTNodeSet::iterator itend = AlwaysTrueFormMap.end();
+    HASHSET<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
+    HASHSET<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
 
-    if (it != itend)
-      {
-        //cerr << "found:" << *it << endl;
-        CountersAndStats("Successful_CheckAlwaysTrueFormMap", _bm);
-        return true;
-      }
-
-    return false;
+    return  it2 != it_end_2;
   }
 
-  void Simplifier::UpdateAlwaysTrueFormMap(const ASTNode& key)
+  void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
   {
-    AlwaysTrueFormMap.insert(key);
+	  AlwaysTrueHashSet.insert(key.GetNodeNum());
   }
 
   ASTNode 
@@ -1050,13 +1043,13 @@ namespace BEEV
       return t2;
     if (t1 == t2)
       return t1;
-    if (CheckAlwaysTrueFormMap(t0))
+    if (CheckAlwaysTrueFormSet(t0))
       {
         return t1;
       }
-    if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, t0))
+    if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0))
         || (NOT == t0.GetKind() 
-            && CheckAlwaysTrueFormMap(t0[0])))
+            && CheckAlwaysTrueFormSet(t0[0])))
       {
         return t2;
       }
@@ -1082,13 +1075,13 @@ namespace BEEV
           return t2;
         if (t1 == t2)
           return t1;
-        if (CheckAlwaysTrueFormMap(t0))
+        if (CheckAlwaysTrueFormSet(t0))
           {
             return t1;
           }
-        if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, t0))
+        if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0))
             || (NOT == t0.GetKind() 
-                && CheckAlwaysTrueFormMap(t0[0])))
+                && CheckAlwaysTrueFormSet(t0[0])))
           {
             return t2;
           }
@@ -1228,7 +1221,7 @@ namespace BEEV
     //pushnegation if there are odd number of NOTs
     bool pn = (NotCount % 2 == 0) ? false : true;
 
-    if (CheckAlwaysTrueFormMap(o))
+    if (CheckAlwaysTrueFormSet(o))
       {
         output = pn ? ASTFalse : ASTTrue;
         return output;
@@ -1393,24 +1386,24 @@ namespace BEEV
           {
             output = ASTTrue;
           }
-        else if (CheckAlwaysTrueFormMap(c0))
+        else if (CheckAlwaysTrueFormSet(c0))
           {
             // c0 AND (~c0 OR c1) <==> c1
             //
             //applying modus ponens
             output = c1;
           }
-        else if (CheckAlwaysTrueFormMap(c1) || 
-                 CheckAlwaysTrueFormMap(nf->CreateNode(NOT, c0)) ||
-                 (NOT == c0.GetKind() && CheckAlwaysTrueFormMap(c0[0])))
+        else if (CheckAlwaysTrueFormSet(c1) || 
+                 CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c0)) ||
+                 (NOT == c0.GetKind() && CheckAlwaysTrueFormSet(c0[0])))
           {
             //(~c0 AND (~c0 OR c1)) <==> TRUE
             //
             //(c0 AND ~c0->c1) <==> TRUE
             output = ASTTrue;
           }
-        else if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, c1)) ||
-                 (NOT == c1.GetKind() && CheckAlwaysTrueFormMap(c1[0])))
+        else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c1)) ||
+                 (NOT == c1.GetKind() && CheckAlwaysTrueFormSet(c1[0])))
           {
             //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
             //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
@@ -1481,19 +1474,19 @@ namespace BEEV
       {
         output = ASTFalse;
       }
-    else if (CheckAlwaysTrueFormMap(c0))
+    else if (CheckAlwaysTrueFormSet(c0))
       {
         output = c1;
       }
-    else if (CheckAlwaysTrueFormMap(c1))
+    else if (CheckAlwaysTrueFormSet(c1))
       {
         output = c0;
       }
-    else if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, c0)))
+    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c0)))
       {
         output = nf->CreateNode(NOT, c1);
       }
-    else if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, c1)))
+    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c1)))
       {
         output = nf->CreateNode(NOT, c0);
       }
@@ -1572,12 +1565,12 @@ namespace BEEV
       {
         output = nf->CreateNode(AND, t0, t1);
       }
-    else if (CheckAlwaysTrueFormMap(t0))
+    else if (CheckAlwaysTrueFormSet(t0))
       {
         output = t1;
       }
-    else if (CheckAlwaysTrueFormMap(nf->CreateNode(NOT, t0)) ||
-             (NOT == t0.GetKind() && CheckAlwaysTrueFormMap(t0[0])))
+    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0)) ||
+             (NOT == t0.GetKind() && CheckAlwaysTrueFormSet(t0[0])))
       {
         output = t2;
       }
@@ -3907,7 +3900,7 @@ namespace BEEV
   {
     cerr << "SimplifyMap:" << SimplifyMap->size() << ":" << SimplifyMap->bucket_count() << endl;
     cerr << "SimplifyNegMap:" << SimplifyNegMap->size() << ":" << SimplifyNegMap->bucket_count() << endl;
-    cerr << "AlwaysTrueFormMap" << AlwaysTrueFormMap.size() << ":" << AlwaysTrueFormMap.bucket_count() << endl;
+    cerr << "AlwaysTrueFormSet" << AlwaysTrueHashSet.size() << ":" << AlwaysTrueHashSet.bucket_count() << endl;
     cerr << "MultInverseMap" << MultInverseMap.size() << ":" << MultInverseMap.bucket_count() << endl;
     cerr << "ReadOverWrite_NewName_Map" << ReadOverWrite_NewName_Map->size() << ":" << ReadOverWrite_NewName_Map->bucket_count() << endl;
     cerr << "NewName_ReadOverWrite_Map" << NewName_ReadOverWrite_Map.size() << ":" << NewName_ReadOverWrite_Map.bucket_count() << endl;

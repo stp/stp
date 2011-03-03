@@ -74,6 +74,12 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   if (CheckSubstitutionMap(a, output))
     return output;
 
+  if (!alreadyVisited.insert(a.GetNodeNum()).second)
+  {
+    return a;
+  }
+
+
   //traverse a and populate the SubstitutionMap
   const Kind k = a.GetKind();
   if (SYMBOL == k && BOOLEAN_TYPE == a.GetType())
@@ -162,7 +168,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
              it = c.begin(), itend = c.end();
            it != itend; it++)
         {
-          simp->UpdateAlwaysTrueFormMap(*it);
+          simp->UpdateAlwaysTrueFormSet(*it);
           ASTNode aaa = CreateSubstitutionMap(*it,at);
 
           if (ASTTrue != aaa)
