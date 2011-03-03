@@ -9,6 +9,7 @@
 #include <cassert>
 #include "LetMgr.h"
 #include "../STPManager/STPManager.h"
+//#include "../boost/pool/object_pool.hpp"
 
 namespace BEEV
 {
@@ -20,6 +21,7 @@ using BEEV::STPMgr;
 class ParserInterface
 {
 	STPMgr& bm;
+	//boost::object_pool<ASTNode> node_pool;
 
 public:
 	LETMgr letMgr;
@@ -97,11 +99,23 @@ public:
     	return bm.LookupOrCreateSymbol(name.c_str());
     }
 
-
     bool isSymbolAlreadyDeclared(string name)
-        {
-            return bm.LookupSymbol(name.c_str());
-        }
+	{
+	   return bm.LookupSymbol(name.c_str());
+	}
+
+    // On testcase20 it took about 4.2 seconds to parse using the standard allocator and the pool allocator.
+	ASTNode * newNode(const ASTNode& copyIn)
+	{
+		return new ASTNode(copyIn);
+		//return node_pool.construct(copyIn);
+	}
+
+	void deleteNode(ASTNode *n)
+	{
+		delete n;
+		//node_pool.destroy(n);
+	}
 };
 }
 

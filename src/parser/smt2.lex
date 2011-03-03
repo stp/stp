@@ -88,7 +88,7 @@
 	  // Check valuesize to see if it's a prop var.  I don't like doing
 	  // type determination in the lexer, but it's easier than rewriting
 	  // the whole grammar to eliminate the term/formula distinction.  
-	  smt2lval.node = new BEEV::ASTNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
+	  smt2lval.node = BEEV::parserInterface->newNode(BEEV::parserInterface->letMgr.ResolveID(nptr));
 	  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 	    return FORMID_TOK;
 	  else 
