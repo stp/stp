@@ -194,7 +194,7 @@ namespace BEEV {
         }
 
         // Simplify using Ite context
-        if (false)
+        if (bm->UserFlags.isSet("ite-context","1"))
         {
           UseITEContext iteC(bm);
           simplified_solved_InputToSAT  = iteC.topLevel(simplified_solved_InputToSAT);
