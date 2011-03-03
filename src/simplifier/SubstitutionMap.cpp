@@ -69,7 +69,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   if (!bm->UserFlags.wordlevel_solve_flag)
     return a;
 
-  ASTNode output = a;
+  ASTNode output;
   //if the variable has been solved for, then simply return it
   if (CheckSubstitutionMap(a, output))
     return output;
@@ -79,6 +79,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
     return a;
   }
 
+  output = a;
 
   //traverse a and populate the SubstitutionMap
   const Kind k = a.GetKind();
@@ -86,19 +87,18 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
     {
       bool updated = UpdateSubstitutionMap(a, ASTTrue);
       output = updated ? ASTTrue : a;
-      return output;
     }
-  if (NOT == k && SYMBOL == a[0].GetKind())
+  else if (NOT == k && SYMBOL == a[0].GetKind())
     {
       bool updated = UpdateSubstitutionMap(a[0], ASTFalse);
       output = updated ? ASTTrue : a;
-      return output;
     }
-
-  if (IFF == k || EQ == k)
+  else if (IFF == k || EQ == k)
     {
 	  ASTVec c = a.GetChildren();
-	  SortByArith(c);
+
+	  if (simplify_during_create_subM)
+		  SortByArith(c);
 
 	  if (c[0] == c[1])
 		  return ASTTrue;
@@ -122,11 +122,8 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
           else if (to ==-1 && c1.GetKind() == READ)
                     at->FillUp_ArrReadIndex_Vec(c1,c[0]);
         }
-
-      return output;
     }
-
-  if (XOR == k)
+  else if (XOR == k)
   {
 	  if (a.Degree() !=2)
 		  return output;
@@ -151,20 +148,17 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 
 	  // If either side is already solved for.
 	  if (CheckSubstitutionMap(symbol) || CheckSubstitutionMap(rhs))
-		  return output;
-
-	  if (UpdateSolverMap(symbol, bm->CreateNode(NOT, rhs)))
-			return ASTTrue;
-		else
-			return output;
+	  {}
+	  else if (UpdateSolverMap(symbol, bm->CreateNode(NOT, rhs)))
+			output =  ASTTrue;
   }
-
-
-  if (AND == k)
+  else if (AND == k)
     {
-      ASTVec o;
-      ASTVec c = a.GetChildren();
-      for (ASTVec::iterator
+	  const ASTVec& c = a.GetChildren();
+	  ASTVec o;
+      o.reserve(c.size());
+
+      for (ASTVec::const_iterator
              it = c.begin(), itend = c.end();
            it != itend; it++)
         {
@@ -180,15 +174,15 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
             }
         }
       if (o.size() == 0)
-        return ASTTrue;
-
-      if (o.size() == 1)
-        return o[0];
-
-      return bm->CreateNode(AND, o);
+        output =  ASTTrue;
+      else if (o.size() == 1)
+        output = o[0];
+      else if (o != c)
+    	output = bm->CreateNode(AND, o);
+      else
+    	output = a;
     }
 
-  //printf("I gave up on kind: %d node: %d\n", k, a.GetNodeNum());
   return output;
 } //end of CreateSubstitutionMap()
 
