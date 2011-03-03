@@ -217,90 +217,82 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 // and pass the replace() function the node "x" to replace, then it
 // will return 5, rather than y.
 
+// NB: You can't use this to map from "5" to the symbol "x" say.
+// It's optimised for the symbol to something case.
+
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 		ASTNodeMap& cache, NodeFactory * nf, bool stopAtArrays)
 {
+    const Kind k = n.GetKind();
+	if (k == BVCONST || k == TRUE || k == FALSE)
+    	return n;
 
-        ASTNodeMap::const_iterator it;
-	if ((it = cache.find(n)) != cache.end())
+	ASTNodeMap::const_iterator it;
+
+    if ((it = cache.find(n)) != cache.end())
 		return it->second;
 
 	if ((it = fromTo.find(n)) != fromTo.end())
 	{
-		if (n.GetIndexWidth() != 0)
-		{
-			const ASTNode& r = it->second;
-			assert(r.GetIndexWidth() == n.GetIndexWidth());
-			assert(BVTypeCheck(r));
-			ASTNode replaced = replace(r, fromTo, cache,nf,stopAtArrays);
-			if (replaced != r)
-				fromTo[n] = replaced;
-
-			return replaced;
-		}
-		ASTNode replaced = replace(it->second, fromTo, cache,nf,stopAtArrays);
-		if (replaced != it->second)
+		const ASTNode& r = it->second;
+		assert(r.GetIndexWidth() == n.GetIndexWidth());
+		ASTNode replaced = replace(r, fromTo, cache,nf,stopAtArrays);
+		if (replaced != r)
 			fromTo[n] = replaced;
 
+		cache.insert(make_pair(n,replaced));
 		return replaced;
 	}
 
-	// These can't be created like regular nodes are. Skip 'em for now.
-	if (n.isConstant() || n.GetKind() == SYMBOL /*|| n.GetKind() == WRITE*/)
+	// These can't be created like regular nodes are
+	if (k == SYMBOL )
 		return n;
 
-         if (stopAtArrays && n.GetType() == ARRAY_TYPE)
-            {
-           return n;
-            }
-
-	ASTVec children;
-	children.reserve(n.GetChildren().size());
-	for (unsigned i = 0; i < n.GetChildren().size(); i++)
+	const unsigned int indexWidth = n.GetIndexWidth();
+	if (stopAtArrays && indexWidth > 0) // is an array.
 	{
-		children.push_back(replace(n[i], fromTo, cache,nf,stopAtArrays));
+	   return n;
 	}
+
+	const ASTVec& children = n.GetChildren();
+	assert(children.size() > 0); // Should have no leaves left here.
+
+	ASTVec new_children;
+	new_children.reserve(children.size());
+
+	for (ASTVec::const_iterator it = children.begin(); it != children.end(); it++)
+	{
+		new_children.push_back(replace(*it, fromTo, cache,nf,stopAtArrays));
+	}
+
+	assert(new_children.size() == children.size());
 
 	// This code short-cuts if the children are the same. Nodes with the same children,
 	// won't have necessarily given the same node if the simplifyingNodeFactory is enabled
 	// now, but wasn't enabled when the node was created. Shortcutting saves lots of time.
+	if (new_children == children)
+	{
+		cache.insert(make_pair(n,n));
+		return n;
+	}
 
 	ASTNode result;
-	if (n.GetType() == BOOLEAN_TYPE)
+	const unsigned int valueWidth = n.GetValueWidth();
+
+	if (valueWidth == 0 ) // n.GetType() == BOOLEAN_TYPE
 	{
-		assert(children.size() > 0);
-		if (children != n.GetChildren()) // short-cut.
-		{
-			result = nf->CreateNode(n.GetKind(), children);
-		}
-		else
-			result = n;
+		result = nf->CreateNode(k, new_children);
 	}
 	else
 	{
-		assert(children.size() > 0);
-		if (children != n.GetChildren()) // short-cut.
-		{
-			// If the index and value width aren't saved, they are reset sometimes (??)
-			const unsigned int indexWidth = n.GetIndexWidth();
-			const unsigned int valueWidth = n.GetValueWidth();
-			result = nf->CreateArrayTerm(n.GetKind(),indexWidth, n.GetValueWidth(),
-					children);
-			assert(result.GetValueWidth() == valueWidth);
-
-		}
-		else
-			result = n;
+		// If the index and value width aren't saved, they are reset sometimes (??)
+		result = nf->CreateArrayTerm(k,indexWidth, valueWidth,new_children);
 	}
 
-	if (n != result)
-	{
-		assert(BVTypeCheck(result));
-		assert(result.GetValueWidth() == n.GetValueWidth());
-		assert(result.GetIndexWidth() == n.GetIndexWidth());
-	}
+	assert(result.GetValueWidth() == valueWidth);
+	assert(result.GetIndexWidth() == indexWidth);
 
-	cache[n] = result;
+	cache.insert(make_pair(n,result));
 	return result;
 }
 
