@@ -449,12 +449,15 @@ int main(int argc, char ** argv) {
 	  }
   }
 
+  FILE* toClose= 0;
+
   // If we're not reading the file from stdin.
   if (infile != NULL)
   {
   if (bm->UserFlags.smtlib1_parser_flag)
     {
       smtin = fopen(infile,"r");
+      toClose = smtin;
       if(smtin == NULL)
         {
           fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
@@ -464,6 +467,7 @@ int main(int argc, char ** argv) {
         if (bm->UserFlags.smtlib2_parser_flag)
           {
             smt2in = fopen(infile,"r");
+            toClose = smt2in;
             if(smt2in == NULL)
               {
                 fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
@@ -474,6 +478,7 @@ int main(int argc, char ** argv) {
   else
     {
       cvcin = fopen(infile,"r");
+      toClose = cvcin;
       if(cvcin == NULL)
         {
           fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
@@ -521,6 +526,8 @@ int main(int argc, char ** argv) {
 			cvclex_destroy();
 		}
 		parserInterface = NULL;
+		if (toClose != NULL)
+			fclose(toClose);
 	}
 	bm->GetRunTimes()->stop(RunTimes::Parsing);
 
