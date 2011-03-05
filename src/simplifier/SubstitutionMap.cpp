@@ -191,7 +191,8 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
 	ASTNodeMap cache;
-	ASTNode result =  replace(n,*SolverMap,cache,bm->defaultNodeFactory, false);
+	SimplifyingNodeFactory nf(*bm->hashingNodeFactory, *bm);
+	ASTNode result =  replace(n,*SolverMap,cache,&nf, false);
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
 	return result;
 }
@@ -200,7 +201,8 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
 	ASTNodeMap cache;
-	ASTNode result = replace(n,*SolverMap,cache,bm->defaultNodeFactory, true);
+	SimplifyingNodeFactory nf(*bm->hashingNodeFactory, *bm);
+	ASTNode result = replace(n,*SolverMap,cache,&nf, true);
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
 	return result;
 }
