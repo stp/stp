@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cmath>
 #include "simplifier.h"
+#include "AIGSimplifyPropositionalCore.h"
 
 namespace BEEV
 {
@@ -3090,10 +3091,7 @@ namespace BEEV
 
     if (constkids.size() > 1)
       {
-        ASTNode output = 
-          nf->CreateTerm(BVPLUS,
-                          constkids[0].GetValueWidth(), constkids);
-        output = BVConstEvaluator(output);
+    	ASTNode output = NonMemberBVConstEvaluator(_bm , BVPLUS, constkids, constkids[0].GetValueWidth());
         if (output != zero)
           outputvec.push_back(output);
       }
@@ -3105,7 +3103,7 @@ namespace BEEV
 
     if (outputvec.size() > 1)
       {
-        output = nf->CreateTerm(BVPLUS, len, outputvec);
+    	output = nf->CreateTerm(BVPLUS, len, outputvec);
       }
     else if (outputvec.size() == 1)
       {
