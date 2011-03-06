@@ -16,7 +16,7 @@
 #include "../sat/utils/System.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
-std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification", "Constant Bit Propagation","Array Read Refinement", "Applying Substitutions", "Remove Unconstrained", "Pure Literals" , "ITE Contexts"};
+std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Create SubstitutionMap", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification", "Constant Bit Propagation","Array Read Refinement", "Applying Substitutions", "Remove Unconstrained", "Pure Literals" , "ITE Contexts", "AIG core simplification"};
 
 namespace BEEV
 {

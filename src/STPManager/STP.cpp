@@ -19,6 +19,7 @@
 #include "../simplifier/FindPureLiterals.h"
 #include "../simplifier/EstablishIntervals.h"
 #include "../simplifier/UseITEContext.h"
+#include "../simplifier/AIGSimplifyPropositionalCore.h"
 #include <memory>
 
 namespace BEEV {
@@ -178,8 +179,9 @@ namespace BEEV {
     {
       EstablishIntervals intervals(*bm);
       simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT );
+      bm->ASTNodeStats("After Establishing Intervals: ",
+                       simplified_solved_InputToSAT);
     }
-
 
     // Find pure literals.
         if (bm->UserFlags.isSet("pure-literals","1"))
@@ -190,6 +192,8 @@ namespace BEEV {
             {
               simplified_solved_InputToSAT  = simp->applySubstitutionMap(simplified_solved_InputToSAT);
               simp->haveAppliedSubstitutionMap();
+              bm->ASTNodeStats("After Pure Literals: ",
+                               simplified_solved_InputToSAT);
             }
         }
 
@@ -198,7 +202,19 @@ namespace BEEV {
         {
           UseITEContext iteC(bm);
           simplified_solved_InputToSAT  = iteC.topLevel(simplified_solved_InputToSAT);
+          bm->ASTNodeStats("After ITE Context: ",
+                           simplified_solved_InputToSAT);
+
         }
+
+        if (bm->UserFlags.isSet("aig-core-simplify","0"))
+        {
+        	AIGSimplifyPropositionalCore aigRR(bm);
+        	simplified_solved_InputToSAT = aigRR.topLevel(simplified_solved_InputToSAT);
+            bm->ASTNodeStats("After AIG Core: ",
+                             simplified_solved_InputToSAT);
+        }
+
 
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", 
                      simplified_solved_InputToSAT);

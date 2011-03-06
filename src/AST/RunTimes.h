@@ -35,7 +35,8 @@ public:
       ApplyingSubstitutions,
       RemoveUnconstrained,
       PureLiterals,
-      UseITEContext
+      UseITEContext,
+      AIGSimplifyCore
     };
 
   static std::string CategoryNames[];
