@@ -2740,26 +2740,38 @@ namespace BEEV
         break;
 
       case BVDIV:
-      if (inputterm[0] == inputterm[1])
         {
-          output = _bm->CreateOneConst(inputValueWidth);
-          break;
+        if (inputterm[0] == inputterm[1])
+          {
+            output = _bm->CreateOneConst(inputValueWidth);
+            break;
+          }
+        if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
+        {
+            output = inputterm[0];
+            break;
         }
-      if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
-      {
-    	  	 output = inputterm[0];
-    	  	 break;
+        ASTNode lessThan = SimplifyFormula(nf->CreateNode(BVLT, inputterm[0], inputterm[1]),false, NULL);
+        if (lessThan == ASTTrue)
+           output = _bm->CreateZeroConst(inputValueWidth);
+        else
+            output = inputterm;
       }
-      output = inputterm;
-      break;
-
-    case BVMOD:
-      if (inputterm[0] == inputterm[1])
+        break;
+      case BVMOD:
         {
-          output = _bm->CreateZeroConst(inputValueWidth);
-          break;
+          if (inputterm[0] == inputterm[1])
+          {
+            output = _bm->CreateZeroConst(inputValueWidth);
+            break;
+          }
+          ASTNode lessThan = SimplifyFormula(nf->CreateNode(BVLT, inputterm[0], inputterm[1]),false, NULL);
+
+          if (lessThan == ASTTrue)
+              output=  inputterm[0];
+           else
+              output = inputterm;
         }
-      output = inputterm;
       break;
 
     case BVXOR:
