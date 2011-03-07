@@ -176,6 +176,7 @@ namespace BEEV {
           simplified_solved_InputToSAT = bm->ASTFalse;
       }
 
+    if (bm->UserFlags.isSet("use-intervals","1"))
     {
       EstablishIntervals intervals(*bm);
       simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT );

@@ -490,8 +490,22 @@ namespace BEEV
   	  assert(false);
     }
 
+    ASTNode replaceIteConst(const ASTNode&n, const ASTNode& newVal, NodeFactory *nf)
+    {
+    	assert(!n.IsNull());
+    	assert(!newVal.IsNull());
+    	if (n.GetKind() == BVCONST)
+    	{
+    		return nf->CreateNode(EQ, newVal, n);
+    	}
+    	else if (n.GetKind() == ITE)
+    	{
+    		return nf->CreateNode(ITE,n[0], replaceIteConst(n[1],newVal,nf), replaceIteConst(n[2],newVal,nf));
+    	}
+    	FatalError("never here",n);
+    }
 
-    bool getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 15)
+    bool getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 25)
     {
     	if (maxCount <=0)
     		return false;
@@ -923,7 +937,7 @@ namespace BEEV
   //return the constructed equality
   ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   {
-    CountersAndStats("CreateSimplifiedEQ", _bm);
+	  CountersAndStats("CreateSimplifiedEQ", _bm);
     const Kind k1 = in1.GetKind();
     const Kind k2 = in2.GetKind();
 
@@ -1004,7 +1018,35 @@ namespace BEEV
             vector<ASTNode>::iterator it = set_intersection(l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
             if (it == result.begin())
               return ASTFalse;
+
+            if (it == result.begin() +1 )
+            {
+            	// If there is just one value in common, then, set it to true whenever it equals that value.
+            	ASTNode lhs= replaceIteConst(in1, *result.begin(),nf);
+            	ASTNode rhs= replaceIteConst(in2, *result.begin(),nf);
+
+            	ASTNode result =  nf->CreateNode(AND, lhs,rhs);
+            	return result;
+            }
         }
+    }
+
+    if (k1 == BVCONST && k2 == BVSX)
+    {
+    	// Each of the bits in the extended part, and one into the un-extended part must be the same.
+    	bool foundZero=false, foundOne=false;
+    	const unsigned original_width = in2[0].GetValueWidth();
+    	const unsigned new_width = in2.GetValueWidth();
+    	for (int i = original_width-1; i < new_width;i++)
+    		if (CONSTANTBV::BitVector_bit_test(in1.GetBVConst(),i))
+    			foundOne=true;
+    		else
+    			foundZero=true;
+    	if (foundZero && foundOne)
+    		return ASTFalse;
+    	ASTNode lhs = nf->CreateTerm(BVEXTRACT, original_width, in1, _bm->CreateBVConst(32,original_width-1), _bm->CreateZeroConst(32));
+    	ASTNode rhs = nf->CreateTerm(BVEXTRACT, original_width, in2, _bm->CreateBVConst(32,original_width-1), _bm->CreateZeroConst(32));
+    	return nf->CreateNode(EQ, lhs,rhs);
     }
 
     //last resort is to CreateNode
@@ -2117,7 +2159,18 @@ namespace BEEV
 
           switch (k1)
             {
-            case BVCONST:
+          case BVEXTRACT:
+          {
+        	  const unsigned innerLow = a0[2].GetUnsignedConst();
+        	  const unsigned innerHigh = a0[1].GetUnsignedConst();
+
+        	  output = nf->CreateTerm(BVEXTRACT, a_len,a0[0], _bm->CreateBVConst(32,i_val+innerLow),_bm->CreateBVConst(32, j_val+innerLow));
+              assert(BVTypeCheck(output));
+              break;
+
+          }
+          break;
+          case BVCONST:
               {
                 //extract the constant
                 output = 
@@ -2444,7 +2497,7 @@ namespace BEEV
       case BVAND:
       case BVOR:
         {
-          // turn BVAND(CONCAT CONCAT) into concat(BVAND() BVAND()). i.e. push ops through concat.
+        	// turn BVAND(CONCAT CONCAT) into concat(BVAND() BVAND()). i.e. push ops through concat.
           if (inputterm.Degree() ==2 && inputterm[0].GetKind() == BVCONCAT && inputterm[1].GetKind() == BVCONCAT && inputterm[0][0].GetValueWidth() ==inputterm[1][0].GetValueWidth() )
           {
                 output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
@@ -2597,6 +2650,48 @@ namespace BEEV
 						assert(BVTypeCheck(output));
           			}
           		}
+          		if (output.GetKind() == BVAND)
+          		{
+			int trailingZeroes = 0;
+			for (int i = 0; i < output.Degree(); i++)
+			{
+				const ASTNode& n = output[i];
+				if (n.GetKind() != BVCONST)
+					continue;
+				int j;
+				for (j = 0; j < n.GetValueWidth(); j++)
+					if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(), j))
+						break;
+
+				if (j > trailingZeroes)
+					trailingZeroes = j;
+			}
+			if (trailingZeroes > 0) {
+				if (trailingZeroes == output.GetValueWidth())
+					output = _bm->CreateZeroConst(trailingZeroes);
+				else {
+					//cerr << "old" << output;
+					ASTNode zeroes = _bm->CreateZeroConst(trailingZeroes);
+					ASTVec newChildren;
+					for (int i = 0; i < output.Degree(); i++)
+						newChildren.push_back(nf->CreateTerm(BVEXTRACT,
+								output.GetValueWidth() - trailingZeroes,
+								output[i], _bm->CreateBVConst(32,
+										output.GetValueWidth() - 1),
+								_bm->CreateBVConst(32, trailingZeroes)));
+
+					ASTNode newAnd = nf->CreateTerm(BVAND,
+							output.GetValueWidth() - trailingZeroes,
+							newChildren);
+					output = nf->CreateTerm(BVCONCAT, output.GetValueWidth(),
+							newAnd, zeroes);
+					assert(BVTypeCheck(output));
+					//cerr << "new" << output;
+				}
+			}
+
+		}
+
           		break;
         }
       case BVCONCAT:
@@ -2941,7 +3036,6 @@ namespace BEEV
     assert(inputterm.GetValueWidth() == output.GetValueWidth());
     assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
     assert(hasBeenSimplified(output));
-
     return output;
   } //end of SimplifyTerm()
 
