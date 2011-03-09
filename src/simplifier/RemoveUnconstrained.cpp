@@ -96,8 +96,7 @@ namespace BEEV
  *   replace the [3:5] (even though it could be).
  */
   void
-  RemoveUnconstrained::
-  splitExtractOnly(vector<MutableASTNode*> extracts)
+  RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
   {
     assert(extracts.size() >0);
 
@@ -358,8 +357,7 @@ namespace BEEV
                 replace(children[0], lhs);
                 replace(children[1], rhs);
               }
-
-            if (children[0] == var && children[1].isConstant())
+            else if (children[0] == var && children[1].isConstant())
               {
                 if (children[1] == c1)
                   continue; // always false. Or always false.
@@ -369,8 +367,7 @@ namespace BEEV
                 ASTNode rhs = nf->CreateTerm(ITE, width, v,biggestNumber, smallestNumber);
                 replace(var, rhs);
               }
-
-            if (children[1] == var && children[0].isConstant())
+            else if (children[1] == var && children[0].isConstant())
               {
                 if (children[0] == c2)
                   continue;  // always false. Or always false.
@@ -380,7 +377,48 @@ namespace BEEV
                 ASTNode rhs = nf->CreateTerm(ITE, width, v, smallestNumber, biggestNumber);
                 replace(var, rhs);
               }
+            else // One side is a variable. The other is anything.
+              {
+                bool varOnLHS = (var == children[0]);
 
+                // All the ASTNode vars need to map to their existing MutableASTNodes. So we collect all the variables
+                vector<MutableASTNode*> vars;
+                set<MutableASTNode*> visited;
+                muteOther->getAllVariablesRecursively(vars, visited);
+                visited.clear();
+
+                map<ASTNode, MutableASTNode *> create;
+                for (vector<MutableASTNode*>::iterator it = vars.begin(); it != vars.end();it++)
+                  create.insert(make_pair((*it)->n, *it));
+                vars.clear();
+
+                ASTNode v= bm.CreateFreshVariable(0, 0, "STP_INTERNAL_comparison");
+
+                ASTNode rhs;
+                ASTNode n;
+                if (varOnLHS)
+                  {
+                    rhs = nf->CreateTerm(ITE, width, v, biggestNumber, smallestNumber);
+
+                    if (kind == BVSGE || kind == BVGE)
+                      n= nf->CreateNode(OR, v, nf->CreateNode(EQ, mutable_children[1]->toASTNode(nf), c1));
+                    else
+                      n= nf->CreateNode(AND, v, nf->CreateNode(NOT,nf->CreateNode(EQ, mutable_children[1]->toASTNode(nf), c1)));
+          }
+                else
+                  {
+                    rhs = nf->CreateTerm(ITE, width, v, smallestNumber, biggestNumber);
+
+                    if (kind == BVSGE || kind == BVGE)
+                      n= nf->CreateNode(OR, v, nf->CreateNode(EQ, mutable_children[0]->toASTNode(nf), c2));
+                    else
+                      n= nf->CreateNode(AND, v, nf->CreateNode(NOT,nf->CreateNode(EQ, mutable_children[0]->toASTNode(nf), c2)));
+                  }
+
+                replace(var, rhs);
+                MutableASTNode *newN = MutableASTNode::build(n,create);
+                muteParent.replaceWithAnotherNode(newN);
+              }
           }
           break;
 

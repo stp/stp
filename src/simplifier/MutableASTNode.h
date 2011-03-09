@@ -34,6 +34,7 @@ private:
     // Make a mutable ASTNode graph like the ASTNode one, but with pointers back up too.
     // It's convoluted because we want a post order traversal. The root node of a sub-tree
     // will be created after its children.
+public:
     static MutableASTNode *
     build(ASTNode n, map<ASTNode, MutableASTNode *> & visited)
     {
@@ -57,6 +58,7 @@ private:
       visited.insert(make_pair(n, mut));
       return mut;
     }
+private:
 
     bool dirty;
 
@@ -136,6 +138,18 @@ private:
       for (ParentsType::iterator it = parents.begin(); it != parents.end() ; it++)
         (*it)->propagateUpDirty();
     }
+
+    void
+    replaceWithAnotherNode(MutableASTNode *newN)
+    {
+      n = newN->n;
+      vector<MutableASTNode*> vars;
+      removeChildren(vars); // ignore the result
+      children.clear();
+      children.insert(children.begin(), newN->children.begin(), newN->children.end());
+      propagateUpDirty();
+    }
+
 
     void
     replaceWithVar(ASTNode newV, vector<MutableASTNode*>& variables)
@@ -240,6 +254,22 @@ private:
         }
       return;
     }
+
+    void
+    getAllVariablesRecursively(vector<MutableASTNode*> & result, set<MutableASTNode*>& visited)
+    {
+      if (visited.find(this) != visited.end())
+        return;
+      if (isSymbol())
+        result.push_back(this);
+      const int size = children.size();
+      for (int i = 0 ; i < size; i++)
+        {
+          children[i]->getAllVariablesRecursively(result,visited);
+        }
+    }
+
+
 
     bool
     isUnconstrained()
