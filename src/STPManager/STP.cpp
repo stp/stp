@@ -163,17 +163,19 @@ namespace BEEV {
 
     if (bm->UserFlags.bitConstantProp_flag)
       {
-        bm->ASTNodeStats("Before Constant Bit Propagation begins: ",
-            simplified_solved_InputToSAT);
-
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory,simplified_solved_InputToSAT);
+        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf,simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT);
 
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
         if (cb.isUnsatisfiable())
           simplified_solved_InputToSAT = bm->ASTFalse;
+
+        bm->ASTNodeStats("After Constant Bit Propagation begins: ",
+            simplified_solved_InputToSAT);
+
       }
 
     if (bm->UserFlags.isSet("use-intervals","1"))
@@ -199,13 +201,12 @@ namespace BEEV {
         }
 
         // Simplify using Ite context
-        if (bm->UserFlags.isSet("ite-context","1"))
+        if (bm->UserFlags.optimize_flag &&  bm->UserFlags.isSet("ite-context","1"))
         {
           UseITEContext iteC(bm);
           simplified_solved_InputToSAT  = iteC.topLevel(simplified_solved_InputToSAT);
           bm->ASTNodeStats("After ITE Context: ",
                            simplified_solved_InputToSAT);
-
         }
 
         if (bm->UserFlags.isSet("aig-core-simplify","0"))

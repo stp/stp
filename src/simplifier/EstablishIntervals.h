@@ -8,6 +8,7 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "simplifier.h"
+#include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 
 
 namespace BEEV
@@ -88,9 +89,9 @@ private:
 
       if (fromTo.size() > 0)
         {
-          //cerr << "intervals found" << fromTo.size() << endl;
           ASTNodeMap cache;
-          return SubstitutionMap::replace(top,fromTo,cache,bm.defaultNodeFactory);
+          SimplifyingNodeFactory nf(*(top.GetSTPMgr()->defaultNodeFactory), *top.GetSTPMgr());
+          return SubstitutionMap::replace(top,fromTo,cache,&nf);
         }
 
       return top;

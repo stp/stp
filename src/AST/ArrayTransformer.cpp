@@ -301,7 +301,10 @@ namespace BEEV
         {
           ASTNode term1 = TransformTerm(simpleForm[0]);
           ASTNode term2 = TransformTerm(simpleForm[1]);
-          result = simp->CreateSimplifiedEQ(term1, term2);
+          if (bm->UserFlags.optimize_flag)
+        	  result = simp->CreateSimplifiedEQ(term1, term2);
+          else
+        	  result = nf->CreateNode(EQ,term1, term2);
           break;
         }
       case AND: // These could shortcut. Not sure if the extra effort is justified.
@@ -416,7 +419,10 @@ namespace BEEV
           {
         	  thn = TransformTerm(thn);
         	  els = TransformTerm(els);
-        	  result = simp->CreateSimplifiedTermITE(cond, thn, els);
+        	  if (bm->UserFlags.optimize_flag)
+        		  result = simp->CreateSimplifiedTermITE(cond, thn, els);
+        	  else
+        		  result = nf->CreateTerm(ITE, thn.GetValueWidth(), cond, thn, els);
           }
           assert(result.GetIndexWidth() ==term.GetIndexWidth());
           break;

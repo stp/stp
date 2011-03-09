@@ -466,6 +466,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
 	switch (kind)
 	{
+	case BEEV::ITE:
+		if (children[0]== ASTTrue)
+			result = children[1];
+		if (children[0]== ASTFalse)
+			result = children[2];
+
+
 
 	case BEEV::BVNEG:
 	{

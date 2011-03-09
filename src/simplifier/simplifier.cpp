@@ -235,7 +235,8 @@ namespace BEEV
                                                bool pushNeg, 
                                                ASTNodeMap* VarConstMap)
   {
-    _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
+	assert(_bm->UserFlags.optimize_flag);
+	_bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     ASTNodeSet visited;
     //checkIfInSimplifyMap(out,visited);
@@ -246,6 +247,7 @@ namespace BEEV
 
   ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
   {
+	assert(_bm->UserFlags.optimize_flag);
     _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
     ASTNode out = SimplifyTerm(b);
     ResetSimplifyMaps();
@@ -505,7 +507,7 @@ namespace BEEV
     	FatalError("never here",n);
     }
 
-    bool getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 25)
+    bool getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 45)
     {
     	if (maxCount <=0)
     		return false;
