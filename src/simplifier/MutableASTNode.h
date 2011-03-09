@@ -258,7 +258,7 @@ private:
     void
     getAllVariablesRecursively(vector<MutableASTNode*> & result, set<MutableASTNode*>& visited)
     {
-      if (visited.find(this) != visited.end())
+      if (!visited.insert(this).second)
         return;
       if (isSymbol())
         result.push_back(this);
