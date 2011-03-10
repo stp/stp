@@ -39,6 +39,9 @@ namespace BEEV
 
     result = topLevel_other(result, simplifier);
 
+    // There should be no unapplied substitutions.
+    assert(result == simplifier->applySubstitutionMap(result));
+
     // It is idempotent if there are no big ANDS (we have a special hack), and,
     // if we don't introduced any new "disjoint extracts."
 
@@ -379,7 +382,7 @@ namespace BEEV
               }
             else // One side is a variable. The other is anything.
               {
-                bool varOnLHS = (var == children[0]);
+            	 bool varOnLHS = (var == children[0]);
 
                 // All the ASTNode vars need to map to their existing MutableASTNodes. So we collect all the variables
                 vector<MutableASTNode*> vars;
@@ -404,7 +407,7 @@ namespace BEEV
                       n= nf->CreateNode(OR, v, nf->CreateNode(EQ, mutable_children[1]->toASTNode(nf), c1));
                     else
                       n= nf->CreateNode(AND, v, nf->CreateNode(NOT,nf->CreateNode(EQ, mutable_children[1]->toASTNode(nf), c1)));
-          }
+                  }
                 else
                   {
                     rhs = nf->CreateTerm(ITE, width, v, smallestNumber, biggestNumber);
@@ -414,10 +417,10 @@ namespace BEEV
                     else
                       n= nf->CreateNode(AND, v, nf->CreateNode(NOT,nf->CreateNode(EQ, mutable_children[0]->toASTNode(nf), c2)));
                   }
-
                 replace(var, rhs);
                 MutableASTNode *newN = MutableASTNode::build(n,create);
                 muteParent.replaceWithAnotherNode(newN);
+                assert(muteParent.checkInvariant());
               }
           }
           break;

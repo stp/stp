@@ -64,6 +64,42 @@ private:
 
   public:
 
+    bool checkInvariant()
+    {
+    	// Symbols have no children.
+    	if (n.GetKind() == SYMBOL)
+    	{
+    		assert(children.size() ==0);
+    	}
+
+    	// all my parents have me as a child.
+        for (ParentsType::iterator it = parents.begin(); it != parents.end() ; it++)
+        {
+        	vector<MutableASTNode *>::iterator it2 = (*it)->children.begin();
+        	bool found = false;
+        	for (;it2!= (*it)->children.end();it2++)
+        	{
+        		assert (*it2 != NULL);
+        		if (*it2 == this)
+        			found = true;
+        	}
+        	assert(found);
+        }
+
+        for (int i = 0; i < children.size(); i++)
+        {
+        	// call check on all the children.
+        	children[i]->checkInvariant();
+
+        	// all my children have me as a parent.
+        	assert (children[i]->parents.find(this) != children[i]->parents.end());
+        }
+
+        return true; // ignored.
+    }
+
+
+
   MutableASTNode&  getParent()
     {
       assert (parents.size() == 1);
@@ -147,7 +183,12 @@ private:
       removeChildren(vars); // ignore the result
       children.clear();
       children.insert(children.begin(), newN->children.begin(), newN->children.end());
+      for (int i = 0; i < children.size(); i++)
+    	  children[i]->parents.insert(this);
+
       propagateUpDirty();
+      assert(newN->parents.size() == 0); // we don't copy 'em in you see.
+      newN->removeChildren(vars);
     }
 
 
