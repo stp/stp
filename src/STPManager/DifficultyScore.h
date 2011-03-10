@@ -38,11 +38,18 @@ private:
 		// no input values are known.
 		int score= 0;
 		if (k == BVMULT)
-		    score += (5 * b.GetValueWidth() * b.GetValueWidth() );
+		    score = (5 * b.GetValueWidth() * b.GetValueWidth() );
 		else if (k == BVMOD)
-		  score += (15 * b.GetValueWidth() * b.GetValueWidth() );
+		  score = (15 * b.GetValueWidth() * b.GetValueWidth() );
 		else if (isLikeDivision(k))
-		  score += (20 * b.GetValueWidth() * b.GetValueWidth() );
+		  score = (20 * b.GetValueWidth() * b.GetValueWidth() );
+		else if (k == BVCONCAT || k == BVEXTRACT || k == NOT)
+		{} // no harder.
+		else if (k == EQ || k == BVGE || k == BVGT|| k == BVSGE || k == BVSGT )
+		{
+			// without getting the width of the child it'd always be 2.
+			score = std::max(b[0].GetValueWidth(),1u) * (b.Degree());
+		}
 		else
 		{
 			score = std::max(b.GetValueWidth(),1u) * (b.Degree());
@@ -62,7 +69,7 @@ private:
 public:
 	int score(const ASTNode& top)
 	{
-	        if (cache.find(top.GetNodeNum()) != cache.end())
+		if (cache.find(top.GetNodeNum()) != cache.end())
 	          return cache.find(top.GetNodeNum())->second;
 
 	        ASTNodeSet visited;
