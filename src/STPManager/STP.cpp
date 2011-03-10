@@ -293,7 +293,7 @@ namespace BEEV {
 
     const bool arrayops = containsArrayOps(original_input);
     bool optimize_enabled = bm->UserFlags.optimize_flag;
-    if (final_difficulty_score > 2 *initial_difficulty_score  && !arrayops)
+    if (final_difficulty_score > 1.1 *initial_difficulty_score  && !arrayops)
     {
     	// If the simplified problem is harder, than the
     	// initial problem we revert back to the initial

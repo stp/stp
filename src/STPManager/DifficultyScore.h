@@ -43,6 +43,10 @@ private:
 		  score += (15 * b.GetValueWidth() * b.GetValueWidth() );
 		else if (isLikeDivision(k))
 		  score += (20 * b.GetValueWidth() * b.GetValueWidth() );
+		else
+		{
+			score = std::max(b.GetValueWidth(),1u) * (b.Degree());
+		}
 
 		const ASTVec& c = b.GetChildren();
 		ASTVec::const_iterator itC = c.begin();
