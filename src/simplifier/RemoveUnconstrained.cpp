@@ -420,7 +420,7 @@ namespace BEEV
                 replace(var, rhs);
                 MutableASTNode *newN = MutableASTNode::build(n,create);
                 muteParent.replaceWithAnotherNode(newN);
-                assert(muteParent.checkInvariant());
+                //assert(muteParent.checkInvariant());
               }
           }
           break;
