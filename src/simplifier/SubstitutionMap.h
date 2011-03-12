@@ -102,7 +102,7 @@ public:
 		return false;
 	} //end of UpdateSolverMap()
 
-	const ASTNodeMap * Return_SolverMap() {
+	 ASTNodeMap * Return_SolverMap() {
 		return SolverMap;
 	} // End of SolverMap()
 

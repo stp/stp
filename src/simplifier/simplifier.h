@@ -243,7 +243,7 @@ namespace BEEV
       return ReadOverWrite_NewName_Map;
     } // End of ReadOverWriteMap()
       
-    const ASTNodeMap * Return_SolverMap()
+    ASTNodeMap * Return_SolverMap()
     {
     	return substitutionMap.Return_SolverMap();
     } // End of SolverMap()

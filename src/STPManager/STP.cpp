@@ -80,6 +80,76 @@ namespace BEEV {
 
   } //End of TopLevelSTP()
   
+
+  // These transformations should never increase the size of the DAG.
+  ASTNode STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver)
+  {
+	    if (bm->UserFlags.isSet("enable-unconstrained","1"))
+		{
+		  // Remove unconstrained.
+		  RemoveUnconstrained r1(*bm);
+		  simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
+		  bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
+		}
+
+	    if (bm->UserFlags.isSet("use-intervals","1"))
+	    {
+	      EstablishIntervals intervals(*bm);
+	      simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT );
+	      bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
+	    }
+
+	    if (bm->UserFlags.bitConstantProp_flag)
+		{
+		  bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+		  SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+		  simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf,simplified_solved_InputToSAT);
+		  simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT,false);
+
+		  bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+		  if (cb.isUnsatisfiable())
+			simplified_solved_InputToSAT = bm->ASTFalse;
+
+		  bm->ASTNodeStats("After Constant Bit Propagation begins: ",
+			  simplified_solved_InputToSAT);
+		}
+
+
+		int initialSize = simp->Return_SolverMap()->size();
+        simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+		if (initialSize != simp->Return_SolverMap()->size())
+		{
+			simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+			simp->haveAppliedSubstitutionMap();
+		}
+
+
+	    // Find pure literals.
+		if (bm->UserFlags.isSet("pure-literals","1"))
+		{
+		  FindPureLiterals fpl;
+		  bool changed = fpl.topLevel(simplified_solved_InputToSAT, simp,bm);
+		  if (changed)
+			{
+			  simplified_solved_InputToSAT  = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+			  simp->haveAppliedSubstitutionMap();
+			  bm->ASTNodeStats("After Pure Literals: ",
+							   simplified_solved_InputToSAT);
+			}
+		}
+
+		DifficultyScore difficulty;
+        if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
+          {
+            simplified_solved_InputToSAT =
+              bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT,false);
+            bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+          }
+
+	   return simplified_solved_InputToSAT;
+  }
+
   //Acceps a query, calls the SAT solver and generates Valid/InValid.
   //if returned 0 then input is INVALID if returned 1 then input is
   //VALID if returned 2 then UNDECIDED
@@ -87,25 +157,36 @@ namespace BEEV {
 					 const ASTNode& modified_input,
 					 const ASTNode& original_input)
   {
-    ASTNode inputToSAT = modified_input;
+
+
+	ASTNode inputToSAT = modified_input;
     ASTNode orig_input = original_input;
     bm->ASTNodeStats("input asserts and query: ", inputToSAT);
 
     ASTNode simplified_solved_InputToSAT = inputToSAT;
+    const bool arrayops = containsArrayOps(original_input);
 
     DifficultyScore difficulty;
     long initial_difficulty_score = difficulty.score(original_input);
+    if (bm->UserFlags.stats_flag)
+    	cerr << "Difficulty Initially:" << initial_difficulty_score << endl;
 
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm,simp);
 
-    if (bm->UserFlags.isSet("enable-unconstrained","1"))
-        {
-          // Remove unconstrained.
-          RemoveUnconstrained r1(*bm);
-          simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
-          bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
-        }
+    simplified_solved_InputToSAT = sizeReducing(inputToSAT,bvSolver);
+
+    initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+    if (bm->UserFlags.stats_flag)
+    	cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
+
+    // Copy the solver map incase we need to revert.
+    ASTNodeMap initialSolverMap;
+    if (!arrayops) // we don't revert for Array problems yet, so don't copy it.
+    	{
+    	initialSolverMap.insert(simp->Return_SolverMap()->begin(), simp->Return_SolverMap()->end());
+    	}
+    ASTNode toRevertTo = simplified_solved_InputToSAT;
 
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
@@ -139,7 +220,6 @@ namespace BEEV {
 				simp->haveAppliedSubstitutionMap();
 			}
 
-
             bm->ASTNodeStats("after pure substitution: ", 
                              simplified_solved_InputToSAT);
 
@@ -157,7 +237,6 @@ namespace BEEV {
               bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
             bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
           }
-
       } 
     while (inputToSAT != simplified_solved_InputToSAT);
 
@@ -175,7 +254,6 @@ namespace BEEV {
 
         bm->ASTNodeStats("After Constant Bit Propagation begins: ",
             simplified_solved_InputToSAT);
-
       }
 
     if (bm->UserFlags.isSet("use-intervals","1"))
@@ -291,7 +369,7 @@ namespace BEEV {
     	cerr << "Final Difficulty Score:" << final_difficulty_score <<endl;
     }
 
-    const bool arrayops = containsArrayOps(original_input);
+
     bool optimize_enabled = bm->UserFlags.optimize_flag;
     if (final_difficulty_score > 1.1 *initial_difficulty_score  && !arrayops)
     {
@@ -301,12 +379,16 @@ namespace BEEV {
 
     	if (bm->UserFlags.stats_flag)
     		cerr << "simplification made the problem harder, reverting."<<endl;
-    	simplified_solved_InputToSAT = original_input;
+    	simplified_solved_InputToSAT = toRevertTo;
 
     	// I do this to clear the substitution/solver map.
     	// Not sure what would happen if it contained simplifications
     	// that haven't been applied.
     	simp->ClearAllTables();
+
+    	simp->Return_SolverMap()->insert(initialSolverMap.begin(), initialSolverMap.end());
+    	initialSolverMap.clear();
+
 
     	// The arrayTransformer calls simplify. We don't want
     	// it to put back in all the bad simplifications.

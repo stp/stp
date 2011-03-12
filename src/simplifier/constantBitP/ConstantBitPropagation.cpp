@@ -211,7 +211,7 @@ namespace simplifier
 
     // NB: This expects that the constructor was called with teh same node. Sorry.
     ASTNode
-    ConstantBitPropagation::topLevelBothWays(const ASTNode& top)
+    ConstantBitPropagation::topLevelBothWays(const ASTNode& top, bool setTopToTrue)
     {
       assert(top.GetSTPMgr()->UserFlags.bitConstantProp_flag);
       assert (BOOLEAN_TYPE == top.GetType());
@@ -227,7 +227,8 @@ namespace simplifier
           cerr << "Number removed by bottom UP:" << fromTo.size() << endl;
         }
 
-      setNodeToTrue(top);
+      if (setTopToTrue)
+    	  setNodeToTrue(top);
 
       if (debug_cBitProp_messages)
         {
