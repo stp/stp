@@ -115,6 +115,10 @@ namespace BEEV
 
     VariablesInExpression& vars;
 
+    bool simplify;
+
+    ASTNode simplifyNode(const ASTNode n);
+
   public:
     //constructor
   BVSolver(STPMgr * bm, Simplifier * simp) : _bm(bm), _simp(simp), vars(simp->getVariablesInExpression())
@@ -122,6 +126,7 @@ namespace BEEV
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);
       ASTUndefined = _bm->CreateNode(UNDEFINED);
+      simplify=true;
     };
 
      //Destructor
@@ -132,7 +137,7 @@ namespace BEEV
 
     //Top Level Solver: Goes over the input DAG, identifies the
     //equation to be solved, solves them,
-    ASTNode TopLevelBVSolve(const ASTNode& a);
+    ASTNode TopLevelBVSolve(const ASTNode& a, const bool enable_simplify=true);
 
     void ClearAllTables(void)
     {

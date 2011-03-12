@@ -22,7 +22,9 @@
 //best-effort. it relies on the SAT solver to be complete.
 //
 //The BVSolver assumes that the input equations are normalized, and
-//have liketerms combined etc.
+//have liketerms combined etc. It won't fail if the input isn't
+// normalised. It just won't be able to simplify things, for example
+// it cant simplify (3*3)*x = y.
 //
 //0. Traverse top-down over the input DAG, looking for a conjunction
 //0. of equations. if you find one, then for each equation in the
@@ -40,6 +42,20 @@ namespace BEEV
 	const bool flatten_ands = true;
 	const bool sort_extracts_last = false;
 	const bool debug_bvsolver = false;
+
+	// The simplify functions can increase the size of the DAG,
+	// so we have the option to disable simplifications.
+  ASTNode BVSolver::simplifyNode(const ASTNode n)
+  {
+	  if (!simplify)
+		  return n;
+
+	  if (n.GetType() == BOOLEAN_TYPE)
+		  return _simp->SimplifyFormula(n,false,NULL);
+	  else
+		  return _simp->SimplifyTerm(n);
+  }
+
 
   //check the solver map for 'key'. If key is present, then return the
   //value by reference in the argument 'output'
@@ -268,6 +284,7 @@ namespace BEEV
 		lhs = eq[1];
 		rhs = eq[0];
 		eq = _bm->CreateNode(EQ, lhs, rhs); // If "return eq" is called, return the arguments in the correct order.
+		assert(BVTypeCheck(eq));
 	}
 
     if (CheckAlreadySolvedMap(eq, output))
@@ -298,10 +315,12 @@ namespace BEEV
         //construct:  rhs - (lhs without the chosen monom)
         unsigned int len = lhs.GetValueWidth();
         leftover_lhs = 
-          _simp->SimplifyTerm(_bm->CreateTerm(BVUMINUS,
+          simplifyNode(_bm->CreateTerm(BVUMINUS,
                                                        len, leftover_lhs));
+        assert(BVTypeCheck(leftover_lhs));
         rhs =
-          _simp->SimplifyTerm(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
+        		simplifyNode(_bm->CreateTerm(BVPLUS, len, rhs, leftover_lhs));
+        assert(BVTypeCheck(rhs));
         lhs = chosen_monom;
         single = true;
       } //end of if(BVPLUS ...)
@@ -310,8 +329,9 @@ namespace BEEV
       {
         //equation is of the form (-lhs0) = rhs
         ASTNode lhs0 = lhs[0];
-        rhs = _simp->SimplifyTerm(_bm->CreateTerm(BVUMINUS,
+        rhs = simplifyNode(_bm->CreateTerm(BVUMINUS,
                                                   rhs.GetValueWidth(), rhs));
+        assert(BVTypeCheck(rhs));
         lhs = lhs0;
       }
 
@@ -437,7 +457,7 @@ namespace BEEV
           ASTNode chosenvar = 
         		  ChosenVar_Is_Extract ? lhs[1][0] : lhs[1];
           ASTNode chosenvar_value = 
-            _simp->SimplifyTerm(_bm->CreateTerm(BVMULT, 
+        		  simplifyNode(_bm->CreateTerm(BVMULT,
                                                 rhs.GetValueWidth(), 
                                                 a, rhs));
 
@@ -449,11 +469,10 @@ namespace BEEV
               return eq;
             }
 
-          //rhs should not have arrayreads in it. it complicates matters
-          //during transformation
-          // if(CheckForArrayReads_TopLevel(chosenvar_value)) {
-          //            return eq;
-          //       }
+          // It fails if it's a full-bitwidth extract. These are rare, and won't be
+          // present after simplification. So ignore them for now.
+          if (ChosenVar_Is_Extract && lhs[0].GetValueWidth() == lhs.GetValueWidth())
+        	  return eq;
 
           //found a variable to solve
           DoNotSolve_TheseVars.insert(chosenvar);
@@ -463,17 +482,20 @@ namespace BEEV
               return eq;
             }
 
+          cout << lhs;
           if (ChosenVar_Is_Extract)
             {
               const ASTNode& var = lhs[1][0];
 
-              ASTNode newvar = 
-                  _bm->CreateFreshVariable(0, var.GetValueWidth() - lhs[1].GetValueWidth(), "v_solver");
-              newvar = 
-                _bm->CreateTerm(BVCONCAT, 
-                                var.GetValueWidth(), 
-                                newvar, chosenvar_value);
-              _simp->UpdateSolverMap(var, newvar);
+				  ASTNode newvar =
+					  _bm->CreateFreshVariable(0, var.GetValueWidth() - lhs[1].GetValueWidth(), "v_solver");
+				  newvar =
+					_bm->CreateTerm(BVCONCAT,
+									var.GetValueWidth(),
+									newvar, chosenvar_value);
+				  assert(BVTypeCheck(newvar));
+				  _simp->UpdateSolverMap(var, newvar);
+
             }
           output = ASTTrue;
           break;
@@ -643,7 +665,7 @@ namespace BEEV
         != and_end; and_child++)
       {
 
-      ASTNode r = solveForXOR(!changed?*and_child:_simp->SimplifyFormula(_simp->applySubstitutionMapUntilArrays(*and_child),false,NULL));
+      ASTNode r = solveForXOR(!changed?*and_child:simplifyNode(_simp->applySubstitutionMapUntilArrays(*and_child)));
       if (r!=*and_child)
         changed=true;
       output_children.push_back(r);
@@ -657,10 +679,11 @@ namespace BEEV
   //The toplevel bvsolver(). Checks if the formula has already been
   //solved. If not, the solver() is invoked. If yes, then simply drop
   //the formula
-  ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input)
+  ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input, const bool enable_simplify)
   {
       assert (_bm->UserFlags.wordlevel_solve_flag);
 	  ASTNode input = _input;
+	  simplify = enable_simplify;
 
     ASTNode output = input;
     if (CheckAlreadySolvedMap(input, output))
@@ -733,8 +756,8 @@ namespace BEEV
     	 which shouldn't be simplified.
   	   */
 
-    	ASTNode aaa =  (any_solved && EQ == it->GetKind()) ? _simp->SimplifyFormula
-    			(_simp->applySubstitutionMapUntilArrays(*it),false,NULL) : *it;
+    	ASTNode aaa =  (any_solved && EQ == it->GetKind()) ? simplifyNode
+    			(_simp->applySubstitutionMapUntilArrays(*it)) : *it;
 
         if (ASTFalse == aaa)
         {
@@ -1029,7 +1052,7 @@ namespace BEEV
                                                           low_minus_one, 
                                                           low_zero));
                 ASTNode lower_x =
-                  _simp->SimplifyTerm(_bm->CreateTerm(BVEXTRACT, 
+                		simplifyNode(_bm->CreateTerm(BVEXTRACT,
                                                       newlen, 
                                                       aaa[1], 
                                                       low_minus_one, 
