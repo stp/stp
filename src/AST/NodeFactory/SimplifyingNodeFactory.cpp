@@ -467,12 +467,15 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	switch (kind)
 	{
 	case BEEV::ITE:
+	{
 		if (children[0]== ASTTrue)
 			result = children[1];
-		if (children[0]== ASTFalse)
+		else if (children[0]== ASTFalse)
 			result = children[2];
-
-
+		else if (children[1] == children[2])
+			result = children[1];
+		break;
+	}
 
 	case BEEV::BVNEG:
 	{
@@ -484,18 +487,15 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 			break;
 		default: // quieten compiler.
 			break;
-
 		}
 	}
-		break;
+	break;
 	default: // quieten compiler.
 		break;
-
 	}
 
 	if (result.IsNull())
 		result = hashing.CreateTerm(kind, width, children);
 
 	return result;
-
 }
