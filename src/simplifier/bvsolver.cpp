@@ -482,7 +482,6 @@ namespace BEEV
               return eq;
             }
 
-          cout << lhs;
           if (ChosenVar_Is_Extract)
             {
               const ASTNode& var = lhs[1][0];
