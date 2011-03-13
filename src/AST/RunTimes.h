@@ -36,7 +36,8 @@ public:
       RemoveUnconstrained,
       PureLiterals,
       UseITEContext,
-      AIGSimplifyCore
+      AIGSimplifyCore,
+      IntervalPropagation
     };
 
   static std::string CategoryNames[];

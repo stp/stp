@@ -66,6 +66,7 @@ private:
     // Replace some of the things that unsigned intervals can figure out for us.
     ASTNode topLevel_unsignedIntervals(const ASTNode&top)
     {
+      bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
       map<const ASTNode, IntervalType*> visited;
       visit(top,visited);
       ASTNodeMap fromTo;
@@ -91,9 +92,11 @@ private:
         {
           ASTNodeMap cache;
           SimplifyingNodeFactory nf(*(top.GetSTPMgr()->defaultNodeFactory), *top.GetSTPMgr());
+          bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
           return SubstitutionMap::replace(top,fromTo,cache,&nf);
         }
 
+      bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
       return top;
     }
 

@@ -1703,7 +1703,7 @@ namespace BEEV
         FatalError("SimplifyTerm: You have input a Non-term", inputterm);
       }
 
-    unsigned int inputValueWidth = inputterm.GetValueWidth();
+    const unsigned int inputValueWidth = inputterm.GetValueWidth();
 
     {
     	assert(k != BVCONST);
@@ -1720,12 +1720,14 @@ namespace BEEV
 
 			v.reserve(toProcess.size());
 			for (unsigned i = 0; i < toProcess.size(); i++)
+			{
 				if (toProcess[i].GetType() == BITVECTOR_TYPE)
 					v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
 				else if (toProcess[i].GetType() == BOOLEAN_TYPE)
 					v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
 				else
 					v.push_back(toProcess[i]);
+			}
 
 			assert(v.size() > 0);
 			if (v != actualInputterm.GetChildren()) // short-cut.
@@ -1735,11 +1737,11 @@ namespace BEEV
 			else
 				output = actualInputterm;
 
-                       if (inputterm != output)
-                         {
-                             UpdateSimplifyMap(inputterm,output,false);
-                             inputterm = output;
-                         }
+		   if (inputterm != output)
+			 {
+				 UpdateSimplifyMap(inputterm,output,false);
+				 inputterm = output;
+			 }
 		}
 
 		const ASTVec& children = inputterm.GetChildren();
@@ -1797,7 +1799,7 @@ namespace BEEV
         // follow on.
       case BVPLUS:
             {
-              ASTVec c = FlattenKind(k,inputterm.GetChildren());
+              const ASTVec c = FlattenKind(k,inputterm.GetChildren());
 
           ASTVec constkids, nonconstkids;
 
@@ -1807,7 +1809,7 @@ namespace BEEV
           //BVPLUS, then ignore it (similarily for 1 and BVMULT).  else,
           //add the computed constant to the nonconst vector, flatten,
           //sort, and create BVPLUS/BVMULT and return
-          for (ASTVec::iterator 
+          for (ASTVec::const_iterator
                  it = c.begin(), itend = c.end(); 
                it != itend; it++)
             {
@@ -1825,9 +1827,9 @@ namespace BEEV
                 }
             }
 
-          ASTNode one = _bm->CreateOneConst(inputValueWidth);
-          ASTNode max = _bm->CreateMaxConst(inputValueWidth);
-          ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
+          const ASTNode one = _bm->CreateOneConst(inputValueWidth);
+          const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
+          const ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
 
           //initialize constoutput to zero, in case there are no elements
           //in constkids
@@ -1947,36 +1949,26 @@ namespace BEEV
                 nf->CreateTerm(output.GetKind(),
                                 output.GetValueWidth(), d);
             }
-
-
-
           break;
-
         }
       case BVSUB:
         {
           assert(inputterm.Degree() == 2);
 
-          ASTNode a0 =inputterm[0];
+          const ASTNode& a0 =inputterm[0];
           assert(hasBeenSimplified(a0));
 
-          ASTNode a1 =inputterm[1];
+          const ASTNode& a1 =inputterm[1];
           assert(hasBeenSimplified(a1));
 
-          unsigned int l = inputValueWidth;
           if (a0 == a1)
-            output = _bm->CreateZeroConst(l);
+            output = _bm->CreateZeroConst(inputValueWidth);
           else
             {
               //covert x-y into x+(-y) and simplify. this transformation
               //triggers more simplifications
               //
-              a1 = 
-                SimplifyTerm(nf->CreateTerm(BVUMINUS, l, a1),
-                             VarConstMap);
-              output = 
-                SimplifyTerm(nf->CreateTerm(BVPLUS, l, a0, a1),
-                             VarConstMap);
+              output = nf->CreateTerm(BVPLUS, inputValueWidth, a0, nf->CreateTerm(BVUMINUS, inputValueWidth, a1));
             }
           break;
         }
@@ -1988,11 +1980,10 @@ namespace BEEV
           //out, and replace with something else so that combineliketerms
           //can catch this fact.
 
-          ASTNode a0 =inputterm[0];
+          const ASTNode& a0 =inputterm[0];
           assert(hasBeenSimplified(a0));
-          Kind k1 = a0.GetKind();
-          unsigned int l = a0.GetValueWidth();
-          ASTNode one = _bm->CreateOneConst(l);
+          const Kind k1 = a0.GetKind();
+          const ASTNode one = _bm->CreateOneConst(inputValueWidth);
           assert(k1 != BVCONST);
           switch (k1)
             {
@@ -2001,20 +1992,18 @@ namespace BEEV
               break;
             case BVNEG:
               {
-                output = 
-                  SimplifyTerm(nf->CreateTerm(BVPLUS, l, a0[0], one),
-                               VarConstMap);
+                output = nf->CreateTerm(BVPLUS, inputValueWidth, a0[0], one);
                 break;
               }
             case BVMULT:
               {
                 if (BVUMINUS == a0[0].GetKind())
                   {
-                    output = nf->CreateTerm(BVMULT, l, a0[0][0], a0[1]);
+                    output = nf->CreateTerm(BVMULT, inputValueWidth, a0[0][0], a0[1]);
                   }
                 else if (BVUMINUS == a0[1].GetKind())
                   {
-                    output = nf->CreateTerm(BVMULT, l, a0[0], a0[1][0]);
+                    output = nf->CreateTerm(BVMULT, inputValueWidth, a0[0], a0[1][0]);
                   }
                 else
                   {
@@ -2026,12 +2015,12 @@ namespace BEEV
                     if (BVCONST == a0[0].GetKind())
                       {
                         ASTNode a00 = 
-                          SimplifyTerm(nf->CreateTerm(BVUMINUS, l, a0[0]),
+                          SimplifyTerm(nf->CreateTerm(BVUMINUS, inputValueWidth, a0[0]),
                                        VarConstMap);
-                        output = nf->CreateTerm(BVMULT, l, a00, a0[1]);
+                        output = nf->CreateTerm(BVMULT, inputValueWidth, a00, a0[1]);
                       }
                     else
-                      output = nf->CreateTerm(BVUMINUS, l, a0);
+                      output = inputterm;
                   }
                 break;
               }
@@ -2042,29 +2031,25 @@ namespace BEEV
                 //
                 //BVUMINUS(a1x1 + a2x2 + ...) <=> BVPLUS(BVUMINUS(a1x1) +
                 //BVUMINUS(a2x2) + ...
-                ASTVec c = a0.GetChildren();
+                const ASTVec& c = a0.GetChildren();
                 ASTVec o;
-                for (ASTVec::iterator
+                for (ASTVec::const_iterator
                        it = c.begin(), itend = c.end(); it != itend; it++)
                   {
                     //Simplify(BVUMINUS(a1x1))
                     ASTNode aaa = 
-                      SimplifyTerm(nf->CreateTerm(BVUMINUS, l, *it),
+                      SimplifyTerm(nf->CreateTerm(BVUMINUS, inputValueWidth, *it),
                                    VarConstMap);
                     o.push_back(aaa);
                   }
-                //simplify the bvplus
-                output = 
-                  SimplifyTerm(nf->CreateTerm(BVPLUS, l, o),
-                               VarConstMap);
+
+                output = nf->CreateTerm(BVPLUS, inputValueWidth, o);
                 break;
               }
             case BVSUB:
               {
                 //BVUMINUS(BVSUB(x,y)) <=> BVSUB(y,x)
-                output = 
-                  SimplifyTerm(nf->CreateTerm(BVSUB, l, a0[1], a0[0]),
-                               VarConstMap);
+                output = nf->CreateTerm(BVSUB, inputValueWidth, a0[1], a0[0]);
                 break;
               }
             case ITE:
@@ -2072,17 +2057,17 @@ namespace BEEV
                 //BVUMINUS(ITE(c,t1,t2)) <==> ITE(c,BVUMINUS(t1),BVUMINUS(t2))
                 ASTNode c = a0[0];
                 ASTNode t1 = 
-                  SimplifyTerm(nf->CreateTerm(BVUMINUS, l, a0[1]),
+                  SimplifyTerm(nf->CreateTerm(BVUMINUS, inputValueWidth, a0[1]),
                                VarConstMap);
                 ASTNode t2 = 
-                  SimplifyTerm(nf->CreateTerm(BVUMINUS, l, a0[2]),
+                  SimplifyTerm(nf->CreateTerm(BVUMINUS, inputValueWidth, a0[2]),
                                VarConstMap);
                 output = CreateSimplifiedTermITE(c, t1, t2);
                 break;
               }
             default:
               {
-                output = nf->CreateTerm(BVUMINUS, l, a0);
+                output = inputterm;
                 break;
               }
             }
@@ -2093,16 +2078,15 @@ namespace BEEV
           //it is important to take care of wordlevel transformation in
           //BVEXTRACT. it exposes oppurtunities for later simplification
           //and solving (variable elimination)
-          ASTNode a0 =inputterm[0];
+          const ASTNode& a0 =inputterm[0];
           assert(hasBeenSimplified(a0));
 
-          Kind k1 = a0.GetKind();
-          unsigned int a_len = inputValueWidth;
+          const Kind k1 = a0.GetKind();
 
           //indices for BVEXTRACT
           ASTNode i = inputterm[1];
           ASTNode j = inputterm[2];
-          ASTNode zero = _bm->CreateZeroConst(32);
+          const ASTNode zero = _bm->CreateZeroConst(32);
 
           //recall that the indices of BVEXTRACT are always 32 bits
           //long. therefore doing a GetBVUnsigned is ok.
@@ -2110,8 +2094,9 @@ namespace BEEV
           unsigned int j_val = j.GetUnsignedConst();
 
           // a0[i:0] and len(a0)=i+1, then return a0
-          if (0 == j_val && a_len == a0.GetValueWidth())
+          if (inputValueWidth == a0.GetValueWidth())
             {
+        	  assert(0 == j_val);
         	  output = a0;
         	  break;
             }
@@ -2120,17 +2105,15 @@ namespace BEEV
 
           switch (k1)
             {
-          case BVEXTRACT:
-          {
-        	  const unsigned innerLow = a0[2].GetUnsignedConst();
-        	  const unsigned innerHigh = a0[1].GetUnsignedConst();
+			  case BVEXTRACT:
+			  {
+				  const unsigned innerLow = a0[2].GetUnsignedConst();
+				  const unsigned innerHigh = a0[1].GetUnsignedConst();
 
-        	  output = nf->CreateTerm(BVEXTRACT, a_len,a0[0], _bm->CreateBVConst(32,i_val+innerLow),_bm->CreateBVConst(32, j_val+innerLow));
-              assert(BVTypeCheck(output));
-              break;
-
-          }
-          break;
+				  output = nf->CreateTerm(BVEXTRACT, inputValueWidth,a0[0], _bm->CreateBVConst(32,i_val+innerLow),_bm->CreateBVConst(32, j_val+innerLow));
+				  assert(BVTypeCheck(output));
+				  break;
+			  }
 
             case BVCONCAT:
               {
@@ -2139,19 +2122,17 @@ namespace BEEV
                 //input is of the form a0[i:j]
                 //
                 //a0 is the conatentation t@u, and a0[0] is t, and a0[1] is u
-                ASTNode t = a0[0];
-                ASTNode u = a0[1];
-                unsigned int len_a0 = a0.GetValueWidth();
-                unsigned int len_u = u.GetValueWidth();
+                 ASTNode t = a0[0];
+                 ASTNode u = a0[1];
+                const unsigned int len_a0 = a0.GetValueWidth();
+                const unsigned int len_u = u.GetValueWidth();
 
                 if (len_u > i_val)
                   {
                     //Apply the following rule:
                     // (t@u)[i:j] <==> u[i:j], if len(u) > i
                     //
-                    output = 
-                      SimplifyTerm(nf->CreateTerm(BVEXTRACT, a_len, u, i, j),
-                                   VarConstMap);
+                    output =  nf->CreateTerm(BVEXTRACT, inputValueWidth, u, i, j);
                   }
                 else if (len_a0 > i_val && j_val >= len_u)
                   {
@@ -2160,9 +2141,7 @@ namespace BEEV
                     // len(u)
                     i = _bm->CreateBVConst(32, i_val - len_u);
                     j = _bm->CreateBVConst(32, j_val - len_u);
-                    output = 
-                      SimplifyTerm(nf->CreateTerm(BVEXTRACT, a_len, t, i, j),
-                                   VarConstMap);
+                    output = nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j);
                   }
                 else
                   {
@@ -2180,7 +2159,7 @@ namespace BEEV
                                                    len_u - j_val, 
                                                    u, m, j), 
                                    VarConstMap);
-                    output = nf->CreateTerm(BVCONCAT, a_len, t, u);
+                    output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
                   }
                 break;
               }
@@ -2207,7 +2186,7 @@ namespace BEEV
                 if (j_val != 0)
                   {
                     //add extraction only if j is not zero
-                    output = nf->CreateTerm(BVEXTRACT, a_len, output, i, j);
+                    output = nf->CreateTerm(BVEXTRACT, inputValueWidth, output, i, j);
                   }
                 break;
               }
@@ -2249,9 +2228,9 @@ namespace BEEV
                 // (~t)[i:j] <==> ~(t[i:j])
                 ASTNode t = a0[0];
                 t = 
-                  SimplifyTerm(nf->CreateTerm(BVEXTRACT, a_len, t, i, j),
+                  SimplifyTerm(nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j),
                                VarConstMap);
-                output = nf->CreateTerm(BVNEG, a_len, t);
+                output = nf->CreateTerm(BVNEG, inputValueWidth, t);
                 break;
               }
               // case BVSX:{ //(BVSX(t,n)[i:j] <==> BVSX(t,i+1), if n
@@ -2289,7 +2268,7 @@ namespace BEEV
               */
             default:
               {
-                output = nf->CreateTerm(BVEXTRACT, a_len, a0, i, j);
+                output = inputterm;
                 break;
               }
             }
@@ -2297,10 +2276,9 @@ namespace BEEV
         }
       case BVNEG:
         {
-          ASTNode a0 =inputterm[0];
+          const ASTNode& a0 =inputterm[0];
           assert(hasBeenSimplified(a0));
 
-          unsigned len = inputValueWidth;
           assert (a0.GetKind() != BVCONST);
 
           switch (a0.GetKind())
@@ -2320,7 +2298,7 @@ namespace BEEV
 			   }
 			   //follow on
             default:
-              output = nf->CreateTerm(BVNEG, len, a0);
+              output = inputterm;
               break;
             }
           break;
@@ -2333,11 +2311,10 @@ namespace BEEV
           assert(hasBeenSimplified(a0));
 
           //a1 represents the length of the term BVSX(a0)
-          ASTNode a1 = inputterm[1];
-          //output length of the BVSX term
-          unsigned len = inputValueWidth;
+          const ASTNode& a1 = inputterm[1];
+          assert(hasBeenSimplified(a1));
 
-          if (a0.GetValueWidth() == len)
+          if (a0.GetValueWidth() == inputValueWidth)
             {
               //nothing to signextend
               output =  a0;
@@ -2348,10 +2325,9 @@ namespace BEEV
           if (mostSignificantConstants(a0) > 0)
           {
         	  if (getConstantBit(a0,0) == 0)
-        		  output = nf->CreateTerm(BVCONCAT, len, _bm->CreateZeroConst(len-a0.GetValueWidth()), a0);
+        		  output = nf->CreateTerm(BVCONCAT, inputValueWidth, _bm->CreateZeroConst(inputValueWidth-a0.GetValueWidth()), a0);
         	  else
-        		  output = nf->CreateTerm(BVCONCAT, len, _bm->CreateMaxConst(len-a0.GetValueWidth()), a0);
-
+        		  output = nf->CreateTerm(BVCONCAT, inputValueWidth, _bm->CreateMaxConst(inputValueWidth-a0.GetValueWidth()), a0);
         	  break;
           }
 
@@ -2359,32 +2335,31 @@ namespace BEEV
 
           switch (a0.GetKind())
             {
-
             case BVNEG:
               output = 
-                nf->CreateTerm(a0.GetKind(), len,
-                                nf->CreateTerm(BVSX, len, a0[0], a1));
+                nf->CreateTerm(a0.GetKind(), inputValueWidth,
+                                nf->CreateTerm(BVSX, inputValueWidth, a0[0], a1));
               break;
             case BVAND:
             case BVOR:
             {
-              ASTVec c = a0.GetChildren();
+              const ASTVec& c = a0.GetChildren();
               ASTVec newChildren;
-              for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
+              newChildren.reserve(c.size());
+              for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
 			  {
-				  newChildren.push_back(nf->CreateTerm(BVSX, len, *it, a1));
+				  newChildren.push_back(nf->CreateTerm(BVSX, inputValueWidth, *it, a1));
 			  }
-
-              output =  nf->CreateTerm(a0.GetKind(), len, newChildren );
+              output =  nf->CreateTerm(a0.GetKind(), inputValueWidth, newChildren );
             }
               break;
             case BVPLUS:
               {
                 //BVSX(m,BVPLUS(n,BVSX(t1),BVSX(t2))) <==>
                 //BVPLUS(m,BVSX(m,t1),BVSX(m,t2))
-                ASTVec c = a0.GetChildren();
+                const ASTVec& c = a0.GetChildren();
                 bool returnflag = false;
-                for (ASTVec::iterator
+                for (ASTVec::const_iterator
                        it = c.begin(), itend = c.end(); it != itend; it++)
                   {
                     if (BVSX != it->GetKind())
@@ -2393,22 +2368,19 @@ namespace BEEV
                         break;
                       }
                   }
-                if (returnflag)
-                  {
-                    output = nf->CreateTerm(BVSX, len, a0, a1);
-                  }
-                else
+                if (!returnflag)
                   {
                     ASTVec o;
-                    for (ASTVec::iterator 
+                    o.reserve(c.size());
+                    for (ASTVec::const_iterator
                            it = c.begin(), itend = c.end(); it != itend; it++)
                       {
                         ASTNode aaa = 
-                          SimplifyTerm(nf->CreateTerm(BVSX, len, *it, a1),
+                          SimplifyTerm(nf->CreateTerm(BVSX, inputValueWidth, *it, a1),
                                        VarConstMap);
                         o.push_back(aaa);
                       }
-                    output = nf->CreateTerm(a0.GetKind(), len, o);
+                    output = nf->CreateTerm(a0.GetKind(), inputValueWidth, o);
                   }
                 break;
               }
@@ -2419,23 +2391,23 @@ namespace BEEV
                 a0 =a0[0];
                 assert(hasBeenSimplified(a0));
 
-                output = nf->CreateTerm(BVSX, len, a0, a1);
+                output = nf->CreateTerm(BVSX, inputValueWidth, a0, a1);
                 break;
               }
             case ITE:
               {
-                ASTNode cond = a0[0];
+                const ASTNode& cond = a0[0];
                 ASTNode thenpart = 
-                  SimplifyTerm(nf->CreateTerm(BVSX, len, a0[1], a1),
+                  SimplifyTerm(nf->CreateTerm(BVSX, inputValueWidth, a0[1], a1),
                                VarConstMap);
                 ASTNode elsepart = 
-                  SimplifyTerm(nf->CreateTerm(BVSX, len, a0[2], a1),
+                  SimplifyTerm(nf->CreateTerm(BVSX, inputValueWidth, a0[2], a1),
                                VarConstMap);
                 output = CreateSimplifiedTermITE(cond, thenpart, elsepart);
                 break;
               }
             default:
-              output = nf->CreateTerm(BVSX, len, a0, a1);
+              output = inputterm;
               break;
             }
           break;
@@ -2452,11 +2424,11 @@ namespace BEEV
                 break;
           }
 
-          ASTNode max = _bm->CreateMaxConst(inputValueWidth);
-          ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
+          const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
+          const ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
 
-          ASTNode identity = (BVAND == k) ? max : zero;
-          ASTNode annihilator = (BVAND == k) ? zero : max;
+          const ASTNode identity = (BVAND == k) ? max : zero;
+          const ASTNode annihilator = (BVAND == k) ? zero : max;
           ASTVec c = FlattenKind(inputterm.GetKind(), inputterm.GetChildren());
           SortByArith(c);
           ASTVec constants;
@@ -2640,10 +2612,10 @@ namespace BEEV
         }
       case BVCONCAT:
         {
-          ASTNode t =inputterm[0];
+          const ASTNode& t =inputterm[0];
           assert(hasBeenSimplified(t));
 
-          ASTNode u =inputterm[1];
+          const ASTNode& u =inputterm[1];
           assert(hasBeenSimplified(u));
 
           const Kind tkind = t.GetKind();
@@ -2656,10 +2628,10 @@ namespace BEEV
                    && t[0] == u[0])
             {
               //to handle the case x[m:n]@x[n-1:k] <==> x[m:k]
-              ASTNode t_hi = t[1];
-              ASTNode t_low = t[2];
-              ASTNode u_hi = u[1];
-              ASTNode u_low = u[2];
+              const ASTNode& t_hi = t[1];
+              const ASTNode& t_low = t[2];
+              const ASTNode& u_hi = u[1];
+              const ASTNode& u_low = u[2];
               ASTNode c =
                 BVConstEvaluator(nf->CreateTerm(BVPLUS, 32,
                                                  u_hi, 
@@ -2679,7 +2651,7 @@ namespace BEEV
             {
 
               /// This makes the left hand child of every concat not a concat.
-              ASTNode left= t[0];
+              const ASTNode& left= t[0];
               ASTNode bottom = nf->CreateTerm(BVCONCAT, t[1].GetValueWidth() + u.GetValueWidth(), t[1], u);
               output = nf->CreateTerm(BVCONCAT, inputValueWidth, left, bottom);
               assert(BVTypeCheck(output));
@@ -2691,15 +2663,14 @@ namespace BEEV
           break;
         }
 
-
       case BVLEFTSHIFT:
       case BVRIGHTSHIFT:
 
         { // If the shift amount is known. Then replace it by an extract.
-          ASTNode a =inputterm[0];
+          const ASTNode a =inputterm[0];
           assert(hasBeenSimplified(a));
 
-          ASTNode b =inputterm[1];
+          const ASTNode b =inputterm[1];
           assert(hasBeenSimplified(b));
 
           const unsigned int width = a.GetValueWidth();
@@ -2762,7 +2733,7 @@ namespace BEEV
         	  output = _bm->CreateZeroConst(width);
           }
           else
-            output = nf->CreateTerm(k, width, a, b);
+            output = inputterm;
         }
         break;
 
@@ -2821,7 +2792,9 @@ namespace BEEV
     		      break;
     		    }
     	  }
-    	  //run on.
+
+    	  output = inputterm;
+    	  break;
       case BVXNOR:
       case BVNAND:
       case BVNOR:
@@ -2867,9 +2840,8 @@ namespace BEEV
               else
                 {
                   //arr is a SYMBOL for sure
-                  ASTNode arr = inputterm[0];
-                  ASTNode index = SimplifyTerm(inputterm[1], VarConstMap);
-                  out1 = nf->CreateTerm(READ, inputValueWidth, arr, index);
+                  out1 = inputterm;
+                  assert(hasBeenSimplified(inputterm[1]));
                 }
             }
           //it is possible that after all the procesing the READ term
@@ -2881,6 +2853,7 @@ namespace BEEV
         }
       case ITE:
         {
+          // SimplifyFormula isn't idempotent, so we try again.
           ASTNode t0 = SimplifyFormula(inputterm[0], false, VarConstMap);
 
           const ASTNode& t1 = inputterm[1];
@@ -2936,6 +2909,20 @@ namespace BEEV
     assert(inputterm.GetValueWidth() == output.GetValueWidth());
     assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
     assert(hasBeenSimplified(output));
+
+	#ifndef NDEBUG
+	for (int i =0; i < output.Degree();i++)
+	{
+		if (output[i].GetType() != ARRAY_TYPE)
+			if (!hasBeenSimplified(output[i]))
+			{
+				cout << output;
+				cout << i;
+				assert(hasBeenSimplified(output[i]));
+			}
+	}
+	#endif
+
     return output;
   } //end of SimplifyTerm()
 

@@ -115,15 +115,14 @@ namespace BEEV {
 			  simplified_solved_InputToSAT);
 		}
 
-
 		int initialSize = simp->Return_SolverMap()->size();
         simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
 		if (initialSize != simp->Return_SolverMap()->size())
 		{
 			simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
 			simp->haveAppliedSubstitutionMap();
+		    bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
 		}
-
 
 	    // Find pure literals.
 		if (bm->UserFlags.isSet("pure-literals","1"))
@@ -139,7 +138,6 @@ namespace BEEV {
 			}
 		}
 
-		DifficultyScore difficulty;
         if(bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT =
