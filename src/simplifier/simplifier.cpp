@@ -24,10 +24,6 @@ namespace BEEV
 // does mean that we can't short cut, for example, if the first argument to a BVOR is all trues,
 // then all the other arguments have already been simplified, so won't be short-cutted.
 
-// I tried enabling it on the formulae, but it interferred with the bvsolver (sometime),
-// so that's disabled.
-  const bool simplify_upfront = true;
-
   // is it ITE(p,bv0[1], bv1[1])  OR  ITE(p,bv0[0], bv1[0])
   bool isPropositionToTerm(const ASTNode& n)
   {
@@ -285,7 +281,7 @@ namespace BEEV
 
     kind = a.GetKind();
 
-    if (false && simplify_upfront)
+    if (false)
     {
     		if (!a.isConstant() && kind != SYMBOL) // const and symbols need to be created specially.
     		{
@@ -1709,7 +1705,6 @@ namespace BEEV
 
     unsigned int inputValueWidth = inputterm.GetValueWidth();
 
-    if (simplify_upfront)
     {
     	assert(k != BVCONST);
 		if (k != SYMBOL) // const and symbols need to be created specially.
@@ -1818,8 +1813,6 @@ namespace BEEV
             {
               ASTNode aaa = *it;
 
-              if (!simplify_upfront)
-                aaa = SimplifyTerm(aaa);
               assert(hasBeenSimplified(aaa));
 
               if (BVCONST == aaa.GetKind())
@@ -1962,16 +1955,12 @@ namespace BEEV
         }
       case BVSUB:
         {
-          ASTVec c = inputterm.GetChildren();
+          assert(inputterm.Degree() == 2);
 
           ASTNode a0 =inputterm[0];
-          if (!simplify_upfront)
-            a0 = SimplifyTerm(a0);
           assert(hasBeenSimplified(a0));
 
           ASTNode a1 =inputterm[1];
-          if (!simplify_upfront)
-            a1 = SimplifyTerm(a1);
           assert(hasBeenSimplified(a1));
 
           unsigned int l = inputValueWidth;
@@ -2000,22 +1989,16 @@ namespace BEEV
           //can catch this fact.
 
           ASTNode a0 =inputterm[0];
-          if (!simplify_upfront)
-            a0 = SimplifyTerm(a0);
           assert(hasBeenSimplified(a0));
           Kind k1 = a0.GetKind();
           unsigned int l = a0.GetValueWidth();
           ASTNode one = _bm->CreateOneConst(l);
+          assert(k1 != BVCONST);
           switch (k1)
             {
             case BVUMINUS:
               output = a0[0];
               break;
-            case BVCONST:
-              {
-                output = BVConstEvaluator(nf->CreateTerm(BVUMINUS, l, a0));
-                break;
-              }
             case BVNEG:
               {
                 output = 
@@ -2111,8 +2094,6 @@ namespace BEEV
           //BVEXTRACT. it exposes oppurtunities for later simplification
           //and solving (variable elimination)
           ASTNode a0 =inputterm[0];
-          if (!simplify_upfront)
-            a0 = SimplifyTerm(a0);
           assert(hasBeenSimplified(a0));
 
           Kind k1 = a0.GetKind();
@@ -2135,6 +2116,8 @@ namespace BEEV
         	  break;
             }
 
+          assert(k1 != BVCONST);
+
           switch (k1)
             {
           case BVEXTRACT:
@@ -2148,14 +2131,7 @@ namespace BEEV
 
           }
           break;
-          case BVCONST:
-              {
-                //extract the constant
-                output = 
-                  BVConstEvaluator(nf->CreateTerm(BVEXTRACT,
-                                                   a_len, a0, i, j));
-                break;
-              }
+
             case BVCONCAT:
               {
                 //assumes concatenation is binary
@@ -2322,16 +2298,13 @@ namespace BEEV
       case BVNEG:
         {
           ASTNode a0 =inputterm[0];
-          if (!simplify_upfront)
-            a0 = SimplifyTerm(a0);
           assert(hasBeenSimplified(a0));
 
           unsigned len = inputValueWidth;
+          assert (a0.GetKind() != BVCONST);
+
           switch (a0.GetKind())
             {
-            case BVCONST:
-              output = BVConstEvaluator(nf->CreateTerm(BVNEG, len, a0));
-              break;
             case BVNEG:
               output = a0[0];
               break;
@@ -2357,8 +2330,6 @@ namespace BEEV
         {
           //a0 is the expr which is being sign extended
           ASTNode a0 =inputterm[0];
-          if (!simplify_upfront)
-            a0 = SimplifyTerm(a0);
           assert(hasBeenSimplified(a0));
 
           //a1 represents the length of the term BVSX(a0)
@@ -2384,12 +2355,11 @@ namespace BEEV
         	  break;
           }
 
+          assert (a0.GetKind() != BVCONST);
 
           switch (a0.GetKind())
             {
-            case BVCONST:
-              output = BVConstEvaluator(nf->CreateTerm(BVSX, len, a0, a1));
-              break;
+
             case BVNEG:
               output = 
                 nf->CreateTerm(a0.GetKind(), len,
@@ -2447,8 +2417,6 @@ namespace BEEV
                 //if you have BVSX(m,BVSX(n,a)) then you can drop the inner
                 //BVSX provided m is greater than n.
                 a0 =a0[0];
-                if (!simplify_upfront)
-                  a0 = SimplifyTerm(a0);
                 assert(hasBeenSimplified(a0));
 
                 output = nf->CreateTerm(BVSX, len, a0, a1);
@@ -2497,8 +2465,6 @@ namespace BEEV
                  it = c.begin(), itend = c.end(); it != itend; it++)
             {
             ASTNode aaa =*it;
-            if (!simplify_upfront)
-              aaa = SimplifyTerm(aaa);
             assert(hasBeenSimplified(aaa));
 
               if (aaa == annihilator)
@@ -2675,25 +2641,17 @@ namespace BEEV
       case BVCONCAT:
         {
           ASTNode t =inputterm[0];
-          if (!simplify_upfront)
-            t = SimplifyTerm(t);
           assert(hasBeenSimplified(t));
 
           ASTNode u =inputterm[1];
-          if (!simplify_upfront)
-            u = SimplifyTerm(u);
           assert(hasBeenSimplified(u));
 
-          Kind tkind = t.GetKind();
-          Kind ukind = u.GetKind();
+          const Kind tkind = t.GetKind();
+          const Kind ukind = u.GetKind();
 
-          if (BVCONST == tkind && BVCONST == ukind)
-            {
-              output = 
-                BVConstEvaluator(nf->CreateTerm(BVCONCAT,
-                                                 inputValueWidth, t, u));
-            }
-          else if (BVEXTRACT == tkind 
+          assert (BVCONST != tkind || BVCONST != ukind);
+
+          if (BVEXTRACT == tkind
                    && BVEXTRACT == ukind 
                    && t[0] == u[0])
             {
@@ -2739,13 +2697,9 @@ namespace BEEV
 
         { // If the shift amount is known. Then replace it by an extract.
           ASTNode a =inputterm[0];
-          if (!simplify_upfront)
-            a = SimplifyTerm(a);
           assert(hasBeenSimplified(a));
 
           ASTNode b =inputterm[1];
-          if (!simplify_upfront)
-            b = SimplifyTerm(b);
           assert(hasBeenSimplified(b));
 
           const unsigned int width = a.GetValueWidth();
@@ -2874,27 +2828,8 @@ namespace BEEV
       case BVVARSHIFT:
       case BVSRSHIFT:
         {
-          ASTVec c = inputterm.GetChildren();
-          ASTVec o;
-          bool constant = true;
-          for (ASTVec::iterator 
-                 it = c.begin(), itend = c.end(); it != itend; it++)
-            {
-            ASTNode aaa = *it;
-            if (!simplify_upfront)
-              aaa = SimplifyTerm(aaa);
-            assert(hasBeenSimplified(aaa));
-
-              if (BVCONST != aaa.GetKind())
-                {
-                  constant = false;
-                }
-              o.push_back(aaa);
-            }
-          output = nf->CreateTerm(k, inputValueWidth, o);
-          if (constant)
-            output = BVConstEvaluator(output);
-          break;
+            output = inputterm;
+            break;
         }
       case READ:
         {
@@ -2948,14 +2883,10 @@ namespace BEEV
         {
           ASTNode t0 = SimplifyFormula(inputterm[0], false, VarConstMap);
 
-          ASTNode t1 = inputterm[1];
-          if (!simplify_upfront)
-            t1 = SimplifyTerm(t1);
+          const ASTNode& t1 = inputterm[1];
           assert(hasBeenSimplified(t1));
 
-          ASTNode t2 = inputterm[2];
-          if (!simplify_upfront)
-            t2 = SimplifyTerm(t2);
+          const ASTNode& t2 = inputterm[2];
           assert(hasBeenSimplified(t2));
 
           output = CreateSimplifiedTermITE(t0, t1, t2);
@@ -2970,7 +2901,8 @@ namespace BEEV
             break;
           }
 
-          // run on.
+          output = inputterm;
+          break;
         }
       case SBVDIV:
         {
@@ -2980,16 +2912,7 @@ namespace BEEV
             break;
           }
 
-
-          ASTVec c = inputterm.GetChildren();
-          ASTVec o;
-          for (ASTVec::iterator
-                 it = c.begin(), itend = c.end(); it != itend; it++)
-            {
-              ASTNode aaa = SimplifyTerm(*it, VarConstMap);
-              o.push_back(aaa);
-            }
-          output = nf->CreateTerm(k, inputValueWidth, o);
+          output = inputterm;
           break;
         }
       case WRITE:
