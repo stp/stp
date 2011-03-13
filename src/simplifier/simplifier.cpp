@@ -770,30 +770,6 @@ namespace BEEV
     return output;
   }
 
-  //Look through the AND Node for terms that contradict.
-  //Should be made significantly more general..
-  ASTNode Simplifier::RemoveContradictionsFromAND(const ASTNode& in)
-  {
-    assert(AND == in.GetKind());
-    const int childrenSize = in.GetChildren().size();
-
-    for (int i = 0; i < childrenSize; i++)
-      {
-        if (BVLT != in[i].GetKind())
-          continue;
-
-        for (int j = i + 1; j < childrenSize; j++)
-          {
-            if (BVLT != in[j].GetKind())
-              continue;
-            // parameters are swapped.
-            if (in[i][0] == in[j][1] && in[i][1] == in[j][0])
-              return ASTFalse;
-          }
-      }
-    return in;
-  }
-
   // turns say (bvslt (ite a b c) (ite a d e)) INTO (ite a (bvslt b d)
   // (bvslt c e)) Expensive. But makes some other simplifications
   // possible.
@@ -3032,7 +3008,6 @@ namespace BEEV
     UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
 
     //cerr << "SimplifyTerm: output" << output << endl;
-    // CheckSimplifyInvariant(inputterm,output);
 
     assert(!output.IsNull());
     assert(inputterm.GetValueWidth() == output.GetValueWidth());
@@ -3040,27 +3015,6 @@ namespace BEEV
     assert(hasBeenSimplified(output));
     return output;
   } //end of SimplifyTerm()
-
-  //At the end of each simplification call, we want the output to be
-  //always smaller or equal to the input in size.
-  void Simplifier::CheckSimplifyInvariant(const ASTNode& a, 
-                                          const ASTNode& output)
-  {
-
-    if (_bm->NodeSize(a, true) + 1 < _bm->NodeSize(output, true))
-      {
-        cerr << "lhs := " << a << endl;
-        cerr << "NodeSize of lhs is: " 
-             << _bm->NodeSize(a, true) << endl;
-        cerr << endl;
-        cerr << "rhs := " << output << endl;
-        cerr << "NodeSize of rhs is: " 
-             << _bm->NodeSize(output, true) << endl;
-        //  FatalError("SimplifyFormula: The nodesize shoudl decrease
-        //  from lhs to rhs: ",ASTUndefined);
-      }
-  }
-
 
   //this function assumes that the input is a vector of childnodes of
   //a BVPLUS term. it combines like terms and returns a bvplus

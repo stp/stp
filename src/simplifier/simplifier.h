@@ -148,10 +148,6 @@ namespace BEEV
                                            bool pushNeg, 
                                            ASTNodeMap* VarConstMap=NULL);
 
-    void CheckSimplifyInvariant(const ASTNode& a, 
-                                const ASTNode& output);
-
-
     ASTNode SimplifyAtomicFormula(const ASTNode& a, 
                                   bool pushNeg, 
                                   ASTNodeMap* VarConstMap=NULL);
@@ -164,8 +160,6 @@ namespace BEEV
 
     ASTNode PullUpITE(const ASTNode& in);
 
-    ASTNode RemoveContradictionsFromAND(const ASTNode& in);
-      
     ASTNode CreateSimplifiedTermITE(const ASTNode& t1, 
                                     const ASTNode& t2, 
                                     const ASTNode& t3);
