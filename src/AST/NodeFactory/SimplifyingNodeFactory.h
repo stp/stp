@@ -48,6 +48,7 @@ private:
 	SimplifyingNodeFactory(const SimplifyingNodeFactory& );
 	SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&);
 
+	ASTNode chaseRead(const ASTVec& children, unsigned int width );
 
 public:
 

@@ -433,6 +433,44 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 	return retval;
 }
 
+// Move reads down through writes until, either we hit a write to an identical (syntactically) index,
+// or we hit a write to an index that might be the same. This is intended to simplify things like:
+// read(write(write(A,1,2),2,3),4) cheaply.
+// The "children" that are passed should be the children of a READ.
+ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children, unsigned int width)
+{
+	assert(children[0].GetKind() == BEEV::WRITE);
+	const ASTNode& readIndex = children[1];
+	ASTNode write = children[0];
+
+	const bool read_is_const = (BEEV::BVCONST == readIndex.GetKind());
+
+	while (write.GetKind() == BEEV::WRITE)
+	{
+		const ASTNode& write_index = write[1];
+
+		if (readIndex == write_index)
+		{
+			// The are definately the same.
+			//cerr << "-";
+			return write[2];
+		}
+		else if (read_is_const && BEEV::BVCONST == write_index.GetKind())
+		{
+			// They are definately different. Ignore this.
+			//cerr << "+";
+		}else
+		{
+			// They may be the same. Exit.
+			//cerr << "#";
+			break;
+		}
+		write = write[0];
+	}
+	return hashing.CreateTerm(BEEV::READ, width, write,readIndex);
+}
+
+
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		const ASTVec &children)
 {
@@ -490,6 +528,14 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		}
 	}
 	break;
+
+	case BEEV::READ:
+	if (children[0].GetKind() == BEEV::WRITE)
+	{
+		result = chaseRead(children,width);
+	}
+	break;
+
 	default: // quieten compiler.
 		break;
 	}
