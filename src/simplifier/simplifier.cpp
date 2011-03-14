@@ -259,6 +259,19 @@ namespace BEEV
 	assert(_bm->UserFlags.optimize_flag);
     assert (BOOLEAN_TYPE == b.GetType());
 
+	  if (b.isConstant())
+		{
+		  if (!pushNeg)
+			return b;
+		  else
+		  {
+			  if (ASTTrue==b)
+				return ASTFalse;
+			else
+				return ASTTrue;
+		  }
+		}
+
     ASTNode output;
     if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
       return output;
@@ -343,12 +356,17 @@ namespace BEEV
       default:
         //kind can be EQ,NEQ,BVLT,BVLE,... or a propositional variable
         output = SimplifyAtomicFormula(a, pushNeg, VarConstMap);
-        //output = pushNeg ? nf->CreateNode(NOT,a) : a;
         break;
       }
 
     UpdateSimplifyMap(b, output, pushNeg, VarConstMap);
     UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
+
+    ASTNode input_with_not = pushNeg? nf->CreateNode(NOT,a):a;
+    if (input_with_not != output)
+    {
+    	return SimplifyFormula(output, false,  VarConstMap);
+    }
     return output;
   }
 
@@ -1785,7 +1803,7 @@ namespace BEEV
     {
     	bool notSimplified= false;
     	for (int i =0; i < inputterm.Degree();i++)
-    		if (inputterm[i].GetType() == BITVECTOR_TYPE)
+    		if (inputterm[i].GetType() != ARRAY_TYPE)
 				if (!hasBeenSimplified(inputterm[i]))
 				{
 					notSimplified = true;
@@ -1977,10 +1995,7 @@ namespace BEEV
           assert(inputterm.Degree() == 2);
 
           const ASTNode& a0 =inputterm[0];
-          assert(hasBeenSimplified(a0));
-
           const ASTNode& a1 =inputterm[1];
-          assert(hasBeenSimplified(a1));
 
           if (a0 == a1)
             output = _bm->CreateZeroConst(inputValueWidth);
@@ -2002,7 +2017,6 @@ namespace BEEV
           //can catch this fact.
 
           const ASTNode& a0 =inputterm[0];
-          assert(hasBeenSimplified(a0));
           const Kind k1 = a0.GetKind();
           const ASTNode one = _bm->CreateOneConst(inputValueWidth);
           assert(k1 != BVCONST);
@@ -2100,7 +2114,6 @@ namespace BEEV
           //BVEXTRACT. it exposes oppurtunities for later simplification
           //and solving (variable elimination)
           const ASTNode& a0 =inputterm[0];
-          assert(hasBeenSimplified(a0));
 
           const Kind k1 = a0.GetKind();
 
@@ -2298,7 +2311,6 @@ namespace BEEV
       case BVNEG:
         {
           const ASTNode& a0 =inputterm[0];
-          assert(hasBeenSimplified(a0));
 
           assert (a0.GetKind() != BVCONST);
 
@@ -2329,11 +2341,10 @@ namespace BEEV
         {
           //a0 is the expr which is being sign extended
           ASTNode a0 =inputterm[0];
-          assert(hasBeenSimplified(a0));
 
           //a1 represents the length of the term BVSX(a0)
           const ASTNode& a1 = inputterm[1];
-          assert(hasBeenSimplified(a1));
+
 
           if (a0.GetValueWidth() == inputValueWidth)
             {
@@ -2634,10 +2645,7 @@ namespace BEEV
       case BVCONCAT:
         {
           const ASTNode& t =inputterm[0];
-          assert(hasBeenSimplified(t));
-
           const ASTNode& u =inputterm[1];
-          assert(hasBeenSimplified(u));
 
           const Kind tkind = t.GetKind();
           const Kind ukind = u.GetKind();
@@ -2689,10 +2697,8 @@ namespace BEEV
 
         { // If the shift amount is known. Then replace it by an extract.
           const ASTNode a =inputterm[0];
-          assert(hasBeenSimplified(a));
-
           const ASTNode b =inputterm[1];
-          assert(hasBeenSimplified(b));
+
 
           const unsigned int width = a.GetValueWidth();
           if (BVCONST == b.GetKind()) // known shift amount.
@@ -2870,16 +2876,7 @@ namespace BEEV
         }
       case ITE:
         {
-          // SimplifyFormula isn't idempotent, so we try again.
-          ASTNode t0 = SimplifyFormula(inputterm[0], false, VarConstMap);
-
-          const ASTNode& t1 = inputterm[1];
-          assert(hasBeenSimplified(t1));
-
-          const ASTNode& t2 = inputterm[2];
-          assert(hasBeenSimplified(t2));
-
-          output = CreateSimplifiedTermITE(t0, t1, t2);
+          output = CreateSimplifiedTermITE(inputterm[0], inputterm[1], inputterm[2]);
           break;
         }
       case SBVREM:
