@@ -100,6 +100,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 	case BEEV::EQ:
 		result = CreateSimpleEQ(children);
 		break;
+	case BEEV::IFF:
+	{
+		assert(children.size() ==2);
+		ASTVec newCh;
+		newCh.reserve(2);
+		newCh.push_back(CreateSimpleNot(children[0]));
+		newCh.push_back(children[1]);
+	    result = CreateSimpleXor(newCh);
+	    break;
+	}
+
 	default:
 		result = hashing.CreateNode(kind, children);
 	}
@@ -171,17 +182,12 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 {
 	const Kind k = IsAnd ? BEEV::AND : BEEV::OR;
 
-	if (debug_simplifyingNodeFactory)
-	{
-		cout << "========" << endl << "CreateSimpAndOr " << k << " ";
-		lpvec(children);
-		cout << endl;
-	}
-
 	const ASTNode& annihilator = (IsAnd ? ASTFalse : ASTTrue);
 	const ASTNode& identity = (IsAnd ? ASTTrue : ASTFalse);
 
 	ASTNode retval;
+	ASTVec new_children;
+	new_children.reserve(children.size());
 
 	const ASTVec::const_iterator it_end = children.end();
 	for (ASTVec::const_iterator it = children.begin(); it != it_end; it++)
@@ -196,41 +202,32 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 
 		if (*it == annihilator)
 		{
-			retval = annihilator;
-			if (debug_simplifyingNodeFactory)
-			{
-				cout << "Annihilator" << endl;
-			}
-			return retval;
+			return annihilator;
 		}
 		else if (*it == identity || (nextexists && (*next_it == *it)))
 		{
 			// just drop it
-		}
+		}else
+			new_children.push_back(*it);
 	}
 
 	// If we get here, we saw no annihilators, and children should
 	// be only the non-True nodes.
-	if (children.size() < 2)
+
+
+	if (0 == new_children.size())
 	{
-		if (0 == children.size())
-		{
-			retval = identity;
-		}
-		else
-		{
-			// there is just one child
-			retval = children[0];
-		}
+		retval = identity;
+	}
+	else if (1==new_children.size())
+	{
+		// there is just one child
+		retval = new_children[0];
 	}
 	else
 	{
 		// 2 or more children.  Create a new node.
-		retval = hashing.CreateNode(IsAnd ? BEEV::AND : BEEV::OR, children);
-	}
-	if (debug_simplifyingNodeFactory)
-	{
-		cout << "returns " << retval << endl;
+		retval = hashing.CreateNode(IsAnd ? BEEV::AND : BEEV::OR, new_children);
 	}
 	return retval;
 }

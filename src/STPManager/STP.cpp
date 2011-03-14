@@ -173,6 +173,7 @@ namespace BEEV {
     BVSolver* bvSolver = new BVSolver(bm,simp);
 
     simplified_solved_InputToSAT = sizeReducing(inputToSAT,bvSolver);
+    //simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT,bvSolver);
 
     initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
     if (bm->UserFlags.stats_flag)
