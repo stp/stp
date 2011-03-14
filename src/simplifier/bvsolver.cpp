@@ -670,7 +670,7 @@ namespace BEEV
       output_children.push_back(r);
       }
 
-    return _bm->CreateNode(AND, output_children);
+    return nf->CreateNode(AND, output_children);
 
   }
 
@@ -803,11 +803,11 @@ namespace BEEV
     output = 
       (o.size() > 0) ? 
       ((o.size() > 1) ? 
-       _bm->CreateNode(AND, o) : 
+       nf->CreateNode(AND, o) :
        o[0]) : 
       ASTTrue;
     if (evens != ASTTrue)
-      output = _bm->CreateNode(AND, output, evens);
+      output = nf->CreateNode(AND, output, evens);
 
     if (_bm->UserFlags.isSet("xor-solve","1"))
       output = solveForAndOfXOR(output);

@@ -115,9 +115,11 @@ namespace BEEV
 
     VariablesInExpression& vars;
 
-    bool simplify;
+    bool simplify; //Whether to apply the simplifyTerm & simplifyFormula functions.
 
     ASTNode simplifyNode(const ASTNode n);
+
+    NodeFactory* nf;
 
   public:
     //constructor
@@ -127,12 +129,14 @@ namespace BEEV
       ASTFalse = _bm->CreateNode(FALSE);
       ASTUndefined = _bm->CreateNode(UNDEFINED);
       simplify=true;
+      nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
     };
 
      //Destructor
     ~BVSolver()
       {
     	ClearAllTables();
+    	delete nf;
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the
