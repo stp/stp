@@ -13,6 +13,7 @@
 #include <string>
 #include <assert.h>
 #include <iostream>
+#include <set>
 namespace BEEV
 {
 	using std::string;
@@ -25,6 +26,9 @@ namespace BEEV
    ******************************************************************/
 
   struct UserDefinedFlags {
+  private:
+	std::set<string> alreadyOutput;
+
   public:
     //collect statistics on certain functions
     bool stats_flag;
@@ -146,18 +150,18 @@ namespace BEEV
     	config_options[n] = v;
     }
 
-    string get(string n) const
+    string get(string n)
     {
     	return get(n,"");
     }
 
     // "1" is set.
-    bool isSet(string n, string def) const
+    bool isSet(string n, string def)
     {
     	return (get(n,def) == string("1"));
     }
 
-    string get(string n, string def) const
+    string get(string n, string def)
     {
     	if (config_options.empty())
     		return def;
@@ -170,8 +174,8 @@ namespace BEEV
     		result = it->second;
 
     	if (stats_flag)
-    		std::cout << n << ":"  << result << std::endl;
-
+    		if (alreadyOutput.insert(n).second)
+    			std::cout << n << ":"  << result << std::endl;
     	return result;
     }
 

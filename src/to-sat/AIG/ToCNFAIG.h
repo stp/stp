@@ -16,11 +16,11 @@ class ToCNFAIG {
 	ToCNFAIG&  operator = (const ToCNFAIG& other);
 	ToCNFAIG(const ToCNFAIG& other);
 
-	const UserDefinedFlags& uf;
+	UserDefinedFlags& uf;
 
 
 public:
-	ToCNFAIG(const UserDefinedFlags& _uf):
+	ToCNFAIG(UserDefinedFlags& _uf):
 		uf(_uf)
 	{
 		priorCnfData = NULL;
