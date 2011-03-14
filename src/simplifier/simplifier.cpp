@@ -1779,6 +1779,27 @@ namespace BEEV
 		  }
     }
 
+
+    //Check that each of the bit-vector operands is simplified.
+    //I haven't measured if this is worth the expense.
+    {
+    	bool notSimplified= false;
+    	for (int i =0; i < inputterm.Degree();i++)
+    		if (inputterm[i].GetType() == BITVECTOR_TYPE)
+				if (!hasBeenSimplified(inputterm[i]))
+				{
+					notSimplified = true;
+					break;
+				}
+    	if (notSimplified)
+    	{
+    		ASTNode r = SimplifyTerm(inputterm);
+			UpdateSimplifyMap(actualInputterm,r,false,NULL);
+			UpdateSimplifyMap(inputterm,r,false,NULL);
+			return r;
+    	}
+    }
+
     switch (k)
       {
       case BVCONST:
@@ -2288,10 +2309,10 @@ namespace BEEV
               break;
             case ITE:
 			   if (a0[1].isConstant() && a0[2].isConstant()) {
-					ASTNode t = nf->CreateTerm(BVNEG, inputValueWidth,
-							a0[1]);
-					ASTNode f = nf->CreateTerm(BVNEG, inputValueWidth,
-							a0[2]);
+					ASTNode t = SimplifyTerm(nf->CreateTerm(BVNEG, inputValueWidth,
+							a0[1]));
+					ASTNode f = SimplifyTerm(nf->CreateTerm(BVNEG, inputValueWidth,
+							a0[2]));
 					output = nf->CreateTerm(ITE, inputValueWidth, a0[0],
 							BVConstEvaluator(t), BVConstEvaluator(f));
 					break;
@@ -2813,11 +2834,7 @@ namespace BEEV
             {
               if (WRITE == inputterm[0].GetKind())
                 {
-                  //get rid of all writes
-		  //_bm->ASTNodeStats("before RemoveWrites_TopLevel:", inputterm);
-                  ASTNode nowrites = RemoveWrites_TopLevel(inputterm);
-		  //_bm->ASTNodeStats("after RemoveWrites_TopLevel:", nowrites);
-                  out1 = nowrites;
+            	  out1 = RemoveWrites_TopLevel(inputterm);
                 }
               else if (ITE == inputterm[0].GetKind())
                 {
