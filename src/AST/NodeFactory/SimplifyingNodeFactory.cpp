@@ -76,6 +76,27 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 		result = NodeFactory::CreateNode(BEEV::BVSGE, children[1], children[0]);
 		break;
 
+
+	case BEEV::BVSGT:
+	case BEEV::BVGT:
+		assert(children.size() ==2);
+		if (children[0] == children[1])
+			result = ASTFalse;
+		else
+			result = hashing.CreateNode(kind, children);
+		break;
+
+	case BEEV::BVSGE:
+	case BEEV::BVGE:
+		assert(children.size() ==2);
+		if (children[0] == children[1])
+			result = ASTTrue;
+		else
+			result = hashing.CreateNode(kind, children);
+		break;
+
+
+
 	case BEEV::NOT:
 		result = CreateSimpleNot(children);
 		break;
@@ -110,6 +131,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 	    result = CreateSimpleXor(newCh);
 	    break;
 	}
+	case BEEV::IMPLIES:
+	{
+		assert(children.size() ==2);
+		ASTVec newCh;
+		newCh.reserve(2);
+		newCh.push_back(CreateSimpleNot(children[0]));
+		newCh.push_back(children[1]);
+	    result = CreateSimpleAndOr(0,newCh);
+	    break;
+	}
+
 
 	default:
 		result = hashing.CreateNode(kind, children);
@@ -512,6 +544,15 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		break;
 	}
 
+
+	case BEEV::BVSX:
+	{
+		if (width == children[0].GetValueWidth())
+			result = children[0];
+		break;
+	}
+
+
 	case BEEV::BVNEG:
 	{
 		switch (children[0].GetKind())
@@ -525,6 +566,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		}
 	}
 	break;
+
+
+	case BEEV::BVMOD:
+		if (children[1].isConstant())
+		{
+			ASTNode one = bm.CreateOneConst(width);
+			if (children[1] == one)
+				result = bm.CreateZeroConst(width);
+		}
+		break;
+
 
 	case BEEV::READ:
 	if (children[0].GetKind() == BEEV::WRITE)
