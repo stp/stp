@@ -1676,6 +1676,42 @@ namespace BEEV
     return (it->second == n);
   }
 
+ // If both of the children are sign extended. Makes this node sign extended too.
+  ASTNode Simplifier::pullUpBVSX(ASTNode output)
+  {
+    assert(output.GetChildren().size() ==2);
+    assert(output[0].GetKind() == BVSX);
+    assert(output[1].GetKind() == BVSX);
+    const Kind k = output.GetKind();
+
+    assert(BVMULT == k || SBVDIV == k || BVPLUS ==k);
+    const int inputValueWidth = output.GetValueWidth();
+
+    int lengthA = output.GetChildren()[0][0].GetValueWidth();
+    int lengthB = output.GetChildren()[1][0].GetValueWidth();
+    int maxLength;
+    if (BVMULT == output.GetKind())
+      maxLength = lengthA + lengthB;
+    else if (BVPLUS == output.GetKind() || SBVDIV == output.GetKind())
+      maxLength = std::max(lengthA,lengthB)+1;
+    else
+      FatalError("Unexpected.");
+    if (maxLength < output.GetValueWidth())
+      {
+        ASTNode newA =  nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[0], _bm->CreateBVConst(32,maxLength-1), _bm->CreateZeroConst(32));
+        newA = SimplifyTerm(newA);
+        ASTNode newB =  nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[1], _bm->CreateBVConst(32,maxLength-1), _bm->CreateZeroConst(32));
+        newB = SimplifyTerm(newB);
+
+        ASTNode mult = nf->CreateTerm(output.GetKind(), maxLength, newA,newB);
+        output = nf->CreateTerm(BVSX, inputValueWidth, mult, _bm->CreateBVConst(32,inputValueWidth));
+        cerr << k;
+      }
+    return output;
+  }
+
+
+
   //This function simplifies terms based on their kind
   ASTNode 
   Simplifier::SimplifyTerm(const ASTNode& actualInputterm, 
@@ -1976,7 +2012,11 @@ namespace BEEV
                 }
             }
 
-          if (BVMULT == output.GetKind())
+          if ((BVMULT == output.GetKind() || BVPLUS == output.GetKind()) && output.GetChildren().size() == 2 && output.GetChildren()[0].GetKind() == BVSX && output.GetChildren()[1].GetKind() == BVSX )
+            {
+              output = pullUpBVSX(output);
+            }
+          else if (BVMULT == output.GetKind())
             {
               output = makeTower(BVMULT,output.GetChildren());
             }
@@ -2893,13 +2933,15 @@ namespace BEEV
         }
       case SBVDIV:
         {
+          output = inputterm;
           if (inputterm[0] == inputterm[1])
           {
             output = _bm->CreateOneConst(inputValueWidth);
             break;
           }
+          if (SBVDIV == output.GetKind() && output.GetChildren().size() == 2 && output.GetChildren()[0].GetKind() == BVSX && output.GetChildren()[1].GetKind() == BVSX )
+            output = pullUpBVSX(output);
 
-          output = inputterm;
           break;
         }
       case WRITE:

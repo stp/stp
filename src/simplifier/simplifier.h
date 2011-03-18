@@ -58,6 +58,8 @@ namespace BEEV
 
     ASTNode makeTower(const Kind k , const ASTVec& children);
 
+    ASTNode pullUpBVSX(const ASTNode output);
+
   public:
 
     /****************************************************************
