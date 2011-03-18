@@ -1705,7 +1705,6 @@ namespace BEEV
 
         ASTNode mult = nf->CreateTerm(output.GetKind(), maxLength, newA,newB);
         output = nf->CreateTerm(BVSX, inputValueWidth, mult, _bm->CreateBVConst(32,inputValueWidth));
-        cerr << k;
       }
     return output;
   }
