@@ -22,16 +22,41 @@ namespace BEEV
       {
         minV = _min;
         maxV = _max;
+        assert(minV != NULL);
+        assert(maxV != NULL);
+        assert(size_(minV) == size_(maxV));
       }
 
       void print()
       {
-        cerr << *(minV) << " " << *(maxV) << endl;
+        if (size_(minV) <= sizeof(unsigned int))
+          cerr << *(minV) << " " << *maxV << endl;
+        else
+          {
+            unsigned char * a = CONSTANTBV::BitVector_to_Dec(minV);
+            unsigned char * b = CONSTANTBV::BitVector_to_Dec(maxV);
+            cerr << *a << " " << *b << endl;
+            free(a);
+            free(b);
+          }
       }
 
       bool isConstant()
       {
     	  return !CONSTANTBV::BitVector_Lexicompare(minV, maxV);
+      }
+
+      bool isComplete()
+      {
+        return (CONSTANTBV::BitVector_is_empty(minV) && CONSTANTBV::BitVector_is_full(maxV));
+      }
+
+      bool checkInvariant()
+      {
+        assert( CONSTANTBV::BitVector_Lexicompare(minV, maxV) <=0);
+
+        // We use NULL to represent the complete domain.
+        assert( !isComplete());
       }
     };
 
@@ -40,6 +65,7 @@ namespace BEEV
 
     IntervalType * freshUnsignedInterval(int width)
     {
+      assert(width > 0);
       IntervalType *it = createInterval(makeCBV(width), makeCBV(width));
       CONSTANTBV::BitVector_Fill(it->maxV);
       return it;
@@ -289,6 +315,11 @@ namespace BEEV
               result = freshUnsignedInterval(n.GetValueWidth());
               CONSTANTBV::BitVector_Copy(result->maxV , children[1]->maxV);
               CONSTANTBV::BitVector_decrement(result->maxV);
+
+              // If the top is known, and it's maximum is less, use that.
+              if (knownC0 && CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,result->maxV) < 0)
+                CONSTANTBV::BitVector_Copy(result->maxV , children[0]->maxV);
+
             }
         }
       else if (BVSX == n.GetKind()  && knownC0 && knownC1)
@@ -316,6 +347,167 @@ namespace BEEV
         		  CONSTANTBV::BitVector_Bit_Off(result->maxV,i);
     	  }
       }
+      else if (BVNEG == n.GetKind() && knownC0) // NOT of the bitvector.
+        {
+          result = freshUnsignedInterval(width);
+          CONSTANTBV::BitVector_Copy(result->maxV,  children[0]->minV);
+          CONSTANTBV::BitVector_Flip(result->maxV);
+          CONSTANTBV::BitVector_Copy(result->minV,  children[0]->maxV);
+          CONSTANTBV::BitVector_Flip(result->minV);
+        }
+      else if (BVUMINUS == n.GetKind() && knownC0)
+        {
+          // Imagine it's {00, 01},  the unary minus of these is: {00,11},
+          // i.e. it's everything. When there's a zero, (except for [0,0]),
+          // it will be everything.
+
+          if (!CONSTANTBV::BitVector_is_empty(children[0]->minV))
+            {
+              result = freshUnsignedInterval(width);
+              CONSTANTBV::BitVector_Copy(result->maxV, children[0]->minV);
+              CONSTANTBV::BitVector_Flip(result->maxV);
+              CONSTANTBV::BitVector_increment(result->maxV);
+
+              CONSTANTBV::BitVector_Copy(result->minV, children[0]->maxV);
+              CONSTANTBV::BitVector_Flip(result->minV);
+              CONSTANTBV::BitVector_increment(result->minV);
+            }
+        }
+      else if (ITE == n.GetKind()  && children[1] != NULL && children[2] != NULL)
+        {
+          // Both terms and propositions.
+          result = freshUnsignedInterval(width==0? 1: width);
+          CBV min, max;
+          if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV, children[2]->minV) >0)
+            min = children[2]->minV;
+          else
+            min = children[1]->minV;
+
+          if (CONSTANTBV::BitVector_Lexicompare(children[1]->maxV, children[2]->maxV) >0)
+            max = children[1]->maxV;
+          else
+            max = children[2]->maxV;
+
+          CONSTANTBV::BitVector_Copy(result->minV, min);
+          CONSTANTBV::BitVector_Copy(result->maxV, max);
+        }
+      else if (BVMULT == n.GetKind() && knownC0 && knownC1)
+        {
+          //  >=2 arity.
+          CBV min,max;
+          min = CONSTANTBV::BitVector_Create(2*width, true);
+          max = CONSTANTBV::BitVector_Create(2*width, true);
+
+          // Make the result interval 1.
+          result = freshUnsignedInterval(width);
+          CONSTANTBV::BitVector_increment(result->minV);
+          CONSTANTBV::BitVector_Flip(result->maxV);
+          CONSTANTBV::BitVector_increment(result->maxV);
+
+          bool bad= false;
+          for (int i =0; i < children.size(); i++)
+            {
+              if (children[i] == NULL)
+                {
+                  bad = true;
+                  break;
+                }
+              CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(min, result->minV, children[i]->minV);
+              assert (0 == e);
+
+              e = CONSTANTBV::BitVector_Multiply(max, result->maxV, children[i]->maxV);
+              assert (0 == e);
+
+              if (CONSTANTBV::Set_Max(max) >= width)
+                bad = true;
+
+              for (int j = width; j < 2 * width; j++)
+                {
+                  if (CONSTANTBV::BitVector_bit_test(min, j))
+                    bad = true;
+                }
+
+              CONSTANTBV::BitVector_Interval_Copy(result->minV, min, 0, 0, width);
+              CONSTANTBV::BitVector_Interval_Copy(result->maxV, max, 0, 0, width);
+            }
+          CONSTANTBV::BitVector_Destroy(min);
+          CONSTANTBV::BitVector_Destroy(max);
+          if (bad)
+            result = NULL;
+        }
+      else if (false && BVLEFTSHIFT == n.GetKind() && knownC0 && knownC1)
+        {
+          // Todo two cases.
+          // 1) The maximum shift of the maximum value doesn't overflow, and,
+          // 2) The minimum shift of the minimum value completely overflows (to zero).
+        }
+      else if (BVAND == n.GetKind())
+        {
+            //int max=width;
+            //for (int i =0 ; i < children.size(); i++)
+            //{
+                //if (children[i] != NULL)
+//                  CONSTANTBV::Set_Max(children[1]->minV)
+  //          }
+        }
+      else if (BVRIGHTSHIFT == n.GetKind() && knownC0 && knownC1)
+           {
+             result = freshUnsignedInterval(width);
+
+             // The maximum result is the maximum >> (minimum shift).
+             if (CONSTANTBV::Set_Max(children[1]->minV) > 1 + log2(width) ||  *(children[1]->minV) > width)
+             {
+                 // The maximum is zero.
+                 CONSTANTBV::BitVector_Flip(result->maxV);
+             }
+             else
+             {
+                 unsigned shift_amount = *(children[1]->minV);
+                 CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+                 while (shift_amount-- > 0)
+                    CONSTANTBV::BitVector_shift_right(result->maxV,0);
+             }
+
+             // The minimum result is the minimum >> (maximum shift).
+             if (CONSTANTBV::Set_Max(children[1]->maxV) > 1 + log2(width) || *(children[1]->maxV) > width)
+             {
+                   // The mimimum is zero. (which it's set to by default.).
+             }
+             else
+             {
+                 unsigned shift_amount = *(children[1]->maxV);
+                 CONSTANTBV::BitVector_Copy(result->minV, children[0]->minV);
+                 while (shift_amount-- > 0)
+                    CONSTANTBV::BitVector_shift_right(result->minV,0);
+             }
+           }
+      else if (BVPLUS == n.GetKind() && knownC0 && knownC1)
+        {
+          //  >=2 arity.
+          result = freshUnsignedInterval(width);
+          CONSTANTBV::BitVector_Flip(result->maxV); // make the max zero too.
+
+          bool carry = false;
+
+          for (int i =0; i < children.size(); i++)
+            {
+              if (children[i] == NULL)
+                {
+                  carry = true;
+                  break;
+                }
+
+              CONSTANTBV::BitVector_add(result->maxV,result->maxV, children[i]->maxV,  &carry);
+              if (carry)
+                break;
+              CONSTANTBV::BitVector_add(result->minV,result->minV, children[i]->minV,  &carry);
+              if (carry)
+                break;
+            }
+
+          if (carry)
+            result = NULL;
+        }
       else if (BVCONCAT == n.GetKind()  && (knownC0 || knownC1))
       {
           result = freshUnsignedInterval(n.GetValueWidth());
@@ -369,15 +561,21 @@ namespace BEEV
 
     	  if (false && nonNull && n.GetKind() != SYMBOL && n.GetKind() != AND)
     	  {
-    		  cerr << n;
-    	  for (int i=0; i < n.Degree();i++)
-    		  children[i]->print();
+    	      cerr << n;
+    	      for (int i=0; i < n.Degree();i++)
+    	        children[i]->print();
     	  }
       }
 
+      if (result != NULL && result->isComplete())
+        result = NULL;
+
+      if (result != NULL)
+          result->checkInvariant();
+
       // result will often be null (which we take to mean the maximum range).
-        visited.insert(make_pair(n,result));
-        return result;
+      visited.insert(make_pair(n,result));
+      return result;
     }
 
     STPMgr& bm;
