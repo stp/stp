@@ -544,6 +544,43 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		break;
 	}
 
+	case BEEV::BVAND:
+	  {
+
+	    bool oneFound=false;
+	    bool zeroFound=false;
+
+	    for (int i = 0; i < children.size(); i++)
+            {
+              if (children[i].GetKind() == BEEV::BVCONST)
+                {
+                if (CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
+                  oneFound = true;
+                else if (CONSTANTBV::BitVector_is_empty(children[i].GetBVConst()))
+                  zeroFound = true;
+                }
+            }
+
+	    if (zeroFound)
+	      return bm.CreateZeroConst(width);
+
+	    if (oneFound)
+	      {
+	        ASTVec new_children;
+                for (int i = 0; i < children.size(); i++)
+                {
+                  if (children[i].GetKind() != BEEV::BVCONST || !CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
+                    new_children.push_back(children[i]);
+                }
+
+                assert(new_children.size() != 0); // constant. Should have been handled earlier.
+                if (new_children.size() == 1)
+                  return new_children[0];
+                else
+                  result = hashing.CreateTerm(kind, width, new_children);
+	      }
+	  }
+	  break;
 
 	case BEEV::BVSX:
 	{
@@ -552,30 +589,24 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		break;
 	}
 
-
 	case BEEV::BVNEG:
-	{
-		switch (children[0].GetKind())
-		{
-
-		case BEEV::BVNEG:
-			result = children[0][0];
-			break;
-		default: // quieten compiler.
-			break;
-		}
-	}
+	  if (children[0].GetKind() == BEEV::BVNEG)
+	    return children[0][0];
 	break;
 
+        case BEEV::BVUMINUS:
+          if (children[0].GetKind() == BEEV::BVUMINUS)
+            return children[0][0];
+        break;
 
 	case BEEV::BVMOD:
-		if (children[1].isConstant())
-		{
-			ASTNode one = bm.CreateOneConst(width);
-			if (children[1] == one)
-				result = bm.CreateZeroConst(width);
-		}
-		break;
+        if (children[1].isConstant())
+        {
+                ASTNode one = bm.CreateOneConst(width);
+                if (children[1] == one)
+                        result = bm.CreateZeroConst(width);
+        }
+        break;
 
 
 	case BEEV::READ:
@@ -588,6 +619,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	default: // quieten compiler.
 		break;
 	}
+
 
 	if (result.IsNull())
 		result = hashing.CreateTerm(kind, width, children);
