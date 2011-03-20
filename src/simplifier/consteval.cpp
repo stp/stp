@@ -462,9 +462,9 @@ namespace BEEV
               && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // a = bq + r, where b!=0 implies r < b. q is quotient, r remainder. i.e. a/b = q.
-              // It doesn't matter what q is when b=0, but r needs to be 0.
+              // It doesn't matter what q is when b=0, but r needs to be a.
               if (k == BVMOD)
-                OutputNode = _bm->CreateZeroConst(outputwidth);
+                OutputNode = children[0];
               else
                 OutputNode = _bm->CreateOneConst(outputwidth);
                 // Expecting a division by zero. Just return one.
