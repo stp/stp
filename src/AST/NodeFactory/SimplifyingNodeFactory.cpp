@@ -14,12 +14,16 @@
  * These rules never increase the total number of nodes.  They are complimented by
  * multi-level re-write rules that consider the global reference count when simplifying.
  *
+ * I think we've got all the two input cases that either map to a constant, or to an input value.
+ * e.g. (a >> a), (a xor a), (a or a), (a and a), (a + 0), (a-0)..
+ *
  */
 
 #include "../../AST/AST.h"
 #include <cassert>
 #include "SimplifyingNodeFactory.h"
 #include "../../simplifier/simplifier.h"
+#include <cmath>
 
 using BEEV::Kind;
 
@@ -78,22 +82,81 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 
 
 	case BEEV::BVSGT:
+		assert(children.size() ==2);
+		if (children[0] == children[1])
+			result = ASTFalse;
+		if (children[1].GetKind() == BEEV::BVCONST)
+		{
+            // 011111111 (most positive number.)
+			unsigned width = children[0].GetValueWidth();
+            BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
+            CONSTANTBV::BitVector_Fill(max);
+            CONSTANTBV::BitVector_Bit_Off(max, width - 1);
+            ASTNode biggestNumber = bm.CreateBVConst(max, width);
+            if (children[1] == biggestNumber)
+            	result = ASTFalse;
+		}
+		if (children[0].GetKind() == BEEV::BVCONST)
+		{
+			unsigned width = children[0].GetValueWidth();
+            // 1000000000 (most negative number.)
+			BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
+            CONSTANTBV::BitVector_Bit_On(max, width - 1);
+            ASTNode smallestNumber = bm.CreateBVConst(max, width);
+            if (children[0] == smallestNumber)
+            	result = ASTFalse;
+		}
+		break;
+
 	case BEEV::BVGT:
 		assert(children.size() ==2);
 		if (children[0] == children[1])
 			result = ASTFalse;
-		else
-			result = hashing.CreateNode(kind, children);
+		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+			result = ASTFalse;
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+			result = ASTFalse;
 		break;
 
-	case BEEV::BVSGE:
 	case BEEV::BVGE:
 		assert(children.size() ==2);
 		if (children[0] == children[1])
 			result = ASTTrue;
-		else
-			result = hashing.CreateNode(kind, children);
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+			result = ASTTrue;
+		if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+			result = ASTTrue;
 		break;
+
+
+	case BEEV::BVSGE:
+		assert(children.size() ==2);
+		if (children[0] == children[1])
+			result = ASTTrue;
+		if (children[0].GetKind() == BEEV::BVCONST)
+		{
+            // 011111111 (most positive number.)
+			unsigned width = children[0].GetValueWidth();
+            BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
+            CONSTANTBV::BitVector_Fill(max);
+            CONSTANTBV::BitVector_Bit_Off(max, width - 1);
+            ASTNode biggestNumber = bm.CreateBVConst(max, width);
+            if (children[0] == biggestNumber)
+            	result = ASTTrue;
+		}
+		if (children[1].GetKind() == BEEV::BVCONST)
+		{
+			unsigned width = children[0].GetValueWidth();
+            // 1000000000 (most negative number.)
+			BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
+            CONSTANTBV::BitVector_Bit_On(max, width - 1);
+            ASTNode smallestNumber = bm.CreateBVConst(max, width);
+            if (children[1] == smallestNumber)
+            	result = ASTTrue;
+		}
+		break;
+
+
 
 
 
@@ -133,12 +196,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 	}
 	case BEEV::IMPLIES:
 	{
-		assert(children.size() ==2);
-		ASTVec newCh;
-		newCh.reserve(2);
-		newCh.push_back(CreateSimpleNot(children[0]));
-		newCh.push_back(children[1]);
-	    result = CreateSimpleAndOr(0,newCh);
+	  assert(children.size() ==2);
+	  if (children[0] == children[1])
+	    result = bm.ASTTrue;
+	  else
+	    {
+              ASTVec newCh;
+              newCh.reserve(2);
+              newCh.push_back(CreateSimpleNot(children[0]));
+              newCh.push_back(children[1]);
+              result = CreateSimpleAndOr(0, newCh);
+	    }
 	    break;
 	}
 
@@ -146,6 +214,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 	default:
 		result = hashing.CreateNode(kind, children);
 	}
+
+	if (result.IsNull())
+		result = hashing.CreateNode(kind, children);
 
 	return result;
 }
@@ -533,6 +604,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
 	switch (kind)
 	{
+
 	case BEEV::ITE:
 	{
 		if (children[0]== ASTTrue)
@@ -543,6 +615,115 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 			result = children[1];
 		break;
 	}
+
+	case BEEV::BVMULT:
+		  {
+			  if (children.size() ==2)
+				  {
+				  if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+				  	  result = bm.CreateZeroConst(width);
+
+				  if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+					  result = bm.CreateZeroConst(width);
+
+				  if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+					  result = children[0];
+
+				  if (children[0].isConstant() && children[0] == bm.CreateOneConst(width))
+					  result = children[1];
+
+				  }
+		  }
+		  break;
+
+	case BEEV::BVLEFTSHIFT:
+	{
+		  if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+				 result = bm.CreateZeroConst(width);
+		  else if (children[1].isConstant() && CONSTANTBV::Set_Max(children[1].GetBVConst()) > 1 + log2(width))
+			  result = bm.CreateZeroConst(width);
+		  else if (children[1].isConstant() && children[1].GetUnsignedConst() >=width)
+			  result = bm.CreateZeroConst(width);
+		  else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+				 result = children[0];
+
+
+	}
+	break;
+
+	case BEEV::BVRIGHTSHIFT:
+		{
+			if (children[0] == children[1])
+				result= bm.CreateZeroConst(width);
+			if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+				 result = bm.CreateZeroConst(width);
+  		  else if (children[1].isConstant() && CONSTANTBV::Set_Max(children[1].GetBVConst()) > 1 + log2(width))
+				  result = bm.CreateZeroConst(width);
+		  else if (children[1].isConstant() && children[1].GetUnsignedConst() >=width)
+				  result = bm.CreateZeroConst(width);
+		  else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+				 result = children[0];
+
+		}
+	break;
+
+	case BEEV::BVSRSHIFT:
+		{
+			if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+				result = bm.CreateZeroConst(width);
+
+			if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+				result = bm.CreateMaxConst(width);
+			else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+					 result = children[0];
+
+		}
+	 break;
+
+	case BEEV::BVSUB:
+            if (children.size() == 2 && children[0] == children[1])
+              result = bm.CreateZeroConst(width);
+            if (children.size() == 2 && children[1] == bm.CreateZeroConst(width))
+              result = children[0];
+            break;
+
+	case BEEV::BVOR:
+		  {
+			  if (children.size() ==2)
+			  {
+			  if (children[0] == children[1])
+				  result = children[0];
+
+			  if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+			  	  result = bm.CreateMaxConst(width);
+
+			  if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+				  result = bm.CreateMaxConst(width);
+
+                          if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+                                    result = children[0];
+
+                          if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+                                    result = children[1];
+
+			  }
+		  }
+		  break;
+
+	case BEEV::BVXOR:
+                  if (children.size() ==2)
+                  {
+                    if (children[0] == children[1])
+                    result = bm.CreateZeroConst(width);
+
+                    if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+                      result = children[0];
+
+                    if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+                      result = children[1];
+                  }
+                break;
+
 
 	case BEEV::BVAND:
 	  {
@@ -562,9 +743,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             }
 
 	    if (zeroFound)
-	      return bm.CreateZeroConst(width);
-
-	    if (oneFound)
+	    {
+	    	result =  bm.CreateZeroConst(width);
+	    }
+	    else if (oneFound)
 	      {
 	        ASTVec new_children;
                 for (int i = 0; i < children.size(); i++)
@@ -575,11 +757,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
                 assert(new_children.size() != 0); // constant. Should have been handled earlier.
                 if (new_children.size() == 1)
-                  return new_children[0];
+                  {
+                	result = new_children[0];
+                  }
                 else
                   result = hashing.CreateTerm(kind, width, new_children);
 	      }
 	  }
+
+
+	  if (children.size() ==2 && children[0] == children[1])
+          {
+	      result = children[0];
+          }
 	  break;
 
 	case BEEV::BVSX:
@@ -591,22 +781,79 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
 	case BEEV::BVNEG:
 	  if (children[0].GetKind() == BEEV::BVNEG)
-	    return children[0][0];
+	    result =  children[0][0];
 	break;
 
-        case BEEV::BVUMINUS:
-          if (children[0].GetKind() == BEEV::BVUMINUS)
-            return children[0][0];
+	case BEEV::BVUMINUS:
+	  if (children[0].GetKind() == BEEV::BVUMINUS)
+		result = children[0][0];
+	break;
+
+	case BEEV::BVPLUS:
+        if (children.size() == 2)
+          {
+            if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+              result = children[0];
+            if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+              result = children[1];
+          }
         break;
 
+	case BEEV::SBVMOD:
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
+				children[1].GetBVConst()))
+			result = children[0];
+		if (children[0] == children[1])
+			result = bm.CreateZeroConst(width);
+		break;
+
+
+	case BEEV::BVDIV:
+	  if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+	    result = children[0];
+	  break;
+
+        case BEEV::SBVDIV:
+          if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+            result = children[0];
+          break;
+
+
+	case BEEV::SBVREM:
+		if (children[0] == children[1])
+			result = bm.CreateZeroConst(width);
+		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(
+				children[0].GetBVConst()))
+			result = bm.CreateZeroConst(width);
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(
+				children[1].GetBVConst()))
+			result = bm.CreateZeroConst(width);
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
+				children[1].GetBVConst()))
+			result = children[0];
+		if (children[1].isConstant() && bm.CreateOneConst(width) == children[1])
+			result = bm.CreateZeroConst(width);
+		break;
+
 	case BEEV::BVMOD:
-        if (children[1].isConstant())
-        {
-                ASTNode one = bm.CreateOneConst(width);
-                if (children[1] == one)
-                        result = bm.CreateZeroConst(width);
-        }
-        break;
+		if (children[0] == children[1])
+			result = bm.CreateZeroConst(width);
+
+		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(
+				children[0].GetBVConst()))
+			result = bm.CreateZeroConst(width);
+
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
+				children[1].GetBVConst()))
+			result = children[0];
+
+
+		if (children[1].isConstant()) {
+			ASTNode one = bm.CreateOneConst(width);
+			if (children[1] == one)
+				result = bm.CreateZeroConst(width);
+		}
+		break;
 
 
 	case BEEV::READ:
