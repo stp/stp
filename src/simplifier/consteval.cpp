@@ -304,8 +304,12 @@ namespace BEEV
               && CONSTANTBV::BitVector_is_empty(tmp1))
             {
               // Expecting a division by zero. Just return one.
-              OutputNode = _bm->CreateOneConst(outputwidth);
-              CONSTANTBV::BitVector_Destroy(remainder);
+        	  if (k==SBVREM)
+        		  OutputNode = children[0];
+        	  else
+        		  OutputNode = _bm->CreateOneConst(outputwidth);
+
+        	  CONSTANTBV::BitVector_Destroy(remainder);
               CONSTANTBV::BitVector_Destroy(quotient);
             }
           else
@@ -363,8 +367,8 @@ namespace BEEV
           if (_bm->UserFlags.division_by_zero_returns_one_flag
               && CONSTANTBV::BitVector_is_empty(tmp1))
             {
-              // Expecting a division by zero. Just return one.
-              OutputNode = _bm->CreateOneConst(outputwidth);
+              // Return the top for a division be zero.
+              OutputNode = children[0];
               CONSTANTBV::BitVector_Destroy(remainder);
             }
           else

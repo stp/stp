@@ -469,7 +469,7 @@ namespace BEEV
                   result = TranslateSignedDivModRem(result);
                 }
 
-              if (bm->UserFlags.division_by_zero_returns_one_flag)
+              if (bm->UserFlags.division_by_zero_returns_one_flag && (k==SBVDIV || k == BVDIV))
                 {
                   // This is a difficult rule to introduce in other
                   // places because it's recursive. i.e.  result is
