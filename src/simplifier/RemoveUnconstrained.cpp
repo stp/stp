@@ -26,7 +26,6 @@ namespace BEEV
 
   const bool debug_unconstrained = false;
 
-  // There should be no unapplied simplifications.
   ASTNode
   RemoveUnconstrained::topLevel(const ASTNode &n, Simplifier *simplifier)
   {
@@ -35,7 +34,9 @@ namespace BEEV
     bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
     //All the simplifications should be written through before we get here.
-    assert(result == simplifier->applySubstitutionMap(result));
+
+    if(simplifier->hasUnappliedSubstitutions())
+      result = simplifier->applySubstitutionMap(result);
 
     result = topLevel_other(result, simplifier);
 
