@@ -26,6 +26,7 @@ namespace BEEV
 
   const bool debug_unconstrained = false;
 
+  // There should be no unapplied simplifications.
   ASTNode
   RemoveUnconstrained::topLevel(const ASTNode &n, Simplifier *simplifier)
   {
@@ -33,14 +34,14 @@ namespace BEEV
 
     bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
-    // If there are substitutions still to write through, I suspect that'd be bad.
-    result = simplifier->applySubstitutionMap(result);
-    simplifier->haveAppliedSubstitutionMap();
+    //All the simplifications should be written through before we get here.
+    assert(result == simplifier->applySubstitutionMap(result));
 
     result = topLevel_other(result, simplifier);
 
     // There should be no unapplied substitutions.
     assert(result == simplifier->applySubstitutionMap(result));
+
 
     // It is idempotent if there are no big ANDS (we have a special hack), and,
     // if we don't introduced any new "disjoint extracts."

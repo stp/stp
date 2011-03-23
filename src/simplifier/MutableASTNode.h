@@ -36,7 +36,7 @@ private:
     // will be created after its children.
 public:
     static MutableASTNode *
-    build(ASTNode n, map<ASTNode, MutableASTNode *> & visited)
+    build(const ASTNode& n, map<ASTNode, MutableASTNode *> & visited)
     {
       if (visited.find(n) != visited.end())
         {
