@@ -99,6 +99,12 @@ public:
     	return bm.LookupOrCreateSymbol(name.c_str());
     }
 
+    bool isSymbolAlreadyDeclared(char* name)
+    {
+           return bm.LookupSymbol(name);
+    }
+
+
     bool isSymbolAlreadyDeclared(string name)
 	{
 	   return bm.LookupSymbol(name.c_str());

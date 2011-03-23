@@ -122,29 +122,32 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "POP"            { return POP_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  string str(yytext);
-   bool found = false;
+  
    ASTNode nptr;
    
-  if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+   if (BEEV::parserInterface->isSymbolAlreadyDeclared(yytext)) // it's a symbol.
     {
-    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
-    	found = true;
-    }
-    else if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
-    {
-    	nptr= BEEV::parserInterface->letMgr.resolveLet(str);
-    	found = true;
+    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(yytext);
+	    cvclval.node = BEEV::parserInterface->newNode(nptr);
+		if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+		  return FORMID_TOK;
+		else 
+		  return TERMID_TOK;
     }
 
-	if (found)
-	{
-	  cvclval.node = BEEV::parserInterface->newNode(nptr);
-	  if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
-	    return FORMID_TOK;
-	  else 
-	    return TERMID_TOK;
-	   }
+    // Making 4.4M strings took 1B instructions. So I split out the above case 
+    // which occurs >90% of the time (so avoiding turning the char* into a string).
+    string str(yytext);
+    if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
+    {
+    	nptr= BEEV::parserInterface->letMgr.resolveLet(str);
+    	cvclval.node = BEEV::parserInterface->newNode(nptr);
+	  
+	    if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	      return FORMID_TOK;
+	    else 
+	      return TERMID_TOK;
+    }
 	   
     // It hasn't been found. So it's not already declared.
     // it has not been seen before.
