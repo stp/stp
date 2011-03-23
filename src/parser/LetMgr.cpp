@@ -37,8 +37,15 @@ namespace BEEV {
                "cannot redeclare as a letvar: v =", var);
     }
 
+    LetExprMgr(var.GetName(),letExpr);
+  }//end of LetExprMgr()
+
+  void LETMgr::LetExprMgr(string name, const ASTNode& letExpr)
+  {
+    assert (_letid_expr_map->find(name) == _letid_expr_map->end());
     (*_letid_expr_map)[name] = letExpr;
   }//end of LetExprMgr()
+
 
   //this function looks up the "var to letexpr map" and returns the
   //corresponding letexpr. if there is no letexpr, then it simply

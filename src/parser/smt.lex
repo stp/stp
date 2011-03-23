@@ -220,17 +220,34 @@ bit{DIGIT}+     {
 "boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = parserInterface->LookupOrCreateSymbol(smttext); 
+  string str(smttext);
+   bool found = false;
+   ASTNode nptr;
+   
+  if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    {
+    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	found = true;
+    }
+    else if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
+    {
+    	nptr= BEEV::parserInterface->letMgr.resolveLet(str);
+    	found = true;
+    }
 
-  // Check valuesize to see if it's a prop var.  I don't like doing
-  // type determination in the lexer, but it's easier than rewriting
-  // the whole grammar to eliminate the term/formula distinction.  
-  smtlval.node = new BEEV::ASTNode(parserInterface->letMgr.ResolveID(nptr));
-  //smtlval.node = new BEEV::ASTNode(nptr);
-  if ((smtlval.node)->GetType() == BOOLEAN_TYPE)
-    return FORMID_TOK;
-  else 
-    return TERMID_TOK;  
+	if (found)
+	{
+	  smtlval.node = BEEV::parserInterface->newNode(nptr);
+	  if ((smtlval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	    return FORMID_TOK;
+	  else 
+	    return TERMID_TOK;
+	   }
+	   
+    // It hasn't been found. So it's not already declared.
+    // it has not been seen before.
+	smtlval.str = new std::string(str);
+	return STRING_TOK;
 }
 . { smterror("Illegal input character."); }
 %%

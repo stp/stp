@@ -70,10 +70,18 @@ namespace BEEV
       delete _letid_expr_map;
     }
 
+    // We know for sure that it's a let.
+    ASTNode resolveLet(const string s)
+    {
+      assert(isLetDeclared(s));
+      return _letid_expr_map->find(s)->second;
+    }
+
     ASTNode ResolveID(const ASTNode& var);
       
     //Functions that are used to manage LET expressions
     void LetExprMgr(const ASTNode& var, const ASTNode& letExpr);
+    void LetExprMgr(string name, const ASTNode& letExpr);
       
     //Delete Letid Map. Called when we move onto the expression after (let ... )
     void CleanupLetIDMap(void);

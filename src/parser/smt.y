@@ -91,11 +91,11 @@
 %type <node> status
 %type <vec> bench_attributes an_formulas an_terms
 
-%type <node> benchmark bench_name bench_attribute
+%type <node> benchmark bench_attribute
 %type <node> an_term an_nonbvconst_term an_formula 
 
-%type <node> var fvar logic_name
-%type <str> user_value
+%type <node> var fvar 
+%type <str> user_value logic_name bench_name
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_TOK
@@ -254,7 +254,7 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
 ;
 
 bench_name:
-FORMID_TOK
+STRING_TOK
 {
 }
 ;
@@ -303,10 +303,10 @@ COLON_TOK ASSUMPTION_TOK an_formula
 }
 | COLON_TOK LOGIC_TOK logic_name
 {
-  if (!(0 == strcmp($3->GetName(),"QF_UFBV")  ||
-        0 == strcmp($3->GetName(),"QF_BV") ||
-        //0 == strcmp($3->GetName(),"QF_UF") ||
-        0 == strcmp($3->GetName(),"QF_AUFBV"))) {
+  if (!(0 == strcmp($3->c_str(),"QF_UFBV")  ||
+        0 == strcmp($3->c_str(),"QF_BV") ||
+        //0 == strcmp($3->c_str(),"QF_UF") ||
+        0 == strcmp($3->c_str(),"QF_AUFBV"))) {
     yyerror("Wrong input logic:");
   }
   delete $3;
@@ -327,11 +327,11 @@ COLON_TOK ASSUMPTION_TOK an_formula
 ;
 
 logic_name:
-FORMID_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
+STRING_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
 {
   $$ = $1;
 }
-| FORMID_TOK
+| STRING_TOK
 {
   $$ = $1;
 }
@@ -405,34 +405,37 @@ sort_symb
 }
 ;
 
+// There are some gulwani benchmarks that create multiple variables in the same header.
+// Maybe you shouldn'.t..
 var_decls:
 var_decl
-{
-}
-//  | LPAREN_TOK var_decl RPAREN_TOK
+{}
 |
 var_decls var_decl
-{
-}
+{}
 ;
 
+
+
 var_decl:
-LPAREN_TOK FORMID_TOK sort_symbs RPAREN_TOK
+LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
 {
-  parserInterface->letMgr._parser_symbol_table.insert(*$2);
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  $2->SetIndexWidth($3.indexwidth);
-  $2->SetValueWidth($3.valuewidth);
+  s.SetIndexWidth($3.indexwidth);
+  s.SetValueWidth($3.valuewidth);
+  parserInterface->letMgr._parser_symbol_table.insert(s);
   delete $2;
 }
-| LPAREN_TOK FORMID_TOK RPAREN_TOK
+| LPAREN_TOK STRING_TOK RPAREN_TOK
 {
-  parserInterface->letMgr._parser_symbol_table.insert(*$2);
+  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
+  parserInterface->letMgr._parser_symbol_table.insert(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  $2->SetIndexWidth(0);
-  $2->SetValueWidth(0);
   delete $2;
 }
 ;
@@ -627,13 +630,8 @@ TRUE_TOK
 ;
 
 letexpr_mgmt: 
-LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK FORMID_TOK an_term RPAREN_TOK
+LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK STRING_TOK an_term RPAREN_TOK
 {
-      
-  //set the valuewidth of the identifier
-  $5->SetValueWidth($6->GetValueWidth());
-  $5->SetIndexWidth($6->GetIndexWidth());
-      
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
   //
@@ -647,14 +645,8 @@ LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK FORMID_TOK an_term RPAREN_TOK
   delete $5;
   delete $6;      
 }
-| LPAREN_TOK FLET_TOK LPAREN_TOK DOLLAR_TOK FORMID_TOK an_formula RPAREN_TOK 
+| LPAREN_TOK FLET_TOK LPAREN_TOK DOLLAR_TOK STRING_TOK an_formula RPAREN_TOK 
 {
-  //Expr must typecheck
-     
-  //set the valuewidth of the identifier
-  $5->SetValueWidth($6->GetValueWidth());
-  $5->SetIndexWidth($6->GetIndexWidth());
-     
   //Do LET-expr management
   parserInterface->letMgr.LetExprMgr(*$5,*$6);
   delete $5;
@@ -702,7 +694,7 @@ an_nonbvconst_term:
 BITCONST_TOK { $$ = $1; }
 | var
 {
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
+  $$ = new ASTNode((*$1));
   delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
@@ -1096,12 +1088,12 @@ BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
 var:
 FORMID_TOK 
 {
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); 
+  $$ = new ASTNode((*$1)); 
   delete $1;      
 }
 | TERMID_TOK
 {
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1));
+  $$ = new ASTNode((*$1));
   delete $1;
 }
 | QUESTION_TOK TERMID_TOK
@@ -1117,7 +1109,7 @@ DOLLAR_TOK FORMID_TOK
 }
 | FORMID_TOK
 {
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); 
+  $$ = new ASTNode((*$1)); 
   delete $1;      
 }   
 ;
