@@ -360,7 +360,7 @@ TRUE_TOK
 }
 | FORMID_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->letMgr.ResolveID(*$1)); 
+  $$ = parserInterface->newNode(*$1); 
   parserInterface->deleteNode($1);      
 }
 | LPAREN_TOK EQ_TOK an_term an_term RPAREN_TOK
@@ -534,12 +534,6 @@ lets: let lets
 
 let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
 {
-  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
-
-  //set the valuewidth of the identifier
-  s.SetValueWidth($3->GetValueWidth());
-  s.SetIndexWidth($3->GetIndexWidth());
-      
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
   //
@@ -548,19 +542,12 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(s,*$3);
-  
-	delete $2;
+  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  delete $2;
   parserInterface->deleteNode( $3);
 }
 | LPAREN_TOK STRING_TOK an_term RPAREN_TOK
 {
-  ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
-
-  //set the valuewidth of the identifier
-  s.SetValueWidth($3->GetValueWidth());
-  s.SetIndexWidth($3->GetIndexWidth());
-      
   //populate the hashtable from LET-var -->
   //LET-exprs and then process them:
   //
@@ -569,9 +556,8 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(s,*$3);
-  
- 	delete $2;
+  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  delete $2;
   parserInterface->deleteNode( $3);
 
 }
@@ -601,7 +587,7 @@ an_terms an_term
 an_term: 
 TERMID_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->letMgr.ResolveID(*$1));
+  $$ = parserInterface->newNode((*$1));
   parserInterface->deleteNode( $1);
 }
 | LPAREN_TOK an_term RPAREN_TOK
