@@ -217,36 +217,41 @@ namespace BEEV
     // A single pass through the problem replacing things that must be true of false.
     IntervalType* visit(const ASTNode& n, map<const ASTNode, IntervalType*> & visited)
     {
-      if (visited.find(n) != visited.end())
-        return visited.find(n)->second;
+      map<const ASTNode, IntervalType*>::iterator it;
+      if ((it = visited.find(n)) != visited.end())
+        return it->second;
 
+      const int number_children = n.Degree();
       vector<IntervalType* > children;
-      children.reserve(n.Degree());
-      for (int i=0; i < n.Degree();i++)
+      children.reserve(number_children);
+      for (int i=0; i < number_children;i++)
         {
           children.push_back(visit(n[i],visited));
         }
 
       IntervalType * result = NULL;
-      unsigned int width = n.GetValueWidth();
-      const bool knownC0 = children.size() <1 ? false : (children[0] != NULL);
-      const bool knownC1 = children.size() <2 ? false : (children[1] != NULL);
+      const unsigned int width = n.GetValueWidth();
+      const bool knownC0 = number_children <1 ? false : (children[0] != NULL);
+      const bool knownC1 = number_children <2 ? false : (children[1] != NULL);
 
-      if (BVCONST == n.GetKind() || BITVECTOR == n.GetKind())
+      switch (n.GetKind())
         {
-          // the CBV doesn't leak. it is a copy of the cbv inside the node.
-          CBV cbv = n.GetBVConst();
-          result = createInterval(cbv,cbv);
+      case BVCONST:
+      case BITVECTOR:
+        {
+        // the CBV doesn't leak. it is a copy of the cbv inside the node.
+        CBV cbv = n.GetBVConst();
+        result = createInterval(cbv, cbv);
         }
-      else if (TRUE == n.GetKind())
-      {
-    	  result = createInterval(littleOne,littleOne);
-      }
-      else if (FALSE == n.GetKind())
-      {
-           result = createInterval(littleZero,littleZero);
-      }
-      else if (NOT == n.GetKind() && knownC0)
+        break;
+      case TRUE:
+        result = createInterval(littleOne, littleOne);
+        break;
+      case FALSE:
+        result = createInterval(littleZero, littleZero);
+        break;
+      case NOT:
+      if (knownC0)
       {
     	  assert(children[0]->isConstant());
     	  if (!CONSTANTBV::BitVector_Lexicompare(children[0]->minV, littleOne))
@@ -254,13 +259,18 @@ namespace BEEV
     	  else
     		  result = createInterval(littleOne,littleOne);
       }
-      else if (EQ == n.GetKind() && knownC0 && knownC1)
+      break;
+      case EQ:
+        if (knownC0 && knownC1)
       {
     	  if ((CONSTANTBV::BitVector_Lexicompare(children[1]->minV,children[0]->maxV) >0)
     		  || (CONSTANTBV::BitVector_Lexicompare(children[0]->minV,children[1]->maxV) >0))
     		  result = createInterval(littleZero, littleZero);
       }
-      else if (
+        break;
+      case BVGT:
+      case BVSGT:
+      if (
           (BVGT == n.GetKind() && knownC0 && knownC1) ||
           (BVSGT == n.GetKind() && knownC0 && knownC1
               && !CONSTANTBV::BitVector_bit_test(children[0]->maxV, n[0].GetValueWidth()-1)
@@ -273,7 +283,10 @@ namespace BEEV
               if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,children[0]->maxV) >=0)
                 result = createInterval(littleZero, littleZero);
           }
-      else if ((BVGE == n.GetKind() && knownC0 && knownC1) ||
+      break;
+      case BVGE:
+      case BVSGE:
+      if ((BVGE == n.GetKind() && knownC0 && knownC1) ||
                (BVSGE == n.GetKind() && knownC0 && knownC1
               && !CONSTANTBV::BitVector_bit_test(children[0]->maxV, n[0].GetValueWidth()-1)
               && !CONSTANTBV::BitVector_bit_test(children[1]->maxV, n[0].GetValueWidth()-1)
@@ -284,7 +297,9 @@ namespace BEEV
           if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,children[0]->maxV) > 0)
             result = createInterval(littleZero, littleZero);
         }
-     else if (BVDIV == n.GetKind() && knownC1)
+      break;
+      case BVDIV:
+      if (knownC1)
       {
     	  // When we're dividing by zero, we know nothing.
     	  if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
@@ -307,7 +322,9 @@ namespace BEEV
               CONSTANTBV::BitVector_Destroy(remainder);
     	  }
       }
-      else if (BVMOD == n.GetKind() && knownC1)
+      break;
+      case BVMOD:
+      if (knownC1)
         {
           // When we're dividing by zero, we know nothing.
           if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
@@ -322,7 +339,9 @@ namespace BEEV
 
             }
         }
-      else if (BVSX == n.GetKind()  && knownC0 && knownC1)
+      break;
+      case BVSX:
+      if (knownC0 && knownC1)
       {
     	  // If the maximum doesn't have the top bit set, then zero extend it.
     	  if (!CONSTANTBV::BitVector_bit_test(children[0]->maxV,n[0].GetValueWidth()-1))
@@ -347,7 +366,9 @@ namespace BEEV
         		  CONSTANTBV::BitVector_Bit_Off(result->maxV,i);
     	  }
       }
-      else if (BVNEG == n.GetKind() && knownC0) // NOT of the bitvector.
+      break;
+      case BVNEG:
+      if (knownC0) // NOT of the bitvector.
         {
           result = freshUnsignedInterval(width);
           CONSTANTBV::BitVector_Copy(result->maxV,  children[0]->minV);
@@ -355,7 +376,9 @@ namespace BEEV
           CONSTANTBV::BitVector_Copy(result->minV,  children[0]->maxV);
           CONSTANTBV::BitVector_Flip(result->minV);
         }
-      else if (BVUMINUS == n.GetKind() && knownC0)
+      break;
+      case BVUMINUS:
+      if (knownC0)
         {
           // Imagine it's {00, 01},  the unary minus of these is: {00,11},
           // i.e. it's everything. When there's a zero, (except for [0,0]),
@@ -373,7 +396,9 @@ namespace BEEV
               CONSTANTBV::BitVector_increment(result->minV);
             }
         }
-      else if (ITE == n.GetKind()  && children[1] != NULL && children[2] != NULL)
+      break;
+      case ITE:
+      if (children[1] != NULL && children[2] != NULL)
         {
           // Both terms and propositions.
           result = freshUnsignedInterval(width==0? 1: width);
@@ -391,7 +416,9 @@ namespace BEEV
           CONSTANTBV::BitVector_Copy(result->minV, min);
           CONSTANTBV::BitVector_Copy(result->maxV, max);
         }
-      else if (BVMULT == n.GetKind() && knownC0 && knownC1)
+      break;
+      case BVMULT:
+      if (knownC0 && knownC1)
         {
           //  >=2 arity.
           CBV min,max;
@@ -435,22 +462,17 @@ namespace BEEV
           if (bad)
             result = NULL;
         }
-      else if (false && BVLEFTSHIFT == n.GetKind() && knownC0 && knownC1)
-        {
+      break;
+      //case BVLEFTSHIFT:
+      // case BVAND:
+       {
           // Todo two cases.
           // 1) The maximum shift of the maximum value doesn't overflow, and,
           // 2) The minimum shift of the minimum value completely overflows (to zero).
-        }
-      else if (BVAND == n.GetKind())
-        {
-            //int max=width;
-            //for (int i =0 ; i < children.size(); i++)
-            //{
-                //if (children[i] != NULL)
-//                  CONSTANTBV::Set_Max(children[1]->minV)
-  //          }
-        }
-      else if (BVRIGHTSHIFT == n.GetKind() && knownC0 && knownC1)
+       }
+
+      case BVRIGHTSHIFT:
+      if (knownC0 && knownC1)
            {
              result = freshUnsignedInterval(width);
 
@@ -481,7 +503,9 @@ namespace BEEV
                     CONSTANTBV::BitVector_shift_right(result->minV,0);
              }
            }
-      else if (BVPLUS == n.GetKind() && knownC0 && knownC1)
+      break;
+      case BVPLUS:
+      if (knownC0 && knownC1)
         {
           //  >=2 arity.
           result = freshUnsignedInterval(width);
@@ -508,7 +532,9 @@ namespace BEEV
           if (carry)
             result = NULL;
         }
-      else if (BVCONCAT == n.GetKind()  && (knownC0 || knownC1))
+        break;
+      case BVCONCAT:
+      if ( (knownC0 || knownC1))
       {
           result = freshUnsignedInterval(n.GetValueWidth());
 
@@ -547,7 +573,8 @@ namespace BEEV
         	  }
           }
       }
-      else
+      break;
+      default:
       {
           // Debugging!
 
@@ -565,6 +592,7 @@ namespace BEEV
     	      for (int i=0; i < n.Degree();i++)
     	        children[i]->print();
     	  }
+      }
       }
 
       if (result != NULL && result->isComplete())
