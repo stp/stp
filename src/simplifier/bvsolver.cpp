@@ -814,8 +814,11 @@ namespace BEEV
 
     // Imagine in the last conjunct A is replaced by B. But there could
     // be variable A's in the first conjunct. This gets rid of 'em.
-   	output = _simp->applySubstitutionMap(output);
-   	_simp->haveAppliedSubstitutionMap();
+    if (_simp->hasUnappliedSubstitutions())
+      {
+          output = _simp->applySubstitutionMap(output);
+          _simp->haveAppliedSubstitutionMap();
+      }
 
     UpdateAlreadySolvedMap(_input, output);
     _bm->GetRunTimes()->stop(RunTimes::BVSolver);

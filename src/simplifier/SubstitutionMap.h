@@ -39,7 +39,13 @@ class SubstitutionMap {
 	void loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>& visited);
 	bool loops(const ASTNode& n0, const ASTNode& n1);
 
+	int substitutionsLastApplied;
 public:
+
+	bool hasUnappliedSubstitutions()
+	{
+	  return (substitutionsLastApplied != SolverMap->size());
+	}
 
 	// When the substitutionMap has been applied globally, then,
 	// these are no longer needed.
@@ -49,6 +55,7 @@ public:
 		rhs.clear();
 		rhs_visited.clear();
 		rhsAlreadyAdded.clear();
+		substitutionsLastApplied = SolverMap->size();
 	}
 
 	VariablesInExpression vars;
@@ -63,6 +70,7 @@ public:
 
 		SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
 		loopCount = 0;
+		substitutionsLastApplied =0;
 	}
 
 	void clear()

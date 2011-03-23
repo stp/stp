@@ -115,14 +115,13 @@ namespace BEEV {
 			  simplified_solved_InputToSAT);
 		}
 
-		int initialSize = simp->Return_SolverMap()->size();
-        simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
-		if (initialSize != simp->Return_SolverMap()->size())
+	        simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+		if (simp->hasUnappliedSubstitutions())
 		{
-			simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
-			simp->haveAppliedSubstitutionMap();
-		    bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
-		}
+                  simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+                  simp->haveAppliedSubstitutionMap();
+                  bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
+                }
 
 	    // Find pure literals.
 		if (bm->UserFlags.isSet("pure-literals","1"))
@@ -165,9 +164,8 @@ namespace BEEV {
     const bool arrayops = containsArrayOps(original_input);
 
     DifficultyScore difficulty;
-    long initial_difficulty_score = difficulty.score(original_input);
     if (bm->UserFlags.stats_flag)
-    	cerr << "Difficulty Initially:" << initial_difficulty_score << endl;
+    	cerr << "Difficulty Initially:" << difficulty.score(original_input) << endl;
 
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm,simp);
@@ -175,7 +173,7 @@ namespace BEEV {
     simplified_solved_InputToSAT = sizeReducing(inputToSAT,bvSolver);
     //simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT,bvSolver);
 
-    initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+    unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
     if (bm->UserFlags.stats_flag)
     	cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
 
@@ -200,8 +198,6 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-            int initialSize = simp->Return_SolverMap()->size();
-
             simplified_solved_InputToSAT = 
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
 
@@ -213,7 +209,7 @@ namespace BEEV {
 			// But it shouldn't be T, it should be a constant.
 			// Applying the substitution map fixes this case.
             //
-			if (initialSize != simp->Return_SolverMap()->size())
+			if (simp->hasUnappliedSubstitutions())
 			{
 				simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
 				simp->haveAppliedSubstitutionMap();
@@ -308,12 +304,10 @@ namespace BEEV {
 
         if(bm->UserFlags.optimize_flag) 
           {
-        	int initialSize = simp->Return_SolverMap()->size();
-
         	simplified_solved_InputToSAT =
             	simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
 
-			if (initialSize != simp->Return_SolverMap()->size())
+			if (simp->hasUnappliedSubstitutions())
 			{
 				simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
 				simp->haveAppliedSubstitutionMap();

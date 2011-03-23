@@ -239,6 +239,11 @@ namespace BEEV
       return ReadOverWrite_NewName_Map;
     } // End of ReadOverWriteMap()
       
+    bool hasUnappliedSubstitutions()
+    {
+      return substitutionMap.hasUnappliedSubstitutions();
+    }
+
     ASTNodeMap * Return_SolverMap()
     {
     	return substitutionMap.Return_SolverMap();
