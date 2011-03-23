@@ -122,18 +122,34 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "POP"            { return POP_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
-  BEEV::ASTNode nptr = parserInterface->LookupOrCreateSymbol(yytext); 
+  string str(yytext);
+   bool found = false;
+   ASTNode nptr;
+   
+  if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    {
+    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	found = true;
+    }
+    else if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
+    {
+    	nptr= BEEV::parserInterface->letMgr.resolveLet(str);
+    	found = true;
+    }
 
-  // Check valuesize to see if it's a prop var.  I don't like doing
-  // type determination in the lexer, but it's easier than rewriting
-  // the whole grammar to eliminate the term/formula distinction.  
-  cvclval.node = 
-    new BEEV::ASTNode(parserInterface->letMgr.ResolveID(nptr));
-  //cvclval.node = new BEEV::ASTNode(nptr);
-  if ((cvclval.node)->GetType() == BOOLEAN_TYPE)
-    return FORMID_TOK;
-  else 
-    return TERMID_TOK;  
+	if (found)
+	{
+	  cvclval.node = BEEV::parserInterface->newNode(nptr);
+	  if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	    return FORMID_TOK;
+	  else 
+	    return TERMID_TOK;
+	   }
+	   
+    // It hasn't been found. So it's not already declared.
+    // it has not been seen before.
+	cvclval.str = strdup(yytext);
+	return STRING_TOK;
 }
 
 .                { cvcerror("Illegal input character."); }
