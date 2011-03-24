@@ -141,6 +141,7 @@ namespace BEEV
   public:
 
     bool LookupSymbol(const char * const name);
+    bool LookupSymbol(const char * const name, ASTNode& output);
     
     /****************************************************************
      * Public Flags                                                 *
@@ -277,6 +278,7 @@ namespace BEEV
     ASTNode CreateBVConst(const char *strval, int base);
     ASTNode CreateBVConst(string& strval, int base, int bit_width);    
     ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+    ASTNode charToASTNode(unsigned char* strval, int base , int bit_width);
     
     /****************************************************************
      * Create Node functions                                        *

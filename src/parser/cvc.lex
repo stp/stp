@@ -125,9 +125,8 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
   
    ASTNode nptr;
    
-   if (BEEV::parserInterface->isSymbolAlreadyDeclared(yytext)) // it's a symbol.
+   if (BEEV::parserInterface->LookupSymbol(yytext,nptr)) // it's a symbol.
     {
-    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(yytext);
 	    cvclval.node = BEEV::parserInterface->newNode(nptr);
 		if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 		  return FORMID_TOK;

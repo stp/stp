@@ -99,6 +99,11 @@ public:
     	return bm.LookupOrCreateSymbol(name.c_str());
     }
 
+    bool LookupSymbol(const char * const name, ASTNode& output)
+    {
+      return bm.LookupSymbol(name,output);
+    }
+
     bool isSymbolAlreadyDeclared(char* name)
     {
            return bm.LookupSymbol(name);
