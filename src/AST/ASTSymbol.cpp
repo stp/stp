@@ -11,6 +11,9 @@
 #include "../STPManager/STP.h"
 namespace BEEV
 {
+  const ASTVec ASTSymbol::empty_children;
+
+
   /****************************************************************
    * ASTSymbol Member Function definitions                        *
    ****************************************************************/

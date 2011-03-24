@@ -11,6 +11,7 @@
 #define ASTINTERIOR_H
 
 #include "UsefulDefs.h"
+#include "ASTInternalWithChildren.h"
 namespace BEEV
 {
   class ASTNode;
@@ -23,7 +24,7 @@ namespace BEEV
    * Internal representation of an interior ASTNode.Generally, these*
    * nodes should have at least one child                           * 
    ******************************************************************/
-  class ASTInterior: public ASTInternal
+  class ASTInterior: public ASTInternalWithChildren
   {
 
     friend class STPMgr;
@@ -82,18 +83,18 @@ namespace BEEV
      ******************************************************************/
     
     // Basic constructors
-    ASTInterior(Kind kind) : ASTInternal(kind)
+    ASTInterior(Kind kind) : ASTInternalWithChildren(kind)
     {
     }
 
-    ASTInterior(Kind kind, ASTVec &children) : ASTInternal(kind, children)
+    ASTInterior(Kind kind, ASTVec &children) : ASTInternalWithChildren(kind, children)
     {
     }
 
     //Copy constructor.  This copies the contents of the child nodes
     //array, along with everything else. Assigning the smart pointer,
     //ASTNode, does NOT invoke this.
-    ASTInterior(const ASTInterior &int_node) : ASTInternal(int_node)
+    ASTInterior(const ASTInterior &int_node) : ASTInternalWithChildren(int_node)
     {
     }
 

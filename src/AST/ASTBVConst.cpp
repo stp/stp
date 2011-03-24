@@ -11,6 +11,8 @@
 #include "../STPManager/STP.h"
 namespace BEEV
 {
+  const ASTVec ASTBVConst::astbv_empty_children;
+
   /****************************************************************
    * ASTBVConst Member Function definitions                       *
    ****************************************************************/
@@ -26,7 +28,7 @@ namespace BEEV
 
   // Copy constructor.
   ASTBVConst::ASTBVConst(const ASTBVConst &sym) :
-    ASTInternal(sym._kind, sym._children)
+    ASTInternal(sym._kind)
   {
     _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
     _value_width = sym._value_width;
