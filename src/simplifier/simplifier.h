@@ -62,6 +62,9 @@ namespace BEEV
 
   public:
 
+    static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf);
+
+
     /****************************************************************
      * Public Member Functions                                      *
      ****************************************************************/      

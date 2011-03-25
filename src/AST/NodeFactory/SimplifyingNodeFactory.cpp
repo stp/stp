@@ -638,33 +638,22 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
 	case BEEV::BVLEFTSHIFT:
 	{
-		  if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
-				 result = bm.CreateZeroConst(width);
-		  else if (children[1].isConstant() && CONSTANTBV::Set_Max(children[1].GetBVConst()) > 1 + log2(width))
-			  result = bm.CreateZeroConst(width);
-		  else if (children[1].isConstant() && children[1].GetUnsignedConst() >=width)
-			  result = bm.CreateZeroConst(width);
-		  else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
-				 result = children[0];
-
-
+          if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+            result = bm.CreateZeroConst(width);
+          else if (children[1].isConstant())
+            result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm, &hashing);
 	}
 	break;
 
 	case BEEV::BVRIGHTSHIFT:
-		{
-			if (children[0] == children[1])
-				result= bm.CreateZeroConst(width);
-			if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
-				 result = bm.CreateZeroConst(width);
-  		  else if (children[1].isConstant() && CONSTANTBV::Set_Max(children[1].GetBVConst()) > 1 + log2(width))
-				  result = bm.CreateZeroConst(width);
-		  else if (children[1].isConstant() && children[1].GetUnsignedConst() >=width)
-				  result = bm.CreateZeroConst(width);
-		  else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
-				 result = children[0];
-
-		}
+        {
+          if (children[0] == children[1])
+            result= bm.CreateZeroConst(width);
+          if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+            result = bm.CreateZeroConst(width);
+          else if (children[1].isConstant())
+            result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm, &hashing);
+        }
 	break;
 
 	case BEEV::BVSRSHIFT:

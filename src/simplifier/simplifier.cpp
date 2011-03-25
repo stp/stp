@@ -1709,6 +1709,71 @@ namespace BEEV
     return output;
   }
 
+  // If the rhs of a left or right shift is known. Then replace it with a concat / extract.
+  ASTNode Simplifier::convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf)
+  {
+    const ASTNode a =children[0];
+    const ASTNode b =children[1];
+    const int width = children[0].GetValueWidth();
+    ASTNode output;
+
+    assert(b.isConstant());
+    assert(k == BVLEFTSHIFT || BVRIGHTSHIFT ==k);
+
+  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
+    {
+      // Intended to remove shifts by very large amounts
+      // that don't fit into the unsigned.  at thhe start
+      // of the "else" branch.
+      output = bm.CreateZeroConst(width);
+    }
+  else
+    {
+      const unsigned int shift = b.GetUnsignedConst();
+      if (shift >= width)
+        {
+          output = bm.CreateZeroConst(width);
+        }
+      else if (shift == 0)
+        {
+          output = a; // unchanged.
+        }
+      else
+        {
+          if (k == BVLEFTSHIFT)
+            {
+              ASTNode zero = bm.CreateZeroConst(shift);
+              ASTNode hi = bm.CreateBVConst(32, width - shift -1);
+              ASTNode low = bm.CreateZeroConst(32);
+              ASTNode extract =
+                nf->CreateTerm(BVEXTRACT, width - shift,
+                                a, hi, low);
+              BVTypeCheck(extract);
+              output =
+                nf->CreateTerm(BVCONCAT, width,
+                                extract, zero);
+              BVTypeCheck(output);
+            }
+          else if (k == BVRIGHTSHIFT)
+            {
+              ASTNode zero = bm.CreateZeroConst(shift);
+              ASTNode hi = bm.CreateBVConst(32, width -1);
+              ASTNode low = bm.CreateBVConst(32, shift);
+              ASTNode extract =
+                nf->CreateTerm(BVEXTRACT, width - shift,
+                                a, hi, low);
+              BVTypeCheck(extract);
+              output =
+                nf->CreateTerm(BVCONCAT, width, zero, extract);
+              BVTypeCheck(output);
+            }
+          else
+            FatalError("herasdf");
+        }
+    }
+  return output;
+}
+
 
 
   //This function simplifies terms based on their kind
@@ -2742,57 +2807,7 @@ namespace BEEV
           const unsigned int width = a.GetValueWidth();
           if (BVCONST == b.GetKind()) // known shift amount.
             {
-              if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
-                {
-                  // Intended to remove shifts by very large amounts
-                  // that don't fit into the unsigned.  at thhe start
-                  // of the "else" branch.
-                  output = _bm->CreateZeroConst(width);
-                }
-              else
-                {
-                  const unsigned int shift = b.GetUnsignedConst();
-                  if (shift >= width)
-                    {
-                      output = _bm->CreateZeroConst(width);
-                    }
-                  else if (shift == 0)
-                    {
-                      output = a; // unchanged.
-                    }
-                  else
-                    {
-                      if (k == BVLEFTSHIFT)
-                        {
-                          ASTNode zero = _bm->CreateZeroConst(shift);
-                          ASTNode hi = _bm->CreateBVConst(32, width - shift -1);
-                          ASTNode low = _bm->CreateZeroConst(32);
-                          ASTNode extract = 
-                            nf->CreateTerm(BVEXTRACT, width - shift,
-                                            a, hi, low);
-                          BVTypeCheck(extract);
-                          output = 
-                            nf->CreateTerm(BVCONCAT, width,
-                                            extract, zero);
-                          BVTypeCheck(output);
-                        }
-                      else if (k == BVRIGHTSHIFT)
-                        {
-                          ASTNode zero = _bm->CreateZeroConst(shift);
-                          ASTNode hi = _bm->CreateBVConst(32, width -1);
-                          ASTNode low = _bm->CreateBVConst(32, shift);
-                          ASTNode extract = 
-                            nf->CreateTerm(BVEXTRACT, width - shift,
-                                            a, hi, low);
-                          BVTypeCheck(extract);
-                          output = 
-                            nf->CreateTerm(BVCONCAT, width, zero, extract);
-                          BVTypeCheck(output);
-                        }
-                      else
-                        FatalError("herasdf");
-                    }
-                }
+              output = convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
             }
           else if (a == _bm->CreateZeroConst(width))
           {
