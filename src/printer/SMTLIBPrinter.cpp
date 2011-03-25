@@ -92,12 +92,10 @@ static string tolower(const char * name)
 				NodeLetVarMap1[it->second] = it->first;
 				closing += ")";
 	          }
-
-			os << " ( " << endl;
-	        SMTLIB1_Print1(os, n, indentation, true);
-			os << closing;
-			os << " ) ) ";
-
+                  os << endl;
+                  SMTLIB1_Print1(os, n, indentation, true);
+                  os << closing;
+                  os << " )  ";
 	      }
 	    else
 	      SMTLIB1_Print1(os, n, indentation, false);
