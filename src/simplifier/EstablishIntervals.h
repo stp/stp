@@ -29,13 +29,13 @@ namespace BEEV
 
       void print()
       {
-        if (size_(minV) <= sizeof(unsigned int))
+       if (size_(minV) == 1)
           cerr << *(minV) << " " << *maxV << endl;
-        else
+       else
           {
             unsigned char * a = CONSTANTBV::BitVector_to_Dec(minV);
             unsigned char * b = CONSTANTBV::BitVector_to_Dec(maxV);
-            cerr << *a << " " << *b << endl;
+            cerr << a << " " << b << endl;
             free(a);
             free(b);
           }
@@ -465,6 +465,7 @@ namespace BEEV
       break;
       //case BVLEFTSHIFT:
       // case BVAND:
+      //case BVSRSHIFT:
        {
           // Todo two cases.
           // 1) The maximum shift of the maximum value doesn't overflow, and,
@@ -472,9 +473,14 @@ namespace BEEV
        }
 
       case BVRIGHTSHIFT:
-      if (knownC0 && knownC1)
+      if (knownC0 || knownC1)
            {
              result = freshUnsignedInterval(width);
+
+             if (children[0] == NULL)
+               children[0] = freshUnsignedInterval(width);
+             if (children[1] == NULL)
+               children[1] = freshUnsignedInterval(width);
 
              // The maximum result is the maximum >> (minimum shift).
              if (CONSTANTBV::Set_Max(children[1]->minV) > 1 + log2(width) ||  *(children[1]->minV) > width)
@@ -487,7 +493,9 @@ namespace BEEV
                  unsigned shift_amount = *(children[1]->minV);
                  CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
                  while (shift_amount-- > 0)
-                    CONSTANTBV::BitVector_shift_right(result->maxV,0);
+                   {
+                     CONSTANTBV::BitVector_shift_right(result->maxV,0);
+                   }
              }
 
              // The minimum result is the minimum >> (maximum shift).
