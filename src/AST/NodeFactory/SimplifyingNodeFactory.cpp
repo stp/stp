@@ -11,8 +11,10 @@
  * re-write rules. So we will never create the node (NOT(NOT x)). This is and example of
  * a multi-level rule that never increases the global number of nodes.
  *
- * These rules never increase the total number of nodes.  They are complimented by
- * multi-level re-write rules that consider the global reference count when simplifying.
+ * These rules (mostly) don't increase the total number of nodes by more than one.
+ *
+ * Sometimes the number of nodes is increased. e.g. creating BVSLT(x,y), will create NOT(BVGT(y,x)).
+ * i.e. it will create an extra node.
  *
  * I think we've got all the two input cases that either map to a constant, or to an input value.
  * e.g. (a >> a), (a xor a), (a or a), (a and a), (a + 0), (a-0)..
@@ -59,7 +61,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 
 	switch (kind)
 	{
-
+	// convert the Less thans to greater thans.
 	case BEEV::BVLT:
 		assert(children.size() ==2);
 		result = NodeFactory::CreateNode(BEEV::BVGT, children[1], children[0]);
@@ -119,46 +121,20 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 		break;
 
 	case BEEV::BVGE:
-		assert(children.size() ==2);
-		if (children[0] == children[1])
-			result = ASTTrue;
-		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
-			result = ASTTrue;
-		if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
-			result = ASTTrue;
-		break;
-
+          assert(children.size() ==2);
+            {
+            ASTNode a = NodeFactory::CreateNode(BEEV::BVGT, children[1], children[0]);
+            result = NodeFactory::CreateNode(BEEV::NOT, a);
+            }
+            break;
 
 	case BEEV::BVSGE:
-		assert(children.size() ==2);
-		if (children[0] == children[1])
-			result = ASTTrue;
-		if (children[0].GetKind() == BEEV::BVCONST)
-		{
-            // 011111111 (most positive number.)
-			unsigned width = children[0].GetValueWidth();
-            BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
-            CONSTANTBV::BitVector_Fill(max);
-            CONSTANTBV::BitVector_Bit_Off(max, width - 1);
-            ASTNode biggestNumber = bm.CreateBVConst(max, width);
-            if (children[0] == biggestNumber)
-            	result = ASTTrue;
-		}
-		if (children[1].GetKind() == BEEV::BVCONST)
-		{
-			unsigned width = children[0].GetValueWidth();
-            // 1000000000 (most negative number.)
-			BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Bit_On(max, width - 1);
-            ASTNode smallestNumber = bm.CreateBVConst(max, width);
-            if (children[1] == smallestNumber)
-            	result = ASTTrue;
-		}
-		break;
-
-
-
-
+          assert(children.size() ==2);
+           {
+            ASTNode a = NodeFactory::CreateNode(BEEV::BVSGT, children[1], children[0]);
+            result = NodeFactory::CreateNode(BEEV::NOT, a);
+            }
+          break;
 
 	case BEEV::NOT:
 		result = CreateSimpleNot(children);
@@ -353,6 +329,14 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	//semantically equal.
 	if (BEEV::BVCONST == k1 && BEEV::BVCONST == k2)
 		return in1.GetSTPMgr()->ASTFalse;
+
+	// This increases the number of nodes. So disable for now.
+	if (false && BEEV::BVCONCAT == k1 && BEEV::BVCONCAT == k2 && in1[0].GetValueWidth() == in2[0].GetValueWidth())
+	  {
+	    ASTNode a = NodeFactory::CreateNode(BEEV::EQ, in1[0],in2[0]);
+	    ASTNode b = NodeFactory::CreateNode(BEEV::EQ, in1[1],in2[1]);
+	    return NodeFactory::CreateNode(BEEV::AND, a, b);
+	  }
 
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
