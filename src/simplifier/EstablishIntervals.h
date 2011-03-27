@@ -85,6 +85,49 @@ namespace BEEV
         return result;
     }
 
+    // A special version that handles the lhs appearing in the rhs of the fromTo map.
+    ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache)
+    {
+      if (n.isAtom())
+        return n;
+
+      if (cache.find(n) != cache.end())
+        return (*(cache.find(n))).second;
+
+      ASTNode result = n;
+
+      if (fromTo.find(n) != fromTo.end())
+        {
+          result = (*fromTo.find(n)).second;
+          fromTo.erase(n); // this is how it differs from the everyday replace.
+        }
+
+      ASTVec new_children;
+      new_children.reserve(result.GetChildren().size());
+
+      for (int i =0; i < result.Degree();i++)
+        new_children.push_back(replace(result[i],fromTo,cache));
+
+      if (new_children == result.GetChildren())
+        {
+          cache.insert(make_pair(n,result));
+          return result;
+        }
+
+      if (n.GetValueWidth() == 0) // n.GetType() == BOOLEAN_TYPE
+        {
+          result = nf->CreateNode(result.GetKind(), new_children);
+        }
+      else
+        {
+          // If the index and value width aren't saved, they are reset sometimes (??)
+          result = nf->CreateArrayTerm(result.GetKind(), result.GetIndexWidth(), result.GetValueWidth(), new_children);
+        }
+
+      cache.insert(make_pair(n,result));
+      return result;
+    }
+
   public:
     // Replace some of the things that unsigned intervals can figure out for us.
     // Reduce from signed to unsigned if possible.
@@ -94,10 +137,12 @@ namespace BEEV
       map<const ASTNode, IntervalType*> visited;
       visit(top,visited);
       ASTNodeMap fromTo;
+      ASTNodeMap onePass;
       for (map<const ASTNode, IntervalType*>::const_iterator it = visited.begin(); it != visited.end(); it++)
       {
           const ASTNode& n = it->first;
           IntervalType *interval = it->second;
+          const int width = n.GetValueWidth();
 
           if (n.isConstant())
             continue;
@@ -198,18 +243,62 @@ namespace BEEV
               ASTNode new_const = bm.CreateBVConst(clone, n.GetValueWidth());
               fromTo.insert(make_pair(n, new_const));
             }
+          else if (false && n.GetType() == BITVECTOR_TYPE && n.GetKind() != SYMBOL && n.GetKind() != BVCONCAT)
+            {
+              // Looks for leading or trailing zeroes/ones, and replaces the node with a
+              // concat and an extract.
+
+              // This slows things down. I suspect because the extracts are "simplified" and split too many things.
+              bool leadingValue = CONSTANTBV::BitVector_bit_test(interval->maxV,width-1);
+              int leadingSame = 0;
+              for (int i=width-1; i >=0 ;i--)
+                {
+                  if (CONSTANTBV::BitVector_bit_test(interval->maxV,i) ^ leadingValue)
+                    break;
+
+                  if (CONSTANTBV::BitVector_bit_test(interval->minV,i) ^ leadingValue)
+                     break;
+                  leadingSame++;
+                }
+
+              assert(leadingSame != width); // That'd be a constant (another case).
+
+              if (leadingSame >0)
+                {
+                  ASTNode prefix;
+                  if (leadingValue)
+                    prefix = bm.CreateMaxConst(leadingSame);
+                  else
+                    prefix = bm.CreateZeroConst(leadingSame);
+
+
+              ASTNode top = bm.CreateBVConst(32,width-leadingSame-1);
+              ASTNode bottom = bm.CreateZeroConst(32);
+              ASTNode remainder = nf->CreateTerm(BVEXTRACT, width-leadingSame, n, top,bottom);
+              ASTNode replaced = nf->CreateTerm(BVCONCAT, width, prefix,remainder);
+              onePass.insert(make_pair(n,replaced));
+                }
+            }
       }
+
+      ASTNode result = top;
+      if (onePass.size() > 0)
+        {
+          // The rhs of the map contains the lhs, so it needs to be applied specially.
+          ASTNodeMap cache;
+          result =  replace(top, onePass, cache);
+        }
 
       if (fromTo.size() > 0)
         {
           ASTNodeMap cache;
           SimplifyingNodeFactory nf(*(top.GetSTPMgr()->defaultNodeFactory), *top.GetSTPMgr());
           bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-          return SubstitutionMap::replace(top,fromTo,cache,&nf);
+          return SubstitutionMap::replace(result,fromTo,cache,&nf);
         }
 
       bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-      return top;
+      return result;
     }
 
 
