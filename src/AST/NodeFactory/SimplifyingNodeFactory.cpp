@@ -694,6 +694,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
                     if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
                       result = children[1];
+
+                    if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+                      result = NodeFactory::CreateTerm(BEEV::BVNEG, width, children[0]);
+
+                    if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+                      result = NodeFactory::CreateTerm(BEEV::BVNEG, width, children[1]);
+
                   }
                 break;
 
