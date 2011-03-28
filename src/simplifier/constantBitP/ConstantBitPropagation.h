@@ -73,7 +73,7 @@ public:
 
       // Returns the node after writing in simplifications from constant Bit propagation.
       BEEV::ASTNode
-      topLevelBothWays(const ASTNode& top, bool setTopToTrue = true);
+      topLevelBothWays(const ASTNode& top, bool setTopToTrue = true, bool conjoinToTop=true);
 
 
       void clearTables()

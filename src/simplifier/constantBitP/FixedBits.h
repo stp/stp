@@ -145,10 +145,22 @@ namespace simplifier
 
       //Returns the position of the first non-fixed value.
       int
-      leastUnfixed()
+      leastUnfixed() const
       {
         int i = 0;
         for (; i < getWidth(); i++)
+          {
+            if (!isFixed(i))
+              break;
+          }
+        return i;
+      }
+
+      int
+      mostUnfixed() const
+      {
+        int i = getWidth()-1;
+        for (; i >=0; i--)
           {
             if (!isFixed(i))
               break;

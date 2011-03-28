@@ -209,9 +209,9 @@ namespace simplifier
     //    then we can replace that node by its fixed bits.
     // 2) But if we assume the top node is true, then get the bits, we need to conjoin it.
 
-    // NB: This expects that the constructor was called with teh same node. Sorry.
+    // NB: This expects that the constructor was called with the same node. Sorry.
     ASTNode
-    ConstantBitPropagation::topLevelBothWays(const ASTNode& top, bool setTopToTrue)
+    ConstantBitPropagation::topLevelBothWays(const ASTNode& top, bool setTopToTrue, bool conjoinToTop)
     {
       assert(top.GetSTPMgr()->UserFlags.bitConstantProp_flag);
       assert (BOOLEAN_TYPE == top.GetType());
@@ -261,10 +261,35 @@ namespace simplifier
         {
           const FixedBits& bits = *it->second;
 
+          const ASTNode& node = (it->first);
+
+          if (false && node.GetKind() == SYMBOL && !bits.isTotallyFixed() && bits.countFixed() > 0)
+            {
+              // replace partially known variables with new variables.
+              int leastFixed = bits.leastUnfixed();
+              int mostFixed = bits.mostUnfixed();
+              const int width = node.GetValueWidth();
+
+              int new_width = mostFixed - leastFixed +1;
+              assert(new_width > 0);
+              ASTNode fresh = node.GetSTPMgr()->CreateFreshVariable(0,new_width,"STP_REPLACE");
+              ASTNode a,b;
+              if (leastFixed > 0)
+                a= node.GetSTPMgr()->CreateBVConst(bits.GetBVConst( leastFixed-1,  0), leastFixed);
+              if (mostFixed != width-1)
+                b =  node.GetSTPMgr()->CreateBVConst(bits.GetBVConst( width-1,  mostFixed+1),width-1-mostFixed);
+              if (!a.IsNull())
+                fresh = nf->CreateTerm(BVCONCAT, a.GetValueWidth() + fresh.GetValueWidth(), fresh, a);
+              if (!b.IsNull())
+                fresh = nf->CreateTerm(BVCONCAT, b.GetValueWidth() + fresh.GetValueWidth(), b, fresh);
+              assert(fresh.GetValueWidth() == node.GetValueWidth());
+              bool r = simplifier->UpdateSubstitutionMap(node, fresh);
+              assert(r);
+            }
+
           if (!bits.isTotallyFixed())
             continue;
 
-          const ASTNode& node = (it->first);
 
           // Don't constrain nodes we already know all about.
           if (node.isConstant())
@@ -279,7 +304,7 @@ namespace simplifier
           ASTNode propositionToAssert;
           ASTNode constantToReplaceWith;
           // skip the assigning and replacing.
-          bool doAssign = true;
+          bool doAssign = false;
 
             {
               // If it is already contained in the fromTo map, then it's one of the values
@@ -297,15 +322,17 @@ namespace simplifier
                       assert(r);
                       doAssign = false;
                     }
-                  else if (bits.getValue(0))
+                  else if (conjoinToTop && bits.getValue(0))
                     {
                       propositionToAssert = node;
                       constantToReplaceWith = constNode;
+                      doAssign=true;
                     }
-                  else
+                  else if (conjoinToTop)
                     {
                       propositionToAssert = nf->CreateNode(NOT, node);
                       constantToReplaceWith = constNode;
+                      doAssign=true;
                     }
                 }
               else if (node.GetType() == BITVECTOR_TYPE)
@@ -317,10 +344,11 @@ namespace simplifier
                       assert(r);
                       doAssign = false;
                     }
-                  else
+                  else if (conjoinToTop)
                     {
                       propositionToAssert = nf->CreateNode(EQ, node, constNode);
                       constantToReplaceWith = constNode;
+                      doAssign=true;
                     }
                 }
               else
@@ -337,6 +365,7 @@ namespace simplifier
 
               fromTo.insert(make_pair(node, constantToReplaceWith));
               toConjoin.push_back(propositionToAssert);
+              assert(conjoinToTop);
             }
         }
 

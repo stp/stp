@@ -100,27 +100,33 @@ namespace BEEV {
         bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
       }
 
-    if (bm->UserFlags.bitConstantProp_flag)
-      {
-        bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf, simplified_solved_InputToSAT);
-        simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT, false);
-
-        bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
-
-        if (cb.isUnsatisfiable())
-          simplified_solved_InputToSAT = bm->ASTFalse;
-
-        bm->ASTNodeStats("After Constant Bit Propagation begins: ", simplified_solved_InputToSAT);
-      }
-
     simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
         simp->haveAppliedSubstitutionMap();
         bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
+      }
+
+    if (bm->UserFlags.bitConstantProp_flag)
+      {
+        bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf, simplified_solved_InputToSAT);
+        simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT, true,false);
+
+        bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+        if (cb.isUnsatisfiable())
+          simplified_solved_InputToSAT = bm->ASTFalse;
+
+        if (simp->hasUnappliedSubstitutions())
+          {
+            simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+            simp->haveAppliedSubstitutionMap();
+          }
+
+        bm->ASTNodeStats("After Constant Bit Propagation begins: ", simplified_solved_InputToSAT);
       }
 
     // Find pure literals.
@@ -167,19 +173,35 @@ namespace BEEV {
     BVSolver* bvSolver = new BVSolver(bm, simp);
 
     simplified_solved_InputToSAT = sizeReducing(inputToSAT, bvSolver);
-    //simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT,bvSolver);
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+
+    // Fixed point it if it's not too difficult.
+    // Currently we discards all the state each time sizeReducing is called,
+    // so it's expensive to call.
+    if (!arrayops && initial_difficulty_score < 1000000)
+      {
+        while (true)
+          {
+            ASTNode last = simplified_solved_InputToSAT;
+            simplified_solved_InputToSAT = sizeReducing(last, bvSolver);
+            if (last == simplified_solved_InputToSAT)
+              break;
+          }
+        initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+      }
+
     if (bm->UserFlags.stats_flag)
       cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
 
     // Copy the solver map incase we need to revert.
     ASTNodeMap initialSolverMap;
+    ASTNode toRevertTo;
     if (!arrayops) // we don't revert for Array problems yet, so don't copy it.
       {
         initialSolverMap.insert(simp->Return_SolverMap()->begin(), simp->Return_SolverMap()->end());
+        toRevertTo = simplified_solved_InputToSAT;
       }
-    ASTNode toRevertTo = simplified_solved_InputToSAT;
 
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
