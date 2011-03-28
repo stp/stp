@@ -769,6 +769,41 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		result = children[0][0];
 	break;
 
+	case BEEV::BVEXTRACT:
+          if (width == children[0].GetValueWidth())
+             result = children[0];
+          else if (BEEV::BVEXTRACT == children[0].GetKind()) // reduce an extract over an extract.
+            {
+              const unsigned outerLow = children[2].GetUnsignedConst();
+              const unsigned outerHigh = children[1].GetUnsignedConst();
+
+              const unsigned innerLow = children[0][2].GetUnsignedConst();
+              const unsigned innerHigh = children[0][1].GetUnsignedConst();
+              result = NodeFactory::CreateTerm(BEEV::BVEXTRACT, width, children[0][0], bm.CreateBVConst(32, outerHigh
+                  + innerLow), bm.CreateBVConst(32, outerLow + innerLow));
+            }
+          else if (BEEV::BVCONCAT == children[0].GetKind())
+           {
+                // If the extract doesn't cross the concat, then remove the concat.
+                const ASTNode& a = children[0][0];
+                const ASTNode& b = children[0][1];
+
+                const unsigned low = children[2].GetUnsignedConst();
+                const unsigned high = children[1].GetUnsignedConst();
+
+                if (high < b.GetValueWidth())  // Extract entirely from the lower value (b).
+                  {
+                    result =  NodeFactory::CreateTerm(BEEV::BVEXTRACT, width, b, children[1], children[2]);
+                  }
+                if (low >= b.GetValueWidth()) // Extract entirely from the upper value (a).
+                  {
+                    ASTNode i = bm.CreateBVConst(32, high - b.GetValueWidth());
+                    ASTNode j = bm.CreateBVConst(32, low - b.GetValueWidth());
+                    result = NodeFactory::CreateTerm(BEEV::BVEXTRACT, width, a, i, j);
+                  }
+              }
+	  break;
+
 	case BEEV::BVPLUS:
         if (children.size() == 2)
           {
