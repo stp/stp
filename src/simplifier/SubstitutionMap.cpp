@@ -186,17 +186,26 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   return output;
 } //end of CreateSubstitutionMap()
 
-
+// idempotent.
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
 	ASTNodeMap cache;
 	SimplifyingNodeFactory nf(*bm->hashingNodeFactory, *bm);
 	ASTNode result =  replace(n,*SolverMap,cache,&nf, false);
+
+	// NB. This is an expensive check. Remove it after it's been idempotent
+	// for a while.
+        #ifndef NDEBUG
+              cache.clear();
+              assert( result ==  replace(result,*SolverMap,cache,&nf, false));
+        #endif
+
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
 	return result;
 }
 
+// not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
@@ -290,6 +299,14 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 		// If the index and value width aren't saved, they are reset sometimes (??)
 		result = nf->CreateArrayTerm(k,indexWidth, valueWidth,new_children);
 	}
+
+	// We may have created something that should be mapped. For instance,
+	// if n is READ(A, x), and the fromTo is: {x==0, READ(A,0) == 1}, then
+	// by here the result will be READ(A,0). Which needs to be mapped again..
+	// I hope that this makes it idempotent.
+
+	if (fromTo.find(result) != fromTo.end())
+	  result = replace(result, fromTo, cache,nf,stopAtArrays);
 
 	assert(result.GetValueWidth() == valueWidth);
 	assert(result.GetIndexWidth() == indexWidth);
