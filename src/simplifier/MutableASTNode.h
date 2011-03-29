@@ -119,18 +119,24 @@ private:
       for (int i = 0; i < children.size(); i++)
         newChildren.push_back(children[i]->toASTNode(nf));
 
+      // Don't use the hashing node factory here. Imagine CreateNode simplified down,
+      // from (= 1 ite( x , 1,0)) to x (say). Then this node will become a symbol,
+      // but, this object will still have the equal's children. i.e. 1, and the ITE.
+      // So it becomes a SYMBOL with children...
+
       if (n.GetType() == BOOLEAN_TYPE)
         {
-          n = nf->CreateNode(n.GetKind(), newChildren);
+          n = n.GetSTPMgr()->hashingNodeFactory->CreateNode(n.GetKind(), newChildren);
         }
       else if (n.GetType() == BITVECTOR_TYPE)
         {
-          n = nf->CreateTerm(n.GetKind(), n.GetValueWidth(), newChildren);
+          n = n.GetSTPMgr()->hashingNodeFactory->CreateTerm(n.GetKind(), n.GetValueWidth(), newChildren);
         }
       else
         {
-          n = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), newChildren);
+          n = n.GetSTPMgr()->hashingNodeFactory->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), newChildren);
         }
+
       dirty = false;
       return n;
     }
