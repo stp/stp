@@ -870,6 +870,16 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		}
 		break;
 
+        case BEEV::WRITE:
+          if (children[0].GetKind() == BEEV::WRITE)
+          {
+              // If the indexes of two writes are the same, then discard the inner write.
+              if (children[1] == children[0][1])
+              {
+                  result = NodeFactory::CreateArrayTerm(BEEV::WRITE, children[0].GetIndexWidth(), children[0].GetValueWidth(),  children[0][0], children[1], children[2]);
+              }
+          }
+          break;
 
 	case BEEV::READ:
 	if (children[0].GetKind() == BEEV::WRITE)
