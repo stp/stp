@@ -616,6 +616,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 				  if (children[0].isConstant() && children[0] == bm.CreateOneConst(width))
 					  result = children[1];
 
+                                  if (width == 1 && children[0] == children[1])
+                                    result = children[0];
 				  }
 		  }
 		  break;
@@ -626,6 +628,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = bm.CreateZeroConst(width);
           else if (children[1].isConstant())
             result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm, &hashing);
+          else if (width == 1 && children[0] == children[1])
+            result = bm.CreateZeroConst(1);
+
 	}
 	break;
 
@@ -649,6 +654,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 				result = bm.CreateMaxConst(width);
 			else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
 					 result = children[0];
+	                else if (width == 1 && children[0] == children[1])
+		              result = children[0];
+                        else if (width == 1 && children[1].isConstant() && children[1] == bm.CreateOneConst(1))
+                              result = children[0];
+
 
 		}
 	 break;
@@ -767,6 +777,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	case BEEV::BVUMINUS:
 	  if (children[0].GetKind() == BEEV::BVUMINUS)
 		result = children[0][0];
+          else if (width == 1)
+                result = children[0];
+
 	break;
 
 	case BEEV::BVEXTRACT:
@@ -809,8 +822,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
           {
             if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
               result = children[0];
-            if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+            else if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
               result = children[1];
+            else if (width == 1 && children[0] == children[1])
+              result = bm.CreateZeroConst(1);
           }
         break;
 
