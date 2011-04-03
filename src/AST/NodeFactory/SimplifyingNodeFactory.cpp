@@ -338,6 +338,43 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	    return NodeFactory::CreateNode(BEEV::AND, a, b);
 	  }
 
+	// Don't create a PLUS with the same operand on both sides.
+        // We don't do big pluses, because 1) this algorithm isn't good enough
+        // 2) it might split nodes (a lot).
+	if ((k1 == BEEV::BVPLUS && in1.Degree() <=2) || (k2 == BEEV::BVPLUS && in2.Degree() <=2))
+	  {
+	    const ASTVec& c1 = (k1 == BEEV::BVPLUS)? in1.GetChildren() : ASTVec(1,in1) ;
+	    const ASTVec& c2 = (k2 == BEEV::BVPLUS)? in2.GetChildren() : ASTVec(1,in2) ;
+
+	    if (c1.size() <=2 && c2.size() <=2)
+	      {
+	         int match1 =-1, match2=-1;
+
+	        for (int i =0; i < c1.size();i++)
+	            for (int j =0; j < c2.size();j++)
+	              {
+	                if (c1[i] == c2[j])
+	                  {
+	                    match1 = i;
+	                    match2 = j;
+	                  }
+	              }
+
+	          if (match1 != -1)
+	            {
+	              assert(match2 !=-1);
+	              const int width = in1.GetValueWidth();
+	              assert(match1 == 0 || match1 == 1);
+	              assert(match2 == 0 || match2 == 1);
+	              // If it was 1 element before, it's zero now.
+	              ASTNode n1 =  c1.size() == 1 ? bm.CreateZeroConst(width) : c1[match1==0?1:0];
+                      ASTNode n2 =  c2.size() == 1 ? bm.CreateZeroConst(width) : c2[match2==0?1:0];
+                      return NodeFactory::CreateNode(BEEV::EQ, n1, n2);
+	            }
+	      }
+	  }
+
+
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
 }
