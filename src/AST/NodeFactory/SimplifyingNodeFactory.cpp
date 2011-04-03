@@ -320,15 +320,25 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	const ASTNode& in2 = children[1];
 	const Kind k1 = in1.GetKind();
 	const Kind k2 = in2.GetKind();
+	const int width = in1.GetValueWidth();
 
 	if (in1 == in2)
 		//terms are syntactically the same
 		return in1.GetSTPMgr()->ASTTrue;
 
-	//here the terms are definitely not syntactically equal but may be
-	//semantically equal.
-	if (BEEV::BVCONST == k1 && BEEV::BVCONST == k2)
-		return in1.GetSTPMgr()->ASTFalse;
+        //here the terms are definitely not syntactically equal but may be
+        //semantically equal.
+        if (BEEV::BVCONST == k1 && BEEV::BVCONST == k2)
+                return in1.GetSTPMgr()->ASTFalse;
+
+        if ((k1 == BEEV::BVNEG && k2 == BEEV::BVNEG) ||  (k1 == BEEV::BVUMINUS && k2 == BEEV::BVUMINUS))
+          return NodeFactory::CreateNode(BEEV::EQ, in1[0], in2[0]);
+
+        if ((k1 == BEEV::BVUMINUS && k2 == BEEV::BVCONST) || (k1 == BEEV::BVNEG && k2 == BEEV::BVCONST))
+          return NodeFactory::CreateNode(BEEV::EQ, in1[0], NodeFactory::CreateTerm(k1,width, in2 ));
+
+        if (k2 == BEEV::BVUMINUS && k1 == BEEV::BVCONST || (k2 == BEEV::BVNEG && k1 == BEEV::BVCONST))
+          return NodeFactory::CreateNode(BEEV::EQ, in2[0], NodeFactory::CreateTerm(k2,width, in1 ));
 
 	// This increases the number of nodes. So disable for now.
 	if (false && BEEV::BVCONCAT == k1 && BEEV::BVCONCAT == k2 && in1[0].GetValueWidth() == in2[0].GetValueWidth())
@@ -363,7 +373,6 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	          if (match1 != -1)
 	            {
 	              assert(match2 !=-1);
-	              const int width = in1.GetValueWidth();
 	              assert(match1 == 0 || match1 == 1);
 	              assert(match2 == 0 || match2 == 1);
 	              // If it was 1 element before, it's zero now.
