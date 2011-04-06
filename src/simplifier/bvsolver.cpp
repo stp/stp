@@ -509,21 +509,6 @@ namespace BEEV
     return output;
   } //end of BVSolve_Odd()
 
-  bool containsExtract(const ASTNode& n, ASTNodeSet& visited) {
-  	if (visited.find(n) != visited.end())
-  		return false;
-
-  	if (BVEXTRACT == n.GetKind())
-  		return true;
-
-  	for (unsigned i = 0; i < n.Degree(); i++) {
-  		if (containsExtract(n[i], visited))
-  			return true;
-  	}
-  	visited.insert(n);
-  	return false;
-  }
-
   // Solve for XORs.
   // to do. Flatten the XOR.
   ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
