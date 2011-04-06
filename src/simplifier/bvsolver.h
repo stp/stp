@@ -63,7 +63,7 @@ namespace BEEV
     bool DoNotSolveThis(const ASTNode& var);
 
     //choose a suitable var from the term
-    ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm);
+    ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm, ASTNodeSet& checked);
     //accepts an equation and solves for a variable or a monom in it
     ASTNode BVSolve_Odd(const ASTNode& eq);
 
@@ -72,7 +72,7 @@ namespace BEEV
     ASTNode BVSolve_Even(const ASTNode& eq);
     ASTNode CheckEvenEqn(const ASTNode& input, bool& evenflag);
 
-
+    ASTNode substitute(const ASTNode& eq, const ASTNode& lhs, const ASTNode& rhs, const bool single);
 
 
     ASTNode solveForXOR(const ASTNode& n);
