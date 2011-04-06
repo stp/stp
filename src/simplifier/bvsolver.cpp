@@ -350,12 +350,6 @@ namespace BEEV
               return eq;
             }
 
-          //rhs should not have arrayreads in it. it complicates matters
-          //during transformation
-          // if(CheckForArrayReads_TopLevel(rhs)) {
-          //            return eq;
-          //       }
-
           if (!_simp->UpdateSolverMap(lhs, rhs))
             {
               return eq;
@@ -364,26 +358,7 @@ namespace BEEV
           output = ASTTrue;
           break;
         }
-        //              case READ:
-        //              {
-        //                if(BVCONST != lhs[1].GetKind() 
-        //                   || READ != rhs.GetKind() || 
-        //                     BVCONST != rhs[1].GetKind() || lhs == rhs) 
-        //                {
-        //                  return eq;
-        //                }
-        //                else 
-        //                {
-        //                  DoNotSolve_TheseVars.insert(lhs);
-        //                  if (!_simp->UpdateSolverMap(lhs, rhs))
-        //                    {
-        //                      return eq;
-        //                    }
 
-        //                  output = ASTTrue;
-        //                  break;                  
-        //                }
-        //              }
       case BVEXTRACT:
         {
           const ASTNode zero = _bm->CreateZeroConst(32);
@@ -521,41 +496,6 @@ namespace BEEV
   	}
   	visited.insert(n);
   	return false;
-  }
-
-  // The order that monomials are chosen in from the system of equations is important.
-  // In particular if a symbol is chosen that is extracted over, and that symbol
-  // appears elsewhere in the system. Then those other positions will be replaced by
-  // an equation that contains a concatenation.
-  // For example, given:
-  // 5x[5:1] + 4y[5:1] = 6
-  // 3x + 2y = 5
-  //
-  // If the x that is extracted over is selected as the monomial, then the later eqn. will be
-  // rewritten as:
-  // 3(concat (1/5)(6-4y[5:1]) v) + 2y =5
-  // where v is a fresh one-bit variable.
-  // What's particularly bad about this is that the "y" appears now in two places in the eqn.
-  // Because it appears in two places it can't be simplified by this algorithm
-  // This sorting function is a partial solution. Ideally the "best" monomial should be
-  // chosen from the system of equations.
-  void specialSort(ASTVec& c) {
-  	// Place equations that don't contain extracts before those that do.
-  	deque<ASTNode> extracts;
-  	ASTNodeSet v;
-
-  	for (unsigned i = 0; i < c.size(); i++) {
-  		if (containsExtract(c[i], v))
-  			extracts.push_back(c[i]);
-  		else
-  			extracts.push_front(c[i]);
-  	}
-
-  	c.clear();
-  	deque<ASTNode>::iterator it = extracts.begin();
-  	while (it != extracts.end()) {
-  		c.push_back(*it++);
-  	}
   }
 
   // Solve for XORs.
@@ -729,9 +669,6 @@ namespace BEEV
       c.push_back(input);
     else
       c = input.GetChildren();
-
-    if (sort_extracts_last)
-    	specialSort(c);
 
     ASTVec eveneqns;
     bool any_solved = false;
