@@ -67,6 +67,14 @@ namespace BEEV
       {
         return false;
       }
+
+    if (!pushNeg && key.isSimplfied())
+      {
+        output = key;
+        return true;
+      }
+
+
     ASTNodeMap::iterator it, itend;
     it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
     itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
@@ -106,11 +114,16 @@ namespace BEEV
     // to cache.
     if (0 == key.Degree())
       return;
-    
+
     if (pushNeg)
       (*SimplifyNegMap)[key] = value;
     else
       (*SimplifyMap)[key] = value;
+
+    if (!pushNeg && key == value)
+      {
+        key.hasBeenSimplfied();
+      }
   }
 
   // Substitution Map methods....
@@ -1659,6 +1672,9 @@ namespace BEEV
   {
     //n has been simplified if, it's a constant:
     if (n.isConstant())
+      return true;
+
+    if (n.isSimplfied())
       return true;
 
     //If it's a symbol that's not in the substitition Map.

@@ -63,8 +63,12 @@ namespace BEEV
       if (n.isAtom())
         return n;
 
+      // Hacks to stop it blowing out..
       {
           if (visited[n]++ > 10)
+            return n;
+
+          if (context.size() > 20)
             return n;
       }
 

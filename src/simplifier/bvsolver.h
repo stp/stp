@@ -115,7 +115,7 @@ namespace BEEV
 
     VariablesInExpression& vars;
 
-    bool simplify; //Whether to apply the simplifyTerm & simplifyFormula functions.
+    bool slow; //Whether to apply the simplifyTerm & simplifyFormula functions.
 
     ASTNode simplifyNode(const ASTNode n);
 
@@ -128,7 +128,7 @@ namespace BEEV
       ASTTrue = _bm->CreateNode(TRUE);
       ASTFalse = _bm->CreateNode(FALSE);
       ASTUndefined = _bm->CreateNode(UNDEFINED);
-      simplify=true;
+      slow=true;
       nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
     };
 
