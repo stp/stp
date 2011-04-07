@@ -16,6 +16,9 @@ namespace BEEV
     // The vector of children
     ASTVec _children;
 
+    /// todo. This should be a bitfield in a superclass if it can fit without increasing the sizeof..
+    mutable bool is_simplified;
+
   public:
 
     virtual ASTVec const &GetChildren() const
@@ -23,16 +26,28 @@ namespace BEEV
       return _children;
     }
 
+    bool isSimplified() const
+    {
+      return is_simplified;
+    }
+
+    void hasBeenSimplified() const
+    {
+      is_simplified =true;
+    }
+
     // Constructor (kind and children).
     ASTInternalWithChildren(Kind kind, const ASTVec &children, int nodenum = 0) :
       ASTInternal(kind,nodenum), _children(children)
     {
+      is_simplified = false;
     }
 
     // Constructor (kind only, empty children, int nodenum)
     ASTInternalWithChildren(Kind kind, int nodenum = 0) :
       ASTInternal(kind,nodenum)
     {
+      is_simplified = false;
     }
   }; //End of Class ASTInternalBase
 }; //end of namespace

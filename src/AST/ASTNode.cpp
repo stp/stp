@@ -217,6 +217,19 @@ namespace BEEV
       }
   } //End of NFASTPrint()
 
+  bool
+  ASTNode::isSimplfied() const
+  {
+    return _int_node_ptr->isSimplified();
+  }
+
+  void
+  ASTNode::hasBeenSimplfied() const
+  {
+    _int_node_ptr->hasBeenSimplified();
+  }
+
+
   //traverse "*this", and construct "let variables" for terms that
   //occur more than once in "*this".
   void ASTNode::LetizeNode(void) const

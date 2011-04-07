@@ -147,6 +147,10 @@ namespace BEEV
     	return (k == BVCONST || k == TRUE || k == FALSE);
     }
 
+    bool isSimplfied() const;
+
+    void hasBeenSimplfied() const;
+
 
     bool isITE() const
 	{

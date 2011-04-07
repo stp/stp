@@ -175,6 +175,18 @@ namespace BEEV
       return _node_num;
     } //End of GetNodeNum()
 
+
+    virtual bool isSimplified() const
+    {
+      return false;
+    }
+
+    virtual void hasBeenSimplified() const
+    {
+      cerr << "astinternal has been";
+    }
+
+
     void SetNodeNum(int nn)
     {
       _node_num = nn;
