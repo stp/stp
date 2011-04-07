@@ -98,9 +98,7 @@ public:
 		ASTNode var = (BVEXTRACT == key.GetKind()) ? key[0] : key;
 
 		if (var.GetKind() == SYMBOL && loops(var,value))
-			{
-		    return false;
-			}
+			return false;
 
 
 		if (!CheckSubstitutionMap(var) && key != value) {

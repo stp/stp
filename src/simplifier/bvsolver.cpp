@@ -37,34 +37,17 @@
 //2. paper for actual solving procedure
 //
 //4. Outside the solver, Substitute and Re-normalize the input DAG
-
-
-// This has a "slow mode", that performs time-consuming substitutions.
-// In slow mode it does applySubstitutions as it goes, it
-// applies the Simplify functions, and it solves for "even" monomials.
-// If we're not in slow mode this might take longer to fixed point. For
-// instance given:
-// 0 = 4x1 + 3x2 + 2x3 + 1x4.
-// 0 = 4x1 + 8x2 + 6x3 + 5x4.
-// 0 = 1x1 + 2x2 + 7x3 + 5x4.
-// The first replacement may be for 3x2, because substitutions aren't being applied
-// then the next two will fail (because any monomial chosen will appear in the rhs).
-// After applying through the substitutions & simplifying. The second formula will
-// change from  0 = 4x1 + 8(-(1/3)(4x1 +  2x3 + 1x4)) + 6x3 + 5x4.
-// to having each variable appear only a single time, so it can be solved for.
-
-
-
 namespace BEEV
 {
 	const bool flatten_ands = true;
+	const bool sort_extracts_last = false;
 	const bool debug_bvsolver = false;
 
 	// The simplify functions can increase the size of the DAG,
 	// so we have the option to disable simplifications.
   ASTNode BVSolver::simplifyNode(const ASTNode n)
   {
-	  if (!slow)
+	  if (!simplify)
 		  return n;
 
 	  if (n.GetType() == BOOLEAN_TYPE)
@@ -108,11 +91,9 @@ namespace BEEV
   	assert(number_shifts >0); // shouldn't be odd.
   }
 
-  // This doesn't seem necessary for correctness, it just stops you checking the same values over and over..
   bool BVSolver::DoNotSolveThis(const ASTNode& var)
   {
-    return false;
-    //return (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end());
+    return (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end());
   }
 
   //chooses a variable in the lhs and returns the chosen variable
@@ -167,12 +148,25 @@ namespace BEEV
         	// that the variable appears in none of them.
 
         	ASTNode var = (SYMBOL == monom.GetKind())? monom: monom[0];
-
+        	bool duplicated = false;
+        	for (ASTVec::const_iterator it2 = c.begin(); it2 != itend; it2++)
+			{
+				if (it2 == it)
+					continue;
+				if (vars.VarSeenInTerm(var,*it2))
+				{
+					duplicated = true;
+					break;
+				}
+			}
+			if (!duplicated)
 			{
 				outmonom = monom; //nb. monom not var.
 				chosen_symbol = true;
 				checked.insert(var);
 			}
+			else
+				o.push_back(monom);
         }
     	else
     		o.push_back(monom);
@@ -287,6 +281,14 @@ namespace BEEV
       {
           DoNotSolve_TheseVars.insert(lhs);
 
+        //input is of the form x = rhs first make sure that the lhs
+        //symbol does not occur on the rhs or that it has not been
+        //solved for
+        if (!single && vars.VarSeenInTerm(lhs, rhs))
+          {
+            //found the lhs in the rhs. Abort!
+            return eq;
+          }
 
         if (!_simp->UpdateSolverMap(lhs, rhs))
           {
@@ -612,17 +614,15 @@ namespace BEEV
     for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child
         != and_end; and_child++)
       {
-      ASTNode r = *and_child;
-      if (slow && changed) // Simplifier expects substitutions to be applied.
-        r = _simp->applySubstitutionMapUntilArrays(r);
 
-      r = solveForXOR(!changed?r:simplifyNode((r)));
+      ASTNode r = solveForXOR(!changed?*and_child:simplifyNode(_simp->applySubstitutionMapUntilArrays(*and_child)));
       if (r!=*and_child)
         changed=true;
       output_children.push_back(r);
       }
 
     return nf->CreateNode(AND, output_children);
+
   }
 
 
@@ -633,7 +633,7 @@ namespace BEEV
   {
       assert (_bm->UserFlags.wordlevel_solve_flag);
 	  ASTNode input = _input;
-	  slow = enable_simplify;
+	  simplify = enable_simplify;
 
     ASTNode output = input;
     if (CheckAlreadySolvedMap(input, output))
@@ -703,14 +703,8 @@ namespace BEEV
     	 which shouldn't be simplified.
   	   */
 
-        // simplifyNode expects substitutions to already be applied.
-        ASTNode aaa = *it;
-        if (EQ == it->GetKind() && any_solved)
-          {
-            if (slow)
-              aaa = _simp->applySubstitutionMapUntilArrays(aaa);
-            aaa = (any_solved && EQ == it->GetKind()) ? simplifyNode(aaa) : aaa;
-          }
+    	ASTNode aaa =  (any_solved && EQ == it->GetKind()) ? simplifyNode
+    			(_simp->applySubstitutionMapUntilArrays(*it)) : *it;
 
         if (ASTFalse == aaa)
         {
@@ -853,7 +847,7 @@ namespace BEEV
     //         return input;
     //       }
 
-    if (slow || !(EQ == input.GetKind() || AND == input.GetKind()))
+    if (!(EQ == input.GetKind() || AND == input.GetKind()))
       {
         return input;
       }
