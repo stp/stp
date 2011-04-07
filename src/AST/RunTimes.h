@@ -65,11 +65,19 @@ public:
   void stop(Category c);
   void print();
   
+  std::string getDifference()
+  {
+    std::stringstream s;
+    long val = getCurrentTime();
+    s << (val -  lastTime) << "ms" ;
+    lastTime = val;
+    return s.str();
+  }
+
   void difference()
   {
-	  long val = getCurrentTime();
-	  std::cout << (val -  lastTime) << "ms" << std::endl;
-	  lastTime = val;
+	  std::cout << getDifference()<< std::endl << std::endl;
+
   }
 
   RunTimes()

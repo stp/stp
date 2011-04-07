@@ -615,7 +615,8 @@ namespace BEEV
 
     StatInfoSet.clear();
     //print node size:
-    cout << endl << "Printing: " << c;
+
+    cout << "[" << GetRunTimes()->getDifference() << "]" <<  "Printing: " << c;
     if (UserFlags.print_nodes_flag)
       {
         //a.PL_Print(cout,0);
