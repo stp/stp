@@ -12,7 +12,7 @@
 
 #include "AST.h"
 #include "../STPManager/STPManager.h"
-
+#include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 
 namespace BEEV
 {
@@ -111,12 +111,17 @@ namespace BEEV
       debug_transform(0),
       TransformMap(NULL)
     {
-      nf = bm->defaultNodeFactory;
+      nf = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
       runTimes = bm->GetRunTimes();
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
       ASTUndefined = bm->CreateNode(UNDEFINED);
+    }
+
+    ~ArrayTransformer()
+    {
+      delete nf;
     }
 
     // Takes a formula, transforms it by replacing array reads with
