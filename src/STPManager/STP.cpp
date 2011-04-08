@@ -29,9 +29,14 @@ namespace BEEV {
   SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts, 
 				      const ASTNode& query)
   {      
-    ASTNode original_input = bm->CreateNode(AND, 
+    ASTNode original_input;
+
+    if (query != bm->ASTFalse)
+      original_input = bm->CreateNode(AND,
 					    inputasserts, 
 					    bm->CreateNode(NOT, query));
+    else
+      original_input = inputasserts;
     
     //solver instantiated here
 //#if defined CRYPTOMINISAT2
