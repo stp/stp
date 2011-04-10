@@ -654,7 +654,9 @@ namespace BEEV
 					nf->CreateTerm(READ, width, arrName[0], readIndex);
 				  assert(BVTypeCheck(readTerm));
 
-				  ASTNode readPushedIn = TransformArrayRead(readTerm);
+				  // The simplifying node factory may have produced
+				  // something that's not a READ.
+				  ASTNode readPushedIn = TransformTerm(readTerm);
 				  assert(BVTypeCheck(readPushedIn));
 
 				  result =
