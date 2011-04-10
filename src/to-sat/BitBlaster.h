@@ -211,6 +211,9 @@ public:
 	//Bitblast a formula
 	const BBNode BBForm(const ASTNode& form);
 
+	void getConsts(const ASTNode& n, ASTNodeMap& fromTo);
+
+
 }; //end of class BitBlaster
 }
 ; //end of namespace

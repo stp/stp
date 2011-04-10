@@ -55,6 +55,86 @@ const bool debug_bitblaster = false;
 
 const bool conjoin_to_top = true;
 
+
+// Look through the maps to see what the bitblaster has discovered (if anything) is constant.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode,BBNodeManagerT>::getConsts(const ASTNode& form, ASTNodeMap& fromTo)
+{
+  assert(form.GetType() == BOOLEAN_TYPE);
+
+  BBNodeSet support;
+  BBForm(form, support);
+
+  assert(support.size() ==0);
+
+  {
+      typename map<ASTNode, BBNode>::iterator it;
+      for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+        {
+          const ASTNode& n = it->first;
+          const BBNode& x = it->second;
+          if (n.isConstant())
+            continue;
+
+          if (x != BBTrue && x != BBFalse)
+            continue;
+
+          assert (n.GetType() == BOOLEAN_TYPE);
+
+          ASTNode result;
+          if (x == BBTrue)
+            result = n.GetSTPMgr()->ASTTrue;
+          else
+            result = n.GetSTPMgr()->ASTFalse;
+
+          if (n.GetKind() != SYMBOL)
+            fromTo.insert(make_pair(n, result));
+          else
+            simp->UpdateSubstitutionMap(n, result);
+        }
+    }
+
+  typename BBNodeVecMap::iterator it;
+  for (it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+        {
+          const ASTNode& n = it->first;
+          assert (n.GetType() == BITVECTOR_TYPE);
+
+          if (n.isConstant())
+            continue;
+
+          vector<BBNode>& x = it->second;
+          assert(x.size() == n.GetValueWidth());
+
+          bool constNode= true;
+          for (int i = 0; i < (int) x.size(); i++)
+            {
+              if (x[i] != BBTrue && x[i] != BBFalse)
+                {
+                  constNode = false;
+                break;
+                }
+            }
+          if (!constNode)
+            continue;
+
+          CBV val = CONSTANTBV::BitVector_Create(n.GetValueWidth(), true);
+          for (int i = 0; i < (int) x.size(); i++)
+            {
+              if (x[i] == BBTrue)
+                CONSTANTBV::BitVector_Bit_On(val, i);
+            }
+
+          ASTNode r = n.GetSTPMgr()->CreateBVConst(val, n.GetValueWidth());
+          if (n.GetKind() == SYMBOL)
+            simp->UpdateSubstitutionMap(n, r);
+          else
+            fromTo.insert(make_pair(n, r));
+
+
+        }
+}
+
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::commonCheck(const ASTNode& n) {
         cerr << "Non constant is constant:";
