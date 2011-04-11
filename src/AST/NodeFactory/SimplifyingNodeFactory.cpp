@@ -340,6 +340,16 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
         if (k2 == BEEV::BVUMINUS && k1 == BEEV::BVCONST || (k2 == BEEV::BVNEG && k1 == BEEV::BVCONST))
           return NodeFactory::CreateNode(BEEV::EQ, in2[0], NodeFactory::CreateTerm(k2,width, in1 ));
 
+        if ((k1 == BEEV::BVNEG && in1[0] == in2) || (k2 == BEEV::BVNEG && in2[0] == in1))
+          return in1.GetSTPMgr()->ASTFalse;
+
+        if (k2 == BEEV::BVDIV && k1 == BEEV::BVCONST && (in1 == bm.CreateZeroConst(width)))
+            return NodeFactory::CreateNode(BEEV::BVGT, in2[1], in2[0]);
+
+        if (k1 == BEEV::BVDIV && k2 == BEEV::BVCONST && (in2 == bm.CreateZeroConst(width)))
+            return NodeFactory::CreateNode(BEEV::BVGT, in1[1], in1[0]);
+
+
 	// This increases the number of nodes. So disable for now.
 	if (false && BEEV::BVCONCAT == k1 && BEEV::BVCONCAT == k2 && in1[0].GetValueWidth() == in2[0].GetValueWidth())
 	  {
