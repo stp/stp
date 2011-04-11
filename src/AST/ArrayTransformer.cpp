@@ -448,49 +448,12 @@ namespace BEEV
           else
         	  result = term;
 
-          const Kind k = result.GetKind();
-
-          if (BVDIV == k 
-              || BVMOD == k 
-              || SBVDIV == k 
-              || SBVREM == k 
-              || SBVMOD == k)
-            {
-
-              // I had this as a reference, but that was wrong. Because
-              // "result" gets over-written in the next block, result[1], may
-              // get a reference count of zero, so be garbage collected.
-              const ASTNode bottom = result[1];
-
               if (SBVDIV == result.GetKind() 
                   || SBVREM == result.GetKind() 
                   || SBVMOD == result.GetKind())
                 {
                   result = TranslateSignedDivModRem(result);
                 }
-
-              if (bm->UserFlags.division_by_zero_returns_one_flag && (k==SBVDIV || k == BVDIV))
-                {
-                  // This is a difficult rule to introduce in other
-                  // places because it's recursive. i.e.  result is
-                  // embedded unchanged inside the result.
-
-                  unsigned inputValueWidth = result.GetValueWidth();
-                  ASTNode zero = bm->CreateZeroConst(inputValueWidth);
-                  ASTNode one = bm->CreateOneConst(inputValueWidth);
-                  result = 
-                    nf->CreateTerm(ITE, inputValueWidth,
-                                   nf->CreateNode(EQ, zero, bottom),
-                                   one, result);
-
-                  //return result;
-                  if (bm->UserFlags.optimize_flag)
-                      return simp->SimplifyTerm_TopLevel(result);
-                  else
-                  	return result;
-
-                }
-            }
         }
         break;
       }

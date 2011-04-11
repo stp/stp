@@ -673,7 +673,22 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
 		BBNodeVec r(num_bits);
 		BBDivMod(dvdd, dvsr, q, r, num_bits, support);
 		if (k == BVDIV)
-			result = q;
+		{
+			if (uf->division_by_zero_returns_one_flag)
+			{
+				BBNodeVec zero(term.GetValueWidth(), BBFalse);
+
+				BBNode eq = BBEQ(zero, dvsr);
+				BBNodeVec one(term.GetValueWidth(), BBFalse);
+				one[0] = BBTrue;
+
+ 			   result = BBITE(eq, one, q);
+			}
+			else
+			{
+				result = q;
+			}
+		}
 		else
 			result = r;
 		break;
