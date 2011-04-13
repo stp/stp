@@ -358,6 +358,21 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	    return NodeFactory::CreateNode(BEEV::AND, a, b);
 	  }
 
+
+	if (k1 == BEEV::BVCONST && k2 == BEEV::ITE && in2[1].GetKind() == BEEV::BVCONST && in2[2].GetKind() == BEEV::BVCONST)
+	  {
+
+	        ASTNode result =
+	    NodeFactory::CreateNode(BEEV::ITE,
+	        in2[0],
+	        NodeFactory::CreateNode(BEEV::EQ,in1,in2[1]),
+	        NodeFactory::CreateNode(BEEV::EQ,in1,in2[2]));
+
+	        return result;
+	  }
+
+
+
 	// Don't create a PLUS with the same operand on both sides.
         // We don't do big pluses, because 1) this algorithm isn't good enough
         // 2) it might split nodes (a lot).
@@ -392,8 +407,6 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	            }
 	      }
 	  }
-
-
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
 }
