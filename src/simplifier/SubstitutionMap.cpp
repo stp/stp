@@ -219,7 +219,7 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 	// for a while.
         #ifndef NDEBUG
               cache.clear();
-              assert( result ==  replace(result,*SolverMap,cache,&nf, false));
+              assert( result ==  replace(result,*SolverMap,cache,nf, false));
         #endif
 
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
