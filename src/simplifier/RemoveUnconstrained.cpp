@@ -33,16 +33,13 @@ namespace BEEV
 
     bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
-    //All the simplifications should be written through before we get here.
-
     if(simplifier->hasUnappliedSubstitutions())
       result = simplifier->applySubstitutionMap(result);
 
+    // In some rare cases, the simplifier might not have removed a term
+    // that can be substituted away. e.g. read(A,0), if read(A,0) == 1,
+    // in the substitution map.
     result = topLevel_other(result, simplifier);
-
-    // There should be no unapplied substitutions.
-    assert(result == simplifier->applySubstitutionMap(result));
-
 
     // It is idempotent if there are no big ANDS (we have a special hack), and,
     // if we don't introduced any new "disjoint extracts."
