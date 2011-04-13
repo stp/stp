@@ -141,6 +141,14 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
                   if (UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
 	        }
+	      else if (a[1].GetKind() == NOT && a[1][0].GetKind() == EQ && a[1][0][0].GetValueWidth() ==1 && a[1][0][1].GetKind() == SYMBOL)
+                {
+                  const ASTNode& symbol = a[1][0][1];
+                  const ASTNode newN = nf->CreateTerm(ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNEG, 1,a[1][0][0]));
+
+                  if (UpdateSolverMap(symbol, newN))
+                      output =  ASTTrue;
+                }
 	      else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() ==1 && a[0][1].GetKind() == SYMBOL)
 	        {
                   // XOR ((= 1 v) ... )
@@ -151,6 +159,14 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
                   if (UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
 	        }
+	      else if (a[1].GetKind() == EQ && a[1][0].GetValueWidth() ==1 && a[1][1].GetKind() == SYMBOL)
+                {
+                  const ASTNode& symbol = a[1][1];
+                  const ASTNode newN = nf->CreateTerm(ITE, 1, a[0], nf->CreateTerm(BVNEG, 1,a[1][0]), a[1][0]);
+
+                  if (UpdateSolverMap(symbol, newN))
+                      output =  ASTTrue;
+                }
 	      else
 	      return output;
 	    }
