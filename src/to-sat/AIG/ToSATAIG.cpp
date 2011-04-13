@@ -123,6 +123,12 @@ namespace BEEV
       {
         if (bm->UserFlags.quick_statistics_flag)
           bm->GetRunTimes()->print();
+
+        if (needAbsRef)
+          cerr << "Warning: STP is exiting after generating the first CNF. But the CNF"
+          "is probably partial which you probably don't want. You probably want to disable"
+          "refinement with the \"-r\" command line option." << endl;
+
         exit(0);
       }
 
