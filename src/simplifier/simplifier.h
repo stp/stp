@@ -99,14 +99,14 @@ namespace BEEV
                   const ASTNode& key, ASTNode& output);
 
       
-    //functions for checking and updating simplifcation map
+    //functions for checking and updating simplification map
     bool CheckSimplifyMap(const ASTNode& key, 
                           ASTNode& output, 
                           bool pushNeg, ASTNodeMap* VarConstMap=NULL);
     void UpdateSimplifyMap(const ASTNode& key, 
                            const ASTNode& value, 
                            bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    bool CheckAlwaysTrueFormSet(const ASTNode& key);
+    bool CheckAlwaysTrueFormSet(const ASTNode& key, bool& result);
     void UpdateAlwaysTrueFormSet(const ASTNode& val);
     bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
     void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);

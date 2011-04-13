@@ -190,17 +190,37 @@ namespace BEEV
     MultInverseMap[key] = value;
   }
 
-  bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key)
+  // Check if key, or NOT(key) is found in the alwaysTrueSet.
+  bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
   {
-    HASHSET<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
     HASHSET<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
+    HASHSET<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
 
-    return  it2 != it_end_2;
+    if(it2 != it_end_2)
+    {
+      result = true; // The key should be replaced by TRUE.
+      return true;
+    }
+
+    int toSearch;
+    if (key.GetKind() == NOT)
+        toSearch = key.GetNodeNum()-1;
+    else
+        toSearch = key.GetNodeNum()+1;
+
+    it2 = AlwaysTrueHashSet.find(toSearch);
+    if(it2 != it_end_2)
+        {
+          result = false;
+          return true;
+        }
+
+    return false;
   }
 
   void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
   {
-	  AlwaysTrueHashSet.insert(key.GetNodeNum());
+    AlwaysTrueHashSet.insert(key.GetNodeNum());
   }
 
   ASTNode 
@@ -1091,15 +1111,14 @@ namespace BEEV
       return t2;
     if (t1 == t2)
       return t1;
-    if (CheckAlwaysTrueFormSet(t0))
+
+    bool result;
+    if (CheckAlwaysTrueFormSet(t0,result))
       {
-        return t1;
-      }
-    if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0))
-        || (NOT == t0.GetKind() 
-            && CheckAlwaysTrueFormSet(t0[0])))
-      {
-        return t2;
+        if (result)
+          return t1;
+        else
+          return t2;
       }
 
     return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(),t1.GetValueWidth(), t0, t1, t2);
@@ -1123,16 +1142,16 @@ namespace BEEV
           return t2;
         if (t1 == t2)
           return t1;
-        if (CheckAlwaysTrueFormSet(t0))
+
+        bool result;
+        if (CheckAlwaysTrueFormSet(t0,result))
           {
-            return t1;
+            if (result)
+              return t1;
+            else
+              return t2;
           }
-        if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0))
-            || (NOT == t0.GetKind() 
-                && CheckAlwaysTrueFormSet(t0[0])))
-          {
-            return t2;
-          }
+
       }
     ASTNode result = nf->CreateNode(ITE, t0, t1, t2);
     assert(BVTypeCheck(result));
@@ -1269,10 +1288,14 @@ namespace BEEV
     //pushnegation if there are odd number of NOTs
     bool pn = (NotCount % 2 == 0) ? false : true;
 
-    if (CheckAlwaysTrueFormSet(o))
+    bool alwaysTrue;
+    if (CheckAlwaysTrueFormSet(o,alwaysTrue))
       {
-        output = pn ? ASTFalse : ASTTrue;
-        return output;
+        if (alwaysTrue)
+          return ( pn ? ASTFalse : ASTTrue);
+
+        // We don't do the false case because it is sometimes
+        // called at the top level.
       }
 
     if (CheckSimplifyMap(o, output, pn))
@@ -1422,6 +1445,7 @@ namespace BEEV
       {
         c0 = SimplifyFormula(a[0], false, VarConstMap);
         c1 = SimplifyFormula(a[1], false, VarConstMap);
+        bool atResult;
         if (ASTFalse == c0)
           {
             output = ASTTrue;
@@ -1434,28 +1458,25 @@ namespace BEEV
           {
             output = ASTTrue;
           }
-        else if (CheckAlwaysTrueFormSet(c0))
+        else if (CheckAlwaysTrueFormSet(c0, atResult))
           {
             // c0 AND (~c0 OR c1) <==> c1
-            //
-            //applying modus ponens
-            output = c1;
-          }
-        else if (CheckAlwaysTrueFormSet(c1) || 
-                 CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c0)) ||
-                 (NOT == c0.GetKind() && CheckAlwaysTrueFormSet(c0[0])))
-          {
             //(~c0 AND (~c0 OR c1)) <==> TRUE
-            //
             //(c0 AND ~c0->c1) <==> TRUE
-            output = ASTTrue;
-          }
-        else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c1)) ||
-                 (NOT == c1.GetKind() && CheckAlwaysTrueFormSet(c1[0])))
-          {
             //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
             //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
-            output = nf->CreateNode(NOT, c0);
+
+            if (atResult)
+              output = c1;
+            else
+              output = ASTTrue;
+          }
+        else if (CheckAlwaysTrueFormSet(c1, atResult))
+          {
+            if (atResult)
+              output = ASTTrue;
+            else
+              output = nf->CreateNode(NOT, c0);
           }
         else
           {
@@ -1495,6 +1516,8 @@ namespace BEEV
     else
       c0 = SimplifyFormula(c0, false, VarConstMap);
 
+    bool alwaysResult;
+
     if (ASTTrue == c0)
       {
         output = c1;
@@ -1522,21 +1545,19 @@ namespace BEEV
       {
         output = ASTFalse;
       }
-    else if (CheckAlwaysTrueFormSet(c0))
+    else if (CheckAlwaysTrueFormSet(c0,alwaysResult))
       {
-        output = c1;
+        if (alwaysResult)
+          output = c1;
+        else
+          output = nf->CreateNode(NOT, c1);
       }
-    else if (CheckAlwaysTrueFormSet(c1))
+    else if (CheckAlwaysTrueFormSet(c1,alwaysResult))
       {
-        output = c0;
-      }
-    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c0)))
-      {
-        output = nf->CreateNode(NOT, c1);
-      }
-    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, c1)))
-      {
-        output = nf->CreateNode(NOT, c0);
+        if (alwaysResult)
+          output = c0;
+        else
+          output = nf->CreateNode(NOT, c0);
       }
     else
       {
@@ -1577,6 +1598,8 @@ namespace BEEV
         t2 = SimplifyFormula(a[2], false, VarConstMap);
       }
 
+    bool alwaysTrue;
+
     if (ASTTrue == t0)
       {
         output = t1;
@@ -1613,14 +1636,12 @@ namespace BEEV
       {
         output = nf->CreateNode(AND, t0, t1);
       }
-    else if (CheckAlwaysTrueFormSet(t0))
+    else if (CheckAlwaysTrueFormSet(t0,alwaysTrue))
       {
-        output = t1;
-      }
-    else if (CheckAlwaysTrueFormSet(nf->CreateNode(NOT, t0)) ||
-             (NOT == t0.GetKind() && CheckAlwaysTrueFormSet(t0[0])))
-      {
-        output = t2;
+        if (alwaysTrue)
+          output = t1;
+        else
+          output = t2;
       }
     else
       {
