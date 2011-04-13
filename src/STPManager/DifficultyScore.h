@@ -50,6 +50,11 @@ private:
 			// without getting the width of the child it'd always be 2.
 			score = std::max(b[0].GetValueWidth(),1u) * (b.Degree());
 		}
+                else if (k == BVSUB)
+                  {
+                    // We convert subtract to a + (-b), we want the difficulty scores to be same.
+                    score = std::max(b[0].GetValueWidth(),1u) * 3;
+                  }
 		else
 		{
 			score = std::max(b.GetValueWidth(),1u) * (b.Degree());
