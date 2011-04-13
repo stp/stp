@@ -24,6 +24,7 @@ class SubstitutionMap {
 	Simplifier *simp;
 	STPMgr* bm;
 	ASTNode ASTTrue, ASTFalse, ASTUndefined;
+	NodeFactory *nf;
 
 	// These are used to avoid substituting {x = f(y,z), z = f(x)}
 	typedef hash_map<ASTNode, Symbols*,ASTNode::ASTNodeHasher> DependsType;
@@ -60,7 +61,8 @@ public:
 
 	VariablesInExpression vars;
 
-	SubstitutionMap(Simplifier *_simp, STPMgr* _bm) {
+	SubstitutionMap(Simplifier *_simp, STPMgr* _bm)
+	{
 		simp = _simp;
 		bm = _bm;
 
@@ -71,6 +73,7 @@ public:
 		SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
 		loopCount = 0;
 		substitutionsLastApplied =0;
+	        nf = new SimplifyingNodeFactory (*bm->hashingNodeFactory, *bm);
 	}
 
 	void clear()

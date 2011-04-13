@@ -13,6 +13,7 @@ namespace BEEV
 SubstitutionMap::~SubstitutionMap()
 {
 	delete SolverMap;
+	delete nf;
 }
 
 // if false. Don't simplify while creating the substitution map.
@@ -126,31 +127,52 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   else if (XOR == k)
   {
 	  if (a.Degree() !=2)
-		  return output;
+	    return output;
 
 	  int to = TermOrder(a[0],a[1]);
 	  if (0 == to)
-		  return output;
+	    {
+	      if (a[0].GetKind() == NOT && a[0][0].GetKind() == EQ && a[0][0][0].GetValueWidth() ==1 && a[0][0][1].GetKind() == SYMBOL)
+	        {
+	          // (XOR (NOT(= (1 v)))  ... )
+	          const ASTNode& symbol = a[0][0][1];
+	          const ASTNode newN = nf->CreateTerm(ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNEG, 1,a[0][0][0]));
 
-	  ASTNode symbol,rhs;
-	  if (to==1)
-	  {
-		  symbol = a[0];
-		  rhs = a[1];
-	  }
+                  if (UpdateSolverMap(symbol, newN))
+                      output =  ASTTrue;
+	        }
+	      else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() ==1 && a[0][1].GetKind() == SYMBOL)
+	        {
+                  // XOR ((= 1 v) ... )
+
+	          const ASTNode& symbol = a[0][1];
+                  const ASTNode newN = nf->CreateTerm(ITE, 1, a[1], nf->CreateTerm(BVNEG, 1,a[0][0]), a[0][0]);
+
+                  if (UpdateSolverMap(symbol, newN))
+                      output =  ASTTrue;
+	        }
+	      else
+	      return output;
+	    }
 	  else
-	  {
-		  symbol = a[0];
-		  rhs = a[1];
-	  }
+	    {
+                ASTNode symbol,rhs;
+                if (to==1)
+                {
+                    symbol = a[0];
+                    rhs = a[1];
+                }
+                else
+                {
+                    symbol = a[1];
+                    rhs = a[0];
+                }
 
-	  assert(symbol.GetKind() == SYMBOL);
+                assert(symbol.GetKind() == SYMBOL);
 
-	  // If either side is already solved for.
-	  if (CheckSubstitutionMap(symbol) || CheckSubstitutionMap(rhs))
-	  {}
-	  else if (UpdateSolverMap(symbol, bm->CreateNode(NOT, rhs)))
-			output =  ASTTrue;
+                if (UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
+                   output =  ASTTrue;
+	    }
   }
   else if (AND == k)
     {
@@ -178,7 +200,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       else if (o.size() == 1)
         output = o[0];
       else if (o != c)
-    	output = bm->CreateNode(AND, o);
+    	output = nf->CreateNode(AND, o);
       else
     	output = a;
     }
@@ -191,8 +213,7 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
 	ASTNodeMap cache;
-	SimplifyingNodeFactory nf(*bm->hashingNodeFactory, *bm);
-	ASTNode result =  replace(n,*SolverMap,cache,&nf, false);
+	ASTNode result =  replace(n,*SolverMap,cache,nf, false);
 
 	// NB. This is an expensive check. Remove it after it's been idempotent
 	// for a while.
@@ -210,8 +231,7 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
 	bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
 	ASTNodeMap cache;
-	SimplifyingNodeFactory nf(*bm->hashingNodeFactory, *bm);
-	ASTNode result = replace(n,*SolverMap,cache,&nf, true);
+	ASTNode result = replace(n,*SolverMap,cache,nf, true);
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
 	return result;
 }
