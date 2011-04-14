@@ -561,6 +561,12 @@ namespace BEEV
                   if (ASTFalse == cond)
                     continue;
 
+                  if (ASTTrue == cond)
+                    {
+                      result = it2->second.ite;
+                      break;
+                    }
+
                   result =
                     simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
                 }
