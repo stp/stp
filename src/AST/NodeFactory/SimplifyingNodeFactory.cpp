@@ -407,6 +407,28 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 	            }
 	      }
 	  }
+
+	if (k1 == BEEV::BVCONST && k2 == BEEV::BVXOR && in2.Degree() == 2 &&  in2[0].GetKind() == BEEV::BVCONST )
+	  {
+	       return NodeFactory::CreateNode(BEEV::EQ,NodeFactory::CreateTerm(BEEV::BVXOR,width,in1,in2[0] ), in2[1]);
+	  }
+
+	if (k2 == BEEV::BVCONST && k1 == BEEV::BVXOR && in1.Degree() == 2 && in1[0].GetKind() == BEEV::BVCONST )
+        {
+             return NodeFactory::CreateNode(BEEV::EQ,NodeFactory::CreateTerm(BEEV::BVXOR,width,in2,in1[0] ), in1[1]);
+        }
+
+	if (k2 == BEEV::BVXOR && in2.Degree() == 2 && in1 == in2[0])
+        {
+	    return NodeFactory::CreateNode(BEEV::EQ, bm.CreateZeroConst(width), in2[1]);
+        }
+
+        if (k1 == BEEV::BVXOR && in1.Degree() == 2 && in2 == in1[0])
+        {
+            return NodeFactory::CreateNode(BEEV::EQ, bm.CreateZeroConst(width), in1[1]);
+        }
+
+
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
 }
