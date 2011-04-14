@@ -261,6 +261,26 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 {
 	const Kind k = IsAnd ? BEEV::AND : BEEV::OR;
 
+	if (k == BEEV::OR && children.size() ==2)
+	  {
+	    const ASTNode& c0 = children[0];
+	    const ASTNode& c1 = children[1];
+	    if (c0.GetKind() == BEEV::NOT && c0[0] == c1)
+	      return ASTTrue;
+	    if (c1.GetKind() == BEEV::NOT && c1[0] == c0)
+                return ASTTrue;
+	  }
+        if (k == BEEV::AND && children.size() ==2)
+          {
+            const ASTNode& c0 = children[0];
+            const ASTNode& c1 = children[1];
+            if (c0.GetKind() == BEEV::NOT && c0[0] == c1)
+              return ASTFalse;
+            if (c1.GetKind() == BEEV::NOT && c1[0] == c0)
+              return ASTFalse;
+          }
+
+
 	const ASTNode& annihilator = (IsAnd ? ASTFalse : ASTTrue);
 	const ASTNode& identity = (IsAnd ? ASTTrue : ASTFalse);
 
@@ -547,10 +567,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec &children)
 	return retval;
 }
 
-// FIXME:  How do I know whether ITE is a formula or not?
 ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 {
-
 	const ASTNode& child0 = children[0];
 	const ASTNode& child1 = children[1];
 	const ASTNode& child2 = children[2];
@@ -594,6 +612,14 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 	else if (ASTFalse == child2)
 	{
 		retval = CreateSimpleAndOr(1, child0, child1);
+	}
+	else if (child0 == child1)
+	{
+	        retval = CreateSimpleAndOr(0, child0, child2);
+	}
+	else if (child0 == child2)
+	{
+	        retval = CreateSimpleAndOr(1, child0, child1);
 	}
 	else
 	{
