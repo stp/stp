@@ -336,8 +336,12 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 //return the constructed equality
 ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 {
-	const ASTNode& in1 = children[0];
-	const ASTNode& in2 = children[1];
+	assert(children.size() == 2);
+
+	// SYMBOL = something, if not that, then CONSTANT =
+	const bool swap = (children[1].GetKind() == BEEV::SYMBOL || ((children[0].GetKind() != BEEV::SYMBOL) && children[1].GetKind() == BEEV::BVCONST));
+	const ASTNode& in1 = swap? children[1] : children[0];
+	const ASTNode& in2 = swap ? children[0] : children[1];
 	const Kind k1 = in1.GetKind();
 	const Kind k2 = in2.GetKind();
 	const int width = in1.GetValueWidth();
@@ -369,6 +373,21 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
         if (k1 == BEEV::BVDIV && k2 == BEEV::BVCONST && (in2 == bm.CreateZeroConst(width)))
             return NodeFactory::CreateNode(BEEV::BVGT, in1[1], in1[0]);
 
+        // split the constant to equal each part of the concat.
+        if (BEEV::BVCONCAT == k2 && BEEV::BVCONST == k1)
+          {
+            int low_b = 0;
+            int high_b = in2[1].GetValueWidth() -1;
+            int low_t = in2[1].GetValueWidth();
+            int high_t = width-1;
+
+            ASTNode c0 =  NodeFactory::CreateTerm(BEEV::BVEXTRACT, in2[1].GetValueWidth(), in1, bm.CreateBVConst(32, high_b), bm.CreateBVConst(32, low_b));
+            ASTNode c1 =  NodeFactory::CreateTerm(BEEV::BVEXTRACT, in2[0].GetValueWidth(), in1, bm.CreateBVConst(32, high_t), bm.CreateBVConst(32, low_t));
+
+            ASTNode a = NodeFactory::CreateNode(BEEV::EQ, in2[1],c0);
+            ASTNode b = NodeFactory::CreateNode(BEEV::EQ, in2[0],c1);
+            return NodeFactory::CreateNode(BEEV::AND, a, b);
+          }
 
 	// This increases the number of nodes. So disable for now.
 	if (false && BEEV::BVCONCAT == k1 && BEEV::BVCONCAT == k2 && in1[0].GetValueWidth() == in2[0].GetValueWidth())
@@ -943,6 +962,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
               result = children[1];
             else if (width == 1 && children[0] == children[1])
               result = bm.CreateZeroConst(1);
+            else if (children[0] == children[1])
+              result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(width,2), children[0]);
+            else if (children[1].GetKind() == BEEV::BVUMINUS  && children[0] == children[1][0])
+              result = bm.CreateZeroConst(width);
+            else if (children[0].GetKind() == BEEV::BVUMINUS  && children[1] == children[0][0])
+              result = bm.CreateZeroConst(width);
           }
         break;
 
