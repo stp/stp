@@ -197,7 +197,7 @@ cmd: commands END
     }  
         
        if (assertionsSMT2.size() > 1)
-      	((ASTVec*)AssertsQuery)->push_back(parserInterface->nf->CreateNode(AND,assertionsSMT2));
+      	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(AND,assertionsSMT2));
       	else if (assertionsSMT2.size() > 0)
       	((ASTVec*)AssertsQuery)->push_back((assertionsSMT2[0]));
       	else
@@ -365,7 +365,7 @@ TRUE_TOK
 }
 | LPAREN_TOK EQ_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(EQ,*$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(EQ,*$3, *$4));
   $$ = n;
   parserInterface->deleteNode($3);
   parserInterface->deleteNode($4);      
@@ -380,7 +380,7 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(EQ, *it, *it2)));
+      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->CreateNode(EQ, *it, *it2)));
 
           
       forms.push_back(n); 
@@ -392,7 +392,7 @@ TRUE_TOK
  
   $$ = (forms.size() == 1) ?
     parserInterface->newNode(forms[0]) :
-    parserInterface->newNode(parserInterface->nf->CreateNode(AND, forms));
+    parserInterface->newNode(parserInterface->CreateNode(AND, forms));
 
   delete $3;
 }
@@ -406,7 +406,7 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(IFF, *it, *it2)));
+      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->CreateNode(IFF, *it, *it2)));
       forms.push_back(n); 
     }
   }
@@ -416,62 +416,62 @@ TRUE_TOK
  
   $$ = (forms.size() == 1) ?
     parserInterface->newNode(forms[0]) :
-    parserInterface->newNode(parserInterface->nf->CreateNode(AND, forms));
+    parserInterface->newNode(parserInterface->CreateNode(AND, forms));
 
   delete $3;
 }
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVSLT, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVSLT, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode($3);
   parserInterface->deleteNode($4);      
 }
 | LPAREN_TOK BVSLE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVSLE, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVSLE, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVSGT, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVSGT, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVSGE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVSGE, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVSGE, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVLT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVLT, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVLT, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVLE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVLE, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVLE, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVGT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVGT, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVGT, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
 | LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = parserInterface->newNode(parserInterface->nf->CreateNode(BVGE, *$3, *$4));
+  ASTNode * n = parserInterface->newNode(parserInterface->CreateNode(BVGE, *$3, *$4));
   $$ = n;
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
@@ -487,7 +487,7 @@ TRUE_TOK
 }
 | LPAREN_TOK IMPLIES_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->nf->CreateNode(IMPLIES, *$3, *$4));
+  $$ = parserInterface->newNode(parserInterface->CreateNode(IMPLIES, *$3, *$4));
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);      
 }
@@ -500,23 +500,23 @@ TRUE_TOK
 }
 | LPAREN_TOK AND_TOK an_formulas RPAREN_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->nf->CreateNode(AND, *$3));
+  $$ = parserInterface->newNode(parserInterface->CreateNode(AND, *$3));
   delete $3;
 }
 | LPAREN_TOK OR_TOK an_formulas RPAREN_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->nf->CreateNode(OR, *$3));
+  $$ = parserInterface->newNode(parserInterface->CreateNode(OR, *$3));
   delete $3;
 }
 | LPAREN_TOK XOR_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->nf->CreateNode(XOR, *$3, *$4));
+  $$ = parserInterface->newNode(parserInterface->CreateNode(XOR, *$3, *$4));
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);
 }
 | LPAREN_TOK EQ_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = parserInterface->newNode(parserInterface->nf->CreateNode(IFF, *$3, *$4));
+  $$ = parserInterface->newNode(parserInterface->CreateNode(IFF, *$3, *$4));
   parserInterface->deleteNode( $3);
   parserInterface->deleteNode( $4);
 }

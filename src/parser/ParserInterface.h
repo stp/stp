@@ -22,6 +22,7 @@ class ParserInterface
 {
 	STPMgr& bm;
 	//boost::object_pool<ASTNode> node_pool;
+	bool alreadyWarned;
 
 public:
 	LETMgr letMgr;
@@ -33,6 +34,7 @@ public:
 	  letMgr(bm.ASTUndefined)
 	{
 		assert(nf != NULL);
+		alreadyWarned = false;
 	}
 
 	const ASTVec GetAsserts(void)
@@ -60,6 +62,17 @@ public:
     {
    	 return nf->CreateNode(kind,children);
     }
+
+    ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTNode n0, const BEEV::ASTNode n1)
+    {
+        if (n0.GetIndexWidth() > 0 && !alreadyWarned)
+          {
+            cerr << "Warning: Parsing a term that uses array extensionality. STP doesn't handle array extensionality." << endl;
+            alreadyWarned = true;
+          }
+        return nf->CreateNode(kind,n0,n1);
+    }
+
 
     //	These belong in the node factory..
 

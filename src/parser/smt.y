@@ -236,7 +236,7 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
 {
   if($4 != NULL){
     if($4->size() > 1) 
-      $$ = new ASTNode(parserInterface->nf->CreateNode(AND,*$4));
+      $$ = new ASTNode(parserInterface->CreateNode(AND,*$4));
     else if($4->size() ==1)
       $$ = new ASTNode((*$4)[0]);
      else
@@ -478,9 +478,8 @@ TRUE_TOK
   $$ = $1;
 }
 | LPAREN_TOK EQ_TOK an_term an_term RPAREN_TOK
-  //| LPAREN_TOK EQ_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(EQ,*$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(EQ,*$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -495,7 +494,7 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->nf->CreateNode(EQ, *it, *it2)));
+      ASTNode n = (parserInterface->nf->CreateNode(NOT, parserInterface->CreateNode(EQ, *it, *it2)));
 
           
       forms.push_back(n); 
@@ -507,7 +506,7 @@ TRUE_TOK
  
   $$ = (forms.size() == 1) ?
     new ASTNode(forms[0]) :
-    new ASTNode(parserInterface->nf->CreateNode(AND, forms));
+    new ASTNode(parserInterface->CreateNode(AND, forms));
 
   delete $3;
 }
@@ -515,7 +514,7 @@ TRUE_TOK
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVSLT_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLT, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVSLT, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -523,7 +522,7 @@ TRUE_TOK
 | LPAREN_TOK BVSLE_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVSLE_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSLE, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVSLE, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -531,7 +530,7 @@ TRUE_TOK
 | LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVSGT_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSGT, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVSGT, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -539,7 +538,7 @@ TRUE_TOK
 | LPAREN_TOK BVSGE_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVSGE_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVSGE, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVSGE, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -547,7 +546,7 @@ TRUE_TOK
 | LPAREN_TOK BVLT_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVLT_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVLT, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVLT, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -555,7 +554,7 @@ TRUE_TOK
 | LPAREN_TOK BVLE_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVLE_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVLE, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVLE, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -563,7 +562,7 @@ TRUE_TOK
 | LPAREN_TOK BVGT_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVGT_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVGT, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVGT, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -571,7 +570,7 @@ TRUE_TOK
 | LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
   //| LPAREN_TOK BVGE_TOK an_term an_term annotations RPAREN_TOK
 {
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(BVGE, *$3, *$4));
+  ASTNode * n = new ASTNode(parserInterface->CreateNode(BVGE, *$3, *$4));
   $$ = n;
   delete $3;
   delete $4;      
@@ -587,7 +586,7 @@ TRUE_TOK
 }
 | LPAREN_TOK IMPLIES_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = new ASTNode(parserInterface->nf->CreateNode(IMPLIES, *$3, *$4));
+  $$ = new ASTNode(parserInterface->CreateNode(IMPLIES, *$3, *$4));
   delete $3;
   delete $4;
 }
@@ -600,23 +599,23 @@ TRUE_TOK
 }
 | LPAREN_TOK AND_TOK an_formulas RPAREN_TOK
 {
-  $$ = new ASTNode(parserInterface->nf->CreateNode(AND, *$3));
+  $$ = new ASTNode(parserInterface->CreateNode(AND, *$3));
   delete $3;
 }
 | LPAREN_TOK OR_TOK an_formulas RPAREN_TOK
 {
-  $$ = new ASTNode(parserInterface->nf->CreateNode(OR, *$3));
+  $$ = new ASTNode(parserInterface->CreateNode(OR, *$3));
   delete $3;
 }
 | LPAREN_TOK XOR_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = new ASTNode(parserInterface->nf->CreateNode(XOR, *$3, *$4));
+  $$ = new ASTNode(parserInterface->CreateNode(XOR, *$3, *$4));
   delete $3;
   delete $4;
 }
 | LPAREN_TOK IFF_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = new ASTNode(parserInterface->nf->CreateNode(IFF, *$3, *$4));
+  $$ = new ASTNode(parserInterface->CreateNode(IFF, *$3, *$4));
   delete $3;
   delete $4;
 }
