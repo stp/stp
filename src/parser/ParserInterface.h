@@ -128,6 +128,19 @@ public:
 	   return bm.LookupSymbol(name.c_str());
 	}
 
+    // Create the node, then "new" it.
+    ASTNode * newNode(const Kind k, const ASTNode& n0, const ASTNode& n1)
+    {
+      return newNode(CreateNode(k,n0,n1));
+    }
+
+    // Create the node, then "new" it.
+    ASTNode * newNode(const Kind k, const int width, const ASTNode& n0, const ASTNode& n1)
+    {
+      return newNode(nf->CreateTerm(k,width,n0,n1));
+    }
+
+
     // On testcase20 it took about 4.2 seconds to parse using the standard allocator and the pool allocator.
 	ASTNode * newNode(const ASTNode& copyIn)
 	{
