@@ -733,7 +733,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 			result = children[2];
 		else if (children[1] == children[2])
 			result = children[1];
-		break;
+		else if (children[2].GetKind() == BEEV::ITE && (children[2][0] == children[0]))
+		        result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[1], children[2][2]);
+                else if (children[1].GetKind() == BEEV::ITE && (children[1][0] == children[0]))
+                        result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[1][1], children[2]);
+
+		  break;
 	}
 
 	case BEEV::BVMULT:
