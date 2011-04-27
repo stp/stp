@@ -127,8 +127,8 @@ namespace simplifier
           if (node.isConstant())
               continue;
 
-          // other nodes will contain the same information (the extract doesn't change the fixings).
-          if (BVEXTRACT == node.GetKind() || BVCONCAT == node.GetKind())
+          // Concat doesn't change the fixings. Ignore it.
+          if (BVCONCAT == node.GetKind())
             continue;
 
           if (bits.isTotallyFixed())
