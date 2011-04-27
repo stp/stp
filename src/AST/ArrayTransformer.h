@@ -85,7 +85,6 @@ namespace BEEV
      * Private Member Functions                                     *
      ****************************************************************/
     
-    ASTNode TranslateSignedDivModRem(const ASTNode& in);
     ASTNode TransformTerm(const ASTNode& inputterm);
     void assertTransformPostConditions(const ASTNode & term, ASTNodeSet& visited);
 
@@ -94,6 +93,7 @@ namespace BEEV
     ASTNode TransformFormula(const ASTNode& form);
 
   public:
+    static ASTNode TranslateSignedDivModRem(const ASTNode& in, NodeFactory*nf, STPMgr *bm);
 
     //fill the arrayname_readindices vector if e0 is a READ(Arr,index)
     //and index is a BVCONST

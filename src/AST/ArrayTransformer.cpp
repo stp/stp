@@ -52,7 +52,7 @@ namespace BEEV
   }
 
   //Translates signed BVDIV,BVMOD and BVREM into unsigned variety
-  ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in)
+  ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,  NodeFactory* nf, STPMgr *bm)
   {
     assert(in.GetChildren().size() ==2);
 
@@ -99,11 +99,6 @@ namespace BEEV
                          cond_dividend, 
                          nf->CreateTerm(BVUMINUS, len, modnode),
                          modnode);
-
-        //put everything together, simplify, and return
-        if (bm->UserFlags.optimize_flag)
-            return simp->SimplifyTerm_TopLevel(n);
-        else
         	return n;
       }
 
@@ -154,9 +149,6 @@ namespace BEEV
                          nf->CreateTerm(BVPLUS, len, rev_node, divisor),
                          rev_node);
 
-        if (bm->UserFlags.optimize_flag)
-            return simp->SimplifyTerm_TopLevel(n);
-        else
         	return n;
       }
     else if (SBVDIV == in.GetKind())
@@ -200,15 +192,12 @@ namespace BEEV
                          nf->CreateTerm(BVUMINUS, len, divnode),
                          divnode);
 
-        if (bm->UserFlags.optimize_flag)
-            return simp->SimplifyTerm_TopLevel(n);
-        else
         	return n;
       }
 
     FatalError("TranslateSignedDivModRem:"\
                "input must be signed DIV/MOD/REM", in);
-    return ASTUndefined;
+    return bm->ASTUndefined;
 
   }//end of TranslateSignedDivModRem()
 
@@ -452,7 +441,13 @@ namespace BEEV
                   || SBVREM == result.GetKind() 
                   || SBVMOD == result.GetKind())
                 {
-                  result = TranslateSignedDivModRem(result);
+                  ASTNode r = TranslateSignedDivModRem(result,nf,bm);
+                  if (r != result && bm->UserFlags.optimize_flag)
+                    {
+                      result = simp->SimplifyTerm_TopLevel(r);
+                    }
+                  else
+                    result = r;
                 }
         }
         break;

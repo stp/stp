@@ -25,6 +25,7 @@
 #include <cassert>
 #include "SimplifyingNodeFactory.h"
 #include "../../simplifier/simplifier.h"
+#include "../ArrayTransformer.h"
 #include <cmath>
 
 using BEEV::Kind;
@@ -977,12 +978,14 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         break;
 
 	case BEEV::SBVMOD:
-		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
-				children[1].GetBVConst()))
-			result = children[0];
-		if (children[0] == children[1])
-			result = bm.CreateZeroConst(width);
-		break;
+          if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
+                          children[1].GetBVConst()))
+                  result = children[0];
+          else if (children[0] == children[1])
+                  result = bm.CreateZeroConst(width);
+          else
+            result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
+          break;
 
 
 	case BEEV::BVDIV:
@@ -993,23 +996,27 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         case BEEV::SBVDIV:
           if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
             result = children[0];
+          else
+            result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
           break;
 
 
 	case BEEV::SBVREM:
 		if (children[0] == children[1])
 			result = bm.CreateZeroConst(width);
-		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(
+		else if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(
 				children[0].GetBVConst()))
 			result = bm.CreateZeroConst(width);
-		if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(
+		else if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(
 				children[1].GetBVConst()))
 			result = bm.CreateZeroConst(width);
-		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
+		else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
 				children[1].GetBVConst()))
 			result = children[0];
-		if (children[1].isConstant() && bm.CreateOneConst(width) == children[1])
+		else if (children[1].isConstant() && bm.CreateOneConst(width) == children[1])
 			result = bm.CreateZeroConst(width);
+                else
+                  result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
 		break;
 
 	case BEEV::BVMOD:
