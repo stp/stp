@@ -1056,23 +1056,6 @@ namespace BEEV
         }
     }
 
-    if (k1 == BVCONST && k2 == BVSX)
-    {
-    	// Each of the bits in the extended part, and one into the un-extended part must be the same.
-    	bool foundZero=false, foundOne=false;
-    	const unsigned original_width = in2[0].GetValueWidth();
-    	const unsigned new_width = in2.GetValueWidth();
-    	for (int i = original_width-1; i < new_width;i++)
-    		if (CONSTANTBV::BitVector_bit_test(in1.GetBVConst(),i))
-    			foundOne=true;
-    		else
-    			foundZero=true;
-    	if (foundZero && foundOne)
-    		return ASTFalse;
-    	ASTNode lhs = nf->CreateTerm(BVEXTRACT, original_width, in1, _bm->CreateBVConst(32,original_width-1), _bm->CreateZeroConst(32));
-    	ASTNode rhs = nf->CreateTerm(BVEXTRACT, original_width, in2, _bm->CreateBVConst(32,original_width-1), _bm->CreateZeroConst(32));
-    	return nf->CreateNode(EQ, lhs,rhs);
-    }
 
     //last resort is to CreateNode
     return nf->CreateNode(EQ, in1, in2);
@@ -1745,6 +1728,28 @@ namespace BEEV
       }
     return output;
   }
+
+  // If the shift is bigger than the bitwidth, replace by an extract.
+  ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf)
+  {
+    const ASTNode a =children[0];
+    const ASTNode b =children[1];
+    const int width = children[0].GetValueWidth();
+    ASTNode output;
+
+    assert(b.isConstant());
+    assert(k == BVSRSHIFT);
+    const unsigned int shift = b.GetUnsignedConst();
+
+    if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width) || (shift >= width))
+      {
+        ASTNode top = bm.CreateBVConst(32,width-1);
+        return nf->CreateTerm(BVSX, width, nf->CreateTerm(BVEXTRACT,1, children[0], top,top ), bm.CreateBVConst(32,width));
+      }
+
+    return ASTNode();
+  }
+
 
   // If the rhs of a left or right shift is known. Then replace it with a concat / extract.
   ASTNode Simplifier::convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf)

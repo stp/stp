@@ -469,6 +469,25 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
         }
 
 
+        if (k1 == BEEV::BVCONST && k2 == BEEV::BVSX)
+          {
+              // Each of the bits in the extended part, and one into the un-extended part must be the same.
+              bool foundZero=false, foundOne=false;
+              const unsigned original_width = in2[0].GetValueWidth();
+              const unsigned new_width = in2.GetValueWidth();
+              for (int i = original_width-1; i < new_width;i++)
+                      if (CONSTANTBV::BitVector_bit_test(in1.GetBVConst(),i))
+                              foundOne=true;
+                      else
+                              foundZero=true;
+              if (foundZero && foundOne)
+                      return ASTFalse;
+              ASTNode lhs = NodeFactory::CreateTerm(BEEV::BVEXTRACT, original_width, in1, bm.CreateBVConst(32,original_width-1), bm.CreateZeroConst(32));
+              ASTNode rhs = NodeFactory::CreateTerm(BEEV::BVEXTRACT, original_width, in2, bm.CreateBVConst(32,original_width-1), bm.CreateZeroConst(32));
+              return NodeFactory::CreateNode(BEEV::EQ, lhs,rhs);
+          }
+
+
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
 }
@@ -791,8 +810,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		{
 			if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
 				result = bm.CreateZeroConst(width);
-
-			if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+			else if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
 				result = bm.CreateMaxConst(width);
 			else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
 					 result = children[0];
@@ -800,6 +818,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		              result = children[0];
                         else if (width == 1 && children[1].isConstant() && children[1] == bm.CreateOneConst(1))
                               result = children[0];
+                        else if (children[1].isConstant())
+                          result = BEEV::Simplifier::convertArithmeticKnownShiftAmount(kind, children, bm, &hashing);
 
 
 		}
@@ -831,6 +851,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                           if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
                                     result = children[1];
 
+                          if (children[1].GetKind() == BEEV::BVNEG && children[0] == children[1][0])
+                              result = bm.CreateMaxConst(width);
+                          if (children[0].GetKind() == BEEV::BVNEG && children[1] == children[0][0])
+                              result = bm.CreateMaxConst(width);
 			  }
 		  }
 		  break;

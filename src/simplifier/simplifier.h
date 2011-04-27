@@ -61,7 +61,7 @@ namespace BEEV
     ASTNode pullUpBVSX(const ASTNode output);
 
   public:
-
+    static ASTNode convertArithmeticKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf);
     static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf);
 
 
