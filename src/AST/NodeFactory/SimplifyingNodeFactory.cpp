@@ -110,11 +110,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
             	result = ASTFalse;
 		}
 
-                if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][1] == children[1][1])
-                        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][0], children[1][0]);
-
-                if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][0] == children[1][0])
-                        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][1], children[1][1]);
+            if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][1] == children[1][1])
+                result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][0], children[1][0]);
 
 
 		break;
