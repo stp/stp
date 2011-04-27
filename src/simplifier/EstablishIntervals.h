@@ -29,16 +29,13 @@ namespace BEEV
 
       void print()
       {
-       if (size_(minV) == 1)
-          cerr << *(minV) << " " << *maxV << endl;
-       else
-          {
+
             unsigned char * a = CONSTANTBV::BitVector_to_Dec(minV);
             unsigned char * b = CONSTANTBV::BitVector_to_Dec(maxV);
             cerr << a << " " << b << endl;
             free(a);
             free(b);
-          }
+
       }
 
       bool isConstant()
@@ -51,13 +48,28 @@ namespace BEEV
         return (CONSTANTBV::BitVector_is_empty(minV) && CONSTANTBV::BitVector_is_full(maxV));
       }
 
-      bool checkInvariant()
+      bool checkUnsignedInvariant()
       {
         assert( CONSTANTBV::BitVector_Lexicompare(minV, maxV) <=0);
 
         // We use NULL to represent the complete domain.
         assert( !isComplete());
       }
+
+      // If the interval is interpreted as a clockwise interval.
+      bool crossesSignedUnsigned(int width)
+      {
+        bool minMSB = CONSTANTBV::BitVector_bit_test(minV,  width- 1);
+        bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV,  width- 1);
+
+        // If the min is zero, and the max is one, then it must cross.
+        if (!minMSB && maxMSB)
+          return true;
+        if (!(minMSB ^ maxMSB)) // bits are the same.
+          return CONSTANTBV::BitVector_Compare(minV, maxV) >0;
+        return false;
+      }
+
     };
 
     vector<EstablishIntervals::IntervalType * > toDeleteLater;
@@ -135,7 +147,8 @@ namespace BEEV
     {
       bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
       map<const ASTNode, IntervalType*> visited;
-      visit(top,visited);
+      map<const ASTNode, IntervalType*> clockwise;
+      visit(top,visited, clockwise);
       ASTNodeMap fromTo;
       ASTNodeMap onePass;
       for (map<const ASTNode, IntervalType*>::const_iterator it = visited.begin(); it != visited.end(); it++)
@@ -304,7 +317,8 @@ namespace BEEV
 
   private:
     // A single pass through the problem replacing things that must be true of false.
-    IntervalType* visit(const ASTNode& n, map<const ASTNode, IntervalType*> & visited)
+    // clockwise are intervals that go clockwise around the circle from low to high.
+    IntervalType* visit(const ASTNode& n, map<const ASTNode, IntervalType*> & visited, map<const ASTNode, IntervalType*> & clockwise)
     {
       map<const ASTNode, IntervalType*>::iterator it;
       if ((it = visited.find(n)) != visited.end())
@@ -315,7 +329,7 @@ namespace BEEV
       children.reserve(number_children);
       for (int i=0; i < number_children;i++)
         {
-          children.push_back(visit(n[i],visited));
+          children.push_back(visit(n[i],visited,clockwise));
         }
 
       IntervalType * result = NULL;
@@ -372,6 +386,48 @@ namespace BEEV
               if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,children[0]->maxV) >=0)
                 result = createInterval(littleZero, littleZero);
           }
+      if (BVSGT == n.GetKind() && result ==NULL)
+        {
+          map<const ASTNode, IntervalType*>::iterator clock_it;
+          clock_it = clockwise.find(n[0]);
+          IntervalType* clock0 = NULL;
+          IntervalType* clock1 = NULL;
+          if (clock_it != clockwise.end())
+            clock0 = clock_it->second;
+          clock_it = clockwise.find(n[1]);
+          if (clock_it != clockwise.end())
+            clock1 = clock_it->second;
+
+          if (clock0 != NULL || clock1 !=NULL)
+            {
+              if (clock0 == NULL)
+                clock0 = children[0];
+              if (clock1 == NULL)
+                clock1 = children[1];
+
+              if (clock0 != NULL && clock1 != NULL)
+                {
+/*
+                  clock0->print();
+                  clock1->print();
+                  cerr << clock0->crossesSignedUnsigned(n[0].GetValueWidth()) << endl;
+                  cerr << clock1->crossesSignedUnsigned(n[0].GetValueWidth()) << endl;
+                  cerr << n;
+*/
+
+                  // if the rhs doesn't cross +ve/-ve boundary, and the min > max
+                  if (!clock0->crossesSignedUnsigned(n[0].GetValueWidth())  && !clock1->crossesSignedUnsigned(n[1].GetValueWidth()))
+                    {
+                      if (CONSTANTBV::BitVector_Compare(clock0->minV,clock1->maxV) >0)
+                        result = createInterval(littleOne, littleOne);
+
+                      if (CONSTANTBV::BitVector_Compare(clock1->minV,clock0->maxV) >=0)
+                        result = createInterval(littleZero, littleZero);
+                    }
+                }
+            }
+        }
+
       break;
       case BVGE:
       case BVSGE:
@@ -454,7 +510,26 @@ namespace BEEV
         	  for (int i=n[0].GetValueWidth(); i < n.GetValueWidth();i++)
         		  CONSTANTBV::BitVector_Bit_Off(result->maxV,i);
     	  }
+      } else if (knownC1)
+      {
+          // Ignores what's already there for now..
+
+          IntervalType * circ_result = freshUnsignedInterval(n.GetValueWidth());
+          for (int i=0; i < n[0].GetValueWidth()-1;i++)
+          {
+              CONSTANTBV::BitVector_Bit_On(circ_result->maxV,i);
+              CONSTANTBV::BitVector_Bit_Off(circ_result->minV,i);
+          }
+
+          for (int i=n[0].GetValueWidth()-1; i < n.GetValueWidth();i++)
+          {
+              CONSTANTBV::BitVector_Bit_Off(circ_result->maxV,i);
+              CONSTANTBV::BitVector_Bit_On(circ_result->minV,i);
+          }
+
+          clockwise.insert(make_pair(n, circ_result));
       }
+
       break;
       case BVNEG:
       if (knownC0) // NOT of the bitvector.
@@ -696,7 +771,7 @@ namespace BEEV
         result = NULL;
 
       if (result != NULL)
-          result->checkInvariant();
+          result->checkUnsignedInvariant();
 
       // result will often be null (which we take to mean the maximum range).
       visited.insert(make_pair(n,result));

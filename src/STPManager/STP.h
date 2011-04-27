@@ -26,7 +26,7 @@
 namespace BEEV
 {
   class STP {
-private:
+public:
 	  ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
 
   public:

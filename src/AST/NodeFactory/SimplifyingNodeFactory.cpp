@@ -109,6 +109,14 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
             if (children[0] == smallestNumber)
             	result = ASTFalse;
 		}
+
+                if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][1] == children[1][1])
+                        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][0], children[1][0]);
+
+                if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][0] == children[1][0])
+                        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][1], children[1][1]);
+
+
 		break;
 
 	case BEEV::BVGT:
@@ -119,6 +127,13 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 			result = ASTFalse;
 		if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
 			result = ASTFalse;
+		if (children[0].GetKind() == BEEV::BVRIGHTSHIFT && children[0][0] == children[1])
+		        result = ASTFalse;
+		if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][1] == children[1][1])
+		        result = NodeFactory::CreateNode(BEEV::BVGT, children[0][0], children[1][0]);
+                if (children[0].GetKind() ==BEEV::BVCONCAT && children[1].GetKind() == BEEV::BVCONCAT && children[0][0] == children[1][0])
+                        result = NodeFactory::CreateNode(BEEV::BVGT, children[0][1], children[1][1]);
+
 		break;
 
 	case BEEV::BVGE:
