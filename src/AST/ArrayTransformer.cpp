@@ -485,8 +485,7 @@ namespace BEEV
     const unsigned int width = term.GetValueWidth();
 
     if (READ != term.GetKind())
-      FatalError("TransformArray: input term is of wrong kind: ",
-                 ASTUndefined);
+      return term;
 
     ASTNodeMap::const_iterator iter;
     if ((iter = TransformMap->find(term)) != TransformMap->end())
