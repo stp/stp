@@ -786,13 +786,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[1][1], children[2]);
                 else if (children[0].GetKind() == BEEV::NOT)
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0][0], children[2], children[1]);
-/*
-                else if (children[0].GetKind() ==BEEV::EQ && children[0][1] == children[1])
+                else if (children[0].GetKind() ==BEEV::EQ && children[0][1] == children[1] && children[0][0].GetKind() == BEEV::BVCONST)
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][0], children[2]);
-                else if (children[0].GetKind() == BEEV::EQ && children[0][0] == children[1])
+                else if (children[0].GetKind() == BEEV::EQ && children[0][0] == children[1] && children[0][1].GetKind() == BEEV::BVCONST)
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][1], children[2]);
-*/
-
 		break;
 	}
 
@@ -1039,13 +1036,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             else if (children[0].GetKind() == BEEV::BVUMINUS  && children[1] == children[0][0])
               result = bm.CreateZeroConst(width);
             // This is ridiculously complicated, it should be cleaner.
-            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][1].GetKind() == BEEV::BVUMINUS && children[0] == children[1][1][0])
+            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][1].GetKind() == BEEV::BVUMINUS && children[0] == children[1][1][0] && children[1].Degree() ==2 )
               result = children[1][0];
-            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][0].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0][0])
+            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][0].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0][0] && children[1].Degree() ==2 )
               result = children[1][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0])
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0] && children[1].Degree() ==2 )
               result = children[0][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0])
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0] && children[1].Degree() ==2 )
                 result = children[0][0];
           }
         break;
