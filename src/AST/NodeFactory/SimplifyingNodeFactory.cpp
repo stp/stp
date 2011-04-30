@@ -503,6 +503,17 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
               return NodeFactory::CreateNode(BEEV::EQ, lhs,rhs);
           }
 
+        // Simplifiy (5 = 4/x) to FALSE.
+        if (bm.UserFlags.division_by_zero_returns_one_flag && k1 == BEEV::BVCONST && k2 == BEEV::BVDIV && in2[0].GetKind() == BEEV::BVCONST)
+          {
+            ASTNode oneV = bm.CreateOneConst(width);
+            if ( CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(), oneV.GetBVConst()) > 0 &&
+                 in1 != oneV &&
+                 CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(), in2[0].GetBVConst()) > 0)
+              {  return ASTFalse;
+              }
+          }
+
 
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
@@ -775,7 +786,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[1][1], children[2]);
                 else if (children[0].GetKind() == BEEV::NOT)
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0][0], children[2], children[1]);
-		  break;
+                else if (children[0].GetKind() ==BEEV::EQ && children[0][1] == children[1])
+                        result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][0], children[2]);
+                else if (children[0].GetKind() == BEEV::EQ && children[0][0] == children[1])
+                        result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][1], children[2]);
+
+		break;
 	}
 
 	case BEEV::BVMULT:
