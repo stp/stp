@@ -838,11 +838,16 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	 break;
 
 	case BEEV::BVSUB:
-            if (children.size() == 2 && children[0] == children[1])
-              result = bm.CreateZeroConst(width);
-            if (children.size() == 2 && children[1] == bm.CreateZeroConst(width))
-              result = children[0];
-            break;
+	  if (children.size() == 2)
+	    {
+	      if (children.size() == 2 && children[0] == children[1])
+                result = bm.CreateZeroConst(width);
+              else if (children.size() == 2 && children[1] == bm.CreateZeroConst(width))
+                result = children[0];
+              else
+                  result = NodeFactory::CreateTerm(BEEV::BVPLUS,width,children[0], NodeFactory::CreateTerm(BEEV::BVUMINUS,width, children[1]));
+	    }
+	  break;
 
 	case BEEV::BVOR:
 		  {
@@ -1010,6 +1015,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
               result = bm.CreateZeroConst(width);
             else if (children[0].GetKind() == BEEV::BVUMINUS  && children[1] == children[0][0])
               result = bm.CreateZeroConst(width);
+            /* This is ridiculously complicated, it should be cleaner.
+            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][1].GetKind() == BEEV::BVUMINUS && children[0] == children[1][1][0])
+              result = children[1][0];
+            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][0].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0][0])
+              result = children[1][1];
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0])
+              result = children[0][1];
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0])
+                result = children[0][0];
+                */
+
           }
         break;
 
