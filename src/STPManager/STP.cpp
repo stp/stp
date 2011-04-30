@@ -87,7 +87,7 @@ namespace BEEV {
   
 
   // These transformations should never increase the size of the DAG.
-  ASTNode
+   ASTNode
   STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver)
   {
     if (bm->UserFlags.isSet("enable-unconstrained", "1"))
@@ -131,7 +131,7 @@ namespace BEEV {
             simp->haveAppliedSubstitutionMap();
           }
 
-        bm->ASTNodeStats("After Constant Bit Propagation begins: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats("After Constant Bit Propagation: ", simplified_solved_InputToSAT);
       }
 
     // Find pure literals.
@@ -146,7 +146,6 @@ namespace BEEV {
             bm->ASTNodeStats("After Pure Literals: ", simplified_solved_InputToSAT);
           }
       }
-
     if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
       {
         simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT, false);
@@ -193,6 +192,25 @@ namespace BEEV {
             if (last == simplified_solved_InputToSAT)
               break;
           }
+
+        // Expensive, so only want to do it once.
+        if (bm->UserFlags.isSet("bitblast-simplification", "0") && initial_difficulty_score < 250000)
+          {
+            BBNodeManagerAIG bbnm;
+            SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+            BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
+            ASTNodeMap fromTo;
+            bb.getConsts(simplified_solved_InputToSAT, fromTo);
+            if (fromTo.size() > 0)
+              {
+                cerr << "#" << fromTo.size() << endl;
+                ASTNodeMap cache;
+                simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+                bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
+              }
+          }
+
+
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
 
@@ -288,7 +306,7 @@ namespace BEEV {
       }
 
     // Simplify using Ite context
-    if (bm->UserFlags.optimize_flag && bm->UserFlags.isSet("ite-context", "1"))
+    if (bm->UserFlags.optimize_flag && bm->UserFlags.isSet("ite-context", "0"))
       {
         UseITEContext iteC(bm);
         simplified_solved_InputToSAT = iteC.topLevel(simplified_solved_InputToSAT);
