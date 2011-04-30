@@ -786,10 +786,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[1][1], children[2]);
                 else if (children[0].GetKind() == BEEV::NOT)
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0][0], children[2], children[1]);
+/*
                 else if (children[0].GetKind() ==BEEV::EQ && children[0][1] == children[1])
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][0], children[2]);
                 else if (children[0].GetKind() == BEEV::EQ && children[0][0] == children[1])
                         result = NodeFactory::CreateTerm(BEEV::ITE, width, children[0], children[0][1], children[2]);
+*/
 
 		break;
 	}
