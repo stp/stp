@@ -37,7 +37,8 @@ public:
       PureLiterals,
       UseITEContext,
       AIGSimplifyCore,
-      IntervalPropagation
+      IntervalPropagation,
+      AlwaysTrue
     };
 
   static std::string CategoryNames[];

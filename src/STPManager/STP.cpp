@@ -19,6 +19,7 @@
 #include "../simplifier/FindPureLiterals.h"
 #include "../simplifier/EstablishIntervals.h"
 #include "../simplifier/UseITEContext.h"
+#include "../simplifier/AlwaysTrue.h"
 #include "../simplifier/AIGSimplifyPropositionalCore.h"
 #include <memory>
 
@@ -146,6 +147,15 @@ namespace BEEV {
             bm->ASTNodeStats("After Pure Literals: ", simplified_solved_InputToSAT);
           }
       }
+
+    if (bm->UserFlags.isSet("always-true", "0"))
+      {
+        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+        AlwaysTrue always (simp,bm,&nf);
+        simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
+        bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
+      }
+
     if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
       {
         simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT, false);
@@ -341,6 +351,15 @@ namespace BEEV {
 
             simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
             bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+
+
+            if (bm->UserFlags.isSet("always-true", "0"))
+              {
+                SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+                AlwaysTrue always (simp,bm,&nf);
+                simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
+                bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
+              }
           }
 
         // The word level solver uses the simplifier to apply the rewrites it makes,
