@@ -399,10 +399,10 @@ void SubstitutionMap::loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>
 	// for each variable.
 	for (set<ASTNode>::const_iterator varIt = varsToCheck.begin(); varIt != varsToCheck.end(); varIt++)
 	{
-		while (*visitedIt < *varIt && visitedIt != visited.end())
-			visitedIt++;
+		while (visitedIt != visited.end() && *visitedIt < *varIt )
+		        visitedIt++;
 
-		if (*visitedIt == *varIt)
+		if ((visitedIt != visited.end()) &&  *visitedIt == *varIt)
 			continue;
 
 		visitedN.push_back(*varIt);
