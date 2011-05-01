@@ -194,7 +194,7 @@ namespace BEEV {
           }
 
         // Expensive, so only want to do it once.
-        if (bm->UserFlags.isSet("bitblast-simplification", "0") && initial_difficulty_score < 250000)
+        if (bm->UserFlags.isSet("bitblast-simplification", "1") && initial_difficulty_score < 250000)
           {
             BBNodeManagerAIG bbnm;
             SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
@@ -203,14 +203,11 @@ namespace BEEV {
             bb.getConsts(simplified_solved_InputToSAT, fromTo);
             if (fromTo.size() > 0)
               {
-                cerr << "#" << fromTo.size() << endl;
                 ASTNodeMap cache;
                 simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
                 bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
               }
           }
-
-
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
 
