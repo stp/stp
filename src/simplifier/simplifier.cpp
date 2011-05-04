@@ -2929,40 +2929,63 @@ namespace BEEV
         }
       case READ:
         {
-          ASTNode out1;
-          //process only if not  in the substitution map. simplifymap
-          //has been checked already
-          if (!CheckSubstitutionMap(inputterm, out1))
-            {
-              if (WRITE == inputterm[0].GetKind())
+              ASTNode out1;
+
+              ASTNode array_term = SimplifyArrayTerm(inputterm[0], VarConstMap);
+              ASTNode read_index = SimplifyTerm(inputterm[1], VarConstMap);
+
+              if (SYMBOL == array_term.GetKind())
                 {
-            	  out1 = RemoveWrites_TopLevel(inputterm);
+                  out1 = nf->CreateTerm(READ, inputterm.GetValueWidth(), array_term, read_index);
                 }
-              else if (ITE == inputterm[0].GetKind())
+              else if (WRITE == array_term.GetKind())
                 {
-                  ASTNode cond = 
+                  ASTNode eq = CreateSimplifiedEQ(read_index, array_term[1]);
+                  if (eq == ASTTrue)
+                    out1 = array_term[2];
+                  else if (eq == ASTFalse)
+                    {
+                      out1 = nf->CreateTerm(READ, inputterm.GetValueWidth(), array_term[0], read_index);
+                      out1 = SimplifyTerm(out1, VarConstMap);
+                    }
+                  else
+                    {
+                      out1 = nf->CreateTerm(READ, inputterm.GetValueWidth(), array_term, read_index);
+                    }
+                }
+              else if (ITE == array_term.GetKind())
+                {
+                  // Pushes the READ through ITES, which is potentially exponential.
+                  // At present, because there's no write refinement or similar, the
+                  // array transformer is going to do this later anyway. So, we do it
+                  // here. But it's ugggglly.
+
+                  ASTNode cond =
                     SimplifyFormula(inputterm[0][0], false, VarConstMap);
-                  ASTNode index = 
-                    SimplifyTerm(inputterm[1], VarConstMap);
-                  ASTNode read1 = 
+                  ASTNode read1 =
                     nf->CreateTerm(READ,
-                                    inputValueWidth, 
-                                    inputterm[0][1], index);
-                  ASTNode read2 = 
+                                    inputValueWidth,
+                                    inputterm[0][1], read_index);
+                  ASTNode read2 =
                     nf->CreateTerm(READ,
-                                    inputValueWidth, 
-                                    inputterm[0][2], index);
+                                    inputValueWidth,
+                                    inputterm[0][2], read_index);
                   read1 = SimplifyTerm(read1, VarConstMap);
                   read2 = SimplifyTerm(read2, VarConstMap);
                   out1 = CreateSimplifiedTermITE(cond, read1, read2);
                 }
               else
                 {
-                  //arr is a SYMBOL for sure
-                  out1 = inputterm;
-                  assert(hasBeenSimplified(inputterm[1]));
+                  FatalError("ffff");
                 }
-            }
+
+              assert(!out1.IsNull());
+
+          //process only if not  in the substitution map. simplifymap
+          //has been checked already
+          if (!CheckSubstitutionMap(out1, out1) && out1.GetType() == READ && WRITE == out1[0].GetKind())
+              out1 = RemoveWrites_TopLevel(inputterm);
+
           //it is possible that after all the procesing the READ term
           //reduces to READ(Symbol,const) and hence we should check the
           //substitutionmap once again.
@@ -3544,7 +3567,8 @@ namespace BEEV
   ASTNode Simplifier::SimplifyArrayTerm(const ASTNode& term,
 		ASTNodeMap* VarConstMap) {
 
-	assert(term.GetIndexWidth() > 0);
+        const unsigned iw = term.GetIndexWidth();
+	assert(iw > 0);
 
 	ASTNode output;
 	if (CheckSimplifyMap(term, output, false)) {
@@ -3555,7 +3579,6 @@ namespace BEEV
 	case SYMBOL:
 		return term;
 	case ITE: {
-		unsigned iw = term.GetIndexWidth();
 		output = CreateSimplifiedTermITE(
 				SimplifyFormula(term[0],VarConstMap),
 				SimplifyArrayTerm(term[1], VarConstMap),
@@ -3564,7 +3587,6 @@ namespace BEEV
 	}
 		break;
 	case WRITE: {
-		unsigned iw = term.GetIndexWidth();
 		ASTNode array = SimplifyArrayTerm(term[0], VarConstMap);
 		ASTNode idx = SimplifyTerm(term[1]);
 		ASTNode val = SimplifyTerm(term[2]);
@@ -3581,7 +3603,7 @@ namespace BEEV
 	assert(term.GetIndexWidth() == output.GetIndexWidth());
 	assert(BVTypeCheck(output));
 	return output;
-}
+ }
 
 
 
@@ -3601,7 +3623,7 @@ namespace BEEV
     if (CheckSimplifyMap(term, output, false))
       {
         return output;
-      }
+     }
 
     ASTVec writeIndices, writeValues;
     unsigned int width = term.GetValueWidth();
