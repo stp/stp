@@ -75,6 +75,11 @@ public:
     return s.str();
   }
 
+  void resetDifference()
+  {
+    getDifference();
+  }
+
   void difference()
   {
 	  std::cout << getDifference()<< std::endl << std::endl;
