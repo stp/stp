@@ -2983,7 +2983,7 @@ namespace BEEV
 
           //process only if not  in the substitution map. simplifymap
           //has been checked already
-          if (!CheckSubstitutionMap(out1, out1) && out1.GetType() == READ && WRITE == out1[0].GetKind())
+          if (!CheckSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
               out1 = RemoveWrites_TopLevel(inputterm);
 
           //it is possible that after all the procesing the READ term
