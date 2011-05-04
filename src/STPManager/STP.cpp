@@ -99,19 +99,19 @@ namespace BEEV {
         bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
       }
 
-    if (bm->UserFlags.isSet("use-intervals", "1"))
-      {
-        EstablishIntervals intervals(*bm);
-        simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
-        bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
-      }
-
     simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
         simp->haveAppliedSubstitutionMap();
         bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
+      }
+
+    if (bm->UserFlags.isSet("use-intervals", "1"))
+      {
+        EstablishIntervals intervals(*bm);
+        simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
+        bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.bitConstantProp_flag)
