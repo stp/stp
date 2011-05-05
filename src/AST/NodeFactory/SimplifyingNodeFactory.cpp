@@ -1051,9 +1051,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
               result = children[1][0];
             else if (children[1].GetKind() == BEEV::BVPLUS && children[1][0].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0][0] && children[1].Degree() ==2 )
               result = children[1][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0] && children[1].Degree() ==2 )
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0] && children[0].Degree() ==2 )
               result = children[0][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0] && children[1].Degree() ==2 )
+            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0] && children[0].Degree() ==2 )
                 result = children[0][0];
           }
         break;
