@@ -50,6 +50,7 @@ private:
 
 	ASTNode chaseRead(const ASTVec& children, unsigned int width );
 
+	ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 public:
 
 	virtual BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec & children);

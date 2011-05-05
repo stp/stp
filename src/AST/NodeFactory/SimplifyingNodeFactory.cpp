@@ -748,6 +748,39 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children, unsigned int w
 	return hashing.CreateTerm(BEEV::READ, width, write,readIndex);
 }
 
+// This gets called with the arguments swapped as well. So the rules don't need to know about commutivity.
+ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
+{
+  ASTNode result;
+  const int width = n0.GetValueWidth();
+
+  if (n0.isConstant() && CONSTANTBV::BitVector_is_empty(n0.GetBVConst()))
+    result = n1;
+  else if (width == 1 && n0 == n1)
+    result = bm.CreateZeroConst(1);
+  else if (n0 == n1)
+    result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(width,2), n0);
+  else if (n0.GetKind() == BEEV::BVUMINUS  && n1 == n0[0])
+    result = bm.CreateZeroConst(width);
+  else if (n1.GetKind() == BEEV::BVPLUS && n1[1].GetKind() == BEEV::BVUMINUS && n0 == n1[1][0] && n1.Degree() ==2 )
+    result = n1[0];
+  else if (n1.GetKind() == BEEV::BVPLUS && n1[0].GetKind() == BEEV::BVUMINUS && n0 == n1[0][0] && n1.Degree() ==2 )
+    result = n1[1];
+  else if (n1.GetKind() == BEEV::BVUMINUS && n0.GetKind() == BEEV::BVPLUS && n0.Degree() ==2 && n1[0] == n0[1])
+    result = n0[0];
+  else if (n1.GetKind() == BEEV::BVUMINUS && n0.GetKind() == BEEV::BVPLUS && n0.Degree() ==2 && n1[0] == n0[0])
+    result = n0[1];
+  else if (n0.GetKind() == BEEV::BVCONST && n1.GetKind() == BEEV::BVPLUS && n1.Degree() ==2 && n1[0].GetKind() == BEEV::BVCONST)
+    {
+      ASTVec ch;
+      ch.push_back(n0);
+      ch.push_back(n1[0]);
+      ASTNode constant = NonMemberBVConstEvaluator(&bm , BEEV::BVPLUS, ch, width);
+      result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, constant, n1[1]);
+    }
+  return result;
+}
+
 
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		const ASTVec &children)
@@ -1034,27 +1067,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	case BEEV::BVPLUS:
         if (children.size() == 2)
           {
-            if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
-              result = children[0];
-            else if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
-              result = children[1];
-            else if (width == 1 && children[0] == children[1])
-              result = bm.CreateZeroConst(1);
-            else if (children[0] == children[1])
-              result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(width,2), children[0]);
-            else if (children[1].GetKind() == BEEV::BVUMINUS  && children[0] == children[1][0])
-              result = bm.CreateZeroConst(width);
-            else if (children[0].GetKind() == BEEV::BVUMINUS  && children[1] == children[0][0])
-              result = bm.CreateZeroConst(width);
-            // This is ridiculously complicated, it should be cleaner.
-            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][1].GetKind() == BEEV::BVUMINUS && children[0] == children[1][1][0] && children[1].Degree() ==2 )
-              result = children[1][0];
-            else if (children[1].GetKind() == BEEV::BVPLUS && children[1][0].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0][0] && children[1].Degree() ==2 )
-              result = children[1][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][0].GetKind() == BEEV::BVUMINUS && children[1] == children[0][0][0] && children[0].Degree() ==2 )
-              result = children[0][1];
-            else if (children[0].GetKind() == BEEV::BVPLUS && children[0][1].GetKind() == BEEV::BVUMINUS && children[1] == children[0][1][0] && children[0].Degree() ==2 )
-                result = children[0][0];
+            result = plusRules(children[0],children[1]);
+            if (result.IsNull())
+              result = plusRules(children[1],children[0]);
           }
         break;
 
