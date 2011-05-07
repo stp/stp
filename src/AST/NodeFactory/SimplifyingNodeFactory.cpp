@@ -525,6 +525,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
               }
           }
 
+        if (k1 == BEEV::BVNEG && k2 == BEEV::BVUMINUS && in1[0] == in2[0])
+          return ASTFalse;
+
+        if (k1 == BEEV::BVUMINUS && k2 == BEEV::BVNEG && in1[0] == in2[0])
+          return ASTFalse;
 
 	//last resort is to CreateNode
 	return hashing.CreateNode(BEEV::EQ, children);
@@ -778,6 +783,11 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
       ASTNode constant = NonMemberBVConstEvaluator(&bm , BEEV::BVPLUS, ch, width);
       result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, constant, n1[1]);
     }
+    else if (n1.GetKind() == BEEV::BVUMINUS &&  (n0.isConstant() && CONSTANTBV::BitVector_is_full(n0.GetBVConst())))
+    {
+      result = NodeFactory::CreateTerm(BEEV::BVNEG, width, n1[0]);
+    }
+
   return result;
 }
 
@@ -855,6 +865,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
                                   if (width == 1 && children[0] == children[1])
                                     result = children[0];
+
+                                  if (children[0].GetKind() == BEEV::BVUMINUS && children[1].GetKind() == BEEV::BVUMINUS)
+                                      result = NodeFactory::CreateTerm(BEEV::BVMULT, width, children[0][0],children[1][0]);
 				  }
 		  }
 		  break;
@@ -1018,7 +1031,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
 	case BEEV::BVNEG:
 	  if (children[0].GetKind() == BEEV::BVNEG)
-	    result =  children[0][0];
+	    result = children[0][0];
+          if (children[0].GetKind() == BEEV::BVPLUS && children[0].Degree() == 2 && children[0][0].GetKind() == BEEV::BVCONST
+              && children[0][0] == bm.CreateMaxConst(width))
+            result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[0][1]);
+          if (children[0].GetKind() == BEEV::BVUMINUS)
+            result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, children[0][0], bm.CreateMaxConst(width));
+
 	break;
 
 	case BEEV::BVUMINUS:
@@ -1026,7 +1045,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		result = children[0][0];
           else if (width == 1)
                 result = children[0];
-
+         else if (children[0].GetKind() == BEEV::BVPLUS && children[0].Degree() == 2 && children[0][0].GetKind() == BEEV::BVCONST && children[0][0] == bm.CreateOneConst(width))
+            result = NodeFactory::CreateTerm(BEEV::BVNEG, width, children[0][1]);
+          else if (children[0].GetKind() == BEEV::BVNEG)
+            result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, children[0][0], bm.CreateOneConst(width));
 	break;
 
 	case BEEV::BVEXTRACT:
@@ -1087,6 +1109,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	case BEEV::BVDIV:
 	  if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
 	    result = children[0];
+          else if (children[1].isConstant() && children[1] == bm.CreateZeroConst(width) && bm.UserFlags.division_by_zero_returns_one_flag)
+             result =  bm.CreateOneConst(width);
+          else if (bm.UserFlags.division_by_zero_returns_one_flag && children[0] == children[1])
+             result =  bm.CreateOneConst(width);
+
 	  break;
 
         case BEEV::SBVDIV:
@@ -1111,6 +1138,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 			result = children[0];
 		else if (children[1].isConstant() && bm.CreateOneConst(width) == children[1])
 			result = bm.CreateZeroConst(width);
+		else if (children[1].GetKind() == BEEV::BVUMINUS)
+                        result = NodeFactory::CreateTerm(BEEV::SBVREM, width, children[0], children[1][0]);
+                else if (children[0].GetKind() == BEEV::BVUMINUS && children[0][0] == children[1])
+                  result = bm.CreateZeroConst(width);
                 else
                   result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
 		break;
