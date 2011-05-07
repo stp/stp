@@ -86,6 +86,35 @@ namespace BEEV {
 
   } //End of TopLevelSTP()
   
+  ASTNode
+  STP::callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, const int initial_difficulty_score)
+  {
+    while (true)
+      {
+        ASTNode last = simplified_solved_InputToSAT;
+        simplified_solved_InputToSAT = sizeReducing(last, bvSolver);
+        if (last == simplified_solved_InputToSAT)
+          break;
+      }
+
+    // Expensive, so only want to do it once.
+    if (bm->UserFlags.isSet("bitblast-simplification", "1") && initial_difficulty_score < 250000)
+      {
+        BBNodeManagerAIG bbnm;
+        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
+        ASTNodeMap fromTo;
+        bb.getConsts(simplified_solved_InputToSAT, fromTo);
+        if (fromTo.size() > 0)
+          {
+            ASTNodeMap cache;
+            simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+            bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
+          }
+      }
+    return simplified_solved_InputToSAT;
+  }
+
 
   // These transformations should never increase the size of the DAG.
    ASTNode
@@ -195,29 +224,7 @@ namespace BEEV {
     // so it's expensive to call.
     if (!arrayops && initial_difficulty_score < 1000000)
       {
-        while (true)
-          {
-            ASTNode last = simplified_solved_InputToSAT;
-            simplified_solved_InputToSAT = sizeReducing(last, bvSolver);
-            if (last == simplified_solved_InputToSAT)
-              break;
-          }
-
-        // Expensive, so only want to do it once.
-        if (bm->UserFlags.isSet("bitblast-simplification", "1") && initial_difficulty_score < 250000)
-          {
-            BBNodeManagerAIG bbnm;
-            SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-            BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
-            ASTNodeMap fromTo;
-            bb.getConsts(simplified_solved_InputToSAT, fromTo);
-            if (fromTo.size() > 0)
-              {
-                ASTNodeMap cache;
-                simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
-                bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
-              }
-          }
+        simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver, initial_difficulty_score);
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
 

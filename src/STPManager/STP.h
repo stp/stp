@@ -26,10 +26,14 @@
 namespace BEEV
 {
   class STP {
-public:
-	  ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
+  private:
+          ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
 
   public:
+          // calls sizeReducing and the bitblasting simplification.
+          ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, const int initial_difficulty_score);
+
+
     /****************************************************************
      * Public Data:
      *  
