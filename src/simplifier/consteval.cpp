@@ -307,7 +307,12 @@ namespace BEEV
         	  if (k==SBVREM)
         		  OutputNode = children[0];
         	  else
-        		  OutputNode = _bm->CreateOneConst(outputwidth);
+        		  {
+        	              if (CONSTANTBV::BitVector_bit_test(tmp0, inputwidth-1))
+        	                OutputNode = _bm->CreateMaxConst(inputwidth);
+        	              else
+        	                OutputNode = _bm->CreateOneConst(inputwidth);
+        		  }
 
         	  CONSTANTBV::BitVector_Destroy(remainder);
               CONSTANTBV::BitVector_Destroy(quotient);
