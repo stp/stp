@@ -1012,6 +1012,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                   oneFound = true;
                 else if (CONSTANTBV::BitVector_is_empty(children[i].GetBVConst()))
                   zeroFound = true;
+
                 }
             }
 
@@ -1043,6 +1044,61 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
           {
 	      result = children[0];
           }
+
+          // If there is just one run of 1 bits, replace by an extract and a concat.
+	  // i.e. 00011111111000000 & x , will be replaced by an extract of x just where
+	  // there are one bits. This should
+	  if (children.size() ==2 && (children[0].isConstant() || children[1].isConstant()))
+	  {
+	      ASTNode c0 = children[0];
+	      ASTNode c1 = children[1];
+	      if (c1.isConstant())
+	        {
+	          ASTNode t = c0;
+	          c0 = c1;
+	          c1 = t;
+	        }
+
+	      int start=-1;
+	      int end=-1;
+	      BEEV::CBV c = c0.GetBVConst();
+	      bool bad= false;
+	      for (int i =0; i < width; i++)
+	        {
+	          if (CONSTANTBV::BitVector_bit_test(c,i))
+	            if (start == -1)
+	                start = i; // first one bit.
+	            else if (end != -1)
+	              bad = true;
+
+	          if (!CONSTANTBV::BitVector_bit_test(c,i))
+	            if (start != -1 && end==-1)
+	              end = i-1; // end of run.
+	        }
+	      if (start != -1 && end == -1)
+	        end = width-1;
+
+	      if (!bad && start !=-1)
+	        {
+	          assert(end != -1);
+
+                  result  = NodeFactory::CreateTerm(BEEV::BVEXTRACT, end-start+1, c1, bm.CreateBVConst(32,end) , bm.CreateBVConst(32,start));
+
+                  if (start > 0)
+                    {
+                      ASTNode z = bm.CreateZeroConst(start);
+                      result = NodeFactory::CreateTerm(BEEV::BVCONCAT, end+1, result,z);
+                    }
+                  if (end < width-1)
+                    {
+                      ASTNode z = bm.CreateZeroConst(width-end-1);
+                      result = NodeFactory::CreateTerm(BEEV::BVCONCAT, width, z,result);
+                    }
+	        }
+	  }
+
+
+
 	  break;
 
 	case BEEV::BVSX:
@@ -1072,6 +1128,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = NodeFactory::CreateTerm(BEEV::BVNEG, width, children[0][1]);
           else if (children[0].GetKind() == BEEV::BVNEG)
             result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, children[0][0], bm.CreateOneConst(width));
+          else if (children[0].GetKind() == BEEV::BVSX && children[0][0].GetValueWidth() ==1)
+            result = NodeFactory::CreateTerm(BEEV::BVCONCAT, width, bm.CreateZeroConst(width-1), children[0][0]);
 	break;
 
 	case BEEV::BVEXTRACT:
@@ -1115,6 +1173,26 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = plusRules(children[0],children[1]);
             if (result.IsNull())
               result = plusRules(children[1],children[0]);
+
+#if 0
+            // This slowed down some of the smtcomp2007 problems x4 total runtime.
+
+            // Put the unary minus on the node with the lowest variable number.
+            if (result.IsNull() && children[0].GetKind() == BEEV::BVUMINUS && !arithless(children[0][0], children[1]))
+              {
+                // Need to be swapped.
+                ASTNode r = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[1]);
+                ASTNode p = NodeFactory::CreateTerm(BEEV::BVPLUS, width, r, children[0][0]);
+                result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, p);
+              }
+            else if (result.IsNull() && children[1].GetKind() == BEEV::BVUMINUS && arithless(children[0], children[1][0]))
+              {
+                // Need to be swapped.
+                ASTNode r = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[0]);
+                ASTNode p = NodeFactory::CreateTerm(BEEV::BVPLUS, width, r, children[1][0]);
+                result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, p);
+              }
+#endif
           }
         break;
 
