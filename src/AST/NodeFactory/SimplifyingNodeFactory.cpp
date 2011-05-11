@@ -764,7 +764,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   else if (width == 1 && n0 == n1)
     result = bm.CreateZeroConst(1);
   else if (n0 == n1)
-    result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(width,2), n0);
+    result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(string("2"), 10, width), n0);
   else if (n0.GetKind() == BEEV::BVUMINUS  && n1 == n0[0])
     result = bm.CreateZeroConst(width);
   else if (n1.GetKind() == BEEV::BVPLUS && n1[1].GetKind() == BEEV::BVUMINUS && n0 == n1[1][0] && n1.Degree() ==2 )

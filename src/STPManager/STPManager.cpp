@@ -266,7 +266,7 @@ namespace BEEV
     return n;
   }
 
-  ASTNode STPMgr::CreateBVConst(string& strval, int base, int bit_width)
+  ASTNode STPMgr::CreateBVConst(string strval, int base, int bit_width)
   {
     assert (bit_width > 0);
 
