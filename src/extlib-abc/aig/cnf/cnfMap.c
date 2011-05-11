@@ -122,8 +122,12 @@ void Cnf_DeriveMapping( Cnf_Man_t * p )
 //        Aig_ObjCollectSuper( pObj, vSuper );
         // get the area flow of this cut
 //        AreaFlow = Cnf_CutSuperAreaFlow( vSuper, pAreaFlows );
+
+        // Trevor: Always set the best one with fBest.
+        // otherwise CNF generation fails. Wrote to Alan
+        // seeking confirmation this was not dangerous.
         AreaFlow = AIG_INFINITY;
-        if ( AreaFlow >= (int)pCutBest->uSign )
+        if (1 || AreaFlow >= (int)pCutBest->uSign )
         {
             pAreaFlows[pObj->Id] = pCutBest->uSign;
             pCutBest->fBest = 1;
