@@ -1739,13 +1739,20 @@ namespace BEEV
 
     assert(b.isConstant());
     assert(k == BVSRSHIFT);
-    const unsigned int shift = b.GetUnsignedConst();
 
-    if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width) || (shift >= width))
+    if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
       {
         ASTNode top = bm.CreateBVConst(32,width-1);
         return nf->CreateTerm(BVSX, width, nf->CreateTerm(BVEXTRACT,1, children[0], top,top ), bm.CreateBVConst(32,width));
       }
+    else
+    {
+        if  (b.GetUnsignedConst() >= width)
+          {
+            ASTNode top = bm.CreateBVConst(32,width-1);
+            return nf->CreateTerm(BVSX, width, nf->CreateTerm(BVEXTRACT,1, children[0], top,top ), bm.CreateBVConst(32,width));
+          }
+    }
 
     return ASTNode();
   }
