@@ -99,10 +99,15 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 				break;
 		}
 	}
-	if (!needAbsRef && mgr.aigMgr->nObjs[AIG_OBJ_AND] < 2000000 && !uf.isSet("simple-cnf","0")) {
+	if (!needAbsRef &&  !uf.isSet("simple-cnf","0")) {
 		cnfData = Cnf_Derive(mgr.aigMgr, 0);
+		if (uf.stats_flag)
+		  cerr << "advanced CNF" << endl;
 	} else {
 		cnfData = Cnf_DeriveSimple(mgr.aigMgr, 0);
+                if (uf.stats_flag)
+                  cerr << "simple CNF" << endl;
+
 	}
 
 	BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
