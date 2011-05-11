@@ -46,6 +46,9 @@ namespace BEEV
     delete TransformMap;
     TransformMap = NULL;
 
+    if (bm->UserFlags.stats_flag)
+      printArrayStats();
+
     runTimes->stop(RunTimes::Transforming);
 
     return result;

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -132,6 +132,21 @@ namespace BEEV
     {
       arrayToIndexToRead.clear();
     }
+
+    void printArrayStats()
+    {
+      cerr << "Array Sizes:";
+
+      for (ArrType::const_iterator
+             iset = arrayToIndexToRead.begin(),
+             iset_end = arrayToIndexToRead.end();
+           iset != iset_end; iset++)
+        {
+          cerr << iset->second.size() << " : ";
+        }
+      cerr << endl;
+    }
+
   }; //end of class Transformer
 
 };//end of namespace
