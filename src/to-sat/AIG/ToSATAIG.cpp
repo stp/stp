@@ -72,6 +72,18 @@ namespace BEEV
       }
 	  first = false;
 
+      if (bm->UserFlags.exit_after_CNF)
+            {
+              if (bm->UserFlags.quick_statistics_flag)
+                bm->GetRunTimes()->print();
+
+              if (needAbsRef)
+                cerr << "Warning: STP is exiting after generating the first CNF. But the CNF"
+                " is probably partial which you probably don't want. You probably want to disable"
+                " refinement with the \"-r\" command line option." << endl;
+
+              exit(0);
+            }
 
       bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
@@ -119,18 +131,6 @@ namespace BEEV
     	  toCNF.setPrior(cnfData);
       }
 
-      if (bm->UserFlags.exit_after_CNF)
-      {
-        if (bm->UserFlags.quick_statistics_flag)
-          bm->GetRunTimes()->print();
-
-        if (needAbsRef)
-          cerr << "Warning: STP is exiting after generating the first CNF. But the CNF"
-          "is probably partial which you probably don't want. You probably want to disable"
-          "refinement with the \"-r\" command line option." << endl;
-
-        exit(0);
-      }
 
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
