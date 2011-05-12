@@ -134,7 +134,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
                       result = NodeFactory::CreateNode(BEEV::NOT, NodeFactory::CreateNode(BEEV::EQ, children[0], children[1]));
                 if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
                       result = NodeFactory::CreateNode(BEEV::NOT, NodeFactory::CreateNode(BEEV::EQ, children[0], children[1]));
-
+                if (children[0].GetKind() ==BEEV::BVAND && children[0].Degree() > 1 && ((children[0][0] == children[1]) || children[0][1] == children[1]))
+                    result = ASTFalse;
 		break;
 
 	case BEEV::BVGE:
