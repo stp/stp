@@ -67,7 +67,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 	if (uf.stats_flag)
 		cerr << "Nodes before AIG rewrite:" << nodeCount << endl;
 
-	if (!needAbsRef && uf.isSet("aig_rewrite","0")) {
+	if (!needAbsRef && uf.isSet("aig-rewrite","0")) {
 		Dar_LibStart();
 		Aig_Man_t * pTemp;
 		Dar_RwrPar_t Pars, *pPars = &Pars;

@@ -101,12 +101,7 @@ namespace BEEV
               + 1]; pLit < pStop; pLit++)
             {
               SATSolver::Var var = (*pLit) >> 1;
-              if (!(var < satSolver.nVars()))
-              {
-            	  cerr << var << " ";
-            	  cerr << satSolver.nVars();
-            	  exit(1);
-              }
+              assert ((var < satSolver.nVars()));
               Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
               satSolverClause.push(l);
             }
