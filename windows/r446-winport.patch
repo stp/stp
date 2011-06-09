@@ -1,0 +1,913 @@
+diff -Nur stp/CMakeLists.txt r446port/CMakeLists.txt
+--- stp/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,139 @@
++cmake_minimum_required(VERSION 2.6)
++
++# base common definitions
++set(TargetName                  "stp")
++set(ProjectName                 "stp")
++
++##########################################################################
++project(${ProjectName})
++
++#set(CMAKE_BUILD_TYPE Release)
++
++# static build settings for MSVC/gcc
++include("../cmakemods/staticrt.cmake")
++
++set(PHINTS "")
++set(STP_DEFS_COMM -DCRYPTOMINISAT)
++set(STP_INCL_COMM src/sat/mtl src/AST)
++
++option(BUILD_SHARED_LIB "Whether to Build shared libstp or not" ON)
++
++set(OPTIMIZITION_FLAGS  "-O3")
++
++# bison and flex is needed for buiding
++if(WIN32)
++  # build shared lib on windows is not prepared at source level
++  set(BUILD_SHARED_LIB OFF)
++  set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
++  set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
++  set(FLEX_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
++
++  set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
++
++  if(MSVC)
++    set(OPTIMIZITION_FLAGS  "/GL /Ox /Oi /Ot /Oy")
++    set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
++    set(STP_INCL_COMM ../winports ../winports/msc99hdr ${STP_INCL_COMM})
++
++    # stack size of MSVC must be specified
++    string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
++    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:256000000")
++  else(MSVC)
++    # mingw 
++    set(STP_DEFS_COMM ${STP_DEFS_COMM} -DEXT_HASH_MAP)
++  endif(MSVC)
++elseif(UNIX)
++  set(STP_DEFS_COMM ${STP_DEFS_COMM} -DEXT_HASH_MAP)
++endif(WIN32)
++
++find_program(PERLP perl)
++find_program(FLEXP flex HINTS ${PHINTS})
++find_program(BISONP bison HINTS ${PHINTS})
++
++#message(${PERLP})
++#message(${FLEXP})
++#message(${BISONP})
++
++
++if(NOT FLEXP OR NOT BISONP OR NOT PERLP)
++message(FATAL_ERROR "Flex/Bison/Perl is not found and is required, Abort!")
++endif(NOT FLEXP OR NOT BISONP OR NOT PERLP)
++
++##
++## add rules generate the custom files in AST
++##
++set(ASTD_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/src/AST)
++
++set(OUTFILES ${ASTD_PREFIX}/ASTKind.h ${ASTD_PREFIX}/ASTKind.cpp)
++set(GenKindsScript ${ASTD_PREFIX}/genkinds.pl)
++add_custom_command(OUTPUT ${OUTFILES}
++                   COMMAND ${PERLP} ${GenKindsScript}
++                   DEPENDS ${GenKindsScript}
++                   WORKING_DIRECTORY ${ASTD_PREFIX}
++                  )
++
++##
++## add rules generate the custom files in parser
++##
++set(PARSERD_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/src/parser)
++set(OUTFILES    ${PARSERD_PREFIX}/lexCVC.cpp  ${PARSERD_PREFIX}/lexSMT.cpp 
++                ${PARSERD_PREFIX}/parseCVC.cpp ${PARSERD_PREFIX}/parseCVC_defs.h
++                ${PARSERD_PREFIX}/parseSMT.cpp ${PARSERD_PREFIX}/parseSMT_defs.h)
++add_custom_command(OUTPUT ${OUTFILES}
++                   COMMAND ${FLEXP} -olexCVC.cpp -Pcvc CVC.lex
++                   COMMAND ${FLEXP} -olexSMT.cpp -Psmt smtlib.lex
++                   COMMAND ${BISONP} -y -v --defines=parseCVC_defs.h -oparseCVC.cpp -pcvc CVC.y
++                   COMMAND ${BISONP} -y -v --defines=parseSMT_defs.h -oparseSMT.cpp -psmt smtlib.y
++                   DEPENDS ${PARSERD_PREFIX}/CVC.lex ${PARSERD_PREFIX}/smtlib.lex ${PARSERD_PREFIX}/CVC.y ${PARSERD_PREFIX}/smtlib.y
++                   WORKING_DIRECTORY ${PARSERD_PREFIX}
++                  )
++
++#
++add_definitions(${STP_DEFS_COMM})
++include_directories(${STP_INCL_COMM})
++
++macro(add_stp_library lib_name, filelist)
++  source_group(${lib_name} FILES ${filelist})
++  set(LIBSTP_SRCLIST ${LIBSTP_SRCLIST} ${${filelist}} PARENT_SCOPE)
++endmacro(add_stp_library)
++
++
++set(SDIRLIST 
++            sat 
++            AST
++            STPManager
++            parser
++            absrefine_counterexample
++            to-sat
++            simplifier
++            printer
++            c_interface
++            extlib-constbv
++    )
++
++foreach(cdir ${SDIRLIST})
++    add_subdirectory(src/${cdir})
++endforeach(cdir ${SDIRLIST})
++
++# the stp library
++add_library(${TargetName}_lib ${STP_LIBTYPE} ${LIBSTP_SRCLIST})
++set_target_properties(${TargetName}_lib 
++                        PROPERTIES OUTPUT_NAME ${TargetName}
++                        COMPILE_DEFINITIONS_RELEASE ${OPTIMIZITION_FLAGS}
++                        COMPILE_DEFINITIONS_RELWITHDEBINFO ${OPTIMIZITION_FLAGS}
++                     )
++
++set(DEPLIBS ${TargetName}_lib)
++
++# generate the stp main program
++file(GLOB SRC_LIST ${PROJECT_SOURCE_DIR}/src/main/*.c* ${PROJECT_SOURCE_DIR}/src/main/*.h)
++add_executable(${TargetName} ${SRC_LIST})
++set_target_properties(${TargetName} 
++                        PROPERTIES
++                        COMPILE_DEFINITIONS_RELEASE ${OPTIMIZITION_FLAGS}
++                        COMPILE_DEFINITIONS_RELWITHDEBINFO ${OPTIMIZITION_FLAGS}
++                      )
++
++add_dependencies(${TargetName} ${DEPLIBS})
++target_link_libraries(${TargetName} ${DEPLIBS})
++
+diff -Nur stp/scripts/dotest.py r446port/scripts/dotest.py
+--- stp/scripts/dotest.py	1970-01-01 08:00:00.000000000 +0800
++++ r446port/scripts/dotest.py	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,316 @@
++#! /usr/bin/python
++# -*- coding: iso-8859-1 -*-
++
++# Run STP regression tests of a given level (default: 0, meaning
++# minimum amount of tests).  The higher the regression level, the more
++# tests to run, and the harder they get.
++# Each test may contain information about its regression level,
++# expected outcome, expected runtime, whether it produces a proof,
++# etc. in the format given below.  This script will scan the first 100
++# lines of each test and try to collect this information.
++# If some info is not found, defaults are assumed.  Default regression
++# level is 0, expected runtime is unbounded, outcome is undefined
++# (whatever it returns is OK), proof should be produced if outcome is
++# Valid, and if it is produced, it'll be verified.
++# Test info is given in the comments; here are examples
++# 
++# %%% Regression level = 2
++# %%% Result = Valid  %% or Invalid, or Unknown
++# %%% Runtime = 10   %% in seconds
++# %%% Proof = yes    %% or 'no', if it doesn't produce a proof
++# %%% Language = presentation %% or 'internal'
++
++# The number of '%' and following spaces can vary, case is not
++# important.  Any text after the value is ignored.  Any comments that
++# are not recognized are also ignored.
++
++import os, sys, subprocess, glob, re
++import logging, optparse
++from os import path
++from mtimeit import *
++
++gprofiler = profiler()
++line_len = 75
++
++class test_context:
++  def __init__ (self):
++    self.num_total = 0
++    self.time_total = 0
++    self.proofs_checked = 0
++    self.num_problems = 0
++    self.test_problems = {}
++  
++  def add_keyval (self, k, v):
++    if not k in self.test_problems:
++      self.test_problems[k] = [v]
++    else:
++      self.test_problems[k].append(v)
++  
++  def get_key (self, k):
++    if k in self.test_problems:
++      return self.test_problems[k]
++    return []
++
++  def add_problems (self, catig, dat):
++    self.add_keyval(catig, dat)
++    self.num_problems += 1
++
++  def add_errors (self, fn, expect_res, act_res):
++    self.add_problems("errors", (fn, expect_res, act_res))
++    
++  def print_errors (self):
++    logging.info("Total tested %d and found %d problems", self.num_total, self.num_problems)
++    if self.num_problems:
++      for k, v in self.test_problems.iteritems():
++        logging.info("%s test total %d", k, len(v))
++        for i in v:
++          logging.info("\t%s", i[0])
++          
++class expected_test_args:
++  def __init__ (self):
++    self.level = None
++    self.result = None
++    self.runtime = None
++    self.proof = None
++    self.sat_mode = None
++    self.lang = None
++    self.stp_opts = ""
++  
++  def set_default(self, opts):
++    pass
++
++def parse_cmdline(permit_null_args=True):
++  the_usage = "usage: %prog [options] [test path] [test path]..."
++  the_version = "version 0.1"
++  parser = optparse.OptionParser(usage = the_usage, version = the_version)
++
++  # logging options
++  parser.add_option("-v", "--verbose", action="store_const", const=logging.INFO, dest="log_level", default=logging.INFO)
++  parser.add_option("-q", "--quiet", action="store_const", const=logging.ERROR, dest="log_level")
++  parser.add_option("--log-format", dest="log_format", metavar="FMT", default="%(asctime)s %(levelname)s %(message)s")
++  parser.add_option("--log-file", dest="log_file", metavar="FILE")
++  parser.add_option("--log-syslog", dest="log_syslog", metavar="HOST")
++
++  # timeouts
++  parser.add_option("-t", "--timeout", dest="timeout", action="store_const", default=0, 
++                      help = "Timeouts in seconds 0 = no limit (default: %default)")
++  parser.add_option("-l", "--testlevel", dest="level", action="store_const", default=4, 
++                      help = "Max regression test level (default: %default)")  
++  parser.add_option("--lang", dest="lang", action="store", default="all", 
++                      help = "Language: presentation/internal/smt-lib (default: %default)")
++  parser.add_option("-p", "--stppath", dest="stppath", action="store", default="", 
++                      help = "Stp path (default: %default)") 
++  parser.add_option("--stpopt", dest="stpopt", action="store", default="-d", 
++                      help = "Options passed to stp command line (default: %default)") 
++  parser.add_option("--vc", dest="vc", action="store", default="bin/stp", 
++                      help = "Verification program (default: %default)") 
++  parser.add_option("--rt", dest="checkruntime", action="store_true", default=True,
++                      help = "Check that each test finishes within the specified runtime (default: %default)") 
++  parser.add_option("--no-rt", dest="checkruntime", action="store_false",
++                      help = "Don't check that each test finishes within the specified runtime")
++  parser.add_option("--max-info-lines", dest="maxinfolines", action="store_const", default=4,
++                      help = "Max info lines to check per testcase file (default: %default)") 
++  parser.add_option("--proofs", dest="proofs", action="store_true",
++                      help = "Produce and verify proofs, None means depends on testcase(default: %default)") 
++  parser.add_option("--no-proofs", dest="proofs", action="store_false",
++                      help = "Do not produce / verify proofs ")
++  parser.add_option("-f", "--list-file", dest="listfile", action="store",
++                      help = "Check test case listed in file")
++  parser.add_option("-r", "--recursive", dest="recursive", action="store_true", default=False,
++                      help = "Do test recursively (default: %default)")
++
++  opts, args = parser.parse_args()
++  if len(args) == 0 and not permit_null_args:
++    parser.print_help()
++    parser.exit()
++  return (opts, args)
++
++def parse_cmdline_and_logging(permit_null_args=True):
++  opts, args = parse_cmdline(permit_null_args)
++  # process logging support
++  logging.basicConfig(level=opts.log_level, format=opts.log_format, filename=opts.log_file, stream=sys.stdout)
++  if opts.log_syslog:
++    from logging.handlers import SysLogHandler
++    logging.info("redirect log to syslogd at %s", opts.log_syslog)
++    logging.getLogger().addHandler(SysLogHandler((opts.log_syslog, 514), SysLogHandler.LOG_LOCAL0))
++  return (opts, args)
++
++def log_basic_test_info(opts):
++  logging.info("Base Test Options:")
++  logging.info("*"*line_len)
++  logging.info("Regression level: %d"%opts.level)
++  logging.info("Language: %s"%opts.lang)
++  if None == opts.proofs: s = "depends on testcase"
++  elif opts.proofs:       s = "yes"
++  else:                   s = "no"
++  logging.info("Whether to produce / check proofs: %s"%s)
++  
++  if opts.timeout == 0:  s = "no limit"
++  else:                 s = "%d seconds"%opts.timeout
++  logging.info("Time limit per test: %s"%s)
++  logging.info("*"*line_len)
++  logging.info("\n\n")
++
++def get_test_opt(opts, test_fn):
++  targs = expected_test_args()
++  with open(test_fn, "rt") as f:
++    for idx, ln in enumerate(f):
++      if idx > opts.maxinfolines:
++        break
++      so = re.search(r"^(\s|%|\#)*Regression level\s*=\s*(\d+)", ln, re.I)
++      if so:
++        targs.level = int(so.group(2))
++        continue
++      so = re.search(r"^(\s|%|\#)*Result\s*=\s*(Invalid|Valid|Unknown)", ln, re.I)
++      if so:
++        targs.result = so.group(2)
++        continue
++      so = re.search(r"^(\s|%|\#)*Runtime\s*=\s*(\d+)", ln, re.I)
++      if so:
++        targs.runtime = int(so.group(2))
++        continue
++      so = re.search(r"^(\s|%|\#)*Proof\s*=\s*(yes|no)", ln, re.I)
++      if so:
++        targs.proofs = so.group(2)
++        continue
++      so = re.search(r"^(\s|%|\#)*SAT mode\s*=\s*(on|off)", ln, re.I)
++      if so:
++        targs.sat_mode = so.group(2)
++        continue
++      so = re.search(r"^(\s|%|\#)*Language\s*=\s*((\w|\d|\_)+)", ln, re.I)
++      if so:
++        targs.lang = so.group(2)
++        continue
++      so = re.search(r"^(\s|%|\#)*STP Options\s*=\s*(.*)$", ln, re.I)
++      if so:
++        targs.stp_opts = so.group(2)
++        continue
++    # guess the level and lang
++    if targs.level == None: targs.level = 3
++    if targs.lang == None: 
++      if re.search(r"\.(stp|svc)$", test_fn, re.I): targs.lang = "presentation"
++      if re.search(r"\.(li?sp)$", test_fn, re.I): targs.lang = "internal"
++      if re.search(r"\.(smt)$", test_fn, re.I): targs.lang = "smt-lib"
++    if targs.result == None:
++      targs.result = "Unknown"
++  return targs
++
++def do_test (opts, tfn):
++  if path.exists(tfn):  tfn = path.abspath(tfn)  
++  targs = get_test_opt(opts, tfn)
++
++  # test only levels that below current or no level hints
++  if targs.level and targs.level > opts.level:
++    logging.warn("Skip test case %s at level %d", tfn, targs.level);
++    return 
++  if opts.lang != "all" and targs.lang and targs.lang != opts.lang:
++    logging.warn("Skip test case %s with lang %d", tfn, targs.lang);
++    return 
++
++  cmd = [opts.stppath]
++  if opts.stpopt: cmd.append(opts.stpopt)
++
++  logging.info("\n")
++  logging.info("="*line_len)
++  logging.info("checking %s"%tfn)
++  logging.info("Language: %s", targs.lang)
++  logging.info("Checking proofs: %s", "yes" if opts.proofs else "no")
++  if targs.runtime:
++    logging.info("Expected runtime: %d sec", targs.runtime)
++  if targs.result:
++    logging.info("Expected result: %s", targs.result)
++  if targs.stp_opts:
++    logging.info("STP options: ", targs.stp_opts)
++    cmd.append(targs.stp_opts)
++  cmd.append(tfn)
++
++  opts.text_ctx.num_total += 1
++  test_tim = accum_time()
++  try:
++    with mtimeit_ctxmgr(test_tim):
++      subp = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
++      sout, serr = subp.communicate()
++      if opts.timeout:
++        test_runtime = opts.timeout
++        if targs.runtime and targs.runtime > opts.timeout:
++          test_runtime = targs.runtime
++        while True:
++          if subp.poll():
++            break
++          if test_tim() > test_runtime:
++            subp.terminate()
++            opts.text_ctx.add_problems("timedout->killed", (tfn, test_runtime))
++          time.sleep(0.05)
++      else:              
++        subp.wait()
++      
++      if targs.result:
++        so = re.search(targs.result, sout, re.M|re.I)
++        if not so:
++          logging.error("%s result not conform!"%tfn)
++          s = (sout+serr)
++          if s: s.strip("\r\n ") 
++          opts.text_ctx.add_problems("Result error", (tfn, targs.result, s))
++        else:
++          logging.info("test passed")
++
++  except:
++    logging.error("Exception when testing: %s", tfn)
++    raise
++    opts.text_ctx.add_problems("Failed tests", (tfn, targs.runtime))
++
++  if targs.runtime:
++    if test_tim() > targs.runtime:
++      opts.text_ctx.add_problems("Longer tests", (tfn, targs.runtime))
++    if targs.runtime > 5 and test_tim() < targs.runtime/2:
++      opts.text_ctx.add_problems("Faster tests", (tfn, targs.runtime))
++
++  logging.info("-"*(line_len/2))
++  logging.info("Runtime is: %d", test_tim())
++  logging.info("="*line_len+"\n")
++  
++@fun_profile("Time Total", gprofiler)
++def do_task_test (opts, args):
++  for arg in args:
++    if os.path.isfile(arg): do_test(opts, arg)
++    elif os.path.isdir(arg):
++      fns = os.path.join(arg, "*.*")
++      testcases = glob.glob(fns)
++      for fn in testcases:
++        do_test(opts, fn)
++
++  if opts.listfile:
++    with open(opts.listfile, "rt") as f:
++      for ln in f:
++        ln = ln.strip("\r\n ")
++        if ln:
++          do_test(opts, ln)          
++
++if __name__=='__main__':
++  opts, args = parse_cmdline_and_logging()
++  
++  # guess some predefined paths
++  defp1 = path.join("..", "bin", "stp.exe")
++  defp2 = path.join("..", "bin", "stp")
++  if not opts.stppath:
++     if path.exists(defp1):   opts.stppath = defp1
++     elif path.exists(defp2): opts.stppath = defp2
++     else:                    opts.stppath = path.join("bin", "stp")
++
++  log_basic_test_info(opts)
++  opts.text_ctx = test_context()
++  try:
++    do_task_test(opts, args)
++  except KeyboardInterrupt:
++    logging.error("="*line_len)
++    logging.error("!!! User aborted by keyboard interrupt!")
++    logging.error("="*line_len)
++  finally:
++    logging.getLogger('').setLevel(logging.INFO)
++    logging.info("\n\n")
++    logging.info("Statistics:")
++    logging.info("="*line_len)
++    opts.text_ctx.print_errors()
++    gprofiler.print_percent()
++    logging.info("="*line_len)
++    logging.info("\n\n")
+diff -Nur stp/scripts/mtimeit.py r446port/scripts/mtimeit.py
+--- stp/scripts/mtimeit.py	1970-01-01 08:00:00.000000000 +0800
++++ r446port/scripts/mtimeit.py	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,136 @@
++#! /usr/bin/python
++# -*- coding: iso-8859-1 -*-
++# assuming python 2.6+ we use with statement without
++import os, sys, time
++import logging
++
++class mtimeit:
++  def __init__ (self):
++    # to make sure that these should not be un-initialized
++    self.stt = None
++    self.edt = None
++
++  def start (self):
++    self.stt = time.time() #time.clock() #time.time()
++
++  def end_and_get_length(self):
++    self.end()
++    return self.length()
++  
++  def end (self):
++    self.edt = time.time() #time.clock() #time.time()
++
++  def length (self):
++    return self.edt - self.stt
++
++  def get_srepr (self):
++    tstr = ""
++    ttim = self.length()
++    if ttim >= 3110400000.0:
++      tstr = "%f centuries"%(ttim/3110400000.0)
++    elif ttim >= 31104000:
++      tstr = "%f years"%(ttim/31104000.0)
++    elif ttim >= 2592000:
++      tstr = "%f months"%(ttim/2592000.0)
++    elif ttim >= 86400:
++      tstr = "%f days"%(ttim/86400.0)
++    elif ttim >= 3600:
++      tstr = "%f hours"%(ttim/3600.0)
++    elif ttim >= 60:
++      tstr = "%f minutes"%(ttim/60)
++    else:
++      tstr = "%f seconds"%ttim
++    return tstr
++  
++  def print_srepr(self):
++    print(self.get_srepr())
++    return True
++
++  show_time = print_srepr
++
++class accum_time:
++  def __init__(self, val=0):
++    self.val = val
++
++  def __iadd__( self, n):
++    self.val += n
++
++  def __add__( self, n):
++    self.val += n
++
++  def __call__( self):
++    return self.val
++
++
++class mtimeit_ctxmgr():
++  def __init__(self, tacc):
++    self.val = tacc
++
++  def __enter__(self):
++    self.tobj = mtimeit()
++    self.tobj.start()
++    return self.tobj
++
++  def __exit__(self, exc_type, exc_value, traceback):
++    self.val += self.tobj.end_and_get_length()
++    return False
++
++class profiler():
++  def __init__(self):
++    self.tot_tim = 0
++    self.profd = {}
++    
++  def __getitem__( self, key):
++    if self.profd.has_key(key):
++      return self.profd[key]    
++    names = [name for name in self.profd.keys() if name.startswith(key + '.')]        
++    if names:
++      return accum_time(sum([self.profd[name]() for name in names]))
++    else:
++      return self.profd.setdefault(key, accum_time())
++    
++  def __setitem__( self, key, value):
++    self.profd[key] = value
++    
++  def print_percent(self, tval = None):
++    self.tot_tim = tval
++    tt = 0
++    if not self.tot_tim:
++      self.tot_tim = 0
++      for k, v in self.profd.iteritems():
++        self.tot_tim += v()
++    for k, v in self.profd.iteritems():
++      tt += v()
++      logging.info("%-20s: time: %5.2f seconds percent: %2.2f%%"%(k, v(), self.get_percent(v())))
++    logging.info("%-20s: time: %5.2f seconds percent: %2.2f%%"%("All monitored events", tt, self.get_percent(tt)))
++    
++  def get_percent(self, v):
++    rv = 0.0 
++    if self.tot_tim:
++      rv = v*100 / self.tot_tim
++    return rv
++  
++def class_profile(name):  
++  def wrapper(func):
++    def newf(self, *args, **kwds):
++      if not hasattr(self, "profiler"): self.profiler = profiler()       
++      with mtimeit_ctxmgr(self.profiler[name]):
++        return func(self, *args, **kwds)
++    return newf
++  return wrapper
++
++def fun_profile(name, the_profiler):
++  def wrapper(func):
++    def newf(self, *args, **kwds):
++      with mtimeit_ctxmgr(the_profiler[name]):
++        return func(self, *args, **kwds)
++    return newf
++  return wrapper
++
++
++if __name__=='__main__':
++  tim = mtimeit()
++  tim.start()
++  time.sleep(2.5)
++  tim.end()
++  tim.print_srepr()
+diff -Nur stp/src/absrefine_counterexample/CMakeLists.txt r446port/src/absrefine_counterexample/CMakeLists.txt
+--- stp/src/absrefine_counterexample/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/absrefine_counterexample/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(absrefine_counterexample, SRCS)
+diff -Nur stp/src/AST/CMakeLists.txt r446port/src/AST/CMakeLists.txt
+--- stp/src/AST/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/AST/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,9 @@
++set(OUTFILES ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.h ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.cpp)
++
++file(GLOB SRCS *.h *.c*)
++string(REGEX MATCH HasAstKindFile "ASTKind.(h|cpp)" ${SRCS})
++if(NOT HasAstKindFile)
++  set(SRCS ${SRCS} ${OUTFILES})
++endif(NOT HasAstKindFile)
++
++add_stp_library(ast, SRCS)
+diff -Nur stp/src/AST/UsefulDefs.h r446port/src/AST/UsefulDefs.h
+--- stp/src/AST/UsefulDefs.h	2009-11-27 14:47:14.484375000 +0800
++++ r446port/src/AST/UsefulDefs.h	2009-12-07 12:51:46.000000000 +0800
+@@ -29,12 +29,19 @@
+ #ifdef EXT_HASH_MAP
+ #include <ext/hash_set>
+ #include <ext/hash_map>
+-#elif defined(TR1_UNORDERED_MAP)
++#elif defined(TR1_UNORDERED_MAP) || defined(_GLIBCXX_UNORDERED_MAP)
+ #include <tr1/unordered_map>
+ #include <tr1/unordered_set>
+ #define hash_map tr1::unordered_map
+ #define hash_set tr1::unordered_set
+ #define hash_multiset tr1::unordered_multiset
++#elif defined(_MSC_VER) && defined(_HAS_TR1)
++#include <unordered_map>
++#include <unordered_set>
++#define hash_map tr1::unordered_map
++#define hash_set tr1::unordered_set
++#define hash_multiset tr1::unordered_multiset
++#define TR1_UNORDERED_MAP 1
+ #else
+ #include <hash_set>
+ #include <hash_map>
+diff -Nur stp/src/c_interface/CMakeLists.txt r446port/src/c_interface/CMakeLists.txt
+--- stp/src/c_interface/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/c_interface/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(c_interface, SRCS)
+diff -Nur stp/src/extlib-constbv/CMakeLists.txt r446port/src/extlib-constbv/CMakeLists.txt
+--- stp/src/extlib-constbv/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/extlib-constbv/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(constantbv, SRCS)
+diff -Nur stp/src/main/main.cpp r446port/src/main/main.cpp
+--- stp/src/main/main.cpp	2009-11-13 11:49:35.859375000 +0800
++++ r446port/src/main/main.cpp	2009-12-07 12:51:46.000000000 +0800
+@@ -26,6 +26,11 @@
+   exit(0);
+ }
+ 
++#if 1 
++namespace BEEV{
++  const std::string version = "1.00";
++}
++#endif
+ 
+ // Amount of memory to ask for at beginning of main.
+ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
+@@ -44,12 +49,16 @@
+   extern FILE *cvcin;
+   extern FILE *smtin;
+ 
+-  // Grab some memory from the OS upfront to reduce system time when
+-  // individual hash tables are being allocated
+-  if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void *) -1))
+-    {
+-      FatalError("Initial allocation of memory failed.");
+-    }
++
++#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
++    // Grab some memory from the OS upfront to reduce system time when
++    // individual hash tables are being allocated
++    if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void *) -1))
++      {
++        FatalError("Initial allocation of memory failed.");
++      }
++#endif // !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
++
+ 
+ 
+   STPMgr * bm       = new STPMgr();
+@@ -59,7 +68,9 @@
+   ToSAT * tosat      = new ToSAT(bm, simp);
+   AbsRefine_CounterExample * Ctr_Example = 
+     new AbsRefine_CounterExample(bm, simp, arrayTransformer, tosat);      
+-  itimerval timeout; 
++#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
++    itimerval timeout; 
++#endif // !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
+ 
+   ParserBM          = bm;
+   GlobalSTP         = 
+@@ -145,12 +156,14 @@
+               bm->UserFlags.num_absrefine = atoi(argv[++i]);
+               break;            
+             case 'g':
+-              signal(SIGVTALRM, handle_time_out);
+-              timeout.it_interval.tv_usec = 0;
+-              timeout.it_interval.tv_sec  = 0;
+-              timeout.it_value.tv_usec    = 0;
+-              timeout.it_value.tv_sec     = atoi(argv[++i]);
+-              setitimer(ITIMER_VIRTUAL, &timeout, NULL);
++#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
++                signal(SIGVTALRM, handle_time_out);
++                timeout.it_interval.tv_usec = 0;
++                timeout.it_interval.tv_sec  = 0;
++                timeout.it_value.tv_usec    = 0;
++                timeout.it_value.tv_sec     = atoi(argv[++i]);
++                setitimer(ITIMER_VIRTUAL, &timeout, NULL);
++#endif // !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
+               break;            
+             case 'h':
+               fprintf(stderr,usage,prog);
+Files stp/src/parser/.parsePL.cpp.swp and r446port/src/parser/.parsePL.cpp.swp differ
+Files stp/src/parser/.PL.y.swp and r446port/src/parser/.PL.y.swp differ
+diff -Nur stp/src/parser/CMakeLists.txt r446port/src/parser/CMakeLists.txt
+--- stp/src/parser/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/parser/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,11 @@
++set(OUTFILES ${CMAKE_CURRENT_SOURCE_DIR}/lexCVC.cpp ${CMAKE_CURRENT_SOURCE_DIR}/lexSMT.cpp 
++            ${CMAKE_CURRENT_SOURCE_DIR}/parseCVC.cpp ${CMAKE_CURRENT_SOURCE_DIR}/parseCVC_defs.h 
++            ${CMAKE_CURRENT_SOURCE_DIR}/parseSMT.cpp ${CMAKE_CURRENT_SOURCE_DIR}/parseSMT_defs.h)
++
++file(GLOB SRCS *.h *.c *.cpp)
++string(REGEX MATCH HasAstKindFile "lexCVC.(h|cpp)" ${SRCS})
++if(NOT HasAstKindFile)
++  set(SRCS ${SRCS} ${OUTFILES})
++endif(NOT HasAstKindFile)
++
++add_stp_library(parser, SRCS)
+diff -Nur stp/src/parser/CVC.lex r446port/src/parser/CVC.lex
+--- stp/src/parser/CVC.lex	2009-11-17 09:20:17.484375000 +0800
++++ r446port/src/parser/CVC.lex	2009-12-07 12:51:46.000000000 +0800
+@@ -15,6 +15,9 @@
+   using namespace BEEV;  
+   extern char *yytext;
+   extern int cvcerror (const char *msg);
++#ifdef _MSC_VER
++  #include <io.h>
++#endif
+ %}
+ 
+ %option noyywrap
+diff -Nur stp/src/parser/smtlib.lex r446port/src/parser/smtlib.lex
+--- stp/src/parser/smtlib.lex	2009-10-21 13:36:04.937500000 +0800
++++ r446port/src/parser/smtlib.lex	2009-12-07 12:51:46.000000000 +0800
+@@ -36,7 +36,9 @@
+ #include <iostream>
+ #include "parser.h"
+ #include "parseSMT_defs.h"
+-
++#ifdef _MSC_VER
++  #include <io.h>
++#endif
+   using namespace std;
+   using namespace BEEV;
+   
+diff -Nur stp/src/printer/CMakeLists.txt r446port/src/printer/CMakeLists.txt
+--- stp/src/printer/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/printer/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(printer, SRCS)
+diff -Nur stp/src/sat/CMakeLists.txt r446port/src/sat/CMakeLists.txt
+--- stp/src/sat/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/sat/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++add_subdirectory(cryptominisat)
++add_stp_library(the_sat, SRCS)
+diff -Nur stp/src/sat/cryptominisat/clause.cpp r446port/src/sat/cryptominisat/clause.cpp
+--- stp/src/sat/cryptominisat/clause.cpp	2009-10-30 09:23:32.671875000 +0800
++++ r446port/src/sat/cryptominisat/clause.cpp	2009-12-07 12:51:46.000000000 +0800
+@@ -24,14 +24,16 @@
+ 
+ Clause* Clause_new(const vec<Lit>& ps, const uint group, const bool learnt)
+ {
+-    void* mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
++    size_t msiz = sizeof(Clause) + sizeof(Lit)* (ps.size() ? (ps.size() - 1) : 0);
++    void* mem = malloc(msiz);
+     Clause* real= new (mem) Clause(ps, group, learnt);
+     return real;
+ }
+ 
+ Clause* Clause_new(const vector<Lit>& ps, const uint group, const bool learnt)
+ {
+-    void* mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
++    size_t msiz = sizeof(Clause) + sizeof(Lit)* (ps.size() ? (ps.size() - 1) : 0);
++    void* mem = malloc(msiz);
+     Clause* real= new (mem) Clause(ps, group, learnt);
+     return real;
+ }
+@@ -39,6 +41,8 @@
+ #ifdef USE_GAUSS
+ Clause* Clause_new(const mpz_class& ps, const vec<lbool>& assigns, const vector<uint>& col_to_var_original, const uint group, const bool learnt)
+ {
++    size_t msiz = sizeof(Clause) + sizeof(Lit)* (ps.size() ? (ps.size() - 1) : 0);
++    void* mem = malloc(msiz);
+     void* mem = malloc(sizeof(Clause) + sizeof(Lit)*(ps.size()));
+     Clause* real= new (mem) Clause(ps, assigns, col_to_var_original, group, learnt);
+     return real;
+diff -Nur stp/src/sat/cryptominisat/clause.h r446port/src/sat/cryptominisat/clause.h
+--- stp/src/sat/cryptominisat/clause.h	2009-11-11 15:22:26.619365500 +0800
++++ r446port/src/sat/cryptominisat/clause.h	2009-12-07 12:51:46.000000000 +0800
+@@ -49,7 +49,7 @@
+ protected:
+     uint32_t size_etc;
+     float act;
+-    Lit     data[0];
++    Lit     data[1];
+ 
+ public:
+     Clause(const vec<Lit>& ps, const uint _group, const bool learnt) :
+diff -Nur stp/src/sat/cryptominisat/CMakeLists.txt r446port/src/sat/cryptominisat/CMakeLists.txt
+--- stp/src/sat/cryptominisat/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/sat/cryptominisat/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,3 @@
++file(GLOB SRCS *.h *.c*)
++#add_library(minisat STATIC ${SRCS})
++add_stp_library(minisat, SRCS)
+diff -Nur stp/src/sat/cryptominisat/Solver.h r446port/src/sat/cryptominisat/Solver.h
+--- stp/src/sat/cryptominisat/Solver.h	2009-10-30 09:23:32.656250000 +0800
++++ r446port/src/sat/cryptominisat/Solver.h	2009-12-07 12:51:46.000000000 +0800
+@@ -31,7 +31,7 @@
+ #include "clause.h"
+ #include <string.h>
+ 
+-#ifdef _MSC_VER
++#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
+   #include <ctime>
+ #else
+   #include <sys/time.h>
+diff -Nur stp/src/sat/mtl/Sort.h r446port/src/sat/mtl/Sort.h
+--- stp/src/sat/mtl/Sort.h	2009-10-30 09:23:32.937500000 +0800
++++ r446port/src/sat/mtl/Sort.h	2009-12-07 12:51:46.000000000 +0800
+@@ -86,7 +86,7 @@
+ 
+ 
+ template <class T, class LessThan> void sort(vec<T>& v, LessThan lt) {
+-    sort((T*)v, v.size(), lt); }
++    sort(v.getData(), v.size(), lt); }
+ template <class T> void sort(vec<T>& v) {
+     sort(v, LessThan_default<T>()); }
+ 
+diff -Nur stp/src/simplifier/CMakeLists.txt r446port/src/simplifier/CMakeLists.txt
+--- stp/src/simplifier/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/simplifier/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(simplifier, SRCS)
+diff -Nur stp/src/STPManager/CMakeLists.txt r446port/src/STPManager/CMakeLists.txt
+--- stp/src/STPManager/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/STPManager/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(STPManager, SRCS)
+diff -Nur stp/src/STPManager/STPManager.h r446port/src/STPManager/STPManager.h
+--- stp/src/STPManager/STPManager.h	2009-11-18 10:56:12.484375000 +0800
++++ r446port/src/STPManager/STPManager.h	2009-12-07 12:51:46.000000000 +0800
+@@ -13,6 +13,9 @@
+ #include "UserDefinedFlags.h"
+ #include "../AST/AST.h"
+ #include "../parser/let-funcs.h"
++#if defined(_MSC_VER)
++  #include <compdep.h>
++#endif
+ 
+ namespace BEEV
+ {
+diff -Nur stp/src/to-sat/BitBlast.cpp r446port/src/to-sat/BitBlast.cpp
+--- stp/src/to-sat/BitBlast.cpp	2009-11-11 15:22:27.213107900 +0800
++++ r446port/src/to-sat/BitBlast.cpp	2009-12-07 12:51:46.000000000 +0800
+@@ -1019,14 +1019,12 @@
+     // left shift x (destructively) within width.  loop backwards so
+     // that copy to self works correctly. (DON'T use STL insert!)
+     ASTVec::iterator xbeg = x.begin();
+-    ASTVec::iterator xit = x.end() - 1;
+-    for (; xit >= xbeg; xit--)
+-      {
+-        if (xit - shift >= xbeg)
+-          *xit = *(xit - shift);
+-        else
+-          *xit = ASTFalse; // new LSB is zero.
+-      }
++    ASTVec::iterator xend = x.end();
++    ASTVec::iterator semi_end = xbeg + shift;
++    if ( semi_end < xend ) {
++      copy_backward(xbeg, xend - shift, x.end());
++    }
++    fill(xbeg, min(semi_end, x.end()), ASTFalse);
+   }
+ 
+   // Right shift within fixed field inserting zeros at MSB.
+diff -Nur stp/src/to-sat/CMakeLists.txt r446port/src/to-sat/CMakeLists.txt
+--- stp/src/to-sat/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ r446port/src/to-sat/CMakeLists.txt	2009-12-07 12:51:46.000000000 +0800
+@@ -0,0 +1,2 @@
++file(GLOB SRCS *.h *.c*)
++add_stp_library(to-sat, SRCS)
