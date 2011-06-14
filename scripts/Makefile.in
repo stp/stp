@@ -190,6 +190,12 @@ regresssmt: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)smt-test/
 regresssmt: REGRESS_LOG = `date +%Y-%m-%d`"-regress-smt.log"
 regresssmt: baseTest
 
+.PHONY: regresscloud9
+regresscloud9: TO_RUN=scripts/run_tests.pl --td=$(TEST_PREFIX)cloud9/
+regresscloud9: REGRESS_LOG = `date +%Y-%m-%d`"-regress-cloud9.log"
+regresscloud9: baseTest
+
+
 .PHONY: regresscapi
 regresscapi: TO_RUN=$(MAKE) -C tests/c-api-tests
 regresscapi: REGRESS_LOG = `date +%Y-%m-%d`"-regress-c-api.log"
@@ -209,6 +215,7 @@ regresscvcbasic: baseTest
 regresssmtbasic: TO_RUN=scripts/run_tests.pl --td=tests/sample-smt-tests
 regresssmtbasic: REGRESS_LOG = `date +%Y-%m-%d`"-regress-smtbasic.log"
 regresssmtbasic: baseTest
+
 
 
 # The higher the level, the more tests are run (3 = all)
