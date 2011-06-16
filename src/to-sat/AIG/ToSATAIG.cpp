@@ -8,7 +8,15 @@ namespace BEEV
     bool
     ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef)
     {
-      if (cb != NULL  && cb->isUnsatisfiable())
+    	// Shortcut if known. This avoids calling the setup of the CNF generator.
+    	// setup takes about 15ms.
+       if (input == ASTFalse && !needAbsRef)
+    		return false;
+
+       if (input == ASTTrue && !needAbsRef)
+    		return true;
+
+     if (cb != NULL  && cb->isUnsatisfiable())
         return false;
 
       if (simp == NULL)
