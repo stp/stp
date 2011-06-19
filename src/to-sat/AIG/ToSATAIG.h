@@ -34,20 +34,15 @@ namespace BEEV
 
 	int count;
 	bool first;
-	BitBlaster<BBNodeAIG, BBNodeManagerAIG> *bb;
 	int CNFFileNameCounter;
-	BBNodeManagerAIG mgr;
-	Simplifier *simp;
 
-    ToCNFAIG toCNF;
+	ToCNFAIG toCNF;
 
     void init()
     {
         count = 0;
         first = true;
-        bb = NULL;
         CNFFileNameCounter =0;
-        simp = NULL;
     }
 
   public:
@@ -56,7 +51,6 @@ namespace BEEV
     {
     	return cb == NULL;
     }
-
 
     ToSATAIG(STPMgr * bm) :
       ToSATBase(bm), toCNF(bm->UserFlags)

@@ -49,9 +49,56 @@ namespace BEEV
     if (bm->UserFlags.stats_flag)
       printArrayStats();
 
-    runTimes->stop(RunTimes::Transforming);
 
-   return result;
+    // This establishes equalities between every indexes, and a fresh variable.
+    if (bm->UserFlags.arrayread_refinement_flag)
+    {
+		ASTNodeMap replaced;
+
+		ASTVec equalsNodes;
+		for (ArrayTransformer::ArrType::iterator
+			   iset = arrayToIndexToRead.begin(),
+			   iset_end = arrayToIndexToRead.end();
+			 iset != iset_end; iset++)
+		  {
+				const ASTNode& ArrName = iset->first;
+				map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
+
+				for (map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =mapper.begin() ; it != mapper.end();it++)
+				{
+					const ASTNode& the_index = it->first;
+
+					if (the_index.isConstant() || the_index.GetKind() == SYMBOL)
+					{
+						it->second.index_symbol = the_index;
+					}
+					else if (replaced.find(the_index) != replaced.end()) // Already associated with a variable.
+					{
+						it->second.index_symbol = replaced.find(the_index)->second;
+					}
+					else
+					{
+						ASTNode newV = bm->CreateFreshVariable(0,the_index.GetValueWidth(), "STP__IndexVariables");
+						equalsNodes.push_back(nf->CreateNode(EQ, the_index, newV));
+						replaced.insert(make_pair(the_index,newV));
+						it->second.index_symbol = newV;
+					}
+					assert(it->second.index_symbol.GetValueWidth() == the_index.GetValueWidth());
+				}
+		  }
+
+		runTimes->stop(RunTimes::Transforming);
+
+		if (equalsNodes.size() > 0)
+			return nf->CreateNode(AND, result, equalsNodes);
+		else
+			return result;
+    }
+    else
+    {
+    	runTimes->stop(RunTimes::Transforming);
+    	return result;
+    }
   }
 
   //Translates signed BVDIV,BVMOD and BVREM into unsigned variety

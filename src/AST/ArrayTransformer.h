@@ -35,8 +35,9 @@ namespace BEEV
           symbol = _symbol;
         }
 
-        ASTNode ite;  // if not using refinement this will be the ITE for the read. Otherwise == symbol.
-        ASTNode symbol; // each read is allocated a distinct fresh variable.
+        ASTNode ite;     // if not using refinement this will be the ITE for the read. Otherwise == symbol.
+        ASTNode symbol;  // each read is allocated a distinct fresh variable.
+        ASTNode index_symbol;  // A symbol constrained to equal the index expression.
       };
 
       // MAP: This maps from arrays to their indexes.
@@ -57,7 +58,7 @@ namespace BEEV
     /****************************************************************
      * Private Typedefs and Data                                    *
      ****************************************************************/
-    
+
     // Handy defs
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
 

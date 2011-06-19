@@ -1,9 +1,8 @@
 #include "ToCNFAIG.h"
 
+
 namespace BEEV
 {
-
-
 
 // Can it only add in the new variables somehow??
 void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData , ToSATBase::ASTNodeToSATVar& nodeToVar)
@@ -29,21 +28,6 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData , ToSATBase::ASTNod
 		}
 		nodeToVar.insert(make_pair(n, v));
 	}
-
-}
-
-
-// When we need abstraction refinement.
-void ToCNFAIG::toCNF_renter(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-		ToSATBase::ASTNodeToSATVar& nodeToVar, BBNodeManagerAIG& mgr) {
-	assert(priorCnfData != NULL);
-	Aig_ObjCreatePo(mgr.aigMgr, top.n); // A new PO.
-
-	cnfData = Cnf_DeriveSimple_Additional(mgr.aigMgr, priorCnfData);
-	Cnf_DataFree(priorCnfData);
-	priorCnfData = cnfData;
-
-	addVariables( mgr,  cnfData , nodeToVar);
 }
 
 void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
@@ -97,16 +81,17 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
 			if (nodeCount == mgr.aigMgr->nObjs[AIG_OBJ_AND])
 				break;
+
 		}
 	}
-	if (!needAbsRef &&  !uf.isSet("simple-cnf","0")) {
+	if (!uf.isSet("simple-cnf","0")) {
 		cnfData = Cnf_Derive(mgr.aigMgr, 0);
 		if (uf.stats_flag)
 		  cerr << "advanced CNF" << endl;
 	} else {
 		cnfData = Cnf_DeriveSimple(mgr.aigMgr, 0);
                 if (uf.stats_flag)
-                  cerr << "simple CNF" << endl;
+                	cerr << "simple CNF" << endl;
 
 	}
 

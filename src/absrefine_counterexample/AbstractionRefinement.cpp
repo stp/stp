@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -18,7 +18,136 @@ namespace BEEV
   /******************************************************************
    * Abstraction Refinement related functions
    ******************************************************************/  
-  
+
+enum Polarity {LEFT_ONLY, RIGHT_ONLY, BOTH};
+
+void getSatVariables(const ASTNode & a, vector<unsigned> & v_a, SATSolver & SatSolver, ToSATBase::ASTNodeToSATVar & satVar)
+ {
+	ToSATBase::ASTNodeToSATVar::iterator it = satVar.find(a);
+	if (it != satVar.end())
+		v_a = it->second;
+	else
+		if (!a.isConstant())
+		{
+			assert(a.GetKind() == SYMBOL);
+			// It was ommitted from the initial problem, so assign it freshly.
+			for(int i = 0;i < a.GetValueWidth();i++)
+				v_a.push_back(SatSolver.newVar());
+			satVar.insert(make_pair(a,v_a));
+		}
+ }
+
+
+// This function adds the clauses to constrain (a=b)->c.
+// Because it's used to create array axionms (a=b)-> (c=d), it can be
+// used to only add one of the polarities..
+Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar, Polarity polary= BOTH)
+{
+	const int width = a.GetValueWidth();
+	assert(width == b.GetValueWidth());
+	assert(!a.isConstant() || !b.isConstant());
+
+	vector<unsigned > v_a;
+	vector<unsigned > v_b;
+
+	getSatVariables(a,v_a,SatSolver,satVar);
+	getSatVariables(b,v_b,SatSolver,satVar);
+
+	// The only time v_a or v_b will be empty is if a resp. b is a constant.
+
+	if (v_a.size() == width && v_b.size() == width)
+	{
+		SATSolver::vec_literals all;
+		const int result = SatSolver.newVar();
+
+		for (int i=0; i < width; i++)
+		{
+			SATSolver::vec_literals s;
+			int nv0 = SatSolver.newVar();
+
+			if (polary != RIGHT_ONLY)
+			{
+				s.push(SATSolver::mkLit(v_a[i], true));
+				s.push(SATSolver::mkLit(v_b[i], true));
+				s.push(SATSolver::mkLit(nv0, false));
+				SatSolver.addClause(s);
+				s.clear();
+
+				s.push(SATSolver::mkLit(v_a[i], false));
+				s.push(SATSolver::mkLit(v_b[i], false));
+				s.push(SATSolver::mkLit(nv0, false));
+				SatSolver.addClause(s);
+				s.clear();
+			}
+
+			if (polary != LEFT_ONLY)
+			{
+				s.push(SATSolver::mkLit(v_a[i], true));
+				s.push(SATSolver::mkLit(v_b[i], false));
+				s.push(SATSolver::mkLit(nv0, true));
+				SatSolver.addClause(s);
+				s.clear();
+
+				s.push(SATSolver::mkLit(v_a[i], false));
+				s.push(SATSolver::mkLit(v_b[i], true));
+				s.push(SATSolver::mkLit(nv0, true));
+				SatSolver.addClause(s);
+				s.clear();
+
+				// result -> nv0 .. new.
+				s.push(SATSolver::mkLit(result, true));
+				s.push(SATSolver::mkLit(nv0, false));
+				SatSolver.addClause(s);
+				s.clear();
+			}
+
+			all.push(SATSolver::mkLit(nv0, true));
+		}
+		all.push(SATSolver::mkLit(result, false));
+
+		SatSolver.addClause(all);
+		return result;
+	}
+	else if (v_a.size() == 0 ^ v_b.size() ==0)
+	{
+		ASTNode constant = a.isConstant()? a:b;
+		vector<unsigned > vec  = v_a.size() == 0? v_b : v_a;
+		assert(constant.isConstant());
+		assert(vec.size() == width);
+
+		SATSolver::vec_literals all;
+		const int result = SatSolver.newVar();
+		all.push(SATSolver::mkLit(result, false));
+
+		CBV v = constant.GetBVConst();
+		for (int i=0; i < width; i++)
+		{
+			if (CONSTANTBV::BitVector_bit_test(v,i))
+				all.push(SATSolver::mkLit(vec[i], true));
+			else
+				all.push(SATSolver::mkLit(vec[i], false));
+
+			if (polary != LEFT_ONLY)
+			{
+				SATSolver::vec_literals p;
+				p.push(SATSolver::mkLit(result, true));
+				if (CONSTANTBV::BitVector_bit_test(v,i))
+					p.push(SATSolver::mkLit(vec[i], false));
+				else
+					p.push(SATSolver::mkLit(vec[i], true));
+
+				SatSolver.addClause(p);
+			}
+
+		}
+		SatSolver.addClause(all);
+		return result;
+	}else
+		FatalError("Unexpected, both must be constants..");
+
+}
+
+
   /******************************************************************
    * ARRAY READ ABSTRACTION REFINEMENT
    *   
@@ -38,6 +167,32 @@ namespace BEEV
    * it compares with other approaches (e.g., one false axiom at a
    * time or all the false axioms each time).
    *****************************************************************/
+  struct AxiomToBe
+  {
+	  AxiomToBe(ASTNode i0, ASTNode i1, ASTNode v0, ASTNode v1)
+	  {
+		  index0 = i0;
+		  index1 = i1;
+		  value0 = v0;
+		  value1 = v1;
+	  }
+	  ASTNode index0, index1;
+	  ASTNode value0, value1;
+ };
+
+  void applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar & satVar, vector<AxiomToBe>& toBe, SATSolver & SatSolver)
+   {
+        for(int i = 0;i < toBe.size();i++){
+           Minisat::Var a = getEquals(SatSolver, toBe[i].index0, toBe[i].index1, satVar, LEFT_ONLY);
+           Minisat::Var b = getEquals(SatSolver, toBe[i].value0, toBe[i].value1, satVar, RIGHT_ONLY);
+           SATSolver::vec_literals satSolverClause;
+           satSolverClause.push(SATSolver::mkLit(a, true));
+           satSolverClause.push(SATSolver::mkLit(b, false));
+           SatSolver.addClause(satSolverClause);
+       }
+        toBe.clear();
+   }
+
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
   SATBased_ArrayReadRefinement(SATSolver& SatSolver,
@@ -45,7 +200,8 @@ namespace BEEV
                                const ASTNode& original_input,
                                ToSATBase* tosat) {
 
-	ASTVec FalseAxiomsVec, RemainingAxiomsVec;
+	vector<AxiomToBe> RemainingAxiomsVec;
+	vector<AxiomToBe> FalseAxiomsVec;
 
 	// NB. Because we stop this timer before entering the SAT solver, the count
 	// it produces isn't the number of times Array Read Refinement was entered.
@@ -81,6 +237,8 @@ namespace BEEV
     	vector<ASTNode> concreteValues;
     	concreteValues.reserve(mapper.size());
 
+    	ASTVec index_symbols;
+
     	for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =mapper.begin() ; it != mapper.end();it++)
     	{
     	    const ASTNode& the_index = it->first;
@@ -88,6 +246,8 @@ namespace BEEV
 
             ASTNode arrsym = it->second.symbol;
             read_node_symbols.push_back(arrsym);
+
+            index_symbols.push_back(it->second.index_symbol);
 
 			assert(read_node_symbols[0].GetValueWidth() == arrsym.GetValueWidth());
 			assert(listOfIndices[0].GetValueWidth() == the_index.GetValueWidth());
@@ -115,68 +275,49 @@ namespace BEEV
             	// If the index is a constant, and different, then there's no reason to check.
             	// Sometimes we get the same index stored multiple times in the array. Not sure why...
             	if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
-            	{
             		continue;
-            	}
 
-            	//prepare for SAT LOOP
-                //first construct the antecedent for the LA axiom
-                ASTNode eqOfIndices = 
-                  (exprless(index_i, index_j)) ? 
-                  simp->CreateSimplifiedEQ(index_i, index_j) : 
-                  simp->CreateSimplifiedEQ(index_j, index_i);
+                if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
+                	continue; // shortcut.
 
-                if (ASTFalse == eqOfIndices)
-                	continue; // shortuct.
+            	AxiomToBe o (index_symbols[i],index_symbols[j],  read_node_symbols[i], read_node_symbols[j]);
 
-                ASTNode eqOfReads = simp->CreateSimplifiedEQ(read_node_symbols[i], read_node_symbols[j]);
-                //construct appropriate Leibnitz axiom
-                ASTNode LeibnitzAxiom = 
-                  bm->CreateNode(IMPLIES, eqOfIndices, eqOfReads);
                 if (concreteIndexes[i] == concreteIndexes[j] && concreteValues[i] != concreteValues[j])
                   {
-                    FalseAxiomsVec.push_back(LeibnitzAxiom);
-                    //cerr << "index:" << index_i << " " <<  index_j;
-                    //cerr << read_node_symbols[i];
-                    //cerr << read_node_symbols[j];
-                  }
+                	FalseAxiomsVec.push_back(o);
+                	//ToSATBase::ASTNodeToSATVar	& satVar = tosat->SATVar_to_SymbolIndexMap();
+                	//applyAxiomsToSolver(satVar, FalseAxiomsVec, SatSolver);
+                }
                 else
-                  {
-                    RemainingAxiomsVec.push_back(LeibnitzAxiom);
-                  }
+                	RemainingAxiomsVec.push_back(o);
               }
-            if (FalseAxiomsVec.size() > 0)
+            if ( FalseAxiomsVec.size() > 0)
             {
-				ASTNode FalseAxioms =
-				  (FalseAxiomsVec.size() > 1) ?
-				  bm->CreateNode(AND, FalseAxiomsVec) : FalseAxiomsVec[0];
-				bm->ASTNodeStats("adding false readaxioms to SAT: ", FalseAxioms);
-				SOLVER_RETURN_TYPE res2;
+            	ToSATBase::ASTNodeToSATVar	& satVar = tosat->SATVar_to_SymbolIndexMap();
+            	applyAxiomsToSolver(satVar, FalseAxiomsVec, SatSolver);
+
+            	SOLVER_RETURN_TYPE res2;
 				bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
 				res2 =  CallSAT_ResultCheck(SatSolver,
-									  FalseAxioms,
+									  ASTTrue,
 									  original_input,
 									  tosat,
 									  true);
-				FalseAxiomsVec.clear();
 
 				if (SOLVER_UNDECIDED != res2)
-				  {
 					return res2;
-				  }
 				bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
             }
           }
       }
+
     if (RemainingAxiomsVec.size() > 0)
     {
-		ASTNode RemainingAxioms =
-				(RemainingAxiomsVec.size() > 1) ? bm->CreateNode(AND,
-						RemainingAxiomsVec) : RemainingAxiomsVec[0];
-		bm->ASTNodeStats("adding remaining readaxioms to SAT: ",
-				RemainingAxioms);
+    	ToSATBase::ASTNodeToSATVar	& satVar = tosat->SATVar_to_SymbolIndexMap();
+    	applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
+
 		bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-		return CallSAT_ResultCheck(SatSolver, RemainingAxioms, original_input,
+		return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
 				tosat,true);
 	}
 

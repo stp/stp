@@ -9,8 +9,7 @@
 
 namespace BEEV {
 
-class ToCNFAIG {
-	Cnf_Dat_t* priorCnfData;
+class ToCNFAIG{
 
     // no copy. no assignment.
 	ToCNFAIG&  operator = (const ToCNFAIG& other);
@@ -18,33 +17,19 @@ class ToCNFAIG {
 
 	UserDefinedFlags& uf;
 
-
 public:
 	ToCNFAIG(UserDefinedFlags& _uf):
 		uf(_uf)
 	{
-		priorCnfData = NULL;
 	}
 
-	~ToCNFAIG() {
-		if (NULL != priorCnfData)
-			Cnf_DataFree(priorCnfData);
+	~ToCNFAIG()
+	{
 	}
 
 	void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 			ToSATBase::ASTNodeToSATVar& nodeToVar,
 			bool needAbsRef,  BBNodeManagerAIG& _mgr);
-
-	// assumes the above function was called first.
-	void toCNF_renter(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-			ToSATBase::ASTNodeToSATVar& nodeToVar, BBNodeManagerAIG& _mgr);
-
-	// The piror must be set before toCNF_reenter is called.
-	void setPrior(Cnf_Dat_t* prior)
-	{
-		priorCnfData = prior;
-	}
-
 };
 
 }

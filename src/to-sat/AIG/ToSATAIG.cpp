@@ -8,69 +8,54 @@ namespace BEEV
     bool
     ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef)
     {
-    	// Shortcut if known. This avoids calling the setup of the CNF generator.
-    	// setup takes about 15ms.
-       if (input == ASTFalse && !needAbsRef)
-    		return false;
+       if (cb != NULL  && cb->isUnsatisfiable())
+          return false;
 
-       if (input == ASTTrue && !needAbsRef)
-    		return true;
+       if (!first)
+       {
+    	   assert(input == ASTTrue);
+    	   bm->GetRunTimes()->start(RunTimes::Solving);
+           satSolver.solve();
+           bm->GetRunTimes()->stop(RunTimes::Solving);
 
-     if (cb != NULL  && cb->isUnsatisfiable())
-        return false;
+           if(bm->UserFlags.stats_flag)
+             satSolver.printStats();
 
-      if (simp == NULL)
-    	  simp = new Simplifier(bm);
+           return satSolver.okay();
+       }
 
-      if (bb== NULL)
-    	  bb =  new BitBlaster<BBNodeAIG, BBNodeManagerAIG>(&mgr,cb,simp,bm->defaultNodeFactory,&bm->UserFlags);
+   	// Shortcut if known. This avoids calling the setup of the CNF generator.
+   	// setup of the CNF generator is expensive. NB, these checks have to occur
+    // after calling the sat solver (if it's not the first time.)
+      if (input == ASTFalse )
+   		return false;
+
+      if (input == ASTTrue  )
+   		return true;
+
+  	  Simplifier simp(bm);
+
+  	  BBNodeManagerAIG mgr;
+  	  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb,&simp,bm->defaultNodeFactory,&bm->UserFlags);
 
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
-      BBNodeAIG BBFormula = bb->BBForm(input);
+      BBNodeAIG BBFormula = bb.BBForm(input);
       bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
-      // It's not incremental.
       delete cb;
       cb = NULL;
-      bb->cb = NULL;
+      bb.cb = NULL;
 
-      if (!needAbsRef)
-      {
-    	  delete simp;
-    	  simp = NULL;
+   	  assert(satSolver.nVars() ==0);
 
-    	  delete bb;
-    	  bb = NULL;
-
-      }
-
-      if (first)
-    	  assert(satSolver.nVars() ==0);
-
-      // Oddly the substitution map, which is necessary to output a model is kept in the simplifier.
-      // The bitblaster should never enter anything into the solver map.
-      //assert(simp.Return_SolverMap()->size() ==0);
-
+   	  bm->GetRunTimes()->start(RunTimes::CNFConversion);
       Cnf_Dat_t* cnfData = NULL;
-
-      bm->GetRunTimes()->start(RunTimes::CNFConversion);
-      if (first)
-    	  {
-    	  toCNF.toCNF(BBFormula, cnfData, nodeToSATVar,needAbsRef,mgr);
-    	  }
-      else
-    	  {
-    	  assert(needAbsRef);
-    	  toCNF.toCNF_renter(BBFormula, cnfData, nodeToSATVar,mgr);
-    	  }
+	  toCNF.toCNF(BBFormula, cnfData, nodeToSATVar,needAbsRef,mgr);
       bm->GetRunTimes()->stop(RunTimes::CNFConversion);
 
-      if (!needAbsRef)
-      {
-    	  // Free the memory in the AIGs.
-    	  BBFormula = BBNodeAIG(); // null node
-    	  mgr.stop();
-      }
+	  // Free the memory in the AIGs.
+	  BBFormula = BBNodeAIG(); // null node
+	  mgr.stop();
 
       if (bm->UserFlags.output_CNF_flag)
       {
@@ -100,7 +85,6 @@ namespace BEEV
       for (int i = 0; i < cnfData->nVars - satV ; i++)
         satSolver.newVar();
 
-
       SATSolver::vec_literals satSolverClause;
       for (int i = 0; i < cnfData->nClauses; i++)
         {
@@ -123,17 +107,9 @@ namespace BEEV
       if (bm->UserFlags.output_bench_flag)
         cerr << "Converting to CNF via ABC's AIG package can't yet print out bench format" << endl;
 
-      if (!needAbsRef)
-      {
-    	  Cnf_ClearMemory();
-    	  Cnf_DataFree(cnfData);
-    	  cnfData = NULL;
-      }
-      else
-      {
-    	  toCNF.setPrior(cnfData);
-      }
-
+	  Cnf_ClearMemory();
+	  Cnf_DataFree(cnfData);
+	  cnfData = NULL;
 
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
@@ -147,10 +123,6 @@ namespace BEEV
 
     ToSATAIG::~ToSATAIG()
     {
-    	delete bb;
-    	delete simp;
     	ClearAllTables();
     }
-
-
 }
