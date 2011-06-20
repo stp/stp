@@ -193,6 +193,11 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
         toBe.clear();
    }
 
+  bool sortBySize(const pair < ASTNode, ArrayTransformer::arrTypeMap >& a, const pair < ASTNode, ArrayTransformer::arrTypeMap >& b)
+  {
+	  return a.second.size() < b.second.size();
+  }
+
   SOLVER_RETURN_TYPE 
   AbsRefine_CounterExample::
   SATBased_ArrayReadRefinement(SATSolver& SatSolver,
@@ -207,19 +212,25 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 	// it produces isn't the number of times Array Read Refinement was entered.
 	bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
 
-    //in these loops we try to construct Leibnitz axioms and add it to
+	/// Check the arrays with the least indexes first.
+	vector < pair < ASTNode, ArrayTransformer::arrTypeMap > > arrayToIndex ;
+	arrayToIndex.insert(arrayToIndex.begin(),ArrayTransform->arrayToIndexToRead.begin(), ArrayTransform->arrayToIndexToRead.end() );
+	sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
+
+    //In these loops we try to construct Leibnitz axioms and add it to
     //the solve(). We add only those axioms that are false in the
     //current counterexample. we keep adding the axioms until there
     //are no more axioms to add
     //
     //for each array, fetch its list of indices seen so far
-    for (ArrayTransformer::ArrType::const_iterator
-           iset = ArrayTransform->arrayToIndexToRead.begin(),
-           iset_end = ArrayTransform->arrayToIndexToRead.end();
+    for (vector < pair < ASTNode, ArrayTransformer::arrTypeMap > >::const_iterator
+    	 iset = arrayToIndex.begin(),
+         iset_end = arrayToIndex.end();
          iset != iset_end; iset++)
       {
     	const ASTNode& ArrName = iset->first;
     	const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
+    	cerr << "array Size" << mapper.size() << endl;
 
         vector<ASTNode> listOfIndices;
         listOfIndices.reserve(mapper.size());
