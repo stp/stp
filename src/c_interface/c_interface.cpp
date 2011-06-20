@@ -51,8 +51,6 @@ void vc_setFlags(VC vc, char c, int param_value) {
   helpstring +=  
     "-d  : check counterexample\n";
   helpstring +=  
-    "-e  : expand finite-for construct\n";
-  helpstring +=  
     "-f  : number of abstraction-refinement loops\n";
   helpstring +=  
     "-h  : help\n";
@@ -83,13 +81,6 @@ void vc_setFlags(VC vc, char c, int param_value) {
   case 'd':
     b->UserFlags.construct_counterexample_flag = true;
     b->UserFlags.check_counterexample_flag = true;
-    break;
-  case 'e':
-    b->UserFlags.expand_finitefor_flag = true;
-    break;
-  case 'f':
-    b->UserFlags.num_absrefine_flag = true;
-    b->UserFlags.num_absrefine = param_value;
     break;
   case 'h':
     fprintf(stderr,BEEV::usage,BEEV::prog);

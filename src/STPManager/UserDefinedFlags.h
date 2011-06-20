@@ -57,14 +57,6 @@ namespace BEEV
     bool print_counterexample_flag;
     bool print_binary_flag;
     
-    //Expands out the finite for-construct completely
-    bool expand_finitefor_flag;
-    
-    //Determines the number of abstraction-refinement loop count for the
-    //for-construct
-    bool num_absrefine_flag;
-    int num_absrefine;
-    
     //if this option is true then print the way dawson wants using a
     //different printer. do not use this printer.
     bool print_arrayval_declaredorder_flag;
@@ -213,14 +205,6 @@ namespace BEEV
       output_CNF_flag = false;
       output_bench_flag = false;
 
-      //Expands out the finite for-construct completely
-      expand_finitefor_flag = false;
-      
-      //Determines the number of abstraction-refinement loop count for the
-      //for-construct
-      num_absrefine_flag = false;
-      num_absrefine = 0;
-            
       //if this option is true then print the way dawson wants using a
       //different printer. do not use this printer.
       print_arrayval_declaredorder_flag = false;

@@ -69,16 +69,8 @@ namespace BEEV {
       }
     
 	SOLVER_RETURN_TYPE result;
-    if(bm->UserFlags.num_absrefine_flag)
-      {
-     result =  UserGuided_AbsRefine(NewSolver,
-				    original_input);
-      }
-    else 
-      {
-	result = TopLevelSTPAux(NewSolver,
+    result = TopLevelSTPAux(NewSolver,
 			      original_input, original_input);
-      }
 
     delete newS;
 
@@ -531,18 +523,20 @@ namespace BEEV {
         return res;
       }
 
-    if (!bm->UserFlags.num_absrefine_flag)
+//    if (!bm->UserFlags.num_absrefine_flag)
       {
         FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
           "either a divide by zero in the input or a bug in STP");
         //bogus return to make the compiler shut up
         return SOLVER_ERROR;
       }
-    else
+  //  else
       {
-        return res;
+       // return res;
       }
   } //End of TopLevelSTPAux
+
+#if 0
 
   //UserGuided abstraction refinement
   SOLVER_RETURN_TYPE
@@ -620,4 +614,6 @@ namespace BEEV {
 	       "either a divide by zero in the input or a bug in STP");    
     return SOLVER_ERROR;
   } //End of UserGuided_AbsRefine()
+#endif
+
 }; //end of namespace

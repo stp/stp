@@ -63,7 +63,6 @@
 %token  AND_TOK                 "AND"
 %token  OR_TOK                  "OR"
 %token  NOT_TOK                 "NOT"
-%token  FOR_TOK                 "FOR"
 %token  EXCEPT_TOK              "EXCEPT"
 %token  XOR_TOK                 "XOR"
 %token  NAND_TOK                "NAND"
@@ -486,69 +485,6 @@ Formula         :     '(' Formula ')'
   $$ = n;
   delete $1;
   delete $3;
-}
-|      FOR_TOK '(' ForDecl ';' BVCONST_TOK ';' BVCONST_TOK ';' BVCONST_TOK ';' EXCEPT_TOK Formula ')' '{' Formula '}'
-{
-  //Allows a compact representation of
-  //parameterized set of formulas (bounded
-  //universal quantification)
-  //
-  //parameter name (a variable)
-  //
-  //initial value (BVCONST)
-  //
-  //limit value (BVCONST)
-  //
-  //increment value (BVCONST)
-  //
-  //formula (it can be a nested forloop)                         
-                           
-  ASTVec vec;
-  vec.push_back(*$3);
-  vec.push_back(*$5);
-  vec.push_back(*$7);
-  vec.push_back(*$9);
-  vec.push_back(*$12);
-  vec.push_back(*$15);
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(FOR,vec));
-  $$ = n;
-  delete $3;
-  delete $5;
-  delete $7;
-  delete $9;
-  delete $12;                  
-  delete $15;
-}
-|      FOR_TOK '(' ForDecl ';' BVCONST_TOK ';' BVCONST_TOK ';' BVCONST_TOK ')' '{' Formula '}'
-{
-  //Allows a compact representation of
-  //parameterized set of formulas (bounded
-  //universal quantification)
-  //
-  //parameter name (a variable)
-  //
-  //initial value (BVCONST)
-  //
-  //limit value (BVCONST)
-  //
-  //increment value (BVCONST)
-  //
-  //formula (it can be a nested forloop)                         
-                           
-  ASTVec vec;
-  vec.push_back(*$3);
-  vec.push_back(*$5);
-  vec.push_back(*$7);
-  vec.push_back(*$9);
-  vec.push_back(parserInterface->CreateNode(FALSE));
-  vec.push_back(*$12);
-  ASTNode * n = new ASTNode(parserInterface->nf->CreateNode(FOR,vec));
-  $$ = n;
-  delete $3;
-  delete $5;
-  delete $7;
-  delete $9;
-  delete $12;
 }
 |      NOT_TOK Formula 
 {

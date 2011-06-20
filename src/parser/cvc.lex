@@ -58,7 +58,6 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "NAND"		 { return NAND_TOK;}
 "NOR"		 { return NOR_TOK;}
 "NOT"		 { return NOT_TOK; }
-"FOR"		 { return FOR_TOK; }
 "EXCEPT"	 { return EXCEPT_TOK; }
 "OR"		 { return OR_TOK; }
 "/="		 { return NEQ_TOK; }

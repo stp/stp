@@ -315,7 +315,6 @@ namespace BEEV
     ASTVec ca = a.GetChildren();
     if (!(IMPLIES == kind || 
           ITE == kind     || 
-          FOR == kind     ||
           PARAMBOOL==kind ||
           isAtomic(kind)))
       {
@@ -382,9 +381,6 @@ namespace BEEV
         break;
       case ITE:
         output = SimplifyIteFormula(a, pushNeg, VarConstMap);
-        break;
-      case FOR:
-        output = SimplifyForFormula(a, pushNeg, VarConstMap);
         break;
       default:
         //kind can be EQ,NEQ,BVLT,BVLE,... or a propositional variable

@@ -541,10 +541,6 @@ namespace BEEV
         output = bm->NewParameterized_BooleanVar(form[0],form[1]);
         output = ComputeFormulaUsingModel(output);
         break;
-      case FOR:
-        //output = Check_FiniteLoop_UsingModel(form);
-        output = ASTTrue;
-        break;
       default:
           cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "

@@ -202,7 +202,6 @@ namespace BEEV
       ASTUndefined = CreateNode(UNDEFINED);
       runTimes     = new RunTimes();
       _current_query = ASTUndefined;
-      UserFlags.num_absrefine = 2;
       CreateBVConstVal = NULL;
     }    
     

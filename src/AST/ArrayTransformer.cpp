@@ -377,13 +377,6 @@ namespace BEEV
           result = nf->CreateNode(k, vec);
           break;
         }
-      case FOR:
-        {
-          //Insert in a global list of FOR constructs. Return TRUE now
-          //GlobalList_Of_FiniteLoops.push_back(simpleForm);
-          return ASTTrue;
-          break;
-        }
       case PARAMBOOL:
         {
           //If the parameteric boolean variable is of the form

@@ -409,9 +409,6 @@ bool containsArrayOps(const ASTNode&n)
             if (3 != n.Degree())
               FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
             break;
-          case FOR:
-            //FIXME: Todo
-            break;
           default:
             FatalError("BVTypeCheck: Unrecognized kind: ");
             break;

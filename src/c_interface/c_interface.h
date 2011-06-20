@@ -396,7 +396,6 @@ extern "C" {
       XOR,
       IFF,
       IMPLIES,
-      FOR,
       PARAMBOOL,
       READ,
       WRITE,

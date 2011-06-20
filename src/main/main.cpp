@@ -338,13 +338,6 @@ int main(int argc, char ** argv) {
               bm->UserFlags.construct_counterexample_flag = true;
               bm->UserFlags.check_counterexample_flag = true;
               break;
-            case 'e':
-              bm->UserFlags.expand_finitefor_flag = true;
-              break;
-            case 'f':
-              bm->UserFlags.num_absrefine_flag = true;
-              bm->UserFlags.num_absrefine = atoi(argv[++i]);
-              break;            
             case 'g':
               signal(SIGVTALRM, handle_time_out);
               timeout.it_interval.tv_usec = 0;
