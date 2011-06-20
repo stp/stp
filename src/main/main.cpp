@@ -138,10 +138,6 @@ int main(int argc, char ** argv) {
 
   helpstring +=  
     "--exit-after-CNF       : exit after the CNF has been generated\n";
-  helpstring +=
-    "-e                     : expand finite-for construct\n";
-  helpstring +=  
-    "-f                     : number of abstraction-refinement loops\n";
   helpstring +=  
     "-g                     : timeout (seconds until STP gives up)\n";
   helpstring +=  
