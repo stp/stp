@@ -178,18 +178,32 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 	  }
 	  ASTNode index0, index1;
 	  ASTNode value0, value1;
+
+	  int numberOfConstants() const
+	  {
+		  return ((index0.isConstant()? 1:0) +
+				  (index1.isConstant()? 1:0) +
+				  (index0.isConstant()? 1:0) +
+				  (index1.isConstant()? 1:0) );
+	  }
+
  };
 
-  void applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar & satVar, vector<AxiomToBe>& toBe, SATSolver & SatSolver)
+  void applyAxiomToSAT(SATSolver & SatSolver, AxiomToBe& toBe,  ToSATBase::ASTNodeToSATVar & satVar)
    {
-        for(int i = 0;i < toBe.size();i++){
-           Minisat::Var a = getEquals(SatSolver, toBe[i].index0, toBe[i].index1, satVar, LEFT_ONLY);
-           Minisat::Var b = getEquals(SatSolver, toBe[i].value0, toBe[i].value1, satVar, RIGHT_ONLY);
+        Minisat::Var a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar, LEFT_ONLY);
+        Minisat::Var b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar, RIGHT_ONLY);
            SATSolver::vec_literals satSolverClause;
            satSolverClause.push(SATSolver::mkLit(a, true));
            satSolverClause.push(SATSolver::mkLit(b, false));
            SatSolver.addClause(satSolverClause);
        }
+
+    void applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar & satVar, vector<AxiomToBe> & toBe, SATSolver & SatSolver)
+    {
+        for(int i = 0;i < toBe.size();i++){
+            applyAxiomToSAT(SatSolver, toBe[i], satVar);
+        }
         toBe.clear();
    }
 
@@ -198,26 +212,33 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 	  return a.second.size() < b.second.size();
   }
 
-  SOLVER_RETURN_TYPE 
-  AbsRefine_CounterExample::
-  SATBased_ArrayReadRefinement(SATSolver& SatSolver,
-                               const ASTNode& inputAlreadyInSAT, 
-                               const ASTNode& original_input,
-                               ToSATBase* tosat) {
+    bool sortByIndexConstants(const pair<ASTNode,ArrayTransformer::ArrayRead> & a, const pair<ASTNode,ArrayTransformer::ArrayRead> & b)
+    {
+        int aCount = ((a.second.index_symbol.isConstant()) ? 2 : 0) + (a.second.symbol.isConstant() ? 1 : 0);
+        int bCount = ((b.second.index_symbol.isConstant()) ? 2 : 0) + (b.second.symbol.isConstant() ? 1 : 0);
+        return aCount > bCount;
+    }
 
+    bool sortbyConstants(const AxiomToBe & a, const AxiomToBe & b)
+    {
+        return a.numberOfConstants() > b.numberOfConstants();
+    }
+
+    SOLVER_RETURN_TYPE AbsRefine_CounterExample::SATBased_ArrayReadRefinement(SATSolver & SatSolver, const ASTNode & inputAlreadyInSAT, const ASTNode & original_input, ToSATBase *tosat)
+    {
 	vector<AxiomToBe> RemainingAxiomsVec;
 	vector<AxiomToBe> FalseAxiomsVec;
-
 	// NB. Because we stop this timer before entering the SAT solver, the count
 	// it produces isn't the number of times Array Read Refinement was entered.
 	bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
-
 	/// Check the arrays with the least indexes first.
+
+
 	vector < pair < ASTNode, ArrayTransformer::arrTypeMap > > arrayToIndex ;
 	arrayToIndex.insert(arrayToIndex.begin(),ArrayTransform->arrayToIndexToRead.begin(), ArrayTransform->arrayToIndexToRead.end() );
 	sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
 
-    //In these loops we try to construct Leibnitz axioms and add it to
+	//In these loops we try to construct Leibnitz axioms and add it to
     //the solve(). We add only those axioms that are false in the
     //current counterexample. we keep adding the axioms until there
     //are no more axioms to add
@@ -230,7 +251,6 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
       {
     	const ASTNode& ArrName = iset->first;
     	const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
-    	cerr << "array Size" << mapper.size() << endl;
 
         vector<ASTNode> listOfIndices;
         listOfIndices.reserve(mapper.size());
@@ -250,7 +270,11 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 
     	ASTVec index_symbols;
 
-    	for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =mapper.begin() ; it != mapper.end();it++)
+    	vector < pair < ASTNode, ArrayTransformer::ArrayRead > > indexToRead ;
+    	indexToRead.insert(indexToRead.begin(),mapper.begin(), mapper.end() );
+    	sort(indexToRead.begin(), indexToRead.end(), sortByIndexConstants);
+
+    	for (vector < pair < ASTNode, ArrayTransformer::ArrayRead > >::const_iterator it =indexToRead.begin() ; it != indexToRead.end();it++)
     	{
     	    const ASTNode& the_index = it->first;
             listOfIndices.push_back(the_index);
@@ -321,7 +345,6 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
             }
           }
       }
-
     if (RemainingAxiomsVec.size() > 0)
     {
     	ToSATBase::ASTNodeToSATVar	& satVar = tosat->SATVar_to_SymbolIndexMap();
@@ -332,8 +355,37 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 				tosat,true);
 	}
 
-	bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    // I suspect this is the better way to do it. I.e.
+#if 0
+        if(RemainingAxiomsVec.size() > 0)
+        {
+        	// Add the axioms in order of how many constants there are in each.
 
+            ToSATBase::ASTNodeToSATVar & satVar = tosat->SATVar_to_SymbolIndexMap();
+            sort(RemainingAxiomsVec.begin(), RemainingAxiomsVec.end(), sortbyConstants);
+            int current_position = 0;
+            for(int n_const = 4;n_const >= 0;n_const--){
+                while(current_position < RemainingAxiomsVec.size() && RemainingAxiomsVec[current_position].numberOfConstants() == n_const)
+                {
+                	AxiomToBe & toBe = RemainingAxiomsVec[current_position];
+                	applyAxiomToSAT(SatSolver, toBe,satVar);
+                    current_position++;
+                }
+	bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+                SOLVER_RETURN_TYPE res2;
+                res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+                if(SOLVER_UNDECIDED != res2)
+                    return res2;
+
+                bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+            }
+            assert(current_position == RemainingAxiomsVec.size());
+            RemainingAxiomsVec.clear();
+            assert(SOLVER_UNDECIDED ==  CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true));
+        }
+#endif
+
+        bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
     return SOLVER_UNDECIDED;
   } //end of SATBased_ArrayReadRefinement
 
