@@ -42,9 +42,10 @@ namespace BEEV
     }
 
 
-// This function adds the clauses to constrain (a=b)->c.
+    // This function adds the clauses to constrain that "a" and "b" equal a fresh variable
+    // (which it returns).
     // Because it's used to create array axionms (a=b)-> (c=d), it can be
-    // used to only add one of the polarities..
+    // used to only add one of the two polarities.
     Minisat::Var
     getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
             Polarity polary = BOTH)
@@ -59,7 +60,7 @@ namespace BEEV
         getSatVariables(a, v_a, SatSolver, satVar);
         getSatVariables(b, v_b, SatSolver, satVar);
 
-        // The only time v_a or v_b will be empty is if a resp. b is a constant.
+        // The only time v_a or v_b will be empty is if "a" resp. "b" is a constant.
 
         if (v_a.size() == width && v_b.size() == width)
             {
@@ -69,10 +70,10 @@ namespace BEEV
                 for (int i = 0; i < width; i++)
                     {
                         SATSolver::vec_literals s;
-                        int nv0 = SatSolver.newVar();
 
                         if (polary != RIGHT_ONLY)
                             {
+                                int nv0 = SatSolver.newVar();
                                 s.push(SATSolver::mkLit(v_a[i], true));
                                 s.push(SATSolver::mkLit(v_b[i], true));
                                 s.push(SATSolver::mkLit(nv0, false));
@@ -84,34 +85,30 @@ namespace BEEV
                                 s.push(SATSolver::mkLit(nv0, false));
                                 SatSolver.addClause(s);
                                 s.clear();
+
+                                all.push(SATSolver::mkLit(nv0, true));
                             }
 
                         if (polary != LEFT_ONLY)
                             {
                                 s.push(SATSolver::mkLit(v_a[i], true));
                                 s.push(SATSolver::mkLit(v_b[i], false));
-                                s.push(SATSolver::mkLit(nv0, true));
+                                s.push(SATSolver::mkLit(result, true));
                                 SatSolver.addClause(s);
                                 s.clear();
 
                                 s.push(SATSolver::mkLit(v_a[i], false));
                                 s.push(SATSolver::mkLit(v_b[i], true));
-                                s.push(SATSolver::mkLit(nv0, true));
-                                SatSolver.addClause(s);
-                                s.clear();
-
-                                // result -> nv0 .. new.
                                 s.push(SATSolver::mkLit(result, true));
-                                s.push(SATSolver::mkLit(nv0, false));
                                 SatSolver.addClause(s);
                                 s.clear();
                             }
-
-                        all.push(SATSolver::mkLit(nv0, true));
                     }
-                all.push(SATSolver::mkLit(result, false));
-
-                SatSolver.addClause(all);
+                if (all.size() > 0)
+                {
+                        all.push(SATSolver::mkLit(result, false));
+                        SatSolver.addClause(all);
+                }
                 return result;
             }
         else if (v_a.size() == 0 ^ v_b.size() == 0)
@@ -128,10 +125,13 @@ namespace BEEV
                 CBV v = constant.GetBVConst();
                 for (int i = 0; i < width; i++)
                     {
-                        if (CONSTANTBV::BitVector_bit_test(v, i))
-                            all.push(SATSolver::mkLit(vec[i], true));
-                        else
-                            all.push(SATSolver::mkLit(vec[i], false));
+                        if (polary != RIGHT_ONLY)
+                            {
+                                if (CONSTANTBV::BitVector_bit_test(v, i))
+                                    all.push(SATSolver::mkLit(vec[i], true));
+                                else
+                                    all.push(SATSolver::mkLit(vec[i], false));
+                            }
 
                         if (polary != LEFT_ONLY)
                             {
@@ -146,12 +146,12 @@ namespace BEEV
                             }
 
                     }
-                SatSolver.addClause(all);
+                if (all.size() > 1)
+                    SatSolver.addClause(all);
                 return result;
             }
         else
             FatalError("Unexpected, both must be constants..");
-
     }
 
 
@@ -358,6 +358,7 @@ namespace BEEV
                             }
                     }
             }
+#if 1
         if (RemainingAxiomsVec.size() > 0)
             {
                 ToSATBase::ASTNodeToSATVar & satVar = tosat->SATVar_to_SymbolIndexMap();
@@ -366,9 +367,10 @@ namespace BEEV
                 bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
                 return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
             }
-
-        // I suspect this is the better way to do it. I.e.
-#if 0
+       // For difficult problems, I suspec this is a better way to do it.
+       // However because it can cause an extra three SAT solver calls, it slows down
+       // easy problems.
+#else
         if(RemainingAxiomsVec.size() > 0)
             {
                 // Add the axioms in order of how many constants there are in each.
@@ -378,12 +380,16 @@ namespace BEEV
                 int current_position = 0;
                 for(int n_const = 4;n_const >= 0;n_const--)
                     {
+                        bool added =false;
                         while(current_position < RemainingAxiomsVec.size() && RemainingAxiomsVec[current_position].numberOfConstants() == n_const)
                             {
                                 AxiomToBe & toBe = RemainingAxiomsVec[current_position];
                                 applyAxiomToSAT(SatSolver, toBe,satVar);
                                 current_position++;
+                                added = true;
                             }
+                        if (!added)
+                            continue;
                         bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
                         SOLVER_RETURN_TYPE res2;
                         res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
