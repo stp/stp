@@ -408,7 +408,7 @@ foreach my $testcase (@testcases) {
 
 	    # STP exit value may be masked by the shell pipe.  Fish it
 	    # out from the output
-	    if($str =~ /^(Interrupted|Segmentation|Bus error|Floating point exception|.*exception)/) {
+	    if($str =~ /^(Interrupted|Segmentation|Fatal Error|Bus error|Floating point exception|.*exception)/) {
 		$exitVal = $1;
 	    }
 	    if($str =~ /^(\*|\s)*((parse\s+)?[Ee]rror)/) {
