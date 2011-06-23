@@ -32,8 +32,6 @@ namespace BEEV
     if (!s->simplify())
       return false;
 
-    // Without the eliminate(true) call. Calling solve() multiple times returns the wrong answer.
-	s->eliminate(true);
     return s->solve();
   }
 
@@ -76,4 +74,8 @@ namespace BEEV
     printf("CPU time              : %g s\n", cpu_time);
   }
 
+  void SimplifyingMinisat::setFrozen(Var x)
+  {
+      s->setFrozen(x,true);
+  }
 };

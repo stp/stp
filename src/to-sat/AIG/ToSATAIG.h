@@ -17,6 +17,7 @@
 #include "../BitBlaster.h"
 #include "BBNodeManagerAIG.h"
 #include "ToCNFAIG.h"
+#include "../../AST/ArrayTransformer.h"
 
 namespace BEEV
 {
@@ -27,6 +28,8 @@ namespace BEEV
 
     ASTNodeToSATVar nodeToSATVar;
     simplifier::constantBitP::ConstantBitPropagation* cb;
+
+    ArrayTransformer *arrayTransformer;
 
     // don't assign or copy construct.
     ToSATAIG&  operator = (const ToSATAIG& other);
@@ -43,9 +46,15 @@ namespace BEEV
         count = 0;
         first = true;
         CNFFileNameCounter =0;
+        arrayTransformer = NULL;
     }
 
   public:
+
+    void setArrayTransformer(ArrayTransformer *at)
+    {
+        arrayTransformer = at;
+    }
 
     bool cbIsDestructed()
     {

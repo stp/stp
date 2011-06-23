@@ -55,6 +55,10 @@ namespace BEEV
     virtual lbool false_literal() =0;
     virtual lbool undef_literal() =0;
 
+    // The simplifying solvers shouldn't eliminate index / value variables.
+    virtual void setFrozen(Var x)
+    {}
+
   };
 };
 #endif

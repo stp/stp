@@ -111,6 +111,36 @@ namespace BEEV
 	  Cnf_DataFree(cnfData);
 	  cnfData = NULL;
 
+	  // Minisat doesn't, but simplifying minisat and cryptominsat eliminate variables during their
+	  // simplification phases. The problem is that we may later add clauses in that refer to those
+	  // simplified-away variables. Here we mark them as frozen which prevents them from being removed.
+	  for (ArrayTransformer::ArrType::iterator it = arrayTransformer->arrayToIndexToRead.begin(); it
+                != arrayTransformer->arrayToIndexToRead.end(); it++)
+            {
+                ArrayTransformer::arrTypeMap& atm = it->second;
+
+                for (ArrayTransformer::arrTypeMap::const_iterator it2 = atm.begin(); it2 != atm.end(); it2++)
+                    {
+                        const ArrayTransformer::ArrayRead& ar = it2->second;
+                        ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
+                        if (it != nodeToSATVar.end())
+                            {
+                                vector<unsigned>& v = it->second;
+                                for (int i=0; i < v.size(); i++)
+                                    satSolver.setFrozen(v[i]);
+                            }
+
+                        it = nodeToSATVar.find(ar.symbol);
+                        if (it != nodeToSATVar.end())
+                            {
+                                vector<unsigned>& v = it->second;
+                                for (int i=0; i < v.size(); i++)
+                                    satSolver.setFrozen(v[i]);
+                            }
+                    }
+            }
+
+
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
       bm->GetRunTimes()->stop(RunTimes::Solving);

@@ -36,7 +36,12 @@ namespace BEEV
                 assert(a.GetKind() == SYMBOL);
                 // It was ommitted from the initial problem, so assign it freshly.
                 for (int i = 0; i < a.GetValueWidth(); i++)
-                    v_a.push_back(SatSolver.newVar());
+                    {
+                        SATSolver::Var v = SatSolver.newVar();
+                        // We probably don't want the variable eliminated.
+                        SatSolver.setFrozen(v);
+                        v_a.push_back(v);
+                    }
                 satVar.insert(make_pair(a, v_a));
             }
     }

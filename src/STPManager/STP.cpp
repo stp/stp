@@ -446,9 +446,6 @@ namespace BEEV {
     if (bm->UserFlags.stats_flag)
       simp->printCacheStatus();
 
-    const bool useAIGToCNF = (!arrayops || !bm->UserFlags.arrayread_refinement_flag || bm->UserFlags.solver_to_use
-        == UserDefinedFlags::MINISAT_SOLVER) && !bm->UserFlags.isSet("traditional-cnf", "0");
-
     const bool maybeRefinement = arrayops && bm->UserFlags.arrayread_refinement_flag;
 
     simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
@@ -469,8 +466,9 @@ namespace BEEV {
       }
 
     ToSATAIG toSATAIG(bm, cb);
+    toSATAIG.setArrayTransformer(arrayTransformer);
 
-    ToSATBase* satBase = useAIGToCNF ? ((ToSAT*) &toSATAIG) : tosat;
+    ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : ((ToSAT*) &toSATAIG) ;
 
     // If it doesn't contain array operations, use ABC's CNF generation.
     res = Ctr_Example->CallSAT_ResultCheck(NewSolver, simplified_solved_InputToSAT, orig_input, satBase,

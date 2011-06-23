@@ -86,5 +86,5 @@ namespace BEEV
   // I was going to make SimpSolver and Solver instances of this template.
   // But I'm not so sure now because I don't understand what eliminate() does in the simp solver.
   template class MinisatCore<Minisat::Solver>;
-  template class MinisatCore<Minisat::SimpSolver>;
+  //template class MinisatCore<Minisat::SimpSolver>;
 };

@@ -48,6 +48,7 @@ namespace BEEV
     virtual lbool false_literal()  {return ((uint8_t)1);}
     virtual lbool undef_literal()  {return ((uint8_t)2);}
 
+    virtual void setFrozen(Var x);
  };
 }
 ;
