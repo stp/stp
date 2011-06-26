@@ -1166,6 +1166,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                     result = NodeFactory::CreateTerm(BEEV::BVEXTRACT, width, a, i, j);
                   }
               }
+          else if (BEEV::BVUMINUS == children[0].GetKind() && children[1] ==bm.CreateZeroConst(children[1].GetValueWidth()) && children[2] == bm.CreateZeroConst(children[2].GetValueWidth()))
+            {
+              result = NodeFactory::CreateTerm(BEEV::BVEXTRACT, width, children[0][0],children[1],children[2]);
+            }
 	  break;
 
 	case BEEV::BVPLUS:
@@ -1203,6 +1207,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                   result = children[0];
           else if (children[0] == children[1])
                   result = bm.CreateZeroConst(width);
+          else if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+              result = bm.CreateZeroConst(width);
+          else if (children[0].GetKind() == BEEV::BVUMINUS && children[0][0] == children[1])
+              result = bm.CreateZeroConst(width);
+          else if (children[1].GetKind() == BEEV::BVUMINUS && children[1][0] == children[0])
+              result = bm.CreateZeroConst(width);
           else
             result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
           break;
@@ -1221,6 +1231,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         case BEEV::SBVDIV:
           if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
             result = children[0];
+          else if (children[0] == children[1] && bm.UserFlags.division_by_zero_returns_one_flag)
+            result =   bm.CreateOneConst(width);
           else
             result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
           break;
