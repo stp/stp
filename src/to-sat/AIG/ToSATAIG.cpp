@@ -60,7 +60,7 @@ namespace BEEV
       if (bm->UserFlags.output_CNF_flag)
       {
   		stringstream fileName;
-  		fileName << "output_" << CNFFileNameCounter++ << ".cnf";
+  		fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
     	Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0);
       }
 	  first = false;

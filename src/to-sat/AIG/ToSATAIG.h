@@ -37,7 +37,6 @@ namespace BEEV
 
 	int count;
 	bool first;
-	int CNFFileNameCounter;
 
 	ToCNFAIG toCNF;
 
@@ -45,7 +44,6 @@ namespace BEEV
     {
         count = 0;
         first = true;
-        CNFFileNameCounter =0;
         arrayTransformer = NULL;
     }
 
