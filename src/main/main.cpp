@@ -30,6 +30,7 @@ extern int cvcparse(void*);
 extern int cvclex_destroy(void);
 extern int smtlex_destroy(void);
 extern int smt2lex_destroy(void);
+extern vector<ASTVec> assertionsSMT2;
 
 // callback for SIGALRM.
 void handle_time_out(int parameter){
@@ -503,12 +504,25 @@ int main(int argc, char ** argv) {
 		else
 			parserInterface = &piTypeCheckSimp;
 
+		if (onePrintBack)
+		  {
+		    if (bm->UserFlags.smtlib2_parser_flag)
+		      {
+		        cerr << "Printback from SMTLIB2 inputs isn't currently working." << endl;
+		        cerr << "Please try again later" << endl;
+		        cerr << "It works prior to revision 1354" << endl;
+		        exit(1);
+		      }
+		  }
+
 
 		if (bm->UserFlags.smtlib1_parser_flag) {
 			smtparse((void*) AssertsQuery);
 			smtlex_destroy();
 		} else if (bm->UserFlags.smtlib2_parser_flag) {
-			smt2parse((void*) AssertsQuery);
+		        assertionsSMT2.push_back(ASTVec());
+		        smt2parse((void*) AssertsQuery);
+			//parserInterface->letMgr.cleanupParserSymbolTable();
 			smt2lex_destroy();
 		} else {
 			cvcparse((void*) AssertsQuery);
@@ -520,80 +534,87 @@ int main(int argc, char ** argv) {
 	}
 	bm->GetRunTimes()->stop(RunTimes::Parsing);
 
-  if(((ASTVec*)AssertsQuery)->empty())
+  /*  The SMTLIB2 has a command language. The parser calls all the functions,
+   *  so when we get to here the parser has already called "exit". i.e. if the
+   *  language is smt2 then all the work has already been done, and all we need
+   *  to do is cleanup...
+   *    */
+  if (!bm->UserFlags.smtlib2_parser_flag)
     {
-      FatalError("Input is Empty. Please enter some asserts and query\n");
+
+      if (((ASTVec*) AssertsQuery)->empty())
+        {
+          FatalError("Input is Empty. Please enter some asserts and query\n");
+        }
+
+      if (((ASTVec*) AssertsQuery)->size() != 2)
+        {
+          FatalError("Input must contain a query\n");
+        }
+
+      ASTNode asserts = (*(ASTVec*) AssertsQuery)[0];
+      ASTNode query = (*(ASTVec*) AssertsQuery)[1];
+
+      if (onePrintBack)
+        {
+
+          ASTNode original_input = bm->CreateNode(AND, bm->CreateNode(NOT, query), asserts);
+
+          if (bm->UserFlags.print_STPinput_back_flag)
+            {
+              if (bm->UserFlags.smtlib1_parser_flag)
+                bm->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
+              else
+                bm->UserFlags.print_STPinput_back_CVC_flag = true;
+            }
+
+          if (bm->UserFlags.print_STPinput_back_CVC_flag)
+            {
+              //needs just the query. Reads the asserts out of the data structure.
+              print_STPInput_Back(query);
+            }
+
+          if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
+            {
+              printer::SMTLIB1_PrintBack(cout, original_input);
+            }
+
+          if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
+            {
+              printer::SMTLIB2_PrintBack(cout, original_input);
+            }
+
+          if (bm->UserFlags.print_STPinput_back_C_flag)
+            {
+              printer::C_Print(cout, original_input);
+            }
+
+          if (bm->UserFlags.print_STPinput_back_GDL_flag)
+            {
+              printer::GDL_Print(cout, original_input);
+            }
+
+          if (bm->UserFlags.print_STPinput_back_dot_flag)
+            {
+              printer::Dot_Print(cout, original_input);
+            }
+
+          return 0;
+        }
+
+      SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
+      if (bm->UserFlags.quick_statistics_flag)
+        {
+          bm->GetRunTimes()->print();
+        }
+      (GlobalSTP->tosat)->PrintOutput(ret);
+
+      asserts = ASTNode();
+      query = ASTNode();
     }
-
-  if(((ASTVec*)AssertsQuery)->size() != 2)
-    {
-      FatalError("Input must contain a query\n");
-    }
-
-  ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-  ASTNode query   = (*(ASTVec*)AssertsQuery)[1];
-
-  if (onePrintBack)
-  {
-
-    ASTNode original_input = bm->CreateNode(AND,
-    		bm->CreateNode(NOT, query),
-    		asserts);
-
-
-  if(bm->UserFlags.print_STPinput_back_flag)
-    {
-      if(bm->UserFlags.smtlib1_parser_flag)
-    	  bm->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
-      else
-    	  bm->UserFlags.print_STPinput_back_CVC_flag = true;
-    }
-
-  if (bm->UserFlags.print_STPinput_back_CVC_flag)
-  {
-	  //needs just the query. Reads the asserts out of the data structure.
-	  print_STPInput_Back(query);
-  }
-
-  if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
-    {
-	  printer::SMTLIB1_PrintBack(cout, original_input);
-   }
-
-  if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
-    {
-	  printer::SMTLIB2_PrintBack(cout, original_input);
-    }
-
-  if (bm->UserFlags.print_STPinput_back_C_flag)
-    {
-	  printer::C_Print(cout, original_input);
-    }
-
-  if (bm->UserFlags.print_STPinput_back_GDL_flag)
-    {
-	  printer::GDL_Print(cout, original_input);
-    }
-
-  if (bm->UserFlags.print_STPinput_back_dot_flag)
-    {
-	  printer::Dot_Print(cout, original_input);
-    }
-
-  return 0;
-  }
-
-  SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
-  if (bm->UserFlags.quick_statistics_flag)
-    {
-      bm->GetRunTimes()->print();
-    }
-  (GlobalSTP->tosat)->PrintOutput(ret);
-
   AssertsQuery->clear();
   delete AssertsQuery;
-  asserts = ASTNode();
-  query = ASTNode();
+
   _empty_ASTVec.clear();
 
   simpCleaner.release();
@@ -603,8 +624,6 @@ int main(int argc, char ** argv) {
 
   delete GlobalSTP;
   delete ParserBM;
-
-
 
 
   return 0;

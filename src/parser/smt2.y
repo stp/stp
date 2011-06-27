@@ -66,8 +66,8 @@
   }
 
   ASTNode querysmt2;
-  ASTVec assertionsSMT2;
-  vector<string> commands;
+  vector<ASTVec> assertionsSMT2;
+    
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
@@ -181,6 +181,8 @@
 %token NOTES_TOK
 %token DECLARE_FUNCTION_TOK
 %token FORMULA_TOK
+%token PUSH_TOK
+%token POP_TOK
 
  /* Functions for QF_AUFBV. */
 %token SELECT_TOK;
@@ -191,21 +193,9 @@
 %%
 cmd: commands END
 {
-	if(querysmt2.IsNull()) 
-    {
-      querysmt2 = parserInterface->CreateNode(FALSE);
-    }  
-        
-       if (assertionsSMT2.size() > 1)
-      	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(AND,assertionsSMT2));
-      	else if (assertionsSMT2.size() > 0)
-      	((ASTVec*)AssertsQuery)->push_back((assertionsSMT2[0]));
-      	else
-      	((ASTVec*)AssertsQuery)->push_back(parserInterface->CreateNode(TRUE));
-  	  ((ASTVec*)AssertsQuery)->push_back(querysmt2);
-       parserInterface->letMgr.cleanupParserSymbolTable();
        querysmt2 = ASTNode();
        assertionsSMT2.clear();
+       parserInterface->cleanUp();
        YYACCEPT;
 }
 ;
@@ -219,11 +209,14 @@ commands: cmdi commands
 cmdi:
 	LPAREN_TOK EXIT_TOK RPAREN_TOK
 	{
-		commands.push_back("exit");
+	   querysmt2 = ASTNode();
+       assertionsSMT2.clear();
+       parserInterface->cleanUp();
+       YYACCEPT;
 	}
 |	LPAREN_TOK CHECK_SAT_TOK RPAREN_TOK
 	{
-		commands.push_back("check-sat");
+		parserInterface->checkSat(assertionsSMT2);
 	}
 |
 	LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
@@ -243,11 +236,27 @@ cmdi:
 	{}
 |	LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
 	{}
+|	LPAREN_TOK PUSH_TOK NUMERAL_TOK RPAREN_TOK
+	{
+		for (int i=0; i < $3;i++)
+		{
+			parserInterface->push();
+			assertionsSMT2.push_back(ASTVec());
+		}
+	}
+|	LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
+	{
+		for (int i=0; i < $3;i++)
+		{
+			parserInterface->pop();
+			assertionsSMT2.erase(assertionsSMT2.end()-1);
+		}
+	}
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
     {}
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
 	{
-	assertionsSMT2.push_back(*$3);
+	assertionsSMT2.back().push_back(*$3);
 	parserInterface->deleteNode($3);
 	}
 ;
@@ -287,7 +296,7 @@ var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str()); 
-  parserInterface->letMgr._parser_symbol_table.insert(s);
+  parserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   s.SetIndexWidth(0);
@@ -299,13 +308,13 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
-  parserInterface->letMgr._parser_symbol_table.insert(s);
+  parserInterface->addSymbol(s);
   delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
   ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($1->c_str());
-  parserInterface->letMgr._parser_symbol_table.insert(s);
+  parserInterface->addSymbol(s);
   unsigned int index_len = $9;
   unsigned int value_len = $14;
   if(index_len > 0) {

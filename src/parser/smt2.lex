@@ -163,11 +163,14 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "set-logic"         { return LOGIC_TOK; }  
 "set-info"  		{ return NOTES_TOK;  }
 "declare-fun"		{ return DECLARE_FUNCTION_TOK; }
+"push"				{ return PUSH_TOK;}
+"pop"				{ return POP_TOK;}
+ 
  /*
 	"set-option" 
 	"declare-sort" 
 	"define-sort"  
-	"push"  
+	  
 	"pop"
 */ 
 "assert" 			{ return FORMULA_TOK; }

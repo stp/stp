@@ -9,6 +9,7 @@
 #include <cassert>
 #include "LetMgr.h"
 #include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 //#include "../boost/pool/object_pool.hpp"
 
 namespace BEEV
@@ -35,6 +36,9 @@ public:
 	{
 		assert(nf != NULL);
 		alreadyWarned = false;
+		cache.push_back(Entry(SOLVER_UNDECIDED));
+		symbols.push_back(ASTVec());
+
 	}
 
 	const ASTVec GetAsserts(void)
@@ -153,6 +157,167 @@ public:
 		delete n;
 		//node_pool.destroy(n);
 	}
+
+	struct Entry
+	{
+	  explicit Entry( SOLVER_RETURN_TYPE result_)
+	  {
+	    result = result_;
+	  }
+
+	  SOLVER_RETURN_TYPE result;
+	  ASTNode node;
+
+	  void print()
+	  {
+            if (result == SOLVER_UNSATISFIABLE)
+              cerr << "u";
+            else if (result ==  SOLVER_SATISFIABLE)
+              cerr << "s";
+            else if (result ==  SOLVER_UNDECIDED)
+              cerr << "?";
+	  }
+	};
+	vector<Entry> cache;
+	vector<vector<ASTNode> > symbols;
+
+	void
+	addSymbol(ASTNode &s)
+	{
+	  symbols.back().push_back(s);
+	  letMgr._parser_symbol_table.insert(s);
+	}
+
+        void
+        pop()
+        {
+          if (symbols.size() ==0)
+            FatalError("Popping from an empty stack.");
+          if (symbols.size() ==1)
+             FatalError("Can't pop away the default base element.");
+
+          assert(symbols.size() == cache.size());
+          cache.erase(cache.end()-1);
+          ASTVec & current = symbols.back();
+          for (int i=0; i < current.size() ;i++)
+              letMgr._parser_symbol_table.erase(current[i]);
+          symbols.erase(symbols.end()-1);
+        }
+
+        void
+        push()
+        {
+          // If the prior one is unsatisiable then the new one will be too.
+          if (cache.size() > 1 && cache.back().result == SOLVER_UNSATISFIABLE)
+            cache.push_back(Entry(SOLVER_UNSATISFIABLE));
+          else
+            cache.push_back(Entry(SOLVER_UNDECIDED));
+
+          symbols.push_back(ASTVec());
+          assert(symbols.size() == cache.size());
+        }
+
+     void printStatus()
+     {
+      for (int i=0; i < cache.size();i++)
+        {
+          cache[i].print();
+        }
+      cerr<< endl;
+     }
+
+     // Does some simple caching of prior results.
+    void
+    checkSat(vector<ASTVec> & assertionsSMT2)
+    {
+      bm.GetRunTimes()->stop(RunTimes::Parsing);
+      assert(assertionsSMT2.size() == cache.size());
+
+      Entry& cacheEntry = cache.back();
+
+      //cerr << "------------" << endl;
+      //printStatus();
+
+      if ((cacheEntry.result ==  SOLVER_SATISFIABLE || cacheEntry.result == SOLVER_UNSATISFIABLE)
+          && (assertionsSMT2.back().size() ==1 && assertionsSMT2.back()[0] == cacheEntry.node))
+        { // If we already know the answer then return.
+          if (bm.UserFlags.quick_statistics_flag)
+            {
+              bm.GetRunTimes()->print();
+            }
+
+          (GlobalSTP->tosat)->PrintOutput(cache.back().result);
+          bm.GetRunTimes()->start(RunTimes::Parsing);
+          return;
+        }
+
+      bm.ClearAllTables();
+      GlobalSTP->ClearAllTables();
+
+      // Loop through the set of assertions converting them to single nodes..
+      ASTVec v;
+      for (int i = 0; i < assertionsSMT2.size(); i++)
+        {
+          if (assertionsSMT2[i].size() == 1)
+            {}
+          else if (assertionsSMT2[i].size() == 0)
+            assertionsSMT2[i].push_back(bm.ASTTrue);
+          else
+            {
+              ASTNode v = parserInterface->CreateNode(AND, assertionsSMT2[i]);
+              assertionsSMT2[i].clear();
+              assertionsSMT2[i].push_back(v);
+            }
+          assert(assertionsSMT2[i].size() ==1);
+          v.push_back(assertionsSMT2[i][0]);
+        }
+
+      ASTNode query;
+
+      if (v.size() > 1)
+        query = parserInterface->CreateNode(AND, v);
+      else if (v.size() > 0)
+        query = v[0];
+      else
+        query = bm.ASTTrue;
+
+      SOLVER_RETURN_TYPE last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+
+      // Write in the answer to the current slot.
+      if (last_result ==SOLVER_SATISFIABLE || last_result ==SOLVER_UNSATISFIABLE)
+          {
+            Entry e(last_result);
+            e.node = assertionsSMT2.back()[0];
+            cacheEntry = e;
+            assert (!cacheEntry.node.IsNull());
+          }
+
+      // It's satisfiable, so everything beneath it is satisfiable too.
+      if (last_result ==SOLVER_SATISFIABLE)
+        {
+          for (int i=0; i < cache.size(); i++)
+              {
+              assert(cache[i].result != SOLVER_UNSATISFIABLE);
+              cache[i].result = SOLVER_SATISFIABLE;
+              }
+        }
+
+      if (bm.UserFlags.quick_statistics_flag)
+        {
+          bm.GetRunTimes()->print();
+        }
+
+      (GlobalSTP->tosat)->PrintOutput(last_result);
+      //printStatus();
+      bm.GetRunTimes()->start(RunTimes::Parsing);
+    }
+
+    void cleanUp()
+    {
+      letMgr.cleanupParserSymbolTable();
+      cache.clear();
+      symbols.clear();
+    }
 };
 }
 
