@@ -49,6 +49,8 @@ namespace BEEV
               cout << "Invalid.\n";
           }
       }
+
+    flush(cout);
   } //end of PrintOutput()
 
 }
