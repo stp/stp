@@ -18,8 +18,8 @@
 
 namespace BEEV
 {
-  void FatalError(const char * str, const ASTNode& a, int w = 0);
-  void FatalError(const char * str);
+  void FatalError(const char * str, const ASTNode& a, int w = 0) __attribute__ ((noreturn));
+  void FatalError(const char * str) __attribute__ ((noreturn));
   void SortByExprNum(ASTVec& c);
   void SortByArith(ASTVec& c);
   bool exprless(const ASTNode n1, const ASTNode n2);
