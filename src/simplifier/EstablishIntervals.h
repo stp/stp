@@ -48,7 +48,7 @@ namespace BEEV
         return (CONSTANTBV::BitVector_is_empty(minV) && CONSTANTBV::BitVector_is_full(maxV));
       }
 
-      bool checkUnsignedInvariant()
+      void checkUnsignedInvariant()
       {
         assert( CONSTANTBV::BitVector_Lexicompare(minV, maxV) <=0);
 
@@ -239,6 +239,8 @@ namespace BEEV
                           fromTo.insert(make_pair(n,copyN));
                       }
                     break;
+                  default:
+                    FatalError("Never here");
                 }
           }
           if (interval == NULL)
