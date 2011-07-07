@@ -16,6 +16,53 @@ namespace BEEV
    * Universal Helper Functions                                   *
    ****************************************************************/
 
+  // Sort ASTNodes by expression numbers
+  bool exprless(const ASTNode n1, const ASTNode n2)
+  {
+    return (n1.GetNodeNum() < n2.GetNodeNum());
+  }
+
+  // This is for sorting by arithmetic expressions (for
+  // combining like terms, etc.)
+  bool arithless(const ASTNode n1, const ASTNode n2)
+  {
+    Kind k1 = n1.GetKind();
+    Kind k2 = n2.GetKind();
+
+    if (n1 == n2)
+      {
+        // necessary for "strict weak ordering"
+        return false;
+      }
+    else if (BVCONST == k1 && BVCONST != k2)
+      {
+        // put consts first
+        return true;
+      }
+    else if (BVCONST != k1 && BVCONST == k2)
+      {
+        // put consts first
+        return false;
+      }
+    else if (SYMBOL == k1 && SYMBOL != k2)
+      {
+        // put symbols next
+        return true;
+      }
+    else if (SYMBOL != k1 && SYMBOL == k2)
+      {
+        // put symbols next
+        return false;
+      }
+    else
+      {
+        // otherwise, sort by exprnum (descendents will appear
+        // before ancestors).
+        return (n1.GetNodeNum() < n2.GetNodeNum());
+      }
+  } //end of arithless
+
+
 bool containsArrayOps(const ASTNode& n, ASTNodeSet& visited)
 {
 	if (visited.find(n) != visited.end())
