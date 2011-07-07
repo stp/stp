@@ -45,7 +45,7 @@ namespace BEEV
     unsigned long long hash = 5381;
     long long c;
 
-    while (c = *str++)
+    while ((c = *str++))
       hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
     //cout << "Hash value computed is: " << hash << endl;
