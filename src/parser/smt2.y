@@ -108,6 +108,7 @@
 %token DIFFICULTY_TOK
 %token VERSION_TOK
 %token STATUS_TOK
+%token PRINT_TOK
 
  /* ASCII Symbols */
  /* Semicolons (comments) are ignored by the lexer */
@@ -179,6 +180,7 @@
 %token CHECK_SAT_TOK
 %token LOGIC_TOK
 %token NOTES_TOK
+%token OPTION_TOK
 %token DECLARE_FUNCTION_TOK
 %token FORMULA_TOK
 %token PUSH_TOK
@@ -226,11 +228,15 @@ cmdi:
 	        0 == strcmp($3->c_str(),"QF_AUFBV"))) {
 	    yyerror("Wrong input logic:");
 	  }
+	  parserInterface->success();
 	  delete $3;
 	}
 |	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
 	{
 	delete $4;
+	}
+|	LPAREN_TOK OPTION_TOK attribute RPAREN_TOK
+	{
 	}
 |	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
 	{}
@@ -243,6 +249,7 @@ cmdi:
 			parserInterface->push();
 			assertionsSMT2.push_back(ASTVec());
 		}
+		parserInterface->success();
 	}
 |	LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
 	{
@@ -251,13 +258,17 @@ cmdi:
 			parserInterface->pop();
 			assertionsSMT2.erase(assertionsSMT2.end()-1);
 		}
+		parserInterface->success();
 	}
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
-    {}
+    {
+    parserInterface->success();
+    }
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
 	{
 	assertionsSMT2.back().push_back(*$3);
 	parserInterface->deleteNode($3);
+	parserInterface->success();
 	}
 ;
 
@@ -290,6 +301,16 @@ SOURCE_TOK
 {}
 | STATUS_TOK status
 {} 
+| PRINT_TOK TRUE_TOK
+{
+	parserInterface->setPrintSuccess(true);
+	parserInterface->success();
+}
+| PRINT_TOK FALSE_TOK
+{
+	parserInterface->setPrintSuccess(false);
+}
+
 ;
 
 var_decl:

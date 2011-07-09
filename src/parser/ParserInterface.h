@@ -24,7 +24,7 @@ class ParserInterface
 	STPMgr& bm;
 	//boost::object_pool<ASTNode> node_pool;
 	bool alreadyWarned;
-
+	bool print_success;
 public:
 	LETMgr letMgr;
 	NodeFactory* nf;
@@ -38,7 +38,7 @@ public:
 		alreadyWarned = false;
 		cache.push_back(Entry(SOLVER_UNDECIDED));
 		symbols.push_back(ASTVec());
-
+		print_success=false;
 	}
 
 	const ASTVec GetAsserts(void)
@@ -126,6 +126,11 @@ public:
            return bm.LookupSymbol(name);
     }
 
+    void setPrintSuccess(bool ps)
+    {
+      print_success= ps;
+    }
+
 
     bool isSymbolAlreadyDeclared(string name)
 	{
@@ -187,6 +192,16 @@ public:
 	  symbols.back().push_back(s);
 	  letMgr._parser_symbol_table.insert(s);
 	}
+
+	void
+        success()
+        {
+          if (print_success)
+            {
+              cout << "success" << endl;
+              flush(cout);
+            }
+        }
 
         void
         pop()

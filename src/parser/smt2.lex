@@ -158,20 +158,20 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 ":difficulty"    { return DIFFICULTY_TOK; }
 ":smt-lib-version"  { return VERSION_TOK; }
 ":status"        { return STATUS_TOK; }
+":print-success"        { return PRINT_TOK; }
+
 
  /* COMMANDS */
 "set-logic"         { return LOGIC_TOK; }  
 "set-info"  		{ return NOTES_TOK;  }
+"set-option"  		{ return OPTION_TOK;  }
 "declare-fun"		{ return DECLARE_FUNCTION_TOK; }
 "push"				{ return PUSH_TOK;}
 "pop"				{ return POP_TOK;}
  
  /*
-	"set-option" 
 	"declare-sort" 
 	"define-sort"  
-	  
-	"pop"
 */ 
 "assert" 			{ return FORMULA_TOK; }
 "check-sat"			{ return CHECK_SAT_TOK; }
