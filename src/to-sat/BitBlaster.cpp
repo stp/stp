@@ -644,14 +644,14 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
 	                results.push_back(BBTerm(term[i], support));
 
 	              const int bitWidth = term[0].GetValueWidth();
-	              stack<BBNode> products[bitWidth];
+	              std::vector<stack<BBNode> > products(bitWidth);
 	              for (int i=0; i < bitWidth;i++)
 	                {
 	                  for (int j=0; j < results.size();j++)
 	                    products[i].push(results[j][i]);
 	                }
 
-	              result = buildAdditionNetworkResult(products,support,bitWidth);
+	              result = buildAdditionNetworkResult(products.data(),support,bitWidth);
 	            }
 	         break;
 	}
@@ -1164,7 +1164,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
 // partial products.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
-		const int bitWidth, const int i, const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 )
+		const int bitWidth, const int i, const int minTrue, const int maxTrue )
 {
       while (products[i].size() >= 2) {
               BBNode c;
@@ -1477,7 +1477,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
     void
     BitBlaster<BBNode, BBNodeManagerT>::mult_SortingNetwork(
         BBNodeSet& support, stack<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted,
-        const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 )
+        const int minTrue, const int maxTrue )
     {
 
       // Add the carry from the prior column. i.e. each second sorted formula.
@@ -1603,7 +1603,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
   	  string mv = uf->get("multiplication_variant","3");
 
       const int bitWidth = x.size();
-      stack<BBNode> products[bitWidth];
+      std::vector<stack<BBNode> > products(bitWidth);
 
       if (mv == "1") {
               //cerr << "v1";
@@ -1611,19 +1611,19 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
       }
       else   if (mv == "2") {
               //cout << "v2";
-              mult_allPairs(x, y, support,products);
-              return buildAdditionNetworkResult(products,support, bitWidth);
+              mult_allPairs(x, y, support,products.data());
+              return buildAdditionNetworkResult(products.data(),support, bitWidth);
       }
 
       else   if (mv == "3") {
               //cout << "v3" << endl;
-              mult_Booth(_x, _y, support,n[0],n[1],products);
-              return buildAdditionNetworkResult(products,support,bitWidth);
+              mult_Booth(_x, _y, support,n[0],n[1],products.data());
+              return buildAdditionNetworkResult(products.data(),support,bitWidth);
       }
       else   if (mv == "4")
       {
         //cerr << "v4";
-        mult_Booth(_x, _y, support,n[0],n[1],products);
+        mult_Booth(_x, _y, support,n[0],n[1],products.data());
         vector<BBNode> prior;
 
         for (int i = 0; i < bitWidth; i++)
@@ -1633,19 +1633,19 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
               prior = output;
               assert(products[i].size() == 1);
           }
-        return buildAdditionNetworkResult(products,support, bitWidth);
+        return buildAdditionNetworkResult(products.data(),support, bitWidth);
       }
       else   if (mv == "5")
         {
         //cout << "v5";
           if (!statsFound(n))
             {
-              mult_Booth(_x, _y, support, n[0], n[1], products);
-              return buildAdditionNetworkResult(products, support, bitWidth);
+              mult_Booth(_x, _y, support, n[0], n[1], products.data());
+              return buildAdditionNetworkResult(products.data(), support, bitWidth);
             }
 
-          mult_allPairs(x, y, support, products);
-          return multWithBounds(n, products, support);
+          mult_allPairs(x, y, support, products.data());
+          return multWithBounds(n, products.data(), support);
         }
       else
     	  FatalError("sda44f");
@@ -2045,15 +2045,15 @@ BBNode BitBlaster<BBNode,BBNodeManagerT>::BBEQ(const BBNodeVec& left, const BBNo
 		return nf->CreateNode(IFF, *lit, *rit);
 }
 
-// This creates all the specialisations of the class that are ever needed.
-template class BitBlaster<ASTNode, BBNodeManagerASTNode>;
-template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
-
 std::ostream& operator<<(std::ostream& output, const BBNodeAIG& h)
 {
   FatalError("This isn't implemented  yet sorry;");
   return output;
 }
+
+// This creates all the specialisations of the class that are ever needed.
+template class BitBlaster<ASTNode, BBNodeManagerASTNode>;
+template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 
 #undef BBNodeVec
 #undef BBNodeVecMap

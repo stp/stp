@@ -83,9 +83,9 @@ class BitBlaster {
         void
         mult_SortingNetwork(
             set<BBNode>& support, stack<BBNode>& currentColumn, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted,
-                const int minTrue , const int maxTrue  );
+                const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 );
 
-	void buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support, const int bitWidth, const int index, const int minTrue, const int maxTrue );
+	void buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support, const int bitWidth, const int index, const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 );
 	vector<BBNode> buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support, int bitWidth);
 
 	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
