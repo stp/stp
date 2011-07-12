@@ -176,6 +176,12 @@ VC vc_createValidityChecker(void) {
                   bvsolver, arrayTransformer, 
                   tosat, Ctr_Example);
   
+  // This expects the simplifying node factory to be used to create all the nodes.
+  // i.e. for sbvdiv to be transformed away. The c-interface uses the hashing node
+  // factory. I tried to enable the simplfyingnode factory. But some c-api-tests
+  // failed with assertion errors.
+  bm->UserFlags.set("bitblast-simplification","0");
+
   BEEV::GlobalSTP = stp;
   decls = new BEEV::ASTVec();
   //created_exprs.clear();

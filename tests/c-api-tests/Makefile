@@ -43,7 +43,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23
 	g++  $(CXXFLAGS) push-pop-1.c  -o a7.out $(LIBS)
 	./a7.out
 8:
-	g++  $(CXXFLAGS)  sbvmod.c  -o a8.out $(LIBS)
+	g++  $(CXXFLAGS)  sbvdiv.c  -o a8.out $(LIBS)
 	./a8.out
 9:
 	g++  $(CXXFLAGS)  simplify.c -o a9.out $(LIBS) 
