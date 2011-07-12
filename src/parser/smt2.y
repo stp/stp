@@ -203,7 +203,7 @@ cmd: commands END
 ;
 
 
-commands: cmdi commands 
+commands: commands cmdi  
 | cmdi
 {}
 ;
