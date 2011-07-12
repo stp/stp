@@ -13,6 +13,8 @@
 #include <stack>
 #include <map>
 #include <string>
+#include "../sat/utils/System.h"
+#include <iomanip>
 
 class RunTimes
 {
@@ -72,6 +74,7 @@ public:
     long val = getCurrentTime();
     s << (val -  lastTime) << "ms" ;
     lastTime = val;
+    s << ":" << std::setiosflags(std::ios::fixed) << std::setprecision(0) << Minisat::memUsed() << "M";
     return s.str();
   }
 
