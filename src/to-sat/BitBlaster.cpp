@@ -1112,7 +1112,7 @@ void convert(const BBNodeVec& v, BBNodeManagerT*nf, mult_type* result)
 
 // Multiply "multiplier" by y[start ... bitWidth].
 template <class BBNode, class BBNodeManagerT>
-void pushP(stack<BBNode> *products, const int start, const BBNodeVec& y, const BBNode& multiplier, BBNodeManagerT*nf)
+void pushP(vector<BBNode> *products, const int start, const BBNodeVec& y, const BBNode& multiplier, BBNodeManagerT*nf)
 {
 	const int bitWidth = y.size();
 
@@ -1121,7 +1121,7 @@ void pushP(stack<BBNode> *products, const int start, const BBNodeVec& y, const B
 	{
 		BBNode n = nf->CreateNode(AND, y[c], multiplier);
 		if (n!= nf->getFalse())
-		  products[i].push(n);
+		  products[i].push_back(n);
 		c++;
 	}
 }
@@ -1388,27 +1388,34 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 		 cerr << yN << endl;
 	 }
 
+	 // We store them into here before sorting them.
+	 vector<BBNode> t_products[bitWidth];
+
 	 for (int i =0; i < bitWidth;i++)
 	 {
 		 if (x[i] != BBTrue && x[i] != BBFalse)
 		 {
-			 pushP(products,i,y,x[i],nf);
+			 pushP(t_products,i,y,x[i],nf);
 		 }
 
 		 // A bit can not be true or false, as well as one of these two.
 		 if (xt[i] == MINUS_ONE_MT)
 		 {
-			 pushP(products,i,notY,BBTrue,nf);
-			 products[i].push(BBTrue);
+			 pushP(t_products,i,notY,BBTrue,nf);
+			 t_products[i].push_back(BBTrue);
 		 }
 
 		 else if (xt[i] == ONE_MT)
 		 {
-			 pushP(products,i,y,BBTrue,nf);
+			 pushP(t_products,i,y,BBTrue,nf);
 		 }
 
-		 if (products[i].size() == 0)
-		   products[i].push(BBFalse);
+		 if (t_products[i].size() == 0)
+		   t_products[i].push_back(BBFalse);
+
+		 sort(t_products[i].begin(), t_products[i].end());
+		 for (int j=0; j < t_products[i].size();j++)
+		     products[i].push(t_products[i][j]);
 	 }
   }
 
