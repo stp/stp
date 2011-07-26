@@ -497,7 +497,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
         }
 
 
-        if (k1 == BEEV::BVCONST && k2 == BEEV::BVSX)
+        if (k1 == BEEV::BVCONST && k2 == BEEV::BVSX && (in2[0].GetValueWidth() != width))
           {
               // Each of the bits in the extended part, and one into the un-extended part must be the same.
               bool foundZero=false, foundOne=false;
