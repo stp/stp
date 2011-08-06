@@ -2,8 +2,8 @@
  * Identifies unconstrained variables and remove them from the input.
  * Robert Bruttomesso's & Robert Brummayer's dissertations describe this.
  * 
- * Nb. this isn't finished. It doesn't do READS, left shift, implies.
- * I don't think anything can be done for : bvsx, bvzx, write, bvmod.
+ * Nb. this isn't finished. It doesn't do reads / writes.
+ * I don't think anything can be done for : bvsx, bvzx.
  */
 
 #include "RemoveUnconstrained.h"
@@ -522,11 +522,41 @@ namespace BEEV
                   }
               }
               break;
+        case BVLEFTSHIFT:
+        case BVRIGHTSHIFT:
+        case BVSRSHIFT:
+             {
+                 assert(numberOfChildren == 2);
+                 if (mutable_children[0]->isUnconstrained() && mutable_children[1]->isUnconstrained())
+                  {
+                     assert(children[0] != children[1]);
+                     ASTNode v =replaceParentWithFresh(muteParent, variable_array);
+                     replace(children[1], bm.CreateZeroConst(width));
+                     replace(children[0], v);
+                  }
+              }
+             break;
+
+        case BVMOD:
+             {
+                 assert(numberOfChildren == 2);
+                 if (mutable_children[0]->isUnconstrained() && mutable_children[1]->isUnconstrained() && bm.UserFlags.isSet("unconstrained-bvmod", "0") )
+                  {
+                     assert (children[0] != children[1]);
+                     ASTNode v =replaceParentWithFresh(muteParent, variable_array);
+                     replace(children[1], bm.CreateZeroConst(width));
+                     replace(children[0], v);
+                  }
+              }
+             break;
+
+
         case BVDIV:
              {
                  assert(numberOfChildren == 2);
                  if (mutable_children[0]->isUnconstrained() && mutable_children[1]->isUnconstrained())
                   {
+                     assert (children[0] != children[1]);
                      ASTNode v =replaceParentWithFresh(muteParent, variable_array);
                      replace(children[1], bm.CreateOneConst(width));
                      replace(children[0], v);
