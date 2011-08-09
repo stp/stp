@@ -14,7 +14,7 @@ else
 endif
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24
 	rm -rf *.out
 
 0:	
@@ -98,6 +98,11 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23
 	g++ $(CXXFLAGS) -o a23.out \
          ../../lib/libstp.a array-cvcl-02.c ../../lib/libstp.a
 	./a23.out
+
+24:
+	g++ $(CXXFLAGS) -o a24.out \
+         ../../lib/libstp.a if-check.c ../../lib/libstp.a
+	./a24.out
 
 
 clean:

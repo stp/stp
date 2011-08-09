@@ -12,6 +12,9 @@ int main(int argc, char * argv [])
   ::Expr b2 = ::vc_falseExpr(vc);
   ::Expr andExpr = ::vc_andExpr(vc, b1, b2);
 
+if (getExprKind(andExpr) !=  ::FALSE )
+  throw new std::runtime_error("sa22dfas");
+
   ::Expr simplifiedExpr = ::vc_simplify(vc, andExpr);
 
 	if (getExprKind(simplifiedExpr) !=  ::FALSE )
