@@ -1,5 +1,7 @@
 #!/bin/sh
-PREFIX=$HOME
+if [ "$PREFIX" == "" ]; then
+	PREFIX=$HOME
+fi
 
 make configclean
 . scripts/configure
