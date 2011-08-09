@@ -26,6 +26,7 @@ typedef BEEV::AbsRefine_CounterExample * ctrexamplestar;
 typedef BEEV::ASTVec                     nodelist;
 typedef BEEV::CompleteCounterExample*    CompleteCEStar;
 BEEV::ASTVec *decls = NULL;
+SimplifyingNodeFactory *simpNF = NULL;
 //vector<BEEV::ASTNode *> created_exprs;
 
 // persist holds a copy of ASTNodes so that the reference count of
@@ -176,11 +177,8 @@ VC vc_createValidityChecker(void) {
                   bvsolver, arrayTransformer, 
                   tosat, Ctr_Example);
   
-  // This expects the simplifying node factory to be used to create all the nodes.
-  // i.e. for sbvdiv to be transformed away. The c-interface uses the hashing node
-  // factory. I tried to enable the simplfyingnode factory. But some c-api-tests
-  // failed with assertion errors.
-  bm->UserFlags.set("bitblast-simplification","0");
+  simpNF = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+  bm->defaultNodeFactory = simpNF;
 
   BEEV::GlobalSTP = stp;
   decls = new BEEV::ASTVec();
@@ -1911,6 +1909,7 @@ void vc_Destroy(VC vc) {
   BEEV::GlobalSTP = NULL;
   delete  BEEV::ParserBM;
   BEEV::ParserBM = NULL;
+  delete simpNF;
 }
 
 void vc_DeleteExpr(Expr e) {

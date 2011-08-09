@@ -307,7 +307,7 @@ namespace BEEV
       if (fromTo.size() > 0)
         {
           ASTNodeMap cache;
-          SimplifyingNodeFactory nf(*(top.GetSTPMgr()->defaultNodeFactory), *top.GetSTPMgr());
+          SimplifyingNodeFactory nf(*(top.GetSTPMgr()->hashingNodeFactory), *top.GetSTPMgr());
           bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
           return SubstitutionMap::replace(result,fromTo,cache,&nf);
         }
