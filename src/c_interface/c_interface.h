@@ -57,7 +57,8 @@ extern "C" {
     this flag is set both at the time the objects are created and at
     the time that vc_Destroy is called, vc_Destroy will automatically
     delete them. */
-    EXPRDELETE
+    EXPRDELETE,
+    CMS2
   };
   void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
 

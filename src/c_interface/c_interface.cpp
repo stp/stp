@@ -40,7 +40,7 @@ extern int smtparse(void*);
 
 void vc_setFlags(VC vc, char c, int param_value) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-  
+
   std::string helpstring = 
     "Usage: stp [-option] [infile]\n\n";
   helpstring += 
@@ -145,6 +145,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {
   case EXPRDELETE:
     cinterface_exprdelete_on_flag = param_value != 0;
     break;
+  case CMS2:
+      {
+      bmstar b = (bmstar)(((stpstar)vc)->bm);
+      b->UserFlags.solver_to_use = BEEV::UserDefinedFlags::CRYPTOMINISAT_SOLVER;
+      break;
+      }
   default:
     BEEV::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
     break;
