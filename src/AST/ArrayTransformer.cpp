@@ -752,16 +752,16 @@ namespace BEEV
 		   */
           if (ASTTrue == cond)
           {
-			  result = TransformArrayRead(thnRead);
+			  result = TransformTerm(thnRead);
           }
           else if (ASTFalse == cond)
           {
-			  result = TransformArrayRead(elsRead);
+			  result = TransformTerm(elsRead);
           }
           else
           {
-			  thnRead = TransformArrayRead(thnRead);
-			  elsRead = TransformArrayRead(elsRead);
+			  thnRead = TransformTerm(thnRead);
+			  elsRead = TransformTerm(elsRead);
 
 			  //(ITE cond (READ thn j) (READ els j))
 			  result = simp->CreateSimplifiedTermITE(cond, thnRead, elsRead);
