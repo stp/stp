@@ -366,6 +366,10 @@ namespace BEEV
 #if 1
         if (RemainingAxiomsVec.size() > 0)
             {
+                if (bm->UserFlags.stats_flag)
+                {
+                        cout << "Adding all the remaining " << RemainingAxiomsVec.size() << " read axioms " << endl;
+                }
                 ToSATBase::ASTNodeToSATVar & satVar = tosat->SATVar_to_SymbolIndexMap();
                 applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
 
