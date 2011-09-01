@@ -660,10 +660,11 @@ namespace BEEV
     {
         ASTVec c = FlattenKind(AND,input.GetChildren());
         input = _bm->CreateNode(AND,c);
+        k = input.GetKind();
 
         // When flattening simplifications will be applied to the node, potentially changing it's type:
         // (AND x (ANY (not x) y)) gives us FALSE.
-       if (!(EQ == input.GetKind() || AND == input.GetKind()))
+       if (!(EQ == k || AND == k ))
            return input;
 
           if (CheckAlreadySolvedMap(input, output))
