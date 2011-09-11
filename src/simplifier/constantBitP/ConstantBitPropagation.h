@@ -41,6 +41,9 @@ namespace simplifier
 
       bool topFixed;
 
+      // A vector that's reused.
+      vector< int > previousChildrenFixedCount;
+
       void
       printNodeWithFixings();
 

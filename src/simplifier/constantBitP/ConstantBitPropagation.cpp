@@ -498,20 +498,19 @@ namespace simplifier
             }
 
           // get a copy of the current fixing from the cache.
-          FixedBits current = *getCurrentFixedBits(n);
+          int previousTop = getCurrentFixedBits(n)->countFixed();
 
           // get the current for the children.
-          vector<FixedBits> childrenFixedBits;
-          childrenFixedBits.reserve(n.GetChildren().size());
+          previousChildrenFixedCount.clear();
 
           // get a copy of the current fixing from the cache.
           for (unsigned i = 0; i < n.GetChildren().size(); i++)
             {
-              childrenFixedBits.push_back(*getCurrentFixedBits(n[i]));
+              previousChildrenFixedCount.push_back(getCurrentFixedBits(n[i])->countFixed());
             }
 
           // derive the new ones.
-          FixedBits newBits = *getUpdatedFixedBits(n);
+          int newCount = getUpdatedFixedBits(n)->countFixed();
 
           if (CONFLICT == status)
             return;
@@ -519,26 +518,19 @@ namespace simplifier
           // Not all transfer function update the status. But if they report NO_CHANGE. There really is no change.
           if (status != NO_CHANGE)
             {
-              if (!FixedBits::equals(newBits, current)) // has been a change.
+              if (newCount != previousTop) // has been a change.
                 {
-                  assert(FixedBits::updateOK(current,newBits));
-
-                  scheduleUp(n); // schedule everything that depends on n.
-                  if (debug_cBitProp_messages)
-                    {
-                      cerr << "Changed " << n.GetNodeNum() << "from:" << current << "to:" << newBits << endl;
-                    }
+                      assert(newCount >= previousTop);
+                      scheduleUp(n); // schedule everything that depends on n.
                 }
 
               for (unsigned i = 0; i < n.GetChildren().size(); i++)
                 {
-                  if (!FixedBits::equals(*getCurrentFixedBits(n[i]), childrenFixedBits[i]))
+                  if (getCurrentFixedBits(n[i])->countFixed() != previousChildrenFixedCount[i])
                     {
-                      assert(FixedBits::updateOK(childrenFixedBits[i], *getCurrentFixedBits(n[i])) );
-
                       if (debug_cBitProp_messages)
                         {
-                          cerr << "Changed: " << n[i].GetNodeNum() << " from:" << childrenFixedBits[i] << "to:"
+                          cerr << "Changed: " << n[i].GetNodeNum() << " from:" << previousChildrenFixedCount[i] << "to:"
                               << *getCurrentFixedBits(n[i]) << endl;
                         }
 
