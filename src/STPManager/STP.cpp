@@ -112,20 +112,20 @@ namespace BEEV {
    ASTNode
   STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver)
   {
-    if (bm->UserFlags.isSet("enable-unconstrained", "1"))
-      {
-        // Remove unconstrained.
-        RemoveUnconstrained r1(*bm);
-        simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
-        bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
-      }
-
     simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
         simp->haveAppliedSubstitutionMap();
         bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
+      }
+
+    if (bm->UserFlags.isSet("enable-unconstrained", "1"))
+      {
+        // Remove unconstrained.
+        RemoveUnconstrained r1(*bm);
+        simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
+        bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.isSet("use-intervals", "1"))
