@@ -1,12 +1,13 @@
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.io.*;
 
 /* Randomly generates problem instances that contain nested array operations */
 
 // Both Indexes and values have the same bitwidth, potentially missing some errors.
 
-// Doesn't generate extensional problems yet..
+// Doesn't generate extensional problems!
 
 public class ArrayGenerator
 {
@@ -15,8 +16,9 @@ public class ArrayGenerator
     static Random r = new Random();
 
     static int MAX_DEPTH;
+    static int numberOfInstances = 500;
 
-    public static void main(String[] args)
+    public static void main(String[] args) throws IOException
     {
 	bits.add("b1");
 	bits.add("b2");
@@ -26,13 +28,18 @@ public class ArrayGenerator
 	arrays.add("a2");
 	arrays.add("a3");
 
-	// When we get to the nesting depth, start to return leaf nodes (like symbols).
-	MAX_DEPTH = r.nextInt(15) +1;
 
-	randomGenerate();
-    }
+	for (int i=0; i < numberOfInstances; i++)
+	{
+		// When we get to the nesting depth, start to return leaf nodes (like symbols).
+		MAX_DEPTH = r.nextInt(15) +1;
 
-    static void randomGenerate()
+		randomGenerate("f"+i+".smt");
+    
+	}
+}
+
+    static void randomGenerate(String fileName) throws IOException
     {
 	StringBuilder output = new StringBuilder();
 	output.append("(\n");
@@ -56,7 +63,12 @@ public class ArrayGenerator
 	    output.append(":assumption " + generateProp(0) + "\n");
 
 	output.append(":formula true \n )\n");
-	System.out.println(output);
+	
+	FileWriter fstream = new FileWriter(fileName);
+	  BufferedWriter out = new BufferedWriter(fstream);
+	  out.write(output.toString());
+	  out.close();
+
     }
 
     // Arrays are either array symbols, ites, or stores.
