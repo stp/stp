@@ -63,26 +63,32 @@ namespace BEEV
   } //end of arithless
 
 
-bool containsArrayOps(const ASTNode& n, ASTNodeSet& visited)
+bool containsArrayOps(const ASTNode& n, hash_set<int> & visited)
 {
-	if (visited.find(n) != visited.end())
-		return false;
-	if (n.GetType() == ARRAY_TYPE)
-		return true;
+        if (n.GetIndexWidth() > 0)
+            return true;
+
+        if (n.Degree() ==0)
+            return false;
+
+        if (visited.find(n.GetNodeNum()) != visited.end())
+            return false;
+
+        visited.insert(n.GetNodeNum());
 
 	for (int i =0; i < n.Degree();i++)
 		if (containsArrayOps(n[i],visited))
 			return true;
 
-	visited.insert(n);
 	return false;
 }
 
-bool containsArrayOps(const ASTNode&n)
-{
-	ASTNodeSet visited;
-	return containsArrayOps(n, visited);
-}
+    bool
+    containsArrayOps(const ASTNode&n)
+    {
+        hash_set<int> visited;
+        return containsArrayOps(n, visited);
+    }
 
 	bool isCommutative(const Kind k) {
 	switch (k) {

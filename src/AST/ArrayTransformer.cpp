@@ -746,7 +746,7 @@ namespace BEEV
 		  ASTNode elsRead = nf->CreateTerm(READ, width, els, readIndex);
 		  assert(BVTypeCheck(elsRead));
 
-		  /* We try to call TransformArrayRead only if necessary, because it
+		  /* We try to call TransformTerm only if necessary, because it
 		   * introduces a new symbol for each read. The amount of work we
 		   * need to do later is based on the square of the number of symbols.
 		   */
