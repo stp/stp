@@ -612,6 +612,13 @@ int main(int argc, char ** argv) {
       asserts = ASTNode();
       query = ASTNode();
     }
+
+  // Currently for testcase12.stp.smt2 we spend 3 seconds running the destructors,
+  // the total runtime is 17 seconds, so about 20% of runtime is spent destructing
+  // which is wasted work because the process is going to be killed anyway.
+  if (bm->UserFlags.isSet("fast-exit", "1"))
+	  exit(0);
+
   AssertsQuery->clear();
   delete AssertsQuery;
 
