@@ -78,7 +78,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile = NULL;
@@ -123,20 +123,19 @@ int main(int argc, char ** argv) {
   helpstring += 
     "STP version            : " + version + "\n\n";
   helpstring +=  
-    "-a                     : switch optimizations off (optimizations are ON by default)\n";
+    "-a                     : disable potentially size-increasing optimisations\n";
   helpstring +=  
     "-b                     : print STP input back to cout\n";
   helpstring +=
     "-c                     : construct counterexample\n";
   helpstring +=  
     "--cryptominisat        : use cryptominisat2 as the solver\n";
-
   helpstring +=
     "-d                     : check counterexample\n";
-
   helpstring +=  
     "--disable-cbitp        : disable constant bit propagation\n";
-
+  helpstring +=
+    "--disable-simplify     : disable all simplifications\n";
   helpstring +=  
     "--exit-after-CNF       : exit after the CNF has been generated\n";
   helpstring +=  
@@ -145,22 +144,16 @@ int main(int argc, char ** argv) {
     "-h                     : help\n";
   helpstring +=  
     "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
-  //helpstring +=
-  //    "-j <filename>          : CNF Dumping. Creates a DIMACS equivalent file of the input STP file\n";
   helpstring +=  
     "-m                     : use the SMTLIB1 parser\n";
   helpstring +=
     "--minisat              : use minisat 2.2 as the solver\n";
-
   helpstring +=  
     "--output-CNF           : save the CNF into output_[0..n].cnf\n";
   helpstring +=  
     "--output-bench         : save in ABC's bench format to output.bench\n";
   helpstring +=  
     "-p                     : print counterexample\n";
-  // I haven't checked that this works so don't want to include it by default.
-  //helpstring +=
-  //  "--print-back-C         : print input as C code (partially works), then exit\n";
   helpstring +=
     "--print-back-CVC       : print input in CVC format, then exit\n";
   helpstring +=
@@ -187,8 +180,8 @@ int main(int argc, char ** argv) {
     "-v                     : print nodes \n";
   helpstring +=  
     "-w                     : switch wordlevel solver off (optimizations are ON by default)\n";
-  helpstring +=  
-    "-x                     : flatten nested XORs\n";
+  //helpstring +=
+  //  "-x                     : flatten nested XORs\n";
   helpstring +=  
     "-y                     : print counterexample in binary\n";
 
@@ -216,6 +209,8 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--SMTLIB2"),SMT_LIB2_FORMAT));
 			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
 			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
+			  lookup.insert(make_pair(tolower("--disable-simplify"),DISABLE_SIMPLIFICATIONS));
+
 
 			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
 			  {
@@ -300,6 +295,13 @@ int main(int argc, char ** argv) {
                           case USE_MINISAT_SOLVER:
                                   bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
                                   break;
+                          case DISABLE_SIMPLIFICATIONS:
+                                  bm->UserFlags.optimize_flag = false;
+                                  bm->UserFlags.bitConstantProp_flag = false;
+                                  bm->UserFlags.set("enable-unconstrained","0");
+                                  bm->UserFlags.set("use-intervals","0");
+                                  bm->UserFlags.wordlevel_solve_flag = false;
+                                break;
 			  default:
 				  fprintf(stderr,usage,prog);
 	               cout << helpstring;
