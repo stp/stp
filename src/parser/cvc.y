@@ -837,70 +837,6 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   delete $1;
   }
 }
-/* |      Expr BVLEFTSHIFT_TOK Expr */
-/* { */
-/*   // VARIABLE LEFT SHIFT */
-/*   // */
-/*   // $1 (THEEXPR) is being shifted */
-/*   // */
-/*   // $3 is the variable shift amount */
-/*   ASTNode inputExpr = *$1; */
-/*   ASTNode varShiftAmt = *$3; */
-
-/*   unsigned int exprWidth = $1->GetValueWidth(); */
-/*   unsigned int shiftAmtWidth = $3->GetValueWidth(); */
-/*   ASTNode exprWidthNode = parserInterface->CreateBVConst(shiftAmtWidth, exprWidth); */
-  
-/*   ASTNode cond, thenExpr, elseExpr; */
-/*   unsigned int count = 0; */
-/*   while(count < exprWidth) */
-/*     { */
-/*       if(0 == count) */
-/* 	{ */
-/* 	  // if count is zero then the appropriate rightshift expression is */
-/* 	  // THEEXPR itself */
-/* 	  elseExpr = inputExpr; */
-/* 	} */
-/*       else */
-/* 	{ */
-/* 	  // 1 <= count < exprWidth */
-/* 	  // */
-/* 	  // Construct appropriate conditional */
-/* 	  ASTNode countNode = parserInterface->CreateBVConst(shiftAmtWidth, count); */
-/* 	  cond = parserInterface->nf->CreateNode(EQ, countNode, varShiftAmt); */
-
-/* 	  //Construct the rightshift expression padding @ Expr[hi:low] */
-/* 	  ASTNode low = */
-/* 	    parserInterface->CreateBVConst(32,count); */
-/* 	  ASTNode extract = */
-/* 	    parserInterface->nf->CreateTerm(BVEXTRACT,exprWidth-count,inputExpr,hi,low); */
-/* 	  ASTNode padding = */
-/* 	    ParserBM->CreateZeroConst(count); */
-/* 	  thenExpr = */
-/* 	    parserInterface->nf->CreateTerm(BVCONCAT, exprWidth, padding, extract); */
-/* 	  ASTNode ite = */
-/* 	    parserInterface->nf->CreateTerm(ITE, exprWidth, cond, thenExpr, elseExpr); */
-/* 	  BVTypeCheck(ite); */
-/* 	  elseExpr = ite; */
-/* 	} */
-/*       count++; */
-/*     } //End of while loop */
-
-/*   // if shiftamount is greater than or equal to exprwidth, then */
-/*   // output is zero. */
-/*   cond = parserInterface->nf->CreateNode(BVGE, varShiftAmt, exprWidthNode); */
-/*   thenExpr = ParserBM->CreateZeroConst(exprWidth); */
-/*   ASTNode * ret = */
-/*     new ASTNode(parserInterface->nf->CreateTerm(ITE, */
-/* 				     exprWidth, */
-/* 				     cond, thenExpr, elseExpr)); */
-/*   BVTypeCheck(*ret); */
-/*   //cout << *ret; */
-
-/*   $$ = ret; */
-/*   delete $1; */
-/*   delete $3; */
-/* } */
 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK
 {
   ASTNode len = parserInterface->CreateZeroConst($3);
@@ -1077,7 +1013,7 @@ LetDecl         :       STRING_TOK '=' Expr
   //2. Ensure that LET variables are not
   //2. defined more than once
   parserInterface->letMgr.LetExprMgr($1,*$3);
-  delete $1;
+  free($1);
   delete $3;
 }
 |       STRING_TOK ':' Type '=' Expr
@@ -1091,7 +1027,7 @@ LetDecl         :       STRING_TOK '=' Expr
     yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
 
   parserInterface->letMgr.LetExprMgr($1,*$5);
-  delete $1;
+  free( $1);
   delete $5;
 }
 |       STRING_TOK '=' Formula
@@ -1101,7 +1037,7 @@ LetDecl         :       STRING_TOK '=' Expr
 
   //Do LET-expr management
   parserInterface->letMgr.LetExprMgr($1,*$3);
-  delete $1;
+  free( $1);
   delete $3;
 }
 |       STRING_TOK ':' Type '=' Formula
@@ -1116,7 +1052,7 @@ LetDecl         :       STRING_TOK '=' Expr
 
   //Do LET-expr management
   parserInterface->letMgr.LetExprMgr($1,*$5);
-  delete $1;
+  free( $1);
   delete $5;
 }                
 ;
