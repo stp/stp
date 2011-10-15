@@ -728,6 +728,7 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children, unsigned int w
 	ASTNode write = children[0];
 
 	const bool read_is_const = (BEEV::BVCONST == readIndex.GetKind());
+        ASTVec c(2);
 
 	while (write.GetKind() == BEEV::WRITE)
 	{
@@ -745,9 +746,28 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children, unsigned int w
 			//cerr << "+";
 		}else
 		{
-			// They may be the same. Exit.
+		        // They may be the same. Exit.
+		        // We've finished the cheap tests, now do the expensive one.
+		        // I don't know if the cost of this justifies the benefit.
 			//cerr << "#";
-			break;
+		        c[0] =write_index;
+		        c[1] = readIndex;
+		        ASTNode n = CreateSimpleEQ(c);
+		        if (n == ASTTrue)
+		            {
+		                //cerr << "#";
+		                return write[2];
+		            }
+		        else if (n == ASTFalse)
+		            {
+		                cerr << "!";
+		            }
+		        else
+		            {
+		                //cerr << "."
+		                //Perhaps they are the same, perhaps not.
+		                break;
+		            }
 		}
 		write = write[0];
 	}
