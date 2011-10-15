@@ -760,7 +760,7 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children, unsigned int w
 		            }
 		        else if (n == ASTFalse)
 		            {
-		                cerr << "!";
+		                //cerr << "!";
 		            }
 		        else
 		            {
