@@ -10,16 +10,11 @@
 
 -include $(TOP)/scripts/config.info
 
-#OPTIMIZE     = -g -pg            # Debugging and gprof-style profiling
-#OPTIMIZE      = -g                # Debugging
-#OPTIMIZE      = -O3 -fPIC         # Maximum optimization
-#OPTIMIZE      = -O3 -march=native -fomit-frame-pointer # Maximum optimization
-#OPTIMIZE      = -O3 -march=native -DNDEBUG -DLESSBYTES_PERNODE
-OPTIMIZE      = -O3  -g            # Maximum optimization
+OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
+#OPTIMIZE      =  -O3 -g            # Debug
 
 #CFLAGS_M32   = -m32
-
-CFLAGS_BASE   = $(OPTIMIZE)
+CFLAGS_BASE   += $(OPTIMIZE)
 
 ifeq ($(WITHCBITP),yes)
 	CFLAGS_BASE += -DWITHCBITP
@@ -39,8 +34,8 @@ ifdef STATIC
 endif
 
 
-LDFLAGS = $(LDFLAGS_BASE)
-CFLAGS = $(CFLAGS_BASE) $(CFLAGS_M32)
+LDFLAGS += $(LDFLAGS_BASE)
+CFLAGS += $(CFLAGS_BASE) $(CFLAGS_M32)
 
 
 #Required by minisat2.2
