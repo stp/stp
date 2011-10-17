@@ -573,7 +573,7 @@ int main(int argc, char ** argv) {
           if (bm->UserFlags.print_STPinput_back_CVC_flag)
             {
               //needs just the query. Reads the asserts out of the data structure.
-              print_STPInput_Back(query);
+              print_STPInput_Back(original_input);
             }
 
           if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
