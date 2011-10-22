@@ -78,7 +78,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT} OptionType;
 
 int main(int argc, char ** argv) {
   char * infile = NULL;
@@ -149,6 +149,8 @@ int main(int argc, char ** argv) {
   helpstring +=
     "--minisat              : use minisat 2.2 as the solver\n";
   helpstring +=  
+    "--oldstyle-refinement  : Do abstraction-refinement outside the SAT solver.\n";
+  helpstring +=
     "--output-CNF           : save the CNF into output_[0..n].cnf\n";
   helpstring +=  
     "--output-bench         : save in ABC's bench format to output.bench\n";
@@ -165,7 +167,7 @@ int main(int argc, char ** argv) {
   helpstring +=
     "--print-back-dot       : print dotty/neato's graph format, then exit\n";
   helpstring +=  
-    "-r                     : switch refinement off (optimizations are ON by default)\n";
+    "-r                     : turn of abstraction-refinement of arrays.\n";
   helpstring +=  
     "-s                     : print function statistics\n";
   helpstring +=
@@ -210,7 +212,7 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--SMTLIB1"),SMT_LIB1_FORMAT));
 			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
 			  lookup.insert(make_pair(tolower("--disable-simplify"),DISABLE_SIMPLIFICATIONS));
-
+			  lookup.insert(make_pair(tolower("--oldstyle-refinement"),OLDSTYLE_REFINEMENT));
 
 			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
 			  {
@@ -293,6 +295,9 @@ int main(int argc, char ** argv) {
                                   bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT_SOLVER;
                                   break;
                           case USE_MINISAT_SOLVER:
+                                  bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
+                                  break;
+                          case OLDSTYLE_REFINEMENT:
                                   bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
                                   break;
                           case DISABLE_SIMPLIFICATIONS:

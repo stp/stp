@@ -1,40 +1,48 @@
-#include "core/Solver.h"
-#include "MinisatCore.h"
+#include "core_prop/Solver_prop.h"
+#include "MinisatCore_prop.h"
 #include "utils/System.h"
-#include "simp/SimpSolver.h"
 
 namespace BEEV
 {
 
   template <class T>
-  MinisatCore<T>::MinisatCore()
+  MinisatCore_prop<T>::MinisatCore_prop()
   {
      s = new T();
   };
 
   template <class T>
-  MinisatCore<T>::~MinisatCore()
+  MinisatCore_prop<T>::~MinisatCore_prop()
   {
     delete s;
   }
 
   template <class T>
   bool
-  MinisatCore<T>::addClause(const SATSolver::vec_literals& ps) // Add a clause to the solver.
+  MinisatCore_prop<T>::addArray(int array_id, const SATSolver::vec_literals& i, const SATSolver::vec_literals& v, const Minisat::vec<Minisat::lbool> & ki, const Minisat::vec<Minisat::lbool> & kv )
+  {
+	  s->addArray(array_id, i,v, ki,kv);
+   return true;
+  }
+
+
+  template <class T>
+  bool
+  MinisatCore_prop<T>::addClause(const SATSolver::vec_literals& ps) // Add a clause to the solver.
   {
     s->addClause(ps);
   }
 
   template <class T>
   bool
-  MinisatCore<T>::okay() const // FALSE means solver is in a conflicting state
+  MinisatCore_prop<T>::okay() const // FALSE means solver is in a conflicting state
   {
     return s->okay();
   }
 
   template <class T>
   bool
-  MinisatCore<T>::solve() // Search without assumptions.
+  MinisatCore_prop<T>::solve() // Search without assumptions.
   {
     if (!s->simplify())
       return false;
@@ -45,30 +53,30 @@ namespace BEEV
 
   template <class T>
   uint8_t
-  MinisatCore<T>::modelValue(Var x) const
+  MinisatCore_prop<T>::modelValue(Var x) const
   {
     return Minisat::toInt(s->modelValue(x));
   }
 
   template <class T>
   Minisat::Var
-  MinisatCore<T>::newVar()
+  MinisatCore_prop<T>::newVar()
   {
     return s->newVar();
   }
 
   template <class T>
-  int MinisatCore<T>::setVerbosity(int v)
+  int MinisatCore_prop<T>::setVerbosity(int v)
   {
     s->verbosity = v;
   }
 
   template <class T>
-  int MinisatCore<T>::nVars()
+  int MinisatCore_prop<T>::nVars()
   {return s->nVars();}
 
   template <class T>
-  void MinisatCore<T>::printStats()
+  void MinisatCore_prop<T>::printStats()
     {
       double cpu_time = Minisat::cpuTime();
       double mem_used = Minisat::memUsedPeak();
@@ -81,9 +89,5 @@ namespace BEEV
       printf("CPU time              : %g s\n", cpu_time);
     }
 
-
-  // I was going to make SimpSolver and Solver instances of this template.
-  // But I'm not so sure now because I don't understand what eliminate() does in the simp solver.
-  template class MinisatCore<Minisat::Solver>;
-  //template class MinisatCore<Minisat::SimpSolver>;
+  template class MinisatCore_prop<Minisat::Solver_prop>;
 };

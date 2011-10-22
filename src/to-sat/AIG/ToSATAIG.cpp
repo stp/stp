@@ -111,36 +111,156 @@ namespace BEEV
 	  Cnf_DataFree(cnfData);
 	  cnfData = NULL;
 
-	  // Minisat doesn't, but simplifying minisat and cryptominsat eliminate variables during their
-	  // simplification phases. The problem is that we may later add clauses in that refer to those
-	  // simplified-away variables. Here we mark them as frozen which prevents them from being removed.
-	  for (ArrayTransformer::ArrType::iterator it = arrayTransformer->arrayToIndexToRead.begin(); it
-                != arrayTransformer->arrayToIndexToRead.end(); it++)
+	// Minisat doesn't, but simplifying minisat and cryptominsat eliminate variables during their
+        // simplification phases. The problem is that we may later add clauses in that refer to those
+        // simplified-away variables. Here we mark them as frozen which prevents them from being removed.
+        for (ArrayTransformer::ArrType::iterator it = arrayTransformer->arrayToIndexToRead.begin();
+                it != arrayTransformer->arrayToIndexToRead.end(); it++)
             {
-                ArrayTransformer::arrTypeMap& atm = it->second;
+                const ArrayTransformer::arrTypeMap& atm = it->second;
 
-                for (ArrayTransformer::arrTypeMap::const_iterator it2 = atm.begin(); it2 != atm.end(); it2++)
+                for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin(); arr_it != atm.end(); arr_it++)
                     {
-                        const ArrayTransformer::ArrayRead& ar = it2->second;
+                        const ArrayTransformer::ArrayRead& ar = arr_it->second;
                         ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
                         if (it != nodeToSATVar.end())
                             {
-                                vector<unsigned>& v = it->second;
-                                for (int i=0; i < v.size(); i++)
+                                const vector<unsigned>& v = it->second;
+                                for (int i = 0; i < v.size(); i++)
                                     satSolver.setFrozen(v[i]);
                             }
 
-                        it = nodeToSATVar.find(ar.symbol);
-                        if (it != nodeToSATVar.end())
+                        ASTNodeToSATVar::iterator it2 = nodeToSATVar.find(ar.symbol);
+                        if (it2 != nodeToSATVar.end())
                             {
-                                vector<unsigned>& v = it->second;
-                                for (int i=0; i < v.size(); i++)
+                                const vector<unsigned>& v = it2->second;
+                                for (int i = 0; i < v.size(); i++)
                                     satSolver.setFrozen(v[i]);
                             }
                     }
             }
 
+        // One modified version of Minisat has an array propagator based solver built in. So this block sends the details of the arrays to it.
+        if ((bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS) &&  bm->UserFlags.arrayread_refinement_flag )
+            {
+                int array_id = 0; // Is incremented for each distinct array.
+                bool found = false;
+                for (ArrayTransformer::ArrType::iterator it = arrayTransformer->arrayToIndexToRead.begin();
+                        it != arrayTransformer->arrayToIndexToRead.end(); it++)
+                    {
+                        const ArrayTransformer::arrTypeMap& atm = it->second;
 
+                        for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin(); arr_it != atm.end(); arr_it++)
+                            {
+                                const ArrayTransformer::ArrayRead& ar = arr_it->second;
+
+                                // Get the the SAT solver variable numbers of the index, but,
+                                // if it's a constant, use that instead,
+                                // if we don't have anything, then add some new stuff in.
+
+                                ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
+                                SATSolver::vec_literals index;
+                                Minisat::vec<Minisat::lbool> index_constants;
+                                const int index_width = arr_it->first.GetValueWidth();
+                                if (index_width > 64)
+                                        FatalError("The array propagators unfortunately don't do arbitary precision integers yet."
+                                                " They use 64-bit integers internally to store values. Your problem has array indexes > 64 bits."
+                                                " Until this is fixed you need to run STP with the '--oldstyle-refinement' or the '-r' flag.");
+                                if (it != nodeToSATVar.end())
+                                    {
+                                        const vector<unsigned>& v = it->second;
+                                        for (int i = 0; i < index_width; i++)
+                                                index.push(SATSolver::mkLit(v[i], false));
+                                    }
+                                else if (ar.index_symbol.isConstant())
+                                    {
+                                        const CBV c = ar.index_symbol.GetBVConst();
+                                        for (int i = 0; i < index_width; i++)
+                                            if (CONSTANTBV::BitVector_bit_test(c, i))
+                                                index_constants.push((Minisat::lbool) satSolver.true_literal());
+                                            else
+                                                index_constants.push((Minisat::lbool) satSolver.false_literal());
+                                    }
+                                else
+                                    {
+
+                                        // The index is ommitted from the problem.
+
+                                        vector<unsigned> v_a;
+                                        assert(ar.index_symbol.GetKind() == SYMBOL);
+                                        // It was ommitted from the initial problem, so assign it freshly.
+                                        for (int i = 0; i < ar.index_symbol.GetValueWidth(); i++)
+                                            {
+                                                SATSolver::Var v = satSolver.newVar();
+                                                // We probably don't want the variable eliminated.
+                                                satSolver.setFrozen(v);
+                                                v_a.push_back(v);
+                                            }
+                                        nodeToSATVar.insert(make_pair(ar.index_symbol, v_a));
+
+                                        for (int i = 0; i < v_a.size(); i++)
+                                            {
+                                                SATSolver::Var var = v_a[i];
+                                                index.push(SATSolver::mkLit(var, false));
+                                            }
+                                    }
+
+                                assert((index.size() > 0) ^ (index_constants.size() > 0));
+
+                                SATSolver::vec_literals value;
+                                Minisat::vec<Minisat::lbool> value_constants;
+                                it = nodeToSATVar.find(ar.symbol);
+
+                                if (it != nodeToSATVar.end())
+                                    {
+                                        vector<unsigned>& v = it->second;
+                                        for (int i = 0; i < v.size(); i++)
+                                            {
+                                                SATSolver::Var var = v[i];
+                                                value.push(SATSolver::mkLit(var, false));
+                                            }
+                                    }
+                                else if (ar.symbol.isConstant())
+                                    {
+                                        CBV c = ar.symbol.GetBVConst();
+                                        for (int i = 0; i < ar.symbol.GetValueWidth(); i++)
+                                            if (CONSTANTBV::BitVector_bit_test(c, i))
+                                                value_constants.push((Minisat::lbool) satSolver.true_literal());
+                                            else
+                                                value_constants.push((Minisat::lbool) satSolver.false_literal());
+                                    }
+                                else
+                                    {
+                                        // The value has been ommitted..
+                                        // I'm not sure this is needed (really).
+                                        vector<unsigned> v_a;
+
+                                        assert(ar.symbol.GetKind() == SYMBOL);
+                                        // It was ommitted from the initial problem, so assign it freshly.
+                                        for (int i = 0; i < ar.symbol.GetValueWidth(); i++)
+                                            {
+                                                SATSolver::Var v = satSolver.newVar();
+                                                // We probably don't want the variable eliminated.
+                                                satSolver.setFrozen(v);
+                                                v_a.push_back(v);
+                                            }
+                                        nodeToSATVar.insert(make_pair(ar.symbol, v_a));
+
+                                        for (int i = 0; i < v_a.size(); i++)
+                                            {
+                                                SATSolver::Var var = v_a[i];
+                                                value.push(SATSolver::mkLit(var, false));
+                                            }
+                                    }
+
+                                satSolver.addArray(array_id, index, value, index_constants, value_constants);
+                                found = true;
+                            }
+                        if (found)
+                            array_id++;
+                        found = false;
+                    }
+            }
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
       bm->GetRunTimes()->stop(RunTimes::Solving);

@@ -15,6 +15,8 @@
 #include "../sat/SimplifyingMinisat.h"
 #include "../sat/MinisatCore.h"
 #include "../sat/CryptoMinisat.h"
+#include "../sat/MinisatCore_prop.h"
+#include "../sat/core_prop/Solver_prop.h"
 #include "../simplifier/RemoveUnconstrained.h"
 #include "../simplifier/FindPureLiterals.h"
 #include "../simplifier/EstablishIntervals.h"
@@ -55,8 +57,10 @@ namespace BEEV {
 		newS = new SimplifyingMinisat();
     else if (bm->UserFlags.solver_to_use == UserDefinedFlags::CRYPTOMINISAT_SOLVER)
                     newS = new CryptoMinisat();
-    else
+    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
       newS = new MinisatCore<Minisat::Solver>();
+    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS)
+      newS = new MinisatCore_prop<Minisat::Solver_prop>();
 
 
 
@@ -487,9 +491,7 @@ namespace BEEV {
 
     assert(arrayops); // should only go to abstraction refinement if there are array ops.
     assert(bm->UserFlags.arrayread_refinement_flag); // Refinement must be enabled too.
-
-    // Unfortunately how I implemented the incremental CNF generator in ABC means that
-    // cryptominisat and simplifying minisat may simplify away variables that we later need.
+    assert (bm->UserFlags.solver_to_use != UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver shouldn't have returned undecided..
 
     res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, orig_input, satBase);
     if (SOLVER_UNDECIDED != res)

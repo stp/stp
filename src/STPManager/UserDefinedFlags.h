@@ -127,7 +127,8 @@ namespace BEEV
       {
         MINISAT_SOLVER =0,
         SIMPLIFYING_MINISAT_SOLVER,
-        CRYPTOMINISAT_SOLVER
+        CRYPTOMINISAT_SOLVER,
+        MINISAT_PROPAGATORS
       };
 
     enum SATSolvers solver_to_use;
@@ -249,7 +250,7 @@ namespace BEEV
       tseitin_are_decision_variables_flag=true;
 
       // use minisat by default.
-      solver_to_use = MINISAT_SOLVER;
+      solver_to_use = MINISAT_PROPAGATORS;
 
       // The special Cryptominisat2 CNF generation with this flag enabled seems to go into an infinite loop.
       // beware of turning this on if you are using cryptominsat2.

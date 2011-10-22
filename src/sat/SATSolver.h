@@ -3,6 +3,7 @@
 
 #include "mtl/Vec.h"
 #include "core/SolverTypes.h"
+#include <iostream>
 
 // Don't let the defines escape outside.
 
@@ -25,7 +26,15 @@ namespace BEEV
     {};
 
     virtual bool
-    addClause(const vec_literals& ps)=0; // Add a clause to the solver.
+    addClause(const SATSolver::vec_literals& ps)=0; // Add a clause to the solver.
+
+    virtual
+    bool addArray(int array_id, const SATSolver::vec_literals& i, const SATSolver::vec_literals& v, const Minisat::vec<Minisat::lbool>&, const Minisat::vec<Minisat::lbool>& )
+    {
+     std::cerr << "Not implemented";
+     exit(1);
+    }
+
 
     virtual bool
     okay() const=0; // FALSE means solver is in a conflicting state
