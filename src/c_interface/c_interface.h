@@ -215,6 +215,9 @@ extern "C" {
   //! Return the counterexample after a failed query.
   Expr vc_getCounterExample(VC vc, Expr e);
 
+  //! Return an array from a counterexample after a failed query.
+  void vc_getCounterExampleArray(VC vc, Expr e, Expr **indices, Expr **values, int *size);
+    
   //! get size of counterexample, i.e. the number of variables/array
   //locations in the counterexample.
   int vc_counterexample_size(VC vc);

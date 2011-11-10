@@ -624,6 +624,27 @@ Expr vc_getCounterExample(VC vc, Expr e) {
   return output;
 }
 
+void vc_getCounterExampleArray(VC vc, Expr e, Expr **indices, Expr **values, int *size) {
+  nodestar a = (nodestar)e;
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
+
+  bool t = false;
+  if(ce->CounterExampleSize())
+    t = true;
+
+  std::vector<std::pair<ASTNode, ASTNode> > entries = ce->GetCounterExampleArray(t, *a);
+  *size = entries.size();
+  if (*size != 0) {
+    *indices = (Expr *) malloc(*size * sizeof(Expr*));
+    *values = (Expr *) malloc(*size * sizeof(Expr*));
+    for (int i = 0; i < *size; ++i) {
+      (*indices)[i] = new node(entries[i].first);
+      (*values)[i] = new node(entries[i].second);
+    }
+  }
+}
+
 int vc_counterexample_size(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  

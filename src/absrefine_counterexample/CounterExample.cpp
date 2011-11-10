@@ -618,6 +618,66 @@ namespace BEEV
     return output;
   } //End of GetCounterExample
 
+  // FUNCTION: queries the counterexample, and returns the number of array locations for e
+  std::vector<std::pair<ASTNode, ASTNode> > AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
+  {
+    std::vector<std::pair<ASTNode, ASTNode> > entries;
+    
+    //input is valid, no counterexample to print
+    if (bm->ValidFlag)
+      {
+        return entries;
+      }
+
+    //t is true if SAT solver generated a counterexample, else it is
+    //false
+    if (!t)
+      {
+          return entries;
+      }
+
+    // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+    // changes it. Which breaks the iterator otherwise.
+    const ASTNodeMap c(CounterExampleMap);
+
+    ASTNodeMap::const_iterator it = c.begin();
+    ASTNodeMap::const_iterator itend = c.end();
+    for (; it != itend; it++)
+      {
+        const ASTNode& f = it->first;
+        const ASTNode& se = it->second;
+
+        if (ARRAY_TYPE == se.GetType())
+          {
+            FatalError("TermToConstTermUsingModel: "
+                       "entry in counterexample is an arraytype. bogus:", se);
+          }
+
+        //skip over introduced variables
+        if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(
+            f)))
+          {
+            continue;
+          }
+        if (f.GetKind() == READ && f[0] == e && f[0].GetKind() == SYMBOL && f[1].GetKind() == BVCONST)
+          {
+            ASTNode rhs;
+            if (BITVECTOR_TYPE == se.GetType())
+              {
+                rhs = TermToConstTermUsingModel(se, false);
+              }
+            else
+              {
+                rhs = ComputeFormulaUsingModel(se);
+              }
+            assert(rhs.isConstant());
+            entries.push_back(std::make_pair(f[1], rhs));
+          }
+      }
+
+    return entries;
+  } //End of GetCounterExampleArray
+
   // FUNCTION: prints a counterexample for INVALID inputs.  iterate
   // through the CounterExampleMap data structure and print it to
   // stdout
