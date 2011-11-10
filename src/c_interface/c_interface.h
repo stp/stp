@@ -58,7 +58,11 @@ extern "C" {
     the time that vc_Destroy is called, vc_Destroy will automatically
     delete them. */
     EXPRDELETE,
-    CMS2
+    MS,
+    SMS,
+    CMS2,
+    MSP
+
   };
   void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
 

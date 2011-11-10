@@ -141,16 +141,23 @@ void vc_setFlags(VC vc, char c, int param_value) {
 }
 
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {
-  switch (f) {
+    bmstar b = (bmstar)(((stpstar)vc)->bm);
+    switch (f) {
   case EXPRDELETE:
     cinterface_exprdelete_on_flag = param_value != 0;
     break;
+  case MS:
+      b->UserFlags.solver_to_use = BEEV::UserDefinedFlags::MINISAT_SOLVER;
+      break;
+  case SMS:
+      b->UserFlags.solver_to_use = BEEV::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
+      break;
   case CMS2:
-      {
-      bmstar b = (bmstar)(((stpstar)vc)->bm);
       b->UserFlags.solver_to_use = BEEV::UserDefinedFlags::CRYPTOMINISAT_SOLVER;
       break;
-      }
+  case MSP:
+      b->UserFlags.solver_to_use = BEEV::UserDefinedFlags::MINISAT_PROPAGATORS;
+      break;
   default:
     BEEV::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
     break;
