@@ -126,12 +126,12 @@ int main(int argc, char ** argv) {
     "-a                     : disable potentially size-increasing optimisations\n";
   helpstring +=  
     "-b                     : print STP input back to cout\n";
-  helpstring +=
-    "-c                     : construct counterexample\n";
+  //helpstring +=
+  //  "-c                     : construct counterexample\n";
   helpstring +=  
     "--cryptominisat        : use cryptominisat2 as the solver\n";
-  helpstring +=
-    "-d                     : check counterexample\n";
+  //helpstring +=
+  //   "-d                     : check counterexample\n";
   helpstring +=  
     "--disable-cbitp        : disable constant bit propagation\n";
   helpstring +=
