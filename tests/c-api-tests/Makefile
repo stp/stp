@@ -14,7 +14,7 @@ else
 endif
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
 	rm -rf *.out
 
 0:	
@@ -113,6 +113,11 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26
 	g++ $(CXXFLAGS) -o a26.out \
          ../../lib/libstp.a stp-test3.c ../../lib/libstp.a
 	./a26.out
+
+27:
+	g++ $(CXXFLAGS) -o a27.out \
+         ../../lib/libstp.a stp-array-model.c ../../lib/libstp.a
+	./a27.out
 
 clean:
 	rm -rf *~ *.out *.dSYM
