@@ -143,6 +143,15 @@ namespace BEEV
     	config_options[n] = v;
     }
 
+    void disableSimplifications()
+    {
+      optimize_flag = false;
+      bitConstantProp_flag = false;
+      set("enable-unconstrained","0");
+      set("use-intervals","0");
+      wordlevel_solve_flag = false;
+    }
+
     string get(string n)
     {
     	return get(n,"");

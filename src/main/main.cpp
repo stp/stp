@@ -301,11 +301,7 @@ int main(int argc, char ** argv) {
                                   bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
                                   break;
                           case DISABLE_SIMPLIFICATIONS:
-                                  bm->UserFlags.optimize_flag = false;
-                                  bm->UserFlags.bitConstantProp_flag = false;
-                                  bm->UserFlags.set("enable-unconstrained","0");
-                                  bm->UserFlags.set("use-intervals","0");
-                                  bm->UserFlags.wordlevel_solve_flag = false;
+                                  bm->UserFlags.disableSimplifications();
                                 break;
 			  default:
 				  fprintf(stderr,usage,prog);
