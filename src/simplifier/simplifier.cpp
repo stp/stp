@@ -1754,7 +1754,7 @@ namespace BEEV
   }
 
 
-  // If the rhs of a left or right shift is known. Then replace it with a concat / extract.
+  // If the rhs of a left or right shift is known.
   ASTNode Simplifier::convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf)
   {
     const ASTNode a =children[0];
@@ -1787,17 +1787,16 @@ namespace BEEV
         {
           if (k == BVLEFTSHIFT)
             {
-              ASTNode zero = bm.CreateZeroConst(shift);
-              ASTNode hi = bm.CreateBVConst(32, width - shift -1);
-              ASTNode low = bm.CreateZeroConst(32);
-              ASTNode extract =
-                nf->CreateTerm(BVEXTRACT, width - shift,
-                                a, hi, low);
-              BVTypeCheck(extract);
+              CBV cbv =  CONSTANTBV::BitVector_Create(width,true);
+              CONSTANTBV::BitVector_Bit_On(cbv,shift);
+              ASTNode c = bm.CreateBVConst(cbv,width);
+
               output =
-                nf->CreateTerm(BVCONCAT, width,
-                                extract, zero);
+                nf->CreateTerm(BVMULT, width,
+                                a, c);
               BVTypeCheck(output);
+              //cout << output;
+              //cout << a << b << endl;
             }
           else if (k == BVRIGHTSHIFT)
             {
@@ -1818,8 +1817,6 @@ namespace BEEV
     }
   return output;
 }
-
-
 
   //This function simplifies terms based on their kind
   ASTNode 
@@ -2236,7 +2233,24 @@ namespace BEEV
                 output = nf->CreateTerm(BVSUB, inputValueWidth, a0[1], a0[0]);
                 break;
               }
-            case ITE:
+              case BVAND:
+            if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) && a0[1][0] == a0[0])
+              {
+                output = nf->CreateTerm(BVOR, inputValueWidth, a0[0], a0[1]);
+              }
+            break;
+            case BVOR:
+            if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) && a0[1][0] == a0[0])
+              {
+                output = nf->CreateTerm(BVAND, inputValueWidth, a0[0], a0[1]);
+              }
+            break;
+          case BVLEFTSHIFT:
+            if (a0[0].GetKind() == BVCONST)
+              output = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, nf->CreateTerm(BVUMINUS, inputValueWidth, a0[0]),
+                  a0[1]);
+            break;
+          case ITE:
               {
                 //BVUMINUS(ITE(c,t1,t2)) <==> ITE(c,BVUMINUS(t1),BVUMINUS(t2))
                 ASTNode c = a0[0];
