@@ -1686,7 +1686,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
 // You can select these with any combination you want of true & false.
 const bool division_variant_1 = true;
 const bool division_variant_2 = false;
-const bool division_variant_3 = false;
+const bool division_variant_3 = true;
 
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
