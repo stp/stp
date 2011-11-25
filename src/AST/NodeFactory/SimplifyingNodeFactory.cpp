@@ -32,6 +32,8 @@ using BEEV::Kind;
 
 static bool debug_simplifyingNodeFactory = false;
 
+static const bool translate_signed = true;
+
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 {
 
@@ -932,7 +934,6 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm, &hashing);
           else if(children[0].isConstant() && children[0] == bm.CreateOneConst(width) && width > 1)
             result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::EQ, children[1], bm.CreateZeroConst(width)), children[0], bm.CreateZeroConst(width));
-
         }
 	break;
 
@@ -940,6 +941,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		{
 			if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
 				result = bm.CreateZeroConst(width);
+			else if (width > 1 && children[0].isConstant() && children[0] == bm.CreateOneConst(width))
+			    result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::EQ, children[1], bm.CreateZeroConst(width)), children[0], bm.CreateZeroConst(width));
 			else if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
 				result = bm.CreateMaxConst(width);
 			else if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
@@ -1203,26 +1206,6 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = plusRules(children[0],children[1]);
             if (result.IsNull())
               result = plusRules(children[1],children[0]);
-
-#if 0
-            // This slowed down some of the smtcomp2007 problems x4 total runtime.
-
-            // Put the unary minus on the node with the lowest variable number.
-            if (result.IsNull() && children[0].GetKind() == BEEV::BVUMINUS && !arithless(children[0][0], children[1]))
-              {
-                // Need to be swapped.
-                ASTNode r = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[1]);
-                ASTNode p = NodeFactory::CreateTerm(BEEV::BVPLUS, width, r, children[0][0]);
-                result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, p);
-              }
-            else if (result.IsNull() && children[1].GetKind() == BEEV::BVUMINUS && arithless(children[0], children[1][0]))
-              {
-                // Need to be swapped.
-                ASTNode r = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[0]);
-                ASTNode p = NodeFactory::CreateTerm(BEEV::BVPLUS, width, r, children[1][0]);
-                result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, p);
-              }
-#endif
           }
         break;
 
@@ -1234,18 +1217,27 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                   result = bm.CreateZeroConst(width);
           else if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
               result = bm.CreateZeroConst(width);
+          else if (children[1].isConstant() && children[1] == bm.CreateMaxConst(width))
+              result = bm.CreateZeroConst(width);
+          else if (children[0].isConstant() && children[0] == bm.CreateZeroConst(width))
+              result = bm.CreateZeroConst(width);
           else if (children[0].GetKind() == BEEV::BVUMINUS && children[0][0] == children[1])
               result = bm.CreateZeroConst(width);
           else if (children[1].GetKind() == BEEV::BVUMINUS && children[1][0] == children[0])
               result = bm.CreateZeroConst(width);
-          else
-            result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
+          else if (translate_signed)
+           result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
           break;
 
 	case BEEV::BVDIV:
 	  if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
 	    result = children[0];
-          else if (children[1].isConstant() && children[1] == bm.CreateZeroConst(width) && bm.UserFlags.division_by_zero_returns_one_flag)
+          if (children[1].isConstant() && CONSTANTBV::BitVector_bit_test(children[1].GetBVConst(),width-1))
+            {
+              // We are dividing by something that has a one in the MSB. It's either 1 or zero.
+              result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::BVGE, children[0], children[1]), bm.CreateOneConst(width), bm.CreateZeroConst(width));
+            }
+	  else if (children[1].isConstant() && children[1] == bm.CreateZeroConst(width) && bm.UserFlags.division_by_zero_returns_one_flag)
              result =  bm.CreateOneConst(width);
           else if (bm.UserFlags.division_by_zero_returns_one_flag && children[0] == children[1])
              result =  bm.CreateOneConst(width);
@@ -1261,7 +1253,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result =   bm.CreateOneConst(width);
           else if (children[1].GetKind() == BEEV::BVUMINUS && children[0] == children[1][0] && bm.UserFlags.division_by_zero_returns_one_flag)
               result = NodeFactory::CreateTerm(BEEV::SBVDIV,width, children[1], children[0]);
-          else
+          else if (bm.UserFlags.division_by_zero_returns_one_flag && children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+             result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::EQ, children[1], bm.CreateZeroConst(width)), bm.CreateOneConst(width), bm.CreateZeroConst(width));
+          if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+            result = NodeFactory::CreateTerm(BEEV::BVUMINUS,width, children[1]);
+          else if (translate_signed)
            result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
           break;
 
@@ -1284,28 +1280,33 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                         result = NodeFactory::CreateTerm(BEEV::SBVREM, width, children[0], children[1][0]);
                 else if (children[0].GetKind() == BEEV::BVUMINUS && children[0][0] == children[1])
                   result = bm.CreateZeroConst(width);
-                else
+                else if (translate_signed)
                   result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children),this,&bm);
 		break;
 
 	case BEEV::BVMOD:
+	  {
 		if (children[0] == children[1])
 			result = bm.CreateZeroConst(width);
 
-		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(
-				children[0].GetBVConst()))
+		if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
 			result = bm.CreateZeroConst(width);
 
-		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(
-				children[1].GetBVConst()))
+		if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
 			result = children[0];
 
+		if (children[0].GetKind() == BEEV::BVPLUS && children[0][0] == bm.CreateMaxConst(width) && children[1] == children[0][1]  )
+		      result = children[0];
 
-		if (children[1].isConstant()) {
-			ASTNode one = bm.CreateOneConst(width);
-			if (children[1] == one)
-				result = bm.CreateZeroConst(width);
-		}
+                const ASTNode one = bm.CreateOneConst(width);
+
+		if (children[1].isConstant() && children[1] == one)
+                 result = bm.CreateZeroConst(width);
+
+		if (children[0].isConstant() && children[0] == one)
+		      result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::EQ, children[1], one), bm.CreateZeroConst(width), one);
+	  }
+
 		break;
 
         case BEEV::WRITE:
