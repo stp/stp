@@ -23,7 +23,6 @@
 #include "../simplifier/UseITEContext.h"
 #include "../simplifier/AlwaysTrue.h"
 #include "../simplifier/AIGSimplifyPropositionalCore.h"
-#include "../simplifier/BigRewriter.h"
 #include <memory>
 
 namespace BEEV {
@@ -109,7 +108,6 @@ namespace BEEV {
             bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
           }
       }
-
     return simplified_solved_InputToSAT;
   }
 
@@ -222,22 +220,9 @@ namespace BEEV {
     // so it's expensive to call.
     if (!arrayops && initial_difficulty_score < 1000000)
       {
-        // Remove the sdiv/smod/srem
-        simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
-
         simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver, initial_difficulty_score);
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
-
-    {
-      bm->GetRunTimes()->start(RunTimes::BigRewrite);
-      BEEV::BigRewriter b ;
-      ASTNodeMap fromTo;
-      SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-      simplified_solved_InputToSAT = b.rewrite(simplified_solved_InputToSAT, fromTo, &nf,bm);
-      bm->GetRunTimes()->stop(RunTimes::BigRewrite);
-    }
-
 
     if (bm->UserFlags.stats_flag)
       cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
@@ -294,7 +279,6 @@ namespace BEEV {
           }
       }
     while (inputToSAT != simplified_solved_InputToSAT);
-
 
     if (bm->UserFlags.bitConstantProp_flag)
       {
