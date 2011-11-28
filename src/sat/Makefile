@@ -6,7 +6,7 @@ OBJS = $(SRCS:.cpp=.o)
 LIB = libminisat.a
 
 # exported variables override those set in recursive makefiles.
-export COPTIMIZE=$(CFLAGS_M32) $(CFLAGS_FPIC) -O3
+export COPTIMIZE=$(CFLAGS_M32) $(CFLAGS_FPIC) -O3 
 
 
 .PHONY:core

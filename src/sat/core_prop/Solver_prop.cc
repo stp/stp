@@ -171,6 +171,18 @@ Solver_prop::addArray(int array_id, const vec<Lit>& i, const vec<Lit>& v, const 
 
     if (!ok) return false;
 
+    if (i.size() > INDEX_BIT_WIDTH || ki.size() > INDEX_BIT_WIDTH)
+        {
+            printf("The array propagators unfortunately don't do arbitrary precision integers yet. "
+                    "With the INDICES_128BITS compile time flag STP does 128-bits on 64-bit machines compiled with GCC. "
+                    "Currently STP is compiled to use %d bit indices. "
+                    "Unfortunately your problem has array indexes of size %d bits. "
+                    "STP does arbitrary precision indices with the '--oldstyle-refinement' or the '-r' flags.\n",
+                    INDEX_BIT_WIDTH, std::max(i.size(), ki.size()));
+            exit(1);
+        }
+
+
     bool startOfNewArray = false;
     if (array_id != last_id)
         {
@@ -179,7 +191,7 @@ Solver_prop::addArray(int array_id, const vec<Lit>& i, const vec<Lit>& v, const 
 
             // Map doesn't have a copy constructor, so we create one on the heap.
             // Some constant indexes will already have been copied into the val_to_aa map.
-            Map<uint64_t, std::vector<ArrayAccess*> >* t = new Map<uint64_t, std::vector<ArrayAccess*>  > [number_of_arrays];
+            Map<index_type, std::vector<ArrayAccess*> >* t = new Map<index_type, std::vector<ArrayAccess*>  > [number_of_arrays];
 
             for (int j=0; j < number_of_arrays-1 ; j++)
                 val_to_aa[j].moveTo(t[j]);
@@ -279,14 +291,14 @@ void Solver_prop::startWatchOfIndexVariable(ArrayAccess* iv)
 
 
 // Reads out the array index as an integer. It is completely specified.
-uint64_t
+index_type
 Solver_prop::index_as_int(const ArrayAccess& iv)
 {
     if (iv.isIndexConstant())
         return iv.constantIndex();
 
-    uint64_t t = 0;
-    assert(64 >= iv.indexSize());
+    index_type t = 0;
+    assert(INDEX_BIT_WIDTH >= iv.indexSize());
 
     for (int i = 0; i < iv.indexSize(); i++)
         {
@@ -514,7 +526,7 @@ Solver_prop::writeOutArrayAxiom(ArrayAccess& iv)
 {
     assert(IndexIsSet(iv));
 
-    const uint64_t asInt = index_as_int(iv);
+    const index_type asInt = index_as_int(iv);
 
     if (!val_to_aa[iv.array_id].has(asInt))
         val_to_aa[iv.array_id].insert(asInt, std::vector<ArrayAccess*>());
@@ -894,11 +906,11 @@ void Solver_prop::cancelUntil(int level) {
 
 	struct to_re_add
 	{
-	    uint64_t index_value;
+	    index_type index_value;
 	    int array_id;
 	};
 
-	vec<uint64_t> toRep;
+	vec<index_type> toRep;
 	vec<ArrayAccess*> aaRep;
 
 	vec<ArrayAccess*> toReAdd;
@@ -912,7 +924,7 @@ void Solver_prop::cancelUntil(int level) {
                 assert(IndexIsSet(aa));   // The index shouldn't be unset yet.
 
         	// Get the integer.
-        	uint64_t asInt = index_as_int(aa);
+                index_type asInt = index_as_int(aa);
         	assert(val_to_aa[aa.array_id].has(asInt));
 
         	std::vector<ArrayAccess*>& aaV = val_to_aa[aa.array_id][asInt];
@@ -946,7 +958,7 @@ void Solver_prop::cancelUntil(int level) {
 	// The zeroeth of these numbers has been deleted, so we might need to redo the implications.
 	for (int i=0; i < toRep.size(); i++)
 	{
-	        uint64_t asInt = toRep[i];
+	        index_type asInt = toRep[i];
 	        ArrayAccess& aa = *aaRep[i];
 
 	        if (val_to_aa[aa.array_id].has(asInt))

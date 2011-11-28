@@ -31,6 +31,17 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace Minisat {
 
+// Use the GCC extension to use 128-bit indices.
+#ifdef INDICES_128BITS
+    typedef unsigned int uint128_t __attribute__((mode(TI)));
+    static inline uint32_t hash(uint128_t x){ return (uint32_t)x; }
+    typedef uint128_t index_type;
+#else
+    typedef uint64_t index_type;
+#endif
+
+#define INDEX_BIT_WIDTH (sizeof(index_type) *8)
+
 //=================================================================================================
 // Solver -- the main class:
 
@@ -132,7 +143,7 @@ private:
             const bool is_value_constant;    // Whether the value is a constant at the start.
             const bool is_index_constant;
 
-            uint64_t index_constant;
+            index_type index_constant;
 	public:
 
             //The index/value is entirely known in advance.
@@ -165,7 +176,7 @@ private:
 
                 if (is_index_constant)
                     {
-                        assert(index_size <=64);
+                        assert(index_size <=INDEX_BIT_WIDTH);
                         for (int i = 0; i < index_size; i++)
                             {
                                 lbool v = constant_index[i];
@@ -175,7 +186,7 @@ private:
                             }
                     }
             }
-            uint64_t constantIndex() const
+            index_type constantIndex() const
              {
                  assert (is_index_constant);
                  return index_constant;
@@ -258,7 +269,7 @@ private:
 
         lbool accessIndex(const ArrayAccess& iv, int i);
 	lbool accessValue(const ArrayAccess& iv, int i);
-	uint64_t index_as_int(const ArrayAccess& iv);
+	index_type index_as_int(const ArrayAccess& iv);
 
 	void startWatchOfIndexVariable(ArrayAccess* iv);
 
@@ -287,7 +298,7 @@ private:
         int top_level_var;
         int alternate_trail_sorted_to;
 
-	Map<uint64_t, std::vector<ArrayAccess*> >* val_to_aa; // Maps from the index value of fixed indexes to the array accesses.
+	Map<index_type, std::vector<ArrayAccess*> >* val_to_aa; // Maps from the index value of fixed indexes to the array accesses.
 	Map<Var, std::vector<ArrayAccess*> > watchedLiterals; // The literals that are watched.
 	vec<ArrayAccess*> toAddAtStartup;        // These need to be added in at startup.
 	vec<ArrayHistory> arrayHistory_stack;    // When the index is fixed it's added into here.

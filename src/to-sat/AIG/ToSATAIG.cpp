@@ -162,10 +162,6 @@ namespace BEEV
                                 SATSolver::vec_literals index;
                                 Minisat::vec<Minisat::lbool> index_constants;
                                 const int index_width = arr_it->first.GetValueWidth();
-                                if (index_width > 64)
-                                        FatalError("The array propagators unfortunately don't do arbitary precision integers yet."
-                                                " They use 64-bit integers internally to store values. Your problem has array indexes > 64 bits."
-                                                " Until this is fixed you need to run STP with the '--oldstyle-refinement' or the '-r' flag.");
                                 if (it != nodeToSATVar.end())
                                     {
                                         const vector<unsigned>& v = it->second;

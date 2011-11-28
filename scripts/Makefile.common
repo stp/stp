@@ -13,7 +13,11 @@
 OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
 #OPTIMIZE      =  -O3 -g            # Debug
 
-#CFLAGS_M32   = -m32
+# To enable 128-bit indices in the array propagators. Put the INDICES_128BITS
+# option into CFLAGS_M32. Weird I know.
+#CFLAGS_M32   = -DINDICES_128BITS
+#CFLAGS_M32   = -m32 
+
 CFLAGS_BASE   += $(OPTIMIZE)
 
 ifeq ($(WITHCBITP),yes)
