@@ -211,6 +211,7 @@ namespace BEEV {
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm, simp);
 
+    // Run size reducing just once.
     simplified_solved_InputToSAT = sizeReducing(inputToSAT, bvSolver);
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
@@ -219,8 +220,10 @@ namespace BEEV {
     // Currently we discards all the state each time sizeReducing is called,
     // so it's expensive to call.
     if (!arrayops && initial_difficulty_score < 1000000)
+           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver, initial_difficulty_score);
+
+    if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
-        simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver, initial_difficulty_score);
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
 
@@ -230,9 +233,12 @@ namespace BEEV {
     // Copy the solver map incase we need to revert.
     ASTNodeMap initialSolverMap;
     ASTNode toRevertTo;
-    if (!arrayops) // we don't revert for Array problems yet, so don't copy it.
+    ArrayTransformer::ArrType backup_arrayToIndexToRead;
+
+    if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
         initialSolverMap.insert(simp->Return_SolverMap()->begin(), simp->Return_SolverMap()->end());
+        backup_arrayToIndexToRead.insert(arrayTransformer->arrayToIndexToRead.begin(),arrayTransformer->arrayToIndexToRead.end());
         toRevertTo = simplified_solved_InputToSAT;
       }
 
@@ -401,8 +407,9 @@ namespace BEEV {
       }
 
     bool optimize_enabled = bm->UserFlags.optimize_flag;
-    if (final_difficulty_score > 1.1 * initial_difficulty_score && !arrayops && bm->UserFlags.isSet(
-        "difficulty-reversion", "1"))
+    if (final_difficulty_score > 1.1 * initial_difficulty_score &&
+       (!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")) &&
+       bm->UserFlags.isSet("difficulty-reversion", "1"))
       {
         // If the simplified problem is harder, than the
         // initial problem we revert back to the initial
@@ -419,6 +426,10 @@ namespace BEEV {
 
         simp->Return_SolverMap()->insert(initialSolverMap.begin(), initialSolverMap.end());
         initialSolverMap.clear();
+
+        // Copy back what we knew about arrays at the start..
+        arrayTransformer->arrayToIndexToRead.clear();
+        arrayTransformer->arrayToIndexToRead.insert(backup_arrayToIndexToRead.begin(), backup_arrayToIndexToRead.end());
 
         // The arrayTransformer calls simplify. We don't want
         // it to put back in all the bad simplifications.
