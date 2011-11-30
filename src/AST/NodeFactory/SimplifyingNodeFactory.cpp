@@ -29,6 +29,11 @@
 #include <cmath>
 
 using BEEV::Kind;
+using BEEV::SYMBOL;
+using BEEV::BVNEG;
+using BEEV::BVMOD;
+using BEEV::BVUMINUS;
+using BEEV::BVMULT;
 
 static bool debug_simplifyingNodeFactory = false;
 
@@ -37,7 +42,7 @@ static const bool translate_signed = true;
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 {
 
-	assert(kind != BEEV::SYMBOL); // These are created specially.
+	assert(kind != SYMBOL); // These are created specially.
 
 	// If all the parameters are constant, return the constant value.
 	// The bitblaster calls CreateNode with a boolean vector. We don't try to simplify those.
@@ -798,6 +803,8 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
     result = n0[0];
   else if (n1.GetKind() == BEEV::BVUMINUS && n0.GetKind() == BEEV::BVPLUS && n0.Degree() ==2 && n1[0] == n0[0])
     result = n0[1];
+  else if (n1.GetKind() == BEEV::BVNEG && n1[0] == n0)
+    result = bm.CreateMaxConst(width);
   else if (n0.GetKind() == BEEV::BVCONST && n1.GetKind() == BEEV::BVPLUS && n1.Degree() ==2 && n1[0].GetKind() == BEEV::BVCONST)
     {
       ASTVec ch;
@@ -1023,6 +1030,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                     if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
                       result = NodeFactory::CreateTerm(BEEV::BVNEG, width, children[1]);
 
+                    if ( children[1].GetKind() == BEEV::BVNEG && children[1][0] == children[0])
+                      result = bm.CreateMaxConst(width);
+                    if ( children[0].GetKind() == BEEV::BVNEG && children[0][0] == children[1])
+                       result = bm.CreateMaxConst(width);
                   }
                 break;
 
@@ -1126,8 +1137,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 	        }
 	  }
 
-
-
+	  if (children.size() == 2)
+	    {
+	      if ( children[1].GetKind() == BVNEG && children[1][0] == children[0])
+	        result = bm.CreateZeroConst(width);
+	      if ( children[0].GetKind() == BVNEG && children[0][0] == children[1])
+                result = bm.CreateZeroConst(width);
+	    }
 	  break;
 
 	case BEEV::BVSX:
@@ -1145,6 +1161,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, children[0][1]);
           if (children[0].GetKind() == BEEV::BVUMINUS)
             result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, children[0][0], bm.CreateMaxConst(width));
+          if (children[0].GetKind() == BVMOD && children[0][0].GetKind() == BVNEG && children[0][1].GetKind() == BVUMINUS && children[0][1][0] == children[0][0][0])
+            result = children[0][0][0];
 
 	break;
 
@@ -1159,7 +1177,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = NodeFactory::CreateTerm(BEEV::BVPLUS, width, children[0][0], bm.CreateOneConst(width));
           else if (children[0].GetKind() == BEEV::BVSX && children[0][0].GetValueWidth() ==1)
             result = NodeFactory::CreateTerm(BEEV::BVCONCAT, width, bm.CreateZeroConst(width-1), children[0][0]);
-	break;
+	  else if ( children[0].GetKind() == BVMULT && children[0].Degree()==2 &&  children[0][0] == bm.CreateMaxConst(width))
+	    result = children[0][1];
+	  break;
 
 	case BEEV::BVEXTRACT:
           if (width == children[0].GetValueWidth())
@@ -1299,6 +1319,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 		      result = children[0];
 
                 const ASTNode one = bm.CreateOneConst(width);
+
+                if (children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0])
+                  result = children[0];
 
 		if (children[1].isConstant() && children[1] == one)
                  result = bm.CreateZeroConst(width);
