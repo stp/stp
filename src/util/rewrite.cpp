@@ -9,6 +9,8 @@
 #include <fstream>
 
 #include "../AST/AST.h"
+#include "../printer/printers.h"
+
 #include "../STPManager/STPManager.h"
 #include "../to-sat/AIG/ToSATAIG.h"
 #include "../sat/MinisatCore.h"
@@ -237,7 +239,7 @@ checkProp(const ASTNode& n)
 
 // True if it's always true. Otherwise fills the assignment.
 bool
-isConstant(const ASTNode& n,  Assignment& different)
+isConstant(const ASTNode& n, Assignment& different)
 {
   if (isConstantToSat(n))
     return true;
@@ -384,54 +386,17 @@ doIte(ASTNode a)
     }
 }
 
-ASTVec
+void
 getAllFunctions(ASTNode v, ASTNode w, ASTVec& result)
 {
 
   Kind types[] =
-    { BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT,
-     BVSUB };
+    { BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT };
   int number_types = sizeof(types) / sizeof(Kind);
 
-  // Two argument.
+  // all two argument functions.
   for (int i = 0; i < number_types; i++)
-    {
-      Kind k = types[i];
-
-      // First case is the same variable on both sides.
-      ASTNode n;
-      n = create(k, v, v);
-      result.push_back(n);
-
-      n = create(k, v, w);
-      result.push_back(n);
-
-      n = create(k, w, v);
-      result.push_back(n);
-
-      ASTNode c = mgr->CreateBVConst(bits, 0);
-
-      n = create(k, c, w);
-      result.push_back(n);
-
-      n = create(k, w, c);
-      result.push_back(n);
-
-      c = mgr->CreateBVConst(bits, 1);
-      n = create(k, w, c);
-      result.push_back(n);
-
-      n = create(k, c, w);
-      result.push_back(n);
-
-      c = mgr->CreateMaxConst(bits);
-      n = create(k, w, c);
-      result.push_back(n);
-
-      n = create(k, c, w);
-      result.push_back(n);
-    }
-  return result;
+    result.push_back(create(types[i], v, w));
 }
 
 int
@@ -549,10 +514,6 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
 {
   assert(expressions.size() >0);
 
-  // fast shortcut.
-  if (expressions.size() ==1)
-    return;
-
   // Put the functions in buckets based on their results on the values.
   HASHMAP<uint64_t, ASTVec> map;
   for (int i = 0; i < expressions.size(); i++)
@@ -571,6 +532,11 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
   for (it2 = map.begin(); it2 != map.end(); it2++)
     {
       ASTVec& equiv = it2->second;
+
+      // fast shortcut.
+      if (equiv.size() == 1)
+        continue;
+
       cerr << "[" << id++ << " of " << map.size() << "] depth:" << depth << ", size:" << equiv.size() << endl;
 
       // We don't want to keep splitting if it's having no effect.
@@ -831,6 +797,10 @@ writeOutRules()
   removeDuplicates(toWrite);
   cerr << "Writing out " << toWrite.size() << " rules." << endl;
 
+  ofstream outputFile;
+  outputFile.open("rewrite_data.cpp", ios::trunc);
+
+
   for (int i = 0; i < toWrite.size(); i++)
     {
       const ASTNode& n = toWrite[i];
@@ -850,15 +820,15 @@ writeOutRules()
       sofar += " && 1==1)    set(output," + name + ", __LINE__ );\n";
 
       if (sofar.find("!!!") == std::string::npos && sofar.length() < 500)
-        output.push_back(sofar);
+        {
+          output.push_back(sofar);
+          //printer::SMTLIB2_PrintBack(outputFile,toWrite[i]);
+        }
     }
 
   // Group functions of the same kind all together.
   hash_map<string, vector<string>, hashF<std::string> > buckets;
   bucket("n.GetKind() ==", output, buckets);
-
-  ofstream outputFile;
-  outputFile.open("rewrite_data.cpp", ios::trunc);
 
   // output the C++ code.
   hash_map<string, vector<string>, hashF<std::string> >::const_iterator it;
@@ -874,6 +844,54 @@ writeOutRules()
     }
 
   outputFile.close();
+}
+
+// Triples the number of functions by adding all the unary ones.
+void
+allUnary(ASTVec& functions)
+{
+  for (int i = 0, size = functions.size(); i < size; i++)
+    {
+      functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
+      functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
+    }
+
+}
+
+// If we can't widen it remove it. Very slow.
+void
+removeNonWidened(ASTVec & functions)
+{
+  for (int i = 0; i < functions.size(); i++)
+    {
+      if (mgr->ASTUndefined == widen(functions[i], bits + 1))
+        {
+          functions.erase(functions.begin() +i);
+          i--;
+        }
+    }
+}
+
+// If there only w variables in the problem. We can delete it because
+// we will have another with just v's.
+// NB: Can only apply at the top level.
+void
+removeSingleVariable(ASTVec & functions)
+{
+  for (int i = 0; i < functions.size(); i++)
+    {
+      vector<ASTNode> symbols;
+      ASTNodeSet visited;
+
+      getVariables(functions[i], symbols, visited);
+      if (symbols.size() == 1 && symbols[0] == w)
+        {
+          functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
+          continue;
+        }
+    }
+
+  removeDuplicates(functions);
 }
 
 int
@@ -898,46 +916,53 @@ main(void)
 
   /////////////////////////// BV, BV -> BV.
   ASTVec functions;
-  getAllFunctions(v, w, functions);
-  getAllFunctions(nf->CreateTerm(BEEV::BVUMINUS, bits, v), nf->CreateTerm(BEEV::BVUMINUS, bits, w), functions);
-  getAllFunctions(w, nf->CreateTerm(BEEV::BVUMINUS, bits, w), functions);
 
-  functions.push_back(mgr->CreateBVConst(bits, 0));
-  functions.push_back(mgr->CreateBVConst(bits, 1));
-  functions.push_back(mgr->CreateMaxConst(bits));
   functions.push_back(w);
   functions.push_back(v);
+  functions.push_back(mgr->CreateBVConst(bits, 0));
+  functions.push_back(mgr->CreateBVConst(bits, 1));
 
-  for (int i = 0, size = functions.size(); i < size; i++)
-    {
-      functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
-      functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
-    }
-
+  // All unary of the leaves.
+  allUnary(functions);
   removeDuplicates(functions);
+  cerr << "Leaves:" << functions.size() << endl;
 
-  ASTVec big;
-  cerr << "Generating big functions." << endl;
+  // We've got the leaves, and their unary operations,
+  // now get the binary operations of all of those.
+  int size = functions.size();
+  for (int i = 0; i < size; i++)
+    for (int j = 0; j < size; j++)
+      getAllFunctions(functions[i], functions[j], functions);
 
-  for (int i = 0; i < functions.size(); i++)
-    for (int j = 0; j < functions.size(); j++)
-      {
-        ASTVec n;
-        getAllFunctions(functions[i], functions[j], n);
-        big.insert(big.end(), n.begin(), n.end());
-      }
+  allUnary(functions);
+  removeDuplicates(functions);
+  removeNonWidened(functions);
+  cerr << "One Level:" << functions.size() << endl;
 
-  big.insert(big.end(), functions.begin(), functions.end());
-  functions.clear();
-
-  int big_size = big.size();
-  for (int i = 0; i < big_size; i++) // < big_size to prevent an infinite loop.
+  const bool two_level = true;
+  if (two_level)
     {
-      big.push_back(nf->CreateTerm(BEEV::BVNEG, bits, big[i]));
-      big.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, big[i]));
-    }
+      int last = 0;
+      ASTVec functions_copy(functions);
+      size = functions_copy.size();
+      for (int i = 0; i < size; i++)
+        for (int j = 0; j < size; j++)
+          {
+            getAllFunctions(functions_copy[i], functions_copy[j], functions);
+            if (functions.size() > last + 5000000) // lots are duplicates.
+              {
+                removeSingleVariable(functions);
+                last = functions.size();
+              }
+          }
 
-  removeDuplicates(big);
+      // All the unary combinations of the binaries.
+      allUnary(functions);
+
+      // This is an agressive filter.
+      removeSingleVariable(functions);
+      cerr << "Two Level:" << functions.size() << endl;
+    }
 
   BBNodeManagerAIG bbnm;
   SimplifyingNodeFactory nf(*(mgr->hashingNodeFactory), *mgr);
@@ -946,34 +971,27 @@ main(void)
 
     {
       SimplifyingNodeFactory nf(*(mgr->hashingNodeFactory), *mgr);
-
       BEEV::BigRewriter b;
 
-      for (int i = 0; i < big.size(); i++)
+      for (int i = 0; i < functions.size(); i++)
         {
-          if (mgr->ASTUndefined == widen(big[i], bits + 1))
-            {
-              big[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
-              continue;
-            }
-
           if (false)
             {
               ASTNodeMap fromTo;
-              ASTNode s = b.rewrite(big[i], fromTo, &nf, mgr);
-              if (s != big[i])
-                big[i] = s;
+              ASTNode s = b.rewrite(functions[i], fromTo, &nf, mgr);
+              if (s != functions[i])
+                functions[i] = s;
             }
 
         }
-      removeDuplicates(big);
+      removeDuplicates(functions);
 
       // There may be a single undefined element now.. remove it.
-      for (int i = 0; i < big.size(); i++)
+      for (int i = 0; i < functions.size(); i++)
         {
-          if (big[i] == mgr->ASTUndefined)
+          if (functions[i] == mgr->ASTUndefined)
             {
-              big.erase(big.begin() + i);
+              functions.erase(functions.begin() + i);
               break;
             }
         }
@@ -986,7 +1004,7 @@ main(void)
   while (values.size() < values_in_hash)
     values.push_back(Assignment(BEEV::ParserBM->CreateBVConst(bits, rand())));
 
-  findRewrites(big, values);
+  findRewrites(functions, values);
   writeOutRules();
 
   return 1;
