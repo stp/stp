@@ -23,13 +23,12 @@ smtparse(void*);
 extern FILE *smtin;
 
 //////////////////////////////////
-const int bits = 11;
-const int widen_to = 16;
+const int bits = 8;
+const int widen_to = 13;
 const int values_in_hash = 64 / bits;
 const int mask = (1 << (bits)) - 1;
 const int unique_vars = 1 << bits;
 //////////////////////////////////
-
 
 // Saves a little bit of time. The vectors are saved between invocations.
 vector<ASTVec> saved_array;
@@ -391,7 +390,7 @@ getAllFunctions(ASTNode v, ASTNode w, ASTVec& result)
 
   Kind types[] =
     { BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT,
-        BVSUB };
+     BVSUB };
   int number_types = sizeof(types) / sizeof(Kind);
 
   // Two argument.
@@ -493,6 +492,7 @@ bool
 isConstantToSat(const ASTNode & query)
 {
   assert(query.GetType() == BOOLEAN_TYPE);
+  cerr << "to";
 
   GlobalSTP->ClearAllTables();
   clearSAT();
@@ -502,10 +502,8 @@ isConstantToSat(const ASTNode & query)
   query2 = GlobalSTP->arrayTransformer->TransformFormula_TopLevel(query2);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(*ss, query2, query2, GlobalSTP->tosat, false);
 
-  if (r == SOLVER_VALID) // unsat, always true
-    return true;
-
-  return false;
+  cerr << "from";
+  return (r == SOLVER_VALID); // unsat, always true
 }
 
 // Replaces the symbols in n, by each of the values, and concatenates them
@@ -539,15 +537,27 @@ getHash(const ASTNode& n, const vector<Assignment>& values)
   return hash;
 }
 
+bool
+lessThan(const ASTNode& n1, const ASTNode& n2)
+{
+  return (((unsigned) n1.GetNodeNum()) < ((unsigned) n2.GetNodeNum()));
+}
+
 // Breaks the expressions into buckets recursively, then pairwise checks that they are equivalent.
 void
 findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const int depth = 0)
 {
+  assert(expressions.size() >0);
+
+  // fast shortcut.
+  if (expressions.size() ==1)
+    return;
+
   // Put the functions in buckets based on their results on the values.
   HASHMAP<uint64_t, ASTVec> map;
   for (int i = 0; i < expressions.size(); i++)
     {
-      if (i % 50000 == 0)
+      if (i % 50000 == 49999)
         cerr << ".";
       uint64_t hash = getHash(expressions[i], values);
       if (map.find(hash) == map.end())
@@ -555,14 +565,13 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
       map[hash].push_back(expressions[i]);
     }
 
-  cerr << "Hash buckets found:" << map.size();
-
   HASHMAP<uint64_t, ASTVec>::iterator it2;
-  int lastOutput = 0;
+  static int lastOutput = 0;
+  int id = 1;
   for (it2 = map.begin(); it2 != map.end(); it2++)
     {
       ASTVec& equiv = it2->second;
-      cerr << "!depth:" << depth << ", buckets:" << equiv.size() << "!" << endl;
+      cerr << "[" << id++ << " of " << map.size() << "] depth:" << depth << ", size:" << equiv.size() << endl;
 
       // We don't want to keep splitting if it's having no effect.
       // In particular we bound the maximum depth, and don't split again,
@@ -571,18 +580,14 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
         {
           vector<Assignment> newValues;
 
-          // Initialise with random values.
-          for (int k = 0; k < values_in_hash; k++)
-            newValues.push_back(Assignment(BEEV::ParserBM->CreateBVConst(bits, rand() & mask)));
+          int max_iterations = std::max(values_in_hash * 2, (int) equiv.size() / 1000);
 
-          int found = 0;
-          for (int j = 0; j < values_in_hash * 2 && found != values_in_hash; j++)
+          for (int j = 0; (j < max_iterations) && (newValues.size() < values_in_hash); j++)
             {
               ASTNode lhs = equiv[rand() % equiv.size()];
               ASTNode rhs = equiv[rand() % equiv.size()];
               ASTNode n = mgr->CreateNode(EQ, lhs, rhs);
 
-              ASTNode sym;
               Assignment different;
               bool con = isConstant(n, different);
 
@@ -590,16 +595,25 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
                 continue; // always same.
 
               // nb: We may find the same values multiple times, but don't currently care..
-              found++;
-              newValues[j % newValues.size()] = different;
+              newValues.push_back(different);
             }
+          cerr << "Found:" << newValues.size() << endl;
 
-          findRewrites(equiv, newValues, depth + 1);
-          continue;
+          if (newValues.size() > 0)
+            {
+              findRewrites(equiv, newValues, depth + 1);
+              continue;
+            }
         }
+
+      // Sort so that constants, and smaller expressions will be checked first.
+      sort(equiv.begin(), equiv.end(), lessThan);
 
       for (int i = 0; i < equiv.size(); i++)
         {
+          if (equiv[i].GetKind() == UNDEFINED)
+            continue;
+
           for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
             {
               if (equiv[i].GetKind() == UNDEFINED || equiv[j].GetKind() == UNDEFINED)
@@ -615,14 +629,15 @@ findRewrites(const ASTVec& expressions, const vector<Assignment>& values, const 
                   if (n[1] == equiv[j])
                     equiv[j] = mgr->ASTUndefined;
                 }
-            }
-        }
 
-      // Write out the rules intermitently.
-      if (lastOutput + 500 < toWrite.size())
-        {
-          lastOutput = toWrite.size();
-          writeOutRules();
+              // Write out the rules intermitently.
+              if (lastOutput + 500 < toWrite.size())
+                {
+                  lastOutput = toWrite.size();
+                  writeOutRules();
+                }
+
+            }
         }
     }
 }
@@ -749,9 +764,7 @@ checkAndStoreRule(const ASTNode & n)
         }
 
       // Send it to the SAT solver to verify that the widening has the same answer.
-      cout << "to";
       bool result = isConstantToSat(widened);
-      cout << "from";
 
       if (!result)
         {
@@ -845,7 +858,7 @@ writeOutRules()
   bucket("n.GetKind() ==", output, buckets);
 
   ofstream outputFile;
-  outputFile.open("rewrite.cpp", ios::trunc);
+  outputFile.open("rewrite_data.cpp", ios::trunc);
 
   // output the C++ code.
   hash_map<string, vector<string>, hashF<std::string> >::const_iterator it;
@@ -944,10 +957,13 @@ main(void)
               continue;
             }
 
-          ASTNodeMap fromTo;
-          ASTNode s = b.rewrite(big[i], fromTo, &nf, mgr);
-          if (s != big[i])
-            big[i] = s;
+          if (false)
+            {
+              ASTNodeMap fromTo;
+              ASTNode s = b.rewrite(big[i], fromTo, &nf, mgr);
+              if (s != big[i])
+                big[i] = s;
+            }
 
         }
       removeDuplicates(big);
