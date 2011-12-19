@@ -510,7 +510,6 @@ namespace BEEV
   } //end of BVSolve_Odd()
 
   // Solve for XORs.
-  // to do. Flatten the XOR.
   ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
   {
     assert(_bm->UserFlags.isSet("xor-solve","1"));
@@ -581,8 +580,6 @@ namespace BEEV
                          _bm->CreateNode(NOT, _bm->CreateNode(XOR, rhs)));
 
               }
-
-
           }
         if (foundSymbol)
           break;
@@ -596,7 +593,6 @@ namespace BEEV
 }
 
   // Solve for XORs.
-   // to do. Flatten the XOR.
    ASTNode
   BVSolver::solveForAndOfXOR(const ASTNode& n)
   {
@@ -605,24 +601,30 @@ namespace BEEV
     if (n.GetKind() != AND)
       return n;
 
-    ASTVec output_children;
-
     ASTVec c =  FlattenKind(AND, n.GetChildren());
     bool changed=false;
-    //_simp->ResetSimplifyMaps();
 
-    for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child
-        != and_end; and_child++)
+    ASTVec output_children;
+    output_children.reserve(c.size());
+
+    for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child != and_end; and_child++)
       {
+      ASTNode r = *and_child;
+      if (changed && r.GetKind() == XOR)
+          r = simplifyNode(_simp->applySubstitutionMapUntilArrays(r));
+      if ( r.GetKind() == XOR)
+        r = solveForXOR(r);
 
-      ASTNode r = solveForXOR(!changed?*and_child:simplifyNode(_simp->applySubstitutionMapUntilArrays(*and_child)));
       if (r!=*and_child)
-        changed=true;
+            changed=true;
+
       output_children.push_back(r);
       }
 
-    return nf->CreateNode(AND, output_children);
+    if (!changed)
+      return n;
 
+    return nf->CreateNode(AND, output_children);
   }
 
 
