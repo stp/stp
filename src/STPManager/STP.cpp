@@ -74,7 +74,7 @@ namespace BEEV {
     
 	SOLVER_RETURN_TYPE result;
     result = TopLevelSTPAux(NewSolver,
-			      original_input, original_input);
+			      original_input);
 
     delete newS;
 
@@ -194,14 +194,14 @@ namespace BEEV {
   //if returned 0 then input is INVALID if returned 1 then input is
   //VALID if returned 2 then UNDECIDED
   SOLVER_RETURN_TYPE
-  STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& modified_input, const ASTNode& original_input)
+  STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
 
-    ASTNode inputToSAT = modified_input;
+    ASTNode inputToSAT = original_input;
     ASTNode orig_input = original_input;
-    bm->ASTNodeStats("input asserts and query: ", inputToSAT);
-
     ASTNode simplified_solved_InputToSAT = inputToSAT;
+
+    bm->ASTNodeStats("input asserts and query: ", inputToSAT);
     const bool arrayops = containsArrayOps(original_input);
 
     DifficultyScore difficulty;

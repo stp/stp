@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -19,14 +19,12 @@
 #include "../parser/LetMgr.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
 
-/********************************************************************
- *  This file gives the class description of the STP class          *
- ********************************************************************/
-
 namespace BEEV
 {
   class STP {
-  private:
+
+    ArrayTransformer * arrayTransformer;
+
           ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
 
           // A copy of all the state we need to restore to a prior expression.
@@ -36,6 +34,15 @@ namespace BEEV
             ASTNode toRevertTo;          // The original expression.
             ArrayTransformer::ArrType backup_arrayToIndexToRead; // array-indices already removed.
           };
+
+          // Accepts query and returns the answer. if query is valid,
+          // returns VALID, else returns INVALID. Automatically constructs
+          // counterexample for invalid queries, and prints them upon
+          // request.
+          SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
+                                            const ASTNode& modified_input
+                                            );
+
 
   public:
           // calls sizeReducing and the bitblasting simplification.
@@ -49,7 +56,6 @@ namespace BEEV
      ****************************************************************/
     STPMgr * bm;
     Simplifier * simp;
-    ArrayTransformer * arrayTransformer;
     ToSAT * tosat;
     AbsRefine_CounterExample * Ctr_Example;
 
@@ -111,18 +117,12 @@ namespace BEEV
     SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts, 
                                    const ASTNode& query);
 
-    // Accepts query and returns the answer. if query is valid,
-    // returns VALID, else returns INVALID. Automatically constructs
-    // counterexample for invalid queries, and prints them upon
-    // request.
-    SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
-				      const ASTNode& modified_input,
-				      const ASTNode& original_input);
-
+#if 0
     SOLVER_RETURN_TYPE
     UserGuided_AbsRefine(SATSolver& SatSolver,
 			 const ASTNode& original_input);
-         
+#endif
+
     void ClearAllTables(void)
     {
 		if (simp != NULL)
