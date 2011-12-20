@@ -27,13 +27,14 @@ namespace BEEV
 
 class FindPureLiterals
 {
-  const static int truePolarity = 1;
-  const static int falsePolarity = 2;
-  const static int bothPolarity = 3;
+  typedef char polarity_type;
+  const static polarity_type truePolarity = 1;
+  const static polarity_type falsePolarity = 2;
+  const static polarity_type bothPolarity = 3;
 
-  map<ASTNode, int> nodeToPolarity;
+  map<ASTNode, polarity_type> nodeToPolarity;
 
-  int swap(int polarity)
+  int swap(polarity_type polarity)
   {
     if (polarity == truePolarity)
       return falsePolarity;
@@ -62,11 +63,11 @@ public:
     build(n , truePolarity);
     bool changed = false;
 
-    map<ASTNode, int>::const_iterator it = nodeToPolarity.begin();
+    map<ASTNode, polarity_type>::const_iterator it = nodeToPolarity.begin();
     while (it != nodeToPolarity.end())
       {
         const ASTNode& n = it->first;
-        const int polarity = it->second;
+        const polarity_type polarity = it->second;
         if (n.GetType() == BOOLEAN_TYPE && n.GetKind() == SYMBOL && polarity != bothPolarity)
           {
               if (polarity == truePolarity)
@@ -85,12 +86,12 @@ public:
   }
 
 
-  void build(const ASTNode& n , int polarity)
+  void build(const ASTNode& n , polarity_type polarity)
   {
     if (n.isConstant())
       return;
 
-    map<ASTNode, int>::iterator it = nodeToPolarity.find(n);
+    map<ASTNode, polarity_type>::iterator it = nodeToPolarity.find(n);
     if (it != nodeToPolarity.end())
       {
         int lookupPolarity = it->second;
