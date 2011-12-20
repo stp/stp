@@ -27,6 +27,7 @@ namespace BEEV
   bool isAtomic(Kind k);
   bool isCommutative(const Kind k);
   bool containsArrayOps(const ASTNode&n);
+  bool  numberOfReadsLessThan(const ASTNode&n, int v);
 
   // If (a > b) in the termorder, then return 1 elseif (a < b) in the
   // termorder, then return -1 else return 0

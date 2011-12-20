@@ -63,6 +63,39 @@ namespace BEEV
   } //end of arithless
 
 
+  // counts the number of reads. Shortcut when we get to the limit.
+  void
+  numberOfReadsLessThan(const ASTNode& n, hash_set<int> & visited, int& soFar, const int limit)
+  {
+    if (n.isAtom())
+      return;
+
+    if (visited.find(n.GetNodeNum()) != visited.end())
+      return;
+
+    if (n.GetKind() == READ)
+      soFar++;
+
+    if (soFar > limit)
+      return;
+
+    visited.insert(n.GetNodeNum());
+
+    for (int i = 0; i < n.Degree(); i++)
+      numberOfReadsLessThan(n[i], visited, soFar,limit);
+  }
+
+  // True if the number of reads in "n" is less than "limit"
+  bool
+  numberOfReadsLessThan(const ASTNode&n, int limit)
+  {
+    hash_set<int> visited;
+    int reads = 0;
+    numberOfReadsLessThan(n, visited, reads,limit);
+    return reads < limit;
+  }
+
+
 bool containsArrayOps(const ASTNode& n, hash_set<int> & visited)
 {
         if (n.GetIndexWidth() > 0)

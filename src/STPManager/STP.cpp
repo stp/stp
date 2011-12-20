@@ -205,10 +205,29 @@ namespace BEEV {
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm, simp);
 
-    const bool arrayops = containsArrayOps(original_input);
+    ASTNode simplified_solved_InputToSAT = original_input;
+
+    // If the number of array reads is small. We rewrite them through.
+    // The bit-vector simplifications are more thorough than the array simplifications. For example,
+    // we don't currently do unconstrained elimination on arrays--- but we do for bit-vectors.
+    // A better way to do this would be to estimate the number of axioms introduced.
+    // TODO: Should be enabled irrespective of whether refinement is enabled.
+    // TODO: I chose the number of reads we perform this operation at randomly.
+    bool removed = false;
+    if (!bm->UserFlags.arrayread_refinement_flag && numberOfReadsLessThan(simplified_solved_InputToSAT,50))
+      {
+          // If the number of axioms that would be added it small. Remove them.
+              simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
+              if (bm->UserFlags.stats_flag)
+                cerr << "Have removed array operations" << endl;
+              removed = true;
+      }
+
+    const bool arrayops = containsArrayOps(simplified_solved_InputToSAT);
+    if (removed)
+      assert(!arrayops);
 
     // Run size reducing just once.
-    ASTNode simplified_solved_InputToSAT = original_input;
     simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver);
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
