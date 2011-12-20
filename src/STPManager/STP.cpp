@@ -230,16 +230,14 @@ namespace BEEV {
     if (bm->UserFlags.stats_flag)
       cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
 
-    // Copy the solver map incase we need to revert.
-    ASTNodeMap initialSolverMap;
-    ASTNode toRevertTo;
-    ArrayTransformer::ArrType backup_arrayToIndexToRead;
+    // So we can delete the object and release all the hash-buckets storage.
+    Revert_to* revert = new Revert_to();
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
-        initialSolverMap.insert(simp->Return_SolverMap()->begin(), simp->Return_SolverMap()->end());
-        backup_arrayToIndexToRead.insert(arrayTransformer->arrayToIndexToRead.begin(),arrayTransformer->arrayToIndexToRead.end());
-        toRevertTo = simplified_solved_InputToSAT;
+        revert->initialSolverMap.insert(simp->Return_SolverMap()->begin(), simp->Return_SolverMap()->end());
+        revert->backup_arrayToIndexToRead.insert(arrayTransformer->arrayToIndexToRead.begin(),arrayTransformer->arrayToIndexToRead.end());
+        revert->toRevertTo = simplified_solved_InputToSAT;
       }
 
     //round of substitution, solving, and simplification. ensures that
@@ -417,24 +415,25 @@ namespace BEEV {
 
         if (bm->UserFlags.stats_flag)
           cerr << "simplification made the problem harder, reverting." << endl;
-        simplified_solved_InputToSAT = toRevertTo;
+        simplified_solved_InputToSAT = revert->toRevertTo;
 
         // I do this to clear the substitution/solver map.
         // Not sure what would happen if it contained simplifications
         // that haven't been applied.
         simp->ClearAllTables();
 
-        simp->Return_SolverMap()->insert(initialSolverMap.begin(), initialSolverMap.end());
-        initialSolverMap.clear();
+        simp->Return_SolverMap()->insert(revert->initialSolverMap.begin(), revert->initialSolverMap.end());
+        revert->initialSolverMap.clear();
 
         // Copy back what we knew about arrays at the start..
         arrayTransformer->arrayToIndexToRead.clear();
-        arrayTransformer->arrayToIndexToRead.insert(backup_arrayToIndexToRead.begin(), backup_arrayToIndexToRead.end());
+        arrayTransformer->arrayToIndexToRead.insert(revert->backup_arrayToIndexToRead.begin(), revert->backup_arrayToIndexToRead.end());
 
         // The arrayTransformer calls simplify. We don't want
         // it to put back in all the bad simplifications.
         bm->UserFlags.optimize_flag = false;
       }
+    delete revert;
 
     simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
     bm->ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);

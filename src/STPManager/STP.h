@@ -29,6 +29,14 @@ namespace BEEV
   private:
           ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
 
+          // A copy of all the state we need to restore to a prior expression.
+          struct Revert_to
+          {
+            ASTNodeMap initialSolverMap; // Map from variables to expressions they were replaced with.
+            ASTNode toRevertTo;          // The original expression.
+            ArrayTransformer::ArrType backup_arrayToIndexToRead; // array-indices already removed.
+          };
+
   public:
           // calls sizeReducing and the bitblasting simplification.
           ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, const int initial_difficulty_score);
