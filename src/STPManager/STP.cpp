@@ -196,13 +196,7 @@ namespace BEEV {
   SOLVER_RETURN_TYPE
   STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
-
-    ASTNode inputToSAT = original_input;
-    ASTNode orig_input = original_input;
-    ASTNode simplified_solved_InputToSAT = inputToSAT;
-
-    bm->ASTNodeStats("input asserts and query: ", inputToSAT);
-    const bool arrayops = containsArrayOps(original_input);
+    bm->ASTNodeStats("input asserts and query: ", original_input);
 
     DifficultyScore difficulty;
     if (bm->UserFlags.stats_flag)
@@ -211,8 +205,11 @@ namespace BEEV {
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm, simp);
 
+    const bool arrayops = containsArrayOps(original_input);
+
     // Run size reducing just once.
-    simplified_solved_InputToSAT = sizeReducing(inputToSAT, bvSolver);
+    ASTNode simplified_solved_InputToSAT = original_input;
+    simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver);
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
 
@@ -239,6 +236,8 @@ namespace BEEV {
         revert->backup_arrayToIndexToRead.insert(arrayTransformer->arrayToIndexToRead.begin(),arrayTransformer->arrayToIndexToRead.end());
         revert->toRevertTo = simplified_solved_InputToSAT;
       }
+
+    ASTNode inputToSAT;
 
     //round of substitution, solving, and simplification. ensures that
     //DAG is minimized as much as possibly, and ideally should
@@ -485,7 +484,7 @@ namespace BEEV {
     ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : ((ToSAT*) &toSATAIG) ;
 
     // If it doesn't contain array operations, use ABC's CNF generation.
-    res = Ctr_Example->CallSAT_ResultCheck(NewSolver, simplified_solved_InputToSAT, orig_input, satBase,
+    res = Ctr_Example->CallSAT_ResultCheck(NewSolver, simplified_solved_InputToSAT, original_input, satBase,
         maybeRefinement);
 
     if (SOLVER_UNDECIDED != res)
@@ -503,7 +502,7 @@ namespace BEEV {
     assert(bm->UserFlags.arrayread_refinement_flag); // Refinement must be enabled too.
     assert (bm->UserFlags.solver_to_use != UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver shouldn't have returned undecided..
 
-    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, orig_input, satBase);
+    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, original_input, satBase);
     if (SOLVER_UNDECIDED != res)
       {
         if (toSATAIG.cbIsDestructed())
@@ -513,7 +512,7 @@ namespace BEEV {
         return res;
       }
 
-    res = Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, orig_input, satBase);
+    res = Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, original_input, satBase);
     if (SOLVER_UNDECIDED != res)
       {
         if (toSATAIG.cbIsDestructed())
@@ -523,7 +522,7 @@ namespace BEEV {
         return res;
       }
 
-    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, orig_input, satBase);
+    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, original_input, satBase);
     if (SOLVER_UNDECIDED != res)
       {
         if (toSATAIG.cbIsDestructed())
