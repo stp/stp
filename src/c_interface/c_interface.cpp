@@ -40,74 +40,7 @@ extern int smtparse(void*);
 
 void vc_setFlags(VC vc, char c, int param_value) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-
-
-  switch(c) {
-  case 'a' :
-    b->UserFlags.optimize_flag = false;
-    break;
-  case 'c':
-    b->UserFlags.construct_counterexample_flag = true;
-    break;
-  case 'd':
-    b->UserFlags.construct_counterexample_flag = true;
-    b->UserFlags.check_counterexample_flag = true;
-    break;
-  case 'h':
-    fprintf(stderr,BEEV::usage,BEEV::prog);
-    //cout << helpstring;
-    //FatalError("");
-    //return -1;
-    break;
-  case 'i':
-    b->UserFlags.random_seed_flag = true;
-    b->UserFlags.random_seed = param_value;
-    break;
-  case 'n':
-    b->UserFlags.print_output_flag = true;
-    break;
-  case 'm':
-    b->UserFlags.smtlib1_parser_flag=true;
-    b->UserFlags.division_by_zero_returns_one_flag = true;
-    break;
-  case 'p':
-    b->UserFlags.print_counterexample_flag = true;
-    break;
-  case 'q':
-    b->UserFlags.print_arrayval_declaredorder_flag = true;
-    break;
-  case 'r':
-    b->UserFlags.arrayread_refinement_flag = false;
-    break;
-  case 's' :
-    b->UserFlags.stats_flag = true;
-    break;
-  case 'u':
-    //b->UserFlags.arraywrite_refinement_flag = false;
-    break;
-  case 'v' :
-    b->UserFlags.print_nodes_flag = true;
-    break;
-  case 'w':
-    b->UserFlags.wordlevel_solve_flag = false;
-    break;
-  case 'x':
-    b->UserFlags.xor_flatten_flag = true;
-    break;
-  case 'y':
-    b->UserFlags.print_binary_flag = true;
-    break;
-  case 'z':
-    b->UserFlags.print_sat_varorder_flag = true;
-    break;
-  default:
-    std::string s = 
-      "C_interface: "                                                   \
-      "vc_setFlags: Unrecognized commandline flag:\n";
-    //s += helpstring;
-    BEEV::FatalError(s.c_str());
-    break;
-  }
+  process_argument(c, b);
 }
 
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {

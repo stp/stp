@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -8,6 +8,7 @@
  ********************************************************************/
 
 #include "AST.h"
+#include "../STPManager/STPManager.h"
 
 namespace BEEV
 {
@@ -15,6 +16,73 @@ namespace BEEV
   /****************************************************************
    * Universal Helper Functions                                   *
    ****************************************************************/
+
+  void process_argument(const char ch, STPMgr  *bm)
+  {
+    switch(ch)
+        {
+        case 'a' :
+          bm->UserFlags.optimize_flag = false;
+          break;
+        case 'c':
+          bm->UserFlags.construct_counterexample_flag = true;
+          break;
+        case 'd':
+          bm->UserFlags.construct_counterexample_flag = true;
+          bm->UserFlags.check_counterexample_flag = true;
+          break;
+
+        case 'h':
+          fprintf(stderr,usage,prog);
+          cout << helpstring;
+          exit(-1);
+          break;
+        case 'm':
+          bm->UserFlags.smtlib1_parser_flag=true;
+          bm->UserFlags.division_by_zero_returns_one_flag = true;
+                      if (bm->UserFlags.smtlib2_parser_flag)
+                              FatalError("Can't use both the smtlib and smtlib2 parsers");
+          break;
+        case 'n':
+          bm->UserFlags.print_output_flag = true;
+          break;
+        case 'p':
+          bm->UserFlags.print_counterexample_flag = true;
+          break;
+        case 'q':
+          bm->UserFlags.print_arrayval_declaredorder_flag = true;
+          break;
+        case 'r':
+          bm->UserFlags.arrayread_refinement_flag = false;
+          break;
+        case 's' :
+          bm->UserFlags.stats_flag = true;
+          break;
+        case 't':
+          bm->UserFlags.quick_statistics_flag = true;
+          break;
+        case 'v' :
+          bm->UserFlags.print_nodes_flag = true;
+          break;
+        case 'w':
+          bm->UserFlags.wordlevel_solve_flag = false;
+          break;
+        case 'x':
+          bm->UserFlags.xor_flatten_flag = true;
+          break;
+        case 'y':
+          bm->UserFlags.print_binary_flag = true;
+          break;
+        case 'z':
+          bm->UserFlags.print_sat_varorder_flag = true;
+          break;
+        default:
+          fprintf(stderr,usage,prog);
+          cout << helpstring;
+          exit(-1);
+          break;
+        }
+  }
 
   // Sort ASTNodes by expression numbers
   bool exprless(const ASTNode n1, const ASTNode n2)

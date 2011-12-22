@@ -18,6 +18,7 @@
 
 namespace BEEV
 {
+  void process_argument(const char ch, STPMgr  *bm);
   void FatalError(const char * str, const ASTNode& a, int w = 0) __attribute__ ((noreturn));
   void FatalError(const char * str) __attribute__ ((noreturn));
   void SortByExprNum(ASTVec& c);

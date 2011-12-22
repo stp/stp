@@ -80,6 +80,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
 
 typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT} OptionType;
 
+
 int main(int argc, char ** argv) {
   char * infile = NULL;
   extern FILE *cvcin;
@@ -149,7 +150,7 @@ int main(int argc, char ** argv) {
     "--output-bench         : save in ABC's bench format to output.bench\n"
     "\n"
     "--exit-after-CNF       : exit after the CNF has been generated\n"
-    "-g                     : timeout (seconds until STP gives up)\n"
+    "-g <time_in_sec>       : timeout (seconds until STP gives up)\n"
     "-h                     : help\n"
     "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0\n"
     "-p                     : print counterexample\n"
@@ -297,99 +298,34 @@ int main(int argc, char ** argv) {
               cout << helpstring;
               return -1;
             }
-          switch(argv[i][1])
-            {
-            case 'a' :
-              bm->UserFlags.optimize_flag = false;
-              break;
-            case 'b':
-              onePrintBack = true;
-              bm->UserFlags.print_STPinput_back_flag = true;
-              break;
-            case 'c':
-              bm->UserFlags.construct_counterexample_flag = true;
-              break;
-            case 'd':
-              bm->UserFlags.construct_counterexample_flag = true;
-              bm->UserFlags.check_counterexample_flag = true;
-              break;
-            case 'g':
-              signal(SIGVTALRM, handle_time_out);
-              timeout.it_interval.tv_usec = 0;
-              timeout.it_interval.tv_sec  = 0;
-              timeout.it_value.tv_usec    = 0;
-              timeout.it_value.tv_sec     = atoi(argv[++i]);
-              setitimer(ITIMER_VIRTUAL, &timeout, NULL);
-              break;
-            case 'h':
-              fprintf(stderr,usage,prog);
-              cout << helpstring;
-              return -1;
-              break;
-	    case 'i':
-	      bm->UserFlags.random_seed_flag = true;
-              bm->UserFlags.random_seed = atoi(argv[++i]);
-	      //cerr << "Random seed is: " << bm->UserFlags.random_seed << endl;
-	      if(!(0 <= bm->UserFlags.random_seed))
-		{
-		  FatalError("Random Seed should be an integer >= 0\n");
-		}
-	      break;
-	    case 'j':
-	      // Used to output the CNF. No longer does.
-	      //bm->UserFlags.print_cnf_flag = true;
-	      //bm->UserFlags.cnf_dump_filename = argv[++i];
-	      break;
-            case 'm':
-              bm->UserFlags.smtlib1_parser_flag=true;
-              bm->UserFlags.division_by_zero_returns_one_flag = true;
-			  if (bm->UserFlags.smtlib2_parser_flag)
-				  FatalError("Can't use both the smtlib and smtlib2 parsers");
 
-              break;
-            case 'n':
-              bm->UserFlags.print_output_flag = true;
-              break;
-            case 'p':
-              bm->UserFlags.print_counterexample_flag = true;
-              break;
-            case 'q':
-              bm->UserFlags.print_arrayval_declaredorder_flag = true;
-              break;
-            case 'r':
-              bm->UserFlags.arrayread_refinement_flag = false;
-              break;
-            case 's' :
-              bm->UserFlags.stats_flag = true;
-              break;
-            case 't':
-              bm->UserFlags.quick_statistics_flag = true;
-              break;
-            case 'u':
-              //bm->UserFlags.arraywrite_refinement_flag = false;
-              break;
-            case 'v' :
-              bm->UserFlags.print_nodes_flag = true;
-              break;
-            case 'w':
-              bm->UserFlags.wordlevel_solve_flag = false;
-              break;
-            case 'x':
-              bm->UserFlags.xor_flatten_flag = true;
-              break;
-            case 'y':
-              bm->UserFlags.print_binary_flag = true;
-              break;            
-            case 'z':
-              bm->UserFlags.print_sat_varorder_flag = true;
-              break;
-            default:
-              fprintf(stderr,usage,prog);
-              cout << helpstring;
-              //FatalError("");
-              return -1;
-              break;
-            }
+      if (argv[i][1] == 'g')
+        {
+        signal(SIGVTALRM, handle_time_out);
+        timeout.it_interval.tv_usec = 0;
+        timeout.it_interval.tv_sec  = 0;
+        timeout.it_value.tv_usec    = 0;
+        timeout.it_value.tv_sec     = atoi(argv[++i]);
+        setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+        }
+      else if (argv[i][1] == 'i')
+        {
+        bm->UserFlags.random_seed_flag = true;
+        bm->UserFlags.random_seed = atoi(argv[++i]);
+        //cerr << "Random seed is: " << bm->UserFlags.random_seed << endl;
+        if(!(0 <= bm->UserFlags.random_seed))
+          {
+            FatalError("Random Seed should be an integer >= 0\n");
+          }
+        }
+      else if (argv[i][1] == 'b')
+        {
+          onePrintBack = true;
+          bm->UserFlags.print_STPinput_back_flag = true;
+        }
+      else
+    	  process_argument(argv[i][1],bm);
+
         }
         } else {          
         	if (NULL != infile)
