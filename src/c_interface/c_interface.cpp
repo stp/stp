@@ -41,37 +41,7 @@ extern int smtparse(void*);
 void vc_setFlags(VC vc, char c, int param_value) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
-  std::string helpstring = 
-    "Usage: stp [-option] [infile]\n\n";
-  helpstring += 
-    "STP version: " + BEEV::version + "\n\n";
-  helpstring +=  
-    "-a  : switch optimizations off (optimizations are ON by default)\n";
-  helpstring +=  
-    "-c  : construct counterexample\n";
-  helpstring +=  
-    "-d  : check counterexample\n";
-  helpstring +=  
-    "-f  : number of abstraction-refinement loops\n";
-  helpstring +=  
-    "-h  : help\n";
-  helpstring +=  
-    "-m  : use the SMTLIB parser\n";
-  helpstring +=  
-    "-p  : print counterexample\n";
-  helpstring +=  
-    "-r  : switch refinement off (optimizations are ON by default)\n";
-  helpstring +=  
-    "-s  : print function statistics\n";
-  helpstring +=  
-    "-v  : print nodes \n";
-  helpstring +=  
-    "-w  : switch wordlevel solver off (optimizations are ON by default)\n";
-  helpstring +=  
-    "-x  : flatten nested XORs\n";
-  helpstring +=  
-    "-y  : print counterexample in binary\n";
-  
+
   switch(c) {
   case 'a' :
     b->UserFlags.optimize_flag = false;
@@ -85,7 +55,7 @@ void vc_setFlags(VC vc, char c, int param_value) {
     break;
   case 'h':
     fprintf(stderr,BEEV::usage,BEEV::prog);
-    cout << helpstring;
+    //cout << helpstring;
     //FatalError("");
     //return -1;
     break;
@@ -134,7 +104,7 @@ void vc_setFlags(VC vc, char c, int param_value) {
     std::string s = 
       "C_interface: "                                                   \
       "vc_setFlags: Unrecognized commandline flag:\n";
-    s += helpstring;
+    //s += helpstring;
     BEEV::FatalError(s.c_str());
     break;
   }

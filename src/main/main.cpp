@@ -1,6 +1,6 @@
 
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -121,71 +121,46 @@ int main(int argc, char ** argv) {
 
   //populate the help string
   helpstring += 
-    "STP version            : " + version + "\n\n";
-  helpstring +=  
-    "-a                     : disable potentially size-increasing optimisations\n";
-  helpstring +=  
-    "-b                     : print STP input back to cout\n";
-  //helpstring +=
-  //  "-c                     : construct counterexample\n";
-  helpstring +=  
-    "--cryptominisat        : use cryptominisat2 as the solver\n";
-  //helpstring +=
-  //   "-d                     : check counterexample\n";
-  helpstring +=  
-    "--disable-cbitp        : disable constant bit propagation\n";
-  helpstring +=
-    "--disable-simplify     : disable all simplifications\n";
-  helpstring +=  
-    "--exit-after-CNF       : exit after the CNF has been generated\n";
-  helpstring +=  
-    "-g                     : timeout (seconds until STP gives up)\n";
-  helpstring +=  
-    "-h                     : help\n";
-  helpstring +=  
-    "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0.\n";
-  helpstring +=  
-    "-m                     : use the SMTLIB1 parser\n";
-  helpstring +=
-    "--minisat              : use minisat 2.2 as the solver\n";
-  helpstring +=  
-    "--oldstyle-refinement  : Do abstraction-refinement outside the SAT solver.\n";
-  helpstring +=
-    "--output-CNF           : save the CNF into output_[0..n].cnf\n";
-  helpstring +=  
-    "--output-bench         : save in ABC's bench format to output.bench\n";
-  helpstring +=  
-    "-p                     : print counterexample\n";
-  helpstring +=
-    "--print-back-CVC       : print input in CVC format, then exit\n";
-  helpstring +=
-    "--print-back-SMTLIB2   : print input in SMT-LIB2 format, then exit\n";
-  helpstring +=
-    "--print-back-SMTLIB1   : print input in SMT-LIB1 format, then exit\n";
-  helpstring +=
-    "--print-back-GDL       : print AiSee's graph format, then exit\n";
-  helpstring +=
-    "--print-back-dot       : print dotty/neato's graph format, then exit\n";
-  helpstring +=  
-    "-r                     : turn of abstraction-refinement of arrays.\n";
-  helpstring +=  
-    "-s                     : print function statistics\n";
-  helpstring +=
-    "--simplifying-minisat  : use simplifying-minisat 2.2 as the solver\n";
-  helpstring +=
-    "--SMTLIB1              : use the SMT-LIB1 format parser\n";
-  helpstring +=
-    "--SMTLIB2              : use the SMT-LIB2 format parser\n";
-  helpstring +=  
-    "-t                     : print quick statistics\n";
-  helpstring +=  
-    "-v                     : print nodes \n";
-  helpstring +=  
-    "-w                     : switch wordlevel solver off (optimizations are ON by default)\n";
-  //helpstring +=
-  //  "-x                     : flatten nested XORs\n";
-  helpstring +=  
+    "STP version            : " + version + "\n"
+    "--disable-simplify     : disable all simplifications\n"
+    "-w                     : switch wordlevel solver off (optimizations are ON by default)\n"
+    "-a                     : disable potentially size-increasing optimisations\n"
+    "--disable-cbitp        : disable constant bit propagation\n"
+    "\n"
+    "--cryptominisat        : use cryptominisat2 as the solver\n"
+    "--simplifying-minisat  : use simplifying-minisat 2.2 as the solver\n"
+    "--minisat              : use minisat 2.2 as the solver\n"
+    "\n"
+    "--oldstyle-refinement  : Do abstraction-refinement outside the SAT solver\n"
+    "-r                     : Eagerly encode array-read axioms (Ackermannistaion)\n"
+    "\n"
+    "-b                     : print STP input back to cout\n"
+    "--print-back-CVC       : print input in CVC format, then exit\n"
+    "--print-back-SMTLIB2   : print input in SMT-LIB2 format, then exit\n"
+    "--print-back-SMTLIB1   : print input in SMT-LIB1 format, then exit\n"
+    "--print-back-GDL       : print AiSee's graph format, then exit\n"
+    "--print-back-dot       : print dotty/neato's graph format, then exit\n"
+    "\n"
+    "-m                     : use the SMTLIB1 parser\n"
+    "--SMTLIB1              : use the SMT-LIB1 format parser\n"
+    "--SMTLIB2              : use the SMT-LIB2 format parser\n"
+    "\n"
+    "--output-CNF           : save the CNF into output_[0..n].cnf\n"
+    "--output-bench         : save in ABC's bench format to output.bench\n"
+    "\n"
+    "--exit-after-CNF       : exit after the CNF has been generated\n"
+    "-g                     : timeout (seconds until STP gives up)\n"
+    "-h                     : help\n"
+    "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0\n"
+    "-p                     : print counterexample\n"
+    "-s                     : print function statistics\n"
+    "-t                     : print quick statistics\n"
+    "-v                     : print nodes \n"
     "-y                     : print counterexample in binary\n";
+
+    //  "-x                     : flatten nested XORs\n"
+    //  "-c                     : construct counterexample\n"
+    //   "-d                     : check counterexample\n"
 
   for(int i=1; i < argc;i++)
     {
