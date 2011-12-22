@@ -214,7 +214,7 @@ namespace BEEV {
     // TODO: Should be enabled irrespective of whether refinement is enabled.
     // TODO: I chose the number of reads we perform this operation at randomly.
     bool removed = false;
-    if (!bm->UserFlags.arrayread_refinement_flag && numberOfReadsLessThan(simplified_solved_InputToSAT,50))
+    if (bm->UserFlags.ackermannisation && numberOfReadsLessThan(simplified_solved_InputToSAT,50))
       {
           // If the number of axioms that would be added it small. Remove them.
               simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
@@ -460,7 +460,7 @@ namespace BEEV {
     bm->UserFlags.optimize_flag = optimize_enabled;
 
     SOLVER_RETURN_TYPE res;
-    if (bm->UserFlags.arrayread_refinement_flag)
+    if (!bm->UserFlags.ackermannisation)
       {
         bm->counterexample_checking_during_refinement = true;
       }
@@ -478,7 +478,7 @@ namespace BEEV {
     if (bm->UserFlags.stats_flag)
       simp->printCacheStatus();
 
-    const bool maybeRefinement = arrayops && bm->UserFlags.arrayread_refinement_flag;
+    const bool maybeRefinement = arrayops && !bm->UserFlags.ackermannisation;
 
     simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
     std::auto_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
@@ -518,7 +518,7 @@ namespace BEEV {
       }
 
     assert(arrayops); // should only go to abstraction refinement if there are array ops.
-    assert(bm->UserFlags.arrayread_refinement_flag); // Refinement must be enabled too.
+    assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
     assert (bm->UserFlags.solver_to_use != UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver shouldn't have returned undecided..
 
     res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, original_input, satBase);

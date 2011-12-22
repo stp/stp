@@ -39,11 +39,11 @@ namespace BEEV
     //run STP in optimized mode
     bool optimize_flag;
     
-    //do sat refinement, i.e. underconstraint the problem, and feed to
+    //do sat refinement, i.e. underconstrain the problem, and feed to
     //SAT. if this works, great. else, add a set of suitable constraints
     //to re-constraint the problem correctly, and call SAT again, until
     //all constraints have been added.
-    bool arrayread_refinement_flag;
+    bool ackermannisation; // eagerly write through the array's function congruence axioms.
     
     //switch to control write refinements
     //bool arraywrite_refinement_flag;
@@ -198,7 +198,7 @@ namespace BEEV
       // SAT. if this works, great. else, add a set of suitable
       // constraints to re-constraint the problem correctly, and call SAT again, 
       // until all constraints have been added.
-      arrayread_refinement_flag = true;
+      ackermannisation = false;
   
       //flag to control write refinement
       //arraywrite_refinement_flag = true;

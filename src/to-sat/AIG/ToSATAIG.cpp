@@ -141,7 +141,7 @@ namespace BEEV
             }
 
         // One modified version of Minisat has an array propagator based solver built in. So this block sends the details of the arrays to it.
-        if ((bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS) &&  bm->UserFlags.arrayread_refinement_flag )
+        if ((bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS) &&  !bm->UserFlags.ackermannisation )
             {
                 int array_id = 0; // Is incremented for each distinct array.
                 bool found = false;

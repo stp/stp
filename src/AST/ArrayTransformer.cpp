@@ -51,7 +51,7 @@ namespace BEEV
 
 
     // This establishes equalities between every indexes, and a fresh variable.
-    if (bm->UserFlags.arrayread_refinement_flag)
+    if (!bm->UserFlags.ackermannisation)
     {
 		ASTNodeMap replaced;
 
@@ -586,7 +586,7 @@ namespace BEEV
 
           result = CurrentSymbol;
 
-          if (bm->UserFlags.arrayread_refinement_flag)
+          if (!bm->UserFlags.ackermannisation)
             {
               // result is a variable here; it is an ite in the
               // else-branch

@@ -53,7 +53,7 @@ namespace BEEV
           bm->UserFlags.print_arrayval_declaredorder_flag = true;
           break;
         case 'r':
-          bm->UserFlags.arrayread_refinement_flag = false;
+          bm->UserFlags.ackermannisation = true;
           break;
         case 's' :
           bm->UserFlags.stats_flag = true;
