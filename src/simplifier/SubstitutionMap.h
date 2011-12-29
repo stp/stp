@@ -187,7 +187,7 @@ public:
 		return false;
 	}
 
-	ASTNode CreateSubstitutionMap(const ASTNode& a,   ArrayTransformer*at);
+	ASTNode propagate(const ASTNode& a,   ArrayTransformer*at);
 
 	ASTNode applySubstitutionMap(const ASTNode& n);
 

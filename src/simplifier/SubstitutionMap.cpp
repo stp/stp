@@ -65,7 +65,7 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
 // formula by true.
 // The bvsolver puts expressions of the form (= SYMBOL TERM) into the solverMap.
 
-ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransformer*at)
+ASTNode SubstitutionMap::propagate(const ASTNode& a,  ArrayTransformer*at)
 {
   if (!bm->UserFlags.wordlevel_solve_flag)
     return a;
@@ -86,12 +86,12 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
   const Kind k = a.GetKind();
   if (SYMBOL == k && BOOLEAN_TYPE == a.GetType())
     {
-      bool updated = UpdateSubstitutionMap(a, ASTTrue);
+      bool updated = simp->UpdateSubstitutionMap(a, ASTTrue);
       output = updated ? ASTTrue : a;
     }
   else if (NOT == k && SYMBOL == a[0].GetKind())
     {
-      bool updated = UpdateSubstitutionMap(a[0], ASTFalse);
+      bool updated = simp->UpdateSubstitutionMap(a[0], ASTFalse);
       output = updated ? ASTTrue : a;
     }
   else if (IFF == k || EQ == k)
@@ -110,7 +110,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
       else// (IFF == k )
     	  c1= simplify_during_create_subM ?  simp->SimplifyFormula_NoRemoveWrites(c[1], false) : c[1];
 
-      bool updated = UpdateSubstitutionMap(c[0], c1);
+      bool updated = simp->UpdateSubstitutionMap(c[0], c1);
       output = updated ? ASTTrue : a;
 
       if (updated)
@@ -138,7 +138,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 	          const ASTNode& symbol = a[0][0][1];
 	          const ASTNode newN = nf->CreateTerm(ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNEG, 1,a[0][0][0]));
 
-                  if (UpdateSolverMap(symbol, newN))
+                  if (simp->UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
 	        }
 	      else if (a[1].GetKind() == NOT && a[1][0].GetKind() == EQ && a[1][0][0].GetValueWidth() ==1 && a[1][0][1].GetKind() == SYMBOL)
@@ -146,7 +146,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
                   const ASTNode& symbol = a[1][0][1];
                   const ASTNode newN = nf->CreateTerm(ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNEG, 1,a[1][0][0]));
 
-                  if (UpdateSolverMap(symbol, newN))
+                  if (simp->UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
                 }
 	      else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() ==1 && a[0][1].GetKind() == SYMBOL)
@@ -156,7 +156,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 	          const ASTNode& symbol = a[0][1];
                   const ASTNode newN = nf->CreateTerm(ITE, 1, a[1], nf->CreateTerm(BVNEG, 1,a[0][0]), a[0][0]);
 
-                  if (UpdateSolverMap(symbol, newN))
+                  if (simp->UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
 	        }
 	      else if (a[1].GetKind() == EQ && a[1][0].GetValueWidth() ==1 && a[1][1].GetKind() == SYMBOL)
@@ -164,7 +164,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
                   const ASTNode& symbol = a[1][1];
                   const ASTNode newN = nf->CreateTerm(ITE, 1, a[0], nf->CreateTerm(BVNEG, 1,a[1][0]), a[1][0]);
 
-                  if (UpdateSolverMap(symbol, newN))
+                  if (simp->UpdateSolverMap(symbol, newN))
                       output =  ASTTrue;
                 }
 	      else
@@ -186,7 +186,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
 
                 assert(symbol.GetKind() == SYMBOL);
 
-                if (UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
+                if (simp->UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
                    output =  ASTTrue;
 	    }
   }
@@ -201,7 +201,7 @@ ASTNode SubstitutionMap::CreateSubstitutionMap(const ASTNode& a,  ArrayTransform
            it != itend; it++)
         {
           simp->UpdateAlwaysTrueFormSet(*it);
-          ASTNode aaa = CreateSubstitutionMap(*it,at);
+          ASTNode aaa = propagate(*it,at);
 
           if (ASTTrue != aaa)
             {
