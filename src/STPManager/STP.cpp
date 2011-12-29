@@ -83,12 +83,12 @@ namespace BEEV {
   } //End of TopLevelSTP()
   
   ASTNode
-  STP::callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, const int initial_difficulty_score)
+  STP::callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score)
   {
     while (true)
       {
         ASTNode last = simplified_solved_InputToSAT;
-        simplified_solved_InputToSAT = sizeReducing(last, bvSolver);
+        simplified_solved_InputToSAT = sizeReducing(last, bvSolver,pe);
         if (last == simplified_solved_InputToSAT)
           break;
       }
@@ -114,14 +114,14 @@ namespace BEEV {
 
   // These transformations should never increase the size of the DAG.
    ASTNode
-  STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver)
+  STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe)
   {
-    simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+    simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
         simp->haveAppliedSubstitutionMap();
-        bm->ASTNodeStats("After Propagating Equalities: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.isSet("enable-unconstrained", "1"))
@@ -204,6 +204,7 @@ namespace BEEV {
 
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm, simp);
+    PropagateEqualities * pe = new PropagateEqualities(simp,bm->defaultNodeFactory,bm);
 
     ASTNode simplified_solved_InputToSAT = original_input;
 
@@ -228,7 +229,7 @@ namespace BEEV {
       assert(!arrayops);
 
     // Run size reducing just once.
-    simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver);
+    simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver,pe);
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
 
@@ -236,7 +237,7 @@ namespace BEEV {
     // Currently we discards all the state each time sizeReducing is called,
     // so it's expensive to call.
     if (!arrayops && initial_difficulty_score < 1000000)
-           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver, initial_difficulty_score);
+           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver,pe, initial_difficulty_score);
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
@@ -271,7 +272,7 @@ namespace BEEV {
 
         if (bm->UserFlags.optimize_flag)
           {
-            simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+            simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
 
             // Imagine:
             // The simplifier simplifies (0 + T) to T
@@ -287,7 +288,7 @@ namespace BEEV {
                 simp->haveAppliedSubstitutionMap();
               }
 
-            bm->ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
 
             simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
 
@@ -364,7 +365,7 @@ namespace BEEV {
 
         if (bm->UserFlags.optimize_flag)
           {
-            simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+            simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
 
             if (simp->hasUnappliedSubstitutions())
               {
@@ -372,7 +373,7 @@ namespace BEEV {
                 simp->haveAppliedSubstitutionMap();
               }
 
-            bm->ASTNodeStats("after pure substitution: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
 
             simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
             bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
@@ -474,6 +475,8 @@ namespace BEEV {
     // Deleting it clears out all the buckets associated with hashmaps etc. too.
     delete bvSolver;
     bvSolver = NULL;
+    delete pe;
+    pe = NULL;
 
     if (bm->UserFlags.stats_flag)
       simp->printCacheStatus();

@@ -22,8 +22,11 @@ namespace BEEV
         STPMgr *bm;
         const ASTNode ASTTrue, ASTFalse;
 
-    public:
+        ASTNode
+        propagate(const ASTNode& a, ArrayTransformer*at);
         HASHSET<int> alreadyVisited;
+
+    public:
         const static string message;
 
         PropagateEqualities(Simplifier *simp_, NodeFactory *nf_, STPMgr *bm_) :
@@ -35,7 +38,14 @@ namespace BEEV
         }
 
         ASTNode
-        propagate(const ASTNode& a, ArrayTransformer*at);
+        topLevel(const ASTNode& a, ArrayTransformer* at)
+        {
+          bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
+          ASTNode result = propagate(a, at);
+          bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
+          return result;
+        }
+
     };
 }
 

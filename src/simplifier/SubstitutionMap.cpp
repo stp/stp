@@ -14,7 +14,6 @@ SubstitutionMap::~SubstitutionMap()
 {
 	delete SolverMap;
 	delete nf;
-	delete pe;
 }
 
 // if false. Don't simplify while creating the substitution map.
@@ -74,12 +73,6 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 
 	bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
 	return result;
-}
-
-
-ASTNode SubstitutionMap::propagate(const ASTNode& a, ArrayTransformer*at)
-{
-    return pe->propagate(a,at);
 }
 
 // not always idempotent.
