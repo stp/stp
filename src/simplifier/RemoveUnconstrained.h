@@ -39,6 +39,7 @@ namespace BEEV
 
   public:
 
+    static const string message;
 
     RemoveUnconstrained(STPMgr& bm);
     virtual

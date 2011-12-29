@@ -119,16 +119,6 @@ namespace BEEV
       }
   }
 
-  // Substitution Map methods....
-
-  ASTNode
-  Simplifier::CreateSubstitutionMap(const ASTNode& a, ArrayTransformer* at)
-  {
-    _bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
-    ASTNode result = substitutionMap.CreateSubstitutionMap(a, at);
-    _bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
-    return result;
-  }
 
   bool
   Simplifier::UpdateSolverMap(const ASTNode& key, const ASTNode& value)
