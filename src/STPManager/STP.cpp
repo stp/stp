@@ -116,7 +116,7 @@ namespace BEEV {
    ASTNode
   STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver)
   {
-    simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+    simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
@@ -271,7 +271,7 @@ namespace BEEV {
 
         if (bm->UserFlags.optimize_flag)
           {
-            simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+            simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
 
             // Imagine:
             // The simplifier simplifies (0 + T) to T
@@ -364,7 +364,7 @@ namespace BEEV {
 
         if (bm->UserFlags.optimize_flag)
           {
-            simplified_solved_InputToSAT = simp->CreateSubstitutionMap(simplified_solved_InputToSAT, arrayTransformer);
+            simplified_solved_InputToSAT = simp->topLevel(simplified_solved_InputToSAT, arrayTransformer);
 
             if (simp->hasUnappliedSubstitutions())
               {

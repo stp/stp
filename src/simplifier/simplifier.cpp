@@ -122,7 +122,7 @@ namespace BEEV
   // Substitution Map methods....
 
   ASTNode
-  Simplifier::CreateSubstitutionMap(const ASTNode& a, ArrayTransformer* at)
+  Simplifier::topLevel(const ASTNode& a, ArrayTransformer* at)
   {
     _bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
     ASTNode result = substitutionMap.propagate(a, at);

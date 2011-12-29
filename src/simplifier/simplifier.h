@@ -113,7 +113,7 @@ namespace BEEV
       
     //Map for solved variables
     bool UpdateSolverMap(const ASTNode& e0, const ASTNode& e1);     
-    ASTNode CreateSubstitutionMap(const ASTNode& a,
+    ASTNode topLevel(const ASTNode& a,
   		ArrayTransformer *at);
 
     //substitution

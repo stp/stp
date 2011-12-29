@@ -10,6 +10,7 @@
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "VariablesInExpression.h"
+#include "PropagateEqualities.h"
 
 namespace BEEV {
 
@@ -25,6 +26,7 @@ class SubstitutionMap {
 	STPMgr* bm;
 	ASTNode ASTTrue, ASTFalse, ASTUndefined;
 	NodeFactory *nf;
+	PropagateEqualities *pe;
 
 	// These are used to avoid substituting {x = f(y,z), z = f(x)}
 	typedef hash_map<ASTNode, Symbols*,ASTNode::ASTNodeHasher> DependsType;
@@ -32,7 +34,7 @@ class SubstitutionMap {
 	ASTNodeSet rhs; // All the rhs that have been seeen.
 	set<ASTNodeSet*> rhsAlreadyAdded;
 	VariablesInExpression::SymbolPtrSet rhs_visited; // the rhs contains all the variables in here already.
-	HASHSET<int> alreadyVisited;
+
 
 	int loopCount;
 
@@ -74,13 +76,14 @@ public:
 		loopCount = 0;
 		substitutionsLastApplied =0;
 	        nf = new SimplifyingNodeFactory (*bm->hashingNodeFactory, *bm);
+	        pe = new PropagateEqualities(_simp, nf, bm);
 	}
 
 	void clear()
 	{
 		SolverMap->clear();
 		haveAppliedSubstitutionMap();
-		alreadyVisited.clear();
+		pe->alreadyVisited.clear();
 	}
 
 	virtual ~SubstitutionMap();
