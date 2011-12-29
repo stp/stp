@@ -32,7 +32,7 @@ class SubstitutionMap {
 	ASTNodeSet rhs; // All the rhs that have been seeen.
 	set<ASTNodeSet*> rhsAlreadyAdded;
 	VariablesInExpression::SymbolPtrSet rhs_visited; // the rhs contains all the variables in here already.
-
+	HASHSET<int> alreadyVisited;
 
 	int loopCount;
 
@@ -80,7 +80,7 @@ public:
 	{
 		SolverMap->clear();
 		haveAppliedSubstitutionMap();
-		//alreadyVisited.clear();
+		alreadyVisited.clear();
 	}
 
 	virtual ~SubstitutionMap();
@@ -187,7 +187,7 @@ public:
 		return false;
 	}
 
-
+	ASTNode CreateSubstitutionMap(const ASTNode& a,   ArrayTransformer*at);
 
 	ASTNode applySubstitutionMap(const ASTNode& n);
 

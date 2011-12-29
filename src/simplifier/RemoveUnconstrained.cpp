@@ -13,8 +13,6 @@ namespace BEEV
 {
   using simplifier::constantBitP::Dependencies;
 
-  const string RemoveUnconstrained::message = "After Unconstrained variable:";
-
   RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) :
     bm(_bm)
   {

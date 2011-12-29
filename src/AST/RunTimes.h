@@ -28,7 +28,7 @@ public:
       BitBlasting, 
       Solving, 
       BVSolver, 
-      PropagateEqualities, 
+      CreateSubstitutionMap, 
       SendingToSAT,
       CounterExampleGeneration,
       SATSimplifying,

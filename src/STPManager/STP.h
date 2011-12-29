@@ -15,11 +15,9 @@
 #include "../STPManager/STPManager.h"
 #include "../simplifier/bvsolver.h"
 #include "../simplifier/simplifier.h"
-#include "../simplifier/PropagateEqualities.h"
 #include "../to-sat/ASTNode/ToSAT.h"
 #include "../parser/LetMgr.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
-
 
 namespace BEEV
 {
@@ -27,7 +25,7 @@ namespace BEEV
 
     ArrayTransformer * arrayTransformer;
 
-          ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver, PropagateEqualities*pe);
+          ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver);
 
           // A copy of all the state we need to restore to a prior expression.
           struct Revert_to
@@ -48,7 +46,7 @@ namespace BEEV
 
   public:
           // calls sizeReducing and the bitblasting simplification.
-          ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score);
+          ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, const int initial_difficulty_score);
 
 
     /****************************************************************
