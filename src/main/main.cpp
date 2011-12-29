@@ -78,7 +78,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT, DISABLE_EQUALITY} OptionType;
 
 
 int main(int argc, char ** argv) {
@@ -127,6 +127,7 @@ int main(int argc, char ** argv) {
     "-w                     : switch wordlevel solver off (optimizations are ON by default)\n"
     "-a                     : disable potentially size-increasing optimisations\n"
     "--disable-cbitp        : disable constant bit propagation\n"
+    "--disable-equality     : disable equality propagation\n"
     "\n"
     "--cryptominisat        : use cryptominisat2 as the solver\n"
     "--simplifying-minisat  : use simplifying-minisat 2.2 as the solver\n"
@@ -142,8 +143,7 @@ int main(int argc, char ** argv) {
     "--print-back-GDL       : print AiSee's graph format, then exit\n"
     "--print-back-dot       : print dotty/neato's graph format, then exit\n"
     "\n"
-    "-m                     : use the SMTLIB1 parser\n"
-    "--SMTLIB1              : use the SMT-LIB1 format parser\n"
+    "--SMTLIB1 -m           : use the SMT-LIB1 format parser\n"
     "--SMTLIB2              : use the SMT-LIB2 format parser\n"
     "\n"
     "--output-CNF           : save the CNF into output_[0..n].cnf\n"
@@ -189,6 +189,8 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--disable-cbitp"),DISABLE_CBITP));
 			  lookup.insert(make_pair(tolower("--disable-simplify"),DISABLE_SIMPLIFICATIONS));
 			  lookup.insert(make_pair(tolower("--oldstyle-refinement"),OLDSTYLE_REFINEMENT));
+			  lookup.insert(make_pair(tolower("--disable-equality"),DISABLE_EQUALITY));
+
 
 			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
 			  {
@@ -279,6 +281,10 @@ int main(int argc, char ** argv) {
                           case DISABLE_SIMPLIFICATIONS:
                                   bm->UserFlags.disableSimplifications();
                                 break;
+                          case DISABLE_EQUALITY:
+                                  bm->UserFlags.propagate_equalities = false;
+                                  break;
+
 			  default:
 				  fprintf(stderr,usage,prog);
 	               cout << helpstring;

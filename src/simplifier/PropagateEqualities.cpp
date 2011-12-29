@@ -21,7 +21,7 @@ namespace BEEV
 
     ASTNode PropagateEqualities::propagate(const ASTNode& a,  ArrayTransformer*at)
     {
-      if (!bm->UserFlags.wordlevel_solve_flag)
+      if (!bm->UserFlags.propagate_equalities)
         return a;
 
       ASTNode output;

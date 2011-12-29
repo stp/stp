@@ -80,6 +80,10 @@ namespace BEEV
     //turn on word level bitvector solver
     bool wordlevel_solve_flag;
     
+
+    bool propagate_equalities;
+
+
     //XOR flattening optimizations.
     bool xor_flatten_flag;
     
@@ -150,6 +154,7 @@ namespace BEEV
       set("enable-unconstrained","0");
       set("use-intervals","0");
       wordlevel_solve_flag = false;
+      propagate_equalities = false;
     }
 
     string get(string n)
@@ -234,6 +239,9 @@ namespace BEEV
       //turn on word level bitvector solver
       wordlevel_solve_flag = true;
       
+      //propagate equalities.
+      propagate_equalities = true;
+
       //turn off XOR flattening
       xor_flatten_flag = false;
       
