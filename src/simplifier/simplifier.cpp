@@ -124,9 +124,9 @@ namespace BEEV
   ASTNode
   Simplifier::CreateSubstitutionMap(const ASTNode& a, ArrayTransformer* at)
   {
-    _bm->GetRunTimes()->start(RunTimes::CreateSubstitutionMap);
+    _bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
     ASTNode result = substitutionMap.CreateSubstitutionMap(a, at);
-    _bm->GetRunTimes()->stop(RunTimes::CreateSubstitutionMap);
+    _bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
     return result;
   }
 
