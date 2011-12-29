@@ -913,8 +913,29 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                     result = NodeFactory::CreateTerm(BEEV::BVMULT, width, children[1][0], children[0]);
                                     result = NodeFactory::CreateTerm(BEEV::BVUMINUS, width, result);
                                   }
-
 				  }
+			  else if (children.size() > 2)
+			      {
+			          //Never create multiplications with arity > 2.
+
+			          deque<ASTNode> names;
+
+			          for (unsigned i = 0; i < children.size(); i++)
+			            names.push_back(children[i]);
+
+			          while (names.size() > 1)
+			            {
+			              ASTNode a = names.front();
+			              names.pop_front();
+
+			              ASTNode b = names.front();
+			              names.pop_front();
+
+			              ASTNode n = NodeFactory::CreateTerm(BVMULT, a.GetValueWidth(), a, b);
+			              names.push_back(n);
+			            }
+			          result = names.front();
+			      }
 		  }
 		  break;
 
