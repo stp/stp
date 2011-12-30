@@ -960,7 +960,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             result = bm.CreateZeroConst(width);
           else if (children[1].isConstant())
             result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm, &hashing);
-          else if(children[0].isConstant() && children[0] == bm.CreateOneConst(width) && width > 1)
+          else if(children[0].isConstant() && children[0] == bm.CreateOneConst(width))
             result = NodeFactory::CreateTerm(BEEV::ITE,width, NodeFactory::CreateNode(BEEV::EQ, children[1], bm.CreateZeroConst(width)), children[0], bm.CreateZeroConst(width));
         }
 	break;
