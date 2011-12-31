@@ -36,7 +36,7 @@ namespace BEEV
   	  Simplifier simp(bm);
 
   	  BBNodeManagerAIG mgr;
-  	  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,cb,&simp,bm->defaultNodeFactory,&bm->UserFlags);
+  	  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,&simp,bm->defaultNodeFactory,&bm->UserFlags,cb);
 
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
       BBNodeAIG BBFormula = bb.BBForm(input);

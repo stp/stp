@@ -1140,7 +1140,7 @@ const bool debug_multiply = false;
  * adder_variant1 = true.   Solving:115s, 103s, 303s
  * adder_variant1 = false.  Solving:181s, 471s, 215s
  * */
-bool const adder_variant1 = true;
+
 
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
@@ -1183,7 +1183,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
 
               BBNode carry, sum;
 
-              if (adder_variant1)
+              if (adder_variant)
                 {
                   carry = Majority(a, b, c);
                   sum = nf->CreateNode(XOR, a, b, c);
@@ -1607,27 +1607,25 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
         y = _x;
       }
 
-  	  string mv = uf->get("multiplication_variant","3");
-
       const int bitWidth = x.size();
       std::vector<stack<BBNode> > products(bitWidth);
 
-      if (mv == "1") {
+      if (multiplication_variant == "1") {
               //cerr << "v1";
               return mult_normal(x, y, support);
       }
-      else   if (mv == "2") {
+      else   if (multiplication_variant == "2") {
               //cout << "v2";
               mult_allPairs(x, y, support,products.data());
               return buildAdditionNetworkResult(products.data(),support, bitWidth);
       }
 
-      else   if (mv == "3") {
+      else   if (multiplication_variant == "3") {
               //cout << "v3" << endl;
               mult_Booth(_x, _y, support,n[0],n[1],products.data());
               return buildAdditionNetworkResult(products.data(),support,bitWidth);
       }
-      else   if (mv == "4")
+      else   if (multiplication_variant == "4")
       {
         //cerr << "v4";
         mult_Booth(_x, _y, support,n[0],n[1],products.data());
@@ -1642,7 +1640,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
           }
         return buildAdditionNetworkResult(products.data(),support, bitWidth);
       }
-      else   if (mv == "5")
+      else   if (multiplication_variant == "5")
         {
         //cout << "v5";
           if (!statsFound(n))
@@ -1658,35 +1656,18 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
     	  FatalError("sda44f");
 }
 
-//======
-// on factoring12bitsx12.cvc with CMS2.
-// variant1 = t, variant2 = t, variant3 = f:  7.3 seconds
-// variant1 = t, variant2 = f, variant3 = f:  3.7 seconds <---
-// variant1 = f, variant2 = f, variant3 = f:  6.1 seconds
-// variant1 = f, variant2 = t, variant3 = f:  9.2 seconds
+// All combinations of division_variant_1, _2, _3
+/* on factoring12bitsx12.cvc with MINISAT2.
+000:    0m2.764s
+001:    0m4.060s
+010:    0m2.750s
+011:    0m4.173s
+100:    0m3.064s
+101:    0m3.217s
+110:    0m3.064s
+111:    0m3.230s
+*/
 
-// variant1 = t, variant2 = t, variant3 = t:  7.0 seconds
-// variant1 = t, variant2 = f, variant3 = t:  6.9 seconds
-// variant1 = f, variant2 = f, variant3 = t:  9.9 seconds
-// variant1 = f, variant2 = t, variant3 = t:  7.3 seconds
-//======
-// on factoring12bitsx12.cvc with MINISAT2.
-// variant1 = t, variant2 = t, variant3 = f: 10.6 seconds
-// variant1 = t, variant2 = f, variant3 = f: 7.8 seconds
-// variant1 = f, variant2 = f, variant3 = f: 10.1 seconds
-// variant1 = f, variant2 = t, variant3 = f: 11.6 seconds
-
-// variant1 = t, variant2 = t, variant3 = t: 10.6 seconds
-// variant1 = t, variant2 = f, variant3 = t: 10.7 seconds
-// variant1 = f, variant2 = f, variant3 = t: 11.8 seconds
-// variant1 = f, variant2 = t, variant3 = t: 11.2 seconds
-//======
-
-
-// You can select these with any combination you want of true & false.
-const bool division_variant_1 = true;
-const bool division_variant_2 = false;
-const bool division_variant_3 = true;
 
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
@@ -1831,15 +1812,9 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBITE(const BBNode& cond, const BBN
 }
 
 //  smt-test/transitive400.smt2
-// Cryptominsat 2:  bbbvle_variant1 = true.  220ms
-// Cryptominsat 2:  bbbvle_variant1 = false. 15 sec
+// Minisat 2:  bbbvle_variant = true. 8 ms
+// Minisat 2:  bbbvle_variant = false. 577 ms
 
-// Minisat 2:  bbbvle_variant1 = true. 13 ms
-// Minisat 2:  bbbvle_variant1 = false. 48 sec
-
-
-const bool bbbvle_variant1 = true;
-const bool bbbvle_variant2 = !bbbvle_variant1;
 
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
@@ -1848,7 +1823,7 @@ template <class BBNode, class BBNodeManagerT>
 BBNode BitBlaster<BBNode,BBNodeManagerT>::BBBVLE(const BBNodeVec& left, const BBNodeVec& right,
                 bool is_signed, bool is_bvlt)
 {
-  if (bbbvle_variant1)
+  if (bbbvle_variant)
     return BBBVLE_variant1(left,right,is_signed,is_bvlt);
   else
     return BBBVLE_variant2(left,right,is_signed,is_bvlt);

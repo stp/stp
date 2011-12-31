@@ -162,6 +162,16 @@ class BitBlaster {
         Simplifier* simp;
         BBNodeManagerT* nf;
 
+        // You can select these with any combination you want of true & false.
+        const bool division_variant_1 ;
+        const bool division_variant_2 ;
+        const bool division_variant_3 ;
+        const bool adder_variant;
+        const bool bbbvle_variant;
+
+        // This is a number 1->5 (currently).
+        const string multiplication_variant;
+
 public:
 
         simplifier::constantBitP::ConstantBitPropagation* cb;
@@ -175,27 +185,22 @@ public:
 	 * Public Member Functions                                      *
 	 ****************************************************************/
 
-        BitBlaster(BBNodeManagerT* bnm  , simplifier::constantBitP::ConstantBitPropagation *cb_, Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf)
-                {
+        BitBlaster(BBNodeManagerT* bnm  , Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf, simplifier::constantBitP::ConstantBitPropagation *cb_ = NULL)
+	: uf(_uf),
+	  division_variant_1("1" == _uf->get("division_variant_1","1")),
+	  division_variant_2("1" == _uf->get("division_variant_2","1")),
+	  division_variant_3("1" == _uf->get("division_variant_3","1")),
+	  multiplication_variant(_uf->get("multiplication_variant","3")),
+	  adder_variant("1" == _uf->get("adder_variant","1")),
+	  bbbvle_variant("1" == _uf->get("bbbvle_variant","1"))
+        {
           nf = bnm;
           cb = cb_;
           BBTrue = nf->getTrue();
           BBFalse = nf->getFalse();
           simp = _simp;
           ASTNF = astNodeF;
-          uf = _uf;
         }
-
-        BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf)
-		{
-          nf = bnm;
-          BBTrue = nf->getTrue();
-          BBFalse = nf->getFalse();
-          cb = NULL;
-          simp = _simp;
-          ASTNF = astNodeF;
-          uf = _uf;
-		}
 
 
         void ClearAllTables()

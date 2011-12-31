@@ -126,7 +126,7 @@ public:
 
 		Simplifier simplifier(bm);
 		BBNodeManagerAIG mgr;
-    	BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr,NULL, &simplifier, bm->defaultNodeFactory,&bm->UserFlags);
+    	BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&mgr, &simplifier, bm->defaultNodeFactory,&bm->UserFlags);
     	BBNodeAIG blasted = bb.BBForm(replaced);
 
     	Aig_ObjCreatePo(mgr.aigMgr, blasted.n);
