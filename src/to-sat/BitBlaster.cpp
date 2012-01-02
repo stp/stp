@@ -1150,6 +1150,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
   BBNodeVec results;
   for (int i = 0; i < bitWidth; i++)
     {
+        if (i+1 != bitWidth)
               buildAdditionNetworkResult(&(products[i]), &(products[i+1]), support, bitWidth, i);
           else
               buildAdditionNetworkResult(&(products[i]), NULL, support, bitWidth, i);
@@ -1165,11 +1166,11 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
 // Use full adders to create an addition network that adds together each of the
 // partial products.
 template <class BBNode, class BBNodeManagerT>
-void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* from_, stack<BBNode>* to_, set<BBNode>& support,
+void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* from_, stack<BBNode>* to, set<BBNode>& support,
 		const int bitWidth, const int i, const int minTrue, const int maxTrue )
 {
-    stack<BBNode> from = *from_;
-    stack<BBNode> to = *to_;
+    stack<BBNode>& from = *from_;
+
 
     while (from.size() >= 2) {
               BBNode c;
@@ -1229,8 +1230,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
              }
              else if (i + 1 != bitWidth && carry != BBFalse)
              {
-                     assert(to != NULL);
-                     to.push(carry);
+                     to->push(carry);
              }
       }
       if (0==from.size())
