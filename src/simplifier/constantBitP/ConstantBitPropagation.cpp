@@ -693,7 +693,7 @@ namespace simplifier
           MAPTFN(ITE,bvITEBothWays)
           MAPTFN(BVCONCAT, bvConcatBothWays)
 
-#ifdef WITHCBITP
+
           case BVMULT: // handled specially later.
           case BVDIV:
           case BVMOD:
@@ -702,7 +702,7 @@ namespace simplifier
           case SBVMOD:
           transfer = NULL;
           break;
-#endif
+
           default:
             {
               notHandled(k);
@@ -712,7 +712,7 @@ namespace simplifier
 #undef MAPTFN
       bool mult_like = false;
 
-#ifdef WITHCBITP
+
       // safe approximation to no overflow multiplication.
       if (k == BVMULT)
         {
@@ -748,7 +748,8 @@ namespace simplifier
           mult_like=true;
         }
       else
-#endif
+
+
       result = transfer(children, output);
 
       if (mult_like && output_mult_like)

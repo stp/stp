@@ -1,9 +1,6 @@
 #include "../../AST/AST.h"
 #include "FixedBits.h"
 
-#ifdef WITHCBITP
-  #include "MersenneTwister.h"
-#endif
 
 #include "ConstantBitP_Utility.h"
 
@@ -154,7 +151,9 @@ namespace simplifier
       return result;
     }
 
-#ifdef WITHCBITP
+#if 0
+    #include "MersenneTwister.h"
+
     // Getting a new random number is expensive. Not sure why.
     FixedBits FixedBits::createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
       {
