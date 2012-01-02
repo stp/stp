@@ -1150,7 +1150,9 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
   BBNodeVec results;
   for (int i = 0; i < bitWidth; i++)
     {
-      buildAdditionNetworkResult(products, support, bitWidth, i);
+              buildAdditionNetworkResult(&(products[i]), &(products[i+1]), support, bitWidth, i);
+          else
+              buildAdditionNetworkResult(&(products[i]), NULL, support, bitWidth, i);
       assert(products[i].size() == 1);
       results.push_back(products[i].top());
     }
@@ -1163,23 +1165,26 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
 // Use full adders to create an addition network that adds together each of the
 // partial products.
 template <class BBNode, class BBNodeManagerT>
-void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
+void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* from_, stack<BBNode>* to_, set<BBNode>& support,
 		const int bitWidth, const int i, const int minTrue, const int maxTrue )
 {
-      while (products[i].size() >= 2) {
+    stack<BBNode> from = *from_;
+    stack<BBNode> to = *to_;
+
+    while (from.size() >= 2) {
               BBNode c;
 
-              if (products[i].size() == 2)
+              if (from.size() == 2)
                       c = nf->getFalse();
               else {
-                      c = products[i].top();
-                      products[i].pop();
+                      c = from.top();
+                      from.pop();
               }
 
-              const BBNode a = products[i].top();
-              products[i].pop();
-              const BBNode b = products[i].top();
-              products[i].pop();
+              const BBNode a = from.top();
+              from.pop();
+              const BBNode b = from.top();
+              from.pop();
 
               BBNode carry, sum;
 
@@ -1216,7 +1221,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
                {
                // I experimented with making products[] a deque and accessing the front and back of the queue.
                // As a stack is works considerably better.
-               products[i].push(sum);
+               from.push(sum);
                }
              if (conjoin_to_top && maxTrue ==1)
              {
@@ -1224,13 +1229,14 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
              }
              else if (i + 1 != bitWidth && carry != BBFalse)
              {
-                     products[i + 1].push(carry);
+                     assert(to != NULL);
+                     to.push(carry);
              }
       }
-      if (0==products[i].size())
-        products[i].push(BBFalse);
+      if (0==from.size())
+        from.push(BBFalse);
 
-      assert(1==products[i].size());
+      assert(1==from.size());
 }
 
 
@@ -1328,7 +1334,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, sta
                         if (debug_bounds)
                                 cerr << "A";
 
-                        buildAdditionNetworkResult(products,toConjoinToTop,bitWidth,i, ms.sumL[i], ms.sumH[i]);
+                        buildAdditionNetworkResult(&(products[i]), ((i+1==bitWidth)?NULL: &(products[i+1])), toConjoinToTop,bitWidth,i, ms.sumL[i], ms.sumH[i]);
                 }
 
                 assert(products[i].size() == 1);
