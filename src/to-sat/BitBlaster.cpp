@@ -644,11 +644,11 @@ const BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBTerm(const ASTNode& _term, 
 	                results.push_back(BBTerm(term[i], support));
 
 	              const int bitWidth = term[0].GetValueWidth();
-	              std::vector<stack<BBNode> > products(bitWidth);
+	              std::vector<list<BBNode> > products(bitWidth);
 	              for (int i=0; i < bitWidth;i++)
 	                {
 	                  for (int j=0; j < results.size();j++)
-	                    products[i].push(results[j][i]);
+	                    products[i].push_back(results[j][i]);
 	                }
 
 	              result = buildAdditionNetworkResult(products.data(),support,bitWidth);
@@ -1143,7 +1143,7 @@ const bool debug_multiply = false;
 
 
 template <class BBNode, class BBNodeManagerT>
-BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* products, set<BBNode>& support,
+BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support,
                 const int bitWidth)
 {
 
@@ -1155,7 +1155,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
           else
               buildAdditionNetworkResult(&(products[i]), NULL, support, bitWidth, i);
       assert(products[i].size() == 1);
-      results.push_back(products[i].top());
+      results.push_back(products[i].back());
     }
 
     assert(results.size() == ((unsigned)bitWidth));
@@ -1166,10 +1166,10 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BB
 // Use full adders to create an addition network that adds together each of the
 // partial products.
 template <class BBNode, class BBNodeManagerT>
-void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>* from_, stack<BBNode>* to, set<BBNode>& support,
+void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(list<BBNode>* from_, list<BBNode>* to, set<BBNode>& support,
 		const int bitWidth, const int i, const int minTrue, const int maxTrue )
 {
-    stack<BBNode>& from = *from_;
+    list<BBNode>& from = *from_;
 
 
     while (from.size() >= 2) {
@@ -1178,14 +1178,14 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
               if (from.size() == 2)
                       c = nf->getFalse();
               else {
-                      c = from.top();
-                      from.pop();
+                      c = from.back();
+                      from.pop_back();
               }
 
-              const BBNode a = from.top();
-              from.pop();
-              const BBNode b = from.top();
-              from.pop();
+              const BBNode a = from.back();
+              from.pop_back();
+              const BBNode b = from.back();
+              from.pop_back();
 
               BBNode carry, sum;
 
@@ -1222,7 +1222,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
                {
                // I experimented with making products[] a deque and accessing the front and back of the queue.
                // As a stack is works considerably better.
-               from.push(sum);
+               from.push_back(sum);
                }
              if (conjoin_to_top && maxTrue ==1)
              {
@@ -1230,11 +1230,11 @@ void BitBlaster<BBNode,BBNodeManagerT>::buildAdditionNetworkResult(stack<BBNode>
              }
              else if (i + 1 != bitWidth && carry != BBFalse)
              {
-                     to->push(carry);
+                     to->push_back(carry);
              }
       }
       if (0==from.size())
-        from.push(BBFalse);
+        from.push_back(BBFalse);
 
       assert(1==from.size());
 }
@@ -1259,7 +1259,7 @@ const bool debug_bounds = false;
 
 // Make sure x and y are the parameters in the correct order. THIS ISNT COMMUTATIVE.
 template <class BBNode, class BBNodeManagerT>
-BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, stack<BBNode>* products, BBNodeSet& toConjoinToTop)
+BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, list<BBNode>* products, BBNodeSet& toConjoinToTop)
 {
 
         simplifier::constantBitP::MultiplicationStats ms;
@@ -1293,11 +1293,11 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, sta
             {
               while (products[i].size() > 0)
                 {
-                  BBNode c = products[i].top(); // DONT take a reference of the top().
-                  products[i].pop();
+                  BBNode c = products[i].back(); // DONT take a reference of the back().
+                  products[i].pop_back();
                   toConjoinToTop.insert(nf->CreateNode(NOT, c));
                 }
-              products[i].push(nf->getFalse());
+              products[i].push_back(nf->getFalse());
             }
         }
 
@@ -1338,7 +1338,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, sta
                 }
 
                 assert(products[i].size() == 1);
-                result.push_back(products[i].top());
+                result.push_back(products[i].back());
         }
 
         if (debug_bitblaster)
@@ -1349,7 +1349,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::multWithBounds(const ASTNode&n, sta
 }
 
 template <class BBNode, class BBNodeManagerT>
-void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support, const ASTNode& xN, const ASTNode& yN, stack<BBNode> * products)
+void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support, const ASTNode& xN, const ASTNode& yN, list<BBNode> * products)
 {
 	 const int bitWidth = x_i.size();
 	 assert(x_i.size() == y_i.size());
@@ -1421,7 +1421,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 
 		 sort(t_products[i].begin(), t_products[i].end());
 		 for (int j=0; j < t_products[i].size();j++)
-		     products[i].push(t_products[i][j]);
+		     products[i].push_back(t_products[i][j]);
 	 }
   }
 
@@ -1430,7 +1430,7 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const B
 // I've copied this in from my the "trevor" branch r482.
 // I've not measured if this is better than the current variant.
 template <class BBNode, class BBNodeManagerT>
-void BitBlaster<BBNode,BBNodeManagerT>::mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support, stack<BBNode> * products)
+void BitBlaster<BBNode,BBNodeManagerT>::mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support, list<BBNode> * products)
   {
       // Make a table of partial products.
       const int bitWidth = x.size();
@@ -1450,11 +1450,11 @@ void BitBlaster<BBNode,BBNodeManagerT>::mult_allPairs(const BBNodeVec& x, const 
               BBNode n = nf->CreateNode(AND, x[i - j], y[j]);
 
               if (n != nf->getFalse())
-                products[i].push(n);
+                products[i].push_back(n);
             }
 
           if (0 == products[i].size())
-            products[i].push(nf->getFalse());
+            products[i].push_back(nf->getFalse());
 
         }
     }
@@ -1489,14 +1489,14 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
   template<class BBNode, class BBNodeManagerT>
     void
     BitBlaster<BBNode, BBNodeManagerT>::mult_SortingNetwork(
-        BBNodeSet& support, stack<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted,
+        BBNodeSet& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted,
         const int minTrue, const int maxTrue )
     {
 
       // Add the carry from the prior column. i.e. each second sorted formula.
       for (int k = 1; k < priorSorted.size(); k += 2)
         {
-          current.push(priorSorted[k]);
+          current.push_back(priorSorted[k]);
         }
 
       const int height = current.size();
@@ -1512,8 +1512,8 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
       for (int l = 0; l < height; l++)
       {
               vector<BBNode> oldSorted(currentSorted);
-              BBNode c = current.top();
-              current.pop();
+              BBNode c = current.back();
+              current.pop_back();
               currentSorted[0] = nf->CreateNode(OR, oldSorted[0], c);
 
               for (int j = 1; j <= l; j++)
@@ -1556,7 +1556,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::mult_normal(const BBNodeVec& x,
       if (height % 2 == 1)
         resultNode = nf->CreateNode(OR, resultNode, currentSorted.at(height - 1));
 
-      current.push(resultNode);
+      current.push_back(resultNode);
     }
 
 
@@ -1604,6 +1604,9 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
 		BBNodeSet& support, const ASTNode& n) {
 
 
+    if (uf->isSet("print_on_mult","0"))
+        cerr << "--mult--";
+
   BBNodeVec x = _x;
   BBNodeVec y = _y;
 
@@ -1614,7 +1617,7 @@ BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::BBMult(const BBNodeVec& _x, const B
       }
 
       const int bitWidth = x.size();
-      std::vector<stack<BBNode> > products(bitWidth);
+      std::vector<list<BBNode> > products(bitWidth);
 
       if (multiplication_variant == "1") {
               //cerr << "v1";
