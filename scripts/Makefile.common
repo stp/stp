@@ -20,10 +20,6 @@ OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
 
 CFLAGS_BASE   += $(OPTIMIZE)
 
-ifeq ($(WITHCBITP),yes)
-	CFLAGS_BASE += -DWITHCBITP
-endif
-
 # todo: These should be set by the config script of course..
 TEST_PREFIX=../../stp-tests/
 SHELL=/bin/bash
