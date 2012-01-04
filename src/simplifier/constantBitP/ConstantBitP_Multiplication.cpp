@@ -5,7 +5,6 @@
 #include "../../AST/AST.h"
 #include "../../simplifier/simplifier.h"
 #include "MultiplicationStats.h"
-#include <hash_set>
 #include "multiplication/ImplicationGraph.h"
 #include "multiplication/ColumnCounts.h"
 // Multiply.
