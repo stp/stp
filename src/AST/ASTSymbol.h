@@ -107,11 +107,6 @@ namespace BEEV
      * Public Member Functions                                      *
      ****************************************************************/
 
-    // Default constructor
-    ASTSymbol() :
-      ASTInternal(), _name(NULL)
-    {
-    }
 
     // Constructor.  This does NOT copy its argument.
     ASTSymbol(const char * const name) :
