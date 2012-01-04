@@ -200,7 +200,7 @@ namespace BEEV {
 
     DifficultyScore difficulty;
     if (bm->UserFlags.stats_flag)
-      cerr << "Difficulty Initially:" << difficulty.score(original_input) << endl;
+            cerr << "Difficulty Initially:" << difficulty.score(original_input) << endl;
 
     // A heap object so I can easily control its lifetime.
     BVSolver* bvSolver = new BVSolver(bm, simp);

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -15,6 +15,7 @@
 #include <cmath>
 #include "../STPManager/STPManager.h"
 #include "../printer/SMTLIBPrinter.h"
+#include "NodeIterator.h"
 
 namespace BEEV
 {
@@ -613,44 +614,23 @@ namespace BEEV
     if (!UserFlags.stats_flag)
       return;
 
-    StatInfoSet.clear();
-    //print node size:
-
-    cout << "[" << GetRunTimes()->getDifference() << "]" <<  "Printing: " << c;
+    cout << "[" << GetRunTimes()->getDifference() << "]" <<  c;
     if (UserFlags.print_nodes_flag)
-      {
-        //a.PL_Print(cout,0);
-        //cout << endl;
         cout << a << endl;
-      }
-    cout << "Node size is: ";
-    cout << NodeSize(a) << endl;
+
+    cout << "Node size is: " << NodeSize(a) << endl;
   }
 
-  unsigned int STPMgr::NodeSize(const ASTNode& a, bool clearStatInfo)
+  unsigned int STPMgr::NodeSize(const ASTNode& a)
   {
-    if (clearStatInfo)
-      StatInfoSet.clear();
-
-    ASTNodeSet::iterator it;
-    if ((it = StatInfoSet.find(a)) != StatInfoSet.end())
-      //has already been counted
-      return 0;
-
-    //record that you have seen this node already
-    StatInfoSet.insert(a);
-    // cout << "Number of bytes per Node is: ";
-    // cout << sizeof(*(a._int_node_ptr)) << endl;
-
-    //leaf node has a size of 1
-    if (a.Degree() == 0)
-      return 1;
-
-    unsigned newn = 1;
-    const ASTVec& c = a.GetChildren();
-    for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
-      newn += NodeSize(*it);
-    return newn;
+      unsigned int result = 0;
+      NodeIterator ni(a, ASTUndefined, *this);
+      ASTNode current;
+      while ((current = ni.next()) != ni.end())
+          {
+               result++;
+         }
+      return result;
   }
 
   bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)

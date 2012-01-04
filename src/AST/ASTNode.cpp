@@ -15,7 +15,19 @@
  ********************************************************************/
 namespace BEEV 
 {
-  // Constructor; 
+    uint8_t ASTNode::getIteration() const
+    {
+        return _int_node_ptr->iteration;
+    }
+
+    void ASTNode::setIteration(uint8_t v) const
+    {
+        _int_node_ptr->iteration = v;
+    }
+
+
+
+    // Constructor;
   //
   // creates a new pointer, increments refcount of pointed-to object.
   ASTNode::ASTNode(ASTInternal *in) :

@@ -73,6 +73,9 @@ namespace BEEV
      * Public Member Functions                                      *
      ****************************************************************/
 
+    uint8_t getIteration() const;
+    void setIteration(uint8_t v) const;
+
     // Default constructor.
     ASTNode() :_int_node_ptr(NULL) {};
 

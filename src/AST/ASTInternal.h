@@ -55,6 +55,8 @@ namespace BEEV
      * Protected Data                                               *
      ****************************************************************/
 
+    mutable uint8_t iteration;
+
     //reference counting for garbage collection
     unsigned int   _ref_count;
    
@@ -128,7 +130,7 @@ namespace BEEV
     ASTInternal(int nodenum = 0) :
       _ref_count(0), _kind(UNDEFINED),
       _node_num(nodenum), 
-      _index_width(0), _value_width(0)
+      _index_width(0), _value_width(0), iteration(0)
     {
     }
 

@@ -79,6 +79,37 @@ namespace BEEV
 
     //frequently used nodes
     ASTNode ASTFalse, ASTTrue, ASTUndefined;
+
+    uint8_t last_iteration;
+
+    // No nodes should already have the iteration number that is returned from here.
+    // This never returns zero.
+    uint8_t getNextIteration()
+    {
+        if (last_iteration == 255)
+            {
+                resetIteration();
+                last_iteration = 0;
+            }
+
+        uint8_t result =  ++last_iteration;
+        assert(result != 0);
+        return result;
+    }
+
+    // Detauls the iteration count back to zero.
+    void resetIteration()
+    {
+        for (ASTInteriorSet::iterator it =_interior_unique_table.begin(); it != _interior_unique_table.end(); it++ )
+            {(*it)->iteration = 0;}
+
+        for (ASTSymbolSet ::iterator it =_symbol_unique_table.begin(); it != _symbol_unique_table.end(); it++ )
+            {(*it)->iteration = 0;}
+
+        for (ASTBVConstSet:: iterator it =_bvconst_unique_table.begin(); it != _bvconst_unique_table.end(); it++ )
+            {(*it)->iteration = 0;}
+    }
+
   private:
 
     // Stack of Logical Context. each entry in the stack is a logical
@@ -91,9 +122,6 @@ namespace BEEV
 
     // Memo table that tracks terms already seen
     ASTNodeMap TermsAlreadySeenMap;
-    
-    //Map for computing ASTNode stats
-    ASTNodeSet StatInfoSet;
     
     // The query for the current logical context.
     ASTNode _current_query;    
@@ -186,7 +214,9 @@ namespace BEEV
       _interior_unique_table(),
       UserFlags(),
       _symbol_count(0),
-      CNFFileNameCounter(0)
+      CNFFileNameCounter(0),
+      last_iteration(0)
+
     {
       _max_node_num = 0;
       Begin_RemoveWrites = false;
@@ -230,9 +260,7 @@ namespace BEEV
       return _max_node_num;
     }
 
-    //reports node size.  Second arg is "clearstatinfo", whatever that
-    //is.
-    unsigned int NodeSize(const ASTNode& a, bool t = false);
+    unsigned int NodeSize(const ASTNode& a);
 
     /****************************************************************
      * Simplifying create formula functions                         *
@@ -436,7 +464,6 @@ namespace BEEV
       NodeLetVarMap1.clear();
       PLPrintNodeSet.clear();
       AlreadyPrintedSet.clear();
-      StatInfoSet.clear();
       TermsAlreadySeenMap.clear();
       NodeLetVarVec.clear();
       ListOfDeclaredVars.clear();
