@@ -353,6 +353,7 @@ namespace BEEV {
         bm->ASTNodeStats("After AIG Core: ", simplified_solved_InputToSAT);
       }
 
+#if 0
     bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
 
     bm->SimplifyWrites_InPlace_Flag = true;
@@ -401,6 +402,7 @@ namespace BEEV {
     while (inputToSAT != simplified_solved_InputToSAT);
 
     bm->ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
+#endif
 
     if (bm->UserFlags.isSet("enable-unconstrained", "1"))
       {
@@ -534,6 +536,7 @@ namespace BEEV {
         return res;
       }
 
+    #if 0
     res = Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, original_input, satBase);
     if (SOLVER_UNDECIDED != res)
       {
@@ -553,18 +556,14 @@ namespace BEEV {
         CountersAndStats("print_func_stats", bm);
         return res;
       }
+    #endif
 
-//    if (!bm->UserFlags.num_absrefine_flag)
-      {
-        FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
-          "either a divide by zero in the input or a bug in STP");
-        //bogus return to make the compiler shut up
-        return SOLVER_ERROR;
-      }
-  //  else
-      {
-       // return res;
-      }
+    FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
+      "either a divide by zero in the input or a bug in STP");
+    //bogus return to make the compiler shut up
+    return SOLVER_ERROR;
+
+
   } //End of TopLevelSTPAux
 
 #if 0

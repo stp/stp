@@ -2872,8 +2872,10 @@ namespace BEEV
 
         //process only if not  in the substitution map. simplifymap
         //has been checked already
+#if 0
         if (!CheckSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
           out1 = RemoveWrites_TopLevel(out1);
+#endif
 
         //it is possible that after all the procesing the READ term
         //reduces to READ(Symbol,const) and hence we should check the
@@ -3325,6 +3327,7 @@ namespace BEEV
     return output;
   } //end of distributemultoverplus()
 
+#if 0
   //converts the BVSX(len, a0) operator into ITE( check top bit,
   //extend a0 by 1, extend a0 by 0)
   ASTNode
@@ -3389,7 +3392,9 @@ namespace BEEV
     UpdateSimplifyMap(a, output, false);
     return output;
   } //end of ConvertBVSXToITE()
+#endif
 
+#if 0
   ASTNode
   Simplifier::RemoveWrites_TopLevel(const ASTNode& term)
   {
@@ -3412,6 +3417,7 @@ namespace BEEV
         return RemoveWrites(term);
       }
   } //end of RemoveWrites_TopLevel()
+#endif
 
   // recursively simplify things that are of type array.
 
@@ -3459,6 +3465,7 @@ namespace BEEV
     return output;
   }
 
+#if 0
   ASTNode
   Simplifier::SimplifyWrites_InPlace(const ASTNode& term, ASTNodeMap* VarConstMap)
   {
@@ -3605,6 +3612,7 @@ namespace BEEV
     return output;
   } //end of RemoveWrites()
 
+
   ASTNode
   Simplifier::ReadOverWrite_To_ITE(const ASTNode& term, ASTNodeMap* VarConstMap)
   {
@@ -3692,6 +3700,7 @@ namespace BEEV
     //UpdateSimplifyMap(term,output,false);
     return output;
   } //ReadOverWrite_To_ITE()
+#endif
 
   //compute the multiplicative inverse of the input
   ASTNode
@@ -3834,10 +3843,13 @@ namespace BEEV
     cerr << "SimplifyNegMap:" << SimplifyNegMap->size() << ":" << SimplifyNegMap->bucket_count() << endl;
     cerr << "AlwaysTrueFormSet" << AlwaysTrueHashSet.size() << ":" << AlwaysTrueHashSet.bucket_count() << endl;
     cerr << "MultInverseMap" << MultInverseMap.size() << ":" << MultInverseMap.bucket_count() << endl;
+
+#if 0
     cerr << "ReadOverWrite_NewName_Map" << ReadOverWrite_NewName_Map->size() << ":"
         << ReadOverWrite_NewName_Map->bucket_count() << endl;
     cerr << "NewName_ReadOverWrite_Map" << NewName_ReadOverWrite_Map.size() << ":"
         << NewName_ReadOverWrite_Map.bucket_count() << endl;
+#endif
     cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
         << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 

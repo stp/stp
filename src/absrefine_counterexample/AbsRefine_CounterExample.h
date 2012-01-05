@@ -130,12 +130,6 @@ namespace BEEV
                         ToSATBase* tosat,
                         bool refinement);
 
-    //creates array write axiom only for the input term or formula, if
-    //necessary. If there are no axioms to produce then it simply
-    //generates TRUE
-    ASTNode 
-    Create_ArrayWriteAxioms(const ASTNode& array_readoverwrite_term, 
-                            const ASTNode& array_newname);
     
     SOLVER_RETURN_TYPE 
     SATBased_ArrayReadRefinement(SATSolver& newS,
@@ -143,10 +137,20 @@ namespace BEEV
                                  const ASTNode& original_input,
                                  ToSATBase* tosat);
 
+#if 0
     SOLVER_RETURN_TYPE 
     SATBased_ArrayWriteRefinement(SATSolver& newS,
                                   const ASTNode& orig_input,
                                   ToSATBase *tosat);
+
+    //creates array write axiom only for the input term or formula, if
+    //necessary. If there are no axioms to produce then it simply
+    //generates TRUE
+    ASTNode
+    Create_ArrayWriteAxioms(const ASTNode& array_readoverwrite_term,
+                            const ASTNode& array_newname);
+
+#endif
 
     void ClearAllTables(void)
     {

@@ -41,11 +41,11 @@ namespace BEEV
 
     // For ArrayWrite Abstraction: map from read-over-write term to
     // newname.
-    ASTNodeMap * ReadOverWrite_NewName_Map;
+    //ASTNodeMap * ReadOverWrite_NewName_Map;
       
     // For ArrayWrite Refinement: Map new arraynames to
     // Read-Over-Write terms
-    ASTNodeMap NewName_ReadOverWrite_Map;
+    //ASTNodeMap NewName_ReadOverWrite_Map;
 
     //Ptr to STP Manager
     STPMgr * _bm;
@@ -73,7 +73,7 @@ namespace BEEV
     {
       SimplifyMap    = new ASTNodeMap(INITIAL_TABLE_SIZE);
       SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      ReadOverWrite_NewName_Map = new ASTNodeMap();
+      //ReadOverWrite_NewName_Map = new ASTNodeMap();
 
       ASTTrue  = bm->CreateNode(TRUE);
       ASTFalse = bm->CreateNode(FALSE);
@@ -86,7 +86,7 @@ namespace BEEV
     {
       delete SimplifyMap;
       delete SimplifyNegMap;
-      delete ReadOverWrite_NewName_Map;
+      //delete ReadOverWrite_NewName_Map;
       delete nf;
     }
 
@@ -213,7 +213,7 @@ namespace BEEV
     ASTNode DistributeMultOverPlus(const ASTNode& a,
                                    bool startdistribution = false);
 
-    ASTNode ConvertBVSXToITE(const ASTNode& a);
+    //ASTNode ConvertBVSXToITE(const ASTNode& a);
 
     ASTNode BVConstEvaluator(const ASTNode& t);
 
@@ -231,17 +231,19 @@ namespace BEEV
 
     ASTNode SimplifyArrayTerm(const ASTNode& term,ASTNodeMap* VarConstMap);
 
-    ASTNode ReadOverWrite_To_ITE(const ASTNode& term, 
-                                 ASTNodeMap* VarConstMap=NULL);
+    //ASTNode ReadOverWrite_To_ITE(const ASTNode& term,
+    //                              ASTNodeMap* VarConstMap=NULL);
 
     void printCacheStatus();
 
+#if 0
     //FIXME: Get rid of this horrible function
     const ASTNodeMap * ReadOverWriteMap()
     {
       return ReadOverWrite_NewName_Map;
     } // End of ReadOverWriteMap()
-      
+#endif
+
     bool hasUnappliedSubstitutions()
     {
       return substitutionMap.hasUnappliedSubstitutions();
@@ -262,8 +264,8 @@ namespace BEEV
     {
       SimplifyMap->clear();
       SimplifyNegMap->clear();
-      ReadOverWrite_NewName_Map->clear();
-      NewName_ReadOverWrite_Map.clear();
+      //ReadOverWrite_NewName_Map->clear();
+      //NewName_ReadOverWrite_Map.clear();
       AlwaysTrueHashSet.clear();
       MultInverseMap.clear();
       substitutionMap.clear();

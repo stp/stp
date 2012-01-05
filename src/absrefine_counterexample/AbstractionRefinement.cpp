@@ -418,6 +418,9 @@ namespace BEEV
     } //end of SATBased_ArrayReadRefinement
 
 
+#if 0
+    // This isn't currently wired up.
+
   /******************************************************************
    * ARRAY WRITE ABSTRACTION REFINEMENT
    *
@@ -497,5 +500,5 @@ namespace BEEV
     ASTNode arraywrite_axiom = simp->CreateSimplifiedEQ(lhs, rhs);
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
-
+#endif
 };// end of namespace BEEV
