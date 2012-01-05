@@ -1345,7 +1345,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = NodeFactory::CreateTerm(ITE, width, NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
           bm.CreateOneConst(width), bm.CreateZeroConst(width));
     if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
-      result = NodeFactory::CreateTerm(BVUMINUS, width, children[1]);
+      result = NodeFactory::CreateTerm(BVUMINUS, width, children[0]);
     else if (translate_signed)
       result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children), this, &bm);
     break;
