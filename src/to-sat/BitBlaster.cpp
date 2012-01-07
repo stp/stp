@@ -1402,6 +1402,7 @@ namespace BEEV
         ms.print();
         }
 
+      vector<BBNode> prior;
       for (int i = 0; i < bitWidth; i++)
         {
         if (debug_bounds)
@@ -1410,26 +1411,10 @@ namespace BEEV
           cerr << "[" << ms.columnL[i] << ":" << ms.columnH[i] << "][" << ms.sumL[i] << ":" << ms.sumH[i] << "]";
           }
 
-        if ((products[i].size() > ms.sumH[i]) && ms.sumH[i] < 10)
-          {
-          if (debug_bounds)
-            cerr << "S";
-          // sorting network.
-
-          //int width = std::min(ms.sumH[i]+1, (signed)products[i].size());
           vector<BBNode> output;
-          vector<BBNode> prior;
+
           mult_SortingNetwork(toConjoinToTop, products[i], output, prior, ms.sumL[i], ms.sumH[i]);
           prior = output;
-
-          }
-        else // addition network.
-          {
-          if (debug_bounds)
-            cerr << "A";
-
-          buildAdditionNetworkResult(products[i], products[i+1], toConjoinToTop, (i + 1 == bitWidth), 0 == ms.sumH[i]);
-          }
 
         assert(products[i].size() == 1);
         result.push_back(products[i].back());
