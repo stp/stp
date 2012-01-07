@@ -101,10 +101,10 @@ namespace BEEV
           vector<BBNode>& priorSorted, const int minTrue = 0, const int maxTrue = ((unsigned) ~0) >> 1);
 
       void
-      buildAdditionNetworkResult(list<BBNode>* from, list<BBNode>* to, set<BBNode>& support, const int bitWidth,
-          const int index, const int minTrue = 0, const int maxTrue = ((unsigned) ~0) >> 1);
+      buildAdditionNetworkResult(list<BBNode>& from, list<BBNode>& to, set<BBNode>& support,
+          const bool top, const bool empty);
       vector<BBNode>
-      buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support, const int bitWidth, const ASTNode& n);
+      buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support, const ASTNode& n);
 
       vector<BBNode>
       BBAndBit(const vector<BBNode>& y, BBNode b);
@@ -228,12 +228,13 @@ namespace BEEV
 
       BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory *astNodeF, UserDefinedFlags *_uf,
           simplifier::constantBitP::ConstantBitPropagation *cb_ = NULL) :
-          uf(_uf), division_variant_1("1" == _uf->get("division_variant_1", "1")), division_variant_2(
-              "1" == _uf->get("division_variant_2", "1")), division_variant_3(
-              "1" == _uf->get("division_variant_3", "1")),
+          uf(_uf),
+          division_variant_1("1" == _uf->get("division_variant_1", "1")),
+          division_variant_2("1" == _uf->get("division_variant_2", "1")),
+          division_variant_3("1" == _uf->get("division_variant_3", "1")),
 
-          multiplication_variant(_uf->get("multiplication_variant", "3")), multiplication_upper_bound(
-              "1" == _uf->get("upper_multiplication_bound", "0")),
+          multiplication_variant(_uf->get("multiplication_variant", "3")),
+          multiplication_upper_bound("1" == _uf->get("upper_multiplication_bound", "0")),
 
           adder_variant("1" == _uf->get("adder_variant", "1")),
 
