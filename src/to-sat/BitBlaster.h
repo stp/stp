@@ -16,6 +16,7 @@
 #include "../STPManager/STPManager.h"
 //#include "../STPManager/UserDefinedFlags.h"
 #include <list>
+#include "../simplifier/constantBitP/MultiplicationStats.h"
 
 namespace simplifier
 {
@@ -29,6 +30,7 @@ namespace simplifier
 namespace BEEV {
 
     using std::list;
+    using simplifier::constantBitP::MultiplicationStats;
 
 class Simplifier;
 class ASTNode;
@@ -75,8 +77,8 @@ class BitBlaster {
 	vector<BBNode> BBMult(const vector<BBNode>& x, const vector<BBNode>& y,
 			set<BBNode>& support, const ASTNode& n);
 	void mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, list<BBNode> * products);
-	void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, list<BBNode> * products);
-	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support);
+	void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN, const BEEV::ASTNode& yN, list<BBNode> * products, const ASTNode&n);
+	vector<BBNode> mult_normal(const vector<BBNode>& x,	const vector<BBNode>& y, set<BBNode>& support,const ASTNode&n);
 
         vector<BBNode> multWithBounds(const ASTNode&n, list<BBNode>* products, set<BBNode>& toConjoinToTop);
         bool
@@ -89,9 +91,11 @@ class BitBlaster {
                 const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 );
 
 	void buildAdditionNetworkResult(list<BBNode>* from, list<BBNode>* to,  set<BBNode>& support, const int bitWidth, const int index, const int minTrue = 0, const int maxTrue = ((unsigned)~0) >> 1 );
-	vector<BBNode> buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support, int bitWidth);
+	vector<BBNode> buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support, const int bitWidth, const ASTNode& n);
 
 	vector<BBNode> BBAndBit(const vector<BBNode>& y, BBNode b);
+
+	MultiplicationStats* getMS(const ASTNode&n, int& highestZero);
 
 	void
 	  checkFixed(const vector<BBNode>& v, const ASTNode& n);
@@ -171,10 +175,11 @@ class BitBlaster {
         const bool division_variant_3 ;
         const bool adder_variant;
         const bool bbbvle_variant;
+        const bool multiplication_upper_bound;
 
-        // This is a number 1->5 (currently).
         const string multiplication_variant;
 
+        ASTNodeSet booth_recoded; // Nodes that have been recoded.
 public:
 
         simplifier::constantBitP::ConstantBitPropagation* cb;
@@ -193,8 +198,12 @@ public:
 	  division_variant_1("1" == _uf->get("division_variant_1","1")),
 	  division_variant_2("1" == _uf->get("division_variant_2","1")),
 	  division_variant_3("1" == _uf->get("division_variant_3","1")),
+
 	  multiplication_variant(_uf->get("multiplication_variant","3")),
+	  multiplication_upper_bound("1" == _uf->get("upper_multiplication_bound","0")),
+
 	  adder_variant("1" == _uf->get("adder_variant","1")),
+
 	  bbbvle_variant("1" == _uf->get("bbbvle_variant","1"))
         {
           nf = bnm;
