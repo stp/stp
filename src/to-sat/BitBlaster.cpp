@@ -1814,9 +1814,265 @@ namespace BEEV
         mult_allPairs(x, y, support, products.data());
         return multWithBounds(n, products.data(), support);
         }
+      else if (multiplication_variant == "6")
+        {
+        //TODO PUT A NEW VERSION 6 in!!!!
+        //TODO PUT A NEW VERSION 6 in!!!!
+
+
+
+        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
+        return v7(products.data(), support, bitWidth);
+        }
+      else if (multiplication_variant == "7")
+        {
+        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
+        return v7(products.data(), support, bitWidth);
+        }
+      else if (multiplication_variant == "8")
+        {
+        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
+        return v8(products.data(), support, bitWidth);
+        }
       else
+        {
+        cerr << "Unk variant" << multiplication_variant;
         FatalError("sda44f");
+        }
+
     }
+
+  // Takes an unsorted array, and returns a sorted array.
+  template <class BBNode, class BBNodeManagerT>
+  BBNodeVec BitBlaster<BBNode,BBNodeManagerT>::batcher(const vector<BBNode>& in)
+  {
+    assert(in.size() != 0);
+
+    if (in.size() ==1)
+      return in;
+
+    vector<BBNode> a;
+    vector<BBNode> b;
+
+    // half way rounded up.
+    const int halfWay = (((in.size()%2)==0? 0:1) + (in.size()/2) );
+    for (int i =0; i < halfWay;i++)
+        a.push_back(in[i]);
+
+    for (int i =halfWay; i < in.size();i++)
+        b.push_back(in[i]);
+
+    assert(a.size() >= b.size());
+    assert(a.size() + b.size() == in.size());
+    vector <BBNode> result=  mergeSorted(batcher(a), batcher(b));
+
+    for (int k = 0; k < result.size(); k++)
+      assert(!result[k].IsNull());
+
+    assert(result.size() == in.size());
+    return result;
+  }
+
+
+  template<class BBNode, class BBNodeManagerT>
+  BBNodeVec
+  BitBlaster<BBNode, BBNodeManagerT>::v7(list<BBNode>* products, set<BBNode>& support, const int bitWidth)
+  {
+      std::vector<list<BBNode> > later(bitWidth+1);
+      std::vector<list<BBNode> > next(bitWidth+1);
+
+      for (int i = 0; i < bitWidth; i++)
+          {
+              next[i+1].clear();
+              buildAdditionNetworkResult((products[i]), (next[i + 1]), support, bitWidth == i+1, false);
+
+              // Calculate the carries of carries.
+              for (int j = i + 1; j < bitWidth; j++)
+                  {
+                      if (next[j].size() == 0)
+                          break;
+
+                      buildAdditionNetworkResult((next[j]), (next[j + 1]), support, bitWidth == i+1, false);
+                  }
+
+              // Put the carries of the carries away until later.
+              for (int j = i + 1; j < bitWidth; j++)
+                  {
+                      if (next[j].size() == 0)
+                          break;
+
+                      assert(next[j].size() <=1);
+                      later[j].push_back(next[j].back());
+                  }
+          }
+
+
+      for (int i = 0; i < bitWidth; i++)
+      {
+              // Copy all the laters into products
+              while(later[i].size() > 0)
+              {
+                      products[i].push_front(later[i].front());
+                      later[i].pop_front();
+              }
+      }
+
+      BBNodeVec results;
+      for (int i = 0; i < bitWidth; i++)
+      {
+
+              buildAdditionNetworkResult((products[i]), (products[i + 1]), support, bitWidth == i+1, false);
+
+
+          results.push_back(products[i].back());
+          products[i].pop_back();
+      }
+
+      assert(results.size() == ((unsigned)bitWidth));
+      return results;
+  }
+
+
+  template<class BBNode, class BBNodeManagerT>
+  BBNodeVec
+  BitBlaster<BBNode, BBNodeManagerT>::v8(list<BBNode>* products, set<BBNode>& support, const int bitWidth)
+  {
+      std::vector<list<BBNode> > later(bitWidth+1); // +1 then ignore the topmost.
+      std::vector<list<BBNode> > next(bitWidth+1);
+
+      for (int i = 0; i < bitWidth; i++)
+          {
+              // Put all the products into next.
+              next[i+1].clear();
+              buildAdditionNetworkResult((products[i]), (next[i + 1]), support, i+1 ==bitWidth, false);
+
+              // Calculate the carries of carries.
+              for (int j = i + 1; j < bitWidth; j++)
+                  {
+                      if (next[j].size() == 0)
+                          break;
+
+                      next[j+1].clear();
+                      buildAdditionNetworkResult(next[j], next[j + 1], support, i+1 ==bitWidth, false);
+                  }
+
+              // Put the carries of the carries away until later.
+              for (int j = i + 1; j < bitWidth; j++)
+                  {
+                      if (next[j].size() == 0)
+                          break;
+
+                      assert(next[j].size() <=1);
+                      later[j].push_back(next[j].back());
+                  }
+          }
+
+
+      for (int i = 0; i < bitWidth; i++)
+      {
+              // Copy all the laters into products
+              while(later[i].size() > 0)
+              {
+                      products[i].push_back(later[i].back());
+                      later[i].pop_back();
+              }
+      }
+
+      BBNodeVec results;
+      for (int i = 0; i < bitWidth; i++)
+      {
+          buildAdditionNetworkResult(products[i], products[i + 1], support, i+1 ==bitWidth, false);
+          results.push_back(products[i].back());
+          products[i].pop_back();
+      }
+
+      assert(results.size() == ((unsigned)bitWidth));
+      return results;
+  }
+
+
+  // compare element 1 with 2, 3 with 4, and so on.
+  template<class BBNode, class BBNodeManagerT>
+  vector<BBNode>
+  BitBlaster<BBNode, BBNodeManagerT>::  compareOddEven(const vector<BBNode>& in)
+    {
+      vector<BBNode> result(in);
+
+      for (int i = 2; i < in.size(); i =i+ 2)
+        {
+            BBNode a = in[i-1];
+            BBNode b = in[i];
+            //comparators++;
+            result[i-1] = nf->CreateNode(OR,a,b);
+            result[i] = nf->CreateNode(AND,a,b);
+        }
+      return result;
+    }
+
+
+  template<class BBNode, class BBNodeManagerT>
+  vector<BBNode>
+  BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1, const vector<BBNode>& in2)
+    {
+
+    assert(in1.size() >= in2.size());
+    assert(in1.size() >0);
+
+    vector <BBNode>result;
+
+      if (in2.size() ==0)
+        {
+          result = in1;
+        }
+      else if (in1.size() == 1 && in2.size() ==1)
+      {
+          //comparators++;
+          result.push_back(nf->CreateNode(OR,in1[0], in2[0]));
+          result.push_back(nf->CreateNode(AND,in1[0], in2[0]));
+
+      }
+      else
+        {
+          vector <BBNode> evenL;
+          vector <BBNode> oddL;
+          for (int i =0; i < in1.size();i++)
+            {
+                if (i%2 ==0)
+                  evenL.push_back(in1[i]);
+                else
+                  oddL.push_back(in1[i]);
+            }
+
+          vector <BBNode> evenR;  // Take the even of each.
+          vector <BBNode> oddR;   // Take the odd of each
+            for (int i =0; i < in2.size();i++)
+              {
+                  if (i%2 ==0)
+                    evenR.push_back(in2[i]);
+                  else
+                    oddR.push_back(in2[i]);
+              }
+
+            vector <BBNode> even = evenL.size()< evenR.size() ? mergeSorted(evenR,evenL) : mergeSorted(evenL,evenR);
+            vector <BBNode> odd = oddL.size() < oddR.size() ? mergeSorted(oddR,oddL) : mergeSorted(oddL,oddR);
+
+            for (int i =0; i < std::max(even.size(),odd.size());i++)
+              {
+                if (even.size() > i)
+                  result.push_back(even[i]);
+
+                if (odd.size() > i)
+                  result.push_back(odd[i]);
+              }
+          result = compareOddEven(result);
+        }
+
+      assert(result.size() == in1.size() + in2.size());
+      return result;
+
+    }
+
+
 
 // All combinations of division_variant_1, _2, _3
   /* on factoring12bitsx12.cvc with MINISAT2.

@@ -91,6 +91,14 @@ namespace BEEV
       vector<BBNode>
       mult_normal(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, const ASTNode&n);
 
+
+      vector<BBNode> batcher(const vector<BBNode>& in);
+      vector<BBNode> mergeSorted(const vector<BBNode>& in1, const vector<BBNode>& in2);
+      vector<BBNode> compareOddEven(const vector<BBNode>& in);
+
+      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,   const int bitWidth);
+      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,   const int bitWidth);
+
       vector<BBNode>
       multWithBounds(const ASTNode&n, list<BBNode>* products, set<BBNode>& toConjoinToTop);
       bool
@@ -111,6 +119,8 @@ namespace BEEV
 
       MultiplicationStats*
       getMS(const ASTNode&n, int& highestZero);
+
+      /////////// The end of the multiplication stuff..
 
       void
       checkFixed(const vector<BBNode>& v, const ASTNode& n);
@@ -212,6 +222,7 @@ namespace BEEV
       const string multiplication_variant;
 
       ASTNodeSet booth_recoded; // Nodes that have been recoded.
+
     public:
 
       simplifier::constantBitP::ConstantBitPropagation* cb;
