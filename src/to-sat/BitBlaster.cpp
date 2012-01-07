@@ -1877,7 +1877,8 @@ namespace BEEV
                       if (next[j].size() == 0)
                           break;
 
-                      buildAdditionNetworkResult((next[j]), (next[j + 1]), support, bitWidth == i+1, false);
+                      next[j+1].clear();
+                      buildAdditionNetworkResult((next[j]), (next[j + 1]), support, bitWidth == j+1, false);
                   }
 
               // Put the carries of the carries away until later.
@@ -1938,7 +1939,7 @@ namespace BEEV
                           break;
 
                       next[j+1].clear();
-                      buildAdditionNetworkResult(next[j], next[j + 1], support, i+1 ==bitWidth, false);
+                      buildAdditionNetworkResult(next[j], next[j + 1], support, j+1 ==bitWidth, false);
                   }
 
               // Put the carries of the carries away until later.
