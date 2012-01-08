@@ -222,6 +222,7 @@ namespace BEEV
       const bool adder_variant;
       const bool bbbvle_variant;
       const bool multiplication_upper_bound;
+      const bool bvplus_variant;
 
       const string multiplication_variant;
 
@@ -253,7 +254,9 @@ namespace BEEV
 
           adder_variant("1" == _uf->get("adder_variant", "1")),
 
-          bbbvle_variant("1" == _uf->get("bbbvle_variant", "1"))
+          bbbvle_variant("1" == _uf->get("bbbvle_variant", "1")),
+
+          bvplus_variant("1" == _uf->get("bvplus_variant", "1"))
       {
         nf = bnm;
         cb = cb_;

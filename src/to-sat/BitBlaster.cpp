@@ -651,7 +651,7 @@ namespace BEEV
       case BVPLUS:
         {
         assert(term.Degree() >=1);
-        if (true)
+        if (bvplus_variant)
           {
           // Add children pairwise and accumulate in BBsum
 
