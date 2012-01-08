@@ -1356,29 +1356,13 @@ namespace BEEV
     BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(const ASTNode&n, list<BBNode>* products,
         BBNodeSet& toConjoinToTop)
     {
-
-      simplifier::constantBitP::MultiplicationStats ms;
-
       const int bitWidth = n.GetValueWidth();
 
-      assert(statsFound(n));
+      int ignored=0;
+      assert(multiplication_upper_bound);
+      simplifier::constantBitP::MultiplicationStats& ms = *getMS(n, ignored);
 
-      assert(NULL != cb);
-      assert(NULL != cb->msm);
 
-      simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::const_iterator it;
-      it = cb->msm->map.find(n);
-      if (it != cb->msm->map.end())
-        {
-        //it->second->print();
-        ms = it->second;
-
-        assert(ms.x.getWidth() == ms.y.getWidth());
-        assert(ms.r.getWidth() == ms.y.getWidth());
-        assert(ms.r.getWidth() == (int)ms.bitWidth);
-        assert(ms.r.getWidth() == bitWidth);
-
-        }
 
       // If all of the partial products in the column must be zero, then replace
       for (int i = 0; i < bitWidth; i++)
@@ -1413,7 +1397,7 @@ namespace BEEV
 
           vector<BBNode> output;
 
-          mult_SortingNetwork(toConjoinToTop, products[i], output, prior, ms.sumL[i], ms.sumH[i]);
+          mult_BubbleSorterWithBounds(toConjoinToTop, products[i], output, prior, ms.sumL[i], ms.sumH[i]);
           prior = output;
 
         assert(products[i].size() == 1);
@@ -1623,10 +1607,10 @@ namespace BEEV
       return prod;
     }
 
-// assumes the prior column is sorted.
+  // assumes the prior column is sorted.
   template<class BBNode, class BBNodeManagerT>
     void
-    BitBlaster<BBNode, BBNodeManagerT>::mult_SortingNetwork(BBNodeSet& support, list<BBNode>& current,
+    BitBlaster<BBNode, BBNodeManagerT>::mult_BubbleSorterWithBounds(BBNodeSet& support, list<BBNode>& current,
         vector<BBNode>& currentSorted, vector<BBNode>& priorSorted, const int minTrue, const int maxTrue)
     {
 
@@ -1782,7 +1766,7 @@ namespace BEEV
         for (int i = 0; i < bitWidth; i++)
           {
           vector<BBNode> output;
-          mult_SortingNetwork(support, products[i], output, prior);
+          mult_BubbleSorterWithBounds(support, products[i], output, prior);
           prior = output;
           assert(products[i].size() == 1);
           }
@@ -1801,23 +1785,27 @@ namespace BEEV
         }
       else if (multiplication_variant == "6")
         {
-        //TODO PUT A NEW VERSION 6 in!!!!
-        //TODO PUT A NEW VERSION 6 in!!!!
+          mult_Booth(_x, _y, support,n[0],n[1],products.data(),n);
+          vector<BBNode> prior;
 
-
-
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v7(products.data(), support, bitWidth);
+          for (int i = 0; i < bitWidth; i++)
+            {
+                vector<BBNode> output;
+                v6(support,  products[i], output ,prior);
+                prior = output;
+                assert(products[i].size() == 1);
+            }
+          return buildAdditionNetworkResult(products.data(),support, n);
         }
       else if (multiplication_variant == "7")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v7(products.data(), support, bitWidth);
+        return v7(products.data(), support, bitWidth,n);
         }
       else if (multiplication_variant == "8")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v8(products.data(), support, bitWidth);
+        return v8(products.data(), support, bitWidth,n);
         }
       else
         {
@@ -1859,17 +1847,83 @@ namespace BEEV
   }
 
 
+
+  // assumes that the prior column is sorted.
+  template<class BBNode, class BBNodeManagerT>
+    void
+    BitBlaster<BBNode, BBNodeManagerT>::v6(BBNodeSet& support, list<BBNode>& current, vector<BBNode>& currentSorted,
+        vector<BBNode>& priorSorted)
+    {
+      int height = current.size();
+      vector<BBNode> toSort;
+
+      // convert the stack to a vector.
+      while (current.size() != 0)
+        {
+        BBNode currentN = current.front();
+        assert(!currentN.IsNull());
+        toSort.push_back(currentN);
+        current.pop_front();
+        }
+
+      vector<BBNode> sorted = batcher(toSort);
+
+      assert(sorted.size() == toSort.size());
+
+      vector<BBNode> sortedCarryIn;
+      for (int k = 1; k < priorSorted.size(); k += 2)
+        {
+        sortedCarryIn.push_back(priorSorted[k]);
+        }
+
+      if (sorted.size() >= sortedCarryIn.size())
+        currentSorted = mergeSorted(sorted, sortedCarryIn);
+      else
+        currentSorted = mergeSorted(sortedCarryIn, sorted);
+
+      assert(currentSorted.size() == sortedCarryIn.size() + toSort.size());
+      height = currentSorted.size();
+
+      assert(current.size() == 0);
+
+      for (int k = 0; k < height; k++)
+        assert(!currentSorted[k].IsNull());
+
+      BBNode resultNode = nf->getFalse();
+
+      // Constrain to equal the result
+      for (int k = 1; k < height; k += 2)
+        {
+        BBNode part = nf->CreateNode(AND, nf->CreateNode(NOT, currentSorted[k]), currentSorted[k - 1]);
+        resultNode = nf->CreateNode(OR, resultNode, part);
+        }
+
+      // constraint the all '1's case.
+      if (height % 2 == 1)
+        resultNode = nf->CreateNode(OR, resultNode, currentSorted.at(height - 1));
+
+      current.push_back(resultNode);
+    }
+
   template<class BBNode, class BBNodeManagerT>
   BBNodeVec
-  BitBlaster<BBNode, BBNodeManagerT>::v7(list<BBNode>* products, set<BBNode>& support, const int bitWidth)
+  BitBlaster<BBNode, BBNodeManagerT>::v7(list<BBNode>* products, set<BBNode>& support, const int bitWidth, const ASTNode&n)
   {
+
+    // If we have details of the partial products which can be true,
+    int ignore = -1;
+    simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
+    if (!multiplication_upper_bound)
+      ms = NULL;
+
+
       std::vector<list<BBNode> > later(bitWidth+1);
       std::vector<list<BBNode> > next(bitWidth+1);
 
       for (int i = 0; i < bitWidth; i++)
           {
               next[i+1].clear();
-              buildAdditionNetworkResult((products[i]), (next[i + 1]), support, bitWidth == i+1, false);
+              buildAdditionNetworkResult(products[i], next[i + 1], support, bitWidth == i+1, (ms!=NULL && (ms->sumH[i]==0)));
 
               // Calculate the carries of carries.
               for (int j = i + 1; j < bitWidth; j++)
@@ -1878,7 +1932,7 @@ namespace BEEV
                           break;
 
                       next[j+1].clear();
-                      buildAdditionNetworkResult((next[j]), (next[j + 1]), support, bitWidth == j+1, false);
+                      buildAdditionNetworkResult(next[j], next[j + 1], support, bitWidth == j+1, false);
                   }
 
               // Put the carries of the carries away until later.
@@ -1921,8 +1975,17 @@ namespace BEEV
 
   template<class BBNode, class BBNodeManagerT>
   BBNodeVec
-  BitBlaster<BBNode, BBNodeManagerT>::v8(list<BBNode>* products, set<BBNode>& support, const int bitWidth)
+  BitBlaster<BBNode, BBNodeManagerT>::v8(list<BBNode>* products, set<BBNode>& support, const int bitWidth, const ASTNode&n)
   {
+
+    // If we have details of the partial products which can be true,
+    int ignore = -1;
+    simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
+    if (!multiplication_upper_bound)
+      ms = NULL;
+
+
+
       std::vector<list<BBNode> > later(bitWidth+1); // +1 then ignore the topmost.
       std::vector<list<BBNode> > next(bitWidth+1);
 
@@ -1930,7 +1993,7 @@ namespace BEEV
           {
               // Put all the products into next.
               next[i+1].clear();
-              buildAdditionNetworkResult((products[i]), (next[i + 1]), support, i+1 ==bitWidth, false);
+              buildAdditionNetworkResult((products[i]), (next[i + 1]), support, i+1 ==bitWidth, (ms!=NULL && (ms->sumH[i]==0)));
 
               // Calculate the carries of carries.
               for (int j = i + 1; j < bitWidth; j++)

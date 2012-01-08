@@ -96,8 +96,12 @@ namespace BEEV
       vector<BBNode> mergeSorted(const vector<BBNode>& in1, const vector<BBNode>& in2);
       vector<BBNode> compareOddEven(const vector<BBNode>& in);
 
-      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,   const int bitWidth);
-      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,   const int bitWidth);
+
+      void
+      v6(set<BBNode>& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted);
+
+      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,   const int bitWidth, const ASTNode&n);
+      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,   const int bitWidth, const ASTNode&n);
 
       vector<BBNode>
       multWithBounds(const ASTNode&n, list<BBNode>* products, set<BBNode>& toConjoinToTop);
@@ -105,7 +109,7 @@ namespace BEEV
       statsFound(const ASTNode& n);
 
       void
-      mult_SortingNetwork(set<BBNode>& support, list<BBNode>& currentColumn, vector<BBNode>& currentSorted,
+      mult_BubbleSorterWithBounds(set<BBNode>& support, list<BBNode>& currentColumn, vector<BBNode>& currentSorted,
           vector<BBNode>& priorSorted, const int minTrue = 0, const int maxTrue = ((unsigned) ~0) >> 1);
 
       void
