@@ -1253,7 +1253,7 @@ namespace BEEV
         results.push_back(products[i].back());
         }
 
-      assert(products[bitWidth].size() ==0); // i+1 is defined but should never be used.
+      assert(products[bitWidth].size() ==0); // products[bitwidth] is defined but should never be used.
       assert(results.size() == ((unsigned)bitWidth));
       return results;
     }
@@ -1773,12 +1773,12 @@ namespace BEEV
         return buildAdditionNetworkResult(products.data(), support, n);
         }
       else if (multiplication_variant == "5")
-        {
-        if (!statsFound(n))
-          {
-          mult_Booth(_x, _y, support, n[0], n[1], products.data(), n);
-          return buildAdditionNetworkResult(products.data(), support, n);
-          }
+              {
+              if (!statsFound(n) || !multiplication_upper_bound)
+                {
+                mult_Booth(_x, _y, support, n[0], n[1], products.data(), n);
+                return buildAdditionNetworkResult(products.data(), support, n);
+                }
 
         mult_allPairs(x, y, support, products.data());
         return multWithBounds(n, products.data(), support);
