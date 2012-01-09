@@ -1252,8 +1252,8 @@ namespace BEEV
         assert(products[i].size() == 1);
         results.push_back(products[i].back());
         }
-      assert(products[i+1].size() ==0); // i+1 is defined but should never be used.
 
+      assert(products[bitWidth].size() ==0); // i+1 is defined but should never be used.
       assert(results.size() == ((unsigned)bitWidth));
       return results;
     }
