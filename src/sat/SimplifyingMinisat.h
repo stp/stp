@@ -1,8 +1,8 @@
 /*
  * Wraps around Simplifying minisat.
  */
-#ifndef CORE_H_
-#define CORE_H_
+#ifndef SIMPLIFYINGMINISAT_H_
+#define SIMPLIFYINGMINISAT_H_
 
 #include "SATSolver.h"
 
@@ -43,6 +43,8 @@ namespace BEEV
     int nVars();
 
     void printStats();
+
+    virtual void setSeed(int i);
 
     virtual lbool true_literal() {return ((uint8_t)0);}
     virtual lbool false_literal()  {return ((uint8_t)1);}

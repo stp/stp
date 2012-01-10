@@ -63,6 +63,13 @@ namespace BEEV
     s->verbosity = v;
   }
 
+    template <class T>
+    void MinisatCore<T>::setSeed(int i)
+    {
+      s->random_seed = i;
+    }
+
+
   template <class T>
   int MinisatCore<T>::nVars()
   {return s->nVars();}

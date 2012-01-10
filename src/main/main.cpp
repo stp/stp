@@ -78,7 +78,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT, DISABLE_EQUALITY} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT, DISABLE_EQUALITY, RANDOM_SEED} OptionType;
 
 
 int main(int argc, char ** argv) {
@@ -153,6 +153,7 @@ int main(int argc, char ** argv) {
     "-g <time_in_sec>       : timeout (seconds until STP gives up)\n"
     "-h                     : help\n"
     "-i <random_seed>       : Randomize STP's satisfiable output. Random_seed is an integer >= 0\n"
+    "--random-seed          : Generate a random number for the SAT solver.\n"
     "-p                     : print counterexample\n"
     "-s                     : print function statistics\n"
     "-t                     : print quick statistics\n"
@@ -190,6 +191,7 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--disable-simplify"),DISABLE_SIMPLIFICATIONS));
 			  lookup.insert(make_pair(tolower("--oldstyle-refinement"),OLDSTYLE_REFINEMENT));
 			  lookup.insert(make_pair(tolower("--disable-equality"),DISABLE_EQUALITY));
+			  lookup.insert(make_pair(tolower("--random-seed"),RANDOM_SEED));
 
 
 			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
@@ -284,6 +286,13 @@ int main(int argc, char ** argv) {
                           case DISABLE_EQUALITY:
                                   bm->UserFlags.propagate_equalities = false;
                                   break;
+                          case RANDOM_SEED:
+                            {
+                                srand(time(NULL));
+                                bm->UserFlags.random_seed_flag = true;
+                                bm->UserFlags.random_seed = rand();
+                            }
+                            break;
 
 			  default:
 				  fprintf(stderr,usage,prog);

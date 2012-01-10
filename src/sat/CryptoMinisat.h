@@ -1,8 +1,8 @@
 /*
- * Wraps around CORE minisat.
+ * Wraps around Cryptominisat minisat.
  */
-#ifndef MINISATCORE_H_
-#define MINIASTCORE_H_
+#ifndef CRYPTOMINISAT_H_
+#define CRYPTOMINISAT_H_
 
 #include "SATSolver.h"
 

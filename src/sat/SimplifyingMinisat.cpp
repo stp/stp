@@ -52,6 +52,11 @@ namespace BEEV
     s->verbosity = v;
   }
 
+  void SimplifyingMinisat::setSeed(int i)
+    {
+      s->random_seed = i;
+    }
+
   Minisat::Var
   SimplifyingMinisat::newVar()
   {

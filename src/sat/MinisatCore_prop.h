@@ -1,8 +1,8 @@
 /*
- * Wraps around CORE minisat.
+ * Wraps around minisat with array propagators
  */
-#ifndef MINISATCORE_H_
-#define MINIASTCORE_H_
+#ifndef MINISATCORE_PROP_H_
+#define MINIASTCORE_PROP_H_
 
 #include "SATSolver.h"
 
@@ -53,7 +53,7 @@ namespace BEEV
     virtual lbool false_literal()  {return ((uint8_t)1);}
     virtual lbool undef_literal()  {return ((uint8_t)2);}
 
-
+    virtual void setSeed(int i);
   };
 }
 ;

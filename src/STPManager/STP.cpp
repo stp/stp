@@ -72,6 +72,11 @@ namespace BEEV {
 	NewSolver.setVerbosity(1);
       }
     
+    if(bm->UserFlags.random_seed_flag)
+      {
+        NewSolver.setSeed(bm->UserFlags.random_seed);
+      }
+
 	SOLVER_RETURN_TYPE result;
     result = TopLevelSTPAux(NewSolver,
 			      original_input);

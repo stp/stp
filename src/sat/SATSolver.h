@@ -56,7 +56,10 @@ namespace BEEV
     virtual void printStats() = 0;
 
     virtual void setSeed(int i)
-    {}
+    {
+      std::cerr << "Setting the random seen is not implemented for this solver" << std::endl;
+      exit(1);
+    }
 
     virtual int setVerbosity(int v) =0;
 

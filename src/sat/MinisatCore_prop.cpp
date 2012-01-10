@@ -89,5 +89,11 @@ namespace BEEV
       printf("CPU time              : %g s\n", cpu_time);
     }
 
+  template <class T>
+  void MinisatCore_prop<T>::setSeed(int i)
+  {
+    s->random_seed = i;
+  }
+
   template class MinisatCore_prop<Minisat::Solver_prop>;
 };

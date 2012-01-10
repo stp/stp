@@ -46,11 +46,11 @@ namespace BEEV
 
     void printStats();
 
+    virtual void setSeed(int i);
+
     virtual lbool true_literal() {return ((uint8_t)0);}
     virtual lbool false_literal()  {return ((uint8_t)1);}
     virtual lbool undef_literal()  {return ((uint8_t)2);}
-
-
   };
 }
 ;
