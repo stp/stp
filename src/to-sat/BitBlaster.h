@@ -98,10 +98,13 @@ namespace BEEV
 
 
       void
-      v6(set<BBNode>& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted);
+      sortingNetworkAdd(set<BBNode>& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted);
 
-      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,   const int bitWidth, const ASTNode&n);
-      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,   const int bitWidth, const ASTNode&n);
+
+      vector<BBNode> v6(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v9(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
 
       vector<BBNode>
       multWithBounds(const ASTNode&n, list<BBNode>* products, set<BBNode>& toConjoinToTop);
