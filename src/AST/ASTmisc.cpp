@@ -9,6 +9,7 @@
 
 #include "AST.h"
 #include "../STPManager/STPManager.h"
+#include "../STPManager/NodeIterator.h"
 
 namespace BEEV
 {
@@ -164,31 +165,18 @@ namespace BEEV
   }
 
 
-bool containsArrayOps(const ASTNode& n, hash_set<int> & visited)
-{
-        if (n.GetIndexWidth() > 0)
-            return true;
-
-        if (n.Degree() ==0)
-            return false;
-
-        if (visited.find(n.GetNodeNum()) != visited.end())
-            return false;
-
-        visited.insert(n.GetNodeNum());
-
-	for (int i =0; i < n.Degree();i++)
-		if (containsArrayOps(n[i],visited))
-			return true;
-
-	return false;
-}
-
+    // True if any descendants are arrays.
     bool
     containsArrayOps(const ASTNode&n)
     {
-        hash_set<int> visited;
-        return containsArrayOps(n, visited);
+
+      NodeIterator ni(n, n.GetSTPMgr()->ASTUndefined, *n.GetSTPMgr());
+      ASTNode current;
+      while ((current = ni.next()) != ni.end())
+        if (current.GetIndexWidth()>0)
+          return true;
+
+      return false;
     }
 
 	bool isCommutative(const Kind k) {
