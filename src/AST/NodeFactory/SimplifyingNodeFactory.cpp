@@ -1380,7 +1380,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
         result = children[0];
 
-      if (children[0].GetKind() == BVPLUS && children[0][0] == bm.CreateMaxConst(width)
+      if (children[0].GetKind() == BVPLUS && children[0].Degree() == 2 && children[0][0] == bm.CreateMaxConst(width)
           && children[1] == children[0][1])
         result = children[0];
 
