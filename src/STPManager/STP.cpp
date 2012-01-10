@@ -27,6 +27,15 @@
 
 namespace BEEV {
 
+  const  static string cb_message =      "After Constant Bit Propagation. ";
+  const  static string bb_message =      "After Bitblast simplification. ";
+  const  static string uc_message =      "After Removing Unconstrained. ";
+  const  static string int_message =     "After Establishing Intervals. ";
+  const  static string pl_message =      "After Pure Literals. ";
+  const  static string bitvec_message =  "After Bit-vector Solving. ";
+  const  static string size_inc_message= "After Speculative Simplifications. ";
+
+
    // The absolute TopLevel function that invokes STP on the input
     // formula
   SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts, 
@@ -40,17 +49,6 @@ namespace BEEV {
 					    bm->CreateNode(NOT, query));
     else
       original_input = inputasserts;
-    
-    //solver instantiated here
-//#if defined CRYPTOMINISAT2
-    //MINISAT::Solver NewSolver;
-
-    //if(bm->UserFlags.print_cnf_flag)
-      //{
-	//NewSolver.needLibraryCNFFile(bm->UserFlags.cnf_dump_filename);
-      //}
-//#endif
-
 
     SATSolver *newS;
     if (bm->UserFlags.solver_to_use == UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER)
@@ -110,7 +108,7 @@ namespace BEEV {
           {
             ASTNodeMap cache;
             simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
-            bm->ASTNodeStats("After bitblast simplification: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
       }
     return simplified_solved_InputToSAT;
@@ -134,14 +132,14 @@ namespace BEEV {
         // Remove unconstrained.
         RemoveUnconstrained r1(*bm);
         simplified_solved_InputToSAT = r1.topLevel(simplified_solved_InputToSAT, simp);
-        bm->ASTNodeStats("After Removing Unconstrained: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(uc_message.c_str(), simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.isSet("use-intervals", "1"))
       {
         EstablishIntervals intervals(*bm);
         simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
-        bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(int_message.c_str(), simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.bitConstantProp_flag)
@@ -162,7 +160,7 @@ namespace BEEV {
             simp->haveAppliedSubstitutionMap();
           }
 
-        bm->ASTNodeStats("After Constant Bit Propagation: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
       }
 
     // Find pure literals.
@@ -174,7 +172,7 @@ namespace BEEV {
           {
             simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
             simp->haveAppliedSubstitutionMap();
-            bm->ASTNodeStats("After Pure Literals: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(pl_message.c_str() , simplified_solved_InputToSAT);
           }
       }
 
@@ -189,7 +187,7 @@ namespace BEEV {
     if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
       {
         simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT, false);
-        bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(bitvec_message.c_str(), simplified_solved_InputToSAT);
       }
 
     return simplified_solved_InputToSAT;
@@ -220,7 +218,7 @@ namespace BEEV {
     // TODO: Should be enabled irrespective of whether refinement is enabled.
     // TODO: I chose the number of reads we perform this operation at randomly.
     bool removed = false;
-    if (bm->UserFlags.ackermannisation && numberOfReadsLessThan(simplified_solved_InputToSAT,50))
+    if ((bm->UserFlags.ackermannisation && numberOfReadsLessThan(simplified_solved_InputToSAT,50)) || bm->UserFlags.isSet("upfront-ack", "0"))
       {
           // If the number of axioms that would be added it small. Remove them.
               simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
@@ -241,7 +239,7 @@ namespace BEEV {
     // Fixed point it if it's not too difficult.
     // Currently we discards all the state each time sizeReducing is called,
     // so it's expensive to call.
-    if (!arrayops && initial_difficulty_score < 1000000)
+    if ((!arrayops && initial_difficulty_score < 1000000) || bm->UserFlags.isSet("preserving-fixedpoint", "0"))
            simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver,pe, initial_difficulty_score);
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
@@ -297,13 +295,13 @@ namespace BEEV {
 
             simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
 
-            bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(size_inc_message.c_str(), simplified_solved_InputToSAT);
           }
 
         if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
           {
             simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-            bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(bitvec_message.c_str(), simplified_solved_InputToSAT);
           }
       }
     while (inputToSAT != simplified_solved_InputToSAT);
@@ -320,14 +318,14 @@ namespace BEEV {
         if (cb.isUnsatisfiable())
           simplified_solved_InputToSAT = bm->ASTFalse;
 
-        bm->ASTNodeStats("After Constant Bit Propagation begins: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.isSet("use-intervals", "1"))
       {
         EstablishIntervals intervals(*bm);
         simplified_solved_InputToSAT = intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
-        bm->ASTNodeStats("After Establishing Intervals: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(int_message.c_str(), simplified_solved_InputToSAT);
       }
 
     // Find pure literals.
@@ -339,7 +337,7 @@ namespace BEEV {
           {
             simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
             simp->haveAppliedSubstitutionMap();
-            bm->ASTNodeStats("After Pure Literals: ", simplified_solved_InputToSAT);
+            bm->ASTNodeStats(pl_message.c_str(), simplified_solved_InputToSAT);
           }
       }
 
@@ -414,7 +412,7 @@ namespace BEEV {
         // Remove unconstrained.
         RemoveUnconstrained r(*bm);
         simplified_solved_InputToSAT = r.topLevel(simplified_solved_InputToSAT, simp);
-        bm->ASTNodeStats("After Unconstrained Remove begins: ", simplified_solved_InputToSAT);
+        bm->ASTNodeStats(uc_message.c_str(), simplified_solved_InputToSAT);
       }
 
     bm->TermsAlreadySeenMap_Clear();
@@ -495,13 +493,13 @@ namespace BEEV {
 
     if (bm->UserFlags.bitConstantProp_flag)
       {
-        bm->ASTNodeStats("Before Constant Bit Propagation begins: ", simplified_solved_InputToSAT);
-
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
         cb = new simplifier::constantBitP::ConstantBitPropagation(simp, bm->defaultNodeFactory,
             simplified_solved_InputToSAT);
         cleaner.reset(cb);
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+        bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
 
         if (cb->isUnsatisfiable())
           simplified_solved_InputToSAT = bm->ASTFalse;
