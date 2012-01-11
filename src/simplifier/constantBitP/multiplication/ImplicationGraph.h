@@ -8,6 +8,7 @@
 #ifndef IMPLICATIONGRAPH_H_
 #define IMPLICATIONGRAPH_H_
 
+#include "../../../AST/UsefulDefs.h"
 #include "../ConstantBitP_TransferFunctions.h"
 #include "../ConstantBitP_Utility.h"
 #include "Edge.h"
@@ -25,7 +26,7 @@ extern const bool debug_multiply;
 // Relationship between bits. One bit may imply another bit.
 class ImplicationGraph
 {
-	typedef __gnu_cxx ::hash_set<Edge, EdgeHasher, eqEdge> Edges;
+	typedef hash_set<Edge, EdgeHasher, eqEdge> Edges;
 	Edges edges;
 
 	struct Target
