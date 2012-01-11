@@ -17,7 +17,7 @@ clean:
 
 # Use svnversion to output the global revision number.
 versionString.stamp: FORCE
-	@SVNVERSION=`svnversion $(TOP)`; \
+	@SVNVERSION=`svnversion -c $(TOP)`; \
 	if [ x`cat $@ 2> /dev/null` != x$$SVNVERSION ]; then \
 		echo $$SVNVERSION > $@; \
 	fi
