@@ -681,7 +681,7 @@ namespace BEEV
               products[i].push_back(results[j][i]);
             }
 
-          result = buildAdditionNetworkResult(products.data(), support, term);
+          result = buildAdditionNetworkResult(products, support, term);
           }
         break;
         }
@@ -1201,7 +1201,7 @@ namespace BEEV
 // Multiply "multiplier" by y[start ... bitWidth].
   template<class BBNode, class BBNodeManagerT>
     void
-    pushP(vector<BBNode> *products, const int start, const BBNodeVec& y, const BBNode& multiplier, BBNodeManagerT*nf)
+    pushP(vector<vector<BBNode> >& products, const int start, const BBNodeVec& y, const BBNode& multiplier, BBNodeManagerT*nf)
     {
       const int bitWidth = y.size();
 
@@ -1232,7 +1232,7 @@ namespace BEEV
 
   template<class BBNode, class BBNodeManagerT>
     BBNodeVec
-    BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support,
+    BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(vector<list<BBNode> >& products, set<BBNode>& support,
         const ASTNode& n)
     {
       const int bitWidth = n.GetValueWidth();
@@ -1353,7 +1353,7 @@ namespace BEEV
 // Make sure x and y are the parameters in the correct order. THIS ISNT COMMUTATIVE.
   template<class BBNode, class BBNodeManagerT>
     BBNodeVec
-    BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(const ASTNode&n, list<BBNode>* products,
+    BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(const ASTNode&n, vector<list<BBNode> >& products,
         BBNodeSet& toConjoinToTop)
     {
       const int bitWidth = n.GetValueWidth();
@@ -1414,7 +1414,7 @@ namespace BEEV
   template<class BBNode, class BBNodeManagerT>
     void
     BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support,
-        const ASTNode& xN, const ASTNode& yN, list<BBNode> * products, const ASTNode& n)
+        const ASTNode& xN, const ASTNode& yN, vector<list<BBNode> >& products, const ASTNode& n)
     {
       const int bitWidth = x_i.size();
       assert(x_i.size() == y_i.size());
@@ -1464,20 +1464,20 @@ namespace BEEV
         {
         if (x[i] != BBTrue && x[i] != BBFalse)
           {
-          pushP(&t_products[0], i, y, x[i], nf);
+          pushP(t_products, i, y, x[i], nf);
           }
 
         // A bit can not be true or false, as well as one of these two.
         if (xt[i] == MINUS_ONE_MT)
           {
-          pushP(&t_products[0], i, notY, BBTrue, nf);
+          pushP(t_products, i, notY, BBTrue, nf);
           t_products[i].push_back(BBTrue);
           booth_recoded.insert(n);
           }
 
         else if (xt[i] == ONE_MT)
           {
-          pushP(&t_products[0], i, y, BBTrue, nf);
+          pushP(t_products, i, y, BBTrue, nf);
           }
 
         if (t_products[i].size() == 0)
@@ -1495,7 +1495,7 @@ namespace BEEV
   template<class BBNode, class BBNodeManagerT>
     void
     BitBlaster<BBNode, BBNodeManagerT>::mult_allPairs(const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support,
-        list<BBNode> * products)
+        vector<list<BBNode> >& products)
     {
       // Make a table of partial products.
       const int bitWidth = x.size();
@@ -1747,19 +1747,19 @@ namespace BEEV
       else if (multiplication_variant == "2")
         {
         //cout << "v2";
-        mult_allPairs(x, y, support, products.data());
-        return buildAdditionNetworkResult(products.data(), support, n);
+        mult_allPairs(x, y, support, products);
+        return buildAdditionNetworkResult(products, support, n);
         }
 
       else if (multiplication_variant == "3")
         {
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(), n);
-        return buildAdditionNetworkResult(products.data(), support, n);
+        mult_Booth(_x, _y, support, n[0], n[1], products, n);
+        return buildAdditionNetworkResult(products, support, n);
         }
       else if (multiplication_variant == "4")
         {
         //cerr << "v4";
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(), n);
+        mult_Booth(_x, _y, support, n[0], n[1], products, n);
         vector<BBNode> prior;
 
         for (int i = 0; i < bitWidth; i++)
@@ -1769,39 +1769,39 @@ namespace BEEV
           prior = output;
           assert(products[i].size() == 1);
           }
-        return buildAdditionNetworkResult(products.data(), support, n);
+        return buildAdditionNetworkResult(products, support, n);
         }
       else if (multiplication_variant == "5")
               {
               if (!statsFound(n) || !multiplication_upper_bound)
                 {
-                mult_Booth(_x, _y, support, n[0], n[1], products.data(), n);
-                return buildAdditionNetworkResult(products.data(), support, n);
+                mult_Booth(_x, _y, support, n[0], n[1], products, n);
+                return buildAdditionNetworkResult(products, support, n);
                 }
 
 
-        mult_allPairs(x, y, support, products.data());
-        return multWithBounds(n, products.data(), support);
+        mult_allPairs(x, y, support, products);
+        return multWithBounds(n, products, support);
         }
       else if (multiplication_variant == "6")
         {
-          mult_Booth(_x, _y, support,n[0],n[1],products.data(),n);
-          return v6(products.data(), support, n);
+          mult_Booth(_x, _y, support,n[0],n[1],products,n);
+          return v6(products, support, n);
         }
       else if (multiplication_variant == "7")
         {
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v7(products.data(), support, n);
+        mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        return v7(products, support, n);
         }
       else if (multiplication_variant == "8")
         {
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v8(products.data(), support, n);
+        mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        return v8(products, support, n);
         }
       else if (multiplication_variant == "9")
         {
-        mult_Booth(_x, _y, support, n[0], n[1], products.data(),n);
-        return v9(products.data(), support,n);
+        mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        return v9(products, support,n);
         }
       else
         {
@@ -1903,7 +1903,7 @@ namespace BEEV
 
   template<class BBNode, class BBNodeManagerT>
   BBNodeVec
-  BitBlaster<BBNode, BBNodeManagerT>::v6(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n)
+  BitBlaster<BBNode, BBNodeManagerT>::v6(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n)
   {
     const int bitWidth = n.GetValueWidth();
 
@@ -1926,7 +1926,7 @@ namespace BEEV
   // For instance, if there are 6 true in a column, then a carry will flow to column+1, and column+2.
   template<class BBNode, class BBNodeManagerT>
     BBNodeVec
-    BitBlaster<BBNode, BBNodeManagerT>::v9(list<BBNode>* products, set<BBNode>& support,const ASTNode&n)
+    BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode> >& products, set<BBNode>& support,const ASTNode&n)
     {
     const int bitWidth = n.GetValueWidth();
 
@@ -2000,7 +2000,7 @@ namespace BEEV
 
   template<class BBNode, class BBNodeManagerT>
   BBNodeVec
-  BitBlaster<BBNode, BBNodeManagerT>::v7(list<BBNode>* products, set<BBNode>& support, const ASTNode&n)
+  BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode> >& products, set<BBNode>& support, const ASTNode&n)
   {
     const int bitWidth = n.GetValueWidth();
 
@@ -2069,7 +2069,7 @@ namespace BEEV
 
   template<class BBNode, class BBNodeManagerT>
   BBNodeVec
-  BitBlaster<BBNode, BBNodeManagerT>::v8(list<BBNode>* products, set<BBNode>& support, const ASTNode&n)
+  BitBlaster<BBNode, BBNodeManagerT>::v8(vector<list<BBNode> >& products, set<BBNode>& support, const ASTNode&n)
   {
     const int bitWidth = n.GetValueWidth();
 

@@ -84,10 +84,10 @@ namespace BEEV
       vector<BBNode>
       BBMult(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, const ASTNode& n);
       void
-      mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, list<BBNode> * products);
+      mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, vector<list<BBNode> >& products);
       void
       mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i, set<BBNode>& support, const BEEV::ASTNode& xN,
-          const BEEV::ASTNode& yN, list<BBNode> * products, const ASTNode&n);
+          const BEEV::ASTNode& yN, vector<list<BBNode> >& products, const ASTNode&n);
       vector<BBNode>
       mult_normal(const vector<BBNode>& x, const vector<BBNode>& y, set<BBNode>& support, const ASTNode&n);
 
@@ -101,13 +101,13 @@ namespace BEEV
       sortingNetworkAdd(set<BBNode>& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted);
 
 
-      vector<BBNode> v6(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
-      vector<BBNode> v7(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
-      vector<BBNode> v8(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
-      vector<BBNode> v9(list<BBNode>* products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v6(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v7(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v8(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v9(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
 
       vector<BBNode>
-      multWithBounds(const ASTNode&n, list<BBNode>* products, set<BBNode>& toConjoinToTop);
+      multWithBounds(const ASTNode&n, vector<list<BBNode> >& products, set<BBNode>& toConjoinToTop);
       bool
       statsFound(const ASTNode& n);
 
@@ -119,7 +119,7 @@ namespace BEEV
       buildAdditionNetworkResult(list<BBNode>& from, list<BBNode>& to, set<BBNode>& support,
           const bool top, const bool empty);
       vector<BBNode>
-      buildAdditionNetworkResult(list<BBNode>* products, set<BBNode>& support, const ASTNode& n);
+      buildAdditionNetworkResult(vector<list<BBNode> >& products, set<BBNode>& support, const ASTNode& n);
 
       vector<BBNode>
       BBAndBit(const vector<BBNode>& y, BBNode b);
