@@ -10,7 +10,13 @@
 
 -include $(TOP)/scripts/config.info
 
-OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
+# use -march=native if it works correctly (it's broken in GCC on OS X)
+ifeq ($(shell $(CXX) -march=native -E - < /dev/null >/dev/null 2>&1 && echo 1),1)
+    OPTIMIZE_MARCH_NATIVE = -march=native
+endif
+
+# Optimization
+OPTIMIZE      = -O3 -DNDEBUG -fomit-frame-pointer $(OPTIMIZE_MARCH_NATIVE)
 #OPTIMIZE      =  -O3 -g            # Debug
 
 # To enable 128-bit indices in the array propagators. Put the INDICES_128BITS
