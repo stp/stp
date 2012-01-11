@@ -10,8 +10,8 @@
 
 -include $(TOP)/scripts/config.info
 
-#OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
-OPTIMIZE      =  -O3 -g            # Debug
+OPTIMIZE      = -O3 -DNDEBUG -march=native -fomit-frame-pointer # Optimization
+#OPTIMIZE      =  -O3 -g            # Debug
 
 # To enable 128-bit indices in the array propagators. Put the INDICES_128BITS
 # option into CFLAGS_M32. Weird I know.
