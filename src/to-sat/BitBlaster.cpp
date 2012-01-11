@@ -1458,26 +1458,26 @@ namespace BEEV
         }
 
       // We store them into here before sorting them.
-      vector<BBNode> t_products[bitWidth];
+      vector<vector<BBNode> > t_products(bitWidth);
 
       for (int i = 0; i < bitWidth; i++)
         {
         if (x[i] != BBTrue && x[i] != BBFalse)
           {
-          pushP(t_products, i, y, x[i], nf);
+          pushP(&t_products[0], i, y, x[i], nf);
           }
 
         // A bit can not be true or false, as well as one of these two.
         if (xt[i] == MINUS_ONE_MT)
           {
-          pushP(t_products, i, notY, BBTrue, nf);
+          pushP(&t_products[0], i, notY, BBTrue, nf);
           t_products[i].push_back(BBTrue);
           booth_recoded.insert(n);
           }
 
         else if (xt[i] == ONE_MT)
           {
-          pushP(t_products, i, y, BBTrue, nf);
+          pushP(&t_products[0], i, y, BBTrue, nf);
           }
 
         if (t_products[i].size() == 0)
