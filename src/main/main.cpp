@@ -418,7 +418,7 @@ int main(int argc, char ** argv) {
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
 	{
- 	    SimplifyingNodeFactory simpNF(*bm->defaultNodeFactory, *bm);
+ 	    SimplifyingNodeFactory simpNF(*bm->hashingNodeFactory, *bm);
 		TypeChecker nfTypeCheckSimp(simpNF, *bm);
 		TypeChecker nfTypeCheckDefault(*bm->defaultNodeFactory, *bm);
 
