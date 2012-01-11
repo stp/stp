@@ -14,7 +14,7 @@ else
 endif
 
 
-all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
+all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
 	rm -rf *.out
 
 0:	
@@ -71,7 +71,7 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 2
 	./a16.out
 17:
 	g++  $(CXXFLAGS)  push-pop.c -o a17.out $(LIBS)
-	./a17.out
+	$(VALGRIND) ./a17.out
 18:
 	g++  $(CXXFLAGS)  cvc-to-c.cpp  -o a18.out $(LIBS)
 	#./a18.out ./t.cvc
@@ -118,6 +118,10 @@ all: 0 1 2 3 4 5 6 7 8 9 10 11 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 2
 	g++ $(CXXFLAGS) -o a27.out \
          ../../lib/libstp.a stp-array-model.c ../../lib/libstp.a
 	./a27.out
+
+28:
+	g++ $(CXXFLAGS) push-no-pop.c -o a28.out $(LIBS)
+	$(VALGRIND) ./a28.out
 
 clean:
 	rm -rf *~ *.out *.dSYM
