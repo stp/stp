@@ -401,7 +401,7 @@ SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   if ((k1 == BVUMINUS && k2 == BEEV::BVCONST) || (k1 == BVNEG && k2 == BEEV::BVCONST))
     return NodeFactory::CreateNode(EQ, in1[0], NodeFactory::CreateTerm(k1, width, in2));
 
-  if (k2 == BVUMINUS && k1 == BEEV::BVCONST || (k2 == BVNEG && k1 == BEEV::BVCONST))
+  if ((k2 == BVUMINUS && k1 == BEEV::BVCONST) || (k2 == BVNEG && k1 == BEEV::BVCONST))
     return NodeFactory::CreateNode(EQ, in2[0], NodeFactory::CreateTerm(k2, width, in1));
 
   if ((k1 == BVNEG && in1[0] == in2) || (k2 == BVNEG && in2[0] == in1))
