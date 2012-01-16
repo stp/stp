@@ -5,14 +5,12 @@
 
 namespace BEEV
 {
-    const string PropagateEqualities::message = "After Propagating Equalities: ";
+
+  // This doesn't rewrite changes through properly so needs to have a substitution applied to its output.
 
     ASTNode
     PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer*at)
     {
-        if (!bm->UserFlags.propagate_equalities)
-            return a;
-
         ASTNode output;
         //if the variable has been solved for, then simply return it
         if (simp->CheckSubstitutionMap(a, output))

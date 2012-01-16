@@ -34,6 +34,8 @@ namespace BEEV {
   const  static string pl_message =      "After Pure Literals. ";
   const  static string bitvec_message =  "After Bit-vector Solving. ";
   const  static string size_inc_message= "After Speculative Simplifications. ";
+  const  static string pe_message=       "After Propagating Equalities. ";
+
 
 
    // The absolute TopLevel function that invokes STP on the input
@@ -124,7 +126,7 @@ namespace BEEV {
       {
         simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
         simp->haveAppliedSubstitutionMap();
-        bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
+        bm->ASTNodeStats(pe_message.c_str(), simplified_solved_InputToSAT);
       }
 
     if (bm->UserFlags.isSet("enable-unconstrained", "1"))
@@ -291,7 +293,7 @@ namespace BEEV {
                 simp->haveAppliedSubstitutionMap();
               }
 
-            bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
+            bm->ASTNodeStats(pe_message.c_str(), simplified_solved_InputToSAT);
 
             simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
 
