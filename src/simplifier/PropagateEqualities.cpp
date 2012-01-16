@@ -37,14 +37,12 @@ namespace BEEV
             }
         else if (IFF == k || EQ == k)
             {
-                ASTVec c = a.GetChildren();
+                const ASTVec& c = a.GetChildren();
 
                 if (c[0] == c[1])
                     return ASTTrue;
 
-                ASTNode c1 = c[1];
-
-                bool updated = simp->UpdateSubstitutionMap(c[0], c1);
+                bool updated = simp->UpdateSubstitutionMap(c[0], c[1]);
                 output = updated ? ASTTrue : a;
 
                 if (updated)
@@ -52,10 +50,10 @@ namespace BEEV
                         //fill the arrayname readindices vector if e0 is a
                         //READ(Arr,index) and index is a BVCONST
                         int to;
-                        if ((to = TermOrder(c[0], c1)) == 1 && c[0].GetKind() == READ)
-                            at->FillUp_ArrReadIndex_Vec(c[0], c1);
-                        else if (to == -1 && c1.GetKind() == READ)
-                            at->FillUp_ArrReadIndex_Vec(c1, c[0]);
+                        if ((to = TermOrder(c[0], c[1])) == 1 && c[0].GetKind() == READ)
+                            at->FillUp_ArrReadIndex_Vec(c[0], c[1]);
+                        else if (to == -1 && c[1].GetKind() == READ)
+                            at->FillUp_ArrReadIndex_Vec(c[1], c[0]);
                     }
             }
         else if (XOR == k)
@@ -138,7 +136,8 @@ namespace BEEV
 
                 for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend; it++)
                     {
-                        simp->UpdateAlwaysTrueFormSet(*it);
+                        if (always_true)
+                          simp->UpdateAlwaysTrueFormSet(*it);
                         ASTNode aaa = propagate(*it, at);
 
                         if (ASTTrue != aaa)

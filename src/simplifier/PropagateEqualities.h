@@ -26,10 +26,12 @@ namespace BEEV
         propagate(const ASTNode& a, ArrayTransformer*at);
         HASHSET<int> alreadyVisited;
 
+        const bool always_true;
     public:
 
         PropagateEqualities(Simplifier *simp_, NodeFactory *nf_, STPMgr *bm_) :
-                ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse)
+                ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
+                always_true(bm_->UserFlags.isSet("always_true","1"))
         {
             simp = simp_;
             nf = nf_;
