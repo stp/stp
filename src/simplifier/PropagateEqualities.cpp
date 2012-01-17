@@ -6,8 +6,110 @@
 namespace BEEV
 {
 
-  // This doesn't rewrite changes through properly so needs to have a substitution applied to its output.
+  /* The search functions look for variables that can be expressed in terms of variables.
+   * The most obvious case it doesn't check for is NOT (OR (.. .. )).
+   * I suspect this could take exponential time in the worst case, but on the benchmarks I've tested,
+   * it finishes in reasonable time.
+   * The obvious ways to speed it up (if required), are to create the RHS lazily.
+   */
 
+  // The old XOR code used to use updateSolverMap instead of UpdateSubstitutionMap, I've no idea why.
+
+  bool
+  PropagateEqualities::searchXOR(const ASTNode& lhs, const ASTNode& rhs)
+  {
+    Kind k = lhs.GetKind();
+
+    if (k == SYMBOL)
+        return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for or loops.
+
+    if (k == NOT)
+      return searchXOR(lhs[0], nf->CreateNode(NOT, rhs));
+
+    bool result = false;
+    if (k == XOR)
+      for (int i = 0; i < lhs.Degree(); i++)
+        {
+          ASTVec others;
+          for (int j = 0; j < lhs.Degree(); j++)
+            if (j != i)
+              others.push_back(lhs[j]);
+
+          others.push_back(rhs);
+          assert (others.size() > 1);
+          ASTNode new_rhs = nf->CreateNode(XOR, others);
+
+          result =  searchXOR(lhs[i], new_rhs);
+          if (result)
+            return result;
+        }
+
+    if (k == EQ && lhs[0].GetValueWidth() ==1)
+      {
+        bool result =  searchTerm(lhs[0], nf->CreateTerm(ITE, 1,rhs, lhs[1], nf->CreateTerm(BVNEG, 1,lhs[1])));
+
+        if (!result)
+          result =  searchTerm(lhs[1], nf->CreateTerm(ITE, 1,rhs, lhs[0], nf->CreateTerm(BVNEG, 1,lhs[0])));
+      }
+
+    return result;
+  }
+
+  bool
+  PropagateEqualities::searchTerm(const ASTNode& lhs, const ASTNode& rhs)
+  {
+    const int width = lhs.GetValueWidth();
+
+    if (lhs.GetKind() == SYMBOL)
+          return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for, or if the RHS contains the LHS.
+
+    if (lhs.GetKind() == BVUMINUS)
+      return searchTerm(lhs[0], nf->CreateTerm(BVUMINUS, width, rhs));
+
+    if (lhs.GetKind() == BVNEG)
+      return searchTerm(lhs[0], nf->CreateTerm(BVNEG, width, rhs));
+
+    if (lhs.GetKind() == BVXOR || lhs.GetKind() == BVPLUS)
+      for (int i = 0; i < lhs.Degree(); i++)
+        {
+          ASTVec others;
+          for (int j = 0; j < lhs.Degree(); j++)
+            if (j != i)
+              others.push_back(lhs[j]);
+
+          ASTNode new_rhs;
+          if (lhs.GetKind() == BVXOR)
+            {
+              others.push_back(rhs);
+              assert (others.size() > 1);
+              new_rhs = nf->CreateTerm(lhs.GetKind(), width, others);
+            }
+          else if (lhs.GetKind() == BVPLUS)
+            {
+              if (others.size() >1)
+                new_rhs = nf->CreateTerm(BVPLUS, width, others);
+              else
+                new_rhs = others[0];
+
+              new_rhs = nf->CreateTerm(BVUMINUS,width,new_rhs);
+              new_rhs = nf->CreateTerm(BVPLUS,width,new_rhs, rhs);
+            }
+          else
+            FatalError("sdafasfsdf2q3234423");
+
+          bool result =  searchTerm(lhs[i], new_rhs);
+          if (result)
+            return true;
+        }
+
+    if (lhs.Degree() == 2 && lhs.GetKind() == BVMULT && lhs[0].isConstant() && simp->BVConstIsOdd(lhs[0]))
+      return searchTerm(lhs[1], nf->CreateTerm(BVMULT, width, simp->MultiplicativeInverse(lhs[0]), rhs));
+
+    return false;
+  }
+
+
+    // This doesn't rewrite changes through properly so needs to have a substitution applied to its output.
     ASTNode
     PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer*at)
     {
@@ -30,9 +132,9 @@ namespace BEEV
                 bool updated = simp->UpdateSubstitutionMap(a, ASTTrue);
                 output = updated ? ASTTrue : a;
             }
-        else if (NOT == k && SYMBOL == a[0].GetKind())
+        else if (NOT == k )
             {
-                bool updated = simp->UpdateSubstitutionMap(a[0], ASTFalse);
+                bool updated = searchXOR(a[0], ASTFalse);
                 output = updated ? ASTTrue : a;
             }
         else if (IFF == k || EQ == k)
@@ -43,7 +145,6 @@ namespace BEEV
                     return ASTTrue;
 
                 bool updated = simp->UpdateSubstitutionMap(c[0], c[1]);
-                output = updated ? ASTTrue : a;
 
                 if (updated)
                     {
@@ -55,9 +156,28 @@ namespace BEEV
                         else if (to == -1 && c[1].GetKind() == READ)
                             at->FillUp_ArrReadIndex_Vec(c[1], c[0]);
                     }
+
+
+                if (!updated)
+                  updated = searchTerm(c[0],c[1]);
+
+                if (!updated)
+                  updated = searchTerm(c[1],c[0]);
+
+                output = updated ? ASTTrue : a;
+
             }
         else if (XOR == k)
             {
+            bool updated = searchXOR(a, ASTTrue);
+            output = updated ? ASTTrue : a;
+
+            if (updated)
+              return output;
+
+            // The below block should be subsumed by the searchXOR function which generalises it.
+            // So the below block should never do anything..
+#ifndef NDEBUG
                 if (a.Degree() != 2)
                     return output;
 
@@ -73,7 +193,10 @@ namespace BEEV
                                         nf->CreateTerm(BVNEG, 1, a[0][0][0]));
 
                                 if (simp->UpdateSolverMap(symbol, newN))
+                                    {
+                                    assert(false);
                                     output = ASTTrue;
+                                    }
                             }
                         else if (a[1].GetKind() == NOT && a[1][0].GetKind() == EQ && a[1][0][0].GetValueWidth() == 1
                                 && a[1][0][1].GetKind() == SYMBOL)
@@ -83,7 +206,10 @@ namespace BEEV
                                         nf->CreateTerm(BVNEG, 1, a[1][0][0]));
 
                                 if (simp->UpdateSolverMap(symbol, newN))
+                                    {
+                                    assert(false);
                                     output = ASTTrue;
+                                    }
                             }
                         else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() == 1 && a[0][1].GetKind() == SYMBOL)
                             {
@@ -94,7 +220,10 @@ namespace BEEV
                                         a[0][0]);
 
                                 if (simp->UpdateSolverMap(symbol, newN))
+                                    {
+                                    assert(false);
                                     output = ASTTrue;
+                                    }
                             }
                         else if (a[1].GetKind() == EQ && a[1][0].GetValueWidth() == 1 && a[1][1].GetKind() == SYMBOL)
                             {
@@ -103,7 +232,10 @@ namespace BEEV
                                         a[1][0]);
 
                                 if (simp->UpdateSolverMap(symbol, newN))
+                                  {
+                                    assert(false);
                                     output = ASTTrue;
+                                  }
                             }
                         else
                             return output;
@@ -125,8 +257,13 @@ namespace BEEV
                         assert(symbol.GetKind() == SYMBOL);
 
                         if (simp->UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
+                            {
+                            assert(false);
                             output = ASTTrue;
+                            }
                     }
+#endif
+
             }
         else if (AND == k)
             {

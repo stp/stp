@@ -3,6 +3,7 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include "../simplifier/simplifier.h"
 
 //This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ SYMBOL BVCONST)),
 // (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
@@ -21,6 +22,9 @@ namespace BEEV
         NodeFactory *nf;
         STPMgr *bm;
         const ASTNode ASTTrue, ASTFalse;
+
+        bool searchXOR(const ASTNode& lhs, const ASTNode& rhs);
+        bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
 
         ASTNode
         propagate(const ASTNode& a, ArrayTransformer*at);
