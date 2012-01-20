@@ -74,10 +74,6 @@ namespace BEEV
 
     ASTNode substitute(const ASTNode& eq, const ASTNode& lhs, const ASTNode& rhs, const bool single);
 
-
-    ASTNode solveForXOR(const ASTNode& n);
-    ASTNode solveForAndOfXOR(const ASTNode& n);
-
     //takes an even number "in" as input, and returns an odd number
     //(return value) and a power of 2 (as number_shifts by reference),
     //such that in = (odd_number * power_of_2).

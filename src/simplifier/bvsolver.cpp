@@ -509,124 +509,6 @@ namespace BEEV
     return output;
   } //end of BVSolve_Odd()
 
-  // Solve for XORs.
-  ASTNode BVSolver::solveForXOR(const ASTNode& xorNode)
-  {
-    assert(_bm->UserFlags.isSet("xor-solve","1"));
-
-    if (xorNode.GetKind() != XOR)
-      {
-       return xorNode;
-      }
-
-    ASTVec children =  FlattenKind(XOR, xorNode.GetChildren());
-
-    bool foundSymbol = false;
-    for (ASTVec::const_iterator symbol_iterator = children.begin(), node_end =
-        children.end(); symbol_iterator != node_end; symbol_iterator++)
-      {
-        // Find a symbol in it.
-        ASTNode symbol =(*symbol_iterator);
-        bool isNot = false;
-
-        if (symbol.GetKind() == SYMBOL)
-          {
-          }
-        else if  (symbol.GetKind()== NOT && symbol[0].GetKind() == SYMBOL)
-          {
-            symbol = symbol[0];
-            isNot = true;
-          }
-        else
-          {
-            continue;
-          }
-
-        bool duplicated = false;
-
-        for (ASTVec::const_iterator it2 = children.begin(); it2
-            != node_end; it2++)
-          {
-            if (it2 == symbol_iterator)
-              continue;
-            if (vars.VarSeenInTerm(symbol, *it2))
-              {
-                duplicated = true;
-                break;
-              }
-          }
-        foundSymbol = false;
-        if (!duplicated)
-          {
-            ASTVec rhs;
-            for (ASTVec::const_iterator it2 = children.begin(); it2
-                != node_end; it2++)
-              {
-              if (it2 != symbol_iterator)
-                rhs.push_back(*it2); // omit the symbol.
-              }
-
-            assert(rhs.size() >=1);
-            if (rhs.size() ==1)
-              {
-              foundSymbol = _simp->UpdateSolverMap(symbol,
-                  isNot? rhs[0]:
-                         _bm->CreateNode(NOT, rhs[0]));
-              }
-            else
-              {
-              foundSymbol = _simp->UpdateSolverMap(symbol,
-                  isNot? _bm->CreateNode(XOR, rhs):
-                         _bm->CreateNode(NOT, _bm->CreateNode(XOR, rhs)));
-
-              }
-          }
-        if (foundSymbol)
-          break;
-      }
-    if (foundSymbol)
-      {
-      return ASTTrue;
-      }
-    else
-      return xorNode;
-}
-
-  // Solve for XORs.
-   ASTNode
-  BVSolver::solveForAndOfXOR(const ASTNode& n)
-  {
-    assert(_bm->UserFlags.isSet("xor-solve","1"));
-
-    if (n.GetKind() != AND)
-      return n;
-
-    ASTVec c =  FlattenKind(AND, n.GetChildren());
-    bool changed=false;
-
-    ASTVec output_children;
-    output_children.reserve(c.size());
-
-    for (ASTVec::const_iterator and_child = c.begin(), and_end = c.end(); and_child != and_end; and_child++)
-      {
-      ASTNode r = *and_child;
-      if (changed && r.GetKind() == XOR)
-          r = simplifyNode(_simp->applySubstitutionMapUntilArrays(r));
-      if ( r.GetKind() == XOR)
-        r = solveForXOR(r);
-
-      if (r!=*and_child)
-            changed=true;
-
-      output_children.push_back(r);
-      }
-
-    if (!changed)
-      return n;
-
-    return nf->CreateNode(AND, output_children);
-  }
-
 
   //The toplevel bvsolver(). Checks if the formula has already been
   //solved. If not, the solver() is invoked. If yes, then simply drop
@@ -645,18 +527,11 @@ namespace BEEV
       }
 
     Kind k = input.GetKind();
-    if (XOR ==k && _bm->UserFlags.isSet("xor-solve","1"))
-    {
-    	ASTNode output = solveForXOR(_input);
-    	UpdateAlreadySolvedMap(_input, output);
-    	return output;
-    }
 
     if (!(EQ == k || AND == k))
       {
         return input;
       }
-
 
     if (flatten_ands && AND == k)
     {
@@ -760,8 +635,8 @@ namespace BEEV
     if (evens != ASTTrue)
       output = nf->CreateNode(AND, output, evens);
 
-    if (_bm->UserFlags.isSet("xor-solve","1"))
-      output = solveForAndOfXOR(output);
+    //if (_bm->UserFlags.isSet("xor-solve","1"))
+    //  output = solveForAndOfXOR(output);
 
     // Imagine in the last conjunct A is replaced by B. But there could
     // be variable A's in the first conjunct. This gets rid of 'em.
@@ -845,10 +720,6 @@ namespace BEEV
   //solve an eqn whose monomials have only even coefficients
   ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
   {
-    //     if (!wordlevel_solve_flag)
-    //       {
-    //         return input;
-    //       }
 
     if (!(EQ == input.GetKind() || AND == input.GetKind()))
       {
@@ -1029,8 +900,4 @@ namespace BEEV
     UpdateAlreadySolvedMap(input, output);
     return output;
   } //end of BVSolve_Even()
-
-
-
-
 };//end of namespace BEEV
