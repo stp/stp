@@ -54,14 +54,6 @@ namespace BEEV
     //
     ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
-    //solved variables list: If a variable has been solved for then do
-    //not solve for it again
-    ASTNodeSet DoNotSolve_TheseVars;
-
-    //checks if var has been solved for or not. if yes, then return
-    //true else return false
-    bool DoNotSolveThis(const ASTNode& var);
-
     //choose a suitable var from the term
     ASTNode ChooseMonom(const ASTNode& eq, ASTNode& modifiedterm, ASTNodeSet& checked);
     //accepts an equation and solves for a variable or a monom in it
@@ -141,7 +133,6 @@ namespace BEEV
 
     void ClearAllTables(void)
     {
-  	  DoNotSolve_TheseVars.clear();
   	  FormulasAlreadySolvedMap.clear();
     } //End of ClearAllTables()
 

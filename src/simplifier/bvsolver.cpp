@@ -91,11 +91,6 @@ namespace BEEV
   	assert(number_shifts >0); // shouldn't be odd.
   }
 
-  bool BVSolver::DoNotSolveThis(const ASTNode& var)
-  {
-    return (DoNotSolve_TheseVars.find(var) != DoNotSolve_TheseVars.end());
-  }
-
   //chooses a variable in the lhs and returns the chosen variable
   ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs, ASTNodeSet& checked)
   {
@@ -129,7 +124,6 @@ namespace BEEV
         	(
         	SYMBOL == monom.GetKind()
             && !chosen_symbol
-       		&& !DoNotSolveThis(monom)
        		&& checked.find(monom)==checked.end()
             && !vars.VarSeenInTerm(monom,rhs)
             )
@@ -138,7 +132,6 @@ namespace BEEV
              BVUMINUS == monom.GetKind()
              && SYMBOL == monom[0].GetKind()
              && !chosen_symbol
-             && !DoNotSolveThis(monom[0])
              && checked.find(monom[0])==checked.end()
              && !vars.VarSeenInTerm(monom[0],rhs)
             )
@@ -191,7 +184,6 @@ namespace BEEV
                 && BVCONST == monom[0].GetKind() 
                 && _simp->BVConstIsOdd(monom[0]) 
                 && !chosen_symbol
-                && !DoNotSolveThis(var)
                 && checked.find(var)==checked.end()
                 && ((SYMBOL == var.GetKind() 
                      && !vars.VarSeenInTerm(var,rhs)
@@ -200,7 +192,6 @@ namespace BEEV
                         && SYMBOL == var[0].GetKind() 
                         && BVCONST == var[1].GetKind() 
                         && zero == var[2]
-                        && !DoNotSolveThis(var[0])
                         && !vars.VarSeenInTerm(var[0],rhs)
                         ))
                 )
@@ -216,7 +207,6 @@ namespace BEEV
                 && SYMBOL == monom[0].GetKind()
                 && BVCONST == monom[1].GetKind()
                 && zero == monom[2]
-                && !DoNotSolveThis(monom[0])
                 && checked.find(monom[0])==checked.end()
                 && !vars.VarSeenInTerm(monom[0],rhs)
             )
@@ -232,7 +222,6 @@ namespace BEEV
                        && SYMBOL == monom[0][0].GetKind()
                        && BVCONST == monom[0][1].GetKind()
                        && zero == monom[0][2]
-                       && !DoNotSolveThis(monom[0][0])
                        && checked.find(monom[0][0])==checked.end()
                        && !vars.VarSeenInTerm(monom[0][0],rhs)
                    )
@@ -279,8 +268,6 @@ namespace BEEV
     {
     case SYMBOL:
       {
-          DoNotSolve_TheseVars.insert(lhs);
-
         //input is of the form x = rhs first make sure that the lhs
         //symbol does not occur on the rhs or that it has not been
         //solved for
@@ -307,18 +294,16 @@ namespace BEEV
               && BVCONST == lhs[1].GetKind()
               && zero == lhs[2]
               && !vars.VarSeenInTerm(lhs[0], rhs)
-              && !DoNotSolveThis(lhs[0])))
+              ))
           {
             return eq;
           }
 
         if (vars.VarSeenInTerm(lhs[0], rhs))
           {
-            DoNotSolve_TheseVars.insert(lhs[0]);
             return eq;
           }
 
-        DoNotSolve_TheseVars.insert(lhs[0]);
         if (!_simp->UpdateSolverMap(lhs, rhs))
           {
             return eq;
@@ -380,7 +365,6 @@ namespace BEEV
         if (vars.VarSeenInTerm(chosenvar, chosenvar_value))
           {
             //abort solving
-            DoNotSolve_TheseVars.insert(lhs);
             return eq;
           }
 
@@ -390,7 +374,6 @@ namespace BEEV
                 return eq;
 
         //found a variable to solve
-        DoNotSolve_TheseVars.insert(chosenvar);
         chosenvar = lhs[1];
         if (!_simp->UpdateSolverMap(chosenvar, chosenvar_value))
           {
