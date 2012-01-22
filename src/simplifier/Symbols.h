@@ -1,13 +1,12 @@
 #ifndef SYMBOLS_H
 #define SYMBOLS_H
 
+#include <boost/utility.hpp>
+
 // Each node is either: empty, an ASTNode, or a vector of more than one child nodes.
 
-class Symbols {
-	private:
-		Symbols& operator =(const Symbols& other); // DO NOT IMPLEMENT
-		Symbols(const Symbols& other); // DO NOT IMPLEMENT
-
+class Symbols : boost::noncopyable
+{
 	public:
 
 		const ASTNode found;

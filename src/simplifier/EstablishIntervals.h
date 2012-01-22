@@ -8,10 +8,11 @@
 #include "../STPManager/STPManager.h"
 #include "simplifier.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class EstablishIntervals
+  class EstablishIntervals : boost::noncopyable
   {
   private:
     struct IntervalType

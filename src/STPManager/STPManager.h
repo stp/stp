@@ -14,6 +14,7 @@
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/HashingNodeFactory.h"
 #include "../sat/SATSolver.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -22,7 +23,7 @@ namespace BEEV
    * such as unique tables for the various kinds of nodes.
    *****************************************************************/
 
-  class STPMgr
+  class STPMgr : boost::noncopyable
   {
     friend class ASTNode;
     friend class ASTInterior;

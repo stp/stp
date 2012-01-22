@@ -21,11 +21,12 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "../simplifier/simplifier.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
 
-class FindPureLiterals
+class FindPureLiterals : boost::noncopyable
 {
   typedef char polarity_type;
   const static polarity_type truePolarity = 1;

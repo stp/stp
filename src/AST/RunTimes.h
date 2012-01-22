@@ -15,8 +15,9 @@
 #include <string>
 #include "../sat/utils/System.h"
 #include <iomanip>
+#include <boost/utility.hpp>
 
-class RunTimes
+class RunTimes : boost::noncopyable
 {
 public:
   enum Category

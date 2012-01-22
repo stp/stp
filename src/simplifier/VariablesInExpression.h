@@ -8,15 +8,14 @@
 
 #include "../AST/AST.h"
 #include "Symbols.h"
-
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
 
-class VariablesInExpression {
+class VariablesInExpression : boost::noncopyable
+{
 private:
-	VariablesInExpression(const VariablesInExpression&);
-	VariablesInExpression& operator=(const VariablesInExpression &);
 
 	void insert(const ASTNode& n, Symbols *s);
 

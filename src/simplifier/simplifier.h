@@ -14,13 +14,14 @@
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "SubstitutionMap.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
   ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
   ASTNode NonMemberBVConstEvaluator(STPMgr* _bm , const Kind k, const ASTVec& input_children, unsigned int inputwidth);
 
-  class Simplifier
+  class Simplifier  : boost::noncopyable
   {
     friend class counterexample;
   private:

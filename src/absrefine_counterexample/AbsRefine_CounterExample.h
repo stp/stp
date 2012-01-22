@@ -15,10 +15,11 @@
 #include "../simplifier/simplifier.h"
 #include "../AST/ArrayTransformer.h"
 #include "../to-sat/ToSATBase.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class AbsRefine_CounterExample
+  class AbsRefine_CounterExample : boost::noncopyable
   {
   private:
 
@@ -165,7 +166,7 @@ namespace BEEV
 
   };//End of Class CounterExample
 
-  class CompleteCounterExample
+  class CompleteCounterExample : boost::noncopyable
   {
     ASTNodeMap counterexample;
     STPMgr * bv;

@@ -7,11 +7,12 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "../simplifier/simplifier.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
 
-class AlwaysTrue
+class AlwaysTrue : boost::noncopyable
 {
   Simplifier *simplifier;
   STPMgr* stp;
@@ -26,10 +27,6 @@ public:
     stp = stp_;
     nf = nf_;
   }
-
-  virtual
-  ~AlwaysTrue()
-  {}
 
   ASTNode topLevel(ASTNode& n)
   {

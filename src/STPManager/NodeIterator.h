@@ -2,20 +2,19 @@
 #define NODEITERATOR_H_
 
 #include <stack>
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
     // Returns each node once, then returns the sentinal.
     // NB if the sentinel is contained in the node that's passed, then it'll be wrong.
-    class NodeIterator
+    class NodeIterator : boost::noncopyable
     {
         stack<ASTNode> toVisit;
 
         const ASTNode& sentinal;
         uint8_t iteration;
 
-        NodeIterator( const NodeIterator& other ); // non copyable
-        NodeIterator& operator=( const NodeIterator& ); // non copyable
 
     public:
         NodeIterator(const ASTNode &n, const ASTNode &_sentinal, STPMgr& stp) :

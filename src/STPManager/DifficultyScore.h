@@ -6,12 +6,13 @@
 #include "../AST/ASTKind.h"
 #include <list>
 #include "../STPManager/NodeIterator.h"
+#include <boost/utility.hpp>
 
 // estimate how difficult that input is to solve based on some simple rules.
 
 namespace BEEV
 {
-    struct DifficultyScore
+    struct DifficultyScore : boost::noncopyable
     {
     private:
         int

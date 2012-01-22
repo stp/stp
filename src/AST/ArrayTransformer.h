@@ -13,12 +13,13 @@
 #include "AST.h"
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
   class Simplifier;
 
-  class ArrayTransformer 
+  class ArrayTransformer : boost::noncopyable
   {
   public:
 

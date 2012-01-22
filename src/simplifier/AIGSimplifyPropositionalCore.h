@@ -18,11 +18,12 @@
 #include "../extlib-abc/dar.h"
 #include "../to-sat/AIG/BBNodeManagerAIG.h"
 #include "../to-sat/BitBlaster.h"
-
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-class AIGSimplifyPropositionalCore {
+class AIGSimplifyPropositionalCore : boost::noncopyable
+{
 
 	ASTNodeMap varToNodeMap;
 	STPMgr * bm;

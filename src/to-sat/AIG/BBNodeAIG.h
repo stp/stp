@@ -20,7 +20,8 @@ namespace BEEV
 
   // This class wraps around a pointer to an AIG (provided by the ABC tool).
   // uses the default copy constructor and assignment operator.
-class BBNodeAIG
+
+  class BBNodeAIG
 {
   // This is only useful for printing small instances for debuging.
     void print(Aig_Obj_t* node) const

@@ -13,6 +13,7 @@
 #include "simplifier.h"
 #include "Symbols.h"
 #include "VariablesInExpression.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -40,7 +41,7 @@ namespace BEEV
    * 4. Outside the solver, Substitute and Re-normalize the input DAG
    ******************************************************************/
 
-  class BVSolver
+  class BVSolver  : boost::noncopyable
   {
   private:
     // Ptr to toplevel manager that manages bit-vector expressions

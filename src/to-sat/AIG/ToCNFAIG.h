@@ -6,24 +6,17 @@
 #include "../../extlib-abc/dar.h"
 #include "../ToSATBase.h"
 #include "BBNodeManagerAIG.h"
+#include <boost/utility.hpp>
 
 namespace BEEV {
 
-class ToCNFAIG{
-
-    // no copy. no assignment.
-	ToCNFAIG&  operator = (const ToCNFAIG& other);
-	ToCNFAIG(const ToCNFAIG& other);
-
+class ToCNFAIG : boost::noncopyable
+{
 	UserDefinedFlags& uf;
 
 public:
 	ToCNFAIG(UserDefinedFlags& _uf):
 		uf(_uf)
-	{
-	}
-
-	~ToCNFAIG()
 	{
 	}
 

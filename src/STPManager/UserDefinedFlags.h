@@ -14,6 +14,8 @@
 #include <assert.h>
 #include <iostream>
 #include <set>
+#include <boost/utility.hpp>
+
 namespace BEEV
 {
 	using std::string;
@@ -25,7 +27,8 @@ namespace BEEV
    * options. 
    ******************************************************************/
 
-  struct UserDefinedFlags {
+  struct UserDefinedFlags : boost::noncopyable
+  {
   private:
 	std::set<string> alreadyOutput;
 

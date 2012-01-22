@@ -13,10 +13,11 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class UseITEContext
+  class UseITEContext  : boost::noncopyable
   {
     NodeFactory *nf;
     RunTimes *runtimes;

@@ -19,10 +19,12 @@
 #include "../parser/LetMgr.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
 #include "../simplifier/PropagateEqualities.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class STP {
+  class STP  : boost::noncopyable
+  {
 
     ArrayTransformer * arrayTransformer;
 

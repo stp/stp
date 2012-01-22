@@ -4,6 +4,7 @@
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
 #include "../simplifier/simplifier.h"
+#include <boost/utility.hpp>
 
 //This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ SYMBOL BVCONST)),
 // (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
@@ -16,8 +17,9 @@ namespace BEEV
     class Simplifier;
     class ArrayTransformer;
 
-    class PropagateEqualities
+    class PropagateEqualities :  boost::noncopyable
     {
+
         Simplifier *simp;
         NodeFactory *nf;
         STPMgr *bm;

@@ -3,10 +3,11 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class ToSATBase
+  class ToSATBase : boost::noncopyable
   {
   protected:
     ASTNode ASTTrue, ASTFalse, ASTUndefined;

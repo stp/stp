@@ -4,6 +4,7 @@
 
 #include <vector>
 #include "../ASTKind.h"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -19,7 +20,7 @@ using BEEV::Kind;
 using BEEV::ASTVec;
 using BEEV::_empty_ASTVec;
 
-class NodeFactory
+class NodeFactory : boost::noncopyable
 {
 protected:
         BEEV::STPMgr& bm;

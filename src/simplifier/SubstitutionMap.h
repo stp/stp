@@ -10,6 +10,7 @@
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "VariablesInExpression.h"
+#include <boost/utility.hpp>
 
 namespace BEEV {
 
@@ -18,7 +19,8 @@ class ArrayTransformer;
 
 const bool debug_substn = false;
 
-class SubstitutionMap {
+class SubstitutionMap  : boost::noncopyable
+{
 
 	ASTNodeMap * SolverMap;
 	Simplifier *simp;

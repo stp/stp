@@ -11,12 +11,14 @@
 #include "constantBitP/Dependencies.h"
 #include "simplifier.h"
 #include "MutableASTNode.h"
+#include <boost/utility.hpp>
+
 
 namespace BEEV
 {
   using simplifier::constantBitP::Dependencies;
 
-  class RemoveUnconstrained
+  class RemoveUnconstrained :  boost::noncopyable
   {
     STPMgr& bm;
 
