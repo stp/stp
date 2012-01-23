@@ -4,7 +4,7 @@
 
 #include <vector>
 #include "../ASTKind.h"
-#include "../boost/noncopyable.hpp"
+#include "../../boost/noncopyable.hpp"
 
 namespace BEEV
 {
