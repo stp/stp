@@ -15,7 +15,7 @@
 #include <string>
 #include "../sat/utils/System.h"
 #include <iomanip>
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 class RunTimes : boost::noncopyable
 {

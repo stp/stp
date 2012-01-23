@@ -1,7 +1,7 @@
 #ifndef SYMBOLS_H
 #define SYMBOLS_H
 
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 // Each node is either: empty, an ASTNode, or a vector of more than one child nodes.
 

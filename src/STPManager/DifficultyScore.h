@@ -6,7 +6,7 @@
 #include "../AST/ASTKind.h"
 #include <list>
 #include "../STPManager/NodeIterator.h"
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 // estimate how difficult that input is to solve based on some simple rules.
 

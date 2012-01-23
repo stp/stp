@@ -69,6 +69,16 @@ ASTNode NodeFactory::CreateNode(Kind kind, const ASTNode& child0,
 	return CreateNode(kind, front_children);
 }
 
+ASTNode NodeFactory::CreateNodeY(Kind kind, const ASTNode& child0,
+                const ASTNode& child1)
+{
+        ASTVec front_children;
+        front_children.push_back(child0);
+        front_children.push_back(child1);
+        return CreateNode(kind, front_children);
+}
+
+
 ASTNode NodeFactory::CreateNode(Kind kind, const ASTNode& child0,
 		const ASTNode& child1, const ASTNode& child2,
 		const ASTVec & back_children)

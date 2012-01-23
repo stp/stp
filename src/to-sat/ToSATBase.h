@@ -3,7 +3,7 @@
 
 #include "../AST/AST.h"
 #include "../STPManager/STPManager.h"
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 namespace BEEV
 {

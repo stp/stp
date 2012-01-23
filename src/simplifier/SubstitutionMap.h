@@ -10,7 +10,7 @@
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "VariablesInExpression.h"
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 namespace BEEV {
 

@@ -14,7 +14,7 @@
 #include <cassert>
 #include <map>
 #include "../STPManager/STPManager.h"
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 #include <list>
 #include "../simplifier/constantBitP/MultiplicationStats.h"
 

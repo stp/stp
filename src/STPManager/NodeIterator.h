@@ -2,7 +2,7 @@
 #define NODEITERATOR_H_
 
 #include <stack>
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 namespace BEEV
 {

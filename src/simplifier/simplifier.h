@@ -14,7 +14,7 @@
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "SubstitutionMap.h"
-#include <boost/utility.hpp>
+#include "../boost/noncopyable.hpp"
 
 namespace BEEV
 {
