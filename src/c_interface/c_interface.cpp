@@ -12,7 +12,7 @@
 #include <assert.h>
 #include "fdstream.h"
 #include "../printer/printers.h"
-#include "../parser/ParserInterface.h"
+#include "../cpp_interface/cpp_interface.h"
 
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)

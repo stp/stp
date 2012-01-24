@@ -38,6 +38,7 @@ lib/libstp.a: $(addprefix $(SRC)/, \
 		absrefine_counterexample/libabstractionrefinement.a \
 		to-sat/libtosat.a sat/libminisat.a simplifier/libsimplifier.a \
 		extlib-constbv/libconstantbv.a extlib-abc/libabc.a \
+		cpp_interface/libcppinterface.a \
 		c_interface/libcinterface.a parser/libparser.a main/libmain.a)
 	mkdir -p $(@D)
 	$(RM) $@
@@ -49,6 +50,7 @@ $(addprefix $(SRC)/, \
 	STPManager/libstpmgr.a printer/libprinter.a \
 	absrefine_counterexample/libabstractionrefinement.a \
 	to-sat/libtosat.a simplifier/libsimplifier.a c_interface/libcinterface.a \
+	cpp_interface/libcppinterface.a \
 	extlib-constbv/libconstantbv.a extlib-abc/libabc.a parser/libparser.a \
 	main/libmain.a main/main.o): $(SRC)/AST/libast.a
 
@@ -93,6 +95,7 @@ clean:
 	$(MAKE) clean -C $(SRC)/to-sat
 	$(MAKE) clean -C $(SRC)/sat
 	$(MAKE) clean -C $(SRC)/c_interface	
+	$(MAKE) clean -C $(SRC)/cpp_interface	
 	$(MAKE) clean -C $(SRC)/parser
 	$(MAKE) clean -C $(SRC)/main
 	$(MAKE) clean -C tests/c-api-tests
