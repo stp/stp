@@ -67,6 +67,18 @@ namespace simplifier
         return uniqueId <= copy.uniqueId;
       }
 
+      const char
+      operator[] (const int n) const
+      {
+        assert(n >=0 && n <width);
+        if (!isFixed(n))
+            return '*';
+        else if (getValue(n))
+            return '1';
+        else
+            return '0';
+      }
+
       bool
       operator==(const FixedBits& other) const
       {
@@ -132,12 +144,24 @@ namespace simplifier
       }
 
       int
-      numberOfTrailingZeroes()
+      minimum_numberOfTrailingZeroes()
       {
         int i = 0;
         for (; i < getWidth(); i++)
           {
             if (!isFixed(i) || getValue(i))
+              break;
+          }
+        return i;
+      }
+
+      int
+      maximum_numberOfTrailingZeroes()
+      {
+        int i = 0;
+        for (; i < getWidth(); i++)
+          {
+            if (isFixed(i) && getValue(i))
               break;
           }
         return i;

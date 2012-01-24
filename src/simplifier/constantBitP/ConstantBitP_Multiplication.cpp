@@ -162,6 +162,29 @@ Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
 	return NO_CHANGE;
 }
 
+// returns true on conflict. A helper function.
+bool
+setToZero(FixedBits& y, int from, int to)
+{
+  assert(from<=to);
+  assert(from>= 0);
+  assert(to <= y.getWidth());
+
+  /***NB < to ***/
+  for (int i=from; i < to; i++)
+    {
+      if (y[i] == '*')
+        {
+          y.setFixed(i, true);
+          y.setValue(i, false);
+        }
+      else if (y[i] == '1')
+          return true;
+    }
+
+  return false;
+}
+
 // Finds the leading one in each of the two inputs.
 // If this position is i & j, then in the output
 // there can be no ones higher than i+j+1.
@@ -189,26 +212,34 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
 	return NOT_IMPLEMENTED;
 }
 
-Result useTrailingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
-{
-	int min = x.numberOfTrailingZeroes();
-	min += y.numberOfTrailingZeroes();
 
-	min = std::min(min, output.getWidth());
 
-	for (int i = 0; i < min; i++)
-		if (!output.isFixed(i))
-		{
-			output.setFixed(i, true);
-			output.setValue(i, false);
-		}
-		else if (output.getValue(i))
-		{
-			return CONFLICT;
-		}
+// if x has n trailing zeroes, and y has m trailing zeroes, then the output has n+m trailing zeroes.
+// if the output has n trailing zeroes and x has p trailing zeroes, then y has at least n-p trailing zeroes.
+  Result
+  useTrailingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
+  {
+    int min = x.minimum_numberOfTrailingZeroes();
+    min += y.minimum_numberOfTrailingZeroes();
 
-	return NOT_IMPLEMENTED;
-}
+    min = std::min(min, output.getWidth());
+
+    if (setToZero(output,0,min))
+         return CONFLICT;
+
+    int output_zeroes = output.minimum_numberOfTrailingZeroes();
+    int x_zeroes = x.maximum_numberOfTrailingZeroes();
+    if (x_zeroes < output_zeroes)
+        if (setToZero(y,0,(output_zeroes - x_zeroes)))
+             return CONFLICT;
+
+    int y_zeroes = y.maximum_numberOfTrailingZeroes();
+    if (y_zeroes < output_zeroes)
+        if (setToZero(x,0,(output_zeroes - y_zeroes)))
+             return CONFLICT;
+
+   return NOT_IMPLEMENTED;
+  }
 
 // About 80% of multipliction runtime is in this function.
 // 48% is generating the multiplicative inverse.
@@ -386,8 +417,6 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 
 	const unsigned bitWidth = x.getWidth();
 
-	ImplicationGraph graph;
-
 	if (debug_multiply)
 		cerr << "======================" << endl;
 
@@ -431,6 +460,8 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 			cerr << "conflict 4";
 		return r;
 	}
+
+	ImplicationGraph graph;
 
 	bool changed = true;
 	while (changed)
