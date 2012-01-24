@@ -1549,7 +1549,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
     return 0;
   }
 
-  BEEV::ParserInterface pi(*b, b->defaultNodeFactory);
+  BEEV::Cpp_interface pi(*b, b->defaultNodeFactory);
   BEEV::parserInterface = &pi;
 
 
@@ -1787,7 +1787,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
   }
 #endif
   
-  BEEV::ParserInterface pi(*b, b->defaultNodeFactory);
+  BEEV::Cpp_interface pi(*b, b->defaultNodeFactory);
   BEEV::parserInterface = &pi;
 
   BEEV::ASTVec AssertsQuery;

@@ -422,8 +422,8 @@ int main(int argc, char ** argv) {
 		TypeChecker nfTypeCheckSimp(simpNF, *bm);
 		TypeChecker nfTypeCheckDefault(*bm->defaultNodeFactory, *bm);
 
-		ParserInterface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
-		ParserInterface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
+		Cpp_interface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
+		Cpp_interface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
 
 		// If you are converting formats, you probably don't want it simplifying (at least I dont).
 		if (onePrintBack)

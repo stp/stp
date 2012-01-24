@@ -1,8 +1,6 @@
-// Wrapper around the main beevmgr class given to the parsers.
-// Over time I hope the parsers will interact entirely through this class.
 
-#ifndef PARSERINTERFACE_H_
-#define PARSERINTERFACE_H_
+#ifndef CPP_INTERFACE_H_
+#define CPP_INTERFACE_H_
 
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/NodeFactory.h"
@@ -19,7 +17,7 @@ using BEEV::STPMgr;
 
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
 
-class ParserInterface
+class Cpp_interface
 {
 	STPMgr& bm;
 	//boost::object_pool<ASTNode> node_pool;
@@ -29,7 +27,7 @@ public:
 	LETMgr letMgr;
 	NodeFactory* nf;
 
-	ParserInterface(STPMgr &bm_, NodeFactory* factory)
+	Cpp_interface(STPMgr &bm_, NodeFactory* factory)
 	: bm(bm_),
 	  nf(factory),
 	  letMgr(bm.ASTUndefined)

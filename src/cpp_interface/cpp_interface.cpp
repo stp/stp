@@ -6,7 +6,7 @@ namespace BEEV
 
 // Does some simple caching of prior results.
     void
-    ParserInterface::checkSat(vector<ASTVec> & assertionsSMT2)
+    Cpp_interface::checkSat(vector<ASTVec> & assertionsSMT2)
     {
       bm.GetRunTimes()->stop(RunTimes::Parsing);
       assert(assertionsSMT2.size() == cache.size());

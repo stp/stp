@@ -20,7 +20,7 @@ namespace BEEV
   STPMgr  * ParserBM;
 
   // Used exclusively for parsing.
-  ParserInterface * parserInterface;
+  Cpp_interface * parserInterface;
 
   void (*vc_error_hdlr)(const char* err_msg) = NULL;
 

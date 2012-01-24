@@ -30,7 +30,7 @@ namespace BEEV
   class ASTBVConst;
   class BVSolver;
   class STP;
-  class ParserInterface;
+  class Cpp_interface;
 
   /***************************************************************
    * ENUM TYPES
@@ -71,7 +71,7 @@ namespace BEEV
   //Useful global variables. Use for parsing only
   extern  STP * GlobalSTP;
   extern  STPMgr * ParserBM;
-  extern ParserInterface * parserInterface;
+  extern Cpp_interface * parserInterface;
 
   //Some constant global vars for the Main function. Once they are
   //set, these globals will remain constants. These vars are not used
