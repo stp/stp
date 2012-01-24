@@ -208,14 +208,14 @@ static void vc_printAssertsToStream(VC vc, ostream &os, int simplify_print) {
   BEEV::ASTVec v = b->GetAsserts();
   BEEV::Simplifier * simp = new BEEV::Simplifier(b);
   for(BEEV::ASTVec::iterator i=v.begin(),iend=v.end();i!=iend;i++) {
-    b->Begin_RemoveWrites = true;
+    //b->Begin_RemoveWrites = true;
     BEEV::ASTNode q = 
       (simplify_print == 1) ? 
       simp->SimplifyFormula_TopLevel(*i,false) : *i;
     q = 
       (simplify_print == 1) ? 
       simp->SimplifyFormula_TopLevel(q,false) : q;
-    b->Begin_RemoveWrites = false;
+    //b->Begin_RemoveWrites = false;
     os << "ASSERT( ";
     q.PL_Print(os);
     os << ");" << endl;
@@ -243,12 +243,12 @@ void vc_printQueryStateToBuffer(VC vc, Expr e,
   vc_printAssertsToStream(vc, os, simplify_print);
   os << "%----------------------------------------------------" << endl;
   os << "QUERY( ";
-  b->Begin_RemoveWrites = true;
+  //b->Begin_RemoveWrites = true;
   BEEV::ASTNode q = 
     (simplify_print == 1) ? 
     simp->SimplifyFormula_TopLevel(*((nodestar)e),false) : 
     *(nodestar)e;
-  b->Begin_RemoveWrites = false;
+  //b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   os << " );" << endl;
 
@@ -1417,21 +1417,21 @@ Expr vc_simplify(VC vc, Expr e) {
     {
       nodestar round1 = 
         new node(simp->SimplifyFormula_TopLevel(*a,false));
-      b->Begin_RemoveWrites = true;
+      //b->Begin_RemoveWrites = true;
       nodestar output = 
         new node(simp->SimplifyFormula_TopLevel(*round1,false));
       //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-      b->Begin_RemoveWrites = false;
+      //b->Begin_RemoveWrites = false;
       delete round1;
       return output;
     }
   else 
     {
       nodestar round1 = new node(simp->SimplifyTerm(*a));
-      b->Begin_RemoveWrites = true;
+      //b->Begin_RemoveWrites = true;
       nodestar output = new node(simp->SimplifyTerm(*round1));
       //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-      b->Begin_RemoveWrites = false;
+      //b->Begin_RemoveWrites = false;
       delete round1;
       return output;
     }

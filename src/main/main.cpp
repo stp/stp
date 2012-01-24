@@ -410,11 +410,6 @@ int main(int argc, char ** argv) {
   //want to print the output always from the commandline.
   bm->UserFlags.print_output_flag = true;
   ASTVec * AssertsQuery = new ASTVec;
-  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
-  if(0 != c) {
-    cout << CONSTANTBV::BitVector_Error(c) << endl;
-    return 0;
-  }
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
 	{
@@ -432,6 +427,8 @@ int main(int argc, char ** argv) {
 		}
 		else
 			parserInterface = &piTypeCheckSimp;
+
+		  parserInterface->startup();
 
 		if (onePrintBack)
 		  {

@@ -637,14 +637,14 @@ namespace BEEV
   {
     if (READ == term.GetKind() 
         && WRITE == term[0].GetKind() 
-        && !GetRemoveWritesFlag())
+        /*&& !GetRemoveWritesFlag()*/)
       {
         return false;
       }
 
     if (READ == term.GetKind() 
         && WRITE == term[0].GetKind() 
-        && GetRemoveWritesFlag())
+        /*&& GetRemoveWritesFlag()*/)
       {
         return true;
       }
@@ -680,7 +680,7 @@ namespace BEEV
     return false;
   }//End of VarSeenInTerm
 
-  
+
   ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
                                               const ASTNode& constant)
   {
@@ -697,6 +697,7 @@ namespace BEEV
     return CurrentSymbol;
   } // End of NewParameterized_BooleanVar()
 
+
   
   //If ASTNode remain with references (somewhere), this will segfault.
   STPMgr::~STPMgr() {
@@ -712,7 +713,7 @@ namespace BEEV
  		ASTTrue = ASTNode(0);
  		ASTUndefined = ASTNode(0);
  		_current_query = ASTNode(0);
- 		dummy_node = ASTNode(0);
+ 		//dummy_node = ASTNode(0);
 
  		zeroes.clear();
  		ones.clear();

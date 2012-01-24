@@ -219,7 +219,7 @@ namespace BEEV
   ASTNode
   Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap)
   {
-    _bm->Begin_RemoveWrites = false;
+    //_bm->Begin_RemoveWrites = false;
     ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
     return out;
   }

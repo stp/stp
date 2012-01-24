@@ -54,11 +54,13 @@ namespace BEEV
       ASTBVConst::ASTBVConstHasher, 
       ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
+#if 0
     typedef HASHMAP<
       ASTNode, 
       ASTNodeSet,
       ASTNode::ASTNodeHasher, 
       ASTNode::ASTNodeEqual> ASTNodeToSetMap;
+#endif
 
     // Unique node tables that enables common subexpression sharing
     ASTInteriorSet _interior_unique_table;
@@ -72,16 +74,14 @@ namespace BEEV
     // Global for assigning new node numbers.
     int _max_node_num;
 
-    ASTNode dummy_node;
-    
+    uint8_t last_iteration;
+
   public:
     HashingNodeFactory* hashingNodeFactory;
     NodeFactory *defaultNodeFactory;
 
     //frequently used nodes
     ASTNode ASTFalse, ASTTrue, ASTUndefined;
-
-    uint8_t last_iteration;
 
     // No nodes should already have the iteration number that is returned from here.
     // This never returns zero.
@@ -118,7 +118,6 @@ namespace BEEV
     // logical context is represented by a ptr to a vector of
     // assertions in that logical context. Logical contexts are
     // created by PUSH/POP
-    //std::vector<ASTVec *> _asserts;
     std::vector<IntToASTVecMap *> _asserts;
 
     // Memo table that tracks terms already seen
@@ -194,8 +193,8 @@ namespace BEEV
     // Flags indicates that counterexample will now be checked by the
     // counterexample checker, and hence simplifyterm must switch off
     // certain optimizations. In particular, array write optimizations
-    bool start_abstracting;
-    bool Begin_RemoveWrites;
+    //bool start_abstracting;
+    //bool Begin_RemoveWrites;
     bool SimplifyWrites_InPlace_Flag;
    
     //count is used in the creation of new variables
@@ -220,12 +219,12 @@ namespace BEEV
 
     {
       _max_node_num = 0;
-      Begin_RemoveWrites = false;
+      //Begin_RemoveWrites = false;
       ValidFlag = false;
       bvdiv_exception_occured = false;
       counterexample_checking_during_refinement = false;
-      start_abstracting = false;
-      Begin_RemoveWrites = false;
+      //start_abstracting = false;
+      //Begin_RemoveWrites = false;
       SimplifyWrites_InPlace_Flag = false;      
 
       // Need to initiate the node factories before any nodes are created.
@@ -245,6 +244,7 @@ namespace BEEV
       return runTimes;
     }
 
+#if 0
     void SetRemoveWritesFlag(bool in)
     {
       Begin_RemoveWrites = in;
@@ -254,6 +254,7 @@ namespace BEEV
     {
       return Begin_RemoveWrites;
     }
+#endif
 
     int NewNodeNum()
     {

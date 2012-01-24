@@ -268,8 +268,8 @@ namespace BEEV {
     //DAG is minimized as much as possibly, and ideally should
     //garuntee that all liketerms in BVPLUSes have been combined.
     bm->SimplifyWrites_InPlace_Flag = false;
-    bm->Begin_RemoveWrites = false;
-    bm->start_abstracting = false;
+    //bm->Begin_RemoveWrites = false;
+    //bm->start_abstracting = false;
     bm->TermsAlreadySeenMap_Clear();
     do
       {
@@ -419,9 +419,9 @@ namespace BEEV {
 
     bm->TermsAlreadySeenMap_Clear();
 
-    bm->start_abstracting = false;
+    //bm->start_abstracting = false;
     bm->SimplifyWrites_InPlace_Flag = false;
-    bm->Begin_RemoveWrites = false;
+    //bm->Begin_RemoveWrites = false;
 
     long final_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
     if (bm->UserFlags.stats_flag)

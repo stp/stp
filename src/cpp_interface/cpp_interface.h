@@ -21,6 +21,34 @@ namespace BEEV
     //boost::object_pool<ASTNode> node_pool;
     bool alreadyWarned;
     bool print_success;
+
+    // Used to cache prior queries.
+    struct Entry
+    {
+      explicit
+      Entry(SOLVER_RETURN_TYPE result_)
+      {
+        result = result_;
+      }
+
+      SOLVER_RETURN_TYPE result;
+      ASTNode node;
+
+      void
+      print()
+      {
+        if (result == SOLVER_UNSATISFIABLE)
+          cerr << "u";
+        else if (result == SOLVER_SATISFIABLE)
+          cerr << "s";
+        else if (result == SOLVER_UNDECIDED)
+          cerr << "?";
+      }
+    };
+    vector<Entry> cache;
+    vector<vector<ASTNode> > symbols;
+
+
   public:
     LETMgr letMgr;
     NodeFactory* nf;
@@ -33,6 +61,16 @@ namespace BEEV
       cache.push_back(Entry(SOLVER_UNDECIDED));
       symbols.push_back(ASTVec());
       print_success = false;
+    }
+
+    void
+    startup()
+    {
+      CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+      if(0 != c) {
+        cout << CONSTANTBV::BitVector_Error(c) << endl;
+        FatalError("Bad startup");
+      }
     }
 
     const ASTVec
@@ -176,31 +214,6 @@ namespace BEEV
       //node_pool.destroy(n);
     }
 
-    struct Entry
-    {
-      explicit
-      Entry(SOLVER_RETURN_TYPE result_)
-      {
-        result = result_;
-      }
-
-      SOLVER_RETURN_TYPE result;
-      ASTNode node;
-
-      void
-      print()
-      {
-        if (result == SOLVER_UNSATISFIABLE)
-          cerr << "u";
-        else if (result == SOLVER_SATISFIABLE)
-          cerr << "s";
-        else if (result == SOLVER_UNDECIDED)
-          cerr << "?";
-      }
-    };
-    vector<Entry> cache;
-    vector<vector<ASTNode> > symbols;
-
     void
     addSymbol(ASTNode &s)
     {
@@ -270,4 +283,4 @@ namespace BEEV
   };
 }
 
-#endif /* PARSERINTERFACE_H_ */
+#endif
