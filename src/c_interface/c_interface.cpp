@@ -410,6 +410,10 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num) {
   b->AddAssert(*a, absrefine_bucket_num);
 }
 
+void soft_time_out(int ignored)
+{
+  BEEV::ParserBM->soft_timeout_expired = true;
+}
 
 //! Check validity of e in the current context. e must be a FORMULA
 //
@@ -424,10 +428,22 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num) {
  * the starting context.  If the result is false, then the resulting
  * context is a context in which e is false.  e must have Boolean
  * type. */
-int vc_query(VC vc, Expr e) {
+int vc_query(VC vc, Expr e, int timeout_ms) {
   nodestar a = (nodestar)e;
   stpstar stp = ((stpstar)vc);
   bmstar b = (bmstar)(stp->bm);
+
+  assert(!BEEV::ParserBM->soft_timeout_expired);
+  if (timeout_ms != -1)
+    {
+      itimerval timeout;
+      signal(SIGVTALRM, soft_time_out);
+      timeout.it_interval.tv_usec = 0;
+      timeout.it_interval.tv_sec  = 0;
+      timeout.it_value.tv_usec    = 1000 * (timeout_ms % 1000);
+      timeout.it_value.tv_sec     = timeout_ms / 1000;
+      setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+    }
 
   if(!BEEV::is_Form_kind(a->GetKind())) 
     {     
@@ -456,6 +472,14 @@ int vc_query(VC vc, Expr e) {
     {
       output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
     }
+
+  if (timeout_ms !=-1)
+    {
+      // Reset the timer.
+      setitimer(ITIMER_VIRTUAL, NULL, NULL);
+      BEEV::ParserBM->soft_timeout_expired = false;
+    }
+
   return output;
 } //end of vc_query
 
@@ -1567,7 +1591,7 @@ Expr vc_parseExpr(VC vc, const char* infile) {
 
   BEEV::ASTNode asserts = (*(BEEV::ASTVec*)AssertsQuery)[0];
   BEEV::ASTNode query   = (*(BEEV::ASTVec*)AssertsQuery)[1];
-  //BEEV::GlobalSTP->TopLevelSTP(asserts, query);
+
 
   node oo = b->CreateNode(BEEV::NOT,query);
   node o = b->CreateNode(BEEV::AND,asserts,oo);

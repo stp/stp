@@ -19,7 +19,7 @@ namespace BEEV
     T * s;
 
   public:
-    MinisatCore();
+    MinisatCore(volatile bool& interrupt);
 
     ~MinisatCore();
 

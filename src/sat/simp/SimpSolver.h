@@ -34,7 +34,7 @@ class SimpSolver : public Solver {
  public:
     // Constructor/Destructor:
     //
-    SimpSolver();
+    SimpSolver(volatile bool& interrupt);
     ~SimpSolver();
 
     // Problem specification:

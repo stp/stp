@@ -19,7 +19,7 @@ namespace BEEV
     T * s;
 
   public:
-    MinisatCore_prop();
+    MinisatCore_prop(volatile bool& timeout);
 
     ~MinisatCore_prop();
 

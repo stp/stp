@@ -7,9 +7,9 @@ namespace BEEV
 {
 
   template <class T>
-  MinisatCore<T>::MinisatCore()
+  MinisatCore<T>::MinisatCore(volatile bool& interrupt)
   {
-     s = new T();
+     s = new T(interrupt);
   };
 
   template <class T>

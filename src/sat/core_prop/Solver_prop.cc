@@ -56,7 +56,7 @@ static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction o
 //=================================================================================================
 // Constructor/Destructor:
 
-Solver_prop::Solver_prop() :
+Solver_prop::Solver_prop(volatile bool& timeout) :
 
     // Parameters (user settable):
     //
@@ -111,7 +111,7 @@ Solver_prop::Solver_prop() :
     //
   , conflict_budget    (-1)
   , propagation_budget (-1)
-  , asynch_interrupt   (false)
+  , asynch_interrupt   (timeout)
 {}
 
 

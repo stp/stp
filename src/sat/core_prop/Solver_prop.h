@@ -313,7 +313,7 @@ private:
 public:
     // Constructor/Destructor:
     //
-    Solver_prop();
+    Solver_prop(volatile bool& timeout);
     virtual ~Solver_prop();
 
     // Problem specification:
@@ -484,7 +484,7 @@ protected:
     //
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
-    bool                asynch_interrupt;
+    volatile bool&      asynch_interrupt;
 
     // Main internal methods:
     //

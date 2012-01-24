@@ -6,9 +6,9 @@ namespace BEEV
 {
 
   template <class T>
-  MinisatCore_prop<T>::MinisatCore_prop()
+  MinisatCore_prop<T>::MinisatCore_prop(volatile bool& timeout)
   {
-     s = new T();
+     s = new T(timeout);
   };
 
   template <class T>

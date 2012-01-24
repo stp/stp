@@ -76,12 +76,14 @@ namespace BEEV
 
     uint8_t last_iteration;
 
-  public:
+      public:
     HashingNodeFactory* hashingNodeFactory;
     NodeFactory *defaultNodeFactory;
 
     //frequently used nodes
     ASTNode ASTFalse, ASTTrue, ASTUndefined;
+
+    volatile bool soft_timeout_expired;
 
     // No nodes should already have the iteration number that is returned from here.
     // This never returns zero.
@@ -215,7 +217,8 @@ namespace BEEV
       UserFlags(),
       _symbol_count(0),
       CNFFileNameCounter(0),
-      last_iteration(0)
+      last_iteration(0),
+      soft_timeout_expired(false)
 
     {
       _max_node_num = 0;

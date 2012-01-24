@@ -919,6 +919,9 @@ namespace BEEV
 
     bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
+    if (bm->soft_timeout_expired)
+        return SOLVER_TIMEOUT;
+
     if (!sat)
       {
         //PrintOutput(true);

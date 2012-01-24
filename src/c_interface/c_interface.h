@@ -210,7 +210,14 @@ extern "C" {
   //if returned 1 then input is VALID
   //
   //if returned 2 then ERROR
-  int vc_query(VC vc, Expr e);
+
+  // NB. The timeout is a soft timeout, use the -g flag for a hard timeout that
+  // will abort automatically. The soft timeout is checked sometimes in the code,
+  // and if the time has passed, then "timeout" will be returned. It's only checked
+  // sometimes though, so the actual timeout may be larger. Cryptominisat doesn't check
+  // the timeout yet..
+  int vc_query(VC vc, Expr e, int timeout_ms= -1);
+
 
   //! Return the counterexample after a failed query.
   Expr vc_getCounterExample(VC vc, Expr e);

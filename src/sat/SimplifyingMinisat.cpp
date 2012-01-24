@@ -4,9 +4,9 @@
 
 namespace BEEV
 {
-  SimplifyingMinisat::SimplifyingMinisat()
+  SimplifyingMinisat::SimplifyingMinisat(volatile bool& timeout)
   {
-	 s = new Minisat::SimpSolver();
+	 s = new Minisat::SimpSolver(timeout);
   }
 
   SimplifyingMinisat::~SimplifyingMinisat()

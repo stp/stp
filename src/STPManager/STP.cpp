@@ -54,13 +54,13 @@ namespace BEEV {
 
     SATSolver *newS;
     if (bm->UserFlags.solver_to_use == UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER)
-		newS = new SimplifyingMinisat();
+		newS = new SimplifyingMinisat(bm->soft_timeout_expired);
     else if (bm->UserFlags.solver_to_use == UserDefinedFlags::CRYPTOMINISAT_SOLVER)
                     newS = new CryptoMinisat();
     else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
-      newS = new MinisatCore<Minisat::Solver>();
+      newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
     else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS)
-      newS = new MinisatCore_prop<Minisat::Solver_prop>();
+      newS = new MinisatCore_prop<Minisat::Solver_prop>(bm->soft_timeout_expired);
 
 
 
@@ -208,8 +208,8 @@ namespace BEEV {
             cerr << "Difficulty Initially:" << difficulty.score(original_input) << endl;
 
     // A heap object so I can easily control its lifetime.
-    BVSolver* bvSolver = new BVSolver(bm, simp);
-    PropagateEqualities * pe = new PropagateEqualities(simp,bm->defaultNodeFactory,bm);
+    std::auto_ptr<BVSolver> bvSolver(new BVSolver(bm, simp));
+    std::auto_ptr<PropagateEqualities> pe (new PropagateEqualities(simp,bm->defaultNodeFactory,bm));
 
     ASTNode simplified_solved_InputToSAT = original_input;
 
@@ -234,7 +234,7 @@ namespace BEEV {
       assert(!arrayops);
 
     // Run size reducing just once.
-    simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver,pe);
+    simplified_solved_InputToSAT = sizeReducing(simplified_solved_InputToSAT, bvSolver.get(),pe.get());
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
 
@@ -242,7 +242,7 @@ namespace BEEV {
     // Currently we discards all the state each time sizeReducing is called,
     // so it's expensive to call.
     if ((!arrayops && initial_difficulty_score < 1000000) || bm->UserFlags.isSet("preserving-fixedpoint", "0"))
-           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver,pe, initial_difficulty_score);
+           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver.get(),pe.get(), initial_difficulty_score);
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
@@ -253,7 +253,7 @@ namespace BEEV {
       cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
 
     // So we can delete the object and release all the hash-buckets storage.
-    Revert_to* revert = new Revert_to();
+    auto_ptr<Revert_to> revert(new Revert_to());
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
@@ -274,6 +274,9 @@ namespace BEEV {
     do
       {
         inputToSAT = simplified_solved_InputToSAT;
+
+        if (bm->soft_timeout_expired)
+            return SOLVER_TIMEOUT;
 
         if (bm->UserFlags.optimize_flag)
           {
@@ -342,6 +345,9 @@ namespace BEEV {
             bm->ASTNodeStats(pl_message.c_str(), simplified_solved_InputToSAT);
           }
       }
+
+    if (bm->soft_timeout_expired)
+        return SOLVER_TIMEOUT;
 
     // Simplify using Ite context
     if (bm->UserFlags.optimize_flag && bm->UserFlags.isSet("ite-context", "0"))
@@ -459,7 +465,7 @@ namespace BEEV {
         // it to put back in all the bad simplifications.
         bm->UserFlags.optimize_flag = false;
       }
-    delete revert;
+    revert.reset(NULL);
 
     simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
     bm->ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
@@ -480,10 +486,9 @@ namespace BEEV {
     bm->ClearAllTables();
 
     // Deleting it clears out all the buckets associated with hashmaps etc. too.
-    delete bvSolver;
-    bvSolver = NULL;
-    delete pe;
-    pe = NULL;
+    bvSolver.reset(NULL);
+    pe.reset(NULL);
+
 
     if (bm->UserFlags.stats_flag)
       simp->printCacheStatus();
@@ -512,10 +517,20 @@ namespace BEEV {
 
     ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : ((ToSAT*) &toSATAIG) ;
 
+    if (bm->soft_timeout_expired)
+        return SOLVER_TIMEOUT;
+
     // If it doesn't contain array operations, use ABC's CNF generation.
     res = Ctr_Example->CallSAT_ResultCheck(NewSolver, simplified_solved_InputToSAT, original_input, satBase,
         maybeRefinement);
 
+    if (bm->soft_timeout_expired)
+      {
+        if (toSATAIG.cbIsDestructed())
+          cleaner.release();
+
+        return SOLVER_TIMEOUT;
+      }
     if (SOLVER_UNDECIDED != res)
       {
         // If the aig converter knows that it is never going to be called again,

@@ -19,7 +19,7 @@ namespace BEEV
 
   public:
 
-    SimplifyingMinisat();
+    SimplifyingMinisat(volatile bool& timeout);
     ~SimplifyingMinisat();
 
     bool
