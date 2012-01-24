@@ -204,12 +204,10 @@ extern "C" {
   Expr vc_simplify(VC vc, Expr e);
 
   //! Check validity of e in the current context. e must be a FORMULA
-  //
-  //if returned 0 then input is INVALID.
-  //
-  //if returned 1 then input is VALID
-  //
-  //if returned 2 then ERROR
+  //returns 0 -> the input is INVALID
+  //returns 1 -> the input is VALID
+  //returns 2 -> then ERROR
+  //returns 3 -> then TIMEOUT
 
   // NB. The timeout is a soft timeout, use the -g flag for a hard timeout that
   // will abort automatically. The soft timeout is checked sometimes in the code,
@@ -217,7 +215,6 @@ extern "C" {
   // sometimes though, so the actual timeout may be larger. Cryptominisat doesn't check
   // the timeout yet..
   int vc_query(VC vc, Expr e, int timeout_ms= -1);
-
 
   //! Return the counterexample after a failed query.
   Expr vc_getCounterExample(VC vc, Expr e);
