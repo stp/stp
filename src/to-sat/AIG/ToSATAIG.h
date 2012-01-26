@@ -47,6 +47,8 @@ namespace BEEV
         arrayTransformer = NULL;
     }
 
+    static int cnf_calls;
+
   public:
 
     void setArrayTransformer(ArrayTransformer *at)

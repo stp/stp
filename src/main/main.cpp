@@ -17,6 +17,7 @@
 #include "../cpp_interface/cpp_interface.h"
 #include <sys/time.h>
 #include <memory>
+#include "../extlib-abc/cnf_short.h"
 
 
 #ifdef EXT_HASH_MAP
@@ -555,6 +556,7 @@ int main(int argc, char ** argv) {
   delete GlobalSTP;
   delete ParserBM;
 
+  Cnf_ClearMemory();
 
   return 0;
 }//end of Main

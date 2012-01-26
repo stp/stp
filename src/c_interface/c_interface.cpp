@@ -13,6 +13,7 @@
 #include "fdstream.h"
 #include "../printer/printers.h"
 #include "../cpp_interface/cpp_interface.h"
+#include "../extlib-abc/cnf_short.h"
 
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)
@@ -1704,6 +1705,8 @@ void vc_Destroy(VC vc) {
       delete *it;
     persist.clear();
   }
+
+  Cnf_ClearMemory();
 
   delete decls;
   delete (stpstar)vc;
