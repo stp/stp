@@ -2,70 +2,62 @@
 
 namespace BEEV
 {
-    // Does some simple caching of prior results.
-    // Assumes that there is one node for each level!!!
-    void
-    Cpp_interface::checkSat(const ASTVec & assertionsSMT2)
-    {
-      bm.GetRunTimes()->stop(RunTimes::Parsing);
+  // Does some simple caching of prior results.
+  void
+  Cpp_interface::checkSat(const ASTVec & assertionsSMT2)
+  {
+    bm.GetRunTimes()->stop(RunTimes::Parsing);
 
-      assert(assertionsSMT2.size() == cache.size());
+    checkInvariant();
+    assert(assertionsSMT2.size() == cache.size());
 
-      Entry& cacheEntry = cache.back();
+    Entry& last_run = cache.back();
+    if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) && (last_run.result == SOLVER_SATISFIABLE))
+      {
+        // extra asserts might have been added to it,
+        // flipping from sat to unsat. But never from unsat to sat.
+        last_run.result =  SOLVER_UNDECIDED;
+      }
 
-      if ((cacheEntry.result ==  SOLVER_SATISFIABLE || cacheEntry.result == SOLVER_UNSATISFIABLE)
-          && (assertionsSMT2.back() == cacheEntry.node))
-        { // If we already know the answer then return.
-          if (bm.UserFlags.quick_statistics_flag)
+    // We might have run this query before, or it might already be shown to be unsat. If it was sat,
+    // we've stored the result (but not the model), so we can shortcut and return what we know.
+    if (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE))
+        {
+          resetSolver();
+
+          ASTNode query;
+
+          if (assertionsSMT2.size() >= 1)
+            query = parserInterface->CreateNode(AND, assertionsSMT2);
+          else if (assertionsSMT2.size() == 1)
+            query = assertionsSMT2[0];
+          else
+            query = bm.ASTTrue;
+
+          SOLVER_RETURN_TYPE last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+
+          // Store away the answer. Might be timeout, or error though..
+          last_run = Entry(last_result);
+          last_run.node_number = assertionsSMT2.back().GetNodeNum();
+
+          // It's satisfiable, so everything beneath it is satisfiable too.
+          if (last_result == SOLVER_SATISFIABLE)
             {
-              bm.GetRunTimes()->print();
+              for (int i = 0; i < cache.size(); i++)
+                {
+                  assert(cache[i].result != SOLVER_UNSATISFIABLE);
+                  cache[i].result = SOLVER_SATISFIABLE;
+                }
             }
-
-          (GlobalSTP->tosat)->PrintOutput(cache.back().result);
-          bm.GetRunTimes()->start(RunTimes::Parsing);
-          return;
         }
 
-      bm.ClearAllTables();
-      GlobalSTP->ClearAllTables();
+    if (bm.UserFlags.quick_statistics_flag)
+      {
+        bm.GetRunTimes()->print();
+      }
 
-      ASTNode query;
-
-      if (assertionsSMT2.size() >= 1)
-        query = parserInterface->CreateNode(AND, assertionsSMT2);
-      else if (assertionsSMT2.size() == 1)
-        query = assertionsSMT2[0];
-      else
-        query = bm.ASTTrue;
-
-      SOLVER_RETURN_TYPE last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
-
-      // Write in the answer to the current slot.
-      if (last_result ==SOLVER_SATISFIABLE || last_result ==SOLVER_UNSATISFIABLE)
-          {
-            Entry e(last_result);
-            e.node = assertionsSMT2.back();
-            cacheEntry = e;
-            assert (!cacheEntry.node.IsNull());
-          }
-
-      // It's satisfiable, so everything beneath it is satisfiable too.
-      if (last_result ==SOLVER_SATISFIABLE)
-        {
-          for (int i=0; i < cache.size(); i++)
-              {
-              assert(cache[i].result != SOLVER_UNSATISFIABLE);
-              cache[i].result = SOLVER_SATISFIABLE;
-              }
-        }
-
-      if (bm.UserFlags.quick_statistics_flag)
-        {
-          bm.GetRunTimes()->print();
-        }
-
-      (GlobalSTP->tosat)->PrintOutput(last_result);
-      //printStatus();
-      bm.GetRunTimes()->start(RunTimes::Parsing);
-    }
-};
+    (GlobalSTP->tosat)->PrintOutput(last_run.result);
+    bm.GetRunTimes()->start(RunTimes::Parsing);
+  }
+}
+;

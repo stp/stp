@@ -29,10 +29,11 @@ namespace BEEV
       Entry(SOLVER_RETURN_TYPE result_)
       {
         result = result_;
+        node_number = -1;
       }
 
       SOLVER_RETURN_TYPE result;
-      ASTNode node;
+      int node_number; // a weak pointer.
 
       void
       print()
@@ -247,6 +248,14 @@ namespace BEEV
         }
     }
 
+    // Resets the tables used by STP, but keeps all the nodes that have been created.
+    void
+    resetSolver()
+    {
+      bm.ClearAllTables();
+      GlobalSTP->ClearAllTables();
+    }
+
     void
     pop()
     {
@@ -257,7 +266,10 @@ namespace BEEV
 
       bm.Pop();
 
-      assert(symbols.size() == cache.size());
+      // These tables might hold references to symbols that have been
+      // removed.
+      resetSolver();
+
       cache.erase(cache.end() - 1);
       ASTVec & current = symbols.back();
       for (int i = 0; i < current.size(); i++)
@@ -277,7 +289,7 @@ namespace BEEV
 
       bm.Push();
       symbols.push_back(ASTVec());
-      assert(symbols.size() == cache.size());
+
       checkInvariant();
     }
 
