@@ -15,10 +15,12 @@
 #include "../to-sat/AIG/ToSATAIG.h"
 #include "../sat/MinisatCore.h"
 #include "../STPManager/STP.h"
-#include "../simplifier/BigRewriter.h"
+
 
 using namespace std;
 using namespace BEEV;
+
+bool finished = false;
 
 extern int
 smtparse(void*);
@@ -426,7 +428,7 @@ startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore<Minisat::Solver>();
+  ss = new MinisatCore<Minisat::Solver>(finished);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -449,7 +451,7 @@ void
 clearSAT()
 {
   delete ss;
-  ss = new MinisatCore<Minisat::Solver>();
+  ss = new MinisatCore<Minisat::Solver>(finished);
 }
 
 // Return true if the negation of the query is unsatisfiable.
@@ -971,6 +973,7 @@ main(void)
 
     {
       SimplifyingNodeFactory nf(*(mgr->hashingNodeFactory), *mgr);
+#if 0
       BEEV::BigRewriter b;
 
       for (int i = 0; i < functions.size(); i++)
@@ -984,7 +987,9 @@ main(void)
             }
 
         }
+#endif
       removeDuplicates(functions);
+
 
       // There may be a single undefined element now.. remove it.
       for (int i = 0; i < functions.size(); i++)

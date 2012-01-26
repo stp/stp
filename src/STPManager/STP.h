@@ -26,7 +26,7 @@ namespace BEEV
   class STP  : boost::noncopyable
   {
 
-    ArrayTransformer * arrayTransformer;
+    
 
           ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver, PropagateEqualities *pe);
 
@@ -48,6 +48,8 @@ namespace BEEV
 
 
   public:
+ArrayTransformer * arrayTransformer;
+    
           // calls sizeReducing and the bitblasting simplification.
           ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score);
 
