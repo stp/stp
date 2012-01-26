@@ -113,7 +113,7 @@ namespace BEEV
       // This releases the memory used by the CNF generator, particularly some data tables.
       // If CNF generation is going to be called lots, we'd rather keep it around.
       // because the datatables are expensive to generate.
-       if (cnf_calls != 0)
+       if (cnf_calls == 0)
            Cnf_ClearMemory();
 
        cnf_calls++;
