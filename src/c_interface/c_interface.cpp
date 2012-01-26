@@ -399,7 +399,7 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue) {
 /////////////////////////////////////////////////////////////////////////////
 //! Assert a new formula in the current context.
 /*! The formula must have Boolean type. */
-void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num) {
+void vc_assertFormula(VC vc, Expr e) {
   nodestar a = (nodestar)e;
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
@@ -407,7 +407,7 @@ void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num) {
     BEEV::FatalError("Trying to assert a NON formula: ",*a);
 
   assert(BVTypeCheck(*a));
-  b->AddAssert(*a, absrefine_bucket_num);
+  b->AddAssert(*a);
 }
 
 void soft_time_out(int ignored)

@@ -198,7 +198,7 @@ extern "C" {
 
   //! Assert a new formula in the current context.
   /*! The formula must have Boolean type. */
-  void vc_assertFormula(VC vc, Expr e, int absrefine_bucket_num _CVCL_DEFAULT_ARG(0));
+  void vc_assertFormula(VC vc, Expr e);
 
   //! Simplify e with respect to the current context
   Expr vc_simplify(VC vc, Expr e);

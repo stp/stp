@@ -434,7 +434,7 @@ namespace BEEV
   }
 
   //add an assertion to the current logical context
-  void STPMgr::AddAssert(const ASTNode& assert, int assertion_bucket_key)
+  void STPMgr::AddAssert(const ASTNode& assert)
   {
     if (!(is_Form_kind(assert.GetKind()) 
 	  && BOOLEAN_TYPE == assert.GetType()))
@@ -442,83 +442,28 @@ namespace BEEV
         FatalError("AddAssert:Trying to assert a non-formula:", assert);
       }
 
-    IntToASTVecMap * AssertsMap;
-    //if the stack of assertion contexts is not empty, then take the
-    //top ASTVec and add the input assert to it
-    if(!_asserts.empty())
-      {
-	AssertsMap = _asserts.back();
-      }
-    else
-      {
-	AssertsMap = new IntToASTVecMap();
-	_asserts.push_back(AssertsMap);
-      }
+    if(_asserts.empty())
+	_asserts.push_back(new ASTVec());
 
-    ASTVec * v;
-    if(AssertsMap->find(assertion_bucket_key) != AssertsMap->end())
-      {
-	v = (*AssertsMap)[assertion_bucket_key];
-	v->push_back(assert);
-      }
-    else
-      {
-	v = new ASTVec();
-	v->push_back(assert);
-	(*AssertsMap)[assertion_bucket_key] = v;
-      }
-
-    //     //if the stack of ASTVec is not empty, then take the top ASTVec
-    //     //and add the input assert to it
-    //     if (!_asserts.empty())
-    //       {
-    //         v = _asserts.back();
-    //         //v->push_back(TransformFormula(assert));
-    //         v->push_back(assert);
-    //       }
-    //     else
-    //       {
-    //         //else create a logical context, and add it to the top of the
-    //         //stack
-    //         v = new ASTVec();
-    //         //v->push_back(TransformFormula(assert));
-    //         v->push_back(assert);
-    //         _asserts.push_back(v);
-    //       }
+    ASTVec& v = *_asserts.back();
+    v.push_back(assert);
   }
 
   void STPMgr::Push(void)
   {
-    //     ASTVec * v;
-    //     v = new ASTVec();
-    IntToASTVecMap * v;
-    v = new IntToASTVecMap();
-    _asserts.push_back(v);
+    _asserts.push_back(new ASTVec());
   }
 
-  void STPMgr::Pop(void)
+  void
+  STPMgr::Pop(void)
   {
-    if (!_asserts.empty())
-      {
-	IntToASTVecMap * c = _asserts.back();
-	IntToASTVecMap::iterator it = c->begin(), itend = c->end();
-	for(;it!=itend;it++)
-	  {
-	    ASTVec * cc = (*it).second;
-	    cc->clear();
-	    delete cc;
-	  }
-	delete c;
-	_asserts.pop_back();
-	
-        // ASTVec * c = _asserts.back();
-	//         //by calling the clear function we ensure that the
-	//         ref count is //decremented for the ASTNodes stored
-	//         in c
-	//         c->clear();
-	//         delete c;
-	//         _asserts.pop_back();
-      }
+    if (_asserts.empty())
+      FatalError("POP on empty.");
+
+    ASTVec * c = _asserts.back();
+    c->clear();
+    delete c;
+    _asserts.pop_back();
   }
 
   void STPMgr::AddQuery(const ASTNode& q)
@@ -540,73 +485,20 @@ namespace BEEV
     return _current_query;
   }
 
-  const ASTVec STPMgr::GetAsserts(void)
+  const ASTVec
+  STPMgr::GetAsserts(void)
   {
-    vector<IntToASTVecMap *>::iterator it = _asserts.begin();
-    vector<IntToASTVecMap *>::iterator itend = _asserts.end();
+    vector<ASTVec *>::iterator it = _asserts.begin();
+    vector<ASTVec *>::iterator itend = _asserts.end();
 
     ASTVec v;
-    for(; it != itend; it++)
+    for (; it != itend; it++)
       {
-	IntToASTVecMap::iterator jt = (*it)->begin();
-	IntToASTVecMap::iterator jtend = (*it)->end();
-	
-	for(; jt != jtend; jt++)
-	  {
-	    ASTVec * cc = (*jt).second; 
-	    if(NULL != cc && !cc->empty())
-	      {
-		v.insert(v.end(), cc->begin(), cc->end());
-	      }
-	  }
+        if (!(*it)->empty())
+          v.insert(v.end(), (*it)->begin(), (*it)->end());
       }
-
     return v;
-    // vector<ASTVec *>::iterator it = _asserts.begin();
-    //     vector<ASTVec *>::iterator itend = _asserts.end();
-    
-    //     ASTVec v;
-    //     for (; it != itend; it++)
-    //       {
-    //         if (!(*it)->empty())
-    //           v.insert(v.end(), (*it)->begin(), (*it)->end());
-    //       }
-    //     return v;
   }
-
-  const ASTVec STPMgr::GetAsserts_WithKey(int key)
-  {
-    vector<IntToASTVecMap *>::iterator it = _asserts.begin();
-    vector<IntToASTVecMap *>::iterator itend = _asserts.end();
-
-    ASTVec v;
-    for(; it != itend; it++)
-      {
-	IntToASTVecMap * assert_map = (*it);
-	ASTVec * cc = (*assert_map)[key];
-	if(!cc->empty())
-	  {
-	    v.insert(v.end(), cc->begin(), cc->end());
-	  }
-      }
-
-    return v;   
-  }
-
-  // //Create a new variable of ValueWidth 'n'
-  //   ASTNode STPMgr::NewArrayVar(unsigned int index, unsigned int value)
-  //   {
-  //     std::string c("v");
-  //     char d[32];
-  //     sprintf(d, "%d", _symbol_count++);
-  //     std::string ccc(d);
-  //     c += "_writearray_" + ccc;
-
-  //     ASTNode CurrentSymbol = CreateSymbol(c.c_str());
-  //     CurrentSymbol.SetValueWidth(value);
-  //     CurrentSymbol.SetIndexWidth(index);
-  //     return CurrentSymbol;
-  //   } //end of NewArrayVar()
 
   //prints statistics for the ASTNode
   void STPMgr::ASTNodeStats(const char * c, const ASTNode& a)
@@ -726,15 +618,11 @@ namespace BEEV
  		_symbol_unique_table.clear();
  		_bvconst_unique_table.clear();
 
- 		vector<IntToASTVecMap*>::iterator it = _asserts.begin();
- 		vector<IntToASTVecMap*>::iterator itend = _asserts.end();
+ 		vector<ASTVec*>::iterator it = _asserts.begin();
+ 		vector<ASTVec*>::iterator itend = _asserts.end();
 
  		for (; it != itend; it++) {
- 			IntToASTVecMap * j = (*it);
- 			for (IntToASTVecMap::iterator it2 = j->begin(); it2 != j->end(); it2++) {
- 				it2->second->clear();
- 				delete (it2->second);
- 			}
+ 			ASTVec * j = (*it);
  			j->clear();
  			delete j;
  		}
