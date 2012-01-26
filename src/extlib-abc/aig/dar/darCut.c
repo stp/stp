@@ -48,6 +48,20 @@ static inline int Dar_WordCountOnes( unsigned uWord )
     return  (uWord & 0x0000FFFF) + (uWord>>16);
 }
 
+// This doesn't count the 1-bits, just strips
+// off the trailing 1-bit four times. If it's not zero,
+// then there are >4 1-bits.
+static inline unsigned Dar_FiveOrMoreBits( unsigned uWord )
+{
+   uWord = (uWord-1)&uWord;
+   uWord = (uWord-1)&uWord;
+   uWord = (uWord-1)&uWord;
+   uWord = (uWord-1)&uWord;
+
+  return uWord; // non-zero if >=5 ones.
+}
+
+
 /**Function*************************************************************
 
   Synopsis    [Compute the cost of the cut.]
@@ -627,8 +641,13 @@ Dar_Cut_t * Dar_ObjComputeCuts( Dar_Man_t * p, Aig_Obj_t * pObj )
     {
         p->nCutsAll++;
         // make sure K-feasible cut exists
-        if ( Dar_WordCountOnes(pCut0->uSign | pCut1->uSign) > 4 )
-            continue;
+
+        //  if (Dar_WordCountOnes(pCut0->uSign | pCut1->uSign) > 4)
+          //  continue;
+
+        if (0 != Dar_FiveOrMoreBits(pCut0->uSign | pCut1->uSign))
+          continue;
+
         // get the next cut of this node
         pCut = Dar_CutFindFree( p, pObj );
         // create the new cut
