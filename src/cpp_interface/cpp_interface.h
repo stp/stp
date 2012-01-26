@@ -48,6 +48,11 @@ namespace BEEV
     vector<Entry> cache;
     vector<vector<ASTNode> > symbols;
 
+    void checkInvariant()
+    {
+      assert(bm.getAssertLevel() == cache.size());
+      assert(bm.getAssertLevel() == symbols.size());
+    }
 
   public:
     LETMgr letMgr;
@@ -58,8 +63,13 @@ namespace BEEV
     {
       assert(nf != NULL);
       alreadyWarned = false;
+
       cache.push_back(Entry(SOLVER_UNDECIDED));
       symbols.push_back(ASTVec());
+
+      if (bm.getVectorOfAsserts().size() ==0)
+        bm.Push();
+
       print_success = false;
     }
 
@@ -77,6 +87,12 @@ namespace BEEV
     GetAsserts(void)
     {
       return bm.GetAsserts();
+    }
+
+    const ASTVec
+    getAssertVector(void)
+    {
+      return bm.getVectorOfAsserts();
     }
 
     UserDefinedFlags&
@@ -239,12 +255,15 @@ namespace BEEV
       if (symbols.size() == 1)
         FatalError("Can't pop away the default base element.");
 
+      bm.Pop();
+
       assert(symbols.size() == cache.size());
       cache.erase(cache.end() - 1);
       ASTVec & current = symbols.back();
       for (int i = 0; i < current.size(); i++)
         letMgr._parser_symbol_table.erase(current[i]);
       symbols.erase(symbols.end() - 1);
+      checkInvariant();
     }
 
     void
@@ -256,8 +275,10 @@ namespace BEEV
       else
         cache.push_back(Entry(SOLVER_UNDECIDED));
 
+      bm.Push();
       symbols.push_back(ASTVec());
       assert(symbols.size() == cache.size());
+      checkInvariant();
     }
 
     void
@@ -271,7 +292,7 @@ namespace BEEV
     }
 
     void
-    checkSat(vector<ASTVec> & assertionsSMT2);
+    checkSat(const ASTVec & assertionsSMT2);
 
     void
     cleanUp()

@@ -113,6 +113,11 @@ namespace BEEV
             {(*it)->iteration = 0;}
     }
 
+    int getAssertLevel()
+    {
+      return _asserts.size();
+    }
+
   private:
 
     // Stack of Logical Context. each entry in the stack is a logical
@@ -388,7 +393,9 @@ namespace BEEV
     void Push(void);    
     const ASTNode PopQuery();
     const ASTNode GetQuery();
-    const ASTVec GetAsserts(void);
+    const ASTVec GetAsserts();
+    const ASTVec getVectorOfAsserts();
+
 
     //add a query/assertion to the current logical context
     void AddQuery(const ASTNode& q);

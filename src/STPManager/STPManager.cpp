@@ -485,6 +485,32 @@ namespace BEEV
     return _current_query;
   }
 
+  // return a vector of the levels.
+  // before returning any vector with >1 nodes is turned into a conjunct.
+  const ASTVec STPMgr::getVectorOfAsserts()
+  {
+    vector<ASTVec *>::iterator it = _asserts.begin();
+    vector<ASTVec *>::iterator itend = _asserts.end();
+
+    ASTVec result;
+    for(; it != itend; it++)
+      {
+        ASTVec& a = (**it);
+        if (a.size() ==0)
+          a.push_back(ASTTrue);
+        else if (a.size() > 1)
+          {
+            ASTNode conjunct = defaultNodeFactory->CreateNode(AND,a);
+            a.resize(0);
+            a.push_back(conjunct);
+          }
+
+        result.push_back(a[0]);
+     }
+
+    return result;
+  }
+
   const ASTVec
   STPMgr::GetAsserts(void)
   {

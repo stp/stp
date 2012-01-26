@@ -25,12 +25,11 @@ using namespace __gnu_cxx;
 using namespace BEEV;
 
 extern int smtparse(void*);
-extern int smt2parse(void*);
+extern int smt2parse();
 extern int cvcparse(void*);
 extern int cvclex_destroy(void);
 extern int smtlex_destroy(void);
 extern int smt2lex_destroy(void);
-extern vector<ASTVec> assertionsSMT2;
 
 // callback for SIGALRM.
 void handle_time_out(int parameter){
@@ -446,9 +445,7 @@ int main(int argc, char ** argv) {
 			smtparse((void*) AssertsQuery);
 			smtlex_destroy();
 		} else if (bm->UserFlags.smtlib2_parser_flag) {
-		        assertionsSMT2.push_back(ASTVec());
-		        smt2parse((void*) AssertsQuery);
-			//parserInterface->letMgr.cleanupParserSymbolTable();
+		        smt2parse();
 			smt2lex_destroy();
 		} else {
 			cvcparse((void*) AssertsQuery);

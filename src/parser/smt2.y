@@ -65,14 +65,12 @@
     return 1;
   }
 
-  ASTNode querysmt2;
-  vector<ASTVec> assertionsSMT2;
-    
+   
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
-#define YYPARSE_PARAM AssertsQuery
+
   %}
 
 %union {  
@@ -195,8 +193,6 @@
 %%
 cmd: commands END
 {
-       querysmt2 = ASTNode();
-       assertionsSMT2.clear();
        parserInterface->cleanUp();
        YYACCEPT;
 }
@@ -211,14 +207,12 @@ commands: commands cmdi
 cmdi:
 	LPAREN_TOK EXIT_TOK RPAREN_TOK
 	{
-	   querysmt2 = ASTNode();
-       assertionsSMT2.clear();
        parserInterface->cleanUp();
        YYACCEPT;
 	}
 |	LPAREN_TOK CHECK_SAT_TOK RPAREN_TOK
 	{
-		parserInterface->checkSat(assertionsSMT2);
+		parserInterface->checkSat(parserInterface->getAssertVector());
 	}
 |
 	LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
@@ -247,17 +241,13 @@ cmdi:
 		for (int i=0; i < $3;i++)
 		{
 			parserInterface->push();
-			assertionsSMT2.push_back(ASTVec());
 		}
 		parserInterface->success();
 	}
 |	LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
 	{
 		for (int i=0; i < $3;i++)
-		{
 			parserInterface->pop();
-			assertionsSMT2.erase(assertionsSMT2.end()-1);
-		}
 		parserInterface->success();
 	}
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
@@ -266,7 +256,7 @@ cmdi:
     }
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
 	{
-	assertionsSMT2.back().push_back(*$3);
+	parserInterface->AddAssert(*$3);
 	parserInterface->deleteNode($3);
 	parserInterface->success();
 	}
