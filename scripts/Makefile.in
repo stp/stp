@@ -117,9 +117,9 @@ regressall: all
 	$(MAKE) regresseric
 	$(MAKE) regresshistar
 	$(MAKE) regresscrypto
-	$(MAKE) unit_test
 	$(MAKE) regresscapi
-
+	$(MAKE) regresscloud9
+	$(MAKE) unit_test
 
 # Checks that simplifications are working.
 .PHONY: unit_test
