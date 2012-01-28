@@ -15,10 +15,11 @@
 #include "../../AST/AST.h"
 #include "../../STPManager/STPManager.h"
 #include "ClauseList.h"
+#include "../../boost/noncopyable.hpp"
 
 namespace BEEV
 {
-  class CNFMgr
+  class CNFMgr  : boost::noncopyable
   {  
   private:
 
