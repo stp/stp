@@ -120,6 +120,10 @@ int main(int argc, char ** argv) {
             Ctr_Example);
   
 
+  auto_ptr<SimplifyingNodeFactory> simplifyingNF( new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
+  bm->defaultNodeFactory = simplifyingNF.get();
+
+
   //populate the help string
   helpstring += 
     "STP version            : " + version + "\n"
@@ -413,8 +417,7 @@ int main(int argc, char ** argv) {
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
 	{
- 	    SimplifyingNodeFactory simpNF(*bm->hashingNodeFactory, *bm);
-		TypeChecker nfTypeCheckSimp(simpNF, *bm);
+                TypeChecker nfTypeCheckSimp(*simplifyingNF.get(), *bm);
 		TypeChecker nfTypeCheckDefault(*bm->defaultNodeFactory, *bm);
 
 		Cpp_interface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
