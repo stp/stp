@@ -40,7 +40,7 @@ class SubstitutionMap  : boost::noncopyable
 
 	void buildDepends(const ASTNode& n0, const ASTNode& n1);
 	void loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>& visited);
-	bool loops(const ASTNode& n0, const ASTNode& n1);
+        bool loops(const ASTNode& n0, const ASTNode& n1);
 
 	int substitutionsLastApplied;
 public:
@@ -153,10 +153,17 @@ public:
 		if (e0.GetKind() == SYMBOL)
 		{
 			if (CheckSubstitutionMap(e0))
-				return false; // already in the map.
+			  {
+	                    // e0 and e1 might both be variables, e0 is already substituted for,
+			    // but maybe not e1.
+			    if (e1.GetKind() == SYMBOL)
+	                       i = -1;
+	                     else
+	                       return false; // already in the map.
+			  }
 
 			if (loops(e0,e1))
-				return false; // loops.
+			    return false; // loops.
 		}
 
 		if (e1.GetKind() == SYMBOL)
