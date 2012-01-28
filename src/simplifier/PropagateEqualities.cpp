@@ -21,7 +21,11 @@ namespace BEEV
     Kind k = lhs.GetKind();
 
     if (k == SYMBOL)
-        return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for or loops.
+        {
+          if (lhs == rhs)
+            return true;
+          return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for or loops.
+        }
 
     if (k == NOT)
       return searchXOR(lhs[0], nf->CreateNode(NOT, rhs));
@@ -61,7 +65,12 @@ namespace BEEV
     const int width = lhs.GetValueWidth();
 
     if (lhs.GetKind() == SYMBOL)
-          return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for, or if the RHS contains the LHS.
+      {
+        if (lhs == rhs)
+          return true;
+
+        return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for, or if the RHS contains the LHS.
+      }
 
     if (lhs.GetKind() == BVUMINUS)
       return searchTerm(lhs[0], nf->CreateTerm(BVUMINUS, width, rhs));
