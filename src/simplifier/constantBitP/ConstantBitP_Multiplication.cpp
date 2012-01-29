@@ -212,31 +212,107 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
 	return NOT_IMPLEMENTED;
 }
 
+// Remove from x any trailing "boths", that don't have support in y and output.
+void
+trailingOneReasoning(FixedBits& x, FixedBits&y, FixedBits& output)
+{
+  const int bitwidth = output.getWidth();
+
+  const int x_min = x.minimum_trailingOne();
+  const int x_max = x.maximum_trailingOne();
+
+  const int y_min = y.minimum_trailingOne();
+  const int y_max = y.maximum_trailingOne();
+
+  int output_max = output.maximum_trailingOne();
+
+  bool done=false;
+  for (int i =x_min; i <=std::min(x_max,bitwidth-1);i++)
+    {
+      if (x[i] == '1')
+        break;
+
+      if (x[i] == '0')
+        continue;
+
+      assert (!done);
+      for (int j =y_min; j <= std::min(y_max,output_max);j++)
+        {
+          if (j+i >= bitwidth || (y[j] != '0' && output[i+j] != '0'))
+            {
+              done=true;
+              break;
+            }
+        }
+      if (!done)
+        {
+          x.setFixed(i, true);
+          x.setValue(i, false);
+        }
+      else
+        break;
+    }
+}
+
+
+Result
+useTrailingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
+{
+  int min = x.minimum_numberOfTrailingZeroes();
+  min += y.minimum_numberOfTrailingZeroes();
+
+  min = std::min(min, output.getWidth());
+
+  if (setToZero(output,0,min))
+       return CONFLICT;
+
+  int output_zeroes = output.minimum_numberOfTrailingZeroes();
+  int x_zeroes = x.maximum_numberOfTrailingZeroes();
+  if (x_zeroes < output_zeroes)
+      if (setToZero(y,0,(output_zeroes - x_zeroes)))
+           return CONFLICT;
+
+  int y_zeroes = y.maximum_numberOfTrailingZeroes();
+  if (y_zeroes < output_zeroes)
+      if (setToZero(x,0,(output_zeroes - y_zeroes)))
+           return CONFLICT;
+
+ return NOT_IMPLEMENTED;
+}
+
 
 
 // if x has n trailing zeroes, and y has m trailing zeroes, then the output has n+m trailing zeroes.
-// if the output has n trailing zeroes and x has p trailing zeroes, then y has at least n-p trailing zeroes.
+// if the output has n trailing zeroes and x has p trailing zeroes, then y has n-p trailing zeroes.
   Result
   useTrailingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
   {
-    int min = x.minimum_numberOfTrailingZeroes();
-    min += y.minimum_numberOfTrailingZeroes();
+    const int bitwidth = output.getWidth();
 
-    min = std::min(min, output.getWidth());
+    trailingOneReasoning(x,y,output);
+    trailingOneReasoning(y,x,output);
+
+    //Calculate the minimum number of trailing zeroes in the operands,
+    //the result has a >= number.
+    int min = x.minimum_numberOfTrailingZeroes() + y.minimum_numberOfTrailingZeroes();
+    min = std::min(min, bitwidth);
 
     if (setToZero(output,0,min))
          return CONFLICT;
 
-    int output_zeroes = output.minimum_numberOfTrailingZeroes();
-    int x_zeroes = x.maximum_numberOfTrailingZeroes();
-    if (x_zeroes < output_zeroes)
-        if (setToZero(y,0,(output_zeroes - x_zeroes)))
-             return CONFLICT;
-
-    int y_zeroes = y.maximum_numberOfTrailingZeroes();
-    if (y_zeroes < output_zeroes)
-        if (setToZero(x,0,(output_zeroes - y_zeroes)))
-             return CONFLICT;
+    // This checks that the new code does indeed generalise the old code.
+#ifndef NDEBUG
+    FixedBits prior_x = x;
+    FixedBits prior_y = y;
+    FixedBits prior_output = output;
+    Result r=  useTrailingZeroesToFix_OLD( x, y,  output);
+    if (r != CONFLICT)
+      {
+        assert(FixedBits::equals(x,prior_x));
+        assert(FixedBits::equals(y,prior_y));
+        assert(FixedBits::equals(output,prior_output));
+      }
+#endif
 
    return NOT_IMPLEMENTED;
   }

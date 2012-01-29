@@ -144,6 +144,32 @@ namespace simplifier
       }
 
       int
+      minimum_trailingOne()
+      {
+        int i = 0;
+        for (; i < getWidth(); i++)
+          {
+            if (!isFixed(i) || getValue(i))
+              break;
+          }
+        return i;
+      }
+
+      int
+      maximum_trailingOne()
+      {
+        int i = 0;
+        for (; i < getWidth(); i++)
+          {
+            if (isFixed(i) && getValue(i))
+              break;
+          }
+        return i;
+      }
+
+
+
+      int
       minimum_numberOfTrailingZeroes()
       {
         int i = 0;
