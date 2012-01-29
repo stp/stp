@@ -5,8 +5,8 @@
 #include "../../AST/AST.h"
 #include "../../simplifier/simplifier.h"
 #include "MultiplicationStats.h"
-#include "multiplication/ImplicationGraph.h"
 #include "multiplication/ColumnCounts.h"
+#include "multiplication/ColumnStats.h"
 // Multiply.
 
 
@@ -537,7 +537,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 		return r;
 	}
 
-	ImplicationGraph graph;
+//	ImplicationGraph graph;
 
 	bool changed = true;
 	while (changed)
@@ -565,61 +565,6 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 
 		if (r == CONFLICT)
 			return CONFLICT;
-
-		do
-		{
-			r = NO_CHANGE;
-
-			if (debug_multiply)
-			{
-				cc.print("At start");
-			}
-
-			for (unsigned column = 0; column < bitWidth; column++)
-			{
-				if (cc.columnL[column] == cc.columnH[column])
-				{
-					r= graph.discoverNewNANDs(x, y, column,
-									cc.columnL[column]);
-					if (CONFLICT == r)
-						return CONFLICT;
-
-					r = graph.discoverNewXORs(x, y, column, cc.columnL[column]);
-					if (CONFLICT == r)
-						return CONFLICT;
-
-				}
-			}
-
-			r = graph.fixUsingImplications(x, y);
-			if (CONFLICT == r)
-				return CONFLICT;
-
-			if (debug_multiply)
-			{
-				cc.print("After fixing using implications");
-			}
-
-			r = graph.updateSums(x, y, cc);
-
-			if (CONFLICT == r)
-				return CONFLICT;
-
-			if (debug_multiply)
-			{
-				cc.print("After implication graph updating sums");
-			}
-
-			r = cc.fixedPoint(output);
-
-			if (debug_multiply)
-			{
-				cc.print("After last fixed point");
-			}
-
-			if (r == CONFLICT)
-				return CONFLICT;
-		} while (r != NO_CHANGE);
 
 		r = NO_CHANGE;
 
