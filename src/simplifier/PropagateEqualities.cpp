@@ -10,7 +10,7 @@ namespace BEEV
    * The most obvious case it doesn't check for is NOT (OR (.. .. )).
    * I suspect this could take exponential time in the worst case, but on the benchmarks I've tested,
    * it finishes in reasonable time.
-   * The obvious ways to speed it up (if required), are to create the RHS lazily.
+   * The obvious way to speed it up (if required), is to create the RHS lazily.
    */
 
   // The old XOR code used to use updateSolverMap instead of UpdateSubstitutionMap, I've no idea why.
@@ -20,12 +20,11 @@ namespace BEEV
   {
     Kind k = lhs.GetKind();
 
+    if (lhs == rhs)
+      return true;
+
     if (k == SYMBOL)
-        {
-          if (lhs == rhs)
-            return true;
           return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for or loops.
-        }
 
     if (k == NOT)
       return searchXOR(lhs[0], nf->CreateNode(NOT, rhs));
@@ -64,13 +63,12 @@ namespace BEEV
   {
     const int width = lhs.GetValueWidth();
 
-    if (lhs.GetKind() == SYMBOL)
-      {
-        if (lhs == rhs)
-          return true;
+    if (lhs == rhs)
+      return true;
 
+
+    if (lhs.GetKind() == SYMBOL)
         return simp->UpdateSubstitutionMap(lhs, rhs); // checks whether it's been solved for, or if the RHS contains the LHS.
-      }
 
     if (lhs.GetKind() == BVUMINUS)
       return searchTerm(lhs[0], nf->CreateTerm(BVUMINUS, width, rhs));
