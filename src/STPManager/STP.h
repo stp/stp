@@ -51,7 +51,7 @@ namespace BEEV
 ArrayTransformer * arrayTransformer;
     
           // calls sizeReducing and the bitblasting simplification.
-          ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score);
+          ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score, int & actualBBSize);
 
 
     /****************************************************************

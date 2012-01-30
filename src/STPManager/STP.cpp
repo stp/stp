@@ -88,7 +88,7 @@ namespace BEEV {
   } //End of TopLevelSTP()
   
   ASTNode
-  STP::callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score)
+  STP::callSizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe, const int initial_difficulty_score, int & actualBBSize)
   {
     while (true)
       {
@@ -97,6 +97,8 @@ namespace BEEV {
         if (last == simplified_solved_InputToSAT)
           break;
       }
+
+    actualBBSize=-1;
 
     // Expensive, so only want to do it once.
     if (bm->UserFlags.isSet("bitblast-simplification", "1") && initial_difficulty_score < 250000)
@@ -112,6 +114,7 @@ namespace BEEV {
             simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
+        actualBBSize =  bbnm.totalNumberOfNodes();
       }
     return simplified_solved_InputToSAT;
   }
@@ -238,16 +241,22 @@ namespace BEEV {
 
     unsigned initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
 
+    int bitblasted_difficulty = -1;
+
     // Fixed point it if it's not too difficult.
     // Currently we discards all the state each time sizeReducing is called,
     // so it's expensive to call.
     if ((!arrayops && initial_difficulty_score < 1000000) || bm->UserFlags.isSet("preserving-fixedpoint", "0"))
-           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver.get(),pe.get(), initial_difficulty_score);
+           simplified_solved_InputToSAT = callSizeReducing(simplified_solved_InputToSAT, bvSolver.get(),pe.get(), initial_difficulty_score, bitblasted_difficulty);
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {
         initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
       }
+
+    if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
+      cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
+
 
     if (bm->UserFlags.stats_flag)
       cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
@@ -430,6 +439,31 @@ namespace BEEV {
     //bm->Begin_RemoveWrites = false;
 
     long final_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+
+    bool worse= false;
+    if (final_difficulty_score > 1.1 * initial_difficulty_score)
+        worse = true;
+
+    // It's of course very wasteful to do this! Later I'll make it reuse the work..
+    // We bit-blast again, in order to throw it away, so that we can measure whether
+    // the number of AIG nodes is smaller. The difficulty score is sometimes completely
+    // wrong, the sage-app7 are the motivating examples. The other way to improve it would
+    // be to fix the difficulty scorer!
+    if (!worse && (bitblasted_difficulty != -1))
+     {
+        BBNodeManagerAIG bbnm;
+        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
+        bb.BBForm(simplified_solved_InputToSAT);
+        int newBB=  bbnm.totalNumberOfNodes();
+        if (bm->UserFlags.stats_flag)
+          cerr << "Final BB Size:" << newBB << endl;
+
+        if (bitblasted_difficulty < newBB)
+          worse = true;
+    }
+
+
     if (bm->UserFlags.stats_flag)
       {
         cerr << "Initial Difficulty Score:" << initial_difficulty_score << endl;
@@ -437,7 +471,7 @@ namespace BEEV {
       }
 
     bool optimize_enabled = bm->UserFlags.optimize_flag;
-    if (final_difficulty_score > 1.1 * initial_difficulty_score &&
+    if (worse &&
        (!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")) &&
        bm->UserFlags.isSet("difficulty-reversion", "1"))
       {

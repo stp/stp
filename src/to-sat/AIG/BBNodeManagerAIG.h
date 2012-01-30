@@ -38,6 +38,12 @@ public:
         typedef map<ASTNode, vector<BBNodeAIG> > SymbolToBBNode;
 
         SymbolToBBNode symbolToBBNode;
+
+        int totalNumberOfNodes()
+        {
+          return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
+        }
+
 private:
         // AIGs can only take two parameters. This makes a log_2 height
         // tower of varadic inputs.
