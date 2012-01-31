@@ -97,6 +97,10 @@ namespace BEEV
       vector<BBNode> compareOddEven(const vector<BBNode>& in);
 
 
+
+      void  setColumnsToZero(vector<list<BBNode> >& products, set<BBNode>& support,const ASTNode&n);
+
+
       void
       sortingNetworkAdd(set<BBNode>& support, list<BBNode>& current, vector<BBNode>& currentSorted, vector<BBNode>& priorSorted);
 
@@ -105,6 +109,8 @@ namespace BEEV
       vector<BBNode> v7(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
       vector<BBNode> v8(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
       vector<BBNode> v9(vector<list<BBNode> >& products, set<BBNode>& support,  const ASTNode&n);
+      vector<BBNode> v13(vector<list<BBNode> >& products, set<BBNode>& support, const ASTNode&n);
+
 
       vector<BBNode>
       multWithBounds(const ASTNode&n, vector<list<BBNode> >& products, set<BBNode>& toConjoinToTop);
@@ -224,7 +230,7 @@ namespace BEEV
       const bool division_variant_3;
       const bool adder_variant;
       const bool bbbvle_variant;
-      const bool multiplication_upper_bound;
+      const bool upper_multiplication_bound;
       const bool bvplus_variant;
 
       const string multiplication_variant;
@@ -253,7 +259,7 @@ namespace BEEV
           division_variant_3("1" == _uf->get("division_variant_3", "1")),
 
           multiplication_variant(_uf->get("multiplication_variant", "3")),
-          multiplication_upper_bound("1" == _uf->get("upper_multiplication_bound", "0")),
+          upper_multiplication_bound("1" == _uf->get("upper_multiplication_bound", "0")),
 
           adder_variant("1" == _uf->get("adder_variant", "1")),
 

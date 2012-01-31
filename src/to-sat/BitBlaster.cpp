@@ -1240,7 +1240,7 @@ namespace BEEV
       // If we have details of the partial products which can be true,
       int ignore = -1;
       simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-      if (!multiplication_upper_bound)
+      if (!upper_multiplication_bound)
         ms = NULL;
 
       BBNodeVec results;
@@ -1359,7 +1359,7 @@ namespace BEEV
       const int bitWidth = n.GetValueWidth();
 
       int ignored=0;
-      assert(multiplication_upper_bound);
+      assert(upper_multiplication_bound);
       simplifier::constantBitP::MultiplicationStats& ms = *getMS(n, ignored);
 
 
@@ -1565,7 +1565,7 @@ namespace BEEV
       // If we have details of the partial products which can be true,
       int highestZero = -1;
       const simplifier::constantBitP::MultiplicationStats* ms = getMS(n, highestZero);
-      if (!multiplication_upper_bound)
+      if (!upper_multiplication_bound)
         ms = NULL;
 
       BBNodeVec ycopy(y);
@@ -1715,6 +1715,47 @@ namespace BEEV
         }
     }
 
+  // If it's not booth encoded, and the column sum is zero,
+  // then set that all the partial products must be zero.
+  // For this to do anything constant bit propagation must be
+  // turned on, and upper_multiplication_bound must be set.
+  template<class BBNode, class BBNodeManagerT>
+    void
+    BitBlaster<BBNode, BBNodeManagerT>::setColumnsToZero(vector<list<BBNode> >& products, set<BBNode>& support,
+        const ASTNode&n)
+    {
+      const int bitWidth = n.GetValueWidth();
+
+      // If we have details of the partial products which can be true,
+      int highestZero = -1;
+      simplifier::constantBitP::MultiplicationStats* ms = getMS(n, highestZero);
+      if (!upper_multiplication_bound)
+        ms = NULL;
+
+      if (ms == NULL)
+        return;
+
+      for (int i = 0; i < bitWidth; i++)
+        {
+        if (ms->sumH[i] == 0)
+          {
+          while (products[i].size() > 0)
+            {
+            BBNode curr = products[i].back();
+            products[i].pop_back();
+
+            if (BBFalse == curr)
+              continue;
+
+            support.insert(nf->CreateNode(NOT, curr));
+            }
+          products[i].push_back(BBFalse);
+
+          }
+        }
+    }
+
+
 // Multiply two bitblasted numbers
   template<class BBNode, class BBNodeManagerT>
     BBNodeVec
@@ -1744,16 +1785,13 @@ namespace BEEV
         {
         return mult_normal(x, y, support, n);
         }
-      else if (multiplication_variant == "2")
-        {
-        //cout << "v2";
-        mult_allPairs(x, y, support, products);
-        return buildAdditionNetworkResult(products, support, n);
-        }
-
+      //else if (multiplication_variant == "2")
+        // V2 used to be V3 with normal rather than booth recoding.
+        // To recreate V2, use V3 and turn off Booth recoding.
       else if (multiplication_variant == "3")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products, n);
+        setColumnsToZero(products,support,n);
         return buildAdditionNetworkResult(products, support, n);
         }
       else if (multiplication_variant == "4")
@@ -1773,35 +1811,47 @@ namespace BEEV
         }
       else if (multiplication_variant == "5")
               {
-              if (!statsFound(n) || !multiplication_upper_bound)
+              if (!statsFound(n) || !upper_multiplication_bound)
                 {
                 mult_Booth(_x, _y, support, n[0], n[1], products, n);
+                setColumnsToZero(products,support,n);
                 return buildAdditionNetworkResult(products, support, n);
                 }
 
 
         mult_allPairs(x, y, support, products);
+        setColumnsToZero(products,support,n);
         return multWithBounds(n, products, support);
         }
       else if (multiplication_variant == "6")
         {
           mult_Booth(_x, _y, support,n[0],n[1],products,n);
+          setColumnsToZero(products,support,n);
           return v6(products, support, n);
         }
       else if (multiplication_variant == "7")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        setColumnsToZero(products,support,n);
         return v7(products, support, n);
         }
       else if (multiplication_variant == "8")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        setColumnsToZero(products,support,n);
         return v8(products, support, n);
         }
       else if (multiplication_variant == "9")
         {
         mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        setColumnsToZero(products,support,n);
         return v9(products, support,n);
+        }
+      else if (multiplication_variant == "13")
+        {
+        mult_Booth(_x, _y, support, n[0], n[1], products,n);
+        setColumnsToZero(products,support,n);
+        return v13(products, support,n);
         }
       else
         {
@@ -1921,6 +1971,80 @@ namespace BEEV
   return buildAdditionNetworkResult(products ,support, n);
   }
 
+  template<class BBNode, class BBNodeManagerT>
+    BBNodeVec
+    BitBlaster<BBNode, BBNodeManagerT>::v13(vector<list<BBNode> >& products, set<BBNode>& support, const ASTNode&n)
+    {
+      const int bitWidth = n.GetValueWidth();
+
+      int ignore = -1;
+      simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
+      if (!upper_multiplication_bound)
+        ms = NULL;
+
+      bool done = false;
+
+      vector<BBNode> a(bitWidth);
+      vector<BBNode> b(bitWidth);
+
+      while (!done)
+        {
+        done = true;
+
+        for (int i = 0; i < bitWidth; i++)
+          {
+          if (products[i].size() > 2)
+            done = false;
+          if (products[i].size() > 0)
+            {
+            a[i] = products[i].back();
+            products[i].pop_back();
+            }
+          else
+            a[i] = BBFalse;
+
+          if (products[i].size() > 0)
+            {
+            b[i] = products[i].back();
+            products[i].pop_back();
+            }
+          else
+            b[i] = BBFalse;
+
+          if (ms != NULL && ms->sumH[i] == 0)
+            {
+            if (a[i] != BBFalse)
+              {
+              support.insert(nf->CreateNode(NOT, a[i]));
+              a[i] = BBFalse;
+              }
+
+            if (b[i] != BBFalse)
+              {
+              support.insert(nf->CreateNode(NOT, b[i]));
+              b[i] = BBFalse;
+              }
+            }assert(!a[i].IsNull());
+          assert(!b[i].IsNull());
+
+          }
+        BBPlus2(a, b, BBFalse);
+        for (int i = 0; i < bitWidth; i++)
+          products[i].push_back(a[i]);
+        }
+
+      BBNodeVec results;
+      for (int i = 0; i < bitWidth; i++)
+        {
+        assert(products[i].size() ==1);
+        results.push_back(products[i].back());
+        }
+
+      assert(results.size() == ((unsigned)bitWidth));
+      return results;
+    }
+
+
 
   // Sorting network that delivers carries directly to the correct column.
   // For instance, if there are 6 true in a column, then a carry will flow to column+1, and column+2.
@@ -2007,7 +2131,7 @@ namespace BEEV
     // If we have details of the partial products which can be true,
     int ignore = -1;
     simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-    if (!multiplication_upper_bound)
+    if (!upper_multiplication_bound)
       ms = NULL;
 
 
@@ -2076,7 +2200,7 @@ namespace BEEV
     // If we have details of the partial products which can be true,
     int ignore = -1;
     simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-    if (!multiplication_upper_bound)
+    if (!upper_multiplication_bound)
       ms = NULL;
 
 
