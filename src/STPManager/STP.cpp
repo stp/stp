@@ -43,6 +43,10 @@ namespace BEEV {
   SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts, 
 				      const ASTNode& query)
   {      
+
+    // Unfortunatey this is a global variable,which the aux function needs to overwrite sometimes.
+    bool saved_ack = bm->UserFlags.ackermannisation;
+
     ASTNode original_input;
 
     if (query != bm->ASTFalse)
@@ -83,6 +87,7 @@ namespace BEEV {
 
     delete newS;
 
+    bm->UserFlags.ackermannisation =saved_ack;
     return result;
 
   } //End of TopLevelSTP()
@@ -220,12 +225,14 @@ namespace BEEV {
     // The bit-vector simplifications are more thorough than the array simplifications. For example,
     // we don't currently do unconstrained elimination on arrays--- but we do for bit-vectors.
     // A better way to do this would be to estimate the number of axioms introduced.
-    // TODO: Should be enabled irrespective of whether refinement is enabled.
     // TODO: I chose the number of reads we perform this operation at randomly.
     bool removed = false;
-    if ((bm->UserFlags.ackermannisation && numberOfReadsLessThan(simplified_solved_InputToSAT,50)) || bm->UserFlags.isSet("upfront-ack", "0"))
+    if (((bm->UserFlags.ackermannisation && numberOfReadsLessThan(simplified_solved_InputToSAT,50)) || bm->UserFlags.isSet("upfront-ack", "0"))
+        || numberOfReadsLessThan(simplified_solved_InputToSAT,10)
+    )
       {
-          // If the number of axioms that would be added it small. Remove them.
+              // If the number of axioms that would be added it small. Remove them.
+              bm->UserFlags.ackermannisation = true;
               simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
               if (bm->UserFlags.stats_flag)
                 cerr << "Have removed array operations" << endl;
