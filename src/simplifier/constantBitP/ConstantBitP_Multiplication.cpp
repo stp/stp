@@ -162,10 +162,10 @@ Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
 	return NO_CHANGE;
 }
 
-// returns true on conflict. A helper function.
-bool
+Result
 setToZero(FixedBits& y, int from, int to)
 {
+  Result r = NO_CHANGE;
   assert(from<=to);
   assert(from>= 0);
   assert(to <= y.getWidth());
@@ -177,12 +177,12 @@ setToZero(FixedBits& y, int from, int to)
         {
           y.setFixed(i, true);
           y.setValue(i, false);
+          r = CHANGED;
         }
       else if (y[i] == '1')
-          return true;
+          return CONFLICT;
     }
-
-  return false;
+  return r;
 }
 
 // Finds the leading one in each of the two inputs.
@@ -260,10 +260,12 @@ Result useLeadingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
             }
           }
 
+#ifndef NDEBUG
         // Assert the new implementation fixes more than the old.
           assert(FixedBits::in(x,x_p ));
           assert(FixedBits::in(y,y_p ));
           assert(FixedBits::in(output, o_p));
+#endif
 
           CONSTANTBV::BitVector_Destroy(x_c);
           CONSTANTBV::BitVector_Destroy(y_c);
@@ -273,9 +275,11 @@ Result useLeadingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
     }
 
 // Remove from x any trailing "boths", that don't have support in y and output.
-void
+Result
 trailingOneReasoning(FixedBits& x, FixedBits&y, FixedBits& output)
 {
+  Result r = NO_CHANGE;
+
   const int bitwidth = output.getWidth();
 
   const int x_min = x.minimum_trailingOne();
@@ -308,38 +312,13 @@ trailingOneReasoning(FixedBits& x, FixedBits&y, FixedBits& output)
         {
           x.setFixed(i, true);
           x.setValue(i, false);
+          r = CHANGED;
         }
       else
         break;
     }
+  return r;
 }
-
-
-Result
-useTrailingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
-{
-  int min = x.minimum_numberOfTrailingZeroes();
-  min += y.minimum_numberOfTrailingZeroes();
-
-  min = std::min(min, output.getWidth());
-
-  if (setToZero(output,0,min))
-       return CONFLICT;
-
-  int output_zeroes = output.minimum_numberOfTrailingZeroes();
-  int x_zeroes = x.maximum_numberOfTrailingZeroes();
-  if (x_zeroes < output_zeroes)
-      if (setToZero(y,0,(output_zeroes - x_zeroes)))
-           return CONFLICT;
-
-  int y_zeroes = y.maximum_numberOfTrailingZeroes();
-  if (y_zeroes < output_zeroes)
-      if (setToZero(x,0,(output_zeroes - y_zeroes)))
-           return CONFLICT;
-
- return NOT_IMPLEMENTED;
-}
-
 
 
 // if x has n trailing zeroes, and y has m trailing zeroes, then the output has n+m trailing zeroes.
@@ -349,38 +328,24 @@ useTrailingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
   {
     const int bitwidth = output.getWidth();
 
-    trailingOneReasoning(x,y,output);
-    trailingOneReasoning(y,x,output);
+    Result r0 = trailingOneReasoning(x,y,output);
+    Result r1 = trailingOneReasoning(y,x,output);
 
     //Calculate the minimum number of trailing zeroes in the operands,
     //the result has a >= number.
     int min = x.minimum_numberOfTrailingZeroes() + y.minimum_numberOfTrailingZeroes();
     min = std::min(min, bitwidth);
 
-    if (setToZero(output,0,min))
-         return CONFLICT;
+    Result r2 = setToZero(output,0,min);
+    if (r2 == CONFLICT)
+      return CONFLICT;
 
-    // This checks that the new code does indeed generalise the old code.
-#ifndef NDEBUG
-    FixedBits prior_x = x;
-    FixedBits prior_y = y;
-    FixedBits prior_output = output;
-    Result r=  useTrailingZeroesToFix_OLD( x, y,  output);
-    if (r != CONFLICT)
-      {
-        assert(FixedBits::equals(x,prior_x));
-        assert(FixedBits::equals(y,prior_y));
-        assert(FixedBits::equals(output,prior_output));
-      }
-#endif
+    if (r0 == CHANGED || r1 == CHANGED || r2 == CHANGED)
+      return CHANGED;
 
-   return NOT_IMPLEMENTED;
+   return NO_CHANGE;
   }
 
-// About 80% of multipliction runtime is in this function.
-// 48% is generating the multiplicative inverse.
-// 17% is constructing the Simpliier.
-// 12% is destroying the simplifier.
 Result useInversesToSolve(FixedBits& x, FixedBits&y, FixedBits& output,
 		BEEV::STPMgr* bm)
 {
@@ -459,7 +424,7 @@ Result useInversesToSolve(FixedBits& x, FixedBits&y, FixedBits& output,
 			}
 			else if (!toSet->isFixed(i))
 			{
-				toSet->setFixed(i, true);
+			        toSet->setFixed(i, true);
 				toSet->setValue(i, expected);
 			}
 		}
@@ -564,40 +529,9 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 		cerr << output << endl;
 	}
 
-	Result r = NO_CHANGE;
-	r = useLeadingZeroesToFix(x, y, output);
+	Result r = useTrailingZeroesToFix(x, y, output);
 	if (CONFLICT == r)
-	{
-		if (debug_multiply)
-			cerr << "conflict 1";
-		return r;
-	}
-
-	r = useTrailingFixedToFix(x, y, output);
-	if (CONFLICT == r)
-	{
-		if (debug_multiply)
-			cerr << "conflict 2";
-		return r;
-	}
-
-	r = useTrailingZeroesToFix(x, y, output);
-	if (CONFLICT == r)
-	{
-		if (debug_multiply)
-			cerr << "conflict 3";
-		return r;
-	}
-
-	r = useInversesToSolve(x, y, output, bm);
-	if (CONFLICT == r)
-	{
-		if (debug_multiply)
-			cerr << "conflict 4";
-		return r;
-	}
-
-//	ImplicationGraph graph;
+	  return r;
 
 	bool changed = true;
 	while (changed)
@@ -610,11 +544,6 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 
 		ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth);
 
-		if (debug_multiply)
-		{
-			cc.print("initially");
-		}
-
 		// Use the number of zeroes and ones in a column to update the possible counts.
 		adjustColumns(x, y, columnL, columnH);
 
@@ -624,7 +553,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 		assert(cc.fixedPoint(output) != CHANGED); // idempotent
 
 		if (r == CONFLICT)
-			return CONFLICT;
+		    return CONFLICT;
 
 		r = NO_CHANGE;
 
@@ -647,7 +576,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 		}
 
 		if (CHANGED == r)
-			changed = true;
+		  changed = true;
 
 		for (unsigned column = 0; column < bitWidth; column++)
 		{
@@ -658,10 +587,10 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 						cc.columnH[column]);
 
 				if (CONFLICT == tempResult)
-					return CONFLICT;
+				    return CONFLICT;
 
 				if (CHANGED == tempResult)
-					r = CHANGED;
+				    r = CHANGED;
 			}
 		}
 
@@ -676,7 +605,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 		assert(CONFLICT != r);
 
 		if (CHANGED == r)
-			changed = true;
+		    changed = true;
 
 		if (ms != NULL)
 		{
@@ -686,16 +615,45 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 			ms->y = *children[1];
 			ms->r = output;
 		}
+
+		if (changed)
+		  {
+	               useTrailingZeroesToFix(x, y, output);
+	            //  if (r == NO_CHANGE)
+	            //    changed= false;
+		  }
 	}
 
-	if (children[0]->isTotallyFixed() && children[1]->isTotallyFixed()
-			&& !output.isTotallyFixed())
-	{
-		cerr << *children[0] << " * ";
-		cerr << *children[1];
-		cerr << output << endl;
-		assert(output.isTotallyFixed());
-	}
+	if (children[0]->isTotallyFixed() && children[1]->isTotallyFixed())
+	  {
+	    assert(output.isTotallyFixed());
+	  }
+
+// The below assertions are for performance only. It's not maximally precise anyway!!!
+
+#ifndef NDEBUG
+	if (r != CONFLICT)
+	          {
+	            FixedBits x_c(x), y_c(y), o_c(output);
+
+	            // These are subsumed by the consistency over the columns..
+	            useTrailingFixedToFix(x_c, y_c, o_c);
+	            useLeadingZeroesToFix(x_c, y_c, o_c);
+	            useInversesToSolve(x_c, y_c, o_c, bm);
+
+	            // This one should have been called to fixed point!
+	            useTrailingZeroesToFix(x_c, y_c, o_c);
+
+	            if(!FixedBits::equals(x_c , x) ||
+	               !FixedBits::equals(y_c , y) ||
+	               !FixedBits::equals(o_c , output))
+	              {
+	              cerr << x << y << output << endl;
+	              cerr << x_c << y_c << o_c << endl;
+	              assert(false);
+	              }
+	          }
+#endif
 
 	return NOT_IMPLEMENTED;
 }
