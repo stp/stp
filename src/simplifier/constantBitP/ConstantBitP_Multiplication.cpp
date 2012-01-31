@@ -188,7 +188,7 @@ setToZero(FixedBits& y, int from, int to)
 // Finds the leading one in each of the two inputs.
 // If this position is i & j, then in the output
 // there can be no ones higher than i+j+1.
-Result useLeadingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
+Result useLeadingZeroesToFix_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
 {
 	// Count the leading zeroes on x & y.
 	// Output should have about that many..
@@ -211,6 +211,66 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
 
 	return NOT_IMPLEMENTED;
 }
+
+    Result
+    useLeadingZeroesToFix(FixedBits& x, FixedBits&y, FixedBits& output)
+    {
+      // To check that the new implementation subsumes the old.
+  #ifndef NDEBUG
+      FixedBits x_p = x;
+      FixedBits y_p = y;
+      FixedBits o_p = output;
+      useLeadingZeroesToFix_OLD(x_p, y_p, o_p);
+  #endif
+
+      const int bitWidth = x.getWidth();
+      CBV x_c = CONSTANTBV::BitVector_Create(2*bitWidth, true);
+      CBV y_c = CONSTANTBV::BitVector_Create(2*bitWidth, true);
+
+      for (int i = 0; i < bitWidth; i++)
+        {
+        if (x[i] == '1' || x[i] == '*')
+          CONSTANTBV::BitVector_Bit_On(x_c, i);
+
+        if (y[i] == '1' || y[i] == '*')
+          CONSTANTBV::BitVector_Bit_On(y_c, i);
+        }
+
+      BEEV::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth+1, true);
+      CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
+      assert (ec == CONSTANTBV::ErrCode_Ok);
+
+        for (int j = (2 * bitWidth) - 1; j >= 0; j--)
+          {
+          if (CONSTANTBV::BitVector_bit_test(result, j))
+            break;
+          if (j < bitWidth)
+            {
+            if (!output.isFixed(j))
+              {
+              output.setFixed(j, true);
+              output.setValue(j, false);
+              }
+            else
+              {
+              if (output.getValue(j))
+                return CONFLICT;
+              }
+
+            }
+          }
+
+        // Assert the new implementation fixes more than the old.
+          assert(FixedBits::in(x,x_p ));
+          assert(FixedBits::in(y,y_p ));
+          assert(FixedBits::in(output, o_p));
+
+          CONSTANTBV::BitVector_Destroy(x_c);
+          CONSTANTBV::BitVector_Destroy(y_c);
+          CONSTANTBV::BitVector_Destroy(result);
+
+      return NOT_IMPLEMENTED;
+    }
 
 // Remove from x any trailing "boths", that don't have support in y and output.
 void
