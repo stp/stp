@@ -46,7 +46,6 @@ struct ColumnCounts
 			columnL[i] = 0;
 			columnH[i] = i + 1;
 		}
-		rebuildSums();
 	}
 
 	void rebuildSums()
