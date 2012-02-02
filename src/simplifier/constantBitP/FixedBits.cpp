@@ -362,47 +362,43 @@ namespace simplifier
       return true;
     }
 
-    // Gets the minimum and maximum unsigned values that are held in the current
-    // set. It saturates to UINT_MAX.
+    // Gets the minimum and maximum unsigned values that are represented by the set "shift".
     void
     FixedBits::getUnsignedMinMax(unsigned &minShift, unsigned &maxShift) const
     {
-      const int bitWidth = this->getWidth();
-      int unsignedBW = sizeof(unsigned)*8;
+      const FixedBits& shift = *this;
 
-      minShift = 0;
-      maxShift = 0;
+      // Get the unsigned minimum and maximum of the shift.
+      BEEV::CBV minCBV = CONSTANTBV::BitVector_Create(shift.getWidth(), true);
+      BEEV::CBV maxCBV = CONSTANTBV::BitVector_Create(shift.getWidth(), true);
 
-      bool bigMax = false;
-      bool bigMin = false;
+      setUnsignedMinMax(shift, minCBV, maxCBV);
 
-      for (int i = unsignedBW; i < bitWidth; i++)
+      BEEV::CBV maxValue = CONSTANTBV::BitVector_Create(shift.getWidth(), true);
+      for (unsigned i = 0; i < sizeof(unsigned) * 8; i++)
+        CONSTANTBV::BitVector_Bit_On(maxValue, i);
+
+      if (unsignedCompare(minCBV, maxValue) > 0)
         {
-        if  ((*this)[i] == '1' || (*this)[i] == '*')
-          bigMax = true;
-
-         if ((*this)[i] == '1')
-          bigMin = true;
+          minShift = UINT_MAX;
+        }
+      else
+        {
+          minShift = cbvTOInt(minCBV);
         }
 
-      for (int i = 0; i < unsignedBW; i++)
+      if (unsignedCompare(maxCBV, maxValue) > 0)
         {
-          if ((*this)[i] == '1')
-            {
-              minShift |= (1 <<i);
-              maxShift |= (1 <<i);
-            }
-          else if ((*this)[i] == '*')
-            {
-              maxShift |= (1 <<i);
-            }
+          maxShift = UINT_MAX;
+        }
+      else
+        {
+          maxShift = cbvTOInt(maxCBV);
         }
 
-      if (bigMax)
-        maxShift = UINT_MAX;
-
-      if (bigMin)
-        minShift = UINT_MAX;
+      CONSTANTBV::BitVector_Destroy(maxValue);
+      CONSTANTBV::BitVector_Destroy(minCBV);
+      CONSTANTBV::BitVector_Destroy(maxCBV);
     }
 
     bool
