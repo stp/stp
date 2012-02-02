@@ -338,6 +338,10 @@ SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd, const ASTVec &children)
       else
         next_it = it_end;
 
+      if (nextexists)
+        if (next_it->GetKind() == BEEV::NOT && (*next_it)[0] == *it)
+          return annihilator;
+
       if (*it == annihilator)
         {
           return annihilator;
