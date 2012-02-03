@@ -55,7 +55,41 @@ namespace BEEV
 
   const bool conjoin_to_top = true;
 
+
+  template<class BBNode>
+  class BBVecHasher
+  {
+  public:
+    size_t operator()(const vector<BBNode>& n) const
+    {
+      int hash =0;
+      for (int i=0; i <  std::min(n.size(),(size_t)6); i++)
+        hash += n[i].GetNodeNum();
+       return hash;
+    }
+  };
+
+  template<class BBNode>
+  class BBVecEquals
+  {
+  public:
+    bool operator()(const vector<BBNode>& n0, const vector<BBNode>& n1) const
+    {
+      if (n0.size() != n1.size())
+        return false;
+
+      for (int i=0; i <  n0.size(); i++)
+        {
+          if (!(n0[i] == n1[i]))
+            return false;
+        }
+      return true;
+    }
+  };
+
+
 // Look through the maps to see what the bitblaster has discovered (if anything) is constant.
+// then looks through for AIGS that are mapped to from different ASTNodes.
   template<class BBNode, class BBNodeManagerT>
     void
     BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form, ASTNodeMap& fromTo, ASTNodeMap& equivs)
@@ -130,7 +164,6 @@ namespace BEEV
           simp->UpdateSubstitutionMap(n, r);
         else
           fromTo.insert(make_pair(n, r));
-
         }
 
       if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","0"))
@@ -167,7 +200,52 @@ namespace BEEV
             }
           }
       }
+
+      typedef HASHMAP<vector<BBNode>, ASTNode,BBVecHasher <BBNode>, BBVecEquals<BBNode> > M;
+      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv", "0"))
+        {
+          M lookup;
+          typename std::map<ASTNode, vector<BBNode> >::iterator it;
+          for (it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+            {
+              const ASTNode& n = it->first;
+              if (n.isConstant())
+                continue;
+
+              const vector<BBNode>& x = it->second;
+
+              bool constNode = true;
+              for (int i = 0; i < (int) x.size(); i++)
+                {
+                  if (x[i] != BBTrue && x[i] != BBFalse)
+                    {
+                      constNode = false;
+                      break;
+                    }
+                }
+              if (!constNode)
+                continue;
+
+              if (lookup.find(x) == lookup.end())
+                {
+                  lookup.insert(make_pair(x, n));
+                }
+              else
+                {
+                  const ASTNode other = (lookup.find(x))->second;
+                  std::pair<ASTNode, ASTNode> p;
+                  if (other.GetNodeNum() > n.GetNodeNum())
+                    p = make_pair(other, n);
+                  else
+                    p = make_pair(n, other);
+
+                  cerr << "EQUIV";
+                  equivs.insert(p);
+                }
+            }
+        }
     }
+
 
   template<class BBNode, class BBNodeManagerT>
     void

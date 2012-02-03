@@ -119,11 +119,20 @@ namespace BEEV {
             /* These nodes have equivalent AIG representations, so even though they have different
              * word level expressions they are identical semantically. So we pick one of the ASTnodes
              * and replace the others with it.
-             * TODO: Currently only for booleans,
              * TODO: Isn't applied transitively because it infinite loops.
              * TODO: I replace with the lower id node, sometimes though we replace with much more
              * difficult looking ASTNodes.
             */
+#if 0
+            ASTNodeMap::iterator it = equivs.begin();
+            while (it!=equivs.end())
+              {
+                cerr << it->first.GetNodeNum() << " " << it->second.GetNodeNum() << endl;
+                 cerr << it->first << endl;
+                cerr << it->second << endl;
+                it++;
+              }
+#endif
             ASTNodeMap cache;
             simplified_solved_InputToSAT = SubstitutionMap::simple_replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
