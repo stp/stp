@@ -219,7 +219,7 @@ namespace BEEV
     // leaves just one instance of the constraint, so it we replace it with true/false
     // the constraint is lost. This is subsumed by constant bit propagation, so I suspect
     // it's not a big loss.
-    if (!_bm->UserFlags.isSet("bb-equiv","0"))
+    if (!_bm->UserFlags.isSet("bb-equiv",""))
       AlwaysTrueHashSet.insert(key.GetNodeNum());
   }
 

@@ -123,6 +123,7 @@ namespace BEEV {
              * TODO: I replace with the lower id node, sometimes though we replace with much more
              * difficult looking ASTNodes.
             */
+            //cerr << "eQUIV";
 #if 0
             ASTNodeMap::iterator it = equivs.begin();
             while (it!=equivs.end())
