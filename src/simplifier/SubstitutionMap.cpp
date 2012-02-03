@@ -311,4 +311,78 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
 	return (loops);
 	}
 
+ASTNode
+SubstitutionMap::simple_replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory * nf)
+{
+  const Kind k = n.GetKind();
+  if (k == BVCONST || k == TRUE || k == FALSE)
+    return n;
+
+  ASTNodeMap::const_iterator it;
+
+  if ((it = cache.find(n)) != cache.end())
+    return it->second;
+
+  if ((it = fromTo.find(n)) != fromTo.end())
+    {
+      const ASTNode& r = it->second;
+      assert(r.GetIndexWidth() == n.GetIndexWidth());
+      cache.insert(make_pair(n, r));
+      return r;
+    }
+
+  // These can't be created like regular nodes are
+  if (k == SYMBOL)
+    return n;
+
+  const unsigned int indexWidth = n.GetIndexWidth();
+
+  const ASTVec& children = n.GetChildren();
+  assert(children.size() > 0);
+  // Should have no leaves left here.
+
+  ASTVec new_children;
+  new_children.reserve(children.size());
+
+  for (ASTVec::const_iterator it = children.begin(); it != children.end(); it++)
+    {
+      new_children.push_back(simple_replace(*it, fromTo, cache, nf));
+    }
+
+  assert(new_children.size() == children.size());
+
+  // This code short-cuts if the children are the same. Nodes with the same children,
+  // won't have necessarily given the same node if the simplifyingNodeFactory is enabled
+  // now, but wasn't enabled when the node was created. Shortcutting saves lots of time.
+  if (new_children == children)
+    {
+      cache.insert(make_pair(n, n));
+      return n;
+    }
+
+  ASTNode result;
+  const unsigned int valueWidth = n.GetValueWidth();
+
+  if (valueWidth == 0) // n.GetType() == BOOLEAN_TYPE
+    {
+      result = nf->CreateNode(k, new_children);
+    }
+  else
+    {
+      // If the index and value width aren't saved, they are reset sometimes (??)
+      result = nf->CreateArrayTerm(k, indexWidth, valueWidth, new_children);
+    }
+
+  // We may have created something that should be mapped. For instance,
+  // if n is READ(A, x), and the fromTo is: {x==0, READ(A,0) == 1}, then
+  // by here the result will be READ(A,0). Which needs to be mapped again..
+  // I hope that this makes it idempotent.
+
+  assert(result.GetValueWidth() == valueWidth);
+  assert(result.GetIndexWidth() == indexWidth);
+
+  cache.insert(make_pair(n, result));
+  return result;
+}
+
 };

@@ -57,6 +57,12 @@ namespace BEEV
         print(c1);
     }
 public:
+
+    intptr_t GetNodeNum() const
+        {
+          return (intptr_t)n;
+        }
+
     // If the pointer is odd. Then it's the NOT of the pointer one less.
 	Aig_Obj_t * n;
 
@@ -90,7 +96,7 @@ public:
 
 	bool operator==(const BBNodeAIG &other) const
 	{
-		return n == other.n;
+	  return n == other.n;
 	}
 
 	bool operator!=(const BBNodeAIG &other) const

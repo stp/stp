@@ -112,11 +112,27 @@ namespace BEEV {
         SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
         BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
         ASTNodeMap fromTo;
-        bb.getConsts(simplified_solved_InputToSAT, fromTo);
+        ASTNodeMap equivs;
+        bb.getConsts(simplified_solved_InputToSAT, fromTo,equivs);
+        if (equivs.size() > 0)
+          {
+            /* These nodes have equivalent AIG representations, so even though they have different
+             * word level expressions they are identical semantically. So we pick one of the ASTnodes
+             * and replace the others with it.
+             * TODO: Currently only for booleans,
+             * TODO: Isn't applied transitively because it infinite loops.
+             * TODO: I replace with the lower id node, sometimes though we replace with much more
+             * difficult looking ASTNodes.
+            */
+            ASTNodeMap cache;
+            simplified_solved_InputToSAT = SubstitutionMap::simple_replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+            bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
+          }
+
         if (fromTo.size() > 0)
           {
             ASTNodeMap cache;
-            simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+            simplified_solved_InputToSAT = SubstitutionMap:: replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
         actualBBSize =  bbnm.totalNumberOfNodes();

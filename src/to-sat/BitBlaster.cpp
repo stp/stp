@@ -58,7 +58,7 @@ namespace BEEV
 // Look through the maps to see what the bitblaster has discovered (if anything) is constant.
   template<class BBNode, class BBNodeManagerT>
     void
-    BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form, ASTNodeMap& fromTo)
+    BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form, ASTNodeMap& fromTo, ASTNodeMap& equivs)
     {
       assert(form.GetType() == BOOLEAN_TYPE);
 
@@ -132,6 +132,41 @@ namespace BEEV
           fromTo.insert(make_pair(n, r));
 
         }
+
+      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","0"))
+      {
+        HASHMAP <intptr_t ,ASTNode> nodeToFn;
+        typename map<ASTNode, BBNode>::iterator it;
+        for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+          {
+          const ASTNode& n = it->first;
+          if (n.isConstant())
+            continue;
+
+          const BBNode& x = it->second;
+          if (x == BBTrue || x == BBFalse)
+            continue;
+
+          if (nodeToFn.find(x.GetNodeNum()) == nodeToFn.end())
+            {
+              nodeToFn.insert(make_pair(x.GetNodeNum(),n));
+            }
+          else
+            {
+              const ASTNode other = (nodeToFn.find(x.GetNodeNum()))->second;
+              std::pair<ASTNode,ASTNode> p;
+              if (other.GetNodeNum() > n.GetNodeNum())
+                p = make_pair(other,n);
+              else
+                p = make_pair(n,other);
+
+              equivs.insert(p);
+              //std::cerr << "from" << p.first << " to" << p.second;
+              //ASTNode equals = ASTNF->CreateNode(NOT,ASTNF->CreateNode(EQ,p.first,p.second));
+              //printer::SMTLIB2_PrintBack(std::cerr,p.second);
+            }
+          }
+      }
     }
 
   template<class BBNode, class BBNodeManagerT>

@@ -292,7 +292,7 @@ namespace BEEV
       BBForm(const ASTNode& form);
 
       void
-      getConsts(const ASTNode& n, ASTNodeMap& fromTo);
+      getConsts(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& equivs);
 
     };
 //end of class BitBlaster

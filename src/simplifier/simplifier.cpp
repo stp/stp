@@ -213,7 +213,14 @@ namespace BEEV
   void
   Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
   {
-    AlwaysTrueHashSet.insert(key.GetNodeNum());
+    // The always true/ always false relies on the top level constraint not being removed.
+    // however with bb equivalence checking, AIGs can figure out that the outer constraint
+    // is unncessary because it's enforced by the implicit constraint---removing it. That
+    // leaves just one instance of the constraint, so it we replace it with true/false
+    // the constraint is lost. This is subsumed by constant bit propagation, so I suspect
+    // it's not a big loss.
+    if (!_bm->UserFlags.isSet("bb-equiv","0"))
+      AlwaysTrueHashSet.insert(key.GetNodeNum());
   }
 
   ASTNode
