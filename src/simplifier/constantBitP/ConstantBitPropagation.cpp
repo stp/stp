@@ -742,11 +742,15 @@ namespace simplifier
           result = bvSignedRemainderBothWays(children, output, n.GetSTPMgr());
           mult_like=true;
         }
+
+      // This propagator is very slow. It needs to be reimplemented.
+      //#if 0
       else if (k == SBVMOD)
         {
           result = bvSignedModulusBothWays(children, output, n.GetSTPMgr());
           mult_like=true;
         }
+      //#endif
       else
 
 
