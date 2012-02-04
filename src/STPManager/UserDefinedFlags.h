@@ -289,7 +289,7 @@ namespace BEEV
       // If the bit-blaster discovers new constants, should the term simplifier be re-run.
       simplify_during_BB_flag=false;
 
-      set("bb-equiv","0");
+      set("bb-equiv","1");
 
     } //End of constructor for UserDefinedFlags
 
