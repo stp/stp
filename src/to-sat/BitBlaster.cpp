@@ -239,7 +239,7 @@ namespace BEEV
                   else
                     p = make_pair(n, other);
 
-                  cerr << "EQUIV";
+                  //cerr << "EQUIV";
                   equivs.insert(p);
                 }
             }
