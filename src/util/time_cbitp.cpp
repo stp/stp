@@ -4,7 +4,7 @@
 #include "../simplifier/constantBitP/FixedBits.h"
 #include "../simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "../extlib-constbv/constantbv.h"
-#include "../simplifier/constantBitP/MersenneTwister.h"
+#include "MersenneTwister.h"
 #include "../AST/ASTKind.h"
 #include "../STPManager/STPManager.h"
 #include "../cpp_interface/cpp_interface.h"
