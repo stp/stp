@@ -1,15 +1,18 @@
 TOP = ../../
 include $(TOP)scripts/Makefile.common
 
-SRCS =  rewrite.cpp
+SRCS =  rewrite.cpp time_cbitp.cpp
 OBJS = $(SRCS:.cpp=.o)
-CFLAGS += -L../../lib/ 
+CXXFLAGS += -L../../lib/ 
 
 .PHONY: clean
 
+time_cbitp: $(OBJS)  $(TOP)lib/libstp.a 
+	$(CXX) $(CXXFLAGS) $@.o -o $@ -lstp 
+
+
 rewrite: $(OBJS)  $(TOP)lib/libstp.a 
-	rm -f evaluate
-	$(CXX)   $(CFLAGS) $^ -o rewrite -lstp 
+	$(CXX)   $(CXXFLAGS) $@.o -o $@ -lstp 
 
 clean:
-	rm -f *.o rewrite
+	rm -f $(OBJS) rewrite time_cbitp
