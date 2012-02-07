@@ -2,12 +2,15 @@
 #include <vector>
 #include "../AST/AST.h"
 #include "../simplifier/constantBitP/FixedBits.h"
+#include "../simplifier/constantBitP/MersenneTwister.h"
+
 #include "../simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "../extlib-constbv/constantbv.h"
-#include "MersenneTwister.h"
+
 #include "../AST/ASTKind.h"
 #include "../STPManager/STPManager.h"
 #include "../cpp_interface/cpp_interface.h"
+
 
 using namespace std;
 using simplifier::constantBitP::FixedBits;
@@ -20,58 +23,7 @@ const unsigned bitWidth = 64;
 BEEV::STPMgr* beev;
 
 
-// Create a random assignment to fixed bits.
-FixedBits createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
-  {
-    assert( 0 <= probabilityOfSetting);
-    assert( 100 >= probabilityOfSetting);
 
-    FixedBits result(length, false);
-
-    // I'm not sure if the random number generator is generating just 32 bit numbers??
-    int i = 0;
-    int randomV = trand.randInt();
-
-    int pool = 32;
-
-    while (i < length)
-      {
-        if (pool < 8)
-          {
-            randomV = trand.randInt();
-            pool = 32;
-          }
-
-        int val = (randomV & 127);
-        randomV >>= 7;
-        pool = pool - 7;
-
-        if (val >= 100)
-        continue;
-
-        if (val < probabilityOfSetting)
-          {
-            switch (randomV & 1)
-              {
-                case 0:
-                result.setFixed(i, true);
-                result.setValue(i, false);
-                break;
-                case 1:
-                result.setFixed(i, true);
-                result.setValue(i, true);
-                break;
-                default:
-                BEEV::FatalError(LOCATION "never.");
-
-              }
-            randomV >>= 1;
-          }
-        i++;
-
-      }
-    return result;
-  }
 
 class Stopwatch
 {
@@ -116,10 +68,10 @@ void run(Result(*transfer)(vector<FixedBits*>&, FixedBits&), const int probabili
 	{
 		vector<FixedBits*> children;
 
-		FixedBits a = createRandom(bitWidth, probabilityOfFixing, rand);
-		FixedBits b = createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits a = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits b = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
 
-		FixedBits output = createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits output = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
 
 		for (unsigned i = 0; i < bitWidth; i++)
 		{
@@ -209,9 +161,9 @@ void runSimple(Result(*transfer)(vector<FixedBits*>&, FixedBits&), const int pro
 	{
 		vector<FixedBits*> children;
 
-		FixedBits a = createRandom(bitWidth, probabilityOfFixing, rand);
-		FixedBits b = createRandom(bitWidth, probabilityOfFixing, rand);
-		FixedBits output = createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits a = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits b = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
+		FixedBits output = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
 
 		int initial =  a.countFixed() + b.countFixed() + output.countFixed();
 

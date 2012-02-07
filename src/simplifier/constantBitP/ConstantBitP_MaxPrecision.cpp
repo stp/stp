@@ -495,7 +495,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 	//beev->ClearAllCaches();
 
 	// The first time we AddAsserts() it creates a new ASTVec to store them (on the heap).
-	beev->Pop();
+	//beev->Pop();
 
 	beev->UserFlags.bitConstantProp_flag = !disabledProp;
 	beev->UserFlags.print_output_flag = printOutput;

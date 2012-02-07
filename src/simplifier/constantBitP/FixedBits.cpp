@@ -1,5 +1,6 @@
 #include "../../AST/AST.h"
 #include "FixedBits.h"
+#include "MersenneTwister.h"
 
 
 #include "ConstantBitP_Utility.h"
@@ -151,8 +152,83 @@ namespace simplifier
       return result;
     }
 
-#if 0
-    #include "MersenneTwister.h"
+
+
+    void
+    FixedBits::join(const FixedBits& a)
+    {
+      assert(a.getWidth() == getWidth());
+      assert(a.isBoolean() == isBoolean());
+
+      for (int i = 0; i < a.getWidth(); i++)
+        {
+          if (a.isFixed(i) && isFixed(i) && (a.getValue(i) == getValue(i)))
+            {
+              // nothind.
+            }
+          else
+            {
+              setFixed(i,false);
+            }
+        }
+    }
+
+    void
+    FixedBits::join(unsigned int a)
+    {
+      for (int i = 0; i < getWidth(); i++)
+        {
+          if (isFixed(i))
+            {
+                if (
+                    (((a >> i) & 1) ==1)
+                  &&
+                    !getValue(i)
+                   )
+                  setFixed(i,false);
+                else if ((((a >> i) & 1) ==0) && getValue(i))
+                  setFixed(i,false);
+            }
+        }
+    }
+
+    // Whether the set of values contains this one.
+    bool
+    FixedBits::unsignedHolds(unsigned val)
+    {
+      for (unsigned i = 0; i < width; i++)
+        {
+          if (i < (unsigned) width && i < sizeof(unsigned) * 8)
+            {
+              if (isFixed(i) && (getValue(i) != (((val & (1 << i))) != 0)))
+                return false;
+            }
+          else if (i < (unsigned) width)
+            {
+              if (isFixed(i) && getValue(i))
+                return false;
+            }
+          else // The unsigned value is bigger than the bitwidth of this.
+            {
+              if (val & (1 << i))
+                return false;
+            }
+        }
+
+      // If the unsigned representation is bigger, we check (slowly) for leading ones.
+      for (unsigned i = width; i < (int) sizeof(unsigned) * 8; i++)
+        if (val & (1 << i))
+             return false;
+
+      return true;
+    }
+
+
+
+
+
+
+
 
     // Getting a new random number is expensive. Not sure why.
     FixedBits FixedBits::createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
@@ -206,7 +282,6 @@ namespace simplifier
           }
         return result;
       }
-#endif
 
     // In the world of static analysis this is ALPHA.
     FixedBits

@@ -252,29 +252,8 @@ namespace simplifier
 
       // Whether the set of values contains this one.
       bool
-      unsignedHolds(unsigned val)
-      {
-        const unsigned maxWidth = std::max((int) sizeof(unsigned) * 8, width);
-        for (unsigned i = 0; i < maxWidth; i++)
-          {
-            if (i < (unsigned) width && i < sizeof(unsigned) * 8)
-              {
-                if (isFixed(i) && (getValue(i) != (((val & (1 << i))) != 0)))
-                  return false;
-              }
-            else if (i < (unsigned) width)
-              {
-                if (isFixed(i) && getValue(i))
-                  return false;
-              }
-            else // The unsigned value is bigger than the bitwidth of this.
-              {
-                if (val & (1 << i))
-                  return false;
-              }
-          }
-        return true;
-      }
+      unsignedHolds(unsigned val);
+
 
       void
       replaceWithContents(const FixedBits& a)
@@ -294,6 +273,7 @@ namespace simplifier
               }
           }
       }
+
 
       void
       copyIn(const FixedBits& a)
@@ -358,6 +338,13 @@ namespace simplifier
 
       static FixedBits
       meet(const FixedBits& a, const FixedBits& b);
+
+      void
+      join(const FixedBits& a);
+
+      void
+      join(unsigned int a);
+
 
       static FixedBits
       createRandom(const int length, const int probabilityOfSetting,

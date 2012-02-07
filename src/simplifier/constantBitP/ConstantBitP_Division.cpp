@@ -1041,6 +1041,9 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
 	 (bvneg (bvurem (bvneg s) (bvneg t)))))))
 	 */
 
+        // I think this implements old style (broken) semantics, so avoiding it.
+        return NO_CHANGE;
+
         if (children[0] == children[1]) // same pointer.
           {
               return NO_CHANGE;

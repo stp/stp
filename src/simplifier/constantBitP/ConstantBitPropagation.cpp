@@ -744,13 +744,13 @@ namespace simplifier
         }
 
       // This propagator is very slow. It needs to be reimplemented.
-      //#if 0
+      #if 0
       else if (k == SBVMOD)
         {
           result = bvSignedModulusBothWays(children, output, n.GetSTPMgr());
           mult_like=true;
         }
-      //#endif
+      #endif
       else
 
 
