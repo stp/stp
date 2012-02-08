@@ -156,6 +156,11 @@ namespace BEEV
       bitConstantProp_flag = false;
       set("enable-unconstrained","0");
       set("use-intervals","0");
+      set("pure-literals","0");
+      set("simple-cnf","1");
+      set("always_true","0");
+	   set("bitblast-simplification","0");
+
       wordlevel_solve_flag = false;
       propagate_equalities = false;
     }
