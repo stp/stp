@@ -135,7 +135,7 @@ namespace BEEV {
               }
 #endif
             ASTNodeMap cache;
-            simplified_solved_InputToSAT = SubstitutionMap::simple_replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+            simplified_solved_InputToSAT = SubstitutionMap::simple_replace(simplified_solved_InputToSAT, equiv, cache,&nf);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
 
