@@ -114,7 +114,7 @@ namespace BEEV {
         ASTNodeMap fromTo;
         ASTNodeMap equivs;
         bb.getConsts(simplified_solved_InputToSAT, fromTo,equivs);
-#if 0
+
         if (equivs.size() > 0)
           {
             /* These nodes have equivalent AIG representations, so even though they have different
@@ -124,22 +124,11 @@ namespace BEEV {
              * TODO: I replace with the lower id node, sometimes though we replace with much more
              * difficult looking ASTNodes.
             */
-            //cerr << "eQUIV";
-
-            ASTNodeMap::iterator it = equivs.begin();
-            while (it!=equivs.end())
-              {
-                cerr << it->first.GetNodeNum() << " " << it->second.GetNodeNum() << endl;
-                 cerr << it->first << endl;
-                cerr << it->second << endl;
-                it++;
-              }
-
             ASTNodeMap cache;
             simplified_solved_InputToSAT = SubstitutionMap::simple_replace(simplified_solved_InputToSAT, equivs, cache,&nf);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
-#endif
+
         if (fromTo.size() > 0)
           {
             ASTNodeMap cache;
