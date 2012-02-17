@@ -39,6 +39,12 @@ namespace simplifier
       init(const FixedBits& copy);
       int uniqueId;
 
+      bool
+      unsignedHolds_new(unsigned val);
+      bool
+      unsignedHolds_old(unsigned val);
+
+
     public:
       FixedBits(int n, bool isBoolean);
 
@@ -79,6 +85,7 @@ namespace simplifier
             return '0';
       }
 
+      // Equality when I was a java programmer sorry!~.
       bool
       operator==(const FixedBits& other) const
       {
@@ -254,7 +261,6 @@ namespace simplifier
       bool
       unsignedHolds(unsigned val);
 
-
       void
       replaceWithContents(const FixedBits& a)
       {
@@ -349,6 +355,9 @@ namespace simplifier
       static FixedBits
       createRandom(const int length, const int probabilityOfSetting,
           MTRand& rand);
+
+      void
+      fromUnsigned(unsigned val);
 
       static FixedBits
       fromUnsignedInt(int width, unsigned val);

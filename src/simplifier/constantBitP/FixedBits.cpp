@@ -192,43 +192,65 @@ namespace simplifier
         }
     }
 
-    // Whether the set of values contains this one.
     bool
     FixedBits::unsignedHolds(unsigned val)
     {
-      for (unsigned i = 0; i < width; i++)
+      bool r = unsignedHolds_new(val);
+      //assert (unsignedHolds_old(val) == r);
+      return r;
+    }
+
+    // Whether the set of values contains this one. Much faster than the _old version.
+    bool
+    FixedBits::unsignedHolds_new(unsigned val)
+    {
+      const int initial_width = std::min((int)width, (int)sizeof(unsigned) * 8);
+
+      for (int i = 0; i < initial_width; i++)
         {
-          if (i < (unsigned) width && i < sizeof(unsigned) * 8)
-            {
-              if (isFixed(i) && (getValue(i) != (((val & (1 << i))) != 0)))
-                return false;
-            }
-          else if (i < (unsigned) width)
-            {
-              if (isFixed(i) && getValue(i))
-                return false;
-            }
-          else // The unsigned value is bigger than the bitwidth of this.
-            {
-              if (val & (1 << i))
-                return false;
-            }
+          char v = (*this)[i];
+          if ('*'== v)
+            {} // ok
+          else if ((v == '1') != ((val & 1) != 0))
+            return false;
+          val = val >> 1;
         }
 
-      // If the unsigned representation is bigger, we check (slowly) for leading ones.
-      for (unsigned i = width; i < (int) sizeof(unsigned) * 8; i++)
-        if (val & (1 << i))
-             return false;
+      // If the unsigned representation is bigger, false if not zero.
+      if ((int) sizeof(unsigned) * 8 > width && (val !=0))
+         return false;
+
+      for (int i = (int) sizeof(unsigned) * 8; i < width; i++)
+        if (isFixed(i) && getValue(i))
+          return false;
 
       return true;
     }
 
-
-
-
-
-
-
+    bool
+    FixedBits::unsignedHolds_old(unsigned val)
+    {
+      const unsigned maxWidth = std::max((int) sizeof(unsigned) * 8, width);
+      for (unsigned i = 0; i < maxWidth; i++)
+        {
+        if (i < (unsigned) width && i < sizeof(unsigned) * 8)
+          {
+          if (isFixed(i) && (getValue(i) != (((val & (1 << i))) != 0)))
+            return false;
+          }
+        else if (i < (unsigned) width)
+          {
+          if (isFixed(i) && getValue(i))
+            return false;
+          }
+        else // The unsigned value is bigger than the bitwidth of this.
+          {
+          if (val & (1 << i))
+            return false;
+          }
+        }
+      return true;
+    }
 
     // Getting a new random number is expensive. Not sure why.
     FixedBits FixedBits::createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
@@ -354,6 +376,32 @@ namespace simplifier
             }
         }
       return output;
+    }
+
+
+    void
+    FixedBits::fromUnsigned(unsigned val)
+    {
+      for (unsigned i = 0; i < width; i++)
+        {
+          if (i < (unsigned) width && i < sizeof(unsigned) * 8)
+            {
+              setFixed(i, true);
+              setValue(i, (val & (1 << i)));
+            }
+          else if (i < (unsigned) width)
+            {
+              setFixed(i, true);
+              setValue(i, false);
+            }
+          else // The unsigned value is bigger than the bitwidth of this.
+            { // so it can't be represented.
+              if (val & (1 << i))
+                {
+                  BEEV::FatalError(LOCATION "Cant be represented.");
+                }
+            }
+        }
     }
 
     int

@@ -180,7 +180,10 @@ namespace simplifier
         {
         if (!FixedBits::equals(*manualChildren[i], *initialChildren[i]))
           {
-          assert(FixedBits::updateOK(*initialChildren[i],*manualChildren[i]));
+          if(!FixedBits::updateOK(*initialChildren[i],*manualChildren[i]))
+            {
+              FatalError("not ok");
+            }
           changed = true;
           }
         }
@@ -199,7 +202,8 @@ namespace simplifier
       // If the status is changed. Then there should have been a change.
       if (CHANGED == manualResult)
         {
-        assert(changed);
+        if (!changed)
+          FatalError("Should have changed");
         }
 
       bool first = maxPrecision(autoChildren, autoOutput, kind, beev);
@@ -482,17 +486,14 @@ struct D
 };
 
 void
-exhaustively_check(const int bitwidth)
+exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, FixedBits&), int (*op)(int a, int b))
 {
   vector<D> list;
 
-  const Kind kind = BVPLUS;
   const int numberOfInputParams = 2;
-  Result (*transfer)(vector<FixedBits*>&, FixedBits&) = &bvAddBothWays;
 
   assert(numberOfInputParams >0);
   const int mask = pow(2, bitwidth) - 1;
-
 
   // Create all the possible inputs, and apply the function.
   for (int i = 0; i < pow(2, bitwidth * numberOfInputParams); i++)
@@ -500,7 +501,7 @@ exhaustively_check(const int bitwidth)
     D d;
     d.a = i & mask;
     d.b = (i >> bitwidth) & mask;
-    d.c = (d.a + d.b) & mask;
+    d.c = op(d.a,d.b) & mask;
     list.push_back(d);
     }
 
@@ -527,12 +528,15 @@ exhaustively_check(const int bitwidth)
   lengths.push_back(resultLength);
   totalLength += resultLength;
 
+  FixedBits empty(bitwidth, false);
+  FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(bitwidth, false);
+
   const int to_iterate = pow(3, totalLength);
   for (long j = 0; j < to_iterate; j++)
     {
     int current = j;
 
-    if (j% 5000 == 0)
+    if (j% 100000 == 0)
       cerr << j << " of " << to_iterate << endl;
 
     int id = 0;
@@ -558,7 +562,6 @@ exhaustively_check(const int bitwidth)
       current /= 3;
       }
 
-    FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(bitwidth, false);
     bool first = true;
     for (int j = 0; j < list.size(); j++)
       {
@@ -567,9 +570,9 @@ exhaustively_check(const int bitwidth)
         {
         if (first)
           {
-          c_a = FixedBits::fromUnsignedInt(bitwidth, d.a);
-          c_b = FixedBits::fromUnsignedInt(bitwidth, d.b);
-          c_o = FixedBits::fromUnsignedInt(bitwidth, d.c);
+          c_a.fromUnsigned(d.a);
+          c_b.fromUnsigned(d.b);
+          c_o.fromUnsigned(d.c);
           first = false;
           }
         else
@@ -581,25 +584,68 @@ exhaustively_check(const int bitwidth)
         }
       }
 
+
     Result r = transfer(children, output);
     if (r == CONFLICT)
       {
-      assert(first);
+      if(!first)
+        FatalError("Not First");
       }
     else
       {
-      assert(FixedBits::equals(*children[0],c_a));
-      assert(FixedBits::equals(*children[1],c_b));
-      assert(FixedBits::equals(output,c_o));
+      if(!FixedBits::equals(*children[0],c_a))
+        FatalError("First");
+      if(!FixedBits::equals(*children[1],c_b))
+        FatalError("Second");
+      if(!FixedBits::equals(output,c_o))
+        FatalError("Third");
       }
     }
+  for (int i=0; i < children.size();i++)
+    delete children[i];
+}
 
+int plusF(int a, int b)
+{
+  return a+b;
+}
+
+int subF(int a, int b)
+{
+  return a-b;
+}
+
+int leftSF(int a, int b)
+{
+  if (b >= sizeof(int)*8)
+    return 0;
+
+  return a<<b;
+}
+
+int rightSF(int a, int b)
+{
+  if (b >= sizeof(int)*8)
+    return 0;
+
+  return a>>b;
+}
+
+int bvandF(int a, int b)
+{
+  return a &b;
+}
+
+int bvorF(int a, int b)
+{
+  return a | b;
 }
 
 int
 main(void)
 {
-  beev = new BEEV::STPMgr();
+  BEEV::STPMgr stp;
+  beev = &stp;
   beev->UserFlags.disableSimplifications();
 
   Cpp_interface interface(*beev, beev->defaultNodeFactory);
@@ -607,15 +653,18 @@ main(void)
   srand(time(NULL));
   BEEV::ParserBM = beev;
 
-  #ifdef NDEBUG
-    cerr << "needs debug please.";
-    exit(1);
-  #endif
+  const int exhaustive_bits = 6;
+  for (int i = 1; i <= exhaustive_bits; i++)
+    {
+    exhaustively_check(i, &bvLeftShiftBothWays, &leftSF);
+    exhaustively_check(i, &bvRightShiftBothWays, &rightSF);
+    exhaustively_check(i, &bvAddBothWays, &plusF);
+    exhaustively_check(i, &bvSubtractBothWays, &subF);
+    exhaustively_check(i, &bvAndBothWays, &bvandF);
+    exhaustively_check(i, &bvOrBothWays, &bvorF);
+    }
 
-
-  const int bits = 4;
-  exhaustively_check(bits);
-
+  const int bits = 5;
 
   if (true)
     {
@@ -655,37 +704,13 @@ main(void)
     signature.maxInputWidth = bits;
     signature.numberOfInputs = 2;
 
-    // BVADD
-    signature.kind = BVPLUS;
-    exhaustive(&bvAddBothWays, signature);
-
-    // BVRIGHTSHIFT
-    signature.kind = BVRIGHTSHIFT;
-    exhaustive(&bvRightShiftBothWays, signature);
-
     // BVaritmeticRIGHTSHIFT
     signature.kind = BVSRSHIFT;
     exhaustive(&bvArithmeticRightShiftBothWays, signature);
 
-    // BVLEFTSHIFT
-    signature.kind = BVLEFTSHIFT;
-    exhaustive(&bvLeftShiftBothWays, signature);
-
-    // BVSUB
-    signature.kind = BVSUB;
-    exhaustive(&bvSubtractBothWays, signature);
-
     // BVXOR.
     signature.kind = BVXOR;
     exhaustive(&bvXorBothWays, signature);
-
-    // BVAND.
-    signature.kind = BVAND;
-    exhaustive(&bvAndBothWays, signature);
-
-    // BVOR
-    signature.kind = BVOR;
-    exhaustive(&bvOrBothWays, signature);
     }
 
   // n Params at most. (Bool,Bool) -> Bool
@@ -875,6 +900,7 @@ main(void)
 
   // Add had a defect effecting bithWidth > 90.
   // Shifting had a defect effecting bitWidth > 64.
+    if (true)
     {
     vector<FixedBits*> children;
     FixedBits a(150, false);
