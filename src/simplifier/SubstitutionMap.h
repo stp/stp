@@ -201,9 +201,8 @@ public:
 
 	// Replace any nodes in "n" that exist in the fromTo map.
 	// NB the fromTo map is changed.
-        static ASTNode simple_replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf);
 	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf);
-	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf, bool stopAtArrays);
+	static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory *nf, bool stopAtArrays, bool preventInfiniteLoops);
 
 
 };
