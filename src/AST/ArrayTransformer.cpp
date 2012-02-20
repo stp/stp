@@ -35,7 +35,7 @@ namespace BEEV
     TransformMap = new ASTNodeMap(100);
     ASTNode result = TransformFormula(form);
 
-#ifndef NDEBUG
+#if 0
     {
     	ASTNodeSet visited;
     	assertTransformPostConditions(result,visited);
@@ -48,7 +48,6 @@ namespace BEEV
 
     if (bm->UserFlags.stats_flag)
       printArrayStats();
-
 
     // This establishes equalities between every indexes, and a fresh variable.
     if (!bm->UserFlags.ackermannisation)
@@ -271,11 +270,6 @@ namespace BEEV
 
     const Kind k = term.GetKind();
 
-    // Check the signed operations have been removed.
-    assert( SBVDIV != k);
-    assert( SBVMOD != k);
-    assert( SBVREM !=k);
-
     // Check the array reads / writes have been removed
     assert( READ !=k );
     assert( WRITE !=k);
@@ -488,19 +482,6 @@ namespace BEEV
           }
           else
         	  result = term;
-
-              if (SBVDIV == result.GetKind() 
-                  || SBVREM == result.GetKind() 
-                  || SBVMOD == result.GetKind())
-                {
-                  ASTNode r = TranslateSignedDivModRem(result,nf,bm);
-                  if (r != result && bm->UserFlags.optimize_flag)
-                    {
-                      result = simp->SimplifyTerm_TopLevel(r);
-                    }
-                  else
-                    result = r;
-                }
         }
         break;
       }

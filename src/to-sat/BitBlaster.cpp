@@ -15,6 +15,7 @@
 #include "../simplifier/constantBitP/ConstantBitPropagation.h"
 #include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "../simplifier/simplifier.h"
+#include "../AST/ArrayTransformer.h"
 
 namespace BEEV
 {
@@ -347,6 +348,8 @@ namespace BEEV
 
       if (n.isConstant())
         {
+        // This doesn't hold any longer because we convert BVSDIV and friends to ASTNodes.
+#if 0
         simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it;
         it = cb->fixedMap->map->find(n);
         if (it == cb->fixedMap->map->end())
@@ -354,6 +357,7 @@ namespace BEEV
           cerr << n;
           assert(it != cb->fixedMap->map->end());
           }assert(it->second->isTotallyFixed());
+#endif
         return;
         }
 
@@ -829,6 +833,15 @@ namespace BEEV
         result = BBMult(mpcd1, mpcd2, support, term);
         break;
         }
+      case SBVREM:
+      case SBVMOD:
+      case SBVDIV:
+        {
+        ASTNode p = ArrayTransformer::TranslateSignedDivModRem(term,ASTNF,term.GetSTPMgr());
+        result = BBTerm(p,support);
+        break;
+        }
+
       case BVDIV:
       case BVMOD:
         {

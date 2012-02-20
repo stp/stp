@@ -50,8 +50,6 @@ using BEEV::BVDIV;
 
 static bool debug_simplifyingNodeFactory = false;
 
-static const bool translate_signed = true;
-
 ASTNode
 SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec & children)
 {
@@ -1311,8 +1309,6 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = bm.CreateZeroConst(width);
     else if (children[1].GetKind() == BVUMINUS && children[1][0] == children[0])
       result = bm.CreateZeroConst(width);
-    else if (translate_signed)
-      result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children), this, &bm);
     break;
 
   case BEEV::BVDIV:
@@ -1350,8 +1346,6 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
           bm.CreateOneConst(width), bm.CreateZeroConst(width));
     if (children[1].isConstant() && CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
       result = NodeFactory::CreateTerm(BVUMINUS, width, children[0]);
-    else if (translate_signed)
-      result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children), this, &bm);
     break;
 
   case SBVREM:
@@ -1369,8 +1363,6 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = NodeFactory::CreateTerm(SBVREM, width, children[0], children[1][0]);
     else if (children[0].GetKind() == BVUMINUS && children[0][0] == children[1])
       result = bm.CreateZeroConst(width);
-    else if (translate_signed)
-      result = BEEV::ArrayTransformer::TranslateSignedDivModRem(hashing.CreateTerm(kind, width, children), this, &bm);
     break;
 
   case BEEV::BVMOD:
