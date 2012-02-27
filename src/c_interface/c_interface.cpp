@@ -68,6 +68,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {
   }
 }
 
+void make_division_total(VC vc)
+{
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  b->UserFlags.division_by_zero_returns_one_flag = true;
+}
+
 //Create a validity Checker. This is the global STPMgr
 VC vc_createValidityChecker(void) {
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
