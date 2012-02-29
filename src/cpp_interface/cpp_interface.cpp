@@ -27,7 +27,7 @@ namespace BEEV
 
           ASTNode query;
 
-          if (assertionsSMT2.size() >= 1)
+          if (assertionsSMT2.size() > 1)
             query = parserInterface->CreateNode(AND, assertionsSMT2);
           else if (assertionsSMT2.size() == 1)
             query = assertionsSMT2[0];
