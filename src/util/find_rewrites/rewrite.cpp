@@ -8,16 +8,27 @@
 #include <iostream>
 #include <fstream>
 
-#include "../AST/AST.h"
-#include "../printer/printers.h"
+#include "../../AST/AST.h"
+#include "../../printer/printers.h"
 
-#include "../STPManager/STPManager.h"
-#include "../to-sat/AIG/ToSATAIG.h"
-#include "../sat/MinisatCore.h"
-#include "../STPManager/STP.h"
-#include "../STPManager/DifficultyScore.h"
-#include "../simplifier/BigRewriter.h"
+#include "../../STPManager/STPManager.h"
+#include "../../to-sat/AIG/ToSATAIG.h"
+#include "../../sat/MinisatCore.h"
+#include "../../STPManager/STP.h"
+#include "../../STPManager/DifficultyScore.h"
+#include "../../simplifier/BigRewriter.h"
+#include "../../AST/NodeFactory/TypeChecker.h"
+#include "../../cpp_interface/cpp_interface.h"
 
+#include "VariableAssignment.h"
+
+#include "rewrite_rule.h"
+#include "rewrite_system.h"
+#include "Functionlist.h"
+
+extern FILE *smt2in;
+extern int
+smt2parse();
 
 using namespace std;
 using namespace BEEV;
@@ -27,7 +38,11 @@ bool finished = false;
 
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
-int highestLevel =0;
+int highestLevel = 0;
+int discarded = 0;
+
+//static
+int  Rewrite_rule::static_id;
 
 //////////////////////////////////
 const int bits = 6;
@@ -42,8 +57,17 @@ vector<ASTVec> saved_array;
 // Stores the difficulties that have already been generated.
 map<ASTNode, int> difficulty_cache;
 
+Rewrite_system to_write;
+
 void
 clearSAT();
+
+template<class T>
+  void
+  removeDuplicates(T & big);
+
+bool
+is_candidate(ASTNode from, ASTNode to);
 
 bool
 isConstantToSat(const ASTNode & query);
@@ -52,9 +76,22 @@ string
 containsNode(const ASTNode& n, const ASTNode& hunting, string& current);
 
 void
-writeOutRules();
+applyRewritesToAll(ASTVec & v);
 
-void applyBigRewrite(ASTVec& functions);
+void
+writeOutRules(string fileName);
+
+int
+getDifficulty(const ASTNode& n_);
+
+vector<ASTNode>
+getVariables(const ASTNode& n);
+
+bool
+unifyNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width);
+
+int
+findNewRewrites();
 
 typedef HASHMAP<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
 
@@ -64,114 +101,44 @@ SATSolver * ss;
 ASTNodeSet stored; // Store nodes so they aren't garbage collected.
 Simplifier *simp;
 
-ASTNode zero, one, maxNode, v, w;
-
-struct ToWrite
-{
-  ASTNode from;
-  ASTNode to;
-  ASTNode n;
-  int time;
-
-  ToWrite()
-  {
-  }
-
-  ToWrite(ASTNode from_, ASTNode to_, int t)
-  {
-    from = from_;
-    to = to_;
-    time = t;
-    n = mgr->CreateNode(EQ,to,from);
-  }
-
-  bool isEmpty()
-  {
-    return (n == mgr->ASTUndefined);
-  }
-
-  bool
-  operator==(const ToWrite t) const
-  {
-    return (n == t.n);
-  }
-
-  bool
-  operator<(const ToWrite t) const
-  {
-    return (n < t.n);
-  }
-};
-
-// Rules to write out when we get the chance.
-vector<ToWrite> toWrite;
+ASTNode zero, one, maxNode, v, w, v0, w0;
 
 // Width of the rewrite rules that were output last time.
 int lastOutput = 0;
 
 
-struct Assignment
-{
-private:
-  ASTNode v;
-  ASTNode w;
-
-public:
-  ASTNode
-  getV() const
-  {
-    assert(v.isConstant());
-    return v;
-  }
-
-  ASTNode
-  getW() const
-  {
-    assert(w.isConstant());
-    return w;
-  }
-
-  void
-  setV(const ASTNode& nv)
-  {
-    assert(nv.isConstant());
-    v = nv;
-  }
-
-  void
-  setW(const ASTNode& nW)
-  {
-    assert(nW.isConstant());
-    w = nW;
-  }
-
-  bool isEmpty()
-  {
-    return (v == mgr->ASTUndefined || w == mgr->ASTUndefined);
-  }
-
-  Assignment()
-  {
-  }
-
-  // Generate w from v a bit randomly.
-  explicit
-  Assignment(const ASTNode & n)
-  {
-    setV(n);
-    srand(v.GetUnsignedConst());
-    w = BEEV::ParserBM->CreateBVConst(n.GetValueWidth(), rand());
-  }
-
-  Assignment(ASTNode & n0, ASTNode & n1)
-  {
-    setV(n0);
-    setV(n1);
-  }
-};
-
 bool
-checkAndStoreRule(const ASTNode & from, const ASTNode & to, Assignment& ass);
+checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& ass, bool& bad);
+
+ASTNode
+renameVars(const ASTNode &n)
+{
+  ASTNodeMap ft;
+
+  assert(v.GetValueWidth() == v0.GetValueWidth());
+  assert(w.GetValueWidth() == w0.GetValueWidth());
+
+  ft.insert(make_pair(v, v0));
+  ft.insert(make_pair(w, w0));
+
+  ASTNodeMap cache;
+  return SubstitutionMap::replace(n, ft, cache, nf);
+}
+
+ASTNode
+renameVarsBack(const ASTNode &n)
+{
+  ASTNodeMap ft;
+
+  assert(v.GetValueWidth() == v0.GetValueWidth());
+  assert(w.GetValueWidth() == w0.GetValueWidth());
+
+  ft.insert(make_pair(v0, v));
+  ft.insert(make_pair(w0, w));
+
+  ASTNodeMap cache;
+  return SubstitutionMap::replace(n, ft, cache, nf);
+}
 
 
 // Helper functions. Don't need to specify the width.
@@ -229,6 +196,16 @@ getVariables(const ASTNode& n, vector<ASTNode>& symbols, ASTNodeSet& visited)
     getVariables(n[i], symbols, visited);
 }
 
+vector<ASTNode>
+getVariables(const ASTNode& n)
+{
+  vector<ASTNode> symbols;
+  ASTNodeSet visited;
+  getVariables(n, symbols, visited);
+
+  return symbols;
+}
+
 // Get the constant from replacing values in the map.
 ASTNode
 eval(const ASTNode &n, ASTNodeMap& map, int count = 0)
@@ -244,7 +221,7 @@ eval(const ASTNode &n, ASTNodeMap& map, int count = 0)
       return (*map.find(n)).second;
     }
 
-  if(n.Degree() == 0 )
+  if (n.Degree() == 0)
     {
       cerr << n;
       assert(false);
@@ -311,28 +288,28 @@ checkProp(const ASTNode& n)
 
 // True if it's always true. Otherwise fills the assignment.
 bool
-isConstant(const ASTNode& n, Assignment& different)
+isConstant(const ASTNode& n, VariableAssignment& different)
 {
   if (isConstantToSat(n))
     return true;
   else
     {
-      vector<ASTNode> symbols;
-      ASTNodeSet visited;
-      getVariables(n,symbols,visited);
+      mgr->ValidFlag = false;
+
+      vector<ASTNode> symbols = getVariables(n);
       assert(symbols.size() > 0);
 
       // Both of them might not be contained in the assignment.
-      different.setV(mgr->CreateBVConst(symbols[0].GetValueWidth(),0));
-      different.setW(mgr->CreateBVConst(symbols[0].GetValueWidth(),0));
+      different.setV(mgr->CreateBVConst(symbols[0].GetValueWidth(), 0));
+      different.setW(mgr->CreateBVConst(symbols[0].GetValueWidth(), 0));
 
       // It might have been widened.
-      for (int i =0; i < symbols.size();i++)
+      for (int i = 0; i < symbols.size(); i++)
         {
-          if (strncmp(symbols[i].GetName(), "v", 1) ==0)
-            different.setV(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
-          else if (strncmp(symbols[i].GetName(), "w", 1) ==0)
-            different.setW(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+          if (strncmp(symbols[i].GetName(), "v", 1) == 0)
+              different.setV(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+          else if (strncmp(symbols[i].GetName(), "w", 1) == 0)
+              different.setW(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
         }
       return false;
     }
@@ -396,49 +373,112 @@ widen(const ASTNode& w, int width)
     }
 
   if (w.GetKind() == BVCONCAT && ((ch[0].GetValueWidth() + ch[1].GetValueWidth()) != width))
-        return mgr->ASTUndefined; // Didn't widen properly.
+    return mgr->ASTUndefined; // Didn't widen properly.
 
+  // We got to the trouble below because sometimes we get 1-bit wide expressions which we don't
+  // want to widen to "bits".
   ASTNode result;
   if (w.GetType() == BOOLEAN_TYPE)
     result = nf->CreateNode(w.GetKind(), ch);
   else if (w.GetKind() == BVEXTRACT)
     {
       int new_width = ch[1].GetUnsignedConst() - ch[2].GetUnsignedConst() + 1;
-      result = nf->CreateTerm(w.GetKind(), new_width, ch);
+      result = nf->CreateTerm(BVEXTRACT, new_width, ch);
     }
+  else if (w.GetKind() == BVCONCAT)
+    result = nf->CreateTerm(BVCONCAT, ch[1].GetValueWidth() + ch[0].GetValueWidth(), ch);
+  else if (w.GetKind() == ITE)
+    result = nf->CreateTerm(ITE, ch[1].GetValueWidth(), ch);
+  else if (w.GetKind() == BVSX)
+    result = nf->CreateTerm(BVSX, ch[1].GetUnsignedConst(), ch);
   else
-    result = nf->CreateTerm(w.GetKind(), width, ch);
+    result = nf->CreateTerm(w.GetKind(), ch[0].GetValueWidth(), ch);
 
-        BVTypeCheck(result);
+  BVTypeCheck(result);
   return result;
 }
 
 
-ASTNode
-rewriteThroughWithAIGS(const ASTNode &n)
+bool
+orderEquivalence(ASTNode& from, ASTNode& to)
 {
-  assert(n.GetKind() == EQ);
+  vector<ASTNode> s_from; // The variables in the from node.
+  ASTNodeSet visited;
+  getVariables(from, s_from, visited);
+  std::sort(s_from.begin(), s_from.end());
 
-  BBNodeManagerAIG nm;
-  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
-  ASTNode input = n;
-  ASTNodeMap fromTo;
-  ASTNodeMap equivs;
-  bb.getConsts(input, fromTo,equivs);
+  vector<ASTNode> s_to;  // The variables in the to node.
+  visited.clear();
+  getVariables(to, s_to, visited);
+  sort(s_to.begin(), s_to.end());
 
-  if (equivs.size() > 0)
+  vector<ASTNode> result(s_to.size() + s_from.size());
+  // We must map from most variables to fewer variables.
+  vector<ASTNode>::iterator it = std::set_intersection(s_from.begin(), s_from.end(), s_to.begin(), s_to.end(),
+      result.begin());
+  int intersection = it - result.begin();
+
+  if (intersection != s_from.size() && intersection != s_to.size())
+    return false;
+
+  if (to.isAtom())
+    return true;
+
+  if (from.isAtom())
     {
-      ASTNodeMap cache;
-      input = SubstitutionMap::replace(input, equivs, cache,nf,false,true);
+      std::swap(from, to);
+      return true;
     }
 
-  if (fromTo.size() > 0)
+  // Is one a subgraph of another.
+  if (is_candidate(from, to))
     {
-      ASTNodeMap cache;
-      input = SubstitutionMap:: replace(input, fromTo, cache,nf);
+      return true;
     }
 
-  return input;
+  if (is_candidate(to, from))
+    {
+      std::swap(from, to);
+      return true;
+    }
+
+  if (s_from.size() < s_to.size())
+    {
+      swap(to, from);
+      return true;
+    }
+
+  if (s_from.size() > s_to.size())
+    return true;
+
+  if (getDifficulty(from) < getDifficulty(to))
+    {
+      swap(from, to);
+      return true;
+    }
+
+  if (getDifficulty(from) > getDifficulty(to))
+    {
+      return true;
+    }
+
+  // Difficulty is equal. Order based on the number of nodes.
+  vector<ASTNode> symbols;
+  visited.clear();
+  getVariables(from, symbols, visited);
+  int from_c = visited.size();
+
+  symbols.clear();
+  visited.clear();
+  getVariables(to, symbols, visited);
+  int to_c = visited.size();
+
+  if (to_c > from_c)
+    {
+      swap(from, to);
+    }
+
+  return true;
 }
 
 int
@@ -450,7 +490,7 @@ getDifficulty(const ASTNode& n_)
     return difficulty_cache.find(n_)->second;
 
   // Calculate the difficulty over the widened version.
-  ASTNode n = widen(n_,widen_to);
+  ASTNode n = widen(n_, widen_to);
   if (n.GetKind() == UNDEFINED)
     return -1;
 
@@ -476,7 +516,7 @@ getDifficulty(const ASTNode& n_)
   // Why we go to all this trouble. The number of clauses.
   int score = cnfData->nClauses;
 
-  Cnf_ClearMemory();
+  //Cnf_ClearMemory();
   Cnf_DataFree(cnfData);
   cnfData = NULL;
 
@@ -530,20 +570,6 @@ doIte(ASTNode a)
     }
 }
 
-
-void
-getAllFunctions(ASTNode v, ASTNode w, ASTVec& result)
-{
-
-  Kind types[] =
-    { BVMULT , BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT };
-  int number_types = sizeof(types) / sizeof(Kind);
-
-  // all two argument functions.
-  for (int i = 0; i < number_types; i++)
-    result.push_back(create(types[i], v, w));
-}
-
 int
 startup()
 {
@@ -566,8 +592,13 @@ startup()
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
+#ifndef NOTSIMPLIFYING_NF
   nf = new SimplifyingNodeFactory(*(mgr->hashingNodeFactory), *mgr);
-  mgr->defaultNodeFactory =nf;
+  mgr->defaultNodeFactory = nf;
+#else
+  nf =  mgr->hashingNodeFactory;
+  mgr->defaultNodeFactory = mgr->hashingNodeFactory;
+#endif
 
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
@@ -584,10 +615,19 @@ startup()
   one = mgr->CreateOneConst(bits);
   maxNode = mgr->CreateMaxConst(bits);
 
-  v = mgr->CreateSymbol("v", 0, bits);
-  w = mgr->CreateSymbol("w", 0, bits);
-
   srand(time(NULL));
+
+  v0 = mgr->LookupOrCreateSymbol("v0");
+  v0.SetValueWidth(bits);
+  w0 = mgr->LookupOrCreateSymbol("w0");
+  w0.SetValueWidth(bits);
+
+  //v = mgr->LookupOrCreateSymbol("v");
+ // v.SetValueWidth(bits);
+ // w = mgr->LookupOrCreateSymbol("w");
+ // w.SetValueWidth(bits);
+
+
 }
 
 void
@@ -602,7 +642,7 @@ bool
 isConstantToSat(const ASTNode & query)
 {
   assert(query.GetType() == BOOLEAN_TYPE);
-  cerr << "to";
+  cout << "to";
 
   GlobalSTP->ClearAllTables();
   clearSAT();
@@ -611,25 +651,24 @@ isConstantToSat(const ASTNode & query)
 
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(*ss, query2, query2, GlobalSTP->tosat, false);
 
-  cerr << "from";
+  cout << "from";
   return (r == SOLVER_VALID); // unsat, always true
 }
-
 
 // Replaces the symbols in n, by each of the values, and concatenates them
 // to turn it into a single 64-bit value.
 uint64_t
-getHash(const ASTNode& n_, const vector<Assignment>& values)
+getHash(const ASTNode& n_, const vector<VariableAssignment>& values)
 {
   assert(values.size() > 0);
-  const int ass_bitwidth =values[0].getV().GetValueWidth();
-  assert (ass_bitwidth >= bits);
+  const int ass_bitwidth = values[0].getV().GetValueWidth();
+  assert(ass_bitwidth >= bits);
 
   ASTNode n = n_;
 
   // The values might be at a higher bit-width.
   if (ass_bitwidth > bits)
-    n = widen(n_,ass_bitwidth);
+    n = widen(n_, ass_bitwidth);
 
   if (n == mgr->ASTUndefined) // Can't be widened.
     return 0;
@@ -645,22 +684,22 @@ getHash(const ASTNode& n_, const vector<Assignment>& values)
       ASTNodeMap mapToVal;
       for (int j = 0; j < symbols.size(); j++)
         {
-          if (strncmp(symbols[j].GetName(), "v", 1) ==0)
+          if (strncmp(symbols[j].GetName(), "v", 1) == 0)
             {
               mapToVal.insert(make_pair(symbols[j], values[i].getV()));
-              assert(symbols[j].GetValueWidth() == values[i].getV().GetValueWidth() );
+              assert(symbols[j].GetValueWidth() == values[i].getV().GetValueWidth());
             }
-          else if (strncmp(symbols[j].GetName(), "w", 1) ==0)
+          else if (strncmp(symbols[j].GetName(), "w", 1) == 0)
             {
               mapToVal.insert(make_pair(symbols[j], values[i].getW()));
-              assert(symbols[j].GetValueWidth() == values[i].getW().GetValueWidth() );
+              assert(symbols[j].GetValueWidth() == values[i].getW().GetValueWidth());
             }
           else
             {
               cerr << "Unknown symbol!" << symbols[j];
               FatalError("f");
             }
-          assert(symbols[j].GetValueWidth() == ass_bitwidth );
+          assert(symbols[j].GetValueWidth() == ass_bitwidth);
         }
 
       ASTNode r = eval(n, mapToVal);
@@ -678,13 +717,12 @@ contained_in(ASTNode from, ASTNode to)
   if (from == to)
     return true;
 
-  for (int i = 0; i < to.Degree(); i++)
-    if (contained_in(from, to[i]))
+  for (int i = 0; i < from.Degree(); i++)
+    if (contained_in(from[i], to))
       return true;
 
   return false;
 }
-
 
 // Is mapping from "From" to "to" a rule we are interested in??
 bool
@@ -705,16 +743,18 @@ lessThan(const ASTNode& n1, const ASTNode& n2)
   return (((unsigned) n1.GetNodeNum()) < ((unsigned) n2.GetNodeNum()));
 }
 
-
-
 // Breaks the expressions into buckets recursively, then pairwise checks that they are equivalent.
 void
-findRewrites(ASTVec& expressions, const vector<Assignment>& values, const int depth = 0)
+findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, const int depth = 0)
 {
   if (expressions.size() < 2)
-    return;
+    {
+      discarded += expressions.size();
+      return;
+    }
 
-  cout << '\n' <<  "depth:" << depth << ", size:" << expressions.size()  << " values:" << values.size() << " found: " << toWrite.size() << '\n';
+  cout << '\n' << "depth:" << depth << ", size:" << expressions.size() << " values:" << values.size() << " found: "
+      << to_write.size() << '\n';
 
   assert(expressions.size() >0);
 
@@ -744,7 +784,7 @@ findRewrites(ASTVec& expressions, const vector<Assignment>& values, const int de
       for (it2 = map.begin(); it2 != map.end(); it2++)
         {
           ASTVec& equiv = it2->second;
-          vector<Assignment> a;
+          vector<VariableAssignment> a;
           findRewrites(equiv, a, depth + 1);
           equiv.clear();
         }
@@ -758,60 +798,55 @@ findRewrites(ASTVec& expressions, const vector<Assignment>& values, const int de
   for (int i = 0; i < equiv.size(); i++)
     {
       if (equiv[i].GetKind() == UNDEFINED)
-        continue;
+          continue;
+
+      // nb. I haven't rebuilt the map, it's done by writeOutRules().
+      equiv[i] == to_write.rewriteNode(equiv[i]);
 
       for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
         {
           if (equiv[i].GetKind() == UNDEFINED || equiv[j].GetKind() == UNDEFINED)
             continue;
 
+          equiv[j] = to_write.rewriteNode(equiv[j]);
+
           ASTNode n = nf->CreateNode(EQ, equiv[i], equiv[j]);
           if (n.GetKind() != EQ)
             continue;
 
-          n = rewriteThroughWithAIGS(n);
+          ASTNode from = equiv[i];
+          ASTNode to = equiv[j];
+          bool r = orderEquivalence(from, to);
 
-          if (n.GetKind() != EQ)
-            continue;
+          VariableAssignment different;
+          bool bad = false;
+          const int st = getCurrentTime();
 
-          ASTNode from, to;
-          if (getDifficulty(n[0]) < getDifficulty(n[1]))
+          if (checkRule(from, to, different, bad))
             {
-              to = n[0];
-              from = n[1];
-            }
-          else if (getDifficulty(n[0]) > getDifficulty(n[1]))
-            {
-              from = n[0];
-              to = n[1];
-            }
-          else
-            {
-              // Difficulty is equal. Try it both ways and see if it's a candidate.
-              if (is_candidate(n[0], n[1]))
-                {
-                  from = n[0];
-                  to = n[1];
-                }
-              else
-                {
-                  from = n[1];
-                  to = n[0];
-                }
-            }
+              to_write.push_back(Rewrite_rule(mgr, from, to, getCurrentTime() - st));
 
-          Assignment different;
-          if (checkAndStoreRule(from,to, different))
-            {
               // Remove the more difficult expression.
               if (from == equiv[i])
-                equiv[i] = mgr->ASTUndefined;
+                {
+                  cerr << ".";
+                  equiv[i] = mgr->ASTUndefined;
+                }
               if (from == equiv[j])
-                equiv[j] = mgr->ASTUndefined;
+                {
+                  cerr << ".";
+                  equiv[j] = mgr->ASTUndefined;
+                }
             }
-          else if (!different.isEmpty())
+          else if (!r)
             {
-              vector<Assignment> ass;
+              // It probably shouldn't get to here..
+              cerr << "can't be ordered" << from << to;
+              continue; // can't be ordered.
+            }
+          else if (!bad)
+            {
+              vector<VariableAssignment> ass;
               ass.push_back(different);
 
               // Discard the ones we've checked entirely.
@@ -823,16 +858,15 @@ findRewrites(ASTVec& expressions, const vector<Assignment>& values, const int de
             }
 
           // Write out the rules intermitently.
-          if (lastOutput + 500 < toWrite.size())
+          if (lastOutput + 5000 < to_write.size())
             {
-              writeOutRules();
-              lastOutput = toWrite.size();
+              writeOutRules("array.smt2");
+              lastOutput = to_write.size();
             }
 
         }
     }
 }
-
 
 // Converts the node into an IF statement that matches the node.
 void
@@ -850,7 +884,7 @@ rule_to_string(const ASTNode & n, ASTNodeString& names, string& current, string&
       return;
     }
 
-  if (n.isConstant() && (n.GetValueWidth() == bits || n.GetValueWidth() == bits-1))
+  if (n.isConstant() && (n.GetValueWidth() == bits || n.GetValueWidth() == bits - 1))
     {
       sofar += "&& " + current + " == ";
       stringstream constant;
@@ -872,7 +906,6 @@ rule_to_string(const ASTNode & n, ASTNodeString& names, string& current, string&
           sofar += "&& " + current + " == bm->CreateOneConst(32) ";
           return;
         }
-
 
       if (n == mgr->CreateBVConst(32, bits))
         {
@@ -958,14 +991,12 @@ containsNode(const ASTNode& n, const ASTNode& hunting, string& current)
 // Check it holds at higher bit-widths.
 // If so, then save the rule for later.
 bool
-checkAndStoreRule(const ASTNode & from, const ASTNode & to, Assignment& assignment)
+checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& assignment, bool&bad)
 {
-  const ASTNode  n = create(EQ,from,to);
+  const ASTNode n = create(EQ, from, to);
 
   assert(n.GetKind() == BEEV::EQ);
   assert(widen_to > bits);
-
-  const int st = getCurrentTime();
 
   for (int i = bits; i < widen_to; i++)
     {
@@ -976,6 +1007,7 @@ checkAndStoreRule(const ASTNode & from, const ASTNode & to, Assignment& assignme
         {
           cerr << "can't widen";
           cerr << n;
+          bad = true;
           return false;
         }
 
@@ -991,12 +1023,13 @@ checkAndStoreRule(const ASTNode & from, const ASTNode & to, Assignment& assignme
             }
 
           // Detected it's not a constant, or is constant FALSE.
-          cerr << "*" << i - bits << "*";
+          if (i-bits > 0)
+            cerr << "*" << i - bits << "*";
+
           return false;
         }
     }
 
-  toWrite.push_back(ToWrite(from,to,getCurrentTime() - st));
   return true;
 }
 
@@ -1007,7 +1040,7 @@ template<class T>
     cerr << "Before removing duplicates:" << big.size();
     std::sort(big.begin(), big.end());
     typename T::iterator it = std::unique(big.begin(), big.end());
-    big.resize(it - big.begin());
+    big.erase(it, big.end());
     cerr << ".After removing duplicates:" << big.size() << endl;
   }
 
@@ -1045,11 +1078,11 @@ bucket(string substring, vector<string>& inputs, hash_map<string, vector<string>
     }
 }
 
-
 string
 name(const ASTNode& n)
 {
-  assert(n.GetValueWidth() ==32); // Widen a constant used in an extract only.
+  assert(n.GetValueWidth() ==32);
+  // Widen a constant used in an extract only.
 
   if (n == mgr->CreateBVConst(32, bits))
     return "width";
@@ -1065,7 +1098,6 @@ name(const ASTNode& n)
   FatalError("@!#$@#$@#");
 }
 
-
 // Turns "n" into a statement in STP's C++ language to create it.
 string
 createString(ASTNode n, map<ASTNode, string>& val)
@@ -1073,46 +1105,53 @@ createString(ASTNode n, map<ASTNode, string>& val)
   if (val.find(n) != val.end())
     return val.find(n)->second;
 
-  string result ="";
+  string result = "";
 
   if (n.GetKind() == BVCONST)
     {
       if (n.isConstant() && n.GetValueWidth() == 1 && n == mgr->CreateZeroConst(1))
         {
-          result  = "bm->CreateZeroConst(1";
+          result = "bm->CreateZeroConst(1";
 
         }
       if (n.isConstant() && n.GetValueWidth() == 1 && n == mgr->CreateOneConst(1))
         {
-          result  = "bm->CreateOneConst(1";
+          result = "bm->CreateOneConst(1";
         }
 
-      if (n.isConstant() && (n.GetValueWidth() == bits || n.GetValueWidth() == bits-1))
+      if (n.isConstant() && (n.GetValueWidth() == bits))
         {
           stringstream constant;
           constant << "bm->CreateBVConst(" << bits << "," << n.GetUnsignedConst() << ")";
           result += "bm->CreateTerm(BVSX,width," + constant.str() + "";
         }
 
+      if (n.isConstant() && (n.GetValueWidth() == bits - 1))
+        {
+          stringstream constant;
+          constant << "bm->CreateBVConst(" << bits - 1 << "," << n.GetUnsignedConst() << ")";
+          result += "bm->CreateTerm(BVSX,width-1," + constant.str() + "";
+        }
+
       if (n.isConstant() && n.GetValueWidth() == 32) // Extract DEFINATELY.
         {
           if (n == mgr->CreateZeroConst(32))
-              result += " bm->CreateZeroConst(32 ";
+            result += " bm->CreateZeroConst(32 ";
 
           if (n == mgr->CreateOneConst(32))
-              result += " bm->CreateOneConst(32 ";
+            result += " bm->CreateOneConst(32 ";
 
           if (n == mgr->CreateBVConst(32, bits))
-              result = " bm->CreateBVConst(32, width ";
+            result = " bm->CreateBVConst(32, width ";
 
           if (n == mgr->CreateBVConst(32, bits - 1))
-              result = "  bm->CreateBVConst(32, width-1 ";
+            result = "  bm->CreateBVConst(32, width-1 ";
 
           if (n == mgr->CreateBVConst(32, bits - 2))
-              result =  "  bm->CreateBVConst(32, width-2 ";
+            result = "  bm->CreateBVConst(32, width-2 ";
         }
 
-      if (result =="")
+      if (result == "")
         {
           // uh oh.
           result = "~~~~~~~!!!!!!!!~~~~~~~~~~~";
@@ -1134,7 +1173,7 @@ createString(ASTNode n, map<ASTNode, string>& val)
 
       ss << name(n[2]) << " +1 - (" << name(n[1]) << "),"; // width.
       ss << createString(n[0], val) << ",";
-      ss << "bm->CreateBVConst(32," << name(n[1]) << "),";  // top then bottom.
+      ss << "bm->CreateBVConst(32," << name(n[1]) << "),"; // top then bottom.
       ss << "bm->CreateBVConst(32," << name(n[2]) << ")";
 
       result += ss.str();
@@ -1153,13 +1192,13 @@ createString(ASTNode n, map<ASTNode, string>& val)
     }
 
   if (n.GetKind() != BVEXTRACT)
-  for (int i = 0; i < n.Degree(); i++)
-    {
-      if (i > 0)
-        result += ",";
+    for (int i = 0; i < n.Degree(); i++)
+      {
+        if (i > 0)
+          result += ",";
 
-      result += createString(n[i], val);
-    }
+        result += createString(n[i], val);
+      }
   result += ")";
 
   val.insert(make_pair(n, result));
@@ -1185,38 +1224,35 @@ visit_all(const ASTNode& n, map<ASTNode, string>& visited, string current)
 }
 
 template<class T>
-std::string to_string(T i)
-{
+  std::string
+  to_string(T i)
+  {
     std::stringstream ss;
     ss << i;
     return ss.str();
-}
-
-
+  }
 
 // Write out all the rules that have been discovered to file.
 void
-writeOutRules()
+writeOutRules(string fileName)
 {
-  removeDuplicates(toWrite);
+  to_write.rewriteAll();
+  to_write.eraseDuplicates();
 
-  vector<string> output;
+  std::vector<string> output;
+  std::map<string, Rewrite_rule> dup;
 
-  for (int i = 0; i < toWrite.size(); i++)
+  for (int i = 0; i < to_write.size(); i++)
     {
-      if (toWrite[i].isEmpty())
-        continue;
-
-      ASTNode to = toWrite[i].to;
-      ASTNode from = toWrite[i].from;
-
-      if (getDifficulty(to) > getDifficulty(from))
+      if (!to_write.toWrite[i].isOK())
         {
-          // Want the easier one on the lhs. Which is the opposite of what you expect..
-          ASTNode t = to;
-          to = from;
-          from = t;
+          to_write.toWrite.erase(to_write.toWrite.begin() + i);
+          i--;
+          continue;
         }
+
+      ASTNode to = to_write.toWrite[i].getTo();
+      ASTNode from = to_write.toWrite[i].getFrom();
 
       // If the RHS is just part of the LHS, then we output something like children[0][1][0][1] as the RHS.
       string to_name = getToName(to, from);
@@ -1237,33 +1273,52 @@ writeOutRules()
           val.insert(make_pair(zero, "zero"));
 
           // loads all the expressions in the rhs into the list of available expressions.
-          visit_all(from, val, "children");
+          visit_all(from, val, "n");
 
           to_name = createString(to, val);
         }
 
       ASTNodeString names;
       string current = "n";
-      string sofar = "if ( width >= " + to_string(bits) + " " ;
+      string sofar = "if ( width >= " + to_string(bits) + " ";
 
       rule_to_string(from, names, current, sofar);
       sofar += ")    set(result,  " + to_name + ");";
 
+
 //      if (sofar.find("!!!") == std::string::npos && sofar.length() < 500)
         {
-          assert(getDifficulty(from) >= getDifficulty(to));
-
-          if (mgr->ASTTrue == rewriteThroughWithAIGS(toWrite[i].n))
-              {
-              toWrite[i] = ToWrite(mgr->ASTUndefined,mgr->ASTUndefined,0);
-              continue;
-              }
-
             {
               char buf[100];
               sprintf(buf, "//%d -> %d | %d ms\n", getDifficulty(from), getDifficulty(to), 0 /*toWrite[i].time*/);
               sofar += buf;
               output.push_back(sofar);
+
+              if (dup.find(sofar) != dup.end())
+                {
+                  cerr << "-----";
+                  cerr << sofar;
+
+                  ASTNode f = to_write.toWrite[i].getFrom();
+                  cerr << f << std::endl;
+                  cerr << dup.find(sofar)->second.getFrom();
+
+                  ASTNodeMap fromTo;
+
+                  f = renameVars(f);
+                  //cerr << "renamed" << f;
+                  bool result = unifyNode(f,dup.find(sofar)->second.getFrom(),fromTo,2) ;
+                  cerr << "unified" << result << endl;
+                  ASTNodeMap seen;
+                  cerr << rewrite(f,to_write.toWrite[i],seen );
+
+                  // The text of this rule is the same as another rule.
+                  to_write.toWrite.erase(to_write.toWrite.begin() + i);
+                  i--;
+                  continue;
+                }
+              else
+                dup.insert(make_pair(sofar,to_write.toWrite[i]));
             }
         }
     }
@@ -1271,7 +1326,7 @@ writeOutRules()
   // Remove the duplicates from output.
   removeDuplicates(output);
 
-  cerr << "Rules Discovered in total: " << toWrite.size() << endl;
+  cerr << "Rules Discovered in total: " << to_write.size() << endl;
 
   // Group functions of the same kind all together.
   hash_map<string, vector<string>, hashF<std::string> > buckets;
@@ -1297,128 +1352,184 @@ writeOutRules()
   ofstream outputFileSMT2;
   outputFileSMT2.open("rewrite_data.smt2", ios::trunc);
 
-      for (int i = 0; i < toWrite.size(); i++)
+  for (int i = 0; i < to_write.size(); i++)
+    {
+      assert(to_write.toWrite[i].isOK());
+      outputFileSMT2 << ";  " << "bits:" << bits << "->" << widen_to << " time to verify:" << to_write.toWrite[i].getTime()
+          << '\n';
+      for (int j = widen_to; j < widen_to + 5; j++)
         {
-          if (toWrite[i].isEmpty())
-            continue;
+          outputFileSMT2 << "(push 1)\n";
+          printer::SMTLIB2_PrintBack(outputFileSMT2, mgr->CreateNode(NOT, w), true, false);
+          outputFileSMT2 << "(pop 1)\n";
+        }
+    }
 
-          outputFileSMT2 << ";  " << "bits:" << bits << "->" << widen_to << " time to verify:" << toWrite[i].time << '\n';
-          for (int j= widen_to; j < widen_to+ 5;j++)
+  outputFileSMT2.close();
+
+  outputFileSMT2.open(fileName.c_str(), ios::trunc);
+  ASTVec v;
+  for (int i = 0; i < to_write.size(); i++)
+    {
+      v.push_back(to_write.toWrite[i].getN());
+    }
+
+  if (v.size() > 0)
+    {
+      ASTNode n = mgr->CreateNode(AND, v);
+      printer::SMTLIB2_PrintBack(outputFileSMT2, n, true);
+    }
+  outputFileSMT2.close();
+
+}
+
+// ASSUMES that buildRewrite() has recently been run on the rules..
+
+ASTNode
+rename_then_rewrite(ASTNode n, const Rewrite_rule& original_rule)
+{
+  n = renameVars(n);
+  ASTNodeMap seen;
+  n = rewrite(n,original_rule,seen);
+  return renameVarsBack(n);
+}
+
+// assumes the variables in n are two characters wide.
+ASTNode
+rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen)
+{
+  if (n.isAtom())
+    return n;
+
+  // nb. won't rewrite through EQ etc.
+  if (n.GetType() != BITVECTOR_TYPE)
+    return n;
+
+  ASTVec v;
+  for (int i = 0; i < n.Degree(); i++)
+    v.push_back(rewrite(n[i],original_rule,seen));
+
+  assert(v.size() > 0);
+  ASTNode n2;
+
+  if (v!=n.GetChildren())
+    n2 = mgr->CreateTerm(n.GetKind(), n.GetValueWidth(), v);
+  else
+    n2 = n;
+
+  ASTNodeMap fromTo;
+
+  vector<Rewrite_rule>& rr =
+      n[0].Degree() > 0 ?
+      (to_write.kind_kind_to_rr[n.GetKind()][n[0].GetKind()]) :
+      (to_write.kind_to_rr[n.GetKind()]) ;
+
+
+  for (int i = 0; i < rr.size(); i++)
+    {
+      // If they are the same rule. Then don't match them.
+      if (original_rule.sameID(rr[i]))
+        continue;
+
+      if (fromTo.size() > 0)
+        fromTo.clear();
+
+      const ASTNode& f = rr[i].getFrom();
+
+      if (unifyNode(f, n2, fromTo,1))
+        {
+          /*
+          cerr << "Unifying" << f;
+          cerr << "with:" << n2;
+
+          cerr << "Now" << rr[i].getTo();
+          cerr << "reducing rule" << rr[i].getN();
+
+          for (ASTNodeMap::iterator it = fromTo.begin(); it != fromTo.end(); it++)
             {
-              outputFileSMT2 << "(push 1)\n";
-              printer::SMTLIB2_PrintBack(outputFileSMT2, mgr->CreateNode(NOT, widen(toWrite[i].n,j)),true,false);
-              outputFileSMT2 << "(pop 1)\n";
+              cerr << it->first << "to" << it->second << endl;
             }
+
+          cerr << "--------------";
+           */
+
+          // This doesn't distinguish between the second time it's seen in the term, and seeing it again.
+          ASTNodeMap cache;
+          if (seen.find(n) != seen.end())
+            return seen.find(n)->second;
+          ASTNode r=  SubstitutionMap::replace(rr[i].getTo(), fromTo, cache, nf, false, true);
+          seen.insert(make_pair(n,r));
+          ASTNode r2= rewrite(r,original_rule,seen);
+          seen.erase(n);
+          seen.insert(make_pair(n,r2));
+          return r2;
         }
-
-      outputFileSMT2.close();
-
-      outputFileSMT2.open("array.smt2", ios::trunc);
-      ASTVec v;
-      for (int i = 0; i < toWrite.size(); i++)
-              {
-                if (toWrite[i].isEmpty())
-                  continue;
-
-                v.push_back(toWrite[i].n);
-              }
-
-      if (v.size() > 0)
-      {
-          ASTNode n = mgr->CreateNode(AND,v);
-          printer::SMTLIB2_PrintBack(outputFileSMT2, n,true);
-      }
-      outputFileSMT2.close();
-
-}
-
-// Triples the number of functions by adding all the unary ones.
-void
-allUnary(ASTVec& functions)
-{
-  for (int i = 0, size = functions.size(); i < size; i++)
-    {
-      if (functions[i] == mgr->ASTUndefined)
-        continue;
-
-      functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
-      functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
     }
+
+  return n2;
 }
 
-void
-removeNonWidened(ASTVec & functions)
+// loads the already existing rules.
+void loadExistingRules(string fileName)
 {
-  for (int i = 0; i < functions.size(); i++)
-    {
-      if (mgr->ASTUndefined == functions[i])
-        continue;
+  if(!ifstream(fileName.c_str()))
+     return; // file doesn't exist.
 
-      if (mgr->ASTUndefined == widen(functions[i], bits + 1))
+  smt2in = fopen(fileName.c_str(), "r");
+  TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
+  Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
+  parserInterface = &piTypeCheckDefault;
+
+  parserInterface->push(); // so the rules can be de-asserted.
+
+  mgr->GetRunTimes()->start(RunTimes::Parsing);
+  smt2parse();
+
+  ASTVec values = piTypeCheckDefault.GetAsserts();
+  values = FlattenKind(AND, values);
+
+  cerr << "Rewrite rule size:" << values.size() << endl;
+
+  for (int i = 0; i < values.size(); i++)
+    {
+      if ((values[i].GetKind() != EQ))
         {
-          functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
+          cerr << "Not equality??";
+          cerr << values[i];
           continue;
         }
+
+      ASTNode from = values[i][0];
+      ASTNode to = values[i][1];
+
+      // Rule should be orderable.
+      bool ok = orderEquivalence(from, to);
+      assert(ok);
+      Rewrite_rule r(mgr, from, to, 0);
+
+
+      if (r.isOK());
+        to_write.push_back(r);
+
     }
+
+  mgr->PopQuery();
+  parserInterface->popToFirstLevel();
+  parserInterface->cleanUp();
+
+  to_write.buildRules();
+
+  ASTVec vvv = mgr->GetAsserts();
+  for (int i=0; i < vvv.size() ;i++)
+    cerr << vvv[i];
+
+  // So we don't output as soon as one is discovered...
+  lastOutput = to_write.size();
 }
 
-// If there only w variables in the problem. We can delete it because
-// we will have another with just v's.
-// NB: Can only apply at the top level.
 void
-removeSingleVariable(ASTVec & functions)
+testProps()
 {
-  for (int i = 0; i < functions.size(); i++)
-    {
-      vector<ASTNode> symbols;
-      ASTNodeSet visited;
-
-      getVariables(functions[i], symbols, visited);
-      if (symbols.size() == 1 && symbols[0] == w)
-        {
-          functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
-          continue;
-        }
-    }
-}
-
-void
-removeSingleUndefined(ASTVec& functions)
-{
-  for (int i = 0; i < functions.size(); i++)
-    {
-      if (functions[i] == mgr->ASTUndefined)
-        {
-          functions.erase(functions.begin() + i);
-          break;
-        }
-    }
-}
-
-void applyBigRewrite(ASTVec& functions)
-{
-  BEEV::BigRewriter b;
-
-  for (int i = 0; i < functions.size(); i++)
-    {
-      if (functions[i] == mgr->ASTUndefined)
-        continue;
-
-      ASTNodeMap fromTo;
-      ASTNode s = b.rewrite(functions[i], fromTo, nf, mgr);
-      if (s != functions[i])
-        {
-          functions[i] = s;
-        }
-    }
-}
-
-
-int
-main(void)
-{
-  startup();
-
   ASTNode a = mgr->CreateSymbol("a", 0, 0);
   ASTNode b = mgr->CreateSymbol("b", 0, 0);
 
@@ -1433,172 +1544,108 @@ main(void)
   // Check that the propositions don't evaluate to true/false.
   for (int k = 0; k < number_types; k++)
     doProp(propKinds[k], a);
+}
 
-  /////////////////////////// BV, BV -> BV.
-  ASTVec functions;
+int test()
+{
+  // Test code.
+  loadExistingRules("test.smt2");
 
-  functions.push_back(w);
-  functions.push_back(v);
-  functions.push_back(mgr->CreateBVConst(bits, 0));
-  functions.push_back(mgr->CreateBVConst(bits, 1));
-  functions.push_back(mgr->CreateMaxConst(bits));
+  v = mgr->LookupOrCreateSymbol("v");
+  v.SetValueWidth(bits);
 
-  // All unary of the leaves.
-  allUnary(functions);
-  removeDuplicates(functions);
-  cerr << "Leaves:" << functions.size() << endl;
+  v0 = mgr->LookupOrCreateSymbol("v0");
+  v0.SetValueWidth(bits);
 
-  // We've got the leaves, and their unary operations,
-  // now get the binary operations of all of those.
-  int size = functions.size();
-  for (int i = 0; i < size; i++)
-    for (int j = 0; j < size; j++)
-      getAllFunctions(functions[i], functions[j], functions);
+  w = mgr->LookupOrCreateSymbol("w");
+  w.SetValueWidth(bits);
 
-  allUnary(functions);
+  w0 = mgr->LookupOrCreateSymbol("w0");
+  w0.SetValueWidth(bits);
 
-  // Duplicates removed, rewrite rules applied, non-widenable removed,
-  //removeNonWidened(functions);
-  //applyBigRewrite(functions);
-  removeDuplicates(functions);
-  removeSingleUndefined(functions);
+  writeOutRules("test-2.smt2");
+  to_write.verifyAllwithSAT();
+  to_write.clear();
+}
 
-  cerr << "One Level:" << functions.size() << endl;
-  applyBigRewrite(functions);
-  removeDuplicates(functions);
-  cerr << "After rewrite:" << functions.size() << endl;
+int
+main()
+{
+  startup();
+  //test();
+  //exit(1);
 
-  const bool two_level = true;
+  loadExistingRules("array.smt2");
 
-  if (two_level)
-    {
-      int last = 0;
-      ASTVec functions_copy(functions);
-      size = functions_copy.size();
-      for (int i = 0; i < size; i++)
-        for (int j = 0; j < size; j++)
-          getAllFunctions(functions_copy[i], functions_copy[j], functions);
+  v = mgr->LookupOrCreateSymbol("v");
+  v.SetValueWidth(bits);
 
-      //applyBigRewrite(functions);
-      removeSingleVariable(functions);
-      removeDuplicates(functions);
-      removeSingleUndefined(functions);
+  v0 = mgr->LookupOrCreateSymbol("v0");
+  v0.SetValueWidth(bits);
 
-      // All the unary combinations of the binaries.
-      //allUnary(functions);
-      //removeNonWidened(functions);
-      //removeDuplicates(functions);
-      cerr << "Two Level:" << functions.size() << endl;
-    }
+  w = mgr->LookupOrCreateSymbol("w");
+  w.SetValueWidth(bits);
+
+  w0 = mgr->LookupOrCreateSymbol("w0");
+  w0.SetValueWidth(bits);
+
+  testProps();
+
+  findNewRewrites();
+  writeOutRules("array.smt2");
+  to_write.verifyAllwithSAT();
+}
+
+int
+findNewRewrites()
+{
+  Function_list functionList;
+  functionList.buildAll();
 
   // The hash is generated on these values.
-  vector<Assignment> values;
-  findRewrites(functions, values);
-  writeOutRules();
+  vector<VariableAssignment> values;
+  findRewrites(functionList.functions, values);
+  writeOutRules("array.smt2");
 
   cerr << "Initial:" << bits << " widening to :" << widen_to << endl;
   cerr << "Highest disproved @ level: " << highestLevel << endl;
   cerr << highestDisproved << endl;
-
   return 0;
 }
 
 
-#if 0
-// Shortcut. Don't examine the rule if it isn't a candidate.
+// Term variables have a specified width!!!
 bool
-isCandidateSizePreserving(const ASTNode& n)
+unifyNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width)
 {
-  if (n.GetKind() != EQ)
-    return false;
-
-  if (n[0].isConstant())
+  // Pointers to the same value. OK.
+  if (n0 == n1)
     return true;
 
-  visited.clear();
-  if (lhsInRHS(n[1], n[0]))
-    return true;
-
-  return false;
-}
-
-ASTNodeSet visited;
-
-bool
-lhsInRHS(const ASTNode& n, const ASTNode& lookFor)
-{
-  if (lookFor == n)
-    return true;
-
-  if (visited.find(n) != visited.end())
-    return false;
-
-  for (int i = 0; i < n.Degree(); i++)
-    if (lhsInRHS(n[i], lookFor))
-      return true;
-
-  visited.insert(n);
-  return false;
-}
-
-int
-getDifficulty_approximate(const ASTNode&n)
-{
-  if (difficulty_cache.find(n) != difficulty_cache.end())
-    return difficulty_cache.find(n)->second;
-
-  DifficultyScore ds;
-  int score = ds.score(n);
-  difficulty_cache.insert(make_pair(n, score));
-  return score;
-}
-
-// Shortcut. Don't examine the rule if it isn't a candidate.
-bool
-isCandidateDifficultyPreserving(const ASTNode& n)
-{
-  if (n.GetKind() != EQ)
-    return false;
-
-  if (getDifficulty(n[0]) != getDifficulty(n[1]))
-    return true;
-
-  return false;
-}
-
-void
-getSomeFunctions(ASTNode v, ASTNode w, ASTVec& result)
-{
-
-  Kind types[] =
-    { BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD };
-  int number_types = sizeof(types) / sizeof(Kind);
-
-  // all two argument functions.
-  for (int i = 0; i < number_types; i++)
-    result.push_back(create(types[i], v, w));
-}
-
-// True if "to" is a single function of "n"
-bool
-single_fn_of(ASTNode from, ASTNode to)
-{
-  for (int i = 0; i < to.Degree(); i++)
+  if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
     {
-      if (to[i].isConstant())
-        continue;
+      if (fromTo.find(n0) != fromTo.end())
+        return unifyNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
 
-      // Special case equalities are cheap so allow them through.
-      if (to[i].GetKind() == EQ && to[i][0].isConstant())
-        {
-          if (!contained_in(to[i][1], from))
-            return false;
-        }
-      else if (!contained_in(to[i], from))
+      fromTo.insert(make_pair(n0, n1));
+      return unifyNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
+    }
+
+  // Here:
+  // They could be different BVConsts, different symbols, or
+  // different functions.
+
+  if (n0.Degree() != n1.Degree() || (n0.Degree() == 0))
+      return false;
+
+  if (n0.GetKind() != n1.GetKind())
+      return false;
+
+  for (int i = 0; i < n0.Degree(); i++)
+    {
+      if (!unifyNode(n0[i], n1[i], fromTo, term_variable_width))
         return false;
     }
+
   return true;
 }
-
-
-#endif

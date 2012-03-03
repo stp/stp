@@ -1,7 +1,7 @@
 TOP = ../../
 include $(TOP)scripts/Makefile.common
 
-SRCS =  rewrite.cpp time_cbitp.cpp test_cbitp.cpp
+SRCS =  time_cbitp.cpp test_cbitp.cpp
 OBJS = $(SRCS:.cpp=.o)
 CXXFLAGS += -L../../lib/ 
 
@@ -10,8 +10,6 @@ CXXFLAGS += -L../../lib/
 time_cbitp: $(OBJS)  $(TOP)lib/libstp.a 
 	$(CXX) $(CXXFLAGS) $@.o -o $@ -lstp 
 
-rewrite: $(OBJS)  $(TOP)lib/libstp.a 
-	$(CXX)   $(CXXFLAGS) $@.o -o $@ -lstp 
 
 test_cbitp: $(OBJS)  $(TOP)lib/libstp.a 
 	$(CXX)   $(CXXFLAGS) $@.o -o $@ -lstp 
