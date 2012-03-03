@@ -1295,6 +1295,9 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
     break;
 
   case SBVMOD:
+    {
+      const ASTNode max = bm.CreateMaxConst(width);
+
     if (children[1].isConstant() && CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
       result = children[0];
     else if (children[0] == children[1])
@@ -1309,6 +1312,14 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = bm.CreateZeroConst(width);
     else if (children[1].GetKind() == BVUMINUS && children[1][0] == children[0])
       result = bm.CreateZeroConst(width);
+    else if ( width >= 4 && children[0].GetKind() == BVNEG && children[1] == children[0][0] )
+      result = bm.CreateTerm(SBVMOD,width,max,children[0][0]);//9759 -> 542 | 4842 ms
+    else if ( width >= 4 && children[1].GetKind() == BVNEG && children[1][0] == children[0] )
+      result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9759 -> 542 | 4005 ms
+    else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0] )
+      result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9807 -> 674 | 2962 ms
+    }
+
     break;
 
   case BEEV::BVDIV:
@@ -1349,6 +1360,11 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
     break;
 
   case SBVREM:
+    {
+      const ASTNode one = bm.CreateOneConst(width);
+          const ASTNode zero = bm.CreateZeroConst(width);
+          const ASTNode max = bm.CreateMaxConst(width);
+
     if (children[0] == children[1])
       result = bm.CreateZeroConst(width);
     else if (children[0].isConstant() && CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
@@ -1363,9 +1379,18 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = NodeFactory::CreateTerm(SBVREM, width, children[0], children[1][0]);
     else if (children[0].GetKind() == BVUMINUS && children[0][0] == children[1])
       result = bm.CreateZeroConst(width);
+    else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1] == children[0][0] )
+      result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[0][0]));//9350 -> 624 | 3072 ms
+    else if ( width >= 4 &&  children[1].GetKind() == BVNEG && children[1][0] == children[0] )
+      result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[1]));//9350 -> 624 | 2402 ms
+    else if ( width >= 4 &&  children[0].GetKind() == BVUMINUS && children[1] == max)
+      result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVREM,width,children[0][0],children[1]));//123 -> 83 | 1600 ms
+    }
+
+
     break;
 
-  case BEEV::BVMOD:
+  case BVMOD:
     {
       if (children[0] == children[1])
         result = bm.CreateZeroConst(width);
@@ -1398,6 +1423,8 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       if ( width >= 3 && children[1].GetKind() == BVNEG && children[1][0] == children[0] )
         result =  NodeFactory::CreateTerm(BVMOD,width,bm.CreateMaxConst(width),children[1]);//3285 -> 3113
 
+      if ( width >= 4 && children[0].GetKind() == BVUMINUS && children[1].GetKind() == BVNEG && children[1][0] == children[0][0] )
+        result  =   NodeFactory::CreateTerm(SBVREM,width,one,children[1]); //8883 -> 206 | 1566 ms
     }
 
     break;
