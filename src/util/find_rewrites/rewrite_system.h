@@ -50,7 +50,7 @@ private:
 
   friend void writeOutRules(string fileName);
 
-  friend ASTNode  rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
+  friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
 
   // Rules to write out when we get the chance.
   typedef list<Rewrite_rule> RewriteRuleContainer;
@@ -66,24 +66,50 @@ public:
   }
 
   void
-  buildRules()
+  addRuleToLookup(Rewrite_rule& r)
+  {
+    const ASTNode& from = r.getFrom();
+    kind_to_rr[from.GetKind()].push_back(r);
+
+    assert(from.Degree() > 0); // Shouldn't map from a constant, nor from a variable.
+
+    if (from[0].Degree() > 0)
+      kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(r);
+  }
+
+  void
+  buildLookupTable()
   {
     kind_to_rr.clear();
     kind_kind_to_rr.clear();
 
     for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
       {
-        ASTNode from = it->getFrom();
-        kind_to_rr[from.GetKind()].push_back(*it);
+        addRuleToLookup(*it);
+      }
+  }
 
-        if (from[0].Degree() > 0)
-          kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(*it);
+  void
+  removeBad()
+  {
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+      {
+        if (!it->isOK())
+          {
+            cout << "Removing Rule that is bad";
+            cout << it->getFrom();
+            cout << it->getTo();
+            cout << "----\n";
+
+            toWrite.erase(it--);
+          }
       }
   }
 
   void
   eraseDuplicates()
   {
+    removeBad();
     toWrite.sort();
     toWrite.unique();
   }
@@ -92,6 +118,13 @@ public:
   push_back(Rewrite_rule rr)
   {
     toWrite.push_back(rr);
+    addRuleToLookup(rr);
+  }
+
+  void
+  erase(RewriteRuleContainer::iterator it)
+  {
+    toWrite.erase(it);
   }
 
   int
@@ -110,21 +143,19 @@ public:
   rewriteAll()
   {
     eraseDuplicates();
-    cerr << "Size before rewriteAll:" << toWrite.size() << endl;
+    cout << "Size before rewriteAll:" << toWrite.size() << endl;
 
-    buildRules();
+    buildLookupTable();
 
     int i=0;
     for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++, i++)
       {
         if (i % 1000 == 0)
-          cerr << "rewrite all:" << i << " of " << toWrite.size() << endl;
+          cout << "rewrite all:" << i << " of " << toWrite.size() << endl;
 
-        if (!it->isOK())
-          {
-            toWrite.erase(it--);
-            continue;
-          }
+        // if not OK, should have been removed during duplicates.
+        // shouldn't add extra rules that aren't ok.
+        assert (it->isOK());
 
         ASTNode n = renameVars(it->getFrom());
         ASTNodeMap seen;
@@ -136,30 +167,48 @@ public:
 
             rewritten_from = renameVarsBack(rewritten_from);
             ASTNode to = it->getTo();
-            bool r = orderEquivalence(rewritten_from, to);
-            if (r)
+            bool ok = orderEquivalence(rewritten_from, to);
+            if (ok)
               {
                 Rewrite_rule rr(mgr, rewritten_from, to, 0);
                 if (rr.isOK())
                   {
+                    cout << "Modifying Rule\n";
+                    cout << "Initially From";
+                    cout << it->getFrom();
+                    cout << "new From";
+                    cout << rewritten_from;
+                    cout << "---";
+
                     *it= rr;
-                    buildRules(); // Otherwise two rules will remove each other?
+                    buildLookupTable(); // Otherwise two rules will remove each other?
                   }
                 else
                   {
                     cout << "Erasing rule";
-                    toWrite.erase(it--);                  }
+                    cout << "Initially From";
+                    cout << it->getFrom();
+                    cout << "new From";
+                    cout << rewritten_from;
+                    cout << "---";
+
+                    erase(it--);
+                    i--;
+                    buildLookupTable(); // Otherwise two rules will remove each other?
+                  }
               }
             else
               {
-                cerr << "Mapped but couldn't order";
-                cerr << rewritten_from << to;
+                cout << "Mapped but couldn't order";
+                cout << rewritten_from << to;
+                erase(it--);
+                i--;
               }
           }
       }
 
     eraseDuplicates();
-    cerr << "Size after rewriteAll:" << toWrite.size() << endl;
+    cout << "Size after rewriteAll:" << toWrite.size() << endl;
   }
 
   void clear()
@@ -178,9 +227,9 @@ public:
         bool r = checkRule(it->getFrom(), it->getTo(), assignment, bad);
         if (!r || bad)
           {
-            cerr << "Bad to, then from" << endl;
-            cerr << it->getFrom();
-            cerr << it->getTo();
+            cout << "Bad to, then from" << endl;
+            cout << it->getFrom();
+            cout << it->getTo();
             assert(r);
             assert(!bad);
           }

@@ -65,16 +65,13 @@ public:
   bool
   isOK()
   {
-    if (getN().GetKind() != EQ)
-      return false;
-
     ASTNode w = widen(getN(), widen_to);
-
-    BVTypeCheckRecursive(n);
-    BVTypeCheckRecursive(w);
 
     if  (w.IsNull() || w.GetKind() == UNDEFINED)
       return false;
+
+    assert(BVTypeCheckRecursive(n));
+    assert(BVTypeCheckRecursive(w));
 
     if (from.isAtom() && to.isAtom())
         return false;
@@ -87,11 +84,16 @@ public:
   }
 
   Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_, const BEEV::ASTNode& to_, const int t)
-  : from(from_), to(to_), n ( bm->CreateNode(BEEV::EQ,to_,from_))
+  : from(from_), to(to_)
     {
       id = static_id++;
-
       time = t;
+
+      ASTVec c;
+      c.push_back(to_);
+      c.push_back(from_);
+      n =  bm->hashingNodeFactory->CreateNode(BEEV::EQ,c);
+
 
       ////
       assert(!from.IsNull());

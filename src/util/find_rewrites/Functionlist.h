@@ -26,7 +26,8 @@ class Function_list
   getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] = {BVMULT, BVPLUS, BVXOR, BVAND, BVOR ,BVRIGHTSHIFT, BVLEFTSHIFT};
+    Kind types[] = {BVMULT, BVPLUS, BVXOR, BVAND};
+
 
     //Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
     const int number_types = sizeof(types) / sizeof(Kind);
@@ -91,7 +92,7 @@ class Function_list
   void
   applyRewritesToAll(ASTVec& functions)
   {
-    to_write.buildRules();
+    to_write.buildLookupTable();
     cerr << "Applying:" << to_write.size()  <<"rewrite rules" << endl;
 
     for (int i = 0; i < functions.size(); i++)
@@ -264,7 +265,7 @@ public:
 
     cerr << "One Level:" << functions.size() << endl;
 
-   const bool two_level = false;
+   const bool two_level = true;
 
     if (two_level)
       {
