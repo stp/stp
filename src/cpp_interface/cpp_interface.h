@@ -256,6 +256,17 @@ namespace BEEV
       GlobalSTP->ClearAllTables();
     }
 
+    // We can't pop off the zeroeth level.
+    void popToFirstLevel()
+    {
+      while (symbols.size() > 1)
+        pop();
+
+      // I don't understand why this is required.
+      while(bm.getAssertLevel() > 0)
+       bm.Pop();
+    }
+
     void
     pop()
     {
