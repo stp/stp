@@ -53,7 +53,9 @@ private:
   friend ASTNode  rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
 
   // Rules to write out when we get the chance.
-  vector<Rewrite_rule> toWrite;
+  typedef list<Rewrite_rule> RewriteRuleContainer;
+
+  RewriteRuleContainer toWrite;
   std::map< Kind, vector<Rewrite_rule> > kind_to_rr;
   std::map< Kind, std::map< Kind, vector<Rewrite_rule> > > kind_kind_to_rr;
 
@@ -69,20 +71,21 @@ public:
     kind_to_rr.clear();
     kind_kind_to_rr.clear();
 
-    for (int i = 0; i < toWrite.size(); i++)
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
       {
-        ASTNode from = toWrite[i].getFrom();
-        kind_to_rr[from.GetKind()].push_back(toWrite[i]);
+        ASTNode from = it->getFrom();
+        kind_to_rr[from.GetKind()].push_back(*it);
 
         if (from[0].Degree() > 0)
-          kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(toWrite[i]);
+          kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(*it);
       }
   }
 
   void
   eraseDuplicates()
   {
-    removeDuplicates(toWrite);
+    toWrite.sort();
+    toWrite.unique();
   }
 
   void
@@ -111,43 +114,41 @@ public:
 
     buildRules();
 
-    for (int i = 0; i < toWrite.size(); i++)
+    int i=0;
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++, i++)
       {
         if (i % 1000 == 0)
           cerr << "rewrite all:" << i << " of " << toWrite.size() << endl;
 
-        if (!toWrite[i].isOK())
+        if (!it->isOK())
           {
-            toWrite.erase(toWrite.begin() + i);
-            i--;
+            toWrite.erase(it--);
             continue;
           }
 
-        ASTNode n = renameVars(toWrite[i].getFrom());
+        ASTNode n = renameVars(it->getFrom());
         ASTNodeMap seen;
-        ASTNode rewritten_from = rewrite(n, toWrite[i],seen);
+        ASTNode rewritten_from = rewrite(n, *it,seen);
 
         if (n != rewritten_from)
           {
             assert (isConstantToSat(create(EQ, rewritten_from,n)));
 
             rewritten_from = renameVarsBack(rewritten_from);
-            ASTNode to = toWrite[i].getTo();
+            ASTNode to = it->getTo();
             bool r = orderEquivalence(rewritten_from, to);
             if (r)
               {
                 Rewrite_rule rr(mgr, rewritten_from, to, 0);
                 if (rr.isOK())
                   {
-                    toWrite[i] = rr;
+                    *it= rr;
                     buildRules(); // Otherwise two rules will remove each other?
                   }
                 else
                   {
                     cout << "Erasing rule";
-                    toWrite.erase(toWrite.begin() + i);
-                    i--;
-                  }
+                    toWrite.erase(it--);                  }
               }
             else
               {
@@ -169,21 +170,21 @@ public:
   void
   verifyAllwithSAT()
   {
-    for (int i = 0; i < toWrite.size(); i++)
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
       {
         VariableAssignment assignment;
         bool bad = false;
         const int st = getCurrentTime();
-        bool r = checkRule(toWrite[i].getFrom(), toWrite[i].getTo(), assignment, bad);
+        bool r = checkRule(it->getFrom(), it->getTo(), assignment, bad);
         if (!r || bad)
           {
             cerr << "Bad to, then from" << endl;
-            cerr << toWrite[i].getFrom();
-            cerr << toWrite[i].getTo();
+            cerr << it->getFrom();
+            cerr << it->getTo();
             assert(r);
             assert(!bad);
           }
-        toWrite[i].time = getCurrentTime() - st;
+        it->time = getCurrentTime() - st;
       }
   }
 };

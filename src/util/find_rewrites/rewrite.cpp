@@ -1242,17 +1242,16 @@ writeOutRules(string fileName)
   std::vector<string> output;
   std::map<string, Rewrite_rule> dup;
 
-  for (int i = 0; i < to_write.size(); i++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
     {
-      if (!to_write.toWrite[i].isOK())
+      if (!it->isOK())
         {
-          to_write.toWrite.erase(to_write.toWrite.begin() + i);
-          i--;
+          to_write.toWrite.erase(it--);
           continue;
         }
 
-      ASTNode to = to_write.toWrite[i].getTo();
-      ASTNode from = to_write.toWrite[i].getFrom();
+      ASTNode to = it->getTo();
+      ASTNode from = it->getFrom();
 
       // If the RHS is just part of the LHS, then we output something like children[0][1][0][1] as the RHS.
       string to_name = getToName(to, from);
@@ -1299,7 +1298,7 @@ writeOutRules(string fileName)
                   cerr << "-----";
                   cerr << sofar;
 
-                  ASTNode f = to_write.toWrite[i].getFrom();
+                  ASTNode f = it->getFrom();
                   cerr << f << std::endl;
                   cerr << dup.find(sofar)->second.getFrom();
 
@@ -1310,15 +1309,14 @@ writeOutRules(string fileName)
                   bool result = unifyNode(f,dup.find(sofar)->second.getFrom(),fromTo,2) ;
                   cerr << "unified" << result << endl;
                   ASTNodeMap seen;
-                  cerr << rewrite(f,to_write.toWrite[i],seen );
+                  cerr << rewrite(f,*it,seen );
 
                   // The text of this rule is the same as another rule.
-                  to_write.toWrite.erase(to_write.toWrite.begin() + i);
-                  i--;
+                  to_write.toWrite.erase(it--);
                   continue;
                 }
               else
-                dup.insert(make_pair(sofar,to_write.toWrite[i]));
+                dup.insert(make_pair(sofar,*it));
             }
         }
     }
@@ -1352,15 +1350,16 @@ writeOutRules(string fileName)
   ofstream outputFileSMT2;
   outputFileSMT2.open("rewrite_data.smt2", ios::trunc);
 
-  for (int i = 0; i < to_write.size(); i++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
     {
-      assert(to_write.toWrite[i].isOK());
-      outputFileSMT2 << ";  " << "bits:" << bits << "->" << widen_to << " time to verify:" << to_write.toWrite[i].getTime()
+      assert(it->isOK());
+      outputFileSMT2 << ";  " << "bits:" << bits << "->" << widen_to << " time to verify:" << it->getTime()
           << '\n';
       for (int j = widen_to; j < widen_to + 5; j++)
         {
+          ASTNode widened = widen(it->getN(),j);
           outputFileSMT2 << "(push 1)\n";
-          printer::SMTLIB2_PrintBack(outputFileSMT2, mgr->CreateNode(NOT, w), true, false);
+          printer::SMTLIB2_PrintBack(outputFileSMT2, mgr->CreateNode(NOT, widened), true, false);
           outputFileSMT2 << "(pop 1)\n";
         }
     }
@@ -1369,9 +1368,9 @@ writeOutRules(string fileName)
 
   outputFileSMT2.open(fileName.c_str(), ios::trunc);
   ASTVec v;
-  for (int i = 0; i < to_write.size(); i++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
     {
-      v.push_back(to_write.toWrite[i].getN());
+      v.push_back(it->getN());
     }
 
   if (v.size() > 0)
