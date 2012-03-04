@@ -1312,12 +1312,14 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = bm.CreateZeroConst(width);
     else if (children[1].GetKind() == BVUMINUS && children[1][0] == children[0])
       result = bm.CreateZeroConst(width);
+#if 0
     else if ( width >= 4 && children[0].GetKind() == BVNEG && children[1] == children[0][0] )
       result = bm.CreateTerm(SBVMOD,width,max,children[0][0]);//9759 -> 542 | 4842 ms
     else if ( width >= 4 && children[1].GetKind() == BVNEG && children[1][0] == children[0] )
       result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9759 -> 542 | 4005 ms
     else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0] )
       result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9807 -> 674 | 2962 ms
+#endif
     }
 
     break;
@@ -1379,12 +1381,14 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       result = NodeFactory::CreateTerm(SBVREM, width, children[0], children[1][0]);
     else if (children[0].GetKind() == BVUMINUS && children[0][0] == children[1])
       result = bm.CreateZeroConst(width);
+#if 0
     else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1] == children[0][0] )
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[0][0]));//9350 -> 624 | 3072 ms
     else if ( width >= 4 &&  children[1].GetKind() == BVNEG && children[1][0] == children[0] )
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[1]));//9350 -> 624 | 2402 ms
     else if ( width >= 4 &&  children[0].GetKind() == BVUMINUS && children[1] == max)
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVREM,width,children[0][0],children[1]));//123 -> 83 | 1600 ms
+#endif
     }
 
 
@@ -1416,7 +1420,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       if (children[0].isConstant() && children[0] == one)
         result = NodeFactory::CreateTerm(ITE, width, NodeFactory::CreateNode(EQ, children[1], one),
             bm.CreateZeroConst(width), one);
-
+#if 0
       if ( width >= 3 && children[0].GetKind() == BVNEG && children[1] == children[0][0] )
         result =  NodeFactory::CreateTerm(BVMOD,width,bm.CreateMaxConst(width),children[0][0]);//3285 -> 3113
 
@@ -1425,6 +1429,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
 
       if ( width >= 4 && children[0].GetKind() == BVUMINUS && children[1].GetKind() == BVNEG && children[1][0] == children[0][0] )
         result  =   NodeFactory::CreateTerm(SBVREM,width,one,children[1]); //8883 -> 206 | 1566 ms
+#endif
     }
 
     break;
