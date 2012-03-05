@@ -43,12 +43,17 @@ rename_then_rewrite(ASTNode n, const Rewrite_rule& original_rule);
 bool
 isConstantToSat(const ASTNode & query);
 
+bool
+isConstant(const ASTNode& n, VariableAssignment& different);
 
 class Rewrite_system
 {
 private:
 
-  friend void writeOutRules(string fileName);
+  friend
+  void
+  writeOutRules();
+
 
   friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
 
@@ -75,6 +80,19 @@ public:
 
     if (from[0].Degree() > 0)
       kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(r);
+  }
+
+  void
+  deleteID(int id)
+  {
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+      {
+        if (it->getId() == id)
+          {
+            toWrite.erase(it--);
+            cerr << "matched" << id;
+          }
+      }
   }
 
   void
@@ -199,10 +217,14 @@ public:
               }
             else
               {
-                cout << "Mapped but couldn't order";
-                cout << rewritten_from << to;
+                if (rewritten_from != to)
+                  {
+                      cout << "Mapped but couldn't order";
+                      cout << rewritten_from << to;
+                  }
                 erase(it--);
                 i--;
+                buildLookupTable(); // Otherwise two rules will remove each other?
               }
           }
       }
@@ -233,7 +255,18 @@ public:
             assert(r);
             assert(!bad);
           }
-        it->time = getCurrentTime() - st;
+        if (bits > it->getVerifiedToBits())
+          it->setVerified(bits,getCurrentTime() - st);
+      }
+  }
+
+
+  void
+  writeOut(ostream &o)
+  {
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+      {
+        it->writeOut(o);
       }
   }
 };

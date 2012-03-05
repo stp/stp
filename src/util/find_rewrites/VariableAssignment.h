@@ -7,10 +7,9 @@
 #define VARIABLEASSIGNMENT_H_
 
 extern ASTNode v, v0, w ,w0;
-
 extern NodeFactory* nf;
-
 extern BEEV::STPMgr* mgr;
+
 
 struct VariableAssignment
 {

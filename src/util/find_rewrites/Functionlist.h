@@ -8,7 +8,7 @@
 
 extern const int bits;
 extern Simplifier *simp;
-extern Rewrite_system to_write;
+extern Rewrite_system rewrite_system;
 
 ASTNode
 widen(const ASTNode& w, int width);
@@ -26,7 +26,7 @@ class Function_list
   getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] = {BVMULT, BVPLUS, BVXOR, BVAND};
+    Kind types[] = {BVXOR, BVAND};
 
 
     //Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
@@ -92,8 +92,8 @@ class Function_list
   void
   applyRewritesToAll(ASTVec& functions)
   {
-    to_write.buildLookupTable();
-    cerr << "Applying:" << to_write.size()  <<"rewrite rules" << endl;
+    rewrite_system.buildLookupTable();
+    cerr << "Applying:" << rewrite_system.size()  <<"rewrite rules" << endl;
 
     for (int i = 0; i < functions.size(); i++)
       {
@@ -103,7 +103,7 @@ class Function_list
         if (i % 100000 == 0)
           cerr << "applyRewritesToAll:" << i << " of " << functions.size() << endl;
 
-        ASTNode r = to_write.rewriteNode(functions[i]);
+        ASTNode r = rewrite_system.rewriteNode(functions[i]);
         if (r!= functions[i])
           {
          //   cerr << "changed" << functions[i] << " to "<< r;
@@ -292,7 +292,7 @@ public:
         removeSingleUndefined();
 
         // All the unary combinations of the binaries.
-        //allUnary(functions);
+        allUnary();
 
         cerr << "Two Level:" << functions.size() << endl;
       }

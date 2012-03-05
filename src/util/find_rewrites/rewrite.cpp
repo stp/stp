@@ -33,9 +33,6 @@ smt2parse();
 using namespace std;
 using namespace BEEV;
 
-// Asynchronously stop solving.
-bool finished = false;
-
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
 int highestLevel = 0;
@@ -51,13 +48,16 @@ const int values_in_hash = 64 / bits;
 const int mask = (1 << (bits)) - 1;
 //////////////////////////////////
 
+// Set by the signal handler to write out the rules that have been discovered.
+volatile bool force_writeout = false;
+
 // Saves a little bit of time. The vectors are saved between invocations.
 vector<ASTVec> saved_array;
 
 // Stores the difficulties that have already been generated.
 map<ASTNode, int> difficulty_cache;
 
-Rewrite_system to_write;
+Rewrite_system rewrite_system;
 
 void
 clearSAT();
@@ -76,10 +76,7 @@ string
 containsNode(const ASTNode& n, const ASTNode& hunting, string& current);
 
 void
-applyRewritesToAll(ASTVec & v);
-
-void
-writeOutRules(string fileName);
+writeOutRules();
 
 int
 getDifficulty(const ASTNode& n_);
@@ -89,9 +86,6 @@ getVariables(const ASTNode& n);
 
 bool
 unifyNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width);
-
-int
-findNewRewrites();
 
 typedef HASHMAP<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
 
@@ -300,8 +294,8 @@ isConstant(const ASTNode& n, VariableAssignment& different)
       assert(symbols.size() > 0);
 
       // Both of them might not be contained in the assignment.
-      different.setV(mgr->CreateBVConst(symbols[0].GetValueWidth(), 0));
-      different.setW(mgr->CreateBVConst(symbols[0].GetValueWidth(), 0));
+      different.setV(mgr->CreateZeroConst(symbols[0].GetValueWidth()));
+      different.setW(mgr->CreateZeroConst(symbols[0].GetValueWidth()));
 
       // It might have been widened.
       for (int i = 0; i < symbols.size(); i++)
@@ -585,6 +579,12 @@ doIte(ASTNode a)
     }
 }
 
+void do_write_out(int ignore)
+{
+  force_writeout = true;
+}
+
+
 int
 startup()
 {
@@ -618,7 +618,7 @@ startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore<Minisat::Solver>(finished);
+  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -642,6 +642,8 @@ startup()
  // w = mgr->LookupOrCreateSymbol("w");
  // w.SetValueWidth(bits);
 
+  // Write out the work so far..
+  signal(SIGUSR1,do_write_out);
 
 }
 
@@ -649,7 +651,7 @@ void
 clearSAT()
 {
   delete ss;
-  ss = new MinisatCore<Minisat::Solver>(finished);
+  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
 }
 
 // Return true if the negation of the query is unsatisfiable.
@@ -657,7 +659,6 @@ bool
 isConstantToSat(const ASTNode & query)
 {
   assert(query.GetType() == BOOLEAN_TYPE);
-  cout << "to";
 
   GlobalSTP->ClearAllTables();
   clearSAT();
@@ -666,7 +667,6 @@ isConstantToSat(const ASTNode & query)
 
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(*ss, query2, query2, GlobalSTP->tosat, false);
 
-  cout << "from";
   return (r == SOLVER_VALID); // unsat, always true
 }
 
@@ -781,7 +781,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
     }
 
   cout << '\n' << "depth:" << depth << ", size:" << expressions.size() << " values:" << values.size() << " found: "
-      << to_write.size() << '\n';
+      << rewrite_system.size() << " done:" << discarded << "\n";
 
   assert(expressions.size() >0);
 
@@ -832,14 +832,14 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
           continue;
 
       // nb. I haven't rebuilt the map, it's done by writeOutRules().
-      equiv[i] == to_write.rewriteNode(equiv[i]);
+      equiv[i] == rewrite_system.rewriteNode(equiv[i]);
 
       for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
         {
           if (equiv[i].GetKind() == UNDEFINED || equiv[j].GetKind() == UNDEFINED)
             continue;
 
-          equiv[j] = to_write.rewriteNode(equiv[j]);
+          equiv[j] = rewrite_system.rewriteNode(equiv[j]);
 
           ASTNode from = equiv[i];
           ASTNode to = equiv[j];
@@ -863,11 +863,16 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               cout << to;
               cout << getDifficulty(from) << " to " << getDifficulty(to) << endl;
               cout << "After rewriting";
-              cout << to_write.rewriteNode(from);
-              cout << to_write.rewriteNode(to);
+              cout << rewrite_system.rewriteNode(from);
+              cout << rewrite_system.rewriteNode(to);
               cout << "------";
 
-              to_write.push_back(Rewrite_rule(mgr, from, to, getCurrentTime() - st));
+              Rewrite_rule rr(mgr, from, to, getCurrentTime() - st);
+
+              if (!rr.timedCheck(10000))
+                continue;
+
+              rewrite_system.push_back(rr);
 
               // Remove the more difficult expression.
               if (from == equiv[i])
@@ -895,14 +900,16 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
             }
 
           // Write out the rules intermitently.
-          if (lastOutput + 5000 < to_write.size())
+          if (force_writeout || lastOutput + 5000 < rewrite_system.size())
             {
-              writeOutRules("array.smt2");
-              lastOutput = to_write.size();
+              rewrite_system.rewriteAll();
+              writeOutRules();
+              lastOutput = rewrite_system.size();
             }
 
         }
     }
+  discarded += expressions.size();
 }
 
 // Converts the node into an IF statement that matches the node.
@@ -1270,20 +1277,20 @@ template<class T>
     return ss.str();
   }
 
-// Write out all the rules that have been discovered to file.
+// Write out all the rules that have been discovered to various files in different formats.
 void
-writeOutRules(string fileName)
+writeOutRules()
 {
-  to_write.rewriteAll();
+  force_writeout = false;
 
   std::vector<string> output;
   std::map<string, Rewrite_rule> dup;
 
-  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
     {
       if (!it->isOK())
         {
-          to_write.erase(it--);
+          rewrite_system.erase(it--);
           continue;
         }
 
@@ -1341,6 +1348,7 @@ writeOutRules(string fileName)
 
                   ASTNodeMap fromTo;
 
+                  cerr << f;
                   f = renameVars(f);
                   //cerr << "renamed" << f;
                   bool result = unifyNode(f,dup.find(sofar)->second.getFrom(),fromTo,2) ;
@@ -1349,7 +1357,7 @@ writeOutRules(string fileName)
                   cout << rewrite(f,*it,seen );
 
                   // The text of this rule is the same as another rule.
-                  to_write.erase(it--);
+                  rewrite_system.erase(it--);
                   continue;
                 }
               else
@@ -1361,7 +1369,7 @@ writeOutRules(string fileName)
   // Remove the duplicates from output.
   removeDuplicates(output);
 
-  cout << "Rules Discovered in total: " << to_write.size() << endl;
+  cout << "Rules Discovered in total: " << rewrite_system.size() << endl;
 
   // Group functions of the same kind all together.
   hash_map<string, vector<string>, hashF<std::string> > buckets;
@@ -1384,28 +1392,18 @@ writeOutRules(string fileName)
     }
   outputFile.close();
 
-  ofstream outputFileSMT2;
-  outputFileSMT2.open("rewrite_data.smt2", ios::trunc);
+  ///////////////
+  outputFile.open("rules_new.smt2", ios::trunc);
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
+  {
+      it->writeOut(outputFile);
+  }
+  outputFile.close();
 
-  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
-    {
-      assert(it->isOK());
-      outputFileSMT2 << ";  " << "bits:" << bits << "->" << widen_to << " time to verify:" << it->getTime()
-          << '\n';
-      for (int j = widen_to; j < widen_to + 5; j++)
-        {
-          ASTNode widened = widen(it->getN(),j);
-          outputFileSMT2 << "(push 1)\n";
-          printer::SMTLIB2_PrintBack(outputFileSMT2, mgr->CreateNode(NOT, widened), true, false);
-          outputFileSMT2 << "(pop 1)\n";
-        }
-    }
-
-  outputFileSMT2.close();
-
-  outputFileSMT2.open(fileName.c_str(), ios::trunc);
+  /////////////////
+  outputFile.open("array.smt2", ios::trunc);
   ASTVec v;
-  for (Rewrite_system::RewriteRuleContainer::iterator it = to_write.toWrite.begin() ; it != to_write.toWrite.end(); it++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
     {
       v.push_back(it->getN());
     }
@@ -1413,9 +1411,9 @@ writeOutRules(string fileName)
   if (v.size() > 0)
     {
       ASTNode n = mgr->CreateNode(AND, v);
-      printer::SMTLIB2_PrintBack(outputFileSMT2, n, true);
+      printer::SMTLIB2_PrintBack(outputFile, n, true);
     }
-  outputFileSMT2.close();
+  outputFile.close();
 
 }
 
@@ -1457,8 +1455,8 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen)
 
   vector<Rewrite_rule>& rr =
       n[0].Degree() > 0 ?
-      (to_write.kind_kind_to_rr[n.GetKind()][n[0].GetKind()]) :
-      (to_write.kind_to_rr[n.GetKind()]) ;
+      (rewrite_system.kind_kind_to_rr[n.GetKind()][n[0].GetKind()]) :
+      (rewrite_system.kind_to_rr[n.GetKind()]) ;
 
 
   for (int i = 0; i < rr.size(); i++)
@@ -1508,6 +1506,147 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen)
   return n2;
 }
 
+int smt2_scan_string(const char *yy_str);
+
+void
+loadNewRules()
+{
+  string fileName = "rules_new.smt2";
+
+  if(!ifstream(fileName.c_str()))
+     return; // file doesn't exist.
+
+  FILE * in = fopen(fileName.c_str(), "r");
+
+  TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
+  Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
+  mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
+  parserInterface = &piTypeCheckDefault;
+
+
+  // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it working 3) am embarised by it.
+  while (!feof(in))
+    {
+      int id, verified_to_bits, time_used, from_v, to_v;
+
+      string s;
+      char line [63000];
+
+      bool first = true;
+      bool done = false;
+      while (true)
+        {
+        fgets ( line, sizeof line, in );
+        if (first)
+          {
+            int rv = sscanf(line, ";id:%d\tverified_to:%d\ttime:%d\tfrom_difficulty:%d\tto_difficulty:%d\n", &id, &verified_to_bits, &time_used, &from_v, &to_v);
+            if (rv !=5)
+              {
+                done = true;
+                break;
+              }
+            first = false;
+            continue;
+          }
+        s+= line;
+        if (!strcmp(line,"(exit)\n"))
+          break;
+        }
+      if (done)
+        break;
+
+      mgr->GetRunTimes()->start(RunTimes::Parsing);
+
+      // Load it into a string because other wise the parser reads in big blocks way past where we want it to.
+      smt2_scan_string(s.c_str());
+      smt2parse();
+      ASTVec values = piTypeCheckDefault.GetAsserts();
+      values = FlattenKind(AND, values);
+
+      assert(values.size() ==1);
+
+      ASTNode from = values[0][0];
+      ASTNode to = values[0][1];
+
+      // Rule should be orderable.
+      bool ok = orderEquivalence(from, to);
+      if (!ok)
+        {
+          cout << "discarding rule that can't be ordered";
+          cout << from << to;
+          cout << "----";
+          continue;
+        }
+
+      Rewrite_rule r(mgr, from, to, 0, id);
+      r.setVerified(verified_to_bits,time_used);
+
+      assert(r.isOK());
+      rewrite_system.push_back(r);
+
+      mgr->PopQuery();
+      parserInterface->popToFirstLevel();
+      //parserInterface->cleanUp();
+    }
+  //fclose(smt2in);
+
+  cout << "New Style Rules Loaded:" << rewrite_system.size() << endl;
+}
+
+//read from stdin, then tests it until the timeout.
+void
+testIndividualRule(int timeout_ms)
+{
+  int id, verified_to_bits, time_used, from_v, to_v;
+  scanf(";id:%d\tverified_to:%d\ttime:%d\tfrom_difficulty:%d\tto_difficulty:%d\n", &id, &verified_to_bits, &time_used, &from_v, &to_v);
+
+  TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
+  Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
+
+  mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
+
+  parserInterface = &piTypeCheckDefault;
+  mgr->GetRunTimes()->start(RunTimes::Parsing);
+  smt2parse();
+  ASTVec values = piTypeCheckDefault.GetAsserts();
+  values = FlattenKind(AND, values);
+
+  assert(values.size() ==1);
+  if ((values[0].GetKind() != EQ))
+    {
+      cout << "Not equality??";
+      cout << values[0];
+      return;
+    }
+
+  ASTNode from = values[0][0];
+  ASTNode to = values[0][1];
+
+  // Rule should be orderable.
+  bool ok = orderEquivalence(from, to);
+  if (!ok)
+    {
+      cout << "discarding rule that can't be ordered";
+      cout << from << to;
+      cout << "----";
+      return;
+    }
+
+  Rewrite_rule r(mgr, from, to, 0, id);
+  r.setVerified(verified_to_bits,time_used);
+
+  assert(r.isOK());
+  rewrite_system.push_back(r);
+
+  mgr->PopQuery();
+  parserInterface->popToFirstLevel();
+  parserInterface->cleanUp();
+
+
+  if (r.timedCheck(timeout_ms))
+    r.writeOut(cout); // omit failed.
+}
+
 // loads the already existing rules.
 void loadExistingRules(string fileName)
 {
@@ -1545,28 +1684,30 @@ void loadExistingRules(string fileName)
       bool ok = orderEquivalence(from, to);
       if (!ok)
         {
-          cout << "discarding rule that can't be ordere";
+          cout << "discarding rule that can't be ordered";
+          cout << from << to;
+          cout << "----";
           continue;
         }
 
       Rewrite_rule r(mgr, from, to, 0);
 
       if (r.isOK());
-        to_write.push_back(r);
+        rewrite_system.push_back(r);
     }
 
   mgr->PopQuery();
   parserInterface->popToFirstLevel();
   parserInterface->cleanUp();
 
-  to_write.buildLookupTable();
+  rewrite_system.buildLookupTable();
 
   ASTVec vvv = mgr->GetAsserts();
   for (int i=0; i < vvv.size() ;i++)
     cout << vvv[i];
 
   // So we don't output as soon as one is discovered...
-  lastOutput = to_write.size();
+  lastOutput = rewrite_system.size();
 }
 
 void
@@ -1605,20 +1746,14 @@ int test()
   w0 = mgr->LookupOrCreateSymbol("w0");
   w0.SetValueWidth(bits);
 
-  writeOutRules("test-2.smt2");
-  to_write.verifyAllwithSAT();
-  to_write.clear();
+  writeOutRules();
+  rewrite_system.verifyAllwithSAT();
+  rewrite_system.clear();
 }
 
-int
-main()
+void
+createVariables()
 {
-  startup();
-  //test();
-  //exit(1);
-
-  loadExistingRules("array.smt2");
-
   v = mgr->LookupOrCreateSymbol("v");
   v.SetValueWidth(bits);
 
@@ -1630,32 +1765,78 @@ main()
 
   w0 = mgr->LookupOrCreateSymbol("w0");
   w0.SetValueWidth(bits);
-
-  testProps();
-
-  findNewRewrites();
-  writeOutRules("array.smt2");
-  to_write.verifyAllwithSAT();
-  writeOutRules("array-with-times.smt2"); // verifyingallwithsat gives us the times..
 }
 
 int
-findNewRewrites()
+main(int argc, const char* argv[])
 {
-  to_write.buildLookupTable();
+  startup();
 
-  Function_list functionList;
-  functionList.buildAll();
+  if (argc == 1) // Read the current rule set, find new rules.
+    {
+        loadExistingRules("array.smt2");
+        createVariables();
+        ////////////
+        rewrite_system.buildLookupTable();
 
-  // The hash is generated on these values.
-  vector<VariableAssignment> values;
-  findRewrites(functionList.functions, values);
+        Function_list functionList;
+        functionList.buildAll();
 
-  cout << "Initial:" << bits << " widening to :" << widen_to << endl;
-  cout << "Highest disproved @ level: " << highestLevel << endl;
-  cout << highestDisproved << endl;
-  return 0;
+        // The hash is generated on these values.
+        vector<VariableAssignment> values;
+        findRewrites(functionList.functions, values);
+
+        cout << "Initial:" << bits << " widening to :" << widen_to << endl;
+        cout << "Highest disproved @ level: " << highestLevel << endl;
+        cout << highestDisproved << endl;
+        ////////////
+
+        rewrite_system.rewriteAll();
+        writeOutRules();
+    }
+  else if (argc == 3 && !strcmp("verify-single",argv[1]))
+    {
+      int timeout_ms = atoi(argv[2]);
+      assert(timeout_ms > 0);
+      testIndividualRule(timeout_ms);
+    }
+  else if (argc == 2 && !strcmp("verify-all",argv[1]))
+    {
+      loadNewRules();
+      createVariables();
+      rewrite_system.verifyAllwithSAT();
+      writeOutRules(); // have the times now..
+    }
+  else if (argc == 2 && !strcmp("write-out",argv[1]))
+    {
+      loadNewRules();
+      createVariables();
+      rewrite_system.rewriteAll();
+      writeOutRules(); // have the times now..
+    }
+  else if (argc == 2 && !strcmp("test",argv[1]))
+    {
+      testProps();
+    }
+  else if (argc == 2 && !strcmp("delete-failed",argv[1]))
+    {
+      loadNewRules();
+      ifstream fin;
+      fin.open("failed.txt",ios::in);
+      char line[256];
+      while (!fin.eof())
+        {
+          fin.getline(line,256);
+          int id;
+          sscanf(line,"FAILED:%d",&id);
+          //cerr << "Failed id: " << id << endl;
+          rewrite_system.deleteID(id);
+        }
+      createVariables();
+      writeOutRules();
+    }
 }
+
 
 
 // Term variables have a specified width!!!
