@@ -48,6 +48,11 @@ isConstant(const ASTNode& n, VariableAssignment& different);
 
 class Rewrite_system
 {
+public:
+
+  // Rules to write out when we get the chance.
+  typedef list<Rewrite_rule> RewriteRuleContainer;
+
 private:
 
   friend
@@ -56,9 +61,6 @@ private:
 
 
   friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
-
-  // Rules to write out when we get the chance.
-  typedef list<Rewrite_rule> RewriteRuleContainer;
 
   RewriteRuleContainer toWrite;
   std::map< Kind, vector<Rewrite_rule> > kind_to_rr;
@@ -69,6 +71,19 @@ public:
   Rewrite_system()
   {
   }
+
+  RewriteRuleContainer::iterator
+  begin()
+  {
+    return toWrite.begin();
+  }
+
+  RewriteRuleContainer::iterator
+  end()
+  {
+    return toWrite.end();
+  }
+
 
   void
   addRuleToLookup(Rewrite_rule& r)

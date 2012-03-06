@@ -56,7 +56,7 @@ public:
   void
   setVerified(int bits_, int time_)
   {
-    if (bits_ > verified_to_bits)
+    if (bits_ >= verified_to_bits)
       {
         verified_to_bits = bits_;
         time_to_verify = time_;

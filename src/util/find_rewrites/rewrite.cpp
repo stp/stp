@@ -26,7 +26,6 @@
 #include "rewrite_system.h"
 #include "Functionlist.h"
 
-extern FILE *smt2in;
 extern int
 smt2parse();
 
@@ -61,6 +60,9 @@ Rewrite_system rewrite_system;
 
 void
 clearSAT();
+
+void
+createVariables();
 
 template<class T>
   void
@@ -637,10 +639,6 @@ startup()
   w0 = mgr->LookupOrCreateSymbol("w0");
   w0.SetValueWidth(bits);
 
-  //v = mgr->LookupOrCreateSymbol("v");
- // v.SetValueWidth(bits);
- // w = mgr->LookupOrCreateSymbol("w");
- // w.SetValueWidth(bits);
 
   // Write out the work so far..
   signal(SIGUSR1,do_write_out);
@@ -1277,6 +1275,13 @@ template<class T>
     return ss.str();
   }
 
+
+/* Writes out:
+ * rewrite_data_new.cpp: rules coded in C++.
+ * array.cpp: rules in SMT2 in one big conjunct.
+ * rules_new.smt2: rules in SMT2 one rule per frame.
+ */
+
 // Write out all the rules that have been discovered to various files in different formats.
 void
 writeOutRules()
@@ -1508,21 +1513,50 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen)
 
 int smt2_scan_string(const char *yy_str);
 
+// http://stackoverflow.com/questions/3418231/c-replace-part-of-a-string-with-another-string
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if(start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
+}
+
+
 void
 loadNewRules()
 {
-  string fileName = "rules_new.smt2";
+  FILE * in;
+  bool opended= false;
+  string fileName = "rules_new.smt2"
 
-  if(!ifstream(fileName.c_str()))
-     return; // file doesn't exist.
+  if(!ifstream(fileName.c_str())) /// use stdin if the default file is not found.
+    in = stdin;
+  else
+    {
+      in = fopen(fileName.c_str(), "r");
+      opended = true; // so we know to fclose it.
+    }
 
-  FILE * in = fopen(fileName.c_str(), "r");
+  // We store references to "v" and "w", so we need to removed the
+  // definitions from the input we parse.
+
+  v = mgr->LookupOrCreateSymbol("v");
+  v.SetValueWidth(bits);
+  w = mgr->LookupOrCreateSymbol("w");
+  w.SetValueWidth(bits);
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
   mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   parserInterface = &piTypeCheckDefault;
 
+  stringstream v_ss, w_ss;
+  v_ss << "(declare-fun v () (_ BitVec " << bits << "))";
+  string v_string = v_ss.str();
+
+  w_ss << "(declare-fun w () (_ BitVec " << bits << "))";
+  string w_string = w_ss.str();
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it working 3) am embarised by it.
   while (!feof(in))
@@ -1557,6 +1591,9 @@ loadNewRules()
 
       mgr->GetRunTimes()->start(RunTimes::Parsing);
 
+      replace(s,v_string,"");
+      replace(s,w_string,"");
+
       // Load it into a string because other wise the parser reads in big blocks way past where we want it to.
       smt2_scan_string(s.c_str());
       smt2parse();
@@ -1586,65 +1623,27 @@ loadNewRules()
 
       mgr->PopQuery();
       parserInterface->popToFirstLevel();
-      //parserInterface->cleanUp();
     }
-  //fclose(smt2in);
+
+  parserInterface->cleanUp();
+  if (opended)
+   fclose(in);
 
   cout << "New Style Rules Loaded:" << rewrite_system.size() << endl;
 }
 
 //read from stdin, then tests it until the timeout.
 void
-testIndividualRule(int timeout_ms)
+expandRules(int timeout_ms)
 {
-  int id, verified_to_bits, time_used, from_v, to_v;
-  scanf(";id:%d\tverified_to:%d\ttime:%d\tfrom_difficulty:%d\tto_difficulty:%d\n", &id, &verified_to_bits, &time_used, &from_v, &to_v);
+  loadNewRules();
+  createVariables();
 
-  TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
-  Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
-
-  mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
-
-  parserInterface = &piTypeCheckDefault;
-  mgr->GetRunTimes()->start(RunTimes::Parsing);
-  smt2parse();
-  ASTVec values = piTypeCheckDefault.GetAsserts();
-  values = FlattenKind(AND, values);
-
-  assert(values.size() ==1);
-  if ((values[0].GetKind() != EQ))
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.begin(); it!= rewrite_system.end();it++)
     {
-      cout << "Not equality??";
-      cout << values[0];
-      return;
+      if ((*it).timedCheck(timeout_ms))
+        it->writeOut(cout); // omit failed.
     }
-
-  ASTNode from = values[0][0];
-  ASTNode to = values[0][1];
-
-  // Rule should be orderable.
-  bool ok = orderEquivalence(from, to);
-  if (!ok)
-    {
-      cout << "discarding rule that can't be ordered";
-      cout << from << to;
-      cout << "----";
-      return;
-    }
-
-  Rewrite_rule r(mgr, from, to, 0, id);
-  r.setVerified(verified_to_bits,time_used);
-
-  assert(r.isOK());
-  rewrite_system.push_back(r);
-
-  mgr->PopQuery();
-  parserInterface->popToFirstLevel();
-  parserInterface->cleanUp();
-
-
-  if (r.timedCheck(timeout_ms))
-    r.writeOut(cout); // omit failed.
 }
 
 // loads the already existing rules.
@@ -1652,6 +1651,8 @@ void loadExistingRules(string fileName)
 {
   if(!ifstream(fileName.c_str()))
      return; // file doesn't exist.
+
+  extern FILE *smt2in;
 
   smt2in = fopen(fileName.c_str(), "r");
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
@@ -1794,11 +1795,11 @@ main(int argc, const char* argv[])
         rewrite_system.rewriteAll();
         writeOutRules();
     }
-  else if (argc == 3 && !strcmp("verify-single",argv[1]))
+  else if (argc == 3 && !strcmp("expand",argv[1])) // expand the bit-widths rules are tested at.
     {
       int timeout_ms = atoi(argv[2]);
       assert(timeout_ms > 0);
-      testIndividualRule(timeout_ms);
+      expandRules(timeout_ms);
     }
   else if (argc == 2 && !strcmp("verify-all",argv[1]))
     {
