@@ -107,9 +107,19 @@ namespace BEEV
       {
       const ASTNode& r = it->second;
       assert(r.GetIndexWidth() == n.GetIndexWidth());
+
+      if (preventInfinite)
+        cache.insert(make_pair(n, r));
+
       ASTNode replaced = replace(r, fromTo, cache, nf, stopAtArrays, preventInfinite);
       if (replaced != r)
-        fromTo[n] = replaced;
+        {
+          fromTo.erase(n);
+          fromTo[n] = replaced;
+        }
+
+      if (preventInfinite)
+        cache.erase(n);
 
       cache.insert(make_pair(n, replaced));
       return replaced;
