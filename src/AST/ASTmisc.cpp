@@ -466,6 +466,8 @@ namespace BEEV
 			checkChildrenAreBV(v, n);
 			if (n.Degree() != 1)
 				FatalError("BVTypeCheck: should have exactly 1 args\n", n);
+			if (n.GetValueWidth() != n[0].GetValueWidth())
+		          FatalError("BVTypeCheck: should have same value width\n", n);
 			break;
 		case BVEXTRACT:
 			checkChildrenAreBV(v, n);
