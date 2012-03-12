@@ -5,20 +5,16 @@
 
 #ifndef FUNCTIONLIST_H_
 #define FUNCTIONLIST_H_
+#include "rewrite_system.h"
+#include "misc.h"
 
-extern const int bits;
-extern Simplifier *simp;
 extern Rewrite_system rewrite_system;
-
-ASTNode
-widen(const ASTNode& w, int width);
-
-ASTNode
-create(Kind k, const ASTNode& n0, const ASTNode& n1);
 
 
 class Function_list
 {
+  private:
+
 
   // Because v and w might come from "result", if "result" is resized, they will
   // be moved. So we can't use references to them.
@@ -37,35 +33,6 @@ class Function_list
       result.push_back(create(types[i], v, w));
   }
 
-
-  ASTNode
-  rewriteThroughWithAIGS(const ASTNode &n_)
-  {
-    assert(n_.GetType() == BITVECTOR_TYPE);
-    ASTNode f = mgr->LookupOrCreateSymbol("rewriteThroughWithAIGS");
-    f.SetValueWidth(n_.GetValueWidth());
-    ASTNode n = create(EQ, n_, f);
-
-    BBNodeManagerAIG nm;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
-    ASTNodeMap fromTo;
-    ASTNodeMap equivs;
-    bb.getConsts(n, fromTo, equivs);
-
-    ASTNode result = n_;
-    if (equivs.size() > 0)
-      {
-        ASTNodeMap cache;
-        result = SubstitutionMap::replace(result, equivs, cache, nf, false, true);
-      }
-
-    if (fromTo.size() > 0)
-      {
-        ASTNodeMap cache;
-        result = SubstitutionMap::replace(result, fromTo, cache, nf);
-      }
-    return result;
-  }
 
   void
   applyBigRewrite()
@@ -187,7 +154,7 @@ class Function_list
 
         if (mgr->ASTUndefined == widen(functions[i], bits + 1))
           {
-            cerr << "Can't widen" << functions[i];
+            //cerr << "Can't widen" << functions[i];
             functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
             continue;
           }
@@ -224,7 +191,7 @@ class Function_list
         if (i % 100000 == 0)
           cerr << "ApplyAigs:" << i << " of " << functions.size() << endl;
 
-        rewriteThroughWithAIGS(functions[i]);
+        functions[i] = rewriteThroughWithAIGS(functions[i]);
       }
   }
 
@@ -255,9 +222,8 @@ public:
 
     allUnary();
 
-
     applyAIGs();
-    applySpeculative();
+    //applySpeculative();
     applyRewritesToAll(functions);
     checkFunctions();
     removeDuplicates(functions);
@@ -276,23 +242,20 @@ public:
           for (int j = 0; j < size; j++)
             getAllFunctions(functions_copy[i], functions_copy[j], functions);
 
-        cerr << "Removing single variables" <<endl;
-        checkFunctions();
         removeNonWidened();
 
         removeSingleVariable();
         removeDuplicates(functions);
-        applySpeculative();
-
-        //applyRewritesToAll(functions);
+        //applySpeculative();
 
         applyAIGs();
 
-        removeDuplicates(functions);
-        removeSingleUndefined();
-
         // All the unary combinations of the binaries.
         allUnary();
+
+        removeDuplicates(functions);
+        removeSingleUndefined();
+        checkFunctions();
 
         cerr << "Two Level:" << functions.size() << endl;
       }

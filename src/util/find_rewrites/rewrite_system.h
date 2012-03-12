@@ -23,13 +23,17 @@ ASTNode
 widen(const ASTNode& w, int width);
 
 bool
-unifyNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo);
+matchNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width);
+
+bool
+commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
+
 
 ASTNode
 renameVars(const ASTNode &n);
 
 ASTNode
-rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
+rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, int depth);
 
 bool
 checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& assignment, bool&bad);
@@ -46,6 +50,10 @@ isConstantToSat(const ASTNode & query);
 bool
 isConstant(const ASTNode& n, VariableAssignment& different);
 
+ASTNode
+rewriteThroughWithAIGS(const ASTNode &n_);
+
+
 class Rewrite_system
 {
 public:
@@ -59,17 +67,27 @@ private:
   void
   writeOutRules();
 
-
-  friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen);
+  friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, int depth);
 
   RewriteRuleContainer toWrite;
+
   std::map< Kind, vector<Rewrite_rule> > kind_to_rr;
-  std::map< Kind, std::map< Kind, vector<Rewrite_rule> > > kind_kind_to_rr;
+   bool lookups_invalid; // whether the above table is bad.
+
+  void
+  addRuleToLookup(Rewrite_rule& r)
+  {
+    const ASTNode& from = r.getFrom();
+    kind_to_rr[from.GetKind()].push_back(r);
+    assert(from.Degree() > 0); // Shouldn't map from a constant, nor from a variable.
+  }
+
 
 public:
 
   Rewrite_system()
   {
+    lookups_invalid = false;
   }
 
   RewriteRuleContainer::iterator
@@ -84,17 +102,18 @@ public:
     return toWrite.end();
   }
 
+  bool areLookupsGood()
+  {
+    return lookups_invalid;
+  }
 
   void
-  addRuleToLookup(Rewrite_rule& r)
+  renumber()
   {
-    const ASTNode& from = r.getFrom();
-    kind_to_rr[from.GetKind()].push_back(r);
-
-    assert(from.Degree() > 0); // Shouldn't map from a constant, nor from a variable.
-
-    if (from[0].Degree() > 0)
-      kind_kind_to_rr[from.GetKind()][from[0].GetKind()].push_back(r);
+    int id=0;
+    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+      it->id = id++;
+    lookups_invalid=true;
   }
 
   void
@@ -106,6 +125,7 @@ public:
           {
             toWrite.erase(it--);
             cerr << "matched" << id;
+            lookups_invalid = true;
           }
       }
   }
@@ -114,41 +134,26 @@ public:
   buildLookupTable()
   {
     kind_to_rr.clear();
-    kind_kind_to_rr.clear();
 
     for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
       {
         addRuleToLookup(*it);
       }
-  }
-
-  void
-  removeBad()
-  {
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
-      {
-        if (!it->isOK())
-          {
-            cout << "Removing Rule that is bad";
-            cout << it->getFrom();
-            cout << it->getTo();
-            cout << "----\n";
-
-            toWrite.erase(it--);
-          }
-      }
+    lookups_invalid =false;
   }
 
   void
   eraseDuplicates()
   {
-    removeBad();
     toWrite.sort();
     toWrite.unique();
+    lookups_invalid = true;
   }
 
+  // Rewrite the "from" and "To", add the rule if it's still good.
+  // NB: Doesn't rebuild the lookup table.
   void
-  push_back(Rewrite_rule rr)
+  push_back(Rewrite_rule& rr)
   {
     toWrite.push_back(rr);
     addRuleToLookup(rr);
@@ -158,6 +163,7 @@ public:
   erase(RewriteRuleContainer::iterator it)
   {
     toWrite.erase(it);
+    lookups_invalid = true;
   }
 
   int
@@ -166,10 +172,9 @@ public:
     return toWrite.size();
   }
 
-  ASTNode rewriteNode(ASTNode n)
+  static ASTNode rewriteNode(ASTNode n)
   {
-    Rewrite_rule  null_rule( Rewrite_rule(mgr,mgr->CreateZeroConst(1), mgr->CreateZeroConst(1),0));
-    return rename_then_rewrite(n,null_rule);
+    return rename_then_rewrite(n,Rewrite_rule::getNullRule());
   }
 
   void
@@ -186,76 +191,89 @@ public:
         if (i % 1000 == 0)
           cout << "rewrite all:" << i << " of " << toWrite.size() << endl;
 
-        // if not OK, should have been removed during duplicates.
-        // shouldn't add extra rules that aren't ok.
-        assert (it->isOK());
+        ASTNode from_wide = renameVars(it->getFrom());
+        ASTNode to_wide = renameVars(it->getTo());
 
-        ASTNode n = renameVars(it->getFrom());
-        ASTNodeMap seen;
-        ASTNode rewritten_from = rewrite(n, *it,seen);
-
-        if (n != rewritten_from)
+        // The renamed should match the original, and vice versa.
           {
-            assert (isConstantToSat(create(EQ, rewritten_from,n)));
+            ASTNodeMap fromTo;
+            assert(commutative_matchNode(from_wide, it->getFrom(),fromTo,2));
+            fromTo.clear();
+            assert(commutative_matchNode(it->getFrom(), from_wide, fromTo, 1));
+            fromTo.clear();
+            assert(commutative_matchNode(to_wide, it->getTo(),fromTo,2));
+            fromTo.clear();
+            assert(commutative_matchNode(it->getTo(),to_wide, fromTo,1));
+          }
 
-            rewritten_from = renameVarsBack(rewritten_from);
-            ASTNode to = it->getTo();
-            bool ok = orderEquivalence(rewritten_from, to);
+        ASTNodeMap seen;
+        ASTNode from_wide_rewritten = rewrite(from_wide, *it,seen,0);
+        seen = ASTNodeMap();
+        ASTNode to_wide_rewritten = rewrite(to_wide, *it,seen,0);
+        seen = ASTNodeMap();
+
+        // Also apply the AIG rules.
+        to_wide_rewritten = rewriteThroughWithAIGS(to_wide_rewritten);
+
+        if ((from_wide != from_wide_rewritten) || (to_wide != to_wide_rewritten))
+          {
+            ASTNode from_rewritten = renameVarsBack(from_wide_rewritten);
+            ASTNode to_rewritten = renameVarsBack(to_wide_rewritten);
+
+            assert(BVTypeCheckRecursive(from_rewritten));
+            assert(BVTypeCheckRecursive(to_rewritten));
+
+            assert (isConstantToSat(create(EQ, from_wide_rewritten,from_wide)));
+            assert (isConstantToSat(create(EQ, to_wide_rewritten,to_wide)));
+            assert (isConstantToSat(create(EQ, it->getFrom(),from_rewritten)));
+            assert (isConstantToSat(create(EQ, it->getTo(),to_rewritten)));
+
+            bool ok = orderEquivalence(from_rewritten, to_rewritten);
             if (ok)
               {
-                Rewrite_rule rr(mgr, rewritten_from, to, 0);
-                if (rr.isOK())
-                  {
-                    cout << "Modifying Rule\n";
-                    cout << "Initially From";
-                    cout << it->getFrom();
-                    cout << "new From";
-                    cout << rewritten_from;
-                    cout << "---";
+                Rewrite_rule rr(mgr, from_rewritten, to_rewritten, 0);
+                cout << "Modifying Rule\n";
+                cout << "Initially From";
+                cout << it->getFrom();
+                cout << "Initially To";
+                cout << it->getTo();
+                cout << "New From";
+                cout << from_rewritten;
+                cout << "New To";
+                cout << to_rewritten;
+                cout << "---";
+                cout << getDifficulty(rr.getFrom()) << " --> " << getDifficulty(rr.getTo()) << endl;
+                cout << "replacing" << it->getId() << " with " << rr.getId() << endl;
 
-                    *it= rr;
-                    buildLookupTable(); // Otherwise two rules will remove each other?
-                  }
-                else
-                  {
-                    cout << "Erasing rule";
-                    cout << "Initially From";
-                    cout << it->getFrom();
-                    cout << "new From";
-                    cout << rewritten_from;
-                    cout << "---";
+                *it = rr;
+                lookups_invalid = true;
 
-                    erase(it--);
-                    i--;
-                    buildLookupTable(); // Otherwise two rules will remove each other?
-                  }
               }
-            else
-              {
-                if (rewritten_from != to)
-                  {
-                      cout << "Mapped but couldn't order";
-                      cout << rewritten_from << to;
-                  }
+            if (!ok)
+            {
+                cout << "Erasing bad rule.\n";
                 erase(it--);
                 i--;
-                buildLookupTable(); // Otherwise two rules will remove each other?
+                lookups_invalid = true;
               }
           }
       }
 
     eraseDuplicates();
     cout << "Size after rewriteAll:" << toWrite.size() << endl;
+    buildLookupTable();
   }
 
   void clear()
   {
     toWrite.clear();
+    buildLookupTable();
   }
 
   void
   verifyAllwithSAT()
   {
+    cerr << "Started verifying all" << endl;
     for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
       {
         VariableAssignment assignment;
@@ -270,11 +288,10 @@ public:
             assert(r);
             assert(!bad);
           }
-        if (bits > it->getVerifiedToBits())
+        if (bits >= it->getVerifiedToBits())
           it->setVerified(bits,getCurrentTime() - st);
       }
   }
-
 
   void
   writeOut(ostream &o)

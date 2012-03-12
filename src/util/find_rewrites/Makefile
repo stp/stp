@@ -8,7 +8,7 @@ CXXFLAGS += -L../../../lib/
 .PHONY: clean
 
 rewrite: $(OBJS)  $(TOP)lib/libstp.a  
-	$(CXX)   $(CXXFLAGS) $@.o -o $@ -lstp --static
+	$(CXX)   $(CXXFLAGS) $@.o -o $@ -lstp #--static
 
 rewrite.o: rewrite.cpp Functionlist.h  rewrite_rule.h  rewrite_system.h  VariableAssignment.h
 	$(CXX)   $(CXXFLAGS) rewrite.cpp -c 

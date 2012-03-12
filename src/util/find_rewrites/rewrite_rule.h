@@ -2,15 +2,7 @@
 #define REWRITERULE_H
 
 #include "../../STPManager/STPManager.h"
-
-extern const int widen_to;
-extern const int bits;
-
-ASTNode
-widen(const ASTNode& w, int width);
-
-int
-getDifficulty(const ASTNode& n_);
+#include "misc.h"
 
 void soft_time_out(int ignored)
 {
@@ -18,37 +10,46 @@ void soft_time_out(int ignored)
 }
 
 bool
-isConstant(const ASTNode& n, VariableAssignment& different);
+orderEquivalence(ASTNode& from, ASTNode& to);
 
-
-vector<ASTNode>
-getVariables(const ASTNode& n);
 
 class Rewrite_rule
 {
-private:
    ASTNode from;
    ASTNode to;
    ASTNode n;
 
-   int id;
    static int  static_id;
 
    int time_to_verify;
    int verified_to_bits;
 
+   // Only used to build the NULL rule
+   Rewrite_rule()
+   {
+     from = mgr->CreateZeroConst(1);
+     to = mgr->CreateZeroConst(1);
+     n = mgr->ASTTrue;
+   }
+
 public:
 
-  void writeOut(ostream& outputFileSMT2)
+   static Rewrite_rule
+   getNullRule()
+   {
+     return Rewrite_rule();
+   }
+
+   int id;
+  void writeOut(ostream& outputFileSMT2) const
   {
-    assert(isOK());
     outputFileSMT2 << ";id:" << getId()
         << "\tverified_to:" << verified_to_bits << "\ttime:" << getTime()
         << "\tfrom_difficulty:" << getDifficulty(getFrom())
         << "\tto_difficulty:"   << getDifficulty(getTo())
         << "\n";
     outputFileSMT2 << "(push 1)" << endl;
-    printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), true, false);
+    printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), true);
     outputFileSMT2 << "(exit)" << endl;
   }
 
@@ -64,7 +65,7 @@ public:
   }
 
   int
-  getVerifiedToBits()
+  getVerifiedToBits() const
   {
     return verified_to_bits;
   }
@@ -112,27 +113,7 @@ public:
     return (n == t.n);
   }
 
-  bool
-  isOK()
-  {
-    ASTNode w = widen(getN(), widen_to);
-
-    if  (w.IsNull() || w.GetKind() == UNDEFINED)
-      return false;
-
-    assert(BVTypeCheckRecursive(n));
-    assert(BVTypeCheckRecursive(w));
-
-    if (from.isAtom() && to.isAtom())
-        return false;
-
-    if (from == to)
-      return false;
-
-    return true;
-
-  }
-
+  // The "from" and "to" should be ordered with the orderEquivalence function.
   Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_, const BEEV::ASTNode& to_, const int t, int _id=-1)
   : from(from_), to(to_)
     {
@@ -151,49 +132,10 @@ public:
       c.push_back(from_);
       n =  bm->hashingNodeFactory->CreateNode(BEEV::EQ,c);
 
-
-      ////
-      assert(!from.IsNull());
-      assert(from.GetKind() != UNDEFINED);
-
-      ////
-      assert(!to.IsNull());
-      assert(to.GetKind() != UNDEFINED);
-
-      ////
-      assert(!n.IsNull());
-      assert(n.GetKind() != UNDEFINED);
-      ////
-
-      if (from.GetKind() == SYMBOL)
-        {
-          assert(to == from); // If it's a symbol. It should be the same one.
-        }
-
-      if (from.isAtom())
-        {
-          assert(to.isAtom()); // sometimes its easiest to make it 0->0 rather than deleting it.
-        }
-
-      // only v or w
-      vector<ASTNode> s_from= getVariables(from);
-      for (vector<ASTNode>::iterator it = s_from.begin(); it != s_from.end() ;it++)
-        {
-          assert(strlen(it->GetName()) ==1);
-          assert(it->GetName()[0] =='v' || it->GetName()[0] =='w');
-          assert(it->GetValueWidth() == bits);
-        }
-
-      vector<ASTNode> s_to= getVariables(to);
-      for (vector<ASTNode>::iterator it = s_to.begin(); it != s_to.end() ;it++)
-        {
-          assert(strlen(it->GetName()) ==1);
-          assert(it->GetName()[0] =='v' || it->GetName()[0] =='w');
-          assert(it->GetValueWidth() == bits);
-        }
-
-      // The "to" side should have fewer nodes.
-      assert(s_from.size() >= s_to.size());
+      assert(orderEquivalence(from,to));
+      assert(from == from_);
+      assert(to == to_);
+      assert(BVTypeCheckRecursive(n));
     }
 
   bool
@@ -236,12 +178,16 @@ public:
             cerr << from << to;
           }
 
-        bool result = isConstant(widened, assignment);
+        bool result = isConstant(widened, assignment,i);
         if (!result && !mgr->soft_timeout_expired)
           {
             // not a constant, and not timed out!
             cerr << "FAILED:" << getId() << endl << i << from << to;
             writeOut(cerr);
+
+            // The timer might not have expired yet.
+            setitimer(ITIMER_VIRTUAL, NULL, NULL);
+            mgr->soft_timeout_expired = false;
             return false;
           }
         if (mgr->soft_timeout_expired)
@@ -253,6 +199,9 @@ public:
     if (getVerifiedToBits() <= checked_to)
       setVerified(checked_to, getTime() + (getCurrentTime() - st));
 
+    // The timer might not have expired yet.
+    setitimer(ITIMER_VIRTUAL, NULL, NULL);
+    mgr->soft_timeout_expired = false;
     return true;
   }
 
