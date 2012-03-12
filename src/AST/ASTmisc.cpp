@@ -559,4 +559,11 @@ namespace BEEV
     return true;
   } //End of TypeCheck function
 
+  long getCurrentTime()
+  {
+    timeval t;
+    gettimeofday(&t, NULL);
+    return (1000 * t.tv_sec) + (t.tv_usec / 1000);
+  }
+
 };//end of namespace

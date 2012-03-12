@@ -44,6 +44,8 @@ namespace BEEV
   // NB: The boolean value is always true!
   bool BVTypeCheck(const ASTNode& n);
   
+ long getCurrentTime();
+
   ASTVec FlattenKind(Kind k, const ASTVec &children);
 
   // Checks recursively all the way down.
