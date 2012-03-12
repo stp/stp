@@ -36,9 +36,6 @@ namespace BEEV
     bool
     solve(); // Search without assumptions.
 
-    bool
-    simplify(); // Removes already satisfied clauses.
-
     virtual uint8_t modelValue(Var x) const;
 
     virtual Var newVar();

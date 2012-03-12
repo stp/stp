@@ -33,6 +33,7 @@ namespace BEEV
     bool
     solve(); // Search without assumptions.
 
+    virtual
     bool
     simplify(); // Removes already satisfied clauses.
 
