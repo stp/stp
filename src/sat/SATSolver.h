@@ -71,6 +71,18 @@ namespace BEEV
     virtual void setFrozen(Var x)
     {}
 
+    virtual int nClauses()
+    {
+      std::cerr << "Not yet implemented.";
+      exit(1);
+    }
+
+    virtual bool simplify()
+    {
+      std::cerr << "Not yet implemented.";
+      exit(1);
+
+    }
   };
 };
 #endif

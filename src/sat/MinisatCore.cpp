@@ -88,6 +88,19 @@ namespace BEEV
       printf("CPU time              : %g s\n", cpu_time);
     }
 
+  template <class T>
+    int MinisatCore<T>::nClauses()
+  {
+    return s->nClauses();
+  }
+
+  template <class T>
+    bool MinisatCore<T>::simplify()
+  {
+    s->simplify();
+  }
+
+
 
   // I was going to make SimpSolver and Solver instances of this template.
   // But I'm not so sure now because I don't understand what eliminate() does in the simp solver.
