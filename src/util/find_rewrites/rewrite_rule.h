@@ -43,7 +43,7 @@ public:
    int id;
   void writeOut(ostream& outputFileSMT2) const
   {
-    outputFileSMT2 << ";id:" << getId()
+    outputFileSMT2 << ";id:0"
         << "\tverified_to:" << verified_to_bits << "\ttime:" << getTime()
         << "\tfrom_difficulty:" << getDifficulty(getFrom())
         << "\tto_difficulty:"   << getDifficulty(getTo())
@@ -88,25 +88,6 @@ public:
     return n;
   }
 
-  int
-  getId() const
-  {
-    return id;
-  }
-
-  bool
-  sameID(const Rewrite_rule& t) const
-  {
-    return (*this == t);
-
-    if  (id == t.id)
-      {
-        assert(n == t.n);
-        return true;
-      }
-    return false;
-  }
-
   bool
   operator==(const Rewrite_rule& t) const
   {
@@ -136,6 +117,7 @@ public:
       assert(from == from_);
       assert(to == to_);
       assert(BVTypeCheckRecursive(n));
+      assert(!n.isConstant());
     }
 
   bool
@@ -182,7 +164,7 @@ public:
         if (!result && !mgr->soft_timeout_expired)
           {
             // not a constant, and not timed out!
-            cerr << "FAILED:" << getId() << endl << i << from << to;
+            cerr << "FAILED:" << endl << i << from << to;
             writeOut(cerr);
 
             // The timer might not have expired yet.

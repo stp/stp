@@ -33,29 +33,6 @@ class Function_list
       result.push_back(create(types[i], v, w));
   }
 
-
-  void
-  applyBigRewrite()
-  {
-    BEEV::BigRewriter b;
-
-    for (int i = 0; i < functions.size(); i++)
-      {
-        if (functions[i] == mgr->ASTUndefined)
-          continue;
-
-        if (i % 100000 == 0)
-          cerr << "BigRewrite:" << i << " of " << functions.size();
-
-        ASTNodeMap fromTo;
-        ASTNode s = b.rewrite(functions[i], fromTo, nf, mgr);
-        if (s != functions[i])
-          {
-            functions[i] = s;
-          }
-      }
-  }
-
   void
   applyRewritesToAll(ASTVec& functions)
   {

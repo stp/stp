@@ -16,7 +16,9 @@
 #include "../../sat/MinisatCore.h"
 #include "../../STPManager/STP.h"
 #include "../../STPManager/DifficultyScore.h"
-#include "../../simplifier/BigRewriter.h"
+#include "../../AST/AST.h"
+#include "../../STPManager/STPManager.h"
+using namespace BEEV;
 #include "../../AST/NodeFactory/TypeChecker.h"
 #include "../../cpp_interface/cpp_interface.h"
 
@@ -754,33 +756,35 @@ getHash(const ASTNode& n_, const vector<VariableAssignment>& values)
   if (n == mgr->ASTUndefined) // Can't be widened.
     return 0;
 
-  vector<ASTNode> symbols; // The variables in the n node.
-  ASTNodeSet visited;
-  getVariables(n, symbols, visited);
+  vector<ASTNode> symbols = getVariables(n);
 
   uint64_t hash = 0;
 
+  for (int j = 0; j < symbols.size(); j++)
+    {
+      assert(symbols[j].GetValueWidth() == ass_bitwidth);
+    }
+
   for (int i = 0; i < values.size(); i++)
     {
+      // They both should be set..
+      assert(values[i].getV().GetValueWidth() == ass_bitwidth);
+      assert(values[i].getW().GetValueWidth() == ass_bitwidth);
+
       ASTNodeMap mapToVal;
       for (int j = 0; j < symbols.size(); j++)
         {
+          assert(symbols[j].GetValueWidth() == ass_bitwidth);
+
           if (strncmp(symbols[j].GetName(), "v", 1) == 0)
-            {
               mapToVal.insert(make_pair(symbols[j], values[i].getV()));
-              assert(symbols[j].GetValueWidth() == values[i].getV().GetValueWidth());
-            }
           else if (strncmp(symbols[j].GetName(), "w", 1) == 0)
-            {
               mapToVal.insert(make_pair(symbols[j], values[i].getW()));
-              assert(symbols[j].GetValueWidth() == values[i].getW().GetValueWidth());
-            }
           else
             {
               cerr << "Unknown symbol!" << symbols[j];
               FatalError("f");
             }
-          assert(symbols[j].GetValueWidth() == ass_bitwidth);
         }
 
       ASTNode r = eval(n, mapToVal);
@@ -876,14 +880,9 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
       cout << "Split into " << map.size() << " pieces\n";
       if (depth > 0)
-        {
-          if(map.size() ==1)
-            {
-              cerr << values[0].getV();
-              cerr << values[0].getW();
-              assert(false);
-            }
-        }
+          {
+            assert(map.size() >0);
+          }
 
       int id = 1;
       for (it2 = map.begin(); it2 != map.end(); it2++)
@@ -898,7 +897,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
   ASTVec& equiv = expressions;
 
   // Sort so that constants, and smaller expressions will be checked first.
-  std::sort(equiv.begin(), equiv.end(), lessThan);
+  //std::sort(equiv.begin(), equiv.end(), lessThan);
 
   for (int i = 0; i < equiv.size(); i++)
     {
@@ -916,23 +915,29 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
           ASTNode& from = equiv[i];
           ASTNode& to = equiv[j];
 
+          if (from.isConstant() && to.isConstant())
+            continue;
+
           VariableAssignment different;
           bool bad = false;
           const int st = getCurrentTime();
 
-          if (from.isConstant() && to.isConstant())
-            continue;
-
           if (checkRule(from, to, different, bad))
             {
-              equiv[i] = rewrite_system.rewriteNode(equiv[i]);
-              equiv[j] = rewrite_system.rewriteNode(equiv[j]);
+              const int checktime = getCurrentTime() - st;
 
               equiv[i] = rewriteThroughWithAIGS(equiv[i]);
               equiv[j] = rewriteThroughWithAIGS(equiv[j]);
 
-              ASTNode& f = equiv[i];
-              ASTNode& t = equiv[j];
+              equiv[i] = rewrite_system.rewriteNode(equiv[i]);
+              equiv[j] = rewrite_system.rewriteNode(equiv[j]);
+
+              // The rules should have been created with the simplifying node factory.
+              assert(equiv[i] == withNF(equiv[i]));
+              assert(equiv[j] == withNF(equiv[j]));
+
+              ASTNode f = equiv[i];
+              ASTNode t = equiv[j];
 
               bool r = orderEquivalence(f, t);
 
@@ -943,9 +948,9 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               cout << f << t;
               cout << getDifficulty(f) << " to " << getDifficulty(t) << endl;
 
-              Rewrite_rule rr(mgr, f, t, getCurrentTime() - st);
+              Rewrite_rule rr(mgr, f, t, checktime);
 
-              if (!rr.timedCheck(1000))
+              if (!rr.timedCheck(10000))
                 {
                   cout << "Rule failed extended verification.";
                   continue;
@@ -955,13 +960,24 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
               rewrite_system.push_back(rr);
 
+              // We've added it. Now the lhs should map to the rhs.
+              // Sometimes it doesn't. Not sure why..
+              if(t != rewrite_system.rewriteNode(f))
+                {
+                  cerr << "!!!!!!!!!Term doesn't map to itself";
+                  cerr << f;
+                  cerr << t;
+                  cerr << rewrite_system.rewriteNode(f);
+
+                }
+
               // Remove the more difficult expression.
-              if (from == equiv[i])
+              if (f == equiv[i])
                 {
                   cout << ".";
                   equiv[i] = mgr->ASTUndefined;
                 }
-              if (from == equiv[j])
+              if (t == equiv[j])
                 {
                   cout << ".";
                   equiv[j] = mgr->ASTUndefined;
@@ -1135,7 +1151,6 @@ checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& assignme
       if (widened == mgr->ASTUndefined)
         {
           cout << "cannot widen";
-          //cerr << n;
           bad = true;
           return false;
         }
@@ -1371,7 +1386,7 @@ template<class T>
 void
 writeOutRules()
 {
-  cerr << "Writing out: " << rewrite_system.size() << " rules" << endl;
+  cout << "Writing out: " << rewrite_system.size() << " rules" << endl;
   force_writeout = false;
 
   std::vector<string> output;
@@ -1430,7 +1445,6 @@ writeOutRules()
                   ASTNode f = it->getFrom();
                   cout << "This:" << f << std::endl;
                   cout << "Has the same text as this: " << dup.find(sofar)->second.getFrom();
-                  cout << "Rule " << it->getId() << " has the same text as " <<  dup.find(sofar)->second.getId() << endl;
 
                   ASTNodeMap fromTo;
                   f = renameVars(f);
@@ -1554,7 +1568,7 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
   for (int i = 0; i < rr.size(); i++)
     {
       // If they are the same rule. Then don't match them.
-      if (original_rule.sameID(rr[i]))
+      if (original_rule == (rr[i]))
         continue;
 
       if (fromTo.size() > 0)
@@ -1566,11 +1580,12 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
         {
           if (debug_usr2)
             {
-              cerr << "Original Rule(" << original_rule.getId() << ")";
+              cerr << "Original Rule";
+
               cerr << original_rule.getFrom();
               cerr << "->" << original_rule.getTo();
 
-              cerr << "Matching Rule(" << rr[i].getId() << ")";
+              cerr << "Matching Rule";
               cerr << rr[i].getFrom();
               cerr << "->" << rr[i].getTo();
 
@@ -1587,20 +1602,19 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
               cerr << "--------------";
             }
 
-          if (seen.find(n) != seen.end())
-            return seen.find(n)->second;
+          ASTNodeMap::const_iterator it;
+          if ((it = seen.find(n2)) != seen.end())
+            return  it->second;
 
-          seen.insert(make_pair(n, rr[i].getTo()));
+          // The substitution map replace should never infinite loop.
           ASTNodeMap cache;
           ASTNode r = SubstitutionMap::replace(rr[i].getTo(), fromTo, cache, nf, false, true);
-          seen.erase(n);
+          seen.insert(make_pair(n2, r));
 
-          seen.insert(make_pair(n, r));
           r = rewrite(r, original_rule, seen, depth + 1);
-          seen.erase(n);
-          seen.insert(make_pair(n, r));
+          seen.erase(n2);
+          seen.insert(make_pair(n2, r));
           return r;
-
         }
     }
 
@@ -2005,6 +2019,7 @@ main(int argc, const char* argv[])
     {
       testProps();
     }
+#if 0
   else if (argc == 2 && !strcmp("delete-failed",argv[1]))
     {
       load_new_rules();
@@ -2022,6 +2037,7 @@ main(int argc, const char* argv[])
       createVariables();
       writeOutRules();
     }
+#endif
   else if (argc == 2 && !strcmp("test2",argv[1]))
     {
       load_new_rules();
@@ -2273,12 +2289,17 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
  *
  * Initially I thought commutative matching was easy to get right. NO!
  *
- * NB: This uses a "statc" container so this can't be called recursively.
+ * NB: This uses a "static" container so this can't be called recursively.
  */
+bool in_commutative=false;
+
 bool
 commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitution, const int term_variable_width)
 {
   assert(substitution.size() ==0);
+
+  assert(!in_commutative); // because the container is static. Check there is only one at a time.
+  in_commutative = true;
 
 #ifdef PEDANTIC_MATCHING_ASSERTS
   {
@@ -2307,7 +2328,7 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitu
 
 #endif
 
-  deque<pair<ASTNode, ASTNode> > commutative;
+  static deque<pair<ASTNode, ASTNode> > commutative;
   commutative.clear();
 
   ASTNode vNode = mgr->ASTUndefined;
@@ -2347,6 +2368,8 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitu
       assert(commutative.size() ==0);  // should be none left to process.
     }
 
+  assert(in_commutative);
+  in_commutative = false;
   return r;
 }
 

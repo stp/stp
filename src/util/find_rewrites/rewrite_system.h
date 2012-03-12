@@ -117,20 +117,6 @@ public:
   }
 
   void
-  deleteID(int id)
-  {
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
-      {
-        if (it->getId() == id)
-          {
-            toWrite.erase(it--);
-            cerr << "matched" << id;
-            lookups_invalid = true;
-          }
-      }
-  }
-
-  void
   buildLookupTable()
   {
     kind_to_rr.clear();
@@ -243,7 +229,6 @@ public:
                 cout << to_rewritten;
                 cout << "---";
                 cout << getDifficulty(rr.getFrom()) << " --> " << getDifficulty(rr.getTo()) << endl;
-                cout << "replacing" << it->getId() << " with " << rr.getId() << endl;
 
                 *it = rr;
                 lookups_invalid = true;
