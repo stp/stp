@@ -24,32 +24,32 @@ namespace printer
   void SMTLIB2_Print1(ostream& os, const BEEV::ASTNode n, int indentation,	bool letize);
   void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
-void SMTLIB2_PrintBack(ostream &os, const ASTNode& n)
+void SMTLIB2_PrintBack(ostream &os, const ASTNode& n, const bool definately_bv)
 {
-	if (containsArrayOps(n))
-		os << "(set-logic QF_ABV)" << endl;
+	if (!definately_bv && containsArrayOps(n))
+		os << "(set-logic QF_ABV)\n";
 	else
-		os << "(set-logic QF_BV)"<< endl;
+		os << "(set-logic QF_BV)\n";
 
-	os << "(set-info :smt-lib-version 2.0)"<< endl;
+	os << "(set-info :smt-lib-version 2.0)\n";
 
 
 	if (input_status == TO_BE_SATISFIABLE) {
-		os << "(set-info :status sat)"<< endl;
+		os << "(set-info :status sat)\n";
 	}
 	else if (input_status == TO_BE_UNSATISFIABLE) {
-		os << "(set-info :status unsat)"<< endl;
+		os << "(set-info :status unsat)\n";
 	} else
-		os << "(set-info :status unknown)"<< endl;
+		os << "(set-info :status unknown)\n";
 
 	ASTNodeSet visited, symbols;
 	buildListOfSymbols(n, visited, symbols);
 	printVarDeclsToStream(symbols, os);
 	os << "(assert ";
     SMTLIB_Print(os, n, 0, &SMTLIB2_Print1, false);
-    os << ")" << endl;
-    os << "(check-sat)" << endl;
-    os << "(exit)" << endl;
+    os << ")\n";
+    // os << "(check-sat)" << endl;
+    // os << "(exit)\n";
   }
 
 void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)

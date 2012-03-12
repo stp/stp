@@ -38,9 +38,7 @@ namespace printer
   void SMTLIB1_PrintBack(ostream &os,
                         const BEEV::ASTNode& n );
 
-  void SMTLIB2_PrintBack(ostream &os,
-                        const BEEV::ASTNode& n );
-
+  void SMTLIB2_PrintBack(ostream &os, const ASTNode& n, bool definately_bv=false);
 
   ostream& GDL_Print(ostream &os, const BEEV::ASTNode n);
   ostream& GDL_Print(ostream &os, const ASTNode n, string (*annotate)(const ASTNode&));
