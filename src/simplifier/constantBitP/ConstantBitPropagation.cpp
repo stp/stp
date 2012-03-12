@@ -7,11 +7,7 @@
 #include "ConstantBitP_Utility.h"
 #include <iostream>
 #include <fstream>
-
-  #include "ConstantBitP_TransferFunctions.h"
-#ifdef WITHCBITP
-  #include "ConstantBitP_MaxPrecision.h"
-#endif
+#include "ConstantBitP_TransferFunctions.h"
 
 using std::endl;
 using std::cout;
@@ -762,47 +758,6 @@ namespace simplifier
 
       return result;
 
-    }
-
-
-  Result dispatchToMaximallyPrecise(const Kind k, vector<FixedBits*>& children,
-      FixedBits& output, const ASTNode n)
-    {
-  #if WITHCBITP
-
-      Signature signature;
-      signature.kind = k;
-
-      vector<FixedBits> childrenCopy;
-
-      for (int i = 0; i < (int) children.size(); i++)
-      childrenCopy.push_back(*(children[i]));
-      FixedBits outputCopy(output);
-
-      if (k == BVMULT)
-        {
-          // We've got some of multiply already implemented. So help it out by getting some done first.
-          Result r = bvMultiplyBothWays(children, output, n.GetSTPMgr());
-          if (CONFLICT == r)
-          return CONFLICT;
-        }
-
-      bool bad = maxPrecision(children, output, k, n.GetSTPMgr());
-
-      if (bad)
-      return CONFLICT;
-
-      if (!FixedBits::equals(outputCopy, output))
-      return CHANGED;
-
-      for (int i = 0; i < (int) children.size(); i++)
-        {
-          if (!FixedBits::equals(*(children[i]), childrenCopy[i]))
-          return CHANGED;
-        }
-
-  #endif
-      return NOT_IMPLEMENTED;
     }
   }
 }
