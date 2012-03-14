@@ -14,7 +14,6 @@ orderEquivalence(ASTNode& from, ASTNode& to);
 ASTNode
 create(Kind k, const ASTNode& n0, const ASTNode& n1);
 
-
 template<class T>
   void
   removeDuplicates(T & big);
@@ -23,11 +22,10 @@ ASTNode
 widen(const ASTNode& w, int width);
 
 bool
-matchNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width);
+matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
 
 bool
 commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
-
 
 ASTNode
 renameVars(const ASTNode &n);
@@ -53,7 +51,6 @@ isConstant(const ASTNode& n, VariableAssignment& different);
 ASTNode
 rewriteThroughWithAIGS(const ASTNode &n_);
 
-
 class Rewrite_system
 {
 public:
@@ -67,36 +64,38 @@ private:
   void
   writeOutRules();
 
-  friend ASTNode rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, int depth);
+  friend ASTNode
+  rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, int depth);
 
   RewriteRuleContainer toWrite;
 
-  std::map< Kind, vector<Rewrite_rule> > kind_to_rr;
-   bool lookups_invalid; // whether the above table is bad.
+  std::map<Kind, vector<Rewrite_rule> > kind_to_rr;
+  bool lookups_invalid; // whether the above table is bad.
 
   void
   addRuleToLookup(Rewrite_rule& r)
   {
     const ASTNode& from = r.getFrom();
     kind_to_rr[from.GetKind()].push_back(r);
-    assert(from.Degree() > 0); // Shouldn't map from a constant, nor from a variable.
+    assert(from.Degree() > 0);
+    // Shouldn't map from a constant, nor from a variable.
   }
-
 
 public:
 
   bool
   checkInvariant()
   {
-    int size=0;
-    std::map< Kind, vector<Rewrite_rule> >::iterator it;
-    for(it=kind_to_rr.begin();it != kind_to_rr.end();it++)
+    int size = 0;
+    std::map<Kind, vector<Rewrite_rule> >::iterator it;
+    for (it = kind_to_rr.begin(); it != kind_to_rr.end(); it++)
       {
-        for (int i=0; i < it->second.size();i++)
+        for (int i = 0; i < it->second.size(); i++)
           {
-            assert(it->second[i].getFrom().GetKind() == it->first); // All have the same kind as the lookup kind.
+            assert(it->second[i].getFrom().GetKind() == it->first);
+            // All have the same kind as the lookup kind.
           }
-        size+= it->second.size();
+        size += it->second.size();
       }
 
     return size == toWrite.size();
@@ -119,7 +118,8 @@ public:
     return toWrite.end();
   }
 
-  bool areLookupsGood()
+  bool
+  areLookupsGood()
   {
     return lookups_invalid;
   }
@@ -129,11 +129,11 @@ public:
   {
     kind_to_rr.clear();
 
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+    for (RewriteRuleContainer::iterator it = toWrite.begin(); it != toWrite.end(); it++)
       {
         addRuleToLookup(*it);
       }
-    lookups_invalid =false;
+    lookups_invalid = false;
   }
 
   void
@@ -166,9 +166,10 @@ public:
     return toWrite.size();
   }
 
-  static ASTNode rewriteNode(ASTNode n)
+  static ASTNode
+  rewriteNode(ASTNode n)
   {
-    return rename_then_rewrite(n,Rewrite_rule::getNullRule());
+    return rename_then_rewrite(n, Rewrite_rule::getNullRule());
   }
 
   void
@@ -179,8 +180,8 @@ public:
 
     buildLookupTable();
 
-    int i=0;
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++, i++)
+    int i = 0;
+    for (RewriteRuleContainer::iterator it = toWrite.begin(); it != toWrite.end(); it++, i++)
       {
         if (i % 1000 == 0)
           cout << "rewrite all:" << i << " of " << toWrite.size() << endl;
@@ -201,9 +202,9 @@ public:
           }
 
         ASTNodeMap seen;
-        ASTNode from_wide_rewritten = rewrite(from_wide, *it,seen,0);
+        ASTNode from_wide_rewritten = rewrite(from_wide, *it, seen, 0);
         seen = ASTNodeMap();
-        ASTNode to_wide_rewritten = rewrite(to_wide, *it,seen,0);
+        ASTNode to_wide_rewritten = rewrite(to_wide, *it, seen, 0);
         seen = ASTNodeMap();
 
         // Also apply the AIG rules.
@@ -217,10 +218,10 @@ public:
             assert(BVTypeCheckRecursive(from_rewritten));
             assert(BVTypeCheckRecursive(to_rewritten));
 
-            assert (isConstantToSat(create(EQ, from_wide_rewritten,from_wide)));
-            assert (isConstantToSat(create(EQ, to_wide_rewritten,to_wide)));
-            assert (isConstantToSat(create(EQ, it->getFrom(),from_rewritten)));
-            assert (isConstantToSat(create(EQ, it->getTo(),to_rewritten)));
+            assert(isConstantToSat(create(EQ, from_wide_rewritten,from_wide)));
+            assert(isConstantToSat(create(EQ, to_wide_rewritten,to_wide)));
+            assert(isConstantToSat(create(EQ, it->getFrom(),from_rewritten)));
+            assert(isConstantToSat(create(EQ, it->getTo(),to_rewritten)));
 
             bool ok = orderEquivalence(from_rewritten, to_rewritten);
             if (ok)
@@ -243,7 +244,7 @@ public:
 
               }
             if (!ok)
-            {
+              {
                 cout << "Erasing bad rule.\n";
                 erase(it--);
                 i--;
@@ -257,7 +258,8 @@ public:
     buildLookupTable();
   }
 
-  void clear()
+  void
+  clear()
   {
     toWrite.clear();
     buildLookupTable();
@@ -267,7 +269,7 @@ public:
   verifyAllwithSAT()
   {
     cerr << "Started verifying all" << endl;
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+    for (RewriteRuleContainer::iterator it = toWrite.begin(); it != toWrite.end(); it++)
       {
         VariableAssignment assignment;
         bool bad = false;
@@ -282,14 +284,14 @@ public:
             assert(!bad);
           }
         if (bits >= it->getVerifiedToBits())
-          it->setVerified(bits,getCurrentTime() - st);
+          it->setVerified(bits, getCurrentTime() - st);
       }
   }
 
   void
   writeOut(ostream &o)
   {
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
+    for (RewriteRuleContainer::iterator it = toWrite.begin(); it != toWrite.end(); it++)
       {
         it->writeOut(o);
       }

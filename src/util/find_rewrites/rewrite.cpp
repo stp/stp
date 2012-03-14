@@ -64,7 +64,6 @@ clearSAT();
 bool
 is_subgraph(const ASTNode& g, const ASTNode& h);
 
-
 void
 createVariables();
 
@@ -91,7 +90,7 @@ vector<ASTNode>
 getVariables(const ASTNode& n);
 
 bool
-matchNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width);
+matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
 
 typedef HASHMAP<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
 
@@ -107,7 +106,6 @@ ASTNode zero, one, maxNode, v, w, v0, w0;
 // Width of the rewrite rules that were output last time.
 int lastOutput = 0;
 
-
 bool
 checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& ass, bool& bad);
 
@@ -118,7 +116,7 @@ withNF(const ASTNode &n)
     return n;
 
   ASTVec c;
-  for (int i=0; i< n.Degree();i++)
+  for (int i = 0; i < n.Degree(); i++)
     c.push_back(withNF(n[i]));
 
   if (n.GetType() == BOOLEAN_TYPE)
@@ -126,7 +124,6 @@ withNF(const ASTNode &n)
   else
     return nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), c);
 }
-
 
 ASTNode
 renameVars(const ASTNode &n)
@@ -157,7 +154,6 @@ renameVarsBack(const ASTNode &n)
   ASTNodeMap cache;
   return SubstitutionMap::replace(n, ft, cache, nf);
 }
-
 
 // Helper functions. Don't need to specify the width.
 ASTNode
@@ -325,9 +321,9 @@ isConstant(const ASTNode& n, VariableAssignment& different, const int bits)
       for (int i = 0; i < symbols.size(); i++)
         {
           if (strncmp(symbols[i].GetName(), "v", 1) == 0)
-              different.setV(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+            different.setV(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
           else if (strncmp(symbols[i].GetName(), "w", 1) == 0)
-              different.setW(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+            different.setW(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
         }
       return false;
     }
@@ -344,14 +340,14 @@ widen(const ASTNode& w, int width)
 
   if (w.isConstant() && w.GetValueWidth() == bits)
     {
-      ASTNode width_n = mgr->CreateBVConst(32,width);
-      return nf->CreateTerm(BVSX, width, w,width_n);
+      ASTNode width_n = mgr->CreateBVConst(32, width);
+      return nf->CreateTerm(BVSX, width, w, width_n);
     }
 
   if (w.isConstant() && w.GetValueWidth() == bits - 1)
     {
-      ASTNode width_n = mgr->CreateBVConst(32,width-1);
-      return nf->CreateTerm(BVSX, width-1, w,width_n);
+      ASTNode width_n = mgr->CreateBVConst(32, width - 1);
+      return nf->CreateTerm(BVSX, width - 1, w, width_n);
     }
 
   if (w.isConstant() && w.GetValueWidth() == 32) // Extract DEFINATELY.
@@ -433,13 +429,13 @@ widen(const ASTNode& w, int width)
 bool
 orderEquivalence(ASTNode& from, ASTNode& to)
 {
-  if(from.IsNull())
+  if (from.IsNull())
     return false;
-  if(from.GetKind() == UNDEFINED)
+  if (from.GetKind() == UNDEFINED)
     return false;
-  if(to.IsNull())
+  if (to.IsNull())
     return false;
-  if(to.GetKind() == UNDEFINED)
+  if (to.GetKind() == UNDEFINED)
     return false;
 
   if (from == to)
@@ -448,7 +444,7 @@ orderEquivalence(ASTNode& from, ASTNode& to)
   if (from.isConstant())
     {
       assert(!to.isConstant());
-      swap(from,to);
+      swap(from, to);
       return true;
     }
 
@@ -458,42 +454,41 @@ orderEquivalence(ASTNode& from, ASTNode& to)
       return true;
     }
 
-  if (is_subgraph(to,from))
+  if (is_subgraph(to, from))
     {
       return true;
     }
 
-  if (is_subgraph(from,to))
+  if (is_subgraph(from, to))
     {
-      swap(from,to);
+      swap(from, to);
       return true;
     }
 
   return false;
 }
 
-
 bool
 orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
 {
-  if(from.IsNull())
+  if (from.IsNull())
     return false;
-  if(from.GetKind() == UNDEFINED)
+  if (from.GetKind() == UNDEFINED)
     return false;
-  if(to.IsNull())
+  if (to.IsNull())
     return false;
-  if(to.GetKind() == UNDEFINED)
+  if (to.GetKind() == UNDEFINED)
     return false;
 
-  {
-    ASTVec c;
-    c.push_back(from);
-    c.push_back(to);
-      ASTNode w = widen(mgr->hashingNodeFactory->CreateNode(EQ,c), widen_to);
+    {
+      ASTVec c;
+      c.push_back(from);
+      c.push_back(to);
+      ASTNode w = widen(mgr->hashingNodeFactory->CreateNode(EQ, c), widen_to);
 
-    if  (w.IsNull() || w.GetKind() == UNDEFINED)
-      return false;
-  }
+      if (w.IsNull() || w.GetKind() == UNDEFINED)
+        return false;
+    }
 
   vector<ASTNode> s_from; // The variables in the from node.
   ASTNodeSet visited;
@@ -501,7 +496,7 @@ orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
   std::sort(s_from.begin(), s_from.end());
   const int from_c = visited.size();
 
-  vector<ASTNode> s_to;  // The variables in the to node.
+  vector<ASTNode> s_to; // The variables in the to node.
   visited.clear();
   getVariables(to, s_to, visited);
   sort(s_to.begin(), s_to.end());
@@ -555,13 +550,13 @@ orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
   if (s_from.size() > s_to.size())
     return true;
 
-  if ((getDifficulty(from)+5) < getDifficulty(to))
+  if ((getDifficulty(from) + 5) < getDifficulty(to))
     {
       swap(from, to);
       return true;
     }
 
-  if (getDifficulty(from) > (getDifficulty(to)+5))
+  if (getDifficulty(from) > (getDifficulty(to) + 5))
     {
       return true;
     }
@@ -576,8 +571,6 @@ orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
       swap(from, to);
       return true;
     }
-
-
 
   // Can't order they have the same number of nodes and the same AIG size.
   return false;
@@ -620,27 +613,27 @@ getDifficulty(const ASTNode& n_)
 
   // Create a new sat variable for each of the variables in the CNF.
   assert(ss->nVars() ==0);
-  for (int i = 0; i < cnfData->nVars ; i++)
+  for (int i = 0; i < cnfData->nVars; i++)
     ss->newVar();
 
   SATSolver::vec_literals satSolverClause;
   for (int i = 0; i < cnfData->nClauses; i++)
     {
       satSolverClause.clear();
-      for (int * pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i
-          + 1]; pLit < pStop; pLit++)
+      for (int * pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1]; pLit < pStop; pLit++)
         {
           SATSolver::Var var = (*pLit) >> 1;
-          assert ((var < ss->nVars()));
+          assert((var < ss->nVars()));
           Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
           satSolverClause.push(l);
         }
 
       ss->addClause(satSolverClause);
-   }
+    }
 
   ss->simplify();
-  assert (ss->okay()); // should be satisfiable.
+  assert(ss->okay());
+  // should be satisfiable.
 
   // Why we go to all this trouble. The number of clauses.
   const int score = ss->nClauses();
@@ -701,7 +694,8 @@ doIte(ASTNode a)
     }
 }
 
-void do_write_out(int ignore)
+void
+do_write_out(int ignore)
 {
   force_writeout = true;
 }
@@ -709,11 +703,11 @@ void do_write_out(int ignore)
 volatile bool debug_usr2 = false;
 
 //toggle.
-void do_usr2(int ignore)
+void
+do_usr2(int ignore)
 {
-  debug_usr2=!debug_usr2;
+  debug_usr2 = !debug_usr2;
 }
-
 
 int
 startup()
@@ -737,7 +731,7 @@ startup()
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
-  mgr->defaultNodeFactory = new SimplifyingNodeFactory (*mgr->hashingNodeFactory, *mgr);
+  mgr->defaultNodeFactory = new SimplifyingNodeFactory(*mgr->hashingNodeFactory, *mgr);
   nf = new TypeChecker(*mgr->defaultNodeFactory, *mgr);
 
   mgr->UserFlags.stats_flag = false;
@@ -762,11 +756,10 @@ startup()
   w0 = mgr->LookupOrCreateSymbol("w0");
   w0.SetValueWidth(bits);
 
-
   // Write out the work so far..
-  signal(SIGUSR1,do_write_out);
+  signal(SIGUSR1, do_write_out);
 
-  signal(SIGUSR2,do_usr2);
+  signal(SIGUSR2, do_usr2);
 
 }
 
@@ -832,9 +825,9 @@ getHash(const ASTNode& n_, const vector<VariableAssignment>& values)
           assert(symbols[j].GetValueWidth() == ass_bitwidth);
 
           if (strncmp(symbols[j].GetName(), "v", 1) == 0)
-              mapToVal.insert(make_pair(symbols[j], values[i].getV()));
+            mapToVal.insert(make_pair(symbols[j], values[i].getV()));
           else if (strncmp(symbols[j].GetName(), "w", 1) == 0)
-              mapToVal.insert(make_pair(symbols[j], values[i].getW()));
+            mapToVal.insert(make_pair(symbols[j], values[i].getW()));
           else
             {
               cerr << "Unknown symbol!" << symbols[j];
@@ -880,17 +873,15 @@ is_candidate(ASTNode from, ASTNode to)
 bool
 is_subgraph(const ASTNode& g, const ASTNode& h)
 {
-  if (g==h)
+  if (g == h)
     return true;
 
   for (int i = 0; i < h.Degree(); i++)
-    if (is_subgraph(g,h[i]))
+    if (is_subgraph(g, h[i]))
       return true;
 
   return false;
-  }
-
-
+}
 
 bool
 lessThan(const ASTNode& n1, const ASTNode& n2)
@@ -902,7 +893,7 @@ lessThan(const ASTNode& n1, const ASTNode& n2)
     return true;
 
   if (!n1_bad && n2_bad)
-      return false;
+    return false;
 
   if (n1_bad && n2_bad)
     return false;
@@ -950,9 +941,9 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
       cout << "Split into " << map.size() << " pieces\n";
       if (depth > 0)
-          {
-            assert(map.size() >0);
-          }
+        {
+          assert(map.size() >0);
+        }
 
       int id = 1;
       for (it2 = map.begin(); it2 != map.end(); it2++)
@@ -972,7 +963,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
   for (int i = 0; i < equiv.size(); i++)
     {
       if (equiv[i].GetKind() == UNDEFINED)
-          continue;
+        continue;
 
       // nb. I haven't rebuilt the map, it's done by writeOutRules().
       equiv[i] == rewrite_system.rewriteNode(equiv[i]);
@@ -1231,7 +1222,7 @@ checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& assignme
 
           // Detected it's not a constant, or is constant FALSE.
 
-           cout << "*" << i - bits << "*";
+          cout << "*" << i - bits << "*";
           return false;
         }
     }
@@ -1438,7 +1429,6 @@ template<class T>
     return ss.str();
   }
 
-
 /* Writes out:
  * rewrite_data_new.cpp: rules coded in C++.
  * array.cpp: rules in SMT2 in one big conjunct.
@@ -1455,7 +1445,8 @@ writeOutRules()
   std::vector<string> output;
   std::map<string, Rewrite_rule> dup;
 
-  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin();
+      it != rewrite_system.toWrite.end(); it++)
     {
       ASTNode to = it->getTo();
       ASTNode from = it->getFrom();
@@ -1491,7 +1482,6 @@ writeOutRules()
       rule_to_string(from, names, current, sofar);
       sofar += ")    set(result,  " + to_name + ");";
 
-
 //      if (sofar.find("!!!") == std::string::npos && sofar.length() < 500)
         {
             {
@@ -1511,7 +1501,7 @@ writeOutRules()
 
                   ASTNodeMap fromTo;
                   f = renameVars(f);
-                  bool result = commutative_matchNode(f,dup.find(sofar)->second.getFrom(),fromTo,2) ;
+                  bool result = commutative_matchNode(f, dup.find(sofar)->second.getFrom(), fromTo, 2);
                   cout << "Has it unified:" << result << endl;
                   ASTNodeMap seen;
 
@@ -1520,7 +1510,7 @@ writeOutRules()
                   continue;
                 }
               else
-                dup.insert(make_pair(sofar,*it));
+                dup.insert(make_pair(sofar, *it));
             }
         }
     }
@@ -1538,9 +1528,8 @@ writeOutRules()
 
   // Because we output the difficulty (i.e. the number of CNF clauses),
   // this is very slow.
-  #ifdef OUTPUT_CPP_RULES
+#ifdef OUTPUT_CPP_RULES
   outputFile.open("rewrite_data_new.cpp", ios::trunc);
-
 
   // output the C++ code.
   hash_map<string, vector<string>, hashF<std::string> >::const_iterator it;
@@ -1550,25 +1539,27 @@ writeOutRules()
       outputFile << "{" << endl;
       vector<string>::const_iterator it2 = it->second.begin();
       for (; it2 != it->second.end(); it2++)
-        outputFile << *it2;
+      outputFile << *it2;
 
       outputFile << "}" << endl;
     }
   outputFile.close();
-  #endif
+#endif
 
   ///////////////
   outputFile.open("rules_new.smt2", ios::trunc);
-  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
-  {
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin();
+      it != rewrite_system.toWrite.end(); it++)
+    {
       it->writeOut(outputFile);
-  }
+    }
   outputFile.close();
 
   /////////////////
   outputFile.open("array.smt2", ios::trunc);
   ASTVec v;
-  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin() ; it != rewrite_system.toWrite.end(); it++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin();
+      it != rewrite_system.toWrite.end(); it++)
     {
       v.push_back(it->getN());
     }
@@ -1589,7 +1580,7 @@ rename_then_rewrite(ASTNode n, const Rewrite_rule& original_rule)
 {
   n = renameVars(n);
   ASTNodeMap seen;
-  n = rewrite(n,original_rule,seen,0);
+  n = rewrite(n, original_rule, seen, 0);
   return renameVarsBack(n);
 }
 
@@ -1606,15 +1597,15 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
   ASTVec v;
   v.reserve(n.Degree());
   for (int i = 0; i < n.Degree(); i++)
-    v.push_back(rewrite(n[i],original_rule,seen,depth+1));
+    v.push_back(rewrite(n[i], original_rule, seen, depth + 1));
 
   assert(v.size() > 0);
   ASTNode n2;
 
-  if (v!=n.GetChildren())
+  if (v != n.GetChildren())
     {
       if (n.GetType() != BOOLEAN_TYPE)
-        n2 = mgr->CreateArrayTerm(n.GetKind(),n.GetIndexWidth(), n.GetValueWidth(), v);
+        n2 = mgr->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), v);
       else
         n2 = mgr->CreateNode(n.GetKind(), v);
     }
@@ -1669,14 +1660,14 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
           ASTNodeMap cache;
           ASTNode r = SubstitutionMap::replace(rr[i].getTo(), fromTo, cache, nf, false, true);
 
-          if (debug_usr2 && (getDifficulty(n2) <  getDifficulty(r)))
+          if (debug_usr2 && (getDifficulty(n2) < getDifficulty(r)))
             {
-            cerr << rr[i].getFrom() << rr[i].getTo();
-            cerr << getDifficulty(rr[i].getFrom()) << "to" <<  getDifficulty(rr[i].getTo()) << "\n";
-            cerr << n2 << r;
-            cerr << getDifficulty(n2) << "to" <<   getDifficulty(r);
-            assert (getDifficulty(n2) >=  getDifficulty(r));
-          }
+              cerr << rr[i].getFrom() << rr[i].getTo();
+              cerr << getDifficulty(rr[i].getFrom()) << "to" << getDifficulty(rr[i].getTo()) << "\n";
+              cerr << n2 << r;
+              cerr << getDifficulty(n2) << "to" << getDifficulty(r);
+              assert(getDifficulty(n2) >= getDifficulty(r));
+            }
 
           seen.insert(make_pair(n2, r));
 
@@ -1707,26 +1698,27 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
   return n2;
 }
 
-
-int smt2_scan_string(const char *yy_str);
+int
+smt2_scan_string(const char *yy_str);
 
 // http://stackoverflow.com/questions/3418231/c-replace-part-of-a-string-with-another-string
-bool replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
-    if(start_pos == std::string::npos)
-        return false;
-    str.replace(start_pos, from.length(), to);
-    return true;
+bool
+replace(std::string& str, const std::string& from, const std::string& to)
+{
+  size_t start_pos = str.find(from);
+  if (start_pos == std::string::npos)
+    return false;
+  str.replace(start_pos, from.length(), to);
+  return true;
 }
-
 
 void
 load_new_rules(const string fileName = "rules_new.smt2")
 {
   FILE * in;
-  bool opended= false;
+  bool opended = false;
 
-  if(!ifstream(fileName.c_str())) /// use stdin if the default file is not found.
+  if (!ifstream(fileName.c_str())) /// use stdin if the default file is not found.
     in = stdin;
   else
     {
@@ -1760,36 +1752,37 @@ load_new_rules(const string fileName = "rules_new.smt2")
       int id, verified_to_bits, time_used, from_v, to_v;
 
       string s;
-      char line [63000];
+      char line[63000];
 
       bool first = true;
       bool done = false;
       while (true)
         {
-        fgets ( line, sizeof line, in );
-        if (first)
-          {
-            int rv = sscanf(line, ";id:%d\tverified_to:%d\ttime:%d\tfrom_difficulty:%d\tto_difficulty:%d\n", &id, &verified_to_bits, &time_used, &from_v, &to_v);
-            if (rv !=5)
-              {
-                cerr << line;
-                done = true;
-                break;
-              }
-            first = false;
-            continue;
-          }
-        s+= line;
-        if (!strcmp(line,"(exit)\n"))
-          break;
+          fgets(line, sizeof line, in);
+          if (first)
+            {
+              int rv = sscanf(line, ";id:%d\tverified_to:%d\ttime:%d\tfrom_difficulty:%d\tto_difficulty:%d\n", &id,
+                  &verified_to_bits, &time_used, &from_v, &to_v);
+              if (rv != 5)
+                {
+                  cerr << line;
+                  done = true;
+                  break;
+                }
+              first = false;
+              continue;
+            }
+          s += line;
+          if (!strcmp(line, "(exit)\n"))
+            break;
         }
       if (done)
         break;
 
       mgr->GetRunTimes()->start(RunTimes::Parsing);
 
-      replace(s,v_string,"");
-      replace(s,w_string,"");
+      replace(s, v_string, "");
+      replace(s, w_string, "");
 
       // Load it into a string because other wise the parser reads in big blocks way past where we want it to.
       smt2_scan_string(s.c_str());
@@ -1818,7 +1811,7 @@ load_new_rules(const string fileName = "rules_new.smt2")
         }
 
       Rewrite_rule r(mgr, from, to, 0, id);
-      r.setVerified(verified_to_bits,time_used);
+      r.setVerified(verified_to_bits, time_used);
 
       rewrite_system.push_back(r);
 
@@ -1826,7 +1819,8 @@ load_new_rules(const string fileName = "rules_new.smt2")
       parserInterface->popToFirstLevel();
     }
 
-  extern int smt2lex_destroy(void);
+  extern int
+  smt2lex_destroy(void);
   smt2lex_destroy();
 
   parserInterface->cleanUp();
@@ -1849,18 +1843,18 @@ expandRules(int timeout_ms, const char* fileName = "")
   load_new_rules(fileName);
   createVariables();
 
-  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.begin(); it!= rewrite_system.end();it++)
+  for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.begin(); it != rewrite_system.end(); it++)
     {
       if ((*it).timedCheck(timeout_ms))
         {
           it->writeOut(cout); // omit failed.
-          cerr  << getDifficulty(it->getFrom()) <<" " <<  getDifficulty(it->getTo());
+          cerr << getDifficulty(it->getFrom()) << " " << getDifficulty(it->getTo());
         }
     }
 }
 
-
-void t2()
+void
+t2()
 {
   extern FILE *smt2in;
 
@@ -1872,24 +1866,24 @@ void t2()
   mgr->GetRunTimes()->start(RunTimes::Parsing);
   smt2parse();
 
-  ASTVec v = FlattenKind(AND,  piTypeCheckDefault.GetAsserts());
+  ASTVec v = FlattenKind(AND, piTypeCheckDefault.GetAsserts());
   ASTNode n = nf->CreateNode(XOR, v);
 
   //rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen)
   ASTNodeMap seen;
   createVariables();
-  ASTNode r = rename_then_rewrite(n,Rewrite_rule::getNullRule());
+  ASTNode r = rename_then_rewrite(n, Rewrite_rule::getNullRule());
   cerr << r;
   parserInterface = NULL;
-
 
 }
 
 // loads the already existing rules.
-void load_old_rules(string fileName)
+void
+load_old_rules(string fileName)
 {
-  if(!ifstream(fileName.c_str()))
-     return; // file doesn't exist.
+  if (!ifstream(fileName.c_str()))
+    return; // file doesn't exist.
 
   extern FILE *smt2in;
 
@@ -1943,7 +1937,7 @@ void load_old_rules(string fileName)
   rewrite_system.buildLookupTable();
 
   ASTVec vvv = mgr->GetAsserts();
-  for (int i=0; i < vvv.size() ;i++)
+  for (int i = 0; i < vvv.size(); i++)
     cout << vvv[i];
 
   // So we don't output as soon as one is discovered...
@@ -1969,7 +1963,8 @@ testProps()
     doProp(propKinds[k], a);
 }
 
-int test()
+int
+test()
 {
   // Test code.
   load_old_rules("test.smt2");
@@ -2007,7 +2002,8 @@ createVariables()
   w0.SetValueWidth(bits);
 }
 
-void unit_test()
+void
+unit_test()
 {
 
   // Create the negation and not terms in different orders. This tests the commutative matching.
@@ -2016,13 +2012,13 @@ void unit_test()
   ASTNode not_v = create(BEEV::BVNEG, c);
   ASTNode neg_v = create(BEEV::BVUMINUS, c);
 
-  ASTNode plus_v = create(BVPLUS,not_v,neg_v);
+  ASTNode plus_v = create(BVPLUS, not_v, neg_v);
 
   c.clear();
   c.push_back(w);
   ASTNode neg_w = create(BEEV::BVUMINUS, c);
   ASTNode not_w = create(BEEV::BVNEG, c);
-  ASTNode plus_w = create(BVPLUS,not_w,neg_w);
+  ASTNode plus_w = create(BVPLUS, not_w, neg_w);
 
   ASTNodeMap sub;
   plus_w = renameVars(plus_w);
@@ -2031,57 +2027,54 @@ void unit_test()
 
   assert(commutative_matchNode(plus_v,plus_w,sub,1));
 
-
 }
-
 
 int
 main(int argc, const char* argv[])
 {
   startup();
 
-
   if (argc == 1) // Read the current rule set, find new rules.
     {
-        load_new_rules();
-        createVariables();
-        ////////////
-        rewrite_system.buildLookupTable();
+      load_new_rules();
+      createVariables();
+      ////////////
+      rewrite_system.buildLookupTable();
 
-        Function_list functionList;
-        functionList.buildAll();
+      Function_list functionList;
+      functionList.buildAll();
 
-        // The hash is generated on these values.
-        vector<VariableAssignment> values;
-        findRewrites(functionList.functions, values);
+      // The hash is generated on these values.
+      vector<VariableAssignment> values;
+      findRewrites(functionList.functions, values);
 
-        cout << "Initial:" << bits << " widening to :" << widen_to << endl;
-        cout << "Highest disproved @ level: " << highestLevel << endl;
-        cout << highestDisproved << endl;
-        ////////////
+      cout << "Initial:" << bits << " widening to :" << widen_to << endl;
+      cout << "Highest disproved @ level: " << highestLevel << endl;
+      cout << highestDisproved << endl;
+      ////////////
 
-        rewrite_system.rewriteAll();
-        writeOutRules();
+      rewrite_system.rewriteAll();
+      writeOutRules();
     }
-  else if (argc ==2 && !strcmp("unit-test",argv[1]))
+  else if (argc == 2 && !strcmp("unit-test", argv[1]))
     {
       load_new_rules();
       createVariables();
       unit_test();
     }
-  else if (argc ==2 && !strcmp("verify",argv[1]))
-      {
+  else if (argc == 2 && !strcmp("verify", argv[1]))
+    {
       load_new_rules();
       rewrite_system.verifyAllwithSAT();
-      }
-  else if ((argc == 4 || argc ==3) && !strcmp("expand",argv[1]))
+    }
+  else if ((argc == 4 || argc == 3) && !strcmp("expand", argv[1]))
     {
       // expand the bit-widths rules are tested at.
       int timeout_ms = atoi(argv[2]);
       assert(timeout_ms > 0);
-      expandRules(timeout_ms, (argc == 4 ? argv[3]:""));
+      expandRules(timeout_ms, (argc == 4 ? argv[3] : ""));
     }
-  else if (argc == 2 && !strcmp("rewrite",argv[1]))
+  else if (argc == 2 && !strcmp("rewrite", argv[1]))
     {
       // load the rules and apply the rewrite system to itself.
       load_new_rules();
@@ -2089,14 +2082,14 @@ main(int argc, const char* argv[])
       rewrite_system.rewriteAll();
       writeOutRules();
     }
-  else if (argc == 2 && !strcmp("write-out",argv[1]))
+  else if (argc == 2 && !strcmp("write-out", argv[1]))
     {
       load_new_rules();
       createVariables();
       rewrite_system.rewriteAll();
       writeOutRules(); // have the times now..
     }
-  else if (argc == 2 && !strcmp("test",argv[1]))
+  else if (argc == 2 && !strcmp("test", argv[1]))
     {
       testProps();
     }
@@ -2119,54 +2112,53 @@ main(int argc, const char* argv[])
       writeOutRules();
     }
 #endif
-  else if (argc == 2 && !strcmp("test2",argv[1]))
+  else if (argc == 2 && !strcmp("test2", argv[1]))
     {
       load_new_rules();
       t2();
     }
 
-  for (int i=0;  i< saved_array.size();i++)
+  for (int i = 0; i < saved_array.size(); i++)
     delete saved_array[i];
 }
 
 #if 0
 // Term variables have a specified width!!!
 bool
-matchNode(const ASTNode& n0, const ASTNode& n1,  ASTNodeMap& fromTo, const int term_variable_width)
-{
-  // Pointers to the same value. OK.
-  if (n0 == n1)
+matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width)
+  {
+    // Pointers to the same value. OK.
+    if (n0 == n1)
     return true;
 
-  if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
-    {
-      if (fromTo.find(n0) != fromTo.end())
+    if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
+      {
+        if (fromTo.find(n0) != fromTo.end())
         return matchNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
 
-      fromTo.insert(make_pair(n0, n1));
-      return matchNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
-    }
+        fromTo.insert(make_pair(n0, n1));
+        return matchNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
+      }
 
-  // Here:
-  // They could be different BVConsts, different symbols, or
-  // different functions.
+    // Here:
+    // They could be different BVConsts, different symbols, or
+    // different functions.
 
-  if (n0.Degree() != n1.Degree() || (n0.Degree() == 0))
-      return false;
+    if (n0.Degree() != n1.Degree() || (n0.Degree() == 0))
+    return false;
 
-  if (n0.GetKind() != n1.GetKind())
-      return false;
+    if (n0.GetKind() != n1.GetKind())
+    return false;
 
-  for (int i = 0; i < n0.Degree(); i++)
-    {
-       if (!matchNode(n0[i], n1[i], fromTo, term_variable_width))
-          return false;
-    }
+    for (int i = 0; i < n0.Degree(); i++)
+      {
+        if (!matchNode(n0[i], n1[i], fromTo, term_variable_width))
+        return false;
+      }
 
-  return true;
-}
+    return true;
+  }
 #endif
-
 
 bool debug_matching = false;
 
@@ -2175,15 +2167,15 @@ bool debug_matching = false;
 // "false" if it definately can't be matched with any possible commutative ordering.
 // "true" can be matched, later you need to check if all the "commutative" can be matched.
 bool
-commutative_matchNode(const ASTNode& n0, const ASTNode& n1,   const int term_variable_width,
-    deque<pair< ASTNode, ASTNode> >&  commutative, ASTNode& vNode, ASTNode& wNode)
+commutative_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
+    deque<pair<ASTNode, ASTNode> >& commutative, ASTNode& vNode, ASTNode& wNode)
 {
   // Pointers to the same value. OK.
   if (n0 == n1)
     return true;
 
   // If we try and match sub-terms of concatenations,e,g. 000::x = 000111, we want it to fail.
-  if(n0.GetValueWidth() != n1.GetValueWidth())
+  if (n0.GetValueWidth() != n1.GetValueWidth())
     return false;
 
   if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
@@ -2217,24 +2209,24 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1,   const int term_var
   // different functions.
 
   if (n0.Degree() != n1.Degree() || (n0.Degree() == 0))
-      return false;
+    return false;
 
   if (n0.GetKind() != n1.GetKind())
-      return false;
+    return false;
 
   // If it's commutative, check it specially / seprately later.
   if (isCommutative(n0.GetKind()) && n0.Degree() > 1)
     {
-      commutative.push_back(make_pair(n0,n1));
+      commutative.push_back(make_pair(n0, n1));
       return true;
     }
   else
     {
-    for (int i = 0; i < n0.Degree(); i++)
-      {
-         if (!commutative_matchNode(n0[i], n1[i], term_variable_width,commutative,vNode,wNode))
+      for (int i = 0; i < n0.Degree(); i++)
+        {
+          if (!commutative_matchNode(n0[i], n1[i], term_variable_width, commutative, vNode, wNode))
             return false;
-      }
+        }
     }
   return true;
 }
@@ -2250,15 +2242,16 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
 
   const int init_comm_size = commutative_to_check.size();
 
-  bool r = commutative_matchNode(n0, n1, term_variable_width, commutative_to_check, vNode,wNode);
-  assert(commutative_to_check.size() >= init_comm_size);  // if anything, only pushed onto the back.
+  bool r = commutative_matchNode(n0, n1, term_variable_width, commutative_to_check, vNode, wNode);
+  assert(commutative_to_check.size() >= init_comm_size);
+  // if anything, only pushed onto the back.
 
   if (debug_matching)
     {
       cerr << "======Commut-match=======" << r << endl;
       cerr << "given" << n0 << n1;
       cerr << "Commutative still to match:" << endl;
-      for (int j=0;j < commutative_to_check.size(); j++)
+      for (int j = 0; j < commutative_to_check.size(); j++)
         {
           cerr << "++++++++++" << endl;
           cerr << "first" << commutative_to_check[j].first;
@@ -2313,13 +2306,12 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
   //deque<pair<ASTNode, ASTNode> > todo_copy2 = commutative_to_check;
   const int new_comm_size = commutative_to_check.size();
 
-
   // Check each permutation of the commutative operation's operands.
   do
     {
       // Check each of the operands matches. Store Extra away in "commutative_to_check".
-      bool good= true;
-      for (int i=0;i < f.size(); i++)
+      bool good = true;
+      for (int i = 0; i < f.size(); i++)
         {
           if (!commutative_matchNode(f[i], s[i], term_variable_width, commutative_to_check, vNode, wNode))
             {
@@ -2330,14 +2322,14 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
 
       // Empty out the "commutative_to_check".
       if (good)
-        if (!c_matchNode(mgr->ASTTrue, mgr->ASTTrue,  term_variable_width, commutative_to_check,vNode,wNode))
-          good =false;
+        if (!c_matchNode(mgr->ASTTrue, mgr->ASTTrue, term_variable_width, commutative_to_check, vNode, wNode))
+          good = false;
 
       if (good)
         {
-         assert(commutative_to_check.size() ==0);
-         return true; // all match.
-       }
+          assert(commutative_to_check.size() ==0);
+          return true; // all match.
+        }
       else
         {
           vNode = vNode_copy2;
@@ -2354,12 +2346,10 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
   vNode = vNode_copy;
   wNode = wNode_copy;
 
-
   if (commutative_to_check.size() < init_comm_size)
     commutative_to_check.push_back(p);
   else
     commutative_to_check.erase(commutative_to_check.begin() + init_comm_size, commutative_to_check.end());
-
 
   return false;
 }
@@ -2372,40 +2362,40 @@ c_matchNode(const ASTNode& n0, const ASTNode& n1, const int term_variable_width,
  *
  * NB: This uses a "static" container so this can't be called recursively.
  */
-bool in_commutative=false;
+bool in_commutative = false;
 
 bool
 commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitution, const int term_variable_width)
 {
   assert(substitution.size() ==0);
 
-  assert(!in_commutative); // because the container is static. Check there is only one at a time.
+  assert(!in_commutative);
+  // because the container is static. Check there is only one at a time.
   in_commutative = true;
 
 #ifdef PEDANTIC_MATCHING_ASSERTS
-  {
-  // There shouldn't be any term variables on the RHS.
-  vector<ASTNode> vars = getVariables(n1);
-  vector<ASTNode>::iterator it = vars.begin();
-  while (it != vars.end())
     {
-      assert(strlen(it->GetName()) != term_variable_width);
-      assert(it->GetName()[0] == 'v' || it->GetName()[0] == 'w');
-      it++;
-    }
-  assert(vars.size() <=2);
+      // There shouldn't be any term variables on the RHS.
+      vector<ASTNode> vars = getVariables(n1);
+      vector<ASTNode>::iterator it = vars.begin();
+      while (it != vars.end())
+        {
+          assert(strlen(it->GetName()) != term_variable_width);
+          assert(it->GetName()[0] == 'v' || it->GetName()[0] == 'w');
+          it++;
+        }
+      assert(vars.size() <=2);
 
-  // All the LHS variables should be term variables.
-  vars = getVariables(n0);
-  it = vars.begin();
-  while (it != vars.end())
-    {
-      assert(strlen(it->GetName()) == term_variable_width);
-      it++;
+      // All the LHS variables should be term variables.
+      vars = getVariables(n0);
+      it = vars.begin();
+      while (it != vars.end())
+        {
+          assert(strlen(it->GetName()) == term_variable_width);
+          it++;
+        }
+      assert(vars.size() <=2);
     }
-  assert(vars.size() <=2);
-  }
-
 
 #endif
 
@@ -2414,12 +2404,12 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitu
 
   ASTNode vNode = mgr->ASTUndefined;
   ASTNode wNode = mgr->ASTUndefined;
-  bool r =  c_matchNode(n0,n1,term_variable_width,commutative,vNode,wNode);
+  bool r = c_matchNode(n0, n1, term_variable_width, commutative, vNode, wNode);
 
   if (r)
     {
       vector<ASTNode> s = getVariables(n0);
-      for (vector<ASTNode>::iterator it = s.begin(); it != s.end();it++)
+      for (vector<ASTNode>::iterator it = s.begin(); it != s.end(); it++)
         {
           assert(it->GetKind() ==SYMBOL);
           assert(strlen(it->GetName()) == term_variable_width);
@@ -2427,13 +2417,13 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitu
             {
               assert(vNode != mgr->ASTUndefined);
               assert(vNode.GetValueWidth() == it->GetValueWidth());
-              substitution.insert(make_pair(*it,vNode));
+              substitution.insert(make_pair(*it, vNode));
             }
           if (it->GetName()[0] == 'w')
             {
               assert(wNode != mgr->ASTUndefined);
               assert(wNode.GetValueWidth() == it->GetValueWidth());
-              substitution.insert(make_pair(*it,wNode));
+              substitution.insert(make_pair(*it, wNode));
             }
         }
     }
@@ -2446,7 +2436,8 @@ commutative_matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& substitu
   if (!r)
     {
       assert(substitution.size() == 0);
-      assert(commutative.size() ==0);  // should be none left to process.
+      assert(commutative.size() ==0);
+      // should be none left to process.
     }
 
   assert(in_commutative);

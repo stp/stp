@@ -10,11 +10,9 @@
 
 extern Rewrite_system rewrite_system;
 
-
 class Function_list
 {
-  private:
-
+private:
 
   // Because v and w might come from "result", if "result" is resized, they will
   // be moved. So we can't use references to them.
@@ -22,8 +20,8 @@ class Function_list
   getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] = {BVXOR, BVAND};
-
+    Kind types[] =
+      { BVXOR, BVAND };
 
     //Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
     const int number_types = sizeof(types) / sizeof(Kind);
@@ -37,7 +35,7 @@ class Function_list
   applyRewritesToAll(ASTVec& functions)
   {
     rewrite_system.buildLookupTable();
-    cerr << "Applying:" << rewrite_system.size()  <<"rewrite rules" << endl;
+    cerr << "Applying:" << rewrite_system.size() << "rewrite rules" << endl;
 
     for (int i = 0; i < functions.size(); i++)
       {
@@ -48,15 +46,14 @@ class Function_list
           cerr << "applyRewritesToAll:" << i << " of " << functions.size() << endl;
 
         ASTNode r = rewrite_system.rewriteNode(functions[i]);
-        if (r!= functions[i])
+        if (r != functions[i])
           {
-         //   cerr << "changed" << functions[i] << " to "<< r;
+            //   cerr << "changed" << functions[i] << " to "<< r;
 
-            functions[i] =r;
+            functions[i] = r;
           }
       }
   }
-
 
   // If there only w variables in the problem. We can delete it because
   // we will have another with just v's.
@@ -138,7 +135,6 @@ class Function_list
       }
   }
 
-
   // Triples the number of functions by adding all the unary ones.
   void
   allUnary()
@@ -152,7 +148,6 @@ class Function_list
         functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
       }
   }
-
 
   void
   applyAIGs()
@@ -208,7 +203,7 @@ public:
 
     cerr << "One Level:" << functions.size() << endl;
 
-   const bool two_level = true;
+    const bool two_level = true;
 
     if (two_level)
       {

@@ -6,10 +6,9 @@
 #ifndef VARIABLEASSIGNMENT_H_
 #define VARIABLEASSIGNMENT_H_
 
-extern ASTNode v, v0, w ,w0;
+extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
 extern BEEV::STPMgr* mgr;
-
 
 struct VariableAssignment
 {
@@ -71,6 +70,5 @@ public:
     setV(n1);
   }
 };
-
 
 #endif /* VARIABLEASSIGNMENT_H_ */
