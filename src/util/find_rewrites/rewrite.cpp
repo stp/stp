@@ -40,9 +40,6 @@ ASTNode highestDisproved;
 int highestLevel = 0;
 int discarded = 0;
 
-//static
-int  Rewrite_rule::static_id;
-
 //////////////////////////////////
 const int bits = 6;
 const int widen_to = 10;
@@ -63,6 +60,10 @@ Rewrite_system rewrite_system;
 
 void
 clearSAT();
+
+bool
+is_subgraph(const ASTNode& g, const ASTNode& h);
+
 
 void
 createVariables();
@@ -96,7 +97,6 @@ typedef HASHMAP<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> 
 
 BEEV::STPMgr* mgr;
 NodeFactory* nf;
-NodeFactory* simpNf;
 
 SATSolver * ss;
 ASTNodeSet stored; // Store nodes so they aren't garbage collected.
@@ -343,10 +343,16 @@ widen(const ASTNode& w, int width)
     return w;
 
   if (w.isConstant() && w.GetValueWidth() == bits)
-    return nf->CreateTerm(BVSX, width, w);
+    {
+      ASTNode width_n = mgr->CreateBVConst(32,width);
+      return nf->CreateTerm(BVSX, width, w,width_n);
+    }
 
   if (w.isConstant() && w.GetValueWidth() == bits - 1)
-    return nf->CreateTerm(BVSX, width - 1, w);
+    {
+      ASTNode width_n = mgr->CreateBVConst(32,width-1);
+      return nf->CreateTerm(BVSX, width-1, w,width_n);
+    }
 
   if (w.isConstant() && w.GetValueWidth() == 32) // Extract DEFINATELY.
     {
@@ -416,9 +422,59 @@ widen(const ASTNode& w, int width)
   return result;
 }
 
+/*
+ * Accepts t_0 -> t_1,
+ * when:
+ * 1) t_0 and t_1 aren't the syntactically equal.
+ * 2) t_1 is a constant (t_0 isn't).
+ * 3) t_1 is a subgraph of t_0.
+ */
 
 bool
 orderEquivalence(ASTNode& from, ASTNode& to)
+{
+  if(from.IsNull())
+    return false;
+  if(from.GetKind() == UNDEFINED)
+    return false;
+  if(to.IsNull())
+    return false;
+  if(to.GetKind() == UNDEFINED)
+    return false;
+
+  if (from == to)
+    return false;
+
+  if (from.isConstant())
+    {
+      assert(!to.isConstant());
+      swap(from,to);
+      return true;
+    }
+
+  if (to.isConstant())
+    {
+      assert(!from.isConstant());
+      return true;
+    }
+
+  if (is_subgraph(to,from))
+    {
+      return true;
+    }
+
+  if (is_subgraph(from,to))
+    {
+      swap(from,to);
+      return true;
+    }
+
+  return false;
+}
+
+
+bool
+orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
 {
   if(from.IsNull())
     return false;
@@ -681,9 +737,8 @@ startup()
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
-  simpNf = new SimplifyingNodeFactory(*(mgr->hashingNodeFactory), *mgr);
-  nf = new TypeChecker(*simpNf, *mgr);
-  mgr->defaultNodeFactory = simpNf;
+  mgr->defaultNodeFactory = new SimplifyingNodeFactory (*mgr->hashingNodeFactory, *mgr);
+  nf = new TypeChecker(*mgr->defaultNodeFactory, *mgr);
 
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
@@ -821,6 +876,21 @@ is_candidate(ASTNode from, ASTNode to)
 
   return false;
 }
+
+bool
+is_subgraph(const ASTNode& g, const ASTNode& h)
+{
+  if (g==h)
+    return true;
+
+  for (int i = 0; i < h.Degree(); i++)
+    if (is_subgraph(g,h[i]))
+      return true;
+
+  return false;
+  }
+
+
 
 bool
 lessThan(const ASTNode& n1, const ASTNode& n2)
@@ -962,14 +1032,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
               // We've added it. Now the lhs should map to the rhs.
               // Sometimes it doesn't. Not sure why..
-              if(t != rewrite_system.rewriteNode(f))
-                {
-                  cerr << "!!!!!!!!!Term doesn't map to itself";
-                  cerr << f;
-                  cerr << t;
-                  cerr << rewrite_system.rewriteNode(f);
-
-                }
+              assert(t == rewrite_system.rewriteNode(f));
 
               // Remove the more difficult expression.
               if (f == equiv[i])
@@ -1602,22 +1665,45 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
               cerr << "--------------";
             }
 
-          ASTNodeMap::const_iterator it;
-          if ((it = seen.find(n2)) != seen.end())
-            return  it->second;
-
           // The substitution map replace should never infinite loop.
           ASTNodeMap cache;
           ASTNode r = SubstitutionMap::replace(rr[i].getTo(), fromTo, cache, nf, false, true);
+
+          if (debug_usr2 && (getDifficulty(n2) <  getDifficulty(r)))
+            {
+            cerr << rr[i].getFrom() << rr[i].getTo();
+            cerr << getDifficulty(rr[i].getFrom()) << "to" <<  getDifficulty(rr[i].getTo()) << "\n";
+            cerr << n2 << r;
+            cerr << getDifficulty(n2) << "to" <<   getDifficulty(r);
+            assert (getDifficulty(n2) >=  getDifficulty(r));
+          }
+
           seen.insert(make_pair(n2, r));
+
+          if (debug_usr2)
+            {
+              cerr << "Term after replacing (1/2) :";
+              cerr << n2 << ":" << r;
+            }
 
           r = rewrite(r, original_rule, seen, depth + 1);
           seen.erase(n2);
           seen.insert(make_pair(n2, r));
+          if (debug_usr2)
+            {
+              cerr << "inserting (2/2)" << n2 << r;
+              cerr << "+++++++!!!!!!!!!!++++++++";
+            }
+
           return r;
         }
     }
 
+  if (debug_usr2)
+    {
+      cerr << "^^^^^^^^";
+      cerr << "Matches Nothing" << n2;
+    }
   return n2;
 }
 
@@ -1744,6 +1830,7 @@ load_new_rules(const string fileName = "rules_new.smt2")
   smt2lex_destroy();
 
   parserInterface->cleanUp();
+  parserInterface = NULL;
   if (opended)
     {
       cout << "New Style Rules Loaded:" << rewrite_system.size() << endl;
@@ -1793,6 +1880,7 @@ void t2()
   createVariables();
   ASTNode r = rename_then_rewrite(n,Rewrite_rule::getNullRule());
   cerr << r;
+  parserInterface = NULL;
 
 
 }
@@ -1850,6 +1938,7 @@ void load_old_rules(string fileName)
   mgr->PopQuery();
   parserInterface->popToFirstLevel();
   parserInterface->cleanUp();
+  parserInterface = NULL;
 
   rewrite_system.buildLookupTable();
 
@@ -2006,14 +2095,6 @@ main(int argc, const char* argv[])
       createVariables();
       rewrite_system.rewriteAll();
       writeOutRules(); // have the times now..
-    }
-  else if (argc == 2 && !strcmp("renumber",argv[1]))
-    {
-      // Intended to merge two sets of rules, then renumber them.
-      load_new_rules();
-      createVariables();
-      rewrite_system.renumber();
-      writeOutRules();
     }
   else if (argc == 2 && !strcmp("test",argv[1]))
     {

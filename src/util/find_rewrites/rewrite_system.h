@@ -85,6 +85,23 @@ private:
 
 public:
 
+  bool
+  checkInvariant()
+  {
+    int size=0;
+    std::map< Kind, vector<Rewrite_rule> >::iterator it;
+    for(it=kind_to_rr.begin();it != kind_to_rr.end();it++)
+      {
+        for (int i=0; i < it->second.size();i++)
+          {
+            assert(it->second[i].getFrom().GetKind() == it->first); // All have the same kind as the lookup kind.
+          }
+        size+= it->second.size();
+      }
+
+    return size == toWrite.size();
+  }
+
   Rewrite_system()
   {
     lookups_invalid = false;
@@ -105,15 +122,6 @@ public:
   bool areLookupsGood()
   {
     return lookups_invalid;
-  }
-
-  void
-  renumber()
-  {
-    int id=0;
-    for (RewriteRuleContainer::iterator it = toWrite.begin() ; it != toWrite.end(); it++)
-      it->id = id++;
-    lookups_invalid=true;
   }
 
   void

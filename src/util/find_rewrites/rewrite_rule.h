@@ -19,8 +19,6 @@ class Rewrite_rule
    ASTNode to;
    ASTNode n;
 
-   static int  static_id;
-
    int time_to_verify;
    int verified_to_bits;
 
@@ -40,7 +38,6 @@ public:
      return Rewrite_rule();
    }
 
-   int id;
   void writeOut(ostream& outputFileSMT2) const
   {
     outputFileSMT2 << ";id:0"
@@ -98,13 +95,15 @@ public:
   Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_, const BEEV::ASTNode& to_, const int t, int _id=-1)
   : from(from_), to(to_)
     {
-      if (_id ==-1)
+#if 0
+    if (_id ==-1)
         id = static_id++;
       else
         {
           id =_id; // relied on to be unique. So be careful.
           static_id =id+1; // assuming we are loading them all up..
         }
+#endif
       verified_to_bits = 0;
       time_to_verify = t;
 
