@@ -61,7 +61,7 @@ ArrayTransformer * arrayTransformer;
      ****************************************************************/
     STPMgr * bm;
     Simplifier * simp;
-    ToSAT * tosat;
+    ToSATBase * tosat;
     AbsRefine_CounterExample * Ctr_Example;
 
     /****************************************************************
@@ -72,7 +72,7 @@ ArrayTransformer * arrayTransformer;
     STP(STPMgr* b,
         Simplifier* s,
         ArrayTransformer * a,
-        ToSAT * ts,
+        ToSATBase * ts,
         AbsRefine_CounterExample * ce)
     {
       bm   = b;
@@ -88,7 +88,7 @@ ArrayTransformer * arrayTransformer;
         Simplifier* s,
         BVSolver* bsolv,
         ArrayTransformer * a,
-        ToSAT * ts,
+        ToSATBase * ts,
         AbsRefine_CounterExample * ce)    
     {
       bm   = b;
