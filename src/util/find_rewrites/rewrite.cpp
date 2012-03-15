@@ -301,9 +301,9 @@ checkProp(const ASTNode& n)
   return true;
 }
 
-// True if it's always true. Otherwise fills the assignment.
+// True if it's always true, otherwise fills the assignment.
 bool
-isConstant(const ASTNode& n, VariableAssignment& different, const int bits)
+isConstant(const ASTNode& n, VariableAssignment& different, const int bit_width)
 {
   if (isConstantToSat(n))
     return true;
@@ -313,18 +313,23 @@ isConstant(const ASTNode& n, VariableAssignment& different, const int bits)
 
       vector<ASTNode> symbols = getVariables(n);
 
-      // Both of them might not be contained in the assignment.
-      different.setV(mgr->CreateZeroConst(bits));
-      different.setW(mgr->CreateZeroConst(bits));
+      // Both of them might not be contained in the assignment,
+      // (which might have been widened).
+      ASTNode vN = mgr->CreateZeroConst(bit_width);
+      ASTNode wN = mgr->CreateZeroConst(bit_width);
 
-      // It might have been widened.
       for (int i = 0; i < symbols.size(); i++)
         {
+          assert(symbols[i].GetValueWidth() == bit_width);
+
           if (strncmp(symbols[i].GetName(), "v", 1) == 0)
-            different.setV(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+            vN = GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]);
           else if (strncmp(symbols[i].GetName(), "w", 1) == 0)
-            different.setW(GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]));
+            wN = GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]);
         }
+
+      different.setValues(vN, wN);
+
       return false;
     }
 }
@@ -727,7 +732,8 @@ startup()
   simp = new Simplifier(mgr);
   ArrayTransformer * at = new ArrayTransformer(mgr, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSAT* tosat = new ToSAT(mgr);
+  ToSATAIG* tosat = new ToSATAIG(mgr);
+  tosat->setArrayTransformer(at);
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
@@ -758,9 +764,7 @@ startup()
 
   // Write out the work so far..
   signal(SIGUSR1, do_write_out);
-
   signal(SIGUSR2, do_usr2);
-
 }
 
 void
@@ -768,6 +772,11 @@ clearSAT()
 {
   delete ss;
   ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+
+  delete GlobalSTP->tosat;
+  ToSATAIG* aig = new ToSATAIG(mgr);
+  aig->setArrayTransformer(GlobalSTP->arrayTransformer);
+  GlobalSTP->tosat = aig;
 }
 
 // Return true if the negation of the query is unsatisfiable.
@@ -979,6 +988,12 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
           if (from.isConstant() && to.isConstant())
             continue;
 
+          // If they can't be ordered continue. Maybe they could be ordered if we applied
+          // the rewrites through..
+          ASTNode f = from, t = to;
+          if (!orderEquivalence(f,t))
+            continue;
+
           VariableAssignment different;
           bool bad = false;
           const int st = getCurrentTime();
@@ -1025,17 +1040,10 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               // Sometimes it doesn't. Not sure why..
               assert(t == rewrite_system.rewriteNode(f));
 
-              // Remove the more difficult expression.
-              if (f == equiv[i])
-                {
-                  cout << ".";
-                  equiv[i] = mgr->ASTUndefined;
-                }
-              if (t == equiv[j])
-                {
-                  cout << ".";
-                  equiv[j] = mgr->ASTUndefined;
-                }
+
+              equiv[i] = rewrite_system.rewriteNode(equiv[i]);
+              equiv[j] = rewrite_system.rewriteNode(equiv[j]);
+
             }
           else if (!bad)
             {
@@ -1210,7 +1218,7 @@ checkRule(const ASTNode & from, const ASTNode & to, VariableAssignment& assignme
         }
 
       // Send it to the SAT solver to verify that the widening has the same answer.
-      bool result = isConstant(widened, assignment, bits);
+      bool result = isConstant(widened, assignment, i);
 
       if (!result)
         {
@@ -1442,6 +1450,7 @@ writeOutRules()
   cout << "Writing out: " << rewrite_system.size() << " rules" << endl;
   force_writeout = false;
 
+#if 0
   std::vector<string> output;
   std::map<string, Rewrite_rule> dup;
 
@@ -1520,9 +1529,11 @@ writeOutRules()
 
   cout << "Rules Discovered in total: " << rewrite_system.size() << endl;
 
+
   // Group functions of the same kind all together.
   hash_map<string, vector<string>, hashF<std::string> > buckets;
   bucket("n.GetKind() ==", output, buckets);
+#endif
 
   ofstream outputFile;
 

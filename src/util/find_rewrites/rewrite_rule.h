@@ -4,6 +4,11 @@
 #include "../../STPManager/STPManager.h"
 #include "misc.h"
 
+extern ASTNode v, v0, w, w0;
+extern NodeFactory* nf;
+extern BEEV::STPMgr* mgr;
+
+
 void
 soft_time_out(int ignored)
 {

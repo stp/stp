@@ -246,6 +246,8 @@ public:
             if (!ok)
               {
                 cout << "Erasing bad rule.\n";
+                cout << "Initially" << it->getFrom() << it->getTo();
+                cout << "Now" << from_rewritten << to_rewritten;
                 erase(it--);
                 i--;
                 lookups_invalid = true;

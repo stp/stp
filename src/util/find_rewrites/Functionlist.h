@@ -21,7 +21,7 @@ private:
   {
 
     Kind types[] =
-      { BVXOR, BVAND };
+      {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVMOD, BVLEFTSHIFT};
 
     //Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
     const int number_types = sizeof(types) / sizeof(Kind);
@@ -220,7 +220,9 @@ public:
         removeDuplicates(functions);
         //applySpeculative();
 
+        // Put back in later! Too slow for now...
         applyAIGs();
+        removeDuplicates(functions);
 
         // All the unary combinations of the binaries.
         allUnary();
