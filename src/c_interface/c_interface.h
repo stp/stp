@@ -48,7 +48,10 @@ extern "C" {
   // h  : help
   // s  : stats
   // v  : print nodes
+
+  // The "num_absrefine" argument isn't used at all. It's left for compatibility with existing code.
   void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
+  void vc_setFlag(VC vc, char c);
 
   //! Interface-only flags.
   enum ifaceflag_t {
@@ -218,7 +221,12 @@ extern "C" {
   // and if the time has passed, then "timeout" will be returned. It's only checked
   // sometimes though, so the actual timeout may be larger. Cryptominisat doesn't check
   // the timeout yet..
-  int vc_query(VC vc, Expr e, int timeout_ms= -1);
+
+  // The C-language doesn't allow default arguments, so to get it compiling, I've split
+  // it into two functions.
+  int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
+  int vc_query(VC vc, Expr e);
+
 
   //! Return the counterexample after a failed query.
   Expr vc_getCounterExample(VC vc, Expr e);

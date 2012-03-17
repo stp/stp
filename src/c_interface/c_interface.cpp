@@ -44,6 +44,11 @@ void vc_setFlags(VC vc, char c, int param_value) {
   process_argument(c, b);
 }
 
+void vc_setFlag(VC vc, char c) {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  process_argument(c, b);
+}
+
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value) {
     bmstar b = (bmstar)(((stpstar)vc)->bm);
     switch (f) {
@@ -435,7 +440,12 @@ void soft_time_out(int ignored)
  * the starting context.  If the result is false, then the resulting
  * context is a context in which e is false.  e must have Boolean
  * type. */
-int vc_query(VC vc, Expr e, int timeout_ms) {
+int vc_query(VC vc, Expr e)
+{
+  return vc_query_with_timeout(vc,e,-1);
+}
+
+int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   nodestar a = (nodestar)e;
   stpstar stp = ((stpstar)vc);
   bmstar b = (bmstar)(stp->bm);
