@@ -1,5 +1,3 @@
-//g++ -I$(HOME)/stp/c_interface print.c -L$(HOME)/stp/lib -lstp -o hex
-
 #include <stdio.h>
 #include "c_interface.h"
 #include <iostream>
@@ -16,9 +14,10 @@ int main() {
   	{
   		int time = rand() % 7000;
   		std::cout << "Timeout : " << time << " : result " ; 
-	  	std::cout << vc_query(vc,vc_falseExpr(vc),time) << std::endl; 
+	  	std::cout << vc_query_with_timeout(vc,vc_falseExpr(vc),time) << std::endl; 
   	}
   vc_DeleteExpr(c);
   vc_Destroy(vc);
+  return 0;
 }
 

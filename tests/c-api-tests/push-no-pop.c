@@ -5,11 +5,9 @@
 
 int main() {
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc,'n');
-  vc_setFlags(vc,'d');
-  vc_setFlags(vc,'p');
-  //vc_setFlags(vc,'v');
-  //vc_setFlags(vc,'s');
+  vc_setFlag(vc,'n');
+  vc_setFlag(vc,'d');
+  vc_setFlag(vc,'p');
 
   Type bv8 = vc_bvType(vc, 8);
 

@@ -43,7 +43,8 @@ int main() {
     exit(3);
   }
 
-  for (int j = 0; j < size; ++j) {
+  int j;
+  for (j = 0; j < size; ++j) {
     Expr index = vc_getCounterExample(vc, indices[j]);
     Expr value = vc_getCounterExample(vc, values[j]);
     unsigned long long i = getBVUnsigned(index);

@@ -1,15 +1,10 @@
-/*
-g++ -DEXT_HASH_MAP array-cvcl-02.c -I/home/vganesh/stp/c_interface -L/home/vganesh/stp/lib -lstp -o cc
-*/
-
-
 #include <stdio.h>
 #include "c_interface.h"
 int main() {  
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc,'n');
-  vc_setFlags(vc,'d');
-  vc_setFlags(vc,'p');
+  vc_setFlag(vc,'n');
+  vc_setFlag(vc,'d');
+  vc_setFlag(vc,'p');
 
   Expr cvcl_array = vc_varExpr1(vc, "a",32,32);
   Expr i = vc_varExpr1(vc, "i", 0, 8);   
@@ -37,7 +32,8 @@ int main() {
 
   long long v; 
   Expr pre = vc_bvConstExprFromInt(vc,24,0);
-  for(int j=0;j<10;j++) {
+  int j;
+  for(j=0;j<10;j++) {
     Expr exprj = vc_bvConstExprFromInt(vc,8,j);
     Expr index = vc_bvConcatExpr(vc, pre, exprj);
     index = vc_simplify(vc,index);
@@ -46,4 +42,5 @@ int main() {
   }
   vc_Destroy(vc);
   //vc_printCounterExample(vc);
+  return 0;
 }
