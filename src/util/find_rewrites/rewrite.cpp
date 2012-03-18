@@ -702,6 +702,7 @@ doIte(ASTNode a)
 void
 do_write_out(int ignore)
 {
+  difficulty_cache.clear();
   force_writeout = true;
 }
 
@@ -927,8 +928,11 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
   if (values.size() > 0)
     {
-      if (values.size() > 10)
+      const int old_size = values.size();
+      if (old_size > 10)
         removeDuplicates(expressions);
+
+      discarded += (old_size - values.size());
 
       // Put the functions in buckets based on their results on the values.
       HASHMAP<uint64_t, ASTVec> map;
@@ -1020,17 +1024,30 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               if (!r)
                 continue;
 
+              Rewrite_rule rr(mgr, f, t, checktime);
+
+              VariableAssignment bad;
+              if (!rr.timedCheck(10000,bad))
+                {
+                  vector<VariableAssignment> ass;
+                  ass.push_back(bad);
+
+                  cout << "Rule failed extended verification.";
+
+                  // If it can fit into an unsigned. Split the list on it.
+                  if (sizeof(unsigned int) * 8 > bad.getV().GetValueWidth())
+                    {
+                      findRewrites(equiv, ass, depth + 1);
+                      return;
+                    }
+                  else
+                    continue;
+                }
+
               cout << "Discovered a new rule.";
               cout << f << t;
               cout << getDifficulty(f) << " to " << getDifficulty(t) << endl;
 
-              Rewrite_rule rr(mgr, f, t, checktime);
-
-              if (!rr.timedCheck(10000))
-                {
-                  cout << "Rule failed extended verification.";
-                  continue;
-                }
               cout << "Verified Rule to: " << rr.getVerifiedToBits() << " bits" << endl;
               cout << "------";
 
@@ -1040,10 +1057,11 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               // Sometimes it doesn't. Not sure why..
               assert(t == rewrite_system.rewriteNode(f));
 
-
               equiv[i] = rewrite_system.rewriteNode(equiv[i]);
               equiv[j] = rewrite_system.rewriteNode(equiv[j]);
 
+              if (equiv[i] == equiv[j])
+                equiv[j]= mgr->ASTUndefined;
             }
           else if (!bad)
             {
@@ -1856,7 +1874,8 @@ expandRules(int timeout_ms, const char* fileName = "")
 
   for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.begin(); it != rewrite_system.end(); it++)
     {
-      if ((*it).timedCheck(timeout_ms))
+      VariableAssignment bad;
+      if ((*it).timedCheck(timeout_ms,bad))
         {
           it->writeOut(cout); // omit failed.
           cerr << getDifficulty(it->getFrom()) << " " << getDifficulty(it->getTo());

@@ -136,10 +136,8 @@ public:
 
   // Tests for the timeout amount of time. FALSE if a bad instance was found. Otherwise true.
   bool
-  timedCheck(int timeout_ms)
+  timedCheck(int timeout_ms, VariableAssignment& bad)
   {
-    VariableAssignment assignment;
-
     mgr->soft_timeout_expired = false;
     itimerval timeout;
     signal(SIGVTALRM, soft_time_out);
@@ -153,7 +151,7 @@ public:
     int checked_to = 0;
 
     // Start it verifying where we left off..
-    for (int i = std::max(bits, getVerifiedToBits() + 1); i < 1024; i++)
+    for (int new_bitwidth = std::max(bits, getVerifiedToBits() + 1); new_bitwidth < 1024; new_bitwidth++)
       {
         //cout << i << " ";
         ASTVec children;
@@ -161,18 +159,18 @@ public:
         children.push_back(to);
 
         const ASTNode n = mgr->hashingNodeFactory->CreateNode(EQ, children);
-        const ASTNode& widened = widen(n, i);
+        const ASTNode& widened = widen(n, new_bitwidth);
         if (widened == mgr->ASTUndefined)
           {
             cout << "cannot widen";
             cerr << from << to;
           }
 
-        bool result = isConstant(widened, assignment, i);
+        bool result = isConstant(widened, bad, new_bitwidth);
         if (!result && !mgr->soft_timeout_expired)
           {
             // not a constant, and not timed out!
-            cerr << "FAILED:" << endl << i << from << to;
+            cerr << "FAILED:" << endl << new_bitwidth << from << to;
             writeOut(cerr);
 
             // The timer might not have expired yet.
@@ -183,7 +181,7 @@ public:
         if (mgr->soft_timeout_expired)
           break;
 
-        checked_to = i;
+        checked_to = new_bitwidth;
       }
 
     if (getVerifiedToBits() <= checked_to)
