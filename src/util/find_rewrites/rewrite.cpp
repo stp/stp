@@ -989,13 +989,22 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
           ASTNode& from = equiv[i];
           ASTNode& to = equiv[j];
 
-          if (from.isConstant() && to.isConstant())
-            continue;
+          if (from == to)
+            {
+              to = mgr->ASTUndefined;
+              continue;
+            }
 
-          // If they can't be ordered continue. Maybe they could be ordered if we applied
-          // the rewrites through..
+          /* If they can't be ordered continue. Maybe they could be ordered if we applied
+           * the rewrites through. This also means that we won't split on terms that can't
+           * be ordered.
+           *
+           * Sometimes we run it anyway. Otherwise we do O(n^2) on big groups of
+           * expression that can't be ordered.
+           */
+
           ASTNode f = from, t = to;
-          if (!orderEquivalence(f,t))
+          if ((rand() % 100 == 0) &&  !orderEquivalence(f,t))
             continue;
 
           VariableAssignment different;
@@ -1019,12 +1028,20 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               ASTNode f = equiv[i];
               ASTNode t = equiv[j];
 
+              if (t == f)
+                {
+                  equiv[j] = mgr->ASTUndefined;
+                  continue;
+                }
+
               bool r = orderEquivalence(f, t);
 
               if (!r)
                 continue;
 
               Rewrite_rule rr(mgr, f, t, checktime);
+
+              cout << "i:" << i << " j:" << j << " size:" << equiv.size() << "\n";
 
               VariableAssignment bad;
               if (!rr.timedCheck(10000,bad))
@@ -1060,6 +1077,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
               equiv[i] = rewrite_system.rewriteNode(equiv[i]);
               equiv[j] = rewrite_system.rewriteNode(equiv[j]);
 
+              // They're the same, so in future we only care about one of them.
               if (equiv[i] == equiv[j])
                 equiv[j]= mgr->ASTUndefined;
             }
