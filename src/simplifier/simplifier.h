@@ -80,7 +80,7 @@ namespace BEEV
       ASTFalse = bm->CreateNode(FALSE);
       ASTUndefined = bm->CreateNode(UNDEFINED);
 
-      nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
+      nf = bm->defaultNodeFactory;
     }
       
     ~Simplifier()
@@ -88,7 +88,6 @@ namespace BEEV
       delete SimplifyMap;
       delete SimplifyNegMap;
       //delete ReadOverWrite_NewName_Map;
-      delete nf;
     }
 
     /****************************************************************

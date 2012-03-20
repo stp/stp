@@ -26,6 +26,7 @@ public:
 	BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children);
 	BEEV::ASTNode CreateArrayTerm(Kind kind, unsigned int index,unsigned int width, const BEEV::ASTVec &children);
 
+	virtual string getName() {return "type checking";}
 };
 
 #endif /* TYPECHECKER_H_ */

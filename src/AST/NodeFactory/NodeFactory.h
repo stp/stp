@@ -67,6 +67,7 @@ public:
 
 	ASTNode CreateConstant(BEEV::CBV cbv, unsigned width);
 
+	virtual std::string getName()=0;
 };
 
 #endif

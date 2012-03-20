@@ -16,13 +16,8 @@ namespace BEEV
   RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) :
     bm(_bm)
   {
-    nf = new SimplifyingNodeFactory(*(_bm.hashingNodeFactory),_bm);
+    nf = _bm.defaultNodeFactory;
  }
-
-  RemoveUnconstrained::~RemoveUnconstrained()
-  {
-    delete nf;
-  }
 
   const bool debug_unconstrained = false;
 

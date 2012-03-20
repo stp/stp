@@ -78,7 +78,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 5. Call SAT to determine if input is SAT or UNSAT
  ********************************************************************/
 
-typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT, DISABLE_EQUALITY, RANDOM_SEED} OptionType;
+typedef enum {PRINT_BACK_C=1, PRINT_BACK_CVC, PRINT_BACK_SMTLIB2,PRINT_BACK_SMTLIB1, PRINT_BACK_GDL, PRINT_BACK_DOT, OUTPUT_BENCH, OUTPUT_CNF, USE_SIMPLIFYING_SOLVER, SMT_LIB2_FORMAT, SMT_LIB1_FORMAT, DISABLE_CBITP,EXIT_AFTER_CNF,USE_CRYPTOMINISAT_SOLVER,USE_MINISAT_SOLVER, DISABLE_SIMPLIFICATIONS, OLDSTYLE_REFINEMENT, DISABLE_EQUALITY, RANDOM_SEED,HASHING_NF} OptionType;
 
 
 int main(int argc, char ** argv) {
@@ -97,6 +97,10 @@ int main(int argc, char ** argv) {
 
   STPMgr * bm       = new STPMgr();
 
+  auto_ptr<SimplifyingNodeFactory> simplifyingNF( new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
+  bm->defaultNodeFactory = simplifyingNF.get();
+
+  // The simplified keeps a pointer to whatever is set as the default node factory.
   Simplifier * simp  = new Simplifier(bm);
   auto_ptr<Simplifier> simpCleaner(simp);
 
@@ -119,10 +123,6 @@ int main(int argc, char ** argv) {
             tosat, 
             Ctr_Example);
   
-
-  auto_ptr<SimplifyingNodeFactory> simplifyingNF( new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
-  bm->defaultNodeFactory = simplifyingNF.get();
-
 
   //populate the help string
   helpstring += 
@@ -196,6 +196,7 @@ int main(int argc, char ** argv) {
 			  lookup.insert(make_pair(tolower("--oldstyle-refinement"),OLDSTYLE_REFINEMENT));
 			  lookup.insert(make_pair(tolower("--disable-equality"),DISABLE_EQUALITY));
 			  lookup.insert(make_pair(tolower("--random-seed"),RANDOM_SEED));
+			  lookup.insert(make_pair(tolower("--hash-nf"),HASHING_NF));
 
 
 			  if (!strncmp(argv[i],"--config_",strlen("--config_")))
@@ -297,6 +298,9 @@ int main(int argc, char ** argv) {
                                 bm->UserFlags.random_seed = rand();
                             }
                             break;
+                          case HASHING_NF:
+                              bm->defaultNodeFactory = bm->hashingNodeFactory;
+                              break;
 
 			  default:
 				  fprintf(stderr,usage,prog);
@@ -417,8 +421,8 @@ int main(int argc, char ** argv) {
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
 	{
-                TypeChecker nfTypeCheckSimp(*simplifyingNF.get(), *bm);
-		TypeChecker nfTypeCheckDefault(*bm->defaultNodeFactory, *bm);
+                TypeChecker nfTypeCheckSimp(*bm->defaultNodeFactory, *bm);
+		TypeChecker nfTypeCheckDefault(*bm->hashingNodeFactory, *bm);
 
 		Cpp_interface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
 		Cpp_interface piTypeCheckDefault(*bm, &nfTypeCheckDefault);

@@ -41,10 +41,7 @@ namespace BEEV
 
   public:
 
-
     RemoveUnconstrained(STPMgr& bm);
-    virtual
-    ~RemoveUnconstrained();
 
     ASTNode
     topLevel(const ASTNode &n, Simplifier *s);

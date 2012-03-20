@@ -119,15 +119,12 @@ namespace BEEV
     UseITEContext(STPMgr *bm)
     {
       runtimes = bm->GetRunTimes();
-      nf = new SimplifyingNodeFactory(*(bm->hashingNodeFactory) ,*bm);
+      nf = bm->defaultNodeFactory;
       ASTTrue = bm->ASTTrue;
       ASTFalse = bm->ASTFalse;
     }
 
-    ~UseITEContext()
-    {
-      delete nf;
-    }
+
   };
 }
 ;

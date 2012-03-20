@@ -75,7 +75,7 @@ namespace BEEV
       SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
       loopCount = 0;
       substitutionsLastApplied = 0;
-      nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
+      nf = bm->defaultNodeFactory;
     }
 
     void

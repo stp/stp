@@ -33,13 +33,10 @@ public:
 	AIGSimplifyPropositionalCore(STPMgr *_bm)
 	{
 		bm = _bm;
-		nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
+		nf = _bm->defaultNodeFactory;
 	}
 
-	virtual ~AIGSimplifyPropositionalCore()
-	{
-		delete nf;
-	}
+
 private:
 
 	// Convert theory nodes to fresh variables.

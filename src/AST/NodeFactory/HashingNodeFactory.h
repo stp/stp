@@ -21,6 +21,7 @@ public:
 	BEEV::ASTNode CreateNode(const BEEV::Kind kind,	const BEEV::ASTVec & back_children);
 	BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,const BEEV::ASTVec &children);
 
+	virtual std::string getName() {return "hashing";}
 };
 
 #endif /* HASHINGNODEFACTORY_H_ */

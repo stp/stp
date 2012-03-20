@@ -56,6 +56,7 @@ public:
 	virtual BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec & children);
 	virtual BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children);
 
+	virtual std::string getName() {return "simplifying";}
 
 	SimplifyingNodeFactory(NodeFactory& raw_, BEEV::STPMgr& bm_)
 	:hashing(raw_), NodeFactory(bm_), ASTTrue(bm_.ASTTrue), ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined)

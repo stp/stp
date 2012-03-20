@@ -118,14 +118,13 @@ namespace BEEV
       ASTFalse = _bm->CreateNode(FALSE);
       ASTUndefined = _bm->CreateNode(UNDEFINED);
       simplify=true;
-      nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory,*bm);
+      nf = bm->defaultNodeFactory;
     };
 
      //Destructor
     ~BVSolver()
       {
     	ClearAllTables();
-    	delete nf;
       }
 
     //Top Level Solver: Goes over the input DAG, identifies the

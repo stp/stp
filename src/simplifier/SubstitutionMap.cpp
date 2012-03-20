@@ -8,7 +8,6 @@ namespace BEEV
   SubstitutionMap::~SubstitutionMap()
   {
     delete SolverMap;
-    delete nf;
   }
 
 // if false. Don't simplify while creating the substitution map.

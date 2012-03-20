@@ -109,8 +109,7 @@ namespace BEEV {
     if (bm->UserFlags.isSet("bitblast-simplification", "1") && initial_difficulty_score < 250000)
       {
         BBNodeManagerAIG bbnm;
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
+        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, bm->defaultNodeFactory , &(bm->UserFlags));
         ASTNodeMap fromTo;
         ASTNodeMap equivs;
         bb.getConsts(simplified_solved_InputToSAT, fromTo,equivs);
@@ -124,14 +123,14 @@ namespace BEEV {
              * difficult looking ASTNodes.
             */
             ASTNodeMap cache;
-            simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, equivs, cache,&nf,false,true);
+            simplified_solved_InputToSAT = SubstitutionMap::replace(simplified_solved_InputToSAT, equivs, cache,bm->defaultNodeFactory,false,true);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
 
         if (fromTo.size() > 0)
           {
             ASTNodeMap cache;
-            simplified_solved_InputToSAT = SubstitutionMap:: replace(simplified_solved_InputToSAT, fromTo, cache,&nf);
+            simplified_solved_InputToSAT = SubstitutionMap:: replace(simplified_solved_InputToSAT, fromTo, cache,bm->defaultNodeFactory);
             bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
           }
         actualBBSize =  bbnm.totalNumberOfNodes();
@@ -144,6 +143,7 @@ namespace BEEV {
    ASTNode
   STP::sizeReducing(ASTNode simplified_solved_InputToSAT, BVSolver* bvSolver, PropagateEqualities *pe)
   {
+
     simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
     if (simp->hasUnappliedSubstitutions())
       {
@@ -170,8 +170,7 @@ namespace BEEV {
     if (bm->UserFlags.bitConstantProp_flag)
       {
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf, simplified_solved_InputToSAT);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory, simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT, true,false);
 
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
@@ -181,8 +180,8 @@ namespace BEEV {
 
         if (simp->hasUnappliedSubstitutions())
           {
-            simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
-            simp->haveAppliedSubstitutionMap();
+          simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+          simp->haveAppliedSubstitutionMap();
           }
 
         bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
@@ -203,8 +202,7 @@ namespace BEEV {
 
     if (bm->UserFlags.isSet("always-true", "0"))
       {
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        AlwaysTrue always (simp,bm,&nf);
+        AlwaysTrue always (simp,bm,bm->defaultNodeFactory);
         simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
         bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
       }
@@ -345,8 +343,7 @@ namespace BEEV {
     if (bm->UserFlags.bitConstantProp_flag)
       {
         bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        simplifier::constantBitP::ConstantBitPropagation cb(simp, &nf, simplified_solved_InputToSAT);
+        simplifier::constantBitP::ConstantBitPropagation cb(simp, bm->defaultNodeFactory, simplified_solved_InputToSAT);
         simplified_solved_InputToSAT = cb.topLevelBothWays(simplified_solved_InputToSAT);
 
         bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
@@ -474,8 +471,7 @@ namespace BEEV {
     if (!worse && (bitblasted_difficulty != -1))
      {
         BBNodeManagerAIG bbnm;
-        SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, &nf , &(bm->UserFlags));
+        BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(&bbnm, simp, bm->defaultNodeFactory , &(bm->UserFlags));
         bb.BBForm(simplified_solved_InputToSAT);
         int newBB=  bbnm.totalNumberOfNodes();
         if (bm->UserFlags.stats_flag)

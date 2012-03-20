@@ -308,9 +308,9 @@ namespace BEEV
       if (fromTo.size() > 0)
         {
           ASTNodeMap cache;
-          SimplifyingNodeFactory nf(*(top.GetSTPMgr()->hashingNodeFactory), *top.GetSTPMgr());
+
           bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-          return SubstitutionMap::replace(result,fromTo,cache,&nf);
+          return SubstitutionMap::replace(result,fromTo,cache,top.GetSTPMgr()->defaultNodeFactory);
         }
 
       bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
@@ -792,7 +792,7 @@ namespace BEEV
       littleZero = makeCBV(1);
       littleOne = makeCBV(1);
       CONSTANTBV::BitVector_Fill(littleOne);
-      nf = new SimplifyingNodeFactory(*(bm.hashingNodeFactory), bm);
+      nf = bm.defaultNodeFactory;
     }
 
     ~EstablishIntervals()
@@ -805,7 +805,6 @@ namespace BEEV
 
       likeAutoPtr.clear();
       toDeleteLater.clear();
-      delete nf;
     }
   };
 }
