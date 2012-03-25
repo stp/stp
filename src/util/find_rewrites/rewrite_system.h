@@ -154,32 +154,14 @@ public:
         if (*next == *it)
           {
              // The same, erase the one with the lowest verified to bits.
-            bool output =false;
-            if (next->getVerifiedToBits() != it->getVerifiedToBits())
-              output=true;
-
             if (next->getVerifiedToBits() > it->getVerifiedToBits())
               {
-                if (output)
-                  {
-                    cerr << "deleting";
-                    it->writeOut(cerr);
-                    next->writeOut(cerr);
-                    cerr << "====";
-                  }
                 erase(it);
                 it = next;
                 continue;
               }
             else
               {
-                if (output)
-                  {
-                    cerr << "deleting";
-                    next->writeOut(cerr);
-                    it->writeOut(cerr);
-                    cerr << "====";
-                  }
                 erase(next);
                 continue;
               }

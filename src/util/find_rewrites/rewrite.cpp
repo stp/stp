@@ -1911,10 +1911,12 @@ expandRules(int timeout_ms, const char* fileName = "")
   for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.begin(); it != rewrite_system.end(); it++)
     {
       VariableAssignment bad;
-      if ((*it).timedCheck(timeout_ms,bad))
+      int to_run = timeout_ms - it->getTime();
+      if (to_run <= 0)
+        continue;
+      if ((*it).timedCheck(to_run,bad))
         {
-          it->writeOut(cout); // omit failed.
-          cerr << getDifficulty(it->getFrom()) << " " << getDifficulty(it->getTo());
+          it->writeOut(cout); // omit succeeded.
         }
     }
 }
