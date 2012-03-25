@@ -659,7 +659,26 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
 		FixedBits& output, STPMgr* bm) {
 
         if (children[1]->containsZero())
-		return NO_CHANGE;
+          {
+            for (int i=children[0]->getWidth()-1; i > 0 ; i--)
+              {
+                if (children[0]->isFixedToZero(i))
+                  {
+                    if (output.isFixedToOne(i))
+                      return CONFLICT;
+                    else if (!output.isFixed(i))
+                      {
+                        output.setFixed(i,true);
+                        output.setValue(i,false);
+                      }
+                  }
+                else
+                  {
+                    break;
+                  }
+              }
+            return NOT_IMPLEMENTED;
+          }
 
 	Result r = bvUnsignedQuotientAndRemainder(children, output, bm,
 			QUOTIENT_IS_OUTPUT);
