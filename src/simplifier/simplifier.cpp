@@ -2832,7 +2832,7 @@ namespace BEEV
            ASTNode div = nf->CreateTerm(BVMOD,rest,top,bottom);
            div = nf->CreateTerm(BVCONCAT,inputValueWidth,_bm->CreateZeroConst(inputValueWidth-rest),div);
 
-           output = nf->CreateTerm(ITE, inputValueWidth, cond, div, _bm->CreateZeroConst(inputValueWidth));
+           output = nf->CreateTerm(ITE, inputValueWidth, cond, div, inputterm[0]);
            break;
          }
 
