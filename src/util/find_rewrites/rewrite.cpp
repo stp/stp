@@ -382,6 +382,7 @@ widen(const ASTNode& w, int width)
   if (w.GetKind() == SYMBOL && w.GetType() == BITVECTOR_TYPE)
     {
       char s[20];
+      //sprintf(s, "%s_widen_to_rarely_used_name", w.GetName());
       sprintf(s, "%s_widen", w.GetName());
       ASTNode newS = mgr->LookupOrCreateSymbol(s);
       newS.SetValueWidth(width);
@@ -446,16 +447,19 @@ orderEquivalence(ASTNode& from, ASTNode& to)
   if (from == to)
     return false;
 
+  // Sometimes this function is run on pairs to see if they can be ordered,
+  // even if they aren't equivalences. For instance (1,2).
+  if (from.isConstant() && to.isConstant())
+    return false;
+
   if (from.isConstant())
     {
-      assert(!to.isConstant());
       swap(from, to);
       return true;
     }
 
   if (to.isConstant())
     {
-      assert(!from.isConstant());
       return true;
     }
 
@@ -791,6 +795,7 @@ isConstantToSat(const ASTNode & query)
 
   ASTNode query2 = nf->CreateNode(NOT, query);
 
+  assert(ss->nClauses() ==0);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(*ss, query2, query2, GlobalSTP->tosat, false);
 
   return (r == SOLVER_VALID); // unsat, always true
@@ -1004,7 +1009,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
            */
 
           ASTNode f = from, t = to;
-          if ((rand() % 100 == 0) &&  !orderEquivalence(f,t))
+          if ((rand() % 500 != 0) &&  !orderEquivalence(f,t))
             continue;
 
           VariableAssignment different;
@@ -1070,9 +1075,8 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
               rewrite_system.push_back(rr);
 
-              // We've added it. Now the lhs should map to the rhs.
-              // Sometimes it doesn't. Not sure why..
-              assert(t == rewrite_system.rewriteNode(f));
+              // In some unusual cases it's not synatically identical.
+              // assert (t == rewrite_system.rewriteNode(f))
 
               equiv[i] = rewrite_system.rewriteNode(equiv[i]);
               equiv[j] = rewrite_system.rewriteNode(equiv[j]);
@@ -1620,6 +1624,14 @@ writeOutRules()
 
 }
 
+ASTNode
+replace_withRR(ASTNode n)
+{
+  ASTNodeMap cache;
+  return rewrite(n,Rewrite_rule::getNullRule(),cache,0);
+}
+
+
 // ASSUMES that buildRewrite() has recently been run on the rules..
 
 ASTNode
@@ -1640,6 +1652,9 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
 
   if (n.isAtom())
     return n;
+
+//  if (seen.find(n) != seen.end())
+//    return seen.find(n)->second;
 
   ASTVec v;
   v.reserve(n.Degree());
@@ -1675,7 +1690,10 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
       if (fromTo.size() > 0)
         fromTo.clear();
 
-      const ASTNode& f = rr[i].getFrom();
+
+      ASTNode f = rr[i].getFrom();
+      //if (n2.GetValueWidth() > bits)
+//        f = widen(f,n2.GetValueWidth());
 
       if (commutative_matchNode(f, n2, fromTo, 1))
         {
@@ -1705,7 +1723,12 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
 
           // The substitution map replace should never infinite loop.
           ASTNodeMap cache;
-          ASTNode r = SubstitutionMap::replace(rr[i].getTo(), fromTo, cache, nf, false, true);
+
+          ASTNode rrTo =  rr[i].getTo();
+          //if (n2.GetValueWidth() > bits)
+         //   rrTo = widen(rrTo,n2.GetValueWidth());
+
+          ASTNode r = SubstitutionMap::replace(rrTo, fromTo, cache, nf, false, true);
 
           if (debug_usr2 && (getDifficulty(n2) < getDifficulty(r)))
             {
@@ -1736,12 +1759,7 @@ rewrite(const ASTNode&n, const Rewrite_rule& original_rule, ASTNodeMap& seen, in
           return r;
         }
     }
-
-  if (debug_usr2)
-    {
-      cerr << "^^^^^^^^";
-      cerr << "Matches Nothing" << n2;
-    }
+  //seen.insert(make_pair(n2, n2));
   return n2;
 }
 
@@ -1880,7 +1898,7 @@ load_new_rules(const string fileName = "rules_new.smt2")
 
   // So we don't output as soon as one is discovered...
   lastOutput = rewrite_system.size();
-
+  mgr->GetRunTimes()->clear();
 }
 
 //Reads in new format rules. And tests each of them for the allocated time.
@@ -2127,6 +2145,7 @@ main(int argc, const char* argv[])
       // load the rules and apply the rewrite system to itself.
       load_new_rules();
       createVariables();
+      rewrite_system.eraseDuplicates();
       rewrite_system.rewriteAll();
       writeOutRules();
     }
