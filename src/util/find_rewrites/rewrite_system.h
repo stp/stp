@@ -136,11 +136,57 @@ public:
     lookups_invalid = false;
   }
 
+  // Remove syntactically the same rewrite rules. Remove the rule verified to a lower level.
   void
   eraseDuplicates()
   {
     toWrite.sort();
-    toWrite.unique();
+    for (RewriteRuleContainer::iterator it = toWrite.begin(); it != toWrite.end(); )
+      {
+        RewriteRuleContainer::iterator next = it;
+        next++;
+        if (next == toWrite.end())
+          {
+            it++;
+            continue;
+          }
+
+        if (*next == *it)
+          {
+             // The same, erase the one with the lowest verified to bits.
+            bool output =false;
+            if (next->getVerifiedToBits() != it->getVerifiedToBits())
+              output=true;
+
+            if (next->getVerifiedToBits() > it->getVerifiedToBits())
+              {
+                if (output)
+                  {
+                    cerr << "deleting";
+                    it->writeOut(cerr);
+                    next->writeOut(cerr);
+                    cerr << "====";
+                  }
+                erase(it);
+                it = next;
+                continue;
+              }
+            else
+              {
+                if (output)
+                  {
+                    cerr << "deleting";
+                    next->writeOut(cerr);
+                    it->writeOut(cerr);
+                    cerr << "====";
+                  }
+                erase(next);
+                continue;
+              }
+          }
+        it++;
+      }
+
     lookups_invalid = true;
   }
 
@@ -171,6 +217,7 @@ public:
   {
     return rename_then_rewrite(n, Rewrite_rule::getNullRule());
   }
+
 
   void
   rewriteAll()
