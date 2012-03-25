@@ -2792,7 +2792,6 @@ namespace BEEV
             div = nf->CreateTerm(BVCONCAT,inputValueWidth,_bm->CreateZeroConst(inputValueWidth-rest),div);
 
             output = nf->CreateTerm(ITE, inputValueWidth, cond, div, _bm->CreateZeroConst(inputValueWidth));
-            cerr << output;
             break;
           }
 
