@@ -2809,6 +2809,33 @@ namespace BEEV
             output = _bm->CreateZeroConst(inputValueWidth);
             break;
           }
+        if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
+          {
+            output = _bm->CreateZeroConst(inputValueWidth);
+            break;
+          }
+
+        unsigned int nlz=  numberOfLeadingZeroes(inputterm[0]);
+       if (nlz > 0)
+         {
+           nlz = std::min(inputValueWidth-1,nlz);
+           int rest = inputValueWidth-nlz;
+           ASTNode low = _bm->CreateBVConst(32,rest);
+           ASTNode high =_bm->CreateBVConst(32,inputValueWidth-1);
+
+           ASTNode cond = nf->CreateNode(EQ,_bm->CreateZeroConst(nlz),
+                          nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high,low));
+
+           ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0], _bm->CreateBVConst(32,rest-1),_bm->CreateZeroConst(32));
+           ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1], _bm->CreateBVConst(32,rest-1),_bm->CreateZeroConst(32));
+
+           ASTNode div = nf->CreateTerm(BVMOD,rest,top,bottom);
+           div = nf->CreateTerm(BVCONCAT,inputValueWidth,_bm->CreateZeroConst(inputValueWidth-rest),div);
+
+           output = nf->CreateTerm(ITE, inputValueWidth, cond, div, _bm->CreateZeroConst(inputValueWidth));
+           break;
+         }
+
         ASTNode lessThan = SimplifyFormula(nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
 
         if (lessThan == ASTTrue)
