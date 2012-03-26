@@ -6,6 +6,7 @@
 #include "../../to-sat/AIG/BBNodeManagerAIG.h"
 #include "../../absrefine_counterexample/AbsRefine_CounterExample.h"
 #include "../../to-sat/ASTNode/ToSAT.h"
+#include "../../to-sat/AIG/ToSATAIG.h"
 #include "../../STPManager/STPManager.h"
 #include "../../sat/MinisatCore.h"
 
@@ -95,6 +96,48 @@ void concretise(const ASTNode& variable, const FixedBits& fixed, ASTVec& list, S
 			}
 		}
 	}
+}
+
+
+// Concretisation function. Gamma.
+void concretise(const ASTNode& variable, const FixedBits& fixed, SATSolver::vec_literals& satSolverClause, STPMgr* beev, ToSATBase::ASTNodeToSATVar& map)
+{
+        if (BOOLEAN_TYPE == variable.GetType())
+        {
+                assert(1 == fixed.getWidth());
+                assert(fixed.isBoolean());
+
+                if (fixed.isFixed(0))
+                {
+                        if (!fixed.getValue(0)) // if it's false, try to find a true assignment.
+                          {
+                            assert(map.find(variable) != map.end());
+                            int v = (map.find(variable)->second)[0];
+                            satSolverClause.push(SATSolver::mkLit(v, false));
+                          }
+                        else
+                          {
+                            assert(map.find(variable) != map.end());
+                            int v = (map.find(variable)->second)[0];
+                            satSolverClause.push(SATSolver::mkLit(v, true));
+                          }
+
+                }
+        }
+        else
+        {
+                assert(BITVECTOR_TYPE == variable.GetType());
+                assert(variable.GetValueWidth() == (unsigned)fixed.getWidth());
+                for (int i = 0; i < fixed.getWidth(); i++)
+                {
+                        if (fixed.isFixed(i))
+                        {
+                            assert(map.find(variable) != map.end());
+                            int v = (map.find(variable)->second)[i];
+                            satSolverClause.push(SATSolver::mkLit(v, fixed.getValue(i)));
+                        }
+                }
+        }
 }
 
 
@@ -323,20 +366,6 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output, Kind kin
         return first;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // The bitWidth isn't necessarily the same for all children. e.g. ITE(boolean, x-bit, x-bit)
 bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STPMgr* beev)
 {
@@ -403,43 +432,36 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 		expr = beev->CreateNode(BEEV::AND, expr, beev->CreateNode(BEEV::AND, notted));
 	}
 
+
 	bool first = true;
-	ASTVec ors;
-	ASTNode total = beev->ASTTrue;
         Simplifier simp(beev);
         ArrayTransformer at(beev,&simp);
         AbsRefine_CounterExample ce(beev,&simp,&at);
-        ToSAT tosat(beev);
         bool timeout = false;
         MinisatCore<Minisat::Solver> newS(timeout);
 
+        ToSATAIG tosat(beev);
+        tosat.setArrayTransformer(&at);
+
+        SATSolver::vec_literals satSolverClause;
+
 	while (true)
 	{
-		ASTNode toSolve;
+
+	      int result;
 
 		if (first)
 		{
-			toSolve = expr;
+			result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat,true);
 		}
 		else
 		{
-			assert(ors.size() !=0);
-			if (ors.size() > 1)
-				toSolve = beev->CreateNode(BEEV::OR, ors);
-			else
-				toSolve = ors[0];
-			ors.clear();
+		    assert(satSolverClause.size() > 0);
+		    newS.addClause(satSolverClause);
+		    satSolverClause.clear();
+
+		    result = ce.CallSAT_ResultCheck(newS, beev->ASTTrue, beev->ASTTrue, &tosat,true);
 		}
-
-		BVTypeCheck(toSolve);
-
-		// Some operations aren't bitblasted directly. For example sbvmod is converted into
-		// other operations first.
-		//ArrayTransformer(STPMgr * bm, Simplifier* s, NodeFactory &nodeFactory_) :
-
-		toSolve = at.TransformFormula_TopLevel(toSolve);
-		total= beev->CreateNode(AND, total, toSolve);
-		int result = ce.CallSAT_ResultCheck(newS, total, total, &tosat,true);
 
 		if (2 == result)
 			FatalError("error from solver");
@@ -456,13 +478,13 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 			{
 				ASTNode n = (ce.GetCounterExample(true, variables[i]));
 				*children[i] = FixedBits::concreteToAbstract(n);
-				concretise(variables[i], *(children[i]), ors, beev);
+				concretise(variables[i], *(children[i]), satSolverClause, beev, tosat.SATVar_to_SymbolIndexMap());
 			}
 
 			ASTNode n = (ce.GetCounterExample(true, outputNode));
 			output = FixedBits::concreteToAbstract(n);
 			//cerr << resultNode.GetName() << " " << n << endl;
-			concretise(outputNode, output, ors, beev);
+			concretise(outputNode, output, satSolverClause, beev, tosat.SATVar_to_SymbolIndexMap());
 		}
 		else
 		{
@@ -471,31 +493,21 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 				ASTNode n = (ce.GetCounterExample(true, variables[i]));
 				//cerr << variables[i].GetName() << " " << n << endl;
 				*children[i] = FixedBits::meet(FixedBits::concreteToAbstract(n), *children[i]);
-				concretise(variables[i], *(children[i]), ors, beev);
+				concretise(variables[i], *(children[i]), satSolverClause, beev, tosat.SATVar_to_SymbolIndexMap());
 			}
 
 			ASTNode n = (ce.GetCounterExample(true, outputNode));
 			output = FixedBits::meet(FixedBits::concreteToAbstract(n), output);
 			//cerr << resultNode.GetName() << " " << n << endl;
-			concretise(outputNode, output, ors, beev);
+			concretise(outputNode, output, satSolverClause, beev,tosat.SATVar_to_SymbolIndexMap());
 
 		}
 
 		first = false;
 
-		//print(children, output, kind);
-
-		if (0 == ors.size())
-			break; // everything is at top.
-
-		//beev->AddAssert(beev->CreateNode(BEEV::OR, ors));
+		if (satSolverClause.size() == 0)
+		  break; // everything is at top.
 	}
-
-	//beev->ClearSATTables();
-	//beev->ClearAllCaches();
-
-	// The first time we AddAsserts() it creates a new ASTVec to store them (on the heap).
-	//beev->Pop();
 
 	beev->UserFlags.bitConstantProp_flag = !disabledProp;
 	beev->UserFlags.print_output_flag = printOutput;
