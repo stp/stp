@@ -304,7 +304,7 @@ public:
       {
         VariableAssignment assignment;
         bool bad = false;
-        const int st = getCurrentTime();
+        const long st = getCurrentTime();
         bool r = checkRule(it->getFrom(), it->getTo(), assignment, bad);
         if (!r || bad)
           {

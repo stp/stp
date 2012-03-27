@@ -1014,11 +1014,11 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
 
           VariableAssignment different;
           bool bad = false;
-          const int st = getCurrentTime();
+          const long st = getCurrentTime();
 
           if (checkRule(from, to, different, bad))
             {
-              const int checktime = getCurrentTime() - st;
+              const long checktime = getCurrentTime() - st;
 
               equiv[i] = rewriteThroughWithAIGS(equiv[i]);
               equiv[j] = rewriteThroughWithAIGS(equiv[j]);

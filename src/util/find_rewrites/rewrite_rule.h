@@ -47,7 +47,7 @@ public:
   writeOut(ostream& outputFileSMT2) const
   {
     outputFileSMT2 << ";id:0" << "\tverified_to:" << verified_to_bits << "\ttime:" << getTime() << "\tfrom_difficulty:"
-        << getDifficulty(getFrom()) << "\tto_difficulty:" << getDifficulty(getTo()) << "\n";
+        << getDifficulty(/*getFrom()*/ mgr->CreateBVConst(32,0)) << "\tto_difficulty:" << getDifficulty(/*getTo()*/  mgr->CreateBVConst(32,0)) << "\n";
     outputFileSMT2 << "(push 1)" << endl;
     printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), true);
     outputFileSMT2 << "(exit)" << endl;
@@ -147,7 +147,7 @@ public:
     timeout.it_value.tv_sec = timeout_ms / 1000;
     setitimer(ITIMER_VIRTUAL, &timeout, NULL);
 
-    const int st = getCurrentTime();
+    const long st = getCurrentTime();
     int checked_to = 0;
 
     // Start it verifying where we left off..

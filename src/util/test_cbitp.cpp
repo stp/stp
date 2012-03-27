@@ -100,9 +100,25 @@ namespace simplifier
         }
     }
 
+    struct Detail
+    {
+      Detail()
+      {
+        conflict =false;
+        maxFixed =0;
+        transferFixed = 0;
+        initial =0;
+      }
+      bool conflict;
+      int maxFixed;
+      int transferFixed;
+      int initial;
+
+    };
+
     void
     checkEqual(vector<FixedBits*>& initialChildren, FixedBits& initialOutput, Result
-    (*transfer)(vector<FixedBits*>&, FixedBits&), Kind kind, bool imprecise)
+    (*transfer)(vector<FixedBits*>&, FixedBits&), Kind kind, bool imprecise, Detail& d)
     {
       // Make two copies of the initial values. One to send to the maximum Precision.
       // The other to send to the manually built transfer functions.
@@ -128,9 +144,16 @@ namespace simplifier
       for (int i = 0; i < (int) initialChildren.size(); i++)
         {
         tempChildren.push_back(new FixedBits(*(manualChildren[i])));
+        d.initial += tempChildren[i]->countFixed();
         }
+      d.initial += initialOutput.countFixed();
 
       Result tempResult = transfer(tempChildren, tempOutput);
+
+      for (int i = 0; i < (int) tempChildren.size(); i++)
+        d.transferFixed += tempChildren[i]->countFixed();
+      d.transferFixed += tempOutput.countFixed();
+
 
       // First and second time should have the same conflict status.
       if ((manualResult == CONFLICT) != (tempResult == CONFLICT))
@@ -208,6 +231,12 @@ namespace simplifier
 
       bool first = maxPrecision(autoChildren, autoOutput, kind, beev);
       beev->ClearAllTables();
+
+      if (first)
+        d.conflict = true;
+      for (int i = 0; i < (int) autoChildren.size(); i++)
+        d.maxFixed += autoChildren[i]->countFixed();
+      d.maxFixed += autoOutput.countFixed();
 
       if (debug_printAll)
         {
@@ -335,7 +364,8 @@ namespace simplifier
               continue;
               }
 
-            checkEqual(children, output, transfer, signature.kind, signature.imprecise);
+            Detail d;
+            checkEqual(children, output, transfer, signature.kind, signature.imprecise,d);
             }
           }
 
@@ -347,28 +377,49 @@ namespace simplifier
 // Random.
     void
     runSomeRandom(Result
-    (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind, const vector<FixedBits*> late, FixedBits out)
+    (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind, int prob)
     {
-      const int PROBABILITY_OF_SETTING = 5;
-
-      cout << "Running Random:" << kind << endl;
-      assert(late.size() ==2);
-      MTRand mtrand;
+      MTRand mtrand(1);
+      srand(0);
 
       vector<FixedBits*> children;
 
-      for (int i = 0; i < 2000; i++)
+      int conflicts =0;
+      int initial =0;
+      int transferC =0;
+      int max =0;
+
+      int count = 100;
+      long st = getCurrentTime();
+
+      for (int width = 7; width <= 256; width++)
         {
         children.clear();
-        FixedBits a = FixedBits::createRandom(out.getWidth(), PROBABILITY_OF_SETTING, mtrand);
+        FixedBits a = FixedBits::createRandom(width, prob, mtrand);
         children.push_back(&a);
-        FixedBits b = FixedBits::createRandom(out.getWidth(), PROBABILITY_OF_SETTING, mtrand);
+        FixedBits b = FixedBits::createRandom(width, prob, mtrand);
         children.push_back(&b);
-        FixedBits output = FixedBits::createRandom(out.getWidth(), PROBABILITY_OF_SETTING, mtrand);
+        FixedBits output = FixedBits::createRandom(width, prob, mtrand);
 
-        checkEqual(children, output, transfer, kind, false);
-        cout << ".";
+        Detail d;
+        bool imprecise = false;
+        if (kind == BVDIV)
+          imprecise = true;
+        checkEqual(children, output, transfer, kind, imprecise,d);
+        if (d.conflict)
+          conflicts++;
+        else
+          {
+            initial += d.initial;
+            transferC += d.transferFixed;
+            max += d.maxFixed;
+          }
         }
+
+      cerr.setf(ios::fixed);
+      cerr << "% Count" << count << " prob" << prob << endl;
+      cerr << setprecision(2) << (getCurrentTime() - st)/1000.0 << "s&" << conflicts << "&" << initial << "&" << transferC << "&" << max << endl;
+
       return;
     }
 
@@ -427,7 +478,8 @@ namespace simplifier
           current /= 3;
           }
 
-        checkEqual(children, output, transfer, kind, false);
+        Detail d;
+        checkEqual(children, output, transfer, kind, false,d);
         }
 
       for (unsigned i = 0; i < children.size(); i++)
@@ -641,17 +693,64 @@ int bvorF(int a, int b)
   return a | b;
 }
 
+void
+go(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
+{
+    runSomeRandom(transfer, kind, 1 );
+    cerr << "&";
+    runSomeRandom(transfer, kind, 5 );
+    cerr << "&";
+    runSomeRandom(transfer, kind, 50 );
+    cerr << "\\\\";
+}
+
+
 int
 main(void)
 {
   BEEV::STPMgr stp;
   beev = &stp;
   beev->UserFlags.disableSimplifications();
+  beev->UserFlags.division_by_zero_returns_one_flag  = true;
 
   Cpp_interface interface(*beev, beev->defaultNodeFactory);
   interface.startup();
   srand(time(NULL));
   BEEV::ParserBM = beev;
+
+  // Add had a defect effecting bithWidth > 90.
+  // Shifting had a defect effecting bitWidth > 64.
+
+  ostream& output = cerr;
+
+  if (true)
+    {
+      output << "bit-vector or&" << endl;
+      go(&bvOrBothWays, BVOR);
+
+      output << "unsigned division&" << endl;
+      go(&unsignedDivide, BVDIV);
+
+      output << "bit-vector xor&" << endl;
+      go(&bvXorBothWays, BVXOR);
+
+      output << "bit-vector and&" << endl;
+      go(&bvAndBothWays, BVAND);
+
+      output << "right shift&" << endl;
+      go(&bvRightShiftBothWays, BVRIGHTSHIFT);
+
+      output << "left shift&" << endl;
+      go(&bvLeftShiftBothWays, BVLEFTSHIFT);
+
+      output << "arith shift&" << endl;
+      go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
+
+      output << "addition&" << endl;
+      go(&bvAddBothWays, BVPLUS);
+
+      exit(1);
+    }
 
   const int exhaustive_bits = 6;
   for (int i = 1; i <= exhaustive_bits; i++)
@@ -898,23 +997,6 @@ main(void)
       }
     }
 
-  // Add had a defect effecting bithWidth > 90.
-  // Shifting had a defect effecting bitWidth > 64.
-    if (true)
-    {
-    vector<FixedBits*> children;
-    FixedBits a(150, false);
-    FixedBits b(150, false);
-
-    children.push_back(&a);
-    children.push_back(&b);
-    FixedBits output(150, false);
-    runSomeRandom(&bvAndBothWays, BVAND, children, output);
-    runSomeRandom(&bvRightShiftBothWays, BVRIGHTSHIFT, children, output);
-    runSomeRandom(&bvLeftShiftBothWays, BVLEFTSHIFT, children, output);
-    runSomeRandom(&bvAddBothWays, BVPLUS, children, output);
-    runSomeRandom(&bvOrBothWays, BVOR, children, output);
-    }
 
   cout << "Done" << endl;
 
