@@ -83,6 +83,7 @@ Result merge(Result r1, Result r2)
 }
 
 // The value "b" is in the range [low,high] inclusive.
+// Unfortunately it's not idempotent, <....1> [5,6], doesn't completely set it.
 Result fix(FixedBits& b, BEEV::CBV low, BEEV::CBV high)
 {
     FixedBits init =b;
@@ -151,8 +152,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
 	const unsigned width = a.getWidth();
 
-	assert(!b.containsZero());
-
 	BEEV::CBV minTop = CONSTANTBV::BitVector_Create(width, true);
 	BEEV::CBV maxTop = CONSTANTBV::BitVector_Create(width, true);
 
@@ -204,13 +203,12 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 		log << endl;
 	}
 
-	// We loop. There are 6 cases.
-
+        // If a bit is changed, then we fixed point again.
+        bool bitEverChanged = false;
+        bool bitJustChanged = true;
 	Result result = NO_CHANGE;
 
-	// If a bit is changed, then we fixed point again.
-	bool bitEverChanged = false;
-	bool bitJustChanged = true;
+        // We loop. There are 6 cases.
 	while (bitJustChanged) {
 		bitJustChanged = false;
 
@@ -220,6 +218,24 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 		while (changed) {
 			changed = false;
 			CONSTANTBV::ErrCode e;
+
+		        // The main loop doesn't work if there is a division by zero possible.
+		        // If the minimum bottom is zero, but the minimum quotient is > 1, then in our semantics
+		        // of 1/0 = 1
+		        if (CONSTANTBV::BitVector_is_empty(minBottom) && CONSTANTBV::BitVector_Lexicompare(minQuotient, one) > 0)
+		          {
+		            CONSTANTBV::BitVector_increment(minBottom);
+		            if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
+		              {
+		                result = CONFLICT;
+		                goto end;
+		              }
+		          }
+
+		        if (CONSTANTBV::BitVector_is_empty(minBottom))
+		          {
+		            goto end; // Possible division by zero. Hard to work with..
+		          }
 
 			bool carry_1 = false;
 			CONSTANTBV::BitVector_sub(copy, minTop, minRemainder, &carry_1);
@@ -246,6 +262,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 			//bool carry_2 = false;
 			//CONSTANTBV::BitVector_sub(copy,maxTop,minRemainder,&carry_2);
 			//assert(!carry_1); // Not sure if it goes negative.
+
 			e = CONSTANTBV::BitVector_Div_Pos(q, copy, minBottom, r);
 			assert(e == CONSTANTBV::ErrCode_Ok);
 
@@ -400,10 +417,18 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
 		{
 			Result r1 = fix(a, minTop, maxTop);
+			r1 = merge(r1,fix(a, minTop, maxTop));
+
 			Result r2 = fix(b, minBottom, maxBottom);
+			// We call is a second time because it's not idepotent..
+			r2 = merge(r2,fix(b, minBottom, maxBottom));
+
 			Result r3;
 			if (whatIs == QUOTIENT_IS_OUTPUT)
-				r3 = fix(output, minQuotient, maxQuotient);
+			  {
+			    r3 = fix(output, minQuotient, maxQuotient);
+			    r3 = merge(r3,fix(output, minQuotient, maxQuotient));
+			  }
 			else
 				r3 = fix(output, minRemainder, maxRemainder);
 
@@ -655,47 +680,36 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
 	return r1;
 }
 
-Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
-		FixedBits& output, STPMgr* bm) {
+    Result
+    bvUnsignedDivisionBothWays(vector<FixedBits*>& children, FixedBits& output, STPMgr* bm)
+    {
+      Result r0 = NO_CHANGE;
 
-        if (children[1]->containsZero())
-          {
-            for (int i=children[0]->getWidth()-1; i > 0 ; i--)
-              {
-                if (children[0]->isFixedToZero(i))
-                  {
-                    if (output.isFixedToOne(i))
-                      return CONFLICT;
-                    else if (!output.isFixed(i))
-                      {
-                        output.setFixed(i,true);
-                        output.setValue(i,false);
-                      }
-                  }
-                else
-                  {
-                    break;
-                  }
-              }
-            return NOT_IMPLEMENTED;
-          }
+      // Enforce that the output must be less than the numerator.
+      // Make special allowance for 0/0 = 1.
+      for (int i = children[0]->getWidth() - 1; i > 0; i--)
+        {
+          if (children[0]->isFixedToZero(i))
+            {
+              if (output.isFixedToOne(i))
+                return CONFLICT;
+              else if (!output.isFixed(i))
+                {
+                  output.setFixed(i, true);
+                  output.setValue(i, false);
+                  r0 = CHANGED;
+                }
+            }
+          else
+            {
+              break;
+            }
+        }
 
-	Result r = bvUnsignedQuotientAndRemainder(children, output, bm,
-			QUOTIENT_IS_OUTPUT);
+      Result r = bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);
 
-	// The current unsigned division doesn't even do constant propagation!!!!!
-	/*
-	 if (r!= CONFLICT && children[0]->isTotallyFixed() && children[1]->isTotallyFixed())
-	 {
-	 cerr << *children[0] << " / ";
-	 cerr << *children[1];
-	 cerr << output << endl;
-	 assert(output.isTotallyFixed());
-	 }
-	 */
-
-	return r;
-}
+      return merge(r0,r);
+    }
 
 bool canBe(const FixedBits& b, int index, bool value) {
 	if (!b.isFixed(index))
