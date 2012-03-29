@@ -339,7 +339,7 @@ namespace simplifier
 
           {
 
-          for (long j = 0; j < pow(3, totalLength); j++)
+          for (long j = 0; j < pow((double)3, totalLength); j++)
             {
             FixedBits output(resultLength, signature.resultType == BOOL_TYPE);
 
@@ -389,10 +389,11 @@ namespace simplifier
       int transferC =0;
       int max =0;
 
-      int count = 100;
+      int count = 1000;
       long st = getCurrentTime();
+	   const int width =32;
 
-      for (int width = 7; width <= 256; width++)
+      for (int i = 0; i < count; i++)
         {
         children.clear();
         FixedBits a = FixedBits::createRandom(width, prob, mtrand);
@@ -403,7 +404,7 @@ namespace simplifier
 
         Detail d;
         bool imprecise = false;
-        if (kind == BVDIV)
+        if (kind == BVDIV || kind == BVMULT || kind == BVMOD || kind == SBVDIV || kind == SBVREM)
           imprecise = true;
         checkEqual(children, output, transfer, kind, imprecise,d);
         if (d.conflict)
@@ -417,7 +418,7 @@ namespace simplifier
         }
 
       cerr.setf(ios::fixed);
-      cerr << "% Count" << count << " prob" << prob << endl;
+      cerr << "% Count" << count << " prob" << prob << " bits" << width << endl;
       cerr << setprecision(2) << (getCurrentTime() - st)/1000.0 << "s&" << conflicts << "&" << initial << "&" << transferC << "&" << max << endl;
 
       return;
@@ -451,7 +452,7 @@ namespace simplifier
       lengths.push_back(resultLength);
       totalLength += resultLength;
 
-      for (long j = 0; j < pow(3, totalLength); j++)
+      for (long j = 0; j < pow((double)3, totalLength); j++)
         {
         int current = j;
 
@@ -503,6 +504,7 @@ unsignedDivide(vector<FixedBits*>& children, FixedBits& output)
   return bvUnsignedDivisionBothWays(children, output, simplifier::constantBitP::beev);
 }
 
+
 Result
 signedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
@@ -545,10 +547,10 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
   const int numberOfInputParams = 2;
 
   assert(numberOfInputParams >0);
-  const int mask = pow(2, bitwidth) - 1;
+  const int mask = pow((double)2, bitwidth) - 1;
 
   // Create all the possible inputs, and apply the function.
-  for (int i = 0; i < pow(2, bitwidth * numberOfInputParams); i++)
+  for (int i = 0; i < pow((double)2, bitwidth * numberOfInputParams); i++)
     {
     D d;
     d.a = i & mask;
@@ -583,7 +585,7 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
   FixedBits empty(bitwidth, false);
   FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(bitwidth, false);
 
-  const int to_iterate = pow(3, totalLength);
+  const int to_iterate = pow((double)3, totalLength);
   for (long j = 0; j < to_iterate; j++)
     {
     int current = j;
@@ -728,9 +730,6 @@ main(void)
       output << "bit-vector or&" << endl;
       go(&bvOrBothWays, BVOR);
 
-      output << "unsigned division&" << endl;
-      go(&unsignedDivide, BVDIV);
-
       output << "bit-vector xor&" << endl;
       go(&bvXorBothWays, BVXOR);
 
@@ -743,11 +742,26 @@ main(void)
       output << "left shift&" << endl;
       go(&bvLeftShiftBothWays, BVLEFTSHIFT);
 
-      output << "arith shift&" << endl;
+      output << "arithmetic shift&" << endl;
       go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
 
       output << "addition&" << endl;
       go(&bvAddBothWays, BVPLUS);
+
+      output << "multiplication&" << endl;
+      go(&multiply, BVMULT);
+
+      output << "unsigned division&" << endl;
+      go(&unsignedDivide, BVDIV);
+
+      output << "unsigned remainder&" << endl;
+      go(&unsignedModulus, BVMOD);
+
+      output << "signed division&" << endl;
+      go(&signedDivide, SBVDIV);
+
+      output << "signed remainder&" << endl;
+      go(&signedRemainder, SBVREM);
 
       exit(1);
     }

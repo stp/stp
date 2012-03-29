@@ -40,7 +40,8 @@ public:
 	void stop2()
 	{
 		clock_t total = clock() - start;
-		cerr << (float(total) / CLOCKS_PER_SEC) << "s";
+	   cerr.setf(ios::fixed);
+		cerr << setprecision(2)  <<  (float(total) / CLOCKS_PER_SEC) << "s";
 	}
 
 private:
@@ -197,17 +198,23 @@ simplifier::constantBitP::Result signedModulus(vector<FixedBits*>& children,
         return bvSignedModulusBothWays(children, output,beev);
 }
 
+simplifier::constantBitP::Result signedRemainder(vector<FixedBits*>& children,
+                FixedBits& output)
+{
+        return bvSignedRemainderBothWays(children, output,beev);
+}
+
+
 simplifier::constantBitP::Result unsignedDivision(vector<FixedBits*>& children,
                 FixedBits& output)
 {
         return bvUnsignedDivisionBothWays(children, output,beev);
 }
 
-
-simplifier::constantBitP::Result divide(vector<FixedBits*>& children,
+simplifier::constantBitP::Result signedDivision(vector<FixedBits*>& children,
                 FixedBits& output)
 {
-        return bvUnsignedDivisionBothWays(children, output,beev);
+        return bvSignedDivisionBothWays(children, output,beev);
 }
 
 
@@ -259,11 +266,26 @@ main(void)
   output << "no_op&" << endl;
   run_with_various_prob(no_op, output);
 
+  output << "bit-vector xor&" << endl;
+  run_with_various_prob(bvXorBothWays, output);
+
+  output << "bit-vector or&" << endl;
+  run_with_various_prob(bvOrBothWays, output);
+
+  output << "bit-vector and&" << endl;
+  run_with_various_prob(bvAndBothWays, output);
+
   output << "right shift&" << endl;
   run_with_various_prob(bvRightShiftBothWays, output);
 
+  output << "left shift&" << endl;
+  run_with_various_prob(bvLeftShiftBothWays, output);
+
   output << "arithmetic shift&" << endl;
   run_with_various_prob(bvArithmeticRightShiftBothWays, output);
+
+  output << "addition&" << endl;
+  run_with_various_prob(bvAddBothWays, output);
 
   output << "multiplication&" << endl;
   run_with_various_prob(multiply, output);
@@ -271,11 +293,14 @@ main(void)
   output << "unsigned division&" << endl;
   run_with_various_prob(unsignedDivision, output);
 
-  output << "bit-vector xor&" << endl;
-  run_with_various_prob(bvXorBothWays, output);
+  output << "unsigned remainder&" << endl;
+  run_with_various_prob(signedRemainder, output);
 
-  output << "addition&" << endl;
-  run_with_various_prob(bvAddBothWays, output);
+  output << "signed division&" << endl;
+  run_with_various_prob(signedDivision, output);
+
+  output << "signed remainder&" << endl;
+  run_with_various_prob(signedRemainder, output);
 
   output << "%" << "iterations" << iterations;
   output << "%" << "bit-width" << iterations;
