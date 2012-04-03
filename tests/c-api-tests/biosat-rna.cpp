@@ -557,4 +557,5 @@ int main(int argc, char** argv) {
   vc_assertFormula(vc, vc_bvGeExpr(vc, total_energy, min_sol_energy_expr));
 
   vc_query(vc, vc_falseExpr(vc));
+  return 0;
 } //End of Main()

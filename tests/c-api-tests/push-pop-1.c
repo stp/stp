@@ -38,4 +38,5 @@ int main() {
   vc_pop(vc);
 
   printf("query = %d\n", query);
+  return 0;
 }

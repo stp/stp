@@ -31,4 +31,5 @@ int main() {
     cast_8_to_32 = vc_simplify(vc, cast_8_to_32);
     vc_Destroy(vc);
   }
+  return 0;
 }

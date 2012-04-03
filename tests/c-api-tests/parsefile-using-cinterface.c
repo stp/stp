@@ -15,5 +15,6 @@ int main() {
   vc_DeleteExpr(c);
   printf("\n");
   vc_Destroy(vc);
+  return 0;
 }
 

@@ -27,4 +27,5 @@ int main(int argc, char *argv[]) {
   //vc_printExpr(vc, cex);
   //
   vc_Destroy(vc);
+  return 0;
 }

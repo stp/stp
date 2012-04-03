@@ -254,4 +254,5 @@ int main ()
 	vc_pop (vc);
 
 	vc_Destroy (vc);
+	return 0;
 }

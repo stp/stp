@@ -47,4 +47,5 @@ int main() {
   fprintf(stderr, "a[1] = %llu\n", v);
 
   vc_Destroy(vc);
+  return 0;
 }

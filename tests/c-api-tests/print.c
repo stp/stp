@@ -17,5 +17,6 @@ int main() {
   vc_printExpr(vc, ct_3);  printf("\n");
 
   vc_Destroy(vc);
+  return 0;
 }
 

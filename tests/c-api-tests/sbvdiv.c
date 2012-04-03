@@ -14,6 +14,7 @@ int main() {
     vc_assertFormula(vc, vc_sbvGtExpr(vc, b, zero));
     vc_assertFormula(vc, vc_sbvLeExpr(vc, a, vc_sbvDivExpr(vc, 32,int_max, b)));
     std::cout << vc_query(vc, vc_falseExpr(vc)) << std::endl;
+    return 0;
 }
 
 

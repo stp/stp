@@ -31,5 +31,6 @@ int main() {
   printf("query = %d\n", query);
 
   vc_Destroy(vc);
+  return 0;
 }
 

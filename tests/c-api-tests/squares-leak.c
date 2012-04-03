@@ -24,4 +24,5 @@ int main(int argc, char **argv) {
       printf("%u**2 = %llu\n", i, j);
     vc_Destroy(vc);
   }
+  return 0;
 }

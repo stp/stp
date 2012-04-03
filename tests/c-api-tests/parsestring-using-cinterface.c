@@ -25,5 +25,6 @@ int main() {
   printf("\n");
 
   vc_Destroy(vc);
+  return 0;
 }
 

@@ -115,4 +115,5 @@ int main(){
     
     vc_Destroy(vc);
     }
+    return 0;
 }

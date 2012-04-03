@@ -29,4 +29,5 @@ int main ()
 	go(MS);
 	go(CMS2);
 	go(MSP);
+	return 0;
 }

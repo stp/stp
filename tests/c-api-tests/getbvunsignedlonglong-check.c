@@ -24,4 +24,5 @@ int main() {
     vc_DeleteExpr(index_3);
     vc_Destroy(vc);
   }
+  return 0;
 }

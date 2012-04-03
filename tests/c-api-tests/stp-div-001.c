@@ -64,4 +64,5 @@ int main() {
   assert((*a_val)/5  == 5);
 
   vc_Destroy(vc);
+  return 0;
 }

@@ -27,4 +27,5 @@ int main() {
   vc_printExpr(vc, cast_8_to_32);
   //cast_8_to_32 = vc_simplify(vc, cast_8_to_32);
   vc_Destroy(vc);
+  return 0;
 }
