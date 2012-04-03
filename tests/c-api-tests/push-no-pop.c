@@ -35,5 +35,7 @@ int main() {
   vc_DeleteExpr(a);
 
   vc_Destroy(vc);
+
+  return 0;
 }
 
