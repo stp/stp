@@ -373,9 +373,11 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 
 	bool disabledProp = !beev->UserFlags.bitConstantProp_flag;
 	bool printOutput = beev->UserFlags.print_output_flag;
+	bool checkCounter = beev->UserFlags.check_counterexample_flag;
 
 	beev->UserFlags.bitConstantProp_flag = false;
 	beev->UserFlags.print_output_flag = false;
+	beev->UserFlags.check_counterexample_flag= false;
 
 	ASTVec initialFixing;
 
@@ -384,7 +386,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 	for (int i = 0; i < numberOfChildren; i++)
         {
           std::stringstream out;
-          out << "v" << i;
+          out << "v_VERY_SPECIALLY_NAMES" << i;
 
           unsigned valueWidth;
 
@@ -401,7 +403,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
         }
 
 	unsigned outputWidth = output.isBoolean()? 0: output.getWidth();
-	ASTNode outputNode = beev->CreateSymbol("result",0,outputWidth);
+	ASTNode outputNode = beev->CreateSymbol("result_WITH_SPECIAL_NAME",0,outputWidth);
 
 	ASTNode expr;
 	if (output.isBoolean())
@@ -452,7 +454,8 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 
 		if (first)
 		{
-			result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat,true);
+		  beev->AddQuery(beev->ASTUndefined);
+		  result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat,true);
 		}
 		else
 		{
@@ -460,6 +463,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 		    newS.addClause(satSolverClause);
 		    satSolverClause.clear();
 
+		    beev->AddQuery(beev->ASTUndefined);
 		    result = ce.CallSAT_ResultCheck(newS, beev->ASTTrue, beev->ASTTrue, &tosat,true);
 		}
 
@@ -511,6 +515,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
 
 	beev->UserFlags.bitConstantProp_flag = !disabledProp;
 	beev->UserFlags.print_output_flag = printOutput;
+	beev->UserFlags.check_counterexample_flag= checkCounter;
 
 	return first;
 }

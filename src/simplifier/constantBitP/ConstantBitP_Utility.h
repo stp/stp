@@ -33,6 +33,8 @@ struct stats
 	unsigned unfixed;
 };
 
+Result merge(Result r1, Result r2);
+
 stats getStats(const vector<FixedBits*>& operands, const unsigned position);
 }
 }

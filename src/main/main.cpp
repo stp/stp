@@ -32,24 +32,9 @@ extern int cvclex_destroy(void);
 extern int smtlex_destroy(void);
 extern int smt2lex_destroy(void);
 
-// callback for SIGALRM.
-void handle_time_out(int parameter){
-  printf("Timed Out.\n");
-
-  abort();
-  // I replaced the exit(0) with an abort().
-  // The exit was sometimes hanging, seemingly because of a bug somewhere else (e.g. loader, glibc).
-  // In strace it output:
-
-  //--- SIGVTALRM (Virtual timer expired) @ 0 (0) ---
-  //fstat(1, {st_mode=S_IFCHR|0620, st_rdev=makedev(136, 5), ...}) = 0
-  //mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7fabca622000
-  //write(1, "Timed Out.\n", 11Timed Out.
-  //)            = 11
-  //futex(0x7fabc9c54e40, FUTEX_WAIT, 2, NULL
-
-  // Then it would just sit there waiting for the mutex (which never came).
-  //exit(0);
+namespace BEEV
+{
+  void setHardTimeout(int);
 }
 
 bool onePrintBack =false;
@@ -112,8 +97,6 @@ int main(int argc, char ** argv) {
 
   AbsRefine_CounterExample * Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
   auto_ptr<AbsRefine_CounterExample> ctrCleaner(Ctr_Example);
-
-  itimerval timeout; 
 
   ParserBM          = bm;
   GlobalSTP         = 
@@ -324,12 +307,7 @@ int main(int argc, char ** argv) {
 
       if (argv[i][1] == 'g')
         {
-        signal(SIGVTALRM, handle_time_out);
-        timeout.it_interval.tv_usec = 0;
-        timeout.it_interval.tv_sec  = 0;
-        timeout.it_value.tv_usec    = 0;
-        timeout.it_value.tv_sec     = atoi(argv[++i]);
-        setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+        BEEV::setHardTimeout(atoi(argv[++i]));
         }
       else if (argv[i][1] == 'i')
         {

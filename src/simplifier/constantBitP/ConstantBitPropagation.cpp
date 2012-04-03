@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include "ConstantBitP_TransferFunctions.h"
+#include "ConstantBitP_MaxPrecision.h"
 
 using std::endl;
 using std::cout;
@@ -31,10 +32,6 @@ namespace simplifier
     Result
     dispatchToTransferFunctions(const Kind k, vector<FixedBits*>& children,
         FixedBits& output, const ASTNode n, MultiplicationStatsMap *msm = NULL);
-
-    Result
-    dispatchToMaximallyPrecise(const Kind k, vector<FixedBits*>& children,
-        FixedBits& output, const ASTNode n);
 
     const bool debug_cBitProp_messages = false;
     const bool output_mult_like = false;
@@ -217,6 +214,15 @@ namespace simplifier
 
       //Determine what must always be true.
       ASTNodeMap fromTo = getAllFixed();
+      {
+        ASTNodeMap::iterator it = fromTo.begin();
+        while(it != fromTo.end())
+          {
+          assert(it->getKind() != SYMBOL);
+          it++;
+          }
+      }
+
 
       if (debug_cBitProp_messages)
         {
@@ -707,7 +713,7 @@ namespace simplifier
         }
 #undef MAPTFN
       bool mult_like = false;
-
+      const bool lift_to_max = false;
 
       // safe approximation to no overflow multiplication.
       if (k == BVMULT)
@@ -716,7 +722,7 @@ namespace simplifier
           result = bvMultiplyBothWays(children, output, n.GetSTPMgr(),&ms);
           		if (CONFLICT != result)
           			msm->map[n] = ms;
-          mult_like=true;
+ 	  mult_like=true;
         }
       else if (k == BVDIV)
         {
@@ -745,9 +751,16 @@ namespace simplifier
           mult_like=true;
         }
       else
+        result = transfer(children, output);
 
-
-      result = transfer(children, output);
+      if (mult_like && lift_to_max)
+        {
+        int bits_before = output.countFixed() + children[0]->countFixed() + children[1]->countFixed();
+        result = merge(result, maxPrecision(children, output, k, n.GetSTPMgr())? CONFLICT :NOT_IMPLEMENTED);
+        int difference =  (output.countFixed() + children[0]->countFixed() + children[1]->countFixed()) - bits_before;
+        assert(difference >= 0);
+        cerr << "Bits fixed" << difference << endl;
+        }
 
       if (mult_like && output_mult_like)
         {

@@ -67,20 +67,6 @@ FixedBits cbvToFixedBits(BEEV::CBV low, unsigned width)
       return lowBits;
     }
 
-Result merge(Result r1, Result r2)
-{
-  if (r1 == CONFLICT || r2 == CONFLICT )
-    return CONFLICT;
-
-  if (r1 == CHANGED || r2 == CHANGED)
-     return CHANGED;
-
-  if (r1 == NO_CHANGE && r2 == NO_CHANGE)
-    return NO_CHANGE;
-
-  return NOT_IMPLEMENTED;
-
-}
 
 // The value "b" is in the range [low,high] inclusive.
 // Unfortunately it's not idempotent, <....1> [5,6], doesn't completely set it.

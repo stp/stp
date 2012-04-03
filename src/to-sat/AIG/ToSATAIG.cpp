@@ -267,6 +267,11 @@ namespace BEEV
                         found = false;
                     }
             }
+
+      //void setHardTimeout(int sec);
+      //setHardTimeout(500);
+
+
       bm->GetRunTimes()->start(RunTimes::Solving);
       satSolver.solve();
       bm->GetRunTimes()->stop(RunTimes::Solving);

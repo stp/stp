@@ -2829,9 +2829,11 @@ namespace BEEV
            ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0], _bm->CreateBVConst(32,rest-1),_bm->CreateZeroConst(32));
            ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1], _bm->CreateBVConst(32,rest-1),_bm->CreateZeroConst(32));
 
+           // nb. This differs from the bvdiv case.
            ASTNode div = nf->CreateTerm(BVMOD,rest,top,bottom);
            div = nf->CreateTerm(BVCONCAT,inputValueWidth,_bm->CreateZeroConst(inputValueWidth-rest),div);
 
+           // nb. This differs from the bvdiv case.
            output = nf->CreateTerm(ITE, inputValueWidth, cond, div, inputterm[0]);
            break;
          }

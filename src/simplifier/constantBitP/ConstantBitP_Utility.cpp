@@ -185,6 +185,20 @@ int signedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs)
 	return CONSTANTBV::BitVector_Compare(lhs,rhs);
 }
 
+Result merge(Result r1, Result r2)
+{
+  if (r1 == CONFLICT || r2 == CONFLICT )
+    return CONFLICT;
+
+  if (r1 == CHANGED || r2 == CHANGED)
+     return CHANGED;
+
+  if (r1 == NO_CHANGE && r2 == NO_CHANGE)
+    return NO_CHANGE;
+
+  return NOT_IMPLEMENTED;
+}
+
 
 int toInt(const BEEV::CBV value)
 {
