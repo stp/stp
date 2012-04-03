@@ -218,7 +218,8 @@ namespace simplifier
         ASTNodeMap::iterator it = fromTo.begin();
         while(it != fromTo.end())
           {
-          assert(it->getKind() != SYMBOL);
+          // I don't think there should be a constant in here ever.
+          assert(it->first.GetKind() != SYMBOL);
           it++;
           }
       }
