@@ -1119,8 +1119,12 @@ Result bvSignedDivisionBothWays(vector<FixedBits*>& children,
         return NO_CHANGE;
     }
 
-
-	return bvSignedDivisionRemainderBothWays(children, output, bm,
+  // unsigned division propagates much better than signed division does!
+  const int top = children[0]->getWidth();
+  if ((*children[0])[top-1] == '0' && (*children[1])[top-1] == '0')
+    return bvUnsignedDivisionBothWays(children, output, bm);
+  else
+    return bvSignedDivisionRemainderBothWays(children, output, bm,
 			bvUnsignedDivisionBothWays, SIGNED_DIVISION);
 }
 }
