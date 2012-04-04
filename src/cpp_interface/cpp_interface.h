@@ -21,6 +21,7 @@ namespace BEEV
     //boost::object_pool<ASTNode> node_pool;
     bool alreadyWarned;
     bool print_success;
+    bool ignoreCheckSatRequest;
 
     // Used to cache prior queries.
     struct Entry
@@ -72,6 +73,7 @@ namespace BEEV
         bm.Push();
 
       print_success = false;
+      ignoreCheckSatRequest=false;
     }
 
     void
@@ -302,6 +304,13 @@ namespace BEEV
       symbols.push_back(ASTVec());
 
       checkInvariant();
+    }
+
+    // Useful when printing back, so that you can parse, but ignore the request.
+    void
+    ignoreCheckSat()
+    {
+      ignoreCheckSatRequest=  true;
     }
 
     void

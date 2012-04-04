@@ -6,6 +6,9 @@ namespace BEEV
   void
   Cpp_interface::checkSat(const ASTVec & assertionsSMT2)
   {
+    if (ignoreCheckSatRequest)
+      return;
+
     bm.GetRunTimes()->stop(RunTimes::Parsing);
 
     checkInvariant();
