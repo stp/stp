@@ -190,7 +190,7 @@ namespace BEEV
 
     	if (stats_flag)
     		if (alreadyOutput.insert(n).second)
-    			std::cout << n << ":"  << result << std::endl;
+    			std::cout << "--config_"<< n << "="  << result << std::endl;
     	return result;
     }
 
