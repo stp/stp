@@ -62,8 +62,9 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
 
       // Should be a symbol.
       assert(a.GetKind()== SYMBOL);
+      os << "|";
       a.nodeprint(os);
-
+      os << "|";
 
 		switch (a.GetType())
 		{
@@ -153,7 +154,9 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
     	  outputBitVecSMTLIB2(n, os);
         break;
       case SYMBOL:
+        os << "|";
         n.nodeprint(os);
+        os << "|";
         break;
       case FALSE:
         os << "false";
