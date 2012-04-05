@@ -542,7 +542,7 @@ namespace BEEV
   }
 
   bool
-  getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 45)
+  getPossibleValues(const ASTNode&n, ASTNodeSet& visited, vector<ASTNode>& found, int maxCount = 5)
   {
     if (maxCount <= 0)
       return false;
@@ -1005,7 +1005,7 @@ namespace BEEV
         return r;
       }
 
-    if ((k1 == ITE || k1 == BVCONST) && (k2 == ITE || k2 == BVCONST))
+    if ((k1 == ITE || k1 == BVCONST) && (k2 == ITE || k2 == BVCONST) && _bm->UserFlags.isSet("ite-const","1"))
       {
         // If it can only evaluate to constants on the LHS and the RHS, and those constants are never equal,
         // then it must be false. e.g.   ite( f, 10 , 20 ) = ite (g, 30 ,12)
