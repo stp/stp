@@ -645,6 +645,5 @@ namespace simplifier
 
       return NOT_IMPLEMENTED;
     }
-
   }
 }

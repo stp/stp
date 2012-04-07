@@ -274,11 +274,8 @@ namespace simplifier
         else
           return NO_CHANGE;
       }
-
     };
-
   }
-
 }
 
 #endif /* COLUMNCOUNTS_H_ */
