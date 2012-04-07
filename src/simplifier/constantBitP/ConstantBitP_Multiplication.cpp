@@ -20,21 +20,23 @@ namespace simplifier
     const bool debug_multiply = false;
     std::ostream& log = std::cerr;
 
+#if 0
 // The maximum size of the carry into a column for MULTIPLICATION
     int
     maximumCarryInForMultiplication(int column)
-    {
+      {
       int result = 0;
       int currIndex = 0;
 
       while (currIndex < column)
         {
-          currIndex++;
-          result = (result + currIndex) / 2;
+        currIndex++;
+        result = (result + currIndex) / 2;
         }
 
       return result;
-    }
+      }
+#endif
 
     Result
     fixIfCanForMultiplication(vector<FixedBits*>& children, const int index, const int aspirationalSum)
@@ -50,56 +52,56 @@ namespace simplifier
       int columnUnfixed = cs.columnUnfixed; // both unfixed.
       int columnOneFixed = cs.columnOneFixed; // one of the values is fixed to one.
       int columnOnes = cs.columnOnes; // both are ones.
-      //int columnZeroes = cs.columnZeroes; // either are zero.
 
       Result result = NO_CHANGE;
+
+      // only one of the conditionals can run.
+      bool run = false;
 
       // We need every value that is unfixed to be set to one.
       if (aspirationalSum == columnOnes + columnOneFixed + columnUnfixed && ((columnOneFixed + columnUnfixed) > 0))
         {
-          for (unsigned i = 0; i <= (unsigned) index; i++)
+        for (unsigned i = 0; i <= (unsigned) index; i++)
+          {
+          // If y is unfixed, and it's not anded with zero.
+          if (!y.isFixed(i) && !(x.isFixed(index - i) && !x.getValue(index - i)))
             {
-              // If y is unfixed, and it's not anded with zero.
-              if (!y.isFixed(i) && !(x.isFixed(index - i) && !x.getValue(index - i)))
-                {
-                  y.setFixed(i, true);
-                  y.setValue(i, true);
-                  result = CHANGED;
-                }
-
-              if (!x.isFixed(index - i) && !(y.isFixed(i) && !y.getValue(i)))
-                {
-                  x.setFixed(index - i, true);
-                  x.setValue(index - i, true);
-                  result = CHANGED;
-                }
+            y.setFixed(i, true);
+            y.setValue(i, true);
+            result = CHANGED;
             }
+
+          if (!x.isFixed(index - i) && !(y.isFixed(i) && !y.getValue(i)))
+            {
+            x.setFixed(index - i, true);
+            x.setValue(index - i, true);
+            result = CHANGED;
+            }
+          }assert(result == CHANGED);
+        run = true;
         }
 
       // We have all the ones that we need already. (thanks). Set everything we can to zero.
       if (aspirationalSum == columnOnes && (columnUnfixed > 0 || columnOneFixed > 0))
         {
-          for (unsigned i = 0; i <= (unsigned) index; i++)
+        assert(!run);
+        for (unsigned i = 0; i <= (unsigned) index; i++)
+          {
+          if (!y.isFixed(i) && x.isFixed(index - i) && x.getValue(index - i)) // one fixed.
+
             {
-              if (!y.isFixed(i) && x.isFixed(index - i) && x.getValue(index - i)) // one fixed.
-
-                {
-                  y.setFixed(i, true);
-                  y.setValue(i, false);
-                  //columnZeroes++;
-                  //columnOneFixed--;
-                  result = CHANGED;
-                }
-
-              if (!x.isFixed(index - i) && y.isFixed(i) && y.getValue(i)) // one fixed other way.
-                {
-                  x.setFixed(index - i, true);
-                  x.setValue(index - i, false);
-                  //columnZeroes++;
-                  //columnOneFixed--;
-                  result = CHANGED;
-                }
+            y.setFixed(i, true);
+            y.setValue(i, false);
+            result = CHANGED;
             }
+
+          if (!x.isFixed(index - i) && y.isFixed(i) && y.getValue(i)) // one fixed other way.
+            {
+            x.setFixed(index - i, true);
+            x.setValue(index - i, false);
+            result = CHANGED;
+            }
+          }
         }
       if (debug_multiply && result == CONFLICT)
         log << "CONFLICT" << endl;
@@ -118,42 +120,42 @@ namespace simplifier
 
       for (unsigned i = 0; i < bitWidth; i++)
         {
-          yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
-          xFixedFalse[i] = x.isFixed(i) && !x.getValue(i);
+        yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
+        xFixedFalse[i] = x.isFixed(i) && !x.getValue(i);
         }
 
       for (unsigned i = 0; i < bitWidth; i++)
         {
-          // decrease using zeroes.
-          if (yFixedFalse[i])
+        // decrease using zeroes.
+        if (yFixedFalse[i])
+          {
+          for (unsigned j = i; j < bitWidth; j++)
             {
-              for (unsigned j = i; j < bitWidth; j++)
-                {
-                  columnH[j]--;
-                }
+            columnH[j]--;
             }
+          }
 
-          if (xFixedFalse[i])
+        if (xFixedFalse[i])
+          {
+          for (unsigned j = i; j < bitWidth; j++)
             {
-              for (unsigned j = i; j < bitWidth; j++)
-                {
-                  // if the row hasn't already been zeroed out.
-                  if (!yFixedFalse[j - i])
-                    columnH[j]--;
-                }
+            // if the row hasn't already been zeroed out.
+            if (!yFixedFalse[j - i])
+              columnH[j]--;
             }
+          }
 
-          // check if there are any pairs of ones.
-          if (x.isFixed(i) && x.getValue(i))
-            for (unsigned j = 0; j < (bitWidth - i); j++)
+        // check if there are any pairs of ones.
+        if (x.isFixed(i) && x.getValue(i))
+          for (unsigned j = 0; j < (bitWidth - i); j++)
+            {
+            assert(i + j < bitWidth);
+            if (y.isFixed(j) && y.getValue(j))
               {
-                assert(i + j < bitWidth);
-                if (y.isFixed(j) && y.getValue(j))
-                  {
-                    // a pair of ones. Increase the lower bound.
-                    columnL[i + j]++;
-                  }
+              // a pair of ones. Increase the lower bound.
+              columnL[i + j]++;
               }
+            }
         }
       return NO_CHANGE;
     }
@@ -169,14 +171,14 @@ namespace simplifier
       /***NB < to ***/
       for (int i = from; i < to; i++)
         {
-          if (y[i] == '*')
-            {
-              y.setFixed(i, true);
-              y.setValue(i, false);
-              r = CHANGED;
-            }
-          else if (y[i] == '1')
-            return CONFLICT;
+        if (y[i] == '*')
+          {
+          y.setFixed(i, true);
+          y.setValue(i, false);
+          r = CHANGED;
+          }
+        else if (y[i] == '1')
+          return CONFLICT;
         }
       return r;
     }
@@ -197,13 +199,13 @@ namespace simplifier
       for (int i = output.getWidth() - 1; i > maxOutputOneFromInputs; i--)
         if (!output.isFixed(i))
           {
-            output.setFixed(i, true);
-            output.setValue(i, false);
+          output.setFixed(i, true);
+          output.setValue(i, false);
           }
         else
           {
-            if (output.getValue(i))
-              return CONFLICT;
+          if (output.getValue(i))
+            return CONFLICT;
           }
 
       return NOT_IMPLEMENTED;
@@ -226,11 +228,11 @@ namespace simplifier
 
       for (int i = 0; i < bitWidth; i++)
         {
-          if (x[i] == '1' || x[i] == '*')
-            CONSTANTBV::BitVector_Bit_On(x_c, i);
+        if (x[i] == '1' || x[i] == '*')
+          CONSTANTBV::BitVector_Bit_On(x_c, i);
 
-          if (y[i] == '1' || y[i] == '*')
-            CONSTANTBV::BitVector_Bit_On(y_c, i);
+        if (y[i] == '1' || y[i] == '*')
+          CONSTANTBV::BitVector_Bit_On(y_c, i);
         }
 
       BEEV::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth + 1, true);
@@ -239,22 +241,22 @@ namespace simplifier
 
       for (int j = (2 * bitWidth) - 1; j >= 0; j--)
         {
-          if (CONSTANTBV::BitVector_bit_test(result, j))
-            break;
-          if (j < bitWidth)
+        if (CONSTANTBV::BitVector_bit_test(result, j))
+          break;
+        if (j < bitWidth)
+          {
+          if (!output.isFixed(j))
             {
-              if (!output.isFixed(j))
-                {
-                  output.setFixed(j, true);
-                  output.setValue(j, false);
-                }
-              else
-                {
-                  if (output.getValue(j))
-                    return CONFLICT;
-                }
-
+            output.setFixed(j, true);
+            output.setValue(j, false);
             }
+          else
+            {
+            if (output.getValue(j))
+              return CONFLICT;
+            }
+
+          }
         }
 
 #ifndef NDEBUG
@@ -290,29 +292,29 @@ namespace simplifier
       bool done = false;
       for (int i = x_min; i <= std::min(x_max, bitwidth - 1); i++)
         {
-          if (x[i] == '1')
-            break;
+        if (x[i] == '1')
+          break;
 
-          if (x[i] == '0')
-            continue;
+        if (x[i] == '0')
+          continue;
 
-          assert(!done);
-          for (int j = y_min; j <= std::min(y_max, output_max); j++)
+        assert(!done);
+        for (int j = y_min; j <= std::min(y_max, output_max); j++)
+          {
+          if (j + i >= bitwidth || (y[j] != '0' && output[i + j] != '0'))
             {
-              if (j + i >= bitwidth || (y[j] != '0' && output[i + j] != '0'))
-                {
-                  done = true;
-                  break;
-                }
-            }
-          if (!done)
-            {
-              x.setFixed(i, true);
-              x.setValue(i, false);
-              r = CHANGED;
-            }
-          else
+            done = true;
             break;
+            }
+          }
+        if (!done)
+          {
+          x.setFixed(i, true);
+          x.setValue(i, false);
+          r = CHANGED;
+          }
+        else
+          break;
         }
       return r;
     }
@@ -360,13 +362,13 @@ namespace simplifier
 
       if (xBottom > yBottom)
         {
-          toInvert = &x;
-          toSet = &y;
+        toInvert = &x;
+        toSet = &y;
         }
       else
         {
-          toInvert = &y;
-          toSet = &x;
+        toInvert = &y;
+        toSet = &x;
         }
 
       invertCount--; // position of the least fixed.
@@ -381,52 +383,52 @@ namespace simplifier
       if (CONSTANTBV::BitVector_bit_test(toInvertCBV, 0))
         {
 
-          if (debug_multiply)
-            cerr << "Value to Invert:" << *toInvertCBV << endl;
+        if (debug_multiply)
+          cerr << "Value to Invert:" << *toInvertCBV << endl;
 
-          BEEV::Simplifier simplifier(bm);
-          BEEV::CBV inverse = simplifier.MultiplicativeInverse(bm->CreateBVConst(toInvertCBV, width)).GetBVConst();
-          BEEV::CBV toMultiplyBy = output.GetBVConst(invertCount, 0);
+        BEEV::Simplifier simplifier(bm);
+        BEEV::CBV inverse = simplifier.MultiplicativeInverse(bm->CreateBVConst(toInvertCBV, width)).GetBVConst();
+        BEEV::CBV toMultiplyBy = output.GetBVConst(invertCount, 0);
 
-          BEEV::CBV toSetEqualTo = CONSTANTBV::BitVector_Create(2 * (width), true);
+        BEEV::CBV toSetEqualTo = CONSTANTBV::BitVector_Create(2 * (width), true);
 
-          CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(toSetEqualTo, inverse, toMultiplyBy);
-          if (ec != CONSTANTBV::ErrCode_Ok)
+        CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(toSetEqualTo, inverse, toMultiplyBy);
+        if (ec != CONSTANTBV::ErrCode_Ok)
+          {
+          assert(false);
+          throw 2314231;
+          }
+
+        if (false && debug_multiply)
+          {
+          cerr << x << "*" << y << "=" << output << endl;
+          cerr << "Invert bit count" << invertCount << endl;
+          cerr << "To set" << *toSet;
+          cerr << "To set equal to:" << *toSetEqualTo << endl;
+          }
+
+        // Write in the value.
+        for (int i = 0; i <= invertCount; i++)
+          {
+          bool expected = CONSTANTBV::BitVector_bit_test(toSetEqualTo, i);
+
+          if (toSet->isFixed(i) && (toSet->getValue(i) ^ expected))
             {
-              assert(false);
-              throw 2314231;
+            status = CONFLICT;
             }
-
-          if (false && debug_multiply)
+          else if (!toSet->isFixed(i))
             {
-              cerr << x << "*" << y << "=" << output << endl;
-              cerr << "Invert bit count" << invertCount << endl;
-              cerr << "To set" << *toSet;
-              cerr << "To set equal to:" << *toSetEqualTo << endl;
+            toSet->setFixed(i, true);
+            toSet->setValue(i, expected);
             }
+          }
 
-          // Write in the value.
-          for (int i = 0; i <= invertCount; i++)
-            {
-              bool expected = CONSTANTBV::BitVector_bit_test(toSetEqualTo, i);
+        // Don't delete the "inverse" because it's reference counted by the ASTNode.
 
-              if (toSet->isFixed(i) && (toSet->getValue(i) ^ expected))
-                {
-                  status = CONFLICT;
-                }
-              else if (!toSet->isFixed(i))
-                {
-                  toSet->setFixed(i, true);
-                  toSet->setValue(i, expected);
-                }
-            }
+        CONSTANTBV::BitVector_Destroy(toSetEqualTo);
+        CONSTANTBV::BitVector_Destroy(toMultiplyBy);
 
-          // Don't delete the "inverse" because it's reference counted by the ASTNode.
-
-          CONSTANTBV::BitVector_Destroy(toSetEqualTo);
-          CONSTANTBV::BitVector_Destroy(toMultiplyBy);
-
-          //cerr << "result" << *toSet;
+        //cerr << "result" << *toSet;
         }
       else
         CONSTANTBV::BitVector_Destroy(toInvertCBV);
@@ -459,22 +461,22 @@ namespace simplifier
       CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, xCBV, yCBV);
       if (ec != CONSTANTBV::ErrCode_Ok)
         {
-          assert(false);
-          throw 2314231;
+        assert(false);
+        throw 2314231;
         }
 
       Result status = NOT_IMPLEMENTED;
       for (int i = 0; i <= minV; i++)
         {
-          bool expected = CONSTANTBV::BitVector_bit_test(result, i);
+        bool expected = CONSTANTBV::BitVector_bit_test(result, i);
 
-          if (output.isFixed(i) && (output.getValue(i) ^ expected))
-            status = CONFLICT;
-          else if (!output.isFixed(i))
-            {
-              output.setFixed(i, true);
-              output.setValue(i, expected);
-            }
+        if (output.isFixed(i) && (output.getValue(i) ^ expected))
+          status = CONFLICT;
+        else if (!output.isFixed(i))
+          {
+          output.setFixed(i, true);
+          output.setValue(i, expected);
+          }
         }
 
       CONSTANTBV::BitVector_Destroy(xCBV);
@@ -489,12 +491,12 @@ namespace simplifier
     {
       for (int i = 0; i < bitWidth; i++)
         {
-          log << sumL[bitWidth - 1 - i] << " ";
+        log << sumL[bitWidth - 1 - i] << " ";
         }
       log << endl;
       for (int i = 0; i < bitWidth; i++)
         {
-          log << sumH[bitWidth - 1 - i] << " ";
+        log << sumH[bitWidth - 1 - i] << " ";
         }
       log << endl;
     }
@@ -515,10 +517,10 @@ namespace simplifier
 
       if (debug_multiply)
         {
-          cerr << "Initial Fixing";
-          cerr << x << "*";
-          cerr << y << "=";
-          cerr << output << endl;
+        cerr << "Initial Fixing";
+        cerr << x << "*";
+        cerr << y << "=";
+        cerr << output << endl;
         }
 
       Result r = useTrailingZeroesToFix(x, y, output);
@@ -528,96 +530,93 @@ namespace simplifier
       bool changed = true;
       while (changed)
         {
-          changed = false;
-          signed columnH[bitWidth]; // maximum number of true partial products.
-          signed columnL[bitWidth]; // minimum  ""            ""
-          signed sumH[bitWidth];
-          signed sumL[bitWidth];
+        changed = false;
+        signed columnH[bitWidth]; // maximum number of true partial products.
+        signed columnL[bitWidth]; // minimum  ""            ""
+        signed sumH[bitWidth];
+        signed sumL[bitWidth];
 
-          ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth);
+        ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output);
 
-          // Use the number of zeroes and ones in a column to update the possible counts.
-          adjustColumns(x, y, columnL, columnH);
+        // Use the number of zeroes and ones in a column to update the possible counts.
+        adjustColumns(x, y, columnL, columnH);
 
-          cc.rebuildSums();
-          Result r = cc.fixedPoint(output);
+        cc.rebuildSums();
+        Result r = cc.fixedPoint();
 
-          assert(cc.fixedPoint(output) != CHANGED);
-          // idempotent
+        if (r == CONFLICT)
+          return CONFLICT;
 
-          if (r == CONFLICT)
-            return CONFLICT;
+        r = NO_CHANGE;
 
-          r = NO_CHANGE;
-
-          // If any of the sums have a cardinality of 1. Set the result.
-          for (unsigned column = 0; column < bitWidth; column++)
+        // If any of the sums have a cardinality of 1. Set the result.
+        for (unsigned column = 0; column < bitWidth; column++)
+          {
+          if (cc.sumL[column] == cc.sumH[column])
             {
-              if (cc.sumL[column] == cc.sumH[column])
-                {
-                  //(1) If the output has a known value. Set the output.
-                  bool newValue = !(sumH[column] % 2 == 0);
-                  if (!output.isFixed(column))
-                    {
-                      output.setFixed(column, true);
-                      output.setValue(column, newValue);
-                      r = CHANGED;
-                    }
-                  else if (output.getValue(column) != newValue)
-                    return CONFLICT;
-                }
+            //(1) If the output has a known value. Set the output.
+            bool newValue = !(sumH[column] % 2 == 0);
+            if (!output.isFixed(column))
+              {
+              output.setFixed(column, true);
+              output.setValue(column, newValue);
+              r = CHANGED;
+              }
+            else if (output.getValue(column) != newValue)
+              return CONFLICT;
             }
+          }
 
-          if (CHANGED == r)
-            changed = true;
+        if (CHANGED == r)
+          changed = true;
 
-          for (unsigned column = 0; column < bitWidth; column++)
+        for (unsigned column = 0; column < bitWidth; column++)
+          {
+          if (cc.columnL[column] == cc.columnH[column])
             {
-              if (cc.columnL[column] == cc.columnH[column])
-                {
-                  //(2) Knowledge of the sum may fix the operands.
-                  Result tempResult = fixIfCanForMultiplication(children, column, cc.columnH[column]);
+            //(2) Knowledge of the sum may fix the operands.
+            Result tempResult = fixIfCanForMultiplication(children, column, cc.columnH[column]);
 
-                  if (CONFLICT == tempResult)
-                    return CONFLICT;
+            if (CONFLICT == tempResult)
+              return CONFLICT;
 
-                  if (CHANGED == tempResult)
-                    r = CHANGED;
-                }
+            if (CHANGED == tempResult)
+              r = CHANGED;
             }
+          }
 
-          if (debug_multiply)
-            {
-              cerr << "At end";
-              cerr << "x:" << x << endl;
-              cerr << "y:" << y << endl;
-              cerr << "output:" << output << endl;
-            }
+        if (debug_multiply)
+          {
+          cerr << "At end";
+          cerr << "x:" << x << endl;
+          cerr << "y:" << y << endl;
+          cerr << "output:" << output << endl;
+          }
 
-          assert(CONFLICT != r);
+        assert(CONFLICT != r);
 
-          if (CHANGED == r)
-            changed = true;
+        if (CHANGED == r)
+          changed = true;
 
-          if (ms != NULL)
-            {
-              *ms = MultiplicationStats(bitWidth, cc.columnL, cc.columnH, cc.sumL, cc.sumH);
-              ms->x = *children[0];
-              ms->y = *children[1];
-              ms->r = output;
-            }
+        if (ms != NULL)
+          {
+          *ms = MultiplicationStats(bitWidth, cc.columnL, cc.columnH, cc.sumL, cc.sumH);
+          ms->x = *children[0];
+          ms->y = *children[1];
+          ms->r = output;
+          }
 
-          if (changed)
-            {
-              useTrailingZeroesToFix(x, y, output);
-              //  if (r == NO_CHANGE)
-              //    changed= false;
-            }
+        if (changed)
+          {
+          useTrailingZeroesToFix(x, y, output);
+          //  if (r == NO_CHANGE)
+          //    changed= false;
+          }
         }
 
       if (children[0]->isTotallyFixed() && children[1]->isTotallyFixed())
         {
-          assert(output.isTotallyFixed());
+        assert(output.isTotallyFixed());
         }
 
 // The below assertions are for performance only. It's not maximally precise anyway!!!
@@ -625,22 +624,22 @@ namespace simplifier
 #ifndef NDEBUG
       if (r != CONFLICT)
         {
-          FixedBits x_c(x), y_c(y), o_c(output);
+        FixedBits x_c(x), y_c(y), o_c(output);
 
-          // These are subsumed by the consistency over the columns..
-          useTrailingFixedToFix(x_c, y_c, o_c);
-          useLeadingZeroesToFix(x_c, y_c, o_c);
-          useInversesToSolve(x_c, y_c, o_c, bm);
+        // These are subsumed by the consistency over the columns..
+        useTrailingFixedToFix(x_c, y_c, o_c);
+        useLeadingZeroesToFix(x_c, y_c, o_c);
+        useInversesToSolve(x_c, y_c, o_c, bm);
 
-          // This one should have been called to fixed point!
-          useTrailingZeroesToFix(x_c, y_c, o_c);
+        // This one should have been called to fixed point!
+        useTrailingZeroesToFix(x_c, y_c, o_c);
 
-          if (!FixedBits::equals(x_c, x) || !FixedBits::equals(y_c, y) || !FixedBits::equals(o_c, output))
-            {
-              cerr << x << y << output << endl;
-              cerr << x_c << y_c << o_c << endl;
-              assert(false);
-            }
+        if (!FixedBits::equals(x_c, x) || !FixedBits::equals(y_c, y) || !FixedBits::equals(o_c, output))
+          {
+          cerr << x << y << output << endl;
+          cerr << x_c << y_c << o_c << endl;
+          assert(false);
+          }
         }
 #endif
 
