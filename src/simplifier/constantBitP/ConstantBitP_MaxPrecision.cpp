@@ -442,8 +442,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind, STP
         bool timeout = false;
         MinisatCore<Minisat::Solver> newS(timeout);
 
-        ToSATAIG tosat(beev);
-        tosat.setArrayTransformer(&at);
+        ToSATAIG tosat(beev,&at);
 
         SATSolver::vec_literals satSolverClause;
 

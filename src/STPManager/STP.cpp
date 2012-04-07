@@ -564,8 +564,7 @@ namespace BEEV {
           simplified_solved_InputToSAT = bm->ASTFalse;
       }
 
-    ToSATAIG toSATAIG(bm, cb);
-    toSATAIG.setArrayTransformer(arrayTransformer);
+    ToSATAIG toSATAIG(bm, cb, arrayTransformer);
 
     ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : ((ToSAT*) &toSATAIG) ;
 

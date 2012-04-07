@@ -44,35 +44,30 @@ namespace BEEV
     {
         count = 0;
         first = true;
-        arrayTransformer = NULL;
     }
 
     static int cnf_calls;
 
   public:
-
-    void setArrayTransformer(ArrayTransformer *at)
-    {
-        arrayTransformer = at;
-    }
-
     bool cbIsDestructed()
     {
     	return cb == NULL;
     }
 
-    ToSATAIG(STPMgr * bm) :
+    ToSATAIG(STPMgr * bm , ArrayTransformer *at) :
       ToSATBase(bm), toCNF(bm->UserFlags)
     {
       cb = NULL;
       init();
+      arrayTransformer = at;
     }
 
-    ToSATAIG(STPMgr * bm, simplifier::constantBitP::ConstantBitPropagation* cb_) :
+    ToSATAIG(STPMgr * bm, simplifier::constantBitP::ConstantBitPropagation* cb_, ArrayTransformer *at ) :
     	ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
     {
       cb = cb_;
       init();
+      arrayTransformer = at;
     }
 
     ~ToSATAIG();

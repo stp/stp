@@ -32,8 +32,7 @@ main(int argc, char ** argv)
   Simplifier *simp = new Simplifier(mgr);
   ArrayTransformer * at = new ArrayTransformer(mgr, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr);
-  tosat->setArrayTransformer(at);
+  ToSATAIG* tosat = new ToSATAIG(mgr,at);
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
