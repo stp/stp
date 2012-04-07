@@ -167,7 +167,7 @@ namespace BEEV
           fromTo.insert(make_pair(n, r));
         }
 
-      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv",""))
+      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","1"))
       {
         HASHMAP <intptr_t ,ASTNode> nodeToFn;
         typename map<ASTNode, BBNode>::iterator it;
@@ -203,7 +203,7 @@ namespace BEEV
       }
 
       typedef HASHMAP<vector<BBNode>, ASTNode,BBVecHasher <BBNode>, BBVecEquals<BBNode> > M;
-      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv",""))
+      if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","1"))
         {
           M lookup;
           typename std::map<ASTNode, vector<BBNode> >::iterator it;
@@ -791,7 +791,7 @@ namespace BEEV
             results.push_back(BBTerm(term[i], support));
 
           const int bitWidth = term[0].GetValueWidth();
-          std::vector<list<BBNode> > products(bitWidth);
+          std::vector<list<BBNode> > products(bitWidth+1);
           for (int i = 0; i < bitWidth; i++)
             {
             for (int j = 0; j < results.size(); j++)
