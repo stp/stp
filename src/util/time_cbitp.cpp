@@ -10,7 +10,7 @@
 #include "../AST/ASTKind.h"
 #include "../STPManager/STPManager.h"
 #include "../cpp_interface/cpp_interface.h"
-
+#include <list>
 
 using namespace std;
 using simplifier::constantBitP::FixedBits;
@@ -21,8 +21,6 @@ const int iterations = 100000;
 const unsigned bitWidth = 64;
 
 BEEV::STPMgr* beev;
-
-
 
 
 class Stopwatch
@@ -37,11 +35,12 @@ public:
 		clock_t total = clock() - start;
 		cerr << "ticks: " << total << " " << (float(total) / CLOCKS_PER_SEC) << "s" << endl;
 	}
-	void stop2()
+	clock_t stop2()
 	{
 		clock_t total = clock() - start;
-	   cerr.setf(ios::fixed);
-		cerr << setprecision(2)  <<  (float(total) / CLOCKS_PER_SEC) << "s";
+		return total;
+	   //cerr.setf(ios::fixed);
+//		cerr << setprecision(2)  <<  (float(total) / CLOCKS_PER_SEC) << "s";
 	}
 
 private:
@@ -147,47 +146,93 @@ void run(Result(*transfer)(vector<FixedBits*>&, FixedBits&), const int probabili
 	return;
 }
 
-void runSimple(Result(*transfer)(vector<FixedBits*>&, FixedBits&), const int probabilityOfFixing, ostream& output)
+struct Relation
 {
-	Stopwatch s;
+  FixedBits a,b,output;
+  int initial;
+  Relation(FixedBits a_, FixedBits b_, FixedBits output_)
+  : a(a_), b(b_), output(output_)
+  {
+    initial = a.countFixed() + b.countFixed() + output.countFixed();
+  }
 
-	int conflicts = 0;
+};
 
-	MTRand rand;
+void
+runSimple(Result
+(*transfer)(vector<FixedBits*>&, FixedBits&), const int probabilityOfFixing, ostream& output, Kind k)
+{
 
-	int initially_fixed = 0;
-	int finally_fixed = 0;
+  int conflicts = 0;
 
-	for (int i = 0; i < iterations; i++)
-	{
-		vector<FixedBits*> children;
+  MTRand rand;
 
-		FixedBits a = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
-		FixedBits b = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
-		FixedBits output = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
+  int initially_fixed = 0;
+  int finally_fixed = 0;
 
-		int initial =  a.countFixed() + b.countFixed() + output.countFixed();
+  list<Relation> relations;
 
+  for (int i = 0; i < iterations; i++)
+    {
+    FixedBits a = FixedBits::createRandom(bitWidth, 100, rand);
+    FixedBits b = FixedBits::createRandom(bitWidth, 100, rand);
 
-		children.push_back(&a);
-		children.push_back(&b);
+    assert(a.isTotallyFixed());
+    assert(b.isTotallyFixed());
+    ASTVec c;
+    c.push_back(beev->CreateBVConst(a.GetBVConst(), bitWidth));
+    c.push_back(beev->CreateBVConst(b.GetBVConst(), bitWidth));
+    ASTNode result = NonMemberBVConstEvaluator(beev, k, c, bitWidth);
+    FixedBits output = FixedBits::concreteToAbstract(result);
 
-		Result r = transfer(children, output);
+    for (int i = 0; i < a.getWidth(); i++)
+      {
+      if (rand.randInt() % 100 >= probabilityOfFixing)
+        a.setFixed(i, false);
+      if (rand.randInt() % 100 >= probabilityOfFixing)
+        b.setFixed(i, false);
+      }
+    for (int i = 0; i < output.getWidth(); i++)
+      if (rand.randInt() % 100 >= probabilityOfFixing)
+        output.setFixed(i, false);
 
-		if (r == CONFLICT)
-			conflicts++;
-		else
-		  {
-	                finally_fixed += a.countFixed() + b.countFixed() + output.countFixed();
-	                initially_fixed += initial;
-		  }
-	}
+    Relation r(a, b, output);
+    relations.push_back(r);
+    }
 
-	output << "&";
-	s.stop2();
-	output <<  "& " << conflicts << " &" << finally_fixed-initially_fixed <<   endl;
+  Stopwatch s;
 
-	return;
+  for (int i = 0; i < iterations; i++)
+    {
+
+    Relation& rel = relations.back();
+    FixedBits& a = rel.a;
+    FixedBits& b = rel.b;
+    FixedBits& output = rel.output;
+
+    vector<FixedBits*> children;
+    children.push_back(&a);
+    children.push_back(&b);
+
+    Result r = transfer(children, output);
+
+    assert(r != CONFLICT);
+
+    const int final = a.countFixed() + b.countFixed() + output.countFixed();
+    assert(final >= rel.initial);
+    finally_fixed += final;
+    initially_fixed += rel.initial;
+
+    relations.pop_back();
+    }
+
+  clock_t t = s.stop2();
+
+  cerr.setf(ios::fixed);
+  cerr << "&" << setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
+  output << " &" << initially_fixed << " & " << finally_fixed-initially_fixed << endl;
+
+  return;
 }
 
 
@@ -225,30 +270,16 @@ simplifier::constantBitP::Result multiply(vector<FixedBits*>& children,
 }
 
 //
-void run_with_various_prob (Result(*transfer)(vector<FixedBits*>&, FixedBits&), ostream& output)
+void run_with_various_prob (Result(*transfer)(vector<FixedBits*>&, FixedBits&), ostream& output, Kind kind =UNDEFINED)
 {
         int prob;
 
-        for (int i = 0; i <= 2; i++)
-        {
-                if (i == 0)
-                        prob = 1;
-                if (i == 1)
-                        prob = 5;
-                if (i==2)
-                        prob = 50;
-
-               // output  << prob;
-                runSimple(transfer, prob, cerr);
-        }
+        runSimple(transfer, 1, cerr,kind);
+        runSimple(transfer, 5, cerr,kind);
+        runSimple(transfer, 50, cerr,kind);
         output << "\\\\" << endl;
 }
 
-simplifier::constantBitP::Result no_op(vector<FixedBits*>& children,
-                FixedBits& output)
-{
-  return NO_CHANGE;
-}
 
 int
 main(void)
@@ -263,47 +294,53 @@ main(void)
 
   ostream& output = cerr;
 
-  output << "no_op&" << endl;
-  run_with_various_prob(no_op, output);
+  output << "signed greater than equals" << endl;
+  run_with_various_prob(&bvSignedGreaterThanEqualsBothWays, output,BVSGE);
 
-  output << "bit-vector xor&" << endl;
-  run_with_various_prob(bvXorBothWays, output);
+  output << "unsigned less than" << endl;
+  run_with_various_prob(&bvLessThanBothWays, output,BVLT);
 
-  output << "bit-vector or&" << endl;
-  run_with_various_prob(bvOrBothWays, output);
+  output << "equals" << endl;
+  run_with_various_prob(bvEqualsBothWays, output,EQ);
 
-  output << "bit-vector and&" << endl;
-  run_with_various_prob(bvAndBothWays, output);
+  output << "bit-vector xor" << endl;
+  run_with_various_prob(bvXorBothWays, output,BVXOR);
 
-  output << "right shift&" << endl;
-  run_with_various_prob(bvRightShiftBothWays, output);
+  output << "bit-vector or" << endl;
+  run_with_various_prob(bvOrBothWays, output,BVOR);
 
-  output << "left shift&" << endl;
-  run_with_various_prob(bvLeftShiftBothWays, output);
+  output << "bit-vector and" << endl;
+  run_with_various_prob(bvAndBothWays, output,BVAND);
 
-  output << "arithmetic shift&" << endl;
-  run_with_various_prob(bvArithmeticRightShiftBothWays, output);
+  output << "right shift" << endl;
+  run_with_various_prob(bvRightShiftBothWays, output, BVRIGHTSHIFT);
 
-  output << "addition&" << endl;
-  run_with_various_prob(bvAddBothWays, output);
+  output << "left shift" << endl;
+  run_with_various_prob(bvLeftShiftBothWays, output, BVLEFTSHIFT);
 
-  output << "multiplication&" << endl;
-  run_with_various_prob(multiply, output);
+  output << "arithmetic shift" << endl;
+  run_with_various_prob(bvArithmeticRightShiftBothWays, output, BVSRSHIFT);
 
-  output << "unsigned division&" << endl;
-  run_with_various_prob(unsignedDivision, output);
+  output << "addition" << endl;
+  run_with_various_prob(bvAddBothWays, output, BVPLUS);
 
-  output << "unsigned remainder&" << endl;
-  run_with_various_prob(signedRemainder, output);
+  output << "multiplication" << endl;
+  run_with_various_prob(multiply, output, BVMULT);
 
-  output << "signed division&" << endl;
-  run_with_various_prob(signedDivision, output);
+  output << "unsigned division" << endl;
+  run_with_various_prob(unsignedDivision, output, BVDIV);
 
-  output << "signed remainder&" << endl;
-  run_with_various_prob(signedRemainder, output);
+  output << "unsigned remainder" << endl;
+  run_with_various_prob(signedRemainder, output, BVMOD);
+
+  output << "signed division" << endl;
+  run_with_various_prob(signedDivision, output, SBVDIV);
+
+  output << "signed remainder" << endl;
+  run_with_various_prob(signedRemainder, output, SBVREM);
 
   output << "%" << "iterations" << iterations;
-  output << "%" << "bit-width" << iterations;
+  output << "%" << "bit-width" << bitWidth;
   return 1;
 }
 
