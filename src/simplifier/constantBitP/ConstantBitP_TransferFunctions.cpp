@@ -40,6 +40,7 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 			if (a.getValue(i) != b.getValue(i))
 			{
 				definatelyFalse = true;
+				break;
 			}
 			else
 			{
@@ -111,7 +112,7 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 	{
 		int unknown = 0;
 
-		for (int i = 0; i < childWidth; i++)
+		for (int i = 0; i < childWidth && unknown < 2; i++)
 		{
 			if (!a.isFixed(i))
 				unknown++;
