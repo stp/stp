@@ -21,6 +21,9 @@
 #include "../STPManager/STP.h"
 #include "../cpp_interface/cpp_interface.h"
 
+#include "StopWatch.h"
+#include "Relations.h"
+
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
@@ -379,9 +382,6 @@ namespace simplifier
     runSomeRandom(Result
     (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind, int prob)
     {
-      MTRand mtrand(1);
-      srand(0);
-
       vector<FixedBits*> children;
 
       int conflicts =0;
@@ -390,36 +390,49 @@ namespace simplifier
       int max =0;
 
       int count = 1000;
-      long st = getCurrentTime();
-	   const int width =32;
+      const int width =32;
 
-      for (int i = 0; i < count; i++)
+      Relations r(count,width,kind, beev, prob);
+
+      Stopwatch s;
+      list<Relations::Relation>::iterator it = r.relations.begin();
+      while(it != r.relations.end())
         {
+        Relations::Relation& rel = *it;
+        FixedBits& a = rel.a;
+        FixedBits& b = rel.b;
+        FixedBits& output = rel.output;
+
         children.clear();
-        FixedBits a = FixedBits::createRandom(width, prob, mtrand);
         children.push_back(&a);
-        FixedBits b = FixedBits::createRandom(width, prob, mtrand);
         children.push_back(&b);
-        FixedBits output = FixedBits::createRandom(width, prob, mtrand);
 
         Detail d;
         bool imprecise = false;
         if (kind == BVDIV || kind == BVMULT || kind == BVMOD || kind == SBVDIV || kind == SBVREM)
           imprecise = true;
         checkEqual(children, output, transfer, kind, imprecise,d);
-        if (d.conflict)
-          conflicts++;
-        else
-          {
-            initial += d.initial;
-            transferC += d.transferFixed;
-            max += d.maxFixed;
-          }
+
+        assert(!d.conflicts);
+
+        initial += d.initial;
+        transferC += d.transferFixed;
+        max += d.maxFixed;
+
+        it++;
         }
 
+      assert(max >= transferC);
+      assert(transferC >= initial);
+
+      int percent = 100* ((float)transferC - initial) / (max - initial);
+      if ((max-initial) ==0)
+        percent = 100;
+      clock_t t = s.stop2();
       cerr.setf(ios::fixed);
       cerr << "% Count" << count << " prob" << prob << " bits" << width << endl;
-      cerr << setprecision(2) << (getCurrentTime() - st)/1000.0 << "s&" << conflicts << "&" << initial << "&" << transferC << "&" << max << endl;
+      cerr << "&" << setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
+      cerr << "&" << initial << "&" << transferC << "&" << max << "&" << percent << "\\%\n" ;
 
       return;
     }
@@ -699,11 +712,33 @@ void
 go(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
 {
     runSomeRandom(transfer, kind, 1 );
-    cerr << "&";
     runSomeRandom(transfer, kind, 5 );
-    cerr << "&";
     runSomeRandom(transfer, kind, 50 );
     cerr << "\\\\";
+}
+
+void g()
+{
+        FixedBits a(3,false);
+        FixedBits b(3,false);
+        a.setFixed(0,true);
+        a.setValue(0,true);
+
+        b.setFixed(1,true);
+        b.setValue(1,true);
+
+        vector<FixedBits*> c;
+        c.push_back(&a);
+        c.push_back(&b);
+
+        FixedBits output(3,false);
+        output.setFixed(0,true);
+        output.setValue(0,true);
+        output.setFixed(2,true);
+        output.setValue(2,true);
+
+
+        multiply(c,output);
 }
 
 
@@ -727,40 +762,49 @@ main(void)
 
   if (true)
     {
-      output << "bit-vector or&" << endl;
+    output << "signed greater than equals" << endl;
+    go(&bvSignedGreaterThanEqualsBothWays, BVSGE);
+
+    output << "unsigned less than" << endl;
+    go(&bvLessThanEqualsBothWays, BVLT);
+
+    output << "equals" << endl;
+    go(&bvEqualsBothWays, EQ);
+
+    output << "bit-vector xor" << endl;
+    go(&bvXorBothWays, BVXOR);
+
+    output << "bit-vector or" << endl;
       go(&bvOrBothWays, BVOR);
 
-      output << "bit-vector xor&" << endl;
-      go(&bvXorBothWays, BVXOR);
-
-      output << "bit-vector and&" << endl;
+      output << "bit-vector and" << endl;
       go(&bvAndBothWays, BVAND);
 
-      output << "right shift&" << endl;
+      output << "right shift" << endl;
       go(&bvRightShiftBothWays, BVRIGHTSHIFT);
 
-      output << "left shift&" << endl;
+      output << "left shift" << endl;
       go(&bvLeftShiftBothWays, BVLEFTSHIFT);
 
-      output << "arithmetic shift&" << endl;
+      output << "arithmetic shift" << endl;
       go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
 
-      output << "addition&" << endl;
+      output << "addition" << endl;
       go(&bvAddBothWays, BVPLUS);
 
-      output << "multiplication&" << endl;
+      output << "multiplication" << endl;
       go(&multiply, BVMULT);
 
-      output << "unsigned division&" << endl;
+      output << "unsigned division" << endl;
       go(&unsignedDivide, BVDIV);
 
-      output << "unsigned remainder&" << endl;
+      output << "unsigned remainder" << endl;
       go(&unsignedModulus, BVMOD);
 
-      output << "signed division&" << endl;
+      output << "signed division" << endl;
       go(&signedDivide, SBVDIV);
 
-      output << "signed remainder&" << endl;
+      output << "signed remainder" << endl;
       go(&signedRemainder, SBVREM);
 
       exit(1);

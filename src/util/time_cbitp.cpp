@@ -12,40 +12,20 @@
 #include "../cpp_interface/cpp_interface.h"
 #include <list>
 
+#include "StopWatch.h"
+#include "Relations.h"
+
 using namespace std;
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
 
-const int iterations = 100000;
+const int iterations = 500000;
 const unsigned bitWidth = 64;
 
 BEEV::STPMgr* beev;
 
 
-class Stopwatch
-{
-public:
-	Stopwatch() :
-		start(std::clock())
-	{
-	}
-	void stop()
-	{
-		clock_t total = clock() - start;
-		cerr << "ticks: " << total << " " << (float(total) / CLOCKS_PER_SEC) << "s" << endl;
-	}
-	clock_t stop2()
-	{
-		clock_t total = clock() - start;
-		return total;
-	   //cerr.setf(ios::fixed);
-//		cerr << setprecision(2)  <<  (float(total) / CLOCKS_PER_SEC) << "s";
-	}
-
-private:
-	std::clock_t start;
-};
 
 
 
@@ -146,18 +126,6 @@ void run(Result(*transfer)(vector<FixedBits*>&, FixedBits&), const int probabili
 	return;
 }
 
-struct Relation
-{
-  FixedBits a,b,output;
-  int initial;
-  Relation(FixedBits a_, FixedBits b_, FixedBits output_)
-  : a(a_), b(b_), output(output_)
-  {
-    initial = a.countFixed() + b.countFixed() + output.countFixed();
-  }
-
-};
-
 void
 runSimple(Result
 (*transfer)(vector<FixedBits*>&, FixedBits&), const int probabilityOfFixing, ostream& output, Kind k)
@@ -165,47 +133,17 @@ runSimple(Result
 
   int conflicts = 0;
 
-  MTRand rand;
-
   int initially_fixed = 0;
   int finally_fixed = 0;
 
-  list<Relation> relations;
-
-  for (int i = 0; i < iterations; i++)
-    {
-    FixedBits a = FixedBits::createRandom(bitWidth, 100, rand);
-    FixedBits b = FixedBits::createRandom(bitWidth, 100, rand);
-
-    assert(a.isTotallyFixed());
-    assert(b.isTotallyFixed());
-    ASTVec c;
-    c.push_back(beev->CreateBVConst(a.GetBVConst(), bitWidth));
-    c.push_back(beev->CreateBVConst(b.GetBVConst(), bitWidth));
-    ASTNode result = NonMemberBVConstEvaluator(beev, k, c, bitWidth);
-    FixedBits output = FixedBits::concreteToAbstract(result);
-
-    for (int i = 0; i < a.getWidth(); i++)
-      {
-      if (rand.randInt() % 100 >= probabilityOfFixing)
-        a.setFixed(i, false);
-      if (rand.randInt() % 100 >= probabilityOfFixing)
-        b.setFixed(i, false);
-      }
-    for (int i = 0; i < output.getWidth(); i++)
-      if (rand.randInt() % 100 >= probabilityOfFixing)
-        output.setFixed(i, false);
-
-    Relation r(a, b, output);
-    relations.push_back(r);
-    }
+  Relations r(iterations,bitWidth,k, beev, probabilityOfFixing);
 
   Stopwatch s;
 
-  for (int i = 0; i < iterations; i++)
+  list<Relations::Relation>::iterator it = r.relations.begin();
+  while(it != r.relations.end())
     {
-
-    Relation& rel = relations.back();
+    Relations::Relation& rel = *it;
     FixedBits& a = rel.a;
     FixedBits& b = rel.b;
     FixedBits& output = rel.output;
@@ -223,7 +161,7 @@ runSimple(Result
     finally_fixed += final;
     initially_fixed += rel.initial;
 
-    relations.pop_back();
+    it++;
     }
 
   clock_t t = s.stop2();
