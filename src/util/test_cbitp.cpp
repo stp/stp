@@ -342,7 +342,7 @@ namespace simplifier
 
           {
 
-          for (long j = 0; j < pow((double)3, totalLength); j++)
+          for (long j = 0; j < pow(3, totalLength); j++)
             {
             FixedBits output(resultLength, signature.resultType == BOOL_TYPE);
 
@@ -413,7 +413,7 @@ namespace simplifier
           imprecise = true;
         checkEqual(children, output, transfer, kind, imprecise,d);
 
-        assert(!d.conflicts);
+        assert(!d.conflict);
 
         initial += d.initial;
         transferC += d.transferFixed;
@@ -465,7 +465,7 @@ namespace simplifier
       lengths.push_back(resultLength);
       totalLength += resultLength;
 
-      for (long j = 0; j < pow((double)3, totalLength); j++)
+      for (long j = 0; j < pow(3, totalLength); j++)
         {
         int current = j;
 
@@ -560,10 +560,10 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
   const int numberOfInputParams = 2;
 
   assert(numberOfInputParams >0);
-  const int mask = pow((double)2, bitwidth) - 1;
+  const int mask = pow(2, bitwidth) - 1;
 
   // Create all the possible inputs, and apply the function.
-  for (int i = 0; i < pow((double)2, bitwidth * numberOfInputParams); i++)
+  for (int i = 0; i < pow(2, bitwidth * numberOfInputParams); i++)
     {
     D d;
     d.a = i & mask;
@@ -598,7 +598,7 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
   FixedBits empty(bitwidth, false);
   FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(bitwidth, false);
 
-  const int to_iterate = pow((double)3, totalLength);
+  const int to_iterate = pow(3, totalLength);
   for (long j = 0; j < to_iterate; j++)
     {
     int current = j;
