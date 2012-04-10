@@ -273,9 +273,49 @@ namespace simplifier
       return NOT_IMPLEMENTED;
     }
 
+    Result
+    trailingOneReasoning_OLD(FixedBits& x, FixedBits&y, FixedBits& output);
+
+
+    // Remove from x any trailing "boths", that don't have support in y and output.
+        Result
+        trailingOneReasoning(FixedBits& x, FixedBits&y, FixedBits& output)
+        {
+          Result r = NO_CHANGE;
+
+          const int bitwidth = output.getWidth();
+
+          const int y_min = y.minimum_trailingOne();
+          const int y_max = y.maximum_trailingOne();
+
+          const int output_max = output.maximum_trailingOne();
+
+          for (int i = 0; i < bitwidth; i++)
+            {
+            if (x[i] == '0')
+              continue;
+
+            if (x[i] == '1')
+              break;
+
+            for (int j = y_min; j <= std::min(y_max, output_max); j++)
+              {
+                if (j + i >= bitwidth || (y[j] != '0' && output[i + j] != '0'))
+                  return r;
+              }
+
+              x.setFixed(i, true);
+              x.setValue(i, false);
+              r = CHANGED;
+            }
+
+          assert(trailingOneReasoning_OLD(x,y,output) == NO_CHANGE);
+          return r;
+        }
+
 // Remove from x any trailing "boths", that don't have support in y and output.
     Result
-    trailingOneReasoning(FixedBits& x, FixedBits&y, FixedBits& output)
+    trailingOneReasoning_OLD(FixedBits& x, FixedBits&y, FixedBits& output)
     {
       Result r = NO_CHANGE;
 
