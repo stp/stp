@@ -737,8 +737,7 @@ startup()
   simp = new Simplifier(mgr);
   ArrayTransformer * at = new ArrayTransformer(mgr, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr);
-  tosat->setArrayTransformer(at);
+  ToSATAIG* tosat = new ToSATAIG(mgr,at);
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
@@ -779,8 +778,7 @@ clearSAT()
   ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
 
   delete GlobalSTP->tosat;
-  ToSATAIG* aig = new ToSATAIG(mgr);
-  aig->setArrayTransformer(GlobalSTP->arrayTransformer);
+  ToSATAIG* aig = new ToSATAIG(mgr,GlobalSTP->arrayTransformer);
   GlobalSTP->tosat = aig;
 }
 
@@ -796,6 +794,7 @@ isConstantToSat(const ASTNode & query)
   ASTNode query2 = nf->CreateNode(NOT, query);
 
   assert(ss->nClauses() ==0);
+  mgr->AddQuery(mgr->ASTUndefined);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(*ss, query2, query2, GlobalSTP->tosat, false);
 
   return (r == SOLVER_VALID); // unsat, always true
@@ -1916,7 +1915,8 @@ expandRules(int timeout_ms, const char* fileName = "")
         continue;
       if ((*it).timedCheck(to_run,bad))
         {
-          it->writeOut(cout); // omit succeeded.
+          // NB. only writes out rules that have used less time than specified.
+          it->writeOut(cout);
         }
     }
 }
