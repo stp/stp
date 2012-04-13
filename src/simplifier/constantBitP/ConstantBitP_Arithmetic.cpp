@@ -212,12 +212,115 @@ void printArray(int f[], int width)
 	std::cerr << std::endl;
 }
 
+void setValue(FixedBits& a, const int i, bool v)
+{
+  if (a.isFixed(i))
+      return;
+
+  a.setFixed(i,true);
+  a.setValue(i,v);
+}
+
+// Specialisation for two operands.
+    Result
+    bvAddBothWays(FixedBits& x, FixedBits& y, FixedBits& output)
+    {
+      const int bitWidth = output.getWidth();
+      FixedBits carry(bitWidth + 1, false);
+      carry.setFixed(0, true);
+      carry.setValue(0, false);
+
+      //cerr << "input" << x << y << output << endl;
+
+      for (int i = 0; i < bitWidth; i++)
+        {
+        //cerr << i << ":"<< x[i] << y[i] << carry[i] << "=" << output[i]<< endl;
+
+        int lb = (x[i] == '1' ? 1 : 0) + (y[i] == '1' ? 1 : 0) + (carry[i] == '1' ? 1 : 0);
+        int ub = (x[i] == '0' ? 0 : 1) + (y[i] == '0' ? 0 : 1) + (carry[i] == '0' ? 0 : 1);
+
+        const int lb_initial = lb;
+        const int ub_initial = ub;
+
+        if (carry[i+1] == '1') // carry out is true.
+          lb = std::max(2, lb);
+
+        if (carry[i+1] == '0') // carry out is false.
+          ub = std::min(1, ub);
+
+        const char output_i = output[i];
+        if (output_i == '1' && (lb % 2 == 0))
+          lb++;
+
+        if (output_i == '0' && (lb % 2 == 1))
+          lb++;
+
+        if (output_i == '1' && (ub % 2 == 0))
+          ub--;
+
+        if (output_i == '0' && (ub % 2 == 1))
+          ub--;
+
+        if (lb >= 2)
+          setValue(carry, i+1, true);
+
+        if (ub <= 1)
+          setValue(carry, i+1, false);
+
+        if (ub < lb)
+          return CONFLICT;
+
+        if (lb == ub)
+          {
+            setValue(output, i, ((lb % 2) == 1));
+
+            if (lb_initial  ==lb)
+              {
+                if (!x.isFixed(i))
+                  setValue(x, i, false);
+                if (!y.isFixed(i))
+                  setValue(y, i, false);
+                if (!carry.isFixed(i))
+                  {
+                  setValue(carry, i, false);
+                  i = std::max(i-2,-1); // go back to the prior column.
+                  continue;
+                  }
+              }
+
+            if (ub_initial ==lb)
+              {
+                if (!x.isFixed(i))
+                  setValue(x, i, true);
+                if (!y.isFixed(i))
+                  setValue(y, i, true);
+                if (!carry.isFixed(i))
+                  {
+                  setValue(carry, i, true);
+                  i = std::max(i-2,-1); // go back to the prior column.
+                  continue;
+                  }
+
+              }
+          }
+        //cerr << i << "[" << ub << ":" << lb << "]" << endl;
+        }
+
+      return NOT_IMPLEMENTED;
+    }
+
 Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
-	Result result = NO_CHANGE;
+        const int numberOfChildren = children.size();
+        if (numberOfChildren==2)
+        {
+          return bvAddBothWays(*children[0],*children[1],output);
+        }
+
+        Result result = NO_CHANGE;
 
 	const int bitWidth = output.getWidth();
-	const int numberOfChildren = children.size();
+
 
 	for (int i = 0; i < numberOfChildren; i++)
 	{
