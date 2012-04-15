@@ -402,21 +402,24 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 		}
 
 		{
-			Result r1 = fix(a, minTop, maxTop);
-			r1 = merge(r1,fix(a, minTop, maxTop));
+                Result r1 = fix(a, minTop, maxTop);
+                if (r1 == CHANGED)
+                  r1 = merge(r1,fix(a, minTop, maxTop));
 
-			Result r2 = fix(b, minBottom, maxBottom);
-			// We call is a second time because it's not idepotent..
-			r2 = merge(r2,fix(b, minBottom, maxBottom));
+                Result r2 = fix(b, minBottom, maxBottom);
+                if (r2 == CHANGED) // We call is a second time because it's not idepotent..
+                  r2 = merge(r2,fix(b, minBottom, maxBottom));
 
-			Result r3;
-			if (whatIs == QUOTIENT_IS_OUTPUT)
-			  {
-			    r3 = fix(output, minQuotient, maxQuotient);
-			    r3 = merge(r3,fix(output, minQuotient, maxQuotient));
-			  }
-			else
-				r3 = fix(output, minRemainder, maxRemainder);
+                Result r3;
+                if (whatIs == QUOTIENT_IS_OUTPUT)
+                  {
+                    r3 = fix(output, minQuotient, maxQuotient);
+                    if (r3 == CHANGED)
+                      r3 = merge(r3,fix(output, minQuotient, maxQuotient));
+                  }
+                else
+                        r3 = fix(output, minRemainder, maxRemainder);
+
 
 			if (r1 == CONFLICT || r2 == CONFLICT || r3 == CONFLICT)
 			{
