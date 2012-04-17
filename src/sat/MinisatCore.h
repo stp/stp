@@ -54,6 +54,11 @@ namespace BEEV
     virtual lbool undef_literal()  {return ((uint8_t)2);}
 
     virtual int nClauses();
+
+    bool unitPropagate(const vec_literals& ps)
+    {
+      return s->unitPropagate(ps);
+    }
   };
 }
 ;

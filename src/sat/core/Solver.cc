@@ -747,6 +747,66 @@ static double luby(double y, int x){
     return pow(y, seq);
 }
 
+bool Solver::unitPropagate(  const vec<Lit>& assumps)
+{
+  model.clear();
+  conflict.clear();
+
+  ok = true;
+
+  assert(assumptions.size() == 0);
+  assert(decisionLevel()== 0);
+
+  // None of the values should be known.
+  for (int i = 0; i < nVars(); i++)
+    {
+    assert(value(i) == l_Undef);
+    }
+
+
+  assumps.copyTo(assumptions);
+
+  while (decisionLevel() < assumptions.size())
+    {
+      // Perform user provided assumption:
+      Lit p = assumptions[decisionLevel()];
+      if (value(p) == l_True){
+          // Dummy decision level:
+          newDecisionLevel();
+      }else if (value(p) == l_False){
+          analyzeFinal(~p, conflict);
+          ok =false;
+          break;
+      }else{
+          newDecisionLevel();
+          uncheckedEnqueue(p);
+          if (propagate() != CRef_Undef)
+            {
+            ok =false;
+            break;
+            }
+      }
+  }
+
+  if (ok)
+    {
+      // Extend & copy model:
+      model.growTo(nVars());
+      for (int i = 0; i < nVars(); i++) model[i] = value(i);
+    }
+
+  cancelUntil(0);
+  assumptions.clear();
+
+  for (int i = 0; i < nVars(); i++)
+    {
+    assert(value(i) == l_Undef);
+    }
+
+  return ok;
+}
+
+
 // NOTE: assumptions passed in member-variable 'assumptions'.
 lbool Solver::solve_()
 {
@@ -799,11 +859,18 @@ lbool Solver::solve_()
 
 static Var mapVar(Var x, vec<Var>& map, Var& max)
 {
-    if (map.size() <= x || map[x] == -1){
+  if (max < x+1)
+    max =x+1;
+  return x;
+
+/*
+
+   if (map.size() <= x || map[x] == -1){
         map.growTo(x+1, -1);
         map[x] = max++;
     }
     return map[x];
+    */
 }
 
 
@@ -826,6 +893,7 @@ void Solver::toDimacs(const char *file, const vec<Lit>& assumps)
     toDimacs(f, assumps);
     fclose(f);
 }
+
 
 
 void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
