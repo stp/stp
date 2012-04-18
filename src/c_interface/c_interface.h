@@ -279,6 +279,7 @@ extern "C" {
   Expr vc_sbvDivExpr(VC vc, int n_bits, Expr left, Expr right);
   // signed left modulo right i.e. left%right
   Expr vc_sbvModExpr(VC vc, int n_bits, Expr left, Expr right);
+  Expr vc_sbvRemExpr(VC vc, int n_bits, Expr left, Expr right);
 
   Expr vc_bvLtExpr(VC vc, Expr left, Expr right);
   Expr vc_bvLeExpr(VC vc, Expr left, Expr right);
@@ -298,6 +299,12 @@ extern "C" {
   Expr vc_bvXorExpr(VC vc, Expr left, Expr right);
   Expr vc_bvNotExpr(VC vc, Expr child);
 
+  // Shift an expression by another expression. This is newstyle.
+  Expr vc_bvLeftShiftExprExpr(VC vc, int n_bits, Expr left, Expr right);
+  Expr vc_bvRightShiftExprExpr(VC vc, int n_bits,  Expr left, Expr right);
+  Expr vc_bvSignedRightShiftExprExpr(VC vc, int n_bits, Expr left, Expr right);
+
+  // These shifts are old-style. Kept for compatability---oldstyle.
   Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr child);
   Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr child);
   /* Same as vc_bvLeftShift only that the answer in 32 bits long */

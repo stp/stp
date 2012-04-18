@@ -1073,6 +1073,11 @@ Expr vc_sbvModExpr(VC vc, int n_bits, Expr left, Expr right) {
     return createBinaryTerm(vc, n_bits, BEEV::SBVREM, left, right);
 }
 
+Expr vc_sbvRemExpr(VC vc, int n_bits, Expr left, Expr right) {
+    return createBinaryTerm(vc, n_bits, BEEV::SBVMOD, left, right);
+}
+
+
 Expr vc_bv32MultExpr(VC vc, Expr left, Expr right) {
   return vc_bvMultExpr(vc, 32, left, right);
 }
@@ -1118,6 +1123,22 @@ Expr vc_sbvGtExpr(VC vc, Expr left, Expr right) {
 Expr vc_sbvGeExpr(VC vc, Expr left, Expr right) {
     return createBinaryNode(vc,BEEV::BVSGE,left,right);
 }
+
+Expr vc_bvLeftShiftExprExpr(VC vc, int n_bits, Expr left, Expr right)
+{
+  return createBinaryTerm(vc, n_bits,BEEV::BVLEFTSHIFT,left,right);
+}
+
+Expr vc_bvRightShiftExprExpr(VC vc, int n_bits,Expr left, Expr right)
+{
+  return createBinaryTerm(vc, n_bits,BEEV::BVRIGHTSHIFT,left,right);
+}
+
+Expr vc_bvSignedRightShiftExprExpr(VC vc,int n_bits, Expr left, Expr right)
+{
+  return createBinaryTerm(vc, n_bits,BEEV::BVSRSHIFT,left,right);
+}
+
 
 Expr vc_bvUMinusExpr(VC vc, Expr ccc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
