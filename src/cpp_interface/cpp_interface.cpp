@@ -1,4 +1,5 @@
 #include "cpp_interface.h"
+#include "../to-sat/AIG/ToSATAIG.h"
 
 namespace BEEV
 {
@@ -61,6 +62,25 @@ namespace BEEV
 
     (GlobalSTP->tosat)->PrintOutput(last_run.result);
     bm.GetRunTimes()->start(RunTimes::Parsing);
+  }
+
+  // This method sets up some of the globally required data.
+  Cpp_interface::Cpp_interface(STPMgr &bm_) :
+      bm(bm_), nf(bm_.defaultNodeFactory), letMgr(bm.ASTUndefined)
+  {
+    nf = bm.defaultNodeFactory;
+    startup();
+    BEEV::parserInterface = this;
+
+    Simplifier *simp = new Simplifier(&bm);
+    ArrayTransformer * at = new ArrayTransformer(&bm, simp);
+    AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(&bm, simp, at);
+    ToSATAIG* tosat = new ToSATAIG(&bm, at);
+
+    BEEV::ParserBM = &bm_;
+
+    GlobalSTP = new STP(&bm, simp, at, tosat, abs);
+    init();
   }
 }
 ;
