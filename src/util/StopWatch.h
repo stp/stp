@@ -33,4 +33,29 @@ private:
 };
 
 
+
+struct Stopwatch2
+{
+        Stopwatch2() :
+                elapsed(0), start_t(0)
+        {
+        }
+        void stop()
+        {
+                elapsed+= (clock() - start_t);
+                start_t =0;
+        }
+
+        void start()
+        {
+          assert(start_t ==0);
+          start_t =  clock();
+        }
+
+        std::clock_t elapsed;
+        std::clock_t start_t;
+};
+
+
+
 #endif /* STOPWATCH_H_ */
