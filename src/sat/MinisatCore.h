@@ -39,6 +39,12 @@ namespace BEEV
 
     virtual uint8_t modelValue(Var x) const;
 
+    uint8_t
+    value(Var x) const
+    {
+      return Minisat::toInt(s->value(x));
+    }
+
     virtual Var newVar();
 
     int setVerbosity(int v);

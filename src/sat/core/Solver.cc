@@ -747,14 +747,24 @@ static double luby(double y, int x){
     return pow(y, seq);
 }
 
+// NB. This method doesn't copy into the modelValue. You need to read the results
+// with value(). So you can't add any clauses to the SAT solver until you've
+// cancelleduntil(0)  --- which clears the values. Otherwise the results will be wrong.
+
 bool Solver::unitPropagate(  const vec<Lit>& assumps)
 {
   model.clear();
   conflict.clear();
 
+  remove_satisfied = false;
   ok = true;
 
-  assert(assumptions.size() == 0);
+  cancelUntil(0);
+  for (int i = 0; i < nVars(); i++)
+    {
+    assert(value(i) == l_Undef);
+    }
+
   assert(decisionLevel()== 0);
 
   // None of the values should be known.
@@ -763,7 +773,7 @@ bool Solver::unitPropagate(  const vec<Lit>& assumps)
     assert(value(i) == l_Undef);
     }
 
-
+  assumptions.clear();
   assumps.copyTo(assumptions);
 
   while (decisionLevel() < assumptions.size())
@@ -787,21 +797,6 @@ bool Solver::unitPropagate(  const vec<Lit>& assumps)
             }
       }
   }
-
-  if (ok)
-    {
-      // Extend & copy model:
-      model.growTo(nVars());
-      for (int i = 0; i < nVars(); i++) model[i] = value(i);
-    }
-
-  cancelUntil(0);
-  assumptions.clear();
-
-  for (int i = 0; i < nVars(); i++)
-    {
-    assert(value(i) == l_Undef);
-    }
 
   return ok;
 }
