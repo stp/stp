@@ -56,12 +56,7 @@ namespace BEEV
       assert(bm.getAssertLevel() == symbols.size());
     }
 
-  public:
-    LETMgr letMgr;
-    NodeFactory* nf;
-
-    Cpp_interface(STPMgr &bm_, NodeFactory* factory) :
-        bm(bm_), nf(factory), letMgr(bm.ASTUndefined)
+    void init()
     {
       assert(nf != NULL);
       alreadyWarned = false;
@@ -74,6 +69,20 @@ namespace BEEV
 
       print_success = false;
       ignoreCheckSatRequest=false;
+
+    }
+
+  public:
+    LETMgr letMgr;
+    NodeFactory* nf;
+
+    Cpp_interface(STPMgr &bm_);
+
+
+    Cpp_interface(STPMgr &bm_, NodeFactory* factory) :
+        bm(bm_), nf(factory), letMgr(bm.ASTUndefined)
+    {
+      init();
     }
 
     void
@@ -325,6 +334,12 @@ namespace BEEV
 
     void
     checkSat(const ASTVec & assertionsSMT2);
+
+    void
+    deleteGlobal()
+    {
+      delete GlobalSTP;
+    }
 
     void
     cleanUp()
