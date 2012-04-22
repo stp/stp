@@ -103,9 +103,35 @@ void destroy(CBV a, CBV b, CBV c, CBV d)
 	CONSTANTBV::BitVector_Destroy(d);
 }
 
+// Fast exit. Without creating min/max.
+bool
+fast_exit(FixedBits& c0, FixedBits& c1)
+{
+  for (int i = c0.getWidth() - 1; i >= 0; i--)
+    {
+      const char c_0 = c0[i];
+      const char c_1 = c1[i];
+
+      if (c_0 == '0')
+        {
+          if (c_1 == '0')
+            continue;
+        }
+      else if (c_0 == '1')
+        {
+          if (c_1 == '1')
+            continue;
+        }
+      else if (c_0 == '*' && c_1 == '*')
+        {
+          return true;
+        }
+      return false;
+    }
+}
+
+
 ///////// Signed operations.
-
-
 
 
 Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
@@ -113,6 +139,9 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 	Result r = NO_CHANGE;
 
 	assert(c0.getWidth() == c1.getWidth());
+
+	if (!output.isFixed(0) && fast_exit(c0,c1))
+          return NO_CHANGE;
 
 	CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
 	CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -257,11 +286,15 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 	return NOT_IMPLEMENTED;
 }
 
+
 Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 {
 	Result r = NO_CHANGE;
 
 	assert(c0.getWidth() == c1.getWidth());
+
+        if (!output.isFixed(0) && fast_exit(c0,c1))
+          return NO_CHANGE;
 
 	CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
 	CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -313,7 +346,7 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 		return bvSignedGreaterThanBothWays(c0, c1, t);
 	}
 
-	const int msb = c0.getWidth() - 1;
+       const int msb = c0.getWidth() - 1;
 
 	if (output.isFixed(0) && output.getValue(0))
 	{
@@ -415,6 +448,9 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 	Result r = NO_CHANGE;
 
 	assert(c0.getWidth() == c1.getWidth());
+
+        if (!output.isFixed(0) && fast_exit(c0,c1))
+          return NO_CHANGE;
 
 	CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
 	CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -524,6 +560,9 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 	Result r = NO_CHANGE;
 
 	assert(c0.getWidth() == c1.getWidth());
+
+        if (!output.isFixed(0) && fast_exit(c0,c1))
+          return NO_CHANGE;
 
 	CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
 	CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
