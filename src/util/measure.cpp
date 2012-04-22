@@ -193,8 +193,7 @@ go(Kind k, Result
 void
 work(int p)
 {
-  out << "\\begin{table*}[t]" << endl;
-  //out << "\\small" << endl;
+  out << "\\begin{table}[t]" << endl;
   out << "\\begin{center}" << endl;
   out << "\\begin{tabular}{|l| r|r|r|r|r|r|r| }" << endl;
   out << "\\hline" << endl;
@@ -218,9 +217,8 @@ work(int p)
   out << "\\caption{Comparison of unit propagation and bit-blasting at "<<  p <<  "\\%. ";
   out << iterations << " iterations at " << bits << " bits.}" << endl;
   out << "\\end{center}" << endl;
-  out << "\\end{table*}" << endl;
-
-}
+  out << "\\end{table}" << endl;
+  }
 
 int
 main()
@@ -228,12 +226,14 @@ main()
   mgr = new STPMgr;
   Cpp_interface interface(*mgr);
 
+  out << "\\begin{subtables}" << endl;
   work(1);
   work(5);
   work(50);
   work(95);
+  out << "\\end{subtables}" << endl;
 
-  cerr << "% Iterations:" << iterations << " bit-width:" << bits << endl;
+  out << "% Iterations:" << iterations << " bit-width:" << bits << endl;
 
 }
 
