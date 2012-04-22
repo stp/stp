@@ -215,7 +215,7 @@ work(int p)
   out << "\\hline" << endl;
   out << "\\end{tabular}" << endl;
   out << "\\caption{Comparison of unit propagation and bit-blasting at "<<  p <<  "\\%. ";
-  out << iterations << " iterations at " << bits << " bits.}" << endl;
+  out << iterations << " iterations at " << bits << " bits. \label{tbl:p"<< p << "}}}" << endl;
   out << "\\end{center}" << endl;
   out << "\\end{table}" << endl;
   }
@@ -225,6 +225,7 @@ main()
 {
   mgr = new STPMgr;
   Cpp_interface interface(*mgr);
+  mgr->UserFlags.division_by_zero_returns_one_flag=true;
 
   out << "\\begin{subtables}" << endl;
   work(1);
