@@ -8,6 +8,7 @@
 #include "Functions.h"
 #include "../printer/printers.h"
 #include "StopWatch.h"
+#include "BBAsProp.h"
 
 using namespace BEEV;
 
@@ -38,41 +39,11 @@ print(MinisatCore<Minisat::Solver> * ss, ASTNode i0, ToSAT::ASTNodeToSATVar& m)
 }
 
 void
-addToClauseCount(MinisatCore<Minisat::Solver> * ss, ASTNode i0, ToSAT::ASTNodeToSATVar& m, int & count)
-{
-  const int bits = std::max(1U, i0.GetValueWidth());
-  for (int i = bits - 1; i >= 0; i--)
-    {
-      SATSolver::lbool r = ss->value(m.find(i0)->second[i]);
-
-      if (r == ss->true_literal() || r == ss->false_literal())
-        count++;
-    }
-}
-
-void
 go(Kind k, Result
 (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 {
-  const bool term = is_Term_kind(k);
 
-  ASTNode i0 = mgr->CreateSymbol("i0", 0, bits);
-  ASTNode i1 = mgr->CreateSymbol("i1", 0, bits);
-
-  ASTNode r, p, eq;
-
-  if (term)
-    {
-      p = mgr->CreateTerm(k, bits, i0, i1);
-      r = mgr->CreateSymbol("r", 0, bits);
-      eq = mgr->CreateNode(EQ, p, r);
-    }
-  else
-    {
-      p = mgr->CreateNode(k, i0, i1);
-      r = mgr->CreateSymbol("r", 0, 0);
-      eq = mgr->CreateNode(IFF, p, r);
-    }
+  BBAsProp bbP(k,mgr,bits);
 
   Relations relations(iterations, bits, k, mgr, prob);
 
@@ -80,55 +51,18 @@ go(Kind k, Result
   int transfer = 0;
   int clause = 0;
 
-  MinisatCore<Minisat::Solver>* ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
-  ToSATAIG aig(mgr, GlobalSTP->arrayTransformer);
-  aig.CallSAT(*ss, eq, false);
-  ToSAT::ASTNodeToSATVar m = aig.SATVar_to_SymbolIndexMap();
-
   Stopwatch2 bb;
   Stopwatch2 prop;
 
   list<Relations::Relation>::iterator it = relations.relations.begin();
   while (it != relations.relations.end())
     {
-      //Relations::Relation rel =
       FixedBits& a = it->a;
       FixedBits& b = it->b;
       FixedBits& output = it->output;
 
-      SATSolver::vec_literals assumptions;
+      bbP.toAssumptions(a,b,output);
 
-      for (int i = 0; i < bits; i++)
-        {
-          if (a[i] == '1')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], false));
-            }
-          else if (a[i] == '0')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], true));
-            }
-
-          if (b[i] == '1')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], false));
-            }
-          else if (b[i] == '0')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], true));
-            }
-        }
-      for (int i = 0; i < output.getWidth(); i++)
-        {
-          if (output[i] == '1')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(r)->second[i], false));
-            }
-          else if (output[i] == '0')
-            {
-              assumptions.push(SATSolver::mkLit(m.find(r)->second[i], true));
-            }
-        }
 
       //Initial.
       //cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
@@ -138,15 +72,14 @@ go(Kind k, Result
 
       // simplify does propagate.
       bb.start();
-      bool ok = ss->unitPropagate(assumptions);
+      bool ok = bbP.unitPropagate();
       bb.stop();
       assert(ok);
 
       // After unit propagation.
       int clauseCount = 0;
-      addToClauseCount(ss, i0, aig.SATVar_to_SymbolIndexMap(), clauseCount);
-      addToClauseCount(ss, i1, aig.SATVar_to_SymbolIndexMap(), clauseCount);
-      addToClauseCount(ss, r, aig.SATVar_to_SymbolIndexMap(), clauseCount);
+      clauseCount = bbP.addToClauseCount();
+
       clause += clauseCount;
 
       // After unit propagation.
@@ -218,7 +151,7 @@ work(int p)
   out << "\\hline" << endl;
   out << "\\end{tabular}" << endl;
   out << "\\caption{Comparison of unit propagation and bit-blasting at "<<  p <<  "\\%. ";
-  out << iterations << " iterations at " << bits << " bits. \label{tbl:p"<< p << "}}}" << endl;
+  out << iterations << " iterations at " << bits << " bits. \\label{tbl:p"<< p << "}}}" << endl;
   out << "\\end{center}" << endl;
   out << "\\end{table}" << endl;
   }
