@@ -5,6 +5,9 @@
 #ifndef BBASPROP_H_
 #define BBASPROP_H_
 
+#include "../sat/core/Solver.h"
+
+
 class BBAsProp
 {
 public:
@@ -91,13 +94,13 @@ public:
   }
 
   int
-  addToClauseCount()
+  fixedCount()
   {
     return addToClauseCount(i0) +addToClauseCount(i1) + addToClauseCount(r);
   }
 
   int
-  addToClauseCount( ASTNode n)
+  addToClauseCount(const ASTNode n)
   {
     int result =0;
     const int bits = std::max(1U, n.GetValueWidth());

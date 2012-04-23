@@ -23,6 +23,8 @@
 
 #include "StopWatch.h"
 #include "Relations.h"
+#include "BBAsProp.h"
+#include "Functions.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -311,22 +313,27 @@ struct D
 };
 
 void
-exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, FixedBits&), int (*op)(int a, int b))
+exhaustively_check(const int bitwidth, Kind k, Result (*transfer)(vector<FixedBits*>&, FixedBits&), int (*op)(int a, int b))
 {
   vector<D> list;
 
+  int transferBad =0;
+  int BBBad =0;
+
   const int numberOfInputParams = 2;
 
-  assert(numberOfInputParams >0);
-  const int mask = pow(2, bitwidth) - 1;
+  int resultLength = (is_Form_kind(k) ) ? 1:bitwidth;
+
+  const int input_mask = pow(2, bitwidth) - 1;
+  const int output_mask = resultLength ==1 ? 1: (pow(2, bitwidth)-1);
 
   // Create all the possible inputs, and apply the function.
   for (int i = 0; i < pow(2, bitwidth * numberOfInputParams); i++)
     {
     D d;
-    d.a = i & mask;
-    d.b = (i >> bitwidth) & mask;
-    d.c = op(d.a,d.b) & mask;
+    d.a = i & input_mask;
+    d.b = (i >> bitwidth) & input_mask;
+    d.c = op(d.a,d.b) & output_mask;
     list.push_back(d);
     }
 
@@ -335,7 +342,9 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
   vector<FixedBits*> temp;
   temp.push_back(&a);
   temp.push_back(&b);
-  FixedBits tempOutput(bitwidth, false);
+
+
+  FixedBits tempOutput(resultLength, false);
 
   vector<int> lengths;
   int totalLength = 0;
@@ -347,35 +356,37 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
     lengths.push_back(children[i]->getWidth());
     }
 
-  int resultLength = tempOutput.getWidth();
+
   FixedBits output(resultLength, tempOutput.isBoolean());
 
   lengths.push_back(resultLength);
   totalLength += resultLength;
 
   FixedBits empty(bitwidth, false);
-  FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(bitwidth, false);
+  FixedBits c_a(bitwidth, false), c_b(bitwidth, false), c_o(resultLength, false);
+
+  BBAsProp BBP(k,mgr,bitwidth);
 
   const int to_iterate = pow(3, totalLength);
   for (long j = 0; j < to_iterate; j++)
     {
     int current = j;
 
-    if (j% 100000 == 0)
-      cerr << j << " of " << to_iterate << endl;
+    //if (j% 100000 == 0)
+    //  cerr << j << " of " << to_iterate << endl;
 
     int id = 0;
     int usedUp = 0;
 
-    for (int k = 0; k < totalLength; k++)
+    for (int k_it = 0; k_it < totalLength; k_it++)
       {
-      if (k < resultLength)
+      if (k_it < resultLength)
         {
-        setV(output, k, current % 3);
+        setV(output, k_it, current % 3);
         }
       else
         {
-        int working = (k - resultLength - usedUp);
+        int working = (k_it - resultLength - usedUp);
         if (working == lengths[id])
           {
           usedUp += lengths[id];
@@ -387,18 +398,18 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
       current /= 3;
       }
 
-    bool first = true;
+    bool max_conflict = true;
     for (int j = 0; j < list.size(); j++)
       {
       D& d = list[j];
       if (children[0]->unsignedHolds(d.a) && children[1]->unsignedHolds(d.b) && output.unsignedHolds(d.c))
         {
-        if (first)
+        if (max_conflict)
           {
           c_a.fromUnsigned(d.a);
           c_b.fromUnsigned(d.b);
           c_o.fromUnsigned(d.c);
-          first = false;
+          max_conflict = false;
           }
         else
           {
@@ -409,14 +420,56 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
         }
       }
 
+    const int initialFixed = children[0]->countFixed() + children[1]->countFixed() + output.countFixed();
+    const int maxFixed = c_a.countFixed() + c_b.countFixed() + c_o.countFixed();
 
-    Result r = transfer(children, output);
-    if (r == CONFLICT)
+
+    BBP.toAssumptions(*children[0], *children[1], output);
+    bool bb_conflict = !BBP.unitPropagate();
+    const int BBFixed = BBP.fixedCount();
+
+    bool transfer_conflict = (transfer(children, output) == CONFLICT) ;
+    const int transferFixed = children[0]->countFixed() + children[1]->countFixed() + output.countFixed();
+
+
+    if (transfer_conflict && !max_conflict)
+      FatalError("!!");
+    if (bb_conflict && !max_conflict)
+      FatalError("~~");
+
+    if (!max_conflict &&  !bb_conflict)
+    {
+        assert( maxFixed >= BBFixed);
+        assert( initialFixed <= BBFixed);
+    }
+
+    //cerr << "----";
+   // cerr << *children[0] << *children[1] << output << endl;
+  //  cerr << c_a << c_b << c_o << endl;
+
+    if (!max_conflict && !transfer_conflict)
       {
-      if(!first)
-        FatalError("Not First");
+        assert( maxFixed >= transferFixed);
+        assert( initialFixed <= transferFixed);
       }
-    else
+
+    assert( initialFixed <= maxFixed);
+
+    if (max_conflict && !transfer_conflict)
+      transferBad++;
+    else if (max_conflict && !bb_conflict)
+        BBBad++;
+    else if (max_conflict)
+      {
+
+      }
+    else if (transferFixed != maxFixed)
+      transferBad++;
+    else if (BBFixed != maxFixed)
+        BBBad++;
+
+
+    if (!transfer_conflict && (k != BVMULT) && (k != BVDIV) && (k != BVMOD) )
       {
       if(!FixedBits::equals(*children[0],c_a))
         FatalError("First");
@@ -428,42 +481,13 @@ exhaustively_check(const int bitwidth, Result (*transfer)(vector<FixedBits*>&, F
     }
   for (int i=0; i < children.size();i++)
     delete children[i];
-}
 
-int plusF(int a, int b)
-{
-  return a+b;
-}
+  cerr.setf(ios::fixed);
+  cerr << setprecision(1);
+  cerr  << "& " <<     100 *(transferBad/ (float)to_iterate) << "\\%";
+  cerr  << "& " <<     100 *(BBBad/ (float)to_iterate) << "\\%";
+  transferBad= 0; BBBad = 0;
 
-int subF(int a, int b)
-{
-  return a-b;
-}
-
-int leftSF(int a, int b)
-{
-  if (b >= sizeof(int)*8)
-    return 0;
-
-  return a<<b;
-}
-
-int rightSF(int a, int b)
-{
-  if (b >= sizeof(int)*8)
-    return 0;
-
-  return a>>b;
-}
-
-int bvandF(int a, int b)
-{
-  return a &b;
-}
-
-int bvorF(int a, int b)
-{
-  return a | b;
 }
 
 void
@@ -507,11 +531,9 @@ main(void)
   mgr = &stp;
   mgr->UserFlags.disableSimplifications();
   mgr->UserFlags.division_by_zero_returns_one_flag  = true;
-
-  Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
-  interface.startup();
+  Cpp_interface interface(*mgr);
   srand(time(NULL));
-  BEEV::ParserBM = mgr;
+
 
   // Add had a defect effecting bithWidth > 90.
   // Shifting had a defect effecting bitWidth > 64.
@@ -520,7 +542,7 @@ main(void)
 
   const int bits = 5;
 
-  if (true)
+  if (false)
     {
     output << "signed greater than equals" << endl;
     go(&bvSignedGreaterThanEqualsBothWays, BVSGE);
@@ -554,7 +576,6 @@ main(void)
 
       output << "multiplication" << endl;
       go(&multiply, BVMULT);
-
       output << "unsigned division" << endl;
       go(&unsignedDivide, BVDIV);
 
@@ -570,17 +591,50 @@ main(void)
       exit(1);
     }
 
-  const int exhaustive_bits = 6;
-  for (int i = 1; i <= exhaustive_bits; i++)
-    {
-    exhaustively_check(i, &bvLeftShiftBothWays, &leftSF);
-    exhaustively_check(i, &bvRightShiftBothWays, &rightSF);
-    exhaustively_check(i, &bvAddBothWays, &plusF);
-    exhaustively_check(i, &bvSubtractBothWays, &subF);
-    exhaustively_check(i, &bvAndBothWays, &bvandF);
-    exhaustively_check(i, &bvOrBothWays, &bvorF);
-    }
 
+  const int exhaustive_bits = 5;
+
+  Functions f;
+  cerr << "% Automatically generated!!" << endl;
+  cerr << "\\begin{figure} \\centering" <<endl;
+  cerr << "\\begin{tabular}{|c|";
+
+  for (int i = 1; i <= exhaustive_bits; i++)
+    cerr << "c|c|";
+
+  cerr << "} \\hline" << endl;
+
+  cerr << "Operation";
+
+  for (int i = 1; i <= exhaustive_bits; i++)
+    cerr << "& \\multicolumn{2}{c|}{"<< i <<" bits}";
+  cerr << "\\\\ \\hline" << endl;
+
+
+
+  for (int i = 1; i <= exhaustive_bits; i++)
+    cerr << "& Prop& BB";
+
+  cerr << "\\\\ \\hline" << endl;
+
+  std::list<Functions::Function>::iterator it = f.l.begin();
+  while (it != f.l.end())
+    {
+      Functions::Function& f = *it;
+      cerr << f.name << endl;
+      for (int i = 1; i <= exhaustive_bits; i++)
+        exhaustively_check(i, f.k,  f.fn, f.op);
+      cerr << "\\\\ " << endl;
+      it++;
+    }
+cerr << "\\hline" ;
+
+  cerr << "\\end{tabular}" <<endl;
+  cerr <<  "\\caption{Percentage of all the assignments at different bit-widths. Where the Bitblasted encoding and the propagators did missed bits to fix, or missed a conflicting assignment.}" << endl;
+  cerr << "\\end{figure}" <<endl;
+
+
+exit(1);
 
 
   if (true)
