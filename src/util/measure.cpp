@@ -81,9 +81,9 @@ go(Kind k, Result
   int clause = 0;
 
   MinisatCore<Minisat::Solver>* ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
-  ToSATAIG a(mgr, GlobalSTP->arrayTransformer);
-  a.CallSAT(*ss, eq, false);
-  ToSAT::ASTNodeToSATVar m = a.SATVar_to_SymbolIndexMap();
+  ToSATAIG aig(mgr, GlobalSTP->arrayTransformer);
+  aig.CallSAT(*ss, eq, false);
+  ToSAT::ASTNodeToSATVar m = aig.SATVar_to_SymbolIndexMap();
 
   Stopwatch2 bb;
   Stopwatch2 prop;
@@ -91,37 +91,40 @@ go(Kind k, Result
   list<Relations::Relation>::iterator it = relations.relations.begin();
   while (it != relations.relations.end())
     {
-      Relations::Relation rel = *it;
+      //Relations::Relation rel =
+      FixedBits& a = it->a;
+      FixedBits& b = it->b;
+      FixedBits& output = it->output;
 
       SATSolver::vec_literals assumptions;
 
       for (int i = 0; i < bits; i++)
         {
-          if (rel.a[i] == '1')
+          if (a[i] == '1')
             {
               assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], false));
             }
-          else if (rel.a[i] == '0')
+          else if (a[i] == '0')
             {
               assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], true));
             }
 
-          if (rel.b[i] == '1')
+          if (b[i] == '1')
             {
               assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], false));
             }
-          else if (rel.b[i] == '0')
+          else if (b[i] == '0')
             {
               assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], true));
             }
         }
-      for (int i = 0; i < rel.output.getWidth(); i++)
+      for (int i = 0; i < output.getWidth(); i++)
         {
-          if (rel.output[i] == '1')
+          if (output[i] == '1')
             {
               assumptions.push(SATSolver::mkLit(m.find(r)->second[i], false));
             }
-          else if (rel.output[i] == '0')
+          else if (output[i] == '0')
             {
               assumptions.push(SATSolver::mkLit(m.find(r)->second[i], true));
             }
@@ -130,7 +133,7 @@ go(Kind k, Result
       //Initial.
       //cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
 
-      const int initialCount = rel.a.countFixed() + rel.b.countFixed() + rel.output.countFixed();
+      const int initialCount = a.countFixed() + b.countFixed() + output.countFixed();
       initial += initialCount;
 
       // simplify does propagate.
@@ -141,9 +144,9 @@ go(Kind k, Result
 
       // After unit propagation.
       int clauseCount = 0;
-      addToClauseCount(ss, i0, a.SATVar_to_SymbolIndexMap(), clauseCount);
-      addToClauseCount(ss, i1, a.SATVar_to_SymbolIndexMap(), clauseCount);
-      addToClauseCount(ss, r, a.SATVar_to_SymbolIndexMap(), clauseCount);
+      addToClauseCount(ss, i0, aig.SATVar_to_SymbolIndexMap(), clauseCount);
+      addToClauseCount(ss, i1, aig.SATVar_to_SymbolIndexMap(), clauseCount);
+      addToClauseCount(ss, r, aig.SATVar_to_SymbolIndexMap(), clauseCount);
       clause += clauseCount;
 
       // After unit propagation.
@@ -157,15 +160,15 @@ go(Kind k, Result
 
       // After transfer functions.
       vector<FixedBits*> ch;
-      ch.push_back(&rel.a);
-      ch.push_back(&rel.b);
+      ch.push_back(&a);
+      ch.push_back(&b);
       prop.start();
-      Result rr = t_fn(ch, rel.output);
+      Result rr = t_fn(ch, output);
       prop.stop();
 
       assert(rr != CONFLICT);
       //cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
-      int transferCount = rel.a.countFixed() + rel.b.countFixed() + rel.output.countFixed();
+      int transferCount = a.countFixed() + b.countFixed() + output.countFixed();
       transfer += transferCount;
 
       //cerr << initialCount << endl;
