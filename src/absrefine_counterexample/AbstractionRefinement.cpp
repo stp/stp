@@ -501,4 +501,90 @@ namespace BEEV
     return arraywrite_axiom;
   }//end of Create_ArrayWriteAxioms()
 #endif
+
+  // This is another way of performing Ackermannisation.
+  void
+  AbsRefine_CounterExample::applyAllCongruenceConstraints(SATSolver & SatSolver, ToSATBase *tosat)
+  {
+    //if (bm->UserFlags.stats_flag)
+      cerr << "~CNF~" << endl;
+
+    vector<pair<ASTNode, ArrayTransformer::arrTypeMap> > arrayToIndex;
+    arrayToIndex.insert(arrayToIndex.begin(), ArrayTransform->arrayToIndexToRead.begin(),
+        ArrayTransform->arrayToIndexToRead.end());
+
+    ToSATBase::ASTNodeToSATVar & satVar = tosat->SATVar_to_SymbolIndexMap();
+
+    //for each array, fetch its list of indices seen so far
+    for (vector<pair<ASTNode, ArrayTransformer::arrTypeMap> >::const_iterator iset = arrayToIndex.begin(), iset_end =
+        arrayToIndex.end(); iset != iset_end; iset++)
+      {
+      //const ASTNode& ArrName = iset->first;
+      const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
+
+      vector<ASTNode> listOfIndices;
+      listOfIndices.reserve(mapper.size());
+
+      // Make a vector of the read symbols.
+      ASTVec read_node_symbols;
+      read_node_symbols.reserve(listOfIndices.size());
+
+      vector<Kind> jKind;
+      jKind.reserve(mapper.size());
+
+      ASTVec index_symbols;
+      index_symbols.reserve(mapper.size());
+
+      for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it = mapper.begin();
+          it != mapper.end(); it++)
+        {
+        const ASTNode& the_index = it->first;
+        listOfIndices.push_back(the_index);
+
+        ASTNode arrsym = it->second.symbol;
+        read_node_symbols.push_back(arrsym);
+
+        index_symbols.push_back(it->second.index_symbol);
+
+        assert(read_node_symbols[0].GetValueWidth() == arrsym.GetValueWidth());
+        assert(listOfIndices[0].GetValueWidth() == the_index.GetValueWidth());
+
+        jKind.push_back(the_index.GetKind());
+        }
+
+      assert(listOfIndices.size() == mapper.size());
+
+      //loop over the list of indices for the array and create LA,
+      //and add to inputAlreadyInSAT
+      for (int i = 0; i < listOfIndices.size(); i++)
+        {
+        const ASTNode& index_i = listOfIndices[i];
+        const Kind iKind = index_i.GetKind();
+
+        // Create all distinct pairs of indexes.
+        for (int j = i + 1; j < listOfIndices.size(); j++)
+          {
+          const ASTNode& index_j = listOfIndices[j];
+
+          // If the index is a constant, and different, then there's no reason to check.
+          // Sometimes we get the same index stored multiple times in the array. Not sure why...
+          if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
+            continue;
+
+          if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
+            continue; // shortcut.
+
+          if (index_i == index_j)
+            cerr << "EQUAL";
+
+          AxiomToBe o(index_symbols[i], index_symbols[j], read_node_symbols[i], read_node_symbols[j]);
+
+          applyAxiomToSAT(SatSolver, o, satVar);
+          }
+        }
+      }
+  }
+
+
+
 };// end of namespace BEEV

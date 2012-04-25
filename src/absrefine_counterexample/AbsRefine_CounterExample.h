@@ -138,6 +138,10 @@ namespace BEEV
                                  const ASTNode& original_input,
                                  ToSATBase* tosat);
 
+    void
+    applyAllCongruenceConstraints(SATSolver & SatSolver, ToSATBase *tosat);
+
+
 #if 0
     SOLVER_RETURN_TYPE 
     SATBased_ArrayWriteRefinement(SATSolver& newS,
