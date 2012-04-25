@@ -2775,9 +2775,9 @@ namespace BEEV
             break;
           }
         unsigned int nlz=  numberOfLeadingZeroes(inputterm[0]);
+        nlz = std::min(inputValueWidth-1,nlz);
         if (nlz > 0)
           {
-            nlz = std::min(inputValueWidth-1,nlz);
             int rest = inputValueWidth-nlz;
             ASTNode low = _bm->CreateBVConst(32,rest);
             ASTNode high =_bm->CreateBVConst(32,inputValueWidth-1);
