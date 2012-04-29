@@ -1032,6 +1032,17 @@ namespace BEEV
               }
           }
       }
+    if (k2 == ITE && (in2[1] == in1) && in1.GetType()== BITVECTOR_TYPE)
+      {
+        ASTNode eq = nf->CreateNode(EQ, in1,in2[2]);
+        return  nf->CreateNode(OR,in2[0],eq );
+      }
+
+    if (k2 == ITE && (in2[2] == in1) && in1.GetType()== BITVECTOR_TYPE)
+      {
+        ASTNode eq = nf->CreateNode(EQ, in1,in2[1]);
+        return  nf->CreateNode(OR,nf->CreateNode(NOT,in2[0]),eq );
+      }
 
     //last resort is to CreateNode
     return nf->CreateNode(EQ, in1, in2);
