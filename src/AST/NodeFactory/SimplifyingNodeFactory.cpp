@@ -1089,13 +1089,14 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         if (children[0].isConstant() && CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
           result = NodeFactory::CreateTerm(BVNEG, width, children[1]);
 
-        if (children[1].GetKind() == BVNEG && children[1][0] == children[0])
-          result = bm.CreateMaxConst(width);
-
-        if (children[0].GetKind() == BVNEG && children[0][0] == children[1])
-          result = bm.CreateMaxConst(width);
-        if ( width >= 3 &&  children.size() ==2 && children[0].GetKind() == BVNEG && children[1].GetKind() == BVNEG )
-          result =  NodeFactory::CreateTerm(BVXOR,width,children[1][0],children[0][0]);//133 -> 133
+        if (children[1].GetKind() == BVNEG)
+          {
+            result = NodeFactory::CreateTerm(BVNEG, width, NodeFactory::CreateTerm(BVXOR, width, children[0], children[1][0]));
+      }
+        else if (children[0].GetKind() == BVNEG)
+          {
+            result = NodeFactory::CreateTerm(BVNEG, width, NodeFactory::CreateTerm(BVXOR, width, children[1], children[0][0]));
+          }
       }
     break;
 
