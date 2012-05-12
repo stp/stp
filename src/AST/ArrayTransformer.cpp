@@ -572,8 +572,15 @@ namespace BEEV
               // result is a variable here; it is an ite in the
               // else-branch
             }
-          else
+          else if (bm->UserFlags.isSet("old_ack","0"))
             {
+
+            /* oops.
+             * This version of ack. doesn't do what I thought it did. The STP 0.1 version of Ack. produces simpler
+             * expressions. I've put that in the next block. Trevor's thesis measures AckITE using this implementation,
+             * rather than the next one like it should have!!!!
+             */
+
               // Full Array transform if we're not doing read refinement.
 
               //list of array-read indices corresponding to arrName, seen while
@@ -598,6 +605,34 @@ namespace BEEV
                     simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
                 }
             }
+          else
+           {
+            // Full Array transform if we're not doing read refinement.
+
+            //list of array-read indices corresponding to arrName, seen while
+            //traversing the AST tree. we need this list to construct the ITEs
+            vector<std::pair<ASTNode, ASTNode > > p = ack_pair[arrName];
+
+            vector<std::pair<ASTNode, ASTNode > >::const_reverse_iterator it2 = p.rbegin();
+            vector<std::pair<ASTNode, ASTNode > >::const_reverse_iterator it2end = p.rend();
+            for (; it2 != it2end; it2++)
+              {
+                ASTNode cond =  simp->CreateSimplifiedEQ(readIndex, it2->first);
+                if (ASTFalse == cond)
+                  continue;
+
+                if (ASTTrue == cond)
+                  {
+                    result = it2->second;
+                    break;
+                  }
+
+                result =
+                  simp->CreateSimplifiedTermITE(cond, it2->second, result);
+              }
+
+           ack_pair[arrName].push_back(make_pair(readIndex,CurrentSymbol));
+           }
 
           assert(arrName.GetType() == ARRAY_TYPE);
           arrayToIndexToRead[arrName].insert(make_pair(readIndex,ArrayRead (result, CurrentSymbol)));
@@ -777,6 +812,9 @@ namespace BEEV
       assert(arrayToIndexToRead[e0[0]].find(e0[1]) ==arrayToIndexToRead[e0[0]].end());
 
       arrayToIndexToRead[e0[0]].insert(make_pair(e0[1],ArrayRead (e1, e1)));
+
+      ack_pair[e0[0]].push_back(make_pair(e0[1],e1));
+
   }
 
 

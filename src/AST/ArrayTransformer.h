@@ -56,6 +56,8 @@ namespace BEEV
 
   private:
 
+     map<ASTNode, vector<std::pair<ASTNode, ASTNode >  > > ack_pair;
+
     /****************************************************************
      * Private Typedefs and Data                                    *
      ****************************************************************/
