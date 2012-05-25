@@ -910,68 +910,37 @@ void Solver_prop::cancelUntil(int level) {
 	    int array_id;
 	};
 
-	vec<index_type> toRep;
-	vec<ArrayAccess*> aaRep;
 
 	vec<ArrayAccess*> toReAdd;
 
         // look through the map, and remove it.
         while ((arrayHistory_stack.size() > 0) && (arrayHistory_stack.last().decisionLevel > level))
         {
-        	ArrayAccess& aa = *(arrayHistory_stack.last().aa);
-                assert(aa.known_index);
-                assert(!aa.isIndexConstant()); // Shouldn't remove known indexes.
-                assert(IndexIsSet(aa));   // The index shouldn't be unset yet.
+          ArrayAccess& aa = *(arrayHistory_stack.last().aa);
+          assert(aa.known_index);
+          assert(!aa.isIndexConstant());
+          // Shouldn't remove known indexes.
+          assert(IndexIsSet(aa));
+          // The index shouldn't be unset yet.
 
-        	// Get the integer.
-                index_type asInt = index_as_int(aa);
-        	assert(val_to_aa[aa.array_id].has(asInt));
+          // Get the integer.
+          index_type asInt = index_as_int(aa);
+          assert(val_to_aa[aa.array_id].has(asInt));
 
-        	std::vector<ArrayAccess*>& aaV = val_to_aa[aa.array_id][asInt];
+          std::vector<ArrayAccess*>& aaV = val_to_aa[aa.array_id][asInt];
+          assert(aaV.size() >0);
+          assert(aaV.back() == &aa);
 
-        	// We'll remove the zeroeth array access, so need to re-add all of the array axioms.
-                if (aaV[0] == &aa)
-                    {
-                        toRep.push(asInt);
-                        aaRep.push(&aa);
-                    }
+          aaV.erase(aaV.begin() + (aaV.size() - 1));
 
-                bool found = false;
-                for (int i = 0; i < (int) aaV.size(); i++)
-                    if (aaV[i] == &aa)
-                        {
-                            //Find the same pointer and erase it.
-                            aaV.erase(aaV.begin() + i);
-                            found = true;
-                            break;
-                        }
-                assert(found);
+          if (aaV.size() == 0)
+            val_to_aa[aa.array_id].remove(asInt);
 
-                    if (aaV.size() == 0)
-                        val_to_aa[aa.array_id].remove(asInt);
+          aa.known_index = false;
+          toReAdd.push(&aa);
+          arrayHistory_stack.shrink(1);
+        }
 
-                    aa.known_index = false;
-                    toReAdd.push(&aa);
-                    arrayHistory_stack.shrink(1);
-                }
-
-	// The zeroeth of these numbers has been deleted, so we might need to redo the implications.
-	for (int i=0; i < toRep.size(); i++)
-	{
-	        index_type asInt = toRep[i];
-	        ArrayAccess& aa = *aaRep[i];
-
-	        if (val_to_aa[aa.array_id].has(asInt))
-	            {
-
-	                std::vector<ArrayAccess*>& aaV = val_to_aa[aa.array_id][asInt];
-	                for (int j=1;j<(int)aaV.size();j++)
-	                {
-	                        assert(aa.known_index);
-	                        writeOutArrayAxiom(*aaV[j]);
-	                }
-	            }
-	}
 
 	sortAlternateTrail();
         while (alternate_trail.size() > 0 && (alternate_trail.back().decisionLevel > level))
