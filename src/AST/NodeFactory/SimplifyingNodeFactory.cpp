@@ -1026,8 +1026,9 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       else if (children[0].isConstant() && !CONSTANTBV::BitVector_bit_test(children[0].GetBVConst(), width - 1))
         result = NodeFactory::CreateTerm(BVRIGHTSHIFT, width, children[0], children[1]);
       else if ( width >= 3 && children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0] )
-        result =  NodeFactory::CreateTerm(BVSRSHIFT,width,children[0],children[0][0]);//414 -> 361
-
+              result =  NodeFactory::CreateTerm(BVSRSHIFT,width,children[0],children[0][0]);//414 -> 361
+      else if (children[0].GetKind() == BVNEG)
+        result =  NodeFactory::CreateTerm(BVNEG, width, NodeFactory::CreateTerm(BVSRSHIFT,width,children[0][0],children[1]));
 
     }
     break;
