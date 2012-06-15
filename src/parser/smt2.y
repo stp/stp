@@ -84,9 +84,10 @@
 %start cmd
 
 %type <node> status
-%type <vec> an_formulas an_terms
+%type <vec> an_formulas an_terms function_params an_mixed
 
-%type <node> an_term  an_formula 
+
+%type <node> an_term  an_formula function_param
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -96,8 +97,8 @@
  /* We have this so we can parse :smt-lib-version 2.0 */
 %token  DECIMAL_TOK
 
-%token <node> FORMID_TOK TERMID_TOK 
-%token <str> STRING_TOK
+%token <node> FORMID_TOK TERMID_TOK  
+%token <str> STRING_TOK FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -180,6 +181,7 @@
 %token NOTES_TOK
 %token OPTION_TOK
 %token DECLARE_FUNCTION_TOK
+%token DEFINE_FUNCTION_TOK
 %token FORMULA_TOK
 %token PUSH_TOK
 %token POP_TOK
@@ -254,6 +256,10 @@ cmdi:
     {
     parserInterface->success();
     }
+|   LPAREN_TOK DEFINE_FUNCTION_TOK function_decl RPAREN_TOK
+    {
+    parserInterface->success();
+    }
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
 	{
 	parserInterface->AddAssert(*$3);
@@ -261,6 +267,70 @@ cmdi:
 	parserInterface->success();
 	}
 ;
+
+
+function_param:
+LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+{
+  $$ = new ASTNode(BEEV::parserInterface->LookupOrCreateSymbol($2->c_str())); 
+  parserInterface->addSymbol(*$$);
+  $$->SetIndexWidth(0);
+  $$->SetValueWidth($6);
+  delete $2;
+};
+
+/* Returns a vector of parameters.*/
+function_params:
+function_param
+{
+  $$ = new ASTVec;
+  $$->push_back(*$1);
+  delete $1;
+}
+| function_params function_param
+{
+  $$ = $1;
+  $$->push_back(*$2);
+  delete $2;
+};
+
+
+function_decl:
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK an_term RPAREN_TOK 
+{
+	if ($11->GetValueWidth() != $8)
+		{
+			char msg [100];
+			sprintf(msg, "Different bit-widths specified: %d %d", $11->GetValueWidth(), $8);
+			yyerror(msg);
+		}
+	
+	BEEV::parserInterface->storeFunction(*$1, *$3, *$11);
+
+	// Next time the variable is used, we want it to be fresh.
+    for (int i = 0; i < $3->size(); i++)
+     BEEV::parserInterface->removeSymbol((*$3)[i]);
+	
+	delete $1;
+	delete $3;
+	delete $11;
+}
+|
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula 
+{
+	// Check the bitwidth defined/ and actually are the same.
+	BEEV::parserInterface->storeFunction(*$1, *$3, *$6);
+
+	// Next time the variable is used, we want it to be fresh.
+    for (int i = 0; i < $3->size(); i++)
+     BEEV::parserInterface->removeSymbol((*$3)[i]);
+
+	delete $1;
+	delete $3;
+	delete $6;
+}
+;
+
 
 status:
 STRING_TOK { 
@@ -300,8 +370,9 @@ SOURCE_TOK
 {
 	parserInterface->setPrintSuccess(false);
 }
-
 ;
+
+
 
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
@@ -344,6 +415,45 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   delete $1;
 }
 ;
+
+an_mixed:
+an_formula
+{
+  $$ = new ASTVec;
+  if ($1 != NULL) {
+    $$->push_back(*$1);
+    parserInterface->deleteNode($1);
+  }
+}
+|
+an_term
+{
+  $$ = new ASTVec;
+  if ($1 != NULL) {
+    $$->push_back(*$1);
+    parserInterface->deleteNode($1);
+  }
+}
+|
+an_mixed an_formula 
+{
+  if ($1 != NULL && $2 != NULL) {
+    $1->push_back(*$2);
+    $$ = $1;
+    parserInterface->deleteNode($2);
+  }
+}
+|
+an_mixed an_term 
+{
+  if ($1 != NULL && $2 != NULL) {
+    $1->push_back(*$2);
+    $$ = $1;
+    parserInterface->deleteNode($2);
+  }
+};
+
+
 
 an_formulas:
 an_formula
@@ -545,6 +655,14 @@ TRUE_TOK
   $$ = $6;
   //Cleanup the LetIDToExprMap
   parserInterface->letMgr.CleanupLetIDMap();                      
+}
+| LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
+{	
+  $$ = parserInterface->newNode(parserInterface->applyFunction(*$2,*$3));
+  if ($$->GetType() != BOOLEAN_TYPE)
+  	yyerror("Must be boolean type");
+  delete $2;
+  delete $3;
 }
 ;
 
@@ -959,6 +1077,17 @@ TERMID_TOK
     $$->SetValueWidth(width);
     delete $1;
 }
+| LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
+{	
+  $$ = parserInterface->newNode(parserInterface->applyFunction(*$2,*$3));
+  
+  if ($$->GetType() != BITVECTOR_TYPE)
+  	yyerror("Must be bitvector type");
+  
+  delete $2;
+  delete $3;
+}
+
 ;
 
 %%

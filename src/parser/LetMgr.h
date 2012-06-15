@@ -18,9 +18,8 @@ namespace BEEV
 //LET Management
   class LETMgr 
   {
-  private:
-
-	  // Hash function for the hash_map of a string..
+  public:
+    // Hash function for the hash_map of a string..
 	template <class T>
 	struct hashF {
 				  size_t operator() (const T & x) const {
@@ -28,6 +27,7 @@ namespace BEEV
 				  }
 		  };
 
+  private:
     const ASTNode ASTUndefined;
 
     typedef hash_map<string,ASTNode, hashF<std::string> > MapType;

@@ -50,6 +50,15 @@ namespace BEEV
     vector<Entry> cache;
     vector<vector<ASTNode> > symbols;
 
+    struct Function
+    {
+      ASTVec params;
+      ASTNode function;
+      string name;
+    };
+
+    HASHMAP <string, Function, BEEV::LETMgr::hashF<std::string> > functions;
+
     void checkInvariant()
     {
       assert(bm.getAssertLevel() == cache.size());
@@ -182,6 +191,74 @@ namespace BEEV
     {
       return bm.LookupOrCreateSymbol(name);
     }
+
+    void
+    removeSymbol(ASTNode s)
+    {
+      bool removed=false;
+
+     for (int i=0; i < symbols.back().size(); i++)
+       if (symbols.back()[i] == s)
+         {
+         symbols.back().erase(symbols.back().begin() + i);
+         removed = true;
+         }
+
+     if (!removed)
+       FatalError("Should have been removed...");
+
+     letMgr._parser_symbol_table.erase(s);
+    }
+
+    // Declare a function. We can't keep references to the declared variables though. So rename them..
+    void
+    storeFunction(const string name, const ASTVec& params, const ASTNode& function)
+    {
+      Function f;
+      f.name = name;
+
+      ASTNodeMap fromTo;
+      for (int i=0; i < params.size();i++)
+        {
+          ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(), params[i].GetValueWidth(), "STP_INTERNAL_FUNCTION_NAME");
+          fromTo.insert(make_pair(params[i], p));
+          f.params.push_back(p);
+        }
+      ASTNodeMap cache;
+      f.function = SubstitutionMap::replace(function,fromTo,cache, nf);
+      functions.insert(make_pair(f.name,f));
+    }
+
+    ASTNode
+    applyFunction(const string name, const ASTVec& params)
+    {
+      if (functions.find(name) == functions.end())
+        FatalError("Trying to apply function which has not been defined.");
+
+      Function f;
+      f = functions[string(name)];
+
+      ASTNodeMap fromTo;
+      for (int i=0; i < f.params.size();i++)
+        {
+          if (f.params[i].GetValueWidth() != params[i].GetValueWidth())
+            FatalError("Actual parameters differ from formal");
+
+          if (f.params[i].GetIndexWidth() != params[i].GetIndexWidth())
+            FatalError("Actual parameters differ from formal");
+
+          fromTo.insert(make_pair(f.params[i], params[i]));
+        }
+
+      ASTNodeMap cache;
+      return SubstitutionMap::replace(f.function,fromTo,cache, nf);
+    }
+
+    bool isFunction(const string name)
+    {
+      return (functions.find(name) != functions.end());
+    }
+
 
     ASTNode
     LookupOrCreateSymbol(string name)

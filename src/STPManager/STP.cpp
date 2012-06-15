@@ -23,6 +23,7 @@
 #include "../simplifier/UseITEContext.h"
 #include "../simplifier/AlwaysTrue.h"
 #include "../simplifier/AIGSimplifyPropositionalCore.h"
+#include "../simplifier/TransformExtensionality.h"
 #include <memory>
 
 namespace BEEV {
@@ -80,6 +81,11 @@ namespace BEEV {
       {
         NewSolver.setSeed(bm->UserFlags.random_seed);
       }
+
+    TransformExtensionality t(bm);
+    original_input = t.topLevel(original_input);
+
+
 
 	SOLVER_RETURN_TYPE result;
     result = TopLevelSTPAux(NewSolver,

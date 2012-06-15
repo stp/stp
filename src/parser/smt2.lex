@@ -81,6 +81,13 @@
     	nptr = BEEV::parserInterface->letMgr.resolveLet(str);
     	found = true;
     }
+    else if (BEEV::parserInterface->isFunction(str))
+    {
+		smt2lval.str = new std::string(str);
+		return  FUNCTIONID_TOK;
+    }
+    
+    
 
 	if (found)
 	{
@@ -166,6 +173,7 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "set-info"  		{ return NOTES_TOK;  }
 "set-option"  		{ return OPTION_TOK;  }
 "declare-fun"		{ return DECLARE_FUNCTION_TOK; }
+"define-fun"		{ return DEFINE_FUNCTION_TOK; }
 "push"				{ return PUSH_TOK;}
 "pop"				{ return POP_TOK;}
  
