@@ -44,7 +44,7 @@ namespace BEEV
   // NB: The boolean value is always true!
   bool BVTypeCheck(const ASTNode& n);
   
- long getCurrentTime();
+  long getCurrentTime();
 
   ASTVec FlattenKind(Kind k, const ASTVec &children);
 
@@ -81,6 +81,8 @@ namespace BEEV
     ASTVec, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeToVecMap;
+
+  void FlattenKindNoDuplicates(const Kind k, const ASTVec &children, ASTVec & flat_children, ASTNodeSet& alreadyFlattened);
 
   //Needed for defining the MAP below
   struct ltint

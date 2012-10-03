@@ -13,7 +13,7 @@
 
 namespace BEEV
 {
-  
+
   /****************************************************************
    * Universal Helper Functions                                   *
    ****************************************************************/
@@ -235,7 +235,7 @@ namespace BEEV
     exit(-1);
 
   }
-  
+
   void SortByExprNum(ASTVec& v)
   {
     sort(v.begin(), v.end(), exprless);
@@ -248,12 +248,12 @@ namespace BEEV
 
   bool isAtomic(Kind kind)
   {
-    if (TRUE == kind  || FALSE == kind || 
+    if (TRUE == kind  || FALSE == kind ||
         EQ == kind    ||
-        BVLT == kind  || BVLE == kind  || 
-        BVGT == kind  || BVGE == kind  || 
-        BVSLT == kind || BVSLE == kind || 
-        BVSGT == kind || BVSGE == kind || 
+        BVLT == kind  || BVLE == kind  ||
+        BVGT == kind  || BVGE == kind  ||
+        BVSLT == kind || BVSLE == kind ||
+        BVSGT == kind || BVSGE == kind ||
         SYMBOL == kind || BVGETBIT == kind)
       return true;
     return false;
@@ -303,7 +303,33 @@ namespace BEEV
 		}
 }
 
-  void FlattenKind(const Kind k, const ASTVec &children, ASTVec & flat_children)
+  /* Maintains a set of nodes that have already been seen. So that deeply shared AND,OR operations are not
+   * flattened multiple times.
+   */
+  void
+  FlattenKindNoDuplicates(const Kind k, const ASTVec &children, ASTVec & flat_children, ASTNodeSet& alreadyFlattened)
+  {
+    const ASTVec::const_iterator ch_end = children.end();
+    for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
+      {
+        const Kind ck = it->GetKind();
+        if (k == ck)
+          {
+            if (alreadyFlattened.find(*it) == alreadyFlattened.end())
+              {
+                alreadyFlattened.insert(*it);
+                FlattenKindNoDuplicates(k, it->GetChildren(), flat_children,alreadyFlattened);
+              }
+          }
+        else
+          {
+            flat_children.push_back(*it);
+          }
+      }
+  }
+
+  void
+  FlattenKind(const Kind k, const ASTVec &children, ASTVec & flat_children)
   {
     ASTVec::const_iterator ch_end = children.end();
     for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
@@ -311,7 +337,7 @@ namespace BEEV
         Kind ck = it->GetKind();
         if (k == ck)
           {
-            FlattenKind(k,it->GetChildren(), flat_children);
+            FlattenKind(k, it->GetChildren(), flat_children);
           }
         else
           {
@@ -324,7 +350,13 @@ namespace BEEV
   ASTVec FlattenKind(Kind k, const ASTVec &children)
   {
     ASTVec flat_children;
-    FlattenKind(k,children,flat_children);
+    if (k == OR || k == BVOR || k == BVAND || k == AND)
+      {
+        ASTNodeSet alreadyFlattened;
+        FlattenKindNoDuplicates(k,children,flat_children,alreadyFlattened);
+      }
+    else
+      FlattenKind(k,children,flat_children);
     return flat_children;
   }
 
