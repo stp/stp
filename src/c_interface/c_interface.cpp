@@ -1838,6 +1838,7 @@ extern void smt_switch_to_buffer (YY_BUFFER_STATE new_buffer  );
 #endif
 
 int smt_scan_string(const char *yy_str);
+int cvc_scan_string(const char *yy_str);
 
 int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
@@ -1867,7 +1868,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
     {
       //YY_BUFFER_STATE bstat = cvc_scan_string(s);
       //cvc_switch_to_buffer(bstat);
-      smt_scan_string(s);
+      cvc_scan_string(s);
       cvcparse((void*)&AssertsQuery);
       //cvc_delete_buffer(bstat);
     }
