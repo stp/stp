@@ -38,6 +38,7 @@ string functionToCVCName(const Kind k) {
 	case BVPLUS:
 	case SBVDIV:
 	case SBVREM:
+	case SBVMOD:
 	case BVDIV:
 	case BVMOD:
 		return _kind_names[k];
@@ -188,6 +189,7 @@ string functionToCVCName(const Kind k) {
       case BVPLUS:
       case SBVDIV:
       case SBVREM:
+      case SBVMOD:
       case BVDIV:
       case BVMOD:
     	os << functionToCVCName(kind) << "(";
