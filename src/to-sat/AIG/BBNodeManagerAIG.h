@@ -10,6 +10,7 @@
 #ifndef BBNodeManagerAIG_H_
 #define BBNodeManagerAIG_H_
 
+#include <stdint.h>
 #include "BBNodeAIG.h"
 
 // cnf_short omits some stuff that doesn't compile in g++ that we don't need anyway.
