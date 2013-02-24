@@ -93,6 +93,12 @@ public:
       }
   }
 
+  void
+  numberClauses()
+  {
+    cerr << "Number of Clauses:"<< ss->nClauses() << endl;
+  }
+
   int
   fixedCount()
   {
