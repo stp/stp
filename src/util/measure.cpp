@@ -44,6 +44,7 @@ go(Kind k, Result
 {
 
   BBAsProp bbP(k,mgr,bits);
+  bbP.numberClauses();
 
   Relations relations(iterations, bits, k, mgr, prob);
 
@@ -78,7 +79,7 @@ go(Kind k, Result
 
       // After unit propagation.
       int clauseCount = 0;
-      clauseCount = bbP.addToClauseCount();
+      clauseCount = bbP.fixedCount();
 
       clause += clauseCount;
 
@@ -162,12 +163,13 @@ main()
   mgr = new STPMgr;
   Cpp_interface interface(*mgr);
   mgr->UserFlags.division_by_zero_returns_one_flag=true;
+  //mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;
-  work(1);
-  work(5);
+  //work(1);
+ // work(5);
   work(50);
-  work(95);
+ // work(95);
   out << "\\end{subtables}" << endl;
 
   out << "% Iterations:" << iterations << " bit-width:" << bits << endl;
