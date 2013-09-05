@@ -5,6 +5,10 @@
 #given a file containing kind names, one per line produces .h and .cpp
 #files for the kinds.
 
+use Getopt::Long;
+my $fname = "ASTKind.kinds";
+GetOptions ("file=s" => \$fname);
+
 #globals
 @kindnames = ();
 $minkids = 0;
@@ -16,7 +20,7 @@ $maxkids = 0;
 $now = localtime time;
 
 sub read_kind_defs {
-    open(KFILE, "< ASTKind.kinds") || die "Cannot open .kinds file: $!\n";
+    open(KFILE, "< $fname") || die "Cannot open .kinds file $fname: $!\n";
     @kindlines = <KFILE>;
     close(KFILE)
 }
@@ -45,7 +49,7 @@ sub split_fields {
 	    for (@kind_cats) {
 		$kind_cat_bits |= (1 << int($cat_index{$_}));
 	    }
-	    push(@cat_bits, $kind_cat_bits); 
+	    push(@cat_bits, $kind_cat_bits);
 	}
     }
 }
@@ -53,7 +57,7 @@ sub split_fields {
 sub gen_h_file {
     open(HFILE, "> ASTKind.h") || die "Cannot open .h file: $!\n";
 
-    print HFILE 
+    print HFILE
 	"// -*- c++ -*-\n",
 	"#ifndef TESTKINDS_H\n",
 	"#define TESTKINDS_H\n",
@@ -66,7 +70,7 @@ sub gen_h_file {
 	print HFILE "    $_,\n";
     }
 
-    print HFILE 
+    print HFILE
 	"} Kind;\n\n",
 	"extern unsigned char _kind_categories[];\n\n";
 
@@ -111,7 +115,7 @@ sub gen_cpp_file {
     for (@cat_bits) {
 	print CPPFILE "   $_,\n";
     }
-    print CPPFILE 
+    print CPPFILE
 	"};\n",
 	"\n};  // end namespace\n";
 

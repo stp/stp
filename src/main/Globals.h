@@ -21,7 +21,7 @@
 #include <vector>
 
 namespace BEEV
-{  
+{
   class STPMgr;
   class ASTNode;
   class ASTInternal;
@@ -44,20 +44,20 @@ namespace BEEV
       TO_BE_UNSATISFIABLE,
       TO_BE_UNKNOWN // Specified in the input file as unknown.
     };
-  
+
   //return types for the GetType() function in ASTNode class
   enum types
     {
-      BOOLEAN_TYPE = 0, 
-      BITVECTOR_TYPE, 
-      ARRAY_TYPE, 
+      BOOLEAN_TYPE = 0,
+      BITVECTOR_TYPE,
+      ARRAY_TYPE,
       UNKNOWN_TYPE
     };
 
-  enum SOLVER_RETURN_TYPE 
+  enum SOLVER_RETURN_TYPE
     {
-      SOLVER_INVALID=0, 
-      SOLVER_VALID=1, 
+      SOLVER_INVALID=0,
+      SOLVER_VALID=1,
       SOLVER_UNDECIDED=2,
       SOLVER_TIMEOUT=3,
       SOLVER_ERROR=-100,
@@ -66,7 +66,7 @@ namespace BEEV
     };
 
   //Empty vector. Useful commonly used ASTNodes
-  extern std::vector<ASTNode> _empty_ASTVec;  
+  extern std::vector<ASTNode> _empty_ASTVec;
   extern ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   //Useful global variables. Use for parsing only
@@ -81,7 +81,6 @@ namespace BEEV
   extern int linenum;
   extern const char * usage;
   extern std::string helpstring;
-  extern const std::string version;
   extern enum inputStatus input_status;
 
 

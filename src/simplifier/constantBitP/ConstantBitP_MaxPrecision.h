@@ -4,7 +4,7 @@
 #include "ConstantBitPropagation.h"
 #include <vector>
 #include "FixedBits.h"
-#include "../../AST/ASTKind.h"
+#include "ASTKind.h"
 
 
 
