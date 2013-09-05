@@ -1,4 +1,4 @@
-#include "../ASTKind.h"
+#include "ASTKind.h"
 #include "../AST.h"
 #include "../../STPManager/STPManager.h"
 

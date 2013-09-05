@@ -18,6 +18,7 @@
 #include <sys/time.h>
 #include <memory>
 #include "../extlib-abc/cnf_short.h"
+#include "GitSHA1.h"
 
 
 #ifdef EXT_HASH_MAP
@@ -99,17 +100,17 @@ int main(int argc, char ** argv) {
   auto_ptr<AbsRefine_CounterExample> ctrCleaner(Ctr_Example);
 
   ParserBM          = bm;
-  GlobalSTP         = 
-    new STP(bm, 
-            simp, 
-            arrayTransformer, 
-            tosat, 
+  GlobalSTP         =
+    new STP(bm,
+            simp,
+            arrayTransformer,
+            tosat,
             Ctr_Example);
-  
+
 
   //populate the help string
-  helpstring += 
-    "STP version            : " + version + "\n"
+  helpstring +=
+    "STP version            : " + string(get_git_version()) + "\n"
     "--disable-simplify     : disable all simplifications\n"
     "-w                     : switch wordlevel solver off (optimizations are ON by default)\n"
     "-a                     : disable potentially size-increasing optimisations\n"
@@ -296,9 +297,9 @@ int main(int argc, char ** argv) {
       {
     	  if(argv[i][2])
             {
-              fprintf(stderr, 
+              fprintf(stderr,
                       "Multiple character options are not allowed.\n");
-              fprintf(stderr, 
+              fprintf(stderr,
                       "(for example: -ab is not an abbreviation for -a -b)\n");
               fprintf(stderr,usage,prog);
               cout << helpstring;
@@ -328,7 +329,7 @@ int main(int argc, char ** argv) {
     	  process_argument(argv[i][1],bm);
 
         }
-        } else {          
+        } else {
         	if (NULL != infile)
 				FatalError("One input file only.");
         	infile = argv[i];

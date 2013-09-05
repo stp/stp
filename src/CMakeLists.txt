@@ -1,0 +1,21 @@
+add_subdirectory(AST)
+add_subdirectory(main)
+add_subdirectory(absrefine_counterexample)
+add_subdirectory(simplifier)
+add_subdirectory(printer)
+add_subdirectory(parser)
+add_subdirectory(c_interface)
+add_subdirectory(cpp_interface)
+add_subdirectory(extlib-abc)
+add_subdirectory(extlib-constbv)
+add_subdirectory(STPManager)
+add_subdirectory(to-sat)
+add_subdirectory(sat)
+
+# add_subdirectory(ocaml-wrapper)
+
+
+
+
+
+#add_subdirectory(util)
