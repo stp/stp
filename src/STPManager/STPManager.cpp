@@ -420,19 +420,6 @@ namespace BEEV
     return os;
   }
 
-  ostream &LispPrintVecSpecial(ostream &os, 
-			       const vector<const ASTNode*> &v, 
-			       int indentation)
-  {
-    // Print the children
-    vector<const ASTNode*>::const_iterator iend = v.end();
-    for (vector<const ASTNode*>::const_iterator i = v.begin(); i != iend; i++)
-      {
-        (*i)->LispPrint_indent(os, indentation);
-      }
-    return os;
-  }
-
   //add an assertion to the current logical context
   void STPMgr::AddAssert(const ASTNode& assert)
   {

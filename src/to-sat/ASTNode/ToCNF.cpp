@@ -1797,24 +1797,4 @@ namespace BEEV
      delete varphi;
      varphi = NULL;
   } //End of DELETE()
-
-
-  /*
-  void CNFMgr::PrintClauseList(ostream& os, ClauseList& cll)
-  {
-    int num_clauses = cll.size();
-    os << "Clauses: " 
-       << endl 
-       << "=========================================" << endl;
-    for (int i = 0; i < num_clauses; i++)
-      {
-        os << "Clause " 
-           << i << endl 
-           << "-------------------------------------------" << endl;
-        LispPrintVecSpecial(os, *cll[i], 0);
-        os << endl 
-           << "-------------------------------------------" << endl;
-      }
-  } //end of PrintClauseList()
-  */
 } // end namespace BEEV
