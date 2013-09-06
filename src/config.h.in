@@ -1,0 +1,20 @@
+#ifndef _CONFIG_H_
+#define _CONFIG_H_
+
+#if __cplusplus
+
+/* Where to find <hash_set> or <unordered_set>, if available. */
+#cmakedefine01 HAVE_HASH_SET
+#define HASH_SET_H ${HASH_SET_H}
+#define HASH_SET_CLASS ${HASH_SET_CLASS}
+#define HASH_SET_NAMESPACE ${HASH_SET_NAMESPACE}
+
+/* Where to find <hash_map> or <unordered_map>, if available. */
+#cmakedefine01 HAVE_HASH_MAP
+#define HASH_MAP_H ${HASH_MAP_H}
+#define HASH_MAP_CLASS ${HASH_MAP_CLASS}
+#define HASH_MAP_NAMESPACE ${HASH_MAP_NAMESPACE}
+
+#endif
+
+#endif
