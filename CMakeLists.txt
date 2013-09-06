@@ -12,8 +12,9 @@ ELSE()
 ENDIF()
 
 PROJECT(stp)
-#m4-extra contains some library search cmake stuff
-SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/m4-extra)
+
+# cmake/modules contains some library search cmake stuff
+SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 #set(LLVM 1)
 if (LLVM)
