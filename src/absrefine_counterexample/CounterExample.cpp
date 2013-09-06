@@ -464,6 +464,12 @@ namespace BEEV
             output = ASTFalse;
           }
         break;
+      case BOOLEXTRACT:
+        {
+          ASTNode t0 = TermToConstTermUsingModel(form[0]);
+          output = simp->BVConstEvaluator(bm->CreateNode(BOOLEXTRACT, t0, form[1]));
+          break;
+        }
       case EQ:
       case BVLT:
       case BVLE:

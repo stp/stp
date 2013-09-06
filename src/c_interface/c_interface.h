@@ -409,7 +409,7 @@ extern "C" {
       BVSX,
       BVZX,
       ITE,
-      BVGETBIT,
+      BOOLEXTRACT,
       BVLT,
       BVLE,
       BVGT,

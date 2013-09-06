@@ -446,7 +446,7 @@ namespace BEEV
         output = pushNeg ? nf->CreateNode(NOT, output) : output;
         break;
       }
-    case BVGETBIT:
+    case BOOLEXTRACT:
       {
         ASTNode term = SimplifyTerm(a[0], VarConstMap);
         ASTNode thebit = a[1];
@@ -459,7 +459,7 @@ namespace BEEV
           output = pushNeg ? ASTFalse : ASTTrue;
         else
           {
-            output = nf->CreateNode(BVGETBIT, term, thebit);
+            output = nf->CreateNode(BOOLEXTRACT, term, thebit);
             output = pushNeg ? nf->CreateNode(NOT, output) : output;
           }
         break;

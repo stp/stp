@@ -39,7 +39,7 @@ BVZX		1	1	Term
 ITE		3	3	Term	Form
 
 # These produce formulas.
-BVGETBIT	2	2	Form
+BOOLEXTRACT	2	2	Form
 BVLT		2	2	Form
 BVLE		2	2	Form
 BVGT		2	2	Form
