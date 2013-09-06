@@ -1,43 +1,14 @@
-/********************************************************************
- * PROGRAM NAME: STP (Simple Theorem Prover)	
- *		
- * AUTHORS: Vijay Ganesh
- *	
- * BEGIN DATE: November, 2005
- *
- * LICENSE: Please view LICENSE file in the home dir of this Program
- ********************************************************************/
+STP is built with [CMake](http://cmake.org/), version 2.6 or newer.
+
+CMake is a meta build system that generates build files for other tools such as
+make(1), Visual Studio, Xcode, etc. For a list of generators supported on your
+platform, consult `cmake --help`.
 
 
-DEFAULT INSTALL INSTRUCTION (Linux, MacOS, or Windows (Cygwin))
-===============================================================
+# Example with make(1)
 
-   ./clean-install.sh
+    mkdir build && cd build
+    cmake -G 'Unix Makefiles' ..
+    make
 
-
-COMPILING STP WITH g++ IN A SPECIFIED PATH
-==========================================
-
-   ./clean-install.sh --with-g++ = <path>
-
-
-INSTALLING STP IN A DIRECTORY OF YOUR CHOICE
-============================================
-
-   ./clean-install.sh --with-prefix=<dir>
-
-(Note that the install script will create 3 directories in <dir>,
-namely, bin, include and lib. STP executable will be put in the bin
-directory, libstp.a in the lib directory, c_interface.h in the include
-directory)
-
-
-RUNNING STP ON WINDOWS USING CYGWIN
-===================================
-
-* To run on Windows Natively:
-
-   * Compile STP inside cygwin as above
-   * Add cygwin DLLs to PATH
-   * Run
-
+In subsequent builds, only the `make` command is required.
