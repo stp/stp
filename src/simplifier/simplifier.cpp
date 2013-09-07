@@ -2523,6 +2523,11 @@ namespace BEEV
           }
         break;
       }
+    case BVZX:
+      {
+        output = inputterm;
+        break;
+      }
     case BVAND:
     case BVOR:
       {
