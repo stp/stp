@@ -65,8 +65,6 @@ string functionToCVCName(const Kind k) {
 		return "|";
 	case BVAND:
 		return "&";
-	case BVRIGHTSHIFT:
-		return ">>";
 	default: {
 		cerr << "Unknown name when outputting:";
 		FatalError(_kind_names[k]);
@@ -169,19 +167,47 @@ string functionToCVCName(const Kind k) {
         os << "]";
         break;
       case BVLEFTSHIFT:
-        os << "(";
-        PL_Print1(os, c[0], indentation, letize);
-        os << " << ";
-        if (!c[1].isConstant())
-        {
-        	FatalError("PL_Print1: The shift argument to a left shift must be a constant. Found:",c[1]);
+        assert(2 == c.size());
+        if (c[1].isConstant()) {
+          os << "(";
+          PL_Print1(os, c[0], indentation, letize);
+          os << " << ";
+          os << c[1].GetUnsignedConst();
+          os << ")";
+          os << "[";
+          os << (c[0].GetValueWidth()-1);
+          os << " : " << "0]";
+        } else {
+          os << "BVSHL(";
+          PL_Print1(os, c[0], indentation, letize);
+          os << ", ";
+          PL_Print1(os, c[1], indentation, letize);
+          os << ")" << endl;
         }
-        os << c[1].GetUnsignedConst();
-        os << ")";
-        os << "[";
-        os << (c[0].GetValueWidth()-1);
-        os << " : " << "0]";
-
+        break;
+      case BVRIGHTSHIFT:
+        assert(2 == c.size());
+        if (c[1].isConstant()) {
+          os << "(";
+          PL_Print1(os, c[0], indentation, letize);
+          os << " << ";
+          os << c[1].GetUnsignedConst();
+          os << ")";
+        } else {
+          os << "BVLSHR(";
+          PL_Print1(os, c[0], indentation, letize);
+          os << ", ";
+          PL_Print1(os, c[1], indentation, letize);
+          os << ")" << endl;
+        }
+        break;
+      case BVSRSHIFT:
+        assert(2 == c.size());
+        os << "BVASHR(";
+        PL_Print1(os, c[0], indentation, letize);
+        os << ", ";
+        PL_Print1(os, c[1], indentation, letize);
+        os << ")" << endl;
         break;
 
       case BVMULT:   // variable arity, function name at front, size next, comma separated.
@@ -242,7 +268,6 @@ string functionToCVCName(const Kind k) {
       case BVCONCAT:  // two arity, infix function name.
       case BVOR:
       case BVAND:
-      case BVRIGHTSHIFT:
       case EQ:
       case IFF:
       case IMPLIES:

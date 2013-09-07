@@ -84,6 +84,11 @@
 %token  BV_TOK                  "BV"
 %token  BVLEFTSHIFT_TOK         "<<"
 %token  BVRIGHTSHIFT_TOK        ">>"
+
+%token  BVSHL_TOK               "BVSHL"
+%token  BVLSHR_TOK              "BVLSHR"
+%token  BVASHR_TOK              "BVASHR"
+
 %token  BVPLUS_TOK              "BVPLUS"
 %token  BVSUB_TOK               "BVSUB"
 %token  BVUMINUS_TOK            "BVUMINUS"
@@ -839,6 +844,22 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   delete $1;
   }
 }
+|      Expr BVLEFTSHIFT_TOK Expr
+{
+  // VARIABLE LEFT SHIFT
+  //
+  // $1 (THEEXPR) is being shifted
+  //
+  // $3 is the variable shift amount
+  unsigned int width = $1->GetValueWidth();
+  ASTNode * ret = new ASTNode(parserInterface->nf->CreateTerm(BVLEFTSHIFT, width, *$1, *$3));
+  BVTypeCheck(*ret);
+  //cout << *ret;
+
+  $$ = ret;
+  delete $1;
+  delete $3;
+}
 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK
 {
   ASTNode len = parserInterface->CreateZeroConst($3);
@@ -874,6 +895,33 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   $$ = ret;
   delete $1;
   delete $3;
+}
+|      BVSHL_TOK '(' Expr ',' Expr ')'
+{
+  unsigned int width = $3->GetValueWidth();
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVLEFTSHIFT, width, *$3, *$5));
+  $$ = n;
+
+  delete $3;
+  delete $5;
+}
+|      BVLSHR_TOK '(' Expr ',' Expr ')'
+{
+  unsigned int width = $3->GetValueWidth();
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVRIGHTSHIFT, width, *$3, *$5));
+  $$ = n;
+
+  delete $3;
+  delete $5;
+}
+|      BVASHR_TOK '(' Expr ',' Expr ')'
+{
+  unsigned int width = $3->GetValueWidth();
+  ASTNode * n = new ASTNode(parserInterface->nf->CreateTerm(BVSRSHIFT, width, *$3, *$5));
+  $$ = n;
+
+  delete $3;
+  delete $5;
 }
 |      BVPLUS_TOK '(' NUMERAL_TOK ',' Exprs ')' 
 {
