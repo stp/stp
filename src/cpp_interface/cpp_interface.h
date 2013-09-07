@@ -57,7 +57,7 @@ namespace BEEV
       string name;
     };
 
-    hash_map<string, Function, BEEV::LETMgr::hashF<std::string> > functions;
+    hash_map<string, Function> functions;
 
     void checkInvariant()
     {

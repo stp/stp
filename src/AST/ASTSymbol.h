@@ -10,10 +10,10 @@
 #ifndef ASTSYMBOL_H
 #define ASTSYMBOL_H
 
+#include "../util/StringHash.h"
+
 namespace BEEV
 {
-  unsigned long long hash(unsigned char *str);
-
   /******************************************************************
    *  Class ASTSymbol:                                              *
    *                                                                *
@@ -46,7 +46,7 @@ namespace BEEV
     public:
       size_t operator()(const ASTSymbol *sym_ptr) const
       {
-        return (size_t)BEEV::hash((unsigned char*)(sym_ptr->_name));
+        return CStringHash()(sym_ptr->_name);
       };
     }; // End of class ASTSymbolHasher
 
