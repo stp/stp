@@ -15,6 +15,7 @@ namespace printer
   using std::string;
   using namespace BEEV;
 
+  ASTNodeSet Lisp_AlreadyPrintedSet;
   ostream &Lisp_Print_indent(ostream &os,  const ASTNode& n,int indentation);
 
 
@@ -63,7 +64,7 @@ namespace printer
         // os << "(" << _int_node_ptr->_ref_count << ")";
         // os << "{" << GetValueWidth() << "}";
       }
-    else if (n.IsAlreadyPrinted())
+    else if (Lisp_AlreadyPrintedSet.find(n) != Lisp_AlreadyPrintedSet.end())
       {
         // print non-symbols as "[index]" if seen before.
         os << "[" << n.GetNodeNum() << "]";
@@ -71,7 +72,7 @@ namespace printer
       }
     else
       {
-        n.MarkAlreadyPrinted();
+        Lisp_AlreadyPrintedSet.insert(n);
         const ASTVec &children = n.GetChildren();
         os << n.GetNodeNum() << ":"
           //<< "(" << _int_node_ptr->_ref_count << ")"
@@ -91,8 +92,7 @@ namespace printer
   ostream &Lisp_Print(ostream &os, const ASTNode& n,  int indentation)
   {
     // Clear the PrintMap
-    STPMgr* bm = n.GetSTPMgr();
-    bm->AlreadyPrintedSet.clear();
+    Lisp_AlreadyPrintedSet.clear();
     Lisp_Print_indent(os, n, indentation);
     printf("\n");
     return os;

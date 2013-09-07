@@ -31,6 +31,7 @@ namespace printer
 
   ostream& Lisp_Print(ostream &os, 
                       const BEEV::ASTNode& n,  int indentation=0);
+  extern BEEV::ASTNodeSet Lisp_AlreadyPrintedSet;
   ostream& Lisp_Print_indent(ostream &os,  
                              const BEEV::ASTNode& n,int indentation=0);
 

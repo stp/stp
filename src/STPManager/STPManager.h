@@ -409,9 +409,6 @@ namespace BEEV
     // Not filled in by the smtlib parser.
     ASTVec ListOfDeclaredVars;
     
-    // Table for DAG printing.
-    ASTNodeSet AlreadyPrintedSet;
-    
     //Nodes seen so far
     ASTNodeSet PLPrintNodeSet;
 
@@ -474,7 +471,6 @@ namespace BEEV
       NodeLetVarMap.clear();
       NodeLetVarMap1.clear();
       PLPrintNodeSet.clear();
-      AlreadyPrintedSet.clear();
       TermsAlreadySeenMap.clear();
       NodeLetVarVec.clear();
       ListOfDeclaredVars.clear();
