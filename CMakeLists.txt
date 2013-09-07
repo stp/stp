@@ -61,11 +61,14 @@ endif()
 
 
 add_cxx_flag_if_supported("-Wall")
+add_cxx_flag_if_supported("-Wextra")
 add_cxx_flag_if_supported("-Wunused")
 add_cxx_flag_if_supported("-Wsign-compare")
 add_cxx_flag_if_supported("-Wtype-limits")
 add_cxx_flag_if_supported("-Wuninitialized")
 add_cxx_flag_if_supported("-Wno-deprecated")
+add_cxx_flag_if_supported("-Wstrict-aliasing")
+add_cxx_flag_if_supported("-Wpointer-arith")
 add_definitions("-D__STDC_LIMIT_MACROS -D__STDC_FORMAT_MACROS")
 
 option(TUNE_NATIVE "Use -mtune=native" OFF)
