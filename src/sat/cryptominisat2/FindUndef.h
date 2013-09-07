@@ -35,23 +35,23 @@ using namespace MINISAT;
 class FindUndef {
     public:
         FindUndef(Solver& _solver);
-        const uint unRoll();
-        
+        uint unRoll();
+
     private:
         Solver& solver;
-        
+
         void moveBinToNormal();
         void moveBinFromNormal();
         bool updateTables();
         void fillPotential();
         void unboundIsPotentials();
-        
+
         vector<bool> dontLookAtClause; //If set to TRUE, then that clause already has only 1 lit that is true, so it can be skipped during updateFixNeed()
         vector<uint32_t> satisfies;
         vector<bool> isPotential;
         uint32_t isPotentialSum;
         uint32_t binPosition;
-        
+
 };
 
 }; //NAMESPACE MINISAT

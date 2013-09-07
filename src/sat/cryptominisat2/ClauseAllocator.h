@@ -45,14 +45,14 @@ class ClauseAllocator {
     public:
         ClauseAllocator();
         ~ClauseAllocator();
-        
+
         template<class T>
-        Clause* Clause_new(const T& ps, const uint32_t group, const bool learnt = false);
+        Clause* Clause_new(const T& ps, uint32_t group, bool learnt = false);
         template<class T>
-        XorClause* XorClause_new(const T& ps, const bool inverted, const uint32_t group);
+        XorClause* XorClause_new(const T& ps, bool inverted, uint32_t group);
         Clause* Clause_new(Clause& c);
 
-        const ClauseOffset getOffset(const Clause* ptr) const;
+        ClauseOffset getOffset(const Clause* ptr) const;
 
         inline Clause* getPointer(const uint32_t offset)
         {
@@ -65,19 +65,19 @@ class ClauseAllocator {
 
     private:
         uint32_t getOuterOffset(const Clause* c) const;
-        uint32_t getInterOffset(const Clause* c, const uint32_t outerOffset) const;
-        const ClauseOffset combineOuterInterOffsets(const uint32_t outerOffset, const uint32_t interOffset) const;
+        uint32_t getInterOffset(const Clause* c, uint32_t outerOffset) const;
+        ClauseOffset combineOuterInterOffsets(uint32_t outerOffset, uint32_t interOffset) const;
 
         template<class T>
         void updatePointers(vec<T*>& toUpdate, const map<Clause*, Clause*>& oldToNewPointer);
         void updatePointers(vector<Clause*>& toUpdate, const map<Clause*, Clause*>& oldToNewPointer);
         void updatePointers(vector<XorClause*>& toUpdate, const map<Clause*, Clause*>& oldToNewPointer);
-        
+
         template<class T>
         void updateOffsets(vec<vec<T> >& watches, const map<ClauseOffset, ClauseOffset>& oldToNewOffset);
         template<class T>
         void updateOffsetsXor(vec<vec<T> >& watches, const map<ClauseOffset, ClauseOffset>& oldToNewOffset);
-        
+
         vec<uint32_t*> dataStarts;
         vec<size_t> sizes;
         vec<vec<uint32_t> > origClauseSizes;
@@ -87,7 +87,7 @@ class ClauseAllocator {
 
         boost::pool<> clausePoolBin;
 
-        void* allocEnough(const uint32_t size);
+        void* allocEnough(uint32_t size);
 };
 
 }; //NAMESPACE MINISAT

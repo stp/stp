@@ -87,7 +87,7 @@ class PropagatedFrom
 {
     private:
         union {Clause* clause; uint32_t otherLit;};
-        
+
     public:
         PropagatedFrom(Clause* c)
         {
@@ -108,7 +108,7 @@ class PropagatedFrom
         {
         }
 
-        const bool isBinary() const
+        bool isBinary() const
         {
             return (otherLit&1);
         }
@@ -134,20 +134,20 @@ class PropagatedFrom
             return clause;
         }
 
-        const bool isNULL() const
+        bool isNULL() const
         {
             if (isBinary()) return false;
             return clause == NULL;
         }
 
-        const uint32_t size() const
+        uint32_t size() const
         {
             if (isBinary()) return 2;
-            
+
             #ifdef DEBUG_PROPAGATEFROM
             assert(!isNULL());
             #endif
-            
+
             return getClause()->size();
         }
 
@@ -251,7 +251,7 @@ public:
     bool      greedyUnbound;        //If set, then variables will be greedily unbounded (set to l_Undef)
     RestartType fixRestartType;     // If set, the solver will always choose the given restart strategy
     GaussianConfig gaussconfig;
-    
+
 
     enum { polarity_true = 0, polarity_false = 1, polarity_rnd = 3, polarity_auto = 4};
 
@@ -269,25 +269,25 @@ public:
     const vec<Clause*>& get_sorted_learnts(); //return the set of learned clauses, sorted according to the logic used in MiniSat to distinguish between 'good' and 'bad' clauses
     const vec<Clause*>& get_learnts() const; //Get all learnt clauses that are >1 long
     const vector<Lit> get_unitary_learnts() const; //return the set of unitary learnt clauses
-    const uint get_unitary_learnts_num() const; //return the number of unitary learnt clauses
+    uint get_unitary_learnts_num() const; //return the number of unitary learnt clauses
     void dumpSortedLearnts(const char* file, const uint32_t maxSize); // Dumps all learnt clauses (including unitary ones) into the file
     void needLibraryCNFFile(const char* fileName); //creates file in current directory with the filename indicated, and puts all calls from the library into the file.
 
     #ifdef USE_GAUSS
-    const uint32_t get_sum_gauss_called() const;
-    const uint32_t get_sum_gauss_confl() const;
-    const uint32_t get_sum_gauss_prop() const;
-    const uint32_t get_sum_gauss_unit_truths() const;
+    uint32_t get_sum_gauss_called() const;
+    uint32_t get_sum_gauss_confl() const;
+    uint32_t get_sum_gauss_prop() const;
+    uint32_t get_sum_gauss_unit_truths() const;
     #endif //USE_GAUSS
 
     //Printing statistics
-    const uint32_t getNumElimSubsume() const; // Get variable elimination stats from Subsumer
-    const uint32_t getNumElimXorSubsume() const; // Get variable elimination stats from XorSubsumer
-    const uint32_t getNumXorTrees() const; // Get the number of trees built from 2-long XOR-s. This is effectively the number of variables that replace other variables
-    const uint32_t getNumXorTreesCrownSize() const; // Get the number of variables being replaced by other variables
-    const double getTotalTimeSubsumer() const;
-    const double getTotalTimeXorSubsumer() const;
-    
+    uint32_t getNumElimSubsume() const; // Get variable elimination stats from Subsumer
+    uint32_t getNumElimXorSubsume() const; // Get variable elimination stats from XorSubsumer
+    uint32_t getNumXorTrees() const; // Get the number of trees built from 2-long XOR-s. This is effectively the number of variables that replace other variables
+    uint32_t getNumXorTreesCrownSize() const; // Get the number of variables being replaced by other variables
+    double getTotalTimeSubsumer() const;
+    double getTotalTimeXorSubsumer() const;
+
 protected:
     #ifdef USE_GAUSS
     void print_gauss_sum_stats();
@@ -301,13 +301,13 @@ protected:
     uint32_t sum_gauss_unit_truths;
     friend class Gaussian;
     #endif //USE_GAUSS
-    
+
     template <class T>
     Clause* addClauseInt(T& ps, uint group);
     template<class T>
-    XorClause* addXorClauseInt(T& ps, bool xor_clause_inverted, const uint32_t group);
+    XorClause* addXorClauseInt(T& ps, bool xor_clause_inverted, uint32_t group);
     template<class T>
-    bool addLearntClause(T& ps, const uint group, const uint32_t activity);
+    bool addLearntClause(T& ps, uint group, uint32_t activity);
     template<class T>
     void    removeWatchedCl(vec<T> &ws, const ClauseOffset c);
     template<class T>
@@ -318,7 +318,7 @@ protected:
     void    removeWatchedBinClAll(vec<T> &ws, const Lit impliedLit);
     template<class T>
     bool    findWatchedBinCl(const vec<T>& ws, const Lit impliedLit) const;
-    
+
     // Helper structures:
     //
     struct VarOrderLt {
@@ -398,10 +398,10 @@ protected:
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
 
-    
+
     uint64_t MYFLAG;
     template<class T>
-    const uint32_t calcNBLevels(const T& ps);
+    uint32_t calcNBLevels(const T& ps);
     vec<uint64_t> permDiff; // LS: permDiff[var] contains the current conflict number... Used to count the number of different decision level variables in learnt clause
     #ifdef UPDATEVARACTIVITY
     vec<Var> lastDecisionLevel;
@@ -413,7 +413,7 @@ protected:
 
     // Main internal methods:
     //
-    const bool simplify    ();                                                           // Removes already satisfied clauses.
+    bool simplify    ();                                                           // Removes already satisfied clauses.
     //int      nbPropagated     (int level);
     void     insertVarOrder   (Var x);                                                 // Insert a variable in the decision order priority queue.
     Lit      pickBranchLit    ();                                                      // Return the next decision variable.
@@ -421,7 +421,7 @@ protected:
     void     uncheckedEnqueue (const Lit p, const PropagatedFrom& from = PropagatedFrom());                 // Enqueue a literal. Assumes value of literal is undefined.
     void     uncheckedEnqueueLight (const Lit p);
     bool     enqueue          (Lit p, PropagatedFrom from = PropagatedFrom());                            // Test if fact 'p' contradicts current state, enqueue otherwise.
-    PropagatedFrom  propagate (const bool update = true);                         // Perform unit propagation. Returns possibly conflicting clause.
+    PropagatedFrom  propagate (bool update = true);                         // Perform unit propagation. Returns possibly conflicting clause.
     PropagatedFrom  propagateBin();
     PropagatedFrom  propagateBinNoLearnts();
     template<bool dontCareLearnt>
@@ -430,12 +430,12 @@ protected:
     PropagatedFrom  propagateBinOneLevel();
     PropagatedFrom  propagate_xors   (const Lit& p);
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
-    Clause*  analyze          (PropagatedFrom confl, vec<Lit>& out_learnt, int& out_btlevel, uint32_t &nblevels, const bool update); // (bt = backtrack)
+    Clause*  analyze          (PropagatedFrom confl, vec<Lit>& out_learnt, int& out_btlevel, uint32_t &nblevels, bool update); // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
-    lbool    search           (int nof_conflicts, int nof_conflicts_fullrestart, const bool update = true);      // Search for a given number of conflicts.
+    lbool    search           (int nof_conflicts, int nof_conflicts_fullrestart, bool update = true);      // Search for a given number of conflicts.
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
-    llbool   handle_conflict  (vec<Lit>& learnt_clause, PropagatedFrom confl, int& conflictC, const bool update);// Handles the conflict clause
+    llbool   handle_conflict  (vec<Lit>& learnt_clause, PropagatedFrom confl, int& conflictC, bool update);// Handles the conflict clause
     llbool   new_decision     (const int& nof_conflicts, const int& nof_conflicts_fullrestart, int& conflictC);  // Handles the case when all propagations have been made, and now a decision must be made
 
     // Maintaining Variable/Clause activity:
@@ -451,22 +451,22 @@ protected:
     void     attachClause     (Clause& c);             // Attach a clause to watcher lists.
     void     detachClause     (const XorClause& c);
     void     detachClause     (const Clause& c);       // Detach a clause to watcher lists.
-    void     detachModifiedClause(const Lit lit1, const Lit lit2, const uint size, const Clause* address);
-    void     detachModifiedClause(const Var var1, const Var var2, const uint origSize, const XorClause* address);
+    void     detachModifiedClause(const Lit lit1, const Lit lit2, uint size, const Clause* address);
+    void     detachModifiedClause(const Var var1, const Var var2, uint origSize, const XorClause* address);
     template<class T>
     void     removeClause(T& c);                       // Detach and free a clause.
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     //void     reverse_binary_clause(Clause& c) const;   // Binary clauses --- the first Lit has to be true
     void     testAllClauseAttach() const;
     void     findAllAttach() const;
-    const bool findClause(XorClause* c) const;
-    const bool findClause(Clause* c) const;
+    bool findClause(XorClause* c) const;
+    bool findClause(Clause* c) const;
 
     // Misc:
     //
     uint32_t decisionLevel    ()      const; // Gives the current decisionlevel.
     uint32_t abstractLevel    (const Var& x) const; // Used to represent an abstraction of sets of decision levels.
-    
+
     //Xor-finding related stuff
     friend class XorFinder;
     friend class Conglomerate;
@@ -492,11 +492,11 @@ protected:
     XorSubsumer* xorSubsumer;
     RestartTypeChooser* restartTypeChooser;
     MatrixFinder* matrixFinder;
-    const bool chooseRestartType(const uint& lastFullRestart);
+    bool chooseRestartType(const uint& lastFullRestart);
     void setDefaultRestartType();
-    const bool checkFullRestart(int& nof_conflicts, int& nof_conflicts_fullrestart, uint& lastFullRestart);
+    bool checkFullRestart(int& nof_conflicts, int& nof_conflicts_fullrestart, uint& lastFullRestart);
     void performStepsBeforeSolve();
-    const lbool simplifyProblem(const uint32_t numConfls);
+    lbool simplifyProblem(uint32_t numConfls);
     bool simplifying;
 
     // Debug & etc:
@@ -510,8 +510,8 @@ protected:
     void     printRestartStat ();
     void     printEndSearchStat();
     double   progressEstimate () const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
-    const bool noLearntBinaries() const;
-    
+    bool noLearntBinaries() const;
+
     // Polarity chooser
     void calculateDefaultPolarities(); //Calculates the default polarity for each var, and fills defaultPolarities[] with it
     bool defaultPolarity(); //if polarity_mode is not polarity_auto, this returns the default polarity of the variable
@@ -546,7 +546,7 @@ inline void Solver::varBumpActivity(Var v)
         var_inc >>= 14;
         //var_inc = 1;
         //std::cout << "var_inc: " << var_inc << std::endl;
-        
+
         /*Heap<VarOrderLt> copy_order_heap2(order_heap);
         while(!copy_order_heap2.empty()) {
             Var v = copy_order_heap2.getmin();
@@ -684,28 +684,28 @@ inline void     Solver::setVariableName(Var var, char* name)
 #endif
 
 #ifdef USE_GAUSS
-inline const uint32_t Solver::get_sum_gauss_unit_truths() const
+inline uint32_t Solver::get_sum_gauss_unit_truths() const
 {
     return sum_gauss_unit_truths;
 }
 
-inline const uint32_t Solver::get_sum_gauss_called() const
+inline uint32_t Solver::get_sum_gauss_called() const
 {
     return sum_gauss_called;
 }
 
-inline const uint32_t Solver::get_sum_gauss_confl() const
+inline uint32_t Solver::get_sum_gauss_confl() const
 {
     return sum_gauss_confl;
 }
 
-inline const uint32_t Solver::get_sum_gauss_prop() const
+inline uint32_t Solver::get_sum_gauss_prop() const
 {
     return sum_gauss_prop;
 }
 #endif
 
-inline const uint Solver::get_unitary_learnts_num() const
+inline uint Solver::get_unitary_learnts_num() const
 {
     if (decisionLevel() > 0)
         return trail_lim[0];
@@ -769,13 +769,13 @@ inline void Solver::reverse_binary_clause(Clause& c) const {
         for (int k = 0, size = c.size(); k != size; k++ ) {
             const lbool& val = assigns[c[k].var()];
             assert(val != l_Undef);
-            
+
             c[k] = c[k].unsign() ^ val.getBool();
             final ^= val.getBool();
         }
         if (final)
             c[0] = c[0].unsign() ^ !assigns[c[0].var()].getBool();
-        
+
         c.setUpdateNeeded(false);
     }
 }*/

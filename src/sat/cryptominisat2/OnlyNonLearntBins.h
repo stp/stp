@@ -31,20 +31,20 @@ class OnlyNonLearntBins {
         OnlyNonLearntBins(Solver& solver);
 
         //propagation
-        const bool propagate();
-        const bool propagateBinExcept(const Lit& exceptLit);
-        const bool propagateBinOneLevel();
+        bool propagate();
+        bool propagateBinExcept(const Lit& exceptLit);
+        bool propagateBinOneLevel();
 
         //Management of clauses
-        const bool fill();
+        bool fill();
         void removeBin(Lit lit1, Lit lit2);
         void removeClause(Clause& c);
-        const uint32_t removeBins();
+        uint32_t removeBins();
 
     private:
         vec<vec<WatchedBin> > binwatches;
         set<uint64_t> toRemove;
-        
+
         Solver& solver;
 };
 

@@ -34,21 +34,21 @@ FindUndef::FindUndef(Solver& _solver) :
 void FindUndef::fillPotential()
 {
     int trail = solver.decisionLevel()-1;
-    
+
     while(trail > 0) {
         assert(trail < (int)solver.trail_lim.size());
         uint at = solver.trail_lim[trail];
-        
+
         assert(at > 0);
         Var v = solver.trail[at].var();
         if (solver.assigns[v] != l_Undef) {
             isPotential[v] = true;
             isPotentialSum++;
         }
-        
+
         trail--;
     }
-    
+
     for (XorClause** it = solver.xorclauses.getData(), **end = it + solver.xorclauses.size(); it != end; it++) {
         XorClause& c = **it;
         for (Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
@@ -59,7 +59,7 @@ void FindUndef::fillPotential()
             assert(!solver.value(*l).isUndef());
         }
     }
-    
+
     vector<Var> replacingVars = solver.varReplacer->getReplacingVars();
     for (Var *it = &replacingVars[0], *end = it + replacingVars.size(); it != end; it++) {
         if (isPotential[*it]) {
@@ -91,20 +91,20 @@ void FindUndef::moveBinFromNormal()
     solver.clauses.shrink(solver.clauses.size() - binPosition);
 }
 
-const uint FindUndef::unRoll()
+uint FindUndef::unRoll()
 {
     if (solver.decisionLevel() == 0) return 0;
-    
+
     moveBinToNormal();
-    
+
     dontLookAtClause.resize(solver.clauses.size(), false);
     isPotential.resize(solver.nVars(), false);
     fillPotential();
     satisfies.resize(solver.nVars(), 0);
-    
+
     while(!updateTables()) {
         assert(isPotentialSum > 0);
-        
+
         uint32_t maximum = 0;
         Var v = var_Undef;
         for (uint i = 0; i < isPotential.size(); i++) {
@@ -114,28 +114,28 @@ const uint FindUndef::unRoll()
             }
         }
         assert(v != var_Undef);
-        
+
         isPotential[v] = false;
         isPotentialSum--;
-        
+
         std::fill(satisfies.begin(), satisfies.end(), 0);
     }
-    
+
     unboundIsPotentials();
     moveBinFromNormal();
-    
+
     return isPotentialSum;
 }
 
 bool FindUndef::updateTables()
 {
     bool allSat = true;
-    
+
     uint i = 0;
     for (Clause** it = solver.clauses.getData(), **end = it + solver.clauses.size(); it != end; it++, i++) {
         if (dontLookAtClause[i])
             continue;
-        
+
         Clause& c = **it;
         bool definitelyOK = false;
         Var v = var_Undef;
@@ -154,7 +154,7 @@ bool FindUndef::updateTables()
         }
         if (definitelyOK)
             continue;
-        
+
         if (numTrue == 1) {
             assert(v != var_Undef);
             isPotential[v] = false;
@@ -162,7 +162,7 @@ bool FindUndef::updateTables()
             dontLookAtClause[i] = true;
             continue;
         }
-        
+
         //numTrue > 1
         allSat = false;
         for (Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
@@ -170,7 +170,7 @@ bool FindUndef::updateTables()
                 satisfies[l->var()]++;
         }
     }
-    
+
     return allSat;
 }
 

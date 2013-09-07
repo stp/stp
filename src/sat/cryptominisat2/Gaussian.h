@@ -50,28 +50,28 @@ class Clause;
 class Gaussian
 {
 public:
-    Gaussian(Solver& solver, const GaussianConfig& config, const uint matrix_no, const vector<XorClause*>& xorclauses);
+    Gaussian(Solver& solver, const GaussianConfig& config, uint matrix_no, const vector<XorClause*>& xorclauses);
     ~Gaussian();
 
-    const bool full_init();
+    bool full_init();
     llbool find_truths(vec<Lit>& learnt_clause, int& conflictC);
 
     //statistics
     void print_stats() const;
     void print_matrix_stats() const;
-    const uint get_called() const;
-    const uint get_useful_prop() const;
-    const uint get_useful_confl() const;
-    const bool get_disabled() const;
-    const uint32_t get_unit_truths() const;
-    void set_disabled(const bool toset);
+    uint get_called() const;
+    uint get_useful_prop() const;
+    uint get_useful_confl() const;
+    bool get_disabled() const;
+    uint32_t get_unit_truths() const;
+    void set_disabled(bool toset);
 
     //functions used throughout the Solver
-    void canceling(const uint sublevel);
+    void canceling(uint sublevel);
 
 protected:
     Solver& solver;
-    
+
     //Gauss high-level configuration
     const GaussianConfig& config;
     const uint matrix_no;
@@ -107,7 +107,7 @@ protected:
     int gauss_last_level;
     vector<pair<Clause*, uint> > clauses_toclear;
     bool disabled; // Gauss is disabled
-    
+
     //State of current elimnation
     vec<uint> propagatable_rows; //used to store which rows were deemed propagatable during elimination
     vector<unsigned char> changed_rows; //used to store which rows were deemed propagatable during elimination
@@ -151,19 +151,19 @@ protected:
     void disable_if_necessary();
     void reset_stats();
     void update_last_one_in_col(matrixset& m);
-    
+
 private:
-    
+
     //debug functions
     bool check_no_conflict(matrixset& m) const; // Are there any conflicts that the matrixset 'm' causes?
-    const bool nothing_to_propagate(matrixset& m) const; // Are there any conflicts of propagations that matrixset 'm' clauses?
+    bool nothing_to_propagate(matrixset& m) const; // Are there any conflicts of propagations that matrixset 'm' clauses?
     template<class T>
     void print_matrix_row(const T& row) const; // Print matrix row 'row'
     template<class T>
     void print_matrix_row_with_assigns(const T& row) const;
     void check_matrix_against_varset(PackedMatrix& matrix,const matrixset& m) const;
-    const bool check_last_one_in_cols(matrixset& m) const;
-    const void check_first_one_in_row(matrixset& m, const uint j);
+    bool check_last_one_in_cols(matrixset& m) const;
+    void check_first_one_in_row(matrixset& m, const uint j);
     void print_matrix(matrixset& m) const;
     void print_last_one_in_cols(matrixset& m) const;
     static const string lbool_to_string(const lbool toprint);
@@ -190,7 +190,7 @@ inline void Gaussian::canceling(const uint sublevel)
         a++;
     }
     clauses_toclear.resize(clauses_toclear.size()-a);
-    
+
     if (messed_matrix_vars_since_reversal)
         return;
     int c = std::min((int)gauss_last_level, (int)(solver.trail.size())-1);
@@ -205,27 +205,27 @@ inline void Gaussian::canceling(const uint sublevel)
     }
 }
 
-inline const uint32_t Gaussian::get_unit_truths() const
+inline uint32_t Gaussian::get_unit_truths() const
 {
     return unit_truths;
 }
 
-inline const uint Gaussian::get_called() const
+inline uint Gaussian::get_called() const
 {
     return called;
 }
 
-inline const uint Gaussian::get_useful_prop() const
+inline uint Gaussian::get_useful_prop() const
 {
     return useful_prop;
 }
 
-inline const uint Gaussian::get_useful_confl() const
+inline uint Gaussian::get_useful_confl() const
 {
     return useful_confl;
 }
 
-inline const bool Gaussian::get_disabled() const
+inline bool Gaussian::get_disabled() const
 {
     return disabled;
 }

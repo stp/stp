@@ -78,7 +78,7 @@ Clause* ClauseAllocator::Clause_new(Clause& c)
     Clause& c2 = *(Clause*)mem;
     c2.setWasBin(c.size() == 2);
     //assert(!(c.size() == 2 && !c2.wasBin()));
-    
+
     return &c2;
 }
 
@@ -96,7 +96,7 @@ void* ClauseAllocator::allocEnough(const uint32_t size)
     if (size == 2) {
         return clausePoolBin.malloc();
     }
-    
+
     uint32_t needed = sizeof(Clause)+sizeof(Lit)*size;
     bool found = false;
     uint32_t which = std::numeric_limits<uint32_t>::max();
@@ -112,14 +112,14 @@ void* ClauseAllocator::allocEnough(const uint32_t size)
         #ifdef DEBUG_CLAUSEALLOCATOR
         std::cout << "c New list in ClauseAllocator" << std::endl;
         #endif //DEBUG_CLAUSEALLOCATOR
-        
+
         uint32_t nextSize; //number of BYTES to allocate
         if (maxSizes.size() != 0)
             nextSize = maxSizes[maxSizes.size()-1]*3*sizeof(uint32_t);
         else
             nextSize = MIN_LIST_SIZE;
         assert(needed <  nextSize);
-        
+
         uint32_t *dataStart = (uint32_t*)malloc(nextSize);
         assert(dataStart != NULL);
         dataStarts.push(dataStart);
@@ -146,14 +146,14 @@ void* ClauseAllocator::allocEnough(const uint32_t size)
     return pointer;
 }
 
-const ClauseOffset ClauseAllocator::getOffset(const Clause* ptr) const
+ClauseOffset ClauseAllocator::getOffset(const Clause* ptr) const
 {
     uint32_t outerOffset = getOuterOffset(ptr);
     uint32_t interOffset = getInterOffset(ptr, outerOffset);
     return combineOuterInterOffsets(outerOffset, interOffset);
 }
 
-inline const ClauseOffset ClauseAllocator::combineOuterInterOffsets(const uint32_t outerOffset, const uint32_t interOffset) const
+inline ClauseOffset ClauseAllocator::combineOuterInterOffsets(const uint32_t outerOffset, const uint32_t interOffset) const
 {
     return (outerOffset | (interOffset<<4));
 }
@@ -198,7 +198,7 @@ struct NewPointerAndOffset {
 void ClauseAllocator::consolidate(Solver* solver)
 {
     double myTime = cpuTime();
-    
+
     //if (dataStarts.size() > 2) {
     uint32_t sum = 0;
     for (uint32_t i = 0; i < sizes.size(); i++) {
@@ -212,7 +212,7 @@ void ClauseAllocator::consolidate(Solver* solver)
     #ifdef DEBUG_CLAUSEALLOCATOR
     std::cout << "c ratio:" << (double)sum/(double)sumAlloc << std::endl;
     #endif //DEBUG_CLAUSEALLOCATOR
-    
+
     if ((double)sum/(double)sumAlloc > 0.7 /*&& sum > 10000000*/) {
         if (solver->verbosity >= 2) {
             std::cout << "c Not consolidating memory." << std::endl;
@@ -220,7 +220,7 @@ void ClauseAllocator::consolidate(Solver* solver)
         return;
     }
 
-    
+
     uint32_t newMaxSize = std::max(sum*2*sizeof(uint32_t), MIN_LIST_SIZE);
     uint32_t* newDataStarts = (uint32_t*)malloc(newMaxSize);
     newMaxSize /= sizeof(uint32_t);
@@ -230,7 +230,7 @@ void ClauseAllocator::consolidate(Solver* solver)
 
     map<Clause*, Clause*> oldToNewPointer;
     map<uint32_t, uint32_t> oldToNewOffset;
-    
+
     uint32_t* newDataStartsPointer = newDataStarts;
     for (uint32_t i = 0; i < dataStarts.size(); i++) {
         uint32_t currentLoc = 0;
@@ -239,7 +239,7 @@ void ClauseAllocator::consolidate(Solver* solver)
             if (!oldPointer->freed()) {
                 uint32_t sizeNeeded = sizeof(Clause) + oldPointer->size()*sizeof(Lit);
                 memcpy(newDataStartsPointer, dataStarts[i] + currentLoc, sizeNeeded);
-                
+
                 oldToNewPointer[oldPointer] = (Clause*)newDataStartsPointer;
                 oldToNewOffset[combineOuterInterOffsets(i, currentLoc)] = combineOuterInterOffsets(0, newSize);
 
@@ -247,7 +247,7 @@ void ClauseAllocator::consolidate(Solver* solver)
                 newOrigClauseSizes.push(sizeNeeded/sizeof(uint32_t));
                 newDataStartsPointer += sizeNeeded/sizeof(uint32_t);
             }
-            
+
             currentLoc += origClauseSizes[i][i2];
         }
     }
@@ -273,7 +273,7 @@ void ClauseAllocator::consolidate(Solver* solver)
     for(map<Var, vector<XorClause*> >::iterator it = solver->xorSubsumer->elimedOutVar.begin(); it != solver->xorSubsumer->elimedOutVar.end(); it++) {
         updatePointers(it->second, oldToNewPointer);
     }
-    
+
 
     vec<PropagatedFrom>& reason = solver->reason;
     for (PropagatedFrom *it = reason.getData(), *end = reason.getDataEnd(); it != end; it++) {

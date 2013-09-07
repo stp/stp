@@ -56,11 +56,11 @@ class MatrixFinder;
 class Clause
 {
 protected:
-    
+
     #ifdef STATS_NEEDED
     uint group;
     #endif
-    
+
     uint32_t isLearnt:1;
     uint32_t strenghtened:1;
     uint32_t varChanged:1;
@@ -72,7 +72,7 @@ protected:
     uint32_t isFreed:1;
     uint32_t wasBinInternal:1;
     uint32_t mySize:20;
-    
+
     union  {uint32_t act; uint32_t abst;} extra;
     float oldActivityInter;
     #ifdef _MSC_VER
@@ -110,7 +110,7 @@ public:
 public:
     friend class ClauseAllocator;
 
-    const uint   size        ()      const {
+    uint   size        ()      const {
         return mySize;
     }
     void         resize      (const uint size) {
@@ -123,21 +123,21 @@ public:
     void         pop         () {
         shrink(1);
     }
-    const bool   isXor       () {
+    bool   isXor       () {
         return isXorClause;
     }
-    const bool   learnt      ()      const {
+    bool   learnt      ()      const {
         return isLearnt;
     }
     float&       oldActivity    () {
         return oldActivityInter;
     }
-    
+
     const float&       oldActivity    () const {
         return oldActivityInter;
     }
-    
-    const bool getStrenghtened() const {
+
+    bool getStrenghtened() const {
         return strenghtened;
     }
     void setStrenghtened() {
@@ -148,7 +148,7 @@ public:
     void unsetStrenghtened() {
         strenghtened = false;
     }
-    const bool getVarChanged() const {
+    bool getVarChanged() const {
         return varChanged;
     }
     void setVarChanged() {
@@ -159,7 +159,7 @@ public:
     void unsetVarChanged() {
         varChanged = false;
     }
-    const bool getSorted() const {
+    bool getSorted() const {
         return sorted;
     }
     void setSorted() {
@@ -171,7 +171,7 @@ public:
     void subsume0Finished() {
         subsume0Done = 1;
     }
-    const bool subsume0IsFinished() {
+    bool subsume0IsFinished() {
         return subsume0Done;
     }
 
@@ -185,35 +185,35 @@ public:
     void setActivity(uint32_t i)  {
         extra.act = i;
     }
-    
+
     const uint32_t&   activity   () const {
         return extra.act;
     }
-    
+
     void makeNonLearnt()  {
         assert(isLearnt);
         isLearnt = false;
         calcAbstractionClause();
     }
-    
+
     void makeLearnt(const uint32_t newActivity)  {
         extra.act = newActivity;
         oldActivityInter = 0;
         isLearnt = true;
     }
-    
+
     inline void  strengthen(const Lit p)
     {
         remove(*this, p);
         sorted = false;
         calcAbstractionClause();
     }
-    
+
     void calcAbstractionClause() {
         assert(!learnt());
         extra.abst = calcAbstraction(*this);;
     }
-    
+
     uint32_t getAbst()
     {
         if (learnt())
@@ -246,7 +246,7 @@ public:
         fprintf(to, "0\n");
     }
     #ifdef STATS_NEEDED
-    const uint32_t getGroup() const
+    uint32_t getGroup() const
     {
         return group;
     }
@@ -255,7 +255,7 @@ public:
         group = _group;
     }
     #else
-    const uint getGroup() const
+    uint getGroup() const
     {
         return 0;
     }
@@ -268,7 +268,7 @@ public:
         isRemoved = true;
     }
 
-    const bool removed() const {
+    bool removed() const {
         return isRemoved;
     }
 
@@ -276,11 +276,11 @@ public:
         isFreed = true;
     }
 
-    const bool freed() const {
+    bool freed() const {
         return isFreed;
     }
 
-    const bool wasBin() const {
+    bool wasBin() const {
         return wasBinInternal;
     }
 
@@ -323,7 +323,7 @@ public:
         printf("XOR Clause   group: %d, size: %d, learnt:%d, lits:\"", getGroup(), size(), learnt());
         plainPrint();
     }
-    
+
     void plainPrint(FILE* to = stdout) const {
         fprintf(to, "x");
         if (xor_clause_inverted())
@@ -333,7 +333,7 @@ public:
         }
         fprintf(to, "0\n");
     }
-    
+
     friend class MatrixFinder;
 };
 

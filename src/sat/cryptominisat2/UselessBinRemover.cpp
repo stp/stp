@@ -35,7 +35,7 @@ UselessBinRemover::UselessBinRemover(Solver& _solver, OnlyNonLearntBins& _onlyNo
 #define MAX_REMOVE_BIN_FULL_PROPS 20000000
 #define EXTRATIME_DIVIDER 2
 
-const bool UselessBinRemover::removeUslessBinFull()
+bool UselessBinRemover::removeUslessBinFull()
 {
     double myTime = cpuTime();
     toDeleteSet.clear();
@@ -88,7 +88,7 @@ const bool UselessBinRemover::removeUslessBinFull()
     return true;
 }
 
-const bool UselessBinRemover::removeUselessBinaries(const Lit& lit)
+bool UselessBinRemover::removeUselessBinaries(const Lit& lit)
 {
     solver.newDecisionLevel();
     solver.uncheckedEnqueueLight(lit);
@@ -161,20 +161,20 @@ void UselessBinRemover::removeBin(const Lit& lit1, const Lit& lit2)
     std::cout << "Removing useless bin: ";
     lit1.print(); lit2.printFull();
     #endif //VERBOSE_DEBUG
-    
+
     solver.removeWatchedBinClAll(solver.binwatches[(~lit1).toInt()], lit2);
     solver.removeWatchedBinClAll(solver.binwatches[(~lit2).toInt()], lit1);
     onlyNonLearntBins.removeBin(lit1, lit2);
 }
 
-const bool UselessBinRemover::fillBinImpliesMinusLast(const Lit& origLit, const Lit& lit, vec<Lit>& wrong)
+bool UselessBinRemover::fillBinImpliesMinusLast(const Lit& origLit, const Lit& lit, vec<Lit>& wrong)
 {
     solver.newDecisionLevel();
     solver.uncheckedEnqueueLight(lit);
     //if it's a cycle, it doesn't work, so don't propagate origLit
     failed = !onlyNonLearntBins.propagateBinExcept(origLit);
     if (failed) return false;
-    
+
     assert(solver.decisionLevel() > 0);
     int c;
     extraTime += (solver.trail.size() - solver.trail_lim[0]) / EXTRATIME_DIVIDER;
@@ -187,12 +187,12 @@ const bool UselessBinRemover::fillBinImpliesMinusLast(const Lit& origLit, const 
         solver.assigns[x.var()] = l_Undef;
     }
     solver.assigns[solver.trail[c].var()] = l_Undef;
-    
+
     solver.qhead = solver.trail_lim[0];
     solver.trail.shrink_(solver.trail.size() - solver.trail_lim[0]);
     solver.trail_lim.clear();
     //solver.cancelUntil(0);
-    
+
     return true;
 }
 

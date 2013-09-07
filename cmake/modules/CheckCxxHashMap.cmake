@@ -9,7 +9,7 @@ set(HAVE_HASH_MAP )
 
 macro(check_cxx_hashmap)
   message(STATUS "Checking for C++ hash_map implementation...")
-  
+
   check_std_unordered_map()
   if(NOT HAVE_HASH_MAP)
     check_tr1_unordered_map()
@@ -23,7 +23,7 @@ macro(check_cxx_hashmap)
   if(NOT HAVE_HASH_MAP)
     check_global_hash_map()
   endif()
-  
+
   if(HAVE_HASH_MAP)
     message(STATUS "C++ hash_map found as ${HASH_MAP_NAMESPACE}::${HASH_MAP_CLASS} in ${HASH_MAP_H}")
   else()
@@ -36,7 +36,7 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_map)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_map>
     int main() {
@@ -44,8 +44,8 @@ macro(check_std_unordered_map)
     }"
     HAVE_HASH_MAP
   )
-  set(CMAKE_REQUIRED_FLAGS )
-  
+  unset(CMAKE_REQUIRED_FLAGS)
+
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<unordered_map>")
     set(HASH_MAP_CLASS "unordered_map")
@@ -54,7 +54,7 @@ macro(check_std_unordered_map)
 endmacro()
 
 macro(check_tr1_unordered_map)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_map>
     int main() {
@@ -62,8 +62,8 @@ macro(check_tr1_unordered_map)
     }"
     HAVE_HASH_MAP
   )
-  set(CMAKE_REQUIRED_FLAGS )
-  
+  unset(CMAKE_REQUIRED_FLAGS)
+
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<tr/unordered_map>")
     set(HASH_MAP_CLASS "unordered_map")
@@ -79,7 +79,7 @@ macro(check_gnu_ext_hash_map)
     }"
     HAVE_HASH_MAP
   )
-  
+
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")
@@ -95,7 +95,7 @@ macro(check_std_ext_hash_map)
     }"
     HAVE_HASH_MAP
   )
-  
+
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")
@@ -111,7 +111,7 @@ macro(check_global_hash_map)
     }"
     HAVE_HASH_MAP
   )
-  
+
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")

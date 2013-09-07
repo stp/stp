@@ -9,7 +9,7 @@ set(HAVE_HASH_SET )
 
 macro(check_cxx_hashset)
   message(STATUS "Checking for C++ hash_set implementation...")
-  
+
   check_std_unordered_set()
   if(NOT HAVE_HASH_SET)
     check_tr1_unordered_set()
@@ -23,7 +23,7 @@ macro(check_cxx_hashset)
   if(NOT HAVE_HASH_SET)
     check_global_hash_set()
   endif()
-  
+
   if(HAVE_HASH_SET)
     message(STATUS "C++ hash_set found as ${HASH_SET_NAMESPACE}::${HASH_SET_CLASS} in ${HASH_SET_H}")
   else()
@@ -36,7 +36,7 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_set)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_set>
     int main() {
@@ -44,8 +44,8 @@ macro(check_std_unordered_set)
     }"
     HAVE_HASH_SET
   )
-  set(CMAKE_REQUIRED_FLAGS )
-  
+  unset(CMAKE_REQUIRED_FLAGS)
+
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<unordered_set>")
     set(HASH_SET_CLASS "unordered_set")
@@ -54,7 +54,7 @@ macro(check_std_unordered_set)
 endmacro()
 
 macro(check_tr1_unordered_set)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_set>
     int main() {
@@ -62,8 +62,8 @@ macro(check_tr1_unordered_set)
     }"
     HAVE_HASH_SET
   )
-  set(CMAKE_REQUIRED_FLAGS )
-  
+  unset(CMAKE_REQUIRED_FLAGS)
+
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<tr/unordered_set>")
     set(HASH_SET_CLASS "unordered_set")
@@ -79,7 +79,7 @@ macro(check_gnu_ext_hash_set)
     }"
     HAVE_HASH_SET
   )
-  
+
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")
@@ -95,7 +95,7 @@ macro(check_std_ext_hash_set)
     }"
     HAVE_HASH_SET
   )
-  
+
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")
@@ -111,7 +111,7 @@ macro(check_global_hash_set)
     }"
     HAVE_HASH_SET
   )
-  
+
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")

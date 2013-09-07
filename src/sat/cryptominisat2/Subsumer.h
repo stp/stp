@@ -33,12 +33,12 @@ public:
     ~Subsumer();
 
     //Called from main
-    const bool simplifyBySubsumption(const bool alsoLearnt = false);
-    const bool subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins);
+    bool simplifyBySubsumption(bool alsoLearnt = false);
+    bool subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins);
     void newVar();
 
     //Used by cleaner
-    void unlinkModifiedClause(vec<Lit>& origClause, ClauseSimp c, const bool detachAndNull);
+    void unlinkModifiedClause(vec<Lit>& origClause, ClauseSimp c, bool detachAndNull);
     void unlinkClause(ClauseSimp cc, Var elim = var_Undef);
     ClauseSimp linkInClause(Clause& cl);
     void linkInAlreadyClause(ClauseSimp& c);
@@ -47,20 +47,20 @@ public:
 
     //UnElimination
     void extendModel(Solver& solver2);
-    const bool unEliminate(const Var var);
+    bool unEliminate(const Var var);
 
 
     //Get-functions
     const vec<char>& getVarElimed() const;
-    const uint32_t getNumElimed() const;
-    const bool checkElimedUnassigned() const;
-    const double getTotalTime() const;
-    
+    uint32_t getNumElimed() const;
+    bool checkElimedUnassigned() const;
+    double getTotalTime() const;
+
 private:
-    
+
     friend class ClauseCleaner;
     friend class ClauseAllocator;
-    
+
     //Main
     vec<ClauseSimp>        clauses;
     CSet                   learntClauses;
@@ -79,12 +79,12 @@ private:
     double totalTime;
     uint32_t numElimed;
     map<Var, vector<Clause*> > elimedOutVar;
-    
+
     // Temporaries (to reduce allocation overhead):
     //
     vec<char>           seen_tmp;       // (used in various places)
-    
-    
+
+
     //Limits
     uint32_t numVarsElimed;
     uint32_t numMaxSubsume1;
@@ -92,7 +92,7 @@ private:
     uint32_t numMaxElim;
     int64_t numMaxBlockToVisit;
     uint32_t numMaxBlockVars;
-    
+
     //Start-up
     template<bool UseCL>
     void addFromSolver(vec<Clause*>& cs, bool alsoLearnt = false);
@@ -104,13 +104,13 @@ private:
     void addBackToSolver();
     void removeWrong(vec<Clause*>& cs);
     void removeAssignedVarsFromEliminated();
-    
+
     //Iterations
     void registerIteration  (CSet& iter_set) { iter_sets.push(&iter_set); }
     void unregisterIteration(CSet& iter_set) { remove(iter_sets, &iter_set); }
     void registerIteration  (vec<ClauseSimp>& iter_vec) { iter_vecs.push(&iter_vec); }
     void unregisterIteration(vec<ClauseSimp>& iter_vec) { remove(iter_vecs, &iter_vec); }
-    
+
     // Subsumption:
     void touch(const Var x);
     void touch(const Lit p);
@@ -129,7 +129,7 @@ private:
     template<class T1, class T2>
     bool subset(const T1& A, const T2& B);
     bool subsetAbst(uint32_t A, uint32_t B);
-    
+
     void orderVarsForElim(vec<Var>& order);
     bool maybeEliminate(Var x);
     void MigrateToPsNs(vec<ClauseSimp>& poss, vec<ClauseSimp>& negs, vec<ClauseSimp>& ps, vec<ClauseSimp>& ns, const Var x);
@@ -137,8 +137,8 @@ private:
     bool merge(const Clause& ps, const Clause& qs, const Lit without_p, const Lit without_q, vec<Lit>& out_clause);
 
     //Subsume with Nonexistent Bins
-    const bool subsWNonExistBinsFull(OnlyNonLearntBins* onlyNonLearntBins);
-    const bool subsWNonExistBins(const Lit& lit, OnlyNonLearntBins* onlyNonLearntBins);
+    bool subsWNonExistBinsFull(OnlyNonLearntBins* onlyNonLearntBins);
+    bool subsWNonExistBins(const Lit& lit, OnlyNonLearntBins* onlyNonLearntBins);
     template<class T>
     void subsume1Partial(const T& ps);
     uint32_t subsNonExistentNum;
@@ -153,7 +153,7 @@ private:
     vec<Lit> toVisit;
     vec<char> toVisitAll;
     vec<Lit> ps2;
-    
+
     class VarOcc {
         public:
             VarOcc(const Var& v, const uint32_t num) :
@@ -163,26 +163,26 @@ private:
             Var var;
             uint32_t occurnum;
     };
-    
+
     struct MyComp {
-        const bool operator() (const VarOcc& l1, const VarOcc& l2) const {
+        bool operator() (const VarOcc& l1, const VarOcc& l2) const {
             return l1.occurnum > l2.occurnum;
         }
     };
-    
+
     void blockedClauseRemoval();
-    const bool allTautology(const vec<Lit>& ps, const Lit lit);
+    bool allTautology(const vec<Lit>& ps, const Lit lit);
     uint32_t numblockedClauseRemoved;
-    const bool tryOneSetting(const Lit lit, const Lit negLit);
+    bool tryOneSetting(const Lit lit, const Lit negLit);
     priority_queue<VarOcc, vector<VarOcc>, MyComp> touchedBlockedVars;
     vec<bool> touchedBlockedVarsBool;
     void touchBlockedVar(const Var x);
     double blockTime;
-    
-    
+
+
     //validity checking
     void verifyIntegrity();
-    
+
     uint32_t clauses_subsumed;
     uint32_t literals_removed;
     uint32_t origNClauses;
@@ -259,12 +259,12 @@ inline const vec<char>& Subsumer::getVarElimed() const
     return var_elimed;
 }
 
-inline const uint32_t Subsumer::getNumElimed() const
+inline uint32_t Subsumer::getNumElimed() const
 {
     return numElimed;
 }
 
-inline const double Subsumer::getTotalTime() const
+inline double Subsumer::getTotalTime() const
 {
     return totalTime;
 }
