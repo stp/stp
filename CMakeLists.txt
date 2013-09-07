@@ -31,7 +31,7 @@ check_cxx_hashmap()
 
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 
 #set(LLVM 1)
 if(LLVM)
@@ -41,20 +41,20 @@ if(LLVM)
   set(CMAKE_C_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
   set(CMAKE_C_FLAGS_RELEASE        "-O4 -DNDEBUG")
   set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -g")
-  
+
   set(CMAKE_CXX_COMPILER             "/usr/bin/clang++")
   set(CMAKE_CXX_FLAGS                "-Wall")
   set(CMAKE_CXX_FLAGS_DEBUG          "-g")
   set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
   set(CMAKE_CXX_FLAGS_RELEASE        "-O4 -DNDEBUG")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
-  
+
   set(CMAKE_AR      "/usr/bin/llvm-ar")
   set(CMAKE_LINKER  "/usr/bin/llvm-ld")
   set(CMAKE_NM      "/usr/bin/llvm-nm")
   set(CMAKE_OBJDUMP "/usr/bin/llvm-objdump")
   set(CMAKE_RANLIB  "/usr/bin/llvm-ranlib")
-  
+
 else()
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wno-deprecated -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -O1 -mtune=native")
 #        "-std=c++0x -pedantic -Wall -Wextra -Wunused -Wsign-compare -Wtype-limits -Wuninitialized -Wno-deprecated -g -fno-omit-frame-pointer -O4 -mtune=native")

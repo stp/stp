@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Determines which header contains the C++ hash_multiset aka unordered_multiset 
+# Determines which header contains the C++ hash_multiset aka unordered_multiset
 # and sets the variables HASH_MULTISET_H, HASH_MULTISET_CLASS, and
 # HASH_MULTISET_NAMESPACE accordingly.
 #
@@ -10,7 +10,7 @@ set(HAVE_HASH_MULTISET )
 
 macro(check_cxx_hashmultiset)
   message(STATUS "Checking for C++ hash_multiset implementation...")
-  
+
   check_std_unordered_multiset()
   if(NOT HAVE_HASH_MULTISET)
     check_tr1_unordered_multiset()
@@ -24,7 +24,7 @@ macro(check_cxx_hashmultiset)
   if(NOT HAVE_HASH_MULTISET)
     check_global_hash_multiset()
   endif()
-  
+
   if(HAVE_HASH_MULTISET)
     message(STATUS "C++ hash_multiset found as ${HASH_MULTISET_NAMESPACE}::${HASH_MULTISET_CLASS} in ${HASH_MULTISET_H}")
   else()
@@ -46,7 +46,7 @@ macro(check_std_unordered_multiset)
     HAVE_HASH_MULTISET
   )
   set(CMAKE_REQUIRED_FLAGS )
-  
+
   if(HAVE_HASH_MULTISET)
     set(HASH_MULTISET_H "<unordered_set>")
     set(HASH_MULTISET_CLASS "unordered_multiset")
@@ -64,7 +64,7 @@ macro(check_tr1_unordered_multiset)
     HAVE_HASH_MULTISET
   )
   set(CMAKE_REQUIRED_FLAGS )
-  
+
   if(HAVE_HASH_MULTISET)
     set(HASH_MULTISET_H "<tr/unordered_set>")
     set(HASH_MULTISET_CLASS "unordered_multiset")
@@ -80,7 +80,7 @@ macro(check_gnu_ext_hash_multiset)
     }"
     HAVE_HASH_MULTISET
   )
-  
+
   if(HAVE_HASH_MULTISET)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
@@ -96,7 +96,7 @@ macro(check_std_ext_hash_multiset)
     }"
     HAVE_HASH_MULTISET
   )
-  
+
   if(HAVE_HASH_MULTISET)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
@@ -112,7 +112,7 @@ macro(check_global_hash_multiset)
     }"
     HAVE_HASH_MULTISET
   )
-  
+
   if(HAVE_HASH_MULTISET)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
