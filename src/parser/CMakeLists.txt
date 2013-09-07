@@ -20,8 +20,8 @@ set(TOLEX cvc smt2 smt)
 foreach(_file ${TOLEX})
     add_custom_command(
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp  ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
-        COMMAND bison --debug -v -o ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp -d -p ${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
-        COMMAND flex -Cfe -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+        COMMAND ${BISON_EXECUTABLE} --debug -v -o ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp -d -p ${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
+        COMMAND ${FLEX_EXECUTABLE} -Cfe -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
         DEPENDS ${_file}.lex ${_file}.y
     )
     add_custom_target(parser_header${_file} ALL
