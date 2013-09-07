@@ -17,7 +17,7 @@ namespace BEEV
 
   public:
 
-    typedef HASHMAP<
+    typedef hash_map<
     ASTNode,
     vector<unsigned>,
     ASTNode::ASTNodeHasher,

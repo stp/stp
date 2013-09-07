@@ -33,6 +33,7 @@ namespace BEEV
   //the function will then print the stats that it has collected.
   void CountersAndStats(const char * functionname, STPMgr * bm)
   {
+#if 0
     static function_counters s;
     if (bm->UserFlags.stats_flag)
       {
@@ -52,6 +53,7 @@ namespace BEEV
         s[functionname] += 1;
 
       }
+#endif
   }
 }
 ;// end of namespace

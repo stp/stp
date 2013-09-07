@@ -169,7 +169,7 @@ namespace BEEV
 
       if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","1"))
       {
-        HASHMAP <intptr_t ,ASTNode> nodeToFn;
+        hash_map<intptr_t ,ASTNode> nodeToFn;
         typename map<ASTNode, BBNode>::iterator it;
         for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
           {
@@ -202,7 +202,7 @@ namespace BEEV
           }
       }
 
-      typedef HASHMAP<vector<BBNode>, ASTNode,BBVecHasher <BBNode>, BBVecEquals<BBNode> > M;
+      typedef hash_map<vector<BBNode>, ASTNode,BBVecHasher <BBNode>, BBVecEquals<BBNode> > M;
       if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","1"))
         {
           M lookup;

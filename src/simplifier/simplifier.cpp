@@ -185,8 +185,8 @@ namespace BEEV
   bool
   Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
   {
-    HASHSET<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
-    HASHSET<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
+    hash_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
+    hash_set<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
 
     if (it2 != it_end_2)
       {

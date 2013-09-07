@@ -21,7 +21,7 @@ namespace printer
 
   void outputBitVec(const ASTNode n, ostream& os);
 
-  void Dot_Print1(ostream &os, const ASTNode n, HASHSET<int> *alreadyOutput)
+  void Dot_Print1(ostream &os, const ASTNode n, hash_set<int> *alreadyOutput)
   {
 
     // check if this node has already been printed. If so return.
@@ -74,7 +74,7 @@ namespace printer
     os << "digraph G{" << endl;
 
     // create hashmap to hold integers (node numbers).
-    HASHSET<int> alreadyOutput;
+    hash_set<int> alreadyOutput;
 
     Dot_Print1(os, n, &alreadyOutput);
 

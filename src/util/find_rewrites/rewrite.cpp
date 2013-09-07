@@ -92,7 +92,7 @@ getVariables(const ASTNode& n);
 bool
 matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
 
-typedef HASHMAP<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
+typedef hash_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
 
 BEEV::STPMgr* mgr;
 NodeFactory* nf;
@@ -939,7 +939,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
       discarded += (old_size - values.size());
 
       // Put the functions in buckets based on their results on the values.
-      HASHMAP<uint64_t, ASTVec> map;
+      hash_map<uint64_t, ASTVec> map;
       for (int i = 0; i < expressions.size(); i++)
         {
           if (expressions[i] == mgr->ASTUndefined)
@@ -954,7 +954,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
         }
       expressions.clear();
 
-      HASHMAP<uint64_t, ASTVec>::iterator it2;
+      hash_map<uint64_t, ASTVec>::iterator it2;
 
       cout << "Split into " << map.size() << " pieces\n";
       if (depth > 0)
