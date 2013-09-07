@@ -15,7 +15,7 @@
 #include "../simplifier/simplifier.h"
 #include "../AST/ArrayTransformer.h"
 #include "../to-sat/ToSATBase.h"
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

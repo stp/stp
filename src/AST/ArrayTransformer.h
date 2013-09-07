@@ -13,7 +13,7 @@
 #include "AST.h"
 #include "../STPManager/STPManager.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

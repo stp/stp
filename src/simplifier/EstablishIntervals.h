@@ -8,7 +8,7 @@
 #include "../STPManager/STPManager.h"
 #include "simplifier.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

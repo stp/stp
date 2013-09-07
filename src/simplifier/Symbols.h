@@ -2,7 +2,7 @@
 #define SYMBOLS_H
 
 #include <vector>
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 using std::vector;
 

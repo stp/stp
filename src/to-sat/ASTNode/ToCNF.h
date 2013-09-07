@@ -15,7 +15,7 @@
 #include "../../AST/AST.h"
 #include "../../STPManager/STPManager.h"
 #include "ClauseList.h"
-#include "../../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

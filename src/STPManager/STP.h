@@ -19,7 +19,7 @@
 #include "../parser/LetMgr.h"
 #include "../absrefine_counterexample/AbsRefine_CounterExample.h"
 #include "../simplifier/PropagateEqualities.h"
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

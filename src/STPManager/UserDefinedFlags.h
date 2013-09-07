@@ -14,7 +14,7 @@
 #include <assert.h>
 #include <iostream>
 #include <set>
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 namespace BEEV
 {

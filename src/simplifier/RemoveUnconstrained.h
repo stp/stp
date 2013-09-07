@@ -11,7 +11,7 @@
 #include "constantBitP/Dependencies.h"
 #include "simplifier.h"
 #include "MutableASTNode.h"
-#include "../boost/noncopyable.hpp"
+#include <boost/utility.hpp>
 
 
 namespace BEEV

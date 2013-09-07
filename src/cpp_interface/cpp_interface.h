@@ -7,7 +7,6 @@
 #include "../parser/LetMgr.h"
 #include "../STPManager/STPManager.h"
 #include "../STPManager/STP.h"
-//#include "../boost/pool/object_pool.hpp"
 
 namespace BEEV
 {
