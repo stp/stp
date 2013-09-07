@@ -10,10 +10,10 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 if(DEFINED CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
-  CACHE STRING "Choose the type of build: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel.")
+  CACHE STRING "Choose the type of build: Debug Release RelWithDebInfo MinSizeRel.")
 else()
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
-  "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel.")
+  "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel.")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -32,11 +32,47 @@ check_cxx_hashmap()
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
+include(CheckCXXCompilerFlag)
 
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wno-deprecated -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -O1 -mtune=native")
-#        "-std=c++0x -pedantic -Wall -Wextra -Wunused -Wsign-compare -Wtype-limits -Wuninitialized -Wno-deprecated -g -fno-omit-frame-pointer -O4 -mtune=native")
-set(CMAKE_CXX_FLAGS_DEBUG "-std=c++0x -Wunused -Wsign-compare -Wtype-limits -Wuninitialized -Wall -Wno-deprecated -O0 -ggdb")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++0x -O2 -g -DNDEBUG -mtune=native")
+macro(add_cxx_flag_if_supported flagname)
+  check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
+
+  if(HAVE_FLAG_${flagname})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
+  endif()
+endmacro()
+
+check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUPP11)
+check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
+check_cxx_compiler_flag("-std=c++0x" HAVE_FLAG_STD_CPP0X)
+check_cxx_compiler_flag("-stdlib=libc++" HAVE_FLAG_STDLIB_LIBCPP)
+
+if(HAVE_FLAG_STD_GNUCPP11)
+  set(CMAKE_CXX_FLAGS "-std=gnu++11 ${CMAKE_CXX_FLAGS}")
+elseif(HAVE_FLAG_STD_CPP11)
+  set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+elseif(HAVE_FLAG_STD_CPP0X)
+  set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS}")
+endif()
+
+if(APPLE AND HAVE_FLAG_STDLIB_LIBCPP)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+endif()
+
+
+add_cxx_flag_if_supported("-Wall")
+add_cxx_flag_if_supported("-Wunused")
+add_cxx_flag_if_supported("-Wsign-compare")
+add_cxx_flag_if_supported("-Wtype-limits")
+add_cxx_flag_if_supported("-Wuninitialized")
+add_cxx_flag_if_supported("-Wno-deprecated")
+add_definitions("-D__STDC_LIMIT_MACROS -D__STDC_FORMAT_MACROS")
+
+option(TUNE_NATIVE "Use -mtune=native" OFF)
+if(TUNE_NATIVE)
+  add_cxx_flag_if_supported("-mtune=native")
+endif()
+
 
 
 if(WIN32)
