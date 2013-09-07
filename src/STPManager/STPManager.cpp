@@ -8,9 +8,6 @@
  ********************************************************************/
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#ifndef __STDC_FORMAT_MACROS
-  #define __STDC_FORMAT_MACROS
-#endif
 #include <inttypes.h>
 #include <cmath>
 #include "../STPManager/STPManager.h"

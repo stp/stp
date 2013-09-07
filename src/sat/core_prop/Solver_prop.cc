@@ -31,8 +31,10 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "../mtl/Sort.h"
 #include "../core_prop/Solver_prop.h"
+#include "../utils/System.h"
 
 using namespace Minisat;
+using std::cout;
 
 //=================================================================================================
 // Options:
@@ -1827,4 +1829,37 @@ void Solver_prop::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n", 
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+}
+
+void Solver_prop::printStats()
+{
+    double cpu_time = cpuTime();
+    double mem_used = memUsedPeak();
+    cout << "restarts              : " << starts << "\n";
+    cout << "conflicts             : "
+    << conflicts
+    << "   (" << conflicts   /cpu_time << " /sec)\n";
+
+    cout
+    << "decisions             : "
+    << decisions
+    << "   (%4.2f %% random)" << (double)rnd_decisions*100 / (double)decisions
+    << " (" << (double)decisions/cpu_time << " /sec)\n";
+
+    cout
+    << "propagations          : "
+    << propagations
+    << "   (" << (double)propagations/cpu_time<< " /sec)\n";
+
+    cout
+    << "conflict literals     : "
+    << tot_literals
+    << "   ("
+    << (double)(max_literals - tot_literals)*100.0/(double)max_literals
+    << " % deleted)\n";
+
+    if (mem_used != 0) {
+        cout << "Memory used           : " << mem_used << " MB\n";
+    }
+    cout << "CPU time              : " << cpu_time <<  " s\n";
 }

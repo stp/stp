@@ -287,6 +287,7 @@ public:
     uint32_t getNumXorTreesCrownSize() const; // Get the number of variables being replaced by other variables
     double getTotalTimeSubsumer() const;
     double getTotalTimeXorSubsumer() const;
+    void printStats();
 
 protected:
     #ifdef USE_GAUSS

@@ -139,6 +139,7 @@ public:
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
     bool unitPropagate(  const vec<Lit>& assumps);
+    void printStats();
 
 protected:
 
