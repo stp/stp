@@ -1288,20 +1288,9 @@ template<class T>
     cout << ".After removing duplicates:" << big.size() << endl;
   }
 
-// Hash function for the hash_map of a string..
-template<class T>
-  struct hashF
-  {
-    size_t
-    operator()(const T & x) const
-    {
-      return __gnu_cxx::hash<const char*>()(x.c_str());
-    }
-  };
-
 // Put all the inputs containing the substring together in the same bucket.
 void
-bucket(string substring, vector<string>& inputs, hash_map<string, vector<string>, hashF<std::string> >& buckets)
+bucket(string substring, vector<string>& inputs, hash_map<string, vector<string>>& buckets)
 {
   for (int i = 0; i < inputs.size(); i++)
     {
@@ -1570,7 +1559,7 @@ writeOutRules()
 
 
   // Group functions of the same kind all together.
-  hash_map<string, vector<string>, hashF<std::string> > buckets;
+  hash_map<string, vector<string> > buckets;
   bucket("n.GetKind() ==", output, buckets);
 #endif
 
@@ -1582,7 +1571,7 @@ writeOutRules()
   outputFile.open("rewrite_data_new.cpp", ios::trunc);
 
   // output the C++ code.
-  hash_map<string, vector<string>, hashF<std::string> >::const_iterator it;
+  hash_map<string, vector<string> >::const_iterator it;
   for (it = buckets.begin(); it != buckets.end(); it++)
     {
       outputFile << "if (" + it->first + ")" << endl;

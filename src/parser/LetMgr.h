@@ -18,19 +18,10 @@ namespace BEEV
 //LET Management
   class LETMgr 
   {
-  public:
-    // Hash function for the hash_map of a string..
-	template <class T>
-	struct hashF {
-				  size_t operator() (const T & x) const {
-						  return std::hash<const char*>()(x.c_str());
-				  }
-		  };
-
   private:
     const ASTNode ASTUndefined;
 
-    typedef hash_map<string,ASTNode, hashF<std::string> > MapType;
+    typedef hash_map<string, ASTNode> MapType;
 
     // MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs

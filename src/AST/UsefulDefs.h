@@ -25,6 +25,7 @@
 #include "ASTKind.h"
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"
+#include "../util/StringHash.h"
 
 #include "config.h"
 
@@ -96,20 +97,12 @@ namespace BEEV {
     return sp;
   }
 
-#if 0
-  struct eqstr {
-    bool operator()(const char* s1, const char* s2) const {
-      return strcmp(s1, s2) == 0;
-    }
-  };
-
   // function_counters: Table for storing function count stats.
   typedef hash_map<
-    const char*,
+    const char *,
     int,
-    BEEV::hash<const char *>,
-    eqstr> function_counters;
-#endif
+    CStringHash,
+    CStringEqualityPredicate> function_counters;
 }; //end of namespace
 
 #endif
