@@ -29,6 +29,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "../mtl/Vec.h"
 #include "../utils/ParseUtils.h"
 #include <iostream>
+#include <limits>
 
 namespace Minisat {
 
@@ -186,7 +187,8 @@ class IntOption : public Option
     int32_t  value;
 
  public:
-    IntOption(const char* c, const char* n, const char* d, int32_t def = int32_t(), IntRange r = IntRange(INT32_MIN, INT32_MAX))
+    IntOption(const char* c, const char* n, const char* d, int32_t def = int32_t(), IntRange r
+        = IntRange(std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()))
         : Option(n, d, c, "<int32>"), range(r), value(def) {}
  
     operator   int32_t   (void) const { return value; }
@@ -218,13 +220,13 @@ class IntOption : public Option
 
     virtual void help (bool verbose = false){
         fprintf(stderr, "  -%-12s = %-8s [", name, type_name);
-        if (range.begin == INT32_MIN)
+        if (range.begin == std::numeric_limits<int32_t>::min())
             fprintf(stderr, "imin");
         else
             fprintf(stderr, "%4d", range.begin);
 
         fprintf(stderr, " .. ");
-        if (range.end == INT32_MAX)
+        if (range.end == std::numeric_limits<int32_t>::max())
             fprintf(stderr, "imax");
         else
             fprintf(stderr, "%4d", range.end);
@@ -248,7 +250,8 @@ class Int64Option : public Option
     int64_t  value;
 
  public:
-    Int64Option(const char* c, const char* n, const char* d, int64_t def = int64_t(), Int64Range r = Int64Range(INT64_MIN, INT64_MAX))
+    Int64Option(const char* c, const char* n, const char* d, int64_t def = int64_t(), Int64Range r
+        = Int64Range(std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max()))
         : Option(n, d, c, "<int64>"), range(r), value(def) {}
  
     operator     int64_t   (void) const { return value; }
@@ -280,13 +283,13 @@ class Int64Option : public Option
 
     virtual void help (bool verbose = false){
         fprintf(stderr, "  -%-12s = %-8s [", name, type_name);
-        if (range.begin == INT64_MIN)
+        if (range.begin == std::numeric_limits<int64_t>::min())
             fprintf(stderr, "imin");
         else
             std::cerr << range.begin;
 
         fprintf(stderr, " .. ");
-        if (range.end == INT64_MAX)
+        if (range.end == std::numeric_limits<int64_t>::max())
             fprintf(stderr, "imax");
         else
             std::cerr << range.end;
