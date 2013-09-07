@@ -9,8 +9,6 @@ g++ -I$HOME/stp/c_interface cvc-to-c.cpp -L$HOME/stp/lib -lstp -o cvc-to-c
 #include "c_interface.h"
 #include <iostream>
 
-using namespace std;
-
 int main(int argc, char** argv) {
   VC vc = vc_createValidityChecker();
 

@@ -50,13 +50,13 @@ namespace BEEV
       // a symbolic constant, say v1, and Read(A,j) is replaced with the
       // following ITE: ITE(i=j,v1,v2)
 
-      typedef map<ASTNode, ArrayRead> arrTypeMap;
-      typedef map<ASTNode, arrTypeMap > ArrType ;
+      typedef std::map<ASTNode, ArrayRead> arrTypeMap;
+      typedef std::map<ASTNode, arrTypeMap > ArrType ;
       ArrType arrayToIndexToRead;
 
   private:
 
-     map<ASTNode, vector<std::pair<ASTNode, ASTNode >  > > ack_pair;
+     std::map<ASTNode, vector<std::pair<ASTNode, ASTNode >  > > ack_pair;
 
     /****************************************************************
      * Private Typedefs and Data                                    *
@@ -134,16 +134,16 @@ namespace BEEV
 
     void printArrayStats()
     {
-      cerr << "Array Sizes:";
+      std::cerr << "Array Sizes:";
 
       for (ArrType::const_iterator
              iset = arrayToIndexToRead.begin(),
              iset_end = arrayToIndexToRead.end();
            iset != iset_end; iset++)
         {
-          cerr << iset->second.size() << " : ";
+          std::cerr << iset->second.size() << " : ";
         }
-      cerr << endl;
+      std::cerr << std::endl;
     }
 
   }; //end of class Transformer

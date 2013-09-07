@@ -10,7 +10,7 @@ namespace BEEV
     // NB if the sentinel is contained in the node that's passed, then it'll be wrong.
     class NodeIterator : boost::noncopyable
     {
-        stack<ASTNode> toVisit;
+        std::stack<ASTNode> toVisit;
 
         const ASTNode& sentinal;
         uint8_t iteration;

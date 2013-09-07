@@ -17,7 +17,7 @@ namespace BEEV
     static vector<MutableASTNode*> all;
 
   public:
-    typedef set<MutableASTNode *> ParentsType;
+    typedef std::set<MutableASTNode *> ParentsType;
     ParentsType parents;
 
 private:
@@ -36,7 +36,7 @@ private:
     // will be created after its children.
 public:
     static MutableASTNode *
-    build(const ASTNode& n, map<ASTNode, MutableASTNode *> & visited)
+    build(const ASTNode& n, std::map<ASTNode, MutableASTNode *> & visited)
     {
       if (visited.find(n) != visited.end())
         {
@@ -55,7 +55,7 @@ public:
         tempChildren[i]->parents.insert(mut);
 
       mut->children.insert(mut->children.end(),tempChildren.begin(),tempChildren.end());
-      visited.insert(make_pair(n, mut));
+      visited.insert(std::make_pair(n, mut));
       return mut;
     }
 private:
@@ -166,7 +166,7 @@ private:
     static MutableASTNode *
     build(ASTNode n)
     {
-      map<ASTNode, MutableASTNode *> visited;
+      std::map<ASTNode, MutableASTNode *> visited;
       return build(n, visited);
     }
 
@@ -303,7 +303,7 @@ private:
     }
 
     void
-    getAllVariablesRecursively(vector<MutableASTNode*> & result, set<MutableASTNode*>& visited)
+    getAllVariablesRecursively(vector<MutableASTNode*> & result, std::set<MutableASTNode*>& visited)
     {
       if (!visited.insert(this).second)
         return;

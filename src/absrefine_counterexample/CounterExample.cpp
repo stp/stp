@@ -15,6 +15,8 @@ const bool debug_counterexample =  false;
 
 namespace BEEV
 {
+  using std::cout;
+
   /*FUNCTION: constructs counterexample from MINISAT counterexample
    * step1 : iterate through MINISAT counterexample and assemble the
    * bits for each AST term. Store it in a map from ASTNode to vector
@@ -86,9 +88,9 @@ namespace BEEV
         ArrayTransform->arrayToIndexToRead.end(); it != itend; it++)
       {
         const ASTNode& array = it->first;
-        const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = it->second;
+        const std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = it->second;
 
-        for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it2 = mapper.begin(), it2end = mapper.end(); it2
+        for (std::map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it2 = mapper.begin(), it2end = mapper.end(); it2
             != it2end; it2++)
           {
             const ASTNode& index = it2->first;

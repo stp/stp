@@ -13,6 +13,7 @@ namespace printer
 {
 
   using std::string;
+  using std::endl;
   using namespace BEEV;
 
   // printer for C code (copied from PL_Print())
@@ -464,9 +465,9 @@ namespace printer
       {
         //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
         //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator it = 
+        std::vector<std::pair<ASTNode, ASTNode> >::iterator it = 
           bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator itend = 
+        std::vector<std::pair<ASTNode, ASTNode> >::iterator itend = 
           bm->NodeLetVarVec.end();
 
         // start a new block to create new static scope

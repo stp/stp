@@ -45,7 +45,6 @@
 #define TOT_E_BITS 24
 #define UNKNOWN_CONST 6
 
-using namespace std;
 using namespace __gnu_cxx;
 
 struct eqint

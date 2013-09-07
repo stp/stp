@@ -82,7 +82,7 @@ namespace BEEV
     }
 
     //Prints the counterexample to stdout
-    void PrintCounterExample(bool t, std::ostream& os = cout);
+    void PrintCounterExample(bool t, std::ostream& os = std::cout);
       
     void ClearCounterExampleMap(void)
     {

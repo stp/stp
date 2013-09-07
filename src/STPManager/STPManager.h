@@ -420,7 +420,7 @@ namespace BEEV
 
     // This is a vector which stores the Node to LetVars pairs. It
     // allows for sorted printing, as opposed to NodeLetVarMap
-    std::vector<pair<ASTNode, ASTNode> > NodeLetVarVec;
+    std::vector<std::pair<ASTNode, ASTNode> > NodeLetVarVec;
 
     // A partial Map from ASTNodes to LetVars. Needed in order to
     // correctly print shared subterms inside the LET itself

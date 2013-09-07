@@ -101,7 +101,7 @@ namespace printer
   // Print newline and indentation, then print the thing.
   ostream &Lisp_Print_indent(ostream &os,  const ASTNode& n,int indentation)
   {
-    os << endl << spaces(indentation);
+    os << std::endl << spaces(indentation);
     Lisp_Print1(os, n, indentation);
     return os;
   }

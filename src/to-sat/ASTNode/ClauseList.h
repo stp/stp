@@ -9,7 +9,7 @@ namespace BEEV
 
 typedef vector<const ASTNode*>* ClausePtr;
 typedef vector<const ASTNode*> ClauseNoPtr;
-typedef deque<ClausePtr> ClauseContainer;
+typedef std::deque<ClausePtr> ClauseContainer;
 
 static bool vectorsizesort(const ClausePtr& a, const ClausePtr& b)
 {

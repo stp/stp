@@ -8,6 +8,7 @@
  ********************************************************************/
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
+#include <iostream>
 
 /********************************************************************
  *  This file gives the class description of the ASTInternal class  *
@@ -177,7 +178,7 @@ namespace BEEV
 
     virtual void hasBeenSimplified() const
     {
-      cerr << "astinternal has been";
+      std::cerr << "astinternal has been";
     }
 
 

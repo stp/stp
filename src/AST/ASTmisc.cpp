@@ -13,6 +13,9 @@
 
 namespace BEEV
 {
+  using std::cout;
+  using std::cerr;
+  using std::endl;
 
   /****************************************************************
    * Universal Helper Functions                                   *
@@ -35,7 +38,7 @@ namespace BEEV
 
         case 'h':
           fprintf(stderr,usage,prog);
-          cout << helpstring;
+          std::cout << helpstring;
           exit(-1);
           break;
         case 'm':

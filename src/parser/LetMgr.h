@@ -14,6 +14,7 @@
 
 namespace BEEV
 {
+  using std::string;
 
 //LET Management
   class LETMgr 

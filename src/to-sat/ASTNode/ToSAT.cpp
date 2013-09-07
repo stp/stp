@@ -16,6 +16,7 @@
 
 namespace BEEV
 {
+  using std::endl;
 
   bool isTseitinVariable(const ASTNode& n) {
     if (n.GetKind() == SYMBOL && n.GetType() == BOOLEAN_TYPE) {
@@ -199,8 +200,8 @@ namespace BEEV
     // CNF that need to be joined together. Nicer would be to read it out of the solver each time.
     	if (bm->UserFlags.output_CNF_flag && true)
     	{
-    		ofstream file;
-    		stringstream fileName;
+    		std::ofstream file;
+    		std::stringstream fileName;
     		fileName << "output_" << CNFFileNameCounter++ << ".cnf";
     		file.open(fileName.str().c_str());
 
@@ -348,8 +349,8 @@ namespace BEEV
 
     if (bm->UserFlags.output_bench_flag)
     {
-		ofstream file;
-		stringstream fileName;
+		std::ofstream file;
+		std::stringstream fileName;
 		fileName << "output_" << benchFileNameCounter++ << ".bench";
 		file.open(fileName.str().c_str());
 		printer::Bench_Print(file,BBFormula);

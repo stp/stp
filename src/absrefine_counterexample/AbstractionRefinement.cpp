@@ -15,6 +15,9 @@
 
 namespace BEEV
 {
+  using std::pair;
+  using std::map;
+
   /******************************************************************
    * Abstraction Refinement related functions
    ******************************************************************/  
@@ -368,7 +371,11 @@ namespace BEEV
             {
                 if (bm->UserFlags.stats_flag)
                 {
-                        cout << "Adding all the remaining " << RemainingAxiomsVec.size() << " read axioms " << endl;
+                        std::cout
+                        << "Adding all the remaining "
+                        << RemainingAxiomsVec.size()
+                        << " read axioms "
+                        << std::endl;
                 }
                 ToSATBase::ASTNodeToSATVar & satVar = tosat->SATVar_to_SymbolIndexMap();
                 applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
@@ -507,7 +514,7 @@ namespace BEEV
   AbsRefine_CounterExample::applyAllCongruenceConstraints(SATSolver & SatSolver, ToSATBase *tosat)
   {
     //if (bm->UserFlags.stats_flag)
-      cerr << "~CNF~" << endl;
+      std::cerr << "~CNF~" << std::endl;
 
     vector<pair<ASTNode, ArrayTransformer::arrTypeMap> > arrayToIndex;
     arrayToIndex.insert(arrayToIndex.begin(), ArrayTransform->arrayToIndexToRead.begin(),
@@ -575,7 +582,7 @@ namespace BEEV
             continue; // shortcut.
 
           if (index_i == index_j)
-            cerr << "EQUAL";
+            std::cerr << "EQUAL";
 
           AxiomToBe o(index_symbols[i], index_symbols[j], read_node_symbols[i], read_node_symbols[j]);
 

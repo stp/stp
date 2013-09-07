@@ -31,6 +31,7 @@ namespace BEEV
 {
 
   using std::list;
+  using std::set;
   using simplifier::constantBitP::MultiplicationStats;
 
   class Simplifier;
@@ -53,7 +54,7 @@ namespace BEEV
       // Memo table for bit blasted formulas.  If a node has already
       // been bitblasted, it is mapped to a node representing the
       // bitblasted equivalent
-      map<ASTNode, BBNode> BBFormMemo;
+      std::map<ASTNode, BBNode> BBFormMemo;
 
       /****************************************************************
        * Private Member Functions                                     *

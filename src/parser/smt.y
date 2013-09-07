@@ -37,7 +37,6 @@
 
 #include "../cpp_interface/cpp_interface.h"
 
-  using namespace std; 
   using namespace BEEV;
 
   // Suppress the bogus warning suppression in bison (it generates

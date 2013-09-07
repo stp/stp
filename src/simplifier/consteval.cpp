@@ -148,7 +148,7 @@ namespace BEEV
                 {
                   // signed shift, and the number was originally negative.
                   // Shift may be larger than the inputwidth.
-                  for (unsigned int i = 0; i < min(shift, inputwidth); i++)
+                  for (unsigned int i = 0; i < std::min(shift, inputwidth); i++)
                     {
                       CONSTANTBV::BitVector_Bit_On(output, (inputwidth - 1 - i));
                     }
@@ -324,7 +324,7 @@ namespace BEEV
 
               if (e != 0)
                 {
-                  cerr << "WARNING" << endl;
+                  std::cerr << "WARNING" << std::endl;
                   FatalError((const char*) CONSTANTBV::BitVector_Error(e));
                 }
 
@@ -389,7 +389,7 @@ namespace BEEV
                   CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
                   if (e != CONSTANTBV::ErrCode_Ok)
                     {
-                      cerr << "Error code was:" << e << endl;
+                      std::cerr << "Error code was:" << e << std::endl;
                       assert(e == CONSTANTBV::ErrCode_Ok);
                     }
                   OutputNode = _bm->CreateBVConst(remainder, outputwidth);
@@ -552,7 +552,7 @@ namespace BEEV
             OutputNode = children[2];
           else
             {
-              cerr << tmp0;
+              std::cerr << tmp0;
               FatalError("BVConstEvaluator: ITE condiional must be either TRUE or FALSE:");
             }
         }
@@ -646,8 +646,8 @@ namespace BEEV
 				  return ASTTrue;
 			  else
 				  {
-				  cerr << ASTFalse;
-				  cerr << input_children[0];
+				  std::cerr << ASTFalse;
+				  std::cerr << input_children[0];
 				  FatalError("BVConstEvaluator: unexpected not input");
 				  }
 

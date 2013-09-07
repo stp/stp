@@ -25,6 +25,7 @@
 
 namespace BEEV
 {
+  using std::map;
 
 class FindPureLiterals : boost::noncopyable
 {
@@ -103,7 +104,7 @@ public:
       }
     else
       {
-        nodeToPolarity.insert(make_pair(n,polarity));
+        nodeToPolarity.insert(std::make_pair(n,polarity));
       }
     const Kind k = n.GetKind();
     switch (k)

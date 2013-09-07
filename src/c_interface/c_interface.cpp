@@ -15,6 +15,13 @@
 #include "../cpp_interface/cpp_interface.h"
 #include "../extlib-abc/cnf_short.h"
 
+using std::cout;
+using std::ostream;
+using std::stringstream;
+using std::string;
+using std::fdostream;
+using std::endl;
+
 //These typedefs lower the effort of using the keyboard to type (too
 //many overloaded meanings of the word type)
 typedef BEEV::ASTNode                    node;
@@ -958,7 +965,7 @@ Expr vc_bvConstExprFromDecStr(VC vc,
                               const char* decimalInput ) 
 {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
-  string str(decimalInput);
+  std::string str(decimalInput);
   node n = b->CreateBVConst(str, 10, width);
   assert(BVTypeCheck(n));
   nodestar output = new node(n);

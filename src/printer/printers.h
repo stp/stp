@@ -19,6 +19,7 @@
 
 namespace printer
 {
+  using std::ostream;
   ostream& Dot_Print(ostream &os, const BEEV::ASTNode n);
 
   ostream& C_Print(ostream &os,
@@ -41,7 +42,7 @@ namespace printer
   void SMTLIB2_PrintBack(ostream &os, const ASTNode& n, bool definately_bv=false);
 
   ostream& GDL_Print(ostream &os, const BEEV::ASTNode n);
-  ostream& GDL_Print(ostream &os, const ASTNode n, string (*annotate)(const ASTNode&));
+  ostream& GDL_Print(ostream &os, const ASTNode n, std::string (*annotate)(const ASTNode&));
 
   ostream& Bench_Print(ostream &os, const ASTNode n);
 }

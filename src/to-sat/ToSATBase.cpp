@@ -2,6 +2,9 @@
 
 namespace BEEV
 {
+  using std::cerr;
+  using std::cout;
+  using std::endl;
 
   //This function prints the output of the STP solver
   void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)

@@ -19,6 +19,9 @@
 
 namespace BEEV
 {
+  using std::cout;
+  using std::endl;
+
   /******************************************************************
    * Assorted print routines collected in one place. The code here is
    * different from the one in printers directory. It is possible that

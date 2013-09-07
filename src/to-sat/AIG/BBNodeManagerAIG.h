@@ -36,7 +36,7 @@ public:
         Aig_Man_t *aigMgr;
 
         // Map from symbols to their AIG nodes.
-        typedef map<ASTNode, vector<BBNodeAIG> > SymbolToBBNode;
+        typedef std::map<ASTNode, vector<BBNodeAIG> > SymbolToBBNode;
 
         SymbolToBBNode symbolToBBNode;
 
@@ -51,7 +51,7 @@ private:
         Aig_Obj_t * makeTower(Aig_Obj_t * (*t)(Aig_Man_t *, Aig_Obj_t *,
                         Aig_Obj_t *), vector<BBNodeAIG>& children)
         {
-                deque<Aig_Obj_t*> names;
+                std::deque<Aig_Obj_t*> names;
 
                 for (unsigned i = 0; i < children.size(); i++)
                         names.push_back(children[i].n);

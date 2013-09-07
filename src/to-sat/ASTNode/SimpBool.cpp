@@ -21,6 +21,8 @@ static bool _disable_simpbool = 0;
 
 namespace BEEV
 {
+  using std::cout;
+  using std::endl;
 
   ASTNode STPMgr::CreateSimpForm(Kind kind, ASTVec &children = _empty_ASTVec)
   {

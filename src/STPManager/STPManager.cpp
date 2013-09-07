@@ -19,6 +19,9 @@
 
 namespace BEEV
 {
+  using std::cout;
+  using std::endl;
+
   ASTInterior *STPMgr::LookupOrCreateInterior(ASTInterior *n_ptr)
   {
     ASTInteriorSet::iterator it = _interior_unique_table.find(n_ptr);
@@ -38,7 +41,7 @@ namespace BEEV
           {
             n_ptr->SetNodeNum(NewNodeNum());
           }
-        pair<ASTInteriorSet::const_iterator, bool> p = 
+        std::pair<ASTInteriorSet::const_iterator, bool> p = 
           _interior_unique_table.insert(n_ptr);
         return *(p.first);
       }
@@ -131,7 +134,7 @@ namespace BEEV
         ASTSymbol * s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()));
         s_ptr1->SetNodeNum(NewNodeNum());
         s_ptr1->_value_width = s_ptr->_value_width;
-        pair<ASTSymbolSet::const_iterator, bool> p = 
+        std::pair<ASTSymbolSet::const_iterator, bool> p = 
           _symbol_unique_table.insert(s_ptr1);
         return *p.first;
       }
@@ -258,7 +261,7 @@ namespace BEEV
 
     if (0 != e)
       {
-        cerr << "CreateBVConst: " << BitVector_Error(e);
+        std::cerr << "CreateBVConst: " << BitVector_Error(e);
         FatalError("", ASTUndefined);
       }
 
@@ -386,7 +389,7 @@ namespace BEEV
         ASTBVConst * s_copy = new ASTBVConst(s);
         s_copy->SetNodeNum(NewNodeNum());
 
-        pair<ASTBVConstSet::const_iterator, bool> p = 
+        std::pair<ASTBVConstSet::const_iterator, bool> p = 
 	  _bvconst_unique_table.insert(s_copy);
         return *p.first;
       }
@@ -602,8 +605,8 @@ namespace BEEV
   ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
                                               const ASTNode& constant)
   {
-    ostringstream outVar;
-    ostringstream outNum;
+    std::ostringstream outVar;
+    std::ostringstream outNum;
     //Get the name of Boolean Var
     var.PL_Print(outVar);
     constant.PL_Print(outNum);

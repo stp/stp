@@ -18,7 +18,7 @@ VariablesInExpression::~VariablesInExpression() {
 void VariablesInExpression::insert(const ASTNode& n, Symbols *s)
 {
 	assert (s!= NULL);
-	symbol_graph.insert(make_pair(n.GetNodeNum(), s));
+	symbol_graph.insert(std::make_pair(n.GetNodeNum(), s));
 }
 
 // This builds a reduced version of a graph, where there

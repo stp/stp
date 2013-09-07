@@ -24,6 +24,7 @@
 
 namespace BEEV
 {
+  using std::make_pair;
   // NB: This is the only function that should be called
   // externally. It sets up the cache that the others use.
   ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
@@ -61,9 +62,9 @@ namespace BEEV
 			 iset != iset_end; iset++)
 		  {
 				const ASTNode& ArrName = iset->first;
-				map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
+				std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
-				for (map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =mapper.begin() ; it != mapper.end();it++)
+				for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =mapper.begin() ; it != mapper.end();it++)
 				{
 					const ASTNode& the_index = it->first;
 
@@ -264,7 +265,7 @@ namespace BEEV
   {
 
 	  // I haven't measure whether this is the quickest way to do it?
-	  pair<ASTNodeSet::iterator, bool> p = visited.insert(term);
+	  std::pair<ASTNodeSet::iterator, bool> p = visited.insert(term);
 	  if (!p.second)
 		  return;
 
@@ -398,9 +399,9 @@ namespace BEEV
             {
               FatalError("TransformFormula: Illegal kind: ", 
                          ASTUndefined, k);
-              cerr << "The input is: " << simpleForm << endl;
-              cerr << "The valuewidth of input is : " 
-                   << simpleForm.GetValueWidth() << endl;
+              std::cerr << "The input is: " << simpleForm << std::endl;
+              std::cerr << "The valuewidth of input is : " 
+                   << simpleForm.GetValueWidth() << std::endl;
             }
           break;
         }
@@ -493,7 +494,7 @@ namespace BEEV
                  "result and input terms are of different length", result);
     if (term.GetIndexWidth() != result.GetIndexWidth())
       {
-        cerr << "TransformTerm: input term is : " << term << endl;
+        std::cerr << "TransformTerm: input term is : " << term << std::endl;
         FatalError("TransformTerm: "\
                    "result & input terms have different index length", result);
       }
@@ -547,7 +548,7 @@ namespace BEEV
             ArrType::const_iterator it;
             if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
               {
-                map<ASTNode, ArrayRead>::const_iterator it2;
+                std::map<ASTNode, ArrayRead>::const_iterator it2;
                   if ((it2 = it->second.find(readIndex)) != it->second.end())
                     {
                       result = it2->second.ite;

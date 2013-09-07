@@ -61,7 +61,7 @@ namespace BEEV
 
       if (bm->UserFlags.output_CNF_flag)
       {
-  		stringstream fileName;
+  		std::stringstream fileName;
   		fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
     	Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0);
       }

@@ -23,6 +23,7 @@
 namespace printer
 {
   using std::string;
+  using std::endl;
   using namespace BEEV;
 
   void SMTLIB1_Print1(ostream& os, const BEEV::ASTNode n, int indentation,	bool letize);

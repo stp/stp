@@ -28,7 +28,7 @@ namespace BEEV
     typedef hash_map<ASTNode, Symbols*, ASTNode::ASTNodeHasher> DependsType;
     DependsType dependsOn; // The lhs depends on the variables in the rhs.
     ASTNodeSet rhs; // All the rhs that have been seeen.
-    set<ASTNodeSet*> rhsAlreadyAdded;
+    std::set<ASTNodeSet*> rhsAlreadyAdded;
     VariablesInExpression::SymbolPtrSet rhs_visited; // the rhs contains all the variables in here already.
 
     int loopCount;
@@ -36,7 +36,7 @@ namespace BEEV
     void
     buildDepends(const ASTNode& n0, const ASTNode& n1);
     void
-    loops_helper(const set<ASTNode>& varsToCheck, set<ASTNode>& visited);
+    loops_helper(const std::set<ASTNode>& varsToCheck, std::set<ASTNode>& visited);
     bool
     loops(const ASTNode& n0, const ASTNode& n1);
 

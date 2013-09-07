@@ -4,6 +4,10 @@
 
 namespace BEEV
 {
+  using std::endl;
+  using std::make_pair;
+  using std::set;
+  using std::cout;
 
   SubstitutionMap::~SubstitutionMap()
   {

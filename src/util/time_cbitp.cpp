@@ -15,7 +15,6 @@
 #include "StopWatch.h"
 #include "Relations.h"
 
-using namespace std;
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 

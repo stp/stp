@@ -12,6 +12,7 @@
 
 using std::endl;
 using std::cout;
+using std::make_pair;
 
 using namespace BEEV;
 
@@ -126,7 +127,7 @@ namespace simplifier
 
           if (bits.isTotallyFixed())
             {
-              toFrom.insert(std::make_pair(node, bitsToNode(node, bits)));
+              toFrom.insert(make_pair(node, bitsToNode(node, bits)));
             }
         }
 
@@ -390,7 +391,7 @@ namespace simplifier
 
   	if (debug_print_graph_after)
 		{
-			ofstream file;
+			std::ofstream file;
 			file.open("afterCbitp.gdl");
 			PrintingHackfixedMap = fixedMap;
 			printer::GDL_Print(file,top,&toString);

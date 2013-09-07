@@ -46,8 +46,8 @@
 
 #define INITIAL_TABLE_SIZE 100
 
-using namespace std;
 namespace BEEV {
+  using std::vector;
 
   /******************************************************************
    * Important classes declared as part of AST datastructures       *
@@ -89,7 +89,7 @@ namespace BEEV {
     { 
       _spaces = spaces; 
     }
-    friend ostream& operator<<(ostream& os, const Spacer &ind);
+    friend std::ostream& operator<<(std::ostream& os, const Spacer &ind);
   }; //End of class spacer
 
   inline Spacer spaces(int width) {

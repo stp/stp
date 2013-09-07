@@ -13,7 +13,6 @@
 #include "../AST/AST.h"
 namespace BEEV
 {
-  using namespace std;
 
   /***************************************************************************
  Class LispPrinter:  iomanipulator for printing ASTNode or ASTVec

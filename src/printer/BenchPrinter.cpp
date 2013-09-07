@@ -11,7 +11,11 @@
 namespace printer
 {
 using std::string;
+using std::map;
+using std::endl;
+
 using namespace BEEV;
+
 
 string name(const Kind k)
 {
@@ -114,7 +118,7 @@ string Bench_Print1(ostream &os, const ASTNode& n,
 		if (n.Degree() > 2)
 		{
 			assert(n.GetKind() == AND || n.GetKind() == XOR || n.GetKind() == OR); // must be associative.
-			deque<string> names;
+			std::deque<string> names;
 
 			for (unsigned i = 0; i < n.Degree(); i++)
 				names.push_back(Bench_Print1(os, n[i], alreadyOutput));

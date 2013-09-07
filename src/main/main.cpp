@@ -22,6 +22,8 @@
 
 
 using namespace BEEV;
+using std::auto_ptr;
+using std::make_pair;
 
 extern int smtparse(void*);
 extern int smt2parse();
@@ -156,7 +158,7 @@ int main(int argc, char ** argv) {
     	  if(argv[i][1] == '-')
     	  {
     		  // long options.
-    		  map<string,OptionType> lookup;
+    		  std::map<string,OptionType> lookup;
     		  lookup.insert(make_pair(tolower("--print-back-C"),PRINT_BACK_C));
     		  lookup.insert(make_pair(tolower("--cryptominisat"),USE_CRYPTOMINISAT_SOLVER));
     		lookup.insert(make_pair(tolower("--minisat"),USE_MINISAT_SOLVER));

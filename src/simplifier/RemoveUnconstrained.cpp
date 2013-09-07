@@ -380,13 +380,13 @@ namespace BEEV
 
                 // All the ASTNode vars need to map to their existing MutableASTNodes. So we collect all the variables
                 vector<MutableASTNode*> vars;
-                set<MutableASTNode*> visited;
+                std::set<MutableASTNode*> visited;
                 muteOther->getAllVariablesRecursively(vars, visited);
                 visited.clear();
 
-                map<ASTNode, MutableASTNode *> create;
+                std::map<ASTNode, MutableASTNode *> create;
                 for (vector<MutableASTNode*>::iterator it = vars.begin(); it != vars.end();it++)
-                  create.insert(make_pair((*it)->n, *it));
+                  create.insert(std::make_pair((*it)->n, *it));
                 vars.clear();
 
                 ASTNode v= bm.CreateFreshVariable(0, 0, "STP_INTERNAL_comparison");

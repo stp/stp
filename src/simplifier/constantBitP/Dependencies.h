@@ -8,6 +8,9 @@ namespace simplifier
   {
 
     using namespace BEEV;
+    using std::set;
+    using std::cout;
+    using std::endl;
 
     // From a child, get the parents of that node.
     class Dependencies

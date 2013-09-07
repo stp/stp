@@ -245,9 +245,9 @@ namespace BEEV
 
     if (debug_bvsolver)
       {
-        cerr << "Initial:" << eq;
-        cerr << "Chosen Monomial:" << outmonom;
-        cerr << "Output LHS:" << modifiedlhs;
+        std::cerr << "Initial:" << eq;
+        std::cerr << "Chosen Monomial:" << outmonom;
+        std::cerr << "Output LHS:" << modifiedlhs;
       }
 
     // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or

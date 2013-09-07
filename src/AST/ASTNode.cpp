@@ -7,6 +7,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 
+#include <sstream>
 #include "AST.h"
 #include "../STPManager/STP.h"
 
@@ -185,7 +186,7 @@ namespace BEEV
         signed long maxBit = CONSTANTBV::Set_Max(n.GetBVConst());
         if (maxBit >= ((signed long) sizeof(unsigned int)) * 8)
           {
-            n.LispPrint(cerr); //print the node so they can find it.
+            n.LispPrint(std::cerr); //print the node so they can find it.
             FatalError("GetUnsignedConst: cannot convert bvconst "\
                        "of length greater than 32 to unsigned int");
           }
@@ -214,7 +215,7 @@ namespace BEEV
       {
         printf("    ");
       }
-    cout << GetKind();
+    std::cout << GetKind();
     printf("\n");
 
     //****************************************
@@ -288,7 +289,7 @@ namespace BEEV
                 //Create a new symbol. Get some name. if it conflicts with a
                 //declared name, too bad.
                 int sz = bm->NodeLetVarMap.size();
-                ostringstream oss;
+                std::ostringstream oss;
                 oss << "let_k_" << sz;
 
                 ASTNode CurrentSymbol = bm->CreateSymbol(oss.str().c_str(),this->GetIndexWidth(),this->GetValueWidth());

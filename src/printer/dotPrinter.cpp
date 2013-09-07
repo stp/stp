@@ -17,6 +17,7 @@ namespace printer
 {
 
   using std::string;
+  using std::endl;
   using namespace BEEV;
 
   void outputBitVec(const ASTNode n, ostream& os);

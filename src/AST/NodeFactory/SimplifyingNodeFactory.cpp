@@ -48,6 +48,9 @@ using BEEV::BVPLUS;
 using BEEV::BVXOR;
 using BEEV::BVDIV;
 
+using std::cout;
+using std::endl;
+
 static bool debug_simplifyingNodeFactory = false;
 
 ASTNode
@@ -563,7 +566,10 @@ SimplifyingNodeFactory::CreateSimpleXor(const ASTVec &children)
 {
   if (debug_simplifyingNodeFactory)
     {
-      cout << "========" << endl << "CreateSimpXor ";
+      cout
+      << "========" << endl
+      << "CreateSimpXor ";
+
       lpvec(children);
       cout << endl;
     }
@@ -809,7 +815,7 @@ SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   else if (width == 1 && n0 == n1)
     result = bm.CreateZeroConst(1);
   else if (n0 == n1)
-    result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(string("2"), 10, width), n0);
+    result = NodeFactory::CreateTerm(BEEV::BVMULT, width, bm.CreateBVConst(std::string("2"), 10, width), n0);
   else if (n0.GetKind() == BVUMINUS && n1 == n0[0])
     result = bm.CreateZeroConst(width);
   else if (n1.GetKind() == BVPLUS && n1[1].GetKind() == BVUMINUS && n0 == n1[1][0] && n1.Degree() == 2)
@@ -938,7 +944,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         {
           //Never create multiplications with arity > 2.
 
-          deque<ASTNode> names;
+          std::deque<ASTNode> names;
 
           for (unsigned i = 0; i < children.size(); i++)
             names.push_back(children[i]);

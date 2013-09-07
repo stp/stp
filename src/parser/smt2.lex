@@ -61,7 +61,7 @@
    
   static int lookup(const char* s)
   {
-    string str(s);
+    std::string str(s);
   
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.

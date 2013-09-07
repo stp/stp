@@ -22,6 +22,8 @@
 
 namespace BEEV
 {
+using std::make_pair;
+
 class AIGSimplifyPropositionalCore : boost::noncopyable
 {
 
@@ -82,7 +84,7 @@ private:
 		return result;
 	}
 
-	typedef map<Aig_Obj_t *, ASTNode> cacheType;
+	typedef std::map<Aig_Obj_t *, ASTNode> cacheType;
 
 	// Convert the AIG back to an ASTNode.
 	ASTNode convert (BBNodeManagerAIG& mgr, Aig_Obj_t * obj, cacheType& cache)

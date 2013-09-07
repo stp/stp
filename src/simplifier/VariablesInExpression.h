@@ -57,7 +57,7 @@ public:
 
     void ClearAllTables()
     {
-		set<Symbols*> deleted;
+		std::set<Symbols*> deleted;
 		for (ASTNodeToNodes::iterator it = symbol_graph.begin(); it
 				!= symbol_graph.end(); it++) {
 			if (deleted.find(it->second) == deleted.end()) {

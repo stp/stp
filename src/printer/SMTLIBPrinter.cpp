@@ -6,6 +6,8 @@
 namespace printer
 {
 using namespace BEEV;
+using std::pair;
+using std::endl;
 
 static string tolower(const char * name)
 {
@@ -145,7 +147,7 @@ static string tolower(const char * name)
 					//Create a new symbol. Get some name. if it conflicts with a
 					//declared name, too bad.
 					int sz = NodeLetVarMap.size();
-					ostringstream oss;
+					std::ostringstream oss;
 					oss << "?let_k_" << sz;
 
 					ASTNode CurrentSymbol = n.GetSTPMgr()->CreateSymbol(
@@ -243,7 +245,7 @@ static string tolower(const char * name)
 
       default:
         {
-          cerr << "Unknown name when outputting:";
+          std::cerr << "Unknown name when outputting:";
           FatalError(_kind_names[k]);
           return ""; // to quieten compiler/
         }

@@ -5,6 +5,8 @@ namespace simplifier
 {
   namespace constantBitP
   {
+    using std::cerr;
+    using std::endl;
 
     class WorkList
     {

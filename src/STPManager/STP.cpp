@@ -275,14 +275,14 @@ namespace BEEV {
       }
 
     if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
-      cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
+      std::cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
 
 
     if (bm->UserFlags.stats_flag)
-      cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
+      std::cout << "Difficulty After Size reducing:" << initial_difficulty_score << endl;
 
     // So we can delete the object and release all the hash-buckets storage.
-    auto_ptr<Revert_to> revert(new Revert_to());
+    std::auto_ptr<Revert_to> revert(new Revert_to());
 
     if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
       {

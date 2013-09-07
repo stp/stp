@@ -12,6 +12,8 @@
 
 namespace BEEV
 {
+  using std::make_pair;
+
   class EstablishIntervals : boost::noncopyable
   {
   private:

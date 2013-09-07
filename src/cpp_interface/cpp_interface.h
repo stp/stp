@@ -12,6 +12,9 @@
 namespace BEEV
 {
   using BEEV::STPMgr;
+  using std::cerr;
+  using std::cout;
+  using std::endl;
 
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
 
@@ -221,12 +224,12 @@ namespace BEEV
       for (int i=0; i < params.size();i++)
         {
           ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(), params[i].GetValueWidth(), "STP_INTERNAL_FUNCTION_NAME");
-          fromTo.insert(make_pair(params[i], p));
+          fromTo.insert(std::make_pair(params[i], p));
           f.params.push_back(p);
         }
       ASTNodeMap cache;
       f.function = SubstitutionMap::replace(function,fromTo,cache, nf);
-      functions.insert(make_pair(f.name,f));
+      functions.insert(std::make_pair(f.name,f));
     }
 
     ASTNode
@@ -247,7 +250,7 @@ namespace BEEV
           if (f.params[i].GetIndexWidth() != params[i].GetIndexWidth())
             FatalError("Actual parameters differ from formal");
 
-          fromTo.insert(make_pair(f.params[i], params[i]));
+          fromTo.insert(std::make_pair(f.params[i], params[i]));
         }
 
       ASTNodeMap cache;

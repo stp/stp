@@ -36,10 +36,11 @@ namespace BEEV
 
   using simplifier::constantBitP::FixedBits;
   using simplifier::constantBitP::NodeToFixedBitsMap;
+  using std::make_pair;
 
-#define BBNodeVec vector<BBNode>
-#define BBNodeVecMap map<ASTNode, vector<BBNode> >
-#define BBNodeSet set<BBNode>
+#define BBNodeVec std::vector<BBNode>
+#define BBNodeVecMap std::map<ASTNode, vector<BBNode> >
+#define BBNodeSet std::set<BBNode>
 
   vector<BBNodeAIG> _empty_BBNodeAIGVec;
 
@@ -103,7 +104,7 @@ namespace BEEV
       assert(support.size() ==0);
 
         {
-        typename map<ASTNode, BBNode>::iterator it;
+        typename std::map<ASTNode, BBNode>::iterator it;
         for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
           {
           const ASTNode& n = it->first;
@@ -123,7 +124,7 @@ namespace BEEV
             result = n.GetSTPMgr()->ASTFalse;
 
           if (n.GetKind() != SYMBOL)
-            fromTo.insert(make_pair(n, result));
+            fromTo.insert(std::make_pair(n, result));
           else
             simp->UpdateSubstitutionMap(n, result);
           }
@@ -164,13 +165,13 @@ namespace BEEV
         if (n.GetKind() == SYMBOL)
           simp->UpdateSubstitutionMap(n, r);
         else
-          fromTo.insert(make_pair(n, r));
+          fromTo.insert(std::make_pair(n, r));
         }
 
       if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv","1"))
       {
         hash_map<intptr_t ,ASTNode> nodeToFn;
-        typename map<ASTNode, BBNode>::iterator it;
+        typename std::map<ASTNode, BBNode>::iterator it;
         for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
           {
           const ASTNode& n = it->first;
@@ -379,7 +380,7 @@ namespace BEEV
         if (bbFixed)
           {
           b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : n.GetValueWidth(), n.GetType() == BOOLEAN_TYPE);
-          cb->fixedMap->map->insert(pair<ASTNode, FixedBits*>(n, b));
+          cb->fixedMap->map->insert(std::pair<ASTNode, FixedBits*>(n, b));
           if (debug_bitblaster)
             cerr << "inserting" << n.GetNodeNum() << endl;
           }
@@ -546,7 +547,7 @@ namespace BEEV
             if (it == cb->fixedMap->map->end())
               {
               nBits = new FixedBits(std::max((unsigned) 1, n_term.GetValueWidth()), term.GetType() == BOOLEAN_TYPE);
-              cb->fixedMap->map->insert(pair<ASTNode, FixedBits*>(n_term, nBits));
+              cb->fixedMap->map->insert(std::pair<ASTNode, FixedBits*>(n_term, nBits));
               }
             else
               nBits = it->second;
@@ -1013,7 +1014,7 @@ namespace BEEV
     const BBNode
     BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form, BBNodeSet& support)
     {
-      typename map<ASTNode, BBNode>::iterator it = BBFormMemo.find(form);
+      typename std::map<ASTNode, BBNode>::iterator it = BBFormMemo.find(form);
       if (it != BBFormMemo.end())
         {
         // already there.  Just return it.

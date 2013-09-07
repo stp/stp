@@ -13,6 +13,7 @@ namespace printer
 {
 
 using std::string;
+using std::endl;
 using namespace BEEV;
 
 string functionToCVCName(const Kind k) {
@@ -68,7 +69,7 @@ string functionToCVCName(const Kind k) {
 	case BVRIGHTSHIFT:
 		return ">>";
 	default: {
-		cerr << "Unknown name when outputting:";
+		std::cerr << "Unknown name when outputting:";
 		FatalError(_kind_names[k]);
 		return ""; // to quieten compiler/
 	}
@@ -321,9 +322,9 @@ string functionToCVCName(const Kind k) {
       {
         //ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
         //ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-        std::vector<pair<ASTNode, ASTNode> >::iterator 
+        vector<std::pair<ASTNode, ASTNode> >::iterator 
           it = bm->NodeLetVarVec.begin();
-        std::vector<pair<ASTNode, ASTNode> >::iterator 
+        vector<std::pair<ASTNode, ASTNode> >::iterator 
           itend = bm->NodeLetVarVec.end();
 
         os << "(LET ";
@@ -338,7 +339,7 @@ string functionToCVCName(const Kind k) {
 
         for (it++; it != itend; it++)
           {
-            os << "," << endl;
+            os << "," << std::endl;
             //print the let var first
             PL_Print1(os, it->first, indentation, false);
             os << " = ";
@@ -349,7 +350,7 @@ string functionToCVCName(const Kind k) {
             bm->NodeLetVarMap1[it->second] = it->first;
           }
 
-        os << " IN " << endl;
+        os << " IN " << std::endl;
         PL_Print1(os, n, indentation, true);
         os << ") ";
       }

@@ -32,7 +32,6 @@ using namespace BEEV;
 extern int
 smt2parse();
 
-using namespace std;
 using namespace BEEV;
 
 // Holds the rewrite that was disproved at the largest bitwidth.

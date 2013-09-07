@@ -1596,7 +1596,7 @@ namespace BEEV
   ASTNode
   Simplifier::makeTower(const Kind k, const BEEV::ASTVec &children)
   {
-    deque<ASTNode> names;
+    std::deque<ASTNode> names;
 
     for (unsigned i = 0; i < children.size(); i++)
       names.push_back(children[i]);
@@ -3009,8 +3009,8 @@ namespace BEEV
         if (output[i].GetType() != ARRAY_TYPE)
           if (!hasBeenSimplified(output[i]))
             {
-              cout << output;
-              cout << i;
+              std::cout << output;
+              std::cout << i;
               assert(hasBeenSimplified(output[i]));
             }
       }

@@ -56,7 +56,7 @@ namespace BEEV
         }
 
         // maps from nodeNumber to the previously calculated difficulty score..
-        map<int, int> cache;
+        std::map<int, int> cache;
 
     public:
 
@@ -72,7 +72,7 @@ namespace BEEV
             while ((current = ni.next()) != ni.end())
                 result += eval(current);
 
-            cache.insert(make_pair(top.GetNodeNum(), result));
+            cache.insert(std::make_pair(top.GetNodeNum(), result));
             return result;
         }
     };

@@ -22,7 +22,6 @@
 #include "../cpp_interface/cpp_interface.h"
 #include <list>
 
-using namespace std;
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 

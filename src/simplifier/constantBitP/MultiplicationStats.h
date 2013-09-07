@@ -9,6 +9,8 @@ namespace simplifier
 {
   namespace constantBitP
   {
+    using std::endl;
+
     struct MultiplicationStats
     {
     private:
@@ -112,7 +114,7 @@ namespace simplifier
       void
       print()
       {
-        ostream& log = std::cerr;
+        std::ostream& log = std::cerr;
 
         log << x << " * " << y << "=" << r << endl;
 
@@ -154,13 +156,13 @@ namespace simplifier
       void
       print()
       {
-        cout << "Size:" << map.size() << endl;
+        std::cout << "Size:" << map.size() << endl;
 
         simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::iterator it;
 
         for (it = map.begin(); it != map.end(); it++)
           {
-            cout << it->first;
+            std::cout << it->first;
             it->second.print();
           }
       }

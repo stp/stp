@@ -12,6 +12,9 @@
 #include "../main/Globals.h"
 namespace BEEV
 {
+  using std::cout;
+  using std::endl;
+
   ostream &operator<<(ostream &os, const Spacer &sp)
   {
     // Instead of wrapping lines with hundreds of spaces, prints
