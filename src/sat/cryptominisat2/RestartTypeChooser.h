@@ -41,23 +41,23 @@ class RestartTypeChooser
     public:
         RestartTypeChooser(const Solver& s);
         void addInfo();
-        const RestartType choose();
+        RestartType choose();
         void reset();
-        
+
     private:
         void calcHeap();
-        const double avg() const;
+        double avg() const;
         const std::pair<double, double> countVarsDegreeStDev() const;
-        const double stdDeviation(vector<uint32_t>& measure) const;
-        
+        double stdDeviation(vector<uint32_t>& measure) const;
+
         template<class T>
         void addDegrees(const vec<T*>& cs, vector<uint32_t>& degrees) const;
-        
+
         const Solver& solver;
         const uint32_t topX;
         const uint32_t limit;
         vector<Var> sameIns;
-        
+
         vector<Var> firstVars, firstVarsOld;
 };
 

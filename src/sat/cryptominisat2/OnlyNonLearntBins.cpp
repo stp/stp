@@ -32,7 +32,7 @@ OnlyNonLearntBins::OnlyNonLearntBins(Solver& _solver) :
     solver(_solver)
 {}
 
-const bool OnlyNonLearntBins::propagate()
+bool OnlyNonLearntBins::propagate()
 {
     while (solver.qhead < solver.trail.size()) {
         Lit p   = solver.trail[solver.qhead++];
@@ -51,7 +51,7 @@ const bool OnlyNonLearntBins::propagate()
     return true;
 }
 
-const bool OnlyNonLearntBins::propagateBinExcept(const Lit& exceptLit)
+bool OnlyNonLearntBins::propagateBinExcept(const Lit& exceptLit)
 {
     while (solver.qhead < solver.trail.size()) {
         Lit p   = solver.trail[solver.qhead++];
@@ -70,7 +70,7 @@ const bool OnlyNonLearntBins::propagateBinExcept(const Lit& exceptLit)
     return true;
 }
 
-const bool OnlyNonLearntBins::propagateBinOneLevel()
+bool OnlyNonLearntBins::propagateBinOneLevel()
 {
     Lit p   = solver.trail[solver.qhead];
     vec<WatchedBin> & wbin = binwatches[p.toInt()];
@@ -87,7 +87,7 @@ const bool OnlyNonLearntBins::propagateBinOneLevel()
     return true;
 }
 
-const bool OnlyNonLearntBins::fill()
+bool OnlyNonLearntBins::fill()
 {
     double myTime = cpuTime();
     assert(solver.performReplace);
@@ -129,7 +129,7 @@ void OnlyNonLearntBins::removeBin(Lit lit1, Lit lit2)
     solver.removeWatchedBinClAll(binwatches[(~lit2).toInt()], lit1);
 }
 
-const uint32_t OnlyNonLearntBins::removeBins()
+uint32_t OnlyNonLearntBins::removeBins()
 {
     Clause **i, **j;
     i = j = solver.binaryClauses.getData();
@@ -141,7 +141,7 @@ const uint32_t OnlyNonLearntBins::removeBins()
         if (index1 > index0) std::swap(index0, index1);
         uint64_t final = index0;
         final |= ((uint64_t)index1) << 32;
-        
+
         if (toRemove.find(final) == toRemove.end()) {
             *j++ = *i;
         } else {

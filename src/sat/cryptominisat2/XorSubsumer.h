@@ -19,9 +19,9 @@ class ClauseCleaner;
 class XorSubsumer
 {
 public:
-    
+
     XorSubsumer(Solver& S2);
-    const bool simplifyBySubsumption(const bool doFullSubsume = false);
+    bool simplifyBySubsumption(bool doFullSubsume = false);
     void unlinkModifiedClause(vec<Lit>& origClause, XorClauseSimp c);
     void unlinkModifiedClauseNoDetachNoNULL(vec<Lit>& origClause, XorClauseSimp c);
     void unlinkClause(XorClauseSimp cc, Var elim = var_Undef);
@@ -29,30 +29,30 @@ public:
     void linkInAlreadyClause(XorClauseSimp& c);
     void newVar();
     void extendModel(Solver& solver2);
-    const uint32_t getNumElimed() const;
+    uint32_t getNumElimed() const;
     const vec<char>& getVarElimed() const;
-    const bool unEliminate(const Var var);
-    const bool checkElimedUnassigned() const;
-    const double getTotalTime() const;
-    
+    bool unEliminate(const Var var);
+    bool checkElimedUnassigned() const;
+    double getTotalTime() const;
+
 private:
-    
+
     friend class ClauseCleaner;
     friend class ClauseAllocator;
-    
+
     //Main
     vec<XorClauseSimp>        clauses;
     vec<vec<XorClauseSimp> >  occur;          // 'occur[index(lit)]' is a list of constraints containing 'lit'.
     Solver&                   solver;         // The Solver
-    
+
     // Temporaries (to reduce allocation overhead):
     //
     vec<char>                 seen_tmp;       // (used in various places)
-    
+
     //Start-up
     void addFromSolver(vec<XorClause*>& cs);
     void addBackToSolver();
-    
+
     // Subsumption:
     void findSubsumed(XorClause& ps, vec<XorClauseSimp>& out_subsumed);
     bool isSubsumed(XorClause& ps);
@@ -65,9 +65,9 @@ private:
 
     //helper
     void testAllClauseAttach() const;
-    
+
     //dependent removal
-    const bool removeDependent();
+    bool removeDependent();
     void fillCannotEliminate();
     vec<char> cannot_eliminate;
     void addToCannotEliminate(Clause* it);
@@ -78,13 +78,13 @@ private:
     map<Var, vector<XorClause*> > elimedOutVar;
     vec<char> var_elimed;
     uint32_t numElimed;
-    
+
     //Heule-process
     template<class T>
     void xorTwoClauses(const T& c1, const T& c2, vec<Lit>& xored);
-    const bool localSubstitute();
+    bool localSubstitute();
     uint32_t localSubstituteUseful;
-    
+
     uint32_t clauses_subsumed;
     uint32_t clauses_cut;
     uint32_t origNClauses;
@@ -127,12 +127,12 @@ inline const vec<char>& XorSubsumer::getVarElimed() const
     return var_elimed;
 }
 
-inline const uint32_t XorSubsumer::getNumElimed() const
+inline uint32_t XorSubsumer::getNumElimed() const
 {
     return numElimed;
 }
 
-inline const double XorSubsumer::getTotalTime() const
+inline double XorSubsumer::getTotalTime() const
 {
     return totalTime;
 }

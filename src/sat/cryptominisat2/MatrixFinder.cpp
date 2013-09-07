@@ -46,17 +46,17 @@ MatrixFinder::MatrixFinder(Solver& _solver) :
 {
 }
 
-inline const Var MatrixFinder::fingerprint(const XorClause& c) const
+inline Var MatrixFinder::fingerprint(const XorClause& c) const
 {
     Var fingerprint = 0;
-    
+
     for (const Lit* a = &c[0], *end = a + c.size(); a != end; a++)
         fingerprint |= a->var();
-    
+
     return fingerprint;
 }
 
-inline const bool MatrixFinder::firstPartOfSecond(const XorClause& c1, const XorClause& c2) const
+inline bool MatrixFinder::firstPartOfSecond(const XorClause& c1, const XorClause& c2) const
 {
     uint i1, i2;
     for (i1 = 0, i2 = 0; i1 < c1.size() && i2 < c2.size();) {
@@ -67,24 +67,24 @@ inline const bool MatrixFinder::firstPartOfSecond(const XorClause& c1, const Xor
             i2++;
         }
     }
-    
+
     return (i1 == c1.size());
 }
 
-const bool MatrixFinder::findMatrixes()
+bool MatrixFinder::findMatrixes()
 {
     table.clear();
     table.resize(solver.nVars(), var_Undef);
     reverseTable.clear();
     matrix_no = 0;
     double myTime = cpuTime();
-    
+
     if (solver.xorclauses.size() < MIN_GAUSS_XOR_CLAUSES ||
         solver.gaussconfig.decision_until <= 0 ||
         solver.xorclauses.size() > MAX_GAUSS_XOR_CLAUSES
         )
         return true;
-    
+
     solver.clauseCleaner->cleanClauses(solver.xorclauses, ClauseCleaner::xorclauses);
     if (!solver.ok) return false;
 
@@ -98,7 +98,7 @@ const bool MatrixFinder::findMatrixes()
         solver.gauss_matrixes.push_back(new Gaussian(solver, solver.gaussconfig, 0, xorclauses));
         return true;
     }
-    
+
     for (XorClause** c = solver.xorclauses.getData(), **end = c + solver.xorclauses.size(); c != end; c++) {
         set<uint> tomerge;
         vector<Var> newSet;
@@ -117,7 +117,7 @@ const bool MatrixFinder::findMatrixes()
             }
             continue;
         }
-        
+
         for (set<uint>::iterator it = tomerge.begin(); it != tomerge.end(); it++) {
             newSet.insert(newSet.end(), reverseTable[*it].begin(), reverseTable[*it].end());
             reverseTable.erase(*it);
@@ -127,7 +127,7 @@ const bool MatrixFinder::findMatrixes()
         reverseTable[matrix_no] = newSet;
         matrix_no++;
     }
-    
+
     #ifdef VERBOSE_DEBUG
     for (map<uint, vector<Var> >::iterator it = reverseTable.begin(), end = reverseTable.end(); it != end; it++) {
         cout << "-- set begin --" << endl;
@@ -137,9 +137,9 @@ const bool MatrixFinder::findMatrixes()
         cout << "-------" << endl;
     }
     #endif
-    
+
     uint32_t numMatrixes = setMatrixes();
-    
+
     if (solver.verbosity >=1)
         std::cout << "c |  Finding matrixes :    " << cpuTime() - myTime << " s (found  " << numMatrixes << ")                                |" << endl;
 
@@ -150,50 +150,50 @@ const bool MatrixFinder::findMatrixes()
     return true;
 }
 
-const uint MatrixFinder::setMatrixes()
+uint MatrixFinder::setMatrixes()
 {
     vector<pair<uint, uint> > numXorInMatrix;
     for (uint i = 0; i < matrix_no; i++)
         numXorInMatrix.push_back(std::make_pair(i, 0));
-    
+
     vector<uint> sumXorSizeInMatrix(matrix_no, 0);
     vector<vector<uint> > xorSizesInMatrix(matrix_no);
     vector<vector<XorClause*> > xorsInMatrix(matrix_no);
-    
+
     #ifdef PART_FINDING
     vector<vector<Var> > xorFingerprintInMatrix(matrix_no);
     #endif
-    
+
     for (XorClause** c = solver.xorclauses.getData(), **end = c + solver.xorclauses.size(); c != end; c++) {
         XorClause& x = **c;
         const uint matrix = table[x[0].var()];
         assert(matrix < matrix_no);
-        
+
         //for stats
         numXorInMatrix[matrix].second++;
         sumXorSizeInMatrix[matrix] += x.size();
         xorSizesInMatrix[matrix].push_back(x.size());
         xorsInMatrix[matrix].push_back(&x);
-        
+
         #ifdef PART_FINDING
         xorFingerprintInMatrix[matrix].push_back(fingerprint(x));
         #endif //PART_FINDING
     }
-    
+
     std::sort(numXorInMatrix.begin(), numXorInMatrix.end(), mysorter());
-    
+
     #ifdef PART_FINDING
     for (uint i = 0; i < matrix_no; i++)
         findParts(xorFingerprintInMatrix[i], xorsInMatrix[i]);
     #endif //PART_FINDING
-    
+
     uint realMatrixNum = 0;
     for (int a = matrix_no-1; a != -1; a--) {
         uint i = numXorInMatrix[a].first;
-        
+
         if (numXorInMatrix[a].second < 3)
             continue;
-        
+
         const uint totalSize = reverseTable[i].size()*numXorInMatrix[a].second;
         const double density = (double)sumXorSizeInMatrix[i]/(double)totalSize*100.0;
         double avg = (double)sumXorSizeInMatrix[i]/(double)numXorInMatrix[a].second;
@@ -202,7 +202,7 @@ const uint MatrixFinder::setMatrixes()
             variance += pow((double)xorSizesInMatrix[i][i2]-avg, 2);
         variance /= (double)xorSizesInMatrix.size();
         const double stdDeviation = sqrt(variance);
-        
+
         if (numXorInMatrix[a].second >= solver.gaussconfig.minMatrixRows
             && numXorInMatrix[a].second <= solver.gaussconfig.maxMatrixRows
             && realMatrixNum < 3)
@@ -211,7 +211,7 @@ const uint MatrixFinder::setMatrixes()
                 cout << "c |  Matrix no " << std::setw(2) << realMatrixNum;
             solver.gauss_matrixes.push_back(new Gaussian(solver, solver.gaussconfig, realMatrixNum, xorsInMatrix[i]));
             realMatrixNum++;
-            
+
         } else {
             if (solver.verbosity >=1  /*&& numXorInMatrix[a].second >= 20*/)
                 cout << "c |  Unused Matrix ";
@@ -223,7 +223,7 @@ const uint MatrixFinder::setMatrixes()
             cout << " stdev:" << std::setw(6) << std::fixed << std::setprecision(2) << stdDeviation << "  |" << endl;
         }
     }
-    
+
     return realMatrixNum;
 }
 

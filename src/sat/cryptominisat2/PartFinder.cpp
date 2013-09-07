@@ -48,17 +48,17 @@ PartFinder::PartFinder(Solver& _solver) :
 {
 }
 
-const bool PartFinder::findParts()
+bool PartFinder::findParts()
 {
     assert(solver.performReplace);
-    
+
     double time = cpuTime();
-    
+
     table.clear();
     table.resize(solver.nVars(), std::numeric_limits<uint32_t>::max());
     reverseTable.clear();
     part_no = 0;
-    
+
     solver.clauseCleaner->removeAndCleanAll(true);
     if (!solver.ok) return false;
     while (solver.varReplacer->getNewToReplaceVars() > 0) {
@@ -68,13 +68,13 @@ const bool PartFinder::findParts()
         if (!solver.ok) return false;
     }
     assert(solver.varReplacer->getClauses().size() == 0);
-    
+
     addToPart(solver.clauses);
     addToPart(solver.binaryClauses);
     addToPart(solver.xorclauses);
-    
+
     const uint parts = setParts();
-    
+
     #ifndef NDEBUG
     for (map<uint, vector<Var> >::const_iterator it = reverseTable.begin(); it != reverseTable.end(); it++) {
         for (uint i2 = 0; i2 < it->second.size(); i2++) {
@@ -82,13 +82,13 @@ const bool PartFinder::findParts()
         }
     }
     #endif
-    
+
     if (solver.verbosity >= 2 || (solver.verbosity >=1 && parts > 1)) {
         std::cout << "c | Found parts: " << std::setw(10) <<  parts
         << " time: " << std::setprecision(2) << std::setw(4) << cpuTime() - time
         << " s" << std::setw(51) << " |" << std::endl;
     }
-    
+
     return true;
 }
 
@@ -109,7 +109,7 @@ void PartFinder::addToPart(const vec<T*>& cs)
         }
         if (tomerge.size() == 1) {
             //no trees to merge, only merge the clause into one tree
-            
+
             const uint into = *tomerge.begin();
             map<uint, vector<Var> >::iterator intoReverse = reverseTable.find(into);
             for (uint i = 0; i < newSet.size(); i++) {
@@ -118,12 +118,12 @@ void PartFinder::addToPart(const vec<T*>& cs)
             }
             continue;
         }
-        
+
         for (set<uint>::iterator it = tomerge.begin(); it != tomerge.end(); it++) {
             newSet.insert(newSet.end(), reverseTable[*it].begin(), reverseTable[*it].end());
             reverseTable.erase(*it);
         }
-        
+
         for (uint i = 0; i < newSet.size(); i++)
             table[newSet[i]] = part_no;
         reverseTable[part_no] = newSet;
@@ -131,15 +131,15 @@ void PartFinder::addToPart(const vec<T*>& cs)
     }
 }
 
-const uint PartFinder::setParts()
+uint PartFinder::setParts()
 {
     vector<uint> numClauseInPart(part_no, 0);
     vector<uint> sumLitsInPart(part_no, 0);
-    
+
     calcIn(solver.clauses, numClauseInPart, sumLitsInPart);
     calcIn(solver.binaryClauses, numClauseInPart, sumLitsInPart);
     calcIn(solver.xorclauses, numClauseInPart, sumLitsInPart);
- 
+
     uint parts = 0;
     for (uint i = 0; i < numClauseInPart.size(); i++) {
         if (sumLitsInPart[i] == 0) continue;
@@ -152,7 +152,7 @@ const uint PartFinder::setParts()
         }
         parts++;
     }
-    
+
     if (parts > 1) {
         #ifdef VERBOSE_DEBUG
         for (map<uint, vector<Var> >::iterator it = reverseTable.begin(), end = reverseTable.end(); it != end; it++) {
@@ -164,7 +164,7 @@ const uint PartFinder::setParts()
         }
         #endif
     }
-    
+
     return parts;
 }
 
@@ -176,7 +176,7 @@ void PartFinder::calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart, vector
         T& x = **c;
         const uint part = table[x[0].var()];
         assert(part < part_no);
-        
+
         //for stats
         numClauseInPart[part]++;
         sumLitsInPart[part] += x.size();

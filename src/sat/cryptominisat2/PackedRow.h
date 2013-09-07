@@ -51,7 +51,7 @@ class PackedRow
 public:
     bool operator ==(const PackedRow& b) const;
     bool operator !=(const PackedRow& b) const;
-    
+
     PackedRow& operator=(const PackedRow& b)
     {
         #ifdef DEBUG_ROW
@@ -59,11 +59,11 @@ public:
         assert(b.size > 0);
         assert(size == b.size);
         #endif
-        
+
         memcpy(mp-1, b.mp-1, size+1);
         return *this;
     }
-    
+
     PackedRow& operator^=(const PackedRow& b)
     {
         #ifdef DEBUG_ROW
@@ -71,15 +71,15 @@ public:
         assert(b.size > 0);
         assert(b.size == size);
         #endif
-        
+
         for (uint32_t i = 0; i != size; i++) {
             *(mp + i) ^= *(b.mp + i);
         }
-        
+
         is_true_internal ^= b.is_true_internal;
         return *this;
     }
-    
+
     void xorBoth(const PackedRow& b)
     {
         #ifdef DEBUG_ROW
@@ -87,18 +87,18 @@ public:
         assert(b.size > 0);
         assert(b.size == size);
         #endif
-        
+
         for (uint32_t i = 0; i != 2*size+1; i++) {
             *(mp + i) ^= *(b.mp + i);
         }
-        
+
         is_true_internal ^= b.is_true_internal;
     }
-    
-    
+
+
     uint32_t popcnt() const;
     uint32_t popcnt(uint32_t from) const;
-    
+
     bool popcnt_is_one() const
     {
         char popcount = 0;
@@ -111,15 +111,15 @@ public:
         }
         return popcount == 1;
     }
-    
+
     bool popcnt_is_one(uint32_t from) const
     {
         from++;
-        
+
         uint64_t tmp = mp[from/64];
         tmp >>= from%64;
         if (tmp) return false;
-        
+
         for (uint32_t i = from/64+1; i != size; i++)
             if (mp[i]) return false;
         return true;
@@ -130,7 +130,7 @@ public:
         return is_true_internal;
     }
 
-    inline const bool isZero() const
+    inline bool isZero() const
     {
         for (uint32_t i = 0; i != size; i++) {
             if (mp[i]) return false;
@@ -157,7 +157,7 @@ public:
     {
         mp[i/64] |= ((uint64_t)1 << (i%64));
     }
-    
+
     void swapBoth(PackedRow b)
     {
         #ifdef DEBUG_ROW
@@ -165,12 +165,12 @@ public:
         assert(b.size > 0);
         assert(b.size == size);
         #endif
-        
+
         uint64_t * __restrict mp1 = mp-1;
         uint64_t * __restrict mp2 = b.mp-1;
-        
+
         uint32_t i = 2*(size+1);
-        
+
         while(i != 0) {
             std::swap(*mp1, *mp2);
             mp1++;
@@ -179,12 +179,12 @@ public:
         }
     }
 
-    inline const bool operator[](const uint32_t& i) const
+    inline bool operator[](const uint32_t& i) const
     {
         #ifdef DEBUG_ROW
         assert(size*64 > i);
         #endif
-        
+
         return (mp[i/64] >> (i%64)) & 1;
     }
 
@@ -197,21 +197,21 @@ public:
         for (uint32_t i = 0; i != v.size(); i++) {
             const uint32_t toset_var = var_to_col[v[i].var()];
             assert(toset_var != std::numeric_limits<uint32_t>::max());
-            
+
             setBit(toset_var);
         }
-        
+
         is_true_internal = !v.xor_clause_inverted();
     }
-    
+
     void fill(vec<Lit>& tmp_clause, const vec<lbool>& assigns, const vector<Var>& col_to_var_original) const;
-    
+
     inline unsigned long int scan(const unsigned long int var) const
     {
         #ifdef DEBUG_ROW
         assert(size > 0);
         #endif
-        
+
         for(uint32_t i = var; i != size*64; i++)
             if (this->operator[](i)) return i;
             return std::numeric_limits<unsigned long int>::max();

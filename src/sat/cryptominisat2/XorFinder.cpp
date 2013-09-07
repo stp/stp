@@ -49,7 +49,7 @@ XorFinder::XorFinder(Solver& _solver, vec<Clause*>& _cls, ClauseCleaner::ClauseS
 {
 }
 
-const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
+bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
 {
     uint sumLengths = 0;
     double time = cpuTime();
@@ -59,20 +59,20 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
         solver.clauseCleaner->cleanClauses(solver.binaryClauses, ClauseCleaner::binaryClauses);
     }
     if (!solver.ok) return false;
-    
+
     toRemove.clear();
     toRemove.resize(cls.size(), false);
     toLeaveInPlace.clear();
     toLeaveInPlace.resize(cls.size(), false);
-    
+
     table.clear();
     table.reserve(cls.size());
-    
+
     ClauseTable unsortedTable;
     unsortedTable.reserve(cls.size());
     ClauseTable sortedTable;
     sortedTable.reserve(cls.size());
-    
+
     for (Clause **it = cls.getData(), **end = it + cls.size(); it != end; it ++) {
         if (it+1 != end)
             __builtin_prefetch(*(it+1), 0);
@@ -94,7 +94,7 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
             std::sort(c.getData(), c.getData()+c.size());
         }
     }
-    
+
     uint i = 0;
     for (Clause **it = cls.getData(), **end = it + cls.size(); it != end; it++, i++) {
         const uint size = (*it)->size();
@@ -105,9 +105,9 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
         if ((*it)->getSorted()) sortedTable.push_back(make_pair(*it, i));
         else unsortedTable.push_back(make_pair(*it, i));
     }
-    
+
     clause_sorter_primary sorter;
-    
+
     std::sort(unsortedTable.begin(), unsortedTable.end(), clause_sorter_primary());
     //std::sort(sortedTable.begin(), sortedTable.end(), clause_sorter_primary());
     #ifdef DEBUG_XORFIND
@@ -118,7 +118,7 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
         assert(!sorter(sortedTable[i+1], sortedTable[i]));
     }
     #endif //DEBUG_XORFIND
-    
+
     for (uint i = 0, j = 0; i < unsortedTable.size() || j <  sortedTable.size();) {
         if (j == sortedTable.size()) {
             table.push_back(unsortedTable[i++]);
@@ -140,10 +140,10 @@ const bool XorFinder::doNoPart(const uint minSize, const uint maxSize)
         //table[i].first->plainPrint();
     }
     #endif //DEBUG_XORFIND
-    
+
     if (findXors(sumLengths) == false) goto end;
     solver.ok = (solver.propagate().isNULL());
-    
+
 end:
     if (minSize == maxSize && minSize == 2) {
         if (solver.verbosity >= 2 || (solver.conflicts == 0 && solver.verbosity >= 1)) {
@@ -154,7 +154,7 @@ end:
             printf("c |  Finding non-binary XORs:    %5.2lf s (found: %7d, avg size: %3.1lf)                  |\n", cpuTime()-time, foundXors, (double)sumLengths/(double)foundXors);
         }
     }
-    
+
     i = 0;
     uint32_t j = 0;
     uint32_t toSkip = 0;
@@ -172,18 +172,18 @@ end:
         }
     }
     cls.shrink(i-j);
-    
+
     return solver.ok;
 }
 
-const bool XorFinder::findXors(uint& sumLengths)
+bool XorFinder::findXors(uint& sumLengths)
 {
     #ifdef VERBOSE_DEBUG
     cout << "Finding Xors started" << endl;
     #endif
-    
+
     sumLengths = 0;
-    
+
     ClauseTable::iterator begin = table.begin();
     ClauseTable::iterator end = table.begin();
     vec<Lit> lits;
@@ -195,11 +195,11 @@ const bool XorFinder::findXors(uint& sumLengths)
             lits.push(Lit(it->var(), false));
         }
         uint old_group = c.getGroup();
-        
+
         #ifdef VERBOSE_DEBUG
         cout << "- Found clauses:" << endl;
         #endif
-        
+
         for (ClauseTable::iterator it = begin; it != end; it++)
             if (impairSigns(*it->first) == impair){
             #ifdef VERBOSE_DEBUG
@@ -208,11 +208,11 @@ const bool XorFinder::findXors(uint& sumLengths)
             toRemove[it->second] = true;
             solver.removeClause(*it->first);
         }
-        
+
         switch(lits.size()) {
         case 2: {
             solver.varReplacer->replace(lits, impair, old_group);
-            
+
             #ifdef VERBOSE_DEBUG
             XorClause* x = XorClause_new(lits, impair, old_group);
             cout << "- Final 2-long xor-clause: ";
@@ -225,25 +225,25 @@ const bool XorFinder::findXors(uint& sumLengths)
             XorClause* x = solver.clauseAllocator.XorClause_new(lits, impair, old_group);
             solver.xorclauses.push(x);
             solver.attachClause(*x);
-            
+
             #ifdef VERBOSE_DEBUG
             cout << "- Final xor-clause: ";
             x->plainPrint();
             #endif
         }
         }
-        
+
         foundXors++;
         sumLengths += lits.size();
     }
-    
+
     return solver.ok;
 }
 
 void XorFinder::clearToRemove()
 {
     assert(toRemove.size() == cls.size());
-    
+
     Clause **a = cls.getData();
     Clause **r = cls.getData();
     Clause **cend = cls.getData() + cls.size();
@@ -271,7 +271,7 @@ bool XorFinder::getNextXor(ClauseTable::iterator& begin, ClauseTable::iterator& 
         if (size > 0 && isXor(size, begin, end, impair))
             return true;
     }
-    
+
     return false;
 }
 
@@ -280,7 +280,7 @@ bool XorFinder::clauseEqual(const Clause& c1, const Clause& c2) const
     assert(c1.size() == c2.size());
     for (uint i = 0, size = c1.size(); i < size; i++)
         if (c1[i].sign() !=  c2[i].sign()) return false;
-    
+
     return true;
 }
 
@@ -289,17 +289,17 @@ bool XorFinder::impairSigns(const Clause& c) const
     uint num = 0;
     for (const Lit *it = &c[0], *end = it + c.size(); it != end; it++)
         num += it->sign();
-        
+
     return num % 2;
 }
 
 bool XorFinder::isXor(const uint32_t size, const ClauseTable::iterator& begin, const ClauseTable::iterator& end, bool& impair)
 {
     const uint requiredSize = 1 << (begin->first->size()-1);
-    
+
     if (size < requiredSize)
         return false;
-    
+
     #ifdef DEBUG_XORFIND2
     {
         vec<Var> vars;
@@ -312,7 +312,7 @@ bool XorFinder::isXor(const uint32_t size, const ClauseTable::iterator& begin, c
                 assert(vars[i] == c[i].var());
         }
         clause_sorter_primary sorter;
-        
+
         for (ClauseTable::iterator it = begin; it != end; it++) {
             ClauseTable::iterator it2 = it;
             it2++;
@@ -321,25 +321,25 @@ bool XorFinder::isXor(const uint32_t size, const ClauseTable::iterator& begin, c
         }
     }
     #endif //DEBUG_XORFIND
-    
+
     std::sort(begin, end, clause_sorter_secondary());
-    
+
     uint numPair = 0;
     uint numImpair = 0;
     countImpairs(begin, end, numImpair, numPair);
-    
+
     if (numImpair == requiredSize) {
         impair = true;
-        
+
         return true;
     }
-    
+
     if (numPair == requiredSize) {
         impair = false;
-        
+
         return true;
     }
-    
+
     return false;
 }
 
@@ -347,15 +347,15 @@ void XorFinder::countImpairs(const ClauseTable::iterator& begin, const ClauseTab
 {
     numImpair = 0;
     numPair = 0;
-    
+
     ClauseTable::const_iterator it = begin;
     ClauseTable::const_iterator it2 = begin;
     it2++;
-    
+
     bool impair = impairSigns(*it->first);
     numImpair += impair;
     numPair += !impair;
-    
+
     for (; it2 != end;) {
         if (!clauseEqual(*it->first, *it2->first)) {
             bool impair = impairSigns(*it2->first);
@@ -394,29 +394,29 @@ void XorFinder::addXorAsNormal3(XorClause& c)
     vec<Var> vars;
     vec<Lit> vars2(c.size());
     const bool inverted = c.xor_clause_inverted();
-    
+
     for (uint32_t i = 0; i < c.size(); i++) {
         vars.push(c[i].var());
     }
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], true ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], true ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
@@ -431,60 +431,60 @@ void XorFinder::addXorAsNormal4(XorClause& c)
     vec<Var> vars;
     vec<Lit> vars2(c.size());
     const bool inverted = !c.xor_clause_inverted();
-    
+
     for (uint32_t i = 0; i < c.size(); i++) {
         vars.push(c[i].var());
     }
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     vars2[3] = Lit(vars[3], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     vars2[3] = Lit(vars[3], false ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
     vars2[3] = Lit(vars[3], false ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     vars2[3] = Lit(vars[3], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], false ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
     vars2[3] = Lit(vars[3], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], true ^ inverted);
     vars2[1] = Lit(vars[1], false ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
     vars2[3] = Lit(vars[3], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], true ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], false ^ inverted);
     vars2[3] = Lit(vars[3], true ^ inverted);
     tmp = solver.addClauseInt(vars2, c.getGroup());
     if (tmp) solver.clauses.push(tmp);
-    
+
     vars2[0] = Lit(vars[0], true ^ inverted);
     vars2[1] = Lit(vars[1], true ^ inverted);
     vars2[2] = Lit(vars[2], true ^ inverted);
