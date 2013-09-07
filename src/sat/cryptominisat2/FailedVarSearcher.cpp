@@ -61,12 +61,12 @@ void FailedVarSearcher::addFromSolver(const vec< XorClause* >& cs)
     for (Var var = 0; var < solver.nVars(); var++) {
         occur[var].clear();
     }
-    
+
     uint32_t i = 0;
     for (XorClause * const*it = cs.getData(), * const*end = it + cs.size(); it !=  end; it++, i++) {
         if (it+1 != end)
             __builtin_prefetch(*(it+1), 0, 0);
-        
+
         const XorClause& cl = **it;
         xorClauseSizes[i] = cl.size();
         for (const Lit *l = cl.getData(), *end2 = l + cl.size(); l != end2; l++) {
@@ -79,7 +79,7 @@ inline void FailedVarSearcher::removeVarFromXors(const Var var)
 {
     vector<uint32_t>& occ = occur[var];
     if (occ.empty()) return;
-    
+
     for (uint32_t *it = &occ[0], *end = it + occ.size(); it != end; it++) {
         xorClauseSizes[*it]--;
         if (!xorClauseTouched[*it]) {
@@ -93,7 +93,7 @@ inline void FailedVarSearcher::addVarFromXors(const Var var)
 {
     vector<uint32_t>& occ = occur[var];
     if (occ.empty()) return;
-    
+
     for (uint32_t *it = &occ[0], *end = it + occ.size(); it != end; it++) {
         xorClauseSizes[*it]++;
     }
@@ -104,7 +104,7 @@ const TwoLongXor FailedVarSearcher::getTwoLongXor(const XorClause& c)
     TwoLongXor tmp;
     uint32_t num = 0;
     tmp.inverted = c.xor_clause_inverted();
-    
+
     for(const Lit *l = c.getData(), *end = l + c.size(); l != end; l++) {
         if (solver.assigns[l->var()] == l_Undef) {
             assert(num < 2);
@@ -114,20 +114,20 @@ const TwoLongXor FailedVarSearcher::getTwoLongXor(const XorClause& c)
             tmp.inverted ^= (solver.assigns[l->var()] == l_True);
         }
     }
-    
+
     #ifdef VERBOSE_DEUBUG
     if (num != 2) {
         std::cout << "Num:" << num << std::endl;
         c.plainPrint();
     }
     #endif
-    
+
     std::sort(&tmp.var[0], &tmp.var[0]+2);
     assert(num == 2);
     return tmp;
 }
 
-const bool FailedVarSearcher::search(uint64_t numProps)
+bool FailedVarSearcher::search(uint64_t numProps)
 {
     assert(solver.decisionLevel() == 0);
     solver.testAllClauseAttach();
@@ -136,24 +136,24 @@ const bool FailedVarSearcher::search(uint64_t numProps)
     StateSaver savedState(solver);
     Heap<Solver::VarOrderLt> order_heap_copy(solver.order_heap); //for hyperbin
     uint64_t origBinClauses = solver.binaryClauses.size();
-    
+
     //General Stats
     numFailed = 0;
     goodBothSame = 0;
     numCalls++;
-    
+
     //If failed var searching is going good, do successively more and more of it
     if (lastTimeFoundTruths > 500 || (double)lastTimeFoundTruths > (double)solver.order_heap.size() * 0.03) std::max(numPropsMultiplier*1.7, 5.0);
     else numPropsMultiplier = 1.0;
     numProps = (uint64_t) ((double)numProps * numPropsMultiplier *3);
-    
+
     //For BothSame
     propagated.resize(solver.nVars(), 0);
     propValue.resize(solver.nVars(), 0);
-    
+
     //For calculating how many variables have really been set
     origTrailSize = solver.trail.size();
-    
+
     //For 2-long xor (rule 6 of  Equivalent literal propagation in the DLL procedure by Chu-Min Li)
     toReplaceBefore = solver.varReplacer->getNewToReplaceVars();
     lastTrailSize = solver.trail.size();
@@ -170,7 +170,7 @@ const bool FailedVarSearcher::search(uint64_t numProps)
     }
     xorClauseTouched.resize(solver.xorclauses.size(), 0);
     newBinXor = 0;
-    
+
     //For 2-long xor through Le Berre paper
     bothInvert = 0;
 
@@ -180,7 +180,7 @@ const bool FailedVarSearcher::search(uint64_t numProps)
     hyperbinProps = 0;
     if (solver.addExtraBins && !orderLits()) return false;
     maxHyperBinProps = numProps/8;
-    
+
     //uint32_t fromBin;
     uint32_t fromVar;
     if (finishedLastTimeVar || lastTimeWentUntilVar >= solver.nVars())
@@ -216,7 +216,7 @@ const bool FailedVarSearcher::search(uint64_t numProps)
         if (!tryBoth(Lit(var, false), Lit(var, true)))
             goto end;
     }
-    
+
     /*if (solver.verbosity >= 1) printResults(myTime);
     if (finishedLastTimeBin || lastTimeWentUntilBin >= solver.binaryClauses.size())
         fromBin = 0;
@@ -230,14 +230,14 @@ const bool FailedVarSearcher::search(uint64_t numProps)
             lastTimeWentUntilBin = binCl;
             break;
         }
-        
+
         Clause& cl = *solver.binaryClauses[binCl];
         if (solver.value(cl[0]) == l_Undef && solver.value(cl[1]) == l_Undef) {
             if (!tryBoth(cl[0], cl[1]))
                 goto end;
         }
     }*/
-    
+
     /*for (Clause **it = solver.clauses.getData(), **end = solver.clauses.getDataEnd(); it != end; it++) {
         Clause& c = **it;
         for (uint i = 0; i < c.size(); i++) {
@@ -245,10 +245,10 @@ const bool FailedVarSearcher::search(uint64_t numProps)
         }
         if (!tryAll(c.getData(), c.getDataEnd()))
             goto end;
-        
+
         next:;
     }
-    
+
     for (Clause **it = solver.learnts.getData(), **end = solver.learnts.getDataEnd(); it != end; it++) {
         Clause& c = **it;
         for (uint i = 0; i < c.size(); i++) {
@@ -256,7 +256,7 @@ const bool FailedVarSearcher::search(uint64_t numProps)
         }
         if (!tryAll(c.getData(), c.getDataEnd()))
             goto end;
-        
+
         next2:;
     }*/
 
@@ -265,9 +265,9 @@ end:
     binClauseAdded = solver.binaryClauses.size() - origBinClauses;
     //Print results
     if (solver.verbosity >= 1) printResults(myTime);
-    
+
     solver.order_heap.filter(Solver::VarFilter(solver));
-    
+
     if (solver.ok && (numFailed || goodBothSame)) {
         double time = cpuTime();
         if ((int)origHeapSize - (int)solver.order_heap.size() >  (int)origHeapSize/15 && solver.nClauses() + solver.learnts.size() > 500000) {
@@ -281,11 +281,11 @@ end:
             <<  std::setw(39) << " | " << std::endl;
         }
     }
-    
+
     lastTimeFoundTruths = solver.trail.size() - origTrailSize;
 
     savedState.restore();
-    
+
     solver.testAllClauseAttach();
     return solver.ok;
 }
@@ -320,7 +320,7 @@ void FailedVarSearcher::printResults(const double myTime) const
     std::setw(5) << " |" << std::endl;
 }
 
-const bool FailedVarSearcher::orderLits()
+bool FailedVarSearcher::orderLits()
 {
     uint64_t oldProps = solver.propagations;
     double myTime = cpuTime();
@@ -330,7 +330,7 @@ const bool FailedVarSearcher::orderLits()
     BitArray alreadyTested;
     alreadyTested.resize(solver.nVars()*2, 0);
     uint32_t i;
-    
+
     for (i = 0; i < 3*solver.order_heap.size(); i++) {
         if (solver.propagations - oldProps > 1500000) break;
         Var var = solver.order_heap[solver.mtrand.randInt(solver.order_heap.size()-1)];
@@ -371,7 +371,7 @@ const bool FailedVarSearcher::orderLits()
     return true;
 }
 
-const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
+bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
 {
     if (binXorFind) {
         if (lastTrailSize < solver.trail.size()) {
@@ -383,13 +383,13 @@ const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
         xorClauseTouched.setZero();
         investigateXor.clear();
     }
-    
+
     propagated.setZero();
     twoLongXors.clear();
     propagatedVars.clear();
     unPropagatedBin.setZero();
     bothSame.clear();
-    
+
     solver.newDecisionLevel();
     solver.uncheckedEnqueueLight(lit1);
     failed = (!solver.propagate().isNULL());
@@ -411,10 +411,10 @@ const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
             }
             if (solver.assigns[x].getBool()) propValue.setBit(x);
             else propValue.clearBit(x);
-            
+
             if (binXorFind) removeVarFromXors(x);
         }
-        
+
         if (binXorFind) {
             for (uint32_t *it = investigateXor.getData(), *end = investigateXor.getDataEnd(); it != end; it++) {
                 if (xorClauseSizes[*it] == 2)
@@ -426,14 +426,14 @@ const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
             xorClauseTouched.setZero();
             investigateXor.clear();
         }
-        
+
         solver.cancelUntil(0);
     }
 
     if (solver.addExtraBins && hyperbinProps < maxHyperBinProps) addBinClauses(lit1);
     propagatedVars.clear();
     unPropagatedBin.setZero();
-    
+
     solver.newDecisionLevel();
     solver.uncheckedEnqueueLight(lit2);
     failed = (!solver.propagate().isNULL());
@@ -478,7 +478,7 @@ const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
             else propValue.clearBit(x);
             if (binXorFind) removeVarFromXors(x);
         }
-        
+
         if (binXorFind) {
             if (twoLongXors.size() > 0) {
                 for (uint32_t *it = investigateXor.getData(), *end = it + investigateXor.size(); it != end; it++) {
@@ -499,19 +499,19 @@ const bool FailedVarSearcher::tryBoth(const Lit lit1, const Lit lit2)
                 addVarFromXors(solver.trail[c].var());
             }
         }
-        
+
         solver.cancelUntil(0);
     }
 
     if (solver.addExtraBins && hyperbinProps < maxHyperBinProps) addBinClauses(lit2);
-    
+
     for(uint32_t i = 0; i != bothSame.size(); i++) {
         solver.uncheckedEnqueue(bothSame[i]);
     }
     goodBothSame += bothSame.size();
     solver.ok = (solver.propagate(false).isNULL());
     if (!solver.ok) return false;
-    
+
     return true;
 }
 
@@ -520,11 +520,11 @@ struct litOrder
     litOrder(const vector<uint32_t>& _litDegrees) :
     litDegrees(_litDegrees)
     {}
-    
+
     bool operator () (const Lit& x, const Lit& y) {
         return litDegrees[x.toInt()] > litDegrees[y.toInt()];
     }
-    
+
     const vector<uint32_t>& litDegrees;
 };
 
@@ -535,7 +535,7 @@ void FailedVarSearcher::addBinClauses(const Lit& lit)
     std::cout << "Checking one BTC vs UP" << std::endl;
     #endif //VERBOSE_DEBUG
     vec<Lit> toVisit;
-    
+
     solver.newDecisionLevel();
     solver.uncheckedEnqueueLight(lit);
     failed = (!solver.propagateBin().isNULL());
@@ -606,7 +606,7 @@ void FailedVarSearcher::fillImplies(const Lit& lit)
     solver.uncheckedEnqueue(lit);
     failed = (!solver.propagate().isNULL());
     assert(!failed);
-    
+
     assert(solver.decisionLevel() > 0);
     for (int c = solver.trail.size()-1; c >= (int)solver.trail_lim[0]; c--) {
         Lit x = solver.trail[c];
@@ -646,10 +646,10 @@ inline void FailedVarSearcher::cleanAndAttachClauses(vec<T*>& cs)
     cs.shrink(i-j);
 }
 
-inline const bool FailedVarSearcher::cleanClause(Clause& ps)
+inline bool FailedVarSearcher::cleanClause(Clause& ps)
 {
     uint32_t origSize = ps.size();
-    
+
     Lit *i = ps.getData();
     Lit *j = i;
     for (Lit *end = ps.getDataEnd(); i != end; i++) {
@@ -660,18 +660,18 @@ inline const bool FailedVarSearcher::cleanClause(Clause& ps)
     }
     ps.shrink(i-j);
     assert(ps.size() > 1);
-    
+
     if (ps.size() != origSize) ps.setStrenghtened();
     if (origSize != 2 && ps.size() == 2)
         solver.becameBinary++;
-    
+
     return true;
 }
 
-inline const bool FailedVarSearcher::cleanClause(XorClause& ps)
+inline bool FailedVarSearcher::cleanClause(XorClause& ps)
 {
     uint32_t origSize = ps.size();
-    
+
     Lit *i = ps.getData(), *j = i;
     for (Lit *end = ps.getDataEnd(); i != end; i++) {
         if (solver.assigns[i->var()] == l_True) ps.invert(true);
@@ -680,10 +680,10 @@ inline const bool FailedVarSearcher::cleanClause(XorClause& ps)
         }
     }
     ps.shrink(i-j);
-    
+
     if (ps.size() == 0) return false;
     assert(ps.size() > 1);
-    
+
     if (ps.size() != origSize) ps.setStrenghtened();
     if (ps.size() == 2) {
         ps[0] = ps[0].unsign();
@@ -691,7 +691,7 @@ inline const bool FailedVarSearcher::cleanClause(XorClause& ps)
         solver.varReplacer->replace(ps, ps.xor_clause_inverted(), ps.getGroup());
         return false;
     }
-    
+
     return true;
 }
 

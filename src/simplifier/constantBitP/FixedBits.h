@@ -73,7 +73,7 @@ namespace simplifier
         return uniqueId <= copy.uniqueId;
       }
 
-      const char
+      char
       operator[] (const int n) const
       {
         assert(n >=0 && n <width);

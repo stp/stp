@@ -63,25 +63,25 @@ void Subsumer::extendModel(Solver& solver2)
         assert(solver.assigns[var] == l_Undef);
         assert(!solver.order_heap.inHeap(var));
         #endif
-        
+
         for (vector<Clause*>::iterator it2 = it->second.begin(), end2 = it->second.end(); it2 != end2; it2++) {
             Clause& c = **it2;
             tmp.clear();
             tmp.growTo(c.size());
             std::copy(c.getData(), c.getDataEnd(), tmp.getData());
-            
+
             #ifdef VERBOSE_DEBUG
             std::cout << "Reinserting Clause: ";
             c.plainPrint();
             #endif
-            
+
             solver2.addClause(tmp);
             assert(solver2.ok);
         }
     }
 }
 
-const bool Subsumer::unEliminate(const Var var)
+bool Subsumer::unEliminate(const Var var)
 {
     assert(var_elimed[var]);
     vec<Lit> tmp;
@@ -93,12 +93,12 @@ const bool Subsumer::unEliminate(const Var var)
     solver.setDecisionVar(var, true);
     var_elimed[var] = false;
     numElimed--;
-    
+
     //If the variable was removed because of
     //pure literal removal (by blocked clause
     //elimination, there are no clauses to re-insert
     if (it == elimedOutVar.end()) return solver.ok;
-    
+
     FILE* backup_libraryCNFfile = solver.libraryCNFFile;
     solver.libraryCNFFile = NULL;
     for (vector<Clause*>::iterator it2 = it->second.begin(), end2 = it->second.end(); it2 != end2; it2++) {
@@ -107,7 +107,7 @@ const bool Subsumer::unEliminate(const Var var)
     }
     solver.libraryCNFFile = backup_libraryCNFfile;
     elimedOutVar.erase(it);
-    
+
     return solver.ok;
 }
 
@@ -126,7 +126,7 @@ bool selfSubset(Clause& A, Clause& B, vec<char>& seen)
 {
     for (uint32_t i = 0; i < B.size(); i++)
         seen[B[i].toInt()] = 1;
-    
+
     bool    flip = false;
     for (uint32_t i = 0; i < A.size(); i++) {
         if (!seen[A[i].toInt()]) {
@@ -179,14 +179,14 @@ uint32_t Subsumer::subsume0Orig(const T& ps, uint32_t abs)
         cout << "-> subsume0 removing:";
         subs[i].clause->plainPrint();
         #endif
-        
+
         Clause* tmp = subs[i].clause;
         subsumedNonLearnt |= !tmp->learnt();
         retIndex = subs[i].index;
         unlinkClause(subs[i]);
         solver.clauseAllocator.clauseFree(tmp);
     }
-    
+
     return retIndex;
 }
 
@@ -220,14 +220,14 @@ void Subsumer::subsume0BIN(const Lit lit1, const vec<char>& lits)
             }
         }
     }
-    
+
     for (uint32_t i = 0; i < subs.size(); i++){
         clauses_subsumed++;
         #ifdef VERBOSE_DEBUG
         cout << "-> subsume0 removing:";
         subs[i].clause->plainPrint();
         #endif
-        
+
         Clause* tmp = subs[i].clause;
         unlinkClause(subs[i]);
         solver.clauseAllocator.clauseFree(tmp);
@@ -308,7 +308,7 @@ void Subsumer::subsume0BIN(const Lit lit1, const vec<char>& lits)
 void Subsumer::unlinkClause(ClauseSimp c, Var elim)
 {
     Clause& cl = *c.clause;
-    
+
     if (elim != var_Undef) {
         assert(!cl.learnt());
         #ifdef VERBOSE_DEBUG
@@ -324,9 +324,9 @@ void Subsumer::unlinkClause(ClauseSimp c, Var elim)
         touch(cl[i]);
         #endif
     }
-    
+
     solver.detachClause(cl);
-    
+
     // Remove from iterator vectors/sets:
     for (uint32_t i = 0; i < iter_vecs.size(); i++) {
         vec<ClauseSimp>& cs = *iter_vecs[i];
@@ -338,11 +338,11 @@ void Subsumer::unlinkClause(ClauseSimp c, Var elim)
         CSet& cs = *iter_sets[i];
         cs.exclude(c);
     }
-    
+
     // Remove clause from clause touched set:
     cl_touched.exclude(c);
     cl_added.exclude(c);
-    
+
     clauses[c.index].clause = NULL;
 }
 
@@ -354,7 +354,7 @@ void Subsumer::unlinkModifiedClause(vec<Lit>& origClause, ClauseSimp c, bool det
         touch(origClause[i]);
         #endif
     }
-    
+
     // Remove from iterator vectors/sets:
     for (uint32_t i = 0; i < iter_vecs.size(); i++){
         vec<ClauseSimp>& cs = *iter_vecs[i];
@@ -366,7 +366,7 @@ void Subsumer::unlinkModifiedClause(vec<Lit>& origClause, ClauseSimp c, bool det
         CSet& cs = *iter_sets[i];
         cs.exclude(c);
     }
-    
+
     // Remove clause from clause touched set:
     cl_touched.exclude(c);
     cl_added.exclude(c);
@@ -383,11 +383,11 @@ void Subsumer::subsume1(ClauseSimp& ps)
     vec<ClauseSimp>    subs;
     vec<Lit>        qs;
     uint32_t        q;
-    
+
     ps.clause->unsetStrenghtened();
     registerIteration(Q);
     registerIteration(subs);
-    
+
     Q.push(ps);
     q = 0;
     while (q < Q.size()){
@@ -396,16 +396,16 @@ void Subsumer::subsume1(ClauseSimp& ps)
         cout << "subsume1 with clause:";
         Q[q].clause->plainPrint();
         #endif
-        
+
         qs.clear();
         for (uint32_t i = 0; i < Q[q].clause->size(); i++)
             qs.push((*Q[q].clause)[i]);
-        
+
         for (uint32_t i = 0; i < qs.size(); i++){
             qs[i] = ~qs[i];
-            
+
             uint32_t abst = calcAbstraction(qs);
-            
+
             findSubsumed(qs, abst, subs);
             for (uint32_t j = 0; j < subs.size(); j++){
                 /*#ifndef NDEBUG
@@ -425,7 +425,7 @@ void Subsumer::subsume1(ClauseSimp& ps)
                 cl.plainPrint();
                 #endif
                 unlinkClause(c);
-                
+
                 literals_removed++;
                 cl.strengthen(qs[i]);
                 Lit *a, *b, *end;
@@ -433,7 +433,7 @@ void Subsumer::subsume1(ClauseSimp& ps)
                     lbool val = solver.value(*a);
                     if (val == l_Undef)
                         *b++ = *a;
-                    
+
                     if (val == l_True) {
                         #ifdef VERBOSE_DEBUG
                         std::cout << "--> Clause was satisfied." << std::endl;
@@ -444,12 +444,12 @@ void Subsumer::subsume1(ClauseSimp& ps)
                 }
                 cl.shrink(a-b);
                 cl.setStrenghtened();
-                
+
                 #ifdef VERBOSE_DEBUG
                 cout << "--> Strenghtened clause:";
                 cl.plainPrint();
                 #endif
-                
+
                 if (cl.size() == 0) {
                     solver.ok = false;
                     unregisterIteration(Q);
@@ -481,13 +481,13 @@ void Subsumer::subsume1(ClauseSimp& ps)
                 }
                 endS:;
             }
-            
+
             qs[i] = ~qs[i];
             subs.clear();
         }
         q++;
     }
-    
+
     unregisterIteration(Q);
     unregisterIteration(subs);
 }
@@ -497,7 +497,7 @@ void Subsumer::subsume1Partial(const T& ps)
 {
     assert(solver.decisionLevel() == 0);
     registerIteration(subsume1PartialSubs);
-    
+
     #ifdef VERBOSE_DEBUG
     cout << "-> Strenghtening using clause :";
     ps[0].print(); std::cout << " ";
@@ -594,7 +594,7 @@ void Subsumer::updateClause(ClauseSimp c)
     subsume0(*c.clause, c.clause->getAbst());
     if (c.clause->learnt() && subsumedNonLearnt)
         c.clause->makeNonLearnt();
-    
+
     cl_touched.add(c);
 }
 
@@ -606,7 +606,7 @@ void Subsumer::almost_all_database()
     // Optimized variant when virtually whole database is involved:
     cl_added  .clear();
     cl_touched.clear();
-    
+
     for (uint32_t i = 0; i < clauses.size(); i++) {
         if (numMaxSubsume1 == 0) break;
         if (clauses[i].clause != NULL) {
@@ -615,18 +615,18 @@ void Subsumer::almost_all_database()
             if (!solver.ok) return;
         }
     }
-    
+
     assert(solver.ok);
     solver.ok = (solver.propagate().isNULL());
     if (!solver.ok) {
         return;
     }
     solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
-    
+
     #ifdef VERBOSE_DEBUG
     cout << "subsume1 part 1 finished" << endl;
     #endif
-    
+
     CSet s1;
     registerIteration(s1);
     while (cl_touched.size() > 0 && numMaxSubsume1 > 0){
@@ -638,7 +638,7 @@ void Subsumer::almost_all_database()
                 s1.add(*it);
         }
         cl_touched.clear();
-        
+
         for (CSet::iterator it = s1.begin(), end = s1.end(); it != end; ++it) {
             if (numMaxSubsume1 == 0) break;
             if (it->clause != NULL) {
@@ -648,7 +648,7 @@ void Subsumer::almost_all_database()
             }
         }
         s1.clear();
-        
+
         if (!solver.ok) return;
         solver.ok = (solver.propagate().isNULL());
         if (!solver.ok) {
@@ -672,28 +672,28 @@ void Subsumer::smaller_database()
     //  Set used in 0-subs:
     //      (1) clauses containing a (non-negated) literal of an added clause, including the added clause itself.
     //      (2) all strenghtened clauses -- REMOVED!! We turned on eager backward subsumption which supersedes this.
-    
+
     #ifdef BIT_MORE_VERBOSITY
     printf("  PREPARING\n");
     #endif
-    
+
     CSet s0, s1;     // 's0' is used for 0-subsumption, 's1' for 1-subsumption
     vec<char>   ol_seen(solver.nVars()*2, 0);
     for (CSet::iterator it = cl_added.begin(), end = cl_added.end(); it != end; ++it) {
         if (it->clause == NULL) continue;
         ClauseSimp& c = *it;
         Clause& cl = *it->clause;
-        
+
         s1.add(c);
         for (uint32_t j = 0; j < cl.size(); j++){
             if (ol_seen[cl[j].toInt()]) continue;
             ol_seen[cl[j].toInt()] = 1;
-            
+
             vec<ClauseSimp>& n_occs = occur[(~cl[j]).toInt()];
             for (uint32_t k = 0; k < n_occs.size(); k++)
                 if (n_occs[k].clause != c.clause && n_occs[k].clause->size() <= cl.size() && selfSubset(n_occs[k].clause->getAbst(), c.clause->getAbst()) && selfSubset(*n_occs[k].clause, cl, seen_tmp))
                     s1.add(n_occs[k]);
-                
+
             vec<ClauseSimp>& p_occs = occur[cl[j].toInt()];
             for (uint32_t k = 0; k < p_occs.size(); k++)
                 if (subsetAbst(p_occs[k].clause->getAbst(), c.clause->getAbst()))
@@ -701,14 +701,14 @@ void Subsumer::smaller_database()
         }
     }
     cl_added.clear();
-    
+
     registerIteration(s0);
     registerIteration(s1);
-    
+
     #ifdef BIT_MORE_VERBOSITY
     printf("c FIXED-POINT\n");
     #endif
-    
+
     // Fixed-point for 1-subsumption:
     while (s1.size() > 0 || cl_touched.size() > 0){
         for (CSet::iterator it = cl_touched.begin(), end = cl_touched.end(); it != end; ++it) {
@@ -717,14 +717,14 @@ void Subsumer::smaller_database()
                 s0.add(*it);
             }
         }
-        
+
         cl_touched.clear();
         assert(solver.qhead == solver.trail.size());
-        
+
         #ifdef BIT_MORE_VERBOSITY
         printf("c s1.size()=%d  cl_touched.size()=%d\n", s1.size(), cl_touched.size());
         #endif
-        
+
         for (CSet::iterator it = s1.begin(), end = s1.end(); it != end; ++it) {
             if (numMaxSubsume1 == 0) break;
             if (it->clause != NULL) {
@@ -734,18 +734,18 @@ void Subsumer::smaller_database()
             }
         }
         s1.clear();
-        
+
         if (!solver.ok) return;
         solver.ok = (solver.propagate().isNULL());
         if (!solver.ok){
             unregisterIteration(s1);
             unregisterIteration(s0);
-            return; 
+            return;
         }
         solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
     }
     unregisterIteration(s1);
-    
+
     // Iteration pass for 0-subsumption:
     for (CSet::iterator it = s0.begin(), end = s0.end(); it != end; ++it) {
         if (it->clause != NULL) {
@@ -766,7 +766,7 @@ ClauseSimp Subsumer::linkInClause(Clause& cl)
         touch(cl[i].var());
     }
     cl_added.add(c);
-    
+
     return c;
 }
 
@@ -859,7 +859,7 @@ void Subsumer::addBackToSolver()
             }
         }
     }
-    
+
     #ifdef HYPER_DEBUG2
     std::cout << "Binary learnt added:" << binaryLearntAdded << std::endl;
     #endif
@@ -898,14 +898,14 @@ void Subsumer::fillCannotEliminate()
         for (uint32_t i2 = 0; i2 < c.size(); i2++)
             cannot_eliminate[c[i2].var()] = true;
     }
-    
+
     const vec<Clause*>& tmp = solver.varReplacer->getClauses();
     for (uint32_t i = 0; i < tmp.size(); i++) {
         const Clause& c = *tmp[i];
         for (uint32_t i2 = 0; i2 < c.size(); i2++)
             cannot_eliminate[c[i2].var()] = true;
     }
-    
+
     #ifdef VERBOSE_DEBUG
     uint32_t tmpNum = 0;
     for (uint32_t i = 0; i < cannot_eliminate.size(); i++)
@@ -915,7 +915,7 @@ void Subsumer::fillCannotEliminate()
     #endif
 }
 
-const bool Subsumer::subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins)
+bool Subsumer::subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins)
 {
     clearAll();
     clauseID = 0;
@@ -963,7 +963,7 @@ const bool Subsumer::subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins)
         << "  time: " << std::setprecision(2) << std::setw(5) <<  cpuTime() - myTime << " s"
         << std::setw(17)  << "   |" << std::endl;
     }
-    
+
     if (!subsWNonExistBinsFull(onlyNonLearntBins)) return false;
 
     #ifdef DEBUG_BINARIES
@@ -1000,7 +1000,7 @@ const bool Subsumer::subsumeWithBinaries(OnlyNonLearntBins* onlyNonLearntBins)
 
 #define MAX_BINARY_PROP 40000000
 
-const bool Subsumer::subsWNonExistBinsFull(OnlyNonLearntBins* onlyNonLearntBins)
+bool Subsumer::subsWNonExistBinsFull(OnlyNonLearntBins* onlyNonLearntBins)
 {
     uint32_t oldClausesSubusmed = clauses_subsumed;
     uint32_t oldLitsRemoved = literals_removed;
@@ -1052,7 +1052,7 @@ const bool Subsumer::subsWNonExistBinsFull(OnlyNonLearntBins* onlyNonLearntBins)
     return true;
 }
 
-const bool Subsumer::subsWNonExistBins(const Lit& lit, OnlyNonLearntBins* onlyNonLearntBins)
+bool Subsumer::subsWNonExistBins(const Lit& lit, OnlyNonLearntBins* onlyNonLearntBins)
 {
     #ifdef VERBOSE_DEBUG
     std::cout << "subsWNonExistBins called with lit "; lit.print();
@@ -1112,10 +1112,10 @@ void Subsumer::clearAll()
     cl_touched.clear();
 }
 
-const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
+bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
 {
     if (solver.nClauses() > 20000000)  return true;
-    
+
     double myTime = cpuTime();
     uint32_t origTrailSize = solver.trail.size();
     clauses_subsumed = 0;
@@ -1126,7 +1126,7 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     numVarsElimed = 0;
     blockTime = 0.0;
     clearAll();
-    
+
     //if (solver.xorclauses.size() < 30000 && solver.clauses.size() < MAX_CLAUSENUM_XORFIND/10) addAllXorAsNorm();
 
     if (solver.performReplace && !solver.varReplacer->performReplace(true))
@@ -1141,7 +1141,7 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     clauses.reserve(expected_size);
     cl_added.reserve(expected_size);
     cl_touched.reserve(expected_size);
-    
+
     if (clauses.size() < 200000) fullSubsume = true;
     else fullSubsume = false;
     if (alsoLearnt) fullSubsume = true;
@@ -1155,7 +1155,7 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     //move to binaryClauses during cleaning!!!!
     solver.clauseCleaner->removeSatisfied(solver.binaryClauses, ClauseCleaner::binaryClauses);
     addFromSolver<true>(solver.binaryClauses, alsoLearnt);
-    
+
     //Limits
     if (clauses.size() > 3500000) {
         numMaxSubsume0 = 900000 * (1+numCalls/2);
@@ -1189,22 +1189,22 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
         numMaxBlockToVisit = 0;
         fullSubsume = true;
     }
-    
+
     //For debugging
     //numMaxBlockToVisit = std::numeric_limits<int64_t>::max();
     //numMaxElim = std::numeric_limits<uint32_t>::max();
     //numMaxSubsume0 = std::numeric_limits<uint32_t>::max();
     //numMaxSubsume1 = std::numeric_limits<uint32_t>::max();
     //numMaxBlockVars = std::numeric_limits<uint32_t>::max();
-    
+
     #ifdef BIT_MORE_VERBOSITY
     std::cout << "c  num clauses:" << clauses.size() << std::endl;
     std::cout << "c  time to link in:" << cpuTime()-myTime << std::endl;
     #endif
-    
+
     for (uint32_t i = 0; i < clauses.size(); i++) {
         if (numMaxSubsume0 == 0) break;
-        if (clauses[i].clause != NULL && 
+        if (clauses[i].clause != NULL &&
             (fullSubsume
             || !clauses[i].clause->subsume0IsFinished())
             )
@@ -1214,13 +1214,13 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
             numMaxSubsume0--;
         }
     }
-    
+
     origNClauses = clauses.size();
-    
+
     #ifdef BIT_MORE_VERBOSITY
     std::cout << "c  time until pre-subsume0 clauses and subsume1 2-learnts:" << cpuTime()-myTime << std::endl;
     #endif
-    
+
     if (!solver.ok) return false;
     #ifdef VERBOSE_DEBUG
     std::cout << "c   pre-subsumed:" << clauses_subsumed << std::endl;
@@ -1229,7 +1229,7 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     std::cout << "c   clauses:" << clauses.size() << std::endl;
     std::cout << "c   origNClauses:" << origNClauses << std::endl;
     #endif
-    
+
     if (clauses.size() > 10000000)  goto endSimplifyBySubsumption;
     if (solver.doBlockedClause && numCalls % 3 == 1) blockedClauseRemoval();
     do{
@@ -1253,24 +1253,24 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
             return false;
         }
         solver.clauseCleaner->cleanClausesBewareNULL(clauses, ClauseCleaner::simpClauses, *this);
-        
+
         #ifdef BIT_MORE_VERBOSITY
         std::cout << "c time until the end of almost_all/smaller: " << cpuTime() - myTime << std::endl;
         #endif
-        
+
         if (!solver.doVarElim) break;
-        
+
         #ifdef BIT_MORE_VERBOSITY
         printf("c VARIABLE ELIMINIATION\n");
         std::cout << "c  toucheds list size:" << touched_list.size() << std::endl;
         #endif
         vec<Var> init_order;
         orderVarsForElim(init_order);   // (will untouch all variables)
-        
+
         for (bool first = true; numMaxElim > 0; first = false){
             uint32_t vars_elimed = 0;
             vec<Var> order;
-            
+
             if (first) {
                 //init_order.copyTo(order);
                 for (uint32_t i = 0; i < init_order.size(); i++) {
@@ -1290,7 +1290,7 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
             #ifdef VERBOSE_DEBUG
             std::cout << "Order size:" << order.size() << std::endl;
             #endif
-            
+
             assert(solver.qhead == solver.trail.size());
             for (uint32_t i = 0; i < order.size() && numMaxElim > 0; i++, numMaxElim--) {
                 if (maybeEliminate(order[i])) {
@@ -1301,9 +1301,9 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
                 }
             }
             assert(solver.qhead == solver.trail.size());
-            
+
             if (vars_elimed == 0) break;
-            
+
             numVarsElimed += vars_elimed;
             #ifdef BIT_MORE_VERBOSITY
             printf("c  #var-elim: %d\n", vars_elimed);
@@ -1312,13 +1312,13 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
         }
     }while (cl_added.size() > 100 && numMaxElim > 0);
     endSimplifyBySubsumption:
-    
+
     if (!solver.ok) return false;
     solver.ok = (solver.propagate().isNULL());
     if (!solver.ok) {
         return false;
     }
-    
+
     #ifndef NDEBUG
     verifyIntegrity();
     #endif
@@ -1328,10 +1328,10 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
     removeAssignedVarsFromEliminated();
 
     solver.order_heap.filter(Solver::VarFilter(solver));
-    
+
     addBackToSolver();
     freeMemory();
-    
+
     if (solver.verbosity >= 1) {
         std::cout << "c |  lits-rem: " << std::setw(9) << literals_removed
         << "  cl-subs: " << std::setw(8) << clauses_subsumed
@@ -1340,11 +1340,11 @@ const bool Subsumer::simplifyBySubsumption(const bool alsoLearnt)
         << "  time: " << std::setprecision(2) << std::setw(5) << (cpuTime() - myTime) << " s"
         //<< " blkClRem: " << std::setw(5) << numblockedClauseRemoved
         << "   |" << std::endl;
-        
+
         if (numblockedClauseRemoved > 0 || blockTime > 0.0) {
-            std::cout 
-            << "c |  Blocked clauses removed: " << std::setw(8) << numblockedClauseRemoved 
-            << "    Time: " << std::fixed << std::setprecision(2) << std::setw(4) << blockTime << " s" 
+            std::cout
+            << "c |  Blocked clauses removed: " << std::setw(8) << numblockedClauseRemoved
+            << "    Time: " << std::fixed << std::setprecision(2) << std::setw(4) << blockTime << " s"
             << "                                    |" << std::endl;
         }
     }
@@ -1381,18 +1381,18 @@ void Subsumer::findSubsumed(const T& ps, uint32_t abs, vec<ClauseSimp>& out_subs
     }
     printf("0\n");
     #endif
-    
+
     uint32_t min_i = 0;
     for (uint32_t i = 1; i < ps.size(); i++){
         if (occur[ps[i].toInt()].size() < occur[ps[min_i].toInt()].size())
             min_i = i;
     }
-    
+
     vec<ClauseSimp>& cs = occur[ps[min_i].toInt()];
     for (ClauseSimp *it = cs.getData(), *end = it + cs.size(); it != end; it++){
         if (it+1 != end)
             __builtin_prefetch((it+1)->clause, 1, 1);
-        
+
         if (it->clause != (Clause*)&ps && subsetAbst(abs, it->clause->getAbst()) && ps.size() <= it->clause->size() && subset(ps, *it->clause)) {
             out_subsumed.push(*it);
             #ifdef VERBOSE_DEBUG
@@ -1407,7 +1407,7 @@ void inline Subsumer::MigrateToPsNs(vec<ClauseSimp>& poss, vec<ClauseSimp>& negs
 {
     poss.moveTo(ps);
     negs.moveTo(ns);
-    
+
     for (uint32_t i = 0; i < ps.size(); i++)
         unlinkClause(ps[i], x);
     for (uint32_t i = 0; i < ns.size(); i++)
@@ -1436,20 +1436,20 @@ bool Subsumer::maybeEliminate(const Var x)
     if (solver.value(x) != l_Undef) return false;
     if (occur[Lit(x, false).toInt()].size() == 0 && occur[Lit(x, true).toInt()].size() == 0)
         return false;
-    
+
     vec<ClauseSimp>&   poss = occur[Lit(x, false).toInt()];
     vec<ClauseSimp>&   negs = occur[Lit(x, true).toInt()];
-    
+
     // Heuristic CUT OFF:
     if (poss.size() >= 10 && negs.size() >= 10)
         return false;
-    
+
     // Count clauses/literals before elimination:
     int before_clauses  = poss.size() + negs.size();
     uint32_t before_literals = 0;
     for (uint32_t i = 0; i < poss.size(); i++) before_literals += poss[i].clause->size();
     for (uint32_t i = 0; i < negs.size(); i++) before_literals += negs[i].clause->size();
-    
+
     // Heuristic CUT OFF2:
     if ((poss.size() >= 3 && negs.size() >= 3 && before_literals > 300)
         && clauses.size() > 1500000)
@@ -1460,7 +1460,7 @@ bool Subsumer::maybeEliminate(const Var x)
     if ((poss.size() >= 8 && negs.size() >= 8 && before_literals > 700)
         && clauses.size() <= 200000)
         return false;
-    
+
     // Count clauses/literals after elimination:
     int after_clauses  = 0;
     vec<Lit>  dummy;
@@ -1474,7 +1474,7 @@ bool Subsumer::maybeEliminate(const Var x)
         }
     }
     Abort:;
-    
+
     //Eliminate:
     if (after_clauses  <= before_clauses) {
         vec<ClauseSimp> ps, ns;
@@ -1502,9 +1502,9 @@ bool Subsumer::maybeEliminate(const Var x)
         DeallocPsNs(ps, ns);
         goto Eliminated;
     }
-    
+
     return false;
-    
+
     Eliminated:
     assert(occur[Lit(x, false).toInt()].size() + occur[Lit(x, true).toInt()].size() == 0);
     var_elimed[x] = true;
@@ -1522,7 +1522,7 @@ bool Subsumer::merge(const Clause& ps, const Clause& qs, const Lit without_p, co
             out_clause.push(ps[i]);
         }
     }
-    
+
     for (uint32_t i = 0; i < qs.size(); i++){
         if (qs[i] != without_q){
             if (seen_tmp[(~qs[i]).toInt()]){
@@ -1534,10 +1534,10 @@ bool Subsumer::merge(const Clause& ps, const Clause& qs, const Lit without_p, co
                 out_clause.push(qs[i]);
         }
     }
-    
+
     for (uint32_t i = 0; i < ps.size(); i++)
         seen_tmp[ps[i].toInt()] = 0;
-    
+
     return true;
 }
 
@@ -1547,7 +1547,7 @@ struct myComp {
             (!(y.first < x.first) && x.second < y.second);
     }
 };
-    
+
 // Side-effect: Will untouch all variables.
 void Subsumer::orderVarsForElim(vec<Var>& order)
 {
@@ -1558,10 +1558,10 @@ void Subsumer::orderVarsForElim(vec<Var>& order)
         touched[x] = 0;
         cost_var.push(std::make_pair( occur[Lit(x, false).toInt()].size() * occur[Lit(x, true).toInt()].size() , x ));
     }
-    
+
     touched_list.clear();
     std::sort(cost_var.getData(), cost_var.getData()+cost_var.size(), myComp());
-    
+
     for (uint32_t x = 0; x < cost_var.size(); x++) {
         if (cost_var[x].first != 0)
             order.push(cost_var[x].second);
@@ -1571,20 +1571,20 @@ void Subsumer::orderVarsForElim(vec<Var>& order)
 void Subsumer::verifyIntegrity()
 {
     vector<uint> occurNum(solver.nVars()*2, 0);
-    
+
     for (uint32_t i = 0; i < clauses.size(); i++) {
         if (clauses[i].clause == NULL) continue;
         Clause& c = *clauses[i].clause;
         for (uint32_t i2 = 0; i2 < c.size(); i2++)
             occurNum[c[i2].toInt()]++;
     }
-    
+
     for (uint32_t i = 0; i < occurNum.size(); i++) {
         assert(occurNum[i] == occur[i].size());
     }
 }
 
-const bool Subsumer::allTautology(const vec<Lit>& ps, const Lit lit)
+bool Subsumer::allTautology(const vec<Lit>& ps, const Lit lit)
 {
     #ifdef VERBOSE_DEBUG
     cout << "allTautology: ";
@@ -1594,19 +1594,19 @@ const bool Subsumer::allTautology(const vec<Lit>& ps, const Lit lit)
     }
     printf("0\n");
     #endif
-    
+
     vec<ClauseSimp>& cs = occur[lit.toInt()];
     if (cs.size() == 0) return true;
-    
+
     for (const Lit *l = ps.getData(), *end = ps.getDataEnd(); l != end; l++) {
         seen_tmp[l->toInt()] = true;
     }
-    
+
     bool allIsTautology = true;
     for (ClauseSimp *it = cs.getData(), *end = cs.getDataEnd(); it != end; it++){
         if (it+1 != end)
             __builtin_prefetch((it+1)->clause, 1, 1);
-        
+
         Clause& c = *it->clause;
         for (Lit *l = c.getData(), *end2 = l + c.size(); l != end2; l++) {
             if (*l != lit && seen_tmp[(~(*l)).toInt()]) {
@@ -1615,14 +1615,14 @@ const bool Subsumer::allTautology(const vec<Lit>& ps, const Lit lit)
         }
         allIsTautology = false;
         break;
-        
+
         next:;
     }
-    
+
     for (const Lit *l = ps.getData(), *end = ps.getDataEnd(); l != end; l++) {
         seen_tmp[l->toInt()] = false;
     }
-    
+
     return allIsTautology;
 }
 
@@ -1632,24 +1632,24 @@ void Subsumer::blockedClauseRemoval()
     if (solver.order_heap.size() < 1) return;
     double myTime = cpuTime();
     vec<ClauseSimp> toRemove;
-    
+
     touchedBlockedVars = priority_queue<VarOcc, vector<VarOcc>, MyComp>();
     touchedBlockedVarsBool.clear();
     touchedBlockedVarsBool.growTo(solver.nVars(), false);
     for (uint32_t i =  0; i < solver.order_heap.size() && i < numMaxBlockVars; i++) {
         touchBlockedVar(solver.order_heap[solver.mtrand.randInt(solver.order_heap.size()-1)]);
     }
-    
+
     while (touchedBlockedVars.size() > 100  && numMaxBlockToVisit > 0) {
         VarOcc vo = touchedBlockedVars.top();
         touchedBlockedVars.pop();
-        
+
         if (solver.assigns[vo.var] != l_Undef || !solver.decision_var[vo.var] || cannot_eliminate[vo.var])
             continue;
         touchedBlockedVarsBool[vo.var] = false;
         Lit lit = Lit(vo.var, false);
         Lit negLit = Lit(vo.var, true);
-        
+
         numMaxBlockToVisit -= (int64_t)occur[lit.toInt()].size();
         numMaxBlockToVisit -= (int64_t)occur[negLit.toInt()].size();
         //if (!tryOneSetting(lit, negLit)) {
@@ -1657,18 +1657,18 @@ void Subsumer::blockedClauseRemoval()
        // }
     }
     blockTime += cpuTime() - myTime;
-    
+
     #ifdef BIT_MORE_VERBOSITY
     std::cout << "c  Total fime for block until now: " << blockTime << std::endl;
     #endif
 }
 
-const bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
+bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
 {
     uint32_t toRemove = 0;
     bool returnVal = false;
     vec<Lit> cl;
-    
+
     for(ClauseSimp *it = occur[lit.toInt()].getData(), *end = occur[lit.toInt()].getDataEnd(); it != end; it++) {
         cl.clear();
         cl.growTo(it->clause->size()-1);
@@ -1678,14 +1678,14 @@ const bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
                 i2++;
             }
         }
-        
+
         if (allTautology(cl, negLit)) {
             toRemove++;
         } else {
             break;
         }
     }
-    
+
     if (toRemove == occur[lit.toInt()].size()) {
         var_elimed[lit.var()] = true;
         solver.setDecisionVar(lit.var(), false);
@@ -1697,7 +1697,7 @@ const bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
             unlinkClause(*it, lit.var());
             numblockedClauseRemoved++;
         }
-        
+
         vec<ClauseSimp> toRemove2(occur[negLit.toInt()]);
         for (ClauseSimp *it = toRemove2.getData(), *end = toRemove2.getDataEnd(); it != end; it++) {
             #ifdef VERBOSE_DEBUG
@@ -1708,11 +1708,11 @@ const bool Subsumer::tryOneSetting(const Lit lit, const Lit negLit)
         }
         returnVal = true;
     }
-    
+
     return returnVal;
 }
 
-const bool Subsumer::checkElimedUnassigned() const
+bool Subsumer::checkElimedUnassigned() const
 {
     for (uint32_t i = 0; i < var_elimed.size(); i++) {
         if (var_elimed[i]) {
@@ -1740,12 +1740,12 @@ vector<char> Subsumer::merge()
 {
     vector<char> var_merged(solver.nVars(), false);
     double myTime = cpuTime();
-    
+
     vector<varDataStruct> varData(solver.nVars());
-    
+
     for (Var var = 0; var < solver.nVars(); var++) if (solver.decision_var[var] && solver.assigns[var] == l_Undef && !cannot_eliminate[var]) {
         varDataStruct thisVar;
-        
+
         vec<ClauseSimp>& toCountPos = occur[Lit(var, false).toInt()];
         thisVar.numPosClauses = toCountPos.size();
         for (uint32_t i2 = 0; i2 < toCountPos.size(); i2++) {
@@ -1754,7 +1754,7 @@ vector<char> Subsumer::merge()
                 if (l->var() != var) thisVar.posHash ^= hash32shift(l->toInt());
             }
         }
-        
+
         vec<ClauseSimp>& toCountNeg = occur[Lit(var, true).toInt()];
         thisVar.numNegClauses = toCountNeg.size();
         for (uint32_t i2 = 0; i2 < toCountNeg.size(); i2++) {
@@ -1763,16 +1763,16 @@ vector<char> Subsumer::merge()
                 if (l->var() != var) thisVar.negHash ^= hash32shift(l->toInt());
             }
         }
-        
+
         varData[var] = thisVar;
     }
-    
+
     map<varDataStruct, vector<Var> > dataToVar;
     for (Var var = 0; var < solver.nVars(); var++) if (solver.decision_var[var] && solver.assigns[var] == l_Undef) {
         dataToVar[varData[var]].push_back(var);
         assert(dataToVar[varData[var]].size() > 0);
     }
-    
+
     for (map<varDataStruct, vector<Var> >::iterator it = dataToVar.begin(); it != dataToVar.end(); it++) {
         //std::cout << "size: " << it->second.size() << std::endl;
         for (uint i = 0; i < it->second.size()-1; i++) {
@@ -1780,13 +1780,13 @@ vector<char> Subsumer::merge()
             assert(varData[it->second[i]] == varData[it->second[i+1]]);
         }
     }
-    
+
     uint64_t checked = 0;
     uint64_t replaced = 0;
     for (Var var = 0; var < solver.nVars(); var++) if (solver.decision_var[var] && solver.assigns[var] == l_Undef && !cannot_eliminate[var]) {
         varDataStruct tmp = varData[var];
         assert(dataToVar[tmp].size() > 0);
-        
+
         if (dataToVar[tmp].size() > 0) {
             map<varDataStruct, vector<Var> >::iterator it = dataToVar.find(tmp);
             for (uint i = 0; i < it->second.size(); i++) if (it->second[i] != var) {
@@ -1800,11 +1800,11 @@ vector<char> Subsumer::merge()
                     solver.varReplacer->replace(ps, true, 0);
                     replaced++;
                     goto next;
-                    
+
                 }
             }
         }
-        
+
         tmp.reversePolarity();
         if (dataToVar[tmp].size() > 0) {
             map<varDataStruct, vector<Var> >::iterator it = dataToVar.find(tmp);
@@ -1822,12 +1822,12 @@ vector<char> Subsumer::merge()
                 }
             }
         }
-        
+
         next:;
     }
-        
+
     std::cout << "c |  Merging vars in same clauses.  checked: " << std::setw(5) << checked << " replaced: " << std::setw(5) << replaced << " time: " << std::setprecision(2) << std::setw(5) << cpuTime()-myTime << std::endl;
-    
+
     return var_merged;
 }*/
 
@@ -1837,16 +1837,16 @@ vector<char> Subsumer::merge()
     #ifdef VERBOSE_DEBUG
     std::cout << "checking : " << lit1.var()+1 << " , " << lit2.var()+1 << std::endl;
     #endif
-    
+
     vec<ClauseSimp>& occSet1 = occur[lit1.toInt()];
     vec<ClauseSimp>& occSet2 = occur[lit2.toInt()];
     vec<Lit> tmp;
-    
+
     for (ClauseSimp *it = occSet1.getData(), *end = it + occSet1.size(); it != end; it++) {
         bool found = false;
         tmp.clear();
         uint32_t clauseSize = it->clause->size();
-        
+
         for (Lit *l = it->clause->getData(), *end2 = l + it->clause->size(); l != end2; l++) {
             if (l->var() != lit1.var()) {
                 tmp.push(*l);
@@ -1857,32 +1857,32 @@ vector<char> Subsumer::merge()
         std::cout << "orig: ";
         it->clause->plainPrint();
         #endif
-        
+
         for (ClauseSimp *it2 = occSet2.getData(), *end2 = it2 + occSet2.size(); (it2 != end2 && !found); it2++) {
             if (it2->clause->size() != clauseSize) continue;
-            
+
             for (Lit *l = it2->clause->getData(), *end3 = l + tmp.size(); l != end3; l++) if (l->var() != lit1.var()) {
                 if (!seen_tmp[l->toInt()]) goto next;
             }
             found = true;
-            
+
             #ifdef VERBOSE_DEBUG
             std::cout << "OK:   ";
             it2->clause->plainPrint();
             #endif
             next:;
         }
-        
+
         for (Lit *l = tmp.getData(), *end2 = l + tmp.size(); l != end2; l++) {
             seen_tmp[l->toInt()] = false;
         }
-        
+
         if (!found) return false;
     }
     #ifdef VERBOSE_DEBUG
     std::cout << "OK" << std::endl;
     #endif
-    
+
     return true;
 }*/
 

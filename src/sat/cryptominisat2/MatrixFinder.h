@@ -40,14 +40,14 @@ using std::vector;
 using std::pair;
 
 class MatrixFinder {
-    
+
     public:
         MatrixFinder(Solver& solver);
-        const bool findMatrixes();
-    
+        bool findMatrixes();
+
     private:
-        const uint setMatrixes();
-        
+        uint setMatrixes();
+
         struct mysorter
         {
             bool operator () (const pair<uint, uint>& left, const pair<uint, uint>& right)
@@ -55,15 +55,15 @@ class MatrixFinder {
                 return left.second < right.second;
             }
         };
-        
+
         void findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClause*>& xorsInMatrix);
-        inline const Var fingerprint(const XorClause& c) const;
-        inline const bool firstPartOfSecond(const XorClause& c1, const XorClause& c2) const;
-        
+        inline Var fingerprint(const XorClause& c) const;
+        inline bool firstPartOfSecond(const XorClause& c1, const XorClause& c2) const;
+
         map<uint, vector<Var> > reverseTable; //matrix -> vars
         vector<Var> table; //var -> matrix
         uint matrix_no;
-        
+
         Solver& solver;
 };
 

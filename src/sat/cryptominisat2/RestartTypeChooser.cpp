@@ -48,16 +48,16 @@ void RestartTypeChooser::addInfo()
         #endif
         sameIns.push_back(sameIn);
     }
-    
+
     #ifdef VERBOSE_DEBUG
     std::cout << "Avg same vars in first&second first 100: " << avg() << " standard Deviation:" << stdDeviation(sameIns) <<std::endl;
     #endif
 }
 
-const RestartType RestartTypeChooser::choose()
+RestartType RestartTypeChooser::choose()
 {
     pair<double, double> mypair = countVarsDegreeStDev();
-    if ((mypair.second  < 80 && 
+    if ((mypair.second  < 80 &&
         (avg() > (double)limit || ((avg() > (double)(limit*0.9) && stdDeviation(sameIns) < 5))))
         ||
         (mypair.second  < 80 && (double)solver.xorclauses.size() > (double)solver.nClauses()*0.1))
@@ -66,7 +66,7 @@ const RestartType RestartTypeChooser::choose()
         return dynamic_restart;
 }
 
-const double RestartTypeChooser::avg() const
+double RestartTypeChooser::avg() const
 {
     double sum = 0.0;
     for (uint i = 0; i != sameIns.size(); i++)
@@ -74,14 +74,14 @@ const double RestartTypeChooser::avg() const
     return (sum/(double)sameIns.size());
 }
 
-const double RestartTypeChooser::stdDeviation(vector<uint32_t>& measure) const
+double RestartTypeChooser::stdDeviation(vector<uint32_t>& measure) const
 {
     double average = avg();
     double variance = 0.0;
     for (uint i = 0; i != measure.size(); i++)
         variance += pow((double)measure[i]-average, 2);
     variance /= (double)measure.size();
-    
+
     return sqrt(variance);
 }
 
@@ -121,14 +121,14 @@ const std::pair<double, double> RestartTypeChooser::countVarsDegreeStDev() const
         }
     }
     degrees.resize(degrees.size() - (i-j));
-    
+
     double avg = (double)sum/(double)degrees.size();
     double stdDev = stdDeviation(degrees);
-    
+
     #ifdef VERBOSE_DEBUG
     std::cout << "varsDegree avg:" << avg << " stdDev:" << stdDev << std::endl;
     #endif
-    
+
     return std::make_pair(avg, stdDev);
 }
 
@@ -138,7 +138,7 @@ void RestartTypeChooser::addDegrees(const vec<T*>& cs, vector<uint32_t>& degrees
     for (T * const*c = cs.getData(), * const*end = c + cs.size(); c != end; c++) {
         T& cl = **c;
         if (cl.learnt()) continue;
-        
+
         for (const Lit *l = cl.getData(), *end2 = l + cl.size(); l != end2; l++) {
             degrees[l->var()]++;
         }

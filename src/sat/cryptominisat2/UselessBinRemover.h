@@ -30,15 +30,15 @@ using namespace MINISAT;
 class UselessBinRemover {
     public:
         UselessBinRemover(Solver& solver, OnlyNonLearntBins& onlyNonLearntBins);
-        const bool removeUslessBinFull();
-        
+        bool removeUslessBinFull();
+
     private:
         bool failed;
         uint32_t extraTime;
-        
+
         //Remove useless binaries
-        const bool fillBinImpliesMinusLast(const Lit& origLit, const Lit& lit, vec<Lit>& wrong);
-        const bool removeUselessBinaries(const Lit& lit);
+        bool fillBinImpliesMinusLast(const Lit& origLit, const Lit& lit, vec<Lit>& wrong);
+        bool removeUselessBinaries(const Lit& lit);
         void removeBin(const Lit& lit1, const Lit& lit2);
         vec<char> toDeleteSet;
         vec<Lit> oneHopAway;
