@@ -136,6 +136,9 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 #SET(Boost_USE_STATIC_LIBS ON)
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
+
 # -----------------------------------------------------------------------------
 # Compile all subdirs
 # -----------------------------------------------------------------------------
