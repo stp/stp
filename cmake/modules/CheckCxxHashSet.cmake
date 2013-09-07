@@ -36,7 +36,7 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_set)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_set>
     int main() {
@@ -44,7 +44,7 @@ macro(check_std_unordered_set)
     }"
     HAVE_HASH_SET
   )
-  set(CMAKE_REQUIRED_FLAGS )
+  unset(CMAKE_REQUIRED_FLAGS)
 
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<unordered_set>")
@@ -54,7 +54,7 @@ macro(check_std_unordered_set)
 endmacro()
 
 macro(check_tr1_unordered_set)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_set>
     int main() {
@@ -62,7 +62,7 @@ macro(check_tr1_unordered_set)
     }"
     HAVE_HASH_SET
   )
-  set(CMAKE_REQUIRED_FLAGS )
+  unset(CMAKE_REQUIRED_FLAGS)
 
   if(HAVE_HASH_SET)
     set(HASH_SET_H "<tr/unordered_set>")

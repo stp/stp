@@ -36,7 +36,7 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_map)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_map>
     int main() {
@@ -44,7 +44,7 @@ macro(check_std_unordered_map)
     }"
     HAVE_HASH_MAP
   )
-  set(CMAKE_REQUIRED_FLAGS )
+  unset(CMAKE_REQUIRED_FLAGS)
 
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<unordered_map>")
@@ -54,7 +54,7 @@ macro(check_std_unordered_map)
 endmacro()
 
 macro(check_tr1_unordered_map)
-  set(CMAKE_REQURED_FLAGS "-std=c++0x")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_map>
     int main() {
@@ -62,7 +62,7 @@ macro(check_tr1_unordered_map)
     }"
     HAVE_HASH_MAP
   )
-  set(CMAKE_REQUIRED_FLAGS )
+  unset(CMAKE_REQUIRED_FLAGS)
 
   if(HAVE_HASH_MAP)
     set(HASH_MAP_H "<tr/unordered_map>")
