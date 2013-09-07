@@ -1070,11 +1070,11 @@ Expr vc_sbvDivExpr(VC vc, int n_bits, Expr left, Expr right) {
 }
 
 Expr vc_sbvModExpr(VC vc, int n_bits, Expr left, Expr right) {
-    return createBinaryTerm(vc, n_bits, BEEV::SBVREM, left, right);
+    return createBinaryTerm(vc, n_bits, BEEV::SBVMOD, left, right);
 }
 
 Expr vc_sbvRemExpr(VC vc, int n_bits, Expr left, Expr right) {
-    return createBinaryTerm(vc, n_bits, BEEV::SBVMOD, left, right);
+    return createBinaryTerm(vc, n_bits, BEEV::SBVREM, left, right);
 }
 
 

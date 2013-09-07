@@ -30,7 +30,7 @@ namespace BEEV
 
         ASTNode
         propagate(const ASTNode& a, ArrayTransformer*at);
-        HASHSET<int> alreadyVisited;
+        hash_set<int> alreadyVisited;
 
         const bool always_true;
     public:

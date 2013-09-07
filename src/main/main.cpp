@@ -21,9 +21,6 @@
 #include "GitSHA1.h"
 
 
-#ifdef EXT_HASH_MAP
-using namespace __gnu_cxx;
-#endif
 using namespace BEEV;
 
 extern int smtparse(void*);

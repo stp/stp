@@ -37,7 +37,7 @@ namespace BEEV
     // value is simplified node.
     ASTNodeMap * SimplifyMap;
     ASTNodeMap * SimplifyNegMap;
-    HASHSET<int> AlwaysTrueHashSet;
+    hash_set<int> AlwaysTrueHashSet;
     ASTNodeMap MultInverseMap;
 
     // For ArrayWrite Abstraction: map from read-over-write term to

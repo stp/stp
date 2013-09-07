@@ -19,7 +19,7 @@ private:
 
 	void insert(const ASTNode& n, Symbols *s);
 
-	typedef HASHMAP<
+	typedef hash_map<
 	  int,
 	  Symbols*
 	  > ASTNodeToNodes;
@@ -32,7 +32,7 @@ public:
 
 
     // When solving, we're interested in whether variables appear multiple times.
-    typedef HASHSET<Symbols*,SymbolPtrHasher> SymbolPtrSet;
+    typedef hash_set<Symbols*,SymbolPtrHasher> SymbolPtrSet;
 
 
 	  Symbols* getSymbol(const ASTNode& n);
@@ -41,7 +41,7 @@ public:
 	    //identifying variables in the those terms. Prevents double
 	    //counting.
 
-	    typedef HASHMAP<
+	    typedef hash_map<
 		  Symbols*,
 		  ASTNodeSet*,
 		  SymbolPtrHasher

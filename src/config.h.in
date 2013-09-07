@@ -9,6 +9,12 @@
 #define HASH_SET_CLASS ${HASH_SET_CLASS}
 #define HASH_SET_NAMESPACE ${HASH_SET_NAMESPACE}
 
+/* Where to find <hash_multiset> or <unordered_multiset>, if available. */
+#cmakedefine01 HAVE_HASH_MULTISET
+#define HASH_MULTISET_H ${HASH_MULTISET_H}
+#define HASH_MULTISET_CLASS ${HASH_MULTISET_CLASS}
+#define HASH_MULTISET_NAMESPACE ${HASH_MULTISET_NAMESPACE}
+
 /* Where to find <hash_map> or <unordered_map>, if available. */
 #cmakedefine01 HAVE_HASH_MAP
 #define HASH_MAP_H ${HASH_MAP_H}

@@ -9,6 +9,7 @@
 
 #ifndef AST_H
 #define AST_H
+
 #include "UsefulDefs.h"
 #include "ASTNode.h"
 #include "ASTInternal.h"
@@ -54,29 +55,29 @@ namespace BEEV
   //Takes a BVCONST and returns its constant value
   unsigned int GetUnsignedConst(const ASTNode n);
 
-  typedef HASHMAP<
+  typedef hash_map<
     ASTNode, 
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeMap;
 
-  typedef HASHMAP<
+  typedef hash_map<
     ASTNode, 
     int32_t, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
-  typedef HASHSET<
+  typedef hash_set<
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeSet;
 
-  typedef HASHMULTISET<
+  typedef hash_multiset<
     ASTNode, 
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTNodeMultiSet;
 
-  typedef HASHMAP<
+  typedef hash_map<
     ASTNode, 
     ASTVec, 
     ASTNode::ASTNodeHasher, 
@@ -96,12 +97,12 @@ namespace BEEV
   class ClauseList;
 
   //Datatype for ClauseLists
-  typedef MAP<
+  typedef std::map<
     int,
     ClauseList *,
     ltint> ClauseBuckets;
 
-  typedef MAP<
+  typedef std::map<
     int,
     ASTVec *,
     ltint> IntToASTVecMap;
@@ -111,4 +112,5 @@ namespace BEEV
 
   void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,ASTNodeSet& symbols);
 }; // end namespace BEEV
+
 #endif

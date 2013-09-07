@@ -46,15 +46,7 @@ namespace BEEV
     public:
       size_t operator()(const ASTSymbol *sym_ptr) const
       {
-#ifdef TR1_UNORDERED_MAP
-        tr1::hash<string> h;
-#else
-        //hash<char *> h;
-#endif
-        //return h(sym_ptr->_name);
-        //cerr << "ASTSymbol hasher recieved name: " 
-        //<< sym_ptr->_name << endl;
-        return (size_t)hash((unsigned char*)(sym_ptr->_name));
+        return (size_t)BEEV::hash((unsigned char*)(sym_ptr->_name));
       };
     }; // End of class ASTSymbolHasher
 

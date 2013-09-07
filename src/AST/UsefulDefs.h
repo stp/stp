@@ -26,31 +26,27 @@
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"
 
-#ifdef EXT_HASH_MAP
-#include <ext/hash_set>
-#include <ext/hash_map>
-#elif defined(TR1_UNORDERED_MAP)
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
-#define hash_map tr1::unordered_map
-#define hash_set tr1::unordered_set
-#define hash_multiset tr1::unordered_multiset
-#else
-#include <hash_set>
-#include <hash_map>
+#include "config.h"
+
+#if HAVE_HASH_SET
+#include HASH_SET_H
+#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
 #endif
 
-#define MAP          map
-#define HASHMAP      hash_map
-#define HASHSET      hash_set
-#define HASHMULTISET hash_multiset
+#if HAVE_HASH_MAP
+#include HASH_MAP_H
+#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
+#endif
+
+#if HAVE_HASH_MULTISET
+#include HASH_MULTISET_H
+#define hash_multiset HASH_MULTISET_NAMESPACE::HASH_MULTISET_CLASS
+#endif
+
 #define INITIAL_TABLE_SIZE 100
 
 using namespace std;
 namespace BEEV {
-#ifdef EXT_HASH_MAP
-  using namespace __gnu_cxx;
-#endif
 
   /******************************************************************
    * Important classes declared as part of AST datastructures       *
@@ -100,6 +96,7 @@ namespace BEEV {
     return sp;
   }
 
+#if 0
   struct eqstr {
     bool operator()(const char* s1, const char* s2) const {
       return strcmp(s1, s2) == 0;
@@ -107,17 +104,11 @@ namespace BEEV {
   };
 
   // function_counters: Table for storing function count stats.
-#ifdef TR1_UNORDERED_MAP
-  typedef tr1::unordered_map<
+  typedef hash_map<
     const char*,
     int,
-    tr1::hash<const char *>,
+    BEEV::hash<const char *>,
     eqstr> function_counters;
-#else
-  typedef HASHMAP<const char*,
-                  int,
-                  BEEV::hash<char *>,
-                  eqstr> function_counters;
 #endif
 }; //end of namespace
 

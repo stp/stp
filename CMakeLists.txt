@@ -23,6 +23,9 @@ endif()
 include(CheckCxxHashSet)
 check_cxx_hashset()
 
+include(CheckCxxHashMultiSet)
+check_cxx_hashmultiset()
+
 include(CheckCxxHashMap)
 check_cxx_hashmap()
 
