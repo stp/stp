@@ -3,7 +3,7 @@ compiler:
   - gcc
   - clang
 before_script:
-  - sudo apt-get install libboost-dev
+  - sudo apt-get install libboost-all-dev
   - mkdir build && cd build
   - cmake -G "Unix Makefiles" ..
 script:
