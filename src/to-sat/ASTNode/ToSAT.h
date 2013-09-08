@@ -32,7 +32,7 @@ namespace BEEV
     // ClauseList returned by CNF converter. For every new boolean
     // variable in ASTClause a new SATSolver::Var is created (these vars
     // typedefs for ints)
-    typedef hash_map<
+    typedef std::unordered_map<
     ASTNode, 
     SATSolver::Var,
     ASTNode::ASTNodeHasher, 

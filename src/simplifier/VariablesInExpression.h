@@ -19,7 +19,7 @@ private:
 
 	void insert(const ASTNode& n, Symbols *s);
 
-	typedef hash_map<
+	typedef std::unordered_map<
 	  int,
 	  Symbols*
 	  > ASTNodeToNodes;
@@ -32,7 +32,7 @@ public:
 
 
     // When solving, we're interested in whether variables appear multiple times.
-    typedef hash_set<Symbols*,SymbolPtrHasher> SymbolPtrSet;
+    typedef std::unordered_set<Symbols*,SymbolPtrHasher> SymbolPtrSet;
 
 
 	  Symbols* getSymbol(const ASTNode& n);
@@ -41,7 +41,7 @@ public:
 	    //identifying variables in the those terms. Prevents double
 	    //counting.
 
-	    typedef hash_map<
+	    typedef std::unordered_map<
 		  Symbols*,
 		  ASTNodeSet*,
 		  SymbolPtrHasher

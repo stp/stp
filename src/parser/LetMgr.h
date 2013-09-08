@@ -22,7 +22,7 @@ namespace BEEV
   private:
     const ASTNode ASTUndefined;
 
-    typedef hash_map<string, ASTNode> MapType;
+    typedef std::unordered_map<string, ASTNode> MapType;
 
     // MAP: This map is from bound IDs that occur in LETs to
     // expression. The map is useful in checking replacing the IDs

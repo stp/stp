@@ -37,25 +37,25 @@ namespace BEEV
      ****************************************************************/
 
     // Typedef for unique Interior node table.
-    typedef hash_set<
+    typedef std::unordered_set<
     ASTInterior *, 
     ASTInterior::ASTInteriorHasher, 
     ASTInterior::ASTInteriorEqual> ASTInteriorSet;    
 
     // Typedef for unique Symbol node (leaf) table.
-    typedef hash_set<
+    typedef std::unordered_set<
       ASTSymbol *, 
       ASTSymbol::ASTSymbolHasher, 
       ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
 
     //Typedef for unique BVConst node (leaf) table.
-    typedef hash_set<
+    typedef std::unordered_set<
       ASTBVConst *, 
       ASTBVConst::ASTBVConstHasher, 
       ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
 #if 0
-    typedef hash_map<
+    typedef std::unordered_map<
       ASTNode, 
       ASTNodeSet,
       ASTNode::ASTNodeHasher, 

@@ -351,7 +351,7 @@ namespace BEEV
     /*****************************************************************
      * Class ASTNodeHahser:                                          *
      *                                                               *
-     * Hasher class for STL hash_maps and hash_sets that use ASTNodes*
+     * Hasher class for unordered_maps and unordered_sets that use ASTNodes*
      * as keys.  Needs to be public so people can define hash tables *
      * (and use ASTNodeMap class)                                    *
      *****************************************************************/
@@ -369,7 +369,7 @@ namespace BEEV
     /*****************************************************************
      * Class ASTNodeEqual:                                           *
      *                                                               *
-     * Equality for ASTNode hash_set and hash_map. Returns true iff  *
+     * Equality for ASTNode unordered_set and unordered_map. Returns true iff  *
      * internal pointers are the same.  Needs to be public so people *
      * can define hash tables (and use ASTNodeSet class)             *
      *****************************************************************/

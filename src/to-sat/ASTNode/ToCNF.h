@@ -58,13 +58,13 @@ namespace BEEV
     //Collect all XOR Clauses here
     ClauseList* clausesxor;
 
-    typedef hash_map<
+    typedef std::unordered_map<
       ASTNode, 
       CNFInfo*, 
       ASTNode::ASTNodeHasher, 
       ASTNode::ASTNodeEqual> ASTNodeToCNFInfoMap;
 
-    typedef hash_map<
+    typedef std::unordered_map<
       ASTNode, 
       ASTNode*, 
       ASTNode::ASTNodeHasher, 
