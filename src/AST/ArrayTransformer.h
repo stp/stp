@@ -130,6 +130,7 @@ namespace BEEV
     void ClearAllTables(void)
     {
       arrayToIndexToRead.clear();
+      ack_pair.clear();
     }
 
     void printArrayStats()
