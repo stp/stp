@@ -2,4 +2,9 @@ language: cpp
 compiler:
   - gcc
   - clang
-script: mkdir build && cd build && cmake -G "Unix Makefiles" .. && make
+before_script:
+  - sudo apt-get install libboost-dev
+  - mkdir build && cd build
+  - cmake -G "Unix Makefiles" ..
+script:
+  - make
