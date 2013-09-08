@@ -92,11 +92,6 @@ namespace BEEV
                                  const ASTVec &v, 
                                  int indentation = 0);
 
-    // Print the arguments in lisp format
-    friend ostream &LispPrintVecSpecial(ostream &os, 
-                                        const vector<const ASTNode*> &v, 
-                                        int indentation = 0);
-
     // Check if it points to a null node
     inline bool IsNull() const 
     { 
