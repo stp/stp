@@ -137,7 +137,7 @@ namespace BEEV
 
   // counts the number of reads. Shortcut when we get to the limit.
   void
-  numberOfReadsLessThan(const ASTNode& n, hash_set<int> & visited, int& soFar, const int limit)
+  numberOfReadsLessThan(const ASTNode& n, std::unordered_set<int> & visited, int& soFar, const int limit)
   {
     if (n.isAtom())
       return;
@@ -161,7 +161,7 @@ namespace BEEV
   bool
   numberOfReadsLessThan(const ASTNode&n, int limit)
   {
-    hash_set<int> visited;
+    std::unordered_set<int> visited;
     int reads = 0;
     numberOfReadsLessThan(n, visited, reads,limit);
     return reads < limit;

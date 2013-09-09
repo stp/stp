@@ -59,7 +59,7 @@ namespace BEEV
       string name;
     };
 
-    hash_map<string, Function> functions;
+    std::unordered_map<string, Function> functions;
 
     void checkInvariant()
     {

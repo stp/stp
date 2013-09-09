@@ -29,20 +29,8 @@
 
 #include "config.h"
 
-#if HAVE_HASH_SET
-#include HASH_SET_H
-#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
-#endif
-
-#if HAVE_HASH_MAP
-#include HASH_MAP_H
-#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
-#endif
-
-#if HAVE_HASH_MULTISET
-#include HASH_MULTISET_H
-#define hash_multiset HASH_MULTISET_NAMESPACE::HASH_MULTISET_CLASS
-#endif
+#include <unordered_set>
+#include <unordered_map>
 
 #define INITIAL_TABLE_SIZE 100
 
@@ -65,8 +53,6 @@ namespace BEEV {
    * Useful typedefs:                                               *
    *                                                                *
    * Vector of ASTNodes, used for child nodes among other things.   *
-   * It is good to define hash_map and hash_set in case we want to  *
-   * use libraries other than STL.                                  *
    ******************************************************************/
   typedef vector<ASTNode> ASTVec;
   typedef unsigned int * CBV;
@@ -98,7 +84,7 @@ namespace BEEV {
   }
 
   // function_counters: Table for storing function count stats.
-  typedef hash_map<
+  typedef std::unordered_map<
     const char *,
     int,
     CStringHash,

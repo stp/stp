@@ -17,7 +17,7 @@ namespace BEEV
 
   public:
 
-    typedef hash_map<
+    typedef std::unordered_map<
     ASTNode,
     vector<unsigned>,
     ASTNode::ASTNodeHasher,

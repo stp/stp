@@ -17,7 +17,7 @@ namespace simplifier
     {
     private:
 
-      typedef hash_map<BEEV::ASTNode, set<BEEV::ASTNode>*, BEEV::ASTNode::ASTNodeHasher, BEEV::ASTNode::ASTNodeEqual>
+      typedef std::unordered_map<BEEV::ASTNode, set<BEEV::ASTNode>*, BEEV::ASTNode::ASTNodeHasher, BEEV::ASTNode::ASTNodeEqual>
           NodeToDependentNodeMap;
       NodeToDependentNodeMap dependents;
 

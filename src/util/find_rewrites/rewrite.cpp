@@ -91,7 +91,7 @@ getVariables(const ASTNode& n);
 bool
 matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int term_variable_width);
 
-typedef hash_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
+typedef std::unordered_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> ASTNodeString;
 
 BEEV::STPMgr* mgr;
 NodeFactory* nf;
@@ -938,7 +938,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
       discarded += (old_size - values.size());
 
       // Put the functions in buckets based on their results on the values.
-      hash_map<uint64_t, ASTVec> map;
+      std::unordered_map<uint64_t, ASTVec> map;
       for (int i = 0; i < expressions.size(); i++)
         {
           if (expressions[i] == mgr->ASTUndefined)
@@ -953,7 +953,7 @@ findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values, cons
         }
       expressions.clear();
 
-      hash_map<uint64_t, ASTVec>::iterator it2;
+      std::unordered_map<uint64_t, ASTVec>::iterator it2;
 
       cout << "Split into " << map.size() << " pieces\n";
       if (depth > 0)
@@ -1289,7 +1289,7 @@ template<class T>
 
 // Put all the inputs containing the substring together in the same bucket.
 void
-bucket(string substring, vector<string>& inputs, hash_map<string, vector<string>>& buckets)
+bucket(string substring, vector<string>& inputs, std::unordered_map<string, vector<string>>& buckets)
 {
   for (int i = 0; i < inputs.size(); i++)
     {
@@ -1558,7 +1558,7 @@ writeOutRules()
 
 
   // Group functions of the same kind all together.
-  hash_map<string, vector<string> > buckets;
+  std::unordered_map<string, vector<string> > buckets;
   bucket("n.GetKind() ==", output, buckets);
 #endif
 
@@ -1570,7 +1570,7 @@ writeOutRules()
   outputFile.open("rewrite_data_new.cpp", ios::trunc);
 
   // output the C++ code.
-  hash_map<string, vector<string> >::const_iterator it;
+  std::unordered_map<string, vector<string> >::const_iterator it;
   for (it = buckets.begin(); it != buckets.end(); it++)
     {
       outputFile << "if (" + it->first + ")" << endl;

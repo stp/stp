@@ -185,8 +185,8 @@ namespace BEEV
   bool
   Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
   {
-    hash_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
-    hash_set<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
+    std::unordered_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
+    std::unordered_set<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
 
     if (it2 != it_end_2)
       {
@@ -3882,14 +3882,14 @@ namespace BEEV
       }
   } //end of BVConstIsOdd()
 
-  // in ext/hash_map, and tr/unordered_map, there is no provision to
-  // shrink down the number of buckets in a hash map. If the hash_map
+  // in unordered_map, there is no provision to
+  // shrink down the number of buckets in a hash map. If the unordered_map
   // has previously held a lot of data, then it will have a lot of
   // buckets. Slowing down iterators and clears() in particular.
   void
   Simplifier::ResetSimplifyMaps()
   {
-    // clear() is extremely expensive for hash_maps with a lot of
+    // clear() is extremely expensive for std::unordered_maps with a lot of
     // buckets, in the EXT_MAP implementation it visits every bucket,
     // checking whether each bucket is empty or not, if non-empty it
     // deletes the contents.  The destructor seems to clear everything
