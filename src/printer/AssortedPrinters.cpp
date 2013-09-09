@@ -50,14 +50,6 @@ namespace BEEV
     return lp;
   } //end of LispPrinter_lisp
 
-  //iomanipulator. builds an object of class "LisPrinter" that has a
-  //special overloaded "<<" operator.
-  inline LispVecPrinter lisp(const ASTVec &vec, int indentation = 0)
-  {
-    LispVecPrinter lvp(vec, indentation);
-    return lvp;
-  } //end of LispVecPrinter_lisp()
-
   // FIXME: Made non-ref in the hope that it would work better.
   void lp(ASTNode node)
   {
