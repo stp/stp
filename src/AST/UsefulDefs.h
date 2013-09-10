@@ -29,20 +29,13 @@
 
 #include "config.h"
 
-#if HAVE_HASH_SET
 #include HASH_SET_H
-#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
-#endif
-
-#if HAVE_HASH_MAP
 #include HASH_MAP_H
-#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
-#endif
-
-#if HAVE_HASH_MULTISET
 #include HASH_MULTISET_H
+
+#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
+#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
 #define hash_multiset HASH_MULTISET_NAMESPACE::HASH_MULTISET_CLASS
-#endif
 
 #define INITIAL_TABLE_SIZE 100
 

@@ -5,26 +5,24 @@
 # This file closely mirrors CheckCxxHashMap.cmake, so be sure to update both.
 # -----------------------------------------------------------------------------
 
-set(HAVE_HASH_SET )
-
 macro(check_cxx_hashset)
   message(STATUS "Checking for C++ hash_set implementation...")
 
   check_std_unordered_set()
-  if(NOT HAVE_HASH_SET)
+  if(NOT HASH_SET_H)
     check_tr1_unordered_set()
   endif()
-  if(NOT HAVE_HASH_SET)
+  if(NOT HASH_SET_H)
     check_gnu_ext_hash_set()
   endif()
-  if(NOT HAVE_HASH_SET)
+  if(NOT HASH_SET_H)
     check_std_ext_hash_set()
   endif()
-  if(NOT HAVE_HASH_SET)
+  if(NOT HASH_SET_H)
     check_global_hash_set()
   endif()
 
-  if(HAVE_HASH_SET)
+  if(HASH_SET_H)
     message(STATUS "C++ hash_set found as ${HASH_SET_NAMESPACE}::${HASH_SET_CLASS} in ${HASH_SET_H}")
   else()
     message(FATAL_ERROR "C++ hash_set not found")
@@ -36,17 +34,15 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_set)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_set>
     int main() {
       std::unordered_set<int> t;
     }"
-    HAVE_HASH_SET
+    HAVE_HASH_SET_STD
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_SET)
+  if(HAVE_HASH_SET_STD)
     set(HASH_SET_H "<unordered_set>")
     set(HASH_SET_CLASS "unordered_set")
     set(HASH_SET_NAMESPACE "std")
@@ -54,18 +50,16 @@ macro(check_std_unordered_set)
 endmacro()
 
 macro(check_tr1_unordered_set)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_set>
     int main() {
       std::tr1::unordered_set<int> t;
     }"
-    HAVE_HASH_SET
+    HAVE_HASH_SET_TR1
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_SET)
-    set(HASH_SET_H "<tr/unordered_set>")
+  if(HAVE_HASH_SET_TR1)
+    set(HASH_SET_H "<tr1/unordered_set>")
     set(HASH_SET_CLASS "unordered_set")
     set(HASH_SET_NAMESPACE "std::tr1")
   endif()
@@ -77,10 +71,10 @@ macro(check_gnu_ext_hash_set)
     int main() {
       __gnu_cxx::hash_set<int> t;
     }"
-    HAVE_HASH_SET
+    HAVE_HASH_SET_GNU_EXT
   )
 
-  if(HAVE_HASH_SET)
+  if(HAVE_HASH_SET_GNU_EXT)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")
     set(HASH_SET_NAMESPACE "__gnu_cxx")
@@ -93,10 +87,10 @@ macro(check_std_ext_hash_set)
     int main() {
       std::hash_set<int> t;
     }"
-    HAVE_HASH_SET
+    HAVE_HASH_SET_STD_EXT
   )
 
-  if(HAVE_HASH_SET)
+  if(HAVE_HASH_SET_STD_EXT)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")
     set(HASH_SET_NAMESPACE "std")
@@ -109,10 +103,10 @@ macro(check_global_hash_set)
     int main() {
       hash_set<int> t;
     }"
-    HAVE_HASH_SET
+    HAVE_HASH_SET_GLOBAL
   )
 
-  if(HAVE_HASH_SET)
+  if(HAVE_HASH_SET_GLOBAL)
     set(HASH_SET_H "<ext/hash_set>")
     set(HASH_SET_CLASS "hash_set")
     set(HASH_SET_NAMESPACE "")

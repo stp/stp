@@ -5,26 +5,24 @@
 # This file closely mirrors CheckCxxHashSet.cmake, so be sure to update both.
 # -----------------------------------------------------------------------------
 
-set(HAVE_HASH_MAP )
-
 macro(check_cxx_hashmap)
   message(STATUS "Checking for C++ hash_map implementation...")
 
   check_std_unordered_map()
-  if(NOT HAVE_HASH_MAP)
+  if(NOT HASH_MAP_H)
     check_tr1_unordered_map()
   endif()
-  if(NOT HAVE_HASH_MAP)
+  if(NOT HASH_MAP_H)
     check_gnu_ext_hash_map()
   endif()
-  if(NOT HAVE_HASH_MAP)
+  if(NOT HASH_MAP_H)
     check_std_ext_hash_map()
   endif()
-  if(NOT HAVE_HASH_MAP)
+  if(NOT HASH_MAP_H)
     check_global_hash_map()
   endif()
 
-  if(HAVE_HASH_MAP)
+  if(HASH_MAP_H)
     message(STATUS "C++ hash_map found as ${HASH_MAP_NAMESPACE}::${HASH_MAP_CLASS} in ${HASH_MAP_H}")
   else()
     message(FATAL_ERROR "C++ hash_map not found")
@@ -36,17 +34,15 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_map)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_map>
     int main() {
       std::unordered_map<int, int> t;
     }"
-    HAVE_HASH_MAP
+    HAVE_HASH_MAP_STD
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_MAP)
+  if(HAVE_HASH_MAP_STD)
     set(HASH_MAP_H "<unordered_map>")
     set(HASH_MAP_CLASS "unordered_map")
     set(HASH_MAP_NAMESPACE "std")
@@ -54,18 +50,16 @@ macro(check_std_unordered_map)
 endmacro()
 
 macro(check_tr1_unordered_map)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_map>
     int main() {
       std::tr1::unordered_map<int, int> t;
     }"
-    HAVE_HASH_MAP
+    HAVE_HASH_MAP_TR1
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_MAP)
-    set(HASH_MAP_H "<tr/unordered_map>")
+  if(HAVE_HASH_MAP_TR1)
+    set(HASH_MAP_H "<tr1/unordered_map>")
     set(HASH_MAP_CLASS "unordered_map")
     set(HASH_MAP_NAMESPACE "std::tr1")
   endif()
@@ -77,10 +71,10 @@ macro(check_gnu_ext_hash_map)
     int main() {
       __gnu_cxx::hash_map<int, int> t;
     }"
-    HAVE_HASH_MAP
+    HAVE_HASH_MAP_GNU_EXT
   )
 
-  if(HAVE_HASH_MAP)
+  if(HAVE_HASH_MAP_GNU_EXT)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")
     set(HASH_MAP_NAMESPACE "__gnu_cxx")
@@ -93,10 +87,10 @@ macro(check_std_ext_hash_map)
     int main() {
       std::hash_map<int, int> t;
     }"
-    HAVE_HASH_MAP
+    HAVE_HASH_MAP_STD_EXT
   )
 
-  if(HAVE_HASH_MAP)
+  if(HAVE_HASH_MAP_STD_EXT)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")
     set(HASH_MAP_NAMESPACE "std")
@@ -109,10 +103,10 @@ macro(check_global_hash_map)
     int main() {
       hash_map<int, int> t;
     }"
-    HAVE_HASH_MAP
+    HAVE_HASH_MAP_GLOBAL
   )
 
-  if(HAVE_HASH_MAP)
+  if(HAVE_HASH_MAP_GLOBAL)
     set(HASH_MAP_H "<ext/hash_map>")
     set(HASH_MAP_CLASS "hash_map")
     set(HASH_MAP_NAMESPACE "")
