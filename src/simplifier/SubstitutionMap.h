@@ -40,7 +40,7 @@ namespace BEEV
     bool
     loops(const ASTNode& n0, const ASTNode& n1);
 
-    int substitutionsLastApplied;
+    size_t substitutionsLastApplied;
   public:
 
     bool

@@ -3,10 +3,10 @@
 
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/NodeFactory.h"
-#include <cassert>
 #include "../parser/LetMgr.h"
 #include "../STPManager/STPManager.h"
 #include "../STPManager/STP.h"
+#include <cassert>
 
 namespace BEEV
 {
@@ -199,7 +199,7 @@ namespace BEEV
     {
       bool removed=false;
 
-     for (int i=0; i < symbols.back().size(); i++)
+     for (size_t i = 0; i < symbols.back().size(); i++)
        if (symbols.back()[i] == s)
          {
          symbols.back().erase(symbols.back().begin() + i);
@@ -220,7 +220,7 @@ namespace BEEV
       f.name = name;
 
       ASTNodeMap fromTo;
-      for (int i=0; i < params.size();i++)
+      for (size_t i = 0, size = params.size(); i < size; ++i)
         {
           ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(), params[i].GetValueWidth(), "STP_INTERNAL_FUNCTION_NAME");
           fromTo.insert(std::make_pair(params[i], p));
@@ -241,7 +241,7 @@ namespace BEEV
       f = functions[string(name)];
 
       ASTNodeMap fromTo;
-      for (int i=0; i < f.params.size();i++)
+      for (size_t i = 0, size = f.params.size(); i < size; ++i)
         {
           if (f.params[i].GetValueWidth() != params[i].GetValueWidth())
             FatalError("Actual parameters differ from formal");
@@ -373,8 +373,9 @@ namespace BEEV
 
       cache.erase(cache.end() - 1);
       ASTVec & current = symbols.back();
-      for (int i = 0; i < current.size(); i++)
+      for (size_t i = 0, size = current.size(); i < size; ++i)
         letMgr._parser_symbol_table.erase(current[i]);
+
       symbols.erase(symbols.end() - 1);
       checkInvariant();
     }
@@ -404,7 +405,7 @@ namespace BEEV
     void
     printStatus()
     {
-      for (int i = 0; i < cache.size(); i++)
+      for (size_t i = 0, size = cache.size(); i < size; ++i)
         {
           cache[i].print();
         }

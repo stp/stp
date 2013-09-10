@@ -22,10 +22,10 @@
  */
 
 #include "../../AST/AST.h"
-#include <cassert>
 #include "SimplifyingNodeFactory.h"
 #include "../../simplifier/simplifier.h"
 #include "../ArrayTransformer.h"
+#include <cassert>
 #include <cmath>
 
 using BEEV::Kind;
@@ -465,15 +465,17 @@ SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
         {
           int match1 = -1, match2 = -1;
 
-          for (int i = 0; i < c1.size(); i++)
-            for (int j = 0; j < c2.size(); j++)
+          for (size_t i = 0, c1Size = c1.size(); i < c1Size; ++i)
+          {
+            for (size_t j = 0, c2Size = c2.size(); j < c2Size; ++j)
+            {
+              if (c1[i] == c2[j])
               {
-                if (c1[i] == c2[j])
-                  {
-                    match1 = i;
-                    match2 = j;
-                  }
+                match1 = i;
+                match2 = j;
               }
+            }
+          }
 
           if (match1 != -1)
             {
@@ -1113,7 +1115,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       bool oneFound = false;
       bool zeroFound = false;
 
-      for (int i = 0; i < children.size(); i++)
+      for (size_t i = 0, size = children.size(); i < size; ++i)
         {
           if (children[i].GetKind() == BEEV::BVCONST)
             {
@@ -1121,7 +1123,6 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
                 oneFound = true;
               else if (CONSTANTBV::BitVector_is_empty(children[i].GetBVConst()))
                 zeroFound = true;
-
             }
         }
 
@@ -1132,7 +1133,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
       else if (oneFound)
         {
           ASTVec new_children;
-          for (int i = 0; i < children.size(); i++)
+          for (size_t i = 0, size = children.size(); i < size; ++i)
             {
               if (children[i].GetKind() != BEEV::BVCONST || !CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
                 new_children.push_back(children[i]);
@@ -1172,7 +1173,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         int end = -1;
         BEEV::CBV c = c0.GetBVConst();
         bool bad = false;
-        for (int i = 0; i < width; i++)
+        for (size_t i = 0; i < width; i++)
           {
             if (CONSTANTBV::BitVector_bit_test(c, i))
               if (start == -1)
