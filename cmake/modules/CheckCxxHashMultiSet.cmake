@@ -6,26 +6,24 @@
 # This file closely mirrors CheckCxxHashMap.cmake, so be sure to update both.
 # -----------------------------------------------------------------------------
 
-set(HAVE_HASH_MULTISET )
-
 macro(check_cxx_hashmultiset)
   message(STATUS "Checking for C++ hash_multiset implementation...")
 
   check_std_unordered_multiset()
-  if(NOT HAVE_HASH_MULTISET)
+  if(NOT HASH_MULTISET_H)
     check_tr1_unordered_multiset()
   endif()
-  if(NOT HAVE_HASH_MULTISET)
+  if(NOT HASH_MULTISET_H)
     check_gnu_ext_hash_multiset()
   endif()
-  if(NOT HAVE_HASH_MULTISET)
+  if(NOT HASH_MULTISET_H)
     check_std_ext_hash_multiset()
   endif()
-  if(NOT HAVE_HASH_MULTISET)
+  if(NOT HASH_MULTISET_H)
     check_global_hash_multiset()
   endif()
 
-  if(HAVE_HASH_MULTISET)
+  if(HASH_MULTISET_H)
     message(STATUS "C++ hash_multiset found as ${HASH_MULTISET_NAMESPACE}::${HASH_MULTISET_CLASS} in ${HASH_MULTISET_H}")
   else()
     message(FATAL_ERROR "C++ hash_multiset not found")
@@ -37,17 +35,15 @@ endmacro()
 include(CheckCXXSourceCompiles)
 
 macro(check_std_unordered_multiset)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <unordered_set>
     int main() {
       std::unordered_multiset<int> t;
     }"
-    HAVE_HASH_MULTISET
+    HAVE_HASH_MULTISET_STD
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_MULTISET)
+  if(HAVE_HASH_MULTISET_STD)
     set(HASH_MULTISET_H "<unordered_set>")
     set(HASH_MULTISET_CLASS "unordered_multiset")
     set(HASH_MULTISET_NAMESPACE "std")
@@ -55,18 +51,16 @@ macro(check_std_unordered_multiset)
 endmacro()
 
 macro(check_tr1_unordered_multiset)
-  set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
   check_cxx_source_compiles("
     #include <tr1/unordered_set>
     int main() {
       std::tr1::unordered_multiset<int> t;
     }"
-    HAVE_HASH_MULTISET
+    HAVE_HASH_MULTISET_TR1
   )
-  unset(CMAKE_REQUIRED_FLAGS)
 
-  if(HAVE_HASH_MULTISET)
-    set(HASH_MULTISET_H "<tr/unordered_set>")
+  if(HAVE_HASH_MULTISET_TR1)
+    set(HASH_MULTISET_H "<tr1/unordered_set>")
     set(HASH_MULTISET_CLASS "unordered_multiset")
     set(HASH_MULTISET_NAMESPACE "std::tr1")
   endif()
@@ -78,10 +72,10 @@ macro(check_gnu_ext_hash_multiset)
     int main() {
       __gnu_cxx::hash_multiset<int> t;
     }"
-    HAVE_HASH_MULTISET
+    HAVE_HASH_MULTISET_GNU_EXT
   )
 
-  if(HAVE_HASH_MULTISET)
+  if(HAVE_HASH_MULTISET_GNU_EXT)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
     set(HASH_MULTISET_NAMESPACE "__gnu_cxx")
@@ -94,10 +88,10 @@ macro(check_std_ext_hash_multiset)
     int main() {
       std::hash_multiset<int> t;
     }"
-    HAVE_HASH_MULTISET
+    HAVE_HASH_MULTISET_STD_EXT
   )
 
-  if(HAVE_HASH_MULTISET)
+  if(HAVE_HASH_MULTISET_STD_EXT)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
     set(HASH_MULTISET_NAMESPACE "std")
@@ -110,10 +104,10 @@ macro(check_global_hash_multiset)
     int main() {
       hash_multiset<int> t;
     }"
-    HAVE_HASH_MULTISET
+    HAVE_HASH_MULTISET_GLOBAL
   )
 
-  if(HAVE_HASH_MULTISET)
+  if(HAVE_HASH_MULTISET_GLOBAL)
     set(HASH_MULTISET_H "<ext/hash_set>")
     set(HASH_MULTISET_CLASS "hash_multiset")
     set(HASH_MULTISET_NAMESPACE "")

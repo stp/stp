@@ -17,19 +17,6 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Determine the locations of C++ hash_set and hash_map
-# -----------------------------------------------------------------------------
-
-include(CheckCxxHashSet)
-check_cxx_hashset()
-
-include(CheckCxxHashMultiSet)
-check_cxx_hashmultiset()
-
-include(CheckCxxHashMap)
-check_cxx_hashmap()
-
-# -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
 include(CheckCXXCompilerFlag)
@@ -101,6 +88,19 @@ if(WIN32)
   endif()
   add_definitions(${STP_DEFS_COMM})
 endif()
+
+# -----------------------------------------------------------------------------
+# Determine the locations of C++ hash_set and hash_map
+# -----------------------------------------------------------------------------
+
+include(CheckCxxHashSet)
+check_cxx_hashset()
+
+include(CheckCxxHashMultiSet)
+check_cxx_hashmultiset()
+
+include(CheckCxxHashMap)
+check_cxx_hashmap()
 
 # -----------------------------------------------------------------------------
 # Write out the config.h
