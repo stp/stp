@@ -53,7 +53,7 @@ private:
         {
                 std::deque<Aig_Obj_t*> names;
 
-                for (unsigned i = 0; i < children.size(); i++)
+                for (size_t i = 0, size = children.size(); i < size; ++i)
                         names.push_back(children[i].n);
 
                 while (names.size() > 2)
@@ -149,7 +149,7 @@ public:
                 Aig_Obj_t * pNode;
                 assert (children.size() != 0);
 
-                for (int i =0; i < children.size();i++)
+                for (size_t i = 0, size = children.size(); i < size; ++i)
                   assert(!children[i].IsNull());
 
                 switch (kind)

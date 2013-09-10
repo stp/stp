@@ -43,12 +43,13 @@ namespace simplifier
     void
     ConstantBitPropagation::printNodeWithFixings()
     {
-      NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it =
-          fixedMap->map->begin();
+      NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator 
+        it = fixedMap->map->begin(),
+        itEnd = fixedMap->map->end();
 
       cerr << "+Nodes with fixings" << endl;
 
-      for (/**/; it != fixedMap->map->end(); it++) // iterates through all the pairs of node->fixedBits.
+      for (/**/; it != itEnd; ++it) // iterates through all the pairs of node->fixedBits.
         {
           cerr << (it->first).GetNodeNum() << " " << *(it->second) << endl;
         }
@@ -107,12 +108,12 @@ namespace simplifier
     ASTNodeMap
     ConstantBitPropagation::getAllFixed()
     {
-      NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it;
+      NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it, itEnd;
 
       ASTNodeMap toFrom;
 
       // iterates through all the pairs of node->fixedBits.
-      for (it = fixedMap->map->begin(); it != fixedMap->map->end(); it++)
+      for (it = fixedMap->map->begin(), itEnd = fixedMap->map->end(); it != itEnd; ++it)
         {
           const ASTNode& node = (it->first);
           const FixedBits& bits = *it->second;
@@ -260,11 +261,12 @@ namespace simplifier
       // go through the fixedBits. If a node is entirely fixed.
       // "and" it onto the top. Creates redundancy. Check that the
       // node doesn't already depend on "top" directly.
+      NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it, itEnd;
 
-      for (NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it = fixedMap->map->begin(); it != fixedMap->map->end(); it++) // iterates through all the pairs of node->fixedBits.
+      // iterates through all the pairs of node->fixedBits.
+      for (it = fixedMap->map->begin(), itEnd = fixedMap->map->end(); it != itEnd; ++it) 
         {
           const FixedBits& bits = *it->second;
-
           const ASTNode& node = (it->first);
 
           if (false && node.GetKind() == SYMBOL && !bits.isTotallyFixed() && bits.countFixed() > 0)
@@ -457,10 +459,11 @@ namespace simplifier
       childrenFixedBits.reserve(n.GetChildren().size());
 
       // get a copy of the current fixing from the cache.
-      for (unsigned i = 0; i < n.GetChildren().size(); i++)
-        {
-          childrenFixedBits.push_back(*getCurrentFixedBits(n[i]));
-        }
+      for (size_t i = 0, size = n.GetChildren().size(); i < size; ++i)
+      {
+        childrenFixedBits.push_back(*getCurrentFixedBits(n[i]));
+      }
+
       FixedBits current = *getCurrentFixedBits(n);
       FixedBits newBits = *getUpdatedFixedBits(n);
 

@@ -136,7 +136,7 @@ namespace BEEV
                         if (it != nodeToSATVar.end())
                             {
                                 const vector<unsigned>& v = it->second;
-                                for (int i = 0; i < v.size(); i++)
+                                for (size_t i = 0, size = v.size(); i < size; ++i)
                                     satSolver.setFrozen(v[i]);
                             }
 
@@ -144,7 +144,7 @@ namespace BEEV
                         if (it2 != nodeToSATVar.end())
                             {
                                 const vector<unsigned>& v = it2->second;
-                                for (int i = 0; i < v.size(); i++)
+                                for (size_t i = 0, size = v.size(); i < size; ++i)
                                     satSolver.setFrozen(v[i]);
                             }
                     }
@@ -195,7 +195,7 @@ namespace BEEV
                                         vector<unsigned> v_a;
                                         assert(ar.index_symbol.GetKind() == SYMBOL);
                                         // It was ommitted from the initial problem, so assign it freshly.
-                                        for (int i = 0; i < ar.index_symbol.GetValueWidth(); i++)
+                                        for (size_t i = 0, size = ar.index_symbol.GetValueWidth(); i < size; ++i)
                                             {
                                                 SATSolver::Var v = satSolver.newVar();
                                                 // We probably don't want the variable eliminated.
@@ -204,7 +204,7 @@ namespace BEEV
                                             }
                                         nodeToSATVar.insert(make_pair(ar.index_symbol, v_a));
 
-                                        for (int i = 0; i < v_a.size(); i++)
+                                        for (size_t i = 0, size = v_a.size(); i < size; ++i)
                                             {
                                                 SATSolver::Var var = v_a[i];
                                                 index.push(SATSolver::mkLit(var, false));
@@ -220,7 +220,7 @@ namespace BEEV
                                 if (it != nodeToSATVar.end())
                                     {
                                         vector<unsigned>& v = it->second;
-                                        for (int i = 0; i < v.size(); i++)
+                                        for (size_t i = 0, size = v.size(); i < size; ++i)
                                             {
                                                 SATSolver::Var var = v[i];
                                                 value.push(SATSolver::mkLit(var, false));
@@ -229,7 +229,7 @@ namespace BEEV
                                 else if (ar.symbol.isConstant())
                                     {
                                         CBV c = ar.symbol.GetBVConst();
-                                        for (int i = 0; i < ar.symbol.GetValueWidth(); i++)
+                                        for (size_t i = 0, size = ar.symbol.GetValueWidth(); i < size; ++i)
                                             if (CONSTANTBV::BitVector_bit_test(c, i))
                                                 value_constants.push((Minisat::lbool) satSolver.true_literal());
                                             else
@@ -243,7 +243,7 @@ namespace BEEV
 
                                         assert(ar.symbol.GetKind() == SYMBOL);
                                         // It was ommitted from the initial problem, so assign it freshly.
-                                        for (int i = 0; i < ar.symbol.GetValueWidth(); i++)
+                                        for (size_t i = 0, size = ar.symbol.GetValueWidth(); i < size; ++i)
                                             {
                                                 SATSolver::Var v = satSolver.newVar();
                                                 // We probably don't want the variable eliminated.
@@ -252,7 +252,7 @@ namespace BEEV
                                             }
                                         nodeToSATVar.insert(make_pair(ar.symbol, v_a));
 
-                                        for (int i = 0; i < v_a.size(); i++)
+                                        for (size_t i = 0, size = v_a.size(); i < size; ++i)
                                             {
                                                 SATSolver::Var var = v_a[i];
                                                 value.push(SATSolver::mkLit(var, false));
