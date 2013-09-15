@@ -12,10 +12,5 @@ add_subdirectory(STPManager)
 add_subdirectory(to-sat)
 add_subdirectory(sat)
 
-# add_subdirectory(ocaml-wrapper)
-
-
-
-
 
 #add_subdirectory(util)
