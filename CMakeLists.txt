@@ -147,17 +147,8 @@ find_package(FLEX REQUIRED)
 add_subdirectory(src)
 
 # -----------------------------------------------------------------------------
-# Copy built binaries to root (build) dir
+# Testing
 # -----------------------------------------------------------------------------
-
-add_custom_target(copy ALL COMMENT "Copying binaries from subdirs to build directory")
-add_custom_command(
-  TARGET copy
-  COMMAND ${CMAKE_COMMAND} -E copy src/main/stp .
-)
-add_dependencies(copy
-  stp
-)
 
 enable_testing()
 
