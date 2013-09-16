@@ -163,7 +163,7 @@ enable_testing()
 
 add_test(NAME regresscvc
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/
-  COMMAND scripts/run_tests.pl --td=${CMAKE_CURRENT_SOURCE_DIR}/big-test/
+  COMMAND run_tests.pl --td=${CMAKE_CURRENT_SOURCE_DIR}/big-test/
 )
 #regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
 #regresscvc: baseTest
