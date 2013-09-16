@@ -98,14 +98,30 @@ class Tester:
 
     def random_options(self) :
         cmd = " "
-        opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
+        #opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
+
+        #print options
+        # --print-back-CVC", "--print-back-SMTLIB2"
+        # --print-back-SMTLIB1", "--print-back-GDL", "--print-back-dot"
+        # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes), -y (counterexample in binary)
+        # -b (print back input to output)
+
+        #input options
+        # , "--SMTLIB1", "-m", "--SMTLIB2"
+
+        #output options
+        #--output-CNF --output-bench --exit-after-CNF
+        opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp"
+                , "--disable-equality", "--cryptominisat"
+                , "--simplifying-minisat", "--minisat"
+                , "--oldstyle-refinement", "-r"]
+
         for opt in opts:
             if random.randint(0,1) == 0 :
                 cmd += opt + " "
 
-        cmd += "--cryptominisat "
-        if random.randint(0,1) == 1 :
-            cmd += "--gauss %d "  % (random.randint(0,100))
+        #if random.randint(0,1) == 1 :
+        #    cmd += "-i %d " % random.randint(0,1000)
 
         return cmd
 
@@ -121,7 +137,7 @@ class Tester:
         command += self.random_options()
         #if options.verbose == False:
         #    command += "--verb 0 "
-        command += "-p "
+        command += "-p " #yes, print counterexample
 
         command += options.extra_options + " "
         command += fname
