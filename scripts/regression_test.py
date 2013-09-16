@@ -314,4 +314,6 @@ tester = Tester()
 if options.fuzz_test:
     tester.check_unsat = True
     tester.fuzz_test()
+else:
+    print "Please pass '--help' to see all the options. By default, the script does nothing"
 
