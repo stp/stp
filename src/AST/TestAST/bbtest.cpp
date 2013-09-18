@@ -23,7 +23,6 @@ int main()
   cout << "bitblasted c1 " << endl;
   LispPrintVec(cout, bbc1, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode c2 = bm->CreateBVConst(size, 1);
   c2.SetValueWidth(size);
@@ -32,7 +31,6 @@ int main()
   cout << "bitblasted c2 " << endl;
   LispPrintVec(cout, bbc2, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode c3 = bm->CreateBVConst(size, 0xFFFFFFFF);
   c3.SetValueWidth(size);
@@ -41,7 +39,6 @@ int main()
   cout << "bitblasted c3 " << endl;
   LispPrintVec(cout, bbc3, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode c4 = bm->CreateBVConst(size, 0xAAAAAAAA);
   c4.SetValueWidth(size);
@@ -50,7 +47,6 @@ int main()
   cout << "bitblasted c4 " << endl;
   LispPrintVec(cout, bbc4, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   //   ASTNode b1 = bm->CreateBVConst(12);
   //   ASTNode b2 = bm->CreateBVConst(36);
@@ -64,7 +60,6 @@ int main()
   cout << "bitblasted a1 " << endl;
   LispPrintVec(cout, bba1, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode a2 = bm->CreateNode(BVPLUS, s1, s2, s3);
   a1.SetValueWidth(2);
@@ -73,7 +68,6 @@ int main()
   cout << "bitblasted a2 " << endl;
   LispPrintVec(cout, bba2, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode a3 = bm->CreateNode(BVXOR, s1, s2);
   a3.SetValueWidth(2);
@@ -82,7 +76,6 @@ int main()
   cout << "bitblasted a3 " << endl;
   LispPrintVec(cout, bba3, 0);
   cout << endl;
-  bm->AlreadyPrintedSet.clear();
 
   ASTNode a4 = bm->CreateNode(EQ, s1, s2);
   ASTNode bba4 = bm->BBForm(a4);
