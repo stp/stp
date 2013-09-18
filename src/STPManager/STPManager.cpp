@@ -411,6 +411,7 @@ namespace BEEV
   /** Print a vector of ASTNodes in lisp format */
   ostream &LispPrintVec(ostream &os, const ASTVec &v, int indentation)
   {
+    printer::Lisp_AlreadyPrintedSet.clear();
     // Print the children
     ASTVec::const_iterator iend = v.end();
     for (ASTVec::const_iterator i = v.begin(); i != iend; i++)

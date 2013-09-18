@@ -132,21 +132,6 @@ namespace BEEV
     return ParserBM;
   } //End of GetSTPMgr()
 
-  // Checks if the node has alreadybeen printed or not
-  bool ASTNode::IsAlreadyPrinted() const
-  {
-    STPMgr * bm = GetSTPMgr();
-    return (bm->AlreadyPrintedSet.find(*this) != 
-            bm->AlreadyPrintedSet.end());
-  } //End of IsAlreadyPrinted()
-
-  // Mark the node as printed if it has been already printed
-  void ASTNode::MarkAlreadyPrinted() const
-  {
-    STPMgr * bm = GetSTPMgr();
-    bm->AlreadyPrintedSet.insert(*this);
-  } //End of MarkAlreadyPrinted()
-
   // Print the node
   void ASTNode::nodeprint(ostream& os, bool c_friendly) const
   {

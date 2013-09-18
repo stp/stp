@@ -230,11 +230,6 @@ namespace BEEV
     } //End of isPred()
 
 
-    // For lisp DAG printing.  Has it been printed already, so we can
-    // just print the node number?
-    bool IsAlreadyPrinted() const;
-    void MarkAlreadyPrinted() const;
-
     // delegates to the ASTInternal node.
     void nodeprint(ostream& os, bool c_friendly = false) const;
 
