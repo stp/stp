@@ -1,13 +1,13 @@
 STP links to copyrighted librarys:
 	* Minisat Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson.
 	* Bit::Vector Copyright (c) 1995 - 2004 by Steffen Beyer. 
-	* CVC's SMT-LIB Parser  Copyright (C) 2004 by the Board of Trustees of Leland Stanford Junior University and by New York University.
+	* CVC's SMT-LIB Parser  Copyright (C) 2004 by the Board of Trustees
+          of Leland Stanford Junior University and by New York University.
 	* CryptoMinisat Copyright (c) 2009 Mate Soos
 	* ABC by Alan Mishchenko
 	* Boost by various: http://www.boost.org/
 
 MINISAT
-	/****************************************************************************************
 	MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
@@ -24,58 +24,45 @@ MINISAT
 	NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 	DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 	OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-	**************************************************************************************************/
 
 Bit::Vector
-	/*****************************************************************************/
-	/*  LICENSE:                                                                 */
-	/*****************************************************************************/
-	/*                                                                           */
-	/*    This library is free software; you can redistribute it and/or          */
-	/*    modify it under the terms of the GNU Library General Public            */
-	/*    License as published by the Free Software Foundation; either           */
-	/*    version 2 of the License, || (at your option) any later version.       */
-	/*                                                                           */
-	/*    This library is distributed in the hope that it will be useful,        */
-	/*    but WITHOUT ANY WARRANTY; without even the implied warranty of         */
-	/*    MERCHANTABILITY || FITNESS FOR A PARTICULAR PURPOSE. See the GNU       */
-	/*    Library General Public License for more details.                       */
-	/*                                                                           */
-	/*    You should have received a copy of the GNU Library General Public      */
-	/*    License along with this library; if not, write to the                  */
-	/*    Free Software Foundation, Inc.,                                        */
-	/*    59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                  */
-	/*                                                                           */
-	/*    || download a copy from ftp://ftp.gnu.org/pub/gnu/COPYING.LIB-2.0      */
-	/*                                                                           */
-	/*****************************************************************************/
+	This library is free software; you can redistribute it and/or    
+	modify it under the terms of the GNU Library General Public      
+	License as published by the Free Software Foundation; either     
+	version 2 of the License, || (at your option) any later version. 
+	                                                                 
+	This library is distributed in the hope that it will be useful,  
+	but WITHOUT ANY WARRANTY; without even the implied warranty of   
+	MERCHANTABILITY || FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+	Library General Public License for more details.                 
+	                                                                 
+	You should have received a copy of the GNU Library General Public
+	License along with this library; if not, write to the            
+	Free Software Foundation, Inc.,                                  
+	59 Temple Place, Suite 330, Boston, MA 02111-1307 USA            
+	                                                                 
+	|| download a copy from ftp://ftp.gnu.org/pub/gnu/COPYING.LIB-2.0
 
 CVC's SMT-LIB Parser
-	 /********************************************************************
-	   *
-	   * \file smtlib.y
-	   * 
-	   * Author: Sergey Berezin, Clark Barrett
-	   * 
-	   * Created: Apr 30 2005
-	   *
-	   * <hr>
-	   * Copyright (C) 2004 by the Board of Trustees of Leland Stanford
-	   * Junior University and by New York University. 
-	   *
-	   * License to use, copy, modify, sell and/or distribute this software
-	   * and its documentation for any purpose is hereby granted without
-	   * royalty, subject to the terms and conditions defined in the \ref
-	   * LICENSE file provided with this distribution.  In particular:
-	   *
-	   * - The above copyright notice and this permission notice must appear
-	   * in all copies of the software and related documentation.
-	   *
-	   * - THE SOFTWARE IS PROVIDED "AS-IS", WITHOUT ANY WARRANTIES,
-	   * EXPRESSED OR IMPLIED.  USE IT AT YOUR OWN RISK.
-	   * 
-	   * <hr>
-	   ********************************************************************/
+	\file smtlib.y
+	
+	Author: Sergey Berezin, Clark Barrett
+	
+	Created: Apr 30 2005
+	
+	Copyright (C) 2004 by the Board of Trustees of Leland Stanford
+	Junior University and by New York University. 
+	
+	License to use, copy, modify, sell and/or distribute this software
+	and its documentation for any purpose is hereby granted without
+	royalty, subject to the terms and conditions defined in the \ref
+	LICENSE file provided with this distribution.  In particular:
+	
+	- The above copyright notice and this permission notice must appear
+	in all copies of the software and related documentation.
+	
+	- THE SOFTWARE IS PROVIDED "AS-IS", WITHOUT ANY WARRANTIES,
+	EXPRESSED OR IMPLIED.  USE IT AT YOUR OWN RISK.
 
 Cryptominisat
 	CryptoMiniSat -- Copyright (c) 2009 Mate Soos
@@ -118,8 +105,6 @@ ABC
 	A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS ON AN "AS IS" BASIS,
 	AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO PROVIDE MAINTENANCE,
 	SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
-
-
 
 Boost
 	Boost Software License - Version 1.0 - August 17th, 2003
