@@ -226,7 +226,13 @@ namespace BEEV
 
   ASTNode STPMgr::charToASTNode(unsigned char* strval, int base , int bit_width)
   {
+    if (base != 2 && base != 10 && base != 16) {
+        FatalError("Base must be 2, 10, or 16");
+    }
     assert ((2 == base || 10 == base || 16 == base));
+    if (bit_width <= 0) {
+        FatalError("Bit width of constant must be greater than 0");
+    }
     assert (bit_width > 0);
 
     // We create a single bvconst that gets reused.
@@ -269,6 +275,9 @@ namespace BEEV
 
   ASTNode STPMgr::CreateBVConst(string strval, int base, int bit_width)
   {
+    if (bit_width <= 0) {
+        FatalError("Bit width of constant must be greater than 0");
+    }
     assert (bit_width > 0);
 
     return charToASTNode((unsigned char*)strval.c_str(), base , bit_width);
