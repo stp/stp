@@ -655,6 +655,12 @@ TRUE_TOK
   //Cleanup the LetIDToExprMap
   parserInterface->letMgr.CleanupLetIDMap();                      
 }
+| LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_term RPAREN_TOK
+{
+  $$ = $6;
+  //Cleanup the LetIDToExprMap
+  parserInterface->letMgr.CleanupLetIDMap();
+}
 | LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
 {	
   $$ = parserInterface->newNode(parserInterface->applyFunction(*$2,*$3));
