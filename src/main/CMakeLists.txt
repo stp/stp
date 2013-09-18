@@ -23,7 +23,7 @@ target_link_libraries(stp-lib
 add_executable(stp
     main.cpp
 )
-set_target_properties(stp-lib PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 target_link_libraries(stp
     stp-lib
 )
