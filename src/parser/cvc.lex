@@ -76,6 +76,9 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "BOOLEAN"        { return BOOLEAN_TOK;}
 "<<"             { return BVLEFTSHIFT_TOK;}
 ">>"             { return BVRIGHTSHIFT_TOK;}
+"BVSHL"             { return BVSHL_TOK;}
+"BVLSHR"             { return BVLSHR_TOK;}
+"BVASHR"             { return BVASHR_TOK;}
 "BVPLUS"         { return BVPLUS_TOK;}
 "BVSUB"          { return BVSUB_TOK;}
 "BVUMINUS"       { return BVUMINUS_TOK;}
