@@ -46,11 +46,13 @@ bool cinterface_exprdelete_on_flag = true;
 extern int cvcparse(void*);
 extern int smtparse(void*);
 
+//TODO remove this, it's really ugly
 void vc_setFlags(VC vc, char c, int param_value) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   process_argument(c, b);
 }
 
+//TODO remove this, it's really ugly
 void vc_setFlag(VC vc, char c) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   process_argument(c, b);

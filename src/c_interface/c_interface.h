@@ -49,7 +49,9 @@ extern "C" {
   // s  : stats
   // v  : print nodes
 
+
   // The "num_absrefine" argument isn't used at all. It's left for compatibility with existing code.
+  //TODO remove these two functions, it's an ugly way of controlling settings
   void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
   void vc_setFlag(VC vc, char c);
 

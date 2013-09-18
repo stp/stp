@@ -21,6 +21,7 @@ namespace BEEV
    * Universal Helper Functions                                   *
    ****************************************************************/
 
+  //TODO remove -- only used in c_interface.cpp NOT from main.cpp
   void process_argument(const char ch, STPMgr  *bm)
   {
     switch(ch)
