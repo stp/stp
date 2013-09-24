@@ -69,8 +69,8 @@ if(WIN32)
   # build shared lib on windows is not prepared at source level
   set(BUILD_SHARED_LIB OFF)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
-  set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
-  set(FLEX_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
+  set(BISON_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
+  set(PERL_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
 
   set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
 
