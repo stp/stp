@@ -46,7 +46,6 @@ if(APPLE AND HAVE_FLAG_STDLIB_LIBCPP)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()
 
-
 add_cxx_flag_if_supported("-Wall")
 add_cxx_flag_if_supported("-Wextra")
 add_cxx_flag_if_supported("-Wunused")
