@@ -1481,7 +1481,6 @@ namespace CONSTANTBV {
   {
     unsigned int  size = size_(addr);
     unsigned int  value;
-    unsigned int  count;
     unsigned int  digit;
     unsigned int  length;
     unsigned char * string;
@@ -1497,7 +1496,7 @@ namespace CONSTANTBV {
         while (size-- > 0)
           {
             value = *addr++;
-            count = BITS;
+            long int count = BITS;
             if (count > length) count = length;
             while (count-- > 0)
               {
