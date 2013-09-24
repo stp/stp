@@ -19,7 +19,7 @@ namespace BEEV
   bool
   SimplifyingMinisat::addClause(const vec_literals& ps) // Add a clause to the solver.
   {
-    s->addClause(ps);
+    return s->addClause(ps);
   }
 
   bool
