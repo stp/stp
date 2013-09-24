@@ -30,7 +30,7 @@ namespace BEEV
   bool
   MinisatCore_prop<T>::addClause(const SATSolver::vec_literals& ps) // Add a clause to the solver.
   {
-    s->addClause(ps);
+    return s->addClause(ps);
   }
 
   template <class T>
