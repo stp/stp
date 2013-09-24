@@ -61,7 +61,7 @@ namespace BEEV
     return s->newVar();
   }
 
-  int CryptoMinisat::setVerbosity(int v)
+  void CryptoMinisat::setVerbosity(int v)
   {
     s->verbosity = v;
   }

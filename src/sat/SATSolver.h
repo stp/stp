@@ -61,7 +61,7 @@ namespace BEEV
       exit(1);
     }
 
-    virtual int setVerbosity(int v) =0;
+    virtual void setVerbosity(int v) =0;
 
     virtual lbool true_literal() =0;
     virtual lbool false_literal() =0;

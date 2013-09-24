@@ -66,7 +66,7 @@ namespace BEEV
   }
 
   template <class T>
-  int MinisatCore_prop<T>::setVerbosity(int v)
+  void MinisatCore_prop<T>::setVerbosity(int v)
   {
     s->verbosity = v;
   }

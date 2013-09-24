@@ -40,7 +40,7 @@ namespace BEEV
 
     virtual Var newVar();
 
-    int setVerbosity(int v);
+    void setVerbosity(int v);
 
     int nVars();
 

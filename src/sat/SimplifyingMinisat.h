@@ -34,7 +34,7 @@ namespace BEEV
     bool
     simplify(); // Removes already satisfied clauses.
 
-    int setVerbosity(int v);
+    void setVerbosity(int v);
 
     virtual uint8_t modelValue(Var x) const;
 

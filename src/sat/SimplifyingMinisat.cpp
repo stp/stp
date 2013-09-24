@@ -49,7 +49,7 @@ namespace BEEV
    return Minisat::toInt(s->modelValue(x));
   }
 
-  int SimplifyingMinisat::setVerbosity(int v)
+  void SimplifyingMinisat::setVerbosity(int v)
   {
     s->verbosity = v;
   }

@@ -58,7 +58,7 @@ namespace BEEV
   }
 
   template <class T>
-  int MinisatCore<T>::setVerbosity(int v)
+  void MinisatCore<T>::setVerbosity(int v)
   {
     s->verbosity = v;
   }
