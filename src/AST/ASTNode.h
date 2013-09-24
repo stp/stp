@@ -90,7 +90,7 @@ namespace BEEV
     // Print the arguments in lisp format
     friend ostream &LispPrintVec(ostream &os, 
                                  const ASTVec &v, 
-                                 int indentation = 0);
+                                 int indentation);
 
     // Check if it points to a null node
     inline bool IsNull() const 

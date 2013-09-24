@@ -418,7 +418,7 @@ namespace BEEV
   //   * Printdepth limit
 
   /** Print a vector of ASTNodes in lisp format */
-  ostream &LispPrintVec(ostream &os, const ASTVec &v, int indentation)
+  ostream &LispPrintVec(ostream &os, const ASTVec &v, int indentation = 0)
   {
     printer::Lisp_AlreadyPrintedSet.clear();
     // Print the children
