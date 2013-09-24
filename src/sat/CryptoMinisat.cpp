@@ -34,7 +34,7 @@ namespace BEEV
     for (int i =0; i<ps.size();i++)
       v.push(MINISAT::Lit(var(ps[i]), sign(ps[i])));
 
-    s->addClause(v);
+    return s->addClause(v);
   }
 
   bool
