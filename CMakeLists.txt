@@ -16,6 +16,30 @@ else()
   "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel.")
 endif()
 
+
+# -----------------------------------------------------------------------------
+# Enable LLVM sanitizations.
+# Note that check_cxx_compiler_flag doesn't work, a fix is needed here
+# -----------------------------------------------------------------------------
+macro(add_cxx_flag flagname)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
+endmacro()
+
+#set(SANITIZE 1)
+if (SANITIZE)
+    SET (CMAKE_CXX_COMPILER "clang++")
+    add_cxx_flag("-fsanitize=return")
+    add_cxx_flag("-fsanitize=bounds")
+    add_cxx_flag("-fsanitize=integer")
+    add_cxx_flag("-fsanitize=undefined")
+    add_cxx_flag("-fsanitize=float-divide-by-zero")
+    add_cxx_flag("-fsanitize=integer-divide-by-zero")
+    add_cxx_flag("-fsanitize=null")
+    add_cxx_flag("-fsanitize=unsigned-integer-overflow")
+    add_cxx_flag("-fsanitize=address")
+    add_cxx_flag("-Wno-bitfield-constant-conversion")
+endif()
+
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
