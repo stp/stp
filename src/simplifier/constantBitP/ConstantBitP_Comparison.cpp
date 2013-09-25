@@ -107,6 +107,7 @@ void destroy(CBV a, CBV b, CBV c, CBV d)
 bool
 fast_exit(FixedBits& c0, FixedBits& c1)
 {
+  assert(c0.getWidth() == c1.getWidth());
   for (int i = c0.getWidth() - 1; i >= 0; i--)
     {
       const char c_0 = c0[i];
