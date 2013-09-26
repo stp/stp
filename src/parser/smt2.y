@@ -782,16 +782,11 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term 
 {
-  if (0 != $4)
-    {
-      unsigned w = $6->GetValueWidth() + $4;
-      ASTNode leading_zeroes = parserInterface->CreateZeroConst($4);
-      ASTNode *n =  parserInterface->newNode(parserInterface->nf->CreateTerm(BVCONCAT,w,leading_zeroes,*$6));
-      $$ = n;
-      parserInterface->deleteNode( $6);
-    }
-  else
-    $$ = $6;
+  unsigned w = $6->GetValueWidth() + $4;
+  ASTNode width = parserInterface->CreateBVConst(32,w);
+  ASTNode *n =  parserInterface->newNode(parserInterface->nf->CreateTerm(BVZX,w,*$6,width));
+  $$ = n;
+  parserInterface->deleteNode( $6);
 }
 |  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK  NUMERAL_TOK  RPAREN_TOK an_term 
 {

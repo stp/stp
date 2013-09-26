@@ -119,6 +119,7 @@
 %token  BVSGE_TOK               "BVSGE"
 %token  BOOL_TO_BV_TOK          "BOOLBV"
 %token  BVSX_TOK                "BVSX"
+%token  BVZX_TOK                "BVZX"
 %token  BOOLEXTRACT_TOK         "BOOLEXTRACT"
 %token  ASSERT_TOK              "ASSERT"
 %token  QUERY_TOK               "QUERY"
@@ -159,7 +160,7 @@
 
 %nonassoc '=' NEQ_TOK ASSIGN_TOK
 %nonassoc BVLT_TOK BVLE_TOK BVGT_TOK BVGE_TOK
-%nonassoc BVUMINUS_TOK BVPLUS_TOK BVSUB_TOK BVSX_TOK
+%nonassoc BVUMINUS_TOK BVPLUS_TOK BVSUB_TOK BVSX_TOK BVZX_TOK
 %nonassoc '[' 
 %nonassoc '{' '.' '('
 %nonassoc BV_TOK
@@ -801,22 +802,29 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.Res
   delete $3;
   delete $5;
 }
-|      BVSX_TOK '(' Expr ',' NUMERAL_TOK ')' 
+|      BVSX_TOK '(' Expr ',' NUMERAL_TOK ')'
 {
   //width of the expr which is being sign
   //extended. $5 is the resulting length of the
-  //signextended expr
+  //sign-extended expr
   BVTypeCheck(*$3);
-  if($3->GetValueWidth() == $5) {
-    $$ = $3;
-  }
-  else {
-    ASTNode width = parserInterface->CreateBVConst(32,$5);
-    ASTNode *n =  
-      new ASTNode(parserInterface->nf->CreateTerm(BVSX, $5,*$3,width));
-    $$ = n;
-    delete $3;
-  }
+  ASTNode width = parserInterface->CreateBVConst(32,$5);
+  ASTNode *n =
+    new ASTNode(parserInterface->nf->CreateTerm(BVSX, $5,*$3,width));
+  $$ = n;
+  delete $3;
+}
+|      BVZX_TOK '(' Expr ',' NUMERAL_TOK ')'
+{
+  //width of the expr which is being zero
+  //extended. $5 is the resulting length of the
+  //zero-extended expr
+  BVTypeCheck(*$3);
+  ASTNode width = parserInterface->CreateBVConst(32,$5);
+  ASTNode *n =
+    new ASTNode(parserInterface->nf->CreateTerm(BVZX, $5,*$3,width));
+  $$ = n;
+  delete $3;
 }
 |      Expr BVCONCAT_TOK Expr 
 {
