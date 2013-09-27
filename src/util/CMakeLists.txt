@@ -1,4 +1,4 @@
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../AST/)
+include_directories(${CMAKE_SOURCE_DIR}/src/AST/)
 add_executable(measure
     measure.cpp
     Functions.cpp
