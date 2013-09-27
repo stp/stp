@@ -6,6 +6,7 @@ add_library(globalstp
     Globals.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
 )
+add_dependencies(globalstp ASTKind_header)
 
 # -----------------------------------------------------------------------------
 # Create binary
