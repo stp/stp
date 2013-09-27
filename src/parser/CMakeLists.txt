@@ -33,8 +33,9 @@ foreach(_file ${TOLEX})
         ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp
     )
 endforeach()
-
 include_directories(${CMAKE_SOURCE_DIR}/src/AST/)
+include_directories(${CMAKE_BINARY_DIR}/src/AST/)
+
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 

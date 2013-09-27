@@ -1,4 +1,5 @@
 include_directories(${CMAKE_SOURCE_DIR}/src/AST/)
+include_directories(${CMAKE_BINARY_DIR}/src/AST/)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp" @ONLY)
 
