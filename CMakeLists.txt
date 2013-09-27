@@ -162,12 +162,6 @@ find_package(FLEX REQUIRED)
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
-add_subdirectory(src)
-
-# -----------------------------------------------------------------------------
-# Create static libraries
-# -----------------------------------------------------------------------------
-
 set(stp_lib
     globalstp
     stpmgr
@@ -182,6 +176,12 @@ set(stp_lib
     printer
 )
 
+add_subdirectory(src)
+
+# -----------------------------------------------------------------------------
+# Create static libraries
+# -----------------------------------------------------------------------------
+
 set(stp_libs_paths "")
 foreach(lib ${stp_lib})
     get_property(path_to_lib TARGET ${lib} PROPERTY LOCATION)
@@ -192,16 +192,6 @@ endforeach()
 message(STATUS "Using ${stp_libs_paths}")
 MERGE_STATIC_LIBRARIES(libstp ALL "${stp_libs_paths}")
 add_dependencies(libstp ${stp_lib})
-
-# -----------------------------------------------------------------------------
-# Create binary
-# -----------------------------------------------------------------------------
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/AST/)
-add_executable(stp
-    src/main/main.cpp
-)
-set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-target_link_libraries(stp ${stp_lib})
 
 # -----------------------------------------------------------------------------
 # Testing
