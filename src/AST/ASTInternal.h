@@ -143,7 +143,7 @@ namespace BEEV
     // ASTNode, does NOT invoke this; This should only be used for
     // temporary hash keys before uniquefication.
     // FIXME:  I don't think children need to be copied.
-    ASTInternal(const ASTInternal &int_node, int nodenum = 0) :
+    ASTInternal(const ASTInternal &int_node) :
       iteration(0),
       _ref_count(0),
       _kind(int_node._kind),
