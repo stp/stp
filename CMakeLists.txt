@@ -8,14 +8,13 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 # Make RelWithDebInfo the default build type if otherwise not set
 # -----------------------------------------------------------------------------
 
-if(DEFINED CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}
-  CACHE STRING "Choose the type of build: Debug Release RelWithDebInfo MinSizeRel.")
+if(CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 else()
-  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
-  "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel.")
+  message(STATUS "You can choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel.")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
-
+message(STATUS "Doing a ${CMAKE_BUILD_TYPE} build")
 
 # -----------------------------------------------------------------------------
 # Enable LLVM sanitizations.
