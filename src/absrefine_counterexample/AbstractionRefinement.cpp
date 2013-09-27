@@ -58,7 +58,7 @@ namespace BEEV
     getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
             Polarity polary = BOTH)
     {
-        const int width = a.GetValueWidth();
+        const unsigned width = a.GetValueWidth();
         assert(width == b.GetValueWidth());
         assert(!a.isConstant() || !b.isConstant());
 
