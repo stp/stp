@@ -138,11 +138,7 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 # Uncomment these for static compilation under Linux (messes up Valgrind)
 # -----------------------------------------------------------------------------
 
-#set (STATICCOMPILE 1)
-if(STATICCOMPILE AND (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
-    set(CMAKE_EXE_LINKER_FLAGS "-static")
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-endif()
+include(MergeStaticLibraries)
 
 # -----------------------------------------------------------------------------
 # Add Git revision
@@ -167,6 +163,45 @@ find_package(FLEX REQUIRED)
 # -----------------------------------------------------------------------------
 
 add_subdirectory(src)
+
+# -----------------------------------------------------------------------------
+# Create static libraries
+# -----------------------------------------------------------------------------
+
+set(stp_lib
+    globalstp
+    stpmgr
+    abstractionrefinement
+    tosat
+    sat
+    simplifier
+    constantbv
+    abc
+    cinterface
+    parser
+    printer
+)
+
+set(stp_libs_paths "")
+foreach(lib ${stp_lib})
+    get_property(path_to_lib TARGET ${lib} PROPERTY LOCATION)
+    message(STATUS "Got ${path_to_lib} for lib \"${lib}\" ")
+    list(APPEND stp_libs_paths ${path_to_lib})
+endforeach()
+
+message(STATUS "Using ${stp_libs_paths}")
+MERGE_STATIC_LIBRARIES(libstp ALL "${stp_libs_paths}")
+add_dependencies(libstp ${stp_lib})
+
+# -----------------------------------------------------------------------------
+# Create binary
+# -----------------------------------------------------------------------------
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/AST/)
+add_executable(stp
+    src/main/main.cpp
+)
+set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+target_link_libraries(stp ${stp_lib})
 
 # -----------------------------------------------------------------------------
 # Testing
