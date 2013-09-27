@@ -206,6 +206,13 @@ message(STATUS "Using ${stp_libs_paths}")
 MERGE_STATIC_LIBRARIES(libstp ALL "${stp_libs_paths}")
 add_dependencies(libstp ${stp_lib})
 
+#Copy libstp.a where clients will expect it
+add_custom_command(TARGET libstp POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy 
+                       ${CMAKE_CURRENT_BINARY_DIR}/libstp.a
+                       ${CMAKE_CURRENT_BINARY_DIR}/lib/libstp.a
+                  )
+
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
