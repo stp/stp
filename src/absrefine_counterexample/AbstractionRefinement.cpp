@@ -563,13 +563,13 @@ namespace BEEV
 
       //loop over the list of indices for the array and create LA,
       //and add to inputAlreadyInSAT
-      for (int i = 0; i < listOfIndices.size(); i++)
+      for (size_t i = 0; i < listOfIndices.size(); i++)
         {
         const ASTNode& index_i = listOfIndices[i];
         const Kind iKind = index_i.GetKind();
 
         // Create all distinct pairs of indexes.
-        for (int j = i + 1; j < listOfIndices.size(); j++)
+        for (size_t j = i + 1; j < listOfIndices.size(); j++)
           {
           const ASTNode& index_j = listOfIndices[j];
 
