@@ -16,4 +16,4 @@ add_executable(stp
     main.cpp
 )
 set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-target_link_libraries(stp ${stp_lib})
+target_link_libraries(stp ${stp_lib} ${Boost_LIBRARIES})
