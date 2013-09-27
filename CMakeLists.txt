@@ -151,7 +151,12 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # Find the Boost package components
 # -----------------------------------------------------------------------------
 
-#SET(Boost_USE_STATIC_LIBS ON)
+# libstp.a should NOT link to a dynamic library
+option(USE_SHARED_BOOST_LIBS "Link to Boost are a shared library rather than static" OFF)
+if(NOT USE_SHARED_BOOST_LIBS)
+    SET(Boost_USE_STATIC_LIBS ON)
+endif()
+
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 include_directories(${Boost_INCLUDE_DIRS})
 
@@ -163,6 +168,7 @@ find_package(FLEX REQUIRED)
 # -----------------------------------------------------------------------------
 
 set(stp_lib
+    AST
     globalstp
     stpmgr
     abstractionrefinement
@@ -189,9 +195,23 @@ foreach(lib ${stp_lib})
     list(APPEND stp_libs_paths ${path_to_lib})
 endforeach()
 
+# Add the Boost Static libraries
+if(NOT USE_SHARED_BOOST_LIBS)
+    list(APPEND stp_libs_paths ${Boost_LIBRARIES})
+else()
+    message(WARNING "libstp.a will have undefined symbols to Boost library functions")
+endif()
+
 message(STATUS "Using ${stp_libs_paths}")
 MERGE_STATIC_LIBRARIES(libstp ALL "${stp_libs_paths}")
 add_dependencies(libstp ${stp_lib})
+
+#Copy libstp.a where clients will expect it
+add_custom_command(TARGET libstp POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy 
+                       ${CMAKE_CURRENT_BINARY_DIR}/libstp.a
+                       ${CMAKE_CURRENT_BINARY_DIR}/lib/libstp.a
+                  )
 
 # -----------------------------------------------------------------------------
 # Testing
