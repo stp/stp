@@ -59,7 +59,7 @@ public:
 	virtual std::string getName() {return "simplifying";}
 
 	SimplifyingNodeFactory(NodeFactory& raw_, BEEV::STPMgr& bm_)
-	:hashing(raw_), NodeFactory(bm_), ASTTrue(bm_.ASTTrue), ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined)
+	:NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue), ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined)
 	{
 	}
 	;

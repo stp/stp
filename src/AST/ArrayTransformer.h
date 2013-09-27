@@ -110,10 +110,10 @@ namespace BEEV
     
     // Constructor
     ArrayTransformer(STPMgr * bm, Simplifier* s) : 
-      bm(bm), 
-      simp(s), 
+      TransformMap(NULL),
       debug_transform(0),
-      TransformMap(NULL)
+      simp(s),
+      bm(bm)
     {
       nf = bm->defaultNodeFactory;
 

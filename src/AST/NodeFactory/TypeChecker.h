@@ -19,7 +19,9 @@ class TypeChecker : public NodeFactory
 NodeFactory& f;
 
 public:
-	TypeChecker(NodeFactory& f_, STPMgr& bm_) : f(f_), NodeFactory(bm)
+	TypeChecker(NodeFactory& f_, STPMgr& bm_) :
+	    NodeFactory(bm)
+	    , f(f_)
 	{}
 
 	BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children);

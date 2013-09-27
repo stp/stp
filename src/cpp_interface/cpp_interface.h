@@ -91,7 +91,9 @@ namespace BEEV
 
 
     Cpp_interface(STPMgr &bm_, NodeFactory* factory) :
-        bm(bm_), nf(factory), letMgr(bm.ASTUndefined)
+        bm(bm_)
+        , letMgr(bm.ASTUndefined)
+        , nf(factory)
     {
       init();
     }
