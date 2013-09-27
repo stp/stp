@@ -38,7 +38,7 @@ namespace BEEV
             {
                 assert(a.GetKind() == SYMBOL);
                 // It was ommitted from the initial problem, so assign it freshly.
-                for (int i = 0; i < a.GetValueWidth(); i++)
+                for (unsigned i = 0; i < a.GetValueWidth(); i++)
                     {
                         SATSolver::Var v = SatSolver.newVar();
                         // We probably don't want the variable eliminated.
@@ -75,7 +75,7 @@ namespace BEEV
                 SATSolver::vec_literals all;
                 const int result = SatSolver.newVar();
 
-                for (int i = 0; i < width; i++)
+                for (unsigned i = 0; i < width; i++)
                     {
                         SATSolver::vec_literals s;
 
@@ -131,7 +131,7 @@ namespace BEEV
                 all.push(SATSolver::mkLit(result, false));
 
                 CBV v = constant.GetBVConst();
-                for (int i = 0; i < width; i++)
+                for (unsigned i = 0; i < width; i++)
                     {
                         if (polary != RIGHT_ONLY)
                             {
@@ -321,13 +321,13 @@ namespace BEEV
 
                 //loop over the list of indices for the array and create LA,
                 //and add to inputAlreadyInSAT
-                for (int i = 0; i < listOfIndices.size(); i++)
+                for (size_t i = 0; i < listOfIndices.size(); i++)
                     {
                         const ASTNode& index_i = listOfIndices[i];
                         const Kind iKind = index_i.GetKind();
 
                         // Create all distinct pairs of indexes.
-                        for (int j = i + 1; j < listOfIndices.size(); j++)
+                        for (size_t j = i + 1; j < listOfIndices.size(); j++)
                             {
                                 const ASTNode& index_j = listOfIndices[j];
 
