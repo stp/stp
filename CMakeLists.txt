@@ -196,7 +196,7 @@ add_dependencies(libstp ${stp_lib})
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/AST/)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/AST/)
 add_executable(stp
     src/main/main.cpp
 )
