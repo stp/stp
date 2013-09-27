@@ -2,7 +2,11 @@ add_subdirectory(cryptominisat2)
 
 include_directories(cryptominisat2/mtl)
 
-add_library(minisat2
+# FIXME: This is a mess.
+#
+#
+
+add_library(minisat2 OBJECT
     simp/SimpSolver.cc
     core/Solver.cc
     core_prop/Solver_prop.cc
@@ -15,14 +19,6 @@ add_library(sat
     MinisatCore.cpp
     MinisatCore_prop.cpp
     SimplifyingMinisat.cpp
+    $<TARGET_OBJECTS:minisat2>
+    $<TARGET_OBJECTS:cryptominisat2>
 )
-
-target_link_libraries(sat
-#     core/lib_release.a
-#     core_prop/lib_release.a
-#     simp/lib_release.a
-#     utils/lib_release.a
-    cryptominisat2
-    minisat2
-)
-#add_dependencies(simplifier ASTKind_header)
