@@ -1,7 +1,7 @@
 include_directories(mtl)
 include_directories(MTRand)
 
-add_library(cryptominisat2 OBJECT
+add_library(cryptominisat2
 ClauseAllocator.cpp
 ClauseCleaner.cpp
 FailedVarSearcher.cpp
@@ -22,9 +22,3 @@ VarReplacer.cpp
 XorFinder.cpp
 XorSubsumer.cpp
 )
-
-# Gross: Don't link dynamic library with static
-# or link static with static
-#target_link_libraries(cryptominisat2
-#    ${Boost_LIBRARIES}
-#)
