@@ -20,7 +20,7 @@ NodeFactory& f;
 
 public:
 	TypeChecker(NodeFactory& f_, STPMgr& bm_) :
-	    NodeFactory(bm)
+	    NodeFactory(bm_)
 	    , f(f_)
 	{}
 
