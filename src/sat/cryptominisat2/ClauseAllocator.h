@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdint.h>
 #endif //_MSC_VER
 
-#include "Vec.h"
+#include "mtl/Vec.h"
 #include <boost/pool/pool.hpp>
 #include <map>
 #include <vector>

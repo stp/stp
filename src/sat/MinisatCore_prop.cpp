@@ -1,6 +1,6 @@
-#include "core_prop/Solver_prop.h"
+#include "minisat/core_prop/Solver_prop.h"
 #include "MinisatCore_prop.h"
-#include "utils/System.h"
+//#include "utils/System.h"
 
 namespace BEEV
 {

@@ -32,9 +32,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #endif //_MSC_VER
 
 #include "time_mem.h"
-#include "Vec.h"
-#include "Heap.h"
-#include "Alg.h"
+#include "mtl/Vec.h"
+#include "mtl/Heap.h"
+#include "mtl/Alg.h"
 #include "MersenneTwister.h"
 #include "SolverTypes.h"
 #include "Clause.h"

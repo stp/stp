@@ -24,9 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "../mtl/Vec.h"
 #include "../mtl/Heap.h"
 #include "../mtl/Alg.h"
-#include "../utils/Options.h"
+//#include "../utils/Options.h"
 #include "../core/SolverTypes.h"
-
+#include <stdio.h>
 
 namespace Minisat {
 

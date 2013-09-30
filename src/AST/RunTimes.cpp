@@ -13,7 +13,7 @@
 #include <iostream>
 #include <utility>
 #include "RunTimes.h"
-#include "../sat/utils/System.h"
+#include "../sat/cryptominisat2/time_mem.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
 std::string RunTimes::CategoryNames[] = { "Transforming", "Simplifying", "Parsing", "CNF Conversion", "Bit Blasting", "SAT Solving", "Bitvector Solving","Variable Elimination", "Sending to SAT Solver", "Counter Example Generation","SAT Simplification", "Constant Bit Propagation","Array Read Refinement", "Applying Substitutions", "Removing Unconstrained", "Pure Literals" , "ITE Contexts", "AIG core simplification", "Interval Propagation", "Always True"};
@@ -66,8 +66,8 @@ void RunTimes::print()
   std::cerr << std::fixed;
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms)/1000 << "s" << std::endl;
-  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << Minisat::memUsedPeak() << "MB" << std::endl;
+  std::cerr << "CPU Time Used   : " << cpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << memUsedPeak()/(1024.0*1024.0) << "MB" << std::endl;
 
   clear();
 

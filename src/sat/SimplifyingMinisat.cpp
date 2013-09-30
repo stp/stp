@@ -1,6 +1,6 @@
 #include "SimplifyingMinisat.h"
-#include "simp/SimpSolver.h"
-#include "utils/System.h"
+#include "minisat/simp/SimpSolver.h"
+//#include "utils/System.h"
 
 namespace BEEV
 {

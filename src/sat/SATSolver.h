@@ -1,8 +1,8 @@
 #ifndef SATSOLVER_H_
 #define SATSOLVER_H_
 
-#include "mtl/Vec.h"
-#include "core/SolverTypes.h"
+#include "minisat/mtl/Vec.h"
+#include "minisat/core/SolverTypes.h"
 #include <iostream>
 
 // Don't let the defines escape outside.

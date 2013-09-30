@@ -13,10 +13,12 @@
 #include "../simplifier/constantBitP/ConstantBitPropagation.h"
 #include "../simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "../sat/SimplifyingMinisat.h"
+
 #include "../sat/MinisatCore.h"
 #include "../sat/CryptoMinisat.h"
 #include "../sat/MinisatCore_prop.h"
-#include "../sat/core_prop/Solver_prop.h"
+#include "../sat/minisat/core_prop/Solver_prop.h"
+
 #include "../simplifier/RemoveUnconstrained.h"
 #include "../simplifier/FindPureLiterals.h"
 #include "../simplifier/EstablishIntervals.h"
@@ -56,17 +58,25 @@ namespace BEEV {
     else
       original_input = inputasserts;
 
-    SATSolver *newS;
-    if (bm->UserFlags.solver_to_use == UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER)
-		newS = new SimplifyingMinisat(bm->soft_timeout_expired);
-    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::CRYPTOMINISAT_SOLVER)
-                    newS = new CryptoMinisat();
-    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
-      newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
-    else if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS)
-      newS = new MinisatCore_prop<Minisat::Solver_prop>(bm->soft_timeout_expired);
-
-
+    SATSolver *newS = NULL;
+    switch(bm->UserFlags.solver_to_use) {
+        case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
+            newS = new SimplifyingMinisat(bm->soft_timeout_expired);
+            break;
+        case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
+            newS = new CryptoMinisat();
+            break;
+        case UserDefinedFlags::MINISAT_SOLVER:
+            newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
+            break;
+        case UserDefinedFlags::MINISAT_PROPAGATORS:
+            newS = new MinisatCore_prop<Minisat::Solver_prop>(bm->soft_timeout_expired);
+            break;
+        default:
+            std::cerr << "ERROR: Undefined solver to use." << endl;
+            exit(-1);
+            break;
+    };
 
     SATSolver& NewSolver = *newS;
 

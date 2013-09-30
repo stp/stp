@@ -13,9 +13,12 @@
 #include <stack>
 #include <map>
 #include <string>
-#include "../sat/utils/System.h"
+//#include "../sat/utils/System.h"
 #include <iomanip>
 #include <boost/utility.hpp>
+#include <iostream>
+#include <sstream>
+#include "../sat/cryptominisat2/time_mem.h"
 
 class RunTimes : boost::noncopyable
 {
@@ -75,7 +78,7 @@ public:
     long val = getCurrentTime();
     s << (val -  lastTime) << "ms" ;
     lastTime = val;
-    s << ":" << std::setiosflags(std::ios::fixed) << std::setprecision(0) << Minisat::memUsed() << "M";
+    s << ":" << std::fixed << std::setprecision(0) << memUsed()/(1024.0*1024.0) << "MB";
     return s.str();
   }
 

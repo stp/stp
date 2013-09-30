@@ -23,6 +23,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "../mtl/Sort.h"
 #include "../core/Solver.h"
 #include "../utils/System.h"
+#include "../utils/Options.h"
+#include <iostream>
 
 using namespace Minisat;
 using std::cout;

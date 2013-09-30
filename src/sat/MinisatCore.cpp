@@ -1,7 +1,7 @@
-#include "core/Solver.h"
+#include "minisat/core/Solver.h"
 #include "MinisatCore.h"
-#include "utils/System.h"
-#include "simp/SimpSolver.h"
+//#include "utils/System.h"
+//#include "simp/SimpSolver.h"
 
 namespace BEEV
 {

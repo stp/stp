@@ -31,10 +31,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
   #include <stdint.h>
 #endif
 
-namespace MINISAT
-{
-using namespace MINISAT;
-
 /*************************************************************************************/
 #ifdef _MSC_VER
 
@@ -64,6 +60,30 @@ static inline int memReadStat(int field)
 }
 static inline uint64_t memUsed() { return (uint64_t)memReadStat(0) * (uint64_t)getpagesize(); }
 
+static inline int memReadPeak(void)
+{
+    char  name[256];
+    pid_t pid = getpid();
+
+    sprintf(name, "/proc/%d/status", pid);
+    FILE* in = fopen(name, "rb");
+    if (in == NULL) return 0;
+
+    // Find the correct line, beginning with "VmPeak:":
+    int peak_kb = 0;
+    while (!feof(in) && fscanf(in, "VmPeak: %d kB", &peak_kb) != 1)
+        while (!feof(in) && fgetc(in) != '\n')
+            ;
+    fclose(in);
+
+    return peak_kb;
+}
+
+double memUsedPeak() {
+    double peak = memReadPeak() * 1024;
+    return peak == 0 ? memUsed() : peak;
+}
+
 
 #elif defined(__FreeBSD__)
 static inline uint64_t memUsed(void) {
@@ -79,7 +99,5 @@ static inline uint64_t memUsed() { return 0; }
 #if defined(__linux__)
 #include <fpu_control.h>
 #endif
-
-};
 
 #endif //TIME_MEM_H

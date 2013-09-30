@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif //_MSC_VER
 
 #include "SolverTypes.h"
-#include "Vec.h"
+#include "mtl/Vec.h"
 #include <string.h>
 #include <iostream>
 #include <algorithm>
