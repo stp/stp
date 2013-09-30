@@ -1,7 +1,7 @@
 include_directories(${CMAKE_SOURCE_DIR}/src/AST/)
 include_directories(${CMAKE_BINARY_DIR}/src/AST/)
 
-add_library(printer
+add_library(printer OBJECT
     AssortedPrinters.cpp
     BenchPrinter.cpp
     CPrinter.cpp

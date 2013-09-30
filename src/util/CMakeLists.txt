@@ -1,6 +1,10 @@
 include_directories(${CMAKE_SOURCE_DIR}/src/AST/)
 include_directories(${CMAKE_BINARY_DIR}/src/AST/)
 
+# FIXME: This isn't build currently.
+#
+#
+
 add_executable(measure
     measure.cpp
     Functions.cpp

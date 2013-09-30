@@ -7,7 +7,7 @@ add_custom_command(
 add_custom_target(ASTKind_header ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-add_library(AST
+add_library(AST OBJECT
     ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp
     ArrayTransformer.cpp
     ASTInterior.cpp
