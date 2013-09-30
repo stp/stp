@@ -44,3 +44,8 @@ else()
     include(MergeStaticLibraries)
     MERGE_STATIC_LIBRARIES(libstp ALL "${Boost_LIBRARIES}")
 endif()
+
+install(TARGETS libstp
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib
+       )

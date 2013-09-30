@@ -184,6 +184,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # -----------------------------------------------------------------------------
 # This macro creates a custom target that copies various header files into
 # in ${CMAKE_CURRENT_SOURCE_DIR} into ${CMAKE_BINARY_DIR}/include/stp
+# It also specifies that these header files should be installed.
+#
 # Usage: copy_public_headers(NAME HEADER_LIST)
 # NAME : The name for the set headers it should not contains spaces
 # HEADER_LIST : A list of header files. You should quote this 
@@ -199,6 +201,7 @@ add_custom_target(CopyPublic_${NAME}_Headers ALL)
                                copy ${CMAKE_CURRENT_SOURCE_DIR}/${public_header}
                                     ${CMAKE_BINARY_DIR}/include/stp/${public_header}
                           )
+        install(FILES ${public_header} DESTINATION include/)
     endforeach()
 endmacro()
 
