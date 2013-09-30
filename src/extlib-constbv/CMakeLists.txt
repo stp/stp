@@ -1,4 +1,4 @@
-add_library(constantbv
+add_library(constantbv OBJECT
     constantbv.cpp
 )
 

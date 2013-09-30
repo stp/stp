@@ -71,7 +71,7 @@ macro (MERGE_STATIC_LIBRARIES TARGET CONFIGURATION LIBRARIES)
 				${PROJECT_SOURCE_DIR}/cmake/modules/PosixMergeStaticLibraries.cmake.in 
 				${CMAKE_CURRENT_BINARY_DIR}/PosixMergeStaticLibraries-${TARGET}.cmake @ONLY
 			)
-			add_custom_target(${TARGET} ALL COMMENT "Copying binaries from subdirs to build directory")
+            # Use existing target
 			add_custom_command (TARGET ${TARGET} POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/PosixMergeStaticLibraries-${TARGET}.cmake
 			)

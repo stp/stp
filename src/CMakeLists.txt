@@ -1,5 +1,4 @@
 add_subdirectory(AST)
-add_subdirectory(main)
 add_subdirectory(absrefine_counterexample)
 add_subdirectory(simplifier)
 add_subdirectory(printer)
@@ -11,6 +10,8 @@ add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(to-sat)
 add_subdirectory(sat)
+add_subdirectory(libstp)
+add_subdirectory(main)
 
 
 #add_subdirectory(util)

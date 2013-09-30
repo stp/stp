@@ -1,7 +1,7 @@
 include_directories(mtl)
 include_directories(MTRand)
 
-add_library(cryptominisat2
+add_library(cryptominisat2 OBJECT
 ClauseAllocator.cpp
 ClauseCleaner.cpp
 FailedVarSearcher.cpp
