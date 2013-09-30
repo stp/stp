@@ -2,7 +2,7 @@
 # and then merges them back into a single TARGET using the proper ar tool
 
 # Setup
-set (TARGETLOC "libstp.a")
+set (TARGETLOC "@TARGETLOC@")
 set (LIBRARIES @LIBRARIES@) # Do NOT quote libraries since we need to loop over the list
 set (CMAKE_CURRENT_BINARY_DIR "@CMAKE_CURRENT_BINARY_DIR@")
 set (CMAKE_AR "@CMAKE_AR@")
@@ -35,9 +35,6 @@ execute_process (
 	COMMAND ${CMAKE_RANLIB} ${TARGETLOC} WORKING_DIRECTORY ${ARDIR}
 )
 message(STATUS "executed COMMAND ${CMAKE_RANLIB} ${TARGETLOC} WORKING_DIRECTORY ${ARDIR}")
-execute_process (
-    COMMAND ${CMAKE_COMMAND} -E copy ${ARDIR}/${TARGETLOC} .
-)
 
 # Delete all leftover object files
 file (REMOVE_RECURSE ${ARDIR})

@@ -1,5 +1,5 @@
 project(STP)
-cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
+cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
 
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
@@ -40,6 +40,12 @@ if (SANITIZE)
 endif()
 
 # -----------------------------------------------------------------------------
+# Let the user decide if they want to build shared or static client library.
+# STP will link against this client library
+# -----------------------------------------------------------------------------
+option(BUILD_SHARED_LIBS "Build client library as a shared library" OFF)
+
+# -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
 include(CheckCXXCompilerFlag)
@@ -51,6 +57,11 @@ macro(add_cxx_flag_if_supported flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
   endif()
 endmacro()
+
+if(BUILD_SHARED_LIBS)
+    message(STATUS "Building shared library currently broken due to mix of C++/C code")
+    add_cxx_flag_if_supported("-fPIC")
+endif()
 
 check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUPP11)
 check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
@@ -89,7 +100,8 @@ endif()
 
 if(WIN32)
   # build shared lib on windows is not prepared at source level
-  set(BUILD_SHARED_LIB OFF)
+  set(BUILD_SHARED_LIBS OFF)
+  message(WARNING "Disabling building of shared library on Windows")
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
   set(BISON_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
   set(PERL_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
@@ -138,8 +150,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 # Uncomment these for static compilation under Linux (messes up Valgrind)
 # -----------------------------------------------------------------------------
 
-include(MergeStaticLibraries)
-
 # -----------------------------------------------------------------------------
 # Add Git revision
 # -----------------------------------------------------------------------------
@@ -151,12 +161,14 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # Find the Boost package components
 # -----------------------------------------------------------------------------
 
-# libstp.a should NOT link to a dynamic library
-option(USE_SHARED_BOOST_LIBS "Link to Boost are a shared library rather than static" OFF)
-if(NOT USE_SHARED_BOOST_LIBS)
-    SET(Boost_USE_STATIC_LIBS ON)
+if(NOT BUILD_SHARED_LIBS)
+    # If we are building libstp as static we will want to 
+    # make sure there are no unresolved symbols to Boost
+    # library functions. Later we'll merge them into the
+    # archive so we'll need static boost libraries.
+    message("Trying to use static Boost libraries")
+    set(Boost_USE_STATIC_LIBS ON)
 endif()
-
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 include_directories(${Boost_INCLUDE_DIRS})
 
@@ -164,56 +176,37 @@ find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
 # -----------------------------------------------------------------------------
+# Setup library output path
+# -----------------------------------------------------------------------------
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# -----------------------------------------------------------------------------
+# This macro creates a custom target that copies various header files into
+# in ${CMAKE_CURRENT_SOURCE_DIR} into ${CMAKE_BINARY_DIR}/include/stp
+# Usage: copy_public_headers(NAME HEADER_LIST)
+# NAME : The name for the set headers it should not contains spaces
+# HEADER_LIST : A list of header files. You should quote this 
+#               e.g. "${my_headers}"
+# -----------------------------------------------------------------------------
+macro(copy_public_headers NAME HEADER_LIST)
+add_custom_target(CopyPublic_${NAME}_Headers ALL)
+    foreach(public_header ${HEADER_LIST})
+        add_custom_command(TARGET CopyPublic_${NAME}_Headers PRE_BUILD
+                           COMMAND ${CMAKE_COMMAND} -E
+                               echo Copying public ${NAME}header ${public_header}
+                           COMMAND ${CMAKE_COMMAND} -E
+                               copy ${CMAKE_CURRENT_SOURCE_DIR}/${public_header}
+                                    ${CMAKE_BINARY_DIR}/include/stp/${public_header}
+                          )
+    endforeach()
+endmacro()
+
+# -----------------------------------------------------------------------------
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
-set(stp_lib
-    AST
-    globalstp
-    stpmgr
-    abstractionrefinement
-    tosat
-    sat
-    minisat2
-    cryptominisat2
-    simplifier
-    constantbv
-    abc
-    cinterface
-    parser
-    printer
-)
-
 add_subdirectory(src)
-
-# -----------------------------------------------------------------------------
-# Create static libraries
-# -----------------------------------------------------------------------------
-
-set(stp_libs_paths "")
-foreach(lib ${stp_lib})
-    get_property(path_to_lib TARGET ${lib} PROPERTY LOCATION)
-    message(STATUS "Got ${path_to_lib} for lib \"${lib}\" ")
-    list(APPEND stp_libs_paths ${path_to_lib})
-endforeach()
-
-# Add the Boost Static libraries
-if(NOT USE_SHARED_BOOST_LIBS)
-    list(APPEND stp_libs_paths ${Boost_LIBRARIES})
-else()
-    message(WARNING "libstp.a will have undefined symbols to Boost library functions")
-endif()
-
-message(STATUS "Using ${stp_libs_paths}")
-MERGE_STATIC_LIBRARIES(libstp ALL "${stp_libs_paths}")
-add_dependencies(libstp ${stp_lib})
-
-#Copy libstp.a where clients will expect it
-add_custom_command(TARGET libstp POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy 
-                       ${CMAKE_CURRENT_BINARY_DIR}/libstp.a
-                       ${CMAKE_CURRENT_BINARY_DIR}/lib/libstp.a
-                  )
 
 # -----------------------------------------------------------------------------
 # Testing

@@ -2,7 +2,7 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 #http://www.eecs.berkeley.edu/~alanmi/abc/
 
-add_library(abc
+add_library(abc OBJECT
     aig/aig/aigCheck.c
     aig/aig/aigDfs.c
     aig/aig/aigFanout.c
