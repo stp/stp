@@ -79,7 +79,7 @@ static inline int memReadPeak(void)
     return peak_kb;
 }
 
-double memUsedPeak() {
+static inline double memUsedPeak() {
     double peak = memReadPeak() * 1024;
     return peak == 0 ? memUsed() : peak;
 }
