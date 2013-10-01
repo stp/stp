@@ -19,4 +19,5 @@ add_library(cryptominisat2 OBJECT
     VarReplacer.cpp
     XorFinder.cpp
     XorSubsumer.cpp
+    time_mem.cpp
 )
