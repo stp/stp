@@ -89,11 +89,25 @@ static inline double memUsedPeak() {
 static inline uint64_t memUsed(void) {
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
-    return ru.ru_maxrss*1024; }
+    return ru.ru_maxrss*1024;
+}
+static inline double memUsedPeak(void) {
+    return memUsed();
+}
+
+
+#elif defined(__APPLE__)
+double memUsed(void);
+static inline double memUsedPeak(void) {
+    return memUsed();
+}
 
 
 #else
 static inline uint64_t memUsed() { return 0; }
+static inline double memUsedPeak(void) { return 0; }
+
+
 #endif
 
 #if defined(__linux__)
