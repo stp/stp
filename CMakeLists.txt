@@ -8,11 +8,17 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 # Make RelWithDebInfo the default build type if otherwise not set
 # -----------------------------------------------------------------------------
 
-if(CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE})
-else()
-  message(STATUS "You can choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel.")
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+if(NOT CMAKE_BUILD_TYPE)
+      set(build_types Debug Release RelWithDebInfo MinSizeRel)
+
+      message(STATUS "You can choose the type of build, options are:${build_types}")
+      set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE String
+          "Options are ${build_types}"
+          FORCE
+         )
+
+      # Provide drop down menu options in cmake-gui
+      set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${build_types})
 endif()
 message(STATUS "Doing a ${CMAKE_BUILD_TYPE} build")
 
