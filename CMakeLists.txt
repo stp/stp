@@ -30,9 +30,11 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
-#set(SANITIZE 1)
+option(SANITIZE "Use Clang sanitizers. This will force using clang++ as the compiler" OFF)
 if (SANITIZE)
-    SET (CMAKE_CXX_COMPILER "clang++")
+    # Set in Cache so user can tweak it later
+    SET(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
+    message("Forcing compiler:${CMAKE_CXX_COMPILER}")
     add_cxx_flag("-fsanitize=return")
     add_cxx_flag("-fsanitize=bounds")
     add_cxx_flag("-fsanitize=integer")
