@@ -218,6 +218,11 @@ endmacro()
 
 
 # -----------------------------------------------------------------------------
+# Provide an export name to be used by targets that wish to export themselves.
+# -----------------------------------------------------------------------------
+set(STP_EXPORT_NAME "STPTargets")
+
+# -----------------------------------------------------------------------------
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
@@ -246,3 +251,55 @@ add_test(NAME regresscvc
 )
 #regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
 #regresscvc: baseTest
+
+# -----------------------------------------------------------------------------
+# Export our targets so that other CMake based projects can interface with
+# the build of STP in the build-tree
+# -----------------------------------------------------------------------------
+set(STP_TARGETS_FILENAME "STPTargets.cmake")
+set(STP_CONFIG_FILENAME "STPConfig.cmake")
+
+# Export targets
+export(TARGETS libstp stp FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+
+# Create STPConfig file
+set(EXPORT_TYPE "Build-tree")
+set(CONF_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/include")
+configure_file(STPConfig.cmake.in
+               "${CMAKE_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
+              )
+
+# Export this package to the CMake user package registry
+# Now the user can just use find_package(STP) on their system
+export(PACKAGE STP)
+
+
+# -----------------------------------------------------------------------------
+# Export our targets so that other CMake based projects can interface with
+# the build of STP that is installed.
+# -----------------------------------------------------------------------------
+if(WIN32 AND NOT CYGWIN)
+  set(DEF_INSTALL_CMAKE_DIR CMake)
+else()
+  set(DEF_INSTALL_CMAKE_DIR lib/cmake/STP)
+endif()
+set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+    "Installation directory for STP CMake files")
+
+# Create STPConfig file
+set(EXPORT_TYPE "installed")
+set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include")
+configure_file(STPConfig.cmake.in
+               "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
+              )
+
+install(FILES
+        "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
+        DESTINATION "${STP_INSTALL_CMAKE_DIR}"
+       )
+
+# Install the export set for use with the install-tree
+install(EXPORT ${STP_EXPORT_NAME} DESTINATION
+        "${STP_INSTALL_CMAKE_DIR}"
+       )
+

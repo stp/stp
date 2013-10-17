@@ -78,6 +78,7 @@ foreach(public_header ${stp_public_headers})
 endforeach()
 
 install(TARGETS libstp
+            EXPORT ${STP_EXPORT_NAME}
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib
             PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include/stp"
