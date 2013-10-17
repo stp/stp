@@ -7,9 +7,4 @@ add_library(cinterface OBJECT
 
 add_dependencies(cinterface ASTKind_header)
 
-# -----------------------------------------------------------------------------
-# Copy over public headers
-# -----------------------------------------------------------------------------
-
-set(public_headers c_interface.h)
-copy_public_headers(cinterface "${public_headers}")
+stp_add_public_header(cinterface c_interface.h)

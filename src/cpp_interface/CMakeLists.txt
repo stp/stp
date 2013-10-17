@@ -7,9 +7,4 @@ add_library(cppinterface OBJECT
 
 add_dependencies(cppinterface ASTKind_header)
 
-# -----------------------------------------------------------------------------
-# Copy over public headers
-# -----------------------------------------------------------------------------
-
-set(public_headers cpp_interface.h)
-copy_public_headers(cppinterface "${public_headers}")
+stp_add_public_header(cppinterface cpp_interface.h)
