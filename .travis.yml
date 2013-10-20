@@ -8,6 +8,13 @@ before_install:
   - sudo apt-get update
   - sudo apt-get install cmake
   - mkdir build && cd build
-  - cmake -G "Unix Makefiles" ..
+  - mkdir simple_example
+  - mkdir stp && cd stp
+  - cmake -G "Unix Makefiles" ../..
 script:
+# Build STP
+  - make
+# Build example project. We assume that the build installed itself to the CMake user package registry (~/.cmake/packages/)
+  - cd ../simple_example
+  - cmake -G "Unix Makefiles" ../../examples/simple
   - make
