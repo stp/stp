@@ -19,5 +19,6 @@ set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_D
 target_link_libraries(stp libstp)
 
 install(TARGETS stp
+        EXPORT ${STP_EXPORT_NAME}
         RUNTIME DESTINATION bin
        )

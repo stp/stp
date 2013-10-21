@@ -190,28 +190,37 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -----------------------------------------------------------------------------
-# This macro creates a custom target that copies various header files into
-# in ${CMAKE_CURRENT_SOURCE_DIR} into ${CMAKE_BINARY_DIR}/include/stp
-# It also specifies that these header files should be installed.
+# This macro is used by library targets to add a public header to themselves.
+# If this library is a component of libstp then libstp will also have the
+# public header added too (handled else where see libstp/CMakeLists.txt)
 #
-# Usage: copy_public_headers(NAME HEADER_LIST)
-# NAME : The name for the set headers it should not contains spaces
-# HEADER_LIST : A list of header files. You should quote this 
-#               e.g. "${my_headers}"
+# Usage : stp_add_public_header(<library_target> <header file>)
 # -----------------------------------------------------------------------------
-macro(copy_public_headers NAME HEADER_LIST)
-add_custom_target(CopyPublic_${NAME}_Headers ALL)
-    foreach(public_header ${HEADER_LIST})
-        add_custom_command(TARGET CopyPublic_${NAME}_Headers PRE_BUILD
-                           COMMAND ${CMAKE_COMMAND} -E
-                               echo Copying public ${NAME}header ${public_header}
-                           COMMAND ${CMAKE_COMMAND} -E
-                               copy ${CMAKE_CURRENT_SOURCE_DIR}/${public_header}
-                                    ${CMAKE_BINARY_DIR}/include/stp/${public_header}
-                          )
-        install(FILES ${public_header} DESTINATION include/)
-    endforeach()
+macro(stp_add_public_header LIBTARGET HEADER)
+    set(HEADER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${HEADER}")
+    if(EXISTS "${HEADER_PATH}")
+        # Get existing PUBLIC_HEADER
+        get_target_property(EXISTING_PUBLIC_HEADERS ${LIBTARGET} PUBLIC_HEADER)
+        if(EXISTING_PUBLIC_HEADERS)
+            list(APPEND EXISTING_PUBLIC_HEADERS "${HEADER_PATH}")
+        else()
+            # Do not append to empty list
+            set(EXISTING_PUBLIC_HEADERS "${HEADER_PATH}")
+        endif()
+        set_target_properties(${LIBTARGET}
+                              PROPERTIES
+                              PUBLIC_HEADER "${EXISTING_PUBLIC_HEADERS}"
+                             )
+    else()
+        message(FATAL_ERROR "Cannot add public header, file ${HEADER_PATH} does not exist.")
+    endif()
 endmacro()
+
+
+# -----------------------------------------------------------------------------
+# Provide an export name to be used by targets that wish to export themselves.
+# -----------------------------------------------------------------------------
+set(STP_EXPORT_NAME "STPTargets")
 
 # -----------------------------------------------------------------------------
 # Compile all subdirs
@@ -242,3 +251,55 @@ add_test(NAME regresscvc
 )
 #regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
 #regresscvc: baseTest
+
+# -----------------------------------------------------------------------------
+# Export our targets so that other CMake based projects can interface with
+# the build of STP in the build-tree
+# -----------------------------------------------------------------------------
+set(STP_TARGETS_FILENAME "STPTargets.cmake")
+set(STP_CONFIG_FILENAME "STPConfig.cmake")
+
+# Export targets
+export(TARGETS libstp stp FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+
+# Create STPConfig file
+set(EXPORT_TYPE "Build-tree")
+set(CONF_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/include")
+configure_file(STPConfig.cmake.in
+               "${CMAKE_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
+              )
+
+# Export this package to the CMake user package registry
+# Now the user can just use find_package(STP) on their system
+export(PACKAGE STP)
+
+
+# -----------------------------------------------------------------------------
+# Export our targets so that other CMake based projects can interface with
+# the build of STP that is installed.
+# -----------------------------------------------------------------------------
+if(WIN32 AND NOT CYGWIN)
+  set(DEF_INSTALL_CMAKE_DIR CMake)
+else()
+  set(DEF_INSTALL_CMAKE_DIR lib/cmake/STP)
+endif()
+set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+    "Installation directory for STP CMake files")
+
+# Create STPConfig file
+set(EXPORT_TYPE "installed")
+set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include")
+configure_file(STPConfig.cmake.in
+               "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
+              )
+
+install(FILES
+        "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
+        DESTINATION "${STP_INSTALL_CMAKE_DIR}"
+       )
+
+# Install the export set for use with the install-tree
+install(EXPORT ${STP_EXPORT_NAME} DESTINATION
+        "${STP_INSTALL_CMAKE_DIR}"
+       )
+
