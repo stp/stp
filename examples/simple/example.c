@@ -29,11 +29,15 @@ int main(int argc, char** argv)
 
     vc_assertFormula(handle, vc_trueExpr(handle) );
 
+    // We are asking STP: ∀ x. true → ( x + x = 2*x )
+    // This should be VALID.
     printf("######First Query\n");
     handleQuery(handle, equality);
 
-    // Create bool expression x + x = 2
+    // We are asking STP: ∀ x. true → ( x + x = 2 )
+    // This should be INVALID.
     printf("######Second Query\n");
+    // Create bool expression x + x = 2
     Expr badEquality = vc_eqExpr(handle, xPlusx , two);
     handleQuery(handle, badEquality);
 
