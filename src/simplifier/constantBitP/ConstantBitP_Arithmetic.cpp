@@ -327,13 +327,13 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 		assert(children[i]->getWidth() == bitWidth );
 	}
 
-	int columnL[bitWidth]; // minimum  ""            ""
-	int columnH[bitWidth]; // maximum number of true partial products.
+	int *columnL = (int*) alloca(sizeof(int) * bitWidth); // minimum  ""            ""
+	int *columnH = (int*) alloca(sizeof(int) * bitWidth); // maximum number of true partial products.
 
 	initialiseColumnCounts(columnL, columnH, bitWidth, numberOfChildren, children);
 
-	int sumH[bitWidth];
-	int sumL[bitWidth];
+	int *sumH = (int*) alloca(sizeof(int) * bitWidth);
+	int *sumL = (int*) alloca(sizeof(int) * bitWidth);
 	sumL[0] = columnL[0];
 	sumH[0] = columnH[0];
 
