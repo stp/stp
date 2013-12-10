@@ -177,6 +177,7 @@ if(NOT BUILD_SHARED_LIBS)
     message("Trying to use static Boost libraries")
     set(Boost_USE_STATIC_LIBS ON)
 endif()
+add_definitions(-DBOOST_ALL_NO_LIB)
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 include_directories(${Boost_INCLUDE_DIRS})
 
