@@ -326,7 +326,7 @@ Cnf_Dat_t * Cnf_DeriveSimple_Additional( Aig_Man_t * p, Cnf_Dat_t * old )
     Aig_Obj_t * pObj;
     Cnf_Dat_t * pCnf;
     int OutVar, pVars[32], * pLits, ** pClas;
-    int i, nLiterals, nClauses;
+    int i, nLiterals, nClauses, Number, newPI;
 
     // calculate the worst case number of literals and clauses
     nLiterals = 1 + 7 * Aig_ManNodeNum(p) + Aig_ManPoNum( p );
@@ -349,10 +349,10 @@ Cnf_Dat_t * Cnf_DeriveSimple_Additional( Aig_Man_t * p, Cnf_Dat_t * old )
     memcpy(pCnf->pVarNums, old->pVarNums, sizeof(int) * old->nVars);
 
     assert (pCnf->pVarNums[Aig_ManConst1(p)->Id] !=-1);
-    int Number = old->nVars+1;
+    Number = old->nVars+1;
 
     // assign variables to the PIs
-    int newPI = 0;
+    newPI = 0;
     Aig_ManForEachPi( p, pObj, i )
     	if (pCnf->pVarNums[pObj->Id] == -1) // new!
     		pCnf->pVarNums[pObj->Id] = Number++;
