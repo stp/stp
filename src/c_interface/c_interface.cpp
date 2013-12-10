@@ -460,6 +460,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   bmstar b = (bmstar)(stp->bm);
 
   assert(!BEEV::ParserBM->soft_timeout_expired);
+#ifndef _MSC_VER
   if (timeout_ms != -1)
     {
       itimerval timeout;
@@ -470,7 +471,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       timeout.it_value.tv_sec     = timeout_ms / 1000;
       setitimer(ITIMER_VIRTUAL, &timeout, NULL);
     }
-
+#endif
   if(!BEEV::is_Form_kind(a->GetKind())) 
     {     
       BEEV::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
@@ -499,12 +500,14 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
     }
 
+#ifndef _MSC_VER
   if (timeout_ms !=-1)
     {
       // Reset the timer.
       setitimer(ITIMER_VIRTUAL, NULL, NULL);
       BEEV::ParserBM->soft_timeout_expired = false;
     }
+#endif _MSC_VER
 
   return output;
 } //end of vc_query
