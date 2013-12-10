@@ -183,6 +183,8 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
+find_package(ZLIB REQUIRED)
+include_directories(${ZLIB_INCLUDE_DIRS})
 
 # -----------------------------------------------------------------------------
 # Setup library output path

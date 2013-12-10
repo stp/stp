@@ -48,7 +48,7 @@ set_target_properties(libstp PROPERTIES
 # Sort out Boost dependency
 if(BUILD_SHARED_LIBS)
     message(STATUS "Boost dynamic libraries will be linked to client library") 
-    target_link_libraries(libstp ${Boost_LIBRARIES}) 
+    target_link_libraries(libstp ${Boost_LIBRARIES} ${ZLIB_LIBRARY}) 
 else()
     message(STATUS "Boost static libraries will be embedded in client library")
     include(MergeStaticLibraries)
