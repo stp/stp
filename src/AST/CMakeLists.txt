@@ -1,6 +1,8 @@
+find_package(Perl)
+
 add_custom_command(
     OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp  ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.h
-    COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.pl --file ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.kinds
+    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.pl --file ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.kinds
     DEPENDS ASTKind.kinds
 )
 
