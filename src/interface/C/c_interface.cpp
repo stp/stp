@@ -15,6 +15,10 @@
 #include "../CPP/cpp_interface.h"
 #include "../extlib-abc/cnf_short.h"
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 using std::cout;
 using std::ostream;
 using std::stringstream;
