@@ -12,6 +12,10 @@
 #include "simplifier.h"
 #include "AIGSimplifyPropositionalCore.h"
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 namespace BEEV
 {
 
