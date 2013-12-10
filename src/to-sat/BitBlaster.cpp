@@ -17,6 +17,10 @@
 #include "../simplifier/simplifier.h"
 #include "../AST/ArrayTransformer.h"
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 namespace BEEV
 {
 
