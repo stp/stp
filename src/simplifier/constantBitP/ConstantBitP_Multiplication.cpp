@@ -115,9 +115,8 @@ namespace simplifier
     {
       const unsigned bitWidth = x.getWidth();
 
-      bool yFixedFalse[bitWidth];
-      bool xFixedFalse[bitWidth];
-
+      bool *yFixedFalse = (bool*) alloca(sizeof(bool) * bitWidth);
+      bool *xFixedFalse = (bool*) alloca(sizeof(bool) * bitWidth);
       for (unsigned i = 0; i < bitWidth; i++)
         {
         yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
@@ -571,11 +570,10 @@ namespace simplifier
       while (changed)
         {
         changed = false;
-        signed columnH[bitWidth]; // maximum number of true partial products.
-        signed columnL[bitWidth]; // minimum  ""            ""
-        signed sumH[bitWidth];
-        signed sumL[bitWidth];
-
+        signed *columnH = (signed*) alloca(sizeof(signed) * bitWidth); // maximum number of true partial products.
+        signed *columnL = (signed*) alloca(sizeof(signed) * bitWidth); // minimum  ""            ""
+        signed *sumH = (signed*) alloca(sizeof(signed) * bitWidth);
+        signed *sumL = (signed*) alloca(sizeof(signed) * bitWidth);
         ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output);
 
         // Use the number of zeroes and ones in a column to update the possible counts.
