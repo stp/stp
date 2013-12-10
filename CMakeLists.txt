@@ -186,8 +186,8 @@ find_package(FLEX REQUIRED)
 # -----------------------------------------------------------------------------
 # Setup library output path
 # -----------------------------------------------------------------------------
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_INSTALL_PREFIX}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_INSTALL_PREFIX}/lib)
 
 # -----------------------------------------------------------------------------
 # This macro is used by library targets to add a public header to themselves.
