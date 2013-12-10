@@ -52,7 +52,16 @@ if(BUILD_SHARED_LIBS)
 else()
     message(STATUS "Boost static libraries will be embedded in client library")
     include(MergeStaticLibraries)
-    MERGE_STATIC_LIBRARIES(libstp ALL "${Boost_LIBRARIES}")
+    # We actually want to pass Boost_LIBRARIES to MERGE_STATIC_LIBRARIES, but
+    # for MSVC FindBoost.cmake adds the keywords 'optimized' and 'debug' to the
+    # list. These are intented to be used by target_link_libraries() and be
+    # passed to the MSVC linker so that one knows which libraries to use.
+    # In our case we use merge_static_libraries instead of target_link_libraries,
+    # which doesn't support these keywords and causes a linker error.
+    # for this reason we name the RELEASE or DEBUG libraries by hand.
+    # You need to change these variable names manually if you want a debug build.
+    # The issues is non-trivial to fix, if cleanly possible at all.
+    MERGE_STATIC_LIBRARIES(libstp ALL "${Boost_SYSTEM_LIBRARY_RELEASE};${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
 endif()
 
 
