@@ -16,7 +16,7 @@
 #include "ASTInterior.h"
 #include "ASTSymbol.h"
 #include "ASTBVConst.h"
-
+#define __attribute__()
 namespace BEEV
 {
   //TODO remove -- only used in c_interface.cpp NOT from main.cpp
