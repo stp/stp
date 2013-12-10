@@ -634,6 +634,7 @@ namespace BEEV
   }
 
 
+#ifndef _MSC_VER
   itimerval timeout;
   void setHardTimeout(int sec)
   {
@@ -644,6 +645,9 @@ namespace BEEV
   timeout.it_value.tv_sec     = sec;
   setitimer(ITIMER_VIRTUAL, &timeout, NULL);
   }
+#else
+  void setHardTimeout(int) {}
+#endif
 
   long getCurrentTime()
   {
