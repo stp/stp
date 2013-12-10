@@ -1572,7 +1572,7 @@ namespace BEEV
         notY.push_back(nf->CreateNode(NOT, y[i]));
         }
 
-      mult_type xt[x.size()];
+      mult_type *xt = (mult_type*) alloca(sizeof(mult_type) * x.size());
       convert(x, nf, xt);
 
       if (debug_multiply)
@@ -1583,7 +1583,7 @@ namespace BEEV
         cerr << xN << endl;
         }
 
-      mult_type yt[x.size()];
+      mult_type *yt = (mult_type*) alloca(sizeof(mult_type) * x.size());
       convert(y, nf, yt);
 
       if (debug_multiply)

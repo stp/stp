@@ -250,7 +250,8 @@ private:
             continue; // the regular case. Don't consider here.
 
           ASTNode& node = all[i]->n;
-          bool found[node.GetValueWidth()];
+          //TODO remove alloca
+          bool *found = (bool*) alloca(sizeof(bool) * node.GetValueWidth());
           for (size_t j=0; j <node.GetValueWidth();j++)
             found[j] = false;
 
