@@ -473,7 +473,7 @@ extern "C" {
   int getExprID (Expr ex);
 
   // parse the expr from memory string!
-  int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts );
+//  int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts );
 #ifdef __cplusplus
 }
 #endif
