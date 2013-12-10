@@ -69,7 +69,7 @@ struct Cnf_Cut_t_
     char            Cost;            // the cost of this cut
     short           nWords;          // the number of words in truth table
     Vec_Int_t *     vIsop[2];        // neg/pos ISOPs
-    int             pFanins[0];      // the fanins (followed by the truth table)
+    int             pFanins[1];      // the fanins (followed by the truth table)
 };
 
 // the CNF computation manager
