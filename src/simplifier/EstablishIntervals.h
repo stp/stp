@@ -10,6 +10,10 @@
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include <boost/utility.hpp>
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 namespace BEEV
 {
   using std::make_pair;
