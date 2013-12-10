@@ -127,7 +127,7 @@ class Clause {
         unsigned has_extra : 1;
         unsigned reloced   : 1;
         unsigned size      : 27; }                            header;
-    union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
+    union { Lit lit; float act; uint32_t abs; CRef rel; } data[1];
 
     friend class ClauseAllocator;
 
