@@ -184,7 +184,7 @@ find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
 # -----------------------------------------------------------------------------
-# Setup library output path
+# Setup library build path (this is **not** the library install path)
 # -----------------------------------------------------------------------------
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
