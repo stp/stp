@@ -23,7 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #ifdef _MSC_VER
   #include <ctime>
-  #include <msvc/stdint.h>
+  #include "msvc/stdint.h"
 #else
   #include <sys/time.h>
   #include <sys/resource.h>

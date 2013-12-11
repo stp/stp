@@ -15,6 +15,10 @@
 #include "../cpp_interface/cpp_interface.h"
 #include "../extlib-abc/cnf_short.h"
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 using std::cout;
 using std::ostream;
 using std::stringstream;
@@ -460,6 +464,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   bmstar b = (bmstar)(stp->bm);
 
   assert(!BEEV::ParserBM->soft_timeout_expired);
+#ifndef _MSC_VER
   if (timeout_ms != -1)
     {
       itimerval timeout;
@@ -470,7 +475,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       timeout.it_value.tv_sec     = timeout_ms / 1000;
       setitimer(ITIMER_VIRTUAL, &timeout, NULL);
     }
-
+#endif
   if(!BEEV::is_Form_kind(a->GetKind())) 
     {     
       BEEV::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
@@ -499,12 +504,14 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
     }
 
+#ifndef _MSC_VER
   if (timeout_ms !=-1)
     {
       // Reset the timer.
       setitimer(ITIMER_VIRTUAL, NULL, NULL);
       BEEV::ParserBM->soft_timeout_expired = false;
     }
+#endif _MSC_VER
 
   return output;
 } //end of vc_query
@@ -1829,7 +1836,7 @@ int getExprID (Expr ex) {
 
 //////////////////////////////////////////////////////////////////////////
 // extended version
-
+/*
 
 #if 0
 /#ifndef YY_TYPEDEF_YY_BUFFER_STATE
@@ -1890,4 +1897,5 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts ) {
   }
   return 1;
 } //end of vc_parseMemExpr()
+*/
 

@@ -119,11 +119,25 @@ if(WIN32)
   if(MSVC)
       set(OPTIMIZITION_FLAGS  "/GL /Ox /Oi /Ot /Oy")
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-      set(STP_INCL_COMM ../winports ../winports/msc99hdr ${STP_INCL_COMM})
+      include_directories(STP_INCL_COMM ${CMAKE_SOURCE_DIR}/windows/winports ${CMAKE_SOURCE_DIR}/windows/winports/msc99hdr)
 
       # stack size of MSVC must be specified
       string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
       set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:256000000")
+
+      # disable warnings
+      #add_definitions(-wd4002 -wd4003 -wd4005 -wd4018 -wd4061 -wd4013 -wd4018 -wd4047 -wd4065 -wd4099)
+      #add_definitions(-wd4100 -wd4101 -wd4127 -wd4146 -wd4189 -wd4191)
+      #add_definitions(-wd4200 -wd4242 -wd4244 -wd4245 -wd4263 -wd4264 -wd4265 -wd4296)
+      #add_definitions(-wd4305 -wd4334 -wd4345 -wd4350 -wd4355 -wd4365 -wd4389 -wd4373 -wd4390)
+      #add_definitions(-wd4505 -wd4512 -wd4514 -wd4515 -wd4554 -wd4571)
+      #add_definitions(-wd4625 -wd4626 -wd4640 -wd4668)
+      #add_definitions(-wd4701 -wd4702 -wd4703 -wd4706 -wd4709 -wd4710 -wd4711 -wd4715)
+      #add_definitions(-wd4800 -wd4820)
+      #add_definitions(-wd4996)
+
+      # inline is not a keyword in visual studios old C version, allow its redefinition
+      add_definitions("-D_ALLOW_KEYWORD_MACROS")
   else()
       # mingw
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -DEXT_HASH_MAP)
@@ -177,11 +191,14 @@ if(NOT BUILD_SHARED_LIBS)
     message("Trying to use static Boost libraries")
     set(Boost_USE_STATIC_LIBS ON)
 endif()
+add_definitions(-DBOOST_ALL_NO_LIB)
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
+find_package(ZLIB REQUIRED)
+include_directories(${ZLIB_INCLUDE_DIRS})
 
 # -----------------------------------------------------------------------------
 # Setup library build path (this is **not** the library install path)
