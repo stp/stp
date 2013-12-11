@@ -16,7 +16,7 @@
 #include "ASTInterior.h"
 #include "ASTSymbol.h"
 #include "ASTBVConst.h"
-#if _MSC_VER
+#ifdef _MSC_VER
 #define __attribute__()
 #endif
 namespace BEEV
