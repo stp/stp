@@ -61,7 +61,7 @@ namespace printer
     const ASTVec &c = n.GetChildren();
     switch (kind)
       {
-      case BVGETBIT:
+      case BOOLEXTRACT:
         FatalError("C_Print1: printing not implemented for this kind: ", n);
         C_Print1(os, c[0], indentation, letize);
         os << "{";

@@ -188,7 +188,7 @@ namespace BEEV
     void convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFPosFALSE(const ASTNode& varphi, ClauseList* defs);  
     void convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs);   
-    void convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, 
+    void convertFormulaToCNFPosBOOLEXTRACT(const ASTNode& varphi,
                                         ClauseList* defs);    
     void convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs);    
@@ -205,7 +205,7 @@ namespace BEEV
     void convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegFALSE(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs);   
-    void convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi,
+    void convertFormulaToCNFNegBOOLEXTRACT(const ASTNode& varphi,
                                         ClauseList* defs);    
     void convertFormulaToCNFNegSYMBOL(const ASTNode& varphi, ClauseList* defs);
     void convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs);    

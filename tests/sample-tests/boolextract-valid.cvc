@@ -1,0 +1,10 @@
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+X : BITVECTOR(2);
+
+ASSERT X = 0bin10;
+ASSERT BOOLEXTRACT(X, 0);
+
+QUERY FALSE;

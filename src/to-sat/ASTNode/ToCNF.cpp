@@ -750,9 +750,9 @@ namespace BEEV
           convertFormulaToCNFPosTRUE(varphi, defs);
           break;
         }
-      case BVGETBIT:
+      case BOOLEXTRACT:
         {
-          convertFormulaToCNFPosBVGETBIT(varphi, defs);
+          convertFormulaToCNFPosBOOLEXTRACT(varphi, defs);
           break;
         }
       case SYMBOL:
@@ -832,9 +832,9 @@ namespace BEEV
           convertFormulaToCNFNegTRUE(varphi, defs);
           break;
         }
-      case BVGETBIT:
+      case BOOLEXTRACT:
         {
-          convertFormulaToCNFNegBVGETBIT(varphi, defs);
+          convertFormulaToCNFNegBOOLEXTRACT(varphi, defs);
           break;
         }
       case SYMBOL:
@@ -925,11 +925,11 @@ namespace BEEV
     info[varphi]->clausespos = SINGLETON(dummy_true_var);
   } //End of convertFormulaToCNFPosTRUE
 
-  void CNFMgr::convertFormulaToCNFPosBVGETBIT(const ASTNode& varphi, 
+  void CNFMgr::convertFormulaToCNFPosBOOLEXTRACT(const ASTNode& varphi,
                                               ClauseList* defs)
   {
     info[varphi]->clausespos = SINGLETON(varphi);
-  }//End of convertFormulaToCNFPosBVGETBIT()
+  }//End of convertFormulaToCNFPosBOOLEXTRACT()
 
   void CNFMgr::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi, 
                                             ClauseList* defs)
@@ -1299,12 +1299,12 @@ namespace BEEV
     info[varphi]->clausesneg = SINGLETON(dummy_false_var);
   } //End of convertFormulaToCNFNegTRUE()
 
-  void CNFMgr::convertFormulaToCNFNegBVGETBIT(const ASTNode& varphi, 
+  void CNFMgr::convertFormulaToCNFNegBOOLEXTRACT(const ASTNode& varphi,
                                               ClauseList* defs)
   {
     ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
     info[varphi]->clausesneg = psi;
-  } //End of convertFormulaToCNFNegBVGETBIT()
+  } //End of convertFormulaToCNFNegBOOLEXTRACT()
 
   void CNFMgr::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi,
                                             ClauseList* defs)

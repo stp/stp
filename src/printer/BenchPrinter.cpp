@@ -80,7 +80,7 @@ string Bench_Print1(ostream &os, const ASTNode& n,
 		return "gnd";
 		}
 
-	if (n.GetKind() == BVGETBIT)
+	if (n.GetKind() == BOOLEXTRACT)
 	{
 		assert(n[1].GetKind() == BVCONST);
 		std::stringstream nn;
@@ -177,7 +177,7 @@ void OutputInputs(ostream &os, const ASTNode& n, hash_set<int> *alreadyOutput)
 
 	alreadyOutput->insert(n.GetNodeNum());
 
-	if (n.GetKind() == BVGETBIT)
+	if (n.GetKind() == BOOLEXTRACT)
 	{
 		assert(n[1].GetKind() == BVCONST);
 		std::stringstream nn;

@@ -1054,6 +1054,15 @@ namespace BEEV
         result = nf->CreateSymbol(form, 0); // 1 bit symbol.
         break;
 
+      case BOOLEXTRACT:
+        {
+        // exactly two children
+        const BBNodeVec bbchild = BBTerm(form[0], support);
+        unsigned int index = form[1].GetUnsignedConst();
+        result = bbchild[index];
+        break;
+        }
+
       case NOT:
         result = nf->CreateNode(NOT, BBForm(form[0], support));
         break;

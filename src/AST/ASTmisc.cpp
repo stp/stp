@@ -258,7 +258,7 @@ namespace BEEV
         BVGT == kind  || BVGE == kind  ||
         BVSLT == kind || BVSLE == kind ||
         BVSGT == kind || BVSGE == kind ||
-        SYMBOL == kind || BVGETBIT == kind)
+        SYMBOL == kind || BOOLEXTRACT == kind)
       return true;
     return false;
   }
@@ -535,6 +535,15 @@ namespace BEEV
           case FALSE:
           case SYMBOL:
             return true;
+          case BOOLEXTRACT:
+            checkChildrenAreBV(v, n);
+            if (n.Degree() != 2)
+              FatalError("BVTypeCheck: should have exactly 2 args\n", n);
+            if (!(BVCONST == n[1].GetKind()))
+              FatalError("BVTypeCheck: index should be BVCONST\n", n);
+            if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
+              FatalError("BVTypeCheck: index is greater or equal to the bitwidth.\n", n);
+            break;
           case PARAMBOOL:
             if(2 != n.Degree())
               FatalError("BVTypeCheck: PARAMBOOL formula can have exactly two childNodes", n);

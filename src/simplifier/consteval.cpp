@@ -78,6 +78,16 @@ namespace BEEV
       //case BVCONST:
 //        OutputNode = t;
   //      break;
+      case BOOLEXTRACT:
+        {
+          unsigned int bit = children[1].GetUnsignedConst();
+          if (CONSTANTBV::BitVector_bit_test(tmp0, bit)) {
+            OutputNode = ASTTrue;
+          } else {
+            OutputNode = ASTFalse;
+          }
+          break;
+        }
       case BVNEG:
         {
           output = CONSTANTBV::BitVector_Create(inputwidth, true);

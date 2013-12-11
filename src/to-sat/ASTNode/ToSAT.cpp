@@ -53,11 +53,11 @@ namespace BEEV
 
         // Copies the symbol into the map that is used to build the counter example.
         // For boolean we create a vector of size 1.
-        if (n.GetKind() == BVGETBIT && n[0].GetKind() == SYMBOL || (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
+        if (n.GetKind() == BOOLEXTRACT && n[0].GetKind() == SYMBOL || (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
           {
-            const ASTNode& symbol = n.GetKind() == BVGETBIT ? n[0] : n;
-            const unsigned index = n.GetKind() == BVGETBIT ? n[1].GetUnsignedConst() : 0;
-            const unsigned width = n.GetKind() == BVGETBIT ? symbol.GetValueWidth(): 1;
+            const ASTNode& symbol = n.GetKind() == BOOLEXTRACT ? n[0] : n;
+            const unsigned index = n.GetKind() == BOOLEXTRACT ? n[1].GetUnsignedConst() : 0;
+            const unsigned width = n.GetKind() == BOOLEXTRACT ? symbol.GetValueWidth(): 1;
 
             if (SATVar_to_SymbolIndex.find(symbol) == SATVar_to_SymbolIndex.end())
               {
@@ -475,7 +475,7 @@ namespace BEEV
           break;
         }
       case SYMBOL:
-      case BVGETBIT:
+      case BOOLEXTRACT:
         {
           result = SymbolTruthValue(newSolver, form);
 

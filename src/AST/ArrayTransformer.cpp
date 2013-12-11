@@ -325,6 +325,14 @@ namespace BEEV
           result = nf->CreateNode(NOT, c);
           break;
         }
+      case BOOLEXTRACT:
+        {
+          ASTVec c;
+          c.push_back(TransformTerm(simpleForm[0]));
+          c.push_back(simpleForm[1]);
+          result = nf->CreateNode(BOOLEXTRACT, c);
+          break;
+        }
       case BVLT:
       case BVLE:
       case BVGT:

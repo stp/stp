@@ -44,7 +44,7 @@ public:
 			assert(i == 0);
 			return n;
 		} else
-			return stp->CreateNode(BVGETBIT, n, stp->CreateBVConst(32, i));
+			return stp->CreateNode(BOOLEXTRACT, n, stp->CreateBVConst(32, i));
 	}
 
 	// CreateSimpForm removes IFF which aren't handled by the cnf converter.

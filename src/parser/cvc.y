@@ -470,11 +470,8 @@ Formula         :     '(' Formula ')'
   if(width <= (unsigned)$5)
     yyerror("Fatal Error: BOOLEXTRACT: trying to boolextract a bit which beyond range");
                          
-  ASTNode hi  =  parserInterface->CreateBVConst(32, $5);
-  ASTNode low =  parserInterface->CreateBVConst(32, $5);
-  ASTNode n = parserInterface->nf->CreateTerm(BVEXTRACT,1,*$3,hi,low);
-  ASTNode one = parserInterface->CreateBVConst(1,1);                   
-  ASTNode * out = new ASTNode(parserInterface->nf->CreateNode(EQ,n,one));
+  ASTNode bit = parserInterface->CreateBVConst(32, $5);
+  ASTNode * out = new ASTNode(parserInterface->nf->CreateNode(BOOLEXTRACT,*$3,bit));
 
   $$ = out;
   delete $3;

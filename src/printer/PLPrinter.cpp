@@ -109,7 +109,7 @@ string functionToCVCName(const Kind k) {
     const ASTVec &c = n.GetChildren();
     switch (kind)
       {
-      case BVGETBIT:
+      case BOOLEXTRACT:
         PL_Print1(os, c[0], indentation, letize);
         os << "{";
         PL_Print1(os, c[1],indentation, letize);

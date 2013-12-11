@@ -36,7 +36,7 @@ namespace printer
     //      children[0].LispPrint1(os, indentation);
     //  os << "[" << children[1] << "]";
     //    } else
-    if (kind == BVGETBIT)
+    if (kind == BOOLEXTRACT)
       {
         const ASTVec &children = n.GetChildren();
         // child 0 is a symbol.  Print without the NodeNum.
