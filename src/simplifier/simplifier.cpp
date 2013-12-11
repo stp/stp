@@ -2523,6 +2523,17 @@ namespace BEEV
           }
         break;
       }
+    case BVZX:
+      {
+        //a0 is the expr which is being zero-extended
+        ASTNode a0 = inputterm[0];
+
+        if (a0.GetValueWidth() == inputValueWidth)
+            output = a0; //nothing to zero-extend
+        else
+            output = inputterm;
+        break;
+      }
     case BVAND:
     case BVOR:
       {

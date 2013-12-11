@@ -1,0 +1,7 @@
+%% Regression level = 3
+%% Result = Valid
+%% Language = presentation
+
+X : BITVECTOR(2);
+
+QUERY BVLT(BVZX(X, 3), 0b010) <=> BVLT(X, 0b10);

@@ -105,11 +105,13 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 "BVSLE"          { return BVSLE_TOK;}
 "BVSGE"          { return BVSGE_TOK;}
 "BVSX"           { return BVSX_TOK;} 
+"BVZX"           { return BVZX_TOK;}
 "SBVLT"          { return BVSLT_TOK;}
 "SBVGT"          { return BVSGT_TOK;}
 "SBVLE"          { return BVSLE_TOK;}
 "SBVGE"          { return BVSGE_TOK;}
 "SX"             { return BVSX_TOK;} 
+"ZX"             { return BVZX_TOK;}
 "BOOLEXTRACT"    { return BOOLEXTRACT_TOK;}
 "BOOLBV"         { return BOOL_TO_BV_TOK;}
 "ASSERT"	 { return ASSERT_TOK; }

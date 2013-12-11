@@ -1030,19 +1030,13 @@ BITCONST_TOK { $$ = $1; }
   $$ = n;
   delete $5;
 }
-| BVZX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term 
+|  BVZX_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK an_term
 {
-  if (0 != $3)
-    {
-      unsigned w = $5->GetValueWidth() + $3;
-      ASTNode leading_zeroes = parserInterface->CreateZeroConst($3);
-      ASTNode *n =  new ASTNode(parserInterface->nf->CreateTerm(BVCONCAT,w,leading_zeroes,*$5));
-      $$ = n;
-      delete $5;
-    }
-  else
-    $$ = $5;
-
+  unsigned w = $5->GetValueWidth() + $3;
+  ASTNode width = parserInterface->CreateBVConst(32,w);
+  ASTNode *n =  new ASTNode(parserInterface->nf->CreateTerm(BVZX,w,*$5,width));
+  $$ = n;
+  delete $5;
 }
 ;
   
