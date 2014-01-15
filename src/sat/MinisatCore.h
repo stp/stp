@@ -2,7 +2,7 @@
  * Wraps around CORE minisat.
  */
 #ifndef MINISATCORE_H_
-#define MINIASTCORE_H_
+#define MINISATCORE_H_
 
 #include "SATSolver.h"
 
