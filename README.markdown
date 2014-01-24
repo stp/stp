@@ -18,8 +18,8 @@ Documentation: https://github.com/stp/stp/wiki
 
 Paper on STP Internals:
 
-A Decision Procedure for Bit-Vectors and Arrays by Vijay Ganesh and David L. Dill. In Proceedings of Computer Aided Verification 2007 (CAV 2007), Berlin, Germany, July 2007 ([pdf](http://people.csail.mit.edu/vganesh/Publications_files/vg2007-STP-CAV.pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/STP-ganesh-07.bib))
+A Decision Procedure for Bit-Vectors and Arrays by Vijay Ganesh and David L. Dill. In Proceedings of Computer Aided Verification 2007 (CAV 2007), Berlin, Germany, July 2007 ([pdf](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.144.5247&rep=rep1&type=pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/STP-ganesh-07.bib))
 
 Paper on EXE Concolic Tester:
 
-EXE: Automatically Generating Inputs of Death by Cristian Cadar, Vijay Ganesh, Peter Pawlowski, Dawson Engler, David Dill. In Proceedings of ACM Conference on Computer and Communications Security 2006 (CCS 2006), Alexandria, Virginia, October, 2006 ([pdf](http://people.csail.mit.edu/vganesh/Publications_files/vg2006-EXE-CCS.pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/EXE-cadarganesh-06.bib))
+EXE: Automatically Generating Inputs of Death by Cristian Cadar, Vijay Ganesh, Peter Pawlowski, Dawson Engler, David Dill. In Proceedings of ACM Conference on Computer and Communications Security 2006 (CCS 2006), Alexandria, Virginia, October, 2006 ([pdf](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.143.474&rep=rep1&type=pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/EXE-cadarganesh-06.bib))
