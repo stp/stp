@@ -171,10 +171,6 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # -----------------------------------------------------------------------------
 
 if(NOT BUILD_SHARED_LIBS)
-    # If we are building libstp as static we will want to 
-    # make sure there are no unresolved symbols to Boost
-    # library functions. Later we'll merge them into the
-    # archive so we'll need static boost libraries.
     message("Trying to use static Boost libraries")
     set(Boost_USE_STATIC_LIBS ON)
 endif()

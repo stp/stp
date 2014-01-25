@@ -45,15 +45,20 @@ set_target_properties(libstp PROPERTIES
                      )
 
 
-# Sort out Boost dependency
-if(BUILD_SHARED_LIBS)
-    message(STATUS "Boost dynamic libraries will be linked to client library") 
-    target_link_libraries(libstp ${Boost_LIBRARIES}) 
-else()
-    message(STATUS "Boost static libraries will be embedded in client library")
-    include(MergeStaticLibraries)
-    MERGE_STATIC_LIBRARIES(libstp ALL "${Boost_LIBRARIES}")
-endif()
+# -----------------------------------------------------------------------------
+# On non-windows systems a built static library cannot have another static
+# library linked to it. So this does not cause the Boost libraries to be
+# added to ``libstp.a``. Instead what this does is tell CMake that anything
+# that we built that uses the ``libstp`` target should also link in these
+# Boost libraries.
+#
+# So the stp executable and any clients of libstp that use the exported CMake
+# targets (e.g. examples/simple) will know what to link in.
+#
+# Clients of libstp that don't use CMake will have to link the Boost libraries
+# in manually.
+# -----------------------------------------------------------------------------
+target_link_libraries(libstp ${Boost_LIBRARIES})
 
 
 # -----------------------------------------------------------------------------
