@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # File: my-indent Opens a set of files in emacs and executes the
 # emacs-format-function.  Assumes the function named
 # emacs-format-function is defined in the file named
 # emacs-format-file.
 
-loadpath=`pwd`
+loadpath=$(cd "${BASH_SOURCE[0]%/*}"; pwd)
 if [ $# = 0 ]
 then
    echo "my-indent requires at least one argument." 1>&2
@@ -29,7 +29,7 @@ do
    exit 1
  fi
  echo "Indenting $1 with emacs in batch mode"
- emacs -batch $1 -l $loadpath/scripts/emacs-format-file -f emacs-format-function
+ emacs -batch $1 -l $loadpath/emacs-format-file -f emacs-format-function
  echo
  shift 1
 done
