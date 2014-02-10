@@ -58,7 +58,7 @@ extern "C" {
   //! Interface-only flags.
   enum ifaceflag_t {
   /*! EXPRDELETE: boolean, default true. For objects created by
-    vc_arrayType, vc_bvType, vc_bv32Type, vc_bvConstExprFromInt, if
+    vc_arrayType, vc_boolType, vc_bvType, vc_bv32Type, vc_bvConstExprFromInt, if
     this flag is set both at the time the objects are created and at
     the time that vc_Destroy is called, vc_Destroy will automatically
     delete them. */
