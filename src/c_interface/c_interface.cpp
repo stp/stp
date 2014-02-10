@@ -716,10 +716,8 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1) {
 Expr vc_boolType(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
-  node o = b->CreateNode(BEEV::BOOLEAN);
-  nodestar output = new node(o);
-  //if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  node output = b->CreateNode(BEEV::BOOLEAN);
+  return persistNode(output);
 }
 
 /////////////////////////////////////////////////////////////////////////////
