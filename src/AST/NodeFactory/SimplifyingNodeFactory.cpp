@@ -895,12 +895,24 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         result = children[2];
       else if (children[1] == children[2])
         result = children[1];
-      else if (children[2].GetKind() == ITE && (children[2][0] == children[0]))
-        result = NodeFactory::CreateTerm(ITE, width, children[0], children[1], children[2][2]);
-      else if (children[1].GetKind() == ITE && (children[1][0] == children[0]))
-        result = NodeFactory::CreateTerm(ITE, width, children[0], children[1][1], children[2]);
-      else if (children[0].GetKind() == BEEV::NOT)
-        result = NodeFactory::CreateTerm(ITE, width, children[0][0], children[2], children[1]);
+      else if (children[2].GetKind() == ITE && (children[2][0] == children[0])) {
+        if (BEEV::ARRAY_TYPE == children[2].GetType())
+          result = NodeFactory::CreateArrayTerm(ITE, children[2].GetIndexWidth(), children[2].GetValueWidth(), children[0], children[1], children[2][2]);
+        else
+          result = NodeFactory::CreateTerm(ITE, width, children[0], children[1], children[2][2]);
+      }
+      else if (children[1].GetKind() == ITE && (children[1][0] == children[0])) {
+        if (BEEV::ARRAY_TYPE == children[1].GetType())
+          result = NodeFactory::CreateArrayTerm(ITE, children[1].GetIndexWidth(), children[1].GetValueWidth(), children[0], children[1][1], children[2]);
+        else
+          result = NodeFactory::CreateTerm(ITE, width, children[0], children[1][1], children[2]);
+      }
+      else if (children[0].GetKind() == BEEV::NOT) {
+        if (BEEV::ARRAY_TYPE == children[1].GetType())
+          result = NodeFactory::CreateArrayTerm(ITE, children[1].GetIndexWidth(), children[1].GetValueWidth(), children[0][0], children[2], children[1]);
+        else
+          result = NodeFactory::CreateTerm(ITE, width, children[0][0], children[2], children[1]);
+      }
       else if (children[0].GetKind() == EQ && children[0][1] == children[1] && children[0][0].GetKind() == BEEV::BVCONST
           && children[0][1].GetKind() != BEEV::BVCONST)
         result = NodeFactory::CreateTerm(ITE, width, children[0], children[0][0], children[2]);
