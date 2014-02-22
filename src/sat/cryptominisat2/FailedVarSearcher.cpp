@@ -261,7 +261,6 @@ bool FailedVarSearcher::search(uint64_t numProps)
     }*/
 
 end:
-    bool removedOldLearnts = false;
     binClauseAdded = solver.binaryClauses.size() - origBinClauses;
     //Print results
     if (solver.verbosity >= 1) printResults(myTime);
@@ -272,7 +271,6 @@ end:
         double time = cpuTime();
         if ((int)origHeapSize - (int)solver.order_heap.size() >  (int)origHeapSize/15 && solver.nClauses() + solver.learnts.size() > 500000) {
             completelyDetachAndReattach();
-            removedOldLearnts = true;
         } else {
             solver.clauseCleaner->removeAndCleanAll();
         }

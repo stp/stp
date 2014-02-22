@@ -259,7 +259,7 @@ public:
     {
         return 0;
     }
-    void setGroup(const uint32_t _group)
+    void setGroup(const uint32_t)
     {
         return;
     }
