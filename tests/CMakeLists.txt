@@ -2,6 +2,7 @@
 # Check we can find Python and the lit tool
 # -----------------------------------------------------------------------------
 find_package(PythonInterp REQUIRED)
+mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
 
 if(NOT PYTHONINTERP_FOUND)
     message(FATAL_ERROR "Python cannot be found. Please install it or disable testing.")
@@ -16,11 +17,14 @@ if(NOT LIT_TOOL)
     message(FATAL_ERROR "Could not find lit tool. Try setting LIT_TOOL to the full path for lit")
 endif()
 
+# Checking absolute path because if(EXISTS ...) behaviour only well
+# defined if path is absolute
 IF(NOT IS_ABSOLUTE "${LIT_TOOL}")
     message(FATAL_ERROR "LIT_TOOL must be set to an absolute PATH")
 endif()
 
 if(NOT EXISTS "${LIT_TOOL}")
+    # Can happen if users environment changes after initial configure
     message(FATAL_ERROR "LIT_TOOL is set but the path does not seem to exist. Try deleting the LIT_TOOL cache variable and reconfiguring")
 endif()
 
@@ -36,7 +40,6 @@ option(TEST_QUERY_FILES
 if(TEST_QUERY_FILES)
     add_subdirectory(query-files)
 endif()
-
 
 # -----------------------------------------------------------------------------
 # Tests that test STP's various different public APIs
