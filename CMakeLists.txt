@@ -240,14 +240,12 @@ add_custom_target(uninstall
 # Testing
 # -----------------------------------------------------------------------------
 
-enable_testing()
+option(ENABLE_TESTING "Enable testing" ON)
 
-add_test(NAME regresscvc
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/
-  COMMAND run_tests.pl --td=${CMAKE_CURRENT_SOURCE_DIR}/big-test/
-)
-#regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
-#regresscvc: baseTest
+if(ENABLE_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with
