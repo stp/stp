@@ -1,4 +1,30 @@
 # -----------------------------------------------------------------------------
+# Check we can find Python and the lit tool
+# -----------------------------------------------------------------------------
+find_package(PythonInterp REQUIRED)
+
+if(NOT PYTHONINTERP_FOUND)
+    message(FATAL_ERROR "Python cannot be found. Please install it or disable testing.")
+endif()
+
+find_program(LIT_TOOL
+             lit
+             DOC "Path to lit tool"
+            )
+
+if(NOT LIT_TOOL)
+    message(FATAL_ERROR "Could not find lit tool. Try setting LIT_TOOL to the full path for lit")
+endif()
+
+IF(NOT IS_ABSOLUTE "${LIT_TOOL}")
+    message(FATAL_ERROR "LIT_TOOL must be set to an absolute PATH")
+endif()
+
+if(NOT EXISTS "${LIT_TOOL}")
+    message(FATAL_ERROR "LIT_TOOL is set but the path does not seem to exist. Try deleting the LIT_TOOL cache variable and reconfiguring")
+endif()
+
+# -----------------------------------------------------------------------------
 # Tests that drive STP by using query files (e.g. smt2, smt and cvc files)
 # -----------------------------------------------------------------------------
 
