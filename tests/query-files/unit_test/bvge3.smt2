@@ -1,7 +1,7 @@
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
-(set-info :status unsat)
+(set-info :status sat)
 (declare-fun x () (_ BitVec 10))
 (declare-fun y () (_ BitVec 10))
 
