@@ -1,1 +1,4 @@
+% RUN: not %solver %s | %OutputCheck %s
+% FIXME: STP should not throw an assertion
+% CHECK: expecting QUERY or STRING_TOK
 ASSERT FALSE;
