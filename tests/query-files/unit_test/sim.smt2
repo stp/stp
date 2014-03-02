@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
@@ -14,6 +15,7 @@
 (assert (not (xor v1 v2)))
 (assert (not (xor v2 v3)))
 
+; CHECK-NEXT: sat
 (check-sat)
 (exit)
 

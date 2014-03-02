@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -16,6 +17,7 @@
 (assert  (= (_ bv44444444444444444 65) (bvadd ((_ sign_extend 50 ) a ) ((_ sign_extend 10 ) b  ))))
 
 
+; CHECK-NEXT: unsat
 (check-sat)
 (exit)
 

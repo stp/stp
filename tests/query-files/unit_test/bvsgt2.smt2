@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -8,5 +9,6 @@
 ; Check that unconstrained elimination through >'s works.
 
 (assert (bvsgt x (concat (_ bv0 10) y)) )
+; CHECK-NEXT: sat
 (check-sat)
 (exit)

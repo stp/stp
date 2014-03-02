@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -45,6 +46,7 @@
 
 
 
+; CHECK-NEXT: sat
 (check-sat)
 (exit)
 

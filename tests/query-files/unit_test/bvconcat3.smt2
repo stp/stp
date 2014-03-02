@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -12,5 +13,6 @@
 (declare-fun v7 () (_ BitVec 2))
 
 (assert (= (concat v1 (concat v2 v3)) (concat (concat v1 v2) v3 ) ))
+; CHECK-NEXT: sat
 (check-sat)
 (exit)

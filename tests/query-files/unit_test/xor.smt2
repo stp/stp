@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
@@ -10,6 +11,7 @@
 ; This should be simplifed to v_0 <=> -v_1 before bitblasing.
 (assert (xor v0 v1))
 
+; CHECK-NEXT: sat
 (check-sat)
 (exit)
 

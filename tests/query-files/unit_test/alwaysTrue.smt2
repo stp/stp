@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -8,5 +9,6 @@
 (declare-fun c () Bool)
 (assert (= (or c b) b) )
 (assert (ite (= (or c b) b) c b ))
+; CHECK-NEXT: sat
 (check-sat)
 (exit)

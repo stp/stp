@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-info :source | fuzzsmt 0.3 |)
 (set-logic  QF_ABV)
 (set-info :status sat)
@@ -10,4 +11,5 @@
 
 (assert(= v5572 (select (store a5575 v5572 (select a5575 v5572)) v5573)))
 
+; CHECK-NEXT: sat
 (check-sat)
