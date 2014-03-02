@@ -1,3 +1,5 @@
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: unsat
 (benchmark B_
   :source {
 Catchconv benchmarks provided by David Molnar (dmolnar@eecs.berkeley.edu).  Converted to SMT-LIB format by Rhishikesh Limaye (rhishi@eecs.berkeley.edu).  Catchconv is a tool for symbolic execution and run-time type inference for catching integer conversion errors.

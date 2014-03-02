@@ -1,3 +1,5 @@
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: sat
 (
 benchmark smt
 :logic QF_BV
