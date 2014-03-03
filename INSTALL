@@ -9,14 +9,16 @@ Useful configuration variables
 Here are a few interesting configuration variables. These apply to all
 generators.
 
+    BUILD_SHARED_LIBS : Build shared libraries rather than static
     CMAKE_BUILD_TYPE : The build type (e.g. Release)
     CMAKE_INSTALL_PREFIX : The prefix for install (e.g. /usr/local )
-    BUILD_SHARED_LIBS : Build shared libraries rather than static
+    ENABLE_TESTING : Enable running tests
     SANITIZE : Use Clang's sanitization checks
+    TEST_QUERY_FILES: Test STP externally by passing it query files in tests/query-files
     TUNE_NATIVE : Tune compilation to native architecture
 
 Makefile
-=========
+========
 
 Quick start
 -----------
@@ -64,14 +66,25 @@ You can also tweak configuration later by running
 Then edit any configuration variables, reconfigure and then regenerate the
 build system.
 
-Build and install
------------------
+Build, test and install
+-----------------------
 After configuration you can build by running
 
     make
 
 Remember you can use the `-j<n>` flag to significantly to decrease build
 time by running `<n>` jobs in parallel (e.g. `make -j4`).
+
+To run tests (optinal) you will need to setup the OutputCheck submodule if you
+have not done so.
+
+    cd /path/to/stp/source/root
+    git submodule init -- scripts/OutputCheck
+    git submodule update
+
+You can then run the tests by running
+
+    make check
 
 Installation (optional) can be done by running
 
@@ -89,6 +102,6 @@ at configure time. Remember you can easily change this at anytime by running
 and editing the value of CMAKE_INSTALL_PREFIX.
 
 Visual Studio
-============
+=============
 
 TODO
