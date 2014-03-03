@@ -48,7 +48,7 @@ endif()
 # FIXME: Enable by default
 option(TEST_APIS
        "Enable tests that test STP's public APIs" 
-       OFF
+       ON
       )
 
 if(TEST_APIS)
@@ -66,6 +66,6 @@ option(TEST_GENERATED_QUERIES
       )
 
 if(TEST_GENERATED_QUERIES)
-    message(FATAL_ERROR "TODD")
+    message(FATAL_ERROR "TODO")
     add_subdirectory(generated-tests)
 endif()
