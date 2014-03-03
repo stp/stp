@@ -1,7 +1,9 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int main(int argc, char *argv[]) {
+// FIXME: This test name sucks!
+TEST(y,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -27,5 +29,5 @@ int main(int argc, char *argv[]) {
   //vc_printExpr(vc, cex);
   //
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }

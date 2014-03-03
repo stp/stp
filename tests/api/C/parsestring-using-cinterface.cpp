@@ -1,7 +1,8 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int CVC_PARSE() {
+TEST(parse_string,CVC) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -22,15 +23,13 @@ int CVC_PARSE() {
   vc_DeleteExpr(q);
   vc_DeleteExpr(asserts);
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 
 
 
-int main() {
-  CVC_PARSE();
-
+TEST(parse_string,SMT) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -56,6 +55,6 @@ int main() {
   vc_DeleteExpr(q);
   vc_DeleteExpr(asserts);
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 

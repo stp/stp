@@ -1,9 +1,9 @@
 /* g++ -I$(HOME)/stp/c_interface push-no-pop.c -L$(HOME)/lib -lstp -o cc*/
-
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int main() {
+TEST(push_no_pop,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc,'n');
   vc_setFlag(vc,'d');
@@ -36,6 +36,6 @@ int main() {
 
   vc_Destroy(vc);
 
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 

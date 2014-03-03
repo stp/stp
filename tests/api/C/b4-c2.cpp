@@ -1,6 +1,9 @@
+#include <gtest/gtest.h>
 #include "c_interface.h"
 #include <iostream>
-int main() {
+
+// FIXME: Find better test name
+TEST(b4_c2,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'w');
   //vc_setFlags(vc,'v');
@@ -2097,5 +2100,5 @@ int main() {
   vc_pop(vc);
 
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }

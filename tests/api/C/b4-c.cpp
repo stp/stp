@@ -1,6 +1,7 @@
+#include <gtest/gtest.h>
 #include "c_interface.h"
 
-int main()
+TEST(b4_c,one)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc,'v');
@@ -281,5 +282,5 @@ int main()
   //vc_pop(vc);
   //vc_pop(vc);
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }

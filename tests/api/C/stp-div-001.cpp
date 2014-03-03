@@ -1,11 +1,11 @@
 /* g++ -I $HOME/stp/c_interface stp-div-001.c -L $HOME/lib -lstp -o cc */
 
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include "c_interface.h"
 
-int main() {  
+TEST(stp_div, one) {  
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -46,9 +46,9 @@ int main() {
   query = vc_query(vc, vc_falseExpr(vc));
   vc_pop(vc);
   printf("query = %d\n", query);
-  assert(!query);
+  ASSERT_TRUE(!query);
   
-  assert(vc_counterexample_size(vc));
+  ASSERT_TRUE(vc_counterexample_size(vc));
   
   int* a_val = (int*) malloc(sizeof *a_val);
   char *p = (char*) a_val;
@@ -61,8 +61,7 @@ int main() {
     *p = v; p++;
   }
   printf("a = %d\n", *a_val);
-  assert((*a_val)/5  == 5);
+  ASSERT_TRUE((*a_val)/5  == 5);
 
   vc_Destroy(vc);
-  return 0;
 }

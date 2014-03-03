@@ -1,9 +1,10 @@
 /* g++ -I$(HOME)/stp/c_interface multiple-queries.c -L$(HOME)/stp/lib -lstp -o cc*/
 
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int main() {
+TEST(multiple_queries,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'c');
@@ -31,6 +32,6 @@ int main() {
   printf("query = %d\n", query);
 
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 

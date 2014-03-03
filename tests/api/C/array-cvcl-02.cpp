@@ -1,6 +1,9 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
-int main() {  
+
+// FIXME: Pick a sensible testname that actually means something!
+TEST(array_cvcl02,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc,'n');
   vc_setFlag(vc,'d');
@@ -42,5 +45,6 @@ int main() {
   }
   vc_Destroy(vc);
   //vc_printCounterExample(vc);
-  return 0;
+  
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }

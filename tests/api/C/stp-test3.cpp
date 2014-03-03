@@ -1,6 +1,6 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
-
 
 void go (enum ifaceflag_t f)
 {
@@ -11,6 +11,7 @@ void go (enum ifaceflag_t f)
 	vc_setInterfaceFlags(vc, f, 0);
 	//vc_setFlags(vc,'s',0);
 
+    // FIXME: Find a way to load this file from correct location
 	vc_parseExpr(vc, "f.cvc");
 
   	Expr a = vc_varExpr(vc, "a", vc_bvType(vc, 8));
@@ -20,14 +21,26 @@ void go (enum ifaceflag_t f)
 
   	int query = vc_query(vc, a_eq_0);
 	vc_Destroy (vc);
+    ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 
-int main ()
+TEST(stp_test,SMS)
 {
-	go(SMS);
-	go(MS);
-	go(CMS2);
-	go(MSP);
-	return 0;
+    go(SMS);
+}
+
+TEST(stp_test,MS)
+{
+    go(MS);
+}
+
+TEST(stp_test,CMS2)
+{
+    go(CMS2);
+}
+
+TEST(stp_test,MSP)
+{
+    go(MSP);
 }

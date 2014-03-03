@@ -1,8 +1,9 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "c_interface.h"
 
-int main() {  
+TEST(stp_array_model,one) {  
   VC vc = vc_createValidityChecker();
 
   Expr a = vc_bvCreateMemoryArray(vc, "a");
@@ -23,25 +24,16 @@ int main() {
   vc_assertFormula(vc, a_of_2_eq_77);
 
   /* query(false) */
-  if (vc_query(vc, vc_falseExpr(vc)) != 0) {
-    printf("Should be invalid...\n");
-    exit(1);
-  }
+  ASSERT_TRUE(vc_query(vc, vc_falseExpr(vc)) == 0); // Should be invalid
 
-  if (vc_counterexample_size(vc) == 0) {
-    printf("Counterexample size is 0\n");
-    exit(2);
-  }
+  ASSERT_FALSE(vc_counterexample_size(vc) == 0);
 
   Expr *indices;
   Expr *values;
   int size;
   vc_getCounterExampleArray(vc, a, &indices, &values, &size);
 
-  if (size == 0) {
-    printf("No array entries!\n");
-    exit(3);
-  }
+  ASSERT_FALSE(size == 0); // No array entries
 
   int j;
   for (j = 0; j < size; ++j) {
@@ -55,5 +47,4 @@ int main() {
 
   vc_Destroy(vc);
 
-  return 0;
 }

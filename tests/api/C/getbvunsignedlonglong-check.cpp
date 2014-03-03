@@ -1,12 +1,12 @@
 /* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp -g */
 
 
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include "c_interface.h"
 
-int main() {
+TEST(getbvunsignedlonglong_check,one) {
   for(int j=0;j < 3; j++) {
     VC vc = vc_createValidityChecker();
     vc_setFlags(vc,'n');
@@ -24,5 +24,5 @@ int main() {
     vc_DeleteExpr(index_3);
     vc_Destroy(vc);
   }
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }

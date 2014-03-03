@@ -1,24 +1,23 @@
 // Bug reported by Alvin Cheung. Thanks.
 
+#include <gtest/gtest.h>
 #include "c_interface.h"
 #include <iostream>
 #include <cassert>
 #include <stdexcept>
 
-int main(int argc, char * argv [])
+// FIXME: This is a terrible name, all of the tests in this directory are interface tests!
+TEST(interface_check,ONE)
 {
   ::VC vc = vc_createValidityChecker();
   ::Expr b1 = ::vc_trueExpr(vc);
   ::Expr b2 = ::vc_falseExpr(vc);
   ::Expr andExpr = ::vc_andExpr(vc, b1, b2);
 
-if (getExprKind(andExpr) !=  ::FALSE )
-  throw new std::runtime_error("sa22dfas");
+  ASSERT_TRUE(getExprKind(andExpr) ==  ::FALSE );
 
   ::Expr simplifiedExpr = ::vc_simplify(vc, andExpr);
 
-	if (getExprKind(simplifiedExpr) !=  ::FALSE )
-	throw new std::runtime_error("sa22dfas");
-  return 0;
+  ASSERT_TRUE(getExprKind(simplifiedExpr) ==  ::FALSE );
 }
 

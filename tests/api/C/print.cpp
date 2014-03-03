@@ -1,9 +1,10 @@
 //g++ -I$(HOME)/stp/c_interface print.c -L$(HOME)/stp/lib -lstp -o hex
 
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int main() {
+TEST(print,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -17,6 +18,6 @@ int main() {
   vc_printExpr(vc, ct_3);  printf("\n");
 
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 

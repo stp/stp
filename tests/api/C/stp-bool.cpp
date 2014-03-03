@@ -1,7 +1,8 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 
-int main ()
+TEST(stp_bool,one)
 {
 	VC vc;
 	int query_result;
@@ -14,5 +15,5 @@ int main ()
 
 
 	vc_Destroy (vc);
-	return 0;
+    ASSERT_TRUE(false && "FIXME: Actually test something");
 }

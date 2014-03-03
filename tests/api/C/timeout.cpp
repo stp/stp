@@ -1,9 +1,10 @@
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include "c_interface.h"
 #include <iostream>
 #include <stdlib.h>
 
-int main() {
+TEST(timeout,one) {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'m');
 
@@ -18,6 +19,6 @@ int main() {
   	}
   vc_DeleteExpr(c);
   vc_Destroy(vc);
-  return 0;
+  ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 

@@ -1,10 +1,11 @@
 //g++ -DEXT_HASH_MAP <this-filename> -I/home/vganesh/stp/c_interface -L/home/vganesh/stp/lib -lstp -o cc
 
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "c_interface.h"
 
-int main() {  
+TEST(stp_counterex,one) {  
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc,'n');
   vc_setFlags(vc,'d');
@@ -34,10 +35,7 @@ int main() {
   vc_pop(vc);
   printf("query = %d\n", query);
   
-  if (vc_counterexample_size(vc) == 0) {
-    printf("Counterexample size is 0\n");
-    exit(1);
-  }
+  ASSERT_FALSE(vc_counterexample_size(vc) == 0);
       
   a_of_1 = vc_simplify(vc, a_of_1);  
   //vc_printExpr(vc, a_of_1);
@@ -47,5 +45,5 @@ int main() {
   fprintf(stderr, "a[1] = %llu\n", v);
 
   vc_Destroy(vc);
-  return 0;
+  // FIXME: we should test more things!
 }
