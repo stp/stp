@@ -284,5 +284,5 @@ ASSERT (inner_energy = BVPLUS(64,  contact_energy12_zero, contact_energy12_one,
 % final query
 ASSERT (BVGE(BVMULT(128,0hex0000000000000000@outer_energy,0hex0000000000000000@inner_energy), 
 	     0hex00000000000000000000000000000001));
-% CHECK: ^[Vv]alid
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;
