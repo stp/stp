@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, David L. Dill
  *
  * BEGIN DATE: November, 2005
  *
