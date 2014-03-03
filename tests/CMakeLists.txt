@@ -52,7 +52,6 @@ option(TEST_APIS
       )
 
 if(TEST_APIS)
-    message(FATAL_ERROR "TODD")
     add_subdirectory(api)
 endif()
 
