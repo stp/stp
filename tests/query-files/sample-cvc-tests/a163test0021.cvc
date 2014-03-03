@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 %% Regression level = 3
 %% Result = InValid
 %% Language = presentation
@@ -12,5 +13,6 @@ ASSERT BVLT(n,0bin00000000000000000000000000001100);
 ASSERT NOT NOT (n = 0bin00000000000000000000000000000000);
 
 %----------------------------------------------------
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;
 COUNTEREXAMPLE;

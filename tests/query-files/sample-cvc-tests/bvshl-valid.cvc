@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 %% Regression level = 3
 %% Result = Valid
 %% Language = presentation
@@ -7,4 +8,5 @@ X, Y : BITVECTOR(2);
 ASSERT X = 0bin11;
 ASSERT BVSHL(X, Y) = 0bin01;
 
+% CHECK: ^[Vv]alid
 QUERY FALSE;

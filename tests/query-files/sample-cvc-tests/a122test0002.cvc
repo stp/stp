@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 %% Regression level = 3
 %% Result = InValid
 %% Language = presentation
@@ -14,5 +15,6 @@ ASSERT NOT NOT (_fresh_symbolic_value_2 =
          0bin00000000000000000000000000000000);
 
 %----------------------------------------------------
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;
 COUNTEREXAMPLE;

@@ -3,5 +3,5 @@
 X : BITVECTOR(4);
 
 ASSERT 0bin0000 = BVPLUS(4,0bin0110, X);
-% CHECK-NEXT: [Ii]nvalid
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;

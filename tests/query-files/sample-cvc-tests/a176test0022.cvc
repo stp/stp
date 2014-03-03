@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 %% Regression level = 3
 %% Result = InValid
 %% Language = presentation
@@ -8,5 +9,6 @@ c: BITVECTOR(8);
 ASSERT NOT BVLT(n,0bin00000000000000000000000000010000);
 
 %----------------------------------------------------
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;
 COUNTEREXAMPLE;

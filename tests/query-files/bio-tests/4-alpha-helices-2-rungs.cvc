@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 % 4 alpha helices. Each helix with 6 amino acid (residues), and 4
 % faces (two inner and two outer). Each face has 1 or 2 residues
 % The problem is encoded with two bit bit-vector variable per face.
@@ -295,4 +296,5 @@ ASSERT (inner_energy = BVPLUS(6, 0bin00@contact_energy12_zero, 0bin00@contact_en
 % final query
 ASSERT (BVGE(BVPLUS(7,0bin0@outer_energy,0bin0@inner_energy), 0bin0001111));
 % ASSERT (BVGE(outer_energy, 0bin000100));
+% CHECK: ^[Ii]nvalid
 QUERY FALSE;
