@@ -8,3 +8,6 @@ add_custom_target(query-file-tests
                   COMMAND ${PYTHON_EXECUTABLE} 
                           ${LIT_TOOL} -v -s . 
                  )
+
+# Make sure this test-suite runs when "check" is target
+add_dependencies(check query-file-tests)

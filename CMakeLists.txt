@@ -243,6 +243,10 @@ add_custom_target(uninstall
 option(ENABLE_TESTING "Enable testing" ON)
 
 if(ENABLE_TESTING)
+    add_custom_target(check
+                      COMMENT "top level target to invoke all other tests"
+                     )
+
     enable_testing()
     add_subdirectory(tests)
 endif()
