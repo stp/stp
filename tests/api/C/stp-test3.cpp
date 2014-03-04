@@ -11,8 +11,8 @@ void go (enum ifaceflag_t f)
 	vc_setInterfaceFlags(vc, f, 0);
 	//vc_setFlags(vc,'s',0);
 
-    // FIXME: Find a way to load this file from correct location
-	vc_parseExpr(vc, "f.cvc");
+    // CVC_FILE is a macro that expands to a file path
+	vc_parseExpr(vc, CVC_FILE);
 
   	Expr a = vc_varExpr(vc, "a", vc_bvType(vc, 8));
 	Expr ct_0 = vc_bvConstExprFromInt(vc, 8, 0);

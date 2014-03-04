@@ -39,7 +39,9 @@ AddSTPGTest(C-api-tests getbvunsignedlonglong-check.cpp)
 AddSTPGTest(C-api-tests if-check.cpp)
 AddSTPGTest(C-api-tests interface-check.cpp)
 AddSTPGTest(C-api-tests multiple-queries.cpp)
-AddSTPGTest(C-api-tests parsefile-using-cinterface.cpp)
+AddSTPGTest(C-api-tests parsefile-using-cinterface.cpp
+                        CVC_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/t.cvc\"
+           )
 AddSTPGTest(C-api-tests parsestring-using-cinterface.cpp)
 AddSTPGTest(C-api-tests print.cpp)
 AddSTPGTest(C-api-tests push-no-pop.cpp)
@@ -51,7 +53,11 @@ AddSTPGTest(C-api-tests stp-bool.cpp)
 AddSTPGTest(C-api-tests stpcheck.cpp)
 AddSTPGTest(C-api-tests stp-counterex.cpp)
 AddSTPGTest(C-api-tests stp-div-001.cpp)
-AddSTPGTest(C-api-tests stp-test3.cpp)
-AddSTPGTest(C-api-tests timeout.cpp)
+AddSTPGTest(C-api-tests stp-test3.cpp
+                        CVC_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/f.cvc\"
+           )
+AddSTPGTest(C-api-tests timeout.cpp
+                        SMT_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/example.smt\"
+           )
 AddSTPGTest(C-api-tests x.cpp)
 AddSTPGTest(C-api-tests y.cpp)
