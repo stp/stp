@@ -151,9 +151,9 @@ class Tester:
 
         #if need time limit, then limit
         if (needToLimitTime) :
-            p = subprocess.Popen(command.rsplit(), stderr=subprocess.STDOUT, stdout=subprocess.PIPE, preexec_fn=setlimits)
+            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
         else:
-            p = subprocess.Popen(command.rsplit(), stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE)
 
 
         #print time limit after child startup
