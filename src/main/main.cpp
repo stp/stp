@@ -309,6 +309,11 @@ int parse_options(int argc, char** argv)
         bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT_SOLVER;
     }
 
+    if (vm.count("cryptominisat") + vm.count("minisat") + vm.count("simplifying-minisat") > 1) {
+        cout << "ERROR: You may only give one solver to use: minisat, simplifying-minisat, or cryptominisat" << endl;
+        exit(-1);
+    }
+
     if (vm.count("gauss")) {
         if (bm->UserFlags.solver_to_use != UserDefinedFlags::CRYPTOMINISAT_SOLVER) {
             cout
