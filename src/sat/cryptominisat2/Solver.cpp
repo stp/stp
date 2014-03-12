@@ -1525,7 +1525,12 @@ bool Solver::simplify()
         return true;
     }
 
-    double slowdown = (100000.0/(double)binaryClauses.size());
+    double slowdown;
+    if (binaryClauses.size() == 0) {
+        slowdown = 10000;
+    } else {
+        slowdown = (100000.0/(double)binaryClauses.size());
+    }
     slowdown = std::min(3.5, slowdown);
     slowdown = std::max(0.2, slowdown);
 
