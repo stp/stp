@@ -122,7 +122,7 @@ namespace CONSTANTBV {
   /* private low-level functions (potentially dangerous!): */
   /*********************************************************/
 
-  static unsigned int power10(unsigned int x) {
+  static unsigned int power10(long x) {
     unsigned int y = 1;
 
     while (x-- > 0) y *= 10;
