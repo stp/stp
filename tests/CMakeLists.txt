@@ -29,6 +29,28 @@ if(NOT EXISTS "${LIT_TOOL}")
 endif()
 
 # -----------------------------------------------------------------------------
+# Find GTest library which will be used to drive tests
+# -----------------------------------------------------------------------------
+# GoogleTest devs don't recommend using a pre-built GTest library
+# ( https://code.google.com/p/googletest/wiki/FAQ#Why_is_it_not_recommended_to_install_a_pre-compiled_copy_of_Goog ).
+# Because of this, distros like Ubuntu don't provide a pre-built GTest library
+# so ``find_package(GTest REQUIRED)`` fails.
+#
+# Instead it is recommended that projects build their own copy of GTest. Detecting
+# the location of GTest source code is probably error prone so using a copy in the 
+# repository seems like the easiest thing to do. This also has the added benefit that
+# everyone uses the same version of GTest.
+set(GTEST_PREFIX ${CMAKE_SOURCE_DIR}/utils/gtest)
+add_subdirectory(${GTEST_PREFIX} gtest)
+set(GTEST_BOTH_LIBRARIES gtest gtest_main)
+
+include_directories(${GTEST_PREFIX}/include)
+add_custom_target(C-api-tests)
+add_dependencies(check C-api-tests)
+
+include(AddSTPGTest)
+
+# -----------------------------------------------------------------------------
 # Tests that drive STP by using query files (e.g. smt2, smt and cvc files)
 # -----------------------------------------------------------------------------
 
