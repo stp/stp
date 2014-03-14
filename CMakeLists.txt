@@ -240,7 +240,7 @@ add_custom_target(uninstall
 # Testing
 # -----------------------------------------------------------------------------
 
-option(ENABLE_TESTING "Enable testing" ON)
+option(ENABLE_TESTING "Enable testing" OFF)
 
 if(ENABLE_TESTING)
     # This is a workaround because ``make test`` will not build the tests
