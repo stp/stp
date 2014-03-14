@@ -243,6 +243,7 @@ add_custom_target(uninstall
 option(ENABLE_TESTING "Enable testing" OFF)
 
 if(ENABLE_TESTING)
+    message(STATUS "Testing is enabled")
     # This is a workaround because ``make test`` will not build the tests
     # before running CTest.
     #
@@ -263,6 +264,8 @@ if(ENABLE_TESTING)
 
 
     add_subdirectory(tests)
+else()
+    message(WARNING "Testing is disabled")
 endif()
 
 # -----------------------------------------------------------------------------
