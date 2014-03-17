@@ -49,6 +49,31 @@ include_directories(${GTEST_PREFIX}/include)
 include(AddSTPGTest)
 
 # -----------------------------------------------------------------------------
+# Provide option for running unit tests with valgrind
+# -----------------------------------------------------------------------------
+option(USE_VALGRIND "Use Valgrind when running unit tests" OFF)
+
+if(USE_VALGRIND)
+    # Make sure valgrind is currently in PATH
+    find_program(VALGRIND_TOOL valgrind
+                 NO_CMAKE_PATH
+                 NO_CMAKE_ENVIRONMENT_PATH
+                 NO_CMAKE_SYSTEM_PATH
+                )
+
+    if(NOT VALGRIND_TOOL)
+        message(FATAL_ERROR "Cannot find valgrind in your PATH")
+    else()
+        message(STATUS "Found valgrind : ${VALGRIND_TOOL}")
+    endif()
+
+    # Note we don't use the VALGRIND_TOOL variable, we just
+    # want to make sure it in the user's PATH so that when
+    # lit tries to use it later it doesn't exit with an unhelpful
+    # error message
+endif()
+
+# -----------------------------------------------------------------------------
 # Tests that drive STP by using query files (e.g. smt2, smt and cvc files)
 # -----------------------------------------------------------------------------
 

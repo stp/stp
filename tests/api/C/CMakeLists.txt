@@ -5,9 +5,15 @@ set(TESTSUITE "C-api-tests") # Unit test group name
 add_custom_target(${TESTSUITE})
 add_dependencies(check ${TESTSUITE})
 
+if(USE_VALGRIND)
+    set(LIT_EXTRA_FLAGS --vg --vg-leak)
+else()
+    set(LIT_EXTRA_FLAGS "")
+endif()
+
 add_custom_command(TARGET ${TESTSUITE}
                    POST_BUILD
-                   COMMAND ${LIT_TOOL} -s -v ${CMAKE_CURRENT_BINARY_DIR}
+                   COMMAND ${LIT_TOOL} -s -v ${LIT_EXTRA_FLAGS} ${CMAKE_CURRENT_BINARY_DIR}
                    COMMENT "Running ${TESTSUITE}"
                   )
 
