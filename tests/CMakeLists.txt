@@ -46,7 +46,9 @@ set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
 include_directories(${GTEST_PREFIX}/include)
 
+# Add handy macros/functions
 include(AddSTPGTest)
+include(AddGTestSuite)
 
 # -----------------------------------------------------------------------------
 # Provide option for running unit tests with valgrind

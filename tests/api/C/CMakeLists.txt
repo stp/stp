@@ -1,29 +1,5 @@
-# -----------------------------------------------------------------------------
-# Setup custom target
-# -----------------------------------------------------------------------------
-set(TESTSUITE "C-api-tests") # Unit test group name
-add_custom_target(${TESTSUITE})
-add_dependencies(check ${TESTSUITE})
+AddGTestSuite(C-api-tests)
 
-if(USE_VALGRIND)
-    set(LIT_EXTRA_FLAGS --vg --vg-leak)
-else()
-    set(LIT_EXTRA_FLAGS "")
-endif()
-
-add_custom_command(TARGET ${TESTSUITE}
-                   POST_BUILD
-                   COMMAND ${LIT_TOOL} -s -v ${LIT_EXTRA_FLAGS} ${CMAKE_CURRENT_BINARY_DIR}
-                   COMMENT "Running ${TESTSUITE}"
-                  )
-
-# -----------------------------------------------------------------------------
-# Setup lit configuration
-# -----------------------------------------------------------------------------
-configure_file(${CMAKE_SOURCE_DIR}/tests/lit-unit-tests-common.site.cfg.in
-               ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg
-               @ONLY@
-              )
 # -----------------------------------------------------------------------------
 # Find the public headers associated with libstp
 # -----------------------------------------------------------------------------
