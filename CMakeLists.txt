@@ -244,6 +244,9 @@ option(ENABLE_TESTING "Enable testing" OFF)
 
 if(ENABLE_TESTING)
     message(STATUS "Testing is enabled")
+
+    set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
+
     # This is a workaround because ``make test`` will not build the tests
     # before running CTest.
     #

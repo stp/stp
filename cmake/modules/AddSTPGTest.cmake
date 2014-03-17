@@ -1,7 +1,8 @@
 # AddSTPGTest(<testsuite> <sourcefile> [<defines> ...])
 #
 # Adds a GoogleTest to <testsuite> (just a custom target)
-# with executable name <sourcefile> with the file extension removed.
+# with executable name <sourcefile> with the file extension removed and
+# the UNIT_TEST_EXE_SUFFIX appended.
 # The executable will be linked with libstp.
 # Remaining arguments to this function are interpreted as preprocessor macros
 # to defines.
@@ -11,7 +12,10 @@
 #
 function(AddSTPGTest testsuite sourcefile)
     get_filename_component(testname ${sourcefile} NAME_WE)
-    
+
+    # testname has suffix because lit expects this
+    set(testname "${testname}${UNIT_TEST_EXE_SUFFIX}")
+
     add_executable(${testname} EXCLUDE_FROM_ALL ${sourcefile})
 
     # Add define flags requested by users
