@@ -5,6 +5,12 @@ set(TESTSUITE "C-api-tests") # Unit test group name
 add_custom_target(${TESTSUITE})
 add_dependencies(check ${TESTSUITE})
 
+add_custom_command(TARGET ${TESTSUITE}
+                   POST_BUILD
+                   COMMAND ${LIT_TOOL} -s -v ${CMAKE_CURRENT_BINARY_DIR}
+                   COMMENT "Running ${TESTSUITE}"
+                  )
+
 # -----------------------------------------------------------------------------
 # Setup lit configuration
 # -----------------------------------------------------------------------------

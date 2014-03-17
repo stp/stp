@@ -30,9 +30,4 @@ function(AddSTPGTest testsuite sourcefile)
     # Add dependency so that building the testsuite
     # will cause this test (testname) to be built
     add_dependencies(${testsuite} ${testname})
-
-    add_test(${testname} ${testname})
-
-    # Ensure that when using the run_ctest target this test gets built first
-    add_dependencies(run_ctest ${testname})
 endfunction()

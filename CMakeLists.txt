@@ -247,24 +247,9 @@ if(ENABLE_TESTING)
 
     set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
 
-    # This is a workaround because ``make test`` will not build the tests
-    # before running CTest.
-    #
-    # The AddSTPGTest() function adds a test as a dependency to the
-    # run_ctest target so the tests will always be up to date before
-    # running CTest via this target.
-    add_custom_target(run_ctest
-                      COMMENT "build tests for ctest and run"
-                      COMMAND ${CMAKE_CTEST_COMMAND}
-                     )
-
     add_custom_target(check
-                      DEPENDS run_ctest
                       COMMENT "top level target to invoke all other tests"
                      )
-
-    enable_testing()
-
 
     add_subdirectory(tests)
 else()
