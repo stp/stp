@@ -9,6 +9,8 @@ Homepage:      http://stp.github.io/stp/
 
 Documentation: https://github.com/stp/stp/wiki
 
+[![Build Status](https://travis-ci.org/stp/stp.png?branch=master)](https://travis-ci.org/stp/stp)
+
 ## Authors
 
 * Vijay Ganesh
