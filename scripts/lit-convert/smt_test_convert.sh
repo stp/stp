@@ -58,7 +58,7 @@ for f in $(find "$1" -iname '*.smt') ; do
     fi
     awkCmd=$( cat <<EOF
 BEGIN { print "; RUN: %solver %s | %OutputCheck %s"}
-BEGIN { print "; CHECK-NEXT: $firstline"}
+BEGIN { print "; CHECK-NEXT: ^$firstline"}
 { print }
 EOF
     )
