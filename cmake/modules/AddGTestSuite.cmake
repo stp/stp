@@ -1,3 +1,5 @@
+# Sets for the current directory (and below) the testsuite to use.
+# This macro should be used with the AddSTPGTest function.
 macro(AddGTestSuite TESTSUITENAME)
     set(TESTSUITE "${TESTSUITENAME}") # Unit test group name
     # Setup custom target

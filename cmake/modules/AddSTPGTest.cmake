@@ -1,6 +1,6 @@
-# AddSTPGTest(<testsuite> <sourcefile> [<defines> ...])
+# AddSTPGTest(<sourcefile> [<defines> ...])
 #
-# Adds a GoogleTest to <testsuite> (just a custom target)
+# Adds a GoogleTest to the current test suite (${TESTSUITE})
 # with executable name <sourcefile> with the file extension removed and
 # the UNIT_TEST_EXE_SUFFIX appended.
 # The executable will be linked with libstp.
@@ -8,9 +8,9 @@
 # to defines.
 #
 # e.g.
-# AddSTPGTest(C-api-tests mysimpleprogram.cpp FOO=15 BAR=\"a string\")
+# AddSTPGTest(mysimpleprogram.cpp FOO=15 BAR=\"a string\")
 #
-function(AddSTPGTest testsuite sourcefile)
+function(AddSTPGTest sourcefile)
     get_filename_component(testname ${sourcefile} NAME_WE)
 
     # testname has suffix because lit expects this
@@ -29,5 +29,5 @@ function(AddSTPGTest testsuite sourcefile)
 
     # Add dependency so that building the testsuite
     # will cause this test (testname) to be built
-    add_dependencies(${testsuite} ${testname})
+    add_dependencies(${TESTSUITE} ${testname})
 endfunction()
