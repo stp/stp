@@ -18,6 +18,7 @@ AddSTPGTest(b4-c.cpp)
 AddSTPGTest(getbvunsignedlonglong-check.cpp)
 AddSTPGTest(if-check.cpp)
 AddSTPGTest(interface-check.cpp)
+AddSTPGTest(leaks.cpp)
 AddSTPGTest(multiple-queries.cpp)
 AddSTPGTest(parsefile-using-cinterface.cpp
                         CVC_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/t.cvc\"

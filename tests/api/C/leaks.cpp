@@ -1,6 +1,14 @@
 #include "c_interface.h"
 #include <stdio.h>
-int main(){
+#include <gtest/gtest.h>
+
+// This test needs to be run under valgrind
+// Should we have a test suite just for leaks
+// that requires valgrind?
+
+// FIXME: Needs better name
+TEST(Leaks,leak)
+{
     for (int i=0; i < 10;i++){
 
    
@@ -115,5 +123,57 @@ int main(){
     
     vc_Destroy(vc);
     }
-    return 0;
+}
+
+TEST(Leaks,boolean)
+{
+    VC vc;
+    vc = vc_createValidityChecker();
+
+    Expr x = vc_varExpr(vc, "x", vc_boolType(vc));
+    Expr y = vc_varExpr(vc, "y", vc_boolType(vc));
+
+    Expr x_and_y = vc_andExpr(vc, x, y);
+    Expr not_x_and_y = vc_notExpr(vc, x_and_y);
+
+    Expr not_x = vc_notExpr(vc, x);
+    Expr not_y = vc_notExpr(vc, y);
+    Expr not_x_or_not_y = vc_orExpr(vc, not_x, not_y);
+
+    Expr equiv = vc_iffExpr(vc, not_x_and_y, not_x_or_not_y);
+
+    printf("%d\n", vc_query(vc, equiv));
+
+    vc_DeleteExpr(equiv);
+    vc_DeleteExpr(not_x_or_not_y);
+    vc_DeleteExpr(not_y);
+    vc_DeleteExpr(not_x);
+    vc_DeleteExpr(not_x_and_y);
+    vc_DeleteExpr(x_and_y);
+    vc_DeleteExpr(y);
+    vc_DeleteExpr(x);
+    vc_Destroy(vc);
+}
+
+
+TEST(Leaks,sqaures)
+{
+  unsigned int i;
+
+  /* Do some simple arithmetic by creating an expression involving
+     constants and then simplifying it. Since we create and destroy
+     a fresh VC each time, we shouldn't leak any memory. */
+  for (i = 1; i <= 100; i++) {
+    VC vc = vc_createValidityChecker();
+    Expr arg = vc_bvConstExprFromLL(vc, 64, (unsigned long long)i);
+    Expr product = vc_bvMultExpr(vc, 64, arg, arg);
+    Expr simp = vc_simplify(vc, product);
+    unsigned long long j = getBVUnsignedLongLong(simp);
+    vc_DeleteExpr(arg);
+    vc_DeleteExpr(product);
+    vc_DeleteExpr(simp);
+    if (i % 10000 == 0)
+      printf("%u**2 = %llu\n", i, j);
+    vc_Destroy(vc);
+  }
 }
