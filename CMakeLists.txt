@@ -240,14 +240,21 @@ add_custom_target(uninstall
 # Testing
 # -----------------------------------------------------------------------------
 
-enable_testing()
+option(ENABLE_TESTING "Enable testing" OFF)
 
-add_test(NAME regresscvc
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/
-  COMMAND run_tests.pl --td=${CMAKE_CURRENT_SOURCE_DIR}/big-test/
-)
-#regresscvc: REGRESS_LOG=`date +%Y-%m-%d`"-regress-cvc.log"
-#regresscvc: baseTest
+if(ENABLE_TESTING)
+    message(STATUS "Testing is enabled")
+
+    set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
+
+    add_custom_target(check
+                      COMMENT "top level target to invoke all other tests"
+                     )
+
+    add_subdirectory(tests)
+else()
+    message(WARNING "Testing is disabled")
+endif()
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with

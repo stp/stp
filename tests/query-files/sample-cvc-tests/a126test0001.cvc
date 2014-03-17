@@ -1,0 +1,13 @@
+% RUN: %solver %s | %OutputCheck %s
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+x: BITVECTOR(32);
+y: BITVECTOR(32);
+%----------------------------------------------------
+
+%----------------------------------------------------
+% CHECK: ^[Ii]nvalid
+QUERY FALSE;
+COUNTEREXAMPLE;

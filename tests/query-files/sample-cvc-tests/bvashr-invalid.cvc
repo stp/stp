@@ -1,0 +1,12 @@
+% RUN: %solver %s | %OutputCheck %s
+%% Regression level = 3
+%% Result = InValid
+%% Language = presentation
+
+X, Y : BITVECTOR(2);
+
+ASSERT X = 0bin11;
+ASSERT BVASHR(X, Y) = 0bin11;
+
+% CHECK: ^[Ii]nvalid
+QUERY FALSE;
