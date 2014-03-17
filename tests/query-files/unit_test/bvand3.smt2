@@ -11,6 +11,6 @@
 ; Identity is discovered.
 (assert (=  (bvand (bvnot v1) (bvand v2 v3)) (bvand v3 (bvand (bvnot v1) v2))  ) )
 (assert (=  (bvnot v1) v2 ))
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 

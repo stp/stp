@@ -5,5 +5,5 @@
 (set-info :status unsat)
 (declare-fun x () (_ BitVec 2))
 (assert (xor (bvult ((_ sign_extend 1) x) (_ bv2 3)) (bvult x (_ bv2 2))))
-; CHECK-NEXT: unsat
+; CHECK-NEXT: ^unsat
 (check-sat)

@@ -8,6 +8,6 @@
 (assert (= (bvor v0 v0) (_ bv0 2)))
 (assert (= (bvor v1 (bvnot v1)) (_ bv3 2)))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)

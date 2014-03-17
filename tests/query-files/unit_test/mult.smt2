@@ -17,7 +17,7 @@
 (assert  (= (_ bv44444444444444444 65) (bvadd ((_ sign_extend 50 ) a ) ((_ sign_extend 10 ) b  ))))
 
 
-; CHECK-NEXT: unsat
+; CHECK-NEXT: ^unsat
 (check-sat)
 (exit)
 

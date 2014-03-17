@@ -1,5 +1,5 @@
 ; RUN: %solver %s | %OutputCheck %s
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (benchmark r
   :status sat
   :category { crafted }

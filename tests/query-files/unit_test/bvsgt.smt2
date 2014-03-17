@@ -5,6 +5,6 @@
 (set-info :status unsat)
 (declare-fun p () Bool)
 (assert (bvsgt (_ bv4 3) (ite p (_ bv7 3)(_ bv0 3) ) ) )
-; CHECK-NEXT: unsat
+; CHECK-NEXT: ^unsat
 (check-sat)
 (exit)

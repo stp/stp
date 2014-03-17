@@ -9,6 +9,6 @@
 (declare-fun c () Bool)
 (assert (= (or c b) b) )
 (assert (ite (= (or c b) b) c b ))
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)

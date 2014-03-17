@@ -11,7 +11,7 @@
 ; This should be simplifed to v_0 <=> -v_1 before bitblasing.
 (assert (xor v0 v1))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
 

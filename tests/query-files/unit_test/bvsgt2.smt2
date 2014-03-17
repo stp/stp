@@ -9,6 +9,6 @@
 ; Check that unconstrained elimination through >'s works.
 
 (assert (bvsgt x (concat (_ bv0 10) y)) )
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)

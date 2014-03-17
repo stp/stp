@@ -11,7 +11,7 @@
 ; This should be simplifed to v_0 <=> -v_1 before bitblasing.
 (assert (= (xor (not v0) (and  v2 (not v1))) true))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
 

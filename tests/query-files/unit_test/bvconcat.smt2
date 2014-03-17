@@ -13,6 +13,6 @@
 (declare-fun v7 () (_ BitVec 2))
 
 (assert (= (concat (concat v4 v5) v1) (concat (concat v6 v7) v2 ) ))
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)

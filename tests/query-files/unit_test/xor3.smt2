@@ -11,7 +11,7 @@
 ; Checks that =, that is IFF, will be mixed in with xor.
 (assert (xor (not (xor v0 v1))  (= v2 v1)))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
 

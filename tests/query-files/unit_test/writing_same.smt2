@@ -11,5 +11,5 @@
 
 (assert(= v5572 (select (store a5575 v5572 (select a5575 v5572)) v5573)))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)

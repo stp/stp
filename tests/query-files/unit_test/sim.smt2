@@ -15,7 +15,7 @@
 (assert (not (xor v1 v2)))
 (assert (not (xor v2 v3)))
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
 

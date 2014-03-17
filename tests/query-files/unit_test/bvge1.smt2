@@ -18,7 +18,7 @@
 (assert (not (bvult x y)))
 
 
-; CHECK-NEXT: unsat
+; CHECK-NEXT: ^unsat
 (check-sat)
 (exit)
 

@@ -20,7 +20,7 @@
 
 
 
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
 

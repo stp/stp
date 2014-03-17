@@ -1,5 +1,5 @@
 ; RUN: %solver %s | %OutputCheck %s
-; CHECK-NEXT: unsat
+; CHECK-NEXT: ^unsat
 (
 benchmark temp20.smt
 :source {Minkeyrink Solver}

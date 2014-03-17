@@ -1,5 +1,5 @@
 ; RUN: %solver %s | %OutputCheck %s
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (benchmark B_610dd9dc.T.stp.smt
   :source {
 From Vijay Ganesh, see http://theory.stanford.edu/~vganesh/stp.html
