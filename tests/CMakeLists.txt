@@ -45,8 +45,6 @@ add_subdirectory(${GTEST_PREFIX} gtest)
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
 include_directories(${GTEST_PREFIX}/include)
-add_custom_target(C-api-tests)
-add_dependencies(check C-api-tests)
 
 include(AddSTPGTest)
 
