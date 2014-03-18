@@ -6,6 +6,6 @@
  (= (_ bv0 8)
     (let ((?x (_ bv0 8)))
          ?x)))
-; CHECK-NEXT: sat
+; CHECK-NEXT: ^sat
 (check-sat)
 (exit)
