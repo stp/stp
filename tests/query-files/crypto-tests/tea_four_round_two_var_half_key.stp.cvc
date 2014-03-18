@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 
 k0,k1,k2,k3 : BITVECTOR(32);
 
@@ -1995,6 +1996,7 @@ k0,k1,k2,k3 : BITVECTOR(32);
    ASSERT(x1_33_t6 = BVPLUS(32,x1_33_t5,k3));
    ASSERT(x1_33 = BVXOR(x1_33_t4,x1_33_t6));
 
+% CHECK: ^[Ii]nvalid
 QUERY(
    NOT(
       %
