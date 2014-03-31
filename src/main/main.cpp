@@ -465,19 +465,18 @@ void print_back(ASTNode& query, ASTNode& asserts)
 
 void read_file()
 {
+     bool error = false;
      if (bm->UserFlags.smtlib1_parser_flag) {
         smtin = fopen(infile.c_str(), "r");
         toClose = smtin;
         if (smtin == NULL) {
-            cerr << prog << ": Error: cannot open" << infile << endl;
-            FatalError("");
+            error = true;
         }
     } else if (bm->UserFlags.smtlib2_parser_flag) {
         smt2in = fopen(infile.c_str(), "r");
         toClose = smt2in;
         if (smt2in == NULL) {
-            cerr << prog << ": Error: cannot open " << infile << endl;
-            FatalError("");
+            error = true;
         }
     }
 
@@ -485,14 +484,29 @@ void read_file()
         cvcin = fopen(infile.c_str(), "r");
         toClose = cvcin;
         if (cvcin == NULL) {
-            cerr << prog << ": Error: cannot open " << infile << endl;
-            FatalError("");
+            error = true;
         }
     }
+
+    if (error)
+    {
+        std::string errorMsg("Cannot open ");
+        errorMsg += infile;
+        FatalError(errorMsg.c_str());
+    }
+}
+
+static void errorHandler(const char* error_msg)
+{
+    cerr << prog << ": Error: " << error_msg << endl;
+    exit(-1);
 }
 
 int main(int argc, char** argv)
 {
+    // Register the error handler
+    vc_error_hdlr = errorHandler;
+
     // Grab some memory from the OS upfront to reduce system time when
     // individual hash tables are being allocated
     if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void*) - 1)) {

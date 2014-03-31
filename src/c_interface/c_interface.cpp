@@ -1608,7 +1608,8 @@ Expr vc_parseExpr(VC vc, const char* infile) {
   cvcin = fopen(infile,"r");
   if(cvcin == NULL) {
     fprintf(stderr,"%s: Error: cannot open %s\n",prog,infile);
-    BEEV::FatalError("");
+    BEEV::FatalError("Cannot open file");
+    return 0;
   }
 
   //BEEV::GlobalSTP = (stpstar)vc;

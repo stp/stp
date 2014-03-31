@@ -226,7 +226,6 @@ namespace BEEV
       }
     if (vc_error_hdlr)
       vc_error_hdlr(str);
-    exit(-1);
   }
 
   void FatalError(const char * str)
@@ -234,8 +233,6 @@ namespace BEEV
     cerr << "Fatal Error: " << str << endl;
     if (vc_error_hdlr)
       vc_error_hdlr(str);
-    exit(-1);
-
   }
 
   void SortByExprNum(ASTVec& v)
