@@ -18,7 +18,7 @@ before_install:
 script:
 # Build STP
   - make
-# - make check # Enable once our tests pass properly
+  - make check
 # Build example project. We assume that the build installed itself to the CMake user package registry (~/.cmake/packages/)
   - cd ../simple_example
   - cmake -G "Unix Makefiles" ../../examples/simple
