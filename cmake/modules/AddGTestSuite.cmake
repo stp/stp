@@ -14,7 +14,7 @@ macro(AddGTestSuite TESTSUITENAME)
 
     add_custom_command(TARGET ${TESTSUITE}
                        POST_BUILD
-                       COMMAND ${LIT_TOOL} -s -v ${LIT_EXTRA_FLAGS} ${CMAKE_CURRENT_BINARY_DIR}
+                       COMMAND ${LIT_TOOL} ${LIT_ARGS} ${LIT_EXTRA_FLAGS} ${CMAKE_CURRENT_BINARY_DIR}
                        COMMENT "Running ${TESTSUITE}"
                       )
 
