@@ -79,8 +79,11 @@ To run tests (optinal) you will need to setup the OutputCheck submodule if you
 have not done so.
 
     cd /path/to/stp/source/root
-    git submodule init -- scripts/OutputCheck
+    git submodule init
     git submodule update
+    cd build
+    cmake -G 'Unix Makefiles' ENABLE_TESTING=ON ..
+    make
 
 You can then run the tests by running
 
