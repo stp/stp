@@ -6,19 +6,19 @@
 
 namespace BEEV
 {
-    // Returns each node once, then returns the sentinal.
+    // Returns each node once, then returns the sentinel.
     // NB if the sentinel is contained in the node that's passed, then it'll be wrong.
     class NodeIterator : boost::noncopyable
     {
         std::stack<ASTNode> toVisit;
 
-        const ASTNode& sentinal;
+        const ASTNode& sentinel;
         uint8_t iteration;
 
 
     public:
-        NodeIterator(const ASTNode &n, const ASTNode &_sentinal, STPMgr& stp) :
-                sentinal(_sentinal), iteration(stp.getNextIteration())
+        NodeIterator(const ASTNode &n, const ASTNode &_sentinel, STPMgr& stp) :
+                sentinel(_sentinel), iteration(stp.getNextIteration())
         {
             toVisit.push(n);
         }
@@ -26,12 +26,12 @@ namespace BEEV
         ASTNode
         next()
         {
-            ASTNode result = sentinal;
+            ASTNode result = sentinel;
 
             while (true)
                 {
                     if (toVisit.empty())
-                        return sentinal;
+                        return sentinel;
 
                     result = toVisit.top();
                     toVisit.pop();
@@ -43,7 +43,7 @@ namespace BEEV
                         break; // not visited, DONE!
                 }
 
-            if (result == sentinal)
+            if (result == sentinel)
                 return result;
 
             result.setIteration(iteration);
@@ -63,7 +63,7 @@ namespace BEEV
         ASTNode
         end()
         {
-            return sentinal;
+            return sentinel;
         }
 
         virtual bool
