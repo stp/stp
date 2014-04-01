@@ -1,6 +1,7 @@
 #ifndef NODEITERATOR_H_
 #define NODEITERATOR_H_
 
+#include "../AST/ASTNode.h"
 #include <stack>
 #include <boost/utility.hpp>
 
