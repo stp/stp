@@ -202,7 +202,7 @@ namespace BEEV
 
     // sizeof(unsigned long) returns the number of bytes in unsigned
     // long. In order to convert it to bits, we need to shift left by
-    // 3. Hence, sizeof(unsigned long) << 3
+    // 3. Hence, sizeof(unsigned long)*8
 
     //The algo below works as follows: It starts by copying the
     //lower-order bits of the input "bvconst" in chunks of size =
