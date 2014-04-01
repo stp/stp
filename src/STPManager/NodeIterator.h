@@ -2,6 +2,7 @@
 #define NODEITERATOR_H_
 
 #include "../AST/ASTNode.h"
+#include "STPManager.h"
 #include <stack>
 #include <boost/utility.hpp>
 
