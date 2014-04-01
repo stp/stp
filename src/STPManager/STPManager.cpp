@@ -184,7 +184,7 @@ namespace BEEV
   ASTNode STPMgr::CreateBVConst(unsigned int width, 
 				unsigned long long int bvconst)
   {
-    if (width > (sizeof(unsigned long long int) << 3) || width <= 0)
+    if (width > (sizeof(unsigned long long int)*8) || width <= 0)
       FatalError("CreateBVConst: "\
                  "trying to create bvconst using "\
 		 "unsigned long long of width: ", 
@@ -209,11 +209,15 @@ namespace BEEV
     //number of bits in unsigned long. The variable "copied" keeps
     //track of the number of chunks copied so far
 
-    const int shift_amount = (sizeof(unsigned long) << 3);
+    const int shift_amount = sizeof(unsigned long)*8;
     while (copied + shift_amount < width)
       {
         CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, shift_amount, copied, c_val);
-        bvconst = bvconst >> shift_amount;
+        if (sizeof(unsigned long) < sizeof(unsigned long long)) {
+            bvconst >>= shift_amount;
+        } else {
+            bvconst = 0;
+        }
         c_val = (~((unsigned long) 0)) & bvconst;
         copied += shift_amount;
       }
