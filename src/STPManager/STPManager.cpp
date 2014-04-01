@@ -213,7 +213,7 @@ namespace BEEV
     while (copied + shift_amount < width)
       {
         CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, shift_amount, copied, c_val);
-        if (sizeof(unsigned long) < sizeof(unsigned long long)) {
+        if (shift_amount < sizeof(bvconst)) {
             bvconst >>= shift_amount;
         } else {
             bvconst = 0;
