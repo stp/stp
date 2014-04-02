@@ -4,8 +4,6 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <bitset> // Remove me when getbv.INT32 test fixed
-#include <iostream> // Remove me when getbv.INT32 test fixed
 #include "c_interface.h"
 
 TEST(getbv,INT64) {
@@ -35,12 +33,10 @@ TEST(getbv,INT64) {
   }
 }
 
-/* FIXME: This test triggers memory errors
 TEST(getbv,INT32) {
   ASSERT_EQ( 32, sizeof(int32_t)*8);
 
   for(uint32_t j=1;j < UINT32_MAX; j|=(j << 1)) {
-    std::cerr << "j:" << std::bitset<64>(j) << std::endl;
     VC vc = vc_createValidityChecker();
     ASSERT_NE(vc, (void*) 0);
     vc_setFlags(vc,'n');
@@ -52,14 +48,15 @@ TEST(getbv,INT32) {
     ASSERT_NE(bv8, (void*) 0);
 
     Expr a =  vc_bvCreateMemoryArray(vc, "a"); // Why do we need this?    
+    ASSERT_NE(a, (void*) 0);
+
     Expr index_3 = vc_bvConstExprFromInt(vc, 32, j);
     ASSERT_NE(index_3, (void*) 0);
 
     uint32_t print_index = getBVUnsignedLongLong(index_3);
     ASSERT_EQ( print_index, j);
     vc_DeleteExpr(a);
-    vc_DeleteExpr(index_3);
+    // vc_DeleteExpr(index_3); - Urgh... STP's C API is inconsistent regarding what we should delete ourselves and what vc_Destroy() will do for us.
     vc_Destroy(vc);
   }
 }
-*/
