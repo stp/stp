@@ -89,6 +89,8 @@ You can then run the tests by running
 
     make check
 
+You can find out more about testing in STP at https://github.com/stp/stp/wiki/Testing .
+
 Installation (optional) can be done by running
 
     make install
