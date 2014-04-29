@@ -144,3 +144,152 @@ _set_func('vc_printCounterExampleFile', None, _VC, c_int32)
 _set_func('exprName', c_char_p, _Expr)
 _set_func('getExprID', c_int32, _Expr)
 _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Expr))
+
+
+class Solver(object):
+    def __init__(self):
+        self.vc = _lib.vc_createValidityChecker()
+        assert self.vc is not None, 'Error creating validity checker'
+
+    def bitvec(self, name, width):
+        # TODO Sanitize the name or stp will segfault.
+        # TODO Perhaps cache these calls per width?
+        bv_type = _lib.vc_bvType(self.vc, width)
+        expr = _lib.vc_varExpr(self.vc, name, bv_type)
+        return Expr(self.vc, width, expr, name=name)
+
+    def bitvecval(self, width, value):
+        expr = _lib.vc_bvConstExprFromInt(self.vc, width, value)
+        return Expr(self.vc, width, expr)
+
+    def add(self, expr):
+        assert isinstance(expr, Expr), 'Formula should be an Expression'
+        _lib.vc_assertFormula(self.vc, expr.expr)
+
+    def check(self, *exprs):
+        if len(exprs) == 1:
+            expr = exprs[0].expr
+        else:
+            # This may not be very clean, but I'm not sure if there are
+            # better ways to achieve this goal.
+            exprs = [expr.expr for expr in exprs]
+            exprs = (_Expr * len(exprs))(*exprs)
+            expr = _lib.vc_andExprN(self.vc, exprs, len(exprs))
+        ret = _lib.vc_query(self.vc, _lib.vc_notExpr(self.vc, expr))
+        assert ret == 0 or ret == 1, 'Error querying your input'
+        return not ret
+
+    def model(self):
+        return
+
+
+class Expr(object):
+    def __init__(self, vc, width, expr, name=None):
+        self.vc = vc
+        self.width = width
+        self.expr = expr
+        self.name = name
+
+    def _1(self, cb):
+        expr = cb(self.vc, self.expr)
+        return Expr(self.vc, self.width, expr)
+
+    def _1w(self, cb):
+        expr = cb(self.vc, self.width, self.expr)
+        return Expr(self.vc, self.width, expr)
+
+    def _2(self, cb, other):
+        assert isinstance(other, Expr), \
+            'Other object must be an Expr instance'
+        expr = cb(self.vc, self.expr, other.expr)
+        return Expr(self.vc, self.width, expr)
+
+    def _2w(self, cb, other):
+        assert isinstance(other, Expr), \
+            'Other object must be an Expr instance'
+        assert self.width == other.width, 'Width must be equal'
+        expr = cb(self.vc, self.width, self.expr, other.expr)
+        return Expr(self.vc, self.width, expr)
+
+    def add(self, other):
+        return self._2w(_lib.vc_bvPlusExpr, other)
+
+    def sub(self, other):
+        return self._2w(_lib.vc_bvMinusExpr, other)
+
+    def mul(self, other):
+        return self._2w(_lib.vc_bvMultExpr, other)
+
+    def div(self, other):
+        return self._2w(_lib.vc_bvDivExpr, other)
+
+    def mod(self, other):
+        return self._2w(_lib.vc_bvModExpr, other)
+
+    def rem(self, other):
+        return self._2w(_lib.vc_bvRemExpr, other)
+
+    def sdiv(self, other):
+        return self._2w(_lib.vc_sbvDivExpr, other)
+
+    def smod(self, other):
+        return self._2w(_lib.vc_sbvModExpr, other)
+
+    def srem(self, other):
+        return self._2w(_lib.vc_sbvRemExpr, other)
+
+    def eq(self, other):
+        return self._2(_lib.vc_eqExpr, other)
+
+    def lt(self, other):
+        return self._2(_lib.vc_bvLtExpr, other)
+
+    def le(self, other):
+        return self._2(_lib.vc_bvLeExpr, other)
+
+    def gt(self, other):
+        return self._2(_lib.vc_bvGtExpr, other)
+
+    def ge(self, other):
+        return self._2(_lib.vc_bvGeExpr, other)
+
+    def slt(self, other):
+        return self._2(_lib.vc_sbvLtExpr, other)
+
+    def sle(self, other):
+        return self._2(_lib.vc_sbvLeExpr, other)
+
+    def sgt(self, other):
+        return self._2(_lib.vc_sbvGtExpr, other)
+
+    def sge(self, other):
+        return self._2(_lib.vc_sbvGeExpr, other)
+
+    def and_(self, other):
+        return self._2(_lib.vc_bvAndExpr, other)
+
+    def or_(self, other):
+        return self._2(_lib.vc_bvOrExpr, other)
+
+    def xor(self, other):
+        return self._2(_lib.vc_bvXorExpr, other)
+
+    def not_(self):
+        return self._1(_lib.vc_bvNotExpr)
+
+    def shl(self, value):
+        return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
+
+    def shr(self, value):
+        return self._2w(_lib.vc_bvRightShiftExprExpr, other)
+
+    def sar(self, value):
+        return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
+
+    def extract(self, high, low):
+        expr = _lib.vc_bvExtract(self.vc, self.expr, high, low)
+        return Expr(self.vc, self.width, expr)
+
+    def simplify(self):
+        expr = _lib.vc_simplify(self.vc, self.expr)
+        return Expr(self.vc, self.width, expr)
