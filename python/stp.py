@@ -148,6 +148,7 @@ _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Ex
 
 class Solver(object):
     def __init__(self):
+        self.keys = {}
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
 
@@ -155,8 +156,8 @@ class Solver(object):
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
         bv_type = _lib.vc_bvType(self.vc, width)
-        expr = _lib.vc_varExpr(self.vc, name, bv_type)
-        return Expr(self.vc, width, expr, name=name)
+        self.keys[name] = _lib.vc_varExpr(self.vc, name, bv_type)
+        return Expr(self.vc, width, self.keys[name], name=name)
 
     def bitvecval(self, width, value):
         expr = _lib.vc_bvConstExprFromInt(self.vc, width, value)
@@ -175,12 +176,18 @@ class Solver(object):
             exprs = [expr.expr for expr in exprs]
             exprs = (_Expr * len(exprs))(*exprs)
             expr = _lib.vc_andExprN(self.vc, exprs, len(exprs))
+        _lib.vc_printAsserts(self.vc, 0)
+        _lib.vc_printExpr(self.vc, expr)
         ret = _lib.vc_query(self.vc, _lib.vc_notExpr(self.vc, expr))
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
     def model(self):
-        return
+        ret = {}
+        for key, expr in self.keys.items():
+            value = _lib.vc_getCounterExample(self.vc, expr)
+            ret[key] = _lib.getBVUnsignedLongLong(value)
+        return ret
 
 
 class Expr(object):
