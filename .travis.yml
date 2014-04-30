@@ -14,10 +14,13 @@ before_install:
   - mkdir build && cd build
   - mkdir simple_example
   - mkdir stp && cd stp
-  - cmake -G "Unix Makefiles" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING="-v" ../..
+  - cmake -G "Unix Makefiles" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING="-v" -DBUILD_SHARED_LIBS:BOOL=ON -DALSO_BUILD_STATIC_LIB:BOOL=ON ../..
 script:
 # Build STP
   - make
+# Check both static and shared libraries were built
+  - test -f lib/libstp.so
+  - test -f lib/libstp.a
   - make check
 # Build example project. We assume that the build installed itself to the CMake user package registry (~/.cmake/packages/)
   - cd ../simple_example
