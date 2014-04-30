@@ -152,6 +152,9 @@ class Solver(object):
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
 
+    def __del__(self):
+        _lib.vc_Destroy(self.vc)
+
     def bitvec(self, name, width):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
@@ -169,6 +172,14 @@ class Solver(object):
         """Adds a constraint to STP."""
         assert isinstance(expr, Expr), 'Formula should be an Expression'
         _lib.vc_assertFormula(self.vc, expr.expr)
+
+    def push(self):
+        """Enter a new frame."""
+        _lib.vc_push(self.vc)
+
+    def pop(self):
+        """Leave the current frame."""
+        _lib.vc_pop(self.vc)
 
     def check(self, *exprs):
         """Check whether the various expressions are satisfiable."""
@@ -192,6 +203,10 @@ class Solver(object):
             ret[key] = _lib.getBVUnsignedLongLong(value)
         return ret
 
+    def not_(self, obj):
+        assert isinstance(obj, Expr), 'Object should be an Expression'
+        expr = _lib.vc_notExpr(self.vc, obj.expr)
+        return Expr(self.vc, obj.width, expr)
 
 class Expr(object):
     def __init__(self, vc, width, expr, name=None):
@@ -199,6 +214,11 @@ class Expr(object):
         self.width = width
         self.expr = expr
         self.name = name
+
+    def __del__(self):
+        # TODO We're not quite there yet.
+        # _lib.vc_DeleteExpr(self.expr)
+        pass
 
     def _1(self, cb):
         """Wrapper around single-expression STP functions."""
