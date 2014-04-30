@@ -1,7 +1,8 @@
 # Config file for the @EXPORT_TYPE@ STP Package
 # It defines the following variables
 #  STP_INCLUDE_DIRS - include directories for STP
-#  STP_LIBRARIES    - libraries to link against
+#  STP_STATIC_LIBRARY - static library target (empty if not built)
+#  STP_SHARED_LIBRARY - dynamic library target (empty if not built)
 #  STP_EXECUTABLE   - the stp executable
 
 # Compute paths
@@ -12,5 +13,7 @@ set(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
 include("${STP_CMAKE_DIR}/@STP_TARGETS_FILENAME@")
 
 # These are IMPORTED targets created by @STP_TARGETS_FILENAME@
-set(STP_LIBRARIES libstp)
 set(STP_EXECUTABLE stp)
+
+set(STP_STATIC_LIBRARY @STP_STATIC_LIBRARY@)
+set(STP_SHARED_LIBRARY @STP_SHARED_LIBRARY@)
