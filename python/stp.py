@@ -153,7 +153,9 @@ class Solver(object):
         assert self.vc is not None, 'Error creating validity checker'
 
     def __del__(self):
-        _lib.vc_Destroy(self.vc)
+        # TODO We're not quite there yet.
+        # _lib.vc_Destroy(self.vc)
+        pass
 
     def bitvec(self, name, width):
         """Creates a new BitVector variable."""
