@@ -163,12 +163,12 @@ class Solver(object):
         # TODO Perhaps cache these calls per width?
         bv_type = _lib.vc_bvType(self.vc, width)
         self.keys[name] = _lib.vc_varExpr(self.vc, name, bv_type)
-        return Expr(self.vc, width, self.keys[name], name=name)
+        return Expr(self, width, self.keys[name], name=name)
 
     def bitvecval(self, width, value):
         """Creates a new BitVector with a constant value."""
         expr = _lib.vc_bvConstExprFromInt(self.vc, width, value)
-        return Expr(self.vc, width, expr)
+        return Expr(self, width, expr)
 
     def add(self, expr):
         """Adds a constraint to STP."""
@@ -211,8 +211,8 @@ class Solver(object):
         return Expr(self.vc, obj.width, expr)
 
 class Expr(object):
-    def __init__(self, vc, width, expr, name=None):
-        self.vc = vc
+    def __init__(self, s, width, expr, name=None):
+        self.s = s
         self.width = width
         self.expr = expr
         self.name = name
@@ -224,28 +224,34 @@ class Expr(object):
 
     def _1(self, cb):
         """Wrapper around single-expression STP functions."""
-        expr = cb(self.vc, self.expr)
-        return Expr(self.vc, self.width, expr)
+        expr = cb(self.s.vc, self.expr)
+        return Expr(self.s, self.width, expr)
 
     def _1w(self, cb):
         """Wrapper around single-expression with width STP functions."""
-        expr = cb(self.vc, self.width, self.expr)
-        return Expr(self.vc, self.width, expr)
+        expr = cb(self.s.vc, self.width, self.expr)
+        return Expr(self.s, self.width, expr)
 
     def _2(self, cb, other):
         """Wrapper around double-expression STP functions."""
+        if isinstance(other, (int, long)):
+            other = self.s.bitvecval(self.width, other)
+
         assert isinstance(other, Expr), \
             'Other object must be an Expr instance'
-        expr = cb(self.vc, self.expr, other.expr)
-        return Expr(self.vc, self.width, expr)
+        expr = cb(self.s.vc, self.expr, other.expr)
+        return Expr(self.s, self.width, expr)
 
     def _2w(self, cb, other):
         """Wrapper around double-expression with width STP functions."""
+        if isinstance(other, (int, long)):
+            other = self.s.bitvecval(self.width, other)
+
         assert isinstance(other, Expr), \
             'Other object must be an Expr instance'
         assert self.width == other.width, 'Width must be equal'
-        expr = cb(self.vc, self.width, self.expr, other.expr)
-        return Expr(self.vc, self.width, expr)
+        expr = cb(self.s.vc, self.width, self.expr, other.expr)
+        return Expr(self.s, self.width, expr)
 
     def add(self, other):
         return self._2w(_lib.vc_bvPlusExpr, other)
@@ -323,10 +329,10 @@ class Expr(object):
         return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
 
     def extract(self, high, low):
-        expr = _lib.vc_bvExtract(self.vc, self.expr, high, low)
-        return Expr(self.vc, self.width, expr)
+        expr = _lib.vc_bvExtract(self.s.vc, self.expr, high, low)
+        return Expr(self.s, self.width, expr)
 
     def simplify(self):
         """Simplify an expression."""
-        expr = _lib.vc_simplify(self.vc, self.expr)
-        return Expr(self.vc, self.width, expr)
+        expr = _lib.vc_simplify(self.s.vc, self.expr)
+        return Expr(self.s, self.width, expr)
