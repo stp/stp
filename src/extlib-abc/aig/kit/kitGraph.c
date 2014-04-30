@@ -349,6 +349,7 @@ unsigned Kit_GraphToTruth( Kit_Graph_t * pGraph )
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Kit_Graph_t * Kit_TruthToGraph( unsigned * pTruth, int nVars, Vec_Int_t * vMemory )
 {
     Kit_Graph_t * pGraph;
@@ -365,6 +366,7 @@ Kit_Graph_t * Kit_TruthToGraph( unsigned * pTruth, int nVars, Vec_Int_t * vMemor
     pGraph = Kit_SopFactor( vMemory, RetValue, nVars, vMemory );
     return pGraph;
 }
+#endif
 
 /**Function*************************************************************
 

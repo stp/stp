@@ -340,6 +340,7 @@ printf( "\n" );
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 int Dar_ManRefactorTryCuts( Ref_Man_t * p, Aig_Obj_t * pObj, int nNodesSaved, int Required )
 {
     Vec_Ptr_t * vCut;
@@ -428,6 +429,7 @@ int Dar_ManRefactorTryCuts( Ref_Man_t * p, Aig_Obj_t * pObj, int nNodesSaved, in
     }
     return p->GainBest;
 }
+#endif
 
 /**Function*************************************************************
 
@@ -461,6 +463,7 @@ int Dar_ObjCutLevelAchieved( Vec_Ptr_t * vCut, int nLevelMin )
   SeeAlso     []
  
 ***********************************************************************/
+#if 0
 int Dar_ManRefactor( Aig_Man_t * pAig, Dar_RefPar_t * pPars )
 {
 //    Bar_Progress_t * pProgress;
@@ -583,6 +586,7 @@ p->timeOther = p->timeTotal - p->timeCuts - p->timeEval;
     return 1;
 
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////
 ///                       END OF FILE                                ///

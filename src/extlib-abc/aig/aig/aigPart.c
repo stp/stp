@@ -869,6 +869,7 @@ Vec_Ptr_t * Aig_ManMiterPartitioned( Aig_Man_t * p1, Aig_Man_t * p2, int nPartSi
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Aig_Man_t * Aig_ManChoicePartitioned( Vec_Ptr_t * vAigs, int nPartSize )
 {
     extern int Cmd_CommandExecute( void * pAbc, char * sCommand );
@@ -981,6 +982,7 @@ Aig_Man_t * Aig_ManChoicePartitioned( Vec_Ptr_t * vAigs, int nPartSize )
     Aig_ManMarkValidChoices( pAig );
     return pAig;
 }
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////
