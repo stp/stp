@@ -37,6 +37,14 @@ class TestSTP(unittest.TestCase):
         m = s.model()
         self.assertEqual((m['a'] << 1) - m['d'], b)
 
+    def test_quick_model(self):
+        s = self.s
+        a = s.bitvec('a', 32)
+        b = s.bitvec('b', 32)
+        c = s.bitvec('c', 32)
+        self.assertTrue(s.check(a + b + c == 666, b - c == 321, c != 666))
+        self.assertEqual((s['a'] + s['b'] + s['c'])%2**32, 666)
+        self.assertEqual((s['b'] - s['c'])%2**32, 321)
 
 
 if __name__ == '__main__':

@@ -205,6 +205,11 @@ class Solver(object):
             ret[key] = _lib.getBVUnsignedLongLong(value)
         return ret
 
+    def __getitem__(self, key):
+        """Allows easy access to the Counter Example."""
+        value = _lib.vc_getCounterExample(self.vc, self.keys[key])
+        return _lib.getBVUnsignedLongLong(value)
+
     def not_(self, obj):
         assert isinstance(obj, Expr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
@@ -294,6 +299,11 @@ class Expr(object):
         return self._2(_lib.vc_eqExpr, other)
 
     __eq__ = eq
+
+    def ne(self, other):
+        return self.s.not_(self.eq(other))
+
+    __ne__ = ne
 
     def lt(self, other):
         return self._2(_lib.vc_bvLtExpr, other)
