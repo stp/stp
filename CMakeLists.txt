@@ -64,6 +64,7 @@ if (BUILD_SHARED_LIBS)
 
 else()
   set(STP_STATIC_LIBRARY libstp) # Used for exporting target
+  unset(ALSO_BUILD_STATIC_LIB CACHE) # Hide this option for ccmake and cmake-gui users
 endif()
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
