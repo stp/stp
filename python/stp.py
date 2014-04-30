@@ -197,18 +197,16 @@ class Solver(object):
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
-    def model(self):
+    def model(self, key=None):
         """Returns a model for the entire Counter Example of BitVectors."""
-        ret = {}
-        for key, expr in self.keys.items():
-            value = _lib.vc_getCounterExample(self.vc, expr)
-            ret[key] = _lib.getBVUnsignedLongLong(value)
-        return ret
+        if key is not None:
+            value = _lib.vc_getCounterExample(self.vc, self.keys[key])
+            return _lib.getBVUnsignedLongLong(value)
 
-    def __getitem__(self, key):
-        """Allows easy access to the Counter Example."""
-        value = _lib.vc_getCounterExample(self.vc, self.keys[key])
-        return _lib.getBVUnsignedLongLong(value)
+        return dict((k, self.model(k)) for k in self.keys)
+
+    # Allows easy access to the Counter Example.
+    __getitem__ = model
 
     def not_(self, obj):
         assert isinstance(obj, Expr), 'Object should be an Expression'
