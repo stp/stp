@@ -12,8 +12,20 @@ message("Using STP rooted at ${STP_DIR}")
 # -----------------------------------------------------------------------------
 
 message("STP include paths are: ${STP_INCLUDE_DIRS}")
-message("STP Libraries targets are: ${STP_LIBRARIES}")
+message("STP Static Library target is: ${STP_STATIC_LIBRARY}")
+message("STP Shared Library target is: ${STP_SHARED_LIBRARY}")
 message("STP executable: ${STP_EXECUTABLE}")
+
+# Try to use the shared library if available
+if(STP_SHARED_LIBRARY)
+  set(LIB ${STP_SHARED_LIBRARY})
+  message("Using STP shared library")
+elseif (STP_STATIC_LIBRARY)
+  set(LIB ${STP_STATIC_LIBRARY})
+  message("Using STP static library")
+else()
+  message(FATAL_ERROR "No library target is available")
+endif()
 
 # Get full path to STP executable
 get_target_property(STP_FULL_PATH ${STP_EXECUTABLE} LOCATION)
@@ -24,4 +36,4 @@ message("Full path to STP binary is ${STP_FULL_PATH}")
 # -----------------------------------------------------------------------------
 include_directories(${STP_INCLUDE_DIRS})
 add_executable(stp-example example.c)
-target_link_libraries(stp-example ${STP_LIBRARIES})
+target_link_libraries(stp-example ${LIB})

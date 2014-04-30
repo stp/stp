@@ -326,6 +326,7 @@ void Aig_WriteDotAig( Aig_Man_t * pMan, char * pFileName, int fHaig, Vec_Ptr_t *
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 void Aig_ManShow( Aig_Man_t * pMan, int fHaig, Vec_Ptr_t * vBold )
 {
     extern void Abc_ShowFile( char * FileNameDot );
@@ -347,6 +348,7 @@ void Aig_ManShow( Aig_Man_t * pMan, int fHaig, Vec_Ptr_t * vBold )
     // visualize the file 
     Abc_ShowFile( FileNameDot );
 }
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////

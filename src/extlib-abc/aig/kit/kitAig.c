@@ -95,6 +95,7 @@ Aig_Obj_t * Kit_GraphToAig( Aig_Man_t * pMan, Aig_Obj_t ** pFanins, Kit_Graph_t 
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Aig_Obj_t * Kit_TruthToAig( Aig_Man_t * pMan, Aig_Obj_t ** pFanins, unsigned * pTruth, int nVars, Vec_Int_t * vMemory )
 {
     Aig_Obj_t * pObj;
@@ -113,6 +114,7 @@ Aig_Obj_t * Kit_TruthToAig( Aig_Man_t * pMan, Aig_Obj_t ** pFanins, unsigned * p
     Kit_GraphFree( pGraph );
     return pObj;
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////
 ///                       END OF FILE                                ///

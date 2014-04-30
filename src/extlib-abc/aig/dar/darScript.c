@@ -64,6 +64,7 @@ Aig_Man_t * Dar_ManRewriteDefault( Aig_Man_t * pAig )
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Aig_Man_t * Dar_ManRwsat( Aig_Man_t * pAig, int fBalance, int fVerbose )
 //alias rwsat       "st; rw -l; b -l; rw -l; rf -l"
 {
@@ -108,6 +109,7 @@ Aig_Man_t * Dar_ManRwsat( Aig_Man_t * pAig, int fBalance, int fVerbose )
 
     return pAig;
 }
+#endif
 
 
 /**Function*************************************************************
@@ -121,6 +123,7 @@ Aig_Man_t * Dar_ManRwsat( Aig_Man_t * pAig, int fBalance, int fVerbose )
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Aig_Man_t * Dar_ManCompress( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, int fVerbose )
 //alias compress2   "b -l; rw -l; rwz -l; b -l; rwz -l; b -l"
 {
@@ -180,6 +183,7 @@ Aig_Man_t * Dar_ManCompress( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, i
 
     return pAig;
 }
+#endif
 
 /**Function*************************************************************
 
@@ -192,6 +196,7 @@ Aig_Man_t * Dar_ManCompress( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, i
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Aig_Man_t * Dar_ManCompress2( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, int fVerbose )
 //alias compress2   "b -l; rw -l; rf -l; b -l; rw -l; rwz -l; b -l; rfz -l; rwz -l; b -l"
 {
@@ -285,6 +290,7 @@ Aig_Man_t * Dar_ManCompress2( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, 
     }
     return pAig;
 }
+#endif
 
 /**Function*************************************************************
 
@@ -297,6 +303,7 @@ Aig_Man_t * Dar_ManCompress2( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, 
   SeeAlso     []
 
 ***********************************************************************/
+#if 0
 Vec_Ptr_t * Dar_ManChoiceSynthesis( Aig_Man_t * pAig, int fBalance, int fUpdateLevel, int fVerbose )
 //alias resyn    "b; rw; rwz; b; rwz; b"
 //alias resyn2   "b; rw; rf; b; rw; rwz; b; rfz; rwz; b"
@@ -311,6 +318,7 @@ Vec_Ptr_t * Dar_ManChoiceSynthesis( Aig_Man_t * pAig, int fBalance, int fUpdateL
     Vec_PtrPush( vAigs, pAig );
     return vAigs;
 }
+#endif
 
 /**Function*************************************************************
 

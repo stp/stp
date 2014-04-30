@@ -39,11 +39,27 @@ endforeach()
 
 add_library(libstp ${stp_lib_objects})
 
-set_target_properties(libstp PROPERTIES 
-                        OUTPUT_NAME stp    
+set_target_properties(libstp PROPERTIES
+                        OUTPUT_NAME stp
                         PUBLIC_HEADER "${stp_public_headers}"
                      )
 
+# -----------------------------------------------------------------------------
+# Support building both static and dynamic library
+# -----------------------------------------------------------------------------
+if (BUILD_SHARED_LIBS AND ALSO_BUILD_STATIC_LIB)
+  add_library(libstp_static STATIC ${stp_lib_objects})
+
+  set_target_properties(libstp_static PROPERTIES
+                          OUTPUT_NAME stp
+                       )
+
+  install(TARGETS libstp_static
+              EXPORT ${STP_EXPORT_NAME}
+              LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+              ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+         )
+endif()
 
 # -----------------------------------------------------------------------------
 # On non-windows systems a built static library cannot have another static

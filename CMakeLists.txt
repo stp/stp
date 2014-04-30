@@ -52,7 +52,20 @@ endif()
 # STP will link against this client library
 # -----------------------------------------------------------------------------
 option(BUILD_SHARED_LIBS "Build client library as a shared library" OFF)
+if (BUILD_SHARED_LIBS)
+  option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" OFF)
 
+  set(STP_SHARED_LIBRARY libstp) # Used for exporting target
+
+  if (ALSO_BUILD_STATIC_LIB)
+    list(APPEND TARGETS_TO_EXPORT libstp_static)
+    set(STP_STATIC_LIBRARY libstp_static) # Used for exporting target
+  endif()
+
+else()
+  set(STP_STATIC_LIBRARY libstp) # Used for exporting target
+  unset(ALSO_BUILD_STATIC_LIB CACHE) # Hide this option for ccmake and cmake-gui users
+endif()
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
@@ -264,7 +277,7 @@ set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
 
 # Export targets
-export(TARGETS libstp stp FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")

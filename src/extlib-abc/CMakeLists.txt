@@ -2,6 +2,21 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 #http://www.eecs.berkeley.edu/~alanmi/abc/
 
+# This is the only C code used in STP so its fine to have
+# the macro here and not global to the project
+include(CheckCCompilerFlag)
+macro(add_c_flag_if_supported flagname)
+  check_c_compiler_flag("${flagname}" HAVE_C_FLAG_${flagname})
+
+  if(HAVE_C_FLAG_${flagname})
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flagname}")
+  endif()
+endmacro()
+
+if(BUILD_SHARED_LIBS)
+  add_c_flag_if_supported("-fPIC")
+endif()
+
 add_library(abc OBJECT
     aig/aig/aigCheck.c
     aig/aig/aigDfs.c
