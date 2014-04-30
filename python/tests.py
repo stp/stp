@@ -22,6 +22,22 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(a.add(b).eq(69)))
         self.assertEqual(s.model()['a'] + s.model()['b'], 69)
 
+    def test_operator(self):
+        s = self.s
+        a = s.bitvec('a', 32)
+        b = s.bitvec('b', 32)
+        c = s.bitvec('c', 32)
+        self.assertTrue(s.check(a + b + c == 123, b - c == 66))
+        m = s.model()
+        self.assertEqual((m['a']+m['b']+m['c'])%2**32, 123)
+        self.assertEqual(m['b']-m['c'], 66)
+
+        d = s.bitvec('d', 32)
+        self.assertTrue(s.check((a << 1) - d == b))
+        m = s.model()
+        self.assertEqual((m['a'] << 1) - m['d'], b)
+
+
 
 if __name__ == '__main__':
     unittest.main()

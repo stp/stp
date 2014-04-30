@@ -256,17 +256,27 @@ class Expr(object):
     def add(self, other):
         return self._2w(_lib.vc_bvPlusExpr, other)
 
+    __add__ = add
+
     def sub(self, other):
         return self._2w(_lib.vc_bvMinusExpr, other)
+
+    __sub__ = sub
 
     def mul(self, other):
         return self._2w(_lib.vc_bvMultExpr, other)
 
+    __mul__ = mul
+
     def div(self, other):
         return self._2w(_lib.vc_bvDivExpr, other)
 
+    __div__ = div
+
     def mod(self, other):
         return self._2w(_lib.vc_bvModExpr, other)
+
+    __mod__ = mod
 
     def rem(self, other):
         return self._2w(_lib.vc_bvRemExpr, other)
@@ -283,17 +293,27 @@ class Expr(object):
     def eq(self, other):
         return self._2(_lib.vc_eqExpr, other)
 
+    __eq__ = eq
+
     def lt(self, other):
         return self._2(_lib.vc_bvLtExpr, other)
+
+    __lt__ = lt
 
     def le(self, other):
         return self._2(_lib.vc_bvLeExpr, other)
 
+    __le__ = le
+
     def gt(self, other):
         return self._2(_lib.vc_bvGtExpr, other)
 
+    __gt__ = gt
+
     def ge(self, other):
         return self._2(_lib.vc_bvGeExpr, other)
+
+    __ge__ = ge
 
     def slt(self, other):
         return self._2(_lib.vc_sbvLtExpr, other)
@@ -310,22 +330,34 @@ class Expr(object):
     def and_(self, other):
         return self._2(_lib.vc_bvAndExpr, other)
 
+    __and__ = and_
+
     def or_(self, other):
         return self._2(_lib.vc_bvOrExpr, other)
+
+    __or__ = or_
 
     def xor(self, other):
         return self._2(_lib.vc_bvXorExpr, other)
 
+    __xor__ = xor
+
     def not_(self):
         return self._1(_lib.vc_bvNotExpr)
 
-    def shl(self, value):
+    __invert__ = not_
+
+    def shl(self, other):
         return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
 
-    def shr(self, value):
+    __lshift__ = shl
+
+    def shr(self, other):
         return self._2w(_lib.vc_bvRightShiftExprExpr, other)
 
-    def sar(self, value):
+    __rshift__ = shr
+
+    def sar(self, other):
         return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
 
     def extract(self, high, low):
