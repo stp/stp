@@ -52,6 +52,9 @@ endif()
 # STP will link against this client library
 # -----------------------------------------------------------------------------
 option(BUILD_SHARED_LIBS "Build client library as a shared library" OFF)
+if (BUILD_SHARED_LIBS)
+  option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" OFF)
+endif()
 
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
