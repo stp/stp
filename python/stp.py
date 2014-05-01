@@ -171,7 +171,7 @@ class Solver(object):
 
     def bitvecval(self, width, value):
         """Creates a new BitVector with a constant value."""
-        expr = _lib.vc_bvConstExprFromInt(self.vc, width, value)
+        expr = _lib.vc_bvConstExprFromLL(self.vc, width, value)
         return Expr(self, width, expr)
 
     def add(self, *exprs):
