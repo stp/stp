@@ -442,6 +442,11 @@ class Expr(object):
         expr = _lib.vc_simplify(self.s.vc, self.expr)
         return Expr(self.s, self.width, expr)
 
+    @property
+    def value(self):
+        """Returns the value of this BitVec in the current model."""
+        return self.s.model(self.name)
+
 
 class ASTtoSTP(ast.NodeVisitor):
     def __init__(self, s, count, *args, **kwargs):

@@ -90,6 +90,12 @@ class TestSTP(unittest.TestCase):
 
             assert count == 4
 
+    def test_value(self):
+        s = self.s
+        a = s.bitvec('a')
+        s.check(a == 0x41414141)
+        self.assertEqual(a.value, 0x41414141)
+
 
 if __name__ == '__main__':
     unittest.main()
