@@ -147,6 +147,8 @@ _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Ex
 
 
 class Solver(object):
+    current = None
+
     def __init__(self):
         self.keys = {}
         self.vc = _lib.vc_createValidityChecker()
@@ -156,6 +158,12 @@ class Solver(object):
         # TODO We're not quite there yet.
         # _lib.vc_Destroy(self.vc)
         pass
+
+    def __enter__(self):
+        Solver.current = self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        Solver.current = None
 
     def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""
@@ -403,3 +411,23 @@ class Expr(object):
         """Simplify an expression."""
         expr = _lib.vc_simplify(self.s.vc, self.expr)
         return Expr(self.s, self.width, expr)
+
+
+def add(*args, **kwargs):
+    return Solver.current.add(*args, **kwargs)
+
+
+def bitvec(*args, **kwargs):
+    return Solver.current.bitvec(*args, **kwargs)
+
+
+def bitvecs(*args, **kwargs):
+    return Solver.current.bitvecs(*args, **kwargs)
+
+
+def check(*args, **kwargs):
+    return Solver.current.check(*args, **kwargs)
+
+
+def model(*args, **kwargs):
+    return Solver.current.model(*args, **kwargs)
