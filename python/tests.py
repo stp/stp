@@ -1,5 +1,16 @@
-from stp import Solver
+from stp import add, bitvecs, check, model, stp, Solver
 import unittest
+
+
+@stp
+def test0_foo(a, b):
+    assert b != 0
+    return (a + 42) % b
+
+
+@stp
+def test0_bar(a, b):
+    return a * b == 12345
 
 
 class TestSTP(unittest.TestCase):
@@ -59,6 +70,24 @@ class TestSTP(unittest.TestCase):
         s.add(a != b, a != c, b != c)
         self.assertTrue(s.check(s.or_(a + b == 1, a + c == 1)))
         self.assertTrue(s['a'] + s['b'] == 1 or s['a'] + s['c'] == 1)
+
+    def test_ast(self):
+        models = [
+            {'y': 1658330539L, 'x': 1658330539L},
+            {'y': 3805814187L, 'x': 3805814187L},
+            {'y': 2636636757L, 'x': 2636636757L},
+            {'y': 489153109L, 'x': 489153109L},
+        ]
+
+        with Solver():
+            x, y = bitvecs('x y')
+            count = 0
+            while check(test0_foo(x, y) == test0_foo(y, x), test0_bar(x, y)):
+                count += 1
+                assert model() in models
+                add(x != model('x'))
+
+            assert count == 4
 
 
 if __name__ == '__main__':
