@@ -46,6 +46,13 @@ class TestSTP(unittest.TestCase):
         self.assertEqual((s['a'] + s['b'] + s['c'])%2**32, 666)
         self.assertEqual((s['b'] - s['c'])%2**32, 321)
 
+    def test_bitvec32(self):
+        s = self.s
+        a, b, c = s.bitvecs('a b c')
+        s.add(a != 0, b != 0, c != 0, a != b, b != c, a != c)
+        self.assertTrue(s.check(a * 2 + b * 2 == c * 2))
+        self.assertEqual((s['a'] * 2 + s['b'] * 2)%2**32, s['c'] * 2 % 2**32)
+
 
 if __name__ == '__main__':
     unittest.main()

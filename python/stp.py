@@ -157,7 +157,7 @@ class Solver(object):
         # _lib.vc_Destroy(self.vc)
         pass
 
-    def bitvec(self, name, width):
+    def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
@@ -165,15 +165,20 @@ class Solver(object):
         self.keys[name] = _lib.vc_varExpr(self.vc, name, bv_type)
         return Expr(self, width, self.keys[name], name=name)
 
+    def bitvecs(self, names, width=32):
+        """Creates one or more BitVectors variables."""
+        return [self.bitvec(name, width) for name in names.split()]
+
     def bitvecval(self, width, value):
         """Creates a new BitVector with a constant value."""
         expr = _lib.vc_bvConstExprFromInt(self.vc, width, value)
         return Expr(self, width, expr)
 
-    def add(self, expr):
-        """Adds a constraint to STP."""
-        assert isinstance(expr, Expr), 'Formula should be an Expression'
-        _lib.vc_assertFormula(self.vc, expr.expr)
+    def add(self, *exprs):
+        """Adds one or more constraint(s) to STP."""
+        for expr in exprs:
+            assert isinstance(expr, Expr), 'Formula should be an Expression'
+            _lib.vc_assertFormula(self.vc, expr.expr)
 
     def push(self):
         """Enter a new frame."""
