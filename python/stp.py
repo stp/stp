@@ -188,17 +188,22 @@ class Solver(object):
         """Leave the current frame."""
         _lib.vc_pop(self.vc)
 
+    def _n_exprs(self, *exprs):
+        """Creates an array of Expressions to be used in the C API."""
+        for expr in exprs:
+            assert isinstance(expr, Expr), 'Object should be an Expression'
+
+        # This may not be very clean, but I'm not sure if there are
+        # better ways to achieve this goal.
+        exprs = [expr.expr for expr in exprs]
+        exprs = (_Expr * len(exprs))(*exprs)
+        return exprs, len(exprs)
+
     def check(self, *exprs):
         """Check whether the various expressions are satisfiable."""
-        if len(exprs) == 1:
-            expr = exprs[0].expr
-        else:
-            # This may not be very clean, but I'm not sure if there are
-            # better ways to achieve this goal.
-            exprs = [expr.expr for expr in exprs]
-            exprs = (_Expr * len(exprs))(*exprs)
-            expr = _lib.vc_andExprN(self.vc, exprs, len(exprs))
-        ret = _lib.vc_query(self.vc, _lib.vc_notExpr(self.vc, expr))
+        expr = self.and_(*exprs)
+        expr = _lib.vc_notExpr(self.vc, expr.expr)
+        ret = _lib.vc_query(self.vc, expr)
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
@@ -213,10 +218,27 @@ class Solver(object):
     # Allows easy access to the Counter Example.
     __getitem__ = model
 
+    def and_(self, *exprs):
+        exprs, length = self._n_exprs(*exprs)
+        expr = _lib.vc_andExprN(self.vc, exprs, length)
+        return Expr(self.vc, None, expr)
+
+    def or_(self, *exprs):
+        exprs, length = self._n_exprs(*exprs)
+        expr = _lib.vc_orExprN(self.vc, exprs, length)
+        return Expr(self.vc, None, expr)
+
+    def xor(self, a, b):
+        assert isinstance(a, Expr), 'Object must be an Expression'
+        assert isinstance(b, Expr), 'Object must be an Expression'
+        expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
+        return Expr(self.vc, None, expr)
+
     def not_(self, obj):
         assert isinstance(obj, Expr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
         return Expr(self.vc, obj.width, expr)
+
 
 class Expr(object):
     def __init__(self, s, width, expr, name=None):

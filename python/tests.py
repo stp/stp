@@ -53,6 +53,13 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(a * 2 + b * 2 == c * 2))
         self.assertEqual((s['a'] * 2 + s['b'] * 2)%2**32, s['c'] * 2 % 2**32)
 
+    def test_boolean_expr(self):
+        s = self.s
+        a, b, c = s.bitvecs('a b c')
+        s.add(a != b, a != c, b != c)
+        self.assertTrue(s.check(s.or_(a + b == 1, a + c == 1)))
+        self.assertTrue(s['a'] + s['b'] == 1 or s['a'] + s['c'] == 1)
+
 
 if __name__ == '__main__':
     unittest.main()
