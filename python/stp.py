@@ -1,6 +1,12 @@
+import ast
 from ctypes import cdll, POINTER, CFUNCTYPE
 from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong
+import inspect
 import os.path
+
+__all__ = [
+    'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
+]
 
 PATHS = [
     './libstp.so',
@@ -434,6 +440,145 @@ class Expr(object):
         """Simplify an expression."""
         expr = _lib.vc_simplify(self.s.vc, self.expr)
         return Expr(self.s, self.width, expr)
+
+
+class ASTtoSTP(ast.NodeVisitor):
+    def __init__(self, s, count, *args, **kwargs):
+        ast.NodeVisitor.__init__(self)
+        self.s = s
+        self.count = count
+        self.inside = False
+        self.func_name = None
+        self.bitvecs = {}
+        self.exprs = []
+        self.returned = None
+        self.args = args
+        self.kwargs = kwargs
+
+    def _super(self, node):
+        return super(ASTtoSTP, self).generic_visit(node)
+
+    visit_Module = _super
+
+    def visit_FunctionDef(self, node):
+        assert node.args.vararg is None and node.args.kwarg is None, \
+            'Variable and Keyword arguments are not allowed'
+
+        if self.inside:
+            raise Exception('Nested functions are not allowed')
+
+        self.inside = True
+        self.func_name = node.name
+
+        for idx, arg in enumerate(node.args.args):
+            name = '%s_%d_%s' % (self.func_name, self.count, arg.id)
+            if idx < len(self.args):
+                self.bitvecs[name] = self.args[idx]
+                continue
+
+            if arg.id in self.kwargs:
+                self.bitvecs[name] = self.kwargs[arg.id]
+                continue
+
+            width = 32
+            if idx < len(node.args.defaults):
+                width = node.args.defaults[idx]
+
+            self.bitvecs[name] = self.s.bitvec(name, width=width)
+
+        for row in node.body:
+            self.visit(row)
+
+    def visit_Num(self, node):
+        return node.n
+
+    def visit_BoolOp(self, node):
+        ops = {
+            ast.And: self.s.and_,
+            ast.Or: self.s.or_,
+        }
+        x = self.visit(node.values[0])
+        y = self.visit(node.values[1])
+        return ops[node.op.__class__](x, y)
+
+    def visit_BinOp(self, node):
+        ops = {
+            ast.Add: lambda x, y: x + y,
+            ast.Sub: lambda x, y: x - y,
+            ast.Mult: lambda x, y: x * y,
+            ast.Div: lambda x, y: x / y,
+            ast.Mod: lambda x, y: x % y,
+            ast.LShift: lambda x, y: x << y,
+            ast.RShift: lambda x, y: x >> y,
+            ast.BitOr: lambda x, y: x | y,
+            ast.BitXor: lambda x, y: x ^ y,
+            ast.BitAnd: lambda x, y: x & y,
+        }
+        x = self.visit(node.left)
+        y = self.visit(node.right)
+        return ops[node.op.__class__](x, y)
+
+    def visit_Compare(self, node):
+        assert len(node.ops) == 1, 'TODO Support multiple comparison ops'
+
+        cmps = {
+            ast.Eq: lambda x, y: x == y,
+            ast.NotEq: lambda x, y: x != y,
+            ast.Lt: lambda x, y: x < y,
+            ast.LtE: lambda x, y: x <= y,
+            ast.Gt: lambda x, y: x > y,
+            ast.GtE: lambda x, y: x >= y,
+            ast.Is: lambda x, y: x == y,
+            ast.IsNot: lambda x, y: x != y,
+        }
+
+        x = self.visit(node.left)
+        y = self.visit(node.comparators[0])
+        return cmps[node.ops[0].__class__](x, y)
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            name = '%s_%d_%s' % (self.func_name, self.count, node.id)
+            return self.bitvecs[name]
+
+        raise
+
+    def visit_Assert(self, node):
+        self.exprs.append(self.visit(node.test))
+
+    def visit_Return(self, node):
+        self.returned = self.visit(node.value)
+
+    def generic_visit(self, node):
+        raise Exception(node.__class__.__name__ + ' is not yet supported!')
+
+
+def _eval_ast(root, *args, **kwargs):
+    s = Solver.current
+    node = ASTtoSTP(s, root.count-1, *args, **kwargs)
+    node.visit(root)
+    if node.exprs:
+        s.add(*node.exprs)
+    return node.returned
+
+
+def stp(f):
+    try:
+        src = inspect.getsource(f)
+    except IOError:
+        raise Exception(
+            'It is only possible to use the @stp decorator when the '
+            'function is stored in a source file. It does *not* work '
+            'directly from the Python interpreter.')
+
+    node = ast.parse(src)
+    node.count = 0
+
+    def h(*args, **kwargs):
+        node.count += 1
+        return _eval_ast(node, *args, **kwargs)
+
+    return h
 
 
 def add(*args, **kwargs):
