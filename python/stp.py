@@ -167,6 +167,7 @@ class Solver(object):
 
     def __enter__(self):
         Solver.current = self
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         Solver.current = None

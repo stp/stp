@@ -1,4 +1,4 @@
-from stp import add, bitvecs, check, model, stp, Solver
+from stp import stp, Solver
 import unittest
 
 
@@ -79,13 +79,14 @@ class TestSTP(unittest.TestCase):
             {'y': 489153109L, 'x': 489153109L},
         ]
 
-        with Solver():
-            x, y = bitvecs('x y')
+        with Solver() as s:
+            x, y = s.bitvecs('x y')
             count = 0
-            while check(test0_foo(x, y) == test0_foo(y, x), test0_bar(x, y)):
+            while s.check(test0_foo(x, y) == test0_foo(y, x),
+                          test0_bar(x, y)):
                 count += 1
-                assert model() in models
-                add(x != model('x'))
+                assert s.model() in models
+                s.add(x != s.model('x'))
 
             assert count == 4
 
