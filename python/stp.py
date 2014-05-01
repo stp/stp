@@ -182,6 +182,14 @@ class Solver(object):
         expr = _lib.vc_bvConstExprFromLL(self.vc, width, value)
         return Expr(self, width, expr)
 
+    def true(self):
+        """Creates a True boolean."""
+        return Expr(self, None, _lib.vc_trueExpr(self.vc))
+
+    def false(self):
+        """Creates a False boolean."""
+        return Expr(self, None, _lib.vc_falseExpr(self.vc))
+
     def add(self, *exprs):
         """Adds one or more constraint(s) to STP."""
         for expr in exprs:
@@ -229,23 +237,23 @@ class Solver(object):
     def and_(self, *exprs):
         exprs, length = self._n_exprs(*exprs)
         expr = _lib.vc_andExprN(self.vc, exprs, length)
-        return Expr(self.vc, None, expr)
+        return Expr(self, None, expr)
 
     def or_(self, *exprs):
         exprs, length = self._n_exprs(*exprs)
         expr = _lib.vc_orExprN(self.vc, exprs, length)
-        return Expr(self.vc, None, expr)
+        return Expr(self, None, expr)
 
     def xor(self, a, b):
         assert isinstance(a, Expr), 'Object must be an Expression'
         assert isinstance(b, Expr), 'Object must be an Expression'
         expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
-        return Expr(self.vc, None, expr)
+        return Expr(self, None, expr)
 
     def not_(self, obj):
         assert isinstance(obj, Expr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
-        return Expr(self.vc, obj.width, expr)
+        return Expr(self, obj.width, expr)
 
 
 class Expr(object):
@@ -270,11 +278,18 @@ class Expr(object):
         expr = cb(self.s.vc, self.width, self.expr)
         return Expr(self.s, self.width, expr)
 
+    def _toexpr(self, other):
+        if isinstance(other, (int, long)):
+            return self.s.bitvecval(self.width, other)
+
+        if isinstance(other, bool):
+            return self.s.true() if other else self.s.false()
+
+        return other
+
     def _2(self, cb, other):
         """Wrapper around double-expression STP functions."""
-        if isinstance(other, (int, long)):
-            other = self.s.bitvecval(self.width, other)
-
+        other = self._toexpr(other)
         assert isinstance(other, Expr), \
             'Other object must be an Expr instance'
         expr = cb(self.s.vc, self.expr, other.expr)
@@ -282,9 +297,7 @@ class Expr(object):
 
     def _2w(self, cb, other):
         """Wrapper around double-expression with width STP functions."""
-        if isinstance(other, (int, long)):
-            other = self.s.bitvecval(self.width, other)
-
+        other = self._toexpr(other)
         assert isinstance(other, Expr), \
             'Other object must be an Expr instance'
         assert self.width == other.width, 'Width must be equal'
