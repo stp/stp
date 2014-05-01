@@ -308,26 +308,31 @@ class Expr(object):
         return self._2w(_lib.vc_bvPlusExpr, other)
 
     __add__ = add
+    __radd__ = add
 
     def sub(self, other):
         return self._2w(_lib.vc_bvMinusExpr, other)
 
     __sub__ = sub
+    __rsub__ = sub
 
     def mul(self, other):
         return self._2w(_lib.vc_bvMultExpr, other)
 
     __mul__ = mul
+    __rmul__ = mul
 
     def div(self, other):
         return self._2w(_lib.vc_bvDivExpr, other)
 
     __div__ = div
+    __rdiv__ = div
 
     def mod(self, other):
         return self._2w(_lib.vc_bvModExpr, other)
 
     __mod__ = mod
+    __rmod__ = mod
 
     def rem(self, other):
         return self._2w(_lib.vc_bvRemExpr, other)
@@ -387,16 +392,19 @@ class Expr(object):
         return self._2(_lib.vc_bvAndExpr, other)
 
     __and__ = and_
+    __rand__ = and_
 
     def or_(self, other):
         return self._2(_lib.vc_bvOrExpr, other)
 
     __or__ = or_
+    __ror__ = or_
 
     def xor(self, other):
         return self._2(_lib.vc_bvXorExpr, other)
 
     __xor__ = xor
+    __rxor__ = xor
 
     def not_(self):
         return self._1(_lib.vc_bvNotExpr)
@@ -407,11 +415,13 @@ class Expr(object):
         return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
 
     __lshift__ = shl
+    __rlshift__ = shl
 
     def shr(self, other):
         return self._2w(_lib.vc_bvRightShiftExprExpr, other)
 
     __rshift__ = shr
+    __rrshift__ = shr
 
     def sar(self, other):
         return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
