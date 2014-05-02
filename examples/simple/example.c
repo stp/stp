@@ -4,13 +4,25 @@
  */
 #include <stp/c_interface.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 void handleQuery(VC handle, Expr queryExpr);
+
+// Error handler
+void errorHandler(const char* err_msg)
+{
+    printf("Error: %s\n", err_msg);
+    exit(1);
+}
 
 int main(int argc, char** argv)
 {
     int width=8;
+
     VC handle = vc_createValidityChecker();
+
+    // Register a callback for errors
+    vc_registerErrorHandler(errorHandler);
 
     // Create variable "x"
     Expr x = vc_varExpr(handle, "x", vc_bvType(handle, width));

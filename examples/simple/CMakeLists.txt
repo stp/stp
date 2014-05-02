@@ -16,15 +16,25 @@ message("STP Static Library target is: ${STP_STATIC_LIBRARY}")
 message("STP Shared Library target is: ${STP_SHARED_LIBRARY}")
 message("STP executable: ${STP_EXECUTABLE}")
 
-# Try to use the shared library if available
-if(STP_SHARED_LIBRARY)
-  set(LIB ${STP_SHARED_LIBRARY})
-  message("Using STP shared library")
-elseif (STP_STATIC_LIBRARY)
-  set(LIB ${STP_STATIC_LIBRARY})
-  message("Using STP static library")
+# -----------------------------------------------------------------------------
+# Pick which STP library to use
+# -----------------------------------------------------------------------------
+option(USE_STP_SHARED_LIBRARY "Try to build against STP's shared library" ON)
+
+if(USE_STP_SHARED_LIBRARY)
+  if(STP_SHARED_LIBRARY)
+    set(LIB ${STP_SHARED_LIBRARY})
+    message("Using STP shared library")
+  else()
+    message(FATAL_ERROR "STP shared library is not available")
+  endif()
 else()
-  message(FATAL_ERROR "No library target is available")
+  if(STP_STATIC_LIBRARY)
+    set(LIB ${STP_STATIC_LIBRARY})
+    message("Using STP static library")
+  else()
+    message(FATAL_ERROR "STP static library is not available")
+  endif()
 endif()
 
 # Get full path to STP executable

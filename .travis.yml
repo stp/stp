@@ -12,7 +12,8 @@ before_install:
   - git submodule init
   - git submodule update
   - mkdir build && cd build
-  - mkdir simple_example
+  - mkdir simple_example_static
+  - mkdir simple_example_shared
   - mkdir stp && cd stp
   - cmake -G "Unix Makefiles" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING="-v" -DBUILD_SHARED_LIBS:BOOL=ON -DALSO_BUILD_STATIC_LIB:BOOL=ON ../..
 script:
@@ -23,6 +24,13 @@ script:
   - test -f lib/libstp.a
   - make check
 # Build example project. We assume that the build installed itself to the CMake user package registry (~/.cmake/packages/)
-  - cd ../simple_example
-  - cmake -G "Unix Makefiles" ../../examples/simple
+# Build against static library
+  - cd ../simple_example_static
+  - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY:BOOL=OFF ../../examples/simple
   - make
+  - ./stp-example
+# Build against shared library
+  - cd ../simple_example_shared
+  - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY:BOOL=ON ../../examples/simple
+  - make
+  - ./stp-example
