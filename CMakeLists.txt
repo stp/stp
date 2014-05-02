@@ -51,9 +51,9 @@ endif()
 # Let the user decide if they want to build shared or static client library.
 # STP will link against this client library
 # -----------------------------------------------------------------------------
-option(BUILD_SHARED_LIBS "Build client library as a shared library" OFF)
+option(BUILD_SHARED_LIBS "Build client library as a shared library" ON)
 if (BUILD_SHARED_LIBS)
-  option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" OFF)
+  option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" ON)
 
   set(STP_SHARED_LIBRARY libstp) # Used for exporting target
 
