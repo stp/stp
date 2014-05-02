@@ -28,8 +28,9 @@ script:
   - cd ../simple_example_static
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY:BOOL=OFF ../../examples/simple
   - make
-# Build example project. We assume that the build installed itself to the CMake user package registry (~/.cmake/packages/)
+  - ./stp-example
 # Build against shared library
   - cd ../simple_example_shared
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY:BOOL=ON ../../examples/simple
   - make
+  - ./stp-example
