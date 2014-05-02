@@ -123,5 +123,34 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(a.value, 0x41414141)
 
 
+    def test_pushpop(self):
+        s = self.s
+
+        s.push()
+        # .add is permanent - once an expression has been added, it cannot
+        # be contradicted.
+        a = s.bitvec('a')
+        s.add(a == 2)
+        self.assertTrue(s.check())
+        self.assertEqual(s.model(), {'a': 2})
+
+        # Contradicts the earlier .add formula.
+        self.assertFalse(s.check(a == 3))
+
+        # Contradicts the earlier .add formula.
+        s.add(a == 3)
+        self.assertFalse(s.check())
+        s.pop()
+
+        s.push()
+        # .check is only used in the current query - an expression given
+        # to .check is not persistent, and can contradict any earlier
+        # expression that has been given to .check.
+        b = s.bitvec('b')
+        self.assertTrue(s.check(b == 1))
+        self.assertTrue(s.check(b == 2))
+        s.pop()
+
+
 if __name__ == '__main__':
     unittest.main()
