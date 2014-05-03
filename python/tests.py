@@ -123,7 +123,6 @@ class TestSTP(unittest.TestCase):
         s.check(a == 0x41414141)
         self.assertEqual(a.value, 0x41414141)
 
-
     def test_pushpop(self):
         s = self.s
 
@@ -151,6 +150,18 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(b == 1))
         self.assertTrue(s.check(b == 2))
         s.pop()
+
+    def test_reflected(self):
+        # Reflected/swapped stuff is like "y+x" instead of "x+y" where "y"
+        # is not an Expr instance, e.g., a plain integer.
+        s = self.s
+
+        a, b = s.bitvecs('a b')
+        self.assertTrue(s.check(42 == a))
+        self.assertEqual(s['a'], 42)
+
+        self.assertTrue(s.check(456 == 123 + a))
+        self.assertEqual(s['a'], 456-123)
 
 
 if __name__ == '__main__':
