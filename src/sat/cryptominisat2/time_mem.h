@@ -24,6 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifdef _MSC_VER
   #include <ctime>
   #include "msvc/stdint.h"
+#elif defined(__MINGW32__) || defined(__MINGW64__)
+  #include <ctime>
+  #include <sys/time.h>
 #else
   #include <sys/time.h>
   #include <sys/resource.h>
@@ -32,7 +35,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #endif
 
 /*************************************************************************************/
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
 
 static inline double cpuTime(void) {
     return (double)clock() / CLOCKS_PER_SEC; }

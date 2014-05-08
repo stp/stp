@@ -474,9 +474,9 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   bmstar b = (bmstar)(stp->bm);
 
   assert(!BEEV::ParserBM->soft_timeout_expired);
-#ifndef _MSC_VER
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
   if (timeout_ms != -1)
-    {
+  {
       itimerval timeout;
       signal(SIGVTALRM, soft_time_out);
       timeout.it_interval.tv_usec = 0;
@@ -484,12 +484,13 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       timeout.it_value.tv_usec    = 1000 * (timeout_ms % 1000);
       timeout.it_value.tv_sec     = timeout_ms / 1000;
       setitimer(ITIMER_VIRTUAL, &timeout, NULL);
-    }
+  }
 #else
-    if (timeout_ms != -1) {
-        BEEV::FatalError("CInterface: query with timeout not supported on Windows builds");
-    }
-#endif
+  if (timeout_ms != -1)
+  {
+      BEEV::FatalError("CInterface: query with timeout not supported on Windows builds");
+  }
+#endif /* !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER) */
   if(!BEEV::is_Form_kind(a->GetKind())) 
     {     
       BEEV::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
@@ -518,14 +519,14 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE),*a);
     }
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
   if (timeout_ms !=-1)
-    {
-      // Reset the timer.
-      setitimer(ITIMER_VIRTUAL, NULL, NULL);
-      BEEV::ParserBM->soft_timeout_expired = false;
-    }
-#endif
+  {
+    // Reset the timer.
+    setitimer(ITIMER_VIRTUAL, NULL, NULL);
+    BEEV::ParserBM->soft_timeout_expired = false;
+  }
+#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) */
 
   return output;
 } //end of vc_query

@@ -642,22 +642,23 @@ namespace BEEV
   }
 
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
   itimerval timeout;
   void setHardTimeout(int sec)
   {
-  signal(SIGVTALRM, handle_time_out);
-  timeout.it_interval.tv_usec = 0;
-  timeout.it_interval.tv_sec  = 0;
-  timeout.it_value.tv_usec    = 0;
-  timeout.it_value.tv_sec     = sec;
-  setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+    signal(SIGVTALRM, handle_time_out);
+    timeout.it_interval.tv_usec = 0;
+    timeout.it_interval.tv_sec  = 0;
+    timeout.it_value.tv_usec    = 0;
+    timeout.it_value.tv_sec     = sec;
+    setitimer(ITIMER_VIRTUAL, &timeout, NULL);
   }
 #else
-  void setHardTimeout(int) {
-      std::cerr << "WARNING: STP does not support hard timeout for Windows builds" << std::endl;
+  void setHardTimeout(int)
+  {
+    std::cerr << "WARNING: STP does not support hard timeout for Windows builds" << std::endl;
   }
-#endif
+#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) */
 
   long getCurrentTime()
   {
