@@ -29,10 +29,16 @@ from ctypes import cdll, POINTER, CFUNCTYPE
 from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong
 import inspect
 import os.path
+import sys
 
 __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
 ]
+
+Py3 = sys.version > '3'
+
+if Py3:
+    long = int
 
 PATHS = [
     './libstp.so',
@@ -202,8 +208,11 @@ class Solver(object):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
+        # TODO Please, please, fix this terrible Py3 support.
+        name_conv = bytes(name, 'utf8') if Py3 else name
+
         bv_type = _lib.vc_bvType(self.vc, width)
-        self.keys[name] = _lib.vc_varExpr(self.vc, name, bv_type)
+        self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, bv_type)
         return Expr(self, width, self.keys[name], name=name)
 
     def bitvecs(self, names, width=32):
@@ -503,13 +512,14 @@ class ASTtoSTP(ast.NodeVisitor):
         self.func_name = node.name
 
         for idx, arg in enumerate(node.args.args):
-            name = '%s_%d_%s' % (self.func_name, self.count, arg.id)
+            arg = arg.arg if Py3 else arg.id
+            name = '%s_%d_%s' % (self.func_name, self.count, arg)
             if idx < len(self.args):
                 self.bitvecs[name] = self.args[idx]
                 continue
 
-            if arg.id in self.kwargs:
-                self.bitvecs[name] = self.kwargs[arg.id]
+            if arg in self.kwargs:
+                self.bitvecs[name] = self.kwargs[arg]
                 continue
 
             width = 32
