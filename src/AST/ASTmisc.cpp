@@ -628,15 +628,19 @@ namespace BEEV
   }
 
 
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
   itimerval timeout;
+#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) */
   void setHardTimeout(int sec)
   {
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
   signal(SIGVTALRM, handle_time_out);
   timeout.it_interval.tv_usec = 0;
   timeout.it_interval.tv_sec  = 0;
   timeout.it_value.tv_usec    = 0;
   timeout.it_value.tv_sec     = sec;
   setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) */
   }
 
   long getCurrentTime()
