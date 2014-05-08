@@ -98,7 +98,7 @@ if (BUILD_SHARED_LIBS)
 
   set(STP_SHARED_LIBRARY libstp) # Used for exporting target
 
-  if (ALSO_BUILD_STATIC_LIB)
+  if (ALSO_BUILD_STATIC_LIB AND NOT WIN32)
     list(APPEND TARGETS_TO_EXPORT libstp_static)
     set(STP_STATIC_LIBRARY libstp_static) # Used for exporting target
   endif()
