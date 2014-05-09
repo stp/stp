@@ -10,7 +10,7 @@
 #include <iostream>
 #include "parser.h"
 #include "parsecvc.hpp"
-#include "../cpp_interface/cpp_interface.h"
+#include "../interface/CPP/cpp_interface.h"
 
   using namespace std;
   using namespace BEEV;  

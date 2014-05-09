@@ -9,7 +9,7 @@
    ********************************************************************/
   
 #include "parser.h"
-#include "../cpp_interface/cpp_interface.h"
+#include "../interface/CPP/cpp_interface.h"
 
   using namespace BEEV;
   

@@ -44,7 +44,7 @@
   // -*- c++ -*-L
 #include "parser.h"
 #include "parsesmt2.hpp"
-#include "../cpp_interface/cpp_interface.h"
+#include "../interface/CPP/cpp_interface.h"
 
   extern char *smt2text;
   extern int smt2error (const char *msg);
