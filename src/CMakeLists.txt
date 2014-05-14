@@ -13,5 +13,10 @@ add_subdirectory(sat)
 add_subdirectory(libstp)
 add_subdirectory(main)
 
+# We can't setup python interface until
+# libstp target is made
+if(ENABLE_PYTHON_INTERFACE)
+    add_subdirectory(interface/python)
+endif()
 
 #add_subdirectory(util)
