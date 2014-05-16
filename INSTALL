@@ -28,8 +28,16 @@ To build STP run
     cmake -G 'Unix Makefiles' /path/to/stp/source/root
     make
 
-If you'd prefer a more in-depth explaination of how to configure, build
+If you'd prefer a more in-depth explanation of how to configure, build
 and install STP read on...
+
+Dependencies
+------------
+STP relies on a few dependencies, namely boost and flex/bison. Installing
+the required header files and binaries can be achieved through the following.
+(Tested on Ubuntu 13.04.)
+
+    sudo apt-get install bison flex libboost-all-dev
 
 Build directory
 ---------------

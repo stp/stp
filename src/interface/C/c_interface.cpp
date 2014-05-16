@@ -12,7 +12,7 @@
 #include <assert.h>
 #include "fdstream.h"
 #include "../printer/printers.h"
-#include "../cpp_interface/cpp_interface.h"
+#include "../CPP/cpp_interface.h"
 #include "../extlib-abc/cnf_short.h"
 
 using std::cout;

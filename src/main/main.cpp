@@ -15,7 +15,7 @@
 #include "../STPManager/STP.h"
 #include "../AST/NodeFactory/TypeChecker.h"
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
-#include "../cpp_interface/cpp_interface.h"
+#include "../interface/CPP/cpp_interface.h"
 #include <sys/time.h>
 #include <memory>
 #include "../extlib-abc/cnf_short.h"
