@@ -1,3 +1,4 @@
+// vim: set sw=2 ts=2 softtabstop=2 expandtab:
 #ifndef CPP_INTERFACE_H_
 #define CPP_INTERFACE_H_
 
