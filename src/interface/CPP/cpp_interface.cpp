@@ -1,12 +1,326 @@
 // vim: set sw=2 ts=2 softtabstop=2 expandtab:
 #include "cpp_interface.h"
 #include "../to-sat/AIG/ToSATAIG.h"
+#include <cassert>
 
 namespace BEEV
 {
+  void Cpp_interface::checkInvariant()
+  {
+    assert(bm.getAssertLevel() == cache.size());
+    assert(bm.getAssertLevel() == symbols.size());
+  }
+
+  void Cpp_interface::init()
+  {
+    assert(nf != NULL);
+    alreadyWarned = false;
+
+    cache.push_back(Entry(SOLVER_UNDECIDED));
+    symbols.push_back(ASTVec());
+
+    if (bm.getVectorOfAsserts().size() ==0)
+      bm.Push();
+
+    print_success = false;
+    ignoreCheckSatRequest=false;
+  }
+
+  Cpp_interface::Cpp_interface(STPMgr &bm_, NodeFactory* factory) :
+      bm(bm_)
+      , letMgr(bm.ASTUndefined)
+      , nf(factory)
+  {
+    init();
+  }
+
+  void Cpp_interface::startup()
+  {
+    CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+    if(0 != c) {
+      cout << CONSTANTBV::BitVector_Error(c) << endl;
+      FatalError("Bad startup");
+    }
+  }
+
+  const ASTVec Cpp_interface::GetAsserts(void)
+  {
+    return bm.GetAsserts();
+  }
+
+  const ASTVec Cpp_interface::getAssertVector(void)
+  {
+    return bm.getVectorOfAsserts();
+  }
+
+  UserDefinedFlags& Cpp_interface::getUserFlags()
+  {
+    return bm.UserFlags;
+  }
+
+  void Cpp_interface::AddAssert(const ASTNode& assert)
+  {
+    bm.AddAssert(assert);
+  }
+
+  void Cpp_interface::AddQuery(const ASTNode& q)
+  {
+    bm.AddQuery(q);
+  }
+
+  ASTNode Cpp_interface::CreateNode(BEEV::Kind kind,
+                                    const BEEV::ASTVec& children)
+  {
+    return nf->CreateNode(kind, children);
+  }
+
+  ASTNode Cpp_interface::CreateNode(BEEV::Kind kind,
+                                    const BEEV::ASTNode n0,
+                                    const BEEV::ASTNode n1)
+  {
+    if (n0.GetIndexWidth() > 0 && !alreadyWarned)
+    {
+      cerr << "Warning: Parsing a term that uses array extensionality. "
+              "STP doesn't handle array extensionality." << endl;
+      alreadyWarned = true;
+    }
+    return nf->CreateNode(kind, n0, n1);
+  }
+
+  ASTNode Cpp_interface::CreateZeroConst(unsigned int width)
+  {
+    return bm.CreateZeroConst(width);
+  }
+
+  ASTNode Cpp_interface::CreateOneConst(unsigned int width)
+  {
+    return bm.CreateOneConst(width);
+  }
+
+  ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
+  {
+    return bm.CreateBVConst(strval, base, bit_width);
+  }
+
+  ASTNode Cpp_interface::CreateBVConst(const char* const strval, int base)
+  {
+    return bm.CreateBVConst(strval, base);
+  }
+
+  // FIXME: unsigned long long int is disgusting! use intN_t from cstdint.h
+  ASTNode Cpp_interface::CreateBVConst(unsigned int width,
+                                       unsigned long long int bvconst)
+  {
+    return bm.CreateBVConst(width, bvconst);
+  }
+
+  ASTNode Cpp_interface::LookupOrCreateSymbol(const char * const name)
+  {
+    return bm.LookupOrCreateSymbol(name);
+  }
+
+  void Cpp_interface::removeSymbol(ASTNode s)
+  {
+    bool removed=false;
+
+    for (size_t i = 0; i < symbols.back().size(); i++)
+      if (symbols.back()[i] == s)
+      {
+        symbols.back().erase(symbols.back().begin() + i);
+        removed = true;
+      }
+
+    if (!removed)
+      FatalError("Should have been removed...");
+
+    letMgr._parser_symbol_table.erase(s);
+  }
+
+  void Cpp_interface::storeFunction(const string name,
+                                    const ASTVec& params,
+                                    const ASTNode& function)
+  {
+    Function f;
+    f.name = name;
+
+    ASTNodeMap fromTo;
+    for (size_t i = 0, size = params.size(); i < size; ++i)
+    {
+      ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(),
+                                         params[i].GetValueWidth(),
+                                         "STP_INTERNAL_FUNCTION_NAME");
+      fromTo.insert(std::make_pair(params[i], p));
+      f.params.push_back(p);
+    }
+
+    ASTNodeMap cache;
+    f.function = SubstitutionMap::replace(function,fromTo,cache, nf);
+    functions.insert(std::make_pair(f.name,f));
+  }
+
+  ASTNode Cpp_interface::applyFunction(const string name,
+                                       const ASTVec& params)
+  {
+    if (functions.find(name) == functions.end())
+      FatalError("Trying to apply function which has not been defined.");
+
+    Function f;
+    f = functions[string(name)];
+
+    ASTNodeMap fromTo;
+    for (size_t i = 0, size = f.params.size(); i < size; ++i)
+    {
+      if (f.params[i].GetValueWidth() != params[i].GetValueWidth())
+        FatalError("Actual parameters differ from formal");
+
+      if (f.params[i].GetIndexWidth() != params[i].GetIndexWidth())
+        FatalError("Actual parameters differ from formal");
+
+      fromTo.insert(std::make_pair(f.params[i], params[i]));
+    }
+
+    ASTNodeMap cache;
+    return SubstitutionMap::replace(f.function,fromTo,cache, nf);
+  }
+
+  bool Cpp_interface::isFunction(const string name)
+  {
+    return (functions.find(name) != functions.end());
+  }
+
+  ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
+  {
+    return bm.LookupOrCreateSymbol(name.c_str());
+  }
+
+  bool Cpp_interface::LookupSymbol(const char * const name, ASTNode& output)
+  {
+    return bm.LookupSymbol(name, output);
+  }
+
+  bool Cpp_interface::isSymbolAlreadyDeclared(char* name)
+  {
+    return bm.LookupSymbol(name);
+  }
+
+  void Cpp_interface::setPrintSuccess(bool ps)
+  {
+    print_success = ps;
+  }
+
+  bool Cpp_interface::isSymbolAlreadyDeclared(string name)
+  {
+    return bm.LookupSymbol(name.c_str());
+  }
+
+  ASTNode* Cpp_interface::newNode(const Kind k,
+                                  const ASTNode& n0,
+                                  const ASTNode& n1)
+  {
+    return newNode(CreateNode(k, n0, n1));
+  }
+
+  ASTNode* Cpp_interface::newNode(const Kind k,
+                                  const int width,
+                                  const ASTNode& n0,
+                                  const ASTNode& n1)
+  {
+    return newNode(nf->CreateTerm(k, width, n0, n1));
+  }
+
+  ASTNode* Cpp_interface::newNode(const ASTNode& copyIn)
+  {
+    return new ASTNode(copyIn);
+  }
+
+  void Cpp_interface::deleteNode(ASTNode *n)
+  {
+    delete n;
+  }
+
+  void Cpp_interface::addSymbol(ASTNode &s)
+  {
+    symbols.back().push_back(s);
+    letMgr._parser_symbol_table.insert(s);
+  }
+
+  void Cpp_interface::success()
+  {
+    if (print_success)
+    {
+      cout << "success" << endl;
+      flush(cout);
+    }
+  }
+
+  void Cpp_interface::resetSolver()
+  {
+    bm.ClearAllTables();
+    GlobalSTP->ClearAllTables();
+  }
+
+  void Cpp_interface::popToFirstLevel()
+  {
+    while (symbols.size() > 1)
+      pop();
+
+    // I don't understand why this is required.
+    while(bm.getAssertLevel() > 0)
+     bm.Pop();
+  }
+
+  void Cpp_interface::pop()
+  {
+    if (symbols.size() == 0)
+      FatalError("Popping from an empty stack.");
+    if (symbols.size() == 1)
+      FatalError("Can't pop away the default base element.");
+
+    bm.Pop();
+
+    // These tables might hold references to symbols that have been
+    // removed.
+    resetSolver();
+
+    cache.erase(cache.end() - 1);
+    ASTVec & current = symbols.back();
+    for (size_t i = 0, size = current.size(); i < size; ++i)
+      letMgr._parser_symbol_table.erase(current[i]);
+
+    symbols.erase(symbols.end() - 1);
+    checkInvariant();
+  }
+
+  void Cpp_interface::push()
+  {
+    // If the prior one is unsatisiable then the new one will be too.
+    if (cache.size() > 1 && cache.back().result == SOLVER_UNSATISFIABLE)
+      cache.push_back(Entry(SOLVER_UNSATISFIABLE));
+    else
+      cache.push_back(Entry(SOLVER_UNDECIDED));
+
+    bm.Push();
+    symbols.push_back(ASTVec());
+
+    checkInvariant();
+  }
+
+  void Cpp_interface::ignoreCheckSat()
+  {
+    ignoreCheckSatRequest=  true;
+  }
+
+  void Cpp_interface::printStatus()
+  {
+    for (size_t i = 0, size = cache.size(); i < size; ++i)
+    {
+      cache[i].print();
+    }
+    cerr << endl;
+  }
+
   // Does some simple caching of prior results.
-  void
-  Cpp_interface::checkSat(const ASTVec & assertionsSMT2)
+  void Cpp_interface::checkSat(const ASTVec & assertionsSMT2)
   {
     if (ignoreCheckSatRequest)
       return;
@@ -67,7 +381,7 @@ namespace BEEV
 
   // This method sets up some of the globally required data.
   Cpp_interface::Cpp_interface(STPMgr &bm_) :
-      bm(bm_), nf(bm_.defaultNodeFactory), letMgr(bm.ASTUndefined)
+      bm(bm_), letMgr(bm.ASTUndefined), nf(bm_.defaultNodeFactory)
   {
     nf = bm.defaultNodeFactory;
     startup();
@@ -82,6 +396,19 @@ namespace BEEV
 
     GlobalSTP = new STP(&bm, simp, at, tosat, abs);
     init();
+  }
+
+
+  void Cpp_interface::deleteGlobal()
+  {
+    delete GlobalSTP;
+  }
+
+  void Cpp_interface::cleanUp()
+  {
+    letMgr.cleanupParserSymbolTable();
+    cache.clear();
+    symbols.clear();
   }
 }
 ;
