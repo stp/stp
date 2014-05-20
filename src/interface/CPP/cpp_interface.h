@@ -10,10 +10,6 @@
 
 namespace BEEV
 {
-  using BEEV::STPMgr;
-  using std::cerr;
-  using std::cout;
-  using std::endl;
 
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
 
@@ -41,11 +37,11 @@ namespace BEEV
       print()
       {
         if (result == SOLVER_UNSATISFIABLE)
-          cerr << "u";
+          std::cerr << "u";
         else if (result == SOLVER_SATISFIABLE)
-          cerr << "s";
+          std::cerr << "s";
         else if (result == SOLVER_UNDECIDED)
-          cerr << "?";
+          std::cerr << "?";
       }
     };
     vector<Entry> cache;

@@ -3,6 +3,10 @@
 #include "../to-sat/AIG/ToSATAIG.h"
 #include <cassert>
 
+using std::cerr;
+using std::cout;
+using std::endl;
+
 namespace BEEV
 {
   void Cpp_interface::checkInvariant()

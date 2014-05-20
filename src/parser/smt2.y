@@ -48,6 +48,9 @@
 #include "../interface/CPP/cpp_interface.h"
 
   using namespace BEEV;
+  using std::cout;
+  using std::cerr;
+  using std::endl;
 
   // Suppress the bogus warning suppression in bison (it generates
   // compile error)

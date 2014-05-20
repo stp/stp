@@ -32,6 +32,9 @@ using namespace __gnu_cxx;
 #endif
 using namespace BEEV;
 using std::auto_ptr;
+using std::cout;
+using std::cerr;
+using std::endl;
 
 extern int smtparse(void*);
 extern int smt2parse();
