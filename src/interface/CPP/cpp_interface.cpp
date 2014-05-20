@@ -1,6 +1,8 @@
 // vim: set sw=2 ts=2 softtabstop=2 expandtab:
 #include "cpp_interface.h"
 #include "../to-sat/AIG/ToSATAIG.h"
+#include "../STPManager/STPManager.h"
+#include "../STPManager/STP.h"
 #include <cassert>
 
 using std::cerr;

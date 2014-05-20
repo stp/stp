@@ -5,13 +5,15 @@
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/NodeFactory.h"
 #include "../parser/LetMgr.h"
-#include "../STPManager/STPManager.h"
-#include "../STPManager/STP.h"
 
 namespace BEEV
 {
 
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
+
+  // Foward declarations
+  struct UserDefinedFlags;
+  class STPMgr;
 
   class Cpp_interface
   {
