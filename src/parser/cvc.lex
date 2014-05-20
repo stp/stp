@@ -141,9 +141,9 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
     // Making 4.4M strings took 1B instructions. So I split out the above case 
     // which occurs >90% of the time (so avoiding turning the char* into a string).
     string str(yytext);
-    if (BEEV::parserInterface->letMgr.isLetDeclared(str)) // a let.
+    if (BEEV::parserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr= BEEV::parserInterface->letMgr.resolveLet(str);
+    	nptr= BEEV::parserInterface->letMgr->resolveLet(str);
     	cvclval.node = BEEV::parserInterface->newNode(nptr);
 	  
 	    if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)

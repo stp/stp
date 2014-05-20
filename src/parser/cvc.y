@@ -10,6 +10,7 @@
   
 #include "parser.h"
 #include "../interface/CPP/cpp_interface.h"
+#include "LetMgr.h"
 
   using namespace BEEV;
   using std::cout;
@@ -188,11 +189,11 @@
 
 cmd             :      other_cmd
 {
-  parserInterface->letMgr._parser_symbol_table.clear();
+  parserInterface->letMgr->_parser_symbol_table.clear();
 }
 |      other_cmd counterexample
 {
-  parserInterface->letMgr._parser_symbol_table.clear(); 
+  parserInterface->letMgr->_parser_symbol_table.clear(); 
 }
 ; 
 
@@ -317,7 +318,7 @@ VarDecl         :      FORM_IDs ':' Type
     ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol(*i);
     s.SetIndexWidth($3.indexwidth);
     s.SetValueWidth($3.valuewidth);
-    parserInterface->letMgr._parser_symbol_table.insert(s);
+    parserInterface->letMgr->_parser_symbol_table.insert(s);
     ParserBM->ListOfDeclaredVars.push_back(s);
   }
   delete $1;
@@ -332,7 +333,7 @@ VarDecl         :      FORM_IDs ':' Type
     yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
-    parserInterface->letMgr.LetExprMgr(*i,*$5);
+    parserInterface->letMgr->LetExprMgr(*i,*$5);
   }
     delete $5;
     delete $1;
@@ -347,7 +348,7 @@ VarDecl         :      FORM_IDs ':' Type
     yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
-    parserInterface->letMgr.LetExprMgr(*i,*$5);
+    parserInterface->letMgr->LetExprMgr(*i,*$5);
   }
   delete $5;
   delete $1;
@@ -379,7 +380,7 @@ ForDecl         :      FORMID_TOK ':' Type
 {
   $1->SetIndexWidth($3.indexwidth);
   $1->SetValueWidth($3.valuewidth);
-  parserInterface->letMgr._parser_symbol_table.insert(*$1);
+  parserInterface->letMgr->_parser_symbol_table.insert(*$1);
   $$ = $1;                      
 }
 
@@ -459,7 +460,7 @@ Formula         :     '(' Formula ')'
 }
 |      FORMID_TOK 
 {  
-  $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); delete $1;
+  $$ = new ASTNode(parserInterface->letMgr->ResolveID(*$1)); delete $1;
 }
 |      FORMID_TOK '(' Expr ')' 
 {
@@ -614,7 +615,7 @@ Formula         :     '(' Formula ')'
 {
   $$ = $4;
   //Cleanup the LetIDToExprMap
-  parserInterface->letMgr.CleanupLetIDMap();
+  parserInterface->letMgr->CleanupLetIDMap();
 }
 ;
 
@@ -660,7 +661,7 @@ Exprs           :      Expr
 ;
 
 /* Grammar for Expr */
-Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr.ResolveID(*$1)); delete $1;}
+Expr            :      TERMID_TOK { $$ = new ASTNode(parserInterface->letMgr->ResolveID(*$1)); delete $1;}
 |      '(' Expr ')' { $$ = $2; }
 |      BVCONST_TOK { $$ = $1; }
 |      BOOL_TO_BV_TOK '(' Formula ')'           
@@ -1069,7 +1070,7 @@ LetDecl         :       STRING_TOK '=' Expr
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr($1,*$3);
+  parserInterface->letMgr->LetExprMgr($1,*$3);
   free($1);
   delete $3;
 }
@@ -1083,7 +1084,7 @@ LetDecl         :       STRING_TOK '=' Expr
   if($3.valuewidth != $5->GetValueWidth())
     yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
 
-  parserInterface->letMgr.LetExprMgr($1,*$5);
+  parserInterface->letMgr->LetExprMgr($1,*$5);
   free( $1);
   delete $5;
 }
@@ -1093,7 +1094,7 @@ LetDecl         :       STRING_TOK '=' Expr
   BVTypeCheck(*$3);
 
   //Do LET-expr management
-  parserInterface->letMgr.LetExprMgr($1,*$3);
+  parserInterface->letMgr->LetExprMgr($1,*$3);
   free( $1);
   delete $3;
 }
@@ -1108,7 +1109,7 @@ LetDecl         :       STRING_TOK '=' Expr
     yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
 
   //Do LET-expr management
-  parserInterface->letMgr.LetExprMgr($1,*$5);
+  parserInterface->letMgr->LetExprMgr($1,*$5);
   free( $1);
   delete $5;
 }                

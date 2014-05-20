@@ -4,7 +4,9 @@
 
 #include "../AST/AST.h"
 #include "../AST/NodeFactory/NodeFactory.h"
-#include "../parser/LetMgr.h"
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace BEEV
 {
@@ -14,6 +16,7 @@ namespace BEEV
   // Foward declarations
   struct UserDefinedFlags;
   class STPMgr;
+  class LETMgr;
 
   class Cpp_interface
   {
@@ -53,16 +56,16 @@ namespace BEEV
     {
       ASTVec params;
       ASTNode function;
-      string name;
+      std::string name;
     };
 
-    hash_map<string, Function> functions;
+    hash_map<std::string, Function> functions;
 
     void checkInvariant();
     void init();
 
   public:
-    LETMgr letMgr;
+    std::unique_ptr<LETMgr> letMgr;
     NodeFactory* nf;
 
     Cpp_interface(STPMgr &bm_);
@@ -92,7 +95,7 @@ namespace BEEV
     //TERMS//
     ASTNode CreateZeroConst(unsigned int width);
     ASTNode CreateOneConst(unsigned int width);
-    ASTNode CreateBVConst(string& strval, int base, int bit_width);
+    ASTNode CreateBVConst(std::string& strval, int base, int bit_width);
     ASTNode CreateBVConst(const char* const strval, int base);
     ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
     ASTNode LookupOrCreateSymbol(const char * const name);
@@ -101,20 +104,20 @@ namespace BEEV
 
     // Declare a function. We can't keep references to the declared variables
     // though. So rename them..
-    void storeFunction(const string name,
+    void storeFunction(const std::string name,
                        const ASTVec& params,
                        const ASTNode& function);
 
-    ASTNode applyFunction(const string name, const ASTVec& params);
+    ASTNode applyFunction(const std::string name, const ASTVec& params);
 
-    bool isFunction(const string name);
+    bool isFunction(const std::string name);
 
 
-    ASTNode LookupOrCreateSymbol(string name);
+    ASTNode LookupOrCreateSymbol(std::string name);
     bool LookupSymbol(const char * const name, ASTNode& output);
     bool isSymbolAlreadyDeclared(char* name);
     void setPrintSuccess(bool ps);
-    bool isSymbolAlreadyDeclared(string name);
+    bool isSymbolAlreadyDeclared(std::string name);
 
     // Create the node, then "new" it.
     ASTNode* newNode(const Kind k,

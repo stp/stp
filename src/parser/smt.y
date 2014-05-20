@@ -36,6 +36,7 @@
   // -*- c++ -*-
 
 #include "../interface/CPP/cpp_interface.h"
+#include "LetMgr.h"
 
   using namespace BEEV;
   using std::cout;
@@ -229,7 +230,7 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(assumptions);
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
-  parserInterface->letMgr.cleanupParserSymbolTable();
+  parserInterface->letMgr->cleanupParserSymbolTable();
   query = ASTNode();
   YYACCEPT;
 }
@@ -429,7 +430,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   //var
   s.SetIndexWidth($3.indexwidth);
   s.SetValueWidth($3.valuewidth);
-  parserInterface->letMgr._parser_symbol_table.insert(s);
+  parserInterface->letMgr->_parser_symbol_table.insert(s);
   delete $2;
 }
 | LPAREN_TOK STRING_TOK RPAREN_TOK
@@ -437,7 +438,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   ASTNode s = BEEV::parserInterface->LookupOrCreateSymbol($2->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
-  parserInterface->letMgr._parser_symbol_table.insert(s);
+  parserInterface->letMgr->_parser_symbol_table.insert(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   delete $2;
@@ -628,7 +629,7 @@ TRUE_TOK
 {
   $$ = $2;
   //Cleanup the LetIDToExprMap
-  parserInterface->letMgr.CleanupLetIDMap();                      
+  parserInterface->letMgr->CleanupLetIDMap();                      
 }
 ;
 
@@ -643,7 +644,7 @@ LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK STRING_TOK an_term RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$5,*$6);
+  parserInterface->letMgr->LetExprMgr(*$5,*$6);
   
   delete $5;
   delete $6;      
@@ -651,7 +652,7 @@ LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK STRING_TOK an_term RPAREN_TOK
 | LPAREN_TOK FLET_TOK LPAREN_TOK DOLLAR_TOK STRING_TOK an_formula RPAREN_TOK 
 {
   //Do LET-expr management
-  parserInterface->letMgr.LetExprMgr(*$5,*$6);
+  parserInterface->letMgr->LetExprMgr(*$5,*$6);
   delete $5;
   delete $6;     
 }

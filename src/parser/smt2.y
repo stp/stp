@@ -46,6 +46,7 @@
   // -*- c++ -*-
 
 #include "../interface/CPP/cpp_interface.h"
+#include "LetMgr.h"
 
   using namespace BEEV;
   using std::cout;
@@ -656,7 +657,7 @@ TRUE_TOK
 {
   $$ = $6;
   //Cleanup the LetIDToExprMap
-  parserInterface->letMgr.CleanupLetIDMap();
+  parserInterface->letMgr->CleanupLetIDMap();
 }
 | LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
 {	
@@ -682,7 +683,7 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  parserInterface->letMgr->LetExprMgr(*$2,*$3);
   delete $2;
   parserInterface->deleteNode( $3);
 }
@@ -696,7 +697,7 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  parserInterface->letMgr.LetExprMgr(*$2,*$3);
+  parserInterface->letMgr->LetExprMgr(*$2,*$3);
   delete $2;
   parserInterface->deleteNode( $3);
 
@@ -1088,7 +1089,7 @@ TERMID_TOK
 {
   $$ = $6;
   //Cleanup the LetIDToExprMap
-  parserInterface->letMgr.CleanupLetIDMap();
+  parserInterface->letMgr->CleanupLetIDMap();
 }
 
 ;

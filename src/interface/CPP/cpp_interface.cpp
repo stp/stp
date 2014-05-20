@@ -3,6 +3,7 @@
 #include "../to-sat/AIG/ToSATAIG.h"
 #include "../STPManager/STPManager.h"
 #include "../STPManager/STP.h"
+#include "../parser/LetMgr.h"
 #include <cassert>
 
 using std::cerr;
@@ -34,7 +35,7 @@ namespace BEEV
 
   Cpp_interface::Cpp_interface(STPMgr &bm_, NodeFactory* factory) :
       bm(bm_)
-      , letMgr(bm.ASTUndefined)
+      , letMgr(new LETMgr(bm.ASTUndefined))
       , nf(factory)
   {
     init();
@@ -139,7 +140,7 @@ namespace BEEV
     if (!removed)
       FatalError("Should have been removed...");
 
-    letMgr._parser_symbol_table.erase(s);
+    letMgr->_parser_symbol_table.erase(s);
   }
 
   void Cpp_interface::storeFunction(const string name,
@@ -247,7 +248,7 @@ namespace BEEV
   void Cpp_interface::addSymbol(ASTNode &s)
   {
     symbols.back().push_back(s);
-    letMgr._parser_symbol_table.insert(s);
+    letMgr->_parser_symbol_table.insert(s);
   }
 
   void Cpp_interface::success()
@@ -291,7 +292,7 @@ namespace BEEV
     cache.erase(cache.end() - 1);
     ASTVec & current = symbols.back();
     for (size_t i = 0, size = current.size(); i < size; ++i)
-      letMgr._parser_symbol_table.erase(current[i]);
+      letMgr->_parser_symbol_table.erase(current[i]);
 
     symbols.erase(symbols.end() - 1);
     checkInvariant();
@@ -387,7 +388,7 @@ namespace BEEV
 
   // This method sets up some of the globally required data.
   Cpp_interface::Cpp_interface(STPMgr &bm_) :
-      bm(bm_), letMgr(bm.ASTUndefined), nf(bm_.defaultNodeFactory)
+      bm(bm_), letMgr( new LETMgr(bm.ASTUndefined) ), nf(bm_.defaultNodeFactory)
   {
     nf = bm.defaultNodeFactory;
     startup();
@@ -412,7 +413,7 @@ namespace BEEV
 
   void Cpp_interface::cleanUp()
   {
-    letMgr.cleanupParserSymbolTable();
+    letMgr->cleanupParserSymbolTable();
     cache.clear();
     symbols.clear();
   }
