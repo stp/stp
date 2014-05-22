@@ -10,6 +10,12 @@
 #include "AST.h"
 #include "../STPManager/STPManager.h"
 #include "../STPManager/NodeIterator.h"
+#ifdef _MSC_VER
+// avoid TRUE and FALSE to be set to 1 and 0 in winmin.h
+#define TRUE TRUE
+#define FALSE FALSE
+#endif
+#include <sys/time.h>
 
 namespace BEEV
 {
