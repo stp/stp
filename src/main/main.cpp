@@ -510,11 +510,13 @@ int main(int argc, char** argv)
     // Register the error handler
     vc_error_hdlr = errorHandler;
 
+#ifndef _MSC_VER
     // Grab some memory from the OS upfront to reduce system time when
     // individual hash tables are being allocated
     if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void*) - 1)) {
         FatalError("Initial allocation of memory failed.");
     }
+#endif
 
 
     bm = new STPMgr();
