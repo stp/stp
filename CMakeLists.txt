@@ -137,7 +137,8 @@ if(WIN32)
   if(MSVC)
       set(OPTIMIZITION_FLAGS  "/GL /Ox /Oi /Ot /Oy")
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-      set(STP_INCL_COMM ../winports ../winports/msc99hdr ${STP_INCL_COMM})
+      set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
+      include_directories(${STP_INCL_COMM})
 
       # stack size of MSVC must be specified
       string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
