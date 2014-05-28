@@ -242,6 +242,7 @@ static void vc_printAssertsToStream(VC vc, ostream &os, int simplify_print) {
     os << ");" << endl;
   }
   delete simp;
+  simp = NULL;
 }
 
 void vc_printAsserts(VC vc, int simplify_print) {
@@ -275,6 +276,7 @@ void vc_printQueryStateToBuffer(VC vc, Expr e,
   os << " );" << endl;
 
   delete simp;
+  simp = NULL;
 
   // convert to a c buffer
   string s = os.str();
