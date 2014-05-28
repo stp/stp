@@ -241,6 +241,8 @@ static void vc_printAssertsToStream(VC vc, ostream &os, int simplify_print) {
     q.PL_Print(os);
     os << ");" << endl;
   }
+  delete simp;
+  simp = NULL;
 }
 
 void vc_printAsserts(VC vc, int simplify_print) {
@@ -272,6 +274,9 @@ void vc_printQueryStateToBuffer(VC vc, Expr e,
   //b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   os << " );" << endl;
+
+  delete simp;
+  simp = NULL;
 
   // convert to a c buffer
   string s = os.str();
