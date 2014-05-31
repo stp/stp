@@ -66,6 +66,7 @@ extern "C" {
     MS,
     SMS,
     CMS2,
+    CMS4,
     MSP
 
   };

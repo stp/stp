@@ -45,13 +45,13 @@ namespace BEEV
 
   template <class T>
   uint8_t
-  MinisatCore<T>::modelValue(Var x) const
+  MinisatCore<T>::modelValue(uint32_t x) const
   {
     return Minisat::toInt(s->modelValue(x));
   }
 
   template <class T>
-  Minisat::Var
+  uint32_t
   MinisatCore<T>::newVar()
   {
     return s->newVar();

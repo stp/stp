@@ -16,6 +16,7 @@
 
 #include "../sat/MinisatCore.h"
 #include "../sat/CryptoMinisat.h"
+#include "../sat/CryptoMinisat4.h"
 #include "../sat/MinisatCore_prop.h"
 #include "../sat/minisat/core_prop/Solver_prop.h"
 
@@ -64,7 +65,10 @@ namespace BEEV {
             newS = new SimplifyingMinisat(bm->soft_timeout_expired);
             break;
         case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
-            newS = new CryptoMinisat();
+            newS = new CryptoMinisat;
+            break;
+        case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
+            newS = new CryptoMinisat4;
             break;
         case UserDefinedFlags::MINISAT_SOLVER:
             newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);

@@ -26,20 +26,19 @@ namespace BEEV
      * Private Typedefs and Data                                    *
      ****************************************************************/
 
-    // MAP: This is a map from ASTNodes to SATSolver::Vars.
+    // MAP: This is a map from ASTNodes to Variables(uint32_t-s).
     //
     // The map is populated while ASTclauses are read from the AST
     // ClauseList returned by CNF converter. For every new boolean
-    // variable in ASTClause a new SATSolver::Var is created (these vars
-    // typedefs for ints)
+    // variable in ASTClause a new variable is created
     typedef hash_map<
     ASTNode, 
-    SATSolver::Var,
+    uint32_t,
     ASTNode::ASTNodeHasher, 
     ASTNode::ASTNodeEqual> ASTtoSATMap;
     ASTtoSATMap _ASTNode_to_SATVar_Map;
 
-    // MAP: This is a map from  ASTNodes to SATSolver::Vars for SYMBOLS>
+    // MAP: This is a map from  ASTNodes to variables(uint32_t-s) for SYMBOLS>
     //
     // Reverse map used in building counterexamples. MINISAT returns a
     // model in terms of MINISAT Vars, and this map helps us convert
@@ -55,7 +54,7 @@ namespace BEEV
 
     //looksup a MINISAT var from the minisat-var memo-table. if none
     //exists, then creates one.  Treat the result as const.
-    SATSolver::Var LookupOrCreateSATVar(SATSolver& S,
+    uint32_t LookupOrCreateSATVar(SATSolver& S,
                                       const ASTNode& n);
 
 

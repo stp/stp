@@ -44,7 +44,7 @@ namespace BEEV
   }
 
   uint8_t
-  SimplifyingMinisat::modelValue(Var x) const
+  SimplifyingMinisat::modelValue(uint32_t x) const
   {
    return Minisat::toInt(s->modelValue(x));
   }
@@ -59,7 +59,7 @@ namespace BEEV
       s->random_seed = i;
     }
 
-  Minisat::Var
+  uint32_t
   SimplifyingMinisat::newVar()
   {
     return s->newVar();
@@ -73,7 +73,7 @@ namespace BEEV
       s->printStats();
   }
 
-  void SimplifyingMinisat::setFrozen(Var x)
+  void SimplifyingMinisat::setFrozen(uint32_t x)
   {
       s->setFrozen(x,true);
   }

@@ -37,15 +37,15 @@ namespace BEEV
     bool
     simplify(); // Removes already satisfied clauses.
 
-    virtual uint8_t modelValue(Var x) const;
+    virtual uint8_t modelValue(uint32_t x) const;
 
     uint8_t
-    value(Var x) const
+    value(uint32_t x) const
     {
       return Minisat::toInt(s->value(x));
     }
 
-    virtual Var newVar();
+    virtual uint32_t newVar();
 
     void setVerbosity(int v);
 

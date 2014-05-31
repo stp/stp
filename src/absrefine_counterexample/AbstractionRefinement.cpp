@@ -40,7 +40,7 @@ namespace BEEV
                 // It was ommitted from the initial problem, so assign it freshly.
                 for (unsigned i = 0; i < a.GetValueWidth(); i++)
                     {
-                        SATSolver::Var v = SatSolver.newVar();
+                        uint32_t v = SatSolver.newVar();
                         // We probably don't want the variable eliminated.
                         SatSolver.setFrozen(v);
                         v_a.push_back(v);

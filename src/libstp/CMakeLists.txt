@@ -14,6 +14,7 @@ set(stp_lib_targets
     sat
     minisat2
     cryptominisat2
+    cryptominisat4
     simplifier
     constantbv
     abc
