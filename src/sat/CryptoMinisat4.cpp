@@ -15,7 +15,8 @@ namespace BEEV
 
   CryptoMinisat4::CryptoMinisat4()
   {
-     s = new CMSat::SATSolver();
+     CMSat::SolverConf conf;
+     s = new CMSat::SATSolver(conf);
      temp_cl = (void*)new std::vector<CMSat::Lit>;
   }
 
@@ -33,6 +34,7 @@ namespace BEEV
     // Cryptominisat uses a slightly different Lit class too.
 
     vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
+    real_temp_cl.clear();
     for (int i = 0; i < ps.size(); i++) {
       real_temp_cl.push_back(CMSat::Lit(var(ps[i]), sign(ps[i])));
     }

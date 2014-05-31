@@ -9,8 +9,8 @@
 
 #include <vector>
 #include <iostream>
-#include "cryptominisat4/solverconf.h"
-#include "cryptominisat4/solvertypesmini.h"
+#include "solverconf.h"
+#include "solvertypesmini.h"
 
 namespace CMSat {
     class SATSolver
