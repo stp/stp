@@ -34,11 +34,11 @@ namespace BEEV
    * _ASTNode_to_SATVar.
    */
 
-  SATSolver::Var
+  uint32_t
   ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
   {
     ASTtoSATMap::iterator it;
-    SATSolver::Var v;
+    uint32_t v;
 
     //look for the symbol in the global map from ASTNodes to ints. if
     //not found, create a S.newVar(), else use the existing one.
@@ -49,7 +49,7 @@ namespace BEEV
 
         //ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
         //by 1 each time it is called, and the initial value of a
-        //SATSolver::Var is 0.
+        //uint32_t is 0.
 
         // Copies the symbol into the map that is used to build the counter example.
         // For boolean we create a vector of size 1.
@@ -129,7 +129,7 @@ namespace BEEV
             //clauseVec.push_back(node);
             bool negate = (NOT == node.GetKind()) ? true : false;
             ASTNode n = negate ? node[0] : node;
-            SATSolver::Var v = LookupOrCreateSATVar(newSolver, n);
+            uint32_t v = LookupOrCreateSATVar(newSolver, n);
             Minisat::Lit l = SATSolver::mkLit(v, negate);
             satSolverClause.push(l);
           }
@@ -220,7 +220,7 @@ namespace BEEV
     	            ASTtoSATMap::iterator it =  _ASTNode_to_SATVar_Map.find(n);
     	            assert(it != _ASTNode_to_SATVar_Map.end());
 
-    	            SATSolver::Var v = it->second;
+    	            uint32_t v = it->second;
 
     				if (negate)
     					file << "-" << (v + 1) << " ";
@@ -420,7 +420,7 @@ namespace BEEV
   // assignment.
   ASTNode ToSAT::SymbolTruthValue(SATSolver &newSolver, ASTNode form)
   {
-    SATSolver::Var satvar = _ASTNode_to_SATVar_Map[form];
+    uint32_t satvar = _ASTNode_to_SATVar_Map[form];
     if (newSolver.model[satvar] == SATSolver::l_False)
       {
         return ASTFalse;

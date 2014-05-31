@@ -36,9 +36,9 @@ namespace BEEV
 
     void setVerbosity(int v);
 
-    virtual uint8_t modelValue(Var x) const;
+    virtual uint8_t modelValue(uint32_t x) const;
 
-    virtual Var newVar();
+    virtual uint32_t newVar();
 
     int nVars();
 
@@ -50,7 +50,7 @@ namespace BEEV
     virtual lbool false_literal()  {return ((uint8_t)1);}
     virtual lbool undef_literal()  {return ((uint8_t)2);}
 
-    virtual void setFrozen(Var x);
+    virtual void setFrozen(uint32_t x);
  };
 }
 ;

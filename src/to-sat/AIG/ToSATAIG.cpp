@@ -94,7 +94,7 @@ namespace BEEV
           for (int * pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i
               + 1]; pLit < pStop; pLit++)
             {
-              SATSolver::Var var = (*pLit) >> 1;
+              uint32_t var = (*pLit) >> 1;
               assert ((var < satSolver.nVars()));
               Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
               satSolverClause.push(l);
@@ -197,7 +197,7 @@ namespace BEEV
                                         // It was ommitted from the initial problem, so assign it freshly.
                                         for (size_t i = 0, size = ar.index_symbol.GetValueWidth(); i < size; ++i)
                                             {
-                                                SATSolver::Var v = satSolver.newVar();
+                                                uint32_t v = satSolver.newVar();
                                                 // We probably don't want the variable eliminated.
                                                 satSolver.setFrozen(v);
                                                 v_a.push_back(v);
@@ -206,7 +206,7 @@ namespace BEEV
 
                                         for (size_t i = 0, size = v_a.size(); i < size; ++i)
                                             {
-                                                SATSolver::Var var = v_a[i];
+                                                uint32_t var = v_a[i];
                                                 index.push(SATSolver::mkLit(var, false));
                                             }
                                     }
@@ -222,7 +222,7 @@ namespace BEEV
                                         vector<unsigned>& v = it->second;
                                         for (size_t i = 0, size = v.size(); i < size; ++i)
                                             {
-                                                SATSolver::Var var = v[i];
+                                                uint32_t var = v[i];
                                                 value.push(SATSolver::mkLit(var, false));
                                             }
                                     }
@@ -245,7 +245,7 @@ namespace BEEV
                                         // It was ommitted from the initial problem, so assign it freshly.
                                         for (size_t i = 0, size = ar.symbol.GetValueWidth(); i < size; ++i)
                                             {
-                                                SATSolver::Var v = satSolver.newVar();
+                                                uint32_t v = satSolver.newVar();
                                                 // We probably don't want the variable eliminated.
                                                 satSolver.setFrozen(v);
                                                 v_a.push_back(v);
@@ -254,7 +254,7 @@ namespace BEEV
 
                                         for (size_t i = 0, size = v_a.size(); i < size; ++i)
                                             {
-                                                SATSolver::Var var = v_a[i];
+                                                uint32_t var = v_a[i];
                                                 value.push(SATSolver::mkLit(var, false));
                                             }
                                     }
