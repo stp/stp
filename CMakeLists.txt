@@ -145,7 +145,14 @@ if(TUNE_NATIVE)
   add_cxx_flag_if_supported("-mtune=native")
 endif()
 
-
+if( NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG" )
+    foreach (flags_var_to_scrub
+        CMAKE_CXX_FLAGS_RELWITHDEBINFO
+        CMAKE_C_FLAGS_RELWITHDEBINFO)
+      string (REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " "
+        "${flags_var_to_scrub}" "${${flags_var_to_scrub}}")
+    endforeach()
+endif()
 
 if(WIN32)
   # build shared lib on windows is not prepared at source level
