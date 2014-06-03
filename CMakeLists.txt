@@ -111,7 +111,7 @@ if(BUILD_SHARED_LIBS)
     add_cxx_flag_if_supported("-fPIC")
 endif()
 
-check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUPP11)
+check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUCPP11)
 check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
 check_cxx_compiler_flag("-std=c++0x" HAVE_FLAG_STD_CPP0X)
 check_cxx_compiler_flag("-stdlib=libc++" HAVE_FLAG_STDLIB_LIBCPP)
