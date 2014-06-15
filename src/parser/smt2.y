@@ -101,7 +101,7 @@
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK  
-%token <str> STRING_TOK FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -299,16 +299,16 @@ function_param
 
 
 function_decl:
-STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK an_term RPAREN_TOK 
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term  
 {
-	if ($11->GetValueWidth() != $8)
+	if ($10->GetValueWidth() != $8)
 		{
 			char msg [100];
-			sprintf(msg, "Different bit-widths specified: %d %d", $11->GetValueWidth(), $8);
+			sprintf(msg, "Different bit-widths specified: %d %d", $10->GetValueWidth(), $8);
 			yyerror(msg);
 		}
 	
-	BEEV::parserInterface->storeFunction(*$1, *$3, *$11);
+	BEEV::parserInterface->storeFunction(*$1, *$3, *$10);
 
 	// Next time the variable is used, we want it to be fresh.
     for (int i = 0; i < $3->size(); i++)
@@ -316,12 +316,11 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 	
 	delete $1;
 	delete $3;
-	delete $11;
+	delete $10;
 }
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula 
 {
-	// Check the bitwidth defined/ and actually are the same.
 	BEEV::parserInterface->storeFunction(*$1, *$3, *$6);
 
 	// Next time the variable is used, we want it to be fresh.
@@ -331,6 +330,31 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 	delete $1;
 	delete $3;
 	delete $6;
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
+{
+	ASTVec empty;
+        BEEV::parserInterface->storeFunction(*$1, empty, *$5);
+
+        delete $1;
+        delete $5;
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term 
+{
+        if ($9->GetValueWidth() != $7)
+                {
+                        char msg [100];
+                        sprintf(msg, "Different bit-widths specified: %d %d", $9->GetValueWidth(), $7);
+                        yyerror(msg);
+                }
+	ASTVec empty;
+
+        BEEV::parserInterface->storeFunction(*$1,empty, *$9);
+
+        delete $1;
+        delete $9;
 }
 ;
 
@@ -659,13 +683,17 @@ TRUE_TOK
   //Cleanup the LetIDToExprMap
   parserInterface->letMgr->CleanupLetIDMap();
 }
-| LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {	
   $$ = parserInterface->newNode(parserInterface->applyFunction(*$2,*$3));
-  if ($$->GetType() != BOOLEAN_TYPE)
-  	yyerror("Must be boolean type");
   delete $2;
   delete $3;
+}
+| BOOLEAN_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = parserInterface->newNode(parserInterface->applyFunction(*$1,empty));
+  delete $1;
 }
 ;
 
@@ -1075,7 +1103,7 @@ TERMID_TOK
     $$->SetValueWidth(width);
     delete $1;
 }
-| LPAREN_TOK FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {	
   $$ = parserInterface->newNode(parserInterface->applyFunction(*$2,*$3));
   
@@ -1084,6 +1112,16 @@ TERMID_TOK
   
   delete $2;
   delete $3;
+}
+| BITVECTOR_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = parserInterface->newNode(parserInterface->applyFunction(*$1,empty));
+
+  if ($$->GetType() != BITVECTOR_TYPE)
+        yyerror("Must be bitvector type");
+
+  delete $1;
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_term RPAREN_TOK
 {

@@ -81,7 +81,10 @@ namespace BEEV
   ASTNode
   SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache, NodeFactory * nf)
   {
-    return replace(n, fromTo, cache, nf, false, false);
+    if (0==fromTo.size())
+	return n;
+   else
+	return replace(n, fromTo, cache, nf, false, false);
   }
 
 // NOTE the fromTo map is changed as we traverse downwards.
