@@ -119,7 +119,7 @@ class Tester:
             if random.randint(0,1) == 0 :
                 cmd += opt + " "
 
-        choose_solver = ["", "--cryptominisat" , "--simplifying-minisat", "--minisat"]
+        choose_solver = ["", "--cryptominisat" , "--simplifying-minisat", "--minisat", "--cryptominisat4"]
         cmd += random.choice(choose_solver) + " ";
 
         #if random.randint(0,1) == 1 :

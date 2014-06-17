@@ -217,6 +217,15 @@ endif()
 find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
 include_directories(${Boost_INCLUDE_DIRS})
 
+find_package(CryptoMiniSat4)
+if (CRYPTOMINISAT4_FOUND AND HAVE_FLAG_STD_CPP11)
+    message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
+    add_definitions(-DUSE_CRYPTOMINISAT4)
+    set(USE_CRYPTOMINISAT4 ON)
+else()
+    message(STATUS "CryptoMiniSat4 or C++11 support not found, not allowing --cryptominisat4 option")
+endif()
+
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 

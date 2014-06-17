@@ -166,6 +166,9 @@ void create_options()
     po::options_description solver_options("SAT Solver options");
     solver_options.add_options()
     ("cryptominisat", "use cryptominisat2 as the solver")
+    #ifdef USE_CRYPTOMINISAT4
+    ("cryptominisat4", "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
+    #endif
     ("simplifying-minisat", "use simplifying-minisat 2.2 as the solver")
     ("minisat", "use minisat 2.2 as the solver")
     ;
@@ -312,7 +315,19 @@ int parse_options(int argc, char** argv)
         bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT_SOLVER;
     }
 
-    if (vm.count("cryptominisat") + vm.count("minisat") + vm.count("simplifying-minisat") > 1) {
+    #ifdef USE_CRYPTOMINISAT4
+    if (vm.count("cryptominisat4")) {
+        bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
+    }
+    #endif
+
+    if (vm.count("cryptominisat")
+        #ifdef USE_CRYPTOMINISAT4
+        + vm.count("cryptominisat4")
+        #endif
+        + vm.count("minisat")
+        + vm.count("simplifying-minisat") > 1
+    ) {
         cout << "ERROR: You may only give one solver to use: minisat, simplifying-minisat, or cryptominisat" << endl;
         exit(-1);
     }

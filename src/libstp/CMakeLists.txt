@@ -74,7 +74,11 @@ endif()
 # Clients of libstp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-target_link_libraries(libstp ${Boost_LIBRARIES})
+set(libstp_link_libs ${Boost_LIBRARIES})
+if (USE_CRYPTOMINISAT4)
+    set(libstp_link_libs ${libstp_link_libs} ${CRYPTOMINISAT4_LIBRARIES})
+endif()
+target_link_libraries(libstp ${libstp_link_libs})
 
 
 # -----------------------------------------------------------------------------
