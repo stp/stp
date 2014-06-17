@@ -11,8 +11,18 @@ add_executable(stp
     STPProgramGlobals.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
 )
+
+if (BUILD_STATIC_BIN)
+    set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 1)
+endif()
+
 set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
 target_link_libraries(stp libstp)
+
+if (BUILD_STATIC_BIN)
+    set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
+endif()
 
 install(TARGETS stp
         EXPORT ${STP_EXPORT_NAME}

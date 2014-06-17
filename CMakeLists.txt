@@ -80,11 +80,19 @@ endif()
 # -----------------------------------------------------------------------------
 option(BUILD_SHARED_LIBS "Build client library as a shared library" ON)
 
-if(WIN32)
+if (WIN32)
   # building of shared lib on windows is not done at source level
   set(BUILD_SHARED_LIBS OFF)
   message(WARNING "Disabling building of shared library on Windows")
-endif(WIN32)
+else()
+    option(BUILD_STATIC_BIN "Build a static binary (and no shared libs)" OFF)
+
+    if (BUILD_STATIC_BIN)
+        set(BUILD_SHARED_LIBS OFF)
+        set(STP_STATIC_LIBRARY ON)
+        set(CMAKE_EXE_LINKER_FLAGS "-static-libstdc++ -static-libgcc -static")
+    endif()
+endif()
 
 if (BUILD_SHARED_LIBS)
   option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" ON)
@@ -100,6 +108,7 @@ else()
   set(STP_STATIC_LIBRARY libstp) # Used for exporting target
   unset(ALSO_BUILD_STATIC_LIB CACHE) # Hide this option for ccmake and cmake-gui users
 endif()
+
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
