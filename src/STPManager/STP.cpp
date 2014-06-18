@@ -73,7 +73,8 @@ namespace BEEV {
             #ifdef USE_CRYPTOMINISAT4
             newS = new CryptoMinisat4;
             #else
-            //fall back to old CryptoMiniSat in case v4 is not available at library compile time
+            std::cerr << "WARNING: Falling back to CryptoMiniSatv2 since v4 \
+            was not available at STP library compile time" << std::endl;
             newS = new CryptoMinisat;
             #endif
             break;
