@@ -89,7 +89,7 @@ else()
 
     if (BUILD_STATIC_BIN)
         set(BUILD_SHARED_LIBS OFF)
-        set(CMAKE_EXE_LINKER_FLAGS "-static-libstdc++ -static-libgcc -static")
+        set(CMAKE_EXE_LINKER_FLAGS "-static")
     endif()
 endif()
 
