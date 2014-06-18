@@ -13,6 +13,7 @@ add_executable(stp
 )
 
 if (BUILD_STATIC_BIN)
+    set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
     set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
 endif()
 
