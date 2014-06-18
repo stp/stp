@@ -187,7 +187,6 @@ public:
                                 pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
                         else
                                 pNode = makeTower(Aig_Or, children);
-                        break;
                         pNode = Aig_Not(pNode);
                         break;
                 case XOR:
