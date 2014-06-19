@@ -467,6 +467,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   assert(!BEEV::ParserBM->soft_timeout_expired);
   if (timeout_ms != -1)
     {
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
       itimerval timeout;
       signal(SIGVTALRM, soft_time_out);
       timeout.it_interval.tv_usec = 0;
@@ -474,6 +475,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       timeout.it_value.tv_usec    = 1000 * (timeout_ms % 1000);
       timeout.it_value.tv_sec     = timeout_ms / 1000;
       setitimer(ITIMER_VIRTUAL, &timeout, NULL);
+#endif /* !defined(__MINGW32__) && !defined(__MINGW64__) */
     }
 
   if(!BEEV::is_Form_kind(a->GetKind())) 
@@ -507,7 +509,9 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
   if (timeout_ms !=-1)
     {
       // Reset the timer.
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
       setitimer(ITIMER_VIRTUAL, NULL, NULL);
+#endif /* !defined(__MINGW32__) && !defined(__MINGW64__) */
       BEEV::ParserBM->soft_timeout_expired = false;
     }
 

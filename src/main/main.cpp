@@ -512,9 +512,11 @@ int main(int argc, char** argv)
 
     // Grab some memory from the OS upfront to reduce system time when
     // individual hash tables are being allocated
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
     if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void*) - 1)) {
         FatalError("Initial allocation of memory failed.");
     }
+#endif /* !defined(__MINGW32__) && !defined(__MINGW64__) */
 
 
     bm = new STPMgr();
