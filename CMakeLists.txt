@@ -222,7 +222,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 # -----------------------------------------------------------------------------
 set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat4Config.cmake")
 find_package(cryptominisat4 CONFIG)
-if (cryptominisat4_DIR AND HAVE_FLAG_STD_CPP11)
+if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
     message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
     add_definitions(-DUSE_CRYPTOMINISAT4)
     include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
