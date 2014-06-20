@@ -1664,7 +1664,7 @@ namespace BEEV
     MultiplicationStats*
     BitBlaster<BBNode, BBNodeManagerT>::getMS(const ASTNode&n, int& highestZero)
     {
-      MultiplicationStats * ms;
+      MultiplicationStats * ms = NULL;
       highestZero = -1;
 
       if (statsFound(n))
@@ -1993,6 +1993,7 @@ namespace BEEV
         {
         cerr << "Unk variant" << multiplication_variant;
         FatalError("sda44f");
+        exit(-1);
         }
 
     }
@@ -2839,6 +2840,7 @@ namespace BEEV
       default:
         cerr << "BBCompare: Illegal kind" << form << endl;
         FatalError("", form);
+        exit(-1);
         }
     }
 

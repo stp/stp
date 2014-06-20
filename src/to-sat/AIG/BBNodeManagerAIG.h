@@ -87,7 +87,8 @@ private:
 
 public:
 
-        BBNodeManagerAIG()
+        BBNodeManagerAIG() :
+            aigMgr(NULL)
         {
                 aigMgr = Aig_ManStart(0);
                 // fancier strashing.

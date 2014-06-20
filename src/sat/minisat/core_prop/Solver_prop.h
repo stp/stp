@@ -176,7 +176,7 @@ private:
 
                 if (is_index_constant)
                     {
-                        assert(index_size <=INDEX_BIT_WIDTH);
+                        assert(index_size <= (int)INDEX_BIT_WIDTH);
                         for (int i = 0; i < index_size; i++)
                             {
                                 lbool v = constant_index[i];

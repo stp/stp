@@ -539,6 +539,7 @@ namespace BEEV
         return nf->CreateNode(ITE, n[0], replaceIteConst(n[1], newVal, nf), replaceIteConst(n[2], newVal, nf));
       }
     FatalError("never here", n);
+    exit(-1);
   }
 
   bool
@@ -1671,8 +1672,10 @@ namespace BEEV
       maxLength = lengthA + lengthB;
     else if (BVPLUS == output.GetKind() || SBVDIV == output.GetKind())
       maxLength = std::max(lengthA, lengthB) + 1;
-    else
+    else {
       FatalError("Unexpected.");
+      exit(-1);
+    }
     if (maxLength < output.GetValueWidth())
       {
         ASTNode newA = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[0],
@@ -2247,7 +2250,7 @@ namespace BEEV
         case BVEXTRACT:
           {
             const unsigned innerLow = a0[2].GetUnsignedConst();
-            const unsigned innerHigh = a0[1].GetUnsignedConst();
+            //const unsigned innerHigh = a0[1].GetUnsignedConst();
 
             output = nf->CreateTerm(BVEXTRACT, inputValueWidth, a0[0], _bm->CreateBVConst(32, i_val + innerLow),
                 _bm->CreateBVConst(32, j_val + innerLow));

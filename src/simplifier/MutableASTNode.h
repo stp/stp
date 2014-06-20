@@ -46,13 +46,15 @@ public:
       vector<MutableASTNode *> tempChildren;
       tempChildren.reserve(n.Degree());
 
-      for (int i = 0; i < n.Degree(); i++)
+      for (size_t i = 0; i < n.Degree(); i++) {
         tempChildren.push_back(build(n[i], visited));
+      }
 
       MutableASTNode * mut = createNode(n);
 
-      for (int i = 0; i < n.Degree(); i++)
+      for (size_t i = 0; i < n.Degree(); i++) {
         tempChildren[i]->parents.insert(mut);
+      }
 
       mut->children.insert(mut->children.end(),tempChildren.begin(),tempChildren.end());
       visited.insert(std::make_pair(n, mut));

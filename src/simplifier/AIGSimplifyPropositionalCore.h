@@ -107,8 +107,10 @@ private:
 			return bm->ASTFalse;
 		else if (Aig_ObjIsPo(obj))
 			return convert(mgr,Aig_ObjChild0(obj),cache);
-		else
+		else {
 			FatalError("Unknown type");
+            exit(-1);
+        }
 	}
 public:
 
