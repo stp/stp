@@ -1819,24 +1819,21 @@ namespace BEEV
     void
     BitBlaster<BBNode, BBNodeManagerT>::checkFixed(const BBNodeVec& v, const ASTNode& n)
     {
-      if (cb == NULL)
+      if (cb == NULL) {
         return;
+      }
 
-      if (cb->isUnsatisfiable())
+      if (cb->isUnsatisfiable()) {
         return;
+      }
 
-      if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end())
-        {
+      if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end()) {
         FixedBits* b = cb->fixedMap->map->find(n)->second;
-        for (int i = 0; i < b->getWidth(); i++)
-          {
-          if (b->isFixed(i))
-            if (b->getValue(i))
-              {
+        for (int i = 0; i < b->getWidth(); i++) {
+          if (b->isFixed(i)) {
+            if (b->getValue(i)) {
               assert(v[i]== BBTrue);
-              }
-            else
-              {
+            } else {
               if (v[i] != BBFalse)
                 {
                 cerr << *b;
@@ -1846,9 +1843,10 @@ namespace BEEV
                 }
 
               assert(v[i]== BBFalse);
-              }
+            }
           }
         }
+      }
     }
 
   // If it's not booth encoded, and the column sum is zero,
