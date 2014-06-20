@@ -109,7 +109,6 @@ private:
 			return convert(mgr,Aig_ObjChild0(obj),cache);
 		else {
 			FatalError("Unknown type");
-            exit(-1);
         }
 	}
 public:

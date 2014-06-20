@@ -1674,7 +1674,6 @@ namespace BEEV
       maxLength = std::max(lengthA, lengthB) + 1;
     else {
       FatalError("Unexpected.");
-      exit(-1);
     }
     if (maxLength < output.GetValueWidth())
       {

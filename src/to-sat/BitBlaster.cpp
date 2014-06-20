@@ -1991,7 +1991,6 @@ namespace BEEV
         {
         cerr << "Unk variant" << multiplication_variant;
         FatalError("sda44f");
-        exit(-1);
         }
 
     }
@@ -2838,7 +2837,6 @@ namespace BEEV
       default:
         cerr << "BBCompare: Illegal kind" << form << endl;
         FatalError("", form);
-        exit(-1);
         }
     }
 
