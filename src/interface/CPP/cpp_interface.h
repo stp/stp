@@ -110,7 +110,8 @@ namespace BEEV
 
     ASTNode applyFunction(const std::string name, const ASTVec& params);
 
-    bool isFunction(const std::string name);
+    bool isBitVectorFunction(const std::string name);
+    bool isBooleanFunction(const std::string name);
 
 
     ASTNode LookupOrCreateSymbol(std::string name);
