@@ -19,7 +19,7 @@ namespace simplifier
     operator<<(std::ostream& output, const FixedBits& h)
     {
       output << "<";
-      for (int i = h.getWidth() - 1; i >= 0; i--)
+      for (int i = (int)h.getWidth() - 1; i >= 0; i--)
         {
           if (h.isFixed(i))
             output << h.getValue(i);
@@ -35,7 +35,7 @@ namespace simplifier
     void
     FixedBits::fixToZero()
     {
-      for (int i = 0; i < getWidth(); i++)
+      for (unsigned i = 0; i < getWidth(); i++)
         {
           setFixed(i, true);
           setValue(i, false);
@@ -49,7 +49,7 @@ namespace simplifier
 
       BEEV::CBV result = CONSTANTBV::BitVector_Create(width, true);
 
-      for (int i = 0; i < width; i++)
+      for (unsigned i = 0; i < width; i++)
         {
           if (values[i])
             CONSTANTBV::BitVector_Bit_On(result, i);
@@ -60,15 +60,15 @@ namespace simplifier
 
     //inclusive
     BEEV::CBV
-    FixedBits::GetBVConst(int to, int from) const
+    FixedBits::GetBVConst(unsigned to, unsigned from) const
     {
       assert(to>=from);
       assert(from >=0);
-      int resultWidth = to - from + 1;
+      unsigned resultWidth = to - from + 1;
 
       BEEV::CBV result = CONSTANTBV::BitVector_Create(resultWidth, true);
 
-      for (int i = from; i <= to; i++)
+      for (unsigned i = from; i <= to; i++)
         {
           if (getValue(i))
             CONSTANTBV::BitVector_Bit_On(result, i - from);
@@ -92,7 +92,7 @@ namespace simplifier
     bool
     FixedBits::isTotallyFixed() const
     {
-      for (int i = 0; i < width; i++)
+      for (unsigned i = 0; i < width; i++)
         {
           if (!fixed[i])
             return false;
@@ -101,7 +101,7 @@ namespace simplifier
       return true;
     }
 
-    FixedBits::FixedBits(int n, bool isbool)
+    FixedBits::FixedBits(unsigned n, bool isbool)
     {
       assert(n > 0);
 
@@ -109,7 +109,7 @@ namespace simplifier
       values = new bool[n];
       width = n;
 
-      for (int i = 0; i < width; i++)
+      for (unsigned i = 0; i < width; i++)
         {
           fixed[i] = false; // I don't know if there's a default value??
           values[i] = false; // stops it printing out junk.
@@ -132,7 +132,7 @@ namespace simplifier
 
       FixedBits result(a.getWidth(), a.isBoolean());
 
-      for (int i = 0; i < a.getWidth(); i++)
+      for (unsigned i = 0; i < a.getWidth(); i++)
         {
           if (a.isFixed(i) != b.isFixed(i))
             {
@@ -160,7 +160,7 @@ namespace simplifier
       assert(a.getWidth() == getWidth());
       assert(a.isBoolean() == isBoolean());
 
-      for (int i = 0; i < a.getWidth(); i++)
+      for (unsigned i = 0; i < a.getWidth(); i++)
         {
           if (a.isFixed(i) && isFixed(i) && (a.getValue(i) == getValue(i)))
             {
@@ -176,7 +176,7 @@ namespace simplifier
     void
     FixedBits::join(unsigned int a)
     {
-      for (int i = 0; i < getWidth(); i++)
+      for (unsigned i = 0; i < getWidth(); i++)
         {
           if (isFixed(i))
             {
@@ -204,9 +204,9 @@ namespace simplifier
     bool
     FixedBits::unsignedHolds_new(unsigned val)
     {
-      const int initial_width = std::min((int)width, (int)sizeof(unsigned) * 8);
+      const unsigned initial_width = std::min(width, (unsigned)sizeof(unsigned) * 8);
 
-      for (int i = 0; i < initial_width; i++)
+      for (unsigned i = 0; i < initial_width; i++)
         {
           char v = (*this)[i];
           if ('*'== v)
@@ -217,10 +217,10 @@ namespace simplifier
         }
 
       // If the unsigned representation is bigger, false if not zero.
-      if ((int) sizeof(unsigned) * 8 > width && (val !=0))
+      if (sizeof(unsigned) * 8 > width && (val !=0))
          return false;
 
-      for (int i = (int) sizeof(unsigned) * 8; i < width; i++)
+      for (unsigned i = sizeof(unsigned) * 8; i < width; i++)
         if (isFixed(i) && getValue(i))
           return false;
 
@@ -230,7 +230,7 @@ namespace simplifier
     bool
     FixedBits::unsignedHolds_old(unsigned val)
     {
-      const unsigned maxWidth = std::max((int) sizeof(unsigned) * 8, width);
+      const unsigned maxWidth = std::max((unsigned)sizeof(unsigned) * 8, width);
       for (unsigned i = 0; i < maxWidth; i++)
         {
         if (i < (unsigned) width && i < sizeof(unsigned) * 8)
@@ -253,7 +253,7 @@ namespace simplifier
     }
 
     // Getting a new random number is expensive. Not sure why.
-    FixedBits FixedBits::createRandom(const int length, const int probabilityOfSetting, MTRand& trand)
+    FixedBits FixedBits::createRandom(const unsigned length, const unsigned probabilityOfSetting, MTRand& trand)
       {
         assert( 0 <= probabilityOfSetting);
         assert( 100 >= probabilityOfSetting);
@@ -261,49 +261,47 @@ namespace simplifier
         FixedBits result(length, false);
 
         // I'm not sure if the random number generator is generating just 32 bit numbers??
-        int i = 0;
-        int randomV = trand.randInt();
+        unsigned i = 0;
+        unsigned randomV = trand.randInt();
 
         int pool = 32;
 
-        while (i < length)
-          {
-            if (pool < 8)
-              {
+        while (i < length) {
+            if (pool < 8) {
                 randomV = trand.randInt();
                 pool = 32;
-              }
+            }
 
-            int val = (randomV & 127);
+            unsigned val = (randomV & 127);
             randomV >>= 7;
             pool = pool - 7;
 
             if (val >= 100)
-            continue;
+                continue;
 
-            if (val < probabilityOfSetting)
-              {
-                switch (randomV & 1)
-                  {
+            if (val < probabilityOfSetting) {
+                switch (randomV & 1) {
                     case 0:
-                    result.setFixed(i, true);
-                    result.setValue(i, false);
-                    break;
+                        result.setFixed(i, true);
+                        result.setValue(i, false);
+                        break;
+
                     case 1:
-                    result.setFixed(i, true);
-                    result.setValue(i, true);
-                    break;
+                        result.setFixed(i, true);
+                        result.setValue(i, true);
+                        break;
+
                     default:
-                    BEEV::FatalError(LOCATION "never.");
+                        BEEV::FatalError(LOCATION "never.");
 
-                  }
+                }
                 randomV >>= 1;
-              }
+            }
             i++;
+        }
 
-          }
         return result;
-      }
+    }
 
     // In the world of static analysis this is ALPHA.
     FixedBits
@@ -311,7 +309,7 @@ namespace simplifier
     {
       //cout << n;
 
-      int bitWidth;
+      unsigned bitWidth;
       if (BEEV::BITVECTOR_TYPE == n.GetType())
         bitWidth = n.GetValueWidth();
       else
@@ -324,7 +322,7 @@ namespace simplifier
           // loop through testing each of the bits.
           BEEV::CBV cbv = n.GetBVConst();
 
-          for (int j = 0; j < bitWidth; j++)
+          for (unsigned j = 0; j < bitWidth; j++)
             {
               output.setFixed(j, true);
               output.setValue(j, CONSTANTBV::BitVector_bit_test(cbv, j));
@@ -349,19 +347,19 @@ namespace simplifier
     }
 
     FixedBits
-    FixedBits::fromUnsignedInt(int width, unsigned val)
+    FixedBits::fromUnsignedInt(unsigned width, unsigned val)
     {
       FixedBits output(width, false);
 
-      const unsigned maxWidth = std::max((int) sizeof(unsigned) * 8, width);
+      const unsigned maxWidth = std::max((unsigned)sizeof(unsigned) * 8, width);
       for (unsigned i = 0; i < maxWidth; i++)
         {
-          if (i < (unsigned) width && i < sizeof(unsigned) * 8)
+          if (i < width && i < sizeof(unsigned) * 8)
             {
               output.setFixed(i, true);
               output.setValue(i, (val & (1 << i)));
             }
-          else if (i < (unsigned) width)
+          else if (i < width)
             {
               output.setFixed(i, true);
               output.setValue(i, false);
@@ -384,12 +382,12 @@ namespace simplifier
     {
       for (unsigned i = 0; i < width; i++)
         {
-          if (i < (unsigned) width && i < sizeof(unsigned) * 8)
+          if (i < width && i < sizeof(unsigned) * 8)
             {
               setFixed(i, true);
               setValue(i, (val & (1 << i)));
             }
-          else if (i < (unsigned) width)
+          else if (i < width)
             {
               setFixed(i, true);
               setValue(i, false);
@@ -409,21 +407,22 @@ namespace simplifier
     {
       assert(isTotallyFixed());
       assert(getWidth() <= 32);
-      int result = 0;
+      unsigned result = 0;
 
-      for (int i = 0; i < width; i++)
+      for (unsigned i = 0; i < width; i++)
         {
           if (getValue(i))
             result += (1 << i);
         }
+
       return result;
     }
 
     bool
     FixedBits::updateOK(const FixedBits& o, const FixedBits &n, const int upTo)
     {
-      assert (n.getWidth() >= upTo);
-      assert (o.getWidth() >= upTo);
+      assert ((int)n.getWidth() >= upTo);
+      assert ((int)o.getWidth() >= upTo);
 
       for (int i = 0; i < upTo; i++)
         {
@@ -439,6 +438,7 @@ namespace simplifier
               return false;
             }
         }
+
       return true;
     }
 
@@ -450,7 +450,7 @@ namespace simplifier
       if (n.getWidth() != o.getWidth())
         return false;
 
-      for (int i = 0; i < n.getWidth(); i++)
+      for (unsigned i = 0; i < n.getWidth(); i++)
         {
           if (n.isFixed(i) && o.isFixed(i))
             {
@@ -473,7 +473,7 @@ namespace simplifier
     {
       assert(a.getWidth() == b.getWidth());
 
-      for (int i = 0; i < a.getWidth(); i++)
+      for (unsigned i = 0; i < a.getWidth(); i++)
         {
           if (a.isFixed(i) && b.isFixed(i) && (a.getValue(i) != b.getValue(i)))
             {
@@ -490,8 +490,8 @@ namespace simplifier
     void
     FixedBits::getUnsignedMinMax(unsigned &minShift, unsigned &maxShift) const
     {
-      const int bitWidth = this->getWidth();
-      int unsignedBW = sizeof(unsigned)*8;
+      const unsigned bitWidth = this->getWidth();
+      unsigned unsignedBW = sizeof(unsigned)*8;
 
       minShift = 0;
       maxShift = 0;
@@ -499,7 +499,7 @@ namespace simplifier
       bool bigMax = false;
       bool bigMin = false;
 
-      for (int i = unsignedBW; i < bitWidth; i++)
+      for (unsigned i = unsignedBW; i < bitWidth; i++)
         {
         if  ((*this)[i] == '1' || (*this)[i] == '*')
           bigMax = true;
@@ -508,7 +508,7 @@ namespace simplifier
           bigMin = true;
         }
 
-      for (int i = 0; i < std::min(unsignedBW,bitWidth); i++)
+      for (unsigned i = 0; i < std::min(unsignedBW,bitWidth); i++)
         {
           if ((*this)[i] == '1')
             {
@@ -529,31 +529,12 @@ namespace simplifier
     }
 
     bool
-    FixedBits::equals(const FixedBits& a, const FixedBits& b, const int upTo)
-    {
-      assert (a.getWidth() >= upTo);
-      assert (b.getWidth() >= upTo);
-
-      for (int i = 0; i < upTo; i++)
-        {
-          if (a.isFixed(i) != b.isFixed(i))
-            {
-              return false;
-            }
-          if (a.isFixed(i))
-            if (a.getValue(i) != b.getValue(i))
-              return false;
-        }
-      return true;
-    }
-
-    bool
     FixedBits::equals(const FixedBits& a, const FixedBits& b)
     {
       if (a.getWidth() != b.getWidth())
         return false;
 
-      for (int i = 0; i < a.getWidth(); i++)
+      for (unsigned i = 0; i < a.getWidth(); i++)
         {
           if (a.isFixed(i) != b.isFixed(i))
             {

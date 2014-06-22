@@ -32,7 +32,7 @@ namespace simplifier
     private:
       bool* fixed;
       bool* values;
-      int width;
+      unsigned width;
       bool representsBoolean;
 
       void
@@ -46,7 +46,7 @@ namespace simplifier
 
 
     public:
-      FixedBits(int n, bool isBoolean);
+      FixedBits(unsigned n, bool isBoolean);
 
       FixedBits(const FixedBits& copy)
       {
@@ -74,9 +74,9 @@ namespace simplifier
       }
 
       char
-      operator[] (const int n) const
+      operator[] (const unsigned n) const
       {
-        assert(n >=0 && n <width);
+        assert(n < width);
         if (!isFixed(n))
             return '*';
         else if (getValue(n))
@@ -97,6 +97,7 @@ namespace simplifier
       {
         if (this == &copy)
           return *this;
+
         delete[] fixed;
         delete[] values;
         init(copy);
@@ -107,7 +108,7 @@ namespace simplifier
       void
       fixToZero();
 
-      int
+      unsigned
       getWidth() const
       {
         return width;
@@ -123,17 +124,17 @@ namespace simplifier
 
       // set value of bit "n" to the value.
       void
-      setValue(int n, bool value)
+      setValue(unsigned n, bool value)
       {
         assert(((char)value) == 0 || (char)value ==1 );
-        assert(n >=0 && n <width && fixed[n]);
+        assert(n < width && fixed[n]);
         values[n] = value;
       }
 
       bool
-      getValue(int n) const
+      getValue(unsigned n) const
       {
-        assert(n >=0 && n <width && fixed[n]);
+        assert(n < width && fixed[n]);
         return values[n];
       }
 
@@ -141,8 +142,8 @@ namespace simplifier
       int
       topmostPossibleLeadingOne()
       {
-        int i = 0;
-        for (i = getWidth() - 1; i >= 0; i--)
+        int i;
+        for (i = (int)getWidth() - 1; i >= 0; i--)
           {
             if (!isFixed(i) || getValue(i))
               break;
@@ -150,10 +151,10 @@ namespace simplifier
         return i;
       }
 
-      int
+      unsigned
       minimum_trailingOne()
       {
-        int i = 0;
+        unsigned i = 0;
         for (; i < getWidth(); i++)
           {
             if (!isFixed(i) || getValue(i))
@@ -162,10 +163,10 @@ namespace simplifier
         return i;
       }
 
-      int
+      unsigned
       maximum_trailingOne()
       {
-        int i = 0;
+        unsigned i = 0;
         for (; i < getWidth(); i++)
           {
             if (isFixed(i) && getValue(i))
@@ -176,10 +177,10 @@ namespace simplifier
 
 
 
-      int
+      unsigned
       minimum_numberOfTrailingZeroes()
       {
-        int i = 0;
+        unsigned i = 0;
         for (; i < getWidth(); i++)
           {
             if (!isFixed(i) || getValue(i))
@@ -188,10 +189,10 @@ namespace simplifier
         return i;
       }
 
-      int
+      unsigned
       maximum_numberOfTrailingZeroes()
       {
-        int i = 0;
+        unsigned i = 0;
         for (; i < getWidth(); i++)
           {
             if (isFixed(i) && getValue(i))
@@ -201,10 +202,10 @@ namespace simplifier
       }
 
       //Returns the position of the first non-fixed value.
-      int
+      unsigned
       leastUnfixed() const
       {
-        int i = 0;
+        unsigned i = 0;
         for (; i < getWidth(); i++)
           {
             if (!isFixed(i))
@@ -216,7 +217,7 @@ namespace simplifier
       int
       mostUnfixed() const
       {
-        int i = getWidth()-1;
+        int i = (int)getWidth()-1;
         for (; i >=0; i--)
           {
             if (!isFixed(i))
@@ -241,18 +242,17 @@ namespace simplifier
 
       // is this bit fixed to either zero or one?
       bool
-      isFixed(int n) const
+      isFixed(unsigned n) const
       {
-        assert(n >=0 && n <width);
+        assert(n <width);
         return fixed[n];
       }
 
       // set bit n to either fixed or unfixed.
       void
-      setFixed(int n, bool value)
+      setFixed(unsigned n, bool value)
       {
-        assert(((char)value) == 0 || (char)value ==1 );
-        assert(n >=0 && n <width);
+        assert(n <width);
         fixed[n] = value;
       }
 
@@ -266,7 +266,7 @@ namespace simplifier
       {
         assert(getWidth() >= a.getWidth());
 
-        for (int i = 0; i < a.getWidth(); i++)
+        for (unsigned i = 0; i < a.getWidth(); i++)
           {
             if (a.isFixed(i))
               {
@@ -284,8 +284,8 @@ namespace simplifier
       void
       copyIn(const FixedBits& a)
       {
-        int to = std::min(getWidth(), a.getWidth());
-        for (int i = 0; i < to; i++)
+        unsigned to = std::min(getWidth(), a.getWidth());
+        for (unsigned i = 0; i < to; i++)
           {
             assert(!isFixed(i));
             if (a.isFixed(i))
@@ -300,19 +300,23 @@ namespace simplifier
       bool
       containsZero() const
       {
-        for (int i = 0; i < getWidth(); i++)
+        for (unsigned i = 0; i < getWidth(); i++) {
           if (isFixed(i) && getValue(i))
             return false;
+        }
+
         return true;
       }
 
-      int
+      unsigned
       countFixed() const
       {
-        int result = 0;
-        for (unsigned i = 0; i < (unsigned) width; i++)
+        unsigned result = 0;
+        for (unsigned i = 0; i < width; i++) {
           if (isFixed(i))
             result++;
+        }
+
         return result;
       }
 
@@ -322,7 +326,7 @@ namespace simplifier
 
       // Result needs to be explicitly deleted.
       BEEV::CBV
-      GetBVConst(int to, int from) const;
+      GetBVConst(unsigned to, unsigned from) const;
 
       void
       getUnsignedMinMax(unsigned &minShift, unsigned &maxShift) const;
@@ -331,7 +335,7 @@ namespace simplifier
       mergeIn(const FixedBits& a)
       {
         assert(a.getWidth() == getWidth());
-        for (int i= 0; i < width;i++)
+        for (unsigned i= 0; i < width;i++)
           {
           if (a.isFixed(i) && !isFixed(i))
             {
@@ -353,23 +357,20 @@ namespace simplifier
 
 
       static FixedBits
-      createRandom(const int length, const int probabilityOfSetting,
+      createRandom(const unsigned length, const unsigned probabilityOfSetting,
           MTRand& rand);
 
       void
       fromUnsigned(unsigned val);
 
       static FixedBits
-      fromUnsignedInt(int width, unsigned val);
+      fromUnsignedInt(unsigned width, unsigned val);
 
       static FixedBits
       concreteToAbstract(const BEEV::ASTNode& n);
 
       static bool
       equals(const FixedBits& a, const FixedBits& b);
-
-      static bool
-      equals(const FixedBits& a, const FixedBits& b, const int upTo);
 
       static bool
       updateOK(const FixedBits& o, const FixedBits & n);
