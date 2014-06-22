@@ -516,7 +516,7 @@ namespace BEEV
   {
     if (n.GetKind() == BVCONST)
       {
-        assert(n.GetValueWidth()-1-i >=0);
+        assert(n.GetValueWidth() >= i + 1);
         return CONSTANTBV::BitVector_bit_test(n.GetBVConst(), n.GetValueWidth() - 1 - i) ? 1 : 0;
       }
     if (n.GetKind() == BVCONCAT)
