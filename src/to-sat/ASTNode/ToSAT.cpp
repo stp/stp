@@ -53,8 +53,9 @@ namespace BEEV
 
         // Copies the symbol into the map that is used to build the counter example.
         // For boolean we create a vector of size 1.
-        if (n.GetKind() == BOOLEXTRACT && n[0].GetKind() == SYMBOL || (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
-          {
+        if ((n.GetKind() == BOOLEXTRACT && n[0].GetKind() == SYMBOL)
+            || (n.GetKind() == SYMBOL && !isTseitinVariable(n))
+        ) {
             const ASTNode& symbol = n.GetKind() == BOOLEXTRACT ? n[0] : n;
             const unsigned index = n.GetKind() == BOOLEXTRACT ? n[1].GetUnsignedConst() : 0;
             const unsigned width = n.GetKind() == BOOLEXTRACT ? symbol.GetValueWidth(): 1;
@@ -99,7 +100,6 @@ namespace BEEV
 	  CountersAndStats("SAT Solver", bm);
     bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
-    int input_clauselist_size = cll.size();
     if (cll.size() == 0)
       {
         FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);    
@@ -116,7 +116,7 @@ namespace BEEV
 
     //iterate through the list (conjunction) of ASTclauses cll
     ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
-    for (int count=0, flag=0; i != iend; i++)
+    for (; i != iend; i++)
       {
         satSolverClause.clear();
         vector<const ASTNode*>::const_iterator j    = (*i)->begin(); 
@@ -313,10 +313,10 @@ namespace BEEV
     ClauseBuckets::iterator itend = cb->end();
 
     bool sat = false;
-    for(int count=1;it!=itend;it++, count++)
+    for(size_t count=1; it!=itend; it++, count++)
       {
         ClauseList *cl = (*it).second;
-	    sat = toSATandSolve(SatSolver,*cl, count==cb->size(),cm);
+        sat = toSATandSolve(SatSolver,*cl, count == cb->size(), cm);
 
         if(!sat)
           {

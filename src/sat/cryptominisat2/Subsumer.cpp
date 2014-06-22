@@ -1493,7 +1493,6 @@ bool Subsumer::maybeEliminate(const Var x)
                 #endif
                 Clause* cl = solver.addClauseInt(dummy, group_num);
                 if (cl != NULL) {
-                    ClauseSimp c = linkInClause(*cl);
                     subsume0(*cl, cl->getAbst());
                 }
                 if (!solver.ok) return true;

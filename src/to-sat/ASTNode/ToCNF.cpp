@@ -254,12 +254,14 @@ namespace BEEV
     return psi;
   } //End of SINGLETON()
 
+#if defined CRYPTOMINISAT__2
   static ASTNode GetNodeFrom_SINGLETON(ClauseList *cl)
   {
     ClausePtr c = (*(*cl).asList())[0];
     const ASTNode * a = (*c)[0];
     return *a;
   }
+#endif
 
   //########################################
   //########################################
