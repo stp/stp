@@ -180,7 +180,7 @@ Solver_prop::addArray(int array_id, const vec<Lit>& i, const vec<Lit>& v, const 
                     "Currently STP is compiled to use %d bit indices. "
                     "Unfortunately your problem has array indexes of size %d bits. "
                     "STP does arbitrary precision indices with the '--oldstyle-refinement' or the '-r' flags.\n",
-                    INDEX_BIT_WIDTH, std::max(i.size(), ki.size()));
+                    (int)INDEX_BIT_WIDTH, std::max(i.size(), ki.size()));
             exit(1);
         }
 
@@ -300,7 +300,7 @@ Solver_prop::index_as_int(const ArrayAccess& iv)
         return iv.constantIndex();
 
     index_type t = 0;
-    assert(INDEX_BIT_WIDTH >= iv.indexSize());
+    assert((int)INDEX_BIT_WIDTH >= iv.indexSize());
 
     for (int i = 0; i < iv.indexSize(); i++)
         {
@@ -1139,7 +1139,6 @@ void Solver_prop::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
 
                 if (debug_print)
                     printf("%d %d\n", toInt(p), toInt(var(p)));
-                Minisat::Clause  cl= ca[confl];
 
                 assert(ca[confl][0] ==p);
                 assert(value(p) != l_Undef);
