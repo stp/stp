@@ -31,10 +31,10 @@ namespace BEEV
 
     bool result = false;
     if (k == XOR)
-      for (int i = 0; i < lhs.Degree(); i++)
+      for (size_t i = 0; i < lhs.Degree(); i++)
         {
           ASTVec others;
-          for (int j = 0; j < lhs.Degree(); j++)
+          for (size_t j = 0; j < lhs.Degree(); j++)
             if (j != i)
               others.push_back(lhs[j]);
 
@@ -77,10 +77,10 @@ namespace BEEV
       return searchTerm(lhs[0], nf->CreateTerm(BVNEG, width, rhs));
 
     if (lhs.GetKind() == BVXOR || lhs.GetKind() == BVPLUS)
-      for (int i = 0; i < lhs.Degree(); i++)
+      for (size_t i = 0; i < lhs.Degree(); i++)
         {
           ASTVec others;
-          for (int j = 0; j < lhs.Degree(); j++)
+          for (size_t j = 0; j < lhs.Degree(); j++)
             if (j != i)
               others.push_back(lhs[j]);
 

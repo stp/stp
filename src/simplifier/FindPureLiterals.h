@@ -122,7 +122,7 @@ public:
 
     default:
         polarity = bothPolarity; // both
-        for (int i =0; i < n.Degree(); i ++)
+        for (size_t i =0; i < n.Degree(); i ++)
           build(n[i],polarity);
       break;
     }

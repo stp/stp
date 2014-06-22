@@ -10,6 +10,10 @@
 #include "../AST/NodeFactory/SimplifyingNodeFactory.h"
 #include <boost/utility.hpp>
 
+#include <iostream>
+using std::cerr;
+using std::endl;
+
 namespace BEEV
 {
   using std::make_pair;
@@ -690,7 +694,7 @@ namespace BEEV
 
           bool carry = false;
 
-          for (int i =0; i < children.size(); i++)
+          for (size_t i =0; i < children.size(); i++)
             {
               if (children[i] == NULL)
                 {
@@ -736,7 +740,7 @@ namespace BEEV
           if (knownC0)
           {
         	  // Copy in the minimum and maximum.
-        	  for (int i=n[1].GetValueWidth(); i < n.GetValueWidth();i++)
+        	  for (unsigned i=n[1].GetValueWidth(); i < n.GetValueWidth();i++)
         	  {
         		  if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,i- n[1].GetValueWidth()))
         			  CONSTANTBV::BitVector_Bit_On(result->maxV,i);
@@ -757,7 +761,7 @@ namespace BEEV
 
     	  bool nonNull = true;
     	  // If all the children are known, output 'em.
-    	  for (int i=0; i < n.Degree();i++)
+    	  for (size_t i=0; i < n.Degree();i++)
     	  {
     		  if (children[i]== NULL)
     			  nonNull=false;
@@ -766,7 +770,7 @@ namespace BEEV
     	  if (false && nonNull && n.GetKind() != SYMBOL && n.GetKind() != AND)
     	  {
     	      cerr << n;
-    	      for (int i=0; i < n.Degree();i++)
+    	      for (size_t i=0; i < n.Degree();i++)
     	        children[i]->print();
     	  }
       }

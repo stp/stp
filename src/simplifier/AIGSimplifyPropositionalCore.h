@@ -95,12 +95,11 @@ private:
 
 		if (Aig_IsComplement(obj))
 			return nf->CreateNode(NOT, convert(mgr,Aig_Regular(obj),cache));
-		else if (Aig_ObjIsAnd(obj))
-			{
-			    ASTNode result = nf->CreateNode(AND,convert(mgr,Aig_ObjChild0(obj),cache),convert(mgr,Aig_ObjChild1(obj),cache));
-				cache.insert(make_pair(obj,result));
-				return result;
-			}
+		else if (Aig_ObjIsAnd(obj)) {
+			ASTNode result = nf->CreateNode(AND,convert(mgr,Aig_ObjChild0(obj),cache),convert(mgr,Aig_ObjChild1(obj),cache));
+			cache.insert(make_pair(obj,result));
+			return result;
+		}
 		else if (obj == Aig_ManConst1(mgr.aigMgr))
 			return bm->ASTTrue;
 		else if (obj == Aig_ManConst0(mgr.aigMgr))

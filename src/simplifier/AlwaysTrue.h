@@ -85,7 +85,7 @@ public:
     else
       new_state = state;
 
-    for (int i=0; i < n.Degree(); i++)
+    for (size_t i=0; i < n.Degree(); i++)
       {
         newChildren.push_back(visit(n[i],new_state,fromTo));
       }

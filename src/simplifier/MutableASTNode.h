@@ -88,7 +88,7 @@ private:
         	assert(found);
         }
 
-        for (int i = 0; i < children.size(); i++)
+        for (size_t i = 0; i < children.size(); i++)
         {
         	// call check on all the children.
         	children[i]->checkInvariant();
@@ -118,7 +118,7 @@ private:
         return n;
 
       ASTVec newChildren;
-      for (int i = 0; i < children.size(); i++)
+      for (size_t i = 0; i < children.size(); i++)
         newChildren.push_back(children[i]->toASTNode(nf));
 
       // Don't use the hashing node factory here. Imagine CreateNode simplified down,
@@ -191,7 +191,7 @@ private:
       removeChildren(vars); // ignore the result
       children.clear();
       children.insert(children.begin(), newN->children.begin(), newN->children.end());
-      for (int i = 0; i < children.size(); i++)
+      for (size_t i = 0; i < children.size(); i++)
     	  children[i]->parents.insert(this);
 
       propagateUpDirty();
@@ -251,7 +251,7 @@ private:
 
           ASTNode& node = all[i]->n;
           bool found[node.GetValueWidth()];
-          for (int j=0; j <node.GetValueWidth();j++)
+          for (size_t j=0; j <node.GetValueWidth();j++)
             found[j] = false;
 
           ParentsType::const_iterator it;
@@ -332,7 +332,7 @@ private:
     static void
     cleanup()
     {
-      for (int i = 0; i < all.size(); i++)
+      for (size_t i = 0; i < all.size(); i++)
         delete all[i];
       all.clear();
     }

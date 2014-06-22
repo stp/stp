@@ -28,7 +28,7 @@ namespace BEEV
       if (n.GetKind() == NOT && n[0].GetKind() == OR)
         {
           ASTVec flat = FlattenKind(OR, n[0].GetChildren());
-          for (int i = 0; i < flat.size(); i++)
+          for (size_t i = 0; i < flat.size(); i++)
             context.insert(nf->CreateNode(NOT, flat[i]));
         }
       else if (n.GetKind() == AND)
@@ -86,7 +86,7 @@ namespace BEEV
         }
       else
         {
-          for (int i = 0; i < n.GetChildren().size(); i++)
+          for (size_t i = 0; i < n.GetChildren().size(); i++)
             new_children.push_back(visit(n[i], visited, visited_empty, context));
         }
 

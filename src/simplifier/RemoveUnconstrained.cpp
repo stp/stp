@@ -55,7 +55,7 @@ namespace BEEV
 
   bool allChildrenAreUnconstrained(vector <MutableASTNode*> children)
   {
-      for (int i =0; i < children.size(); i++)
+      for (size_t i =0; i < children.size(); i++)
         if (!children[i]->isUnconstrained())
           return false;
 
@@ -100,7 +100,7 @@ namespace BEEV
     // Going to be rebuilt later anyway, so discard.
     vector<MutableASTNode*> variables;
 
-    for (int i =0; i <extracts.size(); i++)
+    for (size_t i =0; i <extracts.size(); i++)
       {
         ASTNode& var = extracts[i]->n;
         assert(var.GetKind() == SYMBOL);
@@ -151,7 +151,7 @@ namespace BEEV
         }
 
     ASTNode concat = concatVec[0];
-    for (int i=1; i < concatVec.size();i++)
+    for (size_t i=1; i < concatVec.size();i++)
       {
           assert(!concat.IsNull());
           concat = bm.CreateTerm(BVCONCAT, concat.GetValueWidth() + concatVec[i].GetValueWidth(),concatVec[i], concat);
@@ -184,7 +184,7 @@ namespace BEEV
 
     topMutable->getAllUnconstrainedVariables(variable_array);
 
-    for (int i =0; i < variable_array.size() ; i++)
+    for (size_t i =0; i < variable_array.size() ; i++)
       {
         // Don't make this is a reference. If the vector gets resized, it will point to
         // memory that no longer contains the object.
@@ -208,7 +208,7 @@ namespace BEEV
         //nb. The children might be dirty. i.e. not have substitutions written through them yet.
         ASTVec children;
         children.reserve(mutable_children.size());
-        for (int j = 0; j <mutable_children.size(); j++ )
+        for (size_t j = 0; j <mutable_children.size(); j++ )
           children.push_back(mutable_children[j]->n);
 
         const size_t numberOfChildren = children.size();
@@ -240,9 +240,9 @@ namespace BEEV
           {
             if (kind != AND && kind != OR && kind != BVOR && kind != BVAND)
               {
-                  int found = 0;
+                  size_t found = 0;
 
-                  for (int i = 0; i < numberOfChildren; i++)
+                  for (size_t i = 0; i < numberOfChildren; i++)
                     {
                       if (children[i] == var)
                         found++;
@@ -429,7 +429,7 @@ namespace BEEV
               {
                 ASTNodeSet already;
                 ASTNode v =replaceParentWithFresh(muteParent, variable_array);
-                for (int i =0; i < numberOfChildren;i++)
+                for (size_t i =0; i < numberOfChildren;i++)
                   {
                     /* to avoid problems with:
                     734:(AND
@@ -464,7 +464,7 @@ namespace BEEV
                 ASTNode v =replaceParentWithFresh(muteParent, variable_array);
 
                 ASTVec others;
-                for (int i = 0; i < numberOfChildren; i++)
+                for (size_t i = 0; i < numberOfChildren; i++)
                 {
                     if (children[i] !=var)
                         others.push_back(mutable_children[i]->toASTNode(nf));
@@ -617,7 +617,7 @@ namespace BEEV
         case BVPLUS:
               {
                 ASTVec other;
-                for (int i = 0; i < children.size(); i++)
+                for (size_t i = 0; i < children.size(); i++)
                   if (children[i] != var)
                     other.push_back(mutable_children[i]->toASTNode(nf));
 
@@ -639,7 +639,6 @@ namespace BEEV
               {
                 ASTNode v =replaceParentWithFresh(muteParent, variable_array);
 
-                const unsigned resultWidth = width;
                 const unsigned operandWidth = var.GetValueWidth();
                 assert(children[0] == var); // It can't be anywhere else.
 
@@ -668,7 +667,7 @@ namespace BEEV
                     newWidth += rhsSize;
                   }
 
-                assert(newWidth == operandWidth);
+                assert(newWidth == (long int)operandWidth);
                 replace(var, current);
               }
         break;
