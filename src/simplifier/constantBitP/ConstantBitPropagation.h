@@ -42,7 +42,7 @@ namespace simplifier
       bool topFixed;
 
       // A vector that's reused.
-      vector< int > previousChildrenFixedCount;
+      std::vector< unsigned > previousChildrenFixedCount;
 
       void
       printNodeWithFixings();
