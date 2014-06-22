@@ -488,8 +488,6 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 		return bvGreaterThanEqualsBothWays(c0, c1, t);
 	}
 
-	bool changed = false;
-
 	if (output.isFixed(0) && output.getValue(0))
 	{
 		// Starting from the high order. Turn on each bit in turn. If it being turned on pushes it past the max of the other side
@@ -505,7 +503,6 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 					c0.setFixed(i, true);
 					c0.setValue(i, false);
 					setUnsignedMinMax(c0, c0_min, c0_max);
-					changed = true;
 				}
 				else
 				{
@@ -525,7 +522,6 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 					c1.setFixed(i, true);
 					c1.setValue(i, true);
 					setUnsignedMinMax(c1, c1_min, c1_max);
-					changed = true;
 				}
 				else
 				{
