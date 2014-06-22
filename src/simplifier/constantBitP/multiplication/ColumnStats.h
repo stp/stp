@@ -8,6 +8,7 @@
 #ifndef COLUMNSTATS_H_
 #define COLUMNSTATS_H_
 
+#include "../FixedBits.h"
 #include <assert.h>
 #include <ostream>
 using std::endl;
