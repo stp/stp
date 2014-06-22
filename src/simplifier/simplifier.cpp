@@ -248,7 +248,7 @@ namespace BEEV
         assert(false);
       }
 
-    for (int i = 0; i < n.Degree(); i++)
+    for (size_t i = 0; i < n.Degree(); i++)
       {
         checkIfInSimplifyMap(n[i], visited);
       }
@@ -501,7 +501,7 @@ namespace BEEV
   } //end of SimplifyAtomicFormula()
 
   // number of constant bits in the most significant places.
-  int
+  unsigned
   mostSignificantConstants(const ASTNode& n)
   {
     if (n.isConstant())
@@ -511,7 +511,7 @@ namespace BEEV
     return 0;
   }
 
-  int
+  unsigned
   getConstantBit(const ASTNode& n, const int i)
   {
     if (n.GetKind() == BVCONST)
@@ -574,14 +574,14 @@ namespace BEEV
     return false;
   }
 
-  int
+  unsigned
   numberOfLeadingZeroes(const ASTNode& n)
   {
-    int c = mostSignificantConstants(n);
+    unsigned c = mostSignificantConstants(n);
     if (c <= 0)
       return 0;
 
-    for (int i = 0; i < c; i++)
+    for (unsigned i = 0; i < c; i++)
       if (getConstantBit(n, i) != 0)
         return i;
     return c;
@@ -1303,7 +1303,7 @@ namespace BEEV
     else
       {
         ASTVec newC;
-        for (int i = 0; i < a.GetChildren().size(); i++)
+        for (size_t i = 0; i < a.GetChildren().size(); i++)
           {
             newC.push_back(SimplifyFormula(a[i], false, VarConstMap));
           }
@@ -1665,16 +1665,24 @@ namespace BEEV
     assert(BVMULT == k || SBVDIV == k || BVPLUS ==k);
     const int inputValueWidth = output.GetValueWidth();
 
-    int lengthA = output.GetChildren()[0][0].GetValueWidth();
-    int lengthB = output.GetChildren()[1][0].GetValueWidth();
-    int maxLength;
-    if (BVMULT == output.GetKind())
-      maxLength = lengthA + lengthB;
-    else if (BVPLUS == output.GetKind() || SBVDIV == output.GetKind())
-      maxLength = std::max(lengthA, lengthB) + 1;
-    else {
-      FatalError("Unexpected.");
+    unsigned lengthA = output.GetChildren()[0][0].GetValueWidth();
+    unsigned lengthB = output.GetChildren()[1][0].GetValueWidth();
+    unsigned maxLength;
+    switch(output.GetKind()) {
+        case BVMULT:
+            maxLength = lengthA + lengthB;
+            break;
+
+        case BVPLUS:
+        case SBVDIV:
+            maxLength = std::max(lengthA, lengthB) + 1;
+            break;
+
+        default:
+            FatalError("Unexpected.");
+            maxLength = 0;
     }
+
     if (maxLength < output.GetValueWidth())
       {
         ASTNode newA = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[0],
@@ -1727,7 +1735,7 @@ namespace BEEV
   {
     const ASTNode a = children[0];
     const ASTNode b = children[1];
-    const int width = children[0].GetValueWidth();
+    const unsigned width = children[0].GetValueWidth();
     ASTNode output;
 
     assert(b.isConstant());
@@ -1908,7 +1916,7 @@ namespace BEEV
     //I haven't measured if this is worth the expense.
       {
         bool notSimplified = false;
-        for (int i = 0; i < inputterm.Degree(); i++)
+        for (size_t i = 0; i < inputterm.Degree(); i++)
           if (inputterm[i].GetType() != ARRAY_TYPE)
             if (!hasBeenSimplified(inputterm[i]))
               {
@@ -2660,7 +2668,7 @@ namespace BEEV
             assert(BVTypeCheck(output));
 
             // If the leading bits are zero. Replace it by a concat with zero.
-            int i;
+            unsigned i;
             if (output.GetKind() == BVAND && output.Degree() == 2 && ((i = numberOfLeadingZeroes(output[0])) > 0))
               {
                 // i contains the number of leading zeroes.
@@ -2682,13 +2690,13 @@ namespace BEEV
           }
         if (output.GetKind() == BVAND)
           {
-            int trailingZeroes = 0;
-            for (int i = 0; i < output.Degree(); i++)
+            unsigned trailingZeroes = 0;
+            for (size_t i = 0; i < output.Degree(); i++)
               {
                 const ASTNode& n = output[i];
                 if (n.GetKind() != BVCONST)
                   continue;
-                int j;
+                unsigned j;
                 for (j = 0; j < n.GetValueWidth(); j++)
                   if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(), j))
                     break;
@@ -2705,7 +2713,7 @@ namespace BEEV
                     //cerr << "old" << output;
                     ASTNode zeroes = _bm->CreateZeroConst(trailingZeroes);
                     ASTVec newChildren;
-                    for (int i = 0; i < output.Degree(); i++)
+                    for (size_t i = 0; i < output.Degree(); i++)
                       newChildren.push_back(
                           nf->CreateTerm(BVEXTRACT, output.GetValueWidth() - trailingZeroes, output[i],
                               _bm->CreateBVConst(32, output.GetValueWidth() - 1),
@@ -3017,7 +3025,7 @@ namespace BEEV
     assert(hasBeenSimplified(output));
 
 #ifndef NDEBUG
-    for (int i = 0; i < output.Degree(); i++)
+    for (size_t i = 0; i < output.Degree(); i++)
       {
         if (output[i].GetType() != ARRAY_TYPE)
           if (!hasBeenSimplified(output[i]))

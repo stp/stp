@@ -37,13 +37,13 @@ namespace BEEV
     CBV tmp0 = NULL;
     CBV tmp1 = NULL;
 
-    unsigned int number_of_children = input_children.size();
+    size_t number_of_children = input_children.size();
     assert(number_of_children >=1);
     assert(k != BVCONST);
 
     ASTVec children;
     children.reserve(number_of_children);
-    for (int i =0; i < number_of_children; i++)
+    for (size_t i =0; i < number_of_children; i++)
     {
     	if (input_children[i].isConstant())
     		children.push_back(input_children[i]);

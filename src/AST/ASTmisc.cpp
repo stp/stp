@@ -154,7 +154,7 @@ namespace BEEV
 
     visited.insert(n.GetNodeNum());
 
-    for (int i = 0; i < n.Degree(); i++)
+    for (size_t i = 0; i < n.Degree(); i++)
       numberOfReadsLessThan(n[i], visited, soFar,limit);
   }
 

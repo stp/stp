@@ -173,7 +173,7 @@ Solver_prop::addArray(int array_id, const vec<Lit>& i, const vec<Lit>& v, const 
 
     if (!ok) return false;
 
-    if (i.size() > INDEX_BIT_WIDTH || ki.size() > INDEX_BIT_WIDTH)
+    if (i.size() > (int)INDEX_BIT_WIDTH || ki.size() > (int)INDEX_BIT_WIDTH)
         {
             printf("The array propagators unfortunately don't do arbitrary precision integers yet. "
                     "With the INDICES_128BITS compile time flag STP does 128-bits on 64-bit machines compiled with GCC. "
