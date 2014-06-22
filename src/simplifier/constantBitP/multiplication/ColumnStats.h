@@ -59,7 +59,6 @@ namespace simplifier
             columnUnfixed++;
           }
 
-        assert(columnOnes >= 0 && columnUnfixed >= 0 && columnZeroes >= 0 && columnOneFixed >= 0);
         assert(columnOnes + columnUnfixed + columnOneFixed + columnZeroes == (index + 1));
       }
 

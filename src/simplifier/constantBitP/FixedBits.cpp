@@ -62,8 +62,7 @@ namespace simplifier
     BEEV::CBV
     FixedBits::GetBVConst(unsigned to, unsigned from) const
     {
-      assert(to>=from);
-      assert(from >=0);
+      assert(to >= from);
       unsigned resultWidth = to - from + 1;
 
       BEEV::CBV result = CONSTANTBV::BitVector_Create(resultWidth, true);
@@ -255,7 +254,6 @@ namespace simplifier
     // Getting a new random number is expensive. Not sure why.
     FixedBits FixedBits::createRandom(const unsigned length, const unsigned probabilityOfSetting, MTRand& trand)
       {
-        assert( 0 <= probabilityOfSetting);
         assert( 100 >= probabilityOfSetting);
 
         FixedBits result(length, false);
