@@ -997,7 +997,7 @@ Expr vc_bvConstExprFromInt(VC vc,
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
   unsigned long long int v = (unsigned long long int)value;
-  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> 64-n_bits;
+  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> (64-n_bits);
   //printf("%ull", max_n_bits);
   if(v > max_n_bits) {
     printf("CInterface: vc_bvConstExprFromInt: "\
