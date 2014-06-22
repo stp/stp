@@ -15,7 +15,7 @@ using std::cout;
 using std::endl;
 using std::pair;
 
-Result makeEqual(FixedBits& a, FixedBits& b, int from, int to);
+Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
 void setSignedMinMax(FixedBits& v, BEEV::CBV min, BEEV::CBV max);
 void setUnsignedMinMax(const FixedBits& v, BEEV::CBV min, BEEV::CBV max);
 unsigned cbvTOInt(const BEEV::CBV v);
