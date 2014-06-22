@@ -50,7 +50,7 @@ namespace BEEV
 
     virtual uint32_t newVar() =0;
 
-    virtual int nVars() =0;
+    virtual unsigned long nVars() =0;
 
     virtual void printStats() = 0;
 

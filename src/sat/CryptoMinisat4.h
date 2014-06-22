@@ -38,7 +38,7 @@ namespace BEEV
 
     void setVerbosity(int v);
 
-    int nVars();
+    unsigned long nVars();
 
     void printStats();
 

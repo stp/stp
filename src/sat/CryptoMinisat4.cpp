@@ -76,7 +76,7 @@ namespace BEEV
     //s->conf.verbosity = v;
   }
 
-  int CryptoMinisat4::nVars()
+  unsigned long CryptoMinisat4::nVars()
   {return s->nVars();}
 
   void CryptoMinisat4::printStats()

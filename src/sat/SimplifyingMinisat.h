@@ -40,7 +40,7 @@ namespace BEEV
 
     virtual uint32_t newVar();
 
-    int nVars();
+    unsigned long nVars();
 
     void printStats();
 

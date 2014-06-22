@@ -65,7 +65,7 @@ namespace BEEV
     return s->newVar();
   }
 
-  int SimplifyingMinisat::nVars()
+  unsigned long SimplifyingMinisat::nVars()
   {return s->nVars();}
 
   void SimplifyingMinisat::printStats()

@@ -71,7 +71,7 @@ namespace BEEV
 
 
   template <class T>
-  int MinisatCore<T>::nVars()
+  unsigned long MinisatCore<T>::nVars()
   {return s->nVars();}
 
   template <class T>
