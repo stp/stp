@@ -119,7 +119,7 @@ namespace BEEV
                 }
                 return result;
             }
-        else if ((v_a.size() == 0) ^ (v_b.size()) == 0)
+        else if ((v_a.size() == 0) ^ (v_b.size() == 0))
             {
                 ASTNode constant = a.isConstant() ? a : b;
                 vector<unsigned> vec = v_a.size() == 0 ? v_b : v_a;
