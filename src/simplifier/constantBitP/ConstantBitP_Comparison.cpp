@@ -137,8 +137,6 @@ fast_exit(FixedBits& c0, FixedBits& c1)
 
 Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 {
-	Result r = NO_CHANGE;
-
 	assert(c0.getWidth() == c1.getWidth());
 
 	if (!output.isFixed(0) && fast_exit(c0,c1))
@@ -165,7 +163,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 		{
 			output.setFixed(0, true);
 			output.setValue(0, true);
-			r = CHANGED;
 		}
 	}
 
@@ -183,7 +180,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 		{
 			output.setFixed(0, true);
 			output.setValue(0, false);
-			r = CHANGED;
 		}
 	}
 
@@ -213,7 +209,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 				c0.setFixed(msb, true);
 				c0.setValue(msb, true);
 				setSignedMinMax(c0, c0_min, c0_max);
-				r = CHANGED;
 			}
 			else
 			{
@@ -229,7 +224,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 				c1.setFixed(msb, true);
 				c1.setValue(msb, false);
 				setSignedMinMax(c1, c1_min, c1_max);
-				r = CHANGED;
 			}
 			else
 			{
@@ -252,7 +246,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 						c0.setFixed(i, true);
 						c0.setValue(i, false);
 						setSignedMinMax(c0, c0_min, c0_max);
-						r = CHANGED;
 					}
 					else
 					{
@@ -272,7 +265,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 						c1.setFixed(i, true);
 						c1.setValue(i, true);
 						setSignedMinMax(c1, c1_min, c1_max);
-						r = CHANGED;
 					}
 					else
 					{
@@ -290,8 +282,6 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
 Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 {
-	Result r = NO_CHANGE;
-
 	assert(c0.getWidth() == c1.getWidth());
 
         if (!output.isFixed(0) && fast_exit(c0,c1))
@@ -317,7 +307,6 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 		{
 			output.setFixed(0, true);
 			output.setValue(0, true);
-			r = CHANGED;
 		}
 	}
 
@@ -333,7 +322,6 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 		{
 			output.setFixed(0, true);
 			output.setValue(0, false);
-			r = CHANGED;
 		}
 	}
 
@@ -363,7 +351,6 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 				c0.setFixed(msb, true);
 				c0.setValue(msb, true);
 				setSignedMinMax(c0, c0_min, c0_max);
-				r = CHANGED;
 			}
 			else
 			{
@@ -379,7 +366,6 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 				c1.setFixed(msb, true);
 				c1.setValue(msb, false);
 				setSignedMinMax(c1, c1_min, c1_max);
-				r = CHANGED;
 			}
 			else
 			{
@@ -446,8 +432,6 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 // UNSIGNED!!
 Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 {
-	Result r = NO_CHANGE;
-
 	assert(c0.getWidth() == c1.getWidth());
 
         if (!output.isFixed(0) && fast_exit(c0,c1))
@@ -558,8 +542,6 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 
 Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 {
-	Result r = NO_CHANGE;
-
 	assert(c0.getWidth() == c1.getWidth());
 
         if (!output.isFixed(0) && fast_exit(c0,c1))

@@ -33,7 +33,6 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 	Addargs.push_back(&notB);
 	Addargs.push_back(&one);
 
-	bool changed = false;
 	while (true) // until it fixed points
 	{
 		Result result;
@@ -51,8 +50,6 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 		if (FixedBits::equals(initialNotB, notB) && FixedBits::equals(initialA, a) && FixedBits::equals(initialOut, output))
 			break;
-		else
-			changed = true;
 	}
 
 	return NOT_IMPLEMENTED;
@@ -317,8 +314,6 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
           return bvAddBothWays(*children[0],*children[1],output);
         }
 
-        Result result = NO_CHANGE;
-
 	const int bitWidth = output.getWidth();
 
 
@@ -464,7 +459,6 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 				{
 					output.setFixed(column, true);
 					output.setValue(column, newResult);
-					result = CHANGED;
 					changed = true;
 				}
 				else if (output.isFixed(column) && (output.getValue(column) != newResult))
