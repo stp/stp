@@ -129,7 +129,7 @@ if(APPLE AND HAVE_FLAG_STDLIB_LIBCPP)
 endif()
 
 add_cxx_flag_if_supported("-Wall")
-add_cxx_flag_if_supported("-Wextra")
+#add_cxx_flag_if_supported("-Wextra")
 add_cxx_flag_if_supported("-Wunused")
 add_cxx_flag_if_supported("-Wsign-compare")
 add_cxx_flag_if_supported("-Wtype-limits")
