@@ -18,6 +18,9 @@
 #include "../sat/CryptoMinisat.h"
 #include "../sat/MinisatCore_prop.h"
 #include "../sat/minisat/core_prop/Solver_prop.h"
+#ifdef USE_CRYPTOMINISAT4
+#include "../sat/CryptoMinisat4.h"
+#endif
 
 #include "../simplifier/RemoveUnconstrained.h"
 #include "../simplifier/FindPureLiterals.h"
@@ -64,7 +67,16 @@ namespace BEEV {
             newS = new SimplifyingMinisat(bm->soft_timeout_expired);
             break;
         case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
-            newS = new CryptoMinisat();
+            newS = new CryptoMinisat;
+            break;
+        case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
+            #ifdef USE_CRYPTOMINISAT4
+            newS = new CryptoMinisat4;
+            #else
+            std::cerr << "WARNING: Falling back to CryptoMiniSatv2 since v4 \
+            was not available at STP library compile time" << std::endl;
+            newS = new CryptoMinisat;
+            #endif
             break;
         case UserDefinedFlags::MINISAT_SOLVER:
             newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
