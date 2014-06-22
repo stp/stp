@@ -39,9 +39,8 @@ namespace simplifier
 #endif
 
     Result
-    fixIfCanForMultiplication(vector<FixedBits*>& children, const int index, const int aspirationalSum)
+    fixIfCanForMultiplication(vector<FixedBits*>& children, const unsigned index, const int aspirationalSum)
     {
-      assert(index >=0);
       assert(index < children[0]->getWidth());
 
       FixedBits& x = *children[0];
@@ -61,7 +60,7 @@ namespace simplifier
       // We need every value that is unfixed to be set to one.
       if (aspirationalSum == columnOnes + columnOneFixed + columnUnfixed && ((columnOneFixed + columnUnfixed) > 0))
         {
-        for (unsigned i = 0; i <= (unsigned) index; i++)
+        for (unsigned i = 0; i <= index; i++)
           {
           // If y is unfixed, and it's not anded with zero.
           if (!y.isFixed(i) && !(x.isFixed(index - i) && !x.getValue(index - i)))
@@ -85,7 +84,7 @@ namespace simplifier
       if (aspirationalSum == columnOnes && (columnUnfixed > 0 || columnOneFixed > 0))
         {
         assert(!run);
-        for (unsigned i = 0; i <= (unsigned) index; i++)
+        for (unsigned i = 0; i <= index; i++)
           {
           if (!y.isFixed(i) && x.isFixed(index - i) && x.getValue(index - i)) // one fixed.
 
@@ -161,15 +160,14 @@ namespace simplifier
     }
 
     Result
-    setToZero(FixedBits& y, int from, int to)
+    setToZero(FixedBits& y, unsigned from, unsigned to)
     {
       Result r = NO_CHANGE;
-      assert(from<=to);
-      assert(from>= 0);
+      assert(from <= to);
       assert(to <= y.getWidth());
 
       /***NB < to ***/
-      for (int i = from; i < to; i++)
+      for (unsigned i = from; i < to; i++)
         {
         if (y[i] == '*')
           {
