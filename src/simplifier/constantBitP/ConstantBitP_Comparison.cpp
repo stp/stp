@@ -112,22 +112,17 @@ fast_exit(FixedBits& c0, FixedBits& c1)
       const char c_0 = c0[i];
       const char c_1 = c1[i];
 
-      if (c_0 == '0')
-        {
+      if (c_0 == '0') {
           if (c_1 == '0')
             continue;
-        }
-      else if (c_0 == '1')
-        {
+      } else if (c_0 == '1') {
           if (c_1 == '1')
             continue;
-        }
-      else if (c_0 == '*' && c_1 == '*')
-        {
+      } else if (c_0 == '*' && c_1 == '*') {
           return true;
-        }
+      }
       return false;
-    }
+   }
 }
 
 
