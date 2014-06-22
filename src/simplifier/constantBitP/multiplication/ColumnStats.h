@@ -8,6 +8,10 @@
 #ifndef COLUMNSTATS_H_
 #define COLUMNSTATS_H_
 
+#include <assert.h>
+#include <ostream>
+using std::endl;
+
 namespace simplifier
 {
   namespace constantBitP
