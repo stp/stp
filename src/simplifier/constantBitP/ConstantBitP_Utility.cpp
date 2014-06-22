@@ -52,15 +52,14 @@ stats getStats(const vector<FixedBits*>& operands, const unsigned position)
 	return result;
 }
 
-Result makeEqual(FixedBits& a, FixedBits& b, int from, int to)
+Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to)
 {
 	assert(to >= from);
-	assert(from >=0);
 	assert(from <= a.getWidth());
 	assert(from <= b.getWidth());
 
 	Result result = NO_CHANGE;
-	for (int i = from; i < to; i++)
+	for (unsigned i = from; i < to; i++)
 	{
 		if (a.isFixed(i) && !b.isFixed(i))
 		{
@@ -125,7 +124,7 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
 	CONSTANTBV::BitVector_Fill(max);
 	CONSTANTBV::BitVector_Empty(min);
 
-	for (int i = 0; i < v.getWidth(); i++)
+	for (unsigned i = 0; i < v.getWidth(); i++)
 	{
 		if (v.isFixed(i))
 		{
