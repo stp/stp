@@ -274,7 +274,7 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children, FixedBits& o
 	// the values of shift that shift out everything.
 	// i.e. possibleShift[bitWidth+1] is the SET of all operations that shift past the end.
 	const unsigned numberOfPossibleShifts = bitWidth + 1;
-	bool possibleShift[numberOfPossibleShifts];
+	bool *possibleShift = (bool*) alloca(sizeof(bool) * numberOfPossibleShifts);
 	for (unsigned i = 0; i < numberOfPossibleShifts; i++)
 		possibleShift[i] = false;
 
@@ -409,7 +409,7 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children, FixedBits& o
 	// Then, that bit must be fixed.
 	// E.g.  [--] << [0-] == [00]
 
-	bool candidates[bitWidth];
+	bool *candidates = (bool*) alloca(sizeof(bool*) * bitWidth);
 	for (unsigned i = 0; i < bitWidth; i++)
 	{
 		candidates[i] = !op.isFixed(i);
@@ -579,7 +579,7 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 	// the values of shift that shift out everything.
 	// i.e. possibleShift[bitWidth+1] is the SET of all operations that shift past the end.
 	const unsigned numberOfPossibleShifts = bitWidth + 1;
-	bool possibleShift[numberOfPossibleShifts];
+	bool *possibleShift = (bool*) alloca(sizeof(bool) *numberOfPossibleShifts);
 	for (unsigned i = 0; i < numberOfPossibleShifts; i++)
 		possibleShift[i] = false;
 
@@ -774,7 +774,7 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 	// Then, that bit must be fixed.
 	// E.g.  [--] << [0-] == [00]
 
-	bool candidates[bitWidth];
+	bool *candidates = (bool*) alloca(sizeof(bool) * bitWidth);
 	for (unsigned i = 0; i < bitWidth; i++)
 	{
 		candidates[i] = !op.isFixed(i);

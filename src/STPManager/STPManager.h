@@ -435,7 +435,7 @@ namespace BEEV
     // in the set aren't printed out as part of the counter example.
     ASTNode CreateFreshVariable(int indexWidth, int valueWidth, std::string prefix)
     {
-        char d[32 + prefix.length()];
+        char *d = (char*) alloca(sizeof(char) * (32 + prefix.length()));
         sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
         assert(!LookupSymbol(d));
 

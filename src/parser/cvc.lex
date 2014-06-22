@@ -18,6 +18,7 @@
   extern int cvcerror (const char *msg);
 %}
 
+%option never-interactive
 %option noyywrap
 %option nounput
 %option noreject

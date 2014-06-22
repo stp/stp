@@ -12,6 +12,10 @@
 #include "simplifier.h"
 #include "AIGSimplifyPropositionalCore.h"
 
+#ifdef _MSC_VER
+#include <compdep.h>
+#endif
+
 namespace BEEV
 {
 
@@ -1018,7 +1022,7 @@ namespace BEEV
             sort(l0.begin(), l0.end());
             sort(l1.begin(), l1.end());
             vector<ASTNode> result(l0.size() + l1.size());
-            vector<ASTNode>::iterator it = set_intersection(l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
+            std::vector<ASTNode>::iterator it = set_intersection(l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
             if (it == result.begin())
               return ASTFalse;
 

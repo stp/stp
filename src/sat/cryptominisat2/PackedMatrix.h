@@ -23,7 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <algorithm>
 #ifdef _MSC_VER
-#include <msvc/stdint.h>
+#include "msvc/stdint.h"
 #else
 #include <stdint.h>
 #endif //_MSC_VER
