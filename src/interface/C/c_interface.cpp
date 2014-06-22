@@ -1553,19 +1553,16 @@ Expr vc_bvWriteToMemoryArray(VC vc,
     return vc_writeExpr(vc, array, byteIndex, element);
   else {
     int count = 1;
-    int hi = newBitsPerElem - 1;
     int low = newBitsPerElem - 8;
     int low_elem = 0;
     int hi_elem = low_elem + 7;
     Expr c = vc_bvExtract(vc, element, hi_elem, low_elem);
     Expr newarray = vc_writeExpr(vc, array, byteIndex, c);
     while(--numOfBytes > 0) {
-      hi = low-1;
       low = low-8;
-            
       low_elem = low_elem + 8;
       hi_elem = low_elem + 7;
-            
+
       c = vc_bvExtract(vc, element, hi_elem, low_elem);
       newarray =
         vc_writeExpr(vc, newarray,
