@@ -115,8 +115,20 @@ namespace simplifier
       }
 
       // the value contained in the fixed thingy.
-      int
-      getUnsignedValue() const;
+      unsigned
+      getUnsignedValue() const
+      {
+        assert(isTotallyFixed());
+        assert(getWidth() <= 32);
+        unsigned result = 0;
+
+        for (unsigned i = 0; i < width; i++) {
+          if (getValue(i))
+            result += (1 << i);
+        }
+
+        return result;
+      }
 
       // True if all bits are fixed (irrespective of what value they are fixed to).
       bool

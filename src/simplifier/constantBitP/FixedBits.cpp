@@ -402,22 +402,6 @@ namespace simplifier
         }
     }
 
-    int
-    FixedBits::getUnsignedValue() const
-    {
-      assert(isTotallyFixed());
-      assert(getWidth() <= 32);
-      unsigned result = 0;
-
-      for (unsigned i = 0; i < width; i++)
-        {
-          if (getValue(i))
-            result += (1 << i);
-        }
-
-      return result;
-    }
-
     bool
     FixedBits::updateOK(const FixedBits& o, const FixedBits &n, const int upTo)
     {
