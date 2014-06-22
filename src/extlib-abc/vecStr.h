@@ -415,7 +415,6 @@ static inline void Vec_StrPush( Vec_Str_t * p, char Entry )
 static inline int Vec_StrBase10Log( unsigned Num )
 {
     int Res;
-    assert( Num >= 0 );
     if ( Num == 0 ) return 0;
     if ( Num == 1 ) return 1;
 	for ( Res = 0, Num--;  Num;  Num /= 10,  Res++ );
