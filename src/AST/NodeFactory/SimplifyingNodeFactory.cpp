@@ -1282,7 +1282,7 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         const unsigned outerHigh = children[1].GetUnsignedConst();
 
         const unsigned innerLow = children[0][2].GetUnsignedConst();
-        const unsigned innerHigh = children[0][1].GetUnsignedConst();
+        //const unsigned innerHigh = children[0][1].GetUnsignedConst();
         result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0], bm.CreateBVConst(32, outerHigh + innerLow),
             bm.CreateBVConst(32, outerLow + innerLow));
       }
