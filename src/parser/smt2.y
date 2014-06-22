@@ -243,7 +243,7 @@ cmdi:
 	{}
 |	LPAREN_TOK PUSH_TOK NUMERAL_TOK RPAREN_TOK
 	{
-		for (int i=0; i < $3;i++)
+		for (unsigned i=0; i < $3;i++)
 		{
 			parserInterface->push();
 		}
@@ -251,7 +251,7 @@ cmdi:
 	}
 |	LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
 	{
-		for (int i=0; i < $3;i++)
+		for (unsigned i=0; i < $3;i++)
 			parserInterface->pop();
 		parserInterface->success();
 	}
@@ -311,7 +311,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 	BEEV::parserInterface->storeFunction(*$1, *$3, *$10);
 
 	// Next time the variable is used, we want it to be fresh.
-    for (int i = 0; i < $3->size(); i++)
+    for (size_t i = 0; i < $3->size(); i++)
      BEEV::parserInterface->removeSymbol((*$3)[i]);
 	
 	delete $1;
@@ -324,7 +324,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 	BEEV::parserInterface->storeFunction(*$1, *$3, *$6);
 
 	// Next time the variable is used, we want it to be fresh.
-    for (int i = 0; i < $3->size(); i++)
+    for (size_t i = 0; i < $3->size(); i++)
      BEEV::parserInterface->removeSymbol((*$3)[i]);
 
 	delete $1;
