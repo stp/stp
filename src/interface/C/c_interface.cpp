@@ -614,9 +614,7 @@ WholeCounterExample vc_getWholeCounterExample(VC vc) {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
 
-  CompleteCEStar c =
-    new BEEV::CompleteCounterExample(ce->GetCompleteCounterExample(),
-                                     b);
+  CompleteCEStar c = new BEEV::CompleteCounterExample(ce->GetCompleteCounterExample(),b);
   return c;
 }
 
