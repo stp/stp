@@ -308,16 +308,16 @@ void setValue(FixedBits& a, const int i, bool v)
 
 Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
-        const int numberOfChildren = children.size();
+        const size_t numberOfChildren = children.size();
         if (numberOfChildren==2)
         {
           return bvAddBothWays(*children[0],*children[1],output);
         }
 
-	const int bitWidth = output.getWidth();
+	const unsigned bitWidth = output.getWidth();
 
 
-	for (int i = 0; i < numberOfChildren; i++)
+	for (size_t i = 0; i < numberOfChildren; i++)
 	{
 		assert(children[i]->getWidth() == bitWidth );
 	}
@@ -347,7 +347,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 		changed = false;
 
 		// Make sure each column's sum is consistent with the output.
-		for (int i = 0; i < bitWidth; i++)
+		for (unsigned i = 0; i < bitWidth; i++)
 		{
 			if (output.isFixed(i))
 			{
@@ -371,7 +371,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 		}
 
 		// update the column counts to make them consistent to the totals.
-		for (int i = /**/0 /**/; i < bitWidth; i++)
+		for (unsigned i = /**/0 /**/; i < bitWidth; i++)
 		{
 			if (sumH[i] < columnH[i])
 			{
@@ -384,7 +384,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 		}
 
 		// Go from low to high making each of the sums consistent.
-		for (int i = /**/1 /**/; i < bitWidth; i++)
+		for (unsigned i = /**/1 /**/; i < bitWidth; i++)
 		{
 			assert((columnH[i] >= columnL[i]) && (columnL[i] >= 0));
 			if (sumH[i] > columnH[i] + (sumH[i - 1] / 2))
@@ -404,7 +404,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 		}
 
 		// go from high to low, making each of the sums consistent.
-		for (int i = /**/bitWidth - 1 /**/; i >= 1; i--)
+		for (int i = /**/(int)bitWidth - 1 /**/; i >= 1; i--)
 		{
 			if ((sumH[i] == sumL[i]))
 			{
@@ -448,7 +448,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
 			printArray(sumH, bitWidth);
 		}
 
-		for (int column = 0; column < bitWidth; column++)
+		for (unsigned column = 0; column < bitWidth; column++)
 		{
 			if (sumH[column] == sumL[column])
 			{

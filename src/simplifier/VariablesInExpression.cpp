@@ -42,7 +42,7 @@ Symbols* VariablesInExpression::getSymbol(const ASTNode& n) {
 	}
 
 	vector<Symbols*> children;
-	for (int i = 0; i < n.Degree(); i++) {
+	for (size_t i = 0; i < n.Degree(); i++) {
 		Symbols* v = getSymbol(n[i]);
 		if (!v->empty())
 			children.push_back(v);
@@ -111,7 +111,7 @@ ASTNodeSet * VariablesInExpression::SetofVarsSeenInTerm(Symbols* symbol, bool& d
 	vector<Symbols*> av;
 	VarSeenInTerm(symbol,visited,*symbols,av);
 
-	for (int i =0; i < av.size();i++)
+	for (size_t i =0; i < av.size();i++)
 	{
 		const ASTNodeSet& sym = *TermsAlreadySeenMap.find(av[i])->second;
 		symbols->insert(sym.begin(), sym.end());
@@ -155,7 +155,7 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 		sort(av.begin(), av.end());
 
 		//cout << "===" << endl;
-		for (int i = 0; i < av.size(); i++) {
+		for (size_t i = 0; i < av.size(); i++) {
 			if (i!=0 && av[i] == av[i-1])
 				continue;
 

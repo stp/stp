@@ -1704,7 +1704,7 @@ namespace BEEV
   {
     const ASTNode a = children[0];
     const ASTNode b = children[1];
-    const int width = children[0].GetValueWidth();
+    const unsigned width = children[0].GetValueWidth();
     ASTNode output;
 
     assert(b.isConstant());
