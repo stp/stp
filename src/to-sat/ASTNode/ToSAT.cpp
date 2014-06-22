@@ -140,26 +140,7 @@ namespace BEEV
         //        {
         //          continue;
         //        }
-#if defined CRYPTOMINISAT__2
-        if(add_xor_clauses)
-          {
-            newSolver.addXorClause(satSolverClause, false);
-          }
-        else 
-          {
-            newSolver.addClause(satSolverClause);
-          }
-#else
         newSolver.addClause(satSolverClause);
-#endif
-
-#if defined CRYPTOMINISAT__2
-    newSolver.findNormalXors = false;
-    newSolver.doSubsumption = true;
-    newSolver.verbosity = 0;
-    //newSolver.fixRestartType = static_restart;
-    newSolver.doPartHandler = true;
-#endif
 
 // 	if(enable_clausal_abstraction && 
 // 	   count++ >= input_clauselist_size*CLAUSAL_ABSTRACTION_CUTOFF)
@@ -391,13 +372,6 @@ namespace BEEV
     		delete cm;
     	return sat;
       }
-
-#if defined CRYPTOMINISAT__2
-    if(!xorcl->asList()->empty())
-      {
-        sat = toSATandSolve(SatSolver, *xorcl, true, cm, true,false);
-      }
-#endif
 
     delete xorcl;
 	if (NULL != cm)
