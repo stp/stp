@@ -108,8 +108,7 @@ bool
 fast_exit(FixedBits& c0, FixedBits& c1)
 {
   assert(c0.getWidth() == c1.getWidth());
-  for (int i = c0.getWidth() - 1; i >= 0; i--)
-    {
+  for (int i = (int)c0.getWidth() - 1; i >= 0; i--) {
       const char c_0 = c0[i];
       const char c_1 = c1[i];
 
@@ -235,7 +234,7 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
 		if (output.isFixed(0) && output.getValue(0))
 		{
-			for (int i = c0.getWidth() - 1 - 1; i >= 0; i--)
+			for (int i = (int)c0.getWidth() - 1 - 1; i >= 0; i--)
 			{
 				if (!c0.isFixed(i))
 				{
@@ -255,7 +254,7 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 				}
 			}
 
-			for (int i = c1.getWidth() - 1 - 1; i >= 0; i--)
+			for (int i = (int)c1.getWidth() - 1 - 1; i >= 0; i--)
 			{
 				if (!c1.isFixed(i))
 				{
@@ -377,7 +376,7 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 
 		// Starting from the high order. Turn on each bit in turn. If it being turned on pushes it past the max of the other side
 		// then we know it must be turned off.
-		for (int i = c0.getWidth() - 1 - 1; i >= 0; i--)
+		for (int i = (int)c0.getWidth() - 1 - 1; i >= 0; i--)
 		{
 			if (!c0.isFixed(i)) // bit is variable.
 			{
@@ -399,7 +398,7 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& o
 
 		// Starting from the high order. Turn on each bit in turn. If it being turned on pushes it past the max of the other side
 		// then we know it must be turned off.
-		for (int i = c0.getWidth() - 1 - 1; i >= 0; i--)
+		for (int i = (int)c0.getWidth() - 1 - 1; i >= 0; i--)
 		{
 			if (!c1.isFixed(i)) // bit is variable.
 			{
@@ -492,7 +491,7 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 	{
 		// Starting from the high order. Turn on each bit in turn. If it being turned on pushes it past the max of the other side
 		// then we know it must be turned off.
-		for (int i = c0.getWidth() - 1; i >= 0; i--)
+		for (int i = (int)c0.getWidth() - 1; i >= 0; i--)
 		{
 			if (!c0.isFixed(i)) // bit is variable.
 			{
@@ -512,7 +511,7 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 			}
 		}
 
-		for (int i = c1.getWidth() - 1; i >= 0; i--)
+		for (int i = (int)c1.getWidth() - 1; i >= 0; i--)
 		{
 			if (!c1.isFixed(i)) // bit is variable.
 			{
@@ -599,7 +598,7 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits &c1, FixedBits& output)
 	{
 		// Starting from the high order. Turn on each bit in turn. If it being turned on pushes it past the max of the other side
 		// then we know it must be turned off.
-		for (int i = c0.getWidth() - 1; i >= 0; i--)
+		for (int i = (int)c0.getWidth() - 1; i >= 0; i--)
 		{
 			if (!c0.isFixed(i)) // bit is variable.
 			{
