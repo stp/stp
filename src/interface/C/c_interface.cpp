@@ -574,7 +574,6 @@ void vc_printCounterExample(VC vc) {
 
 Expr vc_getCounterExample(VC vc, Expr e) {
   nodestar a = (nodestar)e;
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
 
   bool t = false;
@@ -587,7 +586,6 @@ Expr vc_getCounterExample(VC vc, Expr e) {
 
 void vc_getCounterExampleArray(VC vc, Expr e, Expr **indices, Expr **values, int *size) {
   nodestar a = (nodestar)e;
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
 
   bool t = false;
@@ -607,7 +605,6 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr **indices, Expr **values, int
 }
 
 int vc_counterexample_size(VC vc) {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);  
 
   return ce->CounterExampleSize();
@@ -624,7 +621,6 @@ WholeCounterExample vc_getWholeCounterExample(VC vc) {
 }
 
 Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample cc) {
-  //bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar n = (nodestar)e;
   CompleteCEStar c = (CompleteCEStar)cc;
 
@@ -1442,7 +1438,6 @@ Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits) {
 
 //! Return an int from a constant bitvector expression
 int getBVInt(Expr e) {
-  //bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar a = (nodestar)e;
 
   if(BEEV::BVCONST != a->GetKind())
@@ -1456,7 +1451,6 @@ int getBVInt(Expr e) {
 
 //! Return an unsigned int from a constant bitvector expression
 unsigned int getBVUnsigned(Expr e) {
-  //bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar a = (nodestar)e;
 
   if(BEEV::BVCONST != a->GetKind())
@@ -1470,7 +1464,6 @@ unsigned int getBVUnsigned(Expr e) {
 
 //! Return an unsigned long long int from a constant bitvector expression
 unsigned long long int getBVUnsignedLongLong(Expr e) {
-  //bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar a = (nodestar)e;
 
   if(BEEV::BVCONST != a->GetKind())
@@ -1486,7 +1479,6 @@ unsigned long long int getBVUnsignedLongLong(Expr e) {
 
 
 Expr vc_simplify(VC vc, Expr e) {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar a = (nodestar)e;
   simpstar simp = (simpstar)(((stpstar)vc)->simp);
 
@@ -1746,7 +1738,6 @@ int vc_isBool(Expr e) {
 }
 
 void vc_Destroy(VC vc) {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   // for(std::vector<BEEV::ASTNode *>::iterator it=created_exprs.begin(),
   //    itend=created_exprs.end();it!=itend;it++) {
   //     BEEV::ASTNode * aaa = *it;
