@@ -322,13 +322,12 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
 Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
 	Result r = NO_CHANGE;
-	const int numberOfChildren = children.size();
-	int current = 0;
-	for (int i = numberOfChildren - 1; i >= 0; i--) // least significant is last.
-
+	const size_t numberOfChildren = children.size();
+	unsigned current = 0;
+	for (int i = (int)numberOfChildren - 1; i >= 0; i--) // least significant is last.
 	{
 		FixedBits& child = *children[i];
-		for (int j = 0; j < child.getWidth(); j++)
+		for (unsigned j = 0; j < child.getWidth(); j++)
 		{
 			// values are different. Bad.
 			if (output.isFixed(current) && child.isFixed(j) && (output.getValue(current) != child.getValue(j)))
