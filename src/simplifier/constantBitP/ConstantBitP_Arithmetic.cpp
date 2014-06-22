@@ -102,7 +102,7 @@ Result fixIfCanForAddition(vector<FixedBits*>& children, const int index, const 
 	assert(inflowMin <= inflowMax);
 	assert(inflowMin >=0);
 	assert(index >=0);
-	assert(index < children[0]->getWidth());
+	assert(index < (int)children[0]->getWidth());
 
 	const int maxCarryIn = maximumCarryInForAddition(children.size(), index);
 
