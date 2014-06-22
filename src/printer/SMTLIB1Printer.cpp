@@ -215,7 +215,7 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os)
   		{
   			string close = "";
 
-  			for (int i =0; i < c.size()-1; i++)
+  			for (long int i =0; i < (long int)c.size()-1; i++)
   			{
   				os << "(" << functionToSMTLIBName(kind,true);
   				os << " ";

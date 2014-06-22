@@ -111,7 +111,7 @@ public:
     {
     case AND:
     case OR:
-      for (int i =0; i < n.Degree(); i ++)
+      for (size_t i =0; i < n.Degree(); i ++)
         build(n[i],polarity);
       break;
 

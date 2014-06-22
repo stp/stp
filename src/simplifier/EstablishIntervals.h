@@ -124,7 +124,7 @@ namespace BEEV
       ASTVec new_children;
       new_children.reserve(result.GetChildren().size());
 
-      for (int i =0; i < result.Degree();i++)
+      for (size_t i =0; i < result.Degree();i++)
         new_children.push_back(replace(result[i],fromTo,cache));
 
       if (new_children == result.GetChildren())
