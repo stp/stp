@@ -503,7 +503,7 @@ namespace BEEV
               result = freshUnsignedInterval(n.GetValueWidth());
 
               // Copy in the minimum and maximum.
-        	  for (int i=0; i < n[0].GetValueWidth();i++)
+        	  for (unsigned i=0; i < n[0].GetValueWidth();i++)
         	  {
         		  if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,i))
         			  CONSTANTBV::BitVector_Bit_On(result->maxV,i);
@@ -516,7 +516,7 @@ namespace BEEV
         			  CONSTANTBV::BitVector_Bit_Off(result->minV,i);
         	  }
 
-        	  for (int i=n[0].GetValueWidth(); i < n.GetValueWidth();i++)
+        	  for (unsigned i=n[0].GetValueWidth(); i < n.GetValueWidth();i++)
         		  CONSTANTBV::BitVector_Bit_Off(result->maxV,i);
     	  }
       } else if (knownC1)
@@ -530,7 +530,7 @@ namespace BEEV
               CONSTANTBV::BitVector_Bit_Off(circ_result->minV,i);
           }
 
-          for (int i = (int)n[0].GetValueWidth()-1; i < n.GetValueWidth();i++)
+          for (int i = (int)n[0].GetValueWidth()-1; i < (int)n.GetValueWidth();i++)
           {
               CONSTANTBV::BitVector_Bit_Off(circ_result->maxV,i);
               CONSTANTBV::BitVector_Bit_On(circ_result->minV,i);

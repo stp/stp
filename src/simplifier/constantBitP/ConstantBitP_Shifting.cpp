@@ -204,8 +204,6 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children, FixedBits& o
 	assert(children[0]->getWidth() == children[1]->getWidth());
 	const unsigned MSBIndex = bitWidth-1;
 
-	Result result = NO_CHANGE;
-
 	FixedBits& op = *children[0];
 	FixedBits& shift = *children[1];
 
@@ -393,7 +391,6 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children, FixedBits& o
 			{
 				shift.setFixed(i, true);
 				shift.setValue(i, setOfPossibleShifts.getValue(i));
-				result = CHANGED;
 			}
 			else if (shift.isFixed(i) && shift.getValue(i)
 					!= setOfPossibleShifts.getValue(i))
@@ -550,7 +547,6 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children, FixedBits& o
 				{
 					output.setFixed(column, true);
 					output.setValue(column, allFixedTo);
-					result = CHANGED;
 				}
 			}
 		}
@@ -562,8 +558,6 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 	const unsigned bitWidth = output.getWidth();
 	assert(2== children.size());
 	assert(bitWidth > 0);
-
-	Result result = NO_CHANGE;
 
 	FixedBits& op = *children[0];
 	FixedBits& shift = *children[1];
@@ -651,13 +645,11 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 	}
 
 	int nOfPossibleShifts = 0;
-	int shiftIndex = 0;
 	for (unsigned i = 0; i < numberOfPossibleShifts; i++)
 	{
 		if (possibleShift[i])
 		{
 			nOfPossibleShifts++;
-			shiftIndex = i;
 			if (debug_shift)
 			{
 				std::cerr << "Possible:" << i << std::endl;
@@ -761,7 +753,6 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 			{
 				shift.setFixed(i, true);
 				shift.setValue(i, v.getValue(i));
-				result = CHANGED;
 			}
 			else if (shift.isFixed(i) && shift.getValue(i) != v.getValue(i))
 				return CONFLICT;
@@ -899,7 +890,6 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 			{
 				output.setFixed(column, true);
 				output.setValue(column, allFixedTo);
-				result = CHANGED;
 			}
 		}
 	}

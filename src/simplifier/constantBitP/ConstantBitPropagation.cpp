@@ -433,7 +433,7 @@ namespace simplifier
     void
     ConstantBitPropagation::scheduleDown(const ASTNode& n)
     {
-      for (int i = 0; i < n.Degree(); i++)
+      for (size_t i = 0; i < n.Degree(); i++)
         workList->push(n[i]);
     }
 
@@ -469,7 +469,7 @@ namespace simplifier
 
       assert(FixedBits::equals(newBits, current));
 
-      for (int i = 0; i < n.Degree(); i++)
+      for (size_t i = 0; i < n.Degree(); i++)
         {
           if (!FixedBits::equals(*getUpdatedFixedBits(n[i]),
               childrenFixedBits[i]))

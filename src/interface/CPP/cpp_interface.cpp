@@ -376,7 +376,7 @@ namespace BEEV
           // It's satisfiable, so everything beneath it is satisfiable too.
           if (last_result == SOLVER_SATISFIABLE)
             {
-              for (int i = 0; i < cache.size(); i++)
+              for (size_t i = 0; i < cache.size(); i++)
                 {
                   assert(cache[i].result != SOLVER_UNSATISFIABLE);
                   cache[i].result = SOLVER_SATISFIABLE;

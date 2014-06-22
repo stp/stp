@@ -61,7 +61,6 @@ namespace BEEV
 			   iset_end = arrayToIndexToRead.end();
 			 iset != iset_end; iset++)
 		  {
-				const ASTNode& ArrName = iset->first;
 				std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
 				for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =mapper.begin() ; it != mapper.end();it++)

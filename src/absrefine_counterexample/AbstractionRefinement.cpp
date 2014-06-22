@@ -119,7 +119,7 @@ namespace BEEV
                 }
                 return result;
             }
-        else if (v_a.size() == 0 ^ v_b.size() == 0)
+        else if ((v_a.size() == 0) ^ (v_b.size()) == 0)
             {
                 ASTNode constant = a.isConstant() ? a : b;
                 vector<unsigned> vec = v_a.size() == 0 ? v_b : v_a;
@@ -217,7 +217,7 @@ namespace BEEV
     void
     applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar & satVar, vector<AxiomToBe> & toBe, SATSolver & SatSolver)
     {
-        for (int i = 0; i < toBe.size(); i++)
+        for (size_t i = 0; i < toBe.size(); i++)
             {
                 applyAxiomToSAT(SatSolver, toBe[i], satVar);
             }
@@ -272,7 +272,6 @@ namespace BEEV
         for (vector<pair<ASTNode, ArrayTransformer::arrTypeMap> >::const_iterator iset = arrayToIndex.begin(),
                 iset_end = arrayToIndex.end(); iset != iset_end; iset++)
             {
-                const ASTNode& ArrName = iset->first;
                 const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
                 vector<ASTNode> listOfIndices;

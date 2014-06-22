@@ -48,7 +48,7 @@ namespace BEEV
         assert(symbol.GetKind() == SYMBOL);
         vector<bool>  bitVector_array(symbolWidth,false);
 
-        for (int index = 0; index < v.size(); index++)
+        for (size_t index = 0; index < v.size(); index++)
           {
             const unsigned sat_variable_index = v[index];
 
@@ -871,7 +871,7 @@ namespace BEEV
       ASTNode symbol = it->first;
       vector<unsigned> v = it->second;
 
-      for (int i =0 ; i < v.size();i++)
+      for (size_t i =0 ; i < v.size();i++)
         {
         if (v[i] == ~((unsigned)0)) // nb. special value.
           continue;

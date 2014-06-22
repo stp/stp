@@ -113,7 +113,7 @@ namespace BEEV
             {(*it)->iteration = 0;}
     }
 
-    int getAssertLevel()
+    size_t getAssertLevel()
     {
       return _asserts.size();
     }
