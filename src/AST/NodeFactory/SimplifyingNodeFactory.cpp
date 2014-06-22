@@ -422,7 +422,7 @@ SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   if (BVCONCAT == k2 && BEEV::BVCONST == k1)
     {
       int low_b = 0;
-      int high_b = in2[1].GetValueWidth() - 1;
+      int high_b = (int)in2[1].GetValueWidth() - 1;
       int low_t = in2[1].GetValueWidth();
       int high_t = width - 1;
 
@@ -524,19 +524,24 @@ SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
     {
       // Each of the bits in the extended part, and one into the un-extended part must be the same.
       bool foundZero = false, foundOne = false;
-      const unsigned original_width = in2[0].GetValueWidth();
-      const unsigned new_width = in2.GetValueWidth();
-      for (int i = original_width - 1; i < new_width; i++)
+      const int original_width = in2[0].GetValueWidth();
+      const int new_width = in2.GetValueWidth();
+
+      for (int i = original_width - 1; i < new_width; i++) {
         if (CONSTANTBV::BitVector_bit_test(in1.GetBVConst(), i))
           foundOne = true;
         else
           foundZero = true;
+      }
+
       if (foundZero && foundOne)
         return ASTFalse;
+
       ASTNode lhs = NodeFactory::CreateTerm(BVEXTRACT, original_width, in1, bm.CreateBVConst(32, original_width - 1),
           bm.CreateZeroConst(32));
       ASTNode rhs = NodeFactory::CreateTerm(BVEXTRACT, original_width, in2, bm.CreateBVConst(32, original_width - 1),
           bm.CreateZeroConst(32));
+
       return NodeFactory::CreateNode(EQ, lhs, rhs);
     }
 
@@ -1185,20 +1190,22 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
         int end = -1;
         BEEV::CBV c = c0.GetBVConst();
         bool bad = false;
-        for (size_t i = 0; i < width; i++)
+        for (int i = 0; i < (int)width; i++)
           {
-            if (CONSTANTBV::BitVector_bit_test(c, i))
+            if (CONSTANTBV::BitVector_bit_test(c, i)) {
               if (start == -1)
                 start = i; // first one bit.
               else if (end != -1)
                 bad = true;
+            }
 
-            if (!CONSTANTBV::BitVector_bit_test(c, i))
+            if (!CONSTANTBV::BitVector_bit_test(c, i)) {
               if (start != -1 && end == -1)
                 end = i - 1; // end of run.
+            }
           }
         if (start != -1 && end == -1)
-          end = width - 1;
+          end = (int)width - 1;
 
         if (!bad && start != -1)
           {
@@ -1212,9 +1219,9 @@ SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width, const ASTVec &
                 ASTNode z = bm.CreateZeroConst(start);
                 result = NodeFactory::CreateTerm(BVCONCAT, end + 1, result, z);
               }
-            if (end < width - 1)
+            if (end < (int)width - 1)
               {
-                ASTNode z = bm.CreateZeroConst(width - end - 1);
+                ASTNode z = bm.CreateZeroConst((int)width - end - 1);
                 result = NodeFactory::CreateTerm(BVCONCAT, width, z, result);
               }
           }

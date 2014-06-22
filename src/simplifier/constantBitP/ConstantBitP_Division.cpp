@@ -157,14 +157,14 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 	if (whatIs == QUOTIENT_IS_OUTPUT) {
 		setUnsignedMinMax(output, minQuotient, maxQuotient);
 
-		for (int i = 0; i < width; i++)
+		for (unsigned i = 0; i < width; i++)
 			CONSTANTBV::BitVector_Bit_On(maxRemainder, i);
 	}
 	else
 	{
 		setUnsignedMinMax(output, minRemainder, maxRemainder);
 
-		for (int i =0; i < width;i++)
+		for (unsigned i =0; i < width;i++)
 			CONSTANTBV::BitVector_Bit_On(maxQuotient,i);
 	}
 
@@ -603,7 +603,7 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
 			&& FixedBits::equals(rCopy, r) && FixedBits::equals(qCopy, q)));
 
 	bool conflict = false;
-	for (int i = 0; i < output.getWidth(); i++) {
+	for (unsigned i = 0; i < output.getWidth(); i++) {
 		if (whatIs == QUOTIENT_IS_OUTPUT)
 			conflict |= fix(output, q, i);
 		else if (whatIs == REMAINDER_IS_OUTPUT)

@@ -84,7 +84,7 @@ void concretise(const ASTNode& variable, const FixedBits& fixed, ASTVec& list, S
 	{
 		assert(BITVECTOR_TYPE == variable.GetType());
 		assert(variable.GetValueWidth() == (unsigned)fixed.getWidth());
-		for (int i = 0; i < fixed.getWidth(); i++)
+		for (unsigned i = 0; i < fixed.getWidth(); i++)
 		{
 			if (fixed.isFixed(i))
 			{
@@ -128,7 +128,7 @@ void concretise(const ASTNode& variable, const FixedBits& fixed, SATSolver::vec_
         {
                 assert(BITVECTOR_TYPE == variable.GetType());
                 assert(variable.GetValueWidth() == (unsigned)fixed.getWidth());
-                for (int i = 0; i < fixed.getWidth(); i++)
+                for (unsigned i = 0; i < fixed.getWidth(); i++)
                 {
                         if (fixed.isFixed(i))
                         {

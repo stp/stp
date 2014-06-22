@@ -219,7 +219,7 @@ namespace BEEV
     vars.VarSeenInTerm(vars.getSymbol(n1), rhs_visited, rhs, av);
 
     sort(av.begin(), av.end());
-    for (int i = 0; i < av.size(); i++)
+    for (size_t i = 0; i < av.size(); i++)
       {
       if (i != 0 && av[i] == av[i - 1])
         continue; // Treat it like a set of Symbol* in effect.

@@ -61,7 +61,7 @@ namespace BEEV
   bool
   PropagateEqualities::searchTerm(const ASTNode& lhs, const ASTNode& rhs)
   {
-    const int width = lhs.GetValueWidth();
+    const unsigned width = lhs.GetValueWidth();
 
     if (lhs == rhs)
       return true;
