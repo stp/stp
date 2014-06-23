@@ -54,8 +54,8 @@ Aig_Obj_t * Kit_GraphToAigInternal( Aig_Man_t * pMan, Kit_Graph_t * pGraph )
     // build the AIG nodes corresponding to the AND gates of the graph
     Kit_GraphForEachNode( pGraph, pNode, i )
     {
-        pAnd0 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge0.Node)->pFunc, pNode->eEdge0.fCompl ); 
-        pAnd1 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge1.Node)->pFunc, pNode->eEdge1.fCompl ); 
+        pAnd0 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge0.bits.Node)->pFunc, pNode->eEdge0.bits.fCompl ); 
+        pAnd1 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge1.bits.Node)->pFunc, pNode->eEdge1.bits.fCompl ); 
         pNode->pFunc = Aig_And( pMan, pAnd0, pAnd1 );
     }
     // complement the result if necessary

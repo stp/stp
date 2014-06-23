@@ -230,16 +230,16 @@ int Dar_RefactTryGraph( Aig_Man_t * pAig, Aig_Obj_t * pRoot, Vec_Ptr_t * vCut, K
     Kit_GraphForEachNode( pGraph, pNode, i )
     {
         // get the children of this node
-        pNode0 = Kit_GraphNode( pGraph, pNode->eEdge0.Node );
-        pNode1 = Kit_GraphNode( pGraph, pNode->eEdge1.Node );
+        pNode0 = Kit_GraphNode( pGraph, pNode->eEdge0.bits.Node );
+        pNode1 = Kit_GraphNode( pGraph, pNode->eEdge1.bits.Node );
         // get the AIG nodes corresponding to the children 
         pAnd0 = pNode0->pFunc; 
         pAnd1 = pNode1->pFunc; 
         if ( pAnd0 && pAnd1 )
         {
             // if they are both present, find the resulting node
-            pAnd0 = Aig_NotCond( pAnd0, pNode->eEdge0.fCompl );
-            pAnd1 = Aig_NotCond( pAnd1, pNode->eEdge1.fCompl );
+            pAnd0 = Aig_NotCond( pAnd0, pNode->eEdge0.bits.fCompl );
+            pAnd1 = Aig_NotCond( pAnd1, pNode->eEdge1.bits.fCompl );
             pAnd  = Aig_TableLookupTwo( pAig, pAnd0, pAnd1 );
             // return -1 if the node is the same as the original root
             if ( Aig_Regular(pAnd) == pRoot )
@@ -312,8 +312,8 @@ Aig_Obj_t * Dar_RefactBuildGraph( Aig_Man_t * pAig, Vec_Ptr_t * vCut, Kit_Graph_
 //printf( "Building (current number %d):\n", Aig_ManObjNumMax(pAig) );
     Kit_GraphForEachNode( pGraph, pNode, i )
     {
-        pAnd0 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge0.Node)->pFunc, pNode->eEdge0.fCompl ); 
-        pAnd1 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge1.Node)->pFunc, pNode->eEdge1.fCompl ); 
+        pAnd0 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge0.bits.Node)->pFunc, pNode->eEdge0.bits.fCompl ); 
+        pAnd1 = Aig_NotCond( Kit_GraphNode(pGraph, pNode->eEdge1.bits.Node)->pFunc, pNode->eEdge1.bits.fCompl ); 
         pNode->pFunc = Aig_And( pAig, pAnd0, pAnd1 );
 /*
 printf( "Checking " );
