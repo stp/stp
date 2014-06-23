@@ -588,7 +588,7 @@ namespace BEEV {
 
     ToSATAIG toSATAIG(bm, cb, arrayTransformer);
 
-    ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : ((ToSAT*) &toSATAIG) ;
+    ToSATBase* satBase = bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : &toSATAIG;
 
     if (bm->soft_timeout_expired)
         return SOLVER_TIMEOUT;

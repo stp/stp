@@ -53,11 +53,14 @@ struct Kit_Sop_t_
     unsigned *        pCubes;         // the storage for cubes
 };
 
-typedef struct Kit_Edge_t_ Kit_Edge_t;
-struct Kit_Edge_t_
+typedef union Kit_Edge_t_ Kit_Edge_t;
+union Kit_Edge_t_
 {
-    unsigned          fCompl   :  1;   // the complemented bit
-    unsigned          Node     : 30;   // the decomposition node pointed by the edge
+    struct {
+        unsigned      fCompl   :  1;   // the complemented bit
+        unsigned      Node     : 30;   // the decomposition node pointed by the edge
+    } bits;
+    unsigned          edgeInt;
 };
 
 typedef struct Kit_Node_t_ Kit_Node_t;
@@ -203,18 +206,18 @@ static inline void         Kit_SopShrink( Kit_Sop_t * cSop, int nCubesNew )     
 static inline void         Kit_SopPushCube( Kit_Sop_t * cSop, unsigned uCube )            { cSop->pCubes[cSop->nCubes++] = uCube;   }
 static inline void         Kit_SopWriteCube( Kit_Sop_t * cSop, unsigned uCube, int i )    { cSop->pCubes[i] = uCube;                }
 
-static inline Kit_Edge_t   Kit_EdgeCreate( int Node, int fCompl )                         { Kit_Edge_t eEdge = { fCompl, Node }; return eEdge;  }
-static inline unsigned     Kit_EdgeToInt( Kit_Edge_t eEdge )                              { return (eEdge.Node << 1) | eEdge.fCompl;            }
+static inline Kit_Edge_t   Kit_EdgeCreate( int Node, int fCompl )                         { Kit_Edge_t eEdge = { { fCompl, Node } }; return eEdge; }
+static inline unsigned     Kit_EdgeToInt( Kit_Edge_t eEdge )                              { return (eEdge.bits.Node << 1) | eEdge.bits.fCompl;  }
 static inline Kit_Edge_t   Kit_IntToEdge( unsigned Edge )                                 { return Kit_EdgeCreate( Edge >> 1, Edge & 1 );       }
-static inline unsigned     Kit_EdgeToInt_( Kit_Edge_t eEdge )                             { return *(unsigned *)&eEdge;                         }
-static inline Kit_Edge_t   Kit_IntToEdge_( unsigned Edge )                                { return *(Kit_Edge_t *)&Edge;                        }
+static inline unsigned     Kit_EdgeToInt_( Kit_Edge_t eEdge )                             { return eEdge.edgeInt;                               }
+static inline Kit_Edge_t   Kit_IntToEdge_( unsigned Edge )                                { Kit_Edge_t eEdge; eEdge.edgeInt = Edge; return eEdge; }
 
 static inline int          Kit_GraphIsConst( Kit_Graph_t * pGraph )                       { return pGraph->fConst;                              }
-static inline int          Kit_GraphIsConst0( Kit_Graph_t * pGraph )                      { return pGraph->fConst && pGraph->eRoot.fCompl;      }
-static inline int          Kit_GraphIsConst1( Kit_Graph_t * pGraph )                      { return pGraph->fConst && !pGraph->eRoot.fCompl;     }
-static inline int          Kit_GraphIsComplement( Kit_Graph_t * pGraph )                  { return pGraph->eRoot.fCompl;                        }
-static inline int          Kit_GraphIsVar( Kit_Graph_t * pGraph )                         { return pGraph->eRoot.Node < (unsigned)pGraph->nLeaves; }
-static inline void         Kit_GraphComplement( Kit_Graph_t * pGraph )                    { pGraph->eRoot.fCompl ^= 1;                          }
+static inline int          Kit_GraphIsConst0( Kit_Graph_t * pGraph )                      { return pGraph->fConst && pGraph->eRoot.bits.fCompl; }
+static inline int          Kit_GraphIsConst1( Kit_Graph_t * pGraph )                      { return pGraph->fConst && !pGraph->eRoot.bits.fCompl; }
+static inline int          Kit_GraphIsComplement( Kit_Graph_t * pGraph )                  { return pGraph->eRoot.bits.fCompl;                   }
+static inline int          Kit_GraphIsVar( Kit_Graph_t * pGraph )                         { return pGraph->eRoot.bits.Node < (unsigned)pGraph->nLeaves; }
+static inline void         Kit_GraphComplement( Kit_Graph_t * pGraph )                    { pGraph->eRoot.bits.fCompl ^= 1;                     }
 static inline void         Kit_GraphSetRoot( Kit_Graph_t * pGraph, Kit_Edge_t eRoot )     { pGraph->eRoot = eRoot;                              }
 static inline int          Kit_GraphLeaveNum( Kit_Graph_t * pGraph )                      { return pGraph->nLeaves;                             }
 static inline int          Kit_GraphNodeNum( Kit_Graph_t * pGraph )                       { return pGraph->nSize - pGraph->nLeaves;             }
@@ -222,14 +225,12 @@ static inline Kit_Node_t * Kit_GraphNode( Kit_Graph_t * pGraph, int i )         
 static inline Kit_Node_t * Kit_GraphNodeLast( Kit_Graph_t * pGraph )                      { return pGraph->pNodes + pGraph->nSize - 1;          }
 static inline int          Kit_GraphNodeInt( Kit_Graph_t * pGraph, Kit_Node_t * pNode )   { return pNode - pGraph->pNodes;                      }
 static inline int          Kit_GraphNodeIsVar( Kit_Graph_t * pGraph, Kit_Node_t * pNode ) { return Kit_GraphNodeInt(pGraph,pNode) < pGraph->nLeaves; }
-static inline Kit_Node_t * Kit_GraphVar( Kit_Graph_t * pGraph )                           { assert( Kit_GraphIsVar( pGraph ) );    return Kit_GraphNode( pGraph, pGraph->eRoot.Node );      }
+static inline Kit_Node_t * Kit_GraphVar( Kit_Graph_t * pGraph )                           { assert( Kit_GraphIsVar( pGraph ) );    return Kit_GraphNode( pGraph, pGraph->eRoot.bits.Node ); }
 static inline int          Kit_GraphVarInt( Kit_Graph_t * pGraph )                        { assert( Kit_GraphIsVar( pGraph ) );    return Kit_GraphNodeInt( pGraph, Kit_GraphVar(pGraph) ); }
-static inline Kit_Node_t * Kit_GraphNodeFanin0( Kit_Graph_t * pGraph, Kit_Node_t * pNode ){ return Kit_GraphNodeIsVar(pGraph, pNode)? NULL : Kit_GraphNode(pGraph, pNode->eEdge0.Node);     }
-static inline Kit_Node_t * Kit_GraphNodeFanin1( Kit_Graph_t * pGraph, Kit_Node_t * pNode ){ return Kit_GraphNodeIsVar(pGraph, pNode)? NULL : Kit_GraphNode(pGraph, pNode->eEdge1.Node);     }
-static inline int          Kit_GraphRootLevel( Kit_Graph_t * pGraph )                     { return Kit_GraphNode(pGraph, pGraph->eRoot.Node)->Level;                                        }
+static inline Kit_Node_t * Kit_GraphNodeFanin0( Kit_Graph_t * pGraph, Kit_Node_t * pNode ){ return Kit_GraphNodeIsVar(pGraph, pNode)? NULL : Kit_GraphNode(pGraph, pNode->eEdge0.bits.Node); }
+static inline Kit_Node_t * Kit_GraphNodeFanin1( Kit_Graph_t * pGraph, Kit_Node_t * pNode ){ return Kit_GraphNodeIsVar(pGraph, pNode)? NULL : Kit_GraphNode(pGraph, pNode->eEdge1.bits.Node); }
+static inline int          Kit_GraphRootLevel( Kit_Graph_t * pGraph )                     { return Kit_GraphNode(pGraph, pGraph->eRoot.bits.Node)->Level;                                   }
 
-static inline int          Kit_Float2Int( float Val )     { return *((int *)&Val);               }
-static inline float        Kit_Int2Float( int Num )       { return *((float *)&Num);             }
 static inline int          Kit_BitWordNum( int nBits )    { return nBits/(8*sizeof(unsigned)) + ((nBits%(8*sizeof(unsigned))) > 0); }
 static inline int          Kit_TruthWordNum( int nVars )  { return nVars <= 5 ? 1 : (1 << (nVars - 5));                             }
 static inline unsigned     Kit_BitMask( int nBits )       { assert( nBits <= 32 ); return ~((~(unsigned)0) << nBits);               }

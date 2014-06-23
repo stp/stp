@@ -69,7 +69,7 @@ Kit_Graph_t * Kit_GraphCreateConst0()
     pGraph = ALLOC( Kit_Graph_t, 1 );
     memset( pGraph, 0, sizeof(Kit_Graph_t) );
     pGraph->fConst = 1;
-    pGraph->eRoot.fCompl = 1;
+    pGraph->eRoot.bits.fCompl = 1;
     return pGraph;
 }
 
@@ -109,8 +109,8 @@ Kit_Graph_t * Kit_GraphCreateLeaf( int iLeaf, int nLeaves, int fCompl )
     Kit_Graph_t * pGraph;
     assert( 0 <= iLeaf && iLeaf < nLeaves );
     pGraph = Kit_GraphCreate( nLeaves );
-    pGraph->eRoot.Node   = iLeaf;
-    pGraph->eRoot.fCompl = fCompl;
+    pGraph->eRoot.bits.Node   = iLeaf;
+    pGraph->eRoot.bits.fCompl = fCompl;
     return pGraph;
 }
 
@@ -174,8 +174,8 @@ Kit_Edge_t Kit_GraphAddNodeAnd( Kit_Graph_t * pGraph, Kit_Edge_t eEdge0, Kit_Edg
     // set the inputs and other info
     pNode->eEdge0 = eEdge0;
     pNode->eEdge1 = eEdge1;
-    pNode->fCompl0 = eEdge0.fCompl;
-    pNode->fCompl1 = eEdge1.fCompl;
+    pNode->fCompl0 = eEdge0.bits.fCompl;
+    pNode->fCompl1 = eEdge1.bits.fCompl;
     return Kit_EdgeCreate( pGraph->nSize - 1, 0 );
 }
 
@@ -198,12 +198,12 @@ Kit_Edge_t Kit_GraphAddNodeOr( Kit_Graph_t * pGraph, Kit_Edge_t eEdge0, Kit_Edge
     // set the inputs and other info
     pNode->eEdge0 = eEdge0;
     pNode->eEdge1 = eEdge1;
-    pNode->fCompl0 = eEdge0.fCompl;
-    pNode->fCompl1 = eEdge1.fCompl;
+    pNode->fCompl0 = eEdge0.bits.fCompl;
+    pNode->fCompl1 = eEdge1.bits.fCompl;
     // make adjustments for the OR gate
     pNode->fNodeOr = 1;
-    pNode->eEdge0.fCompl = !pNode->eEdge0.fCompl;
-    pNode->eEdge1.fCompl = !pNode->eEdge1.fCompl;
+    pNode->eEdge0.bits.fCompl = !pNode->eEdge0.bits.fCompl;
+    pNode->eEdge1.bits.fCompl = !pNode->eEdge1.bits.fCompl;
     return Kit_EdgeCreate( pGraph->nSize - 1, 1 );
 }
 
@@ -224,11 +224,11 @@ Kit_Edge_t Kit_GraphAddNodeXor( Kit_Graph_t * pGraph, Kit_Edge_t eEdge0, Kit_Edg
     if ( Type == 0 )
     {
         // derive the first AND
-        eEdge0.fCompl ^= 1;
+        eEdge0.bits.fCompl ^= 1;
         eNode0 = Kit_GraphAddNodeAnd( pGraph, eEdge0, eEdge1 );
-        eEdge0.fCompl ^= 1;
+        eEdge0.bits.fCompl ^= 1;
         // derive the second AND
-        eEdge1.fCompl ^= 1;
+        eEdge1.bits.fCompl ^= 1;
         eNode1 = Kit_GraphAddNodeAnd( pGraph, eEdge0, eEdge1 );
         // derive the final OR
         eNode = Kit_GraphAddNodeOr( pGraph, eNode0, eNode1 );
@@ -238,12 +238,12 @@ Kit_Edge_t Kit_GraphAddNodeXor( Kit_Graph_t * pGraph, Kit_Edge_t eEdge0, Kit_Edg
         // derive the first AND
         eNode0 = Kit_GraphAddNodeAnd( pGraph, eEdge0, eEdge1 );
         // derive the second AND
-        eEdge0.fCompl ^= 1;
-        eEdge1.fCompl ^= 1;
+        eEdge0.bits.fCompl ^= 1;
+        eEdge1.bits.fCompl ^= 1;
         eNode1 = Kit_GraphAddNodeAnd( pGraph, eEdge0, eEdge1 );
         // derive the final OR
         eNode = Kit_GraphAddNodeOr( pGraph, eNode0, eNode1 );
-        eNode.fCompl ^= 1;
+        eNode.bits.fCompl ^= 1;
     }
     return eNode;
 }
@@ -267,7 +267,7 @@ Kit_Edge_t Kit_GraphAddNodeMux( Kit_Graph_t * pGraph, Kit_Edge_t eEdgeC, Kit_Edg
         // derive the first AND
         eNode0 = Kit_GraphAddNodeAnd( pGraph, eEdgeC, eEdgeT );
         // derive the second AND
-        eEdgeC.fCompl ^= 1;
+        eEdgeC.bits.fCompl ^= 1;
         eNode1 = Kit_GraphAddNodeAnd( pGraph, eEdgeC, eEdgeE );
         // derive the final OR
         eNode = Kit_GraphAddNodeOr( pGraph, eNode0, eNode1 );
@@ -275,16 +275,16 @@ Kit_Edge_t Kit_GraphAddNodeMux( Kit_Graph_t * pGraph, Kit_Edge_t eEdgeC, Kit_Edg
     else
     {
         // complement the arguments
-        eEdgeT.fCompl ^= 1;
-        eEdgeE.fCompl ^= 1;
+        eEdgeT.bits.fCompl ^= 1;
+        eEdgeE.bits.fCompl ^= 1;
         // derive the first AND
         eNode0 = Kit_GraphAddNodeAnd( pGraph, eEdgeC, eEdgeT );
         // derive the second AND
-        eEdgeC.fCompl ^= 1;
+        eEdgeC.bits.fCompl ^= 1;
         eNode1 = Kit_GraphAddNodeAnd( pGraph, eEdgeC, eEdgeE );
         // derive the final OR
         eNode = Kit_GraphAddNodeOr( pGraph, eNode0, eNode1 );
-        eNode.fCompl ^= 1;
+        eNode.bits.fCompl ^= 1;
     }
     return eNode;
 }
@@ -326,10 +326,10 @@ unsigned Kit_GraphToTruth( Kit_Graph_t * pGraph )
     // compute the function for each internal node
     Kit_GraphForEachNode( pGraph, pNode, i )
     {
-        uTruth0 = (unsigned)(long)Kit_GraphNode(pGraph, pNode->eEdge0.Node)->pFunc;
-        uTruth1 = (unsigned)(long)Kit_GraphNode(pGraph, pNode->eEdge1.Node)->pFunc;
-        uTruth0 = pNode->eEdge0.fCompl? ~uTruth0 : uTruth0;
-        uTruth1 = pNode->eEdge1.fCompl? ~uTruth1 : uTruth1;
+        uTruth0 = (unsigned)(long)Kit_GraphNode(pGraph, pNode->eEdge0.bits.Node)->pFunc;
+        uTruth1 = (unsigned)(long)Kit_GraphNode(pGraph, pNode->eEdge1.bits.Node)->pFunc;
+        uTruth0 = pNode->eEdge0.bits.fCompl? ~uTruth0 : uTruth0;
+        uTruth1 = pNode->eEdge1.bits.fCompl? ~uTruth1 : uTruth1;
         uTruth = uTruth0 & uTruth1;
         pNode->pFunc = (void *)(long)uTruth;
     }
