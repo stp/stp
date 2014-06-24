@@ -113,6 +113,6 @@ namespace BEEV
   ostream &operator<<(ostream &os, const ASTNodeMap &nmap);
 
   void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,ASTNodeSet& symbols);
-}; // end namespace BEEV
+} // end namespace BEEV
 
 #endif

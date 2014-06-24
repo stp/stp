@@ -67,5 +67,5 @@ public:
 };
 
 }
-;
+
 #endif /* BBNodeManager_H_ */

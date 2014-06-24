@@ -79,6 +79,6 @@ namespace BEEV
     void CleanupLetIDMap(void);
 
   };// End of class LETMgr
-}; //end of namespace
+} //end of namespace
 
 #endif

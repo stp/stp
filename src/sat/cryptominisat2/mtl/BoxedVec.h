@@ -147,6 +147,6 @@ public:
 
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif

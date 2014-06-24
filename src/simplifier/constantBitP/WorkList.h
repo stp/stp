@@ -131,7 +131,7 @@ namespace simplifier
 
       }
     };
-  };
-};
+  }
+}
 
 #endif /* WORKLIST_H_ */

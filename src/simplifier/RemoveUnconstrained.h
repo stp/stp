@@ -49,6 +49,5 @@ namespace BEEV
   };
 
 }
-;
 
 #endif /* REMOVEUNCONSTRAINED_H_ */

@@ -572,4 +572,4 @@ void VarReplacer::reattachInternalClauses()
     clauses.shrink(i-j);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

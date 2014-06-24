@@ -188,8 +188,6 @@ namespace simplifier
     };
 
   }
-  ;
 }
-;
 
 #endif /* DEPENDENCIES_H_ */

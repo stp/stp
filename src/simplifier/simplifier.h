@@ -288,5 +288,5 @@ namespace BEEV
     }
 
   };//end of class Simplifier
-}; //end of namespace
+} //end of namespace
 #endif

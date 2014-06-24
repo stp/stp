@@ -60,6 +60,6 @@ class GaussianConfig
     uint32_t minMatrixRows; //The minimum matrix size -- no. of rows
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //GAUSSIANCONFIG_H

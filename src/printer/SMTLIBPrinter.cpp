@@ -251,4 +251,4 @@ static string tolower(const char * name)
         }
       }
   }
-};
+}

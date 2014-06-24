@@ -44,6 +44,6 @@ class StateSaver
         uint64_t backup_propagations;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //STATESAVER__H

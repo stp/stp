@@ -168,8 +168,8 @@ namespace simplifier
       }
     };
 
-  };
+  }
 
-};
+}
 
 #endif

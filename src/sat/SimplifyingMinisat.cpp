@@ -77,4 +77,4 @@ namespace BEEV
   {
       s->setFrozen(x,true);
   }
-};
+}

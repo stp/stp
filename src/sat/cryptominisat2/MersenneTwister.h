@@ -382,7 +382,7 @@ inline std::istream& operator>>( std::istream& is, MTRand& mtrand )
 	mtrand.pNext = &mtrand.state[mtrand.N-mtrand.left];
 	return is;
 }
-};
+}
 
 #endif  // MERSENNETWISTER_H
 

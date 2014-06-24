@@ -65,4 +65,4 @@ namespace BEEV
     return (*int_node_ptr1 == *int_node_ptr2);
   } ///End of ASTInteriorEqual operator()
   
-}; //end of namespace
+} //end of namespace

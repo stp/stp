@@ -111,6 +111,6 @@ namespace BEEV
        ClearAllTables();
     }
   }; //end of class ToSAT
-}; //end of namespace
+} //end of namespace
 
 #endif

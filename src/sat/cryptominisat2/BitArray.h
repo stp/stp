@@ -190,7 +190,7 @@ private:
     uint64_t* mp;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //BITARRAY_H
 

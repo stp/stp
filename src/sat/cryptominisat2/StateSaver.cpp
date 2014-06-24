@@ -54,4 +54,4 @@ void StateSaver::restore()
     solver.propagations = backup_propagations;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

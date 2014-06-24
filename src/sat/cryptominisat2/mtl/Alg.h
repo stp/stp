@@ -70,6 +70,6 @@ static inline bool findW(V& ts, const T& t)
     return j < ts.size();
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif

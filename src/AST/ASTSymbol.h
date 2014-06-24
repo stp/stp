@@ -118,5 +118,5 @@ namespace BEEV
       //printf("inside ASTSymbol constructor %s\n", _name);
     }
   }; //End of ASTSymbol
-}; //end of namespace
+} //end of namespace
 #endif

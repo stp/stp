@@ -77,7 +77,6 @@ namespace BEEV
         }
     };
 }
-;
 
 #endif /* DIFFICULTYSCORE_H_ */
 

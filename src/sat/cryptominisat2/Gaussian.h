@@ -240,6 +240,6 @@ inline void Gaussian::set_disabled(const bool toset)
 
 std::ostream& operator << (std::ostream& os, const vec<Lit>& v);
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //GAUSSIAN_H

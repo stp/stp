@@ -103,5 +103,5 @@ namespace BEEV
     {
     }
   }; //End of ASTNodeInterior
-}; //end of namespace BEEV
+} //end of namespace BEEV
 #endif

@@ -135,4 +135,4 @@ namespace BEEV
     query.PL_Print(cout);
     cout << ");\n";
   } //end of print_STPInput_Back()
-};//end of namespace BEEV
+} //end of namespace BEEV

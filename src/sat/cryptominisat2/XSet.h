@@ -131,6 +131,6 @@ class XSet {
         }
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //XSET_H

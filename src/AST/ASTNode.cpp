@@ -290,4 +290,4 @@ namespace BEEV
           }
       }
   } //end of LetizeNode()
-};//end of namespace
+} //end of namespace

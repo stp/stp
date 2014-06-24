@@ -377,4 +377,4 @@ void ClauseAllocator::updatePointers(vector<XorClause*>& toUpdate, const map<Cla
     }
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

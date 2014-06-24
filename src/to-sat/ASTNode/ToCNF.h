@@ -266,5 +266,5 @@ namespace BEEV
 
     //void PrintClauseList(ostream& os, ClauseList& cll);
   }; // end of CNFMgr class
-};//end of namespace
+} //end of namespace
 #endif

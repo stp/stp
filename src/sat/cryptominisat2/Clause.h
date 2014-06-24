@@ -350,6 +350,6 @@ class Watched {
         Lit blockedLit;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //CLAUSE_H

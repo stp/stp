@@ -524,4 +524,4 @@ namespace BEEV
     return (CheckBBandCNFMemo[form] = result);
   } //end of CheckBBandCNF_int()
 #endif
-}; //end of namespace BEEV
+} //end of namespace BEEV

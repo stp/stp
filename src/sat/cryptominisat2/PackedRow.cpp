@@ -120,4 +120,4 @@ void PackedRow::fill(vec<Lit>& tmp_clause, const vec<lbool>& assigns, const vect
         assert(!final);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

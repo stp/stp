@@ -96,6 +96,6 @@ inline const vector<Var>& PartFinder::getPartVars(const uint32_t part)
     return reverseTable[part];
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //PARTFINDER_H

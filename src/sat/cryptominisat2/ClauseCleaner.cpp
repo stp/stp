@@ -421,4 +421,4 @@ void ClauseCleaner::moveBinClausesToBinClauses()
     cs.shrink(s-ss);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

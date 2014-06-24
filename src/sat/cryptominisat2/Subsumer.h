@@ -269,6 +269,6 @@ inline double Subsumer::getTotalTime() const
     return totalTime;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //SIMPLIFIER_H

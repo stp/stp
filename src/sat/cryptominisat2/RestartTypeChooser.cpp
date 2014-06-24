@@ -151,5 +151,5 @@ void RestartTypeChooser::addDegrees(const vec<T*>& cs, vector<uint32_t>& degrees
 template void RestartTypeChooser::addDegrees(const vec<Clause*>& cs, vector<uint32_t>& degrees) const;
 template void RestartTypeChooser::addDegrees(const vec<XorClause*>& cs, vector<uint32_t>& degrees) const;
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 

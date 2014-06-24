@@ -1885,4 +1885,4 @@ vector<char> Subsumer::merge()
     return true;
 }*/
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

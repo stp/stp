@@ -155,4 +155,4 @@ uint32_t OnlyNonLearntBins::removeBins()
     return (i - j);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

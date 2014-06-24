@@ -197,5 +197,5 @@ public:
 	}
 
 };
-};
+}
 #endif /* AIGSIMPLIFYPROPOSITIONALCORE_H_ */

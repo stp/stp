@@ -57,6 +57,6 @@ class FindUndef {
 
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //

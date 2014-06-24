@@ -90,5 +90,6 @@ namespace BEEV
         {
         }
     };
-};
+}
+
 #endif /* NODEITERATOR_H_ */

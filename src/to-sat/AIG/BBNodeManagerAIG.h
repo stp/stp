@@ -259,6 +259,5 @@ public:
 };
 
 }
-;
 
 #endif /* BBNodeManagerAIG_H_ */

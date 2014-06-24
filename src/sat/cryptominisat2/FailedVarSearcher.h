@@ -152,7 +152,7 @@ class FailedVarSearcher {
         uint32_t numCalls;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //FAILEDVARSEARCHER_H
 

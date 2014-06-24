@@ -309,6 +309,6 @@ namespace BEEV
     } //End of constructor for UserDefinedFlags
 
   }; //End of struct UserDefinedFlags
-};//end of namespace
+} //end of namespace
 
 #endif

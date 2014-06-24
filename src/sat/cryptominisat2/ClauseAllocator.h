@@ -105,7 +105,7 @@ class ClauseAllocator {
         void* allocEnough(uint32_t size);
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //CLAUSEALLOCATOR_H
 

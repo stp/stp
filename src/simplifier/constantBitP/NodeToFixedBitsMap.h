@@ -43,8 +43,6 @@ namespace simplifier
       }
     };
   }
-  ;
 }
-;
 
 #endif /* NODETOFIXEDBITSMAP_H_ */

@@ -96,6 +96,6 @@ namespace BEEV {
     int,
     CStringHash,
     CStringEqualityPredicate> function_counters;
-}; //end of namespace
+} //end of namespace
 
 #endif

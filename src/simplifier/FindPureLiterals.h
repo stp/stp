@@ -130,5 +130,5 @@ public:
 
 
 };
-};
+}
 #endif /* FINDPURELITERALS_H_ */

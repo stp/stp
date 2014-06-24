@@ -69,6 +69,6 @@ inline void RestartTypeChooser::reset()
     sameIns.clear();
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //RESTARTTYPECHOOSER_H

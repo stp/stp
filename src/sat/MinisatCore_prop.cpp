@@ -9,7 +9,7 @@ namespace BEEV
   MinisatCore_prop<T>::MinisatCore_prop(volatile bool& timeout)
   {
      s = new T(timeout);
-  };
+  }
 
   template <class T>
   MinisatCore_prop<T>::~MinisatCore_prop()
@@ -88,4 +88,4 @@ namespace BEEV
   }
 
   template class MinisatCore_prop<Minisat::Solver_prop>;
-};
+}

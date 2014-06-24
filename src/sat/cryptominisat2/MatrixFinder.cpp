@@ -249,4 +249,4 @@ void MatrixFinder::findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClau
     }
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

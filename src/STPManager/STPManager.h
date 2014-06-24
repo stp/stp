@@ -478,5 +478,5 @@ namespace BEEV
     ~STPMgr();
 
   };//End of Class STPMgr
-};//end of namespace
+} //end of namespace
 #endif

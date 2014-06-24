@@ -56,5 +56,4 @@ namespace BEEV
 
       }
   }
-}
-;// end of namespace
+} // end of namespace

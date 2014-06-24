@@ -245,7 +245,7 @@ private:
 
 std::ostream& operator << (std::ostream& os, const PackedRow& m);
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //PACKEDROW_H
 

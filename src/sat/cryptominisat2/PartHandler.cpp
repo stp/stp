@@ -342,4 +342,4 @@ void PartHandler::readdRemovedClauses()
     solver.libraryCNFFile = backup_libraryCNFfile;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

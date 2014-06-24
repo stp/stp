@@ -50,5 +50,5 @@ namespace BEEV
       is_simplified = false;
     }
   }; //End of Class ASTInternalBase
-}; //end of namespace
+} //end of namespace
 #endif

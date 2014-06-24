@@ -85,4 +85,4 @@ namespace BEEV {
   {
     _letid_expr_map = new hash_map<string,ASTNode>();
   } //end of InitializeLetIDMap()
-};
+}

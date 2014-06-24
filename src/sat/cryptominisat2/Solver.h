@@ -840,6 +840,6 @@ inline void Solver::uncheckedEnqueueLight(const Lit p)
 
 //=================================================================================================
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //SOLVER_H

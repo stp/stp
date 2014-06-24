@@ -106,5 +106,6 @@ public:
     return result;
   }
 };
-};
+}
+
 #endif

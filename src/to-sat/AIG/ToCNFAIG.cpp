@@ -124,4 +124,4 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 	}
 	assert(cnfData != NULL);
 }
-};
+}

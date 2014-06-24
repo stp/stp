@@ -10,7 +10,7 @@ namespace BEEV
   MinisatCore<T>::MinisatCore(volatile bool& interrupt)
   {
      s = new T(interrupt);
-  };
+  }
 
   template <class T>
   MinisatCore<T>::~MinisatCore()
@@ -98,4 +98,4 @@ namespace BEEV
   // But I'm not so sure now because I don't understand what eliminate() does in the simp solver.
   template class MinisatCore<Minisat::Solver>;
   //template class MinisatCore<Minisat::SimpSolver>;
-};
+}

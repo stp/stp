@@ -339,7 +339,7 @@ private:
     }
   };
 
-};
+}
 
 #endif /* MUTABLEASTNODE_H_ */
 

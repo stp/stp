@@ -173,5 +173,5 @@ namespace BEEV
   };
 
 }
-;
+
 #endif /* SUBSTITUTIONMAP_H_ */

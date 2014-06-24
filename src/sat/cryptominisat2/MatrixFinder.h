@@ -70,6 +70,6 @@ class MatrixFinder {
         Solver& solver;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //MATRIXFINDER_H

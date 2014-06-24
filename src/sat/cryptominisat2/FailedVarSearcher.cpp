@@ -763,4 +763,4 @@ const bool FailedVarSearcher::tryAll(const Lit* begin, const Lit* end)
 Untested code end
 **************/
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

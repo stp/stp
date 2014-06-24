@@ -1132,4 +1132,3 @@ Result bvSignedDivisionBothWays(vector<FixedBits*>& children,
 }
 }
 }
-;

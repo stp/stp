@@ -379,5 +379,5 @@ namespace BEEV
 
   }; //End of Class ASTNode
 
-}; //end of namespace
+} //end of namespace
 #endif

@@ -1161,4 +1161,4 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
 #endif
 }*/
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

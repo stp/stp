@@ -185,6 +185,6 @@ private:
     uint proofStarts;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //LOGGER_H

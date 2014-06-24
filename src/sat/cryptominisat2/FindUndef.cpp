@@ -177,4 +177,4 @@ bool FindUndef::updateTables()
     return allSat;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

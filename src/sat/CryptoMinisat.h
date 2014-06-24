@@ -48,6 +48,5 @@ namespace BEEV
     virtual lbool undef_literal()  {return ((uint8_t)0);}
   };
 }
-;
 
 #endif

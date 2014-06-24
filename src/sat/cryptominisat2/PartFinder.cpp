@@ -186,4 +186,4 @@ void PartFinder::calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart, vector
     }
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

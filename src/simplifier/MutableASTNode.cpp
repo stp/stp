@@ -11,4 +11,4 @@ namespace BEEV
 
   vector<MutableASTNode*> MutableASTNode::all;
 
-};
+}

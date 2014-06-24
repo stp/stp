@@ -142,6 +142,6 @@ void vec<T>::clear(bool dealloc) {
         if (dealloc) free(data), data = NULL, cap = 0; } }
 
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif

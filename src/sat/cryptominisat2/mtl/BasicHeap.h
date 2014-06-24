@@ -103,7 +103,7 @@ class BasicHeap {
     int  getmin    ()      { return removeMin(); }
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 //=================================================================================================
 #endif

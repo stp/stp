@@ -35,4 +35,4 @@ namespace BEEV
   int linenum  = 1;
   const char * usage = "Usage: %s [-option] [infile]\n";
   std::string helpstring = "\n";
-}; //end of namespace BEEV
+} //end of namespace BEEV

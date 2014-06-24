@@ -818,5 +818,5 @@ namespace BEEV
     }
   };
 }
-;
+
 #endif /* ESTABLISHINTERVALS_H_ */

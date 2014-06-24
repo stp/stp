@@ -2605,4 +2605,4 @@ void Solver::printStats()
     cout << "CPU time              : " << cpu_time <<  " s\n";
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

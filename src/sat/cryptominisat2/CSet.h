@@ -125,5 +125,5 @@ class CSet {
 
 #endif //CSET_H
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 

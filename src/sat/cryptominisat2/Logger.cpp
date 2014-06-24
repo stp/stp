@@ -910,4 +910,4 @@ void Logger::reset_statistics()
     last_unitary_learnt_clauses = S->get_unitary_learnts_num();
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

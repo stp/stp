@@ -497,4 +497,4 @@ void XorFinder::addXorAsNormal4(XorClause& c)
 }
 
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

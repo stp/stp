@@ -149,5 +149,5 @@ namespace BEEV
 
   }; //end of class Transformer
 
-};//end of namespace
+} //end of namespace
 #endif

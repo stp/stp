@@ -79,6 +79,6 @@ inline void ClauseCleaner::removeAndCleanAll(bool nolimit)
     cleanClauses(solver.learnts, ClauseCleaner::learnts, limit);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //CLAUSECLEANER_H

@@ -137,6 +137,6 @@ inline double XorSubsumer::getTotalTime() const
     return totalTime;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //XORSIMPLIFIER_H

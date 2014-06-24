@@ -53,6 +53,5 @@ namespace BEEV
     virtual void setSeed(int i);
   };
 }
-;
 
 #endif

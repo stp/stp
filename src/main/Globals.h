@@ -88,6 +88,6 @@ namespace BEEV
   // of STP
   void CountersAndStats(const char * functionname, STPMgr * bm);
 
-}; //end of namespace BEEV
+} //end of namespace BEEV
 
 #endif

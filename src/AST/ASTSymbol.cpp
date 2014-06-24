@@ -53,4 +53,4 @@ namespace BEEV
     return (unsigned long long)hash;
   }
 
-};//end of namespace
+} //end of namespace

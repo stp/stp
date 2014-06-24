@@ -48,5 +48,5 @@ namespace BEEV
                                            int decision, int polarity=0);
 
   void print_STPInput_Back(const ASTNode& query);
-};// end of namespace BEEV
+} // end of namespace BEEV
 #endif

@@ -221,7 +221,7 @@ private:
     uint numCols;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //PACKEDMATRIX_H
 

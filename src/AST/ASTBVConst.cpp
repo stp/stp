@@ -122,5 +122,5 @@ namespace BEEV
             CONSTANTBV::BitVector_Compare(bvc1->_bvconst,
                                           bvc2->_bvconst));
   } //End of ASTBVConstEqual operator
-};//End of namespace
+}//End of namespace
 

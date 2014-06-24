@@ -51,7 +51,7 @@ class OnlyNonLearntBins {
         Solver& solver;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //ONLYNONLEARNTBINS_H
 

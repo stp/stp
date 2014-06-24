@@ -74,7 +74,7 @@ public:
 		TermsAlreadySeenMap.clear();
 	}
 };
-};
+}
 
 
 

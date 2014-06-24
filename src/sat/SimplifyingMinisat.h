@@ -53,6 +53,5 @@ namespace BEEV
     virtual void setFrozen(uint32_t x);
  };
 }
-;
 
 #endif /* CORE_H_ */

@@ -658,4 +658,4 @@ namespace BEEV
     return (1000 * t.tv_sec) + (t.tv_usec / 1000);
   }
 
-};//end of namespace
+} //end of namespace

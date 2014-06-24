@@ -53,4 +53,4 @@ class UselessBinRemover {
 
 #endif //USELESSBINREMOVER_H
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

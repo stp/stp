@@ -298,7 +298,6 @@ namespace BEEV
 
     };
 //end of class BitBlaster
-}
-;
-//end of namespace
+} //end of namespace
+
 #endif

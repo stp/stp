@@ -137,5 +137,5 @@ namespace BEEV
     } //End of ClearAllTables()
 
   }; //end of class bvsolver
-};//end of namespace BEEV
+} //end of namespace BEEV
 #endif

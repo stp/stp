@@ -155,6 +155,6 @@ inline uint32_t VarReplacer::getNumTrees() const
     return reverseTable.size();
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //VARREPLACER_H

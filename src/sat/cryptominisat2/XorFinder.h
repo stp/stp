@@ -145,6 +145,6 @@ class XorFinder
         Solver& solver;
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //XORFINDER_H

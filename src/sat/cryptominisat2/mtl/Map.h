@@ -123,6 +123,6 @@ class Map {
     }
 };
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif

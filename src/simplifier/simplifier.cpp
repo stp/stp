@@ -3947,6 +3947,4 @@ namespace BEEV
         << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 
   } //printCacheStatus()
-}
-;
-//end of namespace
+} //end of namespace

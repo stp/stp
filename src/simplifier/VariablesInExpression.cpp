@@ -180,4 +180,4 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
 	return result;
 }
 
-};
+}

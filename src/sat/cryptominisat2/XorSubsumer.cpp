@@ -591,4 +591,4 @@ bool XorSubsumer::checkElimedUnassigned() const
     return true;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

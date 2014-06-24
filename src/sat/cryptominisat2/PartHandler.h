@@ -82,6 +82,6 @@ inline void PartHandler::newVar()
     savedState.push(l_Undef);
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT
 
 #endif //PARTHANDLER_H

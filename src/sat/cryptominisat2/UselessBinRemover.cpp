@@ -199,4 +199,4 @@ bool UselessBinRemover::fillBinImpliesMinusLast(const Lit& origLit, const Lit& l
     return true;
 }
 
-}; //NAMESPACE MINISAT
+} //NAMESPACE MINISAT

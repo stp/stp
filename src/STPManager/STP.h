@@ -141,5 +141,5 @@ ArrayTransformer * arrayTransformer;
 		//bm->ClearAllTables();
 	}
   }; //End of Class STP
-};//end of namespace
+} //end of namespace
 #endif
