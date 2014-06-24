@@ -523,7 +523,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       setitimer(ITIMER_VIRTUAL, NULL, NULL);
       BEEV::ParserBM->soft_timeout_expired = false;
     }
-#endif _MSC_VER
+#endif
 
   return output;
 } //end of vc_query
