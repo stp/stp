@@ -81,7 +81,7 @@ endif()
 option(BUILD_SHARED_LIBS "Build client library as a shared library" ON)
 
 if(WIN32)
-  # build shared lib on windows is not prepared at source level
+  # building of shared lib on windows is not done at source level
   set(BUILD_SHARED_LIBS OFF)
   message(WARNING "Disabling building of shared library on Windows")
 endif(WIN32)
