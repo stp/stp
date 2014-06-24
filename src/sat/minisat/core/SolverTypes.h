@@ -225,10 +225,10 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
     const Clause* lea       (Ref r) const { return (Clause*)RegionAllocator<uint32_t>::lea(r); }
     Ref           ael       (const Clause* t){ return RegionAllocator<uint32_t>::ael((uint32_t*)t); }
 
-    void free(CRef cid)
+    void _free(CRef cid)
     {
         Clause& c = operator[](cid);
-        RegionAllocator<uint32_t>::free(clauseWord32Size(c.size(), c.has_extra()));
+        RegionAllocator<uint32_t>::_free(clauseWord32Size(c.size(), c.has_extra()));
     }
 
     void reloc(CRef& cr, ClauseAllocator& to)
