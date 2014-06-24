@@ -484,7 +484,9 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms) {
       setitimer(ITIMER_VIRTUAL, &timeout, NULL);
     }
 #else
-    BEEV::FatalError("CInterface: query with timeout not supported on Windows builds");
+    if (timeout_ms != -1) {
+        BEEV::FatalError("CInterface: query with timeout not supported on Windows builds");
+    }
 #endif
   if(!BEEV::is_Form_kind(a->GetKind())) 
     {     
