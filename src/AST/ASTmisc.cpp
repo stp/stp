@@ -646,7 +646,9 @@ namespace BEEV
   setitimer(ITIMER_VIRTUAL, &timeout, NULL);
   }
 #else
-  void setHardTimeout(int) {}
+  void setHardTimeout(int) {
+      std::cerr << "WARNING: STP does not support hard timeout for Windows builds" << std::endl;
+  }
 #endif
 
   long getCurrentTime()
