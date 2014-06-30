@@ -66,8 +66,10 @@ sub gen_h_file {
 	"#include <iostream>\n",
 	"namespace BEEV {\n  typedef enum {\n";
 
-    for (@kindnames) {
-	print HFILE "    $_,\n";
+    for my $i (0 .. $#kindnames) {
+	print HFILE "    ", $kindnames[$i];
+	print HFILE "," unless $i == $#kindnames;
+	print HFILE "\n";
     }
 
     print HFILE
