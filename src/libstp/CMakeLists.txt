@@ -7,6 +7,7 @@
 # library?
 set(stp_lib_targets
     AST
+    globalstp
     stpmgr
     abstractionrefinement
     tosat
