@@ -7,7 +7,7 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 // -*- c++ -*-
-#include "Globals.h"
+#include "STPProgramGlobals.h"
 #include "../AST/AST.h"
 #include "../printer/AssortedPrinters.h"
 #include "../printer/printers.h"

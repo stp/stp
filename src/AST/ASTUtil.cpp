@@ -9,7 +9,7 @@
 
 #include "UsefulDefs.h"
 #include "../STPManager/STPManager.h"
-#include "../main/Globals.h"
+#include "../globals/Globals.h"
 namespace BEEV
 {
   using std::cout;

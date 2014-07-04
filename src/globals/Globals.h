@@ -1,27 +1,23 @@
-// -*- c++ -*-
-/********************************************************************
- * AUTHORS: Vijay Ganesh
- *
- * BEGIN DATE: November, 2005
- *
- * LICENSE: Please view LICENSE file in the home dir of this Program
- ********************************************************************/
+// vim: tabstop=2:shiftwidth=2:softtabstop=2:expandtab
+
+/* This is ABSOLUTELY DISGUSTING!
+ * These globals used by the library should
+ * be encapsulated in a "Context" class
+ * to allow concurrent usage of the STP library
+ */
+
 #ifndef GLOBALS_H
 #define GLOBALS_H
-
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <algorithm>
-#include <ctime>
-#include <unistd.h>
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <vector>
+
+/* FIXME: Clients who import this header file have to have
+ * ASTNode already declarted (eurgh)
+ *
+ */
 
 namespace BEEV
 {
+  // FIXME: We don't need all these forward declarations here!
   class STPMgr;
   class ASTNode;
   class ASTInternal;
@@ -32,27 +28,22 @@ namespace BEEV
   class STP;
   class Cpp_interface;
 
-  /***************************************************************
-   * ENUM TYPES
-   *
-   ***************************************************************/
-
   enum inputStatus
-    {
-      NOT_DECLARED =0, // Not included in the input file / stream
-      TO_BE_SATISFIABLE,
-      TO_BE_UNSATISFIABLE,
-      TO_BE_UNKNOWN // Specified in the input file as unknown.
-    };
+  {
+    NOT_DECLARED =0, // Not included in the input file / stream
+    TO_BE_SATISFIABLE,
+    TO_BE_UNSATISFIABLE,
+    TO_BE_UNKNOWN // Specified in the input file as unknown.
+  };
 
   //return types for the GetType() function in ASTNode class
   enum types
-    {
+  {
       BOOLEAN_TYPE = 0,
       BITVECTOR_TYPE,
       ARRAY_TYPE,
       UNKNOWN_TYPE
-    };
+  };
 
   enum SOLVER_RETURN_TYPE
     {
@@ -67,6 +58,8 @@ namespace BEEV
 
   //Empty vector. Useful commonly used ASTNodes
   extern std::vector<ASTNode> _empty_ASTVec;
+
+  // FIXME: Why aren't these defined in Globals.cpp?
   extern ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   //Useful global variables. Use for parsing only
@@ -74,20 +67,12 @@ namespace BEEV
   extern  STPMgr * ParserBM;
   extern Cpp_interface * parserInterface;
 
-  //Some constant global vars for the Main function. Once they are
-  //set, these globals will remain constants. These vars are not used
-  //in the STP library.
-  extern const char * prog;
-  extern int linenum;
-  extern const char * usage;
-  extern std::string helpstring;
+  // Needed by the SMTLIB printer
   extern enum inputStatus input_status;
-
 
   // Function that computes various kinds of statistics for the phases
   // of STP
   void CountersAndStats(const char * functionname, STPMgr * bm);
 
-} //end of namespace BEEV
-
+}
 #endif

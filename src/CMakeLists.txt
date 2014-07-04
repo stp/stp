@@ -1,3 +1,4 @@
+add_subdirectory(globals)
 add_subdirectory(AST)
 add_subdirectory(absrefine_counterexample)
 add_subdirectory(simplifier)

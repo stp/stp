@@ -14,7 +14,13 @@
 // avoid TRUE and FALSE to be set to 1 and 0 in winmin.h
 #define TRUE TRUE
 #define FALSE FALSE
+#else
+// Needed for signal()
+#include <unistd.h>
+#include <signal.h>
 #endif
+
+
 #include <sys/time.h>
 
 namespace BEEV
@@ -44,8 +50,9 @@ namespace BEEV
           break;
 
         case 'h':
-          fprintf(stderr,usage,prog);
-          std::cout << helpstring;
+          assert(0 && "This API is dumb, don't use it!");
+          //fprintf(stderr,usage,prog);
+          //std::cout << helpstring;
           exit(-1);
           break;
         case 'm':
@@ -88,8 +95,9 @@ namespace BEEV
           bm->UserFlags.print_sat_varorder_flag = true;
           break;
         default:
-          fprintf(stderr,usage,prog);
-          cout << helpstring;
+          //fprintf(stderr,usage,prog);
+          //cout << helpstring;
+          assert(0 && "Unrecognised option");
           exit(-1);
           break;
         }

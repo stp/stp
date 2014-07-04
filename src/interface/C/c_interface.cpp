@@ -17,6 +17,8 @@
 
 #ifdef _MSC_VER
 #include <compdep.h>
+#else
+#include <signal.h>
 #endif
 
 using std::cout;

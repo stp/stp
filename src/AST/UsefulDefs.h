@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <assert.h>
 
-#include "../main/Globals.h"
+#include "../globals/Globals.h"
 #include "ASTKind.h"
 #include "../extlib-constbv/constantbv.h"
 #include "RunTimes.h"

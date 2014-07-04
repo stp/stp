@@ -6,8 +6,8 @@
 # the stp binary and not be in the client
 # library?
 set(stp_lib_targets
+    stpglobals
     AST
-    globalstp
     stpmgr
     abstractionrefinement
     tosat
