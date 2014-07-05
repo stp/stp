@@ -6,6 +6,10 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BIN
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
+if (BUILD_STATIC_BIN)
+    set(CMAKE_EXE_LINKER_FLAGS "-static")
+endif()
+
 add_executable(stp
     main.cpp
     STPProgramGlobals.cpp
