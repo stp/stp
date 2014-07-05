@@ -294,6 +294,27 @@ endmacro()
 set(STP_EXPORT_NAME "STPTargets")
 
 # -----------------------------------------------------------------------------
+# Testing and Python interface options
+# -----------------------------------------------------------------------------
+
+option(ENABLE_TESTING "Enable testing" OFF)
+option(ENABLE_PYTHON_INTERFACE "Enable Python interface" ON)
+
+if (ENABLE_PYTHON_INTERFACE AND NOT BUILD_SHARED_LIBS)
+    message(FATAL_ERROR "Python interface requires shared library")
+endif()
+
+# Both the testing infrastructure and python interface depend on python
+if(ENABLE_TESTING OR ENABLE_PYTHON_INTERFACE)
+    find_package(PythonInterp REQUIRED)
+    mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
+
+    if(NOT PYTHONINTERP_FOUND)
+        message(FATAL_ERROR "Python cannot be found. Please install it or disable testing and/or python interface")
+    endif()
+endif()
+
+# -----------------------------------------------------------------------------
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
@@ -311,10 +332,8 @@ add_custom_target(uninstall
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
 # -----------------------------------------------------------------------------
-# Testing
+# Add tests if required
 # -----------------------------------------------------------------------------
-
-option(ENABLE_TESTING "Enable testing" OFF)
 
 if(ENABLE_TESTING)
     message(STATUS "Testing is enabled")
