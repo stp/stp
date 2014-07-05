@@ -15,6 +15,7 @@ case $STP_CONFIG in
         eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DBUILD_STATIC_BIN:BOOL=OFF \
+                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 
@@ -37,6 +38,7 @@ case $STP_CONFIG in
     STATIC_BINARY)
         eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_STATIC_BIN:BOOL=ON \
+                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 
