@@ -1,4 +1,4 @@
-set(PYTHON_INTERFACE_DIR ${CMAKE_BINARY_DIR}/src/interface/python)
+set(PYTHON_INTERFACE_DIR ${CMAKE_BINARY_DIR}/bindings/python)
 configure_file(tests.py.in tests.py @ONLY)
 
 add_custom_target(python-interface-tests

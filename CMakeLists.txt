@@ -306,9 +306,9 @@ endif()
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
-#add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
+add_subdirectory(bindings)
 
 # -----------------------------------------------------------------------------
 # Add uninstall target for makefiles
