@@ -9,3 +9,5 @@ add_library(tosat OBJECT
     ASTNode/ToCNF.cpp
     ASTNode/ToSAT.cpp
 )
+
+add_dependencies(tosat ASTKind_header)
