@@ -1,4 +1,4 @@
-#include "c_interface.h"
+#include "stp/c_interface.h"
 #include <stdio.h>
 #include <gtest/gtest.h>
 

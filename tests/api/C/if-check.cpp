@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 #include <stdlib.h>
 
 TEST(if_check,one)

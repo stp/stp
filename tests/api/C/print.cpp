@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 TEST(print,one) {
   VC vc = vc_createValidityChecker();

@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 TEST(stp_div, one) {  
   VC vc = vc_createValidityChecker();

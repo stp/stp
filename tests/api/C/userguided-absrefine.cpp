@@ -39,7 +39,7 @@
 #include <cmath>
 #include <ext/hash_set>
 #include <ext/hash_map>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 #define E_BITS 16
 #define TOT_E_BITS 24

@@ -1,7 +1,7 @@
 // Bug reported by Alvin Cheung. Thanks.
 
 #include <gtest/gtest.h>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 #include <iostream>
 #include <cassert>
 #include <stdexcept>

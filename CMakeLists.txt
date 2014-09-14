@@ -277,34 +277,6 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -----------------------------------------------------------------------------
-# This macro is used by library targets to add a public header to themselves.
-# If this library is a component of libstp then libstp will also have the
-# public header added too (handled else where see libstp/CMakeLists.txt)
-#
-# Usage : stp_add_public_header(<library_target> <header file>)
-# -----------------------------------------------------------------------------
-macro(stp_add_public_header LIBTARGET HEADER)
-    set(HEADER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${HEADER}")
-    if(EXISTS "${HEADER_PATH}")
-        # Get existing PUBLIC_HEADER
-        get_target_property(EXISTING_PUBLIC_HEADERS ${LIBTARGET} PUBLIC_HEADER)
-        if(EXISTING_PUBLIC_HEADERS)
-            list(APPEND EXISTING_PUBLIC_HEADERS "${HEADER_PATH}")
-        else()
-            # Do not append to empty list
-            set(EXISTING_PUBLIC_HEADERS "${HEADER_PATH}")
-        endif()
-        set_target_properties(${LIBTARGET}
-                              PROPERTIES
-                              PUBLIC_HEADER "${EXISTING_PUBLIC_HEADERS}"
-                             )
-    else()
-        message(FATAL_ERROR "Cannot add public header, file ${HEADER_PATH} does not exist.")
-    endif()
-endmacro()
-
-
-# -----------------------------------------------------------------------------
 # Provide an export name to be used by targets that wish to export themselves.
 # -----------------------------------------------------------------------------
 set(STP_EXPORT_NAME "STPTargets")

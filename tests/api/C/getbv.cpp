@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 TEST(getbv,INT64) {
   ASSERT_EQ( 64, sizeof(uint64_t)*8);
