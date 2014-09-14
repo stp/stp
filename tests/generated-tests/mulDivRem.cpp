@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <cassert>
 #include <cmath>
-#include "../../src/AST/AST.h"
-#include "../../src/extlib-constbv/constantbv.h"
+#include "stp/AST/AST.h"
+#include "extlib-constbv/constantbv.h"
 
 /*
  * Generates random (a op b = c) triples to check that solver.

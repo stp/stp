@@ -210,10 +210,23 @@ check_cxx_hashmap()
 # -----------------------------------------------------------------------------
 
 configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/include/config.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
 )
+
+
+# -----------------------------------------------------------------------------
+# Set up includes
+# -----------------------------------------------------------------------------
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
+
+# FIXME: External library includes
+include_directories(# For extlib-abc and extlib-constbv
+                    ${CMAKE_SOURCE_DIR}/lib
+                    # For minisat and cryptominisat2
+                    ${CMAKE_SOURCE_DIR}/lib/Sat
+                   )
 
 # -----------------------------------------------------------------------------
 # Uncomment these for static compilation under Linux (messes up Valgrind)
@@ -321,7 +334,9 @@ endif()
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
-add_subdirectory(src)
+#add_subdirectory(include)
+add_subdirectory(lib)
+add_subdirectory(tools)
 
 # -----------------------------------------------------------------------------
 # Add uninstall target for makefiles
