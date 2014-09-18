@@ -23,7 +23,7 @@ before_install:
   - mkdir stp && cd stp
 script:
 # Build STP
-  - ../../.travis-cmake.sh ../../
+  - ../../scripts/travis-cmake.sh ../../
   - make
   - make check
 # Build example project. We assume that the build installed itself to the CMake

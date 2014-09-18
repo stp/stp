@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <string>
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 static unsigned int errorCount = 0;
 static std::string errorMsg;

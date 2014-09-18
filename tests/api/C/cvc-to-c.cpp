@@ -6,7 +6,7 @@ g++ -I$HOME/stp/c_interface cvc-to-c.cpp -L$HOME/stp/lib -lstp -o cvc-to-c
 
 */
 
-#include "c_interface.h"
+#include "stp/c_interface.h"
 #include <iostream>
 
 int main(int argc, char** argv) {

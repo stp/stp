@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "c_interface.h"
+#include "stp/c_interface.h"
 
 // FIXME: This test name sucks!
 TEST(stpcheck,one) {  
