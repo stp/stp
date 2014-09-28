@@ -1,4 +1,4 @@
-#include "CryptoMinisat4.h"
+#include "stp/Sat/CryptoMinisat4.h"
 
 #undef var_Undef
 #undef l_True
