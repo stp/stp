@@ -1,0 +1,18 @@
+---
+Language: Cpp
+BasedOnStyle:  LLVM
+
+# Override some LLVM defaults
+AccessModifierOffset: 0
+AllowShortFunctionsOnASingleLine: Inline
+BreakBeforeBraces: Allman
+ColumnLimit: 80
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+IndentCaseLabels: true
+PointerAlignment: Left
+IndentWidth: 2
+TabWidth: 2
+# Although LLVM doesn't use tabs either I want to be **very** explicit about this
+UseTab: Never
+...
+
