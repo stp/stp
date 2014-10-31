@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: Februrary, 2010
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #ifndef CONSTANTBITPROPAGATION_MAXPRECISION_H_
 #define CONSTANTBITPROPAGATION_MAXPRECISION_H_
 

@@ -1,7 +1,11 @@
-/*
- * VariablesInExpression.h
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
  *
- */
+ * BEGIN DATE: Jan, 2011
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
 
 #ifndef VARIABLESINEXPRESSION_H_
 #define VARIABLESINEXPRESSION_H_

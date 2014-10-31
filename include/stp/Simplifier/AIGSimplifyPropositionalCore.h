@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: March, 2011
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 /*
  * This takes the topmost propositional part of the input, simplifies it with DAG aware rewritting,
  * then converts it back to ASTNodes.

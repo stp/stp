@@ -1,9 +1,11 @@
-/*
- * FindPureLiterals.h
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
  *
- *  Created on: 09/02/2011
- *      Author: thansen
- */
+ * BEGIN DATE: 09/02/2011
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
 
 /*
  * This could very nicely run after unconstrained variable elmination. If we traversed from
