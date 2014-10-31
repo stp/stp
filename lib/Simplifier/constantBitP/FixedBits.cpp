@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Unknown
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "stp/AST/AST.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"

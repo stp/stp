@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Unknown
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include <string>
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/simplifier.h"

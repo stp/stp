@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Unknown
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "minisat/core_prop/Solver_prop.h"
 #include "stp/Sat/MinisatCore_prop.h"
 //#include "utils/System.h"

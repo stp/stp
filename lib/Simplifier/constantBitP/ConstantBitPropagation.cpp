@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Unknown
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/AST/AST.h"
 // FIXME: External library

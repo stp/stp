@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Unknown
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
