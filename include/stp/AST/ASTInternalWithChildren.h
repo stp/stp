@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: Mar 24, 2011
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #ifndef ASTINTERNALWithChildren_H
 #define ASTINTERNALWithChildren_H
 

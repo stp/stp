@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: Jul 5, 2010
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #ifndef CONSTANTBITP_UTILITY_H_
 #define CONSTANTBITP_UTILITY_H_
 
