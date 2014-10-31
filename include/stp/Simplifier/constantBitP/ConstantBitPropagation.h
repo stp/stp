@@ -1,8 +1,8 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Unknown
+ * AUTHORS: Trevor Hansen
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: Jul 5, 2010
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/

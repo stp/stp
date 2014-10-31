@@ -1,3 +1,13 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: Jan, 2012
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
+
 #ifndef NODEITERATOR_H_
 #define NODEITERATOR_H_
 

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Unknown
+ * AUTHORS: Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *

@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: June, 2010
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #ifndef DIFFICULTYSCORE_H_
 #define DIFFICULTYSCORE_H_
 
