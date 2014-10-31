@@ -1,8 +1,8 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Unknown
+ * AUTHORS: Mate Soos
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: November, 2013
  *
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/

@@ -1,6 +1,6 @@
 // -*- c++ -*-
 /********************************************************************
- * AUTHORS: Unknown
+ * AUTHORS: Vijay Ganesh, Mate Soos
  *
  * BEGIN DATE: November, 2005
  *
