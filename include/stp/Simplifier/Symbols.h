@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <boost/utility.hpp>
+#include "assert.h"
 
 using std::vector;
 
