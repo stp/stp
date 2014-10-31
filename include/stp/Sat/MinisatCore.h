@@ -1,6 +1,16 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Vijay Ganesh
+ *
+ * BEGIN DATE: November, 2005
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 /*
  * Wraps around CORE minisat.
  */
+
 #ifndef MINISATCORE_H_
 #define MINISATCORE_H_
 

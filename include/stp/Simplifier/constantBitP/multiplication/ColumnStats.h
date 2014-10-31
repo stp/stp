@@ -1,9 +1,11 @@
-/*
- * ColumnStats.h
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Trevor Hansen
  *
- *  Created on: 24/03/2010
- *      Author: thansen
- */
+ * BEGIN DATE: 24/03/2010
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
 
 #ifndef COLUMNSTATS_H_
 #define COLUMNSTATS_H_

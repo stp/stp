@@ -1,3 +1,12 @@
+// -*- c++ -*-
+/********************************************************************
+ * AUTHORS: Mate Soos
+ *
+ * BEGIN DATE: November, 2013
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 /*
  * Wraps around Cryptominisat minisat.
  */
