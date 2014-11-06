@@ -40,7 +40,7 @@ Py3 = sys.version > '3'
 if Py3:
     long = int
 
-from . library_path import PATHS
+from library_path import PATHS
 
 for path in PATHS:
     if not os.path.exists(path):
