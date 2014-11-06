@@ -7,6 +7,8 @@ intelligent fuzzers and model checkers.
 
 Homepage:      http://stp.github.io/stp/
 
+Ubuntu PPA:    https://launchpad.net/~simple-theorem-prover/+archive/ubuntu/ppa/+packages
+
 Documentation: https://github.com/stp/stp/wiki
 
 [![Build Status](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
