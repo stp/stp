@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
- ********************************************************************/
+********************************************************************/
 // -*- c++ -*-
 #include <cmath>
 #include <cassert>
@@ -52,7 +52,7 @@ namespace BEEV
    * returns a single boolean formula (type BBNode).  A bitblasted
    * term is a vector of BBNodes for formulas.  The 0th element of
    * the vector corresponds to bit 0 -- the low-order bit.
-   ********************************************************************/
+  ********************************************************************/
 
   using simplifier::constantBitP::FixedBits;
   using simplifier::constantBitP::NodeToFixedBitsMap;

@@ -21,7 +21,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
- ********************************************************************/
+********************************************************************/
 // -*- c++ -*-
 #include "STPProgramGlobals.h"
 #include "stp/AST/AST.h"
@@ -75,7 +75,7 @@ static const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
  * step 3. Convert to CNF
  * step 4. Convert to SAT
  * step 5. Call SAT to determine if input is SAT or UNSAT
- ********************************************************************/
+********************************************************************/
 
 static STPMgr* bm;
 static bool onePrintBack = false;

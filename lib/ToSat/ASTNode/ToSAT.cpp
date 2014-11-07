@@ -21,7 +21,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
- ********************************************************************/
+********************************************************************/
 #include "stp/ToSat/ASTNode/ToSAT.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/Printer/printers.h"
