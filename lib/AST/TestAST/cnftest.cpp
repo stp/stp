@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /***************************
  * Authors: Michael Katelman, Tervor Hansen, Vijay Ganesh
  *

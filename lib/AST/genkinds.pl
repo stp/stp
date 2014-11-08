@@ -77,7 +77,6 @@ sub gen_h_file {
     open(HFILE, "> ASTKind.h") || die "Cannot open .h file: $!\n";
 
     print HFILE
-	"// -*- c++ -*-\n",
 	"#ifndef TESTKINDS_H\n",
 	"#define TESTKINDS_H\n",
 	"// Generated automatically by genkinds.pl from ASTKind.kinds $now.\n",

@@ -41,7 +41,6 @@
    * 
    * <hr>
    ********************************************************************/
-  // -*- c++ -*-L
 #include "stp/Parser/parser.h"
 #include "parsesmt2.hpp"
 #include "stp/cpp_interface.h"

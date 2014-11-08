@@ -43,7 +43,6 @@
    * 
    * <hr>
   ********************************************************************/
-  // -*- c++ -*-
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"

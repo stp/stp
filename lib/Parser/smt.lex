@@ -32,7 +32,6 @@
    * 
    * <hr>
    ********************************************************************/
-  // -*- c++ -*-
 #include <iostream>
 #include "stp/Parser/parser.h"
 #include "parsesmt.hpp"
