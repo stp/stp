@@ -205,6 +205,6 @@ namespace std {
   };
 
 
-} // END namespace boost
+}
 
 #endif /*__FDSTREAM_HPP__*/
