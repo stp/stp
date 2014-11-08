@@ -33,10 +33,6 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-FILE* cvcin;
-FILE* smtin;
-FILE* smt2in;
-
 void errorHandler(const char* error_msg)
 {
     cerr << prog << ": Error: " << error_msg << endl;
