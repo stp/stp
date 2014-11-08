@@ -61,7 +61,7 @@ public:
         , po::variables_map& vm
         , po::positional_options_description& pos_options
     );
-    int create_and_parse_options(int argc, char** argv) override;
+    int create_and_parse_options(int argc, char** argv);
     void create_options();
     int parse_options(int argc, char** argv);
 
