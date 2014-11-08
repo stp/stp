@@ -48,8 +48,8 @@ THE SOFTWARE.
  *                fdinbuf::underflow(): cast for return statements
  *  Aug 05, 2001: first public version
  */
-#ifndef BOOST_FDSTREAM_HPP
-#define BOOST_FDSTREAM_HPP
+#ifndef __FDSTREAM_HPP__
+#define __FDSTREAM_HPP__
 
 #include <istream>
 #include <ostream>
@@ -74,7 +74,6 @@ THE SOFTWARE.
 #endif
 
 
-// BEGIN namespace BOOST
 namespace std {
 
 
@@ -208,4 +207,4 @@ namespace std {
 
 } // END namespace boost
 
-#endif /*BOOST_FDSTREAM_HPP*/
+#endif /*__FDSTREAM_HPP__*/
