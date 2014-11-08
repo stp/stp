@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include <cassert>
 #include <map>
 #include "stp/STPManager/STPManager.h"
-#include <boost/utility.hpp>
 #include <list>
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 
@@ -58,7 +57,7 @@ namespace BEEV
     class BitBlaster;
 
   template<class BBNode, class BBNodeManagerT>
-    class BitBlaster : boost::noncopyable
+    class BitBlaster //not copyable
     {
       BBNode BBTrue, BBFalse;
 

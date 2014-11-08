@@ -31,11 +31,10 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ASTNode/ClauseList.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class CNFMgr  : boost::noncopyable
+  class CNFMgr  //not copyable
   {  
   private:
 

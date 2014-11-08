@@ -28,12 +28,11 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "Symbols.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
 
-class VariablesInExpression : boost::noncopyable
+class VariablesInExpression //not copyable
 {
 private:
 

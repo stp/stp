@@ -27,14 +27,13 @@ THE SOFTWARE.
 #define SYMBOLS_H
 
 #include <vector>
-#include <boost/utility.hpp>
 #include "assert.h"
 
 using std::vector;
 
 // Each node is either: empty, an ASTNode, or a vector of more than one child nodes.
 
-class Symbols : boost::noncopyable
+class Symbols //not copyable
 {
 	public:
 

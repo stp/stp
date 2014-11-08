@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include <assert.h>
 #include <iostream>
 #include <set>
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -43,7 +42,7 @@ namespace BEEV
    * options. 
    ******************************************************************/
 
-  struct UserDefinedFlags : boost::noncopyable
+  struct UserDefinedFlags //not copyable
   {
   private:
 	std::set<string> alreadyOutput;

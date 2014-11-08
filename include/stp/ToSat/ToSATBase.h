@@ -27,11 +27,10 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class ToSATBase : boost::noncopyable
+  class ToSATBase //not copyable
   {
   protected:
     ASTNode ASTTrue, ASTFalse, ASTUndefined;

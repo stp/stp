@@ -29,7 +29,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/simplifier.h"
 #include "stp/Simplifier/Symbols.h"
 #include "stp/Simplifier/VariablesInExpression.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -57,7 +56,7 @@ namespace BEEV
    * 4. Outside the solver, Substitute and Re-normalize the input DAG
    ******************************************************************/
 
-  class BVSolver  : boost::noncopyable
+  class BVSolver  //not copyable
   {
   private:
     // Ptr to toplevel manager that manages bit-vector expressions

@@ -37,11 +37,10 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class UseITEContext  : boost::noncopyable
+  class UseITEContext  //not copyable
   {
     NodeFactory *nf;
     RunTimes *runtimes;

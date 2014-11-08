@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
-#include <boost/utility.hpp>
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -47,7 +46,7 @@ namespace BEEV
 {
   using std::make_pair;
 
-  class EstablishIntervals : boost::noncopyable
+  class EstablishIntervals //not copyable
   {
   private:
     struct IntervalType

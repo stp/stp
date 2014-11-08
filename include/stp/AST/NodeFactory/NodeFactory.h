@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -44,7 +43,7 @@ using BEEV::Kind;
 using BEEV::ASTVec;
 using BEEV::_empty_ASTVec;
 
-class NodeFactory : boost::noncopyable
+class NodeFactory //not copyable
 {
 protected:
         BEEV::STPMgr& bm;

@@ -35,11 +35,10 @@ THE SOFTWARE.
 #include "stp/Parser/LetMgr.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Simplifier/PropagateEqualities.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
-  class STP  : boost::noncopyable
+  class STP  //not copyable
   {
 
     

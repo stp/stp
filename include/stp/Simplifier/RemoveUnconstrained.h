@@ -36,7 +36,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/Dependencies.h"
 #include "stp/Simplifier/simplifier.h"
 #include "stp/Simplifier/MutableASTNode.h"
-#include <boost/utility.hpp>
 
 
 namespace BEEV

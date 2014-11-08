@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/VariablesInExpression.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
@@ -40,7 +39,7 @@ namespace BEEV
 
   const bool debug_substn = false;
 
-  class SubstitutionMap : boost::noncopyable
+  class SubstitutionMap //not copyable
   {
 
     ASTNodeMap * SolverMap;

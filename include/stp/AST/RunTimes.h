@@ -31,13 +31,12 @@ THE SOFTWARE.
 #include <string>
 //#include "../sat/utils/System.h"
 #include <iomanip>
-#include <boost/utility.hpp>
 #include <iostream>
 #include <sstream>
 // FIXME: External library include
 #include "Sat/cryptominisat2/time_mem.h"
 
-class RunTimes : boost::noncopyable
+class RunTimes //not copyable
 {
 public:
   enum Category

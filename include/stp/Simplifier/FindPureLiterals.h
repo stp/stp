@@ -39,13 +39,12 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
   using std::map;
 
-class FindPureLiterals : boost::noncopyable
+class FindPureLiterals //not copyable
 {
   typedef char polarity_type;
   const static polarity_type truePolarity = 1;

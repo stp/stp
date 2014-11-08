@@ -30,11 +30,10 @@ THE SOFTWARE.
 #include "extlib-abc/dar.h"
 #include "stp/ToSat/ToSATBase.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include <boost/utility.hpp>
 
 namespace BEEV {
 
-class ToCNFAIG : boost::noncopyable
+class ToCNFAIG //not copyable
 {
 	UserDefinedFlags& uf;
 

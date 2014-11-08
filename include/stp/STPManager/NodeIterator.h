@@ -30,13 +30,12 @@ THE SOFTWARE.
 #include "stp/AST/ASTNode.h"
 #include "stp/STPManager/STPManager.h"
 #include <stack>
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
     // Returns each node once, then returns the sentinel.
     // NB if the sentinel is contained in the node that's passed, then it'll be wrong.
-    class NodeIterator : boost::noncopyable
+    class NodeIterator //not copyable
     {
         std::stack<ASTNode> toVisit;
 

@@ -44,13 +44,12 @@ THE SOFTWARE.
 #include "extlib-abc/dar.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
 using std::make_pair;
 
-class AIGSimplifyPropositionalCore : boost::noncopyable
+class AIGSimplifyPropositionalCore //not copyable
 {
 
 	ASTNodeMap varToNodeMap;

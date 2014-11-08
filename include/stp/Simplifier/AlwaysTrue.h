@@ -32,12 +32,11 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
-#include <boost/utility.hpp>
 
 namespace BEEV
 {
 
-class AlwaysTrue : boost::noncopyable
+class AlwaysTrue //not copyable
 {
   Simplifier *simplifier;
   STPMgr* stp;
