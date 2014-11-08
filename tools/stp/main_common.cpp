@@ -33,6 +33,10 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+FILE* cvcin;
+FILE* smtin;
+FILE* smt2in;
+
 void errorHandler(const char* error_msg)
 {
     cerr << prog << ": Error: " << error_msg << endl;
@@ -47,6 +51,9 @@ Main::Main():
 {
     bm = NULL;
     toClose = NULL;
+    cvcin = NULL;
+    smtin = NULL;
+    smt2in = NULL;
 
     // Register the error handler
     vc_error_hdlr = errorHandler;

@@ -52,6 +52,9 @@ extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
 extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
+extern FILE* cvcin;
+extern FILE* smtin;
+extern FILE* smt2in;
 
 class Main {
 public:
@@ -64,15 +67,12 @@ public:
 
     STPMgr* bm;
     bool onePrintBack;
+    FILE* toClose;
 
     virtual int create_and_parse_options(int argc, char** argv);
 
     //Files to read
     std::string infile;
-    FILE* toClose;
-    FILE* cvcin;
-    FILE* smtin;
-    FILE* smt2in;
 
     //For options
     size_t hardTimeout;
