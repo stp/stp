@@ -42,7 +42,7 @@ namespace BEEV
 {
   using simplifier::constantBitP::Dependencies;
 
-  class RemoveUnconstrained :  boost::noncopyable
+  class RemoveUnconstrained  //not copyable
   {
     STPMgr& bm;
 

@@ -41,7 +41,7 @@ namespace BEEV
     class Simplifier;
     class ArrayTransformer;
 
-    class PropagateEqualities :  boost::noncopyable
+    class PropagateEqualities  //not copyable
     {
 
         Simplifier *simp;
