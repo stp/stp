@@ -1487,8 +1487,8 @@ namespace CONSTANTBV {
     unsigned int  length;
     unsigned char * string;
 
-    assert(*addr >= 3);
     length = bits_(addr);
+    assert(length+1 > 0); //NOTE: Rollaround!
     string = (unsigned char *) malloc((size_t) (length+1));
     if (string == NULL) {
       return(NULL);
