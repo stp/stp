@@ -626,7 +626,10 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr **indices, Expr **values, int
   *size = entries.size();
   if (*size != 0) {
     *indices = (Expr *) malloc(*size * sizeof(Expr*));
+    assert(*indices);
     *values = (Expr *) malloc(*size * sizeof(Expr*));
+    assert(*values);
+
     for (int i = 0; i < *size; ++i) {
       (*indices)[i] = new node(entries[i].first);
       (*values)[i] = new node(entries[i].second);

@@ -226,6 +226,7 @@ void ClauseAllocator::consolidate(Solver* solver)
 
     uint32_t newMaxSize = std::max(sum*2*sizeof(uint32_t), MIN_LIST_SIZE);
     uint32_t* newDataStarts = (uint32_t*)malloc(newMaxSize);
+    assert(newDataStarts);
     newMaxSize /= sizeof(uint32_t);
     uint32_t newSize = 0;
     vec<uint32_t> newOrigClauseSizes;
