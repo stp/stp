@@ -38,8 +38,7 @@ using namespace MINISAT;
 
 //#define DEBUG_CLAUSEALLOCATOR
 
-ClauseAllocator::ClauseAllocator() :
-    clausePoolBin(sizeof(Clause) + 2*sizeof(Lit))
+ClauseAllocator::ClauseAllocator()
 {}
 
 ClauseAllocator::~ClauseAllocator()
@@ -97,7 +96,7 @@ void* ClauseAllocator::allocEnough(const uint32_t size)
     assert(sizeof(Lit)%sizeof(uint32_t) == 0);
 
     if (size == 2) {
-        return clausePoolBin.malloc();
+        return clausePoolBin.GetMemory(sizeof(Clause) + sizeof(Lit)*2);
     }
 
     uint32_t needed = sizeof(Clause)+sizeof(Lit)*size;
@@ -181,7 +180,7 @@ inline uint32_t ClauseAllocator::getInterOffset(const Clause* ptr, uint32_t oute
 void ClauseAllocator::clauseFree(Clause* c)
 {
     if (c->wasBin()) {
-        clausePoolBin.free(c);
+        clausePoolBin.FreeMemory(c, sizeof(Clause) + sizeof(Lit)*2);
     } else {
         c->setFreed();
         uint32_t outerOffset = getOuterOffset(c);
