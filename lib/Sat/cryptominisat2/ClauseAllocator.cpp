@@ -230,7 +230,6 @@ void ClauseAllocator::consolidate(Solver* solver)
     newMaxSize /= sizeof(uint32_t);
     uint32_t newSize = 0;
     vec<uint32_t> newOrigClauseSizes;
-    //}
 
     map<Clause*, Clause*> oldToNewPointer;
     map<uint32_t, uint32_t> oldToNewOffset;
