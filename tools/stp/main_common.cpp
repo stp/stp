@@ -190,6 +190,20 @@ int Main::create_and_parse_options(int argc, char **argv)
     return 0;
 }
 
+void Main::check_infile_type()
+{
+    if (infile.size() >= 5) {
+        if (!infile.compare(infile.length() - 4, 4, ".smt")) {
+            bm->UserFlags.division_by_zero_returns_one_flag = true;
+            bm->UserFlags.smtlib1_parser_flag = true;
+        }
+        if (!infile.compare(infile.length() - 5, 5, ".smt2")) {
+            bm->UserFlags.division_by_zero_returns_one_flag = true;
+            bm->UserFlags.smtlib2_parser_flag = true;
+        }
+    }
+}
+
 int Main::main(int argc, char** argv)
 {
     auto_ptr<SimplifyingNodeFactory> simplifyingNF( new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));

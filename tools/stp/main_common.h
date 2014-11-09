@@ -73,6 +73,7 @@ public:
 
     //Files to read
     std::string infile;
+    void check_infile_type();
 
     //For options
     size_t hardTimeout;

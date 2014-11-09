@@ -247,8 +247,17 @@ if(NOT BUILD_SHARED_LIBS)
     message("Trying to use static Boost libraries")
     set(Boost_USE_STATIC_LIBS ON)
 endif()
-find_package( Boost 1.46 REQUIRED COMPONENTS program_options system)
-include_directories(${Boost_INCLUDE_DIRS})
+
+option(NO_BOOST "Don't try to use boost" OFF)
+if (NOT NO_BOOST)
+    find_package( Boost 1.46 COMPONENTS program_options)
+endif()
+if(NOT Boost_FOUND)
+    message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
+else()
+    include_directories(${Boost_INCLUDE_DIRS})
+endif()
+
 
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat4
@@ -347,7 +356,10 @@ set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
 
 # Export targets
-export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+if (Boost_FOUND)
+    export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+endif()
+export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")

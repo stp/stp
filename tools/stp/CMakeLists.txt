@@ -11,12 +11,14 @@ if (BUILD_STATIC_BIN)
     set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
 endif()
 
-add_executable(stp
-    main.cpp
-    main_common.cpp
-    STPProgramGlobals.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
-)
+if (Boost_FOUND)
+    add_executable(stp
+        main.cpp
+        main_common.cpp
+        STPProgramGlobals.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
+    )
+endif()
 
 add_executable(stp_simple
     main_simple.cpp
@@ -26,23 +28,26 @@ add_executable(stp_simple
 )
 
 if (BUILD_STATIC_BIN)
-    set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
-    set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
+    if (Boost_FOUND)
+        set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
+        set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
+    endif()
 
     set_target_properties(stp_simple PROPERTIES LINK_SEARCH_END_STATIC 1)
     set_target_properties(stp_simple PROPERTIES LINK_SEARCH_START_STATIC 0)
 endif()
 
-set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-set_target_properties(stp_simple PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-
-target_link_libraries(stp libstp)
-target_link_libraries(stp_simple libstp)
-
-install(TARGETS stp
+if (Boost_FOUND)
+    set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+    target_link_libraries(stp libstp)
+    install(TARGETS stp
         EXPORT ${STP_EXPORT_NAME}
         RUNTIME DESTINATION bin
-)
+    )
+endif()
+
+set_target_properties(stp_simple PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+target_link_libraries(stp_simple libstp)
 
 install(TARGETS stp_simple
         EXPORT ${STP_EXPORT_NAME}

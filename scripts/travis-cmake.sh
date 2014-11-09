@@ -71,6 +71,12 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
+    NO_BOOST)
+        eval cmake ${COMMON_CMAKE_ARGS} \
+                   -DNO_BOOSTS:BOOL=ON \
+                   ${SOURCE_DIR}
+    ;;
+
     *)
         echo "\"${STP_CONFIG}\" configuration not recognised"
         exit 1
