@@ -145,6 +145,7 @@ Aig_Tsi_t * Aig_TsiStart( Aig_Man_t * pAig )
     Aig_Tsi_t * p;
     p = (Aig_Tsi_t *)malloc( sizeof(Aig_Tsi_t) );
     memset( p, 0, sizeof(Aig_Tsi_t) );
+    assert(p);
     p->pAig    = pAig;
     p->nWords  = Aig_BitWordNum( 2*Aig_ManRegNum(pAig) );
     p->vStates = Vec_PtrAlloc( 1000 );
