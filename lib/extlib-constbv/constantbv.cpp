@@ -46,7 +46,9 @@
 #include <limits.h>                                 /*  MODULE TYPE:  (sys)  */
 #include <string.h>                                 /*  MODULE TYPE:  (sys)  */
 #include <ctype.h>                                  /*  MODULE TYPE:  (sys)  */
+#include <cassert>
 #include "constantbv.h"
+
 
 namespace CONSTANTBV {
   /*****************************************************************************/
@@ -1485,6 +1487,7 @@ namespace CONSTANTBV {
     unsigned int  length;
     unsigned char * string;
 
+    assert(*addr >= 3);
     length = bits_(addr);
     string = (unsigned char *) malloc((size_t) (length+1));
     if (string == NULL) return(NULL);
