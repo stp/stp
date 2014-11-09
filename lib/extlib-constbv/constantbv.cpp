@@ -1490,9 +1490,11 @@ namespace CONSTANTBV {
     assert(*addr >= 3);
     length = bits_(addr);
     string = (unsigned char *) malloc((size_t) (length+1));
-    if (string == NULL) return(NULL);
+    if (string == NULL) {
+      return(NULL);
+    }
     string += length;
-    *string = (unsigned char) '\0';
+    string[0] = '\0';
     if (size > 0)
       {
         *(addr+size-1) &= mask_(addr);
