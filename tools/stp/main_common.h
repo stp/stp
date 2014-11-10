@@ -41,28 +41,29 @@ THE SOFTWARE.
 #include <stdio.h>
 #include "Util/GitSHA1.h"
 
-class Main {
+class Main
+{
 public:
-    Main();
-    virtual ~Main();
-    int main(int argc, char** argv);
-    void parse_file(ASTVec* AssertsQuery);
-    void print_back(ASTNode& query, ASTNode& asserts);
-    void read_file();
+  Main();
+  virtual ~Main();
+  int main(int argc, char** argv);
+  void parse_file(ASTVec* AssertsQuery);
+  void print_back(ASTNode& query, ASTNode& asserts);
+  void read_file();
 
-    STPMgr* bm;
-    bool onePrintBack;
-    FILE* toClose;
+  STPMgr* bm;
+  bool onePrintBack;
+  FILE* toClose;
 
-    virtual int create_and_parse_options(int argc, char** argv);
+  virtual int create_and_parse_options(int argc, char** argv);
 
-    //Files to read
-    std::string infile;
-    void check_infile_type();
+  // Files to read
+  std::string infile;
+  void check_infile_type();
 
-    //For options
-    size_t hardTimeout;
-    size_t random_seed;
+  // For options
+  size_t hardTimeout;
+  size_t random_seed;
 };
 
 #endif //__MAIN_COMMON_H__

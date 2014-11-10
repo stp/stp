@@ -29,26 +29,28 @@ THE SOFTWARE.
 class SimpleMain : public Main
 {
 public:
-    virtual int create_and_parse_options(int argc, char** argv);
+  virtual int create_and_parse_options(int argc, char** argv);
 };
 
 int SimpleMain::create_and_parse_options(int argc, char** argv)
 {
-    if (argc > 2) {
-        std::cerr << "Only one option is allowed, the input file" << std::endl;
-        exit(0);
-    }
+  if (argc > 2)
+  {
+    std::cerr << "Only one option is allowed, the input file" << std::endl;
+    exit(0);
+  }
 
-    if (argc > 1) {
-        infile = argv[1];
-        check_infile_type();
-    }
+  if (argc > 1)
+  {
+    infile = argv[1];
+    check_infile_type();
+  }
 
-    return 0;
+  return 0;
 }
 
-
-int main(int argc, char **argv) {
-    SimpleMain main;
-    return main.main(argc, argv);
+int main(int argc, char** argv)
+{
+  SimpleMain main;
+  return main.main(argc, argv);
 }
