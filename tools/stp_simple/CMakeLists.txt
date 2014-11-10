@@ -13,7 +13,7 @@ add_executable(stp_simple
     main_simple.cpp
     ../stp/main_common.cpp
     ../stp/STPProgramGlobals.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/../GitSHA1.cpp
+    ${CMAKE_BINARY_DIR}/lib/Util/GitSHA1.cpp
 )
 
 if (BUILD_STATIC_BIN)

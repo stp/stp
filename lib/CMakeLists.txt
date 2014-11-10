@@ -10,6 +10,7 @@ add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
 add_subdirectory(Sat)
+add_subdirectory(Util)
 
 #add_subdirectory(Utils)
 
