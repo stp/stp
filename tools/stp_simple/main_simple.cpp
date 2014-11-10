@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Mate Soos
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: Nov, 2014
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "main_common.h"
+#include "../stp/main_common.h"
 
 #include <iostream>
 

@@ -39,22 +39,7 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 #include <stdio.h>
-#include "extlib-abc/cnf_short.h"
-#include "GitSHA1.h"
-
-extern int smtparse(void*);
-extern int smt2parse();
-extern int cvcparse(void*);
-extern int cvclex_destroy(void);
-extern int smtlex_destroy(void);
-extern int smt2lex_destroy(void);
-extern void errorHandler(const char* error_msg);
-
-// Amount of memory to ask for at beginning of main.
-extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
-extern FILE* cvcin;
-extern FILE* smtin;
-extern FILE* smt2in;
+#include "../GitSHA1.h"
 
 class Main {
 public:
