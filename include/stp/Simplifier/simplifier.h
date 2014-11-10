@@ -33,223 +33,208 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-  ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
-  ASTNode NonMemberBVConstEvaluator(STPMgr* _bm , const Kind k, const ASTVec& input_children, unsigned int inputwidth);
+ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
+ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
+                                  const ASTVec& input_children,
+                                  unsigned int inputwidth);
 
-  class Simplifier  //not copyable
+class Simplifier // not copyable
+{
+  friend class counterexample;
+
+private:
+  /****************************************************************
+   * Private Data and TypeDefs                                    *
+   ****************************************************************/
+
+  // Handy defs
+  ASTNode ASTTrue, ASTFalse, ASTUndefined;
+
+  // Memo table for simplifcation. Key is unsimplified node, and
+  // value is simplified node.
+  ASTNodeMap* SimplifyMap;
+  ASTNodeMap* SimplifyNegMap;
+  hash_set<int> AlwaysTrueHashSet;
+  ASTNodeMap MultInverseMap;
+
+  // For ArrayWrite Abstraction: map from read-over-write term to
+  // newname.
+  // ASTNodeMap * ReadOverWrite_NewName_Map;
+
+  // For ArrayWrite Refinement: Map new arraynames to
+  // Read-Over-Write terms
+  // ASTNodeMap NewName_ReadOverWrite_Map;
+
+  // Ptr to STP Manager
+  STPMgr* _bm;
+
+  NodeFactory* nf;
+
+  SubstitutionMap substitutionMap;
+
+  void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
+
+  ASTNode makeTower(const Kind k, const ASTVec& children);
+
+  ASTNode pullUpBVSX(const ASTNode output);
+
+public:
+  static ASTNode convertArithmeticKnownShiftAmount(const Kind k,
+                                                   const ASTVec& children,
+                                                   STPMgr& bm, NodeFactory* nf);
+  static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children,
+                                         STPMgr& bm, NodeFactory* nf);
+
+  /****************************************************************
+   * Public Member Functions                                      *
+   ****************************************************************/
+  Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(this, bm)
   {
-    friend class counterexample;
-  private:
+    SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    // ReadOverWrite_NewName_Map = new ASTNodeMap();
 
-    /****************************************************************
-     * Private Data and TypeDefs                                    *
-     ****************************************************************/
+    ASTTrue = bm->CreateNode(TRUE);
+    ASTFalse = bm->CreateNode(FALSE);
+    ASTUndefined = bm->CreateNode(UNDEFINED);
 
-    // Handy defs
-    ASTNode ASTTrue, ASTFalse, ASTUndefined;
+    nf = bm->defaultNodeFactory;
+  }
 
-    // Memo table for simplifcation. Key is unsimplified node, and
-    // value is simplified node.
-    ASTNodeMap * SimplifyMap;
-    ASTNodeMap * SimplifyNegMap;
-    hash_set<int> AlwaysTrueHashSet;
-    ASTNodeMap MultInverseMap;
+  ~Simplifier()
+  {
+    delete SimplifyMap;
+    delete SimplifyNegMap;
+    // delete ReadOverWrite_NewName_Map;
+  }
 
-    // For ArrayWrite Abstraction: map from read-over-write term to
-    // newname.
-    //ASTNodeMap * ReadOverWrite_NewName_Map;
-      
-    // For ArrayWrite Refinement: Map new arraynames to
-    // Read-Over-Write terms
-    //ASTNodeMap NewName_ReadOverWrite_Map;
+  /****************************************************************
+   * Functions to check and update various Maps                   *
+   ****************************************************************/
 
-    //Ptr to STP Manager
-    STPMgr * _bm;
+  // Check the map passed to SimplifyTerm
+  bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
 
-    NodeFactory * nf;
+  // functions for checking and updating simplification map
+  bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg,
+                        ASTNodeMap* VarConstMap = NULL);
+  void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg,
+                         ASTNodeMap* VarConstMap = NULL);
+  bool CheckAlwaysTrueFormSet(const ASTNode& key, bool& result);
+  void UpdateAlwaysTrueFormSet(const ASTNode& val);
+  bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
+  void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
 
-    SubstitutionMap substitutionMap;
+  // Map for solved variables
+  bool UpdateSolverMap(const ASTNode& e0, const ASTNode& e1);
+  ASTNode topLevel(const ASTNode& a, ArrayTransformer* at);
 
-    void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
+  // substitution
+  bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
+  bool CheckSubstitutionMap(const ASTNode& a);
+  bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
+  bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
 
-    ASTNode makeTower(const Kind k , const ASTVec& children);
+  ASTNode applySubstitutionMap(const ASTNode& n);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
 
-    ASTNode pullUpBVSX(const ASTNode output);
+  void ResetSimplifyMaps(void);
 
-  public:
-    static ASTNode convertArithmeticKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf);
-    static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children, STPMgr& bm, NodeFactory *nf);
+  /****************************************************************
+   * Simplification functions                                     *
+   ****************************************************************/
 
+  ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg,
+                                   ASTNodeMap* VarConstMap = NULL);
 
-    /****************************************************************
-     * Public Member Functions                                      *
-     ****************************************************************/      
-    Simplifier(STPMgr * bm) : _bm(bm),
-    substitutionMap(this,bm)
-    {
-      SimplifyMap    = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-      //ReadOverWrite_NewName_Map = new ASTNodeMap();
+  ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
 
-      ASTTrue  = bm->CreateNode(TRUE);
-      ASTFalse = bm->CreateNode(FALSE);
-      ASTUndefined = bm->CreateNode(UNDEFINED);
+  ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg,
+                          ASTNodeMap* VarConstMap = NULL);
 
-      nf = bm->defaultNodeFactory;
-    }
-      
-    ~Simplifier()
-    {
-      delete SimplifyMap;
-      delete SimplifyNegMap;
-      //delete ReadOverWrite_NewName_Map;
-    }
+  bool hasBeenSimplified(const ASTNode& n);
 
-    /****************************************************************
-     * Functions to check and update various Maps                   *
-     ****************************************************************/      
-      
-    //Check the map passed to SimplifyTerm
-    bool CheckMap(ASTNodeMap* VarConstMap, 
-                  const ASTNode& key, ASTNode& output);
+  ASTNode SimplifyTerm(const ASTNode& inputterm,
+                       ASTNodeMap* VarConstMap = NULL);
 
-      
-    //functions for checking and updating simplification map
-    bool CheckSimplifyMap(const ASTNode& key, 
-                          ASTNode& output, 
-                          bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    void UpdateSimplifyMap(const ASTNode& key, 
-                           const ASTNode& value, 
-                           bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-    bool CheckAlwaysTrueFormSet(const ASTNode& key, bool& result);
-    void UpdateAlwaysTrueFormSet(const ASTNode& val);
-    bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
-    void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
-      
-    //Map for solved variables
-    bool UpdateSolverMap(const ASTNode& e0, const ASTNode& e1);     
-    ASTNode topLevel(const ASTNode& a,
-  		ArrayTransformer *at);
+  ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg,
+                                         ASTNodeMap* VarConstMap = NULL);
 
-    //substitution
-    bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
-    bool CheckSubstitutionMap(const ASTNode& a);
-    bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
-    bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
+  ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
+                                ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode applySubstitutionMap(const ASTNode& n);
-    ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
+  ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
 
-    void ResetSimplifyMaps(void);
+  ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNodeMap* VarConstMap = NULL);
 
-    /****************************************************************
-     * Simplification functions                                     *
-     ****************************************************************/      
+  ASTNode PullUpITE(const ASTNode& in);
 
-    ASTNode SimplifyFormula_TopLevel(const ASTNode& a, 
-                                     bool pushNeg,
-                                     ASTNodeMap* VarConstMap=NULL);
+  ASTNode CreateSimplifiedTermITE(const ASTNode& t1, const ASTNode& t2,
+                                  const ASTNode& t3);
 
-    ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
+  ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1,
+                                     const ASTNode& in2);
 
+  ASTNode CreateSimplifiedINEQ(const Kind k, const ASTNode& a0,
+                               const ASTNode& a1, bool pushNeg);
 
-    ASTNode SimplifyFormula(const ASTNode& a, 
-                            bool pushNeg, 
-                            ASTNodeMap* VarConstMap=NULL);
+  ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
+  ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
+                               ASTNodeMap* VarConstMap = NULL);
 
-    bool hasBeenSimplified(const ASTNode& n);
+  ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode SimplifyTerm(const ASTNode& inputterm, 
-                         ASTNodeMap* VarConstMap=NULL);
-      
+  ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg,
+                              ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, 
-                                           bool pushNeg, 
-                                           ASTNodeMap* VarConstMap=NULL);
+  ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode SimplifyAtomicFormula(const ASTNode& a, 
-                                  bool pushNeg, 
-                                  ASTNodeMap* VarConstMap=NULL);
+  ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg,
+                                 ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode CreateSimplifiedEQ(const ASTNode& t1, 
-                               const ASTNode& t2);
+  ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode ITEOpt_InEqs(const ASTNode& in1, 
-                         ASTNodeMap* VarConstMap=NULL);
+  ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode PullUpITE(const ASTNode& in);
+  ASTNode SimplifyForFormula(const ASTNode& a, bool pushNeg,
+                             ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode CreateSimplifiedTermITE(const ASTNode& t1, 
-                                    const ASTNode& t2, 
-                                    const ASTNode& t3);
+  ASTNode CombineLikeTerms(const ASTNode& a);
+  ASTNode CombineLikeTerms(const ASTVec& a);
 
-    ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, 
-                                       const ASTNode& in1, 
-                                       const ASTNode& in2);
+  ASTNode LhsMinusRhs(const ASTNode& eq);
 
-    ASTNode CreateSimplifiedINEQ(const Kind k,
-                                 const ASTNode& a0, 
-                                 const ASTNode& a1, bool pushNeg);
+  ASTNode DistributeMultOverPlus(const ASTNode& a,
+                                 bool startdistribution = false);
 
-    ASTNode SimplifyNotFormula(const ASTNode& a, 
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  // ASTNode ConvertBVSXToITE(const ASTNode& a);
 
-    ASTNode SimplifyAndOrFormula(const ASTNode& a,
-                                 bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  ASTNode BVConstEvaluator(const ASTNode& t);
 
-    ASTNode SimplifyXorFormula(const ASTNode& a,
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  // checks if the input constant is odd or not
+  bool BVConstIsOdd(const ASTNode& c);
 
-    ASTNode SimplifyNandFormula(const ASTNode& a,
-                                bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  // computes the multiplicatve inverse of the input
+  ASTNode MultiplicativeInverse(const ASTNode& c);
 
-    ASTNode SimplifyNorFormula(const ASTNode& a,
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  // Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
+  ASTNode RemoveWrites_TopLevel(const ASTNode& term);
+  ASTNode RemoveWrites(const ASTNode& term);
+  ASTNode SimplifyWrites_InPlace(const ASTNode& term,
+                                 ASTNodeMap* VarConstMap = NULL);
 
-    ASTNode SimplifyImpliesFormula(const ASTNode& a,
-                                   bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  ASTNode SimplifyArrayTerm(const ASTNode& term, ASTNodeMap* VarConstMap);
 
-    ASTNode SimplifyIffFormula(const ASTNode& a,
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
+  // ASTNode ReadOverWrite_To_ITE(const ASTNode& term,
+  //                              ASTNodeMap* VarConstMap=NULL);
 
-    ASTNode SimplifyIteFormula(const ASTNode& a,
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-
-    ASTNode SimplifyForFormula(const ASTNode& a,
-                               bool pushNeg, ASTNodeMap* VarConstMap=NULL);
-
-
-    ASTNode CombineLikeTerms(const ASTNode& a);
-    ASTNode CombineLikeTerms(const ASTVec& a);
-
-    ASTNode LhsMinusRhs(const ASTNode& eq);
-
-    ASTNode DistributeMultOverPlus(const ASTNode& a,
-                                   bool startdistribution = false);
-
-    //ASTNode ConvertBVSXToITE(const ASTNode& a);
-
-    ASTNode BVConstEvaluator(const ASTNode& t);
-
-    //checks if the input constant is odd or not
-    bool BVConstIsOdd(const ASTNode& c);
-
-    //computes the multiplicatve inverse of the input
-    ASTNode MultiplicativeInverse(const ASTNode& c);
-
-    //Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
-    ASTNode RemoveWrites_TopLevel(const ASTNode& term);
-    ASTNode RemoveWrites(const ASTNode& term);
-    ASTNode SimplifyWrites_InPlace(const ASTNode& term, 
-                                   ASTNodeMap* VarConstMap=NULL);
-
-    ASTNode SimplifyArrayTerm(const ASTNode& term,ASTNodeMap* VarConstMap);
-
-    //ASTNode ReadOverWrite_To_ITE(const ASTNode& term,
-    //                              ASTNodeMap* VarConstMap=NULL);
-
-    void printCacheStatus();
+  void printCacheStatus();
 
 #if 0
     //FIXME: Get rid of this horrible function
@@ -259,49 +244,47 @@ namespace BEEV
     } // End of ReadOverWriteMap()
 #endif
 
-    bool hasUnappliedSubstitutions()
-    {
-      return substitutionMap.hasUnappliedSubstitutions();
-    }
+  bool hasUnappliedSubstitutions()
+  {
+    return substitutionMap.hasUnappliedSubstitutions();
+  }
 
-    ASTNodeMap * Return_SolverMap()
-    {
-    	return substitutionMap.Return_SolverMap();
-    } // End of SolverMap()
+  ASTNodeMap* Return_SolverMap()
+  {
+    return substitutionMap.Return_SolverMap();
+  } // End of SolverMap()
 
-    void haveAppliedSubstitutionMap()
-    {
-    	substitutionMap.haveAppliedSubstitutionMap();
-    }
+  void haveAppliedSubstitutionMap()
+  {
+    substitutionMap.haveAppliedSubstitutionMap();
+  }
 
+  void ClearAllTables(void)
+  {
+    SimplifyMap->clear();
+    SimplifyNegMap->clear();
+    // ReadOverWrite_NewName_Map->clear();
+    // NewName_ReadOverWrite_Map.clear();
+    AlwaysTrueHashSet.clear();
+    MultInverseMap.clear();
+    substitutionMap.clear();
+  }
 
-    void ClearAllTables(void) 
-    {
-      SimplifyMap->clear();
-      SimplifyNegMap->clear();
-      //ReadOverWrite_NewName_Map->clear();
-      //NewName_ReadOverWrite_Map.clear();
-      AlwaysTrueHashSet.clear();
-      MultInverseMap.clear();
-      substitutionMap.clear();
-    }
+  // These can be cleared (to save memory) without changing the answer.
+  void ClearCaches()
+  {
+    AlwaysTrueHashSet.clear();
+    MultInverseMap.clear();
+    SimplifyMap->clear();
+    SimplifyNegMap->clear();
+    getVariablesInExpression().ClearAllTables();
+  }
 
+  VariablesInExpression& getVariablesInExpression()
+  {
+    return substitutionMap.vars;
+  }
 
-    // These can be cleared (to save memory) without changing the answer.
-    void ClearCaches()
-    {
-        AlwaysTrueHashSet.clear();
-        MultInverseMap.clear();
-        SimplifyMap->clear();
-        SimplifyNegMap->clear();
-        getVariablesInExpression().ClearAllTables();
-    }
-
-    VariablesInExpression& getVariablesInExpression()
-    {
-    	return substitutionMap.vars;
-    }
-
-  };//end of class Simplifier
-} //end of namespace
+}; // end of class Simplifier
+} // end of namespace
 #endif

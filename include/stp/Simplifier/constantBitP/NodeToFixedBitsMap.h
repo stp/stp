@@ -35,39 +35,33 @@ THE SOFTWARE.
 
 namespace simplifier
 {
-  namespace constantBitP
+namespace constantBitP
+{
+
+class NodeToFixedBitsMap
+{
+public:
+  typedef hash_map<BEEV::ASTNode, FixedBits*, BEEV::ASTNode::ASTNodeHasher,
+                   BEEV::ASTNode::ASTNodeEqual> NodeToFixedBitsMapType;
+
+  NodeToFixedBitsMapType* map;
+
+  NodeToFixedBitsMap(int size) { map = new NodeToFixedBitsMapType(size); }
+  virtual ~NodeToFixedBitsMap()
   {
-
-    class NodeToFixedBitsMap
-    {
-    public:
-      typedef hash_map<BEEV::ASTNode, FixedBits*,
-          BEEV::ASTNode::ASTNodeHasher, BEEV::ASTNode::ASTNodeEqual>
-          NodeToFixedBitsMapType;
-
-      NodeToFixedBitsMapType* map;
-
-      NodeToFixedBitsMap(int size)
-      {
-        map = new NodeToFixedBitsMapType(size);
-      }
-      virtual
-      ~NodeToFixedBitsMap()
-      {
-        clear();
-        delete map;
-      }
-
-      void
-      clear()
-      {
-        NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator itD = map->begin();
-        for (; itD != map->end(); itD++)
-          delete itD->second;
-        map->clear();
-      }
-    };
+    clear();
+    delete map;
   }
+
+  void clear()
+  {
+    NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator itD = map->begin();
+    for (; itD != map->end(); itD++)
+      delete itD->second;
+    map->clear();
+  }
+};
+}
 }
 
 #endif /* NODETOFIXEDBITSMAP_H_ */

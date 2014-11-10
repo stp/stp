@@ -35,22 +35,19 @@ private:
   bool empty;
 
 public:
-  ASTNode
-  getV() const
+  ASTNode getV() const
   {
     assert(!empty);
     return v;
   }
 
-  ASTNode
-  getW() const
+  ASTNode getW() const
   {
     assert(!empty);
     return w;
   }
 
-  void
-  setValues(const ASTNode& nv, const ASTNode& nw)
+  void setValues(const ASTNode& nv, const ASTNode& nw)
   {
     assert(nv.isConstant());
     assert(nw.isConstant());
@@ -60,11 +57,7 @@ public:
     empty = false;
   }
 
-  VariableAssignment()
-  {
-    empty = true;
-  }
-
+  VariableAssignment() { empty = true; }
 };
 
 #endif

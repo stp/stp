@@ -24,13 +24,14 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
- * This could very nicely run after unconstrained variable elmination. If we traversed from
- * the root node, we could stop traversing whenever we met a node that wasn't an AND or OR, then
+ * This could very nicely run after unconstrained variable elmination. If we
+ *traversed from
+ * the root node, we could stop traversing whenever we met a node that wasn't an
+ *AND or OR, then
  * we'd just check the number of parents of each boolean symbol that we found.
  *
  * I'm not sure that I've gotten all the polarities sorted.
  */
-
 
 #ifndef FINDPURELITERALS_H_
 #define FINDPURELITERALS_H_
@@ -42,9 +43,9 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-  using std::map;
+using std::map;
 
-class FindPureLiterals //not copyable
+class FindPureLiterals // not copyable
 {
   typedef char polarity_type;
   const static polarity_type truePolarity = 1;
@@ -68,84 +69,79 @@ class FindPureLiterals //not copyable
   }
 
 public:
-  FindPureLiterals()
-  {}
-  virtual
-  ~FindPureLiterals()
-  {}
+  FindPureLiterals() {}
+  virtual ~FindPureLiterals() {}
 
   // Build the polarities, then iterate through fixing them.
-  bool topLevel(ASTNode& n, Simplifier *simplifier, STPMgr *stp)
+  bool topLevel(ASTNode& n, Simplifier* simplifier, STPMgr* stp)
   {
     stp->GetRunTimes()->start(RunTimes::PureLiterals);
 
-    build(n , truePolarity);
+    build(n, truePolarity);
     bool changed = false;
 
     map<ASTNode, polarity_type>::const_iterator it = nodeToPolarity.begin();
     while (it != nodeToPolarity.end())
+    {
+      const ASTNode& n = it->first;
+      const polarity_type polarity = it->second;
+      if (n.GetType() == BOOLEAN_TYPE && n.GetKind() == SYMBOL &&
+          polarity != bothPolarity)
       {
-        const ASTNode& n = it->first;
-        const polarity_type polarity = it->second;
-        if (n.GetType() == BOOLEAN_TYPE && n.GetKind() == SYMBOL && polarity != bothPolarity)
-          {
-              if (polarity == truePolarity)
-                simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTTrue);
-              else
-              {
-                assert (polarity == falsePolarity);
-                simplifier->UpdateSubstitutionMap(n,n.GetSTPMgr()->ASTFalse);
-              }
-            changed = true;
-          }
-        it++;
+        if (polarity == truePolarity)
+          simplifier->UpdateSubstitutionMap(n, n.GetSTPMgr()->ASTTrue);
+        else
+        {
+          assert(polarity == falsePolarity);
+          simplifier->UpdateSubstitutionMap(n, n.GetSTPMgr()->ASTFalse);
+        }
+        changed = true;
       }
+      it++;
+    }
     stp->GetRunTimes()->stop(RunTimes::PureLiterals);
     return changed;
   }
 
-
-  void build(const ASTNode& n , polarity_type polarity)
+  void build(const ASTNode& n, polarity_type polarity)
   {
     if (n.isConstant())
       return;
 
     map<ASTNode, polarity_type>::iterator it = nodeToPolarity.find(n);
     if (it != nodeToPolarity.end())
-      {
-        int lookupPolarity = it->second;
-        if ((polarity | lookupPolarity) == lookupPolarity )
-          return; // already traversed.
+    {
+      int lookupPolarity = it->second;
+      if ((polarity | lookupPolarity) == lookupPolarity)
+        return; // already traversed.
 
-        it->second |= polarity;
-      }
+      it->second |= polarity;
+    }
     else
-      {
-        nodeToPolarity.insert(std::make_pair(n,polarity));
-      }
+    {
+      nodeToPolarity.insert(std::make_pair(n, polarity));
+    }
     const Kind k = n.GetKind();
     switch (k)
     {
-    case AND:
-    case OR:
-      for (size_t i =0; i < n.Degree(); i ++)
-        build(n[i],polarity);
-      break;
+      case AND:
+      case OR:
+        for (size_t i = 0; i < n.Degree(); i++)
+          build(n[i], polarity);
+        break;
 
-    case NOT:
-         polarity = swap(polarity);
-         build(n[0],polarity);
-      break;
+      case NOT:
+        polarity = swap(polarity);
+        build(n[0], polarity);
+        break;
 
-    default:
+      default:
         polarity = bothPolarity; // both
-        for (size_t i =0; i < n.Degree(); i ++)
-          build(n[i],polarity);
-      break;
+        for (size_t i = 0; i < n.Degree(); i++)
+          build(n[i], polarity);
+        break;
     }
   }
-
-
 };
 }
 #endif /* FINDPURELITERALS_H_ */

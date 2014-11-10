@@ -25,14 +25,14 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include "stp/c_interface.h"
 
-TEST(b4_c,one)
+TEST(b4_c, one)
 {
   VC vc = vc_createValidityChecker();
-  vc_setFlag(vc,'v');
-  vc_setFlag(vc,'s');
-  vc_setFlag(vc,'n');
+  vc_setFlag(vc, 'v');
+  vc_setFlag(vc, 's');
+  vc_setFlag(vc, 'n');
 
-  //vc_push(vc);
+  // vc_push(vc);
   Expr e12866 = vc_varExpr(vc, "at", vc_bvType(vc, 5));
   Expr e12867 = e12866;
   Expr e12868 = vc_bvConstExprFromStr(vc, "10000");
@@ -45,20 +45,26 @@ TEST(b4_c,one)
   Expr e12875 = vc_varExpr(vc, "lambda", vc_bvType(vc, 8));
   Expr e12876 = e12875;
   Expr e12877 = e12870;
-  Expr e12878 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 0), vc_bvRightShiftExpr(vc, 1 << 0, e12877), e12877);
-  Expr e12879 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 1), vc_bvRightShiftExpr(vc, 1 << 1, e12878), e12878);
-  Expr e12880 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 2), vc_bvRightShiftExpr(vc, 1 << 2, e12879), e12879);
+  Expr e12878 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 0),
+                           vc_bvRightShiftExpr(vc, 1 << 0, e12877), e12877);
+  Expr e12879 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 1),
+                           vc_bvRightShiftExpr(vc, 1 << 1, e12878), e12878);
+  Expr e12880 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12876, 2),
+                           vc_bvRightShiftExpr(vc, 1 << 2, e12879), e12879);
   Expr e12881 = vc_bvConstExprFromStr(vc, "00000001");
   Expr e12882 = vc_eqExpr(vc, e12880, e12881);
   Expr e12883 = vc_impliesExpr(vc, e12874, e12882);
   Expr e12884 = e12866;
-  Expr e12885 = vc_eqExpr(vc, vc_bvExtract(vc, e12884, 0, 0), vc_bvConstExprFromStr(vc, "1"));
+  Expr e12885 = vc_eqExpr(vc, vc_bvExtract(vc, e12884, 0, 0),
+                          vc_bvConstExprFromStr(vc, "1"));
   Expr e12886 = vc_varExpr(vc, "k", vc_bvType(vc, 8));
   Expr e12887 = e12886;
-  Expr e12888 = vc_eqExpr(vc, vc_bvExtract(vc, e12887, 7, 7), vc_bvConstExprFromStr(vc, "1"));
+  Expr e12888 = vc_eqExpr(vc, vc_bvExtract(vc, e12887, 7, 7),
+                          vc_bvConstExprFromStr(vc, "1"));
   Expr e12889 = vc_notExpr(vc, e12888);
   Expr e12890 = e12866;
-  Expr e12891 = vc_eqExpr(vc, vc_bvExtract(vc, e12890, 4, 4), vc_bvConstExprFromStr(vc, "1"));
+  Expr e12891 = vc_eqExpr(vc, vc_bvExtract(vc, e12890, 4, 4),
+                          vc_bvConstExprFromStr(vc, "1"));
   Expr e12892 = vc_orExpr(vc, e12889, e12891);
   Expr e12893 = vc_orExpr(vc, e12885, e12892);
   Expr e12894 = vc_trueExpr(vc);
@@ -133,10 +139,14 @@ TEST(b4_c,one)
   Expr e12963 = e12886;
   Expr e12964 = vc_bvLeftShiftExpr(vc, 3, e12963);
   Expr e12965 = vc_bvConstExprFromStr(vc, "111100001100110010101010");
-  Expr e12966 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 0), vc_bvRightShiftExpr(vc, 1 << 0, e12965), e12965);
-  Expr e12967 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 1), vc_bvRightShiftExpr(vc, 1 << 1, e12966), e12966);
-  Expr e12968 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 2), vc_bvRightShiftExpr(vc, 1 << 2, e12967), e12967);
-  Expr e12969 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 3), vc_bvRightShiftExpr(vc, 1 << 3, e12968), e12968);
+  Expr e12966 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 0),
+                           vc_bvRightShiftExpr(vc, 1 << 0, e12965), e12965);
+  Expr e12967 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 1),
+                           vc_bvRightShiftExpr(vc, 1 << 1, e12966), e12966);
+  Expr e12968 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 2),
+                           vc_bvRightShiftExpr(vc, 1 << 2, e12967), e12967);
+  Expr e12969 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e12964, 3),
+                           vc_bvRightShiftExpr(vc, 1 << 3, e12968), e12968);
   Expr e12970 = vc_bvExtract(vc, e12969, 7, 0);
   Expr e12971 = vc_bvAndExpr(vc, e12962, e12970);
   Expr e12972 = vc_bvConstExprFromStr(vc, "00000000");
@@ -171,10 +181,14 @@ TEST(b4_c,one)
   Expr e13001 = e12886;
   Expr e13002 = vc_bvLeftShiftExpr(vc, 3, e13001);
   Expr e13003 = vc_bvConstExprFromStr(vc, "111100001100110010101010");
-  Expr e13004 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 0), vc_bvRightShiftExpr(vc, 1 << 0, e13003), e13003);
-  Expr e13005 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 1), vc_bvRightShiftExpr(vc, 1 << 1, e13004), e13004);
-  Expr e13006 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 2), vc_bvRightShiftExpr(vc, 1 << 2, e13005), e13005);
-  Expr e13007 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 3), vc_bvRightShiftExpr(vc, 1 << 3, e13006), e13006);
+  Expr e13004 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 0),
+                           vc_bvRightShiftExpr(vc, 1 << 0, e13003), e13003);
+  Expr e13005 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 1),
+                           vc_bvRightShiftExpr(vc, 1 << 1, e13004), e13004);
+  Expr e13006 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 2),
+                           vc_bvRightShiftExpr(vc, 1 << 2, e13005), e13005);
+  Expr e13007 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13002, 3),
+                           vc_bvRightShiftExpr(vc, 1 << 3, e13006), e13006);
   Expr e13008 = vc_bvExtract(vc, e13007, 7, 0);
   Expr e13009 = vc_bvAndExpr(vc, e13000, e13008);
   Expr e13010 = vc_bvConstExprFromStr(vc, "00000000");
@@ -208,21 +222,36 @@ TEST(b4_c,one)
   Expr e13038 = e12875;
   Expr e13039 = e12886;
   Expr e13040 = vc_bvConstExprFromStr(vc, "00000001");
-  Expr e13041 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13039, 0), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 1, e13040), 8, 1), e13040);
-  Expr e13042 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13039, 1), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 2, e13041), 9, 2), e13041);
-  Expr e13043 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13039, 2), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 4, e13042), 11, 4), e13042);
+  Expr e13041 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13039, 0),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 1, e13040), 8, 1), e13040);
+  Expr e13042 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13039, 1),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 2, e13041), 9, 2), e13041);
+  Expr e13043 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13039, 2),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 4, e13042), 11, 4), e13042);
   Expr e13044 = vc_bvPlusExpr(vc, 8, e13038, e13043);
   Expr e13045 = vc_eqExpr(vc, e13037, e13044);
   Expr e13046 = e12918;
   Expr e13047 = e12886;
   Expr e13048 = vc_bvConstExprFromStr(vc, "00000001");
-  Expr e13049 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13047, 0), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 1, e13048), 8, 1), e13048);
-  Expr e13050 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13047, 1), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 2, e13049), 9, 2), e13049);
-  Expr e13051 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13047, 2), vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 4, e13050), 11, 4), e13050);
+  Expr e13049 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13047, 0),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 1, e13048), 8, 1), e13048);
+  Expr e13050 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13047, 1),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 2, e13049), 9, 2), e13049);
+  Expr e13051 = vc_iteExpr(
+      vc, vc_bvBoolExtract(vc, e13047, 2),
+      vc_bvExtract(vc, vc_bvLeftShiftExpr(vc, 4, e13050), 11, 4), e13050);
   Expr e13052 = e12920;
-  Expr e13053 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 0), vc_bvRightShiftExpr(vc, 1 << 0, e13052), e13052);
-  Expr e13054 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 1), vc_bvRightShiftExpr(vc, 1 << 1, e13053), e13053);
-  Expr e13055 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 2), vc_bvRightShiftExpr(vc, 1 << 2, e13054), e13054);
+  Expr e13053 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 0),
+                           vc_bvRightShiftExpr(vc, 1 << 0, e13052), e13052);
+  Expr e13054 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 1),
+                           vc_bvRightShiftExpr(vc, 1 << 1, e13053), e13053);
+  Expr e13055 = vc_iteExpr(vc, vc_bvBoolExtract(vc, e13051, 2),
+                           vc_bvRightShiftExpr(vc, 1 << 2, e13054), e13054);
   Expr e13056 = vc_eqExpr(vc, e13046, e13055);
   Expr e13057 = vc_andExpr(vc, e13045, e13056);
   Expr e13058 = e12904;
@@ -291,21 +320,23 @@ TEST(b4_c,one)
   Expr e13121 = vc_orExpr(vc, e13097, e13120);
   Expr e13122 = vc_andExpr(vc, e12896, e13121);
   Expr e13123 = e12886;
-  Expr e13124 = vc_eqExpr(vc, vc_bvExtract(vc, e13123, 7, 7), vc_bvConstExprFromStr(vc, "1"));
+  Expr e13124 = vc_eqExpr(vc, vc_bvExtract(vc, e13123, 7, 7),
+                          vc_bvConstExprFromStr(vc, "1"));
   Expr e13125 = vc_notExpr(vc, e13124);
   Expr e13126 = e12924;
-  Expr e13127 = vc_eqExpr(vc, vc_bvExtract(vc, e13126, 7, 7), vc_bvConstExprFromStr(vc, "1"));
+  Expr e13127 = vc_eqExpr(vc, vc_bvExtract(vc, e13126, 7, 7),
+                          vc_bvConstExprFromStr(vc, "1"));
   Expr e13128 = vc_notExpr(vc, e13127);
   Expr e13129 = vc_notExpr(vc, e13128);
   Expr e13130 = vc_andExpr(vc, e13125, e13129);
   Expr e13131 = vc_andExpr(vc, e13122, e13130);
   vc_assertFormula(vc, e13131);
-  //vc_push(vc);
+  // vc_push(vc);
   Expr e13132 = vc_falseExpr(vc);
   vc_query(vc, e13132);
-  //vc_pop(vc);
-  //vc_pop(vc);
+  // vc_pop(vc);
+  // vc_pop(vc);
   vc_Destroy(vc);
   // FIXME: Actually test something
-  //ASSERT_TRUE(false && "FIXME: Actually test something");
+  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

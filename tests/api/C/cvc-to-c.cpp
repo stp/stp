@@ -30,12 +30,13 @@ g++ -I$HOME/stp/c_interface cvc-to-c.cpp -L$HOME/stp/lib -lstp -o cvc-to-c
 #include "stp/c_interface.h"
 #include <iostream>
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
   VC vc = vc_createValidityChecker();
 
-  //vc_setFlags(vc,'n');
-  //vc_setFlags(vc,'d');
-  //vc_setFlags(vc,'p');
+  // vc_setFlags(vc,'n');
+  // vc_setFlags(vc,'d');
+  // vc_setFlags(vc,'p');
 
   Expr c = vc_parseExpr(vc, argv[1]);
 
@@ -44,4 +45,3 @@ int main(int argc, char** argv) {
   vc_Destroy(vc);
   return 0;
 }
-

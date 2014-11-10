@@ -27,7 +27,8 @@ THE SOFTWARE.
 #include <stdlib.h>
 #include "stp/c_interface.h"
 
-TEST(stp_array_model,one) {  
+TEST(stp_array_model, one)
+{
   VC vc = vc_createValidityChecker();
 
   Expr a = vc_bvCreateMemoryArray(vc, "a");
@@ -52,15 +53,16 @@ TEST(stp_array_model,one) {
 
   ASSERT_FALSE(vc_counterexample_size(vc) == 0);
 
-  Expr *indices;
-  Expr *values;
+  Expr* indices;
+  Expr* values;
   int size;
   vc_getCounterExampleArray(vc, a, &indices, &values, &size);
 
   ASSERT_FALSE(size == 0); // No array entries
 
   int j;
-  for (j = 0; j < size; ++j) {
+  for (j = 0; j < size; ++j)
+  {
     Expr index = vc_getCounterExample(vc, indices[j]);
     Expr value = vc_getCounterExample(vc, values[j]);
     unsigned long long i = getBVUnsigned(index);
@@ -70,5 +72,4 @@ TEST(stp_array_model,one) {
   }
 
   vc_Destroy(vc);
-
 }

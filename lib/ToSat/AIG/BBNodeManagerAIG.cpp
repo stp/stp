@@ -27,9 +27,4 @@ THE SOFTWARE.
 // FIXME: What is the point of this??
 namespace BEEV
 {
-
 }
-
-
-
-

@@ -38,72 +38,60 @@ THE SOFTWARE.
 namespace BEEV
 {
 
-  class ToSATAIG : public ToSATBase
+class ToSATAIG : public ToSATBase
+{
+private:
+  ASTNodeToSATVar nodeToSATVar;
+  simplifier::constantBitP::ConstantBitPropagation* cb;
+
+  ArrayTransformer* arrayTransformer;
+
+  // don't assign or copy construct.
+  ToSATAIG& operator=(const ToSATAIG& other);
+  ToSATAIG(const ToSATAIG& other);
+
+  int count;
+  bool first;
+
+  ToCNFAIG toCNF;
+
+  void init()
   {
-  private:
+    count = 0;
+    first = true;
+  }
 
-    ASTNodeToSATVar nodeToSATVar;
-    simplifier::constantBitP::ConstantBitPropagation* cb;
+  static int cnf_calls;
 
-    ArrayTransformer *arrayTransformer;
+public:
+  bool cbIsDestructed() { return cb == NULL; }
 
-    // don't assign or copy construct.
-    ToSATAIG&  operator = (const ToSATAIG& other);
-    ToSATAIG(const ToSATAIG& other);
+  ToSATAIG(STPMgr* bm, ArrayTransformer* at)
+      : ToSATBase(bm), toCNF(bm->UserFlags)
+  {
+    cb = NULL;
+    init();
+    arrayTransformer = at;
+  }
 
-	int count;
-	bool first;
+  ToSATAIG(STPMgr* bm, simplifier::constantBitP::ConstantBitPropagation* cb_,
+           ArrayTransformer* at)
+      : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
+  {
+    cb = cb_;
+    init();
+    arrayTransformer = at;
+  }
 
-	ToCNFAIG toCNF;
+  ~ToSATAIG();
 
-    void init()
-    {
-        count = 0;
-        first = true;
-    }
+  void ClearAllTables() { nodeToSATVar.clear(); }
 
-    static int cnf_calls;
+  // Used to read out the satisfiable answer.
+  ASTNodeToSATVar& SATVar_to_SymbolIndexMap() { return nodeToSATVar; }
 
-  public:
-    bool cbIsDestructed()
-    {
-    	return cb == NULL;
-    }
-
-    ToSATAIG(STPMgr * bm , ArrayTransformer *at) :
-      ToSATBase(bm), toCNF(bm->UserFlags)
-    {
-      cb = NULL;
-      init();
-      arrayTransformer = at;
-    }
-
-    ToSATAIG(STPMgr * bm, simplifier::constantBitP::ConstantBitPropagation* cb_, ArrayTransformer *at ) :
-    	ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
-    {
-      cb = cb_;
-      init();
-      arrayTransformer = at;
-    }
-
-    ~ToSATAIG();
-
-    void
-    ClearAllTables()
-    {
-      nodeToSATVar.clear();
-    }
-
-    // Used to read out the satisfiable answer.
-    ASTNodeToSATVar&
-    SATVar_to_SymbolIndexMap()
-    {
-      return nodeToSATVar;
-    }
-
-    bool  CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef);
-
-  };
+  bool CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef);
+};
 }
 
 #endif

@@ -26,34 +26,37 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 // FIXME: this test name sucks!
-TEST(x,one) {
+TEST(x, one)
+{
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc,'n');
-  vc_setFlags(vc,'d');
-  vc_setFlags(vc,'p'); 
- 
+  vc_setFlags(vc, 'n');
+  vc_setFlags(vc, 'd');
+  vc_setFlags(vc, 'p');
+
   Expr nresp1 = vc_varExpr(vc, "nresp1", vc_bv32Type(vc));
   Expr packet_get_int0 = vc_varExpr(vc, "packet_get_int0", vc_bv32Type(vc));
   Expr sz = vc_varExpr(vc, "sz", vc_bv32Type(vc));
 
-  Expr d0,d1,d2;
+  Expr d0, d1, d2;
   Expr exprs[] = {
-    // nresp1 == packet_get_int0
-    vc_eqExpr(vc, nresp1, packet_get_int0),
-    
-    // nresp1 > 0
-    vc_bvGtExpr(vc, nresp1, vc_bv32ConstExprFromInt(vc, 0)),
-    
-    // sz == nresp1 * 4
-    vc_eqExpr(vc, sz, d0=vc_bv32MultExpr(vc, nresp1, vc_bv32ConstExprFromInt(vc, 4))),
-    
-    // sz > nresp1 || sz < 0
-    vc_orExpr(vc, d1=vc_sbvGeExpr(vc, sz, nresp1), d2=vc_sbvLtExpr(vc, sz, vc_bv32ConstExprFromInt(vc, 0))),
+      // nresp1 == packet_get_int0
+      vc_eqExpr(vc, nresp1, packet_get_int0),
+
+      // nresp1 > 0
+      vc_bvGtExpr(vc, nresp1, vc_bv32ConstExprFromInt(vc, 0)),
+
+      // sz == nresp1 * 4
+      vc_eqExpr(vc, sz, d0 = vc_bv32MultExpr(vc, nresp1,
+                                             vc_bv32ConstExprFromInt(vc, 4))),
+
+      // sz > nresp1 || sz < 0
+      vc_orExpr(vc, d1 = vc_sbvGeExpr(vc, sz, nresp1),
+                d2 = vc_sbvLtExpr(vc, sz, vc_bv32ConstExprFromInt(vc, 0))),
   };
-  
-  Expr res = vc_andExprN(vc, exprs, sizeof(exprs)/sizeof(exprs[0]));
-  //vc_printExpr(vc, res);
-  vc_query(vc,res);
+
+  Expr res = vc_andExprN(vc, exprs, sizeof(exprs) / sizeof(exprs[0]));
+  // vc_printExpr(vc, res);
+  vc_query(vc, res);
 
   vc_DeleteExpr(nresp1);
   vc_DeleteExpr(packet_get_int0);
@@ -71,5 +74,5 @@ TEST(x,one) {
 
   vc_Destroy(vc);
   // FIXME: Actually test something
-  //ASSERT_TRUE(false && "FIXME: Actually test something");
+  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

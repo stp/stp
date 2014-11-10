@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-
 #include "stp/c_interface.h"
 #include <stdio.h>
 #include <gtest/gtest.h>
@@ -32,17 +31,17 @@ THE SOFTWARE.
 // that requires valgrind?
 
 // FIXME: Needs better name
-TEST(Leaks,leak)
+TEST(Leaks, leak)
 {
-    for (int i=0; i < 10;i++){
+  for (int i = 0; i < 10; i++)
+  {
 
-   
     VC vc;
- 	vc = vc_createValidityChecker();
-	vc_setFlags(vc,'n');
-  	vc_setFlags(vc,'d');
-  	vc_setFlags(vc,'p');
-    
+    vc = vc_createValidityChecker();
+    vc_setFlags(vc, 'n');
+    vc_setFlags(vc, 'd');
+    vc_setFlags(vc, 'p');
+
     // create 50 expression
     Expr a1 = vc_varExpr(vc, "a1", vc_bv32Type(vc));
     Expr a2 = vc_varExpr(vc, "a2", vc_bv32Type(vc));
@@ -94,7 +93,7 @@ TEST(Leaks,leak)
     Expr a48 = vc_varExpr(vc, "a48", vc_bv32Type(vc));
     Expr a49 = vc_varExpr(vc, "a49", vc_bv32Type(vc));
     Expr a50 = vc_varExpr(vc, "a50", vc_bv32Type(vc));
-    
+
     vc_DeleteExpr(a1);
     vc_DeleteExpr(a2);
     vc_DeleteExpr(a3);
@@ -145,50 +144,50 @@ TEST(Leaks,leak)
     vc_DeleteExpr(a48);
     vc_DeleteExpr(a49);
     vc_DeleteExpr(a50);
-    
+
     vc_Destroy(vc);
-    }
+  }
 }
 
-TEST(Leaks,boolean)
+TEST(Leaks, boolean)
 {
-    VC vc;
-    vc = vc_createValidityChecker();
+  VC vc;
+  vc = vc_createValidityChecker();
 
-    Expr x = vc_varExpr(vc, "x", vc_boolType(vc));
-    Expr y = vc_varExpr(vc, "y", vc_boolType(vc));
+  Expr x = vc_varExpr(vc, "x", vc_boolType(vc));
+  Expr y = vc_varExpr(vc, "y", vc_boolType(vc));
 
-    Expr x_and_y = vc_andExpr(vc, x, y);
-    Expr not_x_and_y = vc_notExpr(vc, x_and_y);
+  Expr x_and_y = vc_andExpr(vc, x, y);
+  Expr not_x_and_y = vc_notExpr(vc, x_and_y);
 
-    Expr not_x = vc_notExpr(vc, x);
-    Expr not_y = vc_notExpr(vc, y);
-    Expr not_x_or_not_y = vc_orExpr(vc, not_x, not_y);
+  Expr not_x = vc_notExpr(vc, x);
+  Expr not_y = vc_notExpr(vc, y);
+  Expr not_x_or_not_y = vc_orExpr(vc, not_x, not_y);
 
-    Expr equiv = vc_iffExpr(vc, not_x_and_y, not_x_or_not_y);
+  Expr equiv = vc_iffExpr(vc, not_x_and_y, not_x_or_not_y);
 
-    printf("%d\n", vc_query(vc, equiv));
+  printf("%d\n", vc_query(vc, equiv));
 
-    vc_DeleteExpr(equiv);
-    vc_DeleteExpr(not_x_or_not_y);
-    vc_DeleteExpr(not_y);
-    vc_DeleteExpr(not_x);
-    vc_DeleteExpr(not_x_and_y);
-    vc_DeleteExpr(x_and_y);
-    vc_DeleteExpr(y);
-    vc_DeleteExpr(x);
-    vc_Destroy(vc);
+  vc_DeleteExpr(equiv);
+  vc_DeleteExpr(not_x_or_not_y);
+  vc_DeleteExpr(not_y);
+  vc_DeleteExpr(not_x);
+  vc_DeleteExpr(not_x_and_y);
+  vc_DeleteExpr(x_and_y);
+  vc_DeleteExpr(y);
+  vc_DeleteExpr(x);
+  vc_Destroy(vc);
 }
 
-
-TEST(Leaks,sqaures)
+TEST(Leaks, sqaures)
 {
   unsigned int i;
 
   /* Do some simple arithmetic by creating an expression involving
      constants and then simplifying it. Since we create and destroy
      a fresh VC each time, we shouldn't leak any memory. */
-  for (i = 1; i <= 100; i++) {
+  for (i = 1; i <= 100; i++)
+  {
     VC vc = vc_createValidityChecker();
     Expr arg = vc_bvConstExprFromLL(vc, 64, (unsigned long long)i);
     Expr product = vc_bvMultExpr(vc, 64, arg, arg);

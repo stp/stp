@@ -31,22 +31,19 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 
-namespace BEEV {
-
-class ToCNFAIG //not copyable
+namespace BEEV
 {
-	UserDefinedFlags& uf;
+
+class ToCNFAIG // not copyable
+{
+  UserDefinedFlags& uf;
 
 public:
-	ToCNFAIG(UserDefinedFlags& _uf):
-		uf(_uf)
-	{
-	}
+  ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
 
-	void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-			ToSATBase::ASTNodeToSATVar& nodeToVar,
-			bool needAbsRef,  BBNodeManagerAIG& _mgr);
+  void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
+             ToSATBase::ASTNodeToSATVar& nodeToVar, bool needAbsRef,
+             BBNodeManagerAIG& _mgr);
 };
-
 }
 #endif /* TOCNFAIG_H_ */

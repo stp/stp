@@ -30,9 +30,9 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/STP.h"
 
-namespace BEEV 
+namespace BEEV
 {
-  //external parser table for declared symbols.
-  //extern ASTNodeSet _parser_symbol_table;
-} //end of namespace
+// external parser table for declared symbols.
+// extern ASTNodeSet _parser_symbol_table;
+} // end of namespace
 #endif

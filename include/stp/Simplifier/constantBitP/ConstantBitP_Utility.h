@@ -44,18 +44,20 @@ Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
 void setSignedMinMax(FixedBits& v, BEEV::CBV min, BEEV::CBV max);
 void setUnsignedMinMax(const FixedBits& v, BEEV::CBV min, BEEV::CBV max);
 unsigned cbvTOInt(const BEEV::CBV v);
-void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position, bool toFix);
+void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
+                  bool toFix);
 int toInt(BEEV::CBV value);
 
-// wraps the comparison function, including a check that the bitWidth is the same.
+// wraps the comparison function, including a check that the bitWidth is the
+// same.
 int unsignedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs);
 int signedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs);
 
 struct stats
 {
-	unsigned fixedToZero;
-	unsigned fixedToOne;
-	unsigned unfixed;
+  unsigned fixedToZero;
+  unsigned fixedToOne;
+  unsigned unfixed;
 };
 
 Result merge(Result r1, Result r2);
@@ -63,6 +65,5 @@ Result merge(Result r1, Result r2);
 stats getStats(const vector<FixedBits*>& operands, const unsigned position);
 }
 }
-
 
 #endif

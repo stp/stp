@@ -32,17 +32,15 @@ extern Rewrite_system rewrite_system;
 class Function_list
 {
 private:
-
   // Because v and w might come from "result", if "result" is resized, they will
   // be moved. So we can't use references to them.
-  void
-  getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
+  void getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] =
-      {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVMOD, BVLEFTSHIFT};
+    Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVMOD, BVLEFTSHIFT};
 
-    //Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD, BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
+    // Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD,
+    // BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
     const int number_types = sizeof(types) / sizeof(Kind);
 
     // all two argument functions.
@@ -50,146 +48,140 @@ private:
       result.push_back(create(types[i], v, w));
   }
 
-  void
-  applyRewritesToAll(ASTVec& functions)
+  void applyRewritesToAll(ASTVec& functions)
   {
     rewrite_system.buildLookupTable();
     cerr << "Applying:" << rewrite_system.size() << "rewrite rules" << endl;
 
     for (int i = 0; i < functions.size(); i++)
+    {
+      if (functions[i] == mgr->ASTUndefined)
+        continue;
+
+      if (i % 100000 == 0)
+        cerr << "applyRewritesToAll:" << i << " of " << functions.size()
+             << endl;
+
+      ASTNode r = rewrite_system.rewriteNode(functions[i]);
+      if (r != functions[i])
       {
-        if (functions[i] == mgr->ASTUndefined)
-          continue;
+        //   cerr << "changed" << functions[i] << " to "<< r;
 
-        if (i % 100000 == 0)
-          cerr << "applyRewritesToAll:" << i << " of " << functions.size() << endl;
-
-        ASTNode r = rewrite_system.rewriteNode(functions[i]);
-        if (r != functions[i])
-          {
-            //   cerr << "changed" << functions[i] << " to "<< r;
-
-            functions[i] = r;
-          }
+        functions[i] = r;
       }
+    }
   }
 
   // If there only w variables in the problem. We can delete it because
   // we will have another with just v's.
   // NB: Can only apply at the top level.
-  void
-  removeSingleVariable()
+  void removeSingleVariable()
   {
     for (int i = 0; i < functions.size(); i++)
+    {
+      vector<ASTNode> symbols = getVariables(functions[i]);
+
+      if (i % 100000 == 0)
+        cout << "removeSingleVariable:" << i << " of " << functions.size()
+             << "\n";
+
+      if (symbols.size() == 1 && symbols[0] == w)
       {
-        vector<ASTNode> symbols = getVariables(functions[i]);
-
-        if (i % 100000 == 0)
-          cout << "removeSingleVariable:" << i << " of " << functions.size() << "\n";
-
-        if (symbols.size() == 1 && symbols[0] == w)
-          {
-            functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
-            continue;
-          }
+        functions[i] =
+            mgr->ASTUndefined; // We can't widen it later. So remove it.
+        continue;
       }
+    }
   }
 
-  void
-  removeSingleUndefined()
+  void removeSingleUndefined()
   {
     for (int i = 0; i < functions.size(); i++)
+    {
+      if (functions[i] == mgr->ASTUndefined)
       {
-        if (functions[i] == mgr->ASTUndefined)
-          {
-            functions.erase(functions.begin() + i);
-            break;
-          }
+        functions.erase(functions.begin() + i);
+        break;
       }
+    }
   }
 
-  void
-  applySpeculative()
+  void applySpeculative()
   {
     for (int i = 0; i < functions.size(); i++)
-      {
-        if (functions[i] == mgr->ASTUndefined)
-          continue;
+    {
+      if (functions[i] == mgr->ASTUndefined)
+        continue;
 
-        if (i % 100000 == 0)
-          cerr << "applySpeculative:" << i << " of " << functions.size() << "\n";
+      if (i % 100000 == 0)
+        cerr << "applySpeculative:" << i << " of " << functions.size() << "\n";
 
-        functions[i] = simp->SimplifyTerm_TopLevel(functions[i]);
-      }
+      functions[i] = simp->SimplifyTerm_TopLevel(functions[i]);
+    }
   }
 
-  void
-  checkFunctions()
+  void checkFunctions()
   {
     for (int i = 0; i < functions.size(); i++)
-      {
-        assert(functions[i].GetType() == BITVECTOR_TYPE);
-        assert(functions[i].GetValueWidth() == bits);
-        assert(BVTypeCheckRecursive(functions[i]));
-      }
+    {
+      assert(functions[i].GetType() == BITVECTOR_TYPE);
+      assert(functions[i].GetValueWidth() == bits);
+      assert(BVTypeCheckRecursive(functions[i]));
+    }
   }
 
-  void
-  removeNonWidened()
+  void removeNonWidened()
   {
     for (int i = 0; i < functions.size(); i++)
+    {
+      if (mgr->ASTUndefined == functions[i])
+        continue;
+
+      if (i % 100000 == 0)
+        cerr << "Widen check:" << i << " of " << functions.size() << endl;
+
+      if (mgr->ASTUndefined == widen(functions[i], bits + 1))
       {
-        if (mgr->ASTUndefined == functions[i])
-          continue;
-
-        if (i % 100000 == 0)
-          cerr << "Widen check:" << i << " of " << functions.size() << endl;
-
-        if (mgr->ASTUndefined == widen(functions[i], bits + 1))
-          {
-            //cerr << "Can't widen" << functions[i];
-            functions[i] = mgr->ASTUndefined; // We can't widen it later. So remove it.
-            continue;
-          }
+        // cerr << "Can't widen" << functions[i];
+        functions[i] =
+            mgr->ASTUndefined; // We can't widen it later. So remove it.
+        continue;
       }
+    }
   }
 
   // Triples the number of functions by adding all the unary ones.
-  void
-  allUnary()
+  void allUnary()
   {
     for (int i = 0, size = functions.size(); i < size; i++)
-      {
-        if (functions[i] == mgr->ASTUndefined)
-          continue;
+    {
+      if (functions[i] == mgr->ASTUndefined)
+        continue;
 
-        functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
-        functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
-      }
+      functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
+      functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
+    }
   }
 
-  void
-  applyAIGs()
+  void applyAIGs()
   {
     ASTNode f = mgr->LookupOrCreateSymbol("rewriteThroughWithAIGS");
     f.SetValueWidth(bits);
 
     for (int i = 0; i < functions.size(); i++)
-      {
-        if (functions[i] == mgr->ASTUndefined)
-          continue;
+    {
+      if (functions[i] == mgr->ASTUndefined)
+        continue;
 
-        if (i % 100000 == 0)
-          cerr << "ApplyAigs:" << i << " of " << functions.size() << endl;
+      if (i % 100000 == 0)
+        cerr << "ApplyAigs:" << i << " of " << functions.size() << endl;
 
-        functions[i] = rewriteThroughWithAIGS(functions[i]);
-      }
+      functions[i] = rewriteThroughWithAIGS(functions[i]);
+    }
   }
 
 public:
-
-  void
-  buildAll()
+  void buildAll()
   {
     /////////////////////////// BV, BV -> BV.
     functions.push_back(w);
@@ -214,7 +206,7 @@ public:
     allUnary();
 
     applyAIGs();
-    //applySpeculative();
+    // applySpeculative();
     applyRewritesToAll(functions);
     checkFunctions();
     removeDuplicates(functions);
@@ -225,37 +217,37 @@ public:
     const bool two_level = true;
 
     if (two_level)
-      {
-        int last = 0;
-        ASTVec functions_copy(functions);
-        size = functions_copy.size();
-        for (int i = 0; i < size; i++)
-          for (int j = 0; j < size; j++)
-            getAllFunctions(functions_copy[i], functions_copy[j], functions);
+    {
+      int last = 0;
+      ASTVec functions_copy(functions);
+      size = functions_copy.size();
+      for (int i = 0; i < size; i++)
+        for (int j = 0; j < size; j++)
+          getAllFunctions(functions_copy[i], functions_copy[j], functions);
 
-        removeNonWidened();
+      removeNonWidened();
 
-        removeSingleVariable();
-        removeDuplicates(functions);
-        //applySpeculative();
+      removeSingleVariable();
+      removeDuplicates(functions);
+      // applySpeculative();
 
-        // Put back in later! Too slow for now...
-        applyAIGs();
-        removeDuplicates(functions);
+      // Put back in later! Too slow for now...
+      applyAIGs();
+      removeDuplicates(functions);
 
-        // All the unary combinations of the binaries.
-        allUnary();
+      // All the unary combinations of the binaries.
+      allUnary();
 
-        removeDuplicates(functions);
-        removeSingleUndefined();
-        checkFunctions();
+      removeDuplicates(functions);
+      removeSingleUndefined();
+      checkFunctions();
 
-        cerr << "Two Level:" << functions.size() << endl;
-      }
+      cerr << "Two Level:" << functions.size() << endl;
+    }
     else
-      {
-        removeSingleVariable();
-      }
+    {
+      removeSingleVariable();
+    }
   }
 
 public:

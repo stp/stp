@@ -34,15 +34,12 @@ extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
 extern BEEV::STPMgr* mgr;
 
-
-void
-soft_time_out(int ignored)
+void soft_time_out(int ignored)
 {
   mgr->soft_timeout_expired = true;
 }
 
-bool
-orderEquivalence(ASTNode& from, ASTNode& to);
+bool orderEquivalence(ASTNode& from, ASTNode& to);
 
 class Rewrite_rule
 {
@@ -62,73 +59,48 @@ class Rewrite_rule
   }
 
 public:
+  static Rewrite_rule getNullRule() { return Rewrite_rule(); }
 
-  static Rewrite_rule
-  getNullRule()
+  void writeOut(ostream& outputFileSMT2) const
   {
-    return Rewrite_rule();
-  }
-
-  void
-  writeOut(ostream& outputFileSMT2) const
-  {
-    outputFileSMT2 << ";id:0" << "\tverified_to:" << verified_to_bits << "\ttime:" << getTime() << "\tfrom_difficulty:"
-        << getDifficulty(/*getFrom()*/ mgr->CreateBVConst(32,0)) << "\tto_difficulty:" << getDifficulty(/*getTo()*/  mgr->CreateBVConst(32,0)) << "\n";
+    outputFileSMT2 << ";id:0"
+                   << "\tverified_to:" << verified_to_bits
+                   << "\ttime:" << getTime() << "\tfrom_difficulty:"
+                   << getDifficulty(/*getFrom()*/ mgr->CreateBVConst(32, 0))
+                   << "\tto_difficulty:"
+                   << getDifficulty(/*getTo()*/ mgr->CreateBVConst(32, 0))
+                   << "\n";
     outputFileSMT2 << "(push 1)" << endl;
     printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), true);
     outputFileSMT2 << "(exit)" << endl;
   }
 
   // If we've verified it to bigger than before. Then store the bit / time.
-  void
-  setVerified(int bits_, int time_)
+  void setVerified(int bits_, int time_)
   {
     if (bits_ >= verified_to_bits)
-      {
-        verified_to_bits = bits_;
-        time_to_verify = time_;
-      }
+    {
+      verified_to_bits = bits_;
+      time_to_verify = time_;
+    }
   }
 
-  int
-  getVerifiedToBits() const
-  {
-    return verified_to_bits;
-  }
+  int getVerifiedToBits() const { return verified_to_bits; }
 
-  const ASTNode&
-  getFrom() const
-  {
-    return from;
-  }
+  const ASTNode& getFrom() const { return from; }
 
-  const ASTNode&
-  getTo() const
-  {
-    return to;
-  }
+  const ASTNode& getTo() const { return to; }
 
-  int
-  getTime() const
-  {
-    return time_to_verify;
-  }
+  int getTime() const { return time_to_verify; }
 
-  ASTNode
-  getN() const
-  {
-    return n;
-  }
+  ASTNode getN() const { return n; }
 
-  bool
-  operator==(const Rewrite_rule& t) const
-  {
-    return (n == t.n);
-  }
+  bool operator==(const Rewrite_rule& t) const { return (n == t.n); }
 
   // The "from" and "to" should be ordered with the orderEquivalence function.
-  Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_, const BEEV::ASTNode& to_, const int t, int _id = -1) :
-      from(from_), to(to_)
+  Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_,
+               const BEEV::ASTNode& to_, const int t, int _id = -1)
+      : from(from_), to(to_)
   {
 #if 0
     if (_id ==-1)
@@ -147,22 +119,18 @@ public:
     c.push_back(from_);
     n = bm->hashingNodeFactory->CreateNode(BEEV::EQ, c);
 
-    assert(orderEquivalence(from,to));
+    assert(orderEquivalence(from, to));
     assert(from == from_);
     assert(to == to_);
     assert(BVTypeCheckRecursive(n));
     assert(!n.isConstant());
   }
 
-  bool
-  operator<(const Rewrite_rule& t) const
-  {
-    return (n < t.n);
-  }
+  bool operator<(const Rewrite_rule& t) const { return (n < t.n); }
 
-  // Tests for the timeout amount of time. FALSE if a bad instance was found. Otherwise true.
-  bool
-  timedCheck(int timeout_ms, VariableAssignment& bad)
+  // Tests for the timeout amount of time. FALSE if a bad instance was found.
+  // Otherwise true.
+  bool timedCheck(int timeout_ms, VariableAssignment& bad)
   {
     mgr->soft_timeout_expired = false;
     itimerval timeout;
@@ -177,38 +145,39 @@ public:
     int checked_to = 0;
 
     // Start it verifying where we left off..
-    for (int new_bitwidth = std::max(bits, getVerifiedToBits() + 1); new_bitwidth < 1024; new_bitwidth++)
+    for (int new_bitwidth = std::max(bits, getVerifiedToBits() + 1);
+         new_bitwidth < 1024; new_bitwidth++)
+    {
+      // cout << i << " ";
+      ASTVec children;
+      children.push_back(from);
+      children.push_back(to);
+
+      const ASTNode n = mgr->hashingNodeFactory->CreateNode(EQ, children);
+      const ASTNode& widened = widen(n, new_bitwidth);
+      if (widened == mgr->ASTUndefined)
       {
-        //cout << i << " ";
-        ASTVec children;
-        children.push_back(from);
-        children.push_back(to);
-
-        const ASTNode n = mgr->hashingNodeFactory->CreateNode(EQ, children);
-        const ASTNode& widened = widen(n, new_bitwidth);
-        if (widened == mgr->ASTUndefined)
-          {
-            cout << "cannot widen";
-            cerr << from << to;
-          }
-
-        bool result = isConstant(widened, bad, new_bitwidth);
-        if (!result && !mgr->soft_timeout_expired)
-          {
-            // not a constant, and not timed out!
-            cerr << "FAILED:" << endl << new_bitwidth << from << to;
-            writeOut(cerr);
-
-            // The timer might not have expired yet.
-            setitimer(ITIMER_VIRTUAL, NULL, NULL);
-            mgr->soft_timeout_expired = false;
-            return false;
-          }
-        if (mgr->soft_timeout_expired)
-          break;
-
-        checked_to = new_bitwidth;
+        cout << "cannot widen";
+        cerr << from << to;
       }
+
+      bool result = isConstant(widened, bad, new_bitwidth);
+      if (!result && !mgr->soft_timeout_expired)
+      {
+        // not a constant, and not timed out!
+        cerr << "FAILED:" << endl << new_bitwidth << from << to;
+        writeOut(cerr);
+
+        // The timer might not have expired yet.
+        setitimer(ITIMER_VIRTUAL, NULL, NULL);
+        mgr->soft_timeout_expired = false;
+        return false;
+      }
+      if (mgr->soft_timeout_expired)
+        break;
+
+      checked_to = new_bitwidth;
+    }
 
     if (getVerifiedToBits() <= checked_to)
       setVerified(checked_to, getTime() + (getCurrentTime() - st));
@@ -218,6 +187,5 @@ public:
     mgr->soft_timeout_expired = false;
     return true;
   }
-
 };
 #endif

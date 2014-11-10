@@ -56,63 +56,60 @@ THE SOFTWARE.
 
 #define INITIAL_TABLE_SIZE 100
 
-namespace BEEV {
-  using std::vector;
+namespace BEEV
+{
+using std::vector;
 
-  /******************************************************************
-   * Important classes declared as part of AST datastructures       *
-   *                                                                *
-   ******************************************************************/
-  class STPMgr;
-  class ASTNode;
-  class ASTInternal;
-  class ASTInterior;
-  class ASTSymbol;
-  class ASTBVConst;
-  class BVSolver;
+/******************************************************************
+ * Important classes declared as part of AST datastructures       *
+ *                                                                *
+ ******************************************************************/
+class STPMgr;
+class ASTNode;
+class ASTInternal;
+class ASTInterior;
+class ASTSymbol;
+class ASTBVConst;
+class BVSolver;
 
-  /******************************************************************
-   * Useful typedefs:                                               *
-   *                                                                *
-   * Vector of ASTNodes, used for child nodes among other things.   *
-   * It is good to define hash_map and hash_set in case we want to  *
-   * use libraries other than STL.                                  *
-   ******************************************************************/
-  typedef vector<ASTNode> ASTVec;
-  typedef unsigned int * CBV;
-  extern ASTVec _empty_ASTVec;
+/******************************************************************
+ * Useful typedefs:                                               *
+ *                                                                *
+ * Vector of ASTNodes, used for child nodes among other things.   *
+ * It is good to define hash_map and hash_set in case we want to  *
+ * use libraries other than STL.                                  *
+ ******************************************************************/
+typedef vector<ASTNode> ASTVec;
+typedef unsigned int* CBV;
+extern ASTVec _empty_ASTVec;
 
-  // Error handling function
-  extern void (*vc_error_hdlr)(const char* err_msg);
-  
-  /******************************************************************
-   * Class Spacer: 
-   *
-   * Spacer class is basically just an int, but the new class allows
-   * overloading of << with a special definition that prints the int
-   * as that many spaces.
-   ******************************************************************/
-  class Spacer {
-  public:
-    int _spaces;
-    Spacer(int spaces) 
-    { 
-      _spaces = spaces; 
-    }
-    friend std::ostream& operator<<(std::ostream& os, const Spacer &ind);
-  }; //End of class spacer
+// Error handling function
+extern void (*vc_error_hdlr)(const char* err_msg);
 
-  inline Spacer spaces(int width) {
-    Spacer sp(width);
-    return sp;
-  }
+/******************************************************************
+ * Class Spacer:
+ *
+ * Spacer class is basically just an int, but the new class allows
+ * overloading of << with a special definition that prints the int
+ * as that many spaces.
+ ******************************************************************/
+class Spacer
+{
+public:
+  int _spaces;
+  Spacer(int spaces) { _spaces = spaces; }
+  friend std::ostream& operator<<(std::ostream& os, const Spacer& ind);
+}; // End of class spacer
 
-  // function_counters: Table for storing function count stats.
-  typedef hash_map<
-    const char *,
-    int,
-    CStringHash,
-    CStringEqualityPredicate> function_counters;
-} //end of namespace
+inline Spacer spaces(int width)
+{
+  Spacer sp(width);
+  return sp;
+}
+
+// function_counters: Table for storing function count stats.
+typedef hash_map<const char*, int, CStringHash, CStringEqualityPredicate>
+    function_counters;
+} // end of namespace
 
 #endif

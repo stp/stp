@@ -3,7 +3,7 @@ Language: Cpp
 BasedOnStyle:  LLVM
 
 # Override some LLVM defaults
-AccessModifierOffset: 0
+AccessModifierOffset: -2
 AllowShortFunctionsOnASingleLine: Inline
 BreakBeforeBraces: Allman
 ColumnLimit: 80
