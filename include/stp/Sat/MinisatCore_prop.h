@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-
 /*
  * Wraps around minisat with array propagators
  */
@@ -33,50 +32,47 @@ THE SOFTWARE.
 
 namespace Minisat
 {
-   class MinisatCore_prop;
+class MinisatCore_prop;
 }
 
 namespace BEEV
 {
-  template <class T>
-  class MinisatCore_prop: public SATSolver
-  {
-    T * s;
+template <class T> class MinisatCore_prop : public SATSolver
+{
+  T* s;
 
-  public:
-    MinisatCore_prop(volatile bool& timeout);
+public:
+  MinisatCore_prop(volatile bool& timeout);
 
-    ~MinisatCore_prop();
+  ~MinisatCore_prop();
 
-    bool
-    addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
-    bool
-    okay() const; // FALSE means solver is in a conflicting state
+  bool okay() const; // FALSE means solver is in a conflicting state
 
-    virtual
-    bool addArray(int array_id, const SATSolver::vec_literals& i, const SATSolver::vec_literals& v, const Minisat::vec<Minisat::lbool>&, const Minisat::vec<Minisat::lbool> &);
+  virtual bool addArray(int array_id, const SATSolver::vec_literals& i,
+                        const SATSolver::vec_literals& v,
+                        const Minisat::vec<Minisat::lbool>&,
+                        const Minisat::vec<Minisat::lbool>&);
 
+  bool solve(); // Search without assumptions.
 
-    bool
-    solve(); // Search without assumptions.
+  virtual uint8_t modelValue(uint32_t x) const;
 
-    virtual uint8_t modelValue(uint32_t x) const;
+  virtual uint32_t newVar();
 
-    virtual uint32_t newVar();
+  void setVerbosity(int v);
 
-    void setVerbosity(int v);
+  unsigned long nVars();
 
-    unsigned long nVars();
+  void printStats();
 
-    void printStats();
+  virtual lbool true_literal() { return ((uint8_t)0); }
+  virtual lbool false_literal() { return ((uint8_t)1); }
+  virtual lbool undef_literal() { return ((uint8_t)2); }
 
-    virtual lbool true_literal() {return ((uint8_t)0);}
-    virtual lbool false_literal()  {return ((uint8_t)1);}
-    virtual lbool undef_literal()  {return ((uint8_t)2);}
-
-    virtual void setSeed(int i);
-  };
+  virtual void setSeed(int i);
+};
 }
 
 #endif

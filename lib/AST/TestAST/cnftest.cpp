@@ -30,7 +30,7 @@ int main()
 {
   const int size = 1;
 
-  BeevMgr *bm = new BeevMgr();
+  BeevMgr* bm = new BeevMgr();
   ASTNode s1 = bm->CreateSymbol("x");
   s1.SetValueWidth(size);
 
@@ -63,5 +63,4 @@ int main()
   cout << "bitblasted a4 " << endl << bba4 << endl;
 
   bm->PrintClauseList(cout, bm->ToCNF(bba4));
-
 }

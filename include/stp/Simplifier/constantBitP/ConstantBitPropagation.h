@@ -34,113 +34,96 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-  class ASTNode;
-  typedef unsigned int * CBV;
-  class Simplifier;
+class ASTNode;
+typedef unsigned int* CBV;
+class Simplifier;
 }
 
 namespace simplifier
 {
-  namespace constantBitP
-  {
+namespace constantBitP
+{
 
-    enum Result
-    {
-      NO_CHANGE = 1, CHANGED, CONFLICT, NOT_IMPLEMENTED
-    };
+enum Result
+{
+  NO_CHANGE = 1,
+  CHANGED,
+  CONFLICT,
+  NOT_IMPLEMENTED
+};
 
-    class MultiplicationStatsMap;
-    class WorkList;
+class MultiplicationStatsMap;
+class WorkList;
 
-    using BEEV::ASTNode;
-    using BEEV::Simplifier;
+using BEEV::ASTNode;
+using BEEV::Simplifier;
 
-    class ConstantBitPropagation
-    {
-      NodeFactory *nf;
-      Simplifier *simplifier;
+class ConstantBitPropagation
+{
+  NodeFactory* nf;
+  Simplifier* simplifier;
 
-      Result status;
-      WorkList *workList;
-      Dependencies * dependents;
+  Result status;
+  WorkList* workList;
+  Dependencies* dependents;
 
-      bool topFixed;
+  bool topFixed;
 
-      // A vector that's reused.
-      std::vector< unsigned > previousChildrenFixedCount;
+  // A vector that's reused.
+  std::vector<unsigned> previousChildrenFixedCount;
 
-      void
-      printNodeWithFixings();
+  void printNodeWithFixings();
 
-      FixedBits*
-      getUpdatedFixedBits(const ASTNode& n);
+  FixedBits* getUpdatedFixedBits(const ASTNode& n);
 
-      FixedBits*
-      getCurrentFixedBits(const ASTNode& n);
+  FixedBits* getCurrentFixedBits(const ASTNode& n);
 
-      void
-      scheduleDown(const ASTNode& n);
+  void scheduleDown(const ASTNode& n);
 
 public:
-      NodeToFixedBitsMap* fixedMap;
-      MultiplicationStatsMap* msm;
+  NodeToFixedBitsMap* fixedMap;
+  MultiplicationStatsMap* msm;
 
-      bool isUnsatisfiable()
-      {
-        return status == CONFLICT;
-      }
+  bool isUnsatisfiable() { return status == CONFLICT; }
 
-      // propagates.
-      ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf, const ASTNode & top);
+  // propagates.
+  ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf,
+                         const ASTNode& top);
 
-      ~ConstantBitPropagation()
-      {
-        clearTables();
-      }
-      ;
+  ~ConstantBitPropagation() { clearTables(); };
 
-      // Returns the node after writing in simplifications from constant Bit propagation.
-      BEEV::ASTNode
-      topLevelBothWays(const ASTNode& top, bool setTopToTrue = true, bool conjoinToTop=true);
+  // Returns the node after writing in simplifications from constant Bit
+  // propagation.
+  BEEV::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
+                                 bool conjoinToTop = true);
 
-
-      void clearTables()
-      {
-        delete fixedMap;
-        fixedMap = NULL;
-        delete dependents;
-        dependents = NULL;
-        delete workList;
-        workList = NULL;
-        delete msm;
-        msm = NULL;
-      }
-
-      bool
-      checkAtFixedPoint(const ASTNode& n, BEEV::ASTNodeSet & visited);
-
-      void
-      propagate();
-
-      void
-      scheduleUp(const ASTNode& n);
-
-      void
-      scheduleNode(const ASTNode& n);
-
-      void
-      setNodeToTrue(const ASTNode& top);
-
-      ASTNodeMap
-      getAllFixed();
-
-      void initWorkList(const ASTNode n)
-      {
-        workList->initWorkList(n);
-      }
-
-    };
+  void clearTables()
+  {
+    delete fixedMap;
+    fixedMap = NULL;
+    delete dependents;
+    dependents = NULL;
+    delete workList;
+    workList = NULL;
+    delete msm;
+    msm = NULL;
   }
+
+  bool checkAtFixedPoint(const ASTNode& n, BEEV::ASTNodeSet& visited);
+
+  void propagate();
+
+  void scheduleUp(const ASTNode& n);
+
+  void scheduleNode(const ASTNode& n);
+
+  void setNodeToTrue(const ASTNode& top);
+
+  ASTNodeMap getAllFixed();
+
+  void initWorkList(const ASTNode n) { workList->initWorkList(n); }
+};
+}
 }
 
 #endif /* CONSTANTBITPROPAGATION_H_ */

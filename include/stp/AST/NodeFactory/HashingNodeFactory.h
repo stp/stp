@@ -30,22 +30,21 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 namespace BEEV
 {
-	class STPMgr;
+class STPMgr;
 }
 
 class HashingNodeFactory : public NodeFactory
 {
 public:
-	HashingNodeFactory(BEEV::STPMgr& bm_)
-	:NodeFactory(bm_)
-	{
-	}
+  HashingNodeFactory(BEEV::STPMgr& bm_) : NodeFactory(bm_) {}
 
-	virtual ~HashingNodeFactory();
-	BEEV::ASTNode CreateNode(const BEEV::Kind kind,	const BEEV::ASTVec & back_children);
-	BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,const BEEV::ASTVec &children);
+  virtual ~HashingNodeFactory();
+  BEEV::ASTNode CreateNode(const BEEV::Kind kind,
+                           const BEEV::ASTVec& back_children);
+  BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
+                           const BEEV::ASTVec& children);
 
-	virtual std::string getName() {return "hashing";}
+  virtual std::string getName() { return "hashing"; }
 };
 
 #endif /* HASHINGNODEFACTORY_H_ */

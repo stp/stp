@@ -29,7 +29,7 @@ using namespace BEEV;
 int main()
 {
 
-  BeevMgr * bm = new BeevMgr();
+  BeevMgr* bm = new BeevMgr();
   ASTNode s1 = bm->CreateSymbol("foo");
   s1 = bm->CreateSymbol("foo1");
   s1 = bm->CreateSymbol("foo2");

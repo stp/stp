@@ -33,27 +33,24 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using namespace simplifier::constantBitP;
 
-int
-main(int argc, char ** argv)
+int main(int argc, char** argv)
 {
-  extern int
-  smt2parse();
-  extern int
-  smt2lex_destroy(void);
-  extern FILE *smt2in;
+  extern int smt2parse();
+  extern int smt2lex_destroy(void);
+  extern FILE* smt2in;
 
   BEEV::STPMgr stp;
-  STPMgr * mgr = &stp;
+  STPMgr* mgr = &stp;
 
   Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
   interface.startup();
   interface.ignoreCheckSat();
   BEEV::parserInterface = &interface;
 
-  Simplifier *simp = new Simplifier(mgr);
-  ArrayTransformer * at = new ArrayTransformer(mgr, simp);
+  Simplifier* simp = new Simplifier(mgr);
+  ArrayTransformer* at = new ArrayTransformer(mgr, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr,at);
+  ToSATAIG* tosat = new ToSATAIG(mgr, at);
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
@@ -66,15 +63,15 @@ main(int argc, char ** argv)
   // Parse SMTLIB2-----------------------------------------
   mgr->GetRunTimes()->start(RunTimes::Parsing);
   if (argc > 1)
-    {
+  {
     smt2in = fopen(argv[1], "r");
     smt2parse();
-    }
+  }
   else
-    {
+  {
     smt2in = NULL; // from stdin.
     smt2parse();
-    }
+  }
   smt2lex_destroy();
   //-----------------------------------------------------
 
@@ -87,17 +84,18 @@ main(int argc, char ** argv)
     n = v[0];
 
   // Apply cbitp ----------------------------------------
-  simplifier::constantBitP::ConstantBitPropagation cb(simp, mgr->defaultNodeFactory, n);
+  simplifier::constantBitP::ConstantBitPropagation cb(
+      simp, mgr->defaultNodeFactory, n);
   if (cb.isUnsatisfiable())
     n = mgr->ASTFalse;
   else
     n = cb.topLevelBothWays(n, true, true);
 
   if (simp->hasUnappliedSubstitutions())
-    {
+  {
     n = simp->applySubstitutionMap(n);
     simp->haveAppliedSubstitutionMap();
-    }
+  }
 
   // Print back out.
   printer::SMTLIB2_PrintBack(cout, n);
@@ -105,4 +103,3 @@ main(int argc, char ** argv)
   cout << "(exit)\n";
   return 0;
 }
-

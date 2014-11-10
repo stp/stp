@@ -22,18 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-/* g++ -I$(HOME)/stp/c_interface multiple-queries.c -L$(HOME)/stp/lib -lstp -o cc*/
+/* g++ -I$(HOME)/stp/c_interface multiple-queries.c -L$(HOME)/stp/lib -lstp -o
+ * cc*/
 
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include "stp/c_interface.h"
 
-TEST(multiple_queries,one) {
+TEST(multiple_queries, one)
+{
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc,'n');
-  vc_setFlags(vc,'c');
-  vc_setFlags(vc,'d');
-  vc_setFlags(vc,'p');
+  vc_setFlags(vc, 'n');
+  vc_setFlags(vc, 'c');
+  vc_setFlags(vc, 'd');
+  vc_setFlags(vc, 'p');
 
   Type bv8 = vc_bvType(vc, 8);
 
@@ -57,6 +59,5 @@ TEST(multiple_queries,one) {
 
   vc_Destroy(vc);
   // FIXME: Actually test something
-  //ASSERT_TRUE(false && "FIXME: Actually test something");
+  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
-

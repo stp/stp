@@ -23,7 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
-	A decorator pattern, which calls some base node factory, then type checks each of the results.
+  A decorator pattern, which calls some base node factory, then type checks each
+  of the results.
  */
 
 #ifndef TYPECHECKER_H_
@@ -40,19 +41,19 @@ using BEEV::STPMgr;
 
 class TypeChecker : public NodeFactory
 {
-NodeFactory& f;
+  NodeFactory& f;
 
 public:
-	TypeChecker(NodeFactory& f_, STPMgr& bm_) :
-	    NodeFactory(bm_)
-	    , f(f_)
-	{}
+  TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_) {}
 
-	BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width, const BEEV::ASTVec &children);
-	BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children);
-	BEEV::ASTNode CreateArrayTerm(Kind kind, unsigned int index,unsigned int width, const BEEV::ASTVec &children);
+  BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
+                           const BEEV::ASTVec& children);
+  BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children);
+  BEEV::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+                                unsigned int width,
+                                const BEEV::ASTVec& children);
 
-	virtual std::string getName() {return "type checking";}
+  virtual std::string getName() { return "type checking"; }
 };
 
 #endif /* TYPECHECKER_H_ */

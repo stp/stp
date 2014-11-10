@@ -34,19 +34,19 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-  enum inputStatus input_status = NOT_DECLARED;
+enum inputStatus input_status = NOT_DECLARED;
 
-  //Originally just used by the parser, now used elesewhere.
-  STP     * GlobalSTP;
-  STPMgr  * ParserBM;
+// Originally just used by the parser, now used elesewhere.
+STP* GlobalSTP;
+STPMgr* ParserBM;
 
-  // Used exclusively for parsing.
-  Cpp_interface * parserInterface;
+// Used exclusively for parsing.
+Cpp_interface* parserInterface;
 
-  // FIXME: This isn't in Globals.h so how can anyone use this?
-  void (*vc_error_hdlr)(const char* err_msg) = 0;
+// FIXME: This isn't in Globals.h so how can anyone use this?
+void (*vc_error_hdlr)(const char* err_msg) = 0;
 
-  // This is reusable empty vector, for representing empty children
-  // arrays
-  ASTVec _empty_ASTVec;
+// This is reusable empty vector, for representing empty children
+// arrays
+ASTVec _empty_ASTVec;
 }

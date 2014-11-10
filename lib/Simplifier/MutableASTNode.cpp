@@ -26,6 +26,5 @@ THE SOFTWARE.
 namespace BEEV
 {
 
-  vector<MutableASTNode*> MutableASTNode::all;
-
+vector<MutableASTNode*> MutableASTNode::all;
 }

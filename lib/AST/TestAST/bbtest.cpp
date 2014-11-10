@@ -30,7 +30,7 @@ int main()
 {
   const int size = 32;
 
-  BeevMgr *bm = new BeevMgr();
+  BeevMgr* bm = new BeevMgr();
   ASTNode s1 = bm->CreateSymbol("x");
   s1.SetValueWidth(size);
   cout << "s1" << s1 << endl;

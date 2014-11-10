@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-
 // This file defines a hash function and equal_to predicate for use with hash-
 // based data structures. std::hash et al. do not compute a hash over the
 // contents of a C string, only its address, so it is an inappropriate hash
@@ -39,20 +38,20 @@ THE SOFTWARE.
 
 struct CStringHash
 {
-  ::std::size_t operator()(const char *str) const
+  ::std::size_t operator()(const char* str) const
   {
     ::std::size_t hash = 5381;
-  
+
     while (char c = *str++)
       hash = ((hash << 5) + hash) + (unsigned char)c;
-  
+
     return hash;
   }
 };
 
 struct CStringEqualityPredicate
 {
-  bool operator()(const char *a, const char *b) const
+  bool operator()(const char* a, const char* b) const
   {
     return strcmp(a, b) == 0;
   }

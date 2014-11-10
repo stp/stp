@@ -30,57 +30,56 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
 
-//This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ SYMBOL BVCONST)),
+// This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ
+// SYMBOL BVCONST)),
 // (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
 // or (=SYMBOL BVCONST).
-// It tries to remove the conjunct, storing it in the substitutionmap. It replaces it in the
+// It tries to remove the conjunct, storing it in the substitutionmap. It
+// replaces it in the
 // formula by true.
 
 namespace BEEV
 {
-    class Simplifier;
-    class ArrayTransformer;
+class Simplifier;
+class ArrayTransformer;
 
-    class PropagateEqualities  //not copyable
-    {
+class PropagateEqualities // not copyable
+{
 
-        Simplifier *simp;
-        NodeFactory *nf;
-        STPMgr *bm;
-        const ASTNode ASTTrue, ASTFalse;
+  Simplifier* simp;
+  NodeFactory* nf;
+  STPMgr* bm;
+  const ASTNode ASTTrue, ASTFalse;
 
-        bool searchXOR(const ASTNode& lhs, const ASTNode& rhs);
-        bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
+  bool searchXOR(const ASTNode& lhs, const ASTNode& rhs);
+  bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
 
-        ASTNode
-        propagate(const ASTNode& a, ArrayTransformer*at);
-        hash_set<int> alreadyVisited;
+  ASTNode propagate(const ASTNode& a, ArrayTransformer* at);
+  hash_set<int> alreadyVisited;
 
-        const bool always_true;
-    public:
+  const bool always_true;
 
-        PropagateEqualities(Simplifier *simp_, NodeFactory *nf_, STPMgr *bm_) :
-                ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-                always_true(bm_->UserFlags.isSet("always_true","1"))
-        {
-            simp = simp_;
-            nf = nf_;
-            bm = bm_;
-        }
+public:
+  PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
+      : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
+        always_true(bm_->UserFlags.isSet("always_true", "1"))
+  {
+    simp = simp_;
+    nf = nf_;
+    bm = bm_;
+  }
 
-        ASTNode
-        topLevel(const ASTNode& a, ArrayTransformer* at)
-        {
-          if (!bm->UserFlags.propagate_equalities)
-              return a;
+  ASTNode topLevel(const ASTNode& a, ArrayTransformer* at)
+  {
+    if (!bm->UserFlags.propagate_equalities)
+      return a;
 
-          bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
-          ASTNode result = propagate(a, at);
-          bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
-          return result;
-        }
-
-    };
+    bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
+    ASTNode result = propagate(a, at);
+    bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
+    return result;
+  }
+};
 }
 
 #endif

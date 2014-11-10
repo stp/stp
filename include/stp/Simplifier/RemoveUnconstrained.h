@@ -37,41 +37,32 @@ THE SOFTWARE.
 #include "stp/Simplifier/simplifier.h"
 #include "stp/Simplifier/MutableASTNode.h"
 
-
 namespace BEEV
 {
-  using simplifier::constantBitP::Dependencies;
+using simplifier::constantBitP::Dependencies;
 
-  class RemoveUnconstrained  //not copyable
-  {
-    STPMgr& bm;
+class RemoveUnconstrained // not copyable
+{
+  STPMgr& bm;
 
-    ASTNode replaceParentWithFresh(MutableASTNode& mute, vector<MutableASTNode*>& variables);
+  ASTNode replaceParentWithFresh(MutableASTNode& mute,
+                                 vector<MutableASTNode*>& variables);
 
-    ASTNode
-    topLevel_other(const ASTNode &n, Simplifier *simplifier);
+  ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
 
-    void
-    splitExtractOnly(vector<MutableASTNode*> extracts);
+  void splitExtractOnly(vector<MutableASTNode*> extracts);
 
-    void
-    replace(MutableASTNode* from, const ASTNode to);
+  void replace(MutableASTNode* from, const ASTNode to);
 
+  void replace(const ASTNode& from, const ASTNode to);
 
-    void
-    replace(const ASTNode& from, const ASTNode to);
+  NodeFactory* nf;
 
-    NodeFactory* nf;
+public:
+  RemoveUnconstrained(STPMgr& bm);
 
-  public:
-
-    RemoveUnconstrained(STPMgr& bm);
-
-    ASTNode
-    topLevel(const ASTNode &n, Simplifier *s);
-
-  };
-
+  ASTNode topLevel(const ASTNode& n, Simplifier* s);
+};
 }
 
 #endif /* REMOVEUNCONSTRAINED_H_ */

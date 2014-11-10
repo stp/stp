@@ -37,26 +37,17 @@ using namespace simplifier::constantBitP;
 
 using namespace BEEV;
 
-Result
-multiply(vector<FixedBits*>& children, FixedBits& output);
+Result multiply(vector<FixedBits*>& children, FixedBits& output);
 
+Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output);
 
-Result
-unsignedDivide(vector<FixedBits*>& children, FixedBits& output);
+Result signedDivide(vector<FixedBits*>& children, FixedBits& output);
 
+Result signedRemainder(vector<FixedBits*>& children, FixedBits& output);
 
-Result
-signedDivide(vector<FixedBits*>& children, FixedBits& output);
+Result signedModulus(vector<FixedBits*>& children, FixedBits& output);
 
-
-Result
-signedRemainder(vector<FixedBits*>& children, FixedBits& output);
-
-Result
-signedModulus(vector<FixedBits*>& children, FixedBits& output);
-
-Result
-unsignedModulus(vector<FixedBits*>& children, FixedBits& output);
+Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output);
 
 int bvOrF(int a, int b);
 int bvXOrF(int a, int b);
@@ -71,8 +62,6 @@ int eqF(int a, int b);
 int ltF(int a, int b);
 int remF(int a, int b);
 
-
-
 struct Functions
 {
   struct Function
@@ -80,9 +69,11 @@ struct Functions
     Kind k;
     string name;
     Result (*fn)(vector<FixedBits*>&, FixedBits&);
-    int(*op)(int o1, int o2);
+    int (*op)(int o1, int o2);
 
-    Function (Kind k_, string name_, Result (*fn_)(vector<FixedBits*>&, FixedBits&), int(*op_)(int o1, int o2) )
+    Function(Kind k_, string name_,
+             Result (*fn_)(vector<FixedBits*>&, FixedBits&),
+             int (*op_)(int o1, int o2))
     {
       name = name_;
       k = k_;
@@ -90,7 +81,6 @@ struct Functions
       op = op_;
     }
   };
-
 
   std::list<Function> l;
 
@@ -106,27 +96,29 @@ struct Functions
 
   Functions()
   {
-    l.push_back(Function(BVSGE, "signed greater than equals", &bvSignedGreaterThanEqualsBothWays, NULL));
-    l.push_back(Function(BVLT, "unsigned less than", &bvLessThanBothWays, &ltF));
+    l.push_back(Function(BVSGE, "signed greater than equals",
+                         &bvSignedGreaterThanEqualsBothWays, NULL));
+    l.push_back(
+        Function(BVLT, "unsigned less than", &bvLessThanBothWays, &ltF));
     l.push_back(Function(EQ, "equals", &bvEqualsBothWays, &eqF));
     l.push_back(Function(BVXOR, "bit-vector xor", &bvXorBothWays, &bvXOrF));
-    l.push_back(Function(BVOR, "bit-vector or", &bvOrBothWays, &bvOrF ));
+    l.push_back(Function(BVOR, "bit-vector or", &bvOrBothWays, &bvOrF));
     l.push_back(Function(BVAND, "bit-vector and", &bvAndBothWays, &bvAndF));
-    l.push_back(Function(BVRIGHTSHIFT, "right shift", &bvRightShiftBothWays, &rightSF));
-    l.push_back(Function(BVLEFTSHIFT, "left shift", &bvLeftShiftBothWays, &leftSF));
-    l.push_back(Function(BVSRSHIFT, "arithmetic shift", &bvArithmeticRightShiftBothWays, NULL));
+    l.push_back(
+        Function(BVRIGHTSHIFT, "right shift", &bvRightShiftBothWays, &rightSF));
+    l.push_back(
+        Function(BVLEFTSHIFT, "left shift", &bvLeftShiftBothWays, &leftSF));
+    l.push_back(Function(BVSRSHIFT, "arithmetic shift",
+                         &bvArithmeticRightShiftBothWays, NULL));
     l.push_back(Function(BVPLUS, "addition", &bvAddBothWays, &plusF));
     l.push_back(Function(BVSUB, "subtraction", &bvSubtractBothWays, &subF));
     l.push_back(Function(BVMULT, "multiplication", &multiply, &multiplyF));
-    l.push_back(Function(BVDIV, "unsigned division", &unsignedDivide, &divideF));
+    l.push_back(
+        Function(BVDIV, "unsigned division", &unsignedDivide, &divideF));
     l.push_back(Function(BVMOD, "unsigned remainder", &unsignedModulus, &remF));
     l.push_back(Function(SBVDIV, "signed division", &signedDivide, NULL));
-    l.push_back(Function(SBVREM, "signed remainder",&signedRemainder,NULL ));
+    l.push_back(Function(SBVREM, "signed remainder", &signedRemainder, NULL));
   }
-
-
-
-
 };
 
 #endif /* FUNCTIONS_H_ */

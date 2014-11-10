@@ -30,44 +30,39 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-  class ToSATBase //not copyable
+class ToSATBase // not copyable
+{
+protected:
+  ASTNode ASTTrue, ASTFalse, ASTUndefined;
+
+  // Ptr to STPManager
+  STPMgr* bm;
+
+public:
+  typedef hash_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
+                   ASTNode::ASTNodeEqual> ASTNodeToSATVar;
+
+  // Constructor
+  ToSATBase(STPMgr* bm) : bm(bm)
   {
-  protected:
-    ASTNode ASTTrue, ASTFalse, ASTUndefined;
+    ASTTrue = bm->CreateNode(TRUE);
+    ASTFalse = bm->CreateNode(FALSE);
+    ASTUndefined = bm->CreateNode(UNDEFINED);
+  }
 
-    // Ptr to STPManager
-    STPMgr * bm;
+  virtual ~ToSATBase() {}
 
-  public:
+  // print the STP solver output
+  void PrintOutput(SOLVER_RETURN_TYPE ret);
 
-    typedef hash_map<
-    ASTNode,
-    vector<unsigned>,
-    ASTNode::ASTNodeHasher,
-    ASTNode::ASTNodeEqual> ASTNodeToSATVar;
+  // Bitblasts, CNF conversion and calls toSATandSolve()
+  virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
+                       bool doesAbsRef) = 0;
 
-    // Constructor
-    ToSATBase(STPMgr * bm) :
-      bm(bm)
-    {
-      ASTTrue      = bm->CreateNode(TRUE);
-      ASTFalse     = bm->CreateNode(FALSE);
-      ASTUndefined = bm->CreateNode(UNDEFINED);
-    }
+  virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
-    virtual ~ToSATBase()
-    {}
-
-    //print the STP solver output
-    void PrintOutput(SOLVER_RETURN_TYPE ret);
-
-    // Bitblasts, CNF conversion and calls toSATandSolve()
-    virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input, bool doesAbsRef) =0;
-
-    virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap()= 0;
-
-    virtual void ClearAllTables(void)  =0;
-  };
+  virtual void ClearAllTables(void) = 0;
+};
 }
 
 #endif
