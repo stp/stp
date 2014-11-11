@@ -11,7 +11,7 @@ add_dependencies(cinterface ASTKind_header)
 
 # FIXME: Remove this
 # For legacy reasons make the interface header files available in include/stp/ in the build directory
-if (NOT ("${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}"))
+if (NOT ("${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}"))
     add_custom_target(CopyPublicHeaders ALL)
     set(HEADER_DEST "${PROJECT_BINARY_DIR}/include/stp")
     foreach(public_header c_interface.h cpp_interface.h)
