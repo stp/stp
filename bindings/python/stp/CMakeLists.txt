@@ -42,7 +42,7 @@ get_target_property(LIBSTP_LOCATAION libstp LOCATION) # This the full path in th
 get_filename_component(LIBSTP_FILENAME "${LIBSTP_LOCATAION}" NAME)
 set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/lib/${LIBSTP_FILENAME}) # FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
 
-configure_file(library_path.py.in "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
-install(FILES "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
+configure_file(library_path.py.in "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
+install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp"
        )

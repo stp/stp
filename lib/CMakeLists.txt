@@ -98,7 +98,7 @@ target_link_libraries(libstp ${libstp_link_libs})
 # Set the public header so it will be installed
 set_target_properties(libstp
                       PROPERTIES
-                      PUBLIC_HEADER "${CMAKE_SOURCE_DIR}/include/stp/c_interface.h"
+                      PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
                      )
 
 install(TARGETS libstp

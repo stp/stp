@@ -282,8 +282,8 @@ find_package(FLEX REQUIRED)
 # -----------------------------------------------------------------------------
 # Setup library build path (this is **not** the library install path)
 # -----------------------------------------------------------------------------
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
 # -----------------------------------------------------------------------------
 # Provide an export name to be used by targets that wish to export themselves.
@@ -363,9 +363,9 @@ export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PR
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")
-set(CONF_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/include")
+set(CONF_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/include")
 configure_file(STPConfig.cmake.in
-               "${CMAKE_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
+               "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
               )
 
 # Export this package to the CMake user package registry
@@ -389,11 +389,11 @@ set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
 set(EXPORT_TYPE "installed")
 set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include")
 configure_file(STPConfig.cmake.in
-               "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
+               "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
               )
 
 install(FILES
-        "${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
+        "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
         DESTINATION "${STP_INSTALL_CMAKE_DIR}"
        )
 
