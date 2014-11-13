@@ -96,7 +96,7 @@ void* ClauseAllocator::allocEnough(const uint32_t size)
     assert(sizeof(Lit)%sizeof(uint32_t) == 0);
 
     if (size == 2) {
-        return clausePoolBin.GetMemory(sizeof(Clause) + sizeof(Lit)*2);
+        return (Clause*)(clausePoolBin.allocate());
     }
 
     uint32_t needed = sizeof(Clause)+sizeof(Lit)*size;
@@ -180,7 +180,7 @@ inline uint32_t ClauseAllocator::getInterOffset(const Clause* ptr, uint32_t oute
 void ClauseAllocator::clauseFree(Clause* c)
 {
     if (c->wasBin()) {
-        clausePoolBin.FreeMemory(c, sizeof(Clause) + sizeof(Lit)*2);
+        clausePoolBin.deallocate((BinClTmp*)c);
     } else {
         c->setFreed();
         uint32_t outerOffset = getOuterOffset(c);

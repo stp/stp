@@ -44,6 +44,7 @@ using namespace MINISAT;
 // so that they can be used as array indices.
 
 typedef uint32_t Var;
+typedef uint32_t ClauseOffset;
 #define var_Undef (0xffffffffU >>1)
 enum RestartType {dynamic_restart, static_restart, auto_restart};
 

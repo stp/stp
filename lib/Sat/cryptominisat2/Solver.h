@@ -42,6 +42,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "constants.h"
 #include "BoundedQueue.h"
 #include "GaussianConfig.h"
+#include "ClauseAllocator.h"
 
 namespace MINISAT
 {
