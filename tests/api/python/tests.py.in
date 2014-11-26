@@ -132,6 +132,19 @@ class TestSTP(unittest.TestCase):
         s.add(a == 2)
         self.assertTrue(s.check())
 
+    def test_empty_check_wrong(self):
+        s = self.s
+        a = s.bitvec('a')
+        s.add(a == 2)
+        s.add(a == 3)
+        self.assertFalse(s.check())
+
+    def test_double_assume(self):
+        s = self.s
+        b = s.bitvec('b')
+        self.assertTrue(s.check(b == 1))
+        self.assertTrue(s.check(b == 2))
+
     def test_pushpop(self):
         s = self.s
 
