@@ -83,9 +83,6 @@ private:
   // formulas and terms
   ASTNodeMap* TransformMap;
 
-  // Flag for debuggin the transformer
-  const bool debug_transform;
-
   // Ptr to an external simplifier
   Simplifier* simp;
 
@@ -123,7 +120,7 @@ public:
 
   // Constructor
   ArrayTransformer(STPMgr* bm, Simplifier* s)
-      : TransformMap(NULL), debug_transform(0), simp(s), bm(bm)
+      : TransformMap(NULL), simp(s), bm(bm)
   {
     nf = bm->defaultNodeFactory;
 

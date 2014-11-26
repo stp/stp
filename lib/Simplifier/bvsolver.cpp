@@ -54,7 +54,6 @@ THE SOFTWARE.
 namespace BEEV
 {
 const bool flatten_ands = true;
-const bool sort_extracts_last = false;
 const bool debug_bvsolver = false;
 
 // The simplify functions can increase the size of the DAG,

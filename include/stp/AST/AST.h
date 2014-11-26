@@ -37,8 +37,8 @@ namespace BEEV
 // TODO remove -- only used in c_interface.cpp NOT from main.cpp
 void process_argument(const char ch, STPMgr* bm);
 
-void FatalError(const char* str, const ASTNode& a, int w = 0);
-void FatalError(const char* str);
+void FatalError [[noreturn]] (const char* str, const ASTNode& a, int w = 0);
+void FatalError [[noreturn]] (const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool exprless(const ASTNode n1, const ASTNode n2);

@@ -28,7 +28,6 @@ THE SOFTWARE.
 namespace BEEV
 {
 class STPMgr;
-void FatalError(const char* str);
 
 /******************************************************************
  *  Class ASTBVConst:                                             *

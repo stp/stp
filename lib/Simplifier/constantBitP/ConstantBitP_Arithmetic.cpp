@@ -439,7 +439,7 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
     // go from high to low, making each of the sums consistent.
     for (int i = /**/ (int)bitWidth - 1 /**/; i >= 1; i--)
     {
-      if ((sumH[i] == sumL[i]))
+      if (sumH[i] == sumL[i])
       {
         stats s = getStats(children, i);
 

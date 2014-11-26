@@ -42,8 +42,6 @@ RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
   nf = _bm.defaultNodeFactory;
 }
 
-const bool debug_unconstrained = false;
-
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
 {
   ASTNode result(n);
