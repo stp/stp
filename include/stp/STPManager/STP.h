@@ -62,29 +62,13 @@ class STP // not copyable
                                     const ASTNode& modified_input);
 
 public:
-  ArrayTransformer* arrayTransformer;
 
-  // calls sizeReducing and the bitblasting simplification.
-  ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
-                           BVSolver* bvSolver, PropagateEqualities* pe,
-                           const int initial_difficulty_score,
-                           int& actualBBSize);
-
-  /****************************************************************
-   * Public Data:
-   *
-   * Absolute toplevel class. No need to make data private
-   ****************************************************************/
   STPMgr* bm;
   Simplifier* simp;
   ToSATBase* tosat;
   AbsRefine_CounterExample* Ctr_Example;
+  ArrayTransformer* arrayTransformer;
 
-  /****************************************************************
-   * Constructor and Destructor                                   *
-   ****************************************************************/
-
-  // Constructor
   STP(STPMgr* b, Simplifier* s, ArrayTransformer* a, ToSATBase* ts,
       AbsRefine_CounterExample* ce)
   {
@@ -95,7 +79,6 @@ public:
     Ctr_Example = ce;
   } // End of constructor
 
-  // Constructor
   STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
       ToSATBase* ts, AbsRefine_CounterExample* ce)
   {
@@ -110,31 +93,31 @@ public:
   ~STP()
   {
     ClearAllTables();
+
     delete Ctr_Example;
     Ctr_Example = NULL;
+
     delete arrayTransformer;
     arrayTransformer = NULL;
+
     delete tosat;
     tosat = NULL;
+
     delete simp;
     simp = NULL;
     // delete bm;
   }
-
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
   SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
                                  const ASTNode& query);
 
-#if 0
-    SOLVER_RETURN_TYPE
-    UserGuided_AbsRefine(SATSolver& SatSolver,
-			 const ASTNode& original_input);
-#endif
+  // calls sizeReducing and the bitblasting simplification.
+  ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
+                           BVSolver* bvSolver, PropagateEqualities* pe,
+                           const int initial_difficulty_score,
+                           int& actualBBSize);
 
   void ClearAllTables(void)
   {
@@ -148,6 +131,7 @@ public:
       Ctr_Example->ClearAllTables();
     // bm->ClearAllTables();
   }
+
 }; // End of Class STP
 } // end of namespace
 #endif
