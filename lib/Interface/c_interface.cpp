@@ -873,15 +873,17 @@ Expr vc_andExprN(VC vc, Expr* cc, int n)
 {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   nodestar* c = (nodestar*)cc;
-  nodelist d;
+  assert(n > 0);
 
-  for (int i = 0; i < n; i++)
+  nodelist d;
+  for (int i = 0; i < n; i++) {
     d.push_back(*c[i]);
+  }
 
   node o = b->CreateNode(BEEV::AND, d);
   assert(BVTypeCheck(o));
-
   nodestar output = new node(o);
+
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;
 }
