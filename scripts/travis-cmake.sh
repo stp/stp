@@ -78,6 +78,8 @@ case $STP_CONFIG in
     ;;
 
     CPP11)
+         export CC="gcc-4.7"
+         export CXX="g++-4.7"
          eval sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
          eval sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
          eval sudo apt-get update
