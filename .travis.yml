@@ -10,6 +10,7 @@ env:
     - STP_CONFIG=STATIC_BINARY
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
+    - STP_CONFIG=CPP11
 before_install:
   - sudo apt-get install libboost-all-dev
   - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
