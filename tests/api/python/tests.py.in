@@ -126,6 +126,12 @@ class TestSTP(unittest.TestCase):
         s.check(a == 0x41414141)
         self.assertEqual(a.value, 0x41414141)
 
+    def test_empty_check(self):
+        s = self.s
+        a = s.bitvec('a')
+        s.add(a == 2)
+        self.assertTrue(s.check())
+
     def test_pushpop(self):
         s = self.s
 
