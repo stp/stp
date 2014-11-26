@@ -87,7 +87,7 @@ public:
 
   ASTNode end() { return sentinel; }
 
-  virtual bool ok(const ASTNode n) { return true; }
+  virtual bool ok(const ASTNode& n) { return true; }
 };
 
 // Iterator that omits return atoms.
