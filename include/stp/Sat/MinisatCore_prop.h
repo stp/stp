@@ -26,7 +26,7 @@ THE SOFTWARE.
  * Wraps around minisat with array propagators
  */
 #ifndef MINISATCORE_PROP_H_
-#define MINIASTCORE_PROP_H_
+#define MINISATCORE_PROP_H_
 
 #include "SATSolver.h"
 
