@@ -257,9 +257,15 @@ class Solver(object):
 
     def check(self, *exprs):
         """Check whether the various expressions are satisfiable."""
-        expr = self.and_(*exprs)
-        expr = _lib.vc_notExpr(self.vc, expr.expr)
+
+        _, length = self._n_exprs(*exprs)
+        if (length > 0) :
+            expr = self.and_(*exprs)
+            expr = _lib.vc_notExpr(self.vc, expr.expr)
+        else:
+            expr = self.true()
         ret = _lib.vc_query(self.vc, expr)
+
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
