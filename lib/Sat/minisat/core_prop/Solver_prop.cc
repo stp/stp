@@ -345,8 +345,6 @@ void Solver_prop::assertIndexesEqual(ArrayAccess &a, ArrayAccess &b)
         }
 }
 
-const bool debug_equals_lit=false;
-
 CRef
 Solver_prop::addExtraClause(vec<Lit>& c)
 {
