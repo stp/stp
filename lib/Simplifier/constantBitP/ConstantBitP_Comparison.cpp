@@ -162,6 +162,7 @@ bool fast_exit(FixedBits& c0, FixedBits& c1)
     }
     return false;
   }
+  return false;
 }
 
 ///////// Signed operations.

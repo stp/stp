@@ -30,7 +30,7 @@ namespace simplifier
 {
 namespace constantBitP
 {
-class MultiplicationStats;
+struct MultiplicationStats;
 
 // Multiply is not yet  maximally precise.
 //!!!!!!!

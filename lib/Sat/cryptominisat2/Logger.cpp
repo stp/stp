@@ -374,7 +374,7 @@ void Logger::end(const finish_type finish)
 
         int res = fclose(proof);
         if (!res) {
-            assert(!"Unexpected failure of fclose()");
+            assert(0 && "Unexpected failure of fclose()");
         }
         proof = NULL;
         assert(proof == NULL);

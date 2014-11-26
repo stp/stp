@@ -87,13 +87,13 @@ public:
 
   ASTNode end() { return sentinel; }
 
-  virtual bool ok(const ASTNode n) { return true; }
+  virtual bool ok(const ASTNode& n) { return true; }
 };
 
 // Iterator that omits return atoms.
 class NonAtomIterator : public NodeIterator
 {
-  virtual bool ok(const ASTNode& n) { return !n.isAtom(); }
+  virtual bool ok(const ASTNode& n) override { return !n.isAtom(); }
 
 public:
   NonAtomIterator(const ASTNode& n, const ASTNode& uf, STPMgr& stp)

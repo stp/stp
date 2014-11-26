@@ -36,7 +36,6 @@ namespace BEEV
 {
 class ASTNode;
 typedef unsigned int* CBV;
-void FatalError(const char* str);
 }
 
 namespace simplifier
