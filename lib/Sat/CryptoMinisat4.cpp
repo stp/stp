@@ -107,4 +107,5 @@ void CryptoMinisat4::printStats()
 {
   // s->printStats();
 }
-};
+
+} //end namespace BEEV
