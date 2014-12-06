@@ -305,7 +305,7 @@ public:
 
 class XorClause : public Clause
 {
-protected:
+public:
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
     XorClause(const V& ps, const bool inverted, const uint _group) :
@@ -316,7 +316,6 @@ protected:
         calcXorAbstraction();
     }
 
-public:
     friend class ClauseAllocator;
 
     inline bool xor_clause_inverted() const
