@@ -94,4 +94,4 @@ void CryptoMinisat::printStats()
 {
   s->printStats();
 }
-};
+}

@@ -194,7 +194,7 @@ bool XorFinder::findXors(uint& sumLengths)
     while (getNextXor(begin,  end, impair)) {
         const Clause& c = *(begin->first);
         lits.clear();
-        for (const Lit *it = &c[0], *cend = it+c.size() ; it != cend; it++) {
+        for (const Lit *it = c.begin(), *cend = c.end() ; it != cend; it++) {
             lits.push(Lit(it->var(), false));
         }
         uint old_group = c.getGroup();
@@ -290,7 +290,7 @@ bool XorFinder::clauseEqual(const Clause& c1, const Clause& c2) const
 bool XorFinder::impairSigns(const Clause& c) const
 {
     uint num = 0;
-    for (const Lit *it = &c[0], *end = it + c.size(); it != end; it++)
+    for (const Lit *it = c.begin(), *end = c.end(); it != end; it++)
         num += it->sign();
 
     return num % 2;

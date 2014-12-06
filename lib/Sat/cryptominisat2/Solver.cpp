@@ -631,7 +631,7 @@ void Solver::tallyVotes(const vec<Clause*>& cs, vector<double>& votes) const
         if (c.size() > 63) divider = 0.0;
         else divider = 1.0/(double)((uint64_t)1<<(c.size()-1));
 
-        for (const Lit *it2 = &c[0], *end2 = it2 + c.size(); it2 != end2; it2++) {
+        for (const Lit *it2 = c.begin(), *end2 = c.end(); it2 != end2; it2++) {
             if (it2->sign()) votes[it2->var()] += divider;
             else votes[it2->var()] -= divider;
         }

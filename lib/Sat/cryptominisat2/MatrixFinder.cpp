@@ -53,7 +53,7 @@ inline Var MatrixFinder::fingerprint(const XorClause& c) const
 {
     Var fingerprint = 0;
 
-    for (const Lit* a = &c[0], *end = a + c.size(); a != end; a++)
+    for (const Lit* a = c.begin(), *end = c.end(); a != end; a++)
         fingerprint |= a->var();
 
     return fingerprint;

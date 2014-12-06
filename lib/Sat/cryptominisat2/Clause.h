@@ -76,15 +76,8 @@ protected:
 
     union  {uint32_t act; uint32_t abst;} extra;
     float oldActivityInter;
-    #ifdef _MSC_VER
-    Lit     data[1];
-    #else
-    Lit     data[0];
-    #endif //_MSC_VER
 
-#ifdef _MSC_VER
 public:
-#endif //_MSC_VER
     template<class V>
     Clause(const V& ps, const uint _group, const bool learnt)
     {
@@ -100,7 +93,7 @@ public:
         isRemoved = false;
         setGroup(_group);
 
-        memcpy(data, ps.getData(), ps.size()*sizeof(Lit));
+        memcpy(begin(), ps.getData(), ps.size()*sizeof(Lit));
         if (learnt) {
             extra.act = 0;
             oldActivityInter = 0;
@@ -108,8 +101,35 @@ public:
             calcAbstractionClause();
     }
 
-public:
-    friend class ClauseAllocator;
+    const Lit* begin() const
+    {
+      return (const Lit*)((char*)this + sizeof(Clause));
+    }
+
+    Lit* begin()
+    {
+      return (Lit*)((char*)this + sizeof(Clause));
+    }
+
+    const Lit* end() const
+    {
+      return (const Lit*)((char*)this + sizeof(Clause) + sizeof(Lit)*mySize);
+    }
+
+    Lit* end()
+    {
+      return (Lit*)((char*)this + sizeof(Clause) + sizeof(Lit)*mySize);
+    }
+
+    Lit& operator[](const unsigned at)
+    {
+        return begin()[at];
+    }
+
+    const Lit& operator[](const unsigned at) const
+    {
+        return begin()[at];
+    }
 
     uint   size        ()      const {
         return mySize;
@@ -176,13 +196,6 @@ public:
         return subsume0Done;
     }
 
-    Lit& operator [] (uint32_t i) {
-        return data[i];
-    }
-    const Lit& operator [] (uint32_t i) const {
-        return data[i];
-    }
-
     void setActivity(uint32_t i)  {
         extra.act = i;
     }
@@ -224,16 +237,16 @@ public:
     }
 
     const Lit*     getData     () const {
-        return data;
+        return begin();
     }
     Lit*    getData     () {
-        return data;
+        return begin();
     }
     const Lit*     getDataEnd     () const {
-        return data+size();
+        return end();
     }
     Lit*    getDataEnd     () {
-        return data+size();
+        return end();
     }
     void print(FILE* to = stdout) {
         plainPrint(to);
@@ -241,8 +254,8 @@ public:
     }
     void plainPrint(FILE* to = stdout) const {
         for (uint i = 0; i < size(); i++) {
-            if (data[i].sign()) fprintf(to, "-");
-            fprintf(to, "%d ", data[i].var() + 1);
+            if (begin()[i].sign()) fprintf(to, "-");
+            fprintf(to, "%d ", begin()[i].var() + 1);
         }
         fprintf(to, "0\n");
     }
@@ -317,7 +330,7 @@ public:
     void calcXorAbstraction() {
         extra.abst = 0;
         for (uint32_t i = 0; i != size(); i++)
-            extra.abst |= 1 << (data[i].var() & 31);
+            extra.abst |= 1 << (begin()[i].var() & 31);
     }
 
     void print() {
@@ -330,7 +343,7 @@ public:
         if (xor_clause_inverted())
             printf("-");
         for (uint i = 0; i < size(); i++) {
-            fprintf(to, "%d ", data[i].var() + 1);
+            fprintf(to, "%d ", begin()[i].var() + 1);
         }
         fprintf(to, "0\n");
     }
