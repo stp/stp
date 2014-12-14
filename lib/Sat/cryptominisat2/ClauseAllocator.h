@@ -89,8 +89,7 @@ class ClauseAllocator {
         vec<uint32_t> origSizes;
 
         class BinClTmp{
-          Clause cl;
-          Lit lit[2];
+          char dat[sizeof(Clause) + sizeof(Lit)*2];
         };
         MemoryPool<BinClTmp> clausePoolBin;
 
