@@ -155,7 +155,7 @@ public:
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1)
   {
     assert(e0.GetKind() == SYMBOL);
-    assert(!CheckSubstitutionMap(e0));
+    assert(!CheckSubstitutionMap(e0) && "e0 must NOT be in the SolverMap");
     (*SolverMap)[e0] = e1;
     return true;
   }
