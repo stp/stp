@@ -48,6 +48,11 @@
   extern char *smt2text;
   extern int smt2error (const char *msg);
 
+#ifdef _MSC_VER
+  #include <io.h>
+  int isatty(int fd) { return _isatty(fd); }
+#endif
+
   // File-static (local to this file) variables and functions
   static std::string _string_lit;  
   static char escapeChar(char c) {
@@ -113,7 +118,6 @@
 	}
 %}
 
-%option never-interactive
 %option noyywrap
 %option nounput
 %option noreject
