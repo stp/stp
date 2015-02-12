@@ -124,16 +124,19 @@ sub gen_cpp_file {
     "// Do not edit\n",
     "namespace BEEV {\n",
     "const char * _kind_names[] =  {\n";
-  for (@kindnames) {
-    print CPPFILE "   \"$_\",\n";
+
+  for my $i (0 .. $#kindnames) {
+    print CPPFILE "   \"", $kindnames[$i], "\",\n";
   }
   print CPPFILE "};\n\n";
 
   # category bits
   print CPPFILE
     "unsigned char _kind_categories[] = {\n";
-  for (@cat_bits) {
-    print CPPFILE "   $_,\n";
+
+  #for (@cat_bits) {
+  for my $i (0 .. $#kindnames) {
+    print CPPFILE "   ", $cat_bits[$i], ", //", $kindnames[$i], "\n";
   }
   print CPPFILE
     "};\n",
