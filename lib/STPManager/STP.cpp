@@ -126,7 +126,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   bm->UserFlags.ackermannisation = saved_ack;
   return result;
 
-} // End of TopLevelSTP()
+}
 
 ASTNode STP::callSizeReducing(ASTNode simplified_solved_InputToSAT,
                               BVSolver* bvSolver, PropagateEqualities* pe,
@@ -544,14 +544,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     worse = true;
 
   // It's of course very wasteful to do this! Later I'll make it reuse the
-  // work..
-  // We bit-blast again, in order to throw it away, so that we can measure
-  // whether
-  // the number of AIG nodes is smaller. The difficulty score is sometimes
-  // completely
-  // wrong, the sage-app7 are the motivating examples. The other way to improve
-  // it would
-  // be to fix the difficulty scorer!
+  // work..We bit-blast again, in order to throw it away, so that we can
+  // measure whether the number of AIG nodes is smaller. The difficulty score
+  // is sometimes completelywrong, the sage-app7 are the motivating examples.
+  // The other way to improve it would be to fix the difficulty scorer!
   if (!worse && (bitblasted_difficulty != -1))
   {
     BBNodeManagerAIG bbnm;
@@ -652,7 +648,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
-
   ToSATBase* satBase =
       bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : &toSATAIG;
 
@@ -671,6 +666,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     return SOLVER_TIMEOUT;
   }
+
   if (SOLVER_UNDECIDED != res)
   {
     // If the aig converter knows that it is never going to be called again,
@@ -730,33 +726,30 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 } // End of TopLevelSTPAux
 
 #if 0
-
-  //UserGuided abstraction refinement
-  SOLVER_RETURN_TYPE
-  STP::
-  UserGuided_AbsRefine(SATSolver& NewSolver,
-		       const ASTNode& original_input)
-  {
+//UserGuided abstraction refinement
+SOLVER_RETURN_TYPE
+STP::
+UserGuided_AbsRefine(SATSolver& NewSolver, const ASTNode& original_input)
+{
     ASTVec v = bm->GetAsserts_WithKey(0);
     if(v.empty())
       {
-	FatalError("UserGuided_AbsRefine: Something is seriously wrong."\
-		   "The input set is empty");
+        FatalError("UserGuided_AbsRefine: Something is seriously wrong. The input set is empty");
       }
-    ASTNode sureAddInput = 
-      (v.size() == 1) ? v[0] : bm->CreateNode(AND, v); 
+    ASTNode sureAddInput =
+      (v.size() == 1) ? v[0] : bm->CreateNode(AND, v);
 
     SOLVER_RETURN_TYPE res = SOLVER_UNDECIDED;
     res = TopLevelSTPAux(NewSolver, sureAddInput, original_input);
     if(SOLVER_UNDECIDED != res)
       {
-	return res;
+        return res;
       }
-    
+
     //Do refinement here
     if(AND != original_input.GetKind())
       {
-	FatalError("UserGuided_AbsRefine: The input must be an AND");
+        FatalError("UserGuided_AbsRefine: The input must be an AND");
       }
 
     ASTVec RefineFormulasVec;
@@ -765,46 +758,46 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     ASTNode astfalse = bm->CreateNode(FALSE);
     for(int count=0; count < bm->UserFlags.num_absrefine; count++)
       {
-	RemainingFormulasVec.clear();
-	RemainingFormulasVec.push_back(asttrue);
-	RefineFormulasVec.clear();	
-	RefineFormulasVec.push_back(asttrue);
-	ASTVec InputKids = original_input.GetChildren();
-	for(ASTVec::iterator it = InputKids.begin(), itend = InputKids.end();
-	    it!=itend;it++)
-	  {
-	    Ctr_Example->ClearComputeFormulaMap();
-	    if(astfalse == Ctr_Example->ComputeFormulaUsingModel(*it))
-	      {
-		RefineFormulasVec.push_back(*it);
-	      }
-	    else
-	      {
-		RemainingFormulasVec.push_back(*it);
-	      }
-	  }
-	ASTNode RefineFormulas =
-	  (RefineFormulasVec.size() == 1) ?
-	  RefineFormulasVec[0] : bm->CreateNode(AND, RefineFormulasVec);
-	res = TopLevelSTPAux(NewSolver, RefineFormulas, original_input);
-	if(SOLVER_UNDECIDED != res)
-	  {
-	    return res;
-	  }
+        RemainingFormulasVec.clear();
+        RemainingFormulasVec.push_back(asttrue);
+        RefineFormulasVec.clear();
+        RefineFormulasVec.push_back(asttrue);
+        ASTVec InputKids = original_input.GetChildren();
+        for(ASTVec::iterator it = InputKids.begin(), itend = InputKids.end();
+            it!=itend;it++)
+          {
+            Ctr_Example->ClearComputeFormulaMap();
+            if(astfalse == Ctr_Example->ComputeFormulaUsingModel(*it))
+              {
+                RefineFormulasVec.push_back(*it);
+              }
+            else
+              {
+                RemainingFormulasVec.push_back(*it);
+              }
+          }
+        ASTNode RefineFormulas =
+          (RefineFormulasVec.size() == 1) ?
+          RefineFormulasVec[0] : bm->CreateNode(AND, RefineFormulasVec);
+        res = TopLevelSTPAux(NewSolver, RefineFormulas, original_input);
+        if(SOLVER_UNDECIDED != res)
+          {
+            return res;
+          }
       }
 
-    ASTNode RemainingFormulas = 
+    ASTNode RemainingFormulas =
       (RemainingFormulasVec.size() == 1) ?
       RemainingFormulasVec[0] : bm->CreateNode(AND, RemainingFormulasVec);
     res = TopLevelSTPAux(NewSolver, RemainingFormulas, original_input);
-    
+
     if(SOLVER_UNDECIDED != res)
       {
-	return res;
+        return res;
       }
-    
+
     FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
-	       "either a divide by zero in the input or a bug in STP");    
+               "either a divide by zero in the input or a bug in STP");
     return SOLVER_ERROR;
   } //End of UserGuided_AbsRefine()
 #endif
