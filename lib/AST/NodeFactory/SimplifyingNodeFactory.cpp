@@ -998,6 +998,131 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   return result;
 }
 
+void SimplifyingNodeFactory::handle_bvand(
+  Kind kind,
+  unsigned int width,
+  const ASTVec& children,
+  ASTNode& result
+) {
+  bool all_one_found = false;
+  bool all_zero_found = false;
+
+  for (size_t i = 0, size = children.size(); i < size; ++i)
+  {
+    if (children[i].GetKind() == BEEV::BVCONST)
+    {
+      if (CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
+        all_one_found = true;
+      else if (CONSTANTBV::BitVector_is_empty(children[i].GetBVConst()))
+        all_zero_found = true;
+    }
+  }
+
+  if (all_zero_found)
+  {
+    //ZERO out the result
+    result = bm.CreateZeroConst(width);
+    return;
+  }
+  else if (all_one_found)
+  {
+    //Add everything except the ALL-ONE
+    ASTVec new_children;
+    for (size_t i = 0, size = children.size(); i < size; ++i)
+    {
+      if (children[i].GetKind() != BEEV::BVCONST ||
+          !CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
+      {
+        new_children.push_back(children[i]);
+      }
+    }
+
+    assert(new_children.size() != 0);
+    // constant. Should have been handled earlier.
+    if (new_children.size() == 1)
+    {
+      result = new_children[0];
+    }
+    else
+      result = hashing.CreateTerm(kind, width, new_children);
+  }
+
+  //Both are equal, return one
+  if (children.size() == 2 && children[0] == children[1])
+  {
+    result = children[0];
+  }
+
+  // If there is just one run of 1 bits, replace by an extract and a concat.
+  // i.e. 00011111111000000 & x , will be replaced by an extract of x just
+  // where
+  // there are one bits.
+  if (children.size() == 2 &&
+      (children[0].isConstant() || children[1].isConstant()))
+  {
+    ASTNode c0 = children[0];
+    ASTNode c1 = children[1];
+    if (c1.isConstant())
+    {
+      ASTNode t = c0;
+      c0 = c1;
+      c1 = t;
+    }
+
+    int start = -1;
+    int end = -1;
+    BEEV::CBV c = c0.GetBVConst();
+    bool bad = false;
+    for (int i = 0; i < (int)width; i++)
+    {
+      if (CONSTANTBV::BitVector_bit_test(c, i))
+      {
+        if (start == -1)
+          start = i; // first one bit.
+        else if (end != -1)
+          bad = true;
+      }
+
+      if (!CONSTANTBV::BitVector_bit_test(c, i))
+      {
+        if (start != -1 && end == -1)
+          end = i - 1; // end of run.
+      }
+    }
+    if (start != -1 && end == -1)
+      end = (int)width - 1;
+
+    if (!bad && start != -1)
+    {
+      assert(end != -1);
+
+      result = NodeFactory::CreateTerm(BVEXTRACT, end - start + 1, c1,
+                                       bm.CreateBVConst(32, end),
+                                       bm.CreateBVConst(32, start));
+
+      if (start > 0)
+      {
+        ASTNode z = bm.CreateZeroConst(start);
+        result = NodeFactory::CreateTerm(BVCONCAT, end + 1, result, z);
+      }
+      if (end < (int)width - 1)
+      {
+        ASTNode z = bm.CreateZeroConst((int)width - end - 1);
+        result = NodeFactory::CreateTerm(BVCONCAT, width, z, result);
+      }
+    }
+  }
+
+  if (children.size() == 2)
+  {
+    if (children[1].GetKind() == BVNEG && children[1][0] == children[0])
+      result = bm.CreateZeroConst(width);
+    if (children[0].GetKind() == BVNEG && children[0][0] == children[1])
+      result = bm.CreateZeroConst(width);
+  }
+}
+
+
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                            const ASTVec& children)
 {
@@ -1343,119 +1468,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     case BEEV::BVAND:
     {
-
-      bool oneFound = false;
-      bool zeroFound = false;
-
-      for (size_t i = 0, size = children.size(); i < size; ++i)
-      {
-        if (children[i].GetKind() == BEEV::BVCONST)
-        {
-          if (CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
-            oneFound = true;
-          else if (CONSTANTBV::BitVector_is_empty(children[i].GetBVConst()))
-            zeroFound = true;
-        }
-      }
-
-      if (zeroFound)
-      {
-        result = bm.CreateZeroConst(width);
-      }
-      else if (oneFound)
-      {
-        ASTVec new_children;
-        for (size_t i = 0, size = children.size(); i < size; ++i)
-        {
-          if (children[i].GetKind() != BEEV::BVCONST ||
-              !CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
-            new_children.push_back(children[i]);
-        }
-
-        assert(new_children.size() != 0);
-        // constant. Should have been handled earlier.
-        if (new_children.size() == 1)
-        {
-          result = new_children[0];
-        }
-        else
-          result = hashing.CreateTerm(kind, width, new_children);
-      }
-    }
-
-      if (children.size() == 2 && children[0] == children[1])
-      {
-        result = children[0];
-      }
-
-      // If there is just one run of 1 bits, replace by an extract and a concat.
-      // i.e. 00011111111000000 & x , will be replaced by an extract of x just
-      // where
-      // there are one bits. This should
-      if (children.size() == 2 &&
-          (children[0].isConstant() || children[1].isConstant()))
-      {
-        ASTNode c0 = children[0];
-        ASTNode c1 = children[1];
-        if (c1.isConstant())
-        {
-          ASTNode t = c0;
-          c0 = c1;
-          c1 = t;
-        }
-
-        int start = -1;
-        int end = -1;
-        BEEV::CBV c = c0.GetBVConst();
-        bool bad = false;
-        for (int i = 0; i < (int)width; i++)
-        {
-          if (CONSTANTBV::BitVector_bit_test(c, i))
-          {
-            if (start == -1)
-              start = i; // first one bit.
-            else if (end != -1)
-              bad = true;
-          }
-
-          if (!CONSTANTBV::BitVector_bit_test(c, i))
-          {
-            if (start != -1 && end == -1)
-              end = i - 1; // end of run.
-          }
-        }
-        if (start != -1 && end == -1)
-          end = (int)width - 1;
-
-        if (!bad && start != -1)
-        {
-          assert(end != -1);
-
-          result = NodeFactory::CreateTerm(BVEXTRACT, end - start + 1, c1,
-                                           bm.CreateBVConst(32, end),
-                                           bm.CreateBVConst(32, start));
-
-          if (start > 0)
-          {
-            ASTNode z = bm.CreateZeroConst(start);
-            result = NodeFactory::CreateTerm(BVCONCAT, end + 1, result, z);
-          }
-          if (end < (int)width - 1)
-          {
-            ASTNode z = bm.CreateZeroConst((int)width - end - 1);
-            result = NodeFactory::CreateTerm(BVCONCAT, width, z, result);
-          }
-        }
-      }
-
-      if (children.size() == 2)
-      {
-        if (children[1].GetKind() == BVNEG && children[1][0] == children[0])
-          result = bm.CreateZeroConst(width);
-        if (children[0].GetKind() == BVNEG && children[0][0] == children[1])
-          result = bm.CreateZeroConst(width);
-      }
+      handle_bvand(kind,width, children, result);
       break;
+    }
 
     case BEEV::BVSX:
     {
