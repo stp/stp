@@ -85,23 +85,16 @@ using std::endl;
 static bool debug_simplifyingNodeFactory = false;
 
 bool SimplifyingNodeFactory::children_all_constants(
-  Kind kind
-  , const ASTVec& children
+  const ASTVec& children
 ) const {
-  if (kind != BEEV::UNDEFINED && kind != BEEV::BOOLEAN &&
-      kind != BEEV::BITVECTOR && kind != BEEV::ARRAY)
-  {
-    bool allConstant = true;
-
-    for (unsigned i = 0; i < children.size(); i++)
-      if (!children[i].isConstant())
-      {
-        return false;
-      }
-
-    return true;
+  for (unsigned i = 0; i < children.size(); i++) {
+    if (!children[i].isConstant())
+    {
+      return false;
+    }
   }
-  return false;
+
+  return true;
 }
 
 ASTNode SimplifyingNodeFactory::get_smallest_number(const unsigned width)
@@ -130,7 +123,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
   // simplify those.
-  if (children_all_constants(kind, children))
+  if (kind != BEEV::UNDEFINED && kind != BEEV::BOOLEAN &&
+      kind != BEEV::BITVECTOR && kind != BEEV::ARRAY &&
+      children_all_constants(children))
   {
       const ASTNode& hash = hashing.CreateNode(kind, children);
       const ASTNode& c = NonMemberBVConstEvaluator(hash);
@@ -1014,19 +1009,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   assert(kind != BEEV::SYMBOL);
   // so are these.
 
-  // If all the parameters are constant, return the constant value.
-  bool allConstant = true;
-  for (unsigned i = 0; i < children.size(); i++)
-    if (!children[i].isConstant())
-    {
-      allConstant = false;
-      break;
-    }
-
   assert(bm.hashingNodeFactory == &hashing);
 
-  if (allConstant)
-  {
+  // If all the parameters are constant, return the constant value.
+  if (children_all_constants(children)) {
     const ASTNode& hash = hashing.CreateTerm(kind, width, children);
     const ASTNode& c = NonMemberBVConstEvaluator(hash);
     assert(c.isConstant());

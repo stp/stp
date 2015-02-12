@@ -84,7 +84,7 @@ private:
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 
   //Helper functions
-  bool children_all_constants(Kind kind, const ASTVec& children) const;
+  bool children_all_constants(const ASTVec& children) const;
   ASTNode get_smallest_number(const unsigned width);
   ASTNode get_largest_number(const unsigned width);
 
