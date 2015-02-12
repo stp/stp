@@ -69,8 +69,6 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_in
     NewSolver.setSeed(bm->UserFlags.random_seed);
   }
   SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
-  delete newS;
-
   return result;
 }
 
@@ -121,7 +119,6 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   bool saved_ack = bm->UserFlags.ackermannisation;
 
   ASTNode original_input;
-
   if (query != bm->ASTFalse)
   {
     original_input =
@@ -132,9 +129,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
   SATSolver* newS = get_new_sat_solver();
   SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
+  delete newS;
+
   bm->UserFlags.ackermannisation = saved_ack;
   return result;
-
 }
 
 ASTNode STP::callSizeReducing(ASTNode simplified_solved_InputToSAT,
