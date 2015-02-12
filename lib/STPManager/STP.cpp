@@ -368,7 +368,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     revert->toRevertTo = simplified_solved_InputToSAT;
   }
 
-  ASTNode inputToSAT;
 
   // round of substitution, solving, and simplification. ensures that
   // DAG is minimized as much as possibly, and ideally should
@@ -377,6 +376,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // bm->Begin_RemoveWrites = false;
   // bm->start_abstracting = false;
   bm->TermsAlreadySeenMap_Clear();
+
+  ASTNode inputToSAT;
   do
   {
     inputToSAT = simplified_solved_InputToSAT;
