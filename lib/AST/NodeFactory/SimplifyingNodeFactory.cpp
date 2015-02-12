@@ -1145,7 +1145,6 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   }
 
   ASTNode result;
-
   switch (kind)
   {
 
@@ -1388,14 +1387,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       if (children.size() == 2)
       {
         if (children.size() == 2 && children[0] == children[1])
+        {
           result = bm.CreateZeroConst(width);
-        else if (children.size() == 2 &&
-                 children[1] == bm.CreateZeroConst(width))
+        }
+        else if (children.size() == 2 && children[1] == bm.CreateZeroConst(width))
+        {
           result = children[0];
+        }
         else
+        {
           result = NodeFactory::CreateTerm(
               BVPLUS, width, children[0],
               NodeFactory::CreateTerm(BVUMINUS, width, children[1]));
+        }
       }
       break;
 
@@ -1474,8 +1478,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     case BEEV::BVSX:
     {
-      if (width == children[0].GetValueWidth())
+      if (width == children[0].GetValueWidth()) {
         result = children[0];
+      }
       break;
     }
 
