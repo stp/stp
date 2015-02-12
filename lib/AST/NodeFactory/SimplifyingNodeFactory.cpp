@@ -56,6 +56,7 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
+#include "stp/AST/ASTKind.h"
 #include <cassert>
 #include <cmath>
 
