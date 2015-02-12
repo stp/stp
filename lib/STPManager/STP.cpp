@@ -44,6 +44,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/AlwaysTrue.h"
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include <memory>
+using std::cout;
 
 namespace BEEV
 {
@@ -135,16 +136,16 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   return result;
 }
 
-ASTNode STP::callSizeReducing(ASTNode simplified_solved_InputToSAT,
+ASTNode STP::callSizeReducing(ASTNode inputToSat,
                               BVSolver* bvSolver, PropagateEqualities* pe,
                               const int initial_difficulty_score,
                               int& actualBBSize)
 {
   while (true)
   {
-    ASTNode last = simplified_solved_InputToSAT;
-    simplified_solved_InputToSAT = sizeReducing(last, bvSolver, pe);
-    if (last == simplified_solved_InputToSAT)
+    ASTNode last = inputToSat;
+    inputToSat = sizeReducing(last, bvSolver, pe);
+    if (last == inputToSat)
       break;
   }
 
@@ -159,7 +160,7 @@ ASTNode STP::callSizeReducing(ASTNode simplified_solved_InputToSAT,
         &bbnm, simp, bm->defaultNodeFactory, &(bm->UserFlags));
     ASTNodeMap fromTo;
     ASTNodeMap equivs;
-    bb.getConsts(simplified_solved_InputToSAT, fromTo, equivs);
+    bb.getConsts(inputToSat, fromTo, equivs);
 
     if (equivs.size() > 0)
     {
@@ -173,110 +174,110 @@ ASTNode STP::callSizeReducing(ASTNode simplified_solved_InputToSAT,
        * difficult looking ASTNodes.
       */
       ASTNodeMap cache;
-      simplified_solved_InputToSAT =
-          SubstitutionMap::replace(simplified_solved_InputToSAT, equivs, cache,
+      inputToSat =
+          SubstitutionMap::replace(inputToSat, equivs, cache,
                                    bm->defaultNodeFactory, false, true);
-      bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
+      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
     }
 
     if (fromTo.size() > 0)
     {
       ASTNodeMap cache;
-      simplified_solved_InputToSAT = SubstitutionMap::replace(
-          simplified_solved_InputToSAT, fromTo, cache, bm->defaultNodeFactory);
-      bm->ASTNodeStats(bb_message.c_str(), simplified_solved_InputToSAT);
+      inputToSat = SubstitutionMap::replace(
+          inputToSat, fromTo, cache, bm->defaultNodeFactory);
+      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
     }
     actualBBSize = bbnm.totalNumberOfNodes();
   }
-  return simplified_solved_InputToSAT;
+  return inputToSat;
 }
 
 // These transformations should never increase the size of the DAG.
-ASTNode STP::sizeReducing(ASTNode simplified_solved_InputToSAT,
+ASTNode STP::sizeReducing(ASTNode inputToSat,
                           BVSolver* bvSolver, PropagateEqualities* pe)
 {
 
-  simplified_solved_InputToSAT =
-      pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+  inputToSat =
+      pe->topLevel(inputToSat, arrayTransformer);
   if (simp->hasUnappliedSubstitutions())
   {
-    simplified_solved_InputToSAT =
-        simp->applySubstitutionMap(simplified_solved_InputToSAT);
+    inputToSat =
+        simp->applySubstitutionMap(inputToSat);
     simp->haveAppliedSubstitutionMap();
-    bm->ASTNodeStats(pe_message.c_str(), simplified_solved_InputToSAT);
+    bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.isSet("enable-unconstrained", "1"))
   {
     // Remove unconstrained.
     RemoveUnconstrained r1(*bm);
-    simplified_solved_InputToSAT =
-        r1.topLevel(simplified_solved_InputToSAT, simp);
-    bm->ASTNodeStats(uc_message.c_str(), simplified_solved_InputToSAT);
+    inputToSat =
+        r1.topLevel(inputToSat, simp);
+    bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.isSet("use-intervals", "1"))
   {
     EstablishIntervals intervals(*bm);
-    simplified_solved_InputToSAT =
-        intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
-    bm->ASTNodeStats(int_message.c_str(), simplified_solved_InputToSAT);
+    inputToSat =
+        intervals.topLevel_unsignedIntervals(inputToSat);
+    bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
-        simp, bm->defaultNodeFactory, simplified_solved_InputToSAT);
-    simplified_solved_InputToSAT =
-        cb.topLevelBothWays(simplified_solved_InputToSAT, true, false);
+        simp, bm->defaultNodeFactory, inputToSat);
+    inputToSat =
+        cb.topLevelBothWays(inputToSat, true, false);
 
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
     if (cb.isUnsatisfiable())
-      simplified_solved_InputToSAT = bm->ASTFalse;
+      inputToSat = bm->ASTFalse;
 
     if (simp->hasUnappliedSubstitutions())
     {
-      simplified_solved_InputToSAT =
-          simp->applySubstitutionMap(simplified_solved_InputToSAT);
+      inputToSat =
+          simp->applySubstitutionMap(inputToSat);
       simp->haveAppliedSubstitutionMap();
     }
 
-    bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
+    bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
   // Find pure literals.
   if (bm->UserFlags.isSet("pure-literals", "1"))
   {
     FindPureLiterals fpl;
-    bool changed = fpl.topLevel(simplified_solved_InputToSAT, simp, bm);
+    bool changed = fpl.topLevel(inputToSat, simp, bm);
     if (changed)
     {
-      simplified_solved_InputToSAT =
-          simp->applySubstitutionMap(simplified_solved_InputToSAT);
+      inputToSat =
+          simp->applySubstitutionMap(inputToSat);
       simp->haveAppliedSubstitutionMap();
-      bm->ASTNodeStats(pl_message.c_str(), simplified_solved_InputToSAT);
+      bm->ASTNodeStats(pl_message.c_str(), inputToSat);
     }
   }
 
   if (bm->UserFlags.isSet("always-true", "0"))
   {
     AlwaysTrue always(simp, bm, bm->defaultNodeFactory);
-    simplified_solved_InputToSAT =
-        always.topLevel(simplified_solved_InputToSAT);
+    inputToSat =
+        always.topLevel(inputToSat);
     bm->ASTNodeStats("After removing always true: ",
-                     simplified_solved_InputToSAT);
+                     inputToSat);
   }
 
   if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
   {
-    simplified_solved_InputToSAT =
-        bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT, false);
-    bm->ASTNodeStats(bitvec_message.c_str(), simplified_solved_InputToSAT);
+    inputToSat =
+        bvSolver->TopLevelBVSolve(inputToSat, false);
+    bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
   }
 
-  return simplified_solved_InputToSAT;
+  return inputToSat;
 }
 
 // Acceps a query, calls the SAT solver and generates Valid/InValid.
@@ -296,7 +297,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   std::auto_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode simplified_solved_InputToSAT = original_input;
+  ASTNode inputToSat = original_input;
 
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
@@ -308,30 +309,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
   if (((bm->UserFlags.ackermannisation &&
-        numberOfReadsLessThan(simplified_solved_InputToSAT, 50)) ||
-       bm->UserFlags.isSet("upfront-ack", "0")) ||
-      numberOfReadsLessThan(simplified_solved_InputToSAT, 10))
+        numberOfReadsLessThan(inputToSat, 50)) ||
+        bm->UserFlags.isSet("upfront-ack", "0")) ||
+      numberOfReadsLessThan(inputToSat, 10))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
-    simplified_solved_InputToSAT = arrayTransformer->TransformFormula_TopLevel(
-        simplified_solved_InputToSAT);
+    inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
     if (bm->UserFlags.stats_flag)
+    {
       cerr << "Have removed array operations" << endl;
+    }
     removed = true;
   }
 
-  const bool arrayops = containsArrayOps(simplified_solved_InputToSAT);
-  if (removed)
+  const bool arrayops = containsArrayOps(inputToSat);
+  if (removed) {
     assert(!arrayops);
+  }
 
   // Run size reducing just once.
-  simplified_solved_InputToSAT =
-      sizeReducing(simplified_solved_InputToSAT, bvSolver.get(), pe.get());
-
-  unsigned initial_difficulty_score =
-      difficulty.score(simplified_solved_InputToSAT);
-
+  inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
+  unsigned initial_difficulty_score = difficulty.score(inputToSat);
   int bitblasted_difficulty = -1;
 
   // Fixed point it if it's not too difficult.
@@ -339,20 +338,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // so it's expensive to call.
   if ((!arrayops && initial_difficulty_score < 1000000) ||
       bm->UserFlags.isSet("preserving-fixedpoint", "0"))
-    simplified_solved_InputToSAT =
-        callSizeReducing(simplified_solved_InputToSAT, bvSolver.get(), pe.get(),
+  {
+    inputToSat = callSizeReducing(inputToSat, bvSolver.get(), pe.get(),
                          initial_difficulty_score, bitblasted_difficulty);
+  }
 
   if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
   {
-    initial_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+    initial_difficulty_score = difficulty.score(inputToSat);
   }
 
   if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
-    std::cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
+    cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
 
   if (bm->UserFlags.stats_flag)
-    std::cout << "Difficulty After Size reducing:" << initial_difficulty_score
+    cout << "Difficulty After Size reducing:" << initial_difficulty_score
               << endl;
 
   // So we can delete the object and release all the hash-buckets storage.
@@ -365,9 +365,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     revert->backup_arrayToIndexToRead.insert(
         arrayTransformer->arrayToIndexToRead.begin(),
         arrayTransformer->arrayToIndexToRead.end());
-    revert->toRevertTo = simplified_solved_InputToSAT;
+    revert->toRevertTo = inputToSat;
   }
-
 
   // round of substitution, solving, and simplification. ensures that
   // DAG is minimized as much as possibly, and ideally should
@@ -377,18 +376,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // bm->start_abstracting = false;
   bm->TermsAlreadySeenMap_Clear();
 
-  ASTNode inputToSAT;
+  ASTNode tmp_inputToSAT;
   do
   {
-    inputToSAT = simplified_solved_InputToSAT;
+    tmp_inputToSAT = inputToSat;
 
     if (bm->soft_timeout_expired)
       return SOLVER_TIMEOUT;
 
     if (bm->UserFlags.optimize_flag)
     {
-      simplified_solved_InputToSAT =
-          pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+      inputToSat = pe->topLevel(inputToSat, arrayTransformer);
 
       // Imagine:
       // The simplifier simplifies (0 + T) to T
@@ -402,62 +400,53 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       //
       if (simp->hasUnappliedSubstitutions())
       {
-        simplified_solved_InputToSAT =
-            simp->applySubstitutionMap(simplified_solved_InputToSAT);
+        inputToSat = simp->applySubstitutionMap(inputToSat);
         simp->haveAppliedSubstitutionMap();
       }
-
-      bm->ASTNodeStats(pe_message.c_str(), simplified_solved_InputToSAT);
-
-      simplified_solved_InputToSAT =
-          simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-
-      bm->ASTNodeStats(size_inc_message.c_str(), simplified_solved_InputToSAT);
+      bm->ASTNodeStats(pe_message.c_str(), inputToSat);
+      inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
+      bm->ASTNodeStats(size_inc_message.c_str(), inputToSat);
     }
 
     if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
     {
-      simplified_solved_InputToSAT =
-          bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-      bm->ASTNodeStats(bitvec_message.c_str(), simplified_solved_InputToSAT);
+      inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
+      bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
     }
-  } while (inputToSAT != simplified_solved_InputToSAT);
+  } while (tmp_inputToSAT != inputToSat);
 
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
-        simp, bm->defaultNodeFactory, simplified_solved_InputToSAT);
-    simplified_solved_InputToSAT =
-        cb.topLevelBothWays(simplified_solved_InputToSAT);
-
+        simp, bm->defaultNodeFactory, inputToSat);
+    inputToSat = cb.topLevelBothWays(inputToSat);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
-    if (cb.isUnsatisfiable())
-      simplified_solved_InputToSAT = bm->ASTFalse;
+    if (cb.isUnsatisfiable()) {
+      inputToSat = bm->ASTFalse;
+    }
 
-    bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
+    bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.isSet("use-intervals", "1"))
   {
     EstablishIntervals intervals(*bm);
-    simplified_solved_InputToSAT =
-        intervals.topLevel_unsignedIntervals(simplified_solved_InputToSAT);
-    bm->ASTNodeStats(int_message.c_str(), simplified_solved_InputToSAT);
+    inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
+    bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }
 
   // Find pure literals.
   if (bm->UserFlags.isSet("pure-literals", "1"))
   {
     FindPureLiterals fpl;
-    bool changed = fpl.topLevel(simplified_solved_InputToSAT, simp, bm);
+    bool changed = fpl.topLevel(inputToSat, simp, bm);
     if (changed)
     {
-      simplified_solved_InputToSAT =
-          simp->applySubstitutionMap(simplified_solved_InputToSAT);
+      inputToSat = simp->applySubstitutionMap(inputToSat);
       simp->haveAppliedSubstitutionMap();
-      bm->ASTNodeStats(pl_message.c_str(), simplified_solved_InputToSAT);
+      bm->ASTNodeStats(pl_message.c_str(), inputToSat);
     }
   }
 
@@ -468,19 +457,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (bm->UserFlags.optimize_flag && bm->UserFlags.isSet("ite-context", "0"))
   {
     UseITEContext iteC(bm);
-    simplified_solved_InputToSAT = iteC.topLevel(simplified_solved_InputToSAT);
-    bm->ASTNodeStats("After ITE Context: ", simplified_solved_InputToSAT);
+    inputToSat = iteC.topLevel(inputToSat);
+    bm->ASTNodeStats("After ITE Context: ", inputToSat);
   }
 
   if (bm->UserFlags.isSet("aig-core-simplify", "0"))
   {
     AIGSimplifyPropositionalCore aigRR(bm);
-    simplified_solved_InputToSAT = aigRR.topLevel(simplified_solved_InputToSAT);
-    bm->ASTNodeStats("After AIG Core: ", simplified_solved_InputToSAT);
+    inputToSat = aigRR.topLevel(inputToSat);
+    bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
 
 #if 0
-  bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
+  bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", inputToSat);
 
   bm->SimplifyWrites_InPlace_Flag = true;
   bm->Begin_RemoveWrites = false;
@@ -488,30 +477,30 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   bm->TermsAlreadySeenMap_Clear();
   do
     {
-      inputToSAT = simplified_solved_InputToSAT;
+      tmp_inputToSAT = inputToSat;
 
       if (bm->UserFlags.optimize_flag)
         {
-          simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+          inputToSat = pe->topLevel(inputToSat, arrayTransformer);
 
           if (simp->hasUnappliedSubstitutions())
             {
-              simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+              inputToSat = simp->applySubstitutionMap(inputToSat);
               simp->haveAppliedSubstitutionMap();
             }
 
-          bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
+          bm->ASTNodeStats(pe->message.c_str(), inputToSat);
 
-          simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-          bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+          inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
+          bm->ASTNodeStats("after simplification: ", inputToSat);
 
 
           if (bm->UserFlags.isSet("always-true", "0"))
             {
               SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
               AlwaysTrue always (simp,bm,&nf);
-              simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
-              bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
+              inputToSat = always.topLevel(inputToSat);
+              bm->ASTNodeStats("After removing always true: ", inputToSat);
             }
         }
 
@@ -521,21 +510,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       // doesn't yet...
       if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
         {
-          simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-          bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+          inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
+          bm->ASTNodeStats("after solving: ", inputToSat);
         }
     }
-  while (inputToSAT != simplified_solved_InputToSAT);
-  bm->ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
+  while (tmp_inputToSAT != inputToSat);
+  bm->ASTNodeStats("After SimplifyWrites_Inplace: ", inputToSat);
 #endif
 
   if (bm->UserFlags.isSet("enable-unconstrained", "1"))
   {
     // Remove unconstrained.
     RemoveUnconstrained r(*bm);
-    simplified_solved_InputToSAT =
-        r.topLevel(simplified_solved_InputToSAT, simp);
-    bm->ASTNodeStats(uc_message.c_str(), simplified_solved_InputToSAT);
+    inputToSat =
+        r.topLevel(inputToSat, simp);
+    bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
   bm->TermsAlreadySeenMap_Clear();
@@ -544,7 +533,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   bm->SimplifyWrites_InPlace_Flag = false;
   // bm->Begin_RemoveWrites = false;
 
-  long final_difficulty_score = difficulty.score(simplified_solved_InputToSAT);
+  long final_difficulty_score = difficulty.score(inputToSat);
 
   bool worse = false;
   if (final_difficulty_score > 1.1 * initial_difficulty_score)
@@ -560,7 +549,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     BBNodeManagerAIG bbnm;
     BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
         &bbnm, simp, bm->defaultNodeFactory, &(bm->UserFlags));
-    bb.BBForm(simplified_solved_InputToSAT);
+    bb.BBForm(inputToSat);
     int newBB = bbnm.totalNumberOfNodes();
     if (bm->UserFlags.stats_flag)
       cerr << "Final BB Size:" << newBB << endl;
@@ -586,7 +575,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     if (bm->UserFlags.stats_flag)
       cerr << "simplification made the problem harder, reverting." << endl;
-    simplified_solved_InputToSAT = revert->toRevertTo;
+    inputToSat = revert->toRevertTo;
 
     // I do this to clear the substitution/solver map.
     // Not sure what would happen if it contained simplifications
@@ -609,9 +598,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  simplified_solved_InputToSAT =
-      arrayTransformer->TransformFormula_TopLevel(simplified_solved_InputToSAT);
-  bm->ASTNodeStats("after transformation: ", simplified_solved_InputToSAT);
+  inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
+  bm->ASTNodeStats("after transformation: ", inputToSat);
   bm->TermsAlreadySeenMap_Clear();
 
   bm->UserFlags.optimize_flag = optimize_enabled;
@@ -644,14 +632,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     cb = new simplifier::constantBitP::ConstantBitPropagation(
-        simp, bm->defaultNodeFactory, simplified_solved_InputToSAT);
+        simp, bm->defaultNodeFactory, inputToSat);
     cleaner.reset(cb);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
-    bm->ASTNodeStats(cb_message.c_str(), simplified_solved_InputToSAT);
+    bm->ASTNodeStats(cb_message.c_str(), inputToSat);
 
     if (cb->isUnsatisfiable())
-      simplified_solved_InputToSAT = bm->ASTFalse;
+      inputToSat = bm->ASTFalse;
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
@@ -663,7 +651,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // If it doesn't contain array operations, use ABC's CNF generation.
   res = Ctr_Example->CallSAT_ResultCheck(
-      NewSolver, simplified_solved_InputToSAT, original_input, satBase,
+      NewSolver, inputToSat, original_input, satBase,
       maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -693,7 +681,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
                                                  // have returned undecided..
 
   res = Ctr_Example->SATBased_ArrayReadRefinement(
-      NewSolver, simplified_solved_InputToSAT, original_input, satBase);
+      NewSolver, inputToSat, original_input, satBase);
   if (SOLVER_UNDECIDED != res)
   {
     if (toSATAIG.cbIsDestructed())
@@ -714,7 +702,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
         return res;
       }
 
-    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, simplified_solved_InputToSAT, original_input, satBase);
+    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, inputToSat, original_input, satBase);
     if (SOLVER_UNDECIDED != res)
       {
         if (toSATAIG.cbIsDestructed())
