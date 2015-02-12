@@ -56,19 +56,19 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
   // in the substitution map.
   result = topLevel_other(result, simplifier);
 
-// It is idempotent if there are no big ANDS (we have a special hack), and,
-// if we don't introduced any new "disjoint extracts."
+  // It is idempotent if there are no big ANDS (we have a special hack), and,
+  // if we don't introduced any new "disjoint extracts."
 
-#if 0
-    ASTNode result2 = topLevel_other(result, simplifier);
-    if (result2 != result)
-      {
-        cerr << n;
-        cerr << result;
-        cerr << result2;
-        assert(result2 == result);
-      }
-#endif
+  #if 0
+  ASTNode result2 = topLevel_other(result, simplifier);
+  if (result2 != result)
+  {
+      cerr << n;
+      cerr << result;
+      cerr << result2;
+      assert(result2 == result);
+  }
+  #endif
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
   return result;
 }
