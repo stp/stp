@@ -83,6 +83,9 @@ private:
 
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 
+  //Helper functions
+  bool children_all_constants(Kind kind, const ASTVec& children) const;
+
 public:
   virtual BEEV::ASTNode CreateNode(BEEV::Kind kind,
                                    const BEEV::ASTVec& children);

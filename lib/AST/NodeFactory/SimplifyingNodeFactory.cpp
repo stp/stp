@@ -84,15 +84,10 @@ using std::endl;
 
 static bool debug_simplifyingNodeFactory = false;
 
-ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
-{
-
-  assert(kind != SYMBOL);
-  // These are created specially.
-
-  // If all the parameters are constant, return the constant value.
-  // The bitblaster calls CreateNode with a boolean vector. We don't try to
-  // simplify those.
+bool SimplifyingNodeFactory::children_all_constants(
+  Kind kind
+  , const ASTVec& children
+) const {
   if (kind != BEEV::UNDEFINED && kind != BEEV::BOOLEAN &&
       kind != BEEV::BITVECTOR && kind != BEEV::ARRAY)
   {
@@ -101,17 +96,29 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
     for (unsigned i = 0; i < children.size(); i++)
       if (!children[i].isConstant())
       {
-        allConstant = false;
-        break;
+        return false;
       }
 
-    if (allConstant)
-    {
+    return true;
+  }
+  return false;
+}
+
+
+ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
+{
+  assert(kind != SYMBOL);
+  // These are created specially.
+
+  // If all the parameters are constant, return the constant value.
+  // The bitblaster calls CreateNode with a boolean vector. We don't try to
+  // simplify those.
+  if (children_all_constants(kind, children))
+  {
       const ASTNode& hash = hashing.CreateNode(kind, children);
       const ASTNode& c = NonMemberBVConstEvaluator(hash);
       assert(c.isConstant());
       return c;
-    }
   }
   ASTNode result;
 
