@@ -61,6 +61,12 @@ class STP // not copyable
   SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
                                     const ASTNode& modified_input);
 
+  SOLVER_RETURN_TYPE solve_by_sat_solver(
+    SATSolver* newS,
+    ASTNode original_input);
+
+  SATSolver* get_new_sat_solver();
+
 public:
 
   STPMgr* bm;

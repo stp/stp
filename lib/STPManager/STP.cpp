@@ -57,24 +57,25 @@ const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 
-// The absolute TopLevel function that invokes STP on the input
-// formula
-SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
-                                    const ASTNode& query)
+SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_input)
 {
+  SATSolver& NewSolver = *newS;
+  if (bm->UserFlags.stats_flag)
+  {
+    NewSolver.setVerbosity(1);
+  }
+  if (bm->UserFlags.random_seed_flag)
+  {
+    NewSolver.setSeed(bm->UserFlags.random_seed);
+  }
+  SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
+  delete newS;
 
-  // Unfortunatey this is a global variable,which the aux function needs to
-  // overwrite sometimes.
-  bool saved_ack = bm->UserFlags.ackermannisation;
+  return result;
+}
 
-  ASTNode original_input;
-
-  if (query != bm->ASTFalse)
-    original_input =
-        bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
-  else
-    original_input = inputasserts;
-
+SATSolver* STP::get_new_sat_solver()
+{
   SATSolver* newS = NULL;
   switch (bm->UserFlags.solver_to_use)
   {
@@ -85,13 +86,13 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
       newS = new CryptoMinisat;
       break;
     case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
-#ifdef USE_CRYPTOMINISAT4
+      #ifdef USE_CRYPTOMINISAT4
       newS = new CryptoMinisat4;
-#else
+      #else
       std::cerr << "WARNING: Falling back to CryptoMiniSatv2 since v4 \
             was not available at STP library compile time" << std::endl;
       newS = new CryptoMinisat;
-#endif
+      #endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
       newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
@@ -106,23 +107,31 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
       break;
   };
 
-  SATSolver& NewSolver = *newS;
+  return newS;
+}
 
-  if (bm->UserFlags.stats_flag)
+// The absolute TopLevel function that invokes STP on the input
+// formula
+SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
+                                    const ASTNode& query)
+{
+
+  // Unfortunatey this is a global variable,which the aux function needs to
+  // overwrite sometimes.
+  bool saved_ack = bm->UserFlags.ackermannisation;
+
+  ASTNode original_input;
+
+  if (query != bm->ASTFalse)
   {
-    NewSolver.setVerbosity(1);
+    original_input =
+        bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
+  } else {
+    original_input = inputasserts;
   }
 
-  if (bm->UserFlags.random_seed_flag)
-  {
-    NewSolver.setSeed(bm->UserFlags.random_seed);
-  }
-
-  SOLVER_RETURN_TYPE result;
-  result = TopLevelSTPAux(NewSolver, original_input);
-
-  delete newS;
-
+  SATSolver* newS = get_new_sat_solver();
+  SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
   bm->UserFlags.ackermannisation = saved_ack;
   return result;
 
