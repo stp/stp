@@ -472,54 +472,53 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
 #if 0
-    bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
+  bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", simplified_solved_InputToSAT);
 
-    bm->SimplifyWrites_InPlace_Flag = true;
-    bm->Begin_RemoveWrites = false;
-    bm->start_abstracting = false;
-    bm->TermsAlreadySeenMap_Clear();
-    do
-      {
-        inputToSAT = simplified_solved_InputToSAT;
+  bm->SimplifyWrites_InPlace_Flag = true;
+  bm->Begin_RemoveWrites = false;
+  bm->start_abstracting = false;
+  bm->TermsAlreadySeenMap_Clear();
+  do
+    {
+      inputToSAT = simplified_solved_InputToSAT;
 
-        if (bm->UserFlags.optimize_flag)
-          {
-            simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
+      if (bm->UserFlags.optimize_flag)
+        {
+          simplified_solved_InputToSAT = pe->topLevel(simplified_solved_InputToSAT, arrayTransformer);
 
-            if (simp->hasUnappliedSubstitutions())
-              {
-                simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
-                simp->haveAppliedSubstitutionMap();
-              }
+          if (simp->hasUnappliedSubstitutions())
+            {
+              simplified_solved_InputToSAT = simp->applySubstitutionMap(simplified_solved_InputToSAT);
+              simp->haveAppliedSubstitutionMap();
+            }
 
-            bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
+          bm->ASTNodeStats(pe->message.c_str(), simplified_solved_InputToSAT);
 
-            simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
-            bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
+          simplified_solved_InputToSAT = simp->SimplifyFormula_TopLevel(simplified_solved_InputToSAT, false);
+          bm->ASTNodeStats("after simplification: ", simplified_solved_InputToSAT);
 
 
-            if (bm->UserFlags.isSet("always-true", "0"))
-              {
-                SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-                AlwaysTrue always (simp,bm,&nf);
-                simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
-                bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
-              }
-          }
+          if (bm->UserFlags.isSet("always-true", "0"))
+            {
+              SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
+              AlwaysTrue always (simp,bm,&nf);
+              simplified_solved_InputToSAT = always.topLevel(simplified_solved_InputToSAT);
+              bm->ASTNodeStats("After removing always true: ", simplified_solved_InputToSAT);
+            }
+        }
 
-        // The word level solver uses the simplifier to apply the rewrites it makes,
-        // without optimisations enabled. It will enter infinite loops on some input.
-        // Instead it could use the apply function of the substitution map, but it
-        // doesn't yet...
-        if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
-          {
-            simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
-            bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
-          }
-      }
-    while (inputToSAT != simplified_solved_InputToSAT);
-
-    bm->ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
+      // The word level solver uses the simplifier to apply the rewrites it makes,
+      // without optimisations enabled. It will enter infinite loops on some input.
+      // Instead it could use the apply function of the substitution map, but it
+      // doesn't yet...
+      if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
+        {
+          simplified_solved_InputToSAT = bvSolver->TopLevelBVSolve(simplified_solved_InputToSAT);
+          bm->ASTNodeStats("after solving: ", simplified_solved_InputToSAT);
+        }
+    }
+  while (inputToSAT != simplified_solved_InputToSAT);
+  bm->ASTNodeStats("After SimplifyWrites_Inplace: ", simplified_solved_InputToSAT);
 #endif
 
   if (bm->UserFlags.isSet("enable-unconstrained", "1"))
