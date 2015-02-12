@@ -85,6 +85,8 @@ private:
 
   //Helper functions
   bool children_all_constants(Kind kind, const ASTVec& children) const;
+  ASTNode get_smallest_number(const unsigned width);
+  ASTNode get_largest_number(const unsigned width);
 
 public:
   virtual BEEV::ASTNode CreateNode(BEEV::Kind kind,

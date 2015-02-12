@@ -104,6 +104,23 @@ bool SimplifyingNodeFactory::children_all_constants(
   return false;
 }
 
+ASTNode SimplifyingNodeFactory::get_smallest_number(const unsigned width)
+{
+  // 1000000000 (most negative number.)
+  BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  CONSTANTBV::BitVector_Bit_On(max, width - 1);
+  return bm.CreateBVConst(max, width);
+}
+
+ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
+{
+  // 011111111 (most positive number.)
+  BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
+  CONSTANTBV::BitVector_Fill(max);
+  CONSTANTBV::BitVector_Bit_Off(max, width - 1);
+  return bm.CreateBVConst(max, width);
+}
+
 
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
 {
@@ -120,8 +137,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       assert(c.isConstant());
       return c;
   }
-  ASTNode result;
 
+  ASTNode result;
   switch (kind)
   {
     // convert the Less thans to greater thans.
@@ -149,72 +166,112 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       assert(children.size() == 2);
       if (children[0] == children[1])
         result = ASTFalse;
+
       if (children[1].GetKind() == BEEV::BVCONST)
       {
-        // 011111111 (most positive number.)
-        unsigned width = children[0].GetValueWidth();
-        BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
-        CONSTANTBV::BitVector_Fill(max);
-        CONSTANTBV::BitVector_Bit_Off(max, width - 1);
-        ASTNode biggestNumber = bm.CreateBVConst(max, width);
-        if (children[1] == biggestNumber)
-          result = ASTFalse;
-      }
-      if (children[0].GetKind() == BEEV::BVCONST)
-      {
-        unsigned width = children[0].GetValueWidth();
-        // 1000000000 (most negative number.)
-        BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
-        CONSTANTBV::BitVector_Bit_On(max, width - 1);
-        ASTNode smallestNumber = bm.CreateBVConst(max, width);
-        if (children[0] == smallestNumber)
+        const unsigned width = children[0].GetValueWidth();
+        if (children[1] == get_largest_number(width))
           result = ASTFalse;
       }
 
+      if (children[0].GetKind() == BEEV::BVCONST)
+      {
+        const unsigned width = children[0].GetValueWidth();
+        if (children[0] == get_smallest_number(width))
+          result = ASTFalse;
+      }
+
+      //2nd part is the same -> only care about 1st part
       if (children[0].GetKind() == BVCONCAT &&
-          children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
+          children[1].GetKind() == BVCONCAT &&
+          children[0][1] == children[1][1])
+      {
         result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][0],
                                          children[1][0]);
+      }
+
+      //1st part is the same -> only care about 2nd part
+      if (children[0].GetKind() == BVCONCAT &&
+          children[1].GetKind() == BVCONCAT &&
+          children[0][0] == children[1][0])
+      {
+        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][1],
+                                         children[1][1]);
+      }
 
       break;
 
     case BEEV::BVGT:
       assert(children.size() == 2);
-      if (children[0] == children[1])
+      if (children[0] == children[1]) {
         result = ASTFalse;
+        break;
+      }
+
       if (children[0].isConstant() &&
           CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+      {
         result = ASTFalse;
+        break;
+      }
+
       if (children[1].isConstant() &&
           CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+      {
         result = ASTFalse;
+        break;
+      }
+
       if (children[0].GetKind() == BVRIGHTSHIFT &&
           children[0][0] == children[1])
+      {
         result = ASTFalse;
+        break;
+      }
+
+      //2nd part is the same ->only care about 1st part
       if (children[0].GetKind() == BVCONCAT &&
           children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
+      {
         result =
             NodeFactory::CreateNode(BEEV::BVGT, children[0][0], children[1][0]);
+      }
+
+      //1st part is the same ->only care about 2nd part
       if (children[0].GetKind() == BVCONCAT &&
           children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
+      {
         result =
             NodeFactory::CreateNode(BEEV::BVGT, children[0][1], children[1][1]);
+      }
+
+      //If child 1 is constant, GT == NOT EQ
       if (children[1].isConstant() &&
           CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+      {
         result = NodeFactory::CreateNode(
             BEEV::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+      }
+
+      //If child 0 is constant, GT == NOT EQ
       if (children[0].isConstant() &&
           CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+      {
         result = NodeFactory::CreateNode(
             BEEV::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+      }
+
       if (children[0].GetKind() == BEEV::BVAND && children[0].Degree() > 1 &&
           ((children[0][0] == children[1]) || children[0][1] == children[1]))
+      {
         result = ASTFalse;
+        break;
+      }
       break;
 
     case BEEV::BVGE:
-      assert(children.size() == 2);
       {
+        assert(children.size() == 2);
         ASTNode a =
             NodeFactory::CreateNode(BEEV::BVGT, children[1], children[0]);
         result = NodeFactory::CreateNode(BEEV::NOT, a);
@@ -222,8 +279,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       break;
 
     case BEEV::BVSGE:
-      assert(children.size() == 2);
       {
+        assert(children.size() == 2);
         ASTNode a =
             NodeFactory::CreateNode(BEEV::BVSGT, children[1], children[0]);
         result = NodeFactory::CreateNode(BEEV::NOT, a);
@@ -268,7 +325,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
     {
       assert(children.size() == 2);
       if (children[0] == children[1])
+      {
         result = bm.ASTTrue;
+      }
       else
       {
         ASTVec newCh;

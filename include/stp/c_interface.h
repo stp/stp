@@ -269,6 +269,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e);
 Type vc_bvType(VC vc, int no_bits);
 Type vc_bv32Type(VC vc);
 
+//Const expressions for string, int, long-long, etc
 Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput);
 Expr vc_bvConstExprFromStr(VC vc, const char* binary_repr);
 Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value);
