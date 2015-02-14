@@ -132,9 +132,7 @@ ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,
 
 void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
 {
-  const Kind kind = n.GetKind();
-
-  if (kind == SYMBOL || kind == BVCONST || kind == FALSE || kind == TRUE)
+  if (n.isAtom())
     return;
 
   const ASTVec& c = n.GetChildren();
@@ -142,9 +140,7 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
        it++)
   {
     const ASTNode& ccc = *it;
-
-    const Kind k = ccc.GetKind();
-    if (k == SYMBOL || k == BVCONST || k == FALSE || k == TRUE)
+    if (ccc.isAtom())
       continue;
 
     if (PLPrintNodeSet.find(ccc) == PLPrintNodeSet.end())
