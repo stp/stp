@@ -30,20 +30,17 @@ THE SOFTWARE.
  *	    * converts less thans to greater thans.
  *
  * NOTE: CreateNode doesn't necessary return a node with the same Kind as what
- *it was called
- * with. For example: (AND TRUE FALSE) will return FALSE. Which isn't an AND
- *node.
+ * it was called with. For example: (AND TRUE FALSE) will return FALSE. Which
+ * isn't an AND node.
  *
  * The intention is to never create nodes that will later be simplified by
- *single level
- * re-write rules. So we will never create the node (NOT(NOT x)). This is and
- *example of
- * a multi-level rule that never increases the global number of nodes.
+ * single level re-write rules. So we will never create the node (NOT(NOT x))
+ * This is and example of a multi-level rule that never increases the global
+ * number of nodes.
  *
  * These rules never increase the total number of nodes.  They are complimented
- *by
- * multi-level re-write rules that consider the global reference count when
- *simplifying.
+ * by multi-level re-write rules that consider the global reference count when
+ * simplifying.
  *
  */
 
