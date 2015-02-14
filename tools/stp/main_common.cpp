@@ -210,7 +210,6 @@ void Main::read_file()
       error = true;
     }
   }
-
   else
   {
     cvcin = fopen(infile.c_str(), "r");
