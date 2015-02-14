@@ -83,9 +83,6 @@ enum SOLVER_RETURN_TYPE
 // Empty vector. Useful commonly used ASTNodes
 extern std::vector<ASTNode> _empty_ASTVec;
 
-// FIXME: Why aren't these defined in Globals.cpp?
-extern ASTNode ASTFalse, ASTTrue, ASTUndefined;
-
 // Useful global variables. Use for parsing only
 extern STP* GlobalSTP;
 extern STPMgr* ParserBM;
