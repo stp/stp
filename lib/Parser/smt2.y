@@ -78,8 +78,8 @@
 %union {  
   unsigned uintval;                  /* for numerals in types. */
   //ASTNode,ASTVec
-  BEEV::ASTNode *node;
-  BEEV::ASTVec *vec;
+  ASTNode *node;
+  ASTVec *vec;
   std::string *str;
 };
 
@@ -274,7 +274,7 @@ cmdi:
 function_param:
 LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  $$ = new ASTNode(BEEV::GlobalParserInterface->LookupOrCreateSymbol($2->c_str())); 
+  $$ = new ASTNode(GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
   GlobalParserInterface->addSymbol(*$$);
   $$->SetIndexWidth(0);
   $$->SetValueWidth($6);
@@ -307,11 +307,11 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 			yyerror(msg);
 		}
 	
-	BEEV::GlobalParserInterface->storeFunction(*$1, *$3, *$10);
+	GlobalParserInterface->storeFunction(*$1, *$3, *$10);
 
 	// Next time the variable is used, we want it to be fresh.
     for (size_t i = 0; i < $3->size(); i++)
-     BEEV::GlobalParserInterface->removeSymbol((*$3)[i]);
+     GlobalParserInterface->removeSymbol((*$3)[i]);
 	
 	delete $1;
 	delete $3;
@@ -320,11 +320,11 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula 
 {
-	BEEV::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+	GlobalParserInterface->storeFunction(*$1, *$3, *$6);
 
 	// Next time the variable is used, we want it to be fresh.
     for (size_t i = 0; i < $3->size(); i++)
-     BEEV::GlobalParserInterface->removeSymbol((*$3)[i]);
+     GlobalParserInterface->removeSymbol((*$3)[i]);
 
 	delete $1;
 	delete $3;
@@ -334,7 +334,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 {
 	ASTVec empty;
-        BEEV::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+        GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
         delete $1;
         delete $5;
@@ -350,7 +350,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
                 }
 	ASTVec empty;
 
-        BEEV::GlobalParserInterface->storeFunction(*$1,empty, *$9);
+        GlobalParserInterface->storeFunction(*$1,empty, *$9);
 
         delete $1;
         delete $9;
@@ -403,7 +403,7 @@ SOURCE_TOK
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol($1->c_str()); 
+  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
@@ -413,7 +413,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
-  ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   GlobalParserInterface->addSymbol(s);
@@ -421,7 +421,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   GlobalParserInterface->addSymbol(s);
   unsigned int index_len = $9;
   unsigned int value_len = $14;
