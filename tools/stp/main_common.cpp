@@ -312,7 +312,7 @@ int Main::main(int argc, char** argv)
     {
       bm->GetRunTimes()->print();
     }
-    (GlobalSTP->tosat)->PrintOutput(ret);
+    GlobalSTP->tosat->PrintOutput(ret);
 
     asserts = ASTNode();
     query = ASTNode();
