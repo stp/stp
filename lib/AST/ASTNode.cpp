@@ -50,7 +50,7 @@ ASTNode::ASTNode(ASTInternal* in) : _int_node_ptr(in)
   {
     in->IncRef();
   }
-} // End of Constructor
+}
 
 // Copy constructor.  Maintain _ref_count
 ASTNode::ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
@@ -59,26 +59,26 @@ ASTNode::ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
   {
     n._int_node_ptr->IncRef();
   }
-} // End of Copy Constructor for ASTNode
+}
 
 // ASTNode accessor function.
 Kind ASTNode::GetKind() const
 {
   // cout << "GetKind: " << _int_node_ptr;
   return _int_node_ptr->GetKind();
-} // End of GetKind()
+}
 
 // Declared here because of same ordering problem as GetKind.
 const ASTVec& ASTNode::GetChildren() const
 {
   return _int_node_ptr->GetChildren();
-} // End of GetChildren()
+}
 
 // Access node number
 int ASTNode::GetNodeNum() const
 {
   return _int_node_ptr->_node_num;
-} // End of GetNodeNum()
+}
 
 unsigned int ASTNode::GetIndexWidth() const
 {
@@ -98,7 +98,7 @@ unsigned int ASTNode::GetValueWidth() const
 void ASTNode::SetValueWidth(unsigned int vw) const
 {
   _int_node_ptr->_value_width = vw;
-} // End of SetValueWidth()
+}
 
 // return the type of the ASTNode:
 //
@@ -147,7 +147,7 @@ STPMgr* ASTNode::GetSTPMgr() const
 void ASTNode::nodeprint(ostream& os, bool c_friendly) const
 {
   _int_node_ptr->nodeprint(os, c_friendly);
-} // End of nodeprint()
+}
 
 // Get the name from a symbol (char *).  It's an error if kind !=
 // SYMBOL
@@ -156,7 +156,7 @@ const char* ASTNode::GetName() const
   if (GetKind() != SYMBOL)
     FatalError("GetName: Called GetName on a non-symbol: ", *this);
   return ((ASTSymbol*)_int_node_ptr)->GetName();
-} // End of GetName()
+}
 
 // Get the value of bvconst from a bvconst.  It's an error if kind
 // != BVCONST Treat the result as const (the compiler can't enforce
@@ -166,7 +166,7 @@ CBV ASTNode::GetBVConst() const
   if (GetKind() != BVCONST)
     FatalError("GetBVConst: non bitvector-constant: ", *this);
   return ((ASTBVConst*)_int_node_ptr)->GetBVConst();
-} // End of GetBVConst()
+}
 
 unsigned int ASTNode::GetUnsignedConst() const
 {
@@ -188,7 +188,7 @@ unsigned int ASTNode::GetUnsignedConst() const
     }
   }
   return (unsigned int)*((unsigned int*)n.GetBVConst());
-} // end of GetUnsignedConst
+}
 
 void ASTNode::NFASTPrint(int l, int max, int prefix) const
 {
@@ -221,7 +221,7 @@ void ASTNode::NFASTPrint(int l, int max, int prefix) const
   {
     it->NFASTPrint(l + 1, max, prefix + 1);
   }
-} // End of NFASTPrint()
+}
 
 bool ASTNode::isSimplfied() const
 {
@@ -293,5 +293,6 @@ void ASTNode::LetizeNode(void) const
       }
     }
   }
-} // end of LetizeNode()
-} // end of namespace
+}
+
+} //end of namespace
