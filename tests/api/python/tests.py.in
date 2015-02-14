@@ -56,6 +56,20 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
         self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
 
+    def test_equal(self):
+      s = self.s
+      a = s.bitvec('a', 32)
+      b = s.bitvec('b', 32)
+      self.assertFalse(s.check(b.eq(a), a.gt(b)))
+      self.assertTrue(s.check(b.eq(a), a.eq(a)))
+
+    def test_equal2(self):
+      s = self.s
+      a = s.bitvec('a', 32)
+      b = s.bitvec('b', 32)
+      self.assertFalse(s.check(b.eq(a), a.gt(b)))
+      self.assertTrue(s.check(b.eq(a), a.gt(b)))
+
     def test_bitvecval(self):
         s = self.s
         a = s.bitvec('a', 32)
@@ -144,6 +158,32 @@ class TestSTP(unittest.TestCase):
         b = s.bitvec('b')
         self.assertTrue(s.check(b == 1))
         self.assertTrue(s.check(b == 2))
+
+    def test_true_then_false(self):
+      s = self.s
+      a = s.bitvec(_, 32)
+      b = s.bitvec(_, 32)
+      self.assertTrue(s.check(a==b))
+      self.assertTrue(s.check(a>b))
+
+    def test_non_bitvector_constant_assert_fail(self):
+      s = self.s
+      a = s.bitvec(_, 32)
+      b = s.bitvec(_, 32)
+      s.check(a==b)
+      s.check(a==b)
+      s.check(a==b)
+      s.check(a>=b)
+      s.check(a>=b)
+      s.check(a>=b)
+      s.check(a>b)
+      s.check(a>b)
+      s.check(a<b)
+      s.check(a<b)
+      s.add(a==b)
+      s.check()
+      s.check(a>b)
+      a.add(a==b)
 
     def test_pushpop(self):
         s = self.s
