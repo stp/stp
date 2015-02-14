@@ -22,8 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// vim: tabstop=2:shiftwidth=2:softtabstop=2:expandtab
-
 /* This is ABSOLUTELY DISGUSTING!
  * These globals used by the library should
  * be encapsulated in a "Context" class
