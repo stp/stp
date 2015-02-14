@@ -151,6 +151,7 @@ const char* ASTNode::GetName() const
 {
   if (GetKind() != SYMBOL)
     FatalError("GetName: Called GetName on a non-symbol: ", *this);
+
   return ((ASTSymbol*)_int_node_ptr)->GetName();
 }
 
@@ -161,6 +162,7 @@ CBV ASTNode::GetBVConst() const
 {
   if (GetKind() != BVCONST)
     FatalError("GetBVConst: non bitvector-constant: ", *this);
+
   return ((ASTBVConst*)_int_node_ptr)->GetBVConst();
 }
 
