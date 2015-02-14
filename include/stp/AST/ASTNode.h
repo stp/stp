@@ -48,8 +48,7 @@ class ASTNode
   friend class CNFMgr;
   friend class ASTInterior;
   friend class vector<ASTNode>;
-  friend BEEV::ASTNode
-  HashingNodeFactory::CreateNode(const Kind kind,
+  friend BEEV::ASTNode HashingNodeFactory::CreateNode(const Kind kind,
                                  const BEEV::ASTVec& back_children);
   friend bool exprless(const ASTNode n1, const ASTNode n2);
   friend bool arithless(const ASTNode n1, const ASTNode n2);
