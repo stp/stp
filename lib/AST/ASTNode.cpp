@@ -237,9 +237,7 @@ void ASTNode::hasBeenSimplfied() const
 // occur more than once in "*this".
 void ASTNode::LetizeNode(void) const
 {
-  Kind kind = this->GetKind();
-
-  if (kind == SYMBOL || kind == BVCONST || kind == FALSE || kind == TRUE)
+  if (isAtom())
     return;
 
   // FIXME: this is ugly.
@@ -264,8 +262,7 @@ void ASTNode::LetizeNode(void) const
     }
     else
     {
-      Kind k = ccc.GetKind();
-      if (k == SYMBOL || k == BVCONST || k == FALSE || k == TRUE)
+      if (ccc.isAtom())
         continue;
 
       // 0. Else branch: Node has been seen before
