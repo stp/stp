@@ -27,11 +27,11 @@
 %x    COMMENT
 %x    STRING_LITERAL
 LETTER    ([a-zA-Z])
-HEX     ([0-9a-fA-F])
-BITS    ([0-1])
-DIGIT    ([0-9])
+HEX       ([0-9a-fA-F])
+BITS      ([0-1])
+DIGIT     ([0-9])
 OPCHAR    (['?\_$])
-ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
+ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 %%
 
 [()[\]{},.;:'!#?_=]  { return yytext[0];}
