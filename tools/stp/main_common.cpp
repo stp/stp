@@ -78,7 +78,7 @@ Main::Main() : onePrintBack(false)
 #endif
 
   bm = new STPMgr();
-  ParserBM = bm;
+  GlobalParserBM = bm;
 }
 
 Main::~Main()
@@ -98,14 +98,14 @@ void Main::parse_file(ASTVec* AssertsQuery)
   // least I dont).
   if (onePrintBack)
   {
-    parserInterface = &piTypeCheckDefault;
+    GlobalParserInterface = &piTypeCheckDefault;
   }
   else
   {
-    parserInterface = &piTypeCheckSimp;
+    GlobalParserInterface = &piTypeCheckSimp;
   }
 
-  parserInterface->startup();
+  GlobalParserInterface->startup();
 
   if (onePrintBack)
   {
@@ -133,7 +133,7 @@ void Main::parse_file(ASTVec* AssertsQuery)
     cvcparse((void*)AssertsQuery);
     cvclex_destroy();
   }
-  parserInterface = NULL;
+  GlobalParserInterface = NULL;
   if (toClose != NULL)
   {
     fclose(toClose);

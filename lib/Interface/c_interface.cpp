@@ -139,7 +139,7 @@ VC vc_createValidityChecker(void)
   BEEV::AbsRefine_CounterExample* Ctr_Example =
       new BEEV::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 
-  BEEV::ParserBM = bm;
+  BEEV::GlobalParserBM = bm;
   stpstar stp =
       new BEEV::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
 
@@ -477,7 +477,7 @@ void vc_assertFormula(VC vc, Expr e)
 
 void soft_time_out(int ignored)
 {
-  BEEV::ParserBM->soft_timeout_expired = true;
+  BEEV::GlobalParserBM->soft_timeout_expired = true;
 }
 
 //! Check validity of e in the current context. e must be a FORMULA
@@ -504,7 +504,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   stpstar stp = ((stpstar)vc);
   bmstar b = (bmstar)(stp->bm);
 
-  assert(!BEEV::ParserBM->soft_timeout_expired);
+  assert(!BEEV::GlobalParserBM->soft_timeout_expired);
 #if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
   if (timeout_ms != -1)
   {
@@ -557,7 +557,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   {
     // Reset the timer.
     setitimer(ITIMER_VIRTUAL, NULL, NULL);
-    BEEV::ParserBM->soft_timeout_expired = false;
+    BEEV::GlobalParserBM->soft_timeout_expired = false;
   }
 #endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) \
           */
@@ -1741,7 +1741,7 @@ Expr vc_parseExpr(VC vc, const char* infile)
   }
 
   BEEV::Cpp_interface pi(*b, b->defaultNodeFactory);
-  BEEV::parserInterface = &pi;
+  BEEV::GlobalParserInterface = &pi;
 
   BEEV::ASTVec* AssertsQuery = new BEEV::ASTVec;
   if (b->UserFlags.smtlib1_parser_flag)
@@ -1889,8 +1889,8 @@ void vc_Destroy(VC vc)
   delete decls;
   delete (stpstar) vc;
   BEEV::GlobalSTP = NULL;
-  delete BEEV::ParserBM;
-  BEEV::ParserBM = NULL;
+  delete BEEV::GlobalParserBM;
+  BEEV::GlobalParserBM = NULL;
   delete simpNF;
 }
 
@@ -2004,7 +2004,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
 #endif
 
   BEEV::Cpp_interface pi(*b, b->defaultNodeFactory);
-  BEEV::parserInterface = &pi;
+  BEEV::GlobalParserInterface = &pi;
 
   BEEV::ASTVec AssertsQuery;
   if (b->UserFlags.smtlib1_parser_flag)

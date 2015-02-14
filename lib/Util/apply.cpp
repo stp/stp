@@ -45,7 +45,7 @@ int main(int argc, char** argv)
   Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
   interface.startup();
   interface.ignoreCheckSat();
-  BEEV::parserInterface = &interface;
+  BEEV::GlobalParserInterface = &interface;
 
   Simplifier* simp = new Simplifier(mgr);
   ArrayTransformer* at = new ArrayTransformer(mgr, simp);
@@ -55,7 +55,7 @@ int main(int argc, char** argv)
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
   srand(time(NULL));
-  BEEV::ParserBM = &stp;
+  BEEV::GlobalParserBM = &stp;
 
   stp.UserFlags.disableSimplifications();
   stp.UserFlags.bitConstantProp_flag = true;

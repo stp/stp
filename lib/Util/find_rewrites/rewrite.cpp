@@ -735,7 +735,7 @@ int startup()
   }
 
   mgr = new BEEV::STPMgr();
-  BEEV::ParserBM = mgr;
+  BEEV::GlobalParserBM = mgr;
 
   mgr->UserFlags.division_by_zero_returns_one_flag = true;
 
@@ -1789,7 +1789,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
   mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
-  parserInterface = &piTypeCheckDefault;
+  GlobalParserInterface = &piTypeCheckDefault;
 
   stringstream v_ss, w_ss;
   v_ss << "(declare-fun v () (_ BitVec " << bits << "))";
@@ -1863,7 +1863,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
       cout << from << to;
       cout << "----";
       mgr->PopQuery();
-      parserInterface->popToFirstLevel();
+      GlobalParserInterface->popToFirstLevel();
       continue;
     }
 
@@ -1873,14 +1873,14 @@ void load_new_rules(const string fileName = "rules_new.smt2")
     rewrite_system.push_back(r);
 
     mgr->PopQuery();
-    parserInterface->popToFirstLevel();
+    GlobalParserInterface->popToFirstLevel();
   }
 
   extern int smt2lex_destroy(void);
   smt2lex_destroy();
 
-  parserInterface->cleanUp();
-  parserInterface = NULL;
+  GlobalParserInterface->cleanUp();
+  GlobalParserInterface = NULL;
   if (opended)
   {
     cout << "New Style Rules Loaded:" << rewrite_system.size() << endl;
@@ -1921,7 +1921,7 @@ void t2()
   smt2in = fopen("big_array.smt2", "r");
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
-  parserInterface = &piTypeCheckDefault;
+  GlobalParserInterface = &piTypeCheckDefault;
 
   mgr->GetRunTimes()->start(RunTimes::Parsing);
   smt2parse();
@@ -1935,7 +1935,7 @@ void t2()
   createVariables();
   ASTNode r = rename_then_rewrite(n, Rewrite_rule::getNullRule());
   cerr << r;
-  parserInterface = NULL;
+  GlobalParserInterface = NULL;
 }
 
 // loads the already existing rules.
@@ -1949,9 +1949,9 @@ void load_old_rules(string fileName)
   smt2in = fopen(fileName.c_str(), "r");
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
-  parserInterface = &piTypeCheckDefault;
+  GlobalParserInterface = &piTypeCheckDefault;
 
-  parserInterface->push(); // so the rules can be de-asserted.
+  GlobalParserInterface->push(); // so the rules can be de-asserted.
 
   mgr->GetRunTimes()->start(RunTimes::Parsing);
   smt2parse();
@@ -1989,9 +1989,9 @@ void load_old_rules(string fileName)
   }
 
   mgr->PopQuery();
-  parserInterface->popToFirstLevel();
-  parserInterface->cleanUp();
-  parserInterface = NULL;
+  GlobalParserInterface->popToFirstLevel();
+  GlobalParserInterface->cleanUp();
+  GlobalParserInterface = NULL;
 
   rewrite_system.buildLookupTable();
 

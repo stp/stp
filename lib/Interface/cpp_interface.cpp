@@ -419,14 +419,14 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
 {
   nf = bm.defaultNodeFactory;
   startup();
-  BEEV::parserInterface = this;
+  BEEV::GlobalParserInterface = this;
 
   Simplifier* simp = new Simplifier(&bm);
   ArrayTransformer* at = new ArrayTransformer(&bm, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(&bm, simp, at);
   ToSATAIG* tosat = new ToSATAIG(&bm, at);
 
-  BEEV::ParserBM = &bm_;
+  BEEV::GlobalParserBM = &bm_;
 
   GlobalSTP = new STP(&bm, simp, at, tosat, abs);
   init();

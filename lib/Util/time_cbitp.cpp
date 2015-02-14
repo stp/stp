@@ -244,7 +244,7 @@ int main(void)
   interface.startup();
 
   srand(time(NULL));
-  BEEV::ParserBM = beev;
+  BEEV::GlobalParserBM = beev;
 
   ostream& output = cerr;
 

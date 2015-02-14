@@ -75,22 +75,22 @@
     BEEV::ASTNode nptr;
     bool found = false;
     
-    if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    if (BEEV::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
     {
-    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	nptr= BEEV::GlobalParserInterface->LookupOrCreateSymbol(str);
     	found = true;
     }
-    else if (BEEV::parserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (BEEV::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr = BEEV::parserInterface->letMgr->resolveLet(str);
+    	nptr = BEEV::GlobalParserInterface->letMgr->resolveLet(str);
     	found = true;
     }
-    else if (BEEV::parserInterface->isBitVectorFunction(str))
+    else if (BEEV::GlobalParserInterface->isBitVectorFunction(str))
     {
 		smt2lval.str = new std::string(str);
 		return  BITVECTOR_FUNCTIONID_TOK;
     }
-   else if (BEEV::parserInterface->isBooleanFunction(str))
+   else if (BEEV::GlobalParserInterface->isBooleanFunction(str))
    {
                smt2lval.str = new std::string(str);
                return  BOOLEAN_FUNCTIONID_TOK;
@@ -103,7 +103,7 @@
 	  // Check valuesize to see if it's a prop var.  I don't like doing
 	  // type determination in the lexer, but it's easier than rewriting
 	  // the whole grammar to eliminate the term/formula distinction.  
-	  smt2lval.node = BEEV::parserInterface->newNode(nptr);
+	  smt2lval.node = BEEV::GlobalParserInterface->newNode(nptr);
 	  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 	    return FORMID_TOK;
 	  else 

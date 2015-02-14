@@ -83,13 +83,14 @@ enum SOLVER_RETURN_TYPE
 // Empty vector. Useful commonly used ASTNodes
 extern std::vector<ASTNode> _empty_ASTVec;
 
-// Useful global variables. Use for parsing only
-extern STP* GlobalSTP;
-extern STPMgr* ParserBM;
-extern Cpp_interface* parserInterface;
-
 // Needed by the SMTLIB printer
 extern enum inputStatus input_status;
+
+
+// Useful global variables. Use for parsing only
+extern STP* GlobalSTP;
+extern STPMgr* GlobalParserBM;
+extern Cpp_interface* GlobalParserInterface;
 
 // Function that computes various kinds of statistics for the phases
 // of STP

@@ -80,10 +80,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(parserInterface->CreateOneConst(1));
+		     smtlval.node = new BEEV::ASTNode(GlobalParserInterface->CreateOneConst(1));
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(parserInterface->CreateZeroConst(1));
+		     smtlval.node = new BEEV::ASTNode(GlobalParserInterface->CreateZeroConst(1));
 		   }
 		   return BITCONST_TOK;
 		};
@@ -224,20 +224,20 @@ bit{DIGIT}+     {
    bool found = false;
    ASTNode nptr;
    
-  if (BEEV::parserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+  if (BEEV::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
     {
-    	nptr= BEEV::parserInterface->LookupOrCreateSymbol(str);
+    	nptr= BEEV::GlobalParserInterface->LookupOrCreateSymbol(str);
     	found = true;
     }
-    else if (BEEV::parserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (BEEV::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr= BEEV::parserInterface->letMgr->resolveLet(str);
+    	nptr= BEEV::GlobalParserInterface->letMgr->resolveLet(str);
     	found = true;
     }
 
 	if (found)
 	{
-	  smtlval.node = BEEV::parserInterface->newNode(nptr);
+	  smtlval.node = BEEV::GlobalParserInterface->newNode(nptr);
 	  if ((smtlval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 	    return FORMID_TOK;
 	  else 

@@ -13,7 +13,7 @@
 #include "stp/cpp_interface.h"
 
   using namespace std;
-  using namespace BEEV;  
+  using namespace BEEV;
   extern char *yytext;
   extern int cvcerror (const char *msg);
 %}
@@ -38,11 +38,11 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
 
 [\n]             { /*Skip new line */ }
 [ \t\r\f]	 { /* skip whitespace */ }
-0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
-0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
-0x{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
-0h{HEX}+         { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
-0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(BEEV::ParserBM->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
+0b{BITS}+	 { cvclval.node = new BEEV::ASTNode(::BEEV::GlobalParserBM->CreateBVConst(yytext+2,  2)); return BVCONST_TOK;}
+0bin{BITS}+	 { cvclval.node = new BEEV::ASTNode(::BEEV::GlobalParserBM->CreateBVConst(yytext+4,  2)); return BVCONST_TOK;}
+0x{HEX}+         { cvclval.node = new BEEV::ASTNode(::BEEV::GlobalParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
+0h{HEX}+         { cvclval.node = new BEEV::ASTNode(::BEEV::GlobalParserBM->CreateBVConst(yytext+2, 16)); return BVCONST_TOK;}
+0hex{HEX}+       { cvclval.node = new BEEV::ASTNode(::BEEV::GlobalParserBM->CreateBVConst(yytext+4, 16)); return BVCONST_TOK;}
 {DIGIT}+	 { cvclval.uintval = strtoul(yytext, NULL, 10); return NUMERAL_TOK;}
 \'b[0-1]+ { cvclval.str = strdup(yytext+2); return BIN_BASED_NUMBER;}
 \'d[0-9]+ { cvclval.str = strdup(yytext+2); return DEC_BASED_NUMBER;}
@@ -130,9 +130,9 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
   
    ASTNode nptr;
    
-   if (BEEV::parserInterface->LookupSymbol(yytext,nptr)) // it's a symbol.
+   if (BEEV::GlobalParserInterface->LookupSymbol(yytext,nptr)) // it's a symbol.
     {
-	    cvclval.node = BEEV::parserInterface->newNode(nptr);
+	    cvclval.node = BEEV::GlobalParserInterface->newNode(nptr);
 		if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 		  return FORMID_TOK;
 		else 
@@ -142,10 +142,10 @@ ANYTHING ({LETTER}|{DIGIT}|{OPCHAR})
     // Making 4.4M strings took 1B instructions. So I split out the above case 
     // which occurs >90% of the time (so avoiding turning the char* into a string).
     string str(yytext);
-    if (BEEV::parserInterface->letMgr->isLetDeclared(str)) // a let.
+    if (BEEV::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr= BEEV::parserInterface->letMgr->resolveLet(str);
-    	cvclval.node = BEEV::parserInterface->newNode(nptr);
+    	nptr= BEEV::GlobalParserInterface->letMgr->resolveLet(str);
+    	cvclval.node = BEEV::GlobalParserInterface->newNode(nptr);
 	  
 	    if ((cvclval.node)->GetType() == BEEV::BOOLEAN_TYPE)
 	      return FORMID_TOK;

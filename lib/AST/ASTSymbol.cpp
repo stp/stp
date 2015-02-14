@@ -49,7 +49,7 @@ void ASTSymbol::nodeprint(ostream& os, bool c_friendly)
 // unique table
 void ASTSymbol::CleanUp()
 {
-  (ParserBM)->_symbol_unique_table.erase(this);
+  (GlobalParserBM)->_symbol_unique_table.erase(this);
   free((char*)this->_name);
   delete this;
 } // End of cleanup()

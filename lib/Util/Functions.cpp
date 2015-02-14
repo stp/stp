@@ -32,32 +32,32 @@ THE SOFTWARE.
 
 Result multiply(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvMultiplyBothWays(children, output, ParserBM, 0);
+  return bvMultiplyBothWays(children, output, GlobalParserBM, 0);
 }
 
 Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvUnsignedDivisionBothWays(children, output, ParserBM);
+  return bvUnsignedDivisionBothWays(children, output, GlobalParserBM);
 }
 
 Result signedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedDivisionBothWays(children, output, ParserBM);
+  return bvSignedDivisionBothWays(children, output, GlobalParserBM);
 }
 
 Result signedRemainder(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedRemainderBothWays(children, output, ParserBM);
+  return bvSignedRemainderBothWays(children, output, GlobalParserBM);
 }
 
 Result signedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedModulusBothWays(children, output, ParserBM);
+  return bvSignedModulusBothWays(children, output, GlobalParserBM);
 }
 
 Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvUnsignedModulusBothWays(children, output, ParserBM);
+  return bvUnsignedModulusBothWays(children, output, GlobalParserBM);
 }
 
 int bvOrF(int a, int b)

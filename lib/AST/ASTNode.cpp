@@ -136,7 +136,7 @@ ASTNode::~ASTNode()
 
 STPMgr* ASTNode::GetSTPMgr() const
 {
-  return ParserBM;
+  return GlobalParserBM;
 }
 
 // Print the node

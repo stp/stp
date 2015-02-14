@@ -52,7 +52,7 @@ ASTBVConst::ASTBVConst(const ASTBVConst& sym) : ASTInternal(sym._kind)
 // unique table
 void ASTBVConst::CleanUp()
 {
-  (ParserBM)->_bvconst_unique_table.erase(this);
+  (GlobalParserBM)->_bvconst_unique_table.erase(this);
   delete this;
 } // End of Cleanup()
 
