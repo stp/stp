@@ -55,7 +55,7 @@
   // Suppress the bogus warning suppression in bison (it generates
   // compile error)
 #undef __GNUC_MINOR__
-  
+
   extern char* smt2text;
   extern int smt2lineno;
   extern int smt2lex(void);
@@ -209,51 +209,51 @@ commands: commands cmdi
 ;
 
 cmdi:
-	LPAREN_TOK EXIT_TOK RPAREN_TOK
-	{
+    LPAREN_TOK EXIT_TOK RPAREN_TOK
+    {
        GlobalParserInterface->cleanUp();
        YYACCEPT;
-	}
-|	LPAREN_TOK CHECK_SAT_TOK RPAREN_TOK
-	{
-		GlobalParserInterface->checkSat(GlobalParserInterface->getAssertVector());
-	}
+    }
+|    LPAREN_TOK CHECK_SAT_TOK RPAREN_TOK
+    {
+        GlobalParserInterface->checkSat(GlobalParserInterface->getAssertVector());
+    }
 |
-	LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
-	{
-	  if (!(0 == strcmp($3->c_str(),"QF_BV") ||
-	        0 == strcmp($3->c_str(),"QF_ABV") ||
-	        0 == strcmp($3->c_str(),"QF_AUFBV"))) {
-	    yyerror("Wrong input logic:");
-	  }
-	  GlobalParserInterface->success();
-	  delete $3;
-	}
-|	LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
-	{
-	delete $4;
-	}
-|	LPAREN_TOK OPTION_TOK attribute RPAREN_TOK
-	{
-	}
-|	LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
-	{}
-|	LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
-	{}
-|	LPAREN_TOK PUSH_TOK NUMERAL_TOK RPAREN_TOK
-	{
-		for (unsigned i=0; i < $3;i++)
-		{
-			GlobalParserInterface->push();
-		}
-		GlobalParserInterface->success();
-	}
-|	LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
-	{
-		for (unsigned i=0; i < $3;i++)
-			GlobalParserInterface->pop();
-		GlobalParserInterface->success();
-	}
+    LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
+    {
+      if (!(0 == strcmp($3->c_str(),"QF_BV") ||
+            0 == strcmp($3->c_str(),"QF_ABV") ||
+            0 == strcmp($3->c_str(),"QF_AUFBV"))) {
+        yyerror("Wrong input logic:");
+      }
+      GlobalParserInterface->success();
+      delete $3;
+    }
+|    LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
+    {
+    delete $4;
+    }
+|    LPAREN_TOK OPTION_TOK attribute RPAREN_TOK
+    {
+    }
+|    LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
+    {}
+|    LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
+    {}
+|    LPAREN_TOK PUSH_TOK NUMERAL_TOK RPAREN_TOK
+    {
+        for (unsigned i=0; i < $3;i++)
+        {
+            GlobalParserInterface->push();
+        }
+        GlobalParserInterface->success();
+    }
+|    LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
+    {
+        for (unsigned i=0; i < $3;i++)
+            GlobalParserInterface->pop();
+        GlobalParserInterface->success();
+    }
 |   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
     {
     GlobalParserInterface->success();
@@ -263,11 +263,11 @@ cmdi:
     GlobalParserInterface->success();
     }
 |   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
-	{
-	GlobalParserInterface->AddAssert(*$3);
-	GlobalParserInterface->deleteNode($3);
-	GlobalParserInterface->success();
-	}
+    {
+    GlobalParserInterface->AddAssert(*$3);
+    GlobalParserInterface->deleteNode($3);
+    GlobalParserInterface->success();
+    }
 ;
 
 
@@ -300,40 +300,40 @@ function_param
 function_decl:
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term  
 {
-	if ($10->GetValueWidth() != $8)
-		{
-			char msg [100];
-			sprintf(msg, "Different bit-widths specified: %d %d", $10->GetValueWidth(), $8);
-			yyerror(msg);
-		}
-	
-	GlobalParserInterface->storeFunction(*$1, *$3, *$10);
+    if ($10->GetValueWidth() != $8)
+        {
+            char msg [100];
+            sprintf(msg, "Different bit-widths specified: %d %d", $10->GetValueWidth(), $8);
+            yyerror(msg);
+        }
 
-	// Next time the variable is used, we want it to be fresh.
+    GlobalParserInterface->storeFunction(*$1, *$3, *$10);
+
+    // Next time the variable is used, we want it to be fresh.
     for (size_t i = 0; i < $3->size(); i++)
      GlobalParserInterface->removeSymbol((*$3)[i]);
-	
-	delete $1;
-	delete $3;
-	delete $10;
+
+    delete $1;
+    delete $3;
+    delete $10;
 }
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula 
 {
-	GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+    GlobalParserInterface->storeFunction(*$1, *$3, *$6);
 
-	// Next time the variable is used, we want it to be fresh.
+    // Next time the variable is used, we want it to be fresh.
     for (size_t i = 0; i < $3->size(); i++)
      GlobalParserInterface->removeSymbol((*$3)[i]);
 
-	delete $1;
-	delete $3;
-	delete $6;
+    delete $1;
+    delete $3;
+    delete $6;
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 {
-	ASTVec empty;
+    ASTVec empty;
         GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
         delete $1;
@@ -348,7 +348,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
                         sprintf(msg, "Different bit-widths specified: %d %d", $9->GetValueWidth(), $7);
                         yyerror(msg);
                 }
-	ASTVec empty;
+    ASTVec empty;
 
         GlobalParserInterface->storeFunction(*$1,empty, *$9);
 
@@ -364,13 +364,13 @@ STRING_TOK {
  std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
   
   if (0 == strcmp($1->c_str(), "sat"))
-  	input_status = TO_BE_SATISFIABLE;
+      input_status = TO_BE_SATISFIABLE;
   else if (0 == strcmp($1->c_str(), "unsat"))
     input_status = TO_BE_UNSATISFIABLE;
   else if (0 == strcmp($1->c_str(), "unknown"))
-  	input_status = TO_BE_UNKNOWN; 
+      input_status = TO_BE_UNKNOWN;
   else 
-  	yyerror($1->c_str());
+      yyerror($1->c_str());
   delete $1;
   $$ = NULL; 
 }
@@ -389,12 +389,12 @@ SOURCE_TOK
 {} 
 | PRINT_TOK TRUE_TOK
 {
-	GlobalParserInterface->setPrintSuccess(true);
-	GlobalParserInterface->success();
+    GlobalParserInterface->setPrintSuccess(true);
+    GlobalParserInterface->success();
 }
 | PRINT_TOK FALSE_TOK
 {
-	GlobalParserInterface->setPrintSuccess(false);
+    GlobalParserInterface->setPrintSuccess(false);
 }
 ;
 
@@ -683,7 +683,7 @@ TRUE_TOK
   GlobalParserInterface->letMgr->CleanupLetIDMap();
 }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
-{	
+{
   $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$2,*$3));
   delete $2;
   delete $3;
@@ -886,8 +886,8 @@ TERMID_TOK
       GlobalParserInterface->nf->CreateTerm( BVOR, width,
      GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3),
      GlobalParserInterface->nf->CreateTerm(BVAND, width,
-	     GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2),
-     	 GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$3)
+         GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2),
+          GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$3)
      )));
 
       $$ = n;
@@ -896,11 +896,11 @@ TERMID_TOK
 }
 |  BVCOMP_TOK an_term an_term
 {
-  	ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(ITE, 1, 
-  	GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
-  	GlobalParserInterface->CreateOneConst(1),
-  	GlobalParserInterface->CreateZeroConst(1)));
-  	
+      ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(ITE, 1,
+      GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
+      GlobalParserInterface->CreateOneConst(1),
+      GlobalParserInterface->CreateZeroConst(1)));
+
       $$ = n;
     GlobalParserInterface->deleteNode( $2);
     GlobalParserInterface->deleteNode( $3);
@@ -1068,46 +1068,46 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
-	  unsigned count = $4;
-	  if (count < 1)
-	  	FatalError("One or more repeats please");
+      unsigned count = $4;
+      if (count < 1)
+          FatalError("One or more repeats please");
 
-	  unsigned w = $6->GetValueWidth();  
+      unsigned w = $6->GetValueWidth();
       ASTNode n =  *$6;
       
       for (unsigned i =1; i < count; i++)
       {
-      	  n = GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
+            n = GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
       }
       $$ = GlobalParserInterface->newNode(n);
       GlobalParserInterface->deleteNode( $6);
 }
 | UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
-	$$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$2, 10, $3));
+    $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$2, 10, $3));
     $$->SetValueWidth($3);
     delete $2;
 }
 | BVCONST_HEXIDECIMAL_TOK
 {
-	unsigned width = $1->length()*4;
-	$$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 16, width));
+    unsigned width = $1->length()*4;
+    $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 16, width));
     $$->SetValueWidth(width);
     delete $1;
 }
 | BVCONST_BINARY_TOK
 {
-	unsigned width = $1->length();
-	$$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 2, width));
+    unsigned width = $1->length();
+    $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 2, width));
     $$->SetValueWidth(width);
     delete $1;
 }
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
-{	
+{
   $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$2,*$3));
   
   if ($$->GetType() != BITVECTOR_TYPE)
-  	yyerror("Must be bitvector type");
+      yyerror("Must be bitvector type");
   
   delete $2;
   delete $3;
