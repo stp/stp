@@ -185,7 +185,7 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
       }
     }
   }
-} // end of LetizeNode()
+}
 
 string functionToSMTLIBName(const Kind k, bool smtlib1)
 {

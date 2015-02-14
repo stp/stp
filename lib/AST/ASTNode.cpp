@@ -83,17 +83,17 @@ int ASTNode::GetNodeNum() const
 unsigned int ASTNode::GetIndexWidth() const
 {
   return _int_node_ptr->_index_width;
-} // End of GetIndexWidth()
+}
 
 void ASTNode::SetIndexWidth(unsigned int iw) const
 {
   _int_node_ptr->_index_width = iw;
-} // End of SetIndexWidth()
+}
 
 unsigned int ASTNode::GetValueWidth() const
 {
   return _int_node_ptr->_value_width;
-} // End of GetValueWidth()
+}
 
 void ASTNode::SetValueWidth(unsigned int vw) const
 {
@@ -105,43 +105,43 @@ void ASTNode::SetValueWidth(unsigned int vw) const
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 types ASTNode::GetType() const
 {
-  if ((GetIndexWidth() == 0) && (GetValueWidth() == 0)) // BOOLEAN
+  if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
     return BOOLEAN_TYPE;
-  if ((GetIndexWidth() == 0) && (GetValueWidth() > 0)) // BITVECTOR
+
+  if ((GetIndexWidth() == 0) && (GetValueWidth() > 0))
     return BITVECTOR_TYPE;
-  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0)) // ARRAY
+
+  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0))
     return ARRAY_TYPE;
+
   return UNKNOWN_TYPE;
-} // End of GetType()
+}
 
 // Assignment
 ASTNode& ASTNode::operator=(const ASTNode& n)
 {
   if (n._int_node_ptr)
-  {
     n._int_node_ptr->IncRef();
-  }
+
   if (_int_node_ptr)
-  {
     _int_node_ptr->DecRef();
-  }
+
   _int_node_ptr = n._int_node_ptr;
   return *this;
-} // End of operator=
+}
 
-// Destructor
 ASTNode::~ASTNode()
 {
   if (_int_node_ptr)
   {
     _int_node_ptr->DecRef();
   }
-} // End of Destructor()
+}
 
 STPMgr* ASTNode::GetSTPMgr() const
 {
   return ParserBM;
-} // End of GetSTPMgr()
+}
 
 // Print the node
 void ASTNode::nodeprint(ostream& os, bool c_friendly) const
