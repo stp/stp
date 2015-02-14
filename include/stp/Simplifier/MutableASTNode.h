@@ -50,11 +50,11 @@ private:
 
   MutableASTNode(const ASTNode& n_) : n(n_) { dirty = false; }
 
-  // Make a mutable ASTNode graph like the ASTNode one, but with pointers back
-  // up too.
-  // It's convoluted because we want a post order traversal. The root node of a
-  // sub-tree
-  // will be created after its children.
+  /* Make a mutable ASTNode graph like the ASTNode one, but with pointers back
+   * up too. It's convoluted because we want a post order traversal. The root
+   * node of a sub-tree will be created after its children.
+   */
+
 public:
   static MutableASTNode* build(const ASTNode& n,
                                std::map<ASTNode, MutableASTNode*>& visited)
