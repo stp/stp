@@ -26,9 +26,6 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
 
-/********************************************************************
- *  This file gives the class definitions of the ASTNode class      *
-********************************************************************/
 namespace BEEV
 {
 uint8_t ASTNode::getIteration() const
@@ -117,7 +114,6 @@ types ASTNode::GetType() const
   return UNKNOWN_TYPE;
 }
 
-// Assignment
 ASTNode& ASTNode::operator=(const ASTNode& n)
 {
   if (n._int_node_ptr)
