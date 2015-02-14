@@ -94,8 +94,7 @@ void Main::parse_file(ASTVec* AssertsQuery)
   Cpp_interface piTypeCheckSimp(*bm, &nfTypeCheckSimp);
   Cpp_interface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
 
-  // If you are converting formats, you probably don't want it simplifying (at
-  // least I dont).
+  // If you are converting formats, you probably don't want it simplifying
   if (onePrintBack)
   {
     GlobalParserInterface = &piTypeCheckDefault;
