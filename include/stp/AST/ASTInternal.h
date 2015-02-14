@@ -145,7 +145,7 @@ public:
   }
 
   // Increment Reference Count
-  void IncRef() { ++_ref_count; } // End of IncRef()
+  void IncRef() { ++_ref_count; }
 
   // Decrement Reference Count
   void DecRef()
@@ -155,7 +155,7 @@ public:
       // Delete node from unique table and kill it.
       CleanUp();
     }
-  } // End of DecRef()
+  }
 
   int GetNodeNum() const { return _node_num; } // End of GetNodeNum()
 
