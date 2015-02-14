@@ -98,135 +98,33 @@ public:
   // Check if it points to a null node
   inline bool IsNull() const { return _int_node_ptr == NULL; }
 
+  bool isSimplfied() const;
+  void hasBeenSimplfied() const;
+
   bool isConstant() const
   {
     const Kind k = GetKind();
     return (k == BVCONST || k == TRUE || k == FALSE);
   }
 
-  bool isSimplfied() const;
-
-  void hasBeenSimplfied() const;
-
   bool isITE() const
   {
-    bool result;
-
     Kind k = GetKind();
-    switch (k)
-    {
-      case ITE:
-      {
-        result = true;
-        break;
-      }
-      default:
-      {
-        result = false;
-        break;
-      }
-    }
-
-    return result;
+    return k== ITE;
   }
 
   bool isAtom() const
   {
-    bool result;
-
     const Kind k = GetKind();
-    switch (k)
-    {
-      case TRUE:
-      {
-        result = true;
-        break;
-      }
-      case FALSE:
-      {
-        result = true;
-        break;
-      }
-      case SYMBOL:
-      {
-        result = true;
-        break;
-      }
-      case BVCONST:
-      {
-        result = true;
-        break;
-      }
-      default:
-      {
-        result = false;
-        break;
-      }
-    }
-
-    return result;
-  } // End of isAtom()
+    return k == TRUE || k == FALSE || k == SYMBOL || k == BVCONST;
+  }
 
   bool isPred() const
   {
-    bool result;
-
     const Kind k = GetKind();
-    switch (k)
-    {
-      case BVLT:
-      {
-        result = true;
-        break;
-      }
-      case BVLE:
-      {
-        result = true;
-        break;
-      }
-      case BVGT:
-      {
-        result = true;
-        break;
-      }
-      case BVGE:
-      {
-        result = true;
-        break;
-      }
-      case BVSLT:
-      {
-        result = true;
-        break;
-      }
-      case BVSLE:
-      {
-        result = true;
-        break;
-      }
-      case BVSGT:
-      {
-        result = true;
-        break;
-      }
-      case BVSGE:
-      {
-        result = true;
-        break;
-      }
-      case EQ:
-      {
-        result = true;
-        break;
-      }
-      default:
-      {
-        result = false;
-        break;
-      }
-    }
-    return result;
-  } // End of isPred()
+    return k == BVLT || k == BVLE || k == BVGT || k == BVGE ||
+            k == BVSLT || k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
+  }
 
   // delegates to the ASTInternal node.
   void nodeprint(ostream& os, bool c_friendly = false) const;

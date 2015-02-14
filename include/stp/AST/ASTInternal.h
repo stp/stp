@@ -25,10 +25,10 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 #include <iostream>
+#include "stp/AST/ASTKind.h"
 
-/********************************************************************
- *  This file gives the class description of the ASTInternal class  *
-********************************************************************/
+using std::ostream;
+
 namespace BEEV
 {
 /******************************************************************
@@ -50,7 +50,7 @@ template <class E, class T> struct enumeration
 
 private:
   T e_;
-}; // end of Enumeration struct
+};
 
 /******************************************************************
  * Class ASTInternal:                                             *
@@ -124,10 +124,6 @@ protected:
   virtual ASTVec const& GetChildren() const = 0;
 
 public:
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
-
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(Kind kind, int nodenum = 0)
       : iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
