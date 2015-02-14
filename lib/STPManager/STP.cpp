@@ -197,12 +197,10 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
                           BVSolver* bvSolver, PropagateEqualities* pe)
 {
 
-  inputToSat =
-      pe->topLevel(inputToSat, arrayTransformer);
+  inputToSat = pe->topLevel(inputToSat, arrayTransformer);
   if (simp->hasUnappliedSubstitutions())
   {
-    inputToSat =
-        simp->applySubstitutionMap(inputToSat);
+    inputToSat = simp->applySubstitutionMap(inputToSat);
     simp->haveAppliedSubstitutionMap();
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
@@ -211,16 +209,14 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   {
     // Remove unconstrained.
     RemoveUnconstrained r1(*bm);
-    inputToSat =
-        r1.topLevel(inputToSat, simp);
+    inputToSat = r1.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.isSet("use-intervals", "1"))
   {
     EstablishIntervals intervals(*bm);
-    inputToSat =
-        intervals.topLevel_unsignedIntervals(inputToSat);
+    inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
     bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }
 
@@ -229,9 +225,8 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
         simp, bm->defaultNodeFactory, inputToSat);
-    inputToSat =
-        cb.topLevelBothWays(inputToSat, true, false);
 
+    inputToSat = cb.topLevelBothWays(inputToSat, true, false);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
     if (cb.isUnsatisfiable())
@@ -239,8 +234,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 
     if (simp->hasUnappliedSubstitutions())
     {
-      inputToSat =
-          simp->applySubstitutionMap(inputToSat);
+      inputToSat = simp->applySubstitutionMap(inputToSat);
       simp->haveAppliedSubstitutionMap();
     }
 
@@ -254,8 +248,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bool changed = fpl.topLevel(inputToSat, simp, bm);
     if (changed)
     {
-      inputToSat =
-          simp->applySubstitutionMap(inputToSat);
+      inputToSat = simp->applySubstitutionMap(inputToSat);
       simp->haveAppliedSubstitutionMap();
       bm->ASTNodeStats(pl_message.c_str(), inputToSat);
     }
@@ -264,16 +257,13 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.isSet("always-true", "0"))
   {
     AlwaysTrue always(simp, bm, bm->defaultNodeFactory);
-    inputToSat =
-        always.topLevel(inputToSat);
-    bm->ASTNodeStats("After removing always true: ",
-                     inputToSat);
+    inputToSat = always.topLevel(inputToSat);
+    bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
 
   if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
   {
-    inputToSat =
-        bvSolver->TopLevelBVSolve(inputToSat, false);
+    inputToSat = bvSolver->TopLevelBVSolve(inputToSat, false);
     bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
   }
 

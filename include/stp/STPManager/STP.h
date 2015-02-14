@@ -38,7 +38,8 @@ THE SOFTWARE.
 
 namespace BEEV
 {
-class STP // not copyable
+// not copyable
+class STP
 {
 
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
