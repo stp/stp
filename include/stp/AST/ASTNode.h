@@ -54,19 +54,10 @@ class ASTNode
   friend bool exprless(const ASTNode n1, const ASTNode n2);
   friend bool arithless(const ASTNode n1, const ASTNode n2);
 
-private:
-  /****************************************************************
-   * Private Data                                                 *
-   ****************************************************************/
-
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
 
-  /****************************************************************
-   * Private Member Functions                                     *
-   ****************************************************************/
-
-  // Constructor.
+  // Constructor
   ASTNode(ASTInternal* in);
 
   // Equal iff ASTIntNode pointers are the same.
