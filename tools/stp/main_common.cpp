@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "main_common.h"
-
 #include "extlib-abc/cnf_short.h"
 
 extern int smtparse(void*);
@@ -258,20 +257,12 @@ int Main::main(int argc, char** argv)
       new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
   bm->defaultNodeFactory = simplifyingNF.get();
 
-  // The simplified keeps a pointer to whatever is set as the default node
-  // factory.
-  Simplifier* simp = new Simplifier(bm);
-  auto_ptr<Simplifier> simpCleaner(simp);
+  auto_ptr<Simplifier> simp(new Simplifier(bm));
+  auto_ptr<ArrayTransformer> arrayTransformer(new ArrayTransformer(bm, simp.get()));
+  auto_ptr<ToSAT> tosat(new ToSAT(bm));
 
-  ArrayTransformer* arrayTransformer = new ArrayTransformer(bm, simp);
-  auto_ptr<ArrayTransformer> atClearner(arrayTransformer);
-
-  ToSAT* tosat = new ToSAT(bm);
-  auto_ptr<ToSAT> tosatCleaner(tosat);
-
-  AbsRefine_CounterExample* Ctr_Example =
-      new AbsRefine_CounterExample(bm, simp, arrayTransformer);
-  auto_ptr<AbsRefine_CounterExample> ctrCleaner(Ctr_Example);
+  auto_ptr<AbsRefine_CounterExample> Ctr_Example(
+      new AbsRefine_CounterExample(bm, simp.get(), arrayTransformer.get()));
 
   int ret = create_and_parse_options(argc, argv);
   if (ret != 0)
@@ -279,13 +270,12 @@ int Main::main(int argc, char** argv)
     return ret;
   }
 
-  GlobalSTP = new STP(bm, simp, arrayTransformer, tosat, Ctr_Example);
+  GlobalSTP = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
+                      Ctr_Example.get());
 
   // If we're not reading the file from stdin.
   if (!infile.empty())
-  {
     read_file();
-  }
 
   // want to print the output always from the commandline.
   bm->UserFlags.print_output_flag = true;
@@ -302,19 +292,14 @@ int Main::main(int argc, char** argv)
    *    */
   if (!bm->UserFlags.smtlib2_parser_flag)
   {
-
-    if (((ASTVec*)AssertsQuery)->empty())
-    {
+    if (AssertsQuery->empty())
       FatalError("Input is Empty. Please enter some asserts and query\n");
-    }
 
-    if (((ASTVec*)AssertsQuery)->size() != 2)
-    {
+    if (AssertsQuery->size() != 2)
       FatalError("Input must contain a query\n");
-    }
 
-    ASTNode asserts = (*(ASTVec*)AssertsQuery)[0];
-    ASTNode query = (*(ASTVec*)AssertsQuery)[1];
+    ASTNode asserts = (*AssertsQuery)[0];
+    ASTNode query = (*AssertsQuery)[1];
 
     if (onePrintBack)
     {
@@ -335,23 +320,13 @@ int Main::main(int argc, char** argv)
 
   // Without cleanup
   if (bm->UserFlags.isSet("fast-exit", "1"))
-  {
     exit(0);
-  }
 
-  // Propery tidy up
+  //Cleanup
   AssertsQuery->clear();
   delete AssertsQuery;
-
   _empty_ASTVec.clear();
-
-  simpCleaner.release();
-  atClearner.release();
-  tosatCleaner.release();
-  ctrCleaner.release();
-
   delete GlobalSTP;
-
   Cnf_ClearMemory();
 
   return 0;
