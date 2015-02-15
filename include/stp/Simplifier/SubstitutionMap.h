@@ -109,7 +109,7 @@ public:
 
   // check the solver map for 'key'. If key is present, then return the
   // value by reference in the argument 'output'
-  bool CheckSubstitutionMap(const ASTNode& key, ASTNode& output)
+  bool InsideSubstitutionMap(const ASTNode& key, ASTNode& output)
   {
     ASTNodeMap::iterator it = SolverMap->find(key);
     if (it != SolverMap->end())
@@ -128,7 +128,7 @@ public:
     if (var.GetKind() == SYMBOL && loops(var, value))
       return false;
 
-    if (!CheckSubstitutionMap(var) && key != value)
+    if (!InsideSubstitutionMap(var) && key != value)
     {
       // cerr << "from" << key << "to" <<value;
       buildDepends(key, value);
@@ -141,7 +141,7 @@ public:
   ASTNodeMap* Return_SolverMap() { return SolverMap; } // End of SolverMap()
 
   //Returns TRUE if key is not in SolverMap
-  bool CheckSubstitutionMap(const ASTNode& key)
+  bool InsideSubstitutionMap(const ASTNode& key)
   {
     return SolverMap->find(key) != SolverMap->end();
   }
@@ -153,7 +153,7 @@ public:
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1)
   {
     assert(e0.GetKind() == SYMBOL);
-    assert(!CheckSubstitutionMap(e0) && "e0 MUST be in the SolverMap");
+    assert(!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap");
     (*SolverMap)[e0] = e1;
     return true;
   }

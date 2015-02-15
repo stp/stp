@@ -130,8 +130,8 @@ public:
   ASTNode topLevel(const ASTNode& a, ArrayTransformer* at);
 
   // substitution
-  bool CheckSubstitutionMap(const ASTNode& a, ASTNode& output);
-  bool CheckSubstitutionMap(const ASTNode& a);
+  bool InsideSubstitutionMap(const ASTNode& a, ASTNode& output);
+  bool InsideSubstitutionMap(const ASTNode& a);
   bool UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1);
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
 

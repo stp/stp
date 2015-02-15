@@ -824,7 +824,7 @@ ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
 
   ASTNode OutputNode;
 
-  if (CheckSubstitutionMap(t, OutputNode))
+  if (InsideSubstitutionMap(t, OutputNode))
     return OutputNode;
 
   OutputNode = NonMemberBVConstEvaluator(t);

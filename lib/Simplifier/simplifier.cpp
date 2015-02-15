@@ -153,9 +153,9 @@ bool Simplifier::UpdateSolverMap(const ASTNode& key, const ASTNode& value)
   return substitutionMap.UpdateSolverMap(key, value);
 }
 
-bool Simplifier::CheckSubstitutionMap(const ASTNode& key, ASTNode& output)
+bool Simplifier::InsideSubstitutionMap(const ASTNode& key, ASTNode& output)
 {
-  return substitutionMap.CheckSubstitutionMap(key, output);
+  return substitutionMap.InsideSubstitutionMap(key, output);
 }
 
 ASTNode Simplifier::applySubstitutionMap(const ASTNode& n)
@@ -168,9 +168,9 @@ ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
   return substitutionMap.applySubstitutionMapUntilArrays(n);
 }
 
-bool Simplifier::CheckSubstitutionMap(const ASTNode& key)
+bool Simplifier::InsideSubstitutionMap(const ASTNode& key)
 {
-  return substitutionMap.CheckSubstitutionMap(key);
+  return substitutionMap.InsideSubstitutionMap(key);
 }
 bool Simplifier::UpdateSubstitutionMapFewChecks(const ASTNode& e0,
                                                 const ASTNode& e1)
@@ -455,7 +455,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       output = pushNeg ? ASTTrue : ASTFalse;
       break;
     case SYMBOL:
-      if (!CheckSubstitutionMap(a, output))
+      if (!InsideSubstitutionMap(a, output))
       {
         output = a;
       }
@@ -1693,7 +1693,7 @@ bool Simplifier::hasBeenSimplified(const ASTNode& n)
     return true;
 
   // If it's a symbol that's not in the substitition Map.
-  if (n.GetKind() == SYMBOL && CheckSubstitutionMap(n))
+  if (n.GetKind() == SYMBOL && InsideSubstitutionMap(n))
     return false;
 
   if (n.GetKind() == SYMBOL)
@@ -1874,7 +1874,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
   //########################################
   //########################################
 
-  if (CheckSubstitutionMap(inputterm, output))
+  if (InsideSubstitutionMap(inputterm, output))
   {
     // cout << "SolverMap:" << inputterm << " output: " << output << endl;
     return SimplifyTerm(output, VarConstMap);
@@ -2007,7 +2007,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       {
         return output;
       }
-      if (CheckSubstitutionMap(inputterm, output))
+      if (InsideSubstitutionMap(inputterm, output))
       {
         return SimplifyTerm(output, VarConstMap);
       }
@@ -3102,14 +3102,14 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 // process only if not  in the substitution map. simplifymap
 // has been checked already
 #if 0
-        if (!CheckSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
+        if (!InsideSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
           out1 = RemoveWrites_TopLevel(out1);
 #endif
 
       // it is possible that after all the procesing the READ term
       // reduces to READ(Symbol,const) and hence we should check the
       // substitutionmap once again.
-      if (!CheckSubstitutionMap(out1, output))
+      if (!InsideSubstitutionMap(out1, output))
         output = out1;
       break;
     }

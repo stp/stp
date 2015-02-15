@@ -155,7 +155,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
 {
   ASTNode output;
   // if the variable has been solved for, then simply return it
-  if (simp->CheckSubstitutionMap(a, output))
+  if (simp->InsideSubstitutionMap(a, output))
     return output;
 
   if (!alreadyVisited.insert(a.GetNodeNum()).second)

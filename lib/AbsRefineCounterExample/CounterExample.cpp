@@ -127,7 +127,7 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // to a constant against the model
       ASTNode value = TermToConstTermUsingModel(value_ite);
       // save the result in the counter_example
-      if (!simp->CheckSubstitutionMap(key))
+      if (!simp->InsideSubstitutionMap(key))
         CounterExampleMap[key] = value;
     }
   }

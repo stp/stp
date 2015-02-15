@@ -379,7 +379,7 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   if (e0.GetKind() == SYMBOL)
   {
-    if (CheckSubstitutionMap(e0))
+    if (InsideSubstitutionMap(e0))
     {
       // e0 and e1 might both be variables, e0 is already substituted for,
       // but maybe not e1.
@@ -395,7 +395,7 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   if (e1.GetKind() == SYMBOL)
   {
-    if (CheckSubstitutionMap(e1))
+    if (InsideSubstitutionMap(e1))
       return false; // already in the map.
 
     if (loops(e1, e0))
@@ -404,7 +404,7 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   // e0 is of the form READ(Arr,const), and e1 is const, or
   // e0 is of the form var, and e1 is a function.
-  if (1 == i && !CheckSubstitutionMap(e0))
+  if (1 == i && !InsideSubstitutionMap(e0))
   {
     buildDepends(e0, e1);
     (*SolverMap)[e0] = e1;
@@ -413,7 +413,7 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   // e1 is of the form READ(Arr,const), and e0 is const, or
   // e1 is of the form var, and e0 is const
-  if (-1 == i && !CheckSubstitutionMap(e1))
+  if (-1 == i && !InsideSubstitutionMap(e1))
   {
     buildDepends(e1, e0);
     (*SolverMap)[e1] = e0;
