@@ -103,7 +103,6 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
   simplifier_convenient->UpdateSubstitutionMapFewChecks(from, to);
-  return;
 }
 
 /* The most complicated handling is for EXTRACTS. If a variable has parents that
