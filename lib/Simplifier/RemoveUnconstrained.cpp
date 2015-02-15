@@ -97,8 +97,7 @@ RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
 }
 
 //  nb. This avoids the expensive checks that usually updating the substitution
-//  map
-// entails.
+//  map entails.
 void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
