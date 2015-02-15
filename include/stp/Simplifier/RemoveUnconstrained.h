@@ -52,8 +52,6 @@ class RemoveUnconstrained // not copyable
 
   void splitExtractOnly(vector<MutableASTNode*> extracts);
 
-  void replace(MutableASTNode* from, const ASTNode to);
-
   void replace(const ASTNode& from, const ASTNode to);
 
   NodeFactory* nf;
