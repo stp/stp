@@ -217,8 +217,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   for (size_t i = 0; i < variable_array.size(); i++)
   {
     // Don't make this is a reference. If the vector gets resized, it will point
-    // to
-    // memory that no longer contains the object.
+    // to memory that no longer contains the object.
     MutableASTNode& muteNode = *variable_array[i];
 
     const ASTNode var = muteNode.n;
@@ -230,9 +229,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     MutableASTNode& muteParent = muteNode.getParent();
 
     if (noCheck.find(muteParent.n) != noCheck.end())
-    {
       continue;
-    }
 
     vector<MutableASTNode*> mutable_children = muteParent.children;
 
@@ -264,16 +261,17 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         muteOther = mutable_children[1];
       }
 
-      if (kind != AND && kind != OR && kind != BVOR && kind != BVAND)
-        if (other == var)
+      if (kind != AND && kind != OR && kind != BVOR && kind != BVAND &&
+        other == var)
+      {
           continue; // Most rules don't like duplicate variables.
+      }
     }
     else
     {
       if (kind != AND && kind != OR && kind != BVOR && kind != BVAND)
       {
         size_t found = 0;
-
         for (size_t i = 0; i < numberOfChildren; i++)
         {
           if (children[i] == var)
