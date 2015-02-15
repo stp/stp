@@ -82,6 +82,7 @@ bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
   return true;
 }
 
+//Global variable TODO!! This is really bad.
 Simplifier* simplifier_convenient;
 
 ASTNode
