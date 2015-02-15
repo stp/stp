@@ -199,11 +199,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
   simplifier_convenient = simplifier;
 
-  ASTNodeSet noCheck; // We don't want to check some expensive nodes over and
-                      // over again.
-
-  vector<MutableASTNode*> variable_array;
-
   MutableASTNode* topMutable = MutableASTNode::build(n);
 
   vector<MutableASTNode*> extracts;
@@ -213,7 +208,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     splitExtractOnly(extracts);
   }
 
+  vector<MutableASTNode*> variable_array;
   topMutable->getAllUnconstrainedVariables(variable_array);
+
+  // We don't want to check some expensive nodes over and over again.
+  ASTNodeSet noCheck;
 
   for (size_t i = 0; i < variable_array.size(); i++)
   {
