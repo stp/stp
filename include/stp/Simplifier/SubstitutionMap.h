@@ -140,12 +140,10 @@ public:
 
   ASTNodeMap* Return_SolverMap() { return SolverMap; } // End of SolverMap()
 
+  //Returns TRUE if key is not in SolverMap
   bool CheckSubstitutionMap(const ASTNode& key)
   {
-    if (SolverMap->find(key) != SolverMap->end())
-      return true;
-    else
-      return false;
+    return SolverMap->find(key) != SolverMap->end();
   }
 
   // It's depressingly expensive to perform all of the loop checks etc.
@@ -155,7 +153,7 @@ public:
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1)
   {
     assert(e0.GetKind() == SYMBOL);
-    assert(!CheckSubstitutionMap(e0) && "e0 must NOT be in the SolverMap");
+    assert(!CheckSubstitutionMap(e0) && "e0 MUST be in the SolverMap");
     (*SolverMap)[e0] = e1;
     return true;
   }
