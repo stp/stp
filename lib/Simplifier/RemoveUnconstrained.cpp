@@ -295,6 +295,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     switch (kind)
     {
       case BVCONCAT:
+      {
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
             (mutable_children[1]->isUnconstrained()))
@@ -317,7 +318,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           replace(children[0], lhs);
           replace(children[1], rhs);
         }
-        break;
+      }
+      break;
+
       case NOT:
       {
         ASTNode v = replaceParentWithFresh(muteParent, variable_array);
@@ -358,13 +361,12 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           CONSTANTBV::BitVector_Bit_On(max, width - 1);
           smallestNumber = bm.CreateBVConst(max, width);
         }
-        else if (kind == BVGT || kind == BVGE)
+        else
         {
+          assert(kind == BVGT || kind == BVGE);
           biggestNumber = bm.CreateMaxConst(width);
           smallestNumber = bm.CreateZeroConst(width);
         }
-        else
-          FatalError("SDFA!@S");
 
         ASTNode c1, c2;
         if (kind == BVSGT || kind == BVGT)
@@ -372,13 +374,13 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           c1 = biggestNumber;
           c2 = smallestNumber;
         }
-        else if (kind == BVSGE || kind == BVGE)
+        else
         {
+          assert(kind == BVSGE || kind == BVGE);
           c1 = smallestNumber;
           c2 = biggestNumber;
         }
-        else
-          FatalError("SDFA!@S");
+
 
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained())
