@@ -259,7 +259,7 @@ public:
     substitutionMap.haveAppliedSubstitutionMap();
   }
 
-  void ClearAllTables(void)
+  void ClearAllTables()
   {
     SimplifyMap->clear();
     SimplifyNegMap->clear();
