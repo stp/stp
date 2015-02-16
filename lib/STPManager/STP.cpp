@@ -122,6 +122,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   ASTNode original_input;
   if (query != bm->ASTFalse)
   {
+    //BUG probably it's here that the query gets mixed up with the state
     original_input =
         bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
   } else {

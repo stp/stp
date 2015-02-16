@@ -147,7 +147,9 @@ private:
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
 
-  // The query for the current logical context.
+  // The query for the current logical context. BUG probably wrongly handled
+  // and gets mixed up with the state, which it shouldn't (otherwise, next
+  // query will be affected)
   ASTNode _current_query;
 
   // Ptr to class that reports on the running time of various parts

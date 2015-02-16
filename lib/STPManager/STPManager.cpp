@@ -474,6 +474,8 @@ void STPMgr::Pop(void)
   _asserts.pop_back();
 }
 
+//BUG this is most probably wrongly handled. It gets propagated and messed up
+//with the state. On the next query, this mixed state then causes trouble
 void STPMgr::AddQuery(const ASTNode& q)
 {
   //_current_query = TransformFormula(q);
