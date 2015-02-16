@@ -696,6 +696,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       FatalError("BVTypeCheck: Unrecognized kind: ");
       break;
   }
+  return true;
 }
 
 /* FUNCTION: Typechecker for terms and formulas
