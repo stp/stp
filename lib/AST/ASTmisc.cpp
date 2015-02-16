@@ -763,8 +763,7 @@ void setHardTimeout(int)
   std::cerr << "WARNING: STP does not support hard timeout for Windows builds"
             << std::endl;
 }
-#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) \
-          */
+#endif // !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
 
 long getCurrentTime()
 {
