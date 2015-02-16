@@ -282,7 +282,7 @@ public:
 
   VariablesInExpression& getVariablesInExpression()
   {
-    return substitutionMap.vars;
+    return substitutionMap.getVariablesInExpression();
   }
 
 }; // end of class Simplifier

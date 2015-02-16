@@ -64,8 +64,15 @@ class SubstitutionMap // not copyable
   bool loops(const ASTNode& n0, const ASTNode& n1);
 
   size_t substitutionsLastApplied;
+  VariablesInExpression vars;
 
 public:
+
+  VariablesInExpression& getVariablesInExpression()
+  {
+    return vars;
+  }
+
   bool hasUnappliedSubstitutions()
   {
     return (substitutionsLastApplied != SolverMap->size());
@@ -81,8 +88,6 @@ public:
     rhsAlreadyAdded.clear();
     substitutionsLastApplied = SolverMap->size();
   }
-
-  VariablesInExpression vars;
 
   SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
   {
