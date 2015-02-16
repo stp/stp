@@ -264,7 +264,10 @@ class Solver(object):
             expr = _lib.vc_notExpr(self.vc, expr.expr)
         else:
             expr = self.false().expr
+
+        _lib.vc_push(self.vc)
         ret = _lib.vc_query(self.vc, expr)
+        _lib.vc_pop(self.vc)
 
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
