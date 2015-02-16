@@ -166,24 +166,28 @@ class TestSTP(unittest.TestCase):
       self.assertTrue(s.check(a==b))
       self.assertTrue(s.check(a>b))
 
-    def test_non_bitvector_constant_assert_fail(self):
+    def test_empty_check(self):
       s = self.s
-      a = s.bitvec(_, 32)
-      b = s.bitvec(_, 32)
-      s.check(a==b)
-      s.check(a==b)
-      s.check(a==b)
-      s.check(a>=b)
-      s.check(a>=b)
-      s.check(a>=b)
-      s.check(a>b)
-      s.check(a>b)
-      s.check(a<b)
-      s.check(a<b)
+      a = s.bitvec('a', 32)
+      b = s.bitvec('b', 32)
       s.add(a==b)
       s.check()
       s.check(a>b)
-      a.add(a==b)
+      s.add(a>b)
+      s.add(a==b)
+
+    def test_non_bitvector_constant_assert_fail(self):
+      s = self.s
+      a = s.bitvec('a', 32)
+      b = s.bitvec('b', 32)
+      s.check(a==b)
+      s.check(a>=b)
+      s.check(a>b)
+      s.check(a<b)
+      a = a.add(b)
+      s.check()
+      s.check(a>b)
+      b.add(a)
 
     def test_pushpop(self):
         s = self.s
