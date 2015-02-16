@@ -68,7 +68,7 @@ class TestSTP(unittest.TestCase):
       a = s.bitvec('a', 32)
       b = s.bitvec('b', 32)
       self.assertFalse(s.check(b.eq(a), a.gt(b)))
-      self.assertTrue(s.check(b.eq(a), a.gt(b)))
+      self.assertTrue(s.check(b.eq(a), a.eq(b)))
 
     def test_bitvecval(self):
         s = self.s
@@ -161,8 +161,8 @@ class TestSTP(unittest.TestCase):
 
     def test_true_then_false(self):
       s = self.s
-      a = s.bitvec(_, 32)
-      b = s.bitvec(_, 32)
+      a = s.bitvec('a', 32)
+      b = s.bitvec('b', 32)
       self.assertTrue(s.check(a==b))
       self.assertTrue(s.check(a>b))
 
