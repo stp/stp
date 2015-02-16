@@ -56,3 +56,53 @@ TEST(multi_query_bug, one)
 
   vc_Destroy(vc);
 }
+
+TEST(multi_query_bug, many)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'n');
+  vc_setFlags(vc, 'd');
+  vc_setFlags(vc, 'p');
+
+  Expr a = vc_varExpr(vc, "a", vc_bv32Type(vc));
+  Expr b = vc_varExpr(vc, "b", vc_bv32Type(vc));
+
+  // a == b
+  Expr expr = vc_eqExpr(vc, a, b);
+  vc_printExpr(vc, expr);
+  vc_push(vc);
+  int res = vc_query(vc, expr);
+  printf("vc_query result = %d\n", res);
+  ASSERT_EQ(res, 0);
+  vc_pop(vc);
+
+  // a >= b
+  expr = vc_bvGeExpr(vc, a, b);
+  vc_printExpr(vc, expr);
+  vc_push(vc);
+  res = vc_query(vc, expr);
+  printf("vc_query result = %d\n", res);
+  ASSERT_EQ(res, 0);
+  vc_pop(vc);
+
+  // a > b
+  expr = vc_bvGtExpr(vc, a, b);
+  vc_printExpr(vc, expr);
+  vc_push(vc);
+  res = vc_query(vc, expr);
+  printf("vc_query result = %d\n", res);
+  ASSERT_EQ(res, 0);
+  vc_pop(vc);
+
+  // a < b
+  expr = vc_bvGtExpr(vc, b, a);
+  vc_printExpr(vc, expr);
+  vc_push(vc);
+  res = vc_query(vc, expr);
+  printf("vc_query result = %d\n", res);
+  ASSERT_EQ(res, 0);
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}
+
