@@ -65,14 +65,6 @@ private:
   typedef hash_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
                    ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
-#if 0
-    typedef hash_map<
-      ASTNode, 
-      ASTNodeSet,
-      ASTNode::ASTNodeHasher, 
-      ASTNode::ASTNodeEqual> ASTNodeToSetMap;
-#endif
-
   // Unique node tables that enables common subexpression sharing
   ASTInteriorSet _interior_unique_table;
 
