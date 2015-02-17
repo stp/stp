@@ -35,10 +35,6 @@ namespace simplifier
 {
 namespace constantBitP
 {
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::pair;
 
 Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
 void setSignedMinMax(FixedBits& v, stp::CBV min, stp::CBV max);

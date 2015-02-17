@@ -39,8 +39,6 @@ THE SOFTWARE.
 #endif
 
 #include <iostream>
-using std::cerr;
-using std::endl;
 
 namespace stp
 {
@@ -67,7 +65,7 @@ private:
 
       unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
       unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
-      cerr << a << " " << b << endl;
+      std::cerr << a << " " << b << std::endl;
       free(a);
       free(b);
     }
@@ -473,11 +471,11 @@ private:
               /*
                                 clock0->print();
                                 clock1->print();
-                                cerr <<
-                 clock0->crossesSignedUnsigned(n[0].GetValueWidth()) << endl;
-                                cerr <<
-                 clock1->crossesSignedUnsigned(n[0].GetValueWidth()) << endl;
-                                cerr << n;
+                                std::cerr <<
+                 clock0->crossesSignedUnsigned(n[0].GetValueWidth()) << std::endl;
+                                std::cerr <<
+                 clock1->crossesSignedUnsigned(n[0].GetValueWidth()) << std::endl;
+                                std::cerr << n;
               */
 
               // if the rhs doesn't cross +ve/-ve boundary, and the min > max
@@ -850,7 +848,7 @@ private:
 
         if (false && nonNull && n.GetKind() != SYMBOL && n.GetKind() != AND)
         {
-          cerr << n;
+          std::cerr << n;
           for (size_t i = 0; i < n.Degree(); i++)
             children[i]->print();
         }

@@ -38,6 +38,7 @@ THE SOFTWARE.
 using std::endl;
 using std::cout;
 using std::make_pair;
+using std::pair;
 
 using namespace stp;
 
