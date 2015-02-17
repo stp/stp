@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "Symbols.h"
 
-namespace BEEV
+namespace stp
 {
 
 class VariablesInExpression // not copyable

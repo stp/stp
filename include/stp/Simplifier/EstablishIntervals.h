@@ -42,7 +42,7 @@ THE SOFTWARE.
 using std::cerr;
 using std::endl;
 
-namespace BEEV
+namespace stp
 {
 using std::make_pair;
 

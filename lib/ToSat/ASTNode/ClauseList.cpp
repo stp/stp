@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ASTNode/ClauseList.h"
 #include "stp/AST/AST.h"
 
-namespace BEEV
+namespace stp
 {
 
 // inplace PRODUCT of "this".

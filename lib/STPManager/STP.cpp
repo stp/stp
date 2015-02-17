@@ -46,7 +46,7 @@ THE SOFTWARE.
 #include <memory>
 using std::cout;
 
-namespace BEEV
+namespace stp
 {
 
 const static string cb_message = "After Constant Bit Propagation. ";

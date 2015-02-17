@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "extlib-abc/aig.h"
 #include <iostream>
 
-namespace BEEV
+namespace stp
 {
 using std::cerr;
 using std::endl;

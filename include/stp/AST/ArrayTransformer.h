@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 
-namespace BEEV
+namespace stp
 {
 class Simplifier;
 

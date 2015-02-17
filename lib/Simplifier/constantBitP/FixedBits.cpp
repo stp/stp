@@ -65,11 +65,11 @@ void FixedBits::fixToZero()
   }
 }
 
-BEEV::CBV FixedBits::GetBVConst() const
+stp::CBV FixedBits::GetBVConst() const
 {
   assert(isTotallyFixed());
 
-  BEEV::CBV result = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
 
   for (unsigned i = 0; i < width; i++)
   {
@@ -81,12 +81,12 @@ BEEV::CBV FixedBits::GetBVConst() const
 }
 
 // inclusive
-BEEV::CBV FixedBits::GetBVConst(unsigned to, unsigned from) const
+stp::CBV FixedBits::GetBVConst(unsigned to, unsigned from) const
 {
   assert(to >= from);
   unsigned resultWidth = to - from + 1;
 
-  BEEV::CBV result = CONSTANTBV::BitVector_Create(resultWidth, true);
+  stp::CBV result = CONSTANTBV::BitVector_Create(resultWidth, true);
 
   for (unsigned i = from; i <= to; i++)
   {
@@ -307,7 +307,7 @@ FixedBits FixedBits::createRandom(const unsigned length,
           break;
 
         default:
-          BEEV::FatalError(LOCATION "never.");
+          stp::FatalError(LOCATION "never.");
       }
       randomV >>= 1;
     }
@@ -318,22 +318,22 @@ FixedBits FixedBits::createRandom(const unsigned length,
 }
 
 // In the world of static analysis this is ALPHA.
-FixedBits FixedBits::concreteToAbstract(const BEEV::ASTNode& n)
+FixedBits FixedBits::concreteToAbstract(const stp::ASTNode& n)
 {
   // cout << n;
 
   unsigned bitWidth;
-  if (BEEV::BITVECTOR_TYPE == n.GetType())
+  if (stp::BITVECTOR_TYPE == n.GetType())
     bitWidth = n.GetValueWidth();
   else
     bitWidth = 1;
 
-  FixedBits output(bitWidth, BEEV::BOOLEAN_TYPE == n.GetType());
+  FixedBits output(bitWidth, stp::BOOLEAN_TYPE == n.GetType());
 
-  if (BEEV::BITVECTOR_TYPE == n.GetType())
+  if (stp::BITVECTOR_TYPE == n.GetType())
   {
     // loop through testing each of the bits.
-    BEEV::CBV cbv = n.GetBVConst();
+    stp::CBV cbv = n.GetBVConst();
 
     for (unsigned j = 0; j < bitWidth; j++)
     {
@@ -343,18 +343,18 @@ FixedBits FixedBits::concreteToAbstract(const BEEV::ASTNode& n)
   }
   else
   {
-    if (n.GetKind() == BEEV::TRUE)
+    if (n.GetKind() == stp::TRUE)
     {
       output.setFixed(0, true);
       output.setValue(0, true);
     }
-    else if (n.GetKind() == BEEV::FALSE)
+    else if (n.GetKind() == stp::FALSE)
     {
       output.setFixed(0, true);
       output.setValue(0, false);
     }
     else
-      BEEV::FatalError("Unexpected", n);
+      stp::FatalError("Unexpected", n);
   }
   return output;
 }
@@ -380,7 +380,7 @@ FixedBits FixedBits::fromUnsignedInt(unsigned width, unsigned val)
     {    // so it can't be represented.
       if (val & (1 << i))
       {
-        BEEV::FatalError(LOCATION "Cant be represented.");
+        stp::FatalError(LOCATION "Cant be represented.");
       }
     }
   }
@@ -405,7 +405,7 @@ void FixedBits::fromUnsigned(unsigned val)
     {    // so it can't be represented.
       if (val & (1 << i))
       {
-        BEEV::FatalError(LOCATION "Cant be represented.");
+        stp::FatalError(LOCATION "Cant be represented.");
       }
     }
   }

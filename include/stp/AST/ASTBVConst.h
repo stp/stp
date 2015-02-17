@@ -25,7 +25,7 @@ THE SOFTWARE.
 
 #ifndef ASTBVCONST_H
 #define ASTBVCONST_H
-namespace BEEV
+namespace stp
 {
 class STPMgr;
 void FatalError(const char* str);

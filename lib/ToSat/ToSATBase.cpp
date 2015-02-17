@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToSATBase.h"
 
-namespace BEEV
+namespace stp
 {
 using std::cerr;
 using std::cout;

@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include <vector>
 using std::vector;
 
-namespace BEEV
+namespace stp
 {
 
 CryptoMinisat4::CryptoMinisat4()
@@ -108,4 +108,4 @@ void CryptoMinisat4::printStats()
   // s->printStats();
 }
 
-} //end namespace BEEV
+} //end namespace stp

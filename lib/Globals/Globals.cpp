@@ -32,7 +32,7 @@ THE SOFTWARE.
 // it can't be included but ASTNode is not yet defined!
 #include "stp/Globals/Globals.h"
 
-namespace BEEV
+namespace stp
 {
 enum inputStatus input_status = NOT_DECLARED;
 

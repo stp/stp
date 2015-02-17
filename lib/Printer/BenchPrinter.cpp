@@ -38,7 +38,7 @@ using std::string;
 using std::map;
 using std::endl;
 
-using namespace BEEV;
+using namespace stp;
 
 string name(const Kind k)
 {

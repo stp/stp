@@ -52,7 +52,7 @@ std::string RunTimes::CategoryNames[] = {
     "ITE Contexts",           "AIG core simplification",
     "Interval Propagation",   "Always True"};
 
-namespace BEEV
+namespace stp
 {
 void FatalError(const char* str);
 }
@@ -71,7 +71,7 @@ void RunTimes::print()
     std::cerr << "size:" << category_stack.size() << std::endl;
     std::cerr << "top:" << CategoryNames[category_stack.top().first]
               << std::endl;
-    BEEV::FatalError("category stack is not yet empty!!");
+    stp::FatalError("category stack is not yet empty!!");
   }
 
   std::ostringstream result;
@@ -142,7 +142,7 @@ void RunTimes::stop(Category c)
   {
     std::cerr << e.first;
     std::cerr << c;
-    BEEV::FatalError("Don't match");
+    stp::FatalError("Don't match");
   }
   addTime(c, getCurrentTime() - e.second);
   addCount(c);

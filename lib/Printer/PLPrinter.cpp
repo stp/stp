@@ -29,7 +29,7 @@ namespace printer
 
 using std::string;
 using std::endl;
-using namespace BEEV;
+using namespace stp;
 
 string functionToCVCName(const Kind k)
 {

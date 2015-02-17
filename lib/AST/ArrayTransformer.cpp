@@ -36,7 +36,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <sstream>
 
-namespace BEEV
+namespace stp
 {
 using std::make_pair;
 // NB: This is the only function that should be called
@@ -820,4 +820,4 @@ void ArrayTransformer::FillUp_ArrReadIndex_Vec(const ASTNode& e0,
   ack_pair[e0[0]].push_back(make_pair(e0[1], e1));
 }
 
-} // end of namespace BEEV
+} // end of namespace stp

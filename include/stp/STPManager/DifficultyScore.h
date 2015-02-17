@@ -33,7 +33,7 @@ THE SOFTWARE.
 
 // estimate how difficult that input is to solve based on some simple rules.
 
-namespace BEEV
+namespace stp
 {
 struct DifficultyScore // not copyable
 {

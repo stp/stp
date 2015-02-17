@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/STPManager/NodeIterator.h"
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 using std::endl;

@@ -41,9 +41,9 @@ namespace printer
 {
 using std::string;
 using std::endl;
-using namespace BEEV;
+using namespace stp;
 
-void SMTLIB1_Print1(ostream& os, const BEEV::ASTNode n, int indentation,
+void SMTLIB1_Print1(ostream& os, const stp::ASTNode n, int indentation,
                     bool letize);
 void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
@@ -80,33 +80,33 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os)
   for (ASTNodeSet::const_iterator i = symbols.begin(), iend = symbols.end();
        i != iend; i++)
   {
-    const BEEV::ASTNode& a = *i;
+    const stp::ASTNode& a = *i;
 
     // Should be a symbol.
     assert(a.GetKind() == SYMBOL);
 
     switch (a.GetType())
     {
-      case BEEV::BITVECTOR_TYPE:
+      case stp::BITVECTOR_TYPE:
 
         os << ":extrafuns (( ";
         a.nodeprint(os);
         os << " BitVec[" << a.GetValueWidth() << "]";
         os << " ))" << endl;
         break;
-      case BEEV::ARRAY_TYPE:
+      case stp::ARRAY_TYPE:
         os << ":extrafuns (( ";
         a.nodeprint(os);
         os << " Array[" << a.GetIndexWidth();
         os << ":" << a.GetValueWidth() << "] ))" << endl;
         break;
-      case BEEV::BOOLEAN_TYPE:
+      case stp::BOOLEAN_TYPE:
         os << ":extrapreds (( ";
         a.nodeprint(os);
         os << "))" << endl;
         break;
       default:
-        BEEV::FatalError("printVarDeclsToStream: Unsupported type", a);
+        stp::FatalError("printVarDeclsToStream: Unsupported type", a);
         break;
     }
   }

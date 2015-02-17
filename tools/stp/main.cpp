@@ -32,13 +32,13 @@ namespace po = boost::program_options;
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
 #endif
-using namespace BEEV;
+using namespace stp;
 using std::auto_ptr;
 using std::cout;
 using std::cerr;
 using std::endl;
 
-namespace BEEV
+namespace stp
 {
 void setHardTimeout(int);
 }
@@ -387,7 +387,7 @@ int ExtraMain::parse_options(int argc, char** argv)
 #ifndef _MSC_VER
   if (vm.count("timeout"))
   {
-    BEEV::setHardTimeout(hardTimeout);
+    stp::setHardTimeout(hardTimeout);
   }
 #endif
 

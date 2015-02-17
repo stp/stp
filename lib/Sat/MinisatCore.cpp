@@ -27,7 +27,7 @@ THE SOFTWARE.
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
-namespace BEEV
+namespace stp
 {
 
 template <class T> MinisatCore<T>::MinisatCore(volatile bool& interrupt)

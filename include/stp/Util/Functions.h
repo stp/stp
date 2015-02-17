@@ -35,7 +35,7 @@ THE SOFTWARE.
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
-using namespace BEEV;
+using namespace stp;
 
 Result multiply(vector<FixedBits*>& children, FixedBits& output);
 

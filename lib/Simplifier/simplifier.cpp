@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include <compdep.h>
 #endif
 
-namespace BEEV
+namespace stp
 {
 
 // If enabled, simplifyTerm will simplify all the arguments to a function before
@@ -1650,7 +1650,7 @@ ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
   return output;
 }
 
-ASTNode Simplifier::makeTower(const Kind k, const BEEV::ASTVec& children)
+ASTNode Simplifier::makeTower(const Kind k, const stp::ASTVec& children)
 {
   std::deque<ASTNode> names;
 
@@ -1945,7 +1945,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 
     // Perform constant propagation if possible.
     // This should do nothing if the simplifyingnodefactory is used.
-    if (k != BEEV::UNDEFINED && k != BEEV::SYMBOL)
+    if (k != stp::UNDEFINED && k != stp::SYMBOL)
     {
       bool allConstant = true;
 
@@ -3615,22 +3615,22 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
       zeros += '0';
 
     //string of oness of length extensionlen
-    BEEV::ASTNode BVOnes = _bm->CreateBVConst(ones.c_str(), 2);
+    stp::ASTNode BVOnes = _bm->CreateBVConst(ones.c_str(), 2);
     //string of zeros of length extensionlen
-    BEEV::ASTNode BVZeros = _bm->CreateBVConst(zeros.c_str(), 2);
+    stp::ASTNode BVZeros = _bm->CreateBVConst(zeros.c_str(), 2);
 
     //string of ones BVCONCAT a0
-    BEEV::ASTNode concatOnes = nf->CreateTerm(BEEV::BVCONCAT, a_len, BVOnes, a0);
+    stp::ASTNode concatOnes = nf->CreateTerm(stp::BVCONCAT, a_len, BVOnes, a0);
     //string of zeros BVCONCAT a0
-    BEEV::ASTNode concatZeros = nf->CreateTerm(BEEV::BVCONCAT, a_len, BVZeros, a0);
+    stp::ASTNode concatZeros = nf->CreateTerm(stp::BVCONCAT, a_len, BVZeros, a0);
 
     //extract top bit of a0
-    BEEV::ASTNode hi = _bm->CreateBVConst(32, a0_len - 1);
-    BEEV::ASTNode low = _bm->CreateBVConst(32, a0_len - 1);
-    BEEV::ASTNode topBit = nf->CreateTerm(BEEV::BVEXTRACT, 1, a0, hi, low);
+    stp::ASTNode hi = _bm->CreateBVConst(32, a0_len - 1);
+    stp::ASTNode low = _bm->CreateBVConst(32, a0_len - 1);
+    stp::ASTNode topBit = nf->CreateTerm(stp::BVEXTRACT, 1, a0, hi, low);
 
     //compare topBit of a0 with 0bin1
-    BEEV::ASTNode condition = CreateSimplifiedEQ(_bm->CreateBVConst(1, 1), topBit);
+    stp::ASTNode condition = CreateSimplifiedEQ(_bm->CreateBVConst(1, 1), topBit);
 
     //ITE(topbit = 0bin1, 0bin1111...a0, 0bin000...a0)
     output = CreateSimplifiedTermITE(condition, concatOnes, concatZeros);

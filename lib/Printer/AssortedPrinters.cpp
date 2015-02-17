@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include <inttypes.h>
 //#undef __STDC_FORMAT_MACROS
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 using std::endl;
@@ -83,7 +83,7 @@ void lpvec(const ASTVec& vec)
 //   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
 //                                       int decision_level, int polarity)
 //   {
-//     BEEV::ASTNode vv = BEEV::GlobalSTPMgr->_SATVar_to_AST[minisat_var];
+//     stp::ASTNode vv = stp::GlobalSTPMgr->_SATVar_to_AST[minisat_var];
 //     cout << spaces(decision_level);
 //     if (polarity)
 //       {
@@ -99,25 +99,25 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
                             iend = ListOfDeclaredVars.end();
        i != iend; i++)
   {
-    BEEV::ASTNode a = *i;
+    stp::ASTNode a = *i;
     switch (a.GetType())
     {
-      case BEEV::BITVECTOR_TYPE:
+      case stp::BITVECTOR_TYPE:
         a.PL_Print(os);
         os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
-      case BEEV::ARRAY_TYPE:
+      case stp::ARRAY_TYPE:
         a.PL_Print(os);
         os << " : ARRAY "
            << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
         os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
-      case BEEV::BOOLEAN_TYPE:
+      case stp::BOOLEAN_TYPE:
         a.PL_Print(os);
         os << " : BOOLEAN;" << endl;
         break;
       default:
-        BEEV::FatalError("vc_printDeclsToStream: Unsupported type", a);
+        stp::FatalError("vc_printDeclsToStream: Unsupported type", a);
         break;
     }
   }
@@ -146,14 +146,14 @@ void print_STPInput_Back(const ASTNode& query)
   ASTNodeSet visited;
   ASTNodeSet symbols;
   buildListOfSymbols(query, visited, symbols);
-  ASTVec v = (BEEV::GlobalSTP->bm)->GetAsserts();
+  ASTVec v = (stp::GlobalSTP->bm)->GetAsserts();
   for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
     buildListOfSymbols(*i, visited, symbols);
 
-  (BEEV::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
-  (BEEV::GlobalSTP->bm)->printAssertsToStream(cout, 0);
+  (stp::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
+  (stp::GlobalSTP->bm)->printAssertsToStream(cout, 0);
   cout << "QUERY(";
   query.PL_Print(cout);
   cout << ");\n";
 } // end of print_STPInput_Back()
-} // end of namespace BEEV
+} // end of namespace stp

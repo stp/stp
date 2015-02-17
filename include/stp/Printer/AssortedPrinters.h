@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define PRINTER_H
 
 #include "stp/AST/AST.h"
-namespace BEEV
+namespace stp
 {
 
 /***************************************************************************
@@ -63,5 +63,5 @@ void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision,
                                          int polarity = 0);
 
 void print_STPInput_Back(const ASTNode& query);
-} // end of namespace BEEV
+} // end of namespace stp
 #endif

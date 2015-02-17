@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/Sat/SATSolver.h"
 
-namespace BEEV
+namespace stp
 {
 /*****************************************************************
  * Class STPMgr.  This holds all "global" variables for the system,
@@ -44,9 +44,9 @@ class STPMgr // not copyable
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTSymbol;
-  friend BEEV::ASTNode
+  friend stp::ASTNode
   HashingNodeFactory::CreateNode(const Kind kind,
-                                 const BEEV::ASTVec& back_children);
+                                 const stp::ASTVec& back_children);
 
 private:
   /****************************************************************
@@ -330,8 +330,8 @@ public:
   }
 
   // Create and return an interior ASTNode
-  inline BEEV::ASTNode CreateNode(BEEV::Kind kind,
-                                  const BEEV::ASTVec& children = _empty_ASTVec)
+  inline stp::ASTNode CreateNode(stp::Kind kind,
+                                  const stp::ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, children);
   }
@@ -362,15 +362,15 @@ public:
    ****************************************************************/
 
   // Create and return an ASTNode for a term
-  inline BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
-                                  const BEEV::ASTVec& children = _empty_ASTVec)
+  inline stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                                  const stp::ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateTerm(kind, width, children);
   }
 
-  inline BEEV::ASTNode
-  CreateArrayTerm(BEEV::Kind kind, unsigned int indexWidth, unsigned int width,
-                  const BEEV::ASTVec& children = _empty_ASTVec)
+  inline stp::ASTNode
+  CreateArrayTerm(stp::Kind kind, unsigned int indexWidth, unsigned int width,
+                  const stp::ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateArrayTerm(kind, indexWidth, width,
                                                children);
@@ -454,7 +454,7 @@ public:
     sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
-    BEEV::ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
+    stp::ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
   }

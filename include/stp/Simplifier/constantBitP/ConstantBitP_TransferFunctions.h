@@ -35,17 +35,17 @@ struct MultiplicationStats;
 // Multiply is not yet  maximally precise.
 //!!!!!!!
 Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
-                          BEEV::STPMgr* bm, MultiplicationStats* ms = NULL);
+                          stp::STPMgr* bm, MultiplicationStats* ms = NULL);
 Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
-                                  FixedBits& output, BEEV::STPMgr* bm);
+                                  FixedBits& output, stp::STPMgr* bm);
 Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
-                                 FixedBits& output, BEEV::STPMgr* bm);
+                                 FixedBits& output, stp::STPMgr* bm);
 Result bvSignedDivisionBothWays(vector<FixedBits*>& children, FixedBits& output,
-                                BEEV::STPMgr* bm);
+                                stp::STPMgr* bm);
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,
-                                 FixedBits& output, BEEV::STPMgr* bm);
+                                 FixedBits& output, stp::STPMgr* bm);
 Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
-                               BEEV::STPMgr* bm);
+                               stp::STPMgr* bm);
 //!!!!!!!
 
 // BOTH WAY FUNCTIONS..-------MAXIMALLY PRECISE..........

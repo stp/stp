@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 
-namespace BEEV
+namespace stp
 {
 
 class ToCNFAIG // not copyable

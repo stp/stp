@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include <cassert>
 #include "stp/Simplifier/simplifier.h"
 
-namespace BEEV
+namespace stp
 {
 
 // error printing
@@ -831,4 +831,4 @@ ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
   UpdateSolverMap(t, OutputNode);
   return OutputNode;
 }
-} // end of namespace BEEV
+} // end of namespace stp

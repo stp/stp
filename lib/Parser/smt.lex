@@ -38,7 +38,7 @@
 #include "stp/cpp_interface.h"
 
   using namespace std;
-  using namespace BEEV;
+  using namespace stp;
   
   extern char *smttext;
   extern int smterror (const char *msg);
@@ -80,10 +80,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bit{DIGIT}+     {
   		   char c = smttext[3];
 		   if (c == '1') {
-		     smtlval.node = new BEEV::ASTNode(GlobalParserInterface->CreateOneConst(1));
+		     smtlval.node = new stp::ASTNode(GlobalParserInterface->CreateOneConst(1));
 		   }
 		   else {
-		     smtlval.node = new BEEV::ASTNode(GlobalParserInterface->CreateZeroConst(1));
+		     smtlval.node = new stp::ASTNode(GlobalParserInterface->CreateZeroConst(1));
 		   }
 		   return BITCONST_TOK;
 		};
@@ -224,21 +224,21 @@ bit{DIGIT}+     {
    bool found = false;
    ASTNode nptr;
    
-  if (BEEV::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+  if (stp::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
     {
-    	nptr= BEEV::GlobalParserInterface->LookupOrCreateSymbol(str);
+    	nptr= stp::GlobalParserInterface->LookupOrCreateSymbol(str);
     	found = true;
     }
-    else if (BEEV::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr= BEEV::GlobalParserInterface->letMgr->resolveLet(str);
+    	nptr= stp::GlobalParserInterface->letMgr->resolveLet(str);
     	found = true;
     }
 
 	if (found)
 	{
-	  smtlval.node = BEEV::GlobalParserInterface->newNode(nptr);
-	  if ((smtlval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	  smtlval.node = stp::GlobalParserInterface->newNode(nptr);
+	  if ((smtlval.node)->GetType() == stp::BOOLEAN_TYPE)
 	    return FORMID_TOK;
 	  else 
 	    return TERMID_TOK;

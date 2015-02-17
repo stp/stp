@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
 
-namespace BEEV
+namespace stp
 {
 using std::endl;
 using std::make_pair;

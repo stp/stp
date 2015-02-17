@@ -42,7 +42,7 @@ extern FILE* smt2in;
 #ifdef EXT_HASH_MAP
 using namespace __gnu_cxx;
 #endif
-using namespace BEEV;
+using namespace stp;
 using std::auto_ptr;
 using std::cout;
 using std::cerr;

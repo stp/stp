@@ -36,7 +36,7 @@ namespace printer
 
 using std::string;
 using std::endl;
-using namespace BEEV;
+using namespace stp;
 
 void outputBitVec(const ASTNode n, ostream& os);
 
@@ -93,7 +93,7 @@ void GDL_Print1(ostream& os, const ASTNode& n, hash_set<int>* alreadyOutput,
         os << "node: { title:\"n";
 
         os << ss.str() << "\" label: \"";
-        if (it->GetType() == BEEV::BOOLEAN_TYPE)
+        if (it->GetType() == stp::BOOLEAN_TYPE)
           os << _kind_names[it->GetKind()];
         else
           outputBitVec(*it, os);

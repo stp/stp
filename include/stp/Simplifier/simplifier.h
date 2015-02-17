@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "SubstitutionMap.h"
 
-namespace BEEV
+namespace stp
 {
 ASTNode NonMemberBVConstEvaluator(const ASTNode& t);
 ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,

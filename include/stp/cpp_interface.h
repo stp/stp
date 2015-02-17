@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include <string>
 #include <vector>
 
-namespace BEEV
+namespace stp
 {
 
 // There's no BVTypeCheck() function. Use a typechecking node factory instead.
@@ -104,11 +104,11 @@ public:
   void AddQuery(const ASTNode& q);
 
   // NODES//
-  ASTNode CreateNode(BEEV::Kind kind,
-                     const BEEV::ASTVec& children = _empty_ASTVec);
+  ASTNode CreateNode(stp::Kind kind,
+                     const stp::ASTVec& children = _empty_ASTVec);
 
-  ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTNode n0,
-                     const BEEV::ASTNode n1);
+  ASTNode CreateNode(stp::Kind kind, const stp::ASTNode n0,
+                     const stp::ASTNode n1);
 
   //	These belong in the node factory..
 

@@ -158,8 +158,8 @@ private:
       if (functions[i] == mgr->ASTUndefined)
         continue;
 
-      functions.push_back(nf->CreateTerm(BEEV::BVNEG, bits, functions[i]));
-      functions.push_back(nf->CreateTerm(BEEV::BVUMINUS, bits, functions[i]));
+      functions.push_back(nf->CreateTerm(stp::BVNEG, bits, functions[i]));
+      functions.push_back(nf->CreateTerm(stp::BVUMINUS, bits, functions[i]));
     }
   }
 

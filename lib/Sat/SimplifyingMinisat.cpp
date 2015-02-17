@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "minisat/simp/SimpSolver.h"
 //#include "utils/System.h"
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 

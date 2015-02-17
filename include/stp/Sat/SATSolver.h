@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 // Don't let the defines escape outside.
 
-namespace BEEV
+namespace stp
 {
 class SATSolver
 {

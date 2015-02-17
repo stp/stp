@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/MutableASTNode.h"
-namespace BEEV
+namespace stp
 {
 
 vector<MutableASTNode*> MutableASTNode::all;

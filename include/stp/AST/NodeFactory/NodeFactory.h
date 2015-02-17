@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include <vector>
 #include "stp/AST/ASTKind.h"
 
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 typedef std::vector<ASTNode> ASTVec;
@@ -38,29 +38,29 @@ class STPMgr;
 typedef unsigned int* CBV;
 }
 
-using BEEV::ASTNode;
-using BEEV::Kind;
-using BEEV::ASTVec;
-using BEEV::_empty_ASTVec;
+using stp::ASTNode;
+using stp::Kind;
+using stp::ASTVec;
+using stp::_empty_ASTVec;
 
 class NodeFactory // not copyable
 {
 protected:
-  BEEV::STPMgr& bm;
+  stp::STPMgr& bm;
 
 public:
-  NodeFactory(BEEV::STPMgr& bm_) : bm(bm_) {}
+  NodeFactory(stp::STPMgr& bm_) : bm(bm_) {}
 
   virtual ~NodeFactory();
 
-  virtual BEEV::ASTNode CreateTerm(Kind kind, unsigned int width,
-                                   const BEEV::ASTVec& children) = 0;
+  virtual stp::ASTNode CreateTerm(Kind kind, unsigned int width,
+                                   const stp::ASTVec& children) = 0;
 
-  virtual BEEV::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+  virtual stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
                                         unsigned int width,
-                                        const BEEV::ASTVec& children);
+                                        const stp::ASTVec& children);
 
-  virtual BEEV::ASTNode CreateNode(Kind kind, const BEEV::ASTVec& children) = 0;
+  virtual stp::ASTNode CreateNode(Kind kind, const stp::ASTVec& children) = 0;
 
   ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                        unsigned valueWidth);
@@ -90,7 +90,7 @@ public:
   ASTNode getTrue();
   ASTNode getFalse();
 
-  ASTNode CreateConstant(BEEV::CBV cbv, unsigned width);
+  ASTNode CreateConstant(stp::CBV cbv, unsigned width);
 
   virtual std::string getName() = 0;
 };

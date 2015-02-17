@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 // Utility functions used by the transfer functions.
 
-namespace BEEV
+namespace stp
 {
 typedef unsigned int* CBV;
 void FatalError(const char* str);
@@ -39,7 +39,7 @@ namespace simplifier
 namespace constantBitP
 {
 
-using BEEV::CBV;
+using stp::CBV;
 
 // Find ALL the unfixed values in the column and fix it to the specified value.
 void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
@@ -176,7 +176,7 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
 }
 
 // Convert from arbitary precision.
-unsigned cbvTOInt(const BEEV::CBV v)
+unsigned cbvTOInt(const stp::CBV v)
 {
   unsigned result = 0;
   const unsigned bitSize = sizeof(unsigned) * 8;
@@ -187,7 +187,7 @@ unsigned cbvTOInt(const BEEV::CBV v)
     {
       if (j > bitSize)
       {
-        BEEV::FatalError(LOCATION "Can't fix a bit so very much way up high.");
+        stp::FatalError(LOCATION "Can't fix a bit so very much way up high.");
       }
       result += (1 << j);
     }
@@ -195,7 +195,7 @@ unsigned cbvTOInt(const BEEV::CBV v)
   return result;
 }
 
-int unsignedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs)
+int unsignedCompare(const stp::CBV& lhs, const stp::CBV& rhs)
 {
   /// NB: Uses the memory layout of the constant bit library to extract the
   /// bitwidth.
@@ -203,7 +203,7 @@ int unsignedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs)
   return CONSTANTBV::BitVector_Lexicompare(lhs, rhs);
 }
 
-int signedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs)
+int signedCompare(const stp::CBV& lhs, const stp::CBV& rhs)
 {
   /// NB: Uses the memory layout of the constant bit library to extract the
   /// bitwidth.
@@ -225,7 +225,7 @@ Result merge(Result r1, Result r2)
   return NOT_IMPLEMENTED;
 }
 
-int toInt(const BEEV::CBV value)
+int toInt(const stp::CBV value)
 {
   return *((unsigned int*)value);
 }

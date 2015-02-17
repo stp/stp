@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include <stack>
 
-namespace BEEV
+namespace stp
 {
 // Returns each node once, then returns the sentinel.
 // NB if the sentinel is contained in the node that's passed, then it'll be

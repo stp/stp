@@ -37,7 +37,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/simplifier.h"
 #include "stp/Simplifier/MutableASTNode.h"
 
-namespace BEEV
+namespace stp
 {
 using simplifier::constantBitP::Dependencies;
 

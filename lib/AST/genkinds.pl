@@ -82,7 +82,7 @@ sub gen_h_file {
     "// Generated automatically by genkinds.pl from ASTKind.kinds $now.\n",
     "// Do not edit\n",
     "#include <iostream>\n",
-    "namespace BEEV {\n  typedef enum {\n";
+    "namespace stp {\n  typedef enum {\n";
 
   for my $i (0 .. $#kindnames) {
     print HFILE "  ", $kindnames[$i];
@@ -122,7 +122,7 @@ sub gen_cpp_file {
   print CPPFILE
     "// Generated automatically by genkinds.h from ASTKind.kinds $now.\n",
     "// Do not edit\n",
-    "namespace BEEV {\n",
+    "namespace stp {\n",
     "const char * _kind_names[] =  {\n";
 
   for my $i (0 .. $#kindnames) {

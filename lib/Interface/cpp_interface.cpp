@@ -33,7 +33,7 @@ using std::cerr;
 using std::cout;
 using std::endl;
 
-namespace BEEV
+namespace stp
 {
 void Cpp_interface::checkInvariant()
 {
@@ -97,13 +97,13 @@ void Cpp_interface::AddQuery(const ASTNode& q)
   bm.AddQuery(q);
 }
 
-ASTNode Cpp_interface::CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children)
+ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
   return nf->CreateNode(kind, children);
 }
 
-ASTNode Cpp_interface::CreateNode(BEEV::Kind kind, const BEEV::ASTNode n0,
-                                  const BEEV::ASTNode n1)
+ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTNode n0,
+                                  const stp::ASTNode n1)
 {
   if (n0.GetIndexWidth() > 0 && !alreadyWarned)
   {
@@ -418,14 +418,14 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
 {
   nf = bm.defaultNodeFactory;
   startup();
-  BEEV::GlobalParserInterface = this;
+  stp::GlobalParserInterface = this;
 
   Simplifier* simp = new Simplifier(&bm);
   ArrayTransformer* at = new ArrayTransformer(&bm, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(&bm, simp, at);
   ToSATAIG* tosat = new ToSATAIG(&bm, at);
 
-  BEEV::GlobalParserBM = &bm_;
+  stp::GlobalParserBM = &bm_;
 
   GlobalSTP = new STP(&bm, simp, at, tosat, abs);
   init();

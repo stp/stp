@@ -32,7 +32,7 @@ THE SOFTWARE.
  * splitting the two objects apart saves 24 bytes for those objects.
  */
 
-namespace BEEV
+namespace stp
 {
 class ASTInternalWithChildren : public ASTInternal
 {

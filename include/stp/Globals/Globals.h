@@ -37,7 +37,7 @@ THE SOFTWARE.
  *
  */
 
-namespace BEEV
+namespace stp
 {
 // FIXME: We don't need all these forward declarations here!
 class STPMgr;

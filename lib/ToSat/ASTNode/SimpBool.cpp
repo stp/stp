@@ -32,9 +32,9 @@ static bool _disable_simpbool = 0;
 #include "stp/STPManager/STPManager.h"
 
 // SMTLIB experimental hack.  Try allocating a single stack here for
-// children to reduce growing of vectors.  BEEV::ASTVec child_stack;
+// children to reduce growing of vectors.  stp::ASTVec child_stack;
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 using std::endl;
@@ -468,4 +468,4 @@ ASTNode STPMgr::CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1,
 
   return retval;
 }
-} // BEEV namespace
+} // stp namespace

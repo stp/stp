@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STPManager.h"
 
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 typedef std::vector<ASTNode> ASTVec;

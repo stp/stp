@@ -56,7 +56,7 @@ THE SOFTWARE.
 
 #define INITIAL_TABLE_SIZE 100
 
-namespace BEEV
+namespace stp
 {
 using std::vector;
 

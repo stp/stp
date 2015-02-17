@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/VariablesInExpression.h"
 
-namespace BEEV
+namespace stp
 {
 
 VariablesInExpression::VariablesInExpression()

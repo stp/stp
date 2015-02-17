@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include <cassert>
 
-namespace BEEV
+namespace stp
 {
 
 typedef vector<const ASTNode*>* ClausePtr;

@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "UsefulDefs.h"
 #include "ASTInternalWithChildren.h"
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 class STPMgr;
@@ -46,9 +46,9 @@ class ASTInterior : public ASTInternalWithChildren
   friend class STPMgr;
   friend class ASTNodeHasher;
   friend class ASTNodeEqual;
-  friend BEEV::ASTNode
+  friend stp::ASTNode
   HashingNodeFactory::CreateNode(const Kind kind,
-                                 const BEEV::ASTVec& back_children);
+                                 const stp::ASTVec& back_children);
 
 private:
   /******************************************************************
@@ -118,5 +118,5 @@ public:
   // Destructor (does nothing, but is declared virtual here.
   virtual ~ASTInterior() {}
 }; // End of ASTNodeInterior
-} // end of namespace BEEV
+} // end of namespace stp
 #endif

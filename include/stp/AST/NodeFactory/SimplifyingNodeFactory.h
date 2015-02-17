@@ -50,8 +50,8 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
-using BEEV::ASTNode;
-using BEEV::ASTVec;
+using stp::ASTNode;
+using stp::ASTVec;
 
 class SimplifyingNodeFactory : public NodeFactory
 {
@@ -92,14 +92,14 @@ private:
   );
 
 public:
-  virtual BEEV::ASTNode CreateNode(BEEV::Kind kind,
-                                   const BEEV::ASTVec& children);
-  virtual BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
-                                   const BEEV::ASTVec& children);
+  virtual stp::ASTNode CreateNode(stp::Kind kind,
+                                   const stp::ASTVec& children);
+  virtual stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                                   const stp::ASTVec& children);
 
   virtual std::string getName() { return "simplifying"; }
 
-  SimplifyingNodeFactory(NodeFactory& raw_, BEEV::STPMgr& bm_)
+  SimplifyingNodeFactory(NodeFactory& raw_, stp::STPMgr& bm_)
       : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
         ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
   ~SimplifyingNodeFactory() {}

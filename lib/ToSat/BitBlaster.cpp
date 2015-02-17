@@ -36,7 +36,7 @@ THE SOFTWARE.
 #include <compdep.h>
 #endif
 
-namespace BEEV
+namespace stp
 {
 
 /********************************************************************
@@ -2960,4 +2960,4 @@ template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 #undef BBNodeVecMap
 #undef BBNodeSet
 
-} // BEEV namespace
+} // stp namespace

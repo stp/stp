@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <set>
 
-namespace BEEV
+namespace stp
 {
 using std::string;
 

@@ -45,7 +45,7 @@ using namespace simplifier::constantBitP;
 const int iterations = 500000;
 const unsigned bitWidth = 64;
 
-BEEV::STPMgr* beev;
+stp::STPMgr* beev;
 
 void run(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
          const int probabilityOfFixing, ostream& output)
@@ -238,13 +238,13 @@ void run_with_various_prob(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 
 int main(void)
 {
-  beev = new BEEV::STPMgr();
+  beev = new stp::STPMgr();
 
   Cpp_interface interface(*beev, beev->defaultNodeFactory);
   interface.startup();
 
   srand(time(NULL));
-  BEEV::GlobalParserBM = beev;
+  stp::GlobalParserBM = beev;
 
   ostream& output = cerr;
 

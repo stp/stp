@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 
-namespace BEEV
+namespace stp
 {
 using std::string;
 

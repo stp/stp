@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include "stp/ToSat/AIG/ToCNFAIG.h"
 #include "stp/AST/ArrayTransformer.h"
 
-namespace BEEV
+namespace stp
 {
 
 class ToSATAIG : public ToSATBase

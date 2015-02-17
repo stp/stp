@@ -51,7 +51,7 @@ THE SOFTWARE.
 // 2. paper for actual solving procedure
 //
 // 4. Outside the solver, Substitute and Re-normalize the input DAG
-namespace BEEV
+namespace stp
 {
 const bool flatten_ands = true;
 const bool debug_bvsolver = false;
@@ -843,4 +843,4 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
   UpdateAlreadySolvedMap(input, output);
   return output;
 } // end of BVSolve_Even()
-} // end of namespace BEEV
+} // end of namespace stp

@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 
-  using namespace BEEV;
+  using namespace stp;
   using std::cout;
   using std::cerr;
   using std::endl;
@@ -68,14 +68,14 @@ THE SOFTWARE.
   } indexvaluewidth;
 
   //ASTNode,ASTVec
-  BEEV::ASTNode *node;
-  BEEV::ASTVec *vec;
+  stp::ASTNode *node;
+  stp::ASTVec *vec;
   vector<char*> * stringVec;
   char* str;
 
   //Hash_Map to hold Array Updates during parse A map from array index
   //to array values. To support the WITH construct
-  BEEV::ASTNodeMap * Index_To_UpdateValue;
+  stp::ASTNodeMap * Index_To_UpdateValue;
 };
 
 %start cmd
@@ -330,7 +330,7 @@ VarDecls        :      VarDecl ';'
 VarDecl         :      FORM_IDs ':' Type 
 {
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {
-    ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol(*i);
+    ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol(*i);
     s.SetIndexWidth($3.indexwidth);
     s.SetValueWidth($3.valuewidth);
     GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);

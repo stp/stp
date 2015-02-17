@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
 #include "stp/STPManager/UserDefinedFlags.h"
 
-namespace BEEV
+namespace stp
 {
 using std::endl;
 
@@ -537,4 +537,4 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
     return (CheckBBandCNFMemo[form] = result);
   } //end of CheckBBandCNF_int()
 #endif
-} // end of namespace BEEV
+} // end of namespace stp

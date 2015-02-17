@@ -37,7 +37,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 
-  using namespace BEEV;
+  using namespace stp;
   using std::cout;
   using std::cerr;
   using std::endl;
@@ -84,8 +84,8 @@
   } indexvaluewidth;
 
   //ASTNode,ASTVec
-  BEEV::ASTNode *node;
-  BEEV::ASTVec *vec;
+  stp::ASTNode *node;
+  stp::ASTVec *vec;
   std::string *str;
 };
 
@@ -424,7 +424,7 @@ var_decls var_decl
 var_decl:
 LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
 {
-  ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   s.SetIndexWidth($3.indexwidth);
@@ -434,7 +434,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
 }
 | LPAREN_TOK STRING_TOK RPAREN_TOK
 {
-  ASTNode s = BEEV::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
@@ -490,7 +490,7 @@ TRUE_TOK
 }
 | LPAREN_TOK DISTINCT_TOK an_terms RPAREN_TOK
 {
-  using namespace BEEV;
+  using namespace stp;
 
   ASTVec terms = *$3;
   ASTVec forms;

@@ -47,7 +47,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 
-  using namespace BEEV;
+  using namespace stp;
   using std::cout;
   using std::cerr;
   using std::endl;
@@ -528,7 +528,7 @@ TRUE_TOK
 }
 | LPAREN_TOK DISTINCT_TOK an_terms RPAREN_TOK
 {
-  using namespace BEEV;
+  using namespace stp;
 
   ASTVec terms = *$3;
   ASTVec forms;
@@ -555,7 +555,7 @@ TRUE_TOK
 }
 | LPAREN_TOK DISTINCT_TOK an_formulas RPAREN_TOK
 {
-  using namespace BEEV;
+  using namespace stp;
 
   ASTVec terms = *$3;
   ASTVec forms;

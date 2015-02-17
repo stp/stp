@@ -32,7 +32,7 @@ THE SOFTWARE.
 
 extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
-extern BEEV::STPMgr* mgr;
+extern stp::STPMgr* mgr;
 
 void soft_time_out(int ignored)
 {
@@ -98,8 +98,8 @@ public:
   bool operator==(const Rewrite_rule& t) const { return (n == t.n); }
 
   // The "from" and "to" should be ordered with the orderEquivalence function.
-  Rewrite_rule(BEEV::STPMgr* bm, const BEEV::ASTNode& from_,
-               const BEEV::ASTNode& to_, const int t, int _id = -1)
+  Rewrite_rule(stp::STPMgr* bm, const stp::ASTNode& from_,
+               const stp::ASTNode& to_, const int t, int _id = -1)
       : from(from_), to(to_)
   {
 #if 0
@@ -117,7 +117,7 @@ public:
     ASTVec c;
     c.push_back(to_);
     c.push_back(from_);
-    n = bm->hashingNodeFactory->CreateNode(BEEV::EQ, c);
+    n = bm->hashingNodeFactory->CreateNode(stp::EQ, c);
 
     assert(orderEquivalence(from, to));
     assert(from == from_);

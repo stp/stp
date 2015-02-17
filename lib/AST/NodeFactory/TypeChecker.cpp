@@ -25,27 +25,27 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/TypeChecker.h"
 #include "stp/AST/AST.h"
 
-BEEV::ASTNode TypeChecker::CreateTerm(BEEV::Kind kind, unsigned int width,
-                                      const BEEV::ASTVec& children)
+stp::ASTNode TypeChecker::CreateTerm(stp::Kind kind, unsigned int width,
+                                      const stp::ASTVec& children)
 {
-  BEEV::ASTNode r = f.CreateTerm(kind, width, children);
+  stp::ASTNode r = f.CreateTerm(kind, width, children);
   BVTypeCheck(r);
   return r;
 }
 
-// virtual BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec&
+// virtual stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec&
 // children);
-BEEV::ASTNode TypeChecker::CreateNode(BEEV::Kind kind,
-                                      const BEEV::ASTVec& children)
+stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
+                                      const stp::ASTVec& children)
 {
-  BEEV::ASTNode r = f.CreateNode(kind, children);
+  stp::ASTNode r = f.CreateNode(kind, children);
   BVTypeCheck(r);
   return r;
 }
 
-BEEV::ASTNode TypeChecker::CreateArrayTerm(Kind kind, unsigned int index,
+stp::ASTNode TypeChecker::CreateArrayTerm(Kind kind, unsigned int index,
                                            unsigned int width,
-                                           const BEEV::ASTVec& children)
+                                           const stp::ASTVec& children)
 {
   ASTNode r = f.CreateTerm(kind, width, children);
   r.SetIndexWidth(index);

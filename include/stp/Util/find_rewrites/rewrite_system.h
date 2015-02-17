@@ -31,7 +31,7 @@ THE SOFTWARE.
 extern const int widen_to;
 extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
-extern BEEV::STPMgr* mgr;
+extern stp::STPMgr* mgr;
 
 bool orderEquivalence(ASTNode& from, ASTNode& to);
 

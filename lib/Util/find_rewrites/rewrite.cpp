@@ -45,7 +45,7 @@ THE SOFTWARE.
 #include "stp/STPManager/DifficultyScore.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-using namespace BEEV;
+using namespace stp;
 #include "stp/AST/NodeFactory/TypeChecker.h"
 #include "stp/cpp_interface.h"
 
@@ -58,7 +58,7 @@ using namespace BEEV;
 
 extern int smt2parse();
 
-using namespace BEEV;
+using namespace stp;
 
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
@@ -109,7 +109,7 @@ bool matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo,
 typedef hash_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
     ASTNodeString;
 
-BEEV::STPMgr* mgr;
+stp::STPMgr* mgr;
 NodeFactory* nf;
 
 SATSolver* ss;
@@ -734,8 +734,8 @@ int startup()
     return 0;
   }
 
-  mgr = new BEEV::STPMgr();
-  BEEV::GlobalParserBM = mgr;
+  mgr = new stp::STPMgr();
+  stp::GlobalParserBM = mgr;
 
   mgr->UserFlags.division_by_zero_returns_one_flag = true;
 
@@ -2064,15 +2064,15 @@ void unit_test()
   // commutative matching.
   ASTVec c;
   c.push_back(v);
-  ASTNode not_v = create(BEEV::BVNEG, c);
-  ASTNode neg_v = create(BEEV::BVUMINUS, c);
+  ASTNode not_v = create(stp::BVNEG, c);
+  ASTNode neg_v = create(stp::BVUMINUS, c);
 
   ASTNode plus_v = create(BVPLUS, not_v, neg_v);
 
   c.clear();
   c.push_back(w);
-  ASTNode neg_w = create(BEEV::BVUMINUS, c);
-  ASTNode not_w = create(BEEV::BVNEG, c);
+  ASTNode neg_w = create(stp::BVUMINUS, c);
+  ASTNode not_w = create(stp::BVNEG, c);
   ASTNode plus_w = create(BVPLUS, not_w, neg_w);
 
   ASTNodeMap sub;

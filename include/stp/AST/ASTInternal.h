@@ -30,7 +30,7 @@ THE SOFTWARE.
 
 using std::ostream;
 
-namespace BEEV
+namespace stp
 {
 /******************************************************************
  * struct enumeration:                                            *

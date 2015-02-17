@@ -42,7 +42,7 @@ class FixedBits;
 }
 }
 
-namespace BEEV
+namespace stp
 {
 
 using std::list;
@@ -95,8 +95,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster // not copyable
   void mult_allPairs(const vector<BBNode>& x, const vector<BBNode>& y,
                      set<BBNode>& support, vector<list<BBNode>>& products);
   void mult_Booth(const vector<BBNode>& x_i, const vector<BBNode>& y_i,
-                  set<BBNode>& support, const BEEV::ASTNode& xN,
-                  const BEEV::ASTNode& yN, vector<list<BBNode>>& products,
+                  set<BBNode>& support, const stp::ASTNode& xN,
+                  const stp::ASTNode& yN, vector<list<BBNode>>& products,
                   const ASTNode& n);
   vector<BBNode> mult_normal(const vector<BBNode>& x, const vector<BBNode>& y,
                              set<BBNode>& support, const ASTNode& n);

@@ -49,7 +49,7 @@ THE SOFTWARE.
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
-namespace BEEV
+namespace stp
 {
 using std::make_pair;
 

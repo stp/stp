@@ -57,25 +57,25 @@ THE SOFTWARE.
 #include <cassert>
 #include <cmath>
 
-using BEEV::Kind;
+using stp::Kind;
 
-using BEEV::SYMBOL;
-using BEEV::BVNEG;
-using BEEV::BVMOD;
-using BEEV::BVUMINUS;
-using BEEV::BVMULT;
-using BEEV::ITE;
-using BEEV::EQ;
-using BEEV::BVSRSHIFT;
-using BEEV::SBVREM;
-using BEEV::SBVMOD;
-using BEEV::SBVDIV;
-using BEEV::BVCONCAT;
-using BEEV::BVEXTRACT;
-using BEEV::BVRIGHTSHIFT;
-using BEEV::BVPLUS;
-using BEEV::BVXOR;
-using BEEV::BVDIV;
+using stp::SYMBOL;
+using stp::BVNEG;
+using stp::BVMOD;
+using stp::BVUMINUS;
+using stp::BVMULT;
+using stp::ITE;
+using stp::EQ;
+using stp::BVSRSHIFT;
+using stp::SBVREM;
+using stp::SBVMOD;
+using stp::SBVDIV;
+using stp::BVCONCAT;
+using stp::BVEXTRACT;
+using stp::BVRIGHTSHIFT;
+using stp::BVPLUS;
+using stp::BVXOR;
+using stp::BVDIV;
 
 using std::cout;
 using std::endl;
@@ -98,7 +98,7 @@ bool SimplifyingNodeFactory::children_all_constants(
 ASTNode SimplifyingNodeFactory::get_smallest_number(const unsigned width)
 {
   // 1000000000 (most negative number.)
-  BEEV::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_Bit_On(max, width - 1);
   return bm.CreateBVConst(max, width);
 }
@@ -106,7 +106,7 @@ ASTNode SimplifyingNodeFactory::get_smallest_number(const unsigned width)
 ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
 {
   // 011111111 (most positive number.)
-  BEEV::CBV max = CONSTANTBV::BitVector_Create(width, false);
+  stp::CBV max = CONSTANTBV::BitVector_Create(width, false);
   CONSTANTBV::BitVector_Fill(max);
   CONSTANTBV::BitVector_Bit_Off(max, width - 1);
   return bm.CreateBVConst(max, width);
@@ -121,8 +121,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
   // simplify those.
-  if (kind != BEEV::UNDEFINED && kind != BEEV::BOOLEAN &&
-      kind != BEEV::BITVECTOR && kind != BEEV::ARRAY &&
+  if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
+      kind != stp::BITVECTOR && kind != stp::ARRAY &&
       children_all_constants(children))
   {
       const ASTNode& hash = hashing.CreateNode(kind, children);
@@ -135,39 +135,39 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   switch (kind)
   {
     // convert the Less thans to greater thans.
-    case BEEV::BVLT:
+    case stp::BVLT:
       assert(children.size() == 2);
-      result = NodeFactory::CreateNode(BEEV::BVGT, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::BVGT, children[1], children[0]);
       break;
 
-    case BEEV::BVLE:
+    case stp::BVLE:
       assert(children.size() == 2);
-      result = NodeFactory::CreateNode(BEEV::BVGE, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::BVGE, children[1], children[0]);
       break;
 
-    case BEEV::BVSLT:
+    case stp::BVSLT:
       assert(children.size() == 2);
-      result = NodeFactory::CreateNode(BEEV::BVSGT, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::BVSGT, children[1], children[0]);
       break;
 
-    case BEEV::BVSLE:
+    case stp::BVSLE:
       assert(children.size() == 2);
-      result = NodeFactory::CreateNode(BEEV::BVSGE, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::BVSGE, children[1], children[0]);
       break;
 
-    case BEEV::BVSGT:
+    case stp::BVSGT:
       assert(children.size() == 2);
       if (children[0] == children[1])
         result = ASTFalse;
 
-      if (children[1].GetKind() == BEEV::BVCONST)
+      if (children[1].GetKind() == stp::BVCONST)
       {
         const unsigned width = children[0].GetValueWidth();
         if (children[1] == get_largest_number(width))
           result = ASTFalse;
       }
 
-      if (children[0].GetKind() == BEEV::BVCONST)
+      if (children[0].GetKind() == stp::BVCONST)
       {
         const unsigned width = children[0].GetValueWidth();
         if (children[0] == get_smallest_number(width))
@@ -179,7 +179,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           children[1].GetKind() == BVCONCAT &&
           children[0][1] == children[1][1])
       {
-        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][0],
+        result = NodeFactory::CreateNode(stp::BVSGT, children[0][0],
                                          children[1][0]);
       }
 
@@ -188,13 +188,13 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           children[1].GetKind() == BVCONCAT &&
           children[0][0] == children[1][0])
       {
-        result = NodeFactory::CreateNode(BEEV::BVSGT, children[0][1],
+        result = NodeFactory::CreateNode(stp::BVSGT, children[0][1],
                                          children[1][1]);
       }
 
       break;
 
-    case BEEV::BVGT:
+    case stp::BVGT:
       assert(children.size() == 2);
       if (children[0] == children[1]) {
         result = ASTFalse;
@@ -227,7 +227,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
       {
         result =
-            NodeFactory::CreateNode(BEEV::BVGT, children[0][0], children[1][0]);
+            NodeFactory::CreateNode(stp::BVGT, children[0][0], children[1][0]);
       }
 
       //1st part is the same ->only care about 2nd part
@@ -235,7 +235,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
       {
         result =
-            NodeFactory::CreateNode(BEEV::BVGT, children[0][1], children[1][1]);
+            NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
       }
 
       //If child 1 is constant, GT == NOT EQ
@@ -243,7 +243,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
       {
         result = NodeFactory::CreateNode(
-            BEEV::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
       }
 
       //If child 0 is constant, GT == NOT EQ
@@ -251,10 +251,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
       {
         result = NodeFactory::CreateNode(
-            BEEV::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
       }
 
-      if (children[0].GetKind() == BEEV::BVAND && children[0].Degree() > 1 &&
+      if (children[0].GetKind() == stp::BVAND && children[0].Degree() > 1 &&
           ((children[0][0] == children[1]) || children[0][1] == children[1]))
       {
         result = ASTFalse;
@@ -262,40 +262,40 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       }
       break;
 
-    case BEEV::BVGE:
+    case stp::BVGE:
       {
         assert(children.size() == 2);
         ASTNode a =
-            NodeFactory::CreateNode(BEEV::BVGT, children[1], children[0]);
-        result = NodeFactory::CreateNode(BEEV::NOT, a);
+            NodeFactory::CreateNode(stp::BVGT, children[1], children[0]);
+        result = NodeFactory::CreateNode(stp::NOT, a);
       }
       break;
 
-    case BEEV::BVSGE:
+    case stp::BVSGE:
       {
         assert(children.size() == 2);
         ASTNode a =
-            NodeFactory::CreateNode(BEEV::BVSGT, children[1], children[0]);
-        result = NodeFactory::CreateNode(BEEV::NOT, a);
+            NodeFactory::CreateNode(stp::BVSGT, children[1], children[0]);
+        result = NodeFactory::CreateNode(stp::NOT, a);
       }
       break;
 
-    case BEEV::NOT:
+    case stp::NOT:
       result = CreateSimpleNot(children);
       break;
-    case BEEV::AND:
+    case stp::AND:
       result = CreateSimpleAndOr(1, children);
       break;
-    case BEEV::OR:
+    case stp::OR:
       result = CreateSimpleAndOr(0, children);
       break;
-    case BEEV::NAND:
+    case stp::NAND:
       result = CreateSimpleNot(CreateSimpleAndOr(1, children));
       break;
-    case BEEV::NOR:
+    case stp::NOR:
       result = CreateSimpleNot(CreateSimpleAndOr(0, children));
       break;
-    case BEEV::XOR:
+    case stp::XOR:
       result = CreateSimpleXor(children);
       break;
     case ITE:
@@ -304,7 +304,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
     case EQ:
       result = CreateSimpleEQ(children);
       break;
-    case BEEV::IFF:
+    case stp::IFF:
     {
       assert(children.size() == 2);
       ASTVec newCh;
@@ -314,7 +314,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       result = CreateSimpleXor(newCh);
       break;
     }
-    case BEEV::IMPLIES:
+    case stp::IMPLIES:
     {
       assert(children.size() == 2);
       if (children[0] == children[1])
@@ -347,15 +347,15 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
   const Kind k = form.GetKind();
   switch (k)
   {
-    case BEEV::FALSE:
+    case stp::FALSE:
     {
       return form.GetSTPMgr()->ASTTrue;
     }
-    case BEEV::TRUE:
+    case stp::TRUE:
     {
       return form.GetSTPMgr()->ASTFalse;
     }
-    case BEEV::NOT:
+    case stp::NOT:
     {
       return form[0];
     } // NOT NOT cancellation
@@ -363,7 +363,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
     {
       ASTVec children;
       children.push_back(form);
-      return hashing.CreateNode(BEEV::NOT, children);
+      return hashing.CreateNode(stp::NOT, children);
     }
   }
 }
@@ -373,21 +373,21 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTVec& children)
   const Kind k = children[0].GetKind();
   switch (k)
   {
-    case BEEV::FALSE:
+    case stp::FALSE:
     {
       return children[0].GetSTPMgr()->ASTTrue;
     }
-    case BEEV::TRUE:
+    case stp::TRUE:
     {
       return children[0].GetSTPMgr()->ASTFalse;
     }
-    case BEEV::NOT:
+    case stp::NOT:
     {
       return children[0][0];
     } // NOT NOT cancellation
     default:
     {
-      return hashing.CreateNode(BEEV::NOT, children);
+      return hashing.CreateNode(stp::NOT, children);
     }
   }
 }
@@ -405,24 +405,24 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
                                                   const ASTVec& children)
 {
-  const Kind k = IsAnd ? BEEV::AND : BEEV::OR;
+  const Kind k = IsAnd ? stp::AND : stp::OR;
 
-  if (k == BEEV::OR && children.size() == 2)
+  if (k == stp::OR && children.size() == 2)
   {
     const ASTNode& c0 = children[0];
     const ASTNode& c1 = children[1];
-    if (c0.GetKind() == BEEV::NOT && c0[0] == c1)
+    if (c0.GetKind() == stp::NOT && c0[0] == c1)
       return ASTTrue;
-    if (c1.GetKind() == BEEV::NOT && c1[0] == c0)
+    if (c1.GetKind() == stp::NOT && c1[0] == c0)
       return ASTTrue;
   }
-  if (k == BEEV::AND && children.size() == 2)
+  if (k == stp::AND && children.size() == 2)
   {
     const ASTNode& c0 = children[0];
     const ASTNode& c1 = children[1];
-    if (c0.GetKind() == BEEV::NOT && c0[0] == c1)
+    if (c0.GetKind() == stp::NOT && c0[0] == c1)
       return ASTFalse;
-    if (c1.GetKind() == BEEV::NOT && c1[0] == c0)
+    if (c1.GetKind() == stp::NOT && c1[0] == c0)
       return ASTFalse;
   }
 
@@ -445,7 +445,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
       next_it = it_end;
 
     if (nextexists)
-      if (next_it->GetKind() == BEEV::NOT && (*next_it)[0] == *it)
+      if (next_it->GetKind() == stp::NOT && (*next_it)[0] == *it)
         return annihilator;
 
     if (*it == annihilator)
@@ -475,7 +475,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   else
   {
     // 2 or more children.  Create a new node.
-    retval = hashing.CreateNode(IsAnd ? BEEV::AND : BEEV::OR, new_children);
+    retval = hashing.CreateNode(IsAnd ? stp::AND : stp::OR, new_children);
   }
   return retval;
 }
@@ -487,9 +487,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   assert(children.size() == 2);
 
   // SYMBOL = something, if not that, then CONSTANT =
-  const bool swap = (children[1].GetKind() == BEEV::SYMBOL ||
-                     ((children[0].GetKind() != BEEV::SYMBOL) &&
-                      children[1].GetKind() == BEEV::BVCONST));
+  const bool swap = (children[1].GetKind() == stp::SYMBOL ||
+                     ((children[0].GetKind() != stp::SYMBOL) &&
+                      children[1].GetKind() == stp::BVCONST));
   const ASTNode& in1 = swap ? children[1] : children[0];
   const ASTNode& in2 = swap ? children[0] : children[1];
   const Kind k1 = in1.GetKind();
@@ -502,35 +502,35 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 
   // here the terms are definitely not syntactically equal but may be
   // semantically equal.
-  if (BEEV::BVCONST == k1 && BEEV::BVCONST == k2)
+  if (stp::BVCONST == k1 && stp::BVCONST == k2)
     return in1.GetSTPMgr()->ASTFalse;
 
   if ((k1 == BVNEG && k2 == BVNEG) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
 
-  if ((k1 == BVUMINUS && k2 == BEEV::BVCONST) ||
-      (k1 == BVNEG && k2 == BEEV::BVCONST))
+  if ((k1 == BVUMINUS && k2 == stp::BVCONST) ||
+      (k1 == BVNEG && k2 == stp::BVCONST))
     return NodeFactory::CreateNode(EQ, in1[0],
                                    NodeFactory::CreateTerm(k1, width, in2));
 
-  if ((k2 == BVUMINUS && k1 == BEEV::BVCONST) ||
-      (k2 == BVNEG && k1 == BEEV::BVCONST))
+  if ((k2 == BVUMINUS && k1 == stp::BVCONST) ||
+      (k2 == BVNEG && k1 == stp::BVCONST))
     return NodeFactory::CreateNode(EQ, in2[0],
                                    NodeFactory::CreateTerm(k2, width, in1));
 
   if ((k1 == BVNEG && in1[0] == in2) || (k2 == BVNEG && in2[0] == in1))
     return in1.GetSTPMgr()->ASTFalse;
 
-  if (k2 == BEEV::BVDIV && k1 == BEEV::BVCONST &&
+  if (k2 == stp::BVDIV && k1 == stp::BVCONST &&
       (in1 == bm.CreateZeroConst(width)))
-    return NodeFactory::CreateNode(BEEV::BVGT, in2[1], in2[0]);
+    return NodeFactory::CreateNode(stp::BVGT, in2[1], in2[0]);
 
-  if (k1 == BEEV::BVDIV && k2 == BEEV::BVCONST &&
+  if (k1 == stp::BVDIV && k2 == stp::BVCONST &&
       (in2 == bm.CreateZeroConst(width)))
-    return NodeFactory::CreateNode(BEEV::BVGT, in1[1], in1[0]);
+    return NodeFactory::CreateNode(stp::BVGT, in1[1], in1[0]);
 
   // split the constant to equal each part of the concat.
-  if (BVCONCAT == k2 && BEEV::BVCONST == k1)
+  if (BVCONCAT == k2 && stp::BVCONST == k1)
   {
     int low_b = 0;
     int high_b = (int)in2[1].GetValueWidth() - 1;
@@ -546,7 +546,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 
     ASTNode a = NodeFactory::CreateNode(EQ, in2[1], c0);
     ASTNode b = NodeFactory::CreateNode(EQ, in2[0], c1);
-    return NodeFactory::CreateNode(BEEV::AND, a, b);
+    return NodeFactory::CreateNode(stp::AND, a, b);
   }
 
   // This increases the number of nodes. So disable for now.
@@ -555,11 +555,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   {
     ASTNode a = NodeFactory::CreateNode(EQ, in1[0], in2[0]);
     ASTNode b = NodeFactory::CreateNode(EQ, in1[1], in2[1]);
-    return NodeFactory::CreateNode(BEEV::AND, a, b);
+    return NodeFactory::CreateNode(stp::AND, a, b);
   }
 
-  if (k1 == BEEV::BVCONST && k2 == ITE && in2[1].GetKind() == BEEV::BVCONST &&
-      in2[2].GetKind() == BEEV::BVCONST)
+  if (k1 == stp::BVCONST && k2 == ITE && in2[1].GetKind() == stp::BVCONST &&
+      in2[2].GetKind() == stp::BVCONST)
   {
 
     ASTNode result = NodeFactory::CreateNode(
@@ -621,31 +621,31 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
                                    in1[1] == in2 ? in1[0] : in1[1]);
   }
 
-  if (k1 == BEEV::BVCONST && k2 == BEEV::BVXOR && in2.Degree() == 2 &&
-      in2[0].GetKind() == BEEV::BVCONST)
+  if (k1 == stp::BVCONST && k2 == stp::BVXOR && in2.Degree() == 2 &&
+      in2[0].GetKind() == stp::BVCONST)
   {
     return NodeFactory::CreateNode(
-        EQ, NodeFactory::CreateTerm(BEEV::BVXOR, width, in1, in2[0]), in2[1]);
+        EQ, NodeFactory::CreateTerm(stp::BVXOR, width, in1, in2[0]), in2[1]);
   }
 
-  if (k2 == BEEV::BVCONST && k1 == BEEV::BVXOR && in1.Degree() == 2 &&
-      in1[0].GetKind() == BEEV::BVCONST)
+  if (k2 == stp::BVCONST && k1 == stp::BVXOR && in1.Degree() == 2 &&
+      in1[0].GetKind() == stp::BVCONST)
   {
     return NodeFactory::CreateNode(
-        EQ, NodeFactory::CreateTerm(BEEV::BVXOR, width, in2, in1[0]), in1[1]);
+        EQ, NodeFactory::CreateTerm(stp::BVXOR, width, in2, in1[0]), in1[1]);
   }
 
-  if (k2 == BEEV::BVXOR && in2.Degree() == 2 && in1 == in2[0])
+  if (k2 == stp::BVXOR && in2.Degree() == 2 && in1 == in2[0])
   {
     return NodeFactory::CreateNode(EQ, bm.CreateZeroConst(width), in2[1]);
   }
 
-  if (k1 == BEEV::BVXOR && in1.Degree() == 2 && in2 == in1[0])
+  if (k1 == stp::BVXOR && in1.Degree() == 2 && in2 == in1[0])
   {
     return NodeFactory::CreateNode(EQ, bm.CreateZeroConst(width), in1[1]);
   }
 
-  if (k1 == BEEV::BVCONST && k2 == BEEV::BVSX &&
+  if (k1 == stp::BVCONST && k2 == stp::BVSX &&
       (in2[0].GetValueWidth() != width))
   {
     // Each of the bits in the extended part, and one into the un-extended part
@@ -676,8 +676,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   }
 
   // Simplifiy (5 = 4/x) to FALSE.
-  if (bm.UserFlags.division_by_zero_returns_one_flag && k1 == BEEV::BVCONST &&
-      k2 == BEEV::BVDIV && in2[0].GetKind() == BEEV::BVCONST)
+  if (bm.UserFlags.division_by_zero_returns_one_flag && k1 == stp::BVCONST &&
+      k2 == stp::BVDIV && in2[0].GetKind() == stp::BVCONST)
   {
     ASTNode oneV = bm.CreateOneConst(width);
     if (CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(), oneV.GetBVConst()) >
@@ -746,14 +746,14 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
       // so that it gets tossed, too.
       *next_it = ASTFalse;
     }
-    else if (nextexists && (next_it->GetKind() == BEEV::NOT) &&
+    else if (nextexists && (next_it->GetKind() == stp::NOT) &&
              ((*next_it)[0] == *it))
     {
       // x XOR NOT x = TRUE.  Skip current, write "true" into next_it
       // so that it gets tossed, too.
       *next_it = ASTTrue;
     }
-    else if (BEEV::NOT == it->GetKind())
+    else if (stp::NOT == it->GetKind())
     {
       // If child is (NOT alpha), we can flip accumconst and use alpha.
       // This is ok because (NOT alpha) == TRUE XOR alpha
@@ -805,7 +805,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
     {
       new_children[0] = CreateSimpleNot(new_children[0]);
     }
-    retval = hashing.CreateNode(BEEV::XOR, new_children);
+    retval = hashing.CreateNode(stp::XOR, new_children);
   }
 
   if (debug_simplifyingNodeFactory)
@@ -891,14 +891,14 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
                                           unsigned int width)
 {
-  assert(children[0].GetKind() == BEEV::WRITE);
+  assert(children[0].GetKind() == stp::WRITE);
   const ASTNode& readIndex = children[1];
   ASTNode write = children[0];
 
-  const bool read_is_const = (BEEV::BVCONST == readIndex.GetKind());
+  const bool read_is_const = (stp::BVCONST == readIndex.GetKind());
   ASTVec c(2);
 
-  while (write.GetKind() == BEEV::WRITE)
+  while (write.GetKind() == stp::WRITE)
   {
     const ASTNode& write_index = write[1];
 
@@ -908,7 +908,7 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
       // cerr << "-";
       return write[2];
     }
-    else if (read_is_const && BEEV::BVCONST == write_index.GetKind())
+    else if (read_is_const && stp::BVCONST == write_index.GetKind())
     {
       // They are definately different. Ignore this.
       // cerr << "+";
@@ -940,7 +940,7 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
     }
     write = write[0];
   }
-  return hashing.CreateTerm(BEEV::READ, width, write, readIndex);
+  return hashing.CreateTerm(stp::READ, width, write, readIndex);
 }
 
 // This gets called with the arguments swapped as well. So the rules don't need
@@ -956,7 +956,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
     result = bm.CreateZeroConst(1);
   else if (n0 == n1)
     result = NodeFactory::CreateTerm(
-        BEEV::BVMULT, width, bm.CreateBVConst(std::string("2"), 10, width), n0);
+        stp::BVMULT, width, bm.CreateBVConst(std::string("2"), 10, width), n0);
   else if (n0.GetKind() == BVUMINUS && n1 == n0[0])
     result = bm.CreateZeroConst(width);
   else if (n1.GetKind() == BVPLUS && n1[1].GetKind() == BVUMINUS &&
@@ -973,8 +973,8 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
     result = n0[1];
   else if (n1.GetKind() == BVNEG && n1[0] == n0)
     result = bm.CreateMaxConst(width);
-  else if (n0.GetKind() == BEEV::BVCONST && n1.GetKind() == BVPLUS &&
-           n1.Degree() == 2 && n1[0].GetKind() == BEEV::BVCONST)
+  else if (n0.GetKind() == stp::BVCONST && n1.GetKind() == BVPLUS &&
+           n1.Degree() == 2 && n1[0].GetKind() == stp::BVCONST)
   {
     ASTVec ch;
     ch.push_back(n0);
@@ -1007,7 +1007,7 @@ void SimplifyingNodeFactory::handle_bvand(
 
   for (size_t i = 0, size = children.size(); i < size; ++i)
   {
-    if (children[i].GetKind() == BEEV::BVCONST)
+    if (children[i].GetKind() == stp::BVCONST)
     {
       if (CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
         all_one_found = true;
@@ -1028,7 +1028,7 @@ void SimplifyingNodeFactory::handle_bvand(
     ASTVec new_children;
     for (size_t i = 0, size = children.size(); i < size; ++i)
     {
-      if (children[i].GetKind() != BEEV::BVCONST ||
+      if (children[i].GetKind() != stp::BVCONST ||
           !CONSTANTBV::BitVector_is_full(children[i].GetBVConst()))
       {
         new_children.push_back(children[i]);
@@ -1069,7 +1069,7 @@ void SimplifyingNodeFactory::handle_bvand(
 
     int start = -1;
     int end = -1;
-    BEEV::CBV c = c0.GetBVConst();
+    stp::CBV c = c0.GetBVConst();
     bool bad = false;
     for (int i = 0; i < (int)width; i++)
     {
@@ -1127,9 +1127,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   if (!is_Term_kind(kind))
     FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
 
-  assert(kind != BEEV::BVCONST);
+  assert(kind != stp::BVCONST);
   // These are created specially.
-  assert(kind != BEEV::SYMBOL);
+  assert(kind != stp::SYMBOL);
   // so are these.
 
   assert(bm.hashingNodeFactory == &hashing);
@@ -1156,7 +1156,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = children[1];
       else if (children[2].GetKind() == ITE && (children[2][0] == children[0]))
       {
-        if (BEEV::ARRAY_TYPE == children[2].GetType())
+        if (stp::ARRAY_TYPE == children[2].GetType())
           result = NodeFactory::CreateArrayTerm(
               ITE, children[2].GetIndexWidth(), children[2].GetValueWidth(),
               children[0], children[1], children[2][2]);
@@ -1166,7 +1166,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       else if (children[1].GetKind() == ITE && (children[1][0] == children[0]))
       {
-        if (BEEV::ARRAY_TYPE == children[1].GetType())
+        if (stp::ARRAY_TYPE == children[1].GetType())
           result = NodeFactory::CreateArrayTerm(
               ITE, children[1].GetIndexWidth(), children[1].GetValueWidth(),
               children[0], children[1][1], children[2]);
@@ -1174,9 +1174,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
           result = NodeFactory::CreateTerm(ITE, width, children[0],
                                            children[1][1], children[2]);
       }
-      else if (children[0].GetKind() == BEEV::NOT)
+      else if (children[0].GetKind() == stp::NOT)
       {
-        if (BEEV::ARRAY_TYPE == children[1].GetType())
+        if (stp::ARRAY_TYPE == children[1].GetType())
           result = NodeFactory::CreateArrayTerm(
               ITE, children[1].GetIndexWidth(), children[1].GetValueWidth(),
               children[0][0], children[2], children[1]);
@@ -1185,19 +1185,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                            children[2], children[1]);
       }
       else if (children[0].GetKind() == EQ && children[0][1] == children[1] &&
-               children[0][0].GetKind() == BEEV::BVCONST &&
-               children[0][1].GetKind() != BEEV::BVCONST)
+               children[0][0].GetKind() == stp::BVCONST &&
+               children[0][1].GetKind() != stp::BVCONST)
         result = NodeFactory::CreateTerm(ITE, width, children[0],
                                          children[0][0], children[2]);
       else if (children[0].GetKind() == EQ && children[0][0] == children[1] &&
-               children[0][1].GetKind() == BEEV::BVCONST &&
-               children[0][0].GetKind() != BEEV::BVCONST)
+               children[0][1].GetKind() == stp::BVCONST &&
+               children[0][0].GetKind() != stp::BVCONST)
         result = NodeFactory::CreateTerm(ITE, width, children[0],
                                          children[0][1], children[2]);
       break;
     }
 
-    case BEEV::BVMULT:
+    case stp::BVMULT:
     {
       if (children.size() == 2)
       {
@@ -1222,17 +1222,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
         else if (children[0].GetKind() == BVUMINUS &&
                  children[1].GetKind() == BVUMINUS)
-          result = NodeFactory::CreateTerm(BEEV::BVMULT, width, children[0][0],
+          result = NodeFactory::CreateTerm(stp::BVMULT, width, children[0][0],
                                            children[1][0]);
         else if (children[0].GetKind() == BVUMINUS)
         {
-          result = NodeFactory::CreateTerm(BEEV::BVMULT, width, children[0][0],
+          result = NodeFactory::CreateTerm(stp::BVMULT, width, children[0][0],
                                            children[1]);
           result = NodeFactory::CreateTerm(BVUMINUS, width, result);
         }
         else if (children[1].GetKind() == BVUMINUS)
         {
-          result = NodeFactory::CreateTerm(BEEV::BVMULT, width, children[1][0],
+          result = NodeFactory::CreateTerm(stp::BVMULT, width, children[1][0],
                                            children[0]);
           result = NodeFactory::CreateTerm(BVUMINUS, width, result);
         }
@@ -1262,20 +1262,20 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     }
     break;
 
-    case BEEV::BVLEFTSHIFT:
+    case stp::BVLEFTSHIFT:
     {
       if (children[0].isConstant() &&
           CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
         result = bm.CreateZeroConst(width);
       else if (children[1].isConstant())
-        result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm,
+        result = stp::Simplifier::convertKnownShiftAmount(kind, children, bm,
                                                            &hashing);
       else if (width == 1 && children[0] == children[1])
         result = bm.CreateZeroConst(1);
       else if (children[0].GetKind() == BVUMINUS)
         result = NodeFactory::CreateTerm(
             BVUMINUS, width,
-            NodeFactory::CreateTerm(BEEV::BVLEFTSHIFT, width, children[0][0],
+            NodeFactory::CreateTerm(stp::BVLEFTSHIFT, width, children[0][0],
                                     children[1]));
     }
     break;
@@ -1288,7 +1288,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
           CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
         result = bm.CreateZeroConst(width);
       else if (children[1].isConstant())
-        result = BEEV::Simplifier::convertKnownShiftAmount(kind, children, bm,
+        result = stp::Simplifier::convertKnownShiftAmount(kind, children, bm,
                                                            &hashing);
       else if (children[0].isConstant() &&
                children[0] == bm.CreateOneConst(width))
@@ -1324,7 +1324,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     }
     break;
 
-    case BEEV::BVSRSHIFT:
+    case stp::BVSRSHIFT:
     {
       if (children[0].isConstant() &&
           CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
@@ -1351,18 +1351,18 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         ASTNode extract = NodeFactory::CreateTerm(
             BVEXTRACT, 1, children[0], bm.CreateBVConst(32, width - 1),
             bm.CreateBVConst(32, width - 1));
-        result = NodeFactory::CreateTerm(BEEV::BVSX, width, extract,
+        result = NodeFactory::CreateTerm(stp::BVSX, width, extract,
                                          bm.CreateBVConst(32, width));
       }
       else if (width == 1 && children[1].isConstant() &&
                children[1] == bm.CreateOneConst(1))
         result = children[0];
       else if (children[1].isConstant())
-        result = BEEV::Simplifier::convertArithmeticKnownShiftAmount(
+        result = stp::Simplifier::convertArithmeticKnownShiftAmount(
             kind, children, bm, &hashing);
       else if (children[1].GetKind() == BVUMINUS &&
                children[0] == children[1][0])
-        result = NodeFactory::CreateTerm(BEEV::BVSRSHIFT, width, children[0],
+        result = NodeFactory::CreateTerm(stp::BVSRSHIFT, width, children[0],
                                          children[1][0]);
       else if (children[0].isConstant() &&
                !CONSTANTBV::BitVector_bit_test(children[0].GetBVConst(),
@@ -1381,7 +1381,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     }
     break;
 
-    case BEEV::BVSUB:
+    case stp::BVSUB:
       if (children.size() == 2)
       {
         if (children.size() == 2 && children[0] == children[1])
@@ -1401,7 +1401,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       break;
 
-    case BEEV::BVOR:
+    case stp::BVOR:
     {
       if (children.size() == 2)
       {
@@ -1432,7 +1432,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     }
     break;
 
-    case BEEV::BVXOR:
+    case stp::BVXOR:
       if (children.size() == 2)
       {
         if (children[0] == children[1])
@@ -1468,13 +1468,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       break;
 
-    case BEEV::BVAND:
+    case stp::BVAND:
     {
       handle_bvand(kind,width, children, result);
       break;
     }
 
-    case BEEV::BVSX:
+    case stp::BVSX:
     {
       if (width == children[0].GetValueWidth()) {
         result = children[0];
@@ -1486,7 +1486,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       if (children[0].GetKind() == BVNEG)
         result = children[0][0];
       if (children[0].GetKind() == BVPLUS && children[0].Degree() == 2 &&
-          children[0][0].GetKind() == BEEV::BVCONST &&
+          children[0][0].GetKind() == stp::BVCONST &&
           children[0][0] == bm.CreateMaxConst(width))
         result = NodeFactory::CreateTerm(BVUMINUS, width, children[0][1]);
       if (children[0].GetKind() == BVUMINUS)
@@ -1505,13 +1505,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (width == 1)
         result = children[0];
       else if (children[0].GetKind() == BVPLUS && children[0].Degree() == 2 &&
-               children[0][0].GetKind() == BEEV::BVCONST &&
+               children[0][0].GetKind() == stp::BVCONST &&
                children[0][0] == bm.CreateOneConst(width))
         result = NodeFactory::CreateTerm(BVNEG, width, children[0][1]);
       else if (children[0].GetKind() == BVNEG)
         result = NodeFactory::CreateTerm(BVPLUS, width, children[0][0],
                                          bm.CreateOneConst(width));
-      else if (children[0].GetKind() == BEEV::BVSX &&
+      else if (children[0].GetKind() == stp::BVSX &&
                children[0][0].GetValueWidth() == 1)
         result = NodeFactory::CreateTerm(
             BVCONCAT, width, bm.CreateZeroConst(width - 1), children[0][0]);
@@ -1613,7 +1613,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     break;
 
-    case BEEV::BVDIV:
+    case stp::BVDIV:
       if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
         result = children[0];
       if (children[1].isConstant() &&
@@ -1623,7 +1623,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         // or zero.
         result = NodeFactory::CreateTerm(
             ITE, width,
-            NodeFactory::CreateNode(BEEV::BVGE, children[0], children[1]),
+            NodeFactory::CreateNode(stp::BVGE, children[0], children[1]),
             bm.CreateOneConst(width), bm.CreateZeroConst(width));
       }
       else if (children[1].isConstant() &&
@@ -1757,17 +1757,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     break;
 
-    case BEEV::WRITE:
-      if (children[0].GetKind() == BEEV::WRITE && children[1] == children[0][1])
+    case stp::WRITE:
+      if (children[0].GetKind() == stp::WRITE && children[1] == children[0][1])
       {
         // If the indexes of two writes are the same, then discard the inner
         // write.
         result = NodeFactory::CreateArrayTerm(
-            BEEV::WRITE, children[0].GetIndexWidth(),
+            stp::WRITE, children[0].GetIndexWidth(),
             children[0].GetValueWidth(), children[0][0], children[1],
             children[2]);
       }
-      else if (children[2].GetKind() == BEEV::READ &&
+      else if (children[2].GetKind() == stp::READ &&
                children[0] == children[2][0] && children[1] == children[2][1])
       {
         // Its writing into the array what's already there. i.e.  a[i] = a[i]
@@ -1775,8 +1775,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       break;
 
-    case BEEV::READ:
-      if (children[0].GetKind() == BEEV::WRITE)
+    case stp::READ:
+      if (children[0].GetKind() == stp::WRITE)
       {
         result = chaseRead(children, width);
       }

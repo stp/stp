@@ -39,7 +39,7 @@ THE SOFTWARE.
 typedef Cnf_Dat_t_ CNFData;
 typedef Aig_Obj_t AIGNode;
 
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 class STPMgr; // we ignore this anyway.

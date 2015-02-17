@@ -13,7 +13,7 @@
 #include "stp/cpp_interface.h"
 
   using namespace std;
-  using namespace BEEV;
+  using namespace stp;
   extern char *yytext;
   extern int cvcerror (const char *msg);
 %}

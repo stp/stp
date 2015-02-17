@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/AIG/ToCNFAIG.h"
 
-namespace BEEV
+namespace stp
 {
 
 // Can it only add in the new variables somehow??

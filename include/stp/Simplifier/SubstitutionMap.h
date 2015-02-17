@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/VariablesInExpression.h"
 
-namespace BEEV
+namespace stp
 {
 
 class Simplifier;

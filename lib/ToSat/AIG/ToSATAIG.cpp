@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/simplifier.h"
 
-namespace BEEV
+namespace stp
 {
 
 int ToSATAIG::cnf_calls = 0;

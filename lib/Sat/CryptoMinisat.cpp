@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "cryptominisat2/Solver.h"
 #include "cryptominisat2/SolverTypes.h"
 
-namespace BEEV
+namespace stp
 {
 
 CryptoMinisat::CryptoMinisat()

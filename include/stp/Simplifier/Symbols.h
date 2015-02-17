@@ -42,7 +42,7 @@ public:
 
   Symbols() {}
 
-  Symbols(const ASTNode& n) : found(n) { assert(BEEV::SYMBOL == n.GetKind()); }
+  Symbols(const ASTNode& n) : found(n) { assert(stp::SYMBOL == n.GetKind()); }
 
   // This will create an "empty" node if the array is empty.
   Symbols(const vector<Symbols*>& s) : children(s.begin(), s.end())

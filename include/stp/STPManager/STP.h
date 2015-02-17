@@ -36,7 +36,7 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 
-namespace BEEV
+namespace stp
 {
 // not copyable
 // FIXME: This needs a better name

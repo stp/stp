@@ -32,7 +32,7 @@ THE SOFTWARE.
 #include "WorkList.h"
 #include "MultiplicationStats.h"
 
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 typedef unsigned int* CBV;
@@ -55,8 +55,8 @@ enum Result
 class MultiplicationStatsMap;
 class WorkList;
 
-using BEEV::ASTNode;
-using BEEV::Simplifier;
+using stp::ASTNode;
+using stp::Simplifier;
 
 class ConstantBitPropagation
 {
@@ -87,14 +87,14 @@ public:
   bool isUnsatisfiable() { return status == CONFLICT; }
 
   // propagates.
-  ConstantBitPropagation(BEEV::Simplifier* _sm, NodeFactory* _nf,
+  ConstantBitPropagation(stp::Simplifier* _sm, NodeFactory* _nf,
                          const ASTNode& top);
 
   ~ConstantBitPropagation() { clearTables(); };
 
   // Returns the node after writing in simplifications from constant Bit
   // propagation.
-  BEEV::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
+  stp::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
                                  bool conjoinToTop = true);
 
   void clearTables()
@@ -109,7 +109,7 @@ public:
     msm = NULL;
   }
 
-  bool checkAtFixedPoint(const ASTNode& n, BEEV::ASTNodeSet& visited);
+  bool checkAtFixedPoint(const ASTNode& n, stp::ASTNodeSet& visited);
 
   void propagate();
 

@@ -40,7 +40,7 @@ using std::set;
 const bool debug_division = false;
 extern std::ostream& log;
 
-using BEEV::STPMgr;
+using stp::STPMgr;
 
 enum WhatIsOutput
 {
@@ -81,7 +81,7 @@ bool fix(FixedBits& a, const FixedBits& b, const int i)
   return false;
 }
 
-FixedBits cbvToFixedBits(BEEV::CBV low, unsigned width)
+FixedBits cbvToFixedBits(stp::CBV low, unsigned width)
 {
   FixedBits lowBits(width, false);
   for (int i = width - 1; i >= 0; i--)
@@ -102,7 +102,7 @@ FixedBits cbvToFixedBits(BEEV::CBV low, unsigned width)
 
 // The value "b" is in the range [low,high] inclusive.
 // Unfortunately it's not idempotent, <....1> [5,6], doesn't completely set it.
-Result fix(FixedBits& b, BEEV::CBV low, BEEV::CBV high)
+Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
 {
   FixedBits init = b;
   const int width = b.getWidth();
@@ -178,21 +178,21 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
   const unsigned width = a.getWidth();
 
-  BEEV::CBV minTop = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV maxTop = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minTop = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV maxTop = CONSTANTBV::BitVector_Create(width, true);
 
   setUnsignedMinMax(a, minTop, maxTop);
 
-  BEEV::CBV minBottom = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV maxBottom = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minBottom = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV maxBottom = CONSTANTBV::BitVector_Create(width, true);
 
   setUnsignedMinMax(b, minBottom, maxBottom);
 
-  BEEV::CBV minQuotient = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV maxQuotient = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minQuotient = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV maxQuotient = CONSTANTBV::BitVector_Create(width, true);
 
-  BEEV::CBV minRemainder = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV maxRemainder = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minRemainder = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV maxRemainder = CONSTANTBV::BitVector_Create(width, true);
 
   if (whatIs == QUOTIENT_IS_OUTPUT)
   {
@@ -210,15 +210,15 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   }
 
   // need to clean up these at end.
-  BEEV::CBV one = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_increment(one);
   // quotient and remainder.
-  BEEV::CBV q = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV r = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV q = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
   // misc.
-  BEEV::CBV copy = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV copy2 = CONSTANTBV::BitVector_Create(width, true);
-  BEEV::CBV multR = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV copy = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV copy2 = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV multR = CONSTANTBV::BitVector_Create(width, true);
 
   if (debug_division)
   {

@@ -32,7 +32,7 @@ namespace simplifier
 namespace constantBitP
 {
 
-using namespace BEEV;
+using namespace stp;
 using std::set;
 using std::cout;
 using std::endl;
@@ -41,9 +41,9 @@ using std::endl;
 class Dependencies
 {
 private:
-  typedef hash_map<BEEV::ASTNode, set<BEEV::ASTNode>*,
-                   BEEV::ASTNode::ASTNodeHasher,
-                   BEEV::ASTNode::ASTNodeEqual> NodeToDependentNodeMap;
+  typedef hash_map<stp::ASTNode, set<stp::ASTNode>*,
+                   stp::ASTNode::ASTNodeHasher,
+                   stp::ASTNode::ASTNodeEqual> NodeToDependentNodeMap;
   NodeToDependentNodeMap dependents;
 
   const set<ASTNode> empty;
@@ -98,7 +98,7 @@ public:
     NodeToDependentNodeMap::iterator it = dependents.begin();
     for (/**/; it != dependents.end(); it++)
     {
-      // set<BEEV::ASTNode>*
+      // set<stp::ASTNode>*
       delete it->second;
     }
   }

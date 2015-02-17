@@ -51,7 +51,7 @@ enum Type
 
 struct Signature
 {
-  BEEV::Kind kind;
+  stp::Kind kind;
   Type resultType;
   Type inputType;
   int maxInputWidth;
@@ -62,7 +62,7 @@ struct Signature
 };
 
 bool maxPrecision(std::vector<FixedBits*> children, FixedBits& output,
-                  BEEV::Kind kind, BEEV::STPMgr* beev);
+                  stp::Kind kind, stp::STPMgr* beev);
 }
 }
 

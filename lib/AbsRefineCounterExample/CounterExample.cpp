@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 const bool debug_counterexample = false;
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 

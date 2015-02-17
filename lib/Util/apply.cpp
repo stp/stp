@@ -39,13 +39,13 @@ int main(int argc, char** argv)
   extern int smt2lex_destroy(void);
   extern FILE* smt2in;
 
-  BEEV::STPMgr stp;
+  stp::STPMgr stp;
   STPMgr* mgr = &stp;
 
   Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
   interface.startup();
   interface.ignoreCheckSat();
-  BEEV::GlobalParserInterface = &interface;
+  stp::GlobalParserInterface = &interface;
 
   Simplifier* simp = new Simplifier(mgr);
   ArrayTransformer* at = new ArrayTransformer(mgr, simp);
@@ -55,7 +55,7 @@ int main(int argc, char** argv)
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 
   srand(time(NULL));
-  BEEV::GlobalParserBM = &stp;
+  stp::GlobalParserBM = &stp;
 
   stp.UserFlags.disableSimplifications();
   stp.UserFlags.bitConstantProp_flag = true;

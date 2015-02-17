@@ -36,7 +36,7 @@ namespace CMSat
 class SATSolver;
 }
 
-namespace BEEV
+namespace stp
 {
 class CryptoMinisat4 : public SATSolver
 {

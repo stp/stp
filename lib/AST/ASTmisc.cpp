@@ -37,7 +37,7 @@ THE SOFTWARE.
 
 #include <sys/time.h>
 
-namespace BEEV
+namespace stp
 {
 using std::cout;
 using std::cerr;

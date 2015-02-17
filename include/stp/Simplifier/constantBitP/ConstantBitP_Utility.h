@@ -41,17 +41,17 @@ using std::endl;
 using std::pair;
 
 Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
-void setSignedMinMax(FixedBits& v, BEEV::CBV min, BEEV::CBV max);
-void setUnsignedMinMax(const FixedBits& v, BEEV::CBV min, BEEV::CBV max);
-unsigned cbvTOInt(const BEEV::CBV v);
+void setSignedMinMax(FixedBits& v, stp::CBV min, stp::CBV max);
+void setUnsignedMinMax(const FixedBits& v, stp::CBV min, stp::CBV max);
+unsigned cbvTOInt(const stp::CBV v);
 void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
                   bool toFix);
-int toInt(BEEV::CBV value);
+int toInt(stp::CBV value);
 
 // wraps the comparison function, including a check that the bitWidth is the
 // same.
-int unsignedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs);
-int signedCompare(const BEEV::CBV& lhs, const BEEV::CBV& rhs);
+int unsignedCompare(const stp::CBV& lhs, const stp::CBV& rhs);
+int signedCompare(const stp::CBV& lhs, const stp::CBV& rhs);
 
 struct stats
 {

@@ -33,7 +33,7 @@ namespace Minisat
 class SimpSolver;
 }
 
-namespace BEEV
+namespace stp
 {
 class SimplifyingMinisat : public SATSolver
 {

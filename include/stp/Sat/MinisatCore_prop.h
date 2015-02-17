@@ -35,7 +35,7 @@ namespace Minisat
 class MinisatCore_prop;
 }
 
-namespace BEEV
+namespace stp
 {
 template <class T> class MinisatCore_prop : public SATSolver
 {

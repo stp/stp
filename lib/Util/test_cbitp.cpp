@@ -55,7 +55,7 @@ namespace simplifier
 namespace constantBitP
 {
 
-using namespace BEEV;
+using namespace stp;
 
 STPMgr* mgr;
 bool isDivide = false;
@@ -537,7 +537,7 @@ void g()
 
 int main(void)
 {
-  BEEV::STPMgr stp;
+  stp::STPMgr stp;
   mgr = &stp;
   mgr->UserFlags.disableSimplifications();
   mgr->UserFlags.division_by_zero_returns_one_flag = true;

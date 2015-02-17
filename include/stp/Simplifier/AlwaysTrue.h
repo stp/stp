@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
 
-namespace BEEV
+namespace stp
 {
 
 class AlwaysTrue // not copyable

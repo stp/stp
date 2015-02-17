@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include <stdlib.h>
 #include "stp/Parser/LetMgr.h"
 
-namespace BEEV
+namespace stp
 {
 // FUNC: This function builds the map between LET-var names and
 // LET-expressions

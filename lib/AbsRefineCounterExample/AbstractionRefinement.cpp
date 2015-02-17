@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 
-namespace BEEV
+namespace stp
 {
 using std::pair;
 using std::map;
@@ -622,4 +622,4 @@ AbsRefine_CounterExample::applyAllCongruenceConstraints(SATSolver& SatSolver,
   }
 }
 
-} // end of namespace BEEV
+} // end of namespace stp

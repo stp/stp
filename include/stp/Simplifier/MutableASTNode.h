@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "simplifier.h"
 
-namespace BEEV
+namespace stp
 {
 class MutableASTNode
 {

@@ -30,7 +30,7 @@ namespace simplifier
 namespace constantBitP
 {
 
-namespace BEEV
+namespace stp
 {
 typedef unsigned int* CBV;
 }

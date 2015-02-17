@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "stp/Util/StringHash.h"
 
-namespace BEEV
+namespace stp
 {
 /******************************************************************
  *  Class ASTSymbol:                                              *

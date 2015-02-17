@@ -163,7 +163,7 @@ public:
 class MultiplicationStatsMap
 {
 public:
-  typedef std::map<BEEV::ASTNode, MultiplicationStats> NodeToStats;
+  typedef std::map<stp::ASTNode, MultiplicationStats> NodeToStats;
   NodeToStats map;
 
   void print()

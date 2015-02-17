@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/MinisatCore.h"
 
-using namespace BEEV;
+using namespace stp;
 
 namespace simplifier
 {
@@ -193,7 +193,7 @@ void concretiseB(const ASTNode& variable, const ASTNode& min,
 
 bool fix(FixedBits& a, const FixedBits& b, const int i);
 
-Result fix(FixedBits& b, BEEV::CBV low, BEEV::CBV high);
+Result fix(FixedBits& b, stp::CBV low, stp::CBV high);
 
 // The bitWidth isn't necessarily the same for all children. e.g. ITE(boolean,
 // x-bit, x-bit)
@@ -262,7 +262,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
   if (notted.size() > 0) // some are specified.
   {
     expr =
-        beev->CreateNode(BEEV::AND, expr, beev->CreateNode(BEEV::AND, notted));
+        beev->CreateNode(stp::AND, expr, beev->CreateNode(stp::AND, notted));
   }
 
   bool first = true;
@@ -292,7 +292,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
     {
       assert(ors.size() != 0);
       if (ors.size() > 1)
-        toSolve = beev->CreateNode(BEEV::OR, ors);
+        toSolve = beev->CreateNode(stp::OR, ors);
       else
         toSolve = ors[0];
       ors.clear();
@@ -366,7 +366,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
     if (0 == ors.size())
       break; // everything is at top.
 
-    // beev->AddAssert(beev->CreateNode(BEEV::OR, ors));
+    // beev->AddAssert(beev->CreateNode(stp::OR, ors));
   }
 
   if (!first)
@@ -464,7 +464,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   if (notted.size() > 0) // some are specified.
   {
     expr =
-        beev->CreateNode(BEEV::AND, expr, beev->CreateNode(BEEV::AND, notted));
+        beev->CreateNode(stp::AND, expr, beev->CreateNode(stp::AND, notted));
   }
 
   bool first = true;

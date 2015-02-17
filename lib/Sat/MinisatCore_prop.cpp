@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/Sat/MinisatCore_prop.h"
 //#include "utils/System.h"
 
-namespace BEEV
+namespace stp
 {
 
 template <class T> MinisatCore_prop<T>::MinisatCore_prop(volatile bool& timeout)

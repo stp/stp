@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "../AST.h"
 
-using namespace BEEV;
+using namespace stp;
 
 int main()
 {

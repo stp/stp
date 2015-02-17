@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ASTNode/ToCNF.h"
 
-namespace BEEV
+namespace stp
 {
 using std::ostringstream;
 using std::cerr;
@@ -1685,4 +1685,4 @@ void CNFMgr::DELETE(ClauseList* varphi)
   delete varphi;
   varphi = NULL;
 } // End of DELETE()
-} // end namespace BEEV
+} // end namespace stp

@@ -72,25 +72,25 @@
     if (s[0] == '|' && s[str.size()-1] == '|')
     	str = str.substr(1,str.length()-2);
     
-    BEEV::ASTNode nptr;
+    stp::ASTNode nptr;
     bool found = false;
     
-    if (BEEV::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    if (stp::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
     {
-    	nptr= BEEV::GlobalParserInterface->LookupOrCreateSymbol(str);
+    	nptr= stp::GlobalParserInterface->LookupOrCreateSymbol(str);
     	found = true;
     }
-    else if (BEEV::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
     {
-    	nptr = BEEV::GlobalParserInterface->letMgr->resolveLet(str);
+    	nptr = stp::GlobalParserInterface->letMgr->resolveLet(str);
     	found = true;
     }
-    else if (BEEV::GlobalParserInterface->isBitVectorFunction(str))
+    else if (stp::GlobalParserInterface->isBitVectorFunction(str))
     {
 		smt2lval.str = new std::string(str);
 		return  BITVECTOR_FUNCTIONID_TOK;
     }
-   else if (BEEV::GlobalParserInterface->isBooleanFunction(str))
+   else if (stp::GlobalParserInterface->isBooleanFunction(str))
    {
                smt2lval.str = new std::string(str);
                return  BOOLEAN_FUNCTIONID_TOK;
@@ -103,8 +103,8 @@
 	  // Check valuesize to see if it's a prop var.  I don't like doing
 	  // type determination in the lexer, but it's easier than rewriting
 	  // the whole grammar to eliminate the term/formula distinction.  
-	  smt2lval.node = BEEV::GlobalParserInterface->newNode(nptr);
-	  if ((smt2lval.node)->GetType() == BEEV::BOOLEAN_TYPE)
+	  smt2lval.node = stp::GlobalParserInterface->newNode(nptr);
+	  if ((smt2lval.node)->GetType() == stp::BOOLEAN_TYPE)
 	    return FORMID_TOK;
 	  else 
 	    return TERMID_TOK;

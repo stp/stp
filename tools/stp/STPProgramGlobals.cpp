@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include <string>
 
-namespace BEEV
+namespace stp
 {
 // Some constant global vars for the Main function. Once they are
 // set, these globals will remain constants. These vars are not used
@@ -33,4 +33,4 @@ const char* prog = "stp";
 int linenum = 1;
 const char* usage = "Usage: %s [-option] [infile]\n";
 std::string helpstring = "\n";
-} // end of namespace BEEV
+} // end of namespace stp

@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/MutableASTNode.h"
 
-namespace BEEV
+namespace stp
 {
 using simplifier::constantBitP::Dependencies;
 

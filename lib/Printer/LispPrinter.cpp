@@ -28,7 +28,7 @@ namespace printer
 {
 
 using std::string;
-using namespace BEEV;
+using namespace stp;
 
 ASTNodeSet Lisp_AlreadyPrintedSet;
 ostream& Lisp_Print_indent(ostream& os, const ASTNode& n, int indentation);

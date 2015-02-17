@@ -43,8 +43,8 @@ class WorkList
 
 private:
   // select nodes from the cheap_worklist first.
-  set<BEEV::ASTNode> cheap_workList;     // Nodes to work on.
-  set<BEEV::ASTNode> expensive_workList; // Nodes to work on.
+  set<stp::ASTNode> cheap_workList;     // Nodes to work on.
+  set<stp::ASTNode> expensive_workList; // Nodes to work on.
 
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
@@ -86,7 +86,7 @@ public:
     addToWorklist(n, visited);
   }
 
-  void push(const BEEV::ASTNode& n)
+  void push(const stp::ASTNode& n)
   {
     if (n.isConstant()) // don't ever add constants to the worklist.
       return;
@@ -98,7 +98,7 @@ public:
       cheap_workList.insert(n);
   }
 
-  BEEV::ASTNode pop()
+  stp::ASTNode pop()
   {
     assert(!isEmpty());
     if (cheap_workList.size() > 0)
@@ -124,7 +124,7 @@ public:
   void print()
   {
     cerr << "+Worklist" << endl;
-    set<BEEV::ASTNode>::const_iterator it = cheap_workList.begin();
+    set<stp::ASTNode>::const_iterator it = cheap_workList.begin();
     while (it != cheap_workList.end())
     {
       cerr << *it << " ";

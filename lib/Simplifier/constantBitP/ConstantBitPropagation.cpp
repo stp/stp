@@ -39,7 +39,7 @@ using std::endl;
 using std::cout;
 using std::make_pair;
 
-using namespace BEEV;
+using namespace stp;
 
 /*
  *	Propagates known fixed 0 or 1 bits, as well as TRUE/FALSE values through the
@@ -172,7 +172,7 @@ void ConstantBitPropagation::setNodeToTrue(const ASTNode& top)
 }
 
 // Propagates. No writing in of values. Doesn't assume the top is true.
-ConstantBitPropagation::ConstantBitPropagation(BEEV::Simplifier* _sm,
+ConstantBitPropagation::ConstantBitPropagation(stp::Simplifier* _sm,
                                                NodeFactory* _nf,
                                                const ASTNode& top)
 {

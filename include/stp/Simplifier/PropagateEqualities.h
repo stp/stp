@@ -38,7 +38,7 @@ THE SOFTWARE.
 // replaces it in the
 // formula by true.
 
-namespace BEEV
+namespace stp
 {
 class Simplifier;
 class ArrayTransformer;

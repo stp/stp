@@ -29,7 +29,7 @@ THE SOFTWARE.
 
 namespace printer
 {
-using namespace BEEV;
+using namespace stp;
 using std::pair;
 using std::endl;
 
@@ -42,7 +42,7 @@ static string tolower(const char* name)
 }
 
 // Map from ASTNodes to LetVars
-BEEV::ASTNodeMap NodeLetVarMap;
+stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
@@ -50,7 +50,7 @@ std::vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
-BEEV::ASTNodeMap NodeLetVarMap1;
+stp::ASTNodeMap NodeLetVarMap1;
 
 // copied from Presentation Langauge printer.
 ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,

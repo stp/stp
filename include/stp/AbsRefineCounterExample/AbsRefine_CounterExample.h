@@ -32,7 +32,7 @@ THE SOFTWARE.
 #include "stp/AST/ArrayTransformer.h"
 #include "stp/ToSat/ToSATBase.h"
 
-namespace BEEV
+namespace stp
 {
 class AbsRefine_CounterExample // not copyable
 {
@@ -183,7 +183,7 @@ public:
     {
       if (SYMBOL == e.GetKind() && BOOLEAN_TYPE == e.GetType())
       {
-        return bv->CreateNode(BEEV::FALSE);
+        return bv->CreateNode(stp::FALSE);
       }
 
       if (SYMBOL == e.GetKind())

@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Symbols.h"
 #include "stp/Simplifier/VariablesInExpression.h"
 
-namespace BEEV
+namespace stp
 {
 
 /******************************************************************
@@ -152,5 +152,5 @@ public:
   } // End of ClearAllTables()
 
 }; // end of class bvsolver
-} // end of namespace BEEV
+} // end of namespace stp
 #endif

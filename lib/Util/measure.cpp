@@ -31,7 +31,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/Util/StopWatch.h"
 #include "stp/Util/BBAsProp.h"
 
-using namespace BEEV;
+using namespace stp;
 
 int bits = 64;
 int iterations = 100000;

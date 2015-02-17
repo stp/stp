@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "stp/AST/UsefulDefs.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Globals/Globals.h"
-namespace BEEV
+namespace stp
 {
 using std::cout;
 using std::endl;

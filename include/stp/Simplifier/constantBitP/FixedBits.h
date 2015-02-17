@@ -32,7 +32,7 @@ THE SOFTWARE.
 
 class MTRand;
 
-namespace BEEV
+namespace stp
 {
 class ASTNode;
 typedef unsigned int* CBV;
@@ -311,10 +311,10 @@ public:
   }
 
   // Result needs to be explicitly deleted.
-  BEEV::CBV GetBVConst() const;
+  stp::CBV GetBVConst() const;
 
   // Result needs to be explicitly deleted.
-  BEEV::CBV GetBVConst(unsigned to, unsigned from) const;
+  stp::CBV GetBVConst(unsigned to, unsigned from) const;
 
   void getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const;
 
@@ -345,7 +345,7 @@ public:
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 
-  static FixedBits concreteToAbstract(const BEEV::ASTNode& n);
+  static FixedBits concreteToAbstract(const stp::ASTNode& n);
 
   static bool equals(const FixedBits& a, const FixedBits& b);
 

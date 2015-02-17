@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/AST/ASTKind.h"
-namespace BEEV
+namespace stp
 {
 class STPMgr;
 }
@@ -36,13 +36,13 @@ class STPMgr;
 class HashingNodeFactory : public NodeFactory
 {
 public:
-  HashingNodeFactory(BEEV::STPMgr& bm_) : NodeFactory(bm_) {}
+  HashingNodeFactory(stp::STPMgr& bm_) : NodeFactory(bm_) {}
 
   virtual ~HashingNodeFactory();
-  BEEV::ASTNode CreateNode(const BEEV::Kind kind,
-                           const BEEV::ASTVec& back_children);
-  BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
-                           const BEEV::ASTVec& children);
+  stp::ASTNode CreateNode(const stp::Kind kind,
+                           const stp::ASTVec& back_children);
+  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                           const stp::ASTVec& children);
 
   virtual std::string getName() { return "hashing"; }
 };

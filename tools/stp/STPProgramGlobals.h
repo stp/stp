@@ -36,7 +36,7 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <vector>
 
-namespace BEEV
+namespace stp
 {
 // Some constant global vars for the Main function. Once they are
 // set, these globals will remain constants. These vars are not used
@@ -46,6 +46,6 @@ extern int linenum;
 extern const char* usage;
 extern std::string helpstring;
 
-} // end of namespace BEEV
+} // end of namespace stp
 
 #endif

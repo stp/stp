@@ -30,8 +30,8 @@ NodeFactory::~NodeFactory()
 {
 }
 
-BEEV::ASTNode NodeFactory::CreateTerm(BEEV::Kind kind, unsigned int width,
-                                      const BEEV::ASTVec& children)
+stp::ASTNode NodeFactory::CreateTerm(stp::Kind kind, unsigned int width,
+                                      const stp::ASTVec& children)
 {
   return CreateTerm(kind, width, children);
 }
@@ -124,20 +124,20 @@ ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
   return CreateArrayTerm(kind, index, width, child);
 }
 
-BEEV::ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
+stp::ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
                                            unsigned int width,
-                                           const BEEV::ASTVec& children)
+                                           const stp::ASTVec& children)
 {
   ASTNode result = CreateTerm(kind, width, children);
   result.SetIndexWidth(index);
   return result;
 }
 
-BEEV::ASTNode NodeFactory::getTrue()
+stp::ASTNode NodeFactory::getTrue()
 {
   return bm.ASTTrue;
 }
-BEEV::ASTNode NodeFactory::getFalse()
+stp::ASTNode NodeFactory::getFalse()
 {
   return bm.ASTFalse;
 }
@@ -151,7 +151,7 @@ ASTNode NodeFactory::CreateSymbol(const char* const name, unsigned indexWidth,
   return n;
 }
 
-ASTNode NodeFactory::CreateConstant(BEEV::CBV cbv, unsigned width)
+ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width)
 {
   return bm.CreateBVConst(cbv, width);
 }

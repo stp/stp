@@ -33,11 +33,11 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
-namespace BEEV
+namespace stp
 {
 class BeevMgr;
 }
-using BEEV::STPMgr;
+using stp::STPMgr;
 
 class TypeChecker : public NodeFactory
 {
@@ -46,12 +46,12 @@ class TypeChecker : public NodeFactory
 public:
   TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_) {}
 
-  BEEV::ASTNode CreateTerm(BEEV::Kind kind, unsigned int width,
-                           const BEEV::ASTVec& children);
-  BEEV::ASTNode CreateNode(BEEV::Kind kind, const BEEV::ASTVec& children);
-  BEEV::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                           const stp::ASTVec& children);
+  stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
+  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
                                 unsigned int width,
-                                const BEEV::ASTVec& children);
+                                const stp::ASTVec& children);
 
   virtual std::string getName() { return "type checking"; }
 };

@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
-namespace BEEV
+namespace stp
 {
 class ToSATBase // not copyable
 {

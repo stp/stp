@@ -29,7 +29,7 @@ namespace printer
 
 using std::string;
 using std::endl;
-using namespace BEEV;
+using namespace stp;
 
 // printer for C code (copied from PL_Print())
 // TODO: this does not fully implement printing of all of the STP

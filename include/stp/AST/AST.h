@@ -32,7 +32,7 @@ THE SOFTWARE.
 #include "ASTSymbol.h"
 #include "ASTBVConst.h"
 
-namespace BEEV
+namespace stp
 {
 // TODO remove -- only used in c_interface.cpp NOT from main.cpp
 void process_argument(const char ch, STPMgr* bm);
@@ -108,6 +108,6 @@ ostream& operator<<(ostream& os, const ASTNodeMap& nmap);
 
 void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
                         ASTNodeSet& symbols);
-} // end namespace BEEV
+} // end namespace stp
 
 #endif

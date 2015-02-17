@@ -32,7 +32,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATBase.h"
 
-namespace BEEV
+namespace stp
 {
 class ToSAT : public ToSATBase
 {

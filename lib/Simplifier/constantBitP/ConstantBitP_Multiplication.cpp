@@ -260,7 +260,7 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
       CONSTANTBV::BitVector_Bit_On(y_c, i);
   }
 
-  BEEV::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth + 1, true);
+  stp::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth + 1, true);
   CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
   assert(ec == CONSTANTBV::ErrCode_Ok);
 
@@ -407,7 +407,7 @@ Result useTrailingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
 }
 
 Result useInversesToSolve(FixedBits& x, FixedBits& y, FixedBits& output,
-                          BEEV::STPMgr* bm)
+                          stp::STPMgr* bm)
 {
   // Position of the first unfixed value +1.
   int xBottom = x.leastUnfixed();
@@ -436,7 +436,7 @@ Result useInversesToSolve(FixedBits& x, FixedBits& y, FixedBits& output,
   invertCount--; // position of the least fixed.
 
   const unsigned int width = invertCount + 1;
-  BEEV::CBV toInvertCBV = toInvert->GetBVConst(invertCount, 0);
+  stp::CBV toInvertCBV = toInvert->GetBVConst(invertCount, 0);
 
   // cerr << "value to invert:" << *toInvertCBV << " ";
 
@@ -448,13 +448,13 @@ Result useInversesToSolve(FixedBits& x, FixedBits& y, FixedBits& output,
     if (debug_multiply)
       cerr << "Value to Invert:" << *toInvertCBV << endl;
 
-    BEEV::Simplifier simplifier(bm);
-    BEEV::CBV inverse =
+    stp::Simplifier simplifier(bm);
+    stp::CBV inverse =
         simplifier.MultiplicativeInverse(bm->CreateBVConst(toInvertCBV, width))
             .GetBVConst();
-    BEEV::CBV toMultiplyBy = output.GetBVConst(invertCount, 0);
+    stp::CBV toMultiplyBy = output.GetBVConst(invertCount, 0);
 
-    BEEV::CBV toSetEqualTo = CONSTANTBV::BitVector_Create(2 * (width), true);
+    stp::CBV toSetEqualTo = CONSTANTBV::BitVector_Create(2 * (width), true);
 
     CONSTANTBV::ErrCode ec =
         CONSTANTBV::BitVector_Multiply(toSetEqualTo, inverse, toMultiplyBy);
@@ -518,9 +518,9 @@ Result useTrailingFixedToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   minV--;
 
   // The multiply doesn't like to overflow. So we widen the output.
-  BEEV::CBV xCBV = x.GetBVConst(minV, 0);
-  BEEV::CBV yCBV = y.GetBVConst(minV, 0);
-  BEEV::CBV result = CONSTANTBV::BitVector_Create(2 * (minV + 1), true);
+  stp::CBV xCBV = x.GetBVConst(minV, 0);
+  stp::CBV yCBV = y.GetBVConst(minV, 0);
+  stp::CBV result = CONSTANTBV::BitVector_Create(2 * (minV + 1), true);
 
   CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, xCBV, yCBV);
   if (ec != CONSTANTBV::ErrCode_Ok)
@@ -565,7 +565,7 @@ void printColumns(signed* sumL, signed* sumH, int bitWidth)
 }
 
 Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
-                          BEEV::STPMgr* bm, MultiplicationStats* ms)
+                          stp::STPMgr* bm, MultiplicationStats* ms)
 {
   FixedBits& x = *children[0];
   FixedBits& y = *children[1];

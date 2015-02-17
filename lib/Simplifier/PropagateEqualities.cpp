@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
 
-namespace BEEV
+namespace stp
 {
 
 /* The search functions look for variables that can be expressed in terms of

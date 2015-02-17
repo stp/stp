@@ -36,7 +36,7 @@ namespace MINISAT
 class Solver;
 }
 
-namespace BEEV
+namespace stp
 {
 class CryptoMinisat : public SATSolver
 {
