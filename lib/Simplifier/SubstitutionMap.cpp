@@ -422,4 +422,4 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   return false;
 }
-};
+} //namespace stp
