@@ -52,6 +52,7 @@ namespace constantBitP
 static int staticUniqueId = 1;
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
+// Unfixed bits are marked as '*' when using operator[]
 class FixedBits
 {
 private:
