@@ -73,9 +73,9 @@ public:
   virtual ~FindPureLiterals() {}
 
   // Build the polarities, then iterate through fixing them.
-  bool topLevel(ASTNode& n, Simplifier* simplifier, STPMgr* stp)
+  bool topLevel(ASTNode& n, Simplifier* simplifier, STPMgr* stpMgr)
   {
-    stp->GetRunTimes()->start(RunTimes::PureLiterals);
+    stpMgr->GetRunTimes()->start(RunTimes::PureLiterals);
 
     build(n, truePolarity);
     bool changed = false;
@@ -99,7 +99,7 @@ public:
       }
       it++;
     }
-    stp->GetRunTimes()->stop(RunTimes::PureLiterals);
+    stpMgr->GetRunTimes()->stop(RunTimes::PureLiterals);
     return changed;
   }
 

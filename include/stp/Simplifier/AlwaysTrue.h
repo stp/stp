@@ -39,7 +39,7 @@ namespace BEEV
 class AlwaysTrue // not copyable
 {
   Simplifier* simplifier;
-  STPMgr* stp;
+  STPMgr* stpMgr;
   NodeFactory* nf;
 
   enum State
@@ -53,16 +53,16 @@ public:
   AlwaysTrue(Simplifier* simplifier_, STPMgr* stp_, NodeFactory* nf_)
   {
     simplifier = simplifier_;
-    stp = stp_;
+    stpMgr = stp_;
     nf = nf_;
   }
 
   ASTNode topLevel(ASTNode& n)
   {
-    stp->GetRunTimes()->start(RunTimes::AlwaysTrue);
+    stpMgr->GetRunTimes()->start(RunTimes::AlwaysTrue);
     ASTNodeMap fromTo;
     ASTNode result = visit(n, AND_STATE, fromTo);
-    stp->GetRunTimes()->stop(RunTimes::AlwaysTrue);
+    stpMgr->GetRunTimes()->stop(RunTimes::AlwaysTrue);
     return result;
   }
 
@@ -95,9 +95,9 @@ public:
       {
         cerr << "+";
         if (result)
-          return stp->ASTTrue;
+          return stpMgr->ASTTrue;
         else
-          return stp->ASTFalse;
+          return stpMgr->ASTFalse;
       }
     }
 

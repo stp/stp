@@ -41,7 +41,7 @@ typedef std::vector<ASTNode> ASTVec;
 class BBNodeManagerASTNode
 {
   ASTNode ASTTrue, ASTFalse;
-  STPMgr* stp;
+  STPMgr* stpMgr;
 
   // no copy, no assign.
   BBNodeManagerASTNode& operator=(const BBNodeManagerASTNode& other);
@@ -50,9 +50,9 @@ class BBNodeManagerASTNode
 public:
   BBNodeManagerASTNode(STPMgr* _stp)
   {
-    stp = _stp;
-    ASTTrue = stp->CreateNode(TRUE);
-    ASTFalse = stp->CreateNode(FALSE);
+    stpMgr = _stp;
+    ASTTrue = stpMgr->CreateNode(TRUE);
+    ASTFalse = stpMgr->CreateNode(FALSE);
   }
 
   ~BBNodeManagerASTNode() {}
@@ -69,29 +69,29 @@ public:
       return n;
     }
     else
-      return stp->CreateNode(BOOLEXTRACT, n, stp->CreateBVConst(32, i));
+      return stpMgr->CreateNode(BOOLEXTRACT, n, stpMgr->CreateBVConst(32, i));
   }
 
   // CreateSimpForm removes IFF which aren't handled by the cnf converter.
   ASTNode CreateNode(Kind kind, vector<ASTNode>& children)
   {
-    return stp->CreateSimpForm(kind, children);
+    return stpMgr->CreateSimpForm(kind, children);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0)
   {
-    return stp->CreateSimpForm(kind, child0);
+    return stpMgr->CreateSimpForm(kind, child0);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1)
   {
-    return stp->CreateSimpForm(kind, child0, child1);
+    return stpMgr->CreateSimpForm(kind, child0, child1);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
                      const ASTNode& child2)
   {
-    return stp->CreateSimpForm(kind, child0, child1, child2);
+    return stpMgr->CreateSimpForm(kind, child0, child1, child2);
   }
 };
 }

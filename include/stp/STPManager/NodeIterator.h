@@ -43,8 +43,8 @@ class NodeIterator // not copyable
   uint8_t iteration;
 
 public:
-  NodeIterator(const ASTNode& n, const ASTNode& _sentinel, STPMgr& stp)
-      : sentinel(_sentinel), iteration(stp.getNextIteration())
+  NodeIterator(const ASTNode& n, const ASTNode& _sentinel, STPMgr& stpMgr)
+      : sentinel(_sentinel), iteration(stpMgr.getNextIteration())
   {
     toVisit.push(n);
   }
@@ -96,8 +96,8 @@ class NonAtomIterator : public NodeIterator
   virtual bool ok(const ASTNode& n) { return !n.isAtom(); }
 
 public:
-  NonAtomIterator(const ASTNode& n, const ASTNode& uf, STPMgr& stp)
-      : NodeIterator(n, uf, stp)
+  NonAtomIterator(const ASTNode& n, const ASTNode& uf, STPMgr& stpMgr)
+      : NodeIterator(n, uf, stpMgr)
   {
   }
 };

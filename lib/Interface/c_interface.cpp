@@ -44,6 +44,7 @@ using std::string;
 using std::fdostream;
 using std::endl;
 
+// FIXME: These typedefs are stupid. They make the code hard to understand!
 // These typedefs lower the effort of using the keyboard to type (too
 // many overloaded meanings of the word type)
 typedef BEEV::ASTNode node;
@@ -140,17 +141,17 @@ VC vc_createValidityChecker(void)
       new BEEV::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 
   BEEV::GlobalParserBM = bm;
-  stpstar stp =
+  stpstar stpObj =
       new BEEV::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
 
   simpNF = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
   bm->defaultNodeFactory = simpNF;
 
-  BEEV::GlobalSTP = stp;
+  BEEV::GlobalSTP = stpObj;
   decls = new BEEV::ASTVec();
   // created_exprs.clear();
-  vc_setFlags(stp, 'd');
-  return (VC)stp;
+  vc_setFlags(stpObj, 'd');
+  return (VC)stpObj;
 }
 
 // Expr I/O
@@ -501,8 +502,8 @@ int vc_query(VC vc, Expr e)
 int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
 {
   nodestar a = (nodestar)e;
-  stpstar stp = ((stpstar)vc);
-  bmstar b = (bmstar)(stp->bm);
+  stpstar stpObj = ((stpstar)vc);
+  bmstar b = (bmstar)(stpObj->bm);
 
   assert(!BEEV::GlobalParserBM->soft_timeout_expired);
 #if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
@@ -540,16 +541,16 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   {
     if (v.size() == 1)
     {
-      output = stp->TopLevelSTP(v[0], *a);
+      output = stpObj->TopLevelSTP(v[0], *a);
     }
     else
     {
-      output = stp->TopLevelSTP(b->CreateNode(BEEV::AND, v), *a);
+      output = stpObj->TopLevelSTP(b->CreateNode(BEEV::AND, v), *a);
     }
   }
   else
   {
-    output = stp->TopLevelSTP(b->CreateNode(BEEV::TRUE), *a);
+    output = stpObj->TopLevelSTP(b->CreateNode(BEEV::TRUE), *a);
   }
 
 #if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)

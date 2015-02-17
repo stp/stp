@@ -39,6 +39,7 @@ THE SOFTWARE.
 namespace BEEV
 {
 // not copyable
+// FIXME: This needs a better name
 class STP
 {
 
