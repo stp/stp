@@ -73,6 +73,13 @@ ASTNode BVSolver::simplifyNode(const ASTNode n)
 // value by reference in the argument 'output'
 bool BVSolver::CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output)
 {
+  if (key == ASTTrue
+    || key == ASTFalse
+  ) {
+    output = key;
+    return true;
+  }
+
   ASTNodeMap::const_iterator it;
   if ((it = FormulasAlreadySolvedMap.find(key)) !=
       FormulasAlreadySolvedMap.end())

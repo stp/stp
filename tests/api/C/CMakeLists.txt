@@ -34,3 +34,4 @@ AddSTPGTest(timeout.cpp
 AddSTPGTest(x.cpp)
 AddSTPGTest(y.cpp)
 AddSTPGTest(multi-query-bug.cpp)
+AddSTPGTest(reported_error.cpp)
