@@ -62,13 +62,11 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_in
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
-  {
     NewSolver.setVerbosity(1);
-  }
+
   if (bm->UserFlags.random_seed_flag)
-  {
     NewSolver.setSeed(bm->UserFlags.random_seed);
-  }
+
   SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
   return result;
 }
