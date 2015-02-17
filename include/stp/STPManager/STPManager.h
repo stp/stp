@@ -33,12 +33,12 @@ THE SOFTWARE.
 
 namespace stp
 {
-/*****************************************************************
- * Class STPMgr.  This holds all "global" variables for the system,
+/*
+ * This holds all "global" variables for the system,
  * such as unique tables for the various kinds of nodes.
- *****************************************************************/
-
-class STPMgr // not copyable
+ * not copyable
+*/
+class STPMgr
 {
   friend class ASTNode;
   friend class ASTInterior;
