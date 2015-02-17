@@ -89,8 +89,7 @@ public:
   volatile bool soft_timeout_expired;
 
   // No nodes should already have the iteration number that is returned from
-  // here.
-  // This never returns zero.
+  // here. This never returns zero.
   uint8_t getNextIteration()
   {
     if (last_iteration == 255)
