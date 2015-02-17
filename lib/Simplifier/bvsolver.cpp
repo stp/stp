@@ -390,8 +390,9 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
 ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
 {
   ASTNode eq = input;
-  // cerr << "Input to BVSolve_Odd()" << eq << endl;
-  if (!(EQ == eq.GetKind()))
+  //std::cerr << "Input to BVSolve_Odd()" << eq << std::endl;
+
+  if (EQ != eq.GetKind())
   {
     return input;
   }
@@ -412,9 +413,11 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
   {
     lhs = eq[1];
     rhs = eq[0];
+    //std::cerr << "Two sides are:" << lhs << " --- SIDE -- " << rhs << std::endl;
     eq = _bm->CreateNode(EQ, lhs, rhs); // If "return eq" is called, return the
                                         // arguments in the correct order.
     assert(BVTypeCheck(eq));
+    //std::cerr << "Flipped equation around, it's now: " << eq << std::endl;
   }
 
   if (CheckAlreadySolvedMap(eq, output))
@@ -553,7 +556,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
       rewrite a=b through the second expression, giving:
       b = write(A,b,b),
       which shouldn't be simplified.
-      */
+    */
 
     ASTNode aaa =
         (any_solved && EQ == it->GetKind())
