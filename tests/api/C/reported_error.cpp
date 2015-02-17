@@ -84,6 +84,7 @@ TEST(reported_issue_120, one)
   vc_printAsserts(vc);
   printf("\n------\n");
   int query = vc_query(vc, vc_falseExpr(vc));
+  ASSERT_EQ(query, 0);
 
   // Pop context
   printf("Pop\n");
