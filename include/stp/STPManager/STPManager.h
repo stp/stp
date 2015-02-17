@@ -44,9 +44,9 @@ class STPMgr
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTSymbol;
-  friend stp::ASTNode
+  friend ASTNode
   HashingNodeFactory::CreateNode(const Kind kind,
-                                 const stp::ASTVec& back_children);
+                                 const ASTVec& back_children);
 
 private:
   /****************************************************************
@@ -268,12 +268,7 @@ public:
     _max_node_num += 2;
     return _max_node_num;
   }
-
   unsigned int NodeSize(const ASTNode& a);
-
-  /****************************************************************
-   * Simplifying create formula functions                         *
-   ****************************************************************/
 
   // Simplifying create functions
   ASTNode CreateSimpForm(Kind kind, ASTVec& children);
@@ -299,8 +294,7 @@ public:
   // Create and return an ASTNode for a symbol
   ASTNode LookupOrCreateSymbol(const char* const name);
 
-  // Create and return an ASTNode for a symbol Width is number of
-  // bits.
+  // Create and return an ASTNode for a symbol Width is number of bits.
   ASTNode CreateOneConst(unsigned int width);
   ASTNode CreateTwoConst(unsigned int width);
   ASTNode CreateMaxConst(unsigned int width);
@@ -322,8 +316,8 @@ public:
   }
 
   // Create and return an interior ASTNode
-  inline stp::ASTNode CreateNode(stp::Kind kind,
-                                  const stp::ASTVec& children = _empty_ASTVec)
+  inline ASTNode CreateNode(stp::Kind kind,
+                                  const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, children);
   }
@@ -354,15 +348,15 @@ public:
    ****************************************************************/
 
   // Create and return an ASTNode for a term
-  inline stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                                  const stp::ASTVec& children = _empty_ASTVec)
+  inline ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                                  const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateTerm(kind, width, children);
   }
 
-  inline stp::ASTNode
+  inline ASTNode
   CreateArrayTerm(stp::Kind kind, unsigned int indexWidth, unsigned int width,
-                  const stp::ASTVec& children = _empty_ASTVec)
+                  const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateArrayTerm(kind, indexWidth, width,
                                                children);
@@ -446,7 +440,7 @@ public:
     sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
-    stp::ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
   }
