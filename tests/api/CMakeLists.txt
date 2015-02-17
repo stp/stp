@@ -5,7 +5,7 @@ if(TEST_C_API)
 endif()
 
 if(ENABLE_PYTHON_INTERFACE)
-    option(TEST_PYTHON_API "Enable tests that test STP's public Python API" OFF)
+    option(TEST_PYTHON_API "Enable tests that test STP's public Python API" ON)
 endif()
 
 if(TEST_PYTHON_API)
