@@ -26,6 +26,8 @@ THE SOFTWARE.
 #ifndef COLUMNCOUNTS_H_
 #define COLUMNCOUNTS_H_
 
+#include <iostream>
+
 namespace simplifier
 {
 namespace constantBitP
@@ -81,34 +83,34 @@ struct ColumnCounts
     }
   }
 
-  void print(string message)
+  void print(std::string message)
   {
-    log << message << endl;
+    log << message << std::endl;
     log << " columnL:";
     for (unsigned i = 0; i < bitWidth; i++)
     {
       log << columnL[bitWidth - 1 - i] << " ";
     }
-    log << endl;
+    log << std::endl;
     log << " columnH:";
     for (unsigned i = 0; i < bitWidth; i++)
     {
       log << columnH[bitWidth - 1 - i] << " ";
     }
-    log << endl;
+    log << std::endl;
     log << " sumL:   ";
 
     for (unsigned i = 0; i < bitWidth; i++)
     {
       log << sumL[bitWidth - 1 - i] << " ";
     }
-    log << endl;
+    log << std::endl;
     log << " sumH:   ";
     for (unsigned i = 0; i < bitWidth; i++)
     {
       log << sumH[bitWidth - 1 - i] << " ";
     }
-    log << endl;
+    log << std::endl;
   }
 
   Result snapTo(int i)

@@ -566,7 +566,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
       ASTNode CurrentSymbol =
           bm->CreateFreshVariable(term.GetIndexWidth(), term.GetValueWidth(),
-                                  "array_" + string(arrName.GetName()));
+                                  "array_" + std::string(arrName.GetName()));
 
       result = CurrentSymbol;
 

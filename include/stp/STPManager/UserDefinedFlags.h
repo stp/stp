@@ -33,7 +33,6 @@ THE SOFTWARE.
 
 namespace stp
 {
-using std::string;
 
 /******************************************************************
  * Struct UserDefFlags:
@@ -45,7 +44,7 @@ using std::string;
 struct UserDefinedFlags // not copyable
 {
 private:
-  std::set<string> alreadyOutput;
+  std::set<std::string> alreadyOutput;
 
 public:
   // collect statistics on certain functions
@@ -162,9 +161,9 @@ public:
 
   enum SATSolvers solver_to_use;
 
-  std::map<string, string> config_options;
+  std::map<std::string, std::string> config_options;
 
-  void set(string n, string v)
+  void set(std::string n, std::string v)
   {
     assert(n.size() > 0);
     assert(v.size() > 0);
@@ -187,18 +186,18 @@ public:
     propagate_equalities = false;
   }
 
-  string get(string n) { return get(n, ""); }
+  std::string get(std::string n) { return get(n, ""); }
 
   // "1" is set.
-  bool isSet(string n, string def) { return (get(n, def) == string("1")); }
+  bool isSet(std::string n, std::string def) { return (get(n, def) == std::string("1")); }
 
-  string get(string n, string def)
+  std::string get(std::string n, std::string def)
   {
     if (config_options.empty())
       return def;
 
-    string result;
-    std::map<string, string>::const_iterator it = config_options.find(n);
+    std::string result;
+    std::map<std::string, std::string>::const_iterator it = config_options.find(n);
     if (it == config_options.end())
       result = def;
     else

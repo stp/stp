@@ -232,7 +232,7 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster // not copyable
   const bool upper_multiplication_bound;
   const bool bvplus_variant;
 
-  const string multiplication_variant;
+  const std::string multiplication_variant;
 
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
