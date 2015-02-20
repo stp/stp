@@ -25,6 +25,9 @@ THE SOFTWARE.
 
 #ifndef ASTBVCONST_H
 #define ASTBVCONST_H
+
+#include "ASTInternal.h"
+
 namespace stp
 {
 class STPMgr;
