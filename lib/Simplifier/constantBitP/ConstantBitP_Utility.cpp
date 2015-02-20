@@ -185,11 +185,11 @@ unsigned cbvTOInt(const stp::CBV v)
   {
     if (CONSTANTBV::BitVector_bit_test(v, j))
     {
-      if (j > bitSize)
+      if (j >= bitSize)
       {
-        stp::FatalError(LOCATION "Can't fix a bit so very much way up high.");
+        stp::FatalError(LOCATION "Can't fix a bit so very much way up high (limited to unsiged here)");
       }
-      result += (1 << j);
+      result += (1U << j);
     }
   }
   return result;
