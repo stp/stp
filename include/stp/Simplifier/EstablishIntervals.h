@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #ifndef ESTABLISHINTERVALS_H_
 #define ESTABLISHINTERVALS_H_
+
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/simplifier.h"
