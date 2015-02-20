@@ -119,7 +119,7 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::invalid_option_value>>
+      boost::exception_detail::error_info_injector<po::invalid_option_value>>&
              what)
   {
     cerr << "Invalid value '" << what.what() << "'"
@@ -128,7 +128,7 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::multiple_occurrences>>
+      boost::exception_detail::error_info_injector<po::multiple_occurrences>>&
              what)
   {
     cerr << "Error: " << what.what() << " of option '" << what.get_option_name()
@@ -137,7 +137,7 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::required_option>> what)
+      boost::exception_detail::error_info_injector<po::required_option>>& what)
   {
     cerr << "You forgot to give a required option '" << what.get_option_name()
          << "'" << endl;
