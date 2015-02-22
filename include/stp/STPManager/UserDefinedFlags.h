@@ -63,8 +63,6 @@ public:
   bool ackermannisation; // eagerly write through the array's function
                          // congruence axioms.
 
-  // switch to control write refinements
-  // bool arraywrite_refinement_flag;
 
   // check the counterexample against the original input to STP
   bool check_counterexample_flag;
