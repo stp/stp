@@ -31,9 +31,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Clause.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Solver;
 
@@ -96,6 +96,6 @@ inline const vector<Var>& PartFinder::getPartVars(const uint32_t part)
     return reverseTable[part];
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //PARTFINDER_H

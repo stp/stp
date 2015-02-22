@@ -37,9 +37,9 @@ using std::vector;
 #include "Clause.h"
 #include "Vec.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class VarReplacer
 {
@@ -155,6 +155,6 @@ inline uint32_t VarReplacer::getNumTrees() const
     return reverseTable.size();
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //VARREPLACER_H

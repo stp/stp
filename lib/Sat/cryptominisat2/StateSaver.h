@@ -23,9 +23,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Solver.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class StateSaver
 {
@@ -44,6 +44,6 @@ class StateSaver
         uint64_t backup_propagations;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //STATESAVER__H

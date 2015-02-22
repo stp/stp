@@ -39,9 +39,9 @@ using std::ofstream;
 #define SND_WIDTH 35
 #define TRD_WIDTH 10
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 Logger::Logger(int& _verbosity) :
     proof_graph_on(false)
@@ -910,4 +910,4 @@ void Logger::reset_statistics()
     last_unitary_learnt_clauses = S->get_unitary_learnts_num();
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

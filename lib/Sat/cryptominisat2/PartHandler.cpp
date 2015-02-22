@@ -26,9 +26,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 //#define VERBOSE_DEBUG
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 PartHandler::PartHandler(Solver& s) :
     solver(s)
@@ -342,4 +342,4 @@ void PartHandler::readdRemovedClauses()
     solver.libraryCNFFile = backup_libraryCNFfile;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

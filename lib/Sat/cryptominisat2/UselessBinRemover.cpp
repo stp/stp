@@ -25,9 +25,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "time_mem.h"
 #include "OnlyNonLearntBins.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 UselessBinRemover::UselessBinRemover(Solver& _solver, OnlyNonLearntBins& _onlyNonLearntBins) :
     solver(_solver)
@@ -199,4 +199,4 @@ bool UselessBinRemover::fillBinImpliesMinusLast(const Lit& origLit, const Lit& l
     return true;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

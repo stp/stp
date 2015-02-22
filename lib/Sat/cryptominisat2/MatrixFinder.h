@@ -32,9 +32,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Clause.h"
 #include "Solver.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Solver;
 
@@ -70,6 +70,6 @@ class MatrixFinder {
         Solver& solver;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //MATRIXFINDER_H

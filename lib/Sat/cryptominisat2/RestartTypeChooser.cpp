@@ -24,9 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 //#define VERBOSE_DEBUG
 //#define PRINT_VARS
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 RestartTypeChooser::RestartTypeChooser(const Solver& s) :
     solver(s)
@@ -151,5 +151,5 @@ void RestartTypeChooser::addDegrees(const vec<T*>& cs, vector<uint32_t>& degrees
 template void RestartTypeChooser::addDegrees(const vec<Clause*>& cs, vector<uint32_t>& degrees) const;
 template void RestartTypeChooser::addDegrees(const vec<XorClause*>& cs, vector<uint32_t>& degrees) const;
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 

@@ -38,9 +38,9 @@ class Solver;
 
 using std::pair;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class XorFinder
 {
@@ -145,6 +145,6 @@ class XorFinder
         Solver& solver;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //XORFINDER_H

@@ -43,9 +43,9 @@ using std::pair;
 using std::string;
 using std::map;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Solver;
 
@@ -185,6 +185,6 @@ private:
     uint proofStarts;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //LOGGER_H

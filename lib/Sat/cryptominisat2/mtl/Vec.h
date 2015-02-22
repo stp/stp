@@ -29,9 +29,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <stdint.h>
 #endif //_MSC_VER
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //=================================================================================================
 // Automatically resizable arrays
@@ -142,6 +142,6 @@ void vec<T>::clear(bool dealloc) {
         if (dealloc) free(data), data = NULL, cap = 0; } }
 
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif

@@ -20,9 +20,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "PackedRow.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 std::ostream& operator << (std::ostream& os, const PackedRow& m)
 {
@@ -120,4 +120,4 @@ void PackedRow::fill(vec<Lit>& tmp_clause, const vec<lbool>& assigns, const vect
         assert(!final);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

@@ -44,9 +44,9 @@ using std::cout;
 using std::endl;
 #endif
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Clause;
 
@@ -240,6 +240,6 @@ inline void Gaussian::set_disabled(const bool toset)
 
 std::ostream& operator << (std::ostream& os, const vec<Lit>& v);
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //GAUSSIAN_H

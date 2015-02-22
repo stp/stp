@@ -33,9 +33,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 using std::vector;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Solver;
 
@@ -69,6 +69,6 @@ inline void RestartTypeChooser::reset()
     sameIns.clear();
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //RESTARTTYPECHOOSER_H

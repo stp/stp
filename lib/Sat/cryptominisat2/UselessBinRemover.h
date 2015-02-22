@@ -26,9 +26,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "OnlyNonLearntBins.h"
 #include <stdint.h>
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class UselessBinRemover {
     public:
@@ -53,4 +53,4 @@ class UselessBinRemover {
 
 #endif //USELESSBINREMOVER_H
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

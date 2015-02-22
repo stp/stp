@@ -32,9 +32,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 //#define DEBUG_MATRIX
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class PackedMatrix
 {
@@ -221,7 +221,7 @@ private:
     uint numCols;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //PACKEDMATRIX_H
 

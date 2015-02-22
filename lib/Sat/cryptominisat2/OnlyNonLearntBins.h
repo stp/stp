@@ -25,9 +25,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <set>
 using std::set;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class OnlyNonLearntBins {
     public:
@@ -51,7 +51,7 @@ class OnlyNonLearntBins {
         Solver& solver;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //ONLYNONLEARNTBINS_H
 

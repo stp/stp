@@ -47,9 +47,9 @@ using std::cout;
 using std::endl;
 #endif //VERBOSE_DEBUG
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 Subsumer::Subsumer(Solver& s):
     solver(s)
@@ -1900,4 +1900,4 @@ vector<char> Subsumer::merge()
     return true;
 }*/
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

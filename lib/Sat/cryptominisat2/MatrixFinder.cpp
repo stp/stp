@@ -38,9 +38,9 @@ using std::map;
 using std::cout;
 using std::endl;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //#define PART_FINDING
 
@@ -249,4 +249,4 @@ void MatrixFinder::findParts(vector<Var>& xorFingerprintInMatrix, vector<XorClau
     }
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

@@ -42,9 +42,9 @@ using std::endl;
 
 //#define PART_FINDING
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 PartFinder::PartFinder(Solver& _solver) :
     solver(_solver)
@@ -186,4 +186,4 @@ void PartFinder::calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart, vector
     }
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

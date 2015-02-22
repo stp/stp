@@ -32,9 +32,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 //#include "VarReplacer.h"
 #include "PartHandler.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //#define DEBUG_CLAUSEALLOCATOR
 
@@ -376,4 +376,4 @@ void ClauseAllocator::updatePointers(vector<XorClause*>& toUpdate, const map<Cla
     }
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

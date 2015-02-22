@@ -32,9 +32,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "mtl/Alg.h"
 #include <stdio.h>
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //=================================================================================================
 // Variables, literals, lifted booleans, clauses:
@@ -185,6 +185,6 @@ const llbool l_Continue = toLbool(3);
 
 lbool::lbool(llbool b) : value(b.value) {}
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //SOLVERTYPES_H

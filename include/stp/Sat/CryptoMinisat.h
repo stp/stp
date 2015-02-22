@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 
-namespace MINISAT
+namespace CMSat2
 {
 class Solver;
 }
@@ -40,7 +40,7 @@ namespace stp
 {
 class CryptoMinisat : public SATSolver
 {
-  MINISAT::Solver* s;
+  CMSat2::Solver* s;
 
 public:
   CryptoMinisat();

@@ -25,9 +25,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Vec.h"
 #include "XSet.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class ClauseCleaner;
 
@@ -152,6 +152,6 @@ inline double XorSubsumer::getTotalTime() const
     return totalTime;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //XORSIMPLIFIER_H

@@ -27,9 +27,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "ClauseCleaner.h"
 #include "time_mem.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 OnlyNonLearntBins::OnlyNonLearntBins(Solver& _solver) :
     solver(_solver)
@@ -155,4 +155,4 @@ uint32_t OnlyNonLearntBins::removeBins()
     return (i - j);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

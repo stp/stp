@@ -29,9 +29,9 @@ using std::map;
 #include "Clause.h"
 #include "BitArray.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Solver;
 
@@ -152,7 +152,7 @@ class FailedVarSearcher {
         uint32_t numCalls;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //FAILEDVARSEARCHER_H
 

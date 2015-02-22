@@ -57,9 +57,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 //#define VERBOSE_DEBUG_POLARITIES
 //#define DEBUG_DYNAMIC_RESTART
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 using std::cout;
 using std::endl;
 
@@ -2605,4 +2605,4 @@ void Solver::printStats()
     cout << "CPU time              : " << cpu_time <<  " s\n";
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

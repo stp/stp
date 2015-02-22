@@ -31,9 +31,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 //=================================================================================================
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 template <class T>
 class bqueue {
@@ -83,6 +83,6 @@ public:
 
 //=================================================================================================
 
-} //namespace MINISAT
+} //namespace CMSat2
 
 #endif

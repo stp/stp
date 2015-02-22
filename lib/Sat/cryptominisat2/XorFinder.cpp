@@ -39,9 +39,9 @@ using std::cout;
 using std::endl;
 #endif
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 using std::make_pair;
 
@@ -497,4 +497,4 @@ void XorFinder::addXorAsNormal4(XorClause& c)
 }
 
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

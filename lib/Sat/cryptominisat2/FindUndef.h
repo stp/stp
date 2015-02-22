@@ -31,9 +31,9 @@ using std::vector;
 
 #include "Solver.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class FindUndef {
     public:
@@ -57,6 +57,6 @@ class FindUndef {
 
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //

@@ -45,9 +45,9 @@ uint32_t calcAbstraction(const T& ps) {
     return abstraction;
 }
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //=================================================================================================
 // Clause -- a simple class for representing a clause:
@@ -363,6 +363,6 @@ class Watched {
         Lit blockedLit;
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //CLAUSE_H

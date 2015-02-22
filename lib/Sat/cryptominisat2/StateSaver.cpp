@@ -20,9 +20,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "StateSaver.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 StateSaver::StateSaver(Solver& _solver) :
     solver(_solver)
@@ -54,4 +54,4 @@ void StateSaver::restore()
     solver.propagations = backup_propagations;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

@@ -28,9 +28,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Vec.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //=================================================================================================
 // Default hash/equals functions
@@ -123,6 +123,6 @@ class Map {
     }
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif

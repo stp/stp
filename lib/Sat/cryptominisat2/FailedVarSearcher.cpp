@@ -39,9 +39,9 @@ using std::set;
 
 //#define VERBOSE_DEUBUG
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 FailedVarSearcher::FailedVarSearcher(Solver& _solver):
     solver(_solver)
@@ -763,4 +763,4 @@ const bool FailedVarSearcher::tryAll(const Lit* begin, const Lit* end)
 Untested code end
 **************/
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

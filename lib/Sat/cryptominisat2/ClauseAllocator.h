@@ -36,9 +36,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 using std::map;
 using std::vector;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Clause;
 class XorClause;
@@ -96,7 +96,7 @@ class ClauseAllocator {
         void* allocEnough(uint32_t size);
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //CLAUSEALLOCATOR_H
 

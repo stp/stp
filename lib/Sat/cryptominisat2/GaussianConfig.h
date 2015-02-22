@@ -29,9 +29,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "PackedRow.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class GaussianConfig
 {
@@ -60,6 +60,6 @@ class GaussianConfig
     uint32_t minMatrixRows; //The minimum matrix size -- no. of rows
 };
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //GAUSSIANCONFIG_H

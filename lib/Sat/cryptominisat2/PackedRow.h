@@ -42,9 +42,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 using std::vector;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 
 class PackedMatrix;
@@ -245,7 +245,7 @@ private:
 
 std::ostream& operator << (std::ostream& os, const PackedRow& m);
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //PACKEDROW_H
 

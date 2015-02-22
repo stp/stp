@@ -41,9 +41,9 @@ using std::cout;
 using std::endl;
 #endif //VERBOSE_DEBUG
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 XorSubsumer::XorSubsumer(Solver& s):
     solver(s)
@@ -606,4 +606,4 @@ bool XorSubsumer::checkElimedUnassigned() const
     return true;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

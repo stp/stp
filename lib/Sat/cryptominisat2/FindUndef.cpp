@@ -24,9 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "VarReplacer.h"
 #include <algorithm>
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 FindUndef::FindUndef(Solver& _solver) :
     solver(_solver)
@@ -177,4 +177,4 @@ bool FindUndef::updateTables()
     return allSat;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

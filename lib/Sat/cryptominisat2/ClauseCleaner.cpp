@@ -28,9 +28,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 //#define DEBUG_CLEAN
 //#define VERBOSE_DEBUG
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 ClauseCleaner::ClauseCleaner(Solver& _solver) :
     solver(_solver)
@@ -421,4 +421,4 @@ void ClauseCleaner::moveBinClausesToBinClauses()
     cs.shrink(s-ss);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

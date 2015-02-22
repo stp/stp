@@ -38,7 +38,7 @@ namespace stp
 
 CryptoMinisat::CryptoMinisat()
 {
-  s = new MINISAT::Solver();
+  s = new CMSat2::Solver();
 }
 
 CryptoMinisat::~CryptoMinisat()
@@ -53,9 +53,9 @@ CryptoMinisat::addClause(const vec_literals& ps) // Add a clause to the solver.
   // Cryptominisat uses a slightly different Lit class too.
 
   // VERY SLOW>
-  MINISAT::vec<MINISAT::Lit> v;
+  CMSat2::vec<CMSat2::Lit> v;
   for (int i = 0; i < ps.size(); i++)
-    v.push(MINISAT::Lit(var(ps[i]), sign(ps[i])));
+    v.push(CMSat2::Lit(var(ps[i]), sign(ps[i])));
 
   return s->addClause(v);
 }

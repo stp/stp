@@ -63,7 +63,7 @@
 #include <time.h>
 #include <math.h>
 
-namespace MINISAT
+namespace CMSat2
 {
 
 // Not thread safe (unless auto-initialization is avoided and each thread has

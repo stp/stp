@@ -31,9 +31,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Subsumer.h"
 #include "XorSubsumer.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class ClauseCleaner
 {
@@ -79,6 +79,6 @@ inline void ClauseCleaner::removeAndCleanAll(bool nolimit)
     cleanClauses(solver.learnts, ClauseCleaner::learnts, limit);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //CLAUSECLEANER_H

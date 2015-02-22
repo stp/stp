@@ -32,9 +32,9 @@ using std::vector;
 using std::map;
 using std::priority_queue;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class ClauseCleaner;
 class OnlyNonLearntBins;
@@ -284,6 +284,6 @@ inline double Subsumer::getTotalTime() const
     return totalTime;
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //SIMPLIFIER_H

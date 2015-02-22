@@ -32,9 +32,9 @@ using std::map;
 using std::vector;
 using std::pair;
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class PartHandler
 {
@@ -82,6 +82,6 @@ inline void PartHandler::newVar()
     savedState.push(l_Undef);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //PARTHANDLER_H

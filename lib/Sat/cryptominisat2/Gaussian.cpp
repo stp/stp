@@ -34,9 +34,9 @@ using std::endl;
 #include <iterator>
 #endif
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 static const uint16_t unassigned_col = std::numeric_limits<uint16_t>::max();
 static const Var unassigned_var = std::numeric_limits<Var>::max();
 
@@ -1161,4 +1161,4 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
 #endif
 }*/
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2

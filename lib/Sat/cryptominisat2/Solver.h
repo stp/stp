@@ -44,9 +44,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "GaussianConfig.h"
 #include "ClauseAllocator.h"
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 class Gaussian;
 class MatrixFinder;
@@ -841,6 +841,6 @@ inline void Solver::uncheckedEnqueueLight(const Lit p)
 
 //=================================================================================================
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif //SOLVER_H

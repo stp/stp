@@ -26,9 +26,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <stdint.h>
 #endif //_MSC_VER
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 //=================================================================================================
 // Useful functions on vectors
@@ -70,6 +70,6 @@ static inline bool findW(V& ts, const T& t)
     return j < ts.size();
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
 
 #endif

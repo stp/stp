@@ -36,9 +36,9 @@ using std::cout;
 using std::endl;
 #endif
 
-namespace MINISAT
+namespace CMSat2
 {
-using namespace MINISAT;
+using namespace CMSat2;
 
 VarReplacer::VarReplacer(Solver& _solver) :
     replacedLits(0)
@@ -572,4 +572,4 @@ void VarReplacer::reattachInternalClauses()
     clauses.shrink(i-j);
 }
 
-} //NAMESPACE MINISAT
+} //NAMESPACE CMSat2
