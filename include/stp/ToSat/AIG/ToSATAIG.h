@@ -65,6 +65,7 @@ private:
   bool runSolver(SATSolver& satSolver);
   void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
   Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
+  void handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef);
 
   int count;
   bool first;

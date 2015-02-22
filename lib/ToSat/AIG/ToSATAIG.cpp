@@ -52,37 +52,17 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   if (input == ASTTrue)
     return true;
 
-  assert(satSolver.nVars() == 0);
-  Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
-
-  if (bm->UserFlags.output_CNF_flag)
-  {
-    std::stringstream fileName;
-    fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
-    Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0);
-  }
   first = false;
+  Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
+  handle_cnf_options(cnfData, needAbsRef);
 
-  if (bm->UserFlags.exit_after_CNF)
-  {
-    if (bm->UserFlags.quick_statistics_flag)
-      bm->GetRunTimes()->print();
-
-    if (needAbsRef) {
-      cerr << "Warning: STP is exiting after generating the first CNF."
-        << " But the CNF is probably partial which you probably don't want."
-        << " You probably want to disable"
-        << " refinement with the \"-r\" command line option." << endl;
-    }
-
-    exit(0);
-  }
-
+  assert(satSolver.nVars() == 0);
   add_cnf_to_solver(satSolver, cnfData);
 
-  if (bm->UserFlags.output_bench_flag)
+  if (bm->UserFlags.output_bench_flag) {
     cerr << "Converting to CNF via ABC's AIG package can't yet print out bench "
             "format" << endl;
+  }
 
   // This releases the memory used by the CNF generator, particularly some data
   // tables.
@@ -105,6 +85,31 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   return runSolver(satSolver);
+}
+
+void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
+{
+  if (bm->UserFlags.output_CNF_flag)
+  {
+    std::stringstream fileName;
+    fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
+    Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0);
+  }
+
+  if (bm->UserFlags.exit_after_CNF)
+  {
+    if (bm->UserFlags.quick_statistics_flag)
+      bm->GetRunTimes()->print();
+
+    if (needAbsRef) {
+      cerr << "Warning: STP is exiting after generating the first CNF."
+        << " But the CNF is probably partial which you probably don't want."
+        << " You probably want to disable"
+        << " refinement with the \"-r\" command line option." << endl;
+    }
+
+    exit(0);
+  }
 }
 
 Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
