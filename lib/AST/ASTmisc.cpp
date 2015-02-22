@@ -396,7 +396,10 @@ ASTVec FlattenKind(Kind k, const ASTVec& children)
     FlattenKindNoDuplicates(k, children, flat_children, alreadyFlattened);
   }
   else
+  {
     FlattenKind(k, children, flat_children);
+  }
+
   return flat_children;
 }
 
