@@ -63,18 +63,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     cerr << "Converting to CNF via ABC's AIG package can't yet print out bench "
             "format" << endl;
   }
-
-  // This releases the memory used by the CNF generator, particularly some data
-  // tables.
-  // If CNF generation is going to be called lots, we'd rather keep it around.
-  // because the datatables are expensive to generate.
-  if (cnf_calls == 0)
-    Cnf_ClearMemory();
-
-  cnf_calls++;
-
-  Cnf_DataFree(cnfData);
-  cnfData = NULL;
+  release_cnf_memory(cnfData);
 
   mark_variables_as_frozen(satSolver);
 
@@ -85,6 +74,19 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   return runSolver(satSolver);
+}
+
+void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
+{
+  // This releases the memory used by the CNF generator, particularly some data
+  // tables.
+  // If CNF generation is going to be called lots, we'd rather keep it around.
+  // because the datatables are expensive to generate.
+  if (cnf_calls == 0)
+    Cnf_ClearMemory();
+
+  Cnf_DataFree(cnfData);
+  cnf_calls++;
 }
 
 void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
