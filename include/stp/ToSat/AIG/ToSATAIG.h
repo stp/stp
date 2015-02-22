@@ -62,6 +62,7 @@ private:
   // from being removed.
   void mark_variables_as_frozen(SATSolver& satSolver);
   bool runSolver(SATSolver& satSolver);
+  void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
 
   int count;
   bool first;

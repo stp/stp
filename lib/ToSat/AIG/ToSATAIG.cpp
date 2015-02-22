@@ -100,31 +100,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     exit(0);
   }
 
-  bm->GetRunTimes()->start(RunTimes::SendingToSAT);
-
-  // Create a new sat variable for each of the variables in the CNF.
-  int satV = satSolver.nVars();
-  for (int i = 0; i < cnfData->nVars - satV; i++)
-    satSolver.newVar();
-
-  SATSolver::vec_literals satSolverClause;
-  for (int i = 0; i < cnfData->nClauses; i++)
-  {
-    satSolverClause.clear();
-    for (int* pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
-         pLit < pStop; pLit++)
-    {
-      uint32_t var = (*pLit) >> 1;
-      assert((var < satSolver.nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
-      satSolverClause.push(l);
-    }
-
-    satSolver.addClause(satSolverClause);
-    if (!satSolver.okay())
-      break;
-  }
-  bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+  add_cnf_to_solver(satSolver, cnfData);
 
   if (bm->UserFlags.output_bench_flag)
     cerr << "Converting to CNF via ABC's AIG package can't yet print out bench "
@@ -151,6 +127,35 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   return runSolver(satSolver);
+}
+
+void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
+{
+  bm->GetRunTimes()->start(RunTimes::SendingToSAT);
+
+  // Create a new sat variable for each of the variables in the CNF.
+  int satV = satSolver.nVars();
+  for (int i = 0; i < cnfData->nVars - satV; i++)
+    satSolver.newVar();
+
+  SATSolver::vec_literals satSolverClause;
+  for (int i = 0; i < cnfData->nClauses; i++)
+  {
+    satSolverClause.clear();
+    for (int* pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+         pLit < pStop; pLit++)
+    {
+      uint32_t var = (*pLit) >> 1;
+      assert((var < satSolver.nVars()));
+      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+      satSolverClause.push(l);
+    }
+
+    satSolver.addClause(satSolverClause);
+    if (!satSolver.okay())
+      break;
+  }
+  bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
 }
 
 void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
