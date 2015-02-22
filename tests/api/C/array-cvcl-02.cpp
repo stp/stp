@@ -49,7 +49,6 @@ TEST(array_cvcl02, one)
   vc_assertFormula(vc, a_of_i_eq_11);
   vc_query(vc, vc_falseExpr(vc));
 
-  long long v;
   Expr pre = vc_bvConstExprFromInt(vc, 24, 0);
   int j;
   for (j = 0; j < 10; j++)
