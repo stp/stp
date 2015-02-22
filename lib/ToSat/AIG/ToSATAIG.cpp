@@ -118,7 +118,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   Cnf_DataFree(cnfData);
   cnfData = NULL;
 
-  mark_variables_as_frozen();
+  mark_variables_as_frozen(satSolver);
 
   if ((bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS) &&
       !bm->UserFlags.ackermannisation)
