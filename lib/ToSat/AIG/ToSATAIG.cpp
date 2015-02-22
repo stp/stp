@@ -52,30 +52,8 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   if (input == ASTTrue)
     return true;
 
-  Simplifier simp(bm);
-
-  BBNodeManagerAIG mgr;
-  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-      &mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
-
-  bm->GetRunTimes()->start(RunTimes::BitBlasting);
-  BBNodeAIG BBFormula = bb.BBForm(input);
-  bm->GetRunTimes()->stop(RunTimes::BitBlasting);
-
-  delete cb;
-  cb = NULL;
-  bb.cb = NULL;
-
   assert(satSolver.nVars() == 0);
-
-  bm->GetRunTimes()->start(RunTimes::CNFConversion);
-  Cnf_Dat_t* cnfData = NULL;
-  toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, needAbsRef, mgr);
-  bm->GetRunTimes()->stop(RunTimes::CNFConversion);
-
-  // Free the memory in the AIGs.
-  BBFormula = BBNodeAIG(); // null node
-  mgr.stop();
+  Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
 
   if (bm->UserFlags.output_CNF_flag)
   {
@@ -127,6 +105,34 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   return runSolver(satSolver);
+}
+
+Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
+{
+  Simplifier simp(bm);
+
+  BBNodeManagerAIG mgr;
+  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
+      &mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
+
+  bm->GetRunTimes()->start(RunTimes::BitBlasting);
+  BBNodeAIG BBFormula = bb.BBForm(input);
+  bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+
+  delete cb;
+  cb = NULL;
+  bb.cb = NULL;
+
+  bm->GetRunTimes()->start(RunTimes::CNFConversion);
+  Cnf_Dat_t* cnfData = NULL;
+  toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, needAbsRef, mgr);
+  bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+
+  // Free the memory in the AIGs.
+  BBFormula = BBNodeAIG(); // null node
+  mgr.stop();
+
+  return cnfData;
 }
 
 void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)

@@ -61,8 +61,10 @@ private:
   // simplified-away variables. Here we mark them as frozen which prevents them
   // from being removed.
   void mark_variables_as_frozen(SATSolver& satSolver);
+
   bool runSolver(SATSolver& satSolver);
   void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
+  Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
 
   int count;
   bool first;
