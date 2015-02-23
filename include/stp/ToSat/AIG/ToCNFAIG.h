@@ -44,14 +44,14 @@ class ToCNFAIG // not copyable
 
   void fill_node_to_var(
     Cnf_Dat_t* cnfData,
-    ToSATBase::ASTNodeToSATVar& nodeToVar,
+    ToSATBase::ASTNodeToSATVar& nodeToVars,
     BBNodeManagerAIG& mgr);
 
 public:
   ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
 
   void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-             ToSATBase::ASTNodeToSATVar& nodeToVar, bool needAbsRef,
+             ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
              BBNodeManagerAIG& _mgr);
 };
 }

@@ -29,7 +29,7 @@ namespace stp
 
 // Can it only add in the new variables somehow??
 void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
-                  ToSATBase::ASTNodeToSATVar& nodeToVar)
+                  ToSATBase::ASTNodeToSATVar& nodeToVars)
 {
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
   // Each symbol maps to a vector of CNF variables.
@@ -52,7 +52,7 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
         v[i] = cnfData->pVarNums[pObj->Id];
       }
     }
-    nodeToVar.insert(make_pair(n, v));
+    nodeToVars.insert(make_pair(n, v));
   }
 }
 
@@ -100,7 +100,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(
 }
 
 void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-                     ToSATBase::ASTNodeToSATVar& nodeToVar, bool needAbsRef,
+                     ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
                      BBNodeManagerAIG& mgr)
 {
   assert(cnfData == NULL);
@@ -139,16 +139,16 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   }
   assert(cnfData != NULL);
 
-  fill_node_to_var(cnfData, nodeToVar, mgr);
+  fill_node_to_var(cnfData, nodeToVars, mgr);
 }
 
 void ToCNFAIG::fill_node_to_var(
   Cnf_Dat_t* cnfData,
-  ToSATBase::ASTNodeToSATVar& nodeToVar,
+  ToSATBase::ASTNodeToSATVar& nodeToVars,
   BBNodeManagerAIG& mgr)
 {
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
-  assert(nodeToVar.size() == 0);
+  assert(nodeToVars.size() == 0);
 
   // todo. cf. with addvariables above...
   // Each symbol maps to a vector of CNF variables.
@@ -156,7 +156,7 @@ void ToCNFAIG::fill_node_to_var(
   {
     const ASTNode& n = it->first;
     const vector<BBNodeAIG>& b = it->second;
-    assert(nodeToVar.find(n) == nodeToVar.end());
+    assert(nodeToVars.find(n) == nodeToVars.end());
 
     const int width = (n.GetType() == BOOLEAN_TYPE) ? 1 : n.GetValueWidth();
 
@@ -173,7 +173,7 @@ void ToCNFAIG::fill_node_to_var(
       }
     }
 
-    nodeToVar.insert(make_pair(n, v));
+    nodeToVars.insert(make_pair(n, v));
   }
 }
 
