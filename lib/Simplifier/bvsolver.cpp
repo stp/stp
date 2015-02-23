@@ -641,6 +641,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   const bool lhsIsPlus = (BVPLUS == eq[0].GetKind());
   ASTNode lhs = lhsIsPlus ? eq[0] : eq[1];
   ASTNode rhs = lhsIsPlus ? eq[1] : eq[0];
+  //std::cerr << "LHS:" << lhs << " RHS:" << rhs << std::endl;
 
   if (BVPLUS != lhs.GetKind() || zero != rhs)
   {
@@ -656,6 +657,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   {
     const ASTNode aaa = *it;
     const Kind itk = aaa.GetKind();
+    //std::cout << "AT node:" << aaa << " (kind: " << itk << " )" << std::endl;
 
     if (BVCONST == itk)
     {
