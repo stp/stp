@@ -627,8 +627,9 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
 ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
 {
   ASTNode eq = input;
-  // cerr << "Input to BVSolve_Odd()" << eq << endl;
-  if (!(EQ == eq.GetKind()))
+
+  //std::cerr << "Input to BVSolve_Odd()" << eq << std::endl;
+  if (EQ != eq.GetKind())
   {
     evenflag = false;
     return eq;
@@ -641,11 +642,12 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   ASTNode lhs = lhsIsPlus ? eq[0] : eq[1];
   ASTNode rhs = lhsIsPlus ? eq[1] : eq[0];
 
-  if (!(BVPLUS == lhs.GetKind() && zero == rhs))
+  if (BVPLUS != lhs.GetKind() || zero != rhs)
   {
     evenflag = false;
     return eq;
   }
+  //Now, LHS is BVPLUS and RHS is ZERO
 
   const ASTVec& lhs_c = lhs.GetChildren();
   ASTNode savetheconst = rhs;
@@ -657,8 +659,12 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
 
     if (BVCONST == itk)
     {
-      assert(savetheconst ==
-             rhs); // Returns the wrong result if there are >1 constants.
+      // Can't decide if there are more than 1 constants
+      // TODO fix logic so we can decide
+      if (savetheconst != rhs) {
+        evenflag = false;
+        return eq;
+      }
 
       // check later if the constant is even or not
       savetheconst = aaa;
