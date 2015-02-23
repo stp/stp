@@ -38,6 +38,15 @@ class ToCNFAIG // not copyable
 {
   UserDefinedFlags& uf;
 
+  void dag_aware_aig_rewrite(
+    const bool needAbsRef,
+    BBNodeManagerAIG& mgr);
+
+  void fill_node_to_var(
+    Cnf_Dat_t* cnfData,
+    ToSATBase::ASTNodeToSATVar& nodeToVar,
+    BBNodeManagerAIG& mgr);
+
 public:
   ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
 

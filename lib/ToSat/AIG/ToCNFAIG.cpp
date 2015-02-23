@@ -56,6 +56,49 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
   }
 }
 
+void ToCNFAIG::dag_aware_aig_rewrite(
+  const bool needAbsRef,
+  BBNodeManagerAIG& mgr)
+{
+  const int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+
+  if (!needAbsRef && uf.isSet("aig-rewrite", "0"))
+  {
+    Dar_LibStart();
+    Aig_Man_t* pTemp;
+    Dar_RwrPar_t Pars, *pPars = &Pars;
+    Dar_ManDefaultRwrParams(pPars);
+
+    // Assertion errors occur with this enabled.
+    // pPars->fUseZeros = 1;
+
+    // For mul63bit.smt2 with iterations =3 & nCutsMax = 8
+    // CNF generation was taking 139 seconds, solving 10 seconds.
+
+    // With nCutsMax =2, CNF generation takes 16 seconds, solving 10 seconds.
+    // The rewriting doesn't remove as many nodes of course..
+    const int iterations = 3;
+
+    for (int i = 0; i < iterations; i++)
+    {
+      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+      Aig_ManStop(pTemp);
+      Dar_ManRewrite(mgr.aigMgr, pPars);
+
+      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+      Aig_ManStop(pTemp);
+
+      if (uf.stats_flag)
+        cerr << "After rewrite [" << i
+             << "]  nodes:" << mgr.aigMgr->nObjs[AIG_OBJ_AND] << endl;
+
+      //Fixedpoint reached?
+      if (nodeCount == mgr.aigMgr->nObjs[AIG_OBJ_AND])
+        break;
+    }
+  }
+}
+
 void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
                      ToSATBase::ASTNodeToSATVar& nodeToVar, bool needAbsRef,
                      BBNodeManagerAIG& mgr)
@@ -75,44 +118,13 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   // Rewriting is sometimes very slow. Can it be configured to be faster?
   // What about refactoring???
 
-  int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
-  if (uf.stats_flag)
-    cerr << "Nodes before AIG rewrite:" << nodeCount << endl;
-
-  if (!needAbsRef && uf.isSet("aig-rewrite", "0"))
-  {
-    Dar_LibStart();
-    Aig_Man_t* pTemp;
-    Dar_RwrPar_t Pars, *pPars = &Pars;
-    Dar_ManDefaultRwrParams(pPars);
-
-    // Assertion errors occur with this enabled.
-    // pPars->fUseZeros = 1;
-
-    // For mul63bit.smt2 with iterations =3 & nCutsMax = 8
-    // CNF generation was taking 139 seconds, solving 10 seconds.
-
-    // With nCutsMax =2, CNF generation takes 16 seconds, solving 10 seconds.
-    // The rewriting doesn't remove as many nodes of course..
-    int iterations = 3;
-
-    for (int i = 0; i < iterations; i++)
-    {
-      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
-      Aig_ManStop(pTemp);
-      Dar_ManRewrite(mgr.aigMgr, pPars);
-
-      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
-      Aig_ManStop(pTemp);
-
-      if (uf.stats_flag)
-        cerr << "After rewrite [" << i
-             << "]  nodes:" << mgr.aigMgr->nObjs[AIG_OBJ_AND] << endl;
-
-      if (nodeCount == mgr.aigMgr->nObjs[AIG_OBJ_AND])
-        break;
-    }
+  if (uf.stats_flag) {
+    cerr << "Nodes before AIG rewrite:" << mgr.aigMgr->nObjs[AIG_OBJ_AND]
+    << endl;
   }
+
+  dag_aware_aig_rewrite(needAbsRef, mgr);
+
   if (!uf.isSet("simple-cnf", "0"))
   {
     cnfData = Cnf_Derive(mgr.aigMgr, 0);
@@ -125,9 +137,17 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
     if (uf.stats_flag)
       cerr << "simple CNF" << endl;
   }
+  assert(cnfData != NULL);
 
+  fill_node_to_var(cnfData, nodeToVar, mgr);
+}
+
+void ToCNFAIG::fill_node_to_var(
+  Cnf_Dat_t* cnfData,
+  ToSATBase::ASTNodeToSATVar& nodeToVar,
+  BBNodeManagerAIG& mgr)
+{
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
-
   assert(nodeToVar.size() == 0);
 
   // todo. cf. with addvariables above...
@@ -155,6 +175,6 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
     nodeToVar.insert(make_pair(n, v));
   }
-  assert(cnfData != NULL);
 }
+
 }

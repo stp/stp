@@ -36,6 +36,7 @@ using std::endl;
 
 // This class wraps around a pointer to an AIG (provided by the ABC tool).
 // uses the default copy constructor and assignment operator.
+// Used for bitblasting
 
 class BBNodeAIG
 {
@@ -81,7 +82,7 @@ public:
 
   // After dag aware rewriting the symbol stays at the same position in the
   // vector of PIs.
-  // To get it's CNF variable number we get the node at the same position.
+  // To get its CNF variable number we get the node at the same position.
   int symbol_index;
 
   BBNodeAIG() { n = NULL; }
