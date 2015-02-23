@@ -681,7 +681,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
       evenflag = false;
       return eq;
     }
-  } // end of for loop
+  }
 
   // if control is here then it means that all coeffs are even. the
   // only remaining thing is to check if the constant is even or not
