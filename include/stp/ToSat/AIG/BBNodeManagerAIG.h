@@ -177,6 +177,7 @@ public:
         else
           pNode = makeTower(Aig_Or, children);
         break;
+
       case NAND:
         if (children.size() == 2)
           pNode = Aig_And(aigMgr, children[0].n, children[1].n);
@@ -184,10 +185,12 @@ public:
           pNode = makeTower(Aig_And, children);
         pNode = Aig_Not(pNode);
         break;
+
       case NOT:
         assert(children.size() == 1);
         pNode = Aig_Not(children[0].n);
         break;
+
       case NOR:
         if (children.size() == 2)
           pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
@@ -195,21 +198,25 @@ public:
           pNode = makeTower(Aig_Or, children);
         pNode = Aig_Not(pNode);
         break;
+
       case XOR:
         if (children.size() == 2)
           pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(Aig_Exor, children);
         break;
+
       case IFF:
         assert(children.size() == 2);
         pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
         pNode = Aig_Not(pNode);
         break;
+
       case IMPLIES:
         assert(children.size() == 2);
         pNode = Aig_Or(aigMgr, Aig_Not(children[0].n), children[1].n);
         break;
+
       case ITE:
         assert(children.size() == 3);
         pNode = Aig_Mux(aigMgr, children[0].n, children[1].n, children[2].n);
