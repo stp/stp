@@ -22,8 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-// g++ -DEXT_HASH_MAP <this-filename> -I/home/vganesh/stp/c_interface
-// -L/home/vganesh/stp/lib -lstp -o cc
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
