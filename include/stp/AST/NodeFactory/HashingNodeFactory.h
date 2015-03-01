@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// A Node factory that only does structural hashing.
 #ifndef HASHINGNODEFACTORY_H_
 #define HASHINGNODEFACTORY_H_
 
@@ -35,6 +34,7 @@ namespace stp
 class STPMgr;
 }
 
+// A Node factory that only does structural hashing.
 class HashingNodeFactory : public NodeFactory
 {
 public:
