@@ -154,9 +154,9 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.isSet("bitblast-simplification", "1") &&
       initial_difficulty_score < 250000)
   {
-    BBNodeManagerAIG bbnm;
+    BBNodeManagerAIG bitblast_nodemgr;
     BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bbnm, simp, bm->defaultNodeFactory, &(bm->UserFlags));
+        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
     ASTNodeMap fromTo;
     ASTNodeMap equivs;
     bb.getConsts(inputToSat, fromTo, equivs);
@@ -186,7 +186,7 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
           inputToSat, fromTo, cache, bm->defaultNodeFactory);
       bm->ASTNodeStats(bb_message.c_str(), inputToSat);
     }
-    actualBBSize = bbnm.totalNumberOfNodes();
+    actualBBSize = bitblast_nodemgr.totalNumberOfNodes();
   }
   return inputToSat;
 }
@@ -535,11 +535,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // The other way to improve it would be to fix the difficulty scorer!
   if (!worse && (bitblasted_difficulty != -1))
   {
-    BBNodeManagerAIG bbnm;
+    BBNodeManagerAIG bitblast_nodemgr;
     BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bbnm, simp, bm->defaultNodeFactory, &(bm->UserFlags));
+        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
     bb.BBForm(inputToSat);
-    int newBB = bbnm.totalNumberOfNodes();
+    int newBB = bitblast_nodemgr.totalNumberOfNodes();
     if (bm->UserFlags.stats_flag)
       cerr << "Final BB Size:" << newBB << endl;
 
