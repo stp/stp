@@ -23,6 +23,7 @@ THE SOFTWARE.
 **********************/
 
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 
 void test(void) {
     VC vc = vc_createValidityChecker();
