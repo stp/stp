@@ -53,13 +53,14 @@ ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
     {
       n_ptr->SetNodeNum(NewNodeNum());
     }
+
     std::pair<ASTInteriorSet::const_iterator, bool> p =
         _interior_unique_table.insert(n_ptr);
     return *(p.first);
   }
-  else
-    // Delete the temporary node, and return the found node.
-    delete n_ptr;
+
+  // Delete the temporary node, and return the found node.
+  delete n_ptr;
   return *it;
 }
 
