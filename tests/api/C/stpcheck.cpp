@@ -29,8 +29,7 @@ THE SOFTWARE.
 
 #include "stp/c_interface.h"
 
-// FIXME: This test name sucks!
-TEST(stpcheck, one)
+TEST(extend_adder_notexpr, one)
 {
 
   VC vc = vc_createValidityChecker();
