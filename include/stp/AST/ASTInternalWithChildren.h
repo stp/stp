@@ -26,14 +26,16 @@ THE SOFTWARE.
 #ifndef ASTINTERNALWithChildren_H
 #define ASTINTERNALWithChildren_H
 
+#include "ASTInternal.h"
+
+namespace stp
+{
+
 /*
  * Leaf objects like Symbols and BVConsts don't need a vector of
  * children. On a 64-bit machine, a vector object is 24 bytes. So
  * splitting the two objects apart saves 24 bytes for those objects.
  */
-
-namespace stp
-{
 class ASTInternalWithChildren : public ASTInternal
 {
 
@@ -65,6 +67,7 @@ public:
   {
     is_simplified = false;
   }
-}; // End of Class ASTInternalBase
+};
+
 } // end of namespace
 #endif

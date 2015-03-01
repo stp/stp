@@ -28,6 +28,8 @@ THE SOFTWARE.
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/AST/ASTNode.h"
+
 namespace stp
 {
 class STPMgr;
