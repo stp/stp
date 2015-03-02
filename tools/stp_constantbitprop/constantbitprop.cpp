@@ -32,6 +32,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/cpp_interface.h"
 
 using namespace simplifier::constantBitP;
+using namespace stp;
 
 int main(int argc, char** argv)
 {
@@ -39,7 +40,7 @@ int main(int argc, char** argv)
   extern int smt2lex_destroy(void);
   extern FILE* smt2in;
 
-  stp::STPMgr stp;
+  STPMgr stp;
   STPMgr* mgr = &stp;
 
   Cpp_interface interface(*mgr, mgr->defaultNodeFactory);

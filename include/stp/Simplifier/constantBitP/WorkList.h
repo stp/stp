@@ -26,6 +26,9 @@ THE SOFTWARE.
 #ifndef WORKLIST_H_
 #define WORKLIST_H_
 
+#include "stp/AST/ASTNode.h"
+#include "stp/AST/AST.h"
+
 namespace simplifier
 {
 namespace constantBitP
@@ -43,14 +46,14 @@ class WorkList
 
 private:
   // select nodes from the cheap_worklist first.
-  set<stp::ASTNode> cheap_workList;     // Nodes to work on.
-  set<stp::ASTNode> expensive_workList; // Nodes to work on.
+  std::set<stp::ASTNode> cheap_workList;     // Nodes to work on.
+  std::set<stp::ASTNode> expensive_workList; // Nodes to work on.
 
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
 
   // We add to the worklist any node that immediately depends on a constant.
-  void addToWorklist(const ASTNode& n, ASTNodeSet& visited)
+  void addToWorklist(const stp::ASTNode& n, stp::ASTNodeSet& visited)
   {
     if (n.isConstant())
       return;
@@ -82,7 +85,7 @@ public:
 
   void initWorkList(const ASTNode& n)
   {
-    ASTNodeSet visited;
+    stp::ASTNodeSet visited;
     addToWorklist(n, visited);
   }
 
@@ -92,7 +95,7 @@ public:
       return;
 
     // cerr << "WorkList Inserting:" << n.GetNodeNum() << endl;
-    if (n.GetKind() == BVMULT || n.GetKind() == BVPLUS || n.GetKind() == BVDIV)
+    if (n.GetKind() == stp::BVMULT || n.GetKind() == stp::BVPLUS || n.GetKind() == stp::BVDIV)
       expensive_workList.insert(n);
     else
       cheap_workList.insert(n);
@@ -124,7 +127,7 @@ public:
   void print()
   {
     cerr << "+Worklist" << endl;
-    set<stp::ASTNode>::const_iterator it = cheap_workList.begin();
+    std::set<stp::ASTNode>::const_iterator it = cheap_workList.begin();
     while (it != cheap_workList.end())
     {
       cerr << *it << " ";

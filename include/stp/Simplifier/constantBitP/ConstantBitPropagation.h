@@ -119,7 +119,7 @@ public:
 
   void setNodeToTrue(const ASTNode& top);
 
-  ASTNodeMap getAllFixed();
+  stp::ASTNodeMap getAllFixed();
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
 };

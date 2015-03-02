@@ -37,8 +37,8 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
-//#include "stp/Interface/cpp_interface.h"
 #include <list>
+using std::list;
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -58,7 +58,7 @@ struct Relations
 
   list<Relation> relations;
 
-  Relations(int iterations, int bitWidth, Kind k, STPMgr* beev,
+  Relations(int iterations, int bitWidth, Kind k, stp::STPMgr* beev,
             int probabilityOfFixing)
   {
     MTRand rand;

@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"
 // Multiply.
 
+using namespace stp;
+
 namespace simplifier
 {
 namespace constantBitP

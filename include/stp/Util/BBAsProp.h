@@ -44,8 +44,8 @@ public:
   ASTNode i0, i1, r;
   stp::ToSAT::ASTNodeToSATVar m;
 
-  BBAsProp(Kind k, STPMgr* mgr, int bits)
-      : aig(mgr, GlobalSTP->arrayTransformer)
+  BBAsProp(Kind k, stp::STPMgr* mgr, int bits)
+      : aig(mgr, stp::GlobalSTP->arrayTransformer)
   {
 
     const bool term = stp::is_Term_kind(k);
@@ -59,16 +59,16 @@ public:
     {
       p = mgr->CreateTerm(k, bits, i0, i1);
       r = mgr->CreateSymbol("r", 0, bits);
-      eq = mgr->CreateNode(EQ, p, r);
+      eq = mgr->CreateNode(stp::EQ, p, r);
     }
     else
     {
       p = mgr->CreateNode(k, i0, i1);
       r = mgr->CreateSymbol("r", 0, 0);
-      eq = mgr->CreateNode(IFF, p, r);
+      eq = mgr->CreateNode(stp::IFF, p, r);
     }
 
-    ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+    ss = new stp::MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
 
     aig.CallSAT(*ss, eq, false);
     m = aig.SATVar_to_SymbolIndexMap();
@@ -130,7 +130,7 @@ public:
     const int bits = std::max(1U, n.GetValueWidth());
     for (int i = bits - 1; i >= 0; i--)
     {
-      SATSolver::lbool r = ss->value(m.find(n)->second[i]);
+      stp::SATSolver::lbool r = ss->value(m.find(n)->second[i]);
 
       if (r == ss->true_literal() || r == ss->false_literal())
         result++;

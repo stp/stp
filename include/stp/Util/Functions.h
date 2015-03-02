@@ -35,19 +35,17 @@ THE SOFTWARE.
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
-using namespace stp;
+Result multiply(std::vector<FixedBits*>& children, FixedBits& output);
 
-Result multiply(vector<FixedBits*>& children, FixedBits& output);
+Result unsignedDivide(std::vector<FixedBits*>& children, FixedBits& output);
 
-Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output);
+Result signedDivide(std::vector<FixedBits*>& children, FixedBits& output);
 
-Result signedDivide(vector<FixedBits*>& children, FixedBits& output);
+Result signedRemainder(std::vector<FixedBits*>& children, FixedBits& output);
 
-Result signedRemainder(vector<FixedBits*>& children, FixedBits& output);
+Result signedModulus(std::vector<FixedBits*>& children, FixedBits& output);
 
-Result signedModulus(vector<FixedBits*>& children, FixedBits& output);
-
-Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output);
+Result unsignedModulus(std::vector<FixedBits*>& children, FixedBits& output);
 
 int bvOrF(int a, int b);
 int bvXOrF(int a, int b);
@@ -68,11 +66,11 @@ struct Functions
   {
     Kind k;
     std::string name;
-    Result (*fn)(vector<FixedBits*>&, FixedBits&);
+    Result (*fn)(std::vector<FixedBits*>&, FixedBits&);
     int (*op)(int o1, int o2);
 
     Function(Kind k_, std::string name_,
-             Result (*fn_)(vector<FixedBits*>&, FixedBits&),
+             Result (*fn_)(std::vector<FixedBits*>&, FixedBits&),
              int (*op_)(int o1, int o2))
     {
       name = name_;

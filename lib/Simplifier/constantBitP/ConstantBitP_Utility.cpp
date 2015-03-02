@@ -23,10 +23,11 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
-// FIXME: External library
 #include "extlib-constbv/constantbv.h"
 
 // Utility functions used by the transfer functions.
+
+using std::vector;
 
 namespace stp
 {

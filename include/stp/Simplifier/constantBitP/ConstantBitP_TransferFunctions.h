@@ -31,6 +31,7 @@ namespace simplifier
 namespace constantBitP
 {
 struct MultiplicationStats;
+using std::vector;
 
 // Multiply is not yet  maximally precise.
 //!!!!!!!

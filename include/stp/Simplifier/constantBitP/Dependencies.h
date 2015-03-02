@@ -32,7 +32,7 @@ namespace simplifier
 namespace constantBitP
 {
 
-using namespace stp;
+//using namespace stp;
 using std::set;
 using std::cout;
 using std::endl;
@@ -133,7 +133,7 @@ public:
         continue;
       }
 
-      if (child.GetKind() == SYMBOL && it->second->size() == 1)
+      if (child.GetKind() == stp::SYMBOL && it->second->size() == 1)
       {
         variables.push_back(child);
       }
@@ -185,7 +185,7 @@ public:
 
   bool isUnconstrained(const ASTNode& n)
   {
-    if (n.GetKind() != SYMBOL)
+    if (n.GetKind() != stp::SYMBOL)
       return false;
 
     NodeToDependentNodeMap::const_iterator it = dependents.find(n);
