@@ -1,2 +1,3 @@
 add_subdirectory(stp)
 add_subdirectory(stp_simple)
+add_subdirectory(stp_constantbitprop)
