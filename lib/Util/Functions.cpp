@@ -30,7 +30,7 @@ THE SOFTWARE.
  *      Author: thansen
  */
 
-Result multiply(vector<FixedBits*>& children, FixedBits& output)
+/*Result multiply(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvMultiplyBothWays(children, output, GlobalParserBM, 0);
 }
@@ -58,7 +58,7 @@ Result signedModulus(vector<FixedBits*>& children, FixedBits& output)
 Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvUnsignedModulusBothWays(children, output, GlobalParserBM);
-}
+}*/
 
 int bvOrF(int a, int b)
 {

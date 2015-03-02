@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include <ctime>
 #include <vector>
-#include "s/AST/AST.h"
+#include "stp/AST/AST.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
 
@@ -37,7 +37,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Interface/cpp_interface.h"
+//#include "stp/Interface/cpp_interface.h"
 #include <list>
 
 using simplifier::constantBitP::FixedBits;

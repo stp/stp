@@ -19,11 +19,13 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BIN
 #     stp
 # )
 #
-# add_executable(test_cbitp
-#     test_cbitp.cpp
-# )
-# target_link_libraries(test_cbitp
-#     stp
-# )
-#
+
+add_executable(test_constantbitprop
+    test_cbitp.cpp
+    Functions.cpp
+)
+target_link_libraries(test_constantbitprop
+    stp
+)
+
 

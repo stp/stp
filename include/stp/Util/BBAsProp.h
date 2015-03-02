@@ -29,23 +29,26 @@ THE SOFTWARE.
 #ifndef BBASPROP_H_
 #define BBASPROP_H_
 
-// FIXME: This header seems dead. Remove it
-#include "stp/Sat/Core/Solver.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ASTNode/ToSAT.h"
+#include "stp/ToSat/ToSATBase.h"
+#include "stp/AST/AST.h"
 
 class BBAsProp
 {
 public:
-  SATSolver::vec_literals assumptions;
-  ToSATAIG aig;
-  MinisatCore<Minisat::Solver>* ss;
+  stp::SATSolver::vec_literals assumptions;
+  stp::ToSATAIG aig;
+  stp::MinisatCore<Minisat::Solver>* ss;
   ASTNode i0, i1, r;
-  ToSAT::ASTNodeToSATVar m;
+  stp::ToSAT::ASTNodeToSATVar m;
 
   BBAsProp(Kind k, STPMgr* mgr, int bits)
       : aig(mgr, GlobalSTP->arrayTransformer)
   {
 
-    const bool term = is_Term_kind(k);
+    const bool term = stp::is_Term_kind(k);
 
     i0 = mgr->CreateSymbol("i0", 0, bits);
     i1 = mgr->CreateSymbol("i1", 0, bits);
@@ -82,31 +85,31 @@ public:
     {
       if (a[i] == '1')
       {
-        assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], false));
+        assumptions.push(stp::SATSolver::mkLit(m.find(i0)->second[i], false));
       }
       else if (a[i] == '0')
       {
-        assumptions.push(SATSolver::mkLit(m.find(i0)->second[i], true));
+        assumptions.push(stp::SATSolver::mkLit(m.find(i0)->second[i], true));
       }
 
       if (b[i] == '1')
       {
-        assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], false));
+        assumptions.push(stp::SATSolver::mkLit(m.find(i1)->second[i], false));
       }
       else if (b[i] == '0')
       {
-        assumptions.push(SATSolver::mkLit(m.find(i1)->second[i], true));
+        assumptions.push(stp::SATSolver::mkLit(m.find(i1)->second[i], true));
       }
     }
     for (int i = 0; i < output.getWidth(); i++)
     {
       if (output[i] == '1')
       {
-        assumptions.push(SATSolver::mkLit(m.find(r)->second[i], false));
+        assumptions.push(stp::SATSolver::mkLit(m.find(r)->second[i], false));
       }
       else if (output[i] == '0')
       {
-        assumptions.push(SATSolver::mkLit(m.find(r)->second[i], true));
+        assumptions.push(stp::SATSolver::mkLit(m.find(r)->second[i], true));
       }
     }
   }

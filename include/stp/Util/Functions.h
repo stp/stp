@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define FUNCTIONS_H_
 
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Interface/cpp_interface.h"
+//#include "stp/Interface/cpp_interface.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include <list>
@@ -67,11 +67,11 @@ struct Functions
   struct Function
   {
     Kind k;
-    string name;
+    std::string name;
     Result (*fn)(vector<FixedBits*>&, FixedBits&);
     int (*op)(int o1, int o2);
 
-    Function(Kind k_, string name_,
+    Function(Kind k_, std::string name_,
              Result (*fn_)(vector<FixedBits*>&, FixedBits&),
              int (*op_)(int o1, int o2))
     {

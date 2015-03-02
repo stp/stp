@@ -44,7 +44,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "stp/Util/StopWatch.h"
 #include "stp/Util/Relations.h"
-#include "stp/UtilBBAsProp.h"
+#include "stp/Util/BBAsProp.h"
 #include "stp/Util/Functions.h"
 
 using simplifier::constantBitP::FixedBits;
@@ -210,9 +210,8 @@ void runSomeRandom(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
   if ((max - initial) == 0)
     percent = 100;
   clock_t t = s.stop2();
-  cerr.setf(ios::fixed);
-  cerr << "% Count" << count << " prob" << prob << " bits" << width << endl;
-  cerr << "&" << setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
+  cerr << std::fixed << "% Count" << count << " prob" << prob << " bits" << width << endl;
+  cerr << "&" << std::setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
   cerr << "&" << initial << "&" << transferC << "&" << max << "&" << percent
        << "\\%\n";
 
@@ -496,10 +495,10 @@ void exhaustively_check(const int bitwidth, Kind k,
   for (int i = 0; i < children.size(); i++)
     delete children[i];
 
-  cerr.setf(ios::fixed);
-  cerr << setprecision(1);
-  cerr << "& " << 100 * (transferBad / (float)to_iterate) << "\\%";
-  cerr << "& " << 100 * (BBBad / (float)to_iterate) << "\\%";
+  cerr << std::setprecision(1) << std::fixed
+  << "& " << 100 * (transferBad / (float)to_iterate) << "\\%"
+  << "& " << 100 * (BBBad / (float)to_iterate) << "\\%";
+
   transferBad = 0;
   BBBad = 0;
 }

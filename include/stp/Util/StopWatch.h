@@ -26,6 +26,10 @@ THE SOFTWARE.
 #define STOPWATCH_H_
 
 #include <ctime>
+#include <iostream>
+
+using std::cerr;
+using std::endl;
 
 class Stopwatch
 {
