@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// Abstract base class for all the node factories.
 #ifndef NODEFACTORY_H
 #define NODEFACTORY_H
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
+#include "stp/AST/ASTNode.h"
 
 namespace stp
 {
@@ -43,6 +43,7 @@ using stp::Kind;
 using stp::ASTVec;
 using stp::_empty_ASTVec;
 
+// Abstract base class for all the node factories.
 class NodeFactory // not copyable
 {
 protected:

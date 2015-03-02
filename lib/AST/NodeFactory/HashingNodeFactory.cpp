@@ -26,34 +26,28 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
 
-using stp::Kind;
-using stp::ASTInterior;
-using stp::ASTVec;
-using stp::ASTNode;
+using namespace stp;
 
 HashingNodeFactory::~HashingNodeFactory()
 {
 }
 
 // Get structurally hashed version of the node.
-stp::ASTNode HashingNodeFactory::CreateNode(const Kind kind,
-                                             const stp::ASTVec& back_children)
+ASTNode HashingNodeFactory::CreateNode(const Kind kind,
+                                             const ASTVec& back_children)
 {
   // We can't create NOT(NOT (..)) nodes because of how the numbering scheme we
-  // use works.
-  // So you can't trust the hashiing node factory even to return nodes of the
-  // same kind that
-  // you ask for.
-  if (kind == stp::NOT && back_children[0].GetKind() == stp::NOT)
+  // use works. So you can't trust the hashing node factory even to return
+  // nodes of the same kind that you ask for.
+  if (kind == NOT && back_children[0].GetKind() == NOT)
   {
     return back_children[0][0];
   }
 
   ASTVec children(back_children);
   // The Bitvector solver seems to expect constants on the RHS, variables on the
-  // LHS.
-  // We leave the order of equals children as we find them.
-  if (stp::isCommutative(kind) && kind != stp::AND)
+  // LHS. We leave the order of equals children as we find them.
+  if (isCommutative(kind) && kind != AND)
   {
     SortByArith(children);
   }
