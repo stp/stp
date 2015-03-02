@@ -98,7 +98,7 @@ public:
   bool isConstant() const
   {
     const Kind k = GetKind();
-    return (k == BVCONST || k == TRUE || k == FALSE);
+    return k == BVCONST || k == TRUE || k == FALSE;
   }
 
   bool isITE() const
@@ -110,7 +110,7 @@ public:
   bool isAtom() const
   {
     const Kind k = GetKind();
-    return k == TRUE || k == FALSE || k == SYMBOL || k == BVCONST;
+    return k == SYMBOL || isConstant();
   }
 
   bool isPred() const
