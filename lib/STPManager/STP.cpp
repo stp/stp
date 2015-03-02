@@ -680,28 +680,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     return res;
   }
 
-#if 0
-    res = Ctr_Example->SATBased_ArrayWriteRefinement(NewSolver, original_input, satBase);
-    if (SOLVER_UNDECIDED != res)
-      {
-        if (toSATAIG.cbIsDestructed())
-          cleaner.release();
-
-        CountersAndStats("print_func_stats", bm);
-        return res;
-      }
-
-    res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, inputToSat, original_input, satBase);
-    if (SOLVER_UNDECIDED != res)
-      {
-        if (toSATAIG.cbIsDestructed())
-          cleaner.release();
-
-        CountersAndStats("print_func_stats", bm);
-        return res;
-      }
-#endif
-
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"
              "either a divide by zero in the input or a bug in STP");
   // bogus return to make the compiler shut up
