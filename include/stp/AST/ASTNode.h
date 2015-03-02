@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, David L. Dill
  *
@@ -24,40 +23,35 @@ THE SOFTWARE.
 ********************************************************************/
 #ifndef ASTNODE_H
 #define ASTNODE_H
-#include "ASTInternal.h"
+
+#include "stp/AST/ASTInternal.h"
+#include "stp/AST/ASTKind.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 
-/********************************************************************
- *  This file gives the class description of the ASTNode class      *
-********************************************************************/
 namespace stp
 {
 using std::ostream;
 
 /******************************************************************
- *  Class ASTNode:                                                *
- *                                                                *
  *  A Kind of Smart pointer to actual ASTInternal datastructure.  *
  *  This class defines the node datastructure for the DAG that    *
  *  captures input formulas to STP.                               *
  ******************************************************************/
-
 class ASTNode
 {
   friend class STPMgr;
   friend class CNFMgr;
   friend class ASTInterior;
   friend class vector<ASTNode>;
-  friend stp::ASTNode HashingNodeFactory::CreateNode(const Kind kind,
-                                 const stp::ASTVec& back_children);
+  friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
+                                             const ASTVec& back_children);
   friend bool exprless(const ASTNode n1, const ASTNode n2);
   friend bool arithless(const ASTNode n1, const ASTNode n2);
 
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
 
-  // Constructor
-  ASTNode(ASTInternal* in);
+  explicit ASTNode(ASTInternal* in);
 
   // Equal iff ASTIntNode pointers are the same.
   friend bool operator==(const ASTNode& node1, const ASTNode& node2)
@@ -215,8 +209,6 @@ public:
   bool IsDefined() const { return _int_node_ptr != NULL; }
 
   /*****************************************************************
-   * Class ASTNodeHahser:                                          *
-   *                                                               *
    * Hasher class for STL hash_maps and hash_sets that use ASTNodes*
    * as keys.  Needs to be public so people can define hash tables *
    * (and use ASTNodeMap class)                                    *
@@ -232,8 +224,6 @@ public:
   }; // End of ASTNodeHasher
 
   /*****************************************************************
-   * Class ASTNodeEqual:                                           *
-   *                                                               *
    * Equality for ASTNode hash_set and hash_map. Returns true iff  *
    * internal pointers are the same.  Needs to be public so people *
    * can define hash tables (and use ASTNodeSet class)             *
@@ -245,9 +235,9 @@ public:
     {
       return (n1._int_node_ptr == n2._int_node_ptr);
     }
-  }; // End of ASTNodeEqual
+  };
 
-}; // End of Class ASTNode
+};
 
 } // end of namespace
 #endif

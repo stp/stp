@@ -24,6 +24,7 @@ THE SOFTWARE.
 ********************************************************************/
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
+
 #include <iostream>
 #include "stp/AST/ASTKind.h"
 #include "stp/AST/ASTNode.h"

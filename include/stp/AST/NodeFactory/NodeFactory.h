@@ -27,7 +27,6 @@ THE SOFTWARE.
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
-#include "stp/AST/ASTNode.h"
 
 namespace stp
 {

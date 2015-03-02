@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
+#include "stp/AST/NodeFactory/HashingNodeFactory.h"
 
 using namespace stp;
 
