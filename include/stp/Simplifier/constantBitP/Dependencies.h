@@ -32,7 +32,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-//using namespace stp;
 using std::set;
 using std::cout;
 using std::endl;
