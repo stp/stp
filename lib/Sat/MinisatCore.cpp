@@ -30,6 +30,16 @@ THE SOFTWARE.
 namespace stp
 {
 
+template <class T>
+bool MinisatCore<T>::unitPropagate(const vec_literals& ps) {
+  return s->unitPropagate(ps);
+}
+
+template <class T>
+uint8_t MinisatCore<T>::value(uint32_t x) const {
+  return Minisat::toInt(s->value(x));
+}
+
 template <class T> MinisatCore<T>::MinisatCore(volatile bool& interrupt)
 {
   s = new T(interrupt);

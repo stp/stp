@@ -58,7 +58,7 @@ public:
 
   virtual uint8_t modelValue(uint32_t x) const;
 
-  uint8_t value(uint32_t x) const { return Minisat::toInt(s->value(x)); }
+  uint8_t value(uint32_t x) const;
 
   virtual uint32_t newVar();
 
@@ -76,7 +76,7 @@ public:
 
   virtual int nClauses();
 
-  bool unitPropagate(const vec_literals& ps) { return s->unitPropagate(ps); }
+  bool unitPropagate(const vec_literals& ps);
 };
 }
 
