@@ -109,11 +109,11 @@ void ASTBVConst::nodeprint(ostream& os, bool c_friendly)
   CONSTANTBV::BitVector_Dispose(res);
 } // End of nodeprint()
 
-// Return the bvconst. It is a const-value
+
 CBV ASTBVConst::GetBVConst() const
 {
   return _bvconst;
-} // End of GetBVConst()
+}
 
 /****************************************************************
  * Class ASTBVConstHasher and ASTBVConstEqual Functions         *
