@@ -765,11 +765,6 @@ bool Solver::unitPropagate(  const vec<Lit>& assumps)
   ok = true;
 
   cancelUntil(0);
-  for (int i = 0; i < nVars(); i++)
-    {
-    assert(value(i) == l_Undef);
-    }
-
   assert(decisionLevel()== 0);
 
   // None of the values should be known.
