@@ -81,13 +81,13 @@ bool PartFinder::findParts()
   addToPart(solver.binaryClauses);
   addToPart(solver.xorclauses);
 
-  const uint parts = setParts();
+  const unsigned parts = setParts();
 
 #ifndef NDEBUG
-  for (map<uint, vector<Var>>::const_iterator it = reverseTable.begin();
+  for (map<unsigned, vector<Var>>::const_iterator it = reverseTable.begin();
        it != reverseTable.end(); it++)
   {
-    for (uint i2 = 0; i2 < it->second.size(); i2++)
+    for (unsigned i2 = 0; i2 < it->second.size(); i2++)
     {
       assert(table[(it->second)[i2]] == it->first);
     }
@@ -106,7 +106,7 @@ bool PartFinder::findParts()
 
 template <class T> void PartFinder::addToPart(const vec<T*>& cs)
 {
-  set<uint> tomerge;
+  set<unsigned> tomerge;
   vector<Var> newSet;
   for (T* const* c = cs.getData(), *const* end = c + cs.size(); c != end; c++)
   {
@@ -126,9 +126,9 @@ template <class T> void PartFinder::addToPart(const vec<T*>& cs)
     {
       // no trees to merge, only merge the clause into one tree
 
-      const uint into = *tomerge.begin();
-      map<uint, vector<Var>>::iterator intoReverse = reverseTable.find(into);
-      for (uint i = 0; i < newSet.size(); i++)
+      const unsigned into = *tomerge.begin();
+      map<unsigned, vector<Var>>::iterator intoReverse = reverseTable.find(into);
+      for (unsigned i = 0; i < newSet.size(); i++)
       {
         intoReverse->second.push_back(newSet[i]);
         table[newSet[i]] = into;
@@ -136,31 +136,31 @@ template <class T> void PartFinder::addToPart(const vec<T*>& cs)
       continue;
     }
 
-    for (set<uint>::iterator it = tomerge.begin(); it != tomerge.end(); it++)
+    for (set<unsigned>::iterator it = tomerge.begin(); it != tomerge.end(); it++)
     {
       newSet.insert(newSet.end(), reverseTable[*it].begin(),
                     reverseTable[*it].end());
       reverseTable.erase(*it);
     }
 
-    for (uint i = 0; i < newSet.size(); i++)
+    for (unsigned i = 0; i < newSet.size(); i++)
       table[newSet[i]] = part_no;
     reverseTable[part_no] = newSet;
     part_no++;
   }
 }
 
-uint PartFinder::setParts()
+unsigned PartFinder::setParts()
 {
-  vector<uint> numClauseInPart(part_no, 0);
-  vector<uint> sumLitsInPart(part_no, 0);
+  vector<unsigned> numClauseInPart(part_no, 0);
+  vector<unsigned> sumLitsInPart(part_no, 0);
 
   calcIn(solver.clauses, numClauseInPart, sumLitsInPart);
   calcIn(solver.binaryClauses, numClauseInPart, sumLitsInPart);
   calcIn(solver.xorclauses, numClauseInPart, sumLitsInPart);
 
-  uint parts = 0;
-  for (uint i = 0; i < numClauseInPart.size(); i++)
+  unsigned parts = 0;
+  for (unsigned i = 0; i < numClauseInPart.size(); i++)
   {
     if (sumLitsInPart[i] == 0)
       continue;
@@ -179,7 +179,7 @@ uint PartFinder::setParts()
   if (parts > 1)
   {
 #ifdef VERBOSE_DEBUG
-    for (map<uint, vector<Var>>::iterator it = reverseTable.begin(),
+    for (map<unsigned, vector<Var>>::iterator it = reverseTable.begin(),
                                           end = reverseTable.end();
          it != end; it++)
     {
@@ -199,15 +199,15 @@ uint PartFinder::setParts()
 }
 
 template <class T>
-void PartFinder::calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart,
-                        vector<uint>& sumLitsInPart)
+void PartFinder::calcIn(const vec<T*>& cs, vector<unsigned>& numClauseInPart,
+                        vector<unsigned>& sumLitsInPart)
 {
   for (T* const* c = cs.getData(), *const* end = c + cs.size(); c != end; c++)
   {
     if ((*c)->learnt())
       continue;
     T& x = **c;
-    const uint part = table[x[0].var()];
+    const unsigned part = table[x[0].var()];
     assert(part < part_no);
 
     // for stats

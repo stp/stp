@@ -40,11 +40,11 @@ void RestartTypeChooser::addInfo()
 {
   firstVarsOld = firstVars;
   calcHeap();
-  uint sameIn = 0;
+  unsigned sameIn = 0;
   if (!firstVarsOld.empty())
   {
-    uint thisTopX = std::min(firstVarsOld.size(), (size_t)topX);
-    for (uint i = 0; i != thisTopX; i++)
+    unsigned thisTopX = std::min(firstVarsOld.size(), (size_t)topX);
+    for (unsigned i = 0; i != thisTopX; i++)
     {
       if (std::find(firstVars.begin(), firstVars.end(), firstVarsOld[i]) !=
           firstVars.end())
@@ -79,7 +79,7 @@ RestartType RestartTypeChooser::choose()
 double RestartTypeChooser::avg() const
 {
   double sum = 0.0;
-  for (uint i = 0; i != sameIns.size(); i++)
+  for (unsigned i = 0; i != sameIns.size(); i++)
     sum += sameIns[i];
   return (sum / (double)sameIns.size());
 }
@@ -88,7 +88,7 @@ double RestartTypeChooser::stdDeviation(vector<uint32_t>& measure) const
 {
   double average = avg();
   double variance = 0.0;
-  for (uint i = 0; i != measure.size(); i++)
+  for (unsigned i = 0; i != measure.size(); i++)
     variance += pow((double)measure[i] - average, 2);
   variance /= (double)measure.size();
 

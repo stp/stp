@@ -42,7 +42,7 @@ void FindUndef::fillPotential()
   while (trail > 0)
   {
     assert(trail < (int)solver.trail_lim.size());
-    uint at = solver.trail_lim[trail];
+    unsigned at = solver.trail_lim[trail];
 
     assert(at > 0);
     Var v = solver.trail[at].var();
@@ -85,7 +85,7 @@ void FindUndef::fillPotential()
 
 void FindUndef::unboundIsPotentials()
 {
-  for (uint i = 0; i < isPotential.size(); i++)
+  for (unsigned i = 0; i < isPotential.size(); i++)
     if (isPotential[i])
       solver.assigns[i] = l_Undef;
 }
@@ -93,19 +93,19 @@ void FindUndef::unboundIsPotentials()
 void FindUndef::moveBinToNormal()
 {
   binPosition = solver.clauses.size();
-  for (uint i = 0; i != solver.binaryClauses.size(); i++)
+  for (unsigned i = 0; i != solver.binaryClauses.size(); i++)
     solver.clauses.push(solver.binaryClauses[i]);
   solver.binaryClauses.clear();
 }
 
 void FindUndef::moveBinFromNormal()
 {
-  for (uint i = binPosition; i != solver.clauses.size(); i++)
+  for (unsigned i = binPosition; i != solver.clauses.size(); i++)
     solver.binaryClauses.push(solver.clauses[i]);
   solver.clauses.shrink(solver.clauses.size() - binPosition);
 }
 
-uint FindUndef::unRoll()
+unsigned FindUndef::unRoll()
 {
   if (solver.decisionLevel() == 0)
     return 0;
@@ -123,7 +123,7 @@ uint FindUndef::unRoll()
 
     uint32_t maximum = 0;
     Var v = var_Undef;
-    for (uint i = 0; i < isPotential.size(); i++)
+    for (unsigned i = 0; i < isPotential.size(); i++)
     {
       if (isPotential[i] && satisfies[i] >= maximum)
       {
@@ -149,7 +149,7 @@ bool FindUndef::updateTables()
 {
   bool allSat = true;
 
-  uint i = 0;
+  unsigned i = 0;
   for (Clause** it = solver.clauses.getData(),
                 **end = it + solver.clauses.size();
        it != end; it++, i++)
@@ -160,7 +160,7 @@ bool FindUndef::updateTables()
     Clause& c = **it;
     bool definitelyOK = false;
     Var v = var_Undef;
-    uint numTrue = 0;
+    unsigned numTrue = 0;
     for (Lit* l = c.getData(), *end = l + c.size(); l != end; l++)
     {
       if (solver.value(*l) == l_True)

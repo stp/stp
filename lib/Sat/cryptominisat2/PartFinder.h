@@ -57,12 +57,12 @@ public:
   const vector<Var>& getPartVars(const uint32_t part);
 
 private:
-  uint setParts();
+  unsigned setParts();
   template <class T> void addToPart(const vec<T*>& cs);
 
   struct mysorter
   {
-    bool operator()(const pair<uint, uint>& left, const pair<uint, uint>& right)
+    bool operator()(const pair<unsigned, unsigned>& left, const pair<unsigned, unsigned>& right)
     {
       return left.second < right.second;
     }
@@ -71,8 +71,8 @@ private:
   // const bool findParts(vector<Var>& xorFingerprintInMatrix,
   // vector<XorClause*>& xorsInMatrix);
   template <class T>
-  void calcIn(const vec<T*>& cs, vector<uint>& numClauseInPart,
-              vector<uint>& sumLitsInPart);
+  void calcIn(const vec<T*>& cs, vector<unsigned>& numClauseInPart,
+              vector<unsigned>& sumLitsInPart);
 
   map<uint32_t, vector<Var>> reverseTable; // part -> vars
   vector<uint32_t> table; // var -> part

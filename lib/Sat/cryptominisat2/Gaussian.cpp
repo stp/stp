@@ -56,7 +56,7 @@ ostream& operator<<(ostream& os, const vec<Lit>& v)
 }
 
 Gaussian::Gaussian(Solver& _solver, const GaussianConfig& _config,
-                   const uint _matrix_no, const vector<XorClause*>& _xorclauses)
+                   const unsigned _matrix_no, const vector<XorClause*>& _xorclauses)
     : solver(_solver), config(_config), matrix_no(_matrix_no),
       xorclauses(_xorclauses), messed_matrix_vars_since_reversal(true),
       gauss_last_level(0), disabled(false), useful_prop(0), useful_confl(0),
@@ -66,13 +66,13 @@ Gaussian::Gaussian(Solver& _solver, const GaussianConfig& _config,
 
 Gaussian::~Gaussian()
 {
-  for (uint i = 0; i < clauses_toclear.size(); i++)
+  for (unsigned i = 0; i < clauses_toclear.size(); i++)
     solver.clauseAllocator.clauseFree(clauses_toclear[i].first);
 }
 
 inline void Gaussian::set_matrixset_to_cur()
 {
-  uint level = solver.decisionLevel() / config.only_nth_gauss_save;
+  unsigned level = solver.decisionLevel() / config.only_nth_gauss_save;
   assert(level <= matrix_sets.size());
 
   if (level == matrix_sets.size())
@@ -146,12 +146,12 @@ void Gaussian::init()
 #endif
 }
 
-uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
+unsigned Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
                                   matrixset& origMat)
 {
   var_to_col.resize(solver.nVars(), unassigned_col);
 
-  uint num_xorclauses = 0;
+  unsigned num_xorclauses = 0;
   for (uint32_t i = 0; i != xorclauses.size(); i++)
   {
     XorClause& c = *xorclauses[i];
@@ -159,15 +159,15 @@ uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
       continue;
     num_xorclauses++;
 
-    for (uint i2 = 0; i2 < c.size(); i2++)
+    for (unsigned i2 = 0; i2 < c.size(); i2++)
     {
       assert(solver.assigns[c[i2].var()].isUndef());
       var_to_col[c[i2].var()] = unassigned_col - 1;
     }
   }
 
-  uint largest_used_var = 0;
-  for (uint i = 0; i < var_to_col.size(); i++)
+  unsigned largest_used_var = 0;
+  for (unsigned i = 0; i < var_to_col.size(); i++)
     if (var_to_col[i] != unassigned_col)
       largest_used_var = i;
   var_to_col.resize(largest_used_var + 1);
@@ -199,7 +199,7 @@ uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
     if (var_to_col[v] == 1)
     {
 #ifdef DEBUG_GAUSS
-      vector<uint>::iterator it =
+      vector<unsigned>::iterator it =
           std::find(origMat.col_to_var.begin(), origMat.col_to_var.end(), v);
       assert(it == origMat.col_to_var.end());
 #endif
@@ -211,7 +211,7 @@ uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
   }
 
   // for the ones that were not in the order_heap, but are marked in var_to_col
-  for (uint v = 0; v != var_to_col.size(); v++)
+  for (unsigned v = 0; v != var_to_col.size(); v++)
   {
     if (var_to_col[v] == unassigned_col - 1)
     {
@@ -224,7 +224,7 @@ uint Gaussian::select_columnorder(vector<uint16_t>& var_to_col,
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")col_to_var:";
   std::copy(origMat.col_to_var.begin(), origMat.col_to_var.end(),
-            std::ostream_iterator<uint>(cout, ","));
+            std::ostream_iterator<unsigned>(cout, ","));
   cout << endl;
 #endif
 
@@ -258,7 +258,7 @@ void Gaussian::fill_matrix(matrixset& origMat)
        << origMat.num_cols << endl;
 #endif
 
-  uint matrix_row = 0;
+  unsigned matrix_row = 0;
   for (uint32_t i = 0; i != xorclauses.size(); i++)
   {
     const XorClause& c = *xorclauses[i];
@@ -272,7 +272,7 @@ void Gaussian::fill_matrix(matrixset& origMat)
   assert(origMat.num_rows == matrix_row);
 }
 
-void Gaussian::update_matrix_col(matrixset& m, const Var var, const uint col)
+void Gaussian::update_matrix_col(matrixset& m, const Var var, const unsigned col)
 {
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")Updating matrix var " << var + 1 << " (col "
@@ -287,11 +287,11 @@ void Gaussian::update_matrix_col(matrixset& m, const Var var, const uint col)
 
   m.least_column_changed = std::min(m.least_column_changed, (int)col);
   PackedMatrix::iterator this_row = m.matrix.beginMatrix();
-  uint row_num = 0;
+  unsigned row_num = 0;
 
   if (solver.assigns[var].getBool())
   {
-    for (uint end = m.last_one_in_col[col]; row_num != end;
+    for (unsigned end = m.last_one_in_col[col]; row_num != end;
          ++this_row, row_num++)
     {
       if ((*this_row)[col])
@@ -304,7 +304,7 @@ void Gaussian::update_matrix_col(matrixset& m, const Var var, const uint col)
   }
   else
   {
-    for (uint end = m.last_one_in_col[col]; row_num != end;
+    for (unsigned end = m.last_one_in_col[col]; row_num != end;
          ++this_row, row_num++)
     {
       if ((*this_row)[col])
@@ -334,7 +334,7 @@ void Gaussian::update_matrix_by_col_all(matrixset& m)
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")Updating matrix." << endl;
   print_matrix(m);
-  uint num_updated = 0;
+  unsigned num_updated = 0;
 #endif
 
 #ifdef DEBUG_GAUSS
@@ -344,8 +344,8 @@ void Gaussian::update_matrix_by_col_all(matrixset& m)
 
   memset(&changed_rows[0], 0, sizeof(char) * changed_rows.size());
 
-  uint last = 0;
-  uint col = 0;
+  unsigned last = 0;
+  unsigned col = 0;
   for (const Var* it = &m.col_to_var[0], *end = it + m.num_cols; it != end;
        col++, it++)
   {
@@ -398,7 +398,7 @@ Gaussian::gaussian_ret Gaussian::gaussian(Clause*& confl)
     cout << "(" << matrix_no << ")matrix needs copy before update" << endl;
 #endif
 
-    const uint level = solver.decisionLevel() / config.only_nth_gauss_save;
+    const unsigned level = solver.decisionLevel() / config.only_nth_gauss_save;
     assert(level < matrix_sets.size());
     cur_matrixset = matrix_sets[level];
   }
@@ -410,8 +410,8 @@ Gaussian::gaussian_ret Gaussian::gaussian(Clause*& confl)
   badlevel = UINT_MAX;
 
   propagatable_rows.clear();
-  uint conflict_row = UINT_MAX;
-  uint last_row = eliminate(cur_matrixset, conflict_row);
+  unsigned conflict_row = UINT_MAX;
+  unsigned last_row = eliminate(cur_matrixset, conflict_row);
 #ifdef DEBUG_GAUSS
   check_matrix_against_varset(cur_matrixset.matrix, cur_matrixset);
 #endif
@@ -419,9 +419,9 @@ Gaussian::gaussian_ret Gaussian::gaussian(Clause*& confl)
   gaussian_ret ret;
   // There is no early abort, so this is unneeded
   /*if (conflict_row != UINT_MAX) {
-      uint maxlevel = UINT_MAX;
-      uint size = UINT_MAX;
-      uint best_row = UINT_MAX;
+      unsigned maxlevel = UINT_MAX;
+      unsigned size = UINT_MAX;
+      unsigned best_row = UINT_MAX;
       analyse_confl(cur_matrixset, conflict_row, maxlevel, size, best_row);
       ret = handle_matrix_confl(confl, cur_matrixset, size, maxlevel, best_row);
   } else {*/
@@ -455,7 +455,7 @@ Gaussian::gaussian_ret Gaussian::gaussian(Clause*& confl)
   return ret;
 }
 
-uint Gaussian::eliminate(matrixset& m, uint& conflict_row)
+unsigned Gaussian::eliminate(matrixset& m, unsigned& conflict_row)
 {
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")";
@@ -463,8 +463,8 @@ uint Gaussian::eliminate(matrixset& m, uint& conflict_row)
   cout << "m.least_column_changed:" << m.least_column_changed << endl;
   print_last_one_in_cols(m);
 
-  uint number_of_row_additions = 0;
-  uint no_exchanged = 0;
+  unsigned number_of_row_additions = 0;
+  unsigned no_exchanged = 0;
 #endif
 
   if (m.least_column_changed == INT_MAX)
@@ -480,8 +480,8 @@ uint Gaussian::eliminate(matrixset& m, uint& conflict_row)
   assert(solver.decisionLevel() == 0 || check_last_one_in_cols(m));
 #endif
 
-  uint i = 0;
-  uint j = (config.iterativeReduce) ? m.least_column_changed + 1 : 0;
+  unsigned i = 0;
+  unsigned j = (config.iterativeReduce) ? m.least_column_changed + 1 : 0;
   PackedMatrix::iterator beginIt = m.matrix.beginMatrix();
   PackedMatrix::iterator rowIt = m.matrix.beginMatrix();
 
@@ -610,8 +610,8 @@ finish:
 
 #ifdef DEBUG_GAUSS
   assert(check_last_one_in_cols(m));
-  uint row = 0;
-  uint col = 0;
+  unsigned row = 0;
+  unsigned col = 0;
   for (; col < m.num_cols && row < m.num_rows && row < i; col++)
   {
     assert(m.matrix.getMatrixAt(row).popcnt() ==
@@ -639,9 +639,9 @@ finish:
 
 Gaussian::gaussian_ret Gaussian::handle_matrix_confl(Clause*& confl,
                                                      const matrixset& m,
-                                                     const uint size,
-                                                     const uint maxlevel,
-                                                     const uint best_row)
+                                                     const unsigned size,
+                                                     const unsigned maxlevel,
+                                                     const unsigned best_row)
 {
   assert(best_row != UINT_MAX);
 
@@ -676,15 +676,15 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_confl(Clause*& confl,
 #endif
     solver.cancelUntil(maxlevel);
   }
-  const uint curr_dec_level = solver.decisionLevel();
+  const unsigned curr_dec_level = solver.decisionLevel();
   assert(maxlevel == curr_dec_level);
 
-  uint maxsublevel = 0;
-  uint maxsublevel_at = UINT_MAX;
-  for (uint i = 0, size = cla.size(); i != size; i++)
+  unsigned maxsublevel = 0;
+  unsigned maxsublevel_at = UINT_MAX;
+  for (unsigned i = 0, size = cla.size(); i != size; i++)
     if (solver.level[cla[i].var()] == (int32_t)curr_dec_level)
     {
-      uint tmp = find_sublevel(cla[i].var());
+      unsigned tmp = find_sublevel(cla[i].var());
       if (tmp >= maxsublevel)
       {
         maxsublevel = tmp;
@@ -706,14 +706,14 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_confl(Clause*& confl,
 }
 
 Gaussian::gaussian_ret Gaussian::handle_matrix_prop_and_confl(matrixset& m,
-                                                              uint last_row,
+                                                              unsigned last_row,
                                                               Clause*& confl)
 {
   int32_t maxlevel = std::numeric_limits<int32_t>::max();
-  uint size = UINT_MAX;
-  uint best_row = UINT_MAX;
+  unsigned size = UINT_MAX;
+  unsigned best_row = UINT_MAX;
 
-  for (uint row = last_row; row != m.num_rows; row++)
+  for (unsigned row = last_row; row != m.num_rows; row++)
   {
 #ifdef DEBUG_GAUSS
     assert(m.matrix.getMatrixAt(row).isZero());
@@ -738,8 +738,8 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_prop_and_confl(matrixset& m,
 
   gaussian_ret ret = nothing;
 
-  uint num_props = 0;
-  for (const uint* prop_row = propagatable_rows.getData(),
+  unsigned num_props = 0;
+  for (const unsigned* prop_row = propagatable_rows.getData(),
                    *end = prop_row + propagatable_rows.size();
        prop_row != end; prop_row++)
   {
@@ -764,7 +764,7 @@ Gaussian::gaussian_ret Gaussian::handle_matrix_prop_and_confl(matrixset& m,
   return ret;
 }
 
-uint Gaussian::find_sublevel(const Var v) const
+unsigned Gaussian::find_sublevel(const Var v) const
 {
   for (int i = solver.trail.size() - 1; i >= 0; i--)
     if (solver.trail[i].var() == v)
@@ -779,7 +779,7 @@ uint Gaussian::find_sublevel(const Var v) const
   return 0;
 }
 
-void Gaussian::cancel_until_sublevel(const uint until_sublevel)
+void Gaussian::cancel_until_sublevel(const unsigned until_sublevel)
 {
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")Canceling until sublevel " << until_sublevel
@@ -813,9 +813,9 @@ void Gaussian::cancel_until_sublevel(const uint until_sublevel)
 #endif
 }
 
-void Gaussian::analyse_confl(const matrixset& m, const uint row,
-                             int32_t& maxlevel, uint& size,
-                             uint& best_row) const
+void Gaussian::analyse_confl(const matrixset& m, const unsigned row,
+                             int32_t& maxlevel, unsigned& size,
+                             unsigned& best_row) const
 {
   assert(row < m.num_rows);
 
@@ -833,7 +833,7 @@ void Gaussian::analyse_confl(const matrixset& m, const uint row,
 
   int32_t this_maxlevel = 0;
   unsigned long int var = 0;
-  uint this_size = 0;
+  unsigned this_size = 0;
   while (true)
   {
     var = m.matrix.getVarsetAt(row).scan(var);
@@ -887,7 +887,7 @@ void Gaussian::analyse_confl(const matrixset& m, const uint row,
 }
 
 Gaussian::gaussian_ret Gaussian::handle_matrix_prop(matrixset& m,
-                                                    const uint row)
+                                                    const unsigned row)
 {
 #ifdef VERBOSE_DEBUG
   cout << "(" << matrix_no << ")matrix prop found!" << endl;
@@ -932,7 +932,7 @@ void Gaussian::disable_if_necessary()
   if ( // nof_conflicts >= 0
       //&& conflictC >= nof_conflicts/8
       !config.dontDisable && called > 50 &&
-      useful_confl * 2 + useful_prop < (uint)((double)called * 0.05))
+      useful_confl * 2 + useful_prop < (unsigned)((double)called * 0.05))
     disabled = true;
 }
 
@@ -1087,7 +1087,7 @@ void Gaussian::reset_stats()
 
 bool Gaussian::check_no_conflict(matrixset& m) const
 {
-  uint row = 0;
+  unsigned row = 0;
   for (PackedMatrix::iterator r = m.matrix.beginMatrix(),
                               end = m.matrix.endMatrix();
        r != end; ++r, ++row)
@@ -1103,7 +1103,7 @@ bool Gaussian::check_no_conflict(matrixset& m) const
 
 void Gaussian::print_matrix(matrixset& m) const
 {
-  uint row = 0;
+  unsigned row = 0;
   for (PackedMatrix::iterator it = m.matrix.beginMatrix();
        it != m.matrix.endMatrix(); ++it, row++)
   {
@@ -1116,7 +1116,7 @@ void Gaussian::print_matrix(matrixset& m) const
 
 void Gaussian::print_last_one_in_cols(matrixset& m) const
 {
-  for (uint i = 0; i < m.num_cols; i++)
+  for (unsigned i = 0; i < m.num_cols; i++)
   {
     cout << "last_one_in_col[" << i << "]-1 = " << m.last_one_in_col[i] - 1
          << endl;
@@ -1145,11 +1145,11 @@ bool Gaussian::nothing_to_propagate(matrixset& m) const
 
 bool Gaussian::check_last_one_in_cols(matrixset& m) const
 {
-  for (uint i = 0; i < m.num_cols; i++)
+  for (unsigned i = 0; i < m.num_cols; i++)
   {
-    const uint last = std::min(m.last_one_in_col[i] - 1, (int)m.num_rows);
-    uint real_last = 0;
-    uint i2 = 0;
+    const unsigned last = std::min(m.last_one_in_col[i] - 1, (int)m.num_rows);
+    unsigned real_last = 0;
+    unsigned i2 = 0;
     for (PackedMatrix::iterator it = m.matrix.beginMatrix();
          it != m.matrix.endMatrix(); ++it, i2++)
     {
@@ -1166,7 +1166,7 @@ bool Gaussian::check_last_one_in_cols(matrixset& m) const
 void Gaussian::check_matrix_against_varset(PackedMatrix& matrix,
                                            const matrixset& m) const
 {
-  for (uint i = 0; i < matrix.getSize(); i++)
+  for (unsigned i = 0; i < matrix.getSize(); i++)
   {
     const PackedRow mat_row = matrix.getMatrixAt(i);
     const PackedRow var_row = matrix.getVarsetAt(i);
@@ -1216,7 +1216,7 @@ void Gaussian::check_matrix_against_varset(PackedMatrix& matrix,
   }
 }
 
-void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
+void Gaussian::check_first_one_in_row(matrixset& m, const unsigned j)
 {
   if (j)
   {
@@ -1231,7 +1231,7 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
            << m.first_one_in_row[m.num_rows - 1] << endl;
 #endif
     }
-    for (uint i2 = 0; i2 != until2; i2++)
+    for (unsigned i2 = 0; i2 != until2; i2++)
     {
 #ifdef VERBOSE_DEBUG
       cout << endl << "row " << i2 << " (num rows:" << m.num_rows << ")"
@@ -1249,7 +1249,7 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
            << endl;
 #endif
 
-      for (uint i3 = 0; i3 < m.first_one_in_row[i2]; i3++)
+      for (unsigned i3 = 0; i3 < m.first_one_in_row[i2]; i3++)
       {
         assert(m.matrix.getMatrixAt(i2)[i3] == 0);
       }
@@ -1266,16 +1266,16 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
 {
 #ifdef VERBOSE_DEBUG
     cout << "Updating matrix." << endl;
-    uint num_updated = 0;
+    unsigned num_updated = 0;
 #endif
 #ifdef DEBUG_GAUSS
     assert(nothing_to_propagate(cur_matrixset));
 #endif
 
     mpz_class toclear, tocount;
-    uint last_col = 0;
+    unsigned last_col = 0;
 
-    for (uint col = 0; col < m.num_cols; col ++) {
+    for (unsigned col = 0; col < m.num_cols; col ++) {
         Var var = m.col_to_var[col];
 
         if (var != UINT_MAX && !solver.assigns[var].isUndef()) {
@@ -1300,7 +1300,7 @@ void Gaussian::check_first_one_in_row(matrixset& m, const uint j)
     toclear.invert();
     mpz_class tmp;
     mpz_class* this_row = &m.matrix[0];
-    for(uint i = 0, until = std::min(m.num_rows, m.last_one_in_col[last_col]+1);
+    for(unsigned i = 0, until = std::min(m.num_rows, m.last_one_in_col[last_col]+1);
 i < until; i++, this_row++) {
         mpz_class& r = *this_row;
         mpz_and(tmp.get_mp(), tocount.get_mp(), r.get_mp());
@@ -1314,11 +1314,11 @@ m.removeable_cols << " cols " <<endl;
 #endif
 }*/
 
-/*void Gaussian::update_matrix_by_col(matrixset& m, const uint last_level) const
+/*void Gaussian::update_matrix_by_col(matrixset& m, const unsigned last_level) const
 {
 #ifdef VERBOSE_DEBUG
     cout << "Updating matrix." << endl;
-    uint num_updated = 0;
+    unsigned num_updated = 0;
 #endif
 #ifdef DEBUG_GAUSS
     assert(nothing_to_propagate(cur_matrixset));
@@ -1326,7 +1326,7 @@ m.removeable_cols << " cols " <<endl;
 
     for (int level = solver.trail.size()-1; level >= last_level; level--){
         Var var = solver.trail[level].var();
-        const uint col = m.var_to_col[var];
+        const unsigned col = m.var_to_col[var];
         if ( col < UINT_MAX-1) {
             update_matrix_col(m, var, col);
 #ifdef VERBOSE_DEBUG

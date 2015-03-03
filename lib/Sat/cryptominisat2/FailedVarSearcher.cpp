@@ -265,7 +265,7 @@ for (uint32_t binCl = 0; binCl < solver.binaryClauses.size(); binCl++) {
 /*for (Clause **it = solver.clauses.getData(), **end =
 solver.clauses.getDataEnd(); it != end; it++) {
     Clause& c = **it;
-    for (uint i = 0; i < c.size(); i++) {
+    for (unsigned i = 0; i < c.size(); i++) {
         if (solver.value(c[i]) != l_Undef) goto next;
     }
     if (!tryAll(c.getData(), c.getDataEnd()))
@@ -277,7 +277,7 @@ solver.clauses.getDataEnd(); it != end; it++) {
 for (Clause **it = solver.learnts.getData(), **end =
 solver.learnts.getDataEnd(); it != end; it++) {
     Clause& c = **it;
-    for (uint i = 0; i < c.size(); i++) {
+    for (unsigned i = 0; i < c.size(); i++) {
         if (solver.value(c[i]) != l_Undef) goto next2;
     }
     if (!tryAll(c.getData(), c.getDataEnd()))

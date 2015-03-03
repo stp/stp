@@ -636,7 +636,7 @@ void XorSubsumer::testAllClauseAttach() const
     if (solver.assigns[c[0].var()] != l_Undef ||
         solver.assigns[c[1].var()] != l_Undef)
     {
-      for (uint i = 0; i < c.size(); i++)
+      for (unsigned i = 0; i < c.size(); i++)
       {
         assert(solver.assigns[c[i].var()] != l_Undef);
       }

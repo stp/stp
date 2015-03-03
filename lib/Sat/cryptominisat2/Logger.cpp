@@ -92,7 +92,7 @@ void Logger::new_var(const Var var)
 
 // Resizes the groupnames and other, related vectors to accomodate for a new
 // group
-void Logger::new_group(const uint group)
+void Logger::new_group(const unsigned group)
 {
   if (groupnames.size() <= group)
   {
@@ -108,7 +108,7 @@ void Logger::new_group(const uint group)
 string Logger::cut_name_to_size(const string& name) const
 {
   string ret = name;
-  uint len = name.length();
+  unsigned len = name.length();
   while (len > 0 && (name[len - 1] == ' ' || name[len - 1] == 0x0A ||
                      name[len - 1] == 0x0D))
   {
@@ -127,7 +127,7 @@ string Logger::cut_name_to_size(const string& name) const
 }
 
 // Adds the new clause group's name to the information stored
-void Logger::set_group_name(const uint group, const char* name_tmp)
+void Logger::set_group_name(const unsigned group, const char* name_tmp)
 {
   if (!statistics_on && !proof_graph_on)
     return;
@@ -141,7 +141,7 @@ void Logger::set_group_name(const uint group, const char* name_tmp)
   set_group_name(group, name);
 }
 
-void Logger::set_group_name(const uint group, string& name)
+void Logger::set_group_name(const unsigned group, string& name)
 {
   new_group(group);
 
@@ -164,7 +164,7 @@ void Logger::set_group_name(const uint group, string& name)
   }
 }
 
-string Logger::get_group_name(const uint group) const
+string Logger::get_group_name(const unsigned group) const
 {
   assert(group < groupnames.size());
   return groupnames[group];
@@ -178,7 +178,7 @@ string Logger::get_var_name(const Var var) const
 }
 
 // sets the variable's name
-void Logger::set_variable_name(const uint var, char* name_tmp)
+void Logger::set_variable_name(const unsigned var, char* name_tmp)
 {
   if (!statistics_on && !proof_graph_on)
     return;
@@ -249,13 +249,13 @@ void Logger::begin()
 
 // For noting conflicts. Updates the proof graph and the statistics.
 template <class T>
-void Logger::conflict(const confl_type type, const uint goback_level,
-                      const uint group, const T& learnt_clause)
+void Logger::conflict(const confl_type type, const unsigned goback_level,
+                      const unsigned group, const T& learnt_clause)
 {
   first_begin();
   assert(!(proof == NULL && proof_graph_on));
 
-  const uint goback_sublevel = S->trail_lim[goback_level];
+  const unsigned goback_sublevel = S->trail_lim[goback_level];
 
   if (proof_graph_on)
   {
@@ -311,11 +311,11 @@ void Logger::conflict(const confl_type type, const uint goback_level,
   }
 }
 
-template void Logger::conflict(const confl_type type, const uint goback_level,
-                               const uint group, const Clause& learnt_clause);
+template void Logger::conflict(const confl_type type, const unsigned goback_level,
+                               const unsigned group, const Clause& learnt_clause);
 
-template void Logger::conflict(const confl_type type, const uint goback_level,
-                               const uint group, const vec<Lit>& learnt_clause);
+template void Logger::conflict(const confl_type type, const unsigned goback_level,
+                               const unsigned group, const vec<Lit>& learnt_clause);
 
 // Propagating a literal. Type of literal and the (learned
 // clause's)/(propagating clause's)/(etc) group must be given. Updates the proof
@@ -326,7 +326,7 @@ void Logger::propagation(const Lit lit, Clause* c)
   first_begin();
   assert(!(proof == NULL && proof_graph_on));
 
-  uint group;
+  unsigned group;
   prop_type type;
   if (c == NULL)
   {
@@ -334,7 +334,7 @@ void Logger::propagation(const Lit lit, Clause* c)
       type = add_clause_type;
     else
       type = guess_type;
-    group = std::numeric_limits<uint>::max();
+    group = std::numeric_limits<unsigned>::max();
   }
   else
   {
@@ -466,8 +466,8 @@ void Logger::print_footer() const
 
 void Logger::print_assign_var_order() const
 {
-  vector<pair<double, uint>> prop_ordered;
-  for (uint i = 0; i < depths_of_assigns_for_var.size(); i++)
+  vector<pair<double, unsigned>> prop_ordered;
+  for (unsigned i = 0; i < depths_of_assigns_for_var.size(); i++)
   {
     double avg = (double)depths_of_assigns_for_var[i].sum /
                  (double)depths_of_assigns_for_var[i].num;
@@ -488,8 +488,8 @@ void Logger::print_assign_var_order() const
 
 void Logger::print_prop_order() const
 {
-  vector<pair<double, uint>> prop_ordered;
-  for (uint i = 0; i < depths_of_propagations_for_group.size(); i++)
+  vector<pair<double, unsigned>> prop_ordered;
+  for (unsigned i = 0; i < depths_of_propagations_for_group.size(); i++)
   {
     double avg = (double)depths_of_propagations_for_group[i].sum /
                  (double)depths_of_propagations_for_group[i].num;
@@ -511,8 +511,8 @@ void Logger::print_prop_order() const
 
 void Logger::print_confl_order() const
 {
-  vector<pair<double, uint>> confl_ordered;
-  for (uint i = 0; i < depths_of_conflicts_for_group.size(); i++)
+  vector<pair<double, unsigned>> confl_ordered;
+  for (unsigned i = 0; i < depths_of_conflicts_for_group.size(); i++)
   {
     double avg = (double)depths_of_conflicts_for_group[i].sum /
                  (double)depths_of_conflicts_for_group[i].num;
@@ -532,7 +532,7 @@ void Logger::print_confl_order() const
 
 void Logger::print_times_var_guessed() const
 {
-  vector<pair<uint, uint>> times_var_ordered;
+  vector<pair<unsigned, unsigned>> times_var_ordered;
   for (uint32_t i = 0; i != varnames.size(); i++)
     if (times_var_guessed[i] > 0)
       times_var_ordered.push_back(std::make_pair(times_var_guessed[i], i));
@@ -549,8 +549,8 @@ void Logger::print_times_var_guessed() const
 
 void Logger::print_times_group_caused_propagation() const
 {
-  vector<pair<uint, uint>> props_group_ordered;
-  for (uint i = 0; i < times_group_caused_propagation.size(); i++)
+  vector<pair<unsigned, unsigned>> props_group_ordered;
+  for (unsigned i = 0; i < times_group_caused_propagation.size(); i++)
     if (times_group_caused_propagation[i] > 0)
       props_group_ordered.push_back(
           std::make_pair(times_group_caused_propagation[i], i));
@@ -567,8 +567,8 @@ void Logger::print_times_group_caused_propagation() const
 
 void Logger::print_times_group_caused_conflict() const
 {
-  vector<pair<uint, uint>> confls_group_ordered;
-  for (uint i = 0; i < times_group_caused_conflict.size(); i++)
+  vector<pair<unsigned, unsigned>> confls_group_ordered;
+  for (unsigned i = 0; i < times_group_caused_conflict.size(); i++)
     if (times_group_caused_conflict[i] > 0)
       confls_group_ordered.push_back(
           std::make_pair(times_group_caused_conflict[i], i));
@@ -584,7 +584,7 @@ void Logger::print_times_group_caused_conflict() const
 }
 
 template <class T>
-void Logger::print_line(const uint& number, const string& name,
+void Logger::print_line(const unsigned& number, const string& name,
                         const T& value) const
 {
   cout << "|" << std::setw(FST_WIDTH) << number << "  " << std::setw(SND_WIDTH)
@@ -599,10 +599,10 @@ void Logger::print_header(const string& first, const string& second,
   print_footer();
 }
 
-void Logger::print_groups(const vector<pair<double, uint>>& to_print) const
+void Logger::print_groups(const vector<pair<double, unsigned>>& to_print) const
 {
-  uint i = 0;
-  typedef vector<pair<double, uint>>::const_iterator myiterator;
+  unsigned i = 0;
+  typedef vector<pair<double, unsigned>>::const_iterator myiterator;
   for (myiterator it = to_print.begin();
        it != to_print.end() && i < max_print_lines; it++, i++)
   {
@@ -612,10 +612,10 @@ void Logger::print_groups(const vector<pair<double, uint>>& to_print) const
   print_footer();
 }
 
-void Logger::print_groups(const vector<pair<uint, uint>>& to_print) const
+void Logger::print_groups(const vector<pair<unsigned, unsigned>>& to_print) const
 {
-  uint i = 0;
-  typedef vector<pair<uint, uint>>::const_iterator myiterator;
+  unsigned i = 0;
+  typedef vector<pair<unsigned, unsigned>>::const_iterator myiterator;
   for (myiterator it = to_print.begin();
        it != to_print.end() && i < max_print_lines; it++, i++)
   {
@@ -625,10 +625,10 @@ void Logger::print_groups(const vector<pair<uint, uint>>& to_print) const
   print_footer();
 }
 
-void Logger::print_vars(const vector<pair<double, uint>>& to_print) const
+void Logger::print_vars(const vector<pair<double, unsigned>>& to_print) const
 {
-  uint i = 0;
-  for (vector<pair<double, uint>>::const_iterator it = to_print.begin();
+  unsigned i = 0;
+  for (vector<pair<double, unsigned>>::const_iterator it = to_print.begin();
        it != to_print.end() && i < max_print_lines; it++, i++)
     print_line(it->second + 1, cut_name_to_size(varnames[it->second]),
                it->first);
@@ -636,10 +636,10 @@ void Logger::print_vars(const vector<pair<double, uint>>& to_print) const
   print_footer();
 }
 
-void Logger::print_vars(const vector<pair<uint, uint>>& to_print) const
+void Logger::print_vars(const vector<pair<unsigned, unsigned>>& to_print) const
 {
-  uint i = 0;
-  for (vector<pair<uint, uint>>::const_iterator it = to_print.begin();
+  unsigned i = 0;
+  for (vector<pair<unsigned, unsigned>>::const_iterator it = to_print.begin();
        it != to_print.end() && i < max_print_lines; it++, i++)
   {
     print_line(it->second + 1, cut_name_to_size(varnames[it->second]),
@@ -664,7 +664,7 @@ void Logger::print_simple_line(const string& str) const
 
 void Logger::print_center_line(const string& str) const
 {
-  uint middle = (FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4 - str.size()) / 2;
+  unsigned middle = (FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4 - str.size()) / 2;
   int rest = FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4 - middle * 2 - str.size();
   cout << "|" << std::setw(middle) << " " << str << std::setw(middle + rest)
        << " "
@@ -675,11 +675,11 @@ void Logger::print_branch_depth_distrib() const
 {
   // cout << "--- Branch depth stats ---" << endl;
 
-  const uint range = 20;
-  map<uint, uint> range_stat;
+  const unsigned range = 20;
+  map<unsigned, unsigned> range_stat;
 
-  uint i = 0;
-  for (vector<uint>::const_iterator it = branch_depth_distrib.begin();
+  unsigned i = 0;
+  for (vector<unsigned>::const_iterator it = branch_depth_distrib.begin();
        it != branch_depth_distrib.end(); it++, i++)
   {
     range_stat[i / range] += *it;
@@ -697,7 +697,7 @@ void Logger::print_branch_depth_distrib() const
   branch_depth_file.open(ss.str().c_str());
   i = 0;
 
-  for (map<uint, uint>::iterator it = range_stat.begin();
+  for (map<unsigned, unsigned>::iterator it = range_stat.begin();
        it != range_stat.end(); it++, i++)
   {
     std::stringstream ss2;
@@ -721,17 +721,17 @@ void Logger::print_branch_depth_distrib() const
 
 void Logger::print_learnt_clause_distrib() const
 {
-  map<uint, uint> learnt_sizes;
+  map<unsigned, unsigned> learnt_sizes;
   const vec<Clause*>& learnts = S->get_learnts();
 
-  uint maximum = 0;
+  unsigned maximum = 0;
 
-  for (uint i = 0; i < learnts.size(); i++)
+  for (unsigned i = 0; i < learnts.size(); i++)
   {
-    uint size = learnts[i]->size();
+    unsigned size = learnts[i]->size();
     maximum = std::max(maximum, size);
 
-    map<uint, uint>::iterator it = learnt_sizes.find(size);
+    map<unsigned, unsigned>::iterator it = learnt_sizes.find(size);
     if (it == learnt_sizes.end())
       learnt_sizes[size] = 1;
     else
@@ -740,7 +740,7 @@ void Logger::print_learnt_clause_distrib() const
 
   learnt_sizes[0] = S->get_unitary_learnts_num();
 
-  uint slice =
+  unsigned slice =
       (maximum + 1) / max_print_lines + (bool)((maximum + 1) % max_print_lines);
 
   print_footer();
@@ -748,17 +748,17 @@ void Logger::print_learnt_clause_distrib() const
   print_line("Length between", "no. cl.");
   print_footer();
 
-  uint until = slice;
-  uint from = 0;
+  unsigned until = slice;
+  unsigned from = 0;
   while (until < maximum + 1)
   {
     std::stringstream ss2;
     ss2 << from << " - " << until - 1;
 
-    uint sum = 0;
+    unsigned sum = 0;
     for (; from < until; from++)
     {
-      map<uint, uint>::const_iterator it = learnt_sizes.find(from);
+      map<unsigned, unsigned>::const_iterator it = learnt_sizes.find(from);
       if (it != learnt_sizes.end())
         sum += it->second;
     }
@@ -774,20 +774,20 @@ void Logger::print_learnt_clause_distrib() const
 }
 
 void Logger::print_leearnt_clause_graph_distrib(
-    const uint maximum, const map<uint, uint>& learnt_sizes) const
+    const unsigned maximum, const map<unsigned, unsigned>& learnt_sizes) const
 {
-  uint no_slices = FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4 - 3;
-  uint slice = (maximum + 1) / no_slices + (bool)((maximum + 1) % no_slices);
-  uint until = slice;
-  uint from = 0;
-  vector<uint> slices;
-  uint hmax = 0;
+  unsigned no_slices = FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4 - 3;
+  unsigned slice = (maximum + 1) / no_slices + (bool)((maximum + 1) % no_slices);
+  unsigned until = slice;
+  unsigned from = 0;
+  vector<unsigned> slices;
+  unsigned hmax = 0;
   while (until < maximum + 1)
   {
-    uint sum = 0;
+    unsigned sum = 0;
     for (; from < until; from++)
     {
-      map<uint, uint>::const_iterator it = learnt_sizes.find(from);
+      map<unsigned, unsigned>::const_iterator it = learnt_sizes.find(from);
       if (it != learnt_sizes.end())
         sum += it->second;
     }
@@ -797,15 +797,15 @@ void Logger::print_leearnt_clause_graph_distrib(
   }
   slices.resize(no_slices, 0);
 
-  uint height = max_print_lines;
-  uint hslice = (hmax + 1) / height + (bool)((hmax + 1) % height);
+  unsigned height = max_print_lines;
+  unsigned hslice = (hmax + 1) / height + (bool)((hmax + 1) % height);
   if (hslice == 0)
     return;
 
   print_simple_line(" Learnt clause distribution in graph form");
   print_footer();
   string yaxis = "Number";
-  uint middle = (height - yaxis.size()) / 2;
+  unsigned middle = (height - yaxis.size()) / 2;
 
   for (int i = height - 1; i > 0; i--)
   {
@@ -814,9 +814,9 @@ void Logger::print_leearnt_clause_graph_distrib(
       cout << yaxis[height - 1 - i - middle] << " ";
     else
       cout << "  ";
-    for (uint i2 = 0; i2 != no_slices; i2++)
+    for (unsigned i2 = 0; i2 != no_slices; i2++)
     {
-      if (slices[i2] / hslice >= (uint)i)
+      if (slices[i2] / hslice >= (unsigned)i)
         cout << "+";
       else
         cout << " ";
@@ -845,7 +845,7 @@ void Logger::print_general_stats() const
   print_footer();
 }
 
-void Logger::print_learnt_unitaries(const uint from, const string display) const
+void Logger::print_learnt_unitaries(const unsigned from, const string display) const
 {
   print_footer();
   print_simple_line(display);
@@ -855,7 +855,7 @@ void Logger::print_learnt_unitaries(const uint from, const string display) const
     until = S->trail_lim[0];
   else
     until = S->trail.size();
-  for (uint i = from; i < until; i++)
+  for (unsigned i = from; i < until; i++)
   {
     Var var = S->trail[i].var();
     bool value = !(S->trail[i].sign());
@@ -871,14 +871,14 @@ void Logger::printstats() const
   assert(varnames.size() == times_var_guessed.size());
   assert(varnames.size() == times_var_propagated.size());
 
-  const uint fullwidth = FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4;
+  const unsigned fullwidth = FST_WIDTH + SND_WIDTH + TRD_WIDTH + 4;
   cout << endl;
   cout << "+" << std::setfill('=') << std::setw(fullwidth) << "="
        << "+" << endl;
   std::stringstream tmp;
   tmp << " STATS FOR RESTART NO. " << std::setw(3) << S->starts << "  BEGIN ";
-  uint len = (fullwidth - 2) / 2 - tmp.str().length() / 2;
-  uint len2 = len + tmp.str().length() % 2 + (fullwidth - 2) % 2;
+  unsigned len = (fullwidth - 2) / 2 - tmp.str().length() / 2;
+  unsigned len2 = len + tmp.str().length() % 2 + (fullwidth - 2) % 2;
   cout << "||" << std::setfill('*') << std::setw(len) << "*" << tmp.str()
        << std::setw(len2) << "*"
        << "||" << endl;
@@ -913,7 +913,7 @@ void Logger::print_matrix_stats() const
   print_simple_line(" Matrix statistics");
   print_footer();
 
-  uint i = 0;
+  unsigned i = 0;
   for (vector<Gaussian*>::const_iterator it = S->gauss_matrixes.begin(),
                                          end = S->gauss_matrixes.end();
        it != end; it++, i++)
@@ -994,7 +994,7 @@ void Logger::reset_statistics()
   assert(times_group_caused_conflict.size() ==
          times_group_caused_propagation.size());
 
-  typedef vector<uint>::iterator vecit;
+  typedef vector<unsigned>::iterator vecit;
   for (vecit it = times_var_guessed.begin(); it != times_var_guessed.end();
        it++)
     *it = 0;
@@ -1039,10 +1039,10 @@ void Logger::reset_statistics()
     it->sum = 0;
     it->num = 0;
   }
-  for (uint i = 0; i < depths_of_assigns_unit.size(); i++)
+  for (unsigned i = 0; i < depths_of_assigns_unit.size(); i++)
     depths_of_assigns_unit[i] = false;
 
-  for (uint i = 0; i < depths_of_propagations_unit.size(); i++)
+  for (unsigned i = 0; i < depths_of_propagations_unit.size(); i++)
     depths_of_propagations_unit[i] = false;
 
   sum_conflict_depths = 0;

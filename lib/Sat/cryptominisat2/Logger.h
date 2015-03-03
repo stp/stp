@@ -57,8 +57,8 @@ class MyAvg
 public:
   MyAvg() : sum(0), num(0) {}
 
-  uint sum;
-  uint num;
+  unsigned sum;
+  unsigned num;
 };
 
 class Logger
@@ -88,54 +88,54 @@ public:
 
   // Conflict and propagation(guess is also a proapgation...)
   template <class T>
-  void conflict(const confl_type type, const uint goback_level,
-                const uint group, const T& learnt_clause);
+  void conflict(const confl_type type, const unsigned goback_level,
+                const unsigned group, const T& learnt_clause);
   void propagation(const Lit lit, Clause* c);
 
   // functions to add/name variables
   void new_var(const Var var);
-  void set_variable_name(const uint var, char* name_tmp);
+  void set_variable_name(const unsigned var, char* name_tmp);
 
   // function to name clause groups
-  void set_group_name(const uint group, const char* name_tmp);
-  void set_group_name(const uint group, string& name);
-  string get_group_name(const uint group) const;
+  void set_group_name(const unsigned group, const char* name_tmp);
+  void set_group_name(const unsigned group, string& name);
+  string get_group_name(const unsigned group) const;
   string get_var_name(const Var var) const;
 
   void begin();
   void end(const finish_type finish);
 
-  void newclause(const vec<Lit>& ps, const bool xor_clause, const uint group);
+  void newclause(const vec<Lit>& ps, const bool xor_clause, const unsigned group);
 
   bool proof_graph_on;
   bool mini_proof;
   bool statistics_on;
 
 private:
-  void new_group(const uint group);
+  void new_group(const unsigned group);
   string cut_name_to_size(const string& name) const;
 
-  void print_groups(const vector<pair<uint, uint>>& to_print) const;
-  void print_groups(const vector<pair<double, uint>>& to_print) const;
-  void print_vars(const vector<pair<uint, uint>>& to_print) const;
-  void print_vars(const vector<pair<double, uint>>& to_print) const;
+  void print_groups(const vector<pair<unsigned, unsigned>>& to_print) const;
+  void print_groups(const vector<pair<double, unsigned>>& to_print) const;
+  void print_vars(const vector<pair<unsigned, unsigned>>& to_print) const;
+  void print_vars(const vector<pair<double, unsigned>>& to_print) const;
   void print_times_var_guessed() const;
   void print_times_group_caused_propagation() const;
   void print_times_group_caused_conflict() const;
   void print_branch_depth_distrib() const;
   void print_learnt_clause_distrib() const;
   void
-  print_leearnt_clause_graph_distrib(const uint maximum,
-                                     const map<uint, uint>& learnt_sizes) const;
+  print_leearnt_clause_graph_distrib(const unsigned maximum,
+                                     const map<unsigned, unsigned>& learnt_sizes) const;
   void print_advanced_stats() const;
   void print_statistics_note() const;
   void print_matrix_stats() const;
   void print_general_stats() const;
-  void print_learnt_unitaries(const uint from, const string display) const;
+  void print_learnt_unitaries(const unsigned from, const string display) const;
 
-  uint max_print_lines;
+  unsigned max_print_lines;
   template <class T>
-  void print_line(const uint& number, const string& name, const T& value) const;
+  void print_line(const unsigned& number, const string& name, const T& value) const;
   void print_header(const string& first, const string& second,
                     const string& third) const;
   void print_footer() const;
@@ -150,12 +150,12 @@ private:
   void reset_statistics();
 
   // internal data structures
-  uint uniqueid; // used to store the last unique ID given to a node
-  vector<uint> history; // stores the node uniqueIDs
+  unsigned uniqueid; // used to store the last unique ID given to a node
+  vector<unsigned> history; // stores the node uniqueIDs
 
   // graph drawing
   FILE* proof; // The file to store the proof
-  uint runid;
+  unsigned runid;
 
   //---------------------
   // statistics collection
@@ -166,15 +166,15 @@ private:
   vector<string> varnames;
 
   // confls and props grouped by clause groups
-  vector<uint> confls_by_group;
-  vector<uint> props_by_group;
+  vector<unsigned> confls_by_group;
+  vector<unsigned> props_by_group;
 
   // props and guesses grouped by vars
-  vector<uint> times_var_guessed;
-  vector<uint> times_var_propagated;
+  vector<unsigned> times_var_guessed;
+  vector<unsigned> times_var_propagated;
 
-  vector<uint> times_group_caused_conflict;
-  vector<uint> times_group_caused_propagation;
+  vector<unsigned> times_group_caused_conflict;
+  vector<unsigned> times_group_caused_propagation;
 
   vector<MyAvg> depths_of_propagations_for_group;
   vector<bool> depths_of_propagations_unit;
@@ -184,7 +184,7 @@ private:
 
   // the distribution of branch depths. first = depth, second = number of
   // occurances
-  vector<uint> branch_depth_distrib;
+  vector<unsigned> branch_depth_distrib;
 
   uint64_t sum_conflict_depths;
   uint64_t no_conflicts;
@@ -201,7 +201,7 @@ private:
 
   void first_begin();
   bool begin_called;
-  uint proofStarts;
+  unsigned proofStarts;
 };
 
 } // NAMESPACE CMSat2

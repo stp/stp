@@ -288,7 +288,7 @@ template XorClause* Solver::addXorClauseInt(XorClause& ps,
                                             uint32_t group);
 
 template <class T>
-bool Solver::addXorClause(T& ps, bool xor_clause_inverted, const uint group,
+bool Solver::addXorClause(T& ps, bool xor_clause_inverted, const unsigned group,
                           char* group_name)
 {
   assert(decisionLevel() == 0);
@@ -350,12 +350,12 @@ bool Solver::addXorClause(T& ps, bool xor_clause_inverted, const uint group,
 }
 
 template bool Solver::addXorClause(vec<Lit>& ps, bool xor_clause_inverted,
-                                   uint group, char* group_name);
+                                   unsigned group, char* group_name);
 template bool Solver::addXorClause(XorClause& ps, bool xor_clause_inverted,
-                                   uint group, char* group_name);
+                                   unsigned group, char* group_name);
 
 template <class T>
-bool Solver::addLearntClause(T& ps, const uint group, const uint32_t activity)
+bool Solver::addLearntClause(T& ps, const unsigned group, const uint32_t activity)
 {
   Clause* c = addClauseInt(ps, group);
   if (c == NULL)
@@ -376,12 +376,12 @@ bool Solver::addLearntClause(T& ps, const uint group, const uint32_t activity)
   }
   return ok;
 }
-template bool Solver::addLearntClause(Clause& ps, uint group,
+template bool Solver::addLearntClause(Clause& ps, unsigned group,
                                       uint32_t activity);
-template bool Solver::addLearntClause(vec<Lit>& ps, uint group,
+template bool Solver::addLearntClause(vec<Lit>& ps, unsigned group,
                                       uint32_t activity);
 
-template <class T> Clause* Solver::addClauseInt(T& ps, uint group)
+template <class T> Clause* Solver::addClauseInt(T& ps, unsigned group)
 {
   assert(ok);
 
@@ -415,11 +415,11 @@ template <class T> Clause* Solver::addClauseInt(T& ps, uint group)
   return c;
 }
 
-template Clause* Solver::addClauseInt(Clause& ps, uint group);
-template Clause* Solver::addClauseInt(vec<Lit>& ps, uint group);
+template Clause* Solver::addClauseInt(Clause& ps, unsigned group);
+template Clause* Solver::addClauseInt(vec<Lit>& ps, unsigned group);
 
 template <class T>
-bool Solver::addClause(T& ps, const uint group, char* group_name)
+bool Solver::addClause(T& ps, const unsigned group, char* group_name)
 {
   assert(decisionLevel() == 0);
   if (ps.size() > (0x01UL << 18))
@@ -475,8 +475,8 @@ bool Solver::addClause(T& ps, const uint group, char* group_name)
   return ok;
 }
 
-template bool Solver::addClause(vec<Lit>& ps, uint group, char* group_name);
-template bool Solver::addClause(Clause& ps, uint group, char* group_name);
+template bool Solver::addClause(vec<Lit>& ps, unsigned group, char* group_name);
+template bool Solver::addClause(Clause& ps, unsigned group, char* group_name);
 
 void Solver::attachClause(XorClause& c)
 {
@@ -556,7 +556,7 @@ void Solver::detachClause(const Clause& c)
     clauses_literals -= c.size();
 }
 
-void Solver::detachModifiedClause(const Lit lit1, const Lit lit2, uint origSize,
+void Solver::detachModifiedClause(const Lit lit1, const Lit lit2, unsigned origSize,
                                   const Clause* address)
 {
   assert(origSize > 1);
@@ -582,7 +582,7 @@ void Solver::detachModifiedClause(const Lit lit1, const Lit lit2, uint origSize,
     clauses_literals -= origSize;
 }
 
-void Solver::detachModifiedClause(const Var var1, const Var var2, uint origSize,
+void Solver::detachModifiedClause(const Var var1, const Var var2, unsigned origSize,
                                   const XorClause* address)
 {
   assert(origSize > 2);
@@ -657,7 +657,7 @@ void Solver::needLibraryCNFFile(const char* fileName)
 #ifdef USE_GAUSS
 void Solver::clearGaussMatrixes()
 {
-  for (uint i = 0; i < gauss_matrixes.size(); i++)
+  for (unsigned i = 0; i < gauss_matrixes.size(); i++)
     delete gauss_matrixes[i];
   gauss_matrixes.clear();
 }
@@ -858,18 +858,18 @@ Lit Solver::pickBranchLit()
 template <class T1, class T2>
 bool subset(const T1& A, const T2& B, vector<bool>& seen)
 {
-  for (uint i = 0; i != B.size(); i++)
+  for (unsigned i = 0; i != B.size(); i++)
     seen[B[i].toInt()] = 1;
-  for (uint i = 0; i != A.size(); i++)
+  for (unsigned i = 0; i != A.size(); i++)
   {
     if (!seen[A[i].toInt()])
     {
-      for (uint i = 0; i != B.size(); i++)
+      for (unsigned i = 0; i != B.size(); i++)
         seen[B[i].toInt()] = 0;
       return false;
     }
   }
-  for (uint i = 0; i != B.size(); i++)
+  for (unsigned i = 0; i != B.size(); i++)
     seen[B[i].toInt()] = 0;
   return true;
 }
@@ -915,7 +915,7 @@ Clause* Solver::analyze(PropagatedFrom confl, vec<Lit>& out_learnt,
         confl.getClause()->learnt())
       claBumpActivity(*confl.getClause());
 
-    for (uint j = (p == lit_Undef) ? 0 : 1, size = confl.size(); j != size; j++)
+    for (unsigned j = (p == lit_Undef) ? 0 : 1, size = confl.size(); j != size; j++)
     {
       Lit q;
       if (j == 0 && confl.isBinary())
@@ -985,7 +985,7 @@ Clause* Solver::analyze(PropagatedFrom confl, vec<Lit>& out_learnt,
     {
       PropagatedFrom c(reason[out_learnt[i].var()]);
 
-      for (uint k = 1, size = c.size(); k < size; k++)
+      for (unsigned k = 1, size = c.size(); k < size; k++)
       {
         if (!seen[c[k].var()] && level[c[k].var()] > 0)
         {
@@ -1067,7 +1067,7 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels)
 
     analyze_stack.pop();
 
-    for (uint i = 1, size = c.size(); i < size; i++)
+    for (unsigned i = 1, size = c.size(); i < size; i++)
     {
       Lit p = c[i];
       if (!seen[p.var()] && level[p.var()] > 0)
@@ -1127,7 +1127,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
       else
       {
         PropagatedFrom c = reason[x];
-        for (uint j = 1, size = c.size(); j < size; j++)
+        for (unsigned j = 1, size = c.size(); j < size; j++)
           if (level[c[j].var()] > 0)
             seen[c[j].var()] = 1;
       }
@@ -1483,8 +1483,8 @@ never removed.
 |________________________________________________________________________________________________@*/
 bool reduceDB_ltMiniSat::operator()(const Clause* x, const Clause* y)
 {
-  const uint xsize = x->size();
-  const uint ysize = y->size();
+  const unsigned xsize = x->size();
+  const unsigned ysize = y->size();
 
   // First criteria
   if (xsize > 2 && ysize == 2)
@@ -1500,8 +1500,8 @@ bool reduceDB_ltMiniSat::operator()(const Clause* x, const Clause* y)
 
 bool reduceDB_ltGlucose::operator()(const Clause* x, const Clause* y)
 {
-  const uint xsize = x->size();
-  const uint ysize = y->size();
+  const unsigned xsize = x->size();
+  const unsigned ysize = y->size();
 
   // First criteria
   if (xsize > 2 && ysize == 2)
@@ -1530,7 +1530,7 @@ void Solver::reduceDB()
 
 #ifdef VERBOSE_DEBUG
   std::cout << "Cleaning clauses" << std::endl;
-  for (uint i = 0; i != learnts.size(); i++)
+  for (unsigned i = 0; i != learnts.size(); i++)
   {
     std::cout << "activity:" << learnts[i]->activity()
               << " \toldActivity:" << learnts[i]->oldActivity()
@@ -1538,7 +1538,7 @@ void Solver::reduceDB()
   }
 #endif
 
-  const uint removeNum = (double)learnts.size() / (double)RATIOREMOVECLAUSES;
+  const unsigned removeNum = (double)learnts.size() / (double)RATIOREMOVECLAUSES;
   for (i = j = 0; i != removeNum; i++)
   {
     // NOTE: The next instruciton only works if removeNum < learnts.size()
@@ -1622,7 +1622,7 @@ void Solver::dumpSortedLearnts(const char* file, const uint32_t maxSize)
   fprintf(outfile, "c \nc ---------------------------------\n");
   fprintf(outfile, "c learnt clauses from binaryClauses\n");
   fprintf(outfile, "c ---------------------------------\n");
-  for (uint i = 0; i != binaryClauses.size(); i++)
+  for (unsigned i = 0; i != binaryClauses.size(); i++)
   {
     if (binaryClauses[i]->learnt())
     {
@@ -1706,7 +1706,7 @@ double Solver::getTotalTimeXorSubsumer() const
   return xorSubsumer->getTotalTime();
 }
 
-void Solver::setMaxRestarts(const uint num)
+void Solver::setMaxRestarts(const unsigned num)
 {
   maxRestarts = num;
 }
@@ -2030,7 +2030,7 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, PropagatedFrom confl,
 {
 #ifdef VERBOSE_DEBUG
   cout << "Handling conflict: ";
-  for (uint i = 0; i < learnt_clause.size(); i++)
+  for (unsigned i = 0; i < learnt_clause.size(); i++)
     cout << learnt_clause[i].var() + 1 << ",";
   cout << endl;
 #endif
@@ -2068,7 +2068,7 @@ llbool Solver::handle_conflict(vec<Lit>& learnt_clause, PropagatedFrom confl,
 
 #ifdef VERBOSE_DEBUG
   cout << "Learning:";
-  for (uint i = 0; i < learnt_clause.size(); i++)
+  for (unsigned i = 0; i < learnt_clause.size(); i++)
     printLit(learnt_clause[i]), cout << " ";
   cout << endl;
   cout << "reverting var " << learnt_clause[0].var() + 1 << " to "
@@ -2161,10 +2161,10 @@ void Solver::print_gauss_sum_stats()
     return;
   }
 
-  uint called = 0;
-  uint useful_prop = 0;
-  uint useful_confl = 0;
-  uint disabled = 0;
+  unsigned called = 0;
+  unsigned useful_prop = 0;
+  unsigned useful_confl = 0;
+  unsigned disabled = 0;
   for (vector<Gaussian*>::const_iterator gauss = gauss_matrixes.begin(),
                                          end = gauss_matrixes.end();
        gauss != end; gauss++)
@@ -2198,9 +2198,9 @@ void Solver::print_gauss_sum_stats()
 }
 #endif // USE_GAUSS
 
-bool Solver::chooseRestartType(const uint& lastFullRestart)
+bool Solver::chooseRestartType(const unsigned& lastFullRestart)
 {
-  uint relativeStart = starts - lastFullRestart;
+  unsigned relativeStart = starts - lastFullRestart;
 
   if (relativeStart > RESTART_TYPE_DECIDER_FROM &&
       relativeStart < RESTART_TYPE_DECIDER_UNTIL)
@@ -2392,7 +2392,7 @@ end:
 
 bool Solver::checkFullRestart(int& nof_conflicts,
                               int& nof_conflicts_fullrestart,
-                              uint& lastFullRestart)
+                              unsigned& lastFullRestart)
 {
   if (nof_conflicts_fullrestart > 0 &&
       (int)conflicts >= nof_conflicts_fullrestart)
@@ -2544,7 +2544,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
   int nof_conflicts_fullrestart =
       restart_first * FULLRESTART_MULTIPLIER + conflicts;
   // nof_conflicts_fullrestart = -1;
-  uint lastFullRestart = starts;
+  unsigned lastFullRestart = starts;
   lbool status = l_Undef;
   uint64_t nextSimplify = restart_first * SIMPLIFY_MULTIPLIER + conflicts;
 
@@ -2610,7 +2610,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
   printEndSearchStat();
 
 #ifdef USE_GAUSS
-  for (uint i = 0; i < gauss_matrixes.size(); i++)
+  for (unsigned i = 0; i < gauss_matrixes.size(); i++)
     delete gauss_matrixes[i];
   gauss_matrixes.clear();
 #endif // USE_GAUSS
@@ -2630,7 +2630,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
     {
       double time = cpuTime();
       FindUndef finder(*this);
-      const uint unbounded = finder.unRoll();
+      const unsigned unbounded = finder.unRoll();
       if (verbosity >= 1)
         printf("c Greedy unbounding     :%5.2lf s, unbounded: %7d vars\n",
                cpuTime() - time, unbounded);
@@ -2734,7 +2734,7 @@ lbool Solver::solve(const vec<Lit>& assumps)
 #ifdef LS_STATS_NBBUMP
   for (int i = 0; i < learnts.size(); i++)
     printf("## %d %d %d\n", learnts[i]->size(), learnts[i]->activity(),
-           (uint)learnts[i]->nbBump());
+           (unsigned)learnts[i]->nbBump());
 #endif
 
   cancelUntil(0);
@@ -2773,7 +2773,7 @@ bool Solver::verifyXorClauses(const vec<XorClause*>& cs) const
     clauseFree(c2);
 #endif
 
-    for (uint j = 0; j < c.size(); j++)
+    for (unsigned j = 0; j < c.size(); j++)
     {
       assert(modelValue(c[j].unsign()) != l_Undef);
       final ^= (modelValue(c[j].unsign()) == l_True);
@@ -2801,7 +2801,7 @@ bool Solver::verifyClauses(const vec<Clause*>& cs) const
   for (uint32_t i = 0; i != cs.size(); i++)
   {
     Clause& c = *cs[i];
-    for (uint j = 0; j < c.size(); j++)
+    for (unsigned j = 0; j < c.size(); j++)
       if (modelValue(c[j]) == l_True)
         goto next;
 
@@ -2947,7 +2947,7 @@ void Solver::testAllClauseAttach() const
     assert(find(xorwatches[c[1].var()], &c));
     if (assigns[c[0].var()] != l_Undef || assigns[c[1].var()] != l_Undef)
     {
-      for (uint i = 0; i < c.size(); i++)
+      for (unsigned i = 0; i < c.size(); i++)
       {
         assert(assigns[c[i].var()] != l_Undef);
       }

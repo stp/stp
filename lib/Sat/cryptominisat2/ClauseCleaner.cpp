@@ -37,7 +37,7 @@ using namespace CMSat2;
 
 ClauseCleaner::ClauseCleaner(Solver& _solver) : solver(_solver)
 {
-  for (uint i = 0; i < 6; i++)
+  for (unsigned i = 0; i < 6; i++)
   {
     lastNumUnitarySat[i] = solver.get_unitary_learnts_num();
     lastNumUnitaryClean[i] = solver.get_unitary_learnts_num();
@@ -45,7 +45,7 @@ ClauseCleaner::ClauseCleaner(Solver& _solver) : solver(_solver)
 }
 
 void ClauseCleaner::removeSatisfied(vec<XorClause*>& cs, ClauseSetType type,
-                                    const uint limit)
+                                    const unsigned limit)
 {
 #ifdef DEBUG_CLEAN
   assert(solver.decisionLevel() == 0);
@@ -68,7 +68,7 @@ void ClauseCleaner::removeSatisfied(vec<XorClause*>& cs, ClauseSetType type,
 }
 
 void ClauseCleaner::removeSatisfied(vec<Clause*>& cs, ClauseSetType type,
-                                    const uint limit)
+                                    const unsigned limit)
 {
 #ifdef DEBUG_CLEAN
   assert(solver.decisionLevel() == 0);
@@ -93,7 +93,7 @@ void ClauseCleaner::removeSatisfied(vec<Clause*>& cs, ClauseSetType type,
 }
 
 void ClauseCleaner::cleanClauses(vec<Clause*>& cs, ClauseSetType type,
-                                 const uint limit)
+                                 const unsigned limit)
 {
   assert(solver.decisionLevel() == 0);
   assert(solver.qhead == solver.trail.size());
@@ -188,7 +188,7 @@ inline bool ClauseCleaner::cleanClause(Clause*& cc)
 }
 
 void ClauseCleaner::cleanClauses(vec<XorClause*>& cs, ClauseSetType type,
-                                 const uint limit)
+                                 const unsigned limit)
 {
   assert(solver.decisionLevel() == 0);
   assert(solver.qhead == solver.trail.size());
@@ -287,7 +287,7 @@ inline bool ClauseCleaner::cleanClause(XorClause& c)
 
 void ClauseCleaner::cleanClausesBewareNULL(vec<ClauseSimp>& cs,
                                            ClauseCleaner::ClauseSetType type,
-                                           Subsumer& subs, const uint limit)
+                                           Subsumer& subs, const unsigned limit)
 {
   assert(solver.decisionLevel() == 0);
   assert(solver.qhead == solver.trail.size());
@@ -370,7 +370,7 @@ inline bool ClauseCleaner::cleanClauseBewareNULL(ClauseSimp cc, Subsumer& subs)
 void ClauseCleaner::cleanXorClausesBewareNULL(vec<XorClauseSimp>& cs,
                                               ClauseCleaner::ClauseSetType type,
                                               XorSubsumer& subs,
-                                              const uint limit)
+                                              const unsigned limit)
 {
   assert(solver.decisionLevel() == 0);
   assert(solver.qhead == solver.trail.size());
@@ -445,7 +445,7 @@ inline bool ClauseCleaner::cleanXorClauseBewareNULL(XorClauseSimp cc,
 
 bool ClauseCleaner::satisfied(const Clause& c) const
 {
-  for (uint i = 0; i != c.size(); i++)
+  for (unsigned i = 0; i != c.size(); i++)
     if (solver.value(c[i]) == l_True)
       return true;
   return false;
@@ -454,7 +454,7 @@ bool ClauseCleaner::satisfied(const Clause& c) const
 bool ClauseCleaner::satisfied(const XorClause& c) const
 {
   bool final = c.xor_clause_inverted();
-  for (uint k = 0; k != c.size(); k++)
+  for (unsigned k = 0; k != c.size(); k++)
   {
     const lbool& val = solver.assigns[c[k].var()];
     if (val.isUndef())

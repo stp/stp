@@ -182,11 +182,11 @@ public:
   Var newVar(bool dvar = true); // Add a new variable with parameters specifying
                                 // variable mode.
   template <class T>
-  bool addClause(T& ps, const uint group = 0,
+  bool addClause(T& ps, const unsigned group = 0,
                  char* group_name = NULL); // Add a clause to the solver. NOTE!
                                            // 'ps' may be shrunk by this method!
   template <class T>
-  bool addXorClause(T& ps, bool xor_clause_inverted, const uint group = 0,
+  bool addXorClause(T& ps, bool xor_clause_inverted, const unsigned group = 0,
                     char* group_name = NULL); // Add a xor-clause to the solver.
                                               // NOTE! 'ps' may be shrunk by
                                               // this method!
@@ -208,7 +208,7 @@ public:
                                       // heuristic.
   void setSeed(const uint32_t seed);  // Sets the seed to be the given number
   void setMaxRestarts(
-      const uint num); // sets the maximum number of restarts to given value
+      const unsigned num); // sets the maximum number of restarts to given value
 
   // Read state:
   //
@@ -323,7 +323,7 @@ public:
   get_learnts() const; // Get all learnt clauses that are >1 long
   const vector<Lit>
   get_unitary_learnts() const; // return the set of unitary learnt clauses
-  uint get_unitary_learnts_num()
+  unsigned get_unitary_learnts_num()
       const; // return the number of unitary learnt clauses
   void dumpSortedLearnts(const char* file,
                          const uint32_t maxSize); // Dumps all learnt clauses
@@ -370,10 +370,10 @@ protected:
   friend class Gaussian;
 #endif // USE_GAUSS
 
-  template <class T> Clause* addClauseInt(T& ps, uint group);
+  template <class T> Clause* addClauseInt(T& ps, unsigned group);
   template <class T>
   XorClause* addXorClauseInt(T& ps, bool xor_clause_inverted, uint32_t group);
-  template <class T> bool addLearntClause(T& ps, uint group, uint32_t activity);
+  template <class T> bool addLearntClause(T& ps, unsigned group, uint32_t activity);
   template <class T> void removeWatchedCl(vec<T>& ws, const ClauseOffset c);
   template <class T>
   bool findWatchedCl(const vec<T>& ws, const ClauseOffset c) const;
@@ -459,12 +459,12 @@ protected:
   bool remove_satisfied; // Indicates whether possibly inefficient linear scan
                          // for satisfied clauses should be performed in
                          // 'simplify'.
-  bqueue<uint>
+  bqueue<unsigned>
       nbDecisionLevelHistory; // Set of last decision level in conflict clauses
   double totalSumOfDecisionLevel;
   uint64_t conflictsAtLastSolve;
 #ifdef RANDOM_LOOKAROUND_SEARCHSPACE
-  bqueue<uint> avgBranchDepth; // Avg branch depth
+  bqueue<unsigned> avgBranchDepth; // Avg branch depth
 #endif // RANDOM_LOOKAROUND_SEARCHSPACE
   MTRand mtrand;           // random number generaton
   RestartType restartType; // Used internally to determine which restart
@@ -475,7 +475,7 @@ protected:
   Logger logger;                   // dynamic logging, statistics
   bool dynamic_behaviour_analysis; // Is logger running?
 #endif
-  uint maxRestarts; // More than this number of restarts will not be performed
+  unsigned maxRestarts; // More than this number of restarts will not be performed
 
   // Temporaries (to reduce allocation overhead). Each variable is prefixed by
   // the method in which it is
@@ -496,7 +496,7 @@ protected:
 #endif
 
   // Logging
-  uint learnt_clause_group; // the group number of learnt clauses. Incremented
+  unsigned learnt_clause_group; // the group number of learnt clauses. Incremented
                             // at each added learnt clause
   FILE* libraryCNFFile; // The file that all calls from the library are logged
 
@@ -570,9 +570,9 @@ protected:
   void attachClause(Clause& c); // Attach a clause to watcher lists.
   void detachClause(const XorClause& c);
   void detachClause(const Clause& c); // Detach a clause to watcher lists.
-  void detachModifiedClause(const Lit lit1, const Lit lit2, uint size,
+  void detachModifiedClause(const Lit lit1, const Lit lit2, unsigned size,
                             const Clause* address);
-  void detachModifiedClause(const Var var1, const Var var2, uint origSize,
+  void detachModifiedClause(const Var var1, const Var var2, unsigned origSize,
                             const XorClause* address);
   template <class T> void removeClause(T& c); // Detach and free a clause.
   bool locked(const Clause& c) const; // Returns TRUE if a clause is a reason
@@ -616,10 +616,10 @@ protected:
   XorSubsumer* xorSubsumer;
   RestartTypeChooser* restartTypeChooser;
   MatrixFinder* matrixFinder;
-  bool chooseRestartType(const uint& lastFullRestart);
+  bool chooseRestartType(const unsigned& lastFullRestart);
   void setDefaultRestartType();
   bool checkFullRestart(int& nof_conflicts, int& nof_conflicts_fullrestart,
-                        uint& lastFullRestart);
+                        unsigned& lastFullRestart);
   void performStepsBeforeSolve();
   lbool simplifyProblem(uint32_t numConfls);
   bool simplifying;
@@ -843,7 +843,7 @@ inline uint32_t Solver::get_sum_gauss_prop() const
 }
 #endif
 
-inline uint Solver::get_unitary_learnts_num() const
+inline unsigned Solver::get_unitary_learnts_num() const
 {
   if (decisionLevel() > 0)
     return trail_lim[0];

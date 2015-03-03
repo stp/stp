@@ -53,11 +53,11 @@ public:
   bool findMatrixes();
 
 private:
-  uint setMatrixes();
+  unsigned setMatrixes();
 
   struct mysorter
   {
-    bool operator()(const pair<uint, uint>& left, const pair<uint, uint>& right)
+    bool operator()(const pair<unsigned, unsigned>& left, const pair<unsigned, unsigned>& right)
     {
       return left.second < right.second;
     }
@@ -68,9 +68,9 @@ private:
   inline Var fingerprint(const XorClause& c) const;
   inline bool firstPartOfSecond(const XorClause& c1, const XorClause& c2) const;
 
-  map<uint, vector<Var>> reverseTable; // matrix -> vars
+  map<unsigned, vector<Var>> reverseTable; // matrix -> vars
   vector<Var> table; // var -> matrix
-  uint matrix_no;
+  unsigned matrix_no;
 
   Solver& solver;
 };

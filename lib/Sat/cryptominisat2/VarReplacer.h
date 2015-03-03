@@ -52,16 +52,16 @@ public:
   bool performReplace(bool always = false);
   bool needsReplace();
   template <class T>
-  bool replace(T& ps, bool xor_clause_inverted, const uint group);
+  bool replace(T& ps, bool xor_clause_inverted, const unsigned group);
 
   void extendModelPossible() const;
   void extendModelImpossible(Solver& solver2) const;
   void reattachInternalClauses();
 
-  uint getNumReplacedLits() const;
-  uint getNumReplacedVars() const;
-  uint getNumLastReplacedVars() const;
-  uint getNewToReplaceVars() const;
+  unsigned getNumReplacedLits() const;
+  unsigned getNumReplacedVars() const;
+  unsigned getNumLastReplacedVars() const;
+  unsigned getNewToReplaceVars() const;
   uint32_t getNumTrees() const;
   const vector<Var> getReplacingVars() const;
   const vector<Lit>& getReplaceTable() const;
@@ -83,7 +83,7 @@ private:
   bool handleUpdatedClause(XorClause& c, const Var origVar1,
                            const Var origVar2);
   template <class T>
-  void addBinaryXorClause(T& ps, bool xor_clause_inverted, uint group,
+  void addBinaryXorClause(T& ps, bool xor_clause_inverted, unsigned group,
                           bool internal = false);
 
   void setAllThatPointsHereTo(const Var var, const Lit lit);
@@ -93,9 +93,9 @@ private:
   map<Var, vector<Var>> reverseTable;
   vec<Clause*> clauses;
 
-  uint replacedLits;
-  uint replacedVars;
-  uint lastReplacedVars;
+  unsigned replacedLits;
+  unsigned replacedVars;
+  unsigned lastReplacedVars;
   Solver& solver;
 };
 
@@ -119,22 +119,22 @@ inline bool VarReplacer::needsReplace()
   return (getNewToReplaceVars() > limit);
 }
 
-inline uint VarReplacer::getNumReplacedLits() const
+inline unsigned VarReplacer::getNumReplacedLits() const
 {
   return replacedLits;
 }
 
-inline uint VarReplacer::getNumReplacedVars() const
+inline unsigned VarReplacer::getNumReplacedVars() const
 {
   return replacedVars;
 }
 
-inline uint VarReplacer::getNumLastReplacedVars() const
+inline unsigned VarReplacer::getNumLastReplacedVars() const
 {
   return lastReplacedVars;
 }
 
-inline uint VarReplacer::getNewToReplaceVars() const
+inline unsigned VarReplacer::getNewToReplaceVars() const
 {
   return replacedVars - lastReplacedVars;
 }

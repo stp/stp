@@ -42,7 +42,7 @@ class FindUndef
 {
 public:
   FindUndef(Solver& _solver);
-  uint unRoll();
+  unsigned unRoll();
 
 private:
   Solver& solver;

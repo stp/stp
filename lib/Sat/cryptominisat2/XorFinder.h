@@ -50,13 +50,13 @@ class XorFinder
 public:
   XorFinder(Solver& _solver, vec<Clause*>& cls,
             ClauseCleaner::ClauseSetType _type);
-  bool doNoPart(uint minSize, uint maxSize);
+  bool doNoPart(unsigned minSize, unsigned maxSize);
   void addAllXorAsNorm();
 
 private:
-  typedef vector<pair<Clause*, uint>> ClauseTable;
+  typedef vector<pair<Clause*, unsigned>> ClauseTable;
 
-  bool findXors(uint& sumLengths);
+  bool findXors(unsigned& sumLengths);
   bool getNextXor(ClauseTable::iterator& begin, ClauseTable::iterator& end,
                   bool& impair);
 
@@ -66,7 +66,7 @@ private:
     {
       size_t hash = 5381;
       hash = ((hash << 5) + hash) ^ c->size();
-      for (uint i = 0, size = c->size(); i < size; i++)
+      for (unsigned i = 0, size = c->size(); i < size; i++)
         hash = ((hash << 5) + hash) ^ (*c)[i].var();
 
       return hash;
@@ -75,19 +75,19 @@ private:
 
   struct clause_sorter_primary
   {
-    bool operator()(const pair<Clause*, uint>& c11,
-                    const pair<Clause*, uint>& c22)
+    bool operator()(const pair<Clause*, unsigned>& c11,
+                    const pair<Clause*, unsigned>& c22)
     {
       if (c11.first->size() != c22.first->size())
         return (c11.first->size() < c22.first->size());
 
 #ifdef DEBUG_XORFIND2
       Clause& c1 = *c11.first;
-      for (uint i = 0; i + 1 < c1.size(); i++)
+      for (unsigned i = 0; i + 1 < c1.size(); i++)
         assert(c1[i].var() <= c1[i + 1].var());
 
       Clause& c2 = *c22.first;
-      for (uint i = 0; i + 1 < c2.size(); i++)
+      for (unsigned i = 0; i + 1 < c2.size(); i++)
         assert(c2[i].var() <= c2[i + 1].var());
 #endif // DEBUG_XORFIND2
 
@@ -109,13 +109,13 @@ private:
 
   struct clause_sorter_secondary
   {
-    bool operator()(const pair<Clause*, uint>& c11,
-                    const pair<Clause*, uint>& c22) const
+    bool operator()(const pair<Clause*, unsigned>& c11,
+                    const pair<Clause*, unsigned>& c22) const
     {
       const Clause& c1 = *(c11.first);
       const Clause& c2 = *(c22.first);
 
-      for (uint i = 0, size = c1.size(); i < size; i++)
+      for (unsigned i = 0, size = c1.size(); i < size; i++)
       {
         if (c1[i].sign() != c2[i].sign())
           return c1[i].sign();
@@ -130,7 +130,7 @@ private:
     if (c1->size() != c2->size())
       return false;
 
-    for (uint i = 0, size = c1->size(); i < size; i++)
+    for (unsigned i = 0, size = c1->size(); i < size; i++)
       if ((*c1)[i].var() != (*c2)[i].var())
         return false;
 
@@ -153,8 +153,8 @@ private:
   bool clauseEqual(const Clause& c1, const Clause& c2) const;
   bool impairSigns(const Clause& c) const;
   void countImpairs(const ClauseTable::iterator& begin,
-                    const ClauseTable::iterator& end, uint& numImpair,
-                    uint& numPair) const;
+                    const ClauseTable::iterator& end, unsigned& numImpair,
+                    unsigned& numPair) const;
   bool isXor(const uint32_t size, const ClauseTable::iterator& begin,
              const ClauseTable::iterator& end, bool& impair);
 

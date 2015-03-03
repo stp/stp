@@ -50,7 +50,7 @@ VarReplacer::VarReplacer(Solver& _solver)
 
 VarReplacer::~VarReplacer()
 {
-  for (uint i = 0; i != clauses.size(); i++)
+  for (unsigned i = 0; i != clauses.size(); i++)
     solver.clauseAllocator.clauseFree(clauses[i]);
 }
 
@@ -62,8 +62,8 @@ bool VarReplacer::performReplaceInternal()
   double time = cpuTime();
 
 #ifdef REPLACE_STATISTICS
-  uint numRedir = 0;
-  for (uint i = 0; i < table.size(); i++)
+  unsigned numRedir = 0;
+  for (unsigned i = 0; i < table.size(); i++)
   {
     if (table[i].var() != i)
       numRedir++;
@@ -84,7 +84,7 @@ for (;it != end; it++) {
 
 #ifdef VERBOSE_DEBUG
   {
-    uint i = 0;
+    unsigned i = 0;
     for (vector<Lit>::const_iterator it = table.begin(); it != table.end();
          it++, i++)
     {
@@ -150,7 +150,7 @@ for (;it != end; it++) {
   solver.testAllClauseAttach();
 
 end:
-  for (uint i = 0; i != clauses.size(); i++)
+  for (unsigned i = 0; i != clauses.size(); i++)
     solver.removeClause(*clauses[i]);
   clauses.clear();
 
@@ -219,7 +219,7 @@ bool VarReplacer::replace_set(vec<XorClause*>& cs)
 bool VarReplacer::handleUpdatedClause(XorClause& c, const Var origVar1,
                                       const Var origVar2)
 {
-  uint origSize = c.size();
+  unsigned origSize = c.size();
   std::sort(c.getData(), c.getDataEnd());
   Lit p;
   uint32_t i, j;
@@ -334,7 +334,7 @@ bool VarReplacer::handleUpdatedClause(Clause& c, const Lit origLit1,
   std::sort(c.getData(), c.getData() + c.size());
   Lit p;
   uint32_t i, j;
-  const uint origSize = c.size();
+  const unsigned origSize = c.size();
   for (i = j = 0, p = lit_Undef; i != origSize; i++)
   {
     if (solver.value(c[i]) == l_True || c[i] == ~p)
@@ -394,7 +394,7 @@ void VarReplacer::extendModelPossible() const
 #ifdef VERBOSE_DEBUG
   std::cout << "extendModelPossible() called" << std::endl;
 #endif // VERBOSE_DEBUG
-  uint i = 0;
+  unsigned i = 0;
   for (vector<Lit>::const_iterator it = table.begin(); it != table.end();
        it++, i++)
   {
@@ -435,7 +435,7 @@ void VarReplacer::extendModelImpossible(Solver& solver2) const
 #endif // VERBOSE_DEBUG
 
   vec<Lit> tmpClause;
-  uint i = 0;
+  unsigned i = 0;
   for (vector<Lit>::const_iterator it = table.begin(); it != table.end();
        it++, i++)
   {
@@ -463,7 +463,7 @@ void VarReplacer::extendModelImpossible(Solver& solver2) const
 
 template <class T>
 bool VarReplacer::replace(T& ps, const bool xor_clause_inverted,
-                          const uint group)
+                          const unsigned group)
 {
 #ifdef VERBOSE_DEBUG
   std::cout << "replace() called with var " << ps[0].var() + 1 << " and var "
@@ -548,13 +548,13 @@ bool VarReplacer::replace(T& ps, const bool xor_clause_inverted,
 }
 
 template bool VarReplacer::replace(vec<Lit>& ps, bool xor_clause_inverted,
-                                   uint group);
+                                   unsigned group);
 template bool VarReplacer::replace(XorClause& ps, bool xor_clause_inverted,
-                                   uint group);
+                                   unsigned group);
 
 template <class T>
 void VarReplacer::addBinaryXorClause(T& ps, const bool xor_clause_inverted,
-                                     const uint group, const bool internal)
+                                     const unsigned group, const bool internal)
 {
   assert(internal || (replacedVars > lastReplacedVars));
 #ifdef DEBUG_REPLACER
@@ -590,10 +590,10 @@ void VarReplacer::addBinaryXorClause(T& ps, const bool xor_clause_inverted,
 
 template void VarReplacer::addBinaryXorClause(vec<Lit>& ps,
                                               bool xor_clause_inverted,
-                                              uint group, bool internal);
+                                              unsigned group, bool internal);
 template void VarReplacer::addBinaryXorClause(XorClause& ps,
                                               bool xor_clause_inverted,
-                                              uint group, bool internal);
+                                              unsigned group, bool internal);
 
 bool VarReplacer::alreadyIn(const Var var, const Lit lit)
 {

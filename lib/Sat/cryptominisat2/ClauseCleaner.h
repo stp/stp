@@ -53,17 +53,17 @@ public:
     xorSimpClauses
   };
 
-  void cleanClauses(vec<Clause*>& cs, ClauseSetType type, uint limit = 0);
+  void cleanClauses(vec<Clause*>& cs, ClauseSetType type, unsigned limit = 0);
   void cleanClausesBewareNULL(vec<ClauseSimp>& cs, ClauseSetType type,
-                              Subsumer& subs, uint limit = 0);
+                              Subsumer& subs, unsigned limit = 0);
   void cleanXorClausesBewareNULL(vec<XorClauseSimp>& cs, ClauseSetType type,
-                                 XorSubsumer& subs, uint limit = 0);
+                                 XorSubsumer& subs, unsigned limit = 0);
   bool cleanClauseBewareNULL(ClauseSimp c, Subsumer& subs);
   bool cleanXorClauseBewareNULL(XorClauseSimp c, XorSubsumer& subs);
 
-  void cleanClauses(vec<XorClause*>& cs, ClauseSetType type, uint limit = 0);
-  void removeSatisfied(vec<Clause*>& cs, ClauseSetType type, uint limit = 0);
-  void removeSatisfied(vec<XorClause*>& cs, ClauseSetType type, uint limit = 0);
+  void cleanClauses(vec<XorClause*>& cs, ClauseSetType type, unsigned limit = 0);
+  void removeSatisfied(vec<Clause*>& cs, ClauseSetType type, unsigned limit = 0);
+  void removeSatisfied(vec<XorClause*>& cs, ClauseSetType type, unsigned limit = 0);
   void removeAndCleanAll(bool nolimit = false);
   bool satisfied(const Clause& c) const;
   bool satisfied(const XorClause& c) const;
@@ -74,17 +74,17 @@ private:
   bool cleanClause(XorClause& c);
   bool cleanClause(Clause*& c);
 
-  uint lastNumUnitarySat[6];
-  uint lastNumUnitaryClean[6];
+  unsigned lastNumUnitarySat[6];
+  unsigned lastNumUnitaryClean[6];
 
   Solver& solver;
 };
 
 inline void ClauseCleaner::removeAndCleanAll(bool nolimit)
 {
-  // uint limit = std::min((uint)((double)solver.order_heap.size() *
+  // unsigned limit = std::min((unsigned)((double)solver.order_heap.size() *
   // PERCENTAGECLEANCLAUSES), FIXCLEANREPLACE);
-  uint limit = (double)solver.order_heap.size() * PERCENTAGECLEANCLAUSES;
+  unsigned limit = (double)solver.order_heap.size() * PERCENTAGECLEANCLAUSES;
   if (nolimit)
     limit = 0;
 

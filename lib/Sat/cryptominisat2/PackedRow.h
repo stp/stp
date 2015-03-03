@@ -46,9 +46,6 @@ SOFTWARE.
 #include <iostream>
 #include <algorithm>
 #include <limits>
-#ifndef uint
-#define uint unsigned int
-#endif
 
 using std::vector;
 

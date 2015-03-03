@@ -32,7 +32,6 @@ THE SOFTWARE.
 
 #include <cstdio>
 #include <vector>
-#include <sys/types.h>
 #include "mtl/Vec.h"
 #include "SolverTypes.h"
 #include "PackedRow.h"
@@ -61,7 +60,7 @@ class Clause
 {
 protected:
 #ifdef STATS_NEEDED
-  uint group;
+  unsigned group;
 #endif
 
   uint32_t isLearnt : 1;
@@ -84,7 +83,7 @@ protected:
   float oldActivityInter;
 
 public:
-  template <class V> Clause(const V& ps, const uint _group, const bool learnt)
+  template <class V> Clause(const V& ps, const unsigned _group, const bool learnt)
   {
     wasBinInternal = (ps.size() == 2);
     isFreed = false;
@@ -129,9 +128,9 @@ public:
 
   const Lit& operator[](const unsigned at) const { return begin()[at]; }
 
-  uint size() const { return mySize; }
-  void resize(const uint size) { mySize = size; }
-  void shrink(const uint i)
+  unsigned size() const { return mySize; }
+  void resize(const unsigned size) { mySize = size; }
+  void shrink(const unsigned i)
   {
     assert(i <= size());
     mySize -= i;
@@ -217,7 +216,7 @@ public:
   }
   void plainPrint(FILE* to = stdout) const
   {
-    for (uint i = 0; i < size(); i++)
+    for (unsigned i = 0; i < size(); i++)
     {
       if (begin()[i].sign())
         fprintf(to, "-");
@@ -229,7 +228,7 @@ public:
   uint32_t getGroup() const { return group; }
   void setGroup(const uint32_t _group) { group = _group; }
 #else
-  uint getGroup() const { return 0; }
+  unsigned getGroup() const { return 0; }
   void setGroup(const uint32_t) { return; }
 #endif // STATS_NEEDED
   void setRemoved() { isRemoved = true; }
@@ -251,7 +250,7 @@ public:
   // NOTE: This constructor cannot be used directly (doesn't allocate enough
   // memory).
   template <class V>
-  XorClause(const V& ps, const bool inverted, const uint _group)
+  XorClause(const V& ps, const bool inverted, const unsigned _group)
       : Clause(ps, _group, false)
   {
     invertedXor = inverted;
@@ -282,7 +281,7 @@ public:
     fprintf(to, "x");
     if (xor_clause_inverted())
       printf("-");
-    for (uint i = 0; i < size(); i++)
+    for (unsigned i = 0; i < size(); i++)
     {
       fprintf(to, "%d ", begin()[i].var() + 1);
     }

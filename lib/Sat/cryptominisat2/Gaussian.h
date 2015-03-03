@@ -56,7 +56,7 @@ class Clause;
 class Gaussian
 {
 public:
-  Gaussian(Solver& solver, const GaussianConfig& config, uint matrix_no,
+  Gaussian(Solver& solver, const GaussianConfig& config, unsigned matrix_no,
            const vector<XorClause*>& xorclauses);
   ~Gaussian();
 
@@ -66,22 +66,22 @@ public:
   // statistics
   void print_stats() const;
   void print_matrix_stats() const;
-  uint get_called() const;
-  uint get_useful_prop() const;
-  uint get_useful_confl() const;
+  unsigned get_called() const;
+  unsigned get_useful_prop() const;
+  unsigned get_useful_confl() const;
   bool get_disabled() const;
   uint32_t get_unit_truths() const;
   void set_disabled(bool toset);
 
   // functions used throughout the Solver
-  void canceling(uint sublevel);
+  void canceling(unsigned sublevel);
 
 protected:
   Solver& solver;
 
   // Gauss high-level configuration
   const GaussianConfig& config;
-  const uint matrix_no;
+  const unsigned matrix_no;
   vector<XorClause*> xorclauses;
 
   enum gaussian_ret
@@ -98,7 +98,7 @@ protected:
   BitArray var_is_in; // variable is part of the the matrix. var_is_in's size is
                       // _minimal_ so you should check whether
                       // var_is_in.getSize() < var before issuing var_is_in[var]
-  uint badlevel;
+  unsigned badlevel;
 
   class matrixset
   {
@@ -112,7 +112,7 @@ protected:
     uint16_t num_rows; // number of active rows in the matrix. Unactive rows are
                        // rows that contain only zeros (and if they are
                        // conflicting, then the conflict has been treated)
-    uint num_cols; // number of active columns in the matrix. The columns at the
+    unsigned num_cols; // number of active columns in the matrix. The columns at the
                    // end that have all be zeroed are no longer active
     int least_column_changed; // when updating the matrix, this value contains
                               // the smallest column number that has been
@@ -124,7 +124,7 @@ protected:
                                       // elim. (it only needs to look until that
                                       // row)
     vector<uint16_t> first_one_in_row;
-    uint removeable_cols; // the number of columns that have been zeroed out
+    unsigned removeable_cols; // the number of columns that have been zeroed out
                           // (i.e. assigned)
   };
 
@@ -140,51 +140,51 @@ protected:
   // Varibales to keep Gauss state
   bool messed_matrix_vars_since_reversal;
   int gauss_last_level;
-  vector<pair<Clause*, uint>> clauses_toclear;
+  vector<pair<Clause*, unsigned>> clauses_toclear;
   bool disabled; // Gauss is disabled
 
   // State of current elimnation
-  vec<uint> propagatable_rows; // used to store which rows were deemed
+  vec<unsigned> propagatable_rows; // used to store which rows were deemed
                                // propagatable during elimination
   vector<unsigned char> changed_rows; // used to store which rows were deemed
                                       // propagatable during elimination
 
   // Statistics
-  uint useful_prop; // how many times Gauss gave propagation as a result
-  uint useful_confl; // how many times Gauss gave conflict as a result
-  uint called; // how many times called the Gauss
+  unsigned useful_prop; // how many times Gauss gave propagation as a result
+  unsigned useful_confl; // how many times Gauss gave conflict as a result
+  unsigned called; // how many times called the Gauss
   uint32_t unit_truths; // how many unitary (i.e. decisionLevel 0) truths have
                         // been found
 
   // gauss init functions
   void init();                          // Initalise gauss state
   void fill_matrix(matrixset& origMat); // Fills the origMat matrix
-  uint select_columnorder(vector<uint16_t>& var_to_col,
+  unsigned select_columnorder(vector<uint16_t>& var_to_col,
                           matrixset& origMat); // Fills var_to_col and
                                                // col_to_var of the origMat
                                                // matrix.
 
   // Main function
-  uint eliminate(matrixset& matrix,
-                 uint& conflict_row); // does the actual gaussian elimination
+  unsigned eliminate(matrixset& matrix,
+                 unsigned& conflict_row); // does the actual gaussian elimination
 
   // matrix update functions
   void update_matrix_col(matrixset& matrix, const Var x,
-                         const uint col);      // Update one matrix column
+                         const unsigned col);      // Update one matrix column
   void update_matrix_by_col_all(matrixset& m); // Update all columns,
                                                // column-by-column (and not
                                                // row-by-row)
   void set_matrixset_to_cur(); // Save the current matrixset, the cur_matrixset
                                // to matrix_sets
   // void update_matrix_by_row(matrixset& matrix) const;
-  // void update_matrix_by_col(matrixset& matrix, const uint last_level) const;
+  // void update_matrix_by_col(matrixset& matrix, const unsigned last_level) const;
 
   // conflict&propagation handling
-  gaussian_ret handle_matrix_prop_and_confl(matrixset& m, uint row,
+  gaussian_ret handle_matrix_prop_and_confl(matrixset& m, unsigned row,
                                             Clause*& confl);
-  void analyse_confl(const matrixset& m, const uint row, int32_t& maxlevel,
-                     uint& size,
-                     uint& best_row) const; // analyse conflcit to find the best
+  void analyse_confl(const matrixset& m, const unsigned row, int32_t& maxlevel,
+                     unsigned& size,
+                     unsigned& best_row) const; // analyse conflcit to find the best
                                             // conflict. Gets & returns the best
                                             // one in 'maxlevel', 'size' and
                                             // 'best row' (these are all
@@ -193,15 +193,15 @@ protected:
                                             // is no other possible conflict to
                                             // compare to the new in 'row')
   gaussian_ret handle_matrix_confl(Clause*& confl, const matrixset& m,
-                                   const uint size, const uint maxlevel,
-                                   const uint best_row);
+                                   const unsigned size, const unsigned maxlevel,
+                                   const unsigned best_row);
   gaussian_ret
   handle_matrix_prop(matrixset& m,
-                     const uint row); // Handle matrix propagation at row 'row'
+                     const unsigned row); // Handle matrix propagation at row 'row'
   vec<Lit> tmp_clause;
 
   // propagation&conflict handling
-  void cancel_until_sublevel(const uint until_sublevel); // cancels until
+  void cancel_until_sublevel(const unsigned until_sublevel); // cancels until
                                                          // sublevel
                                                          // 'until_sublevel'.
                                                          // The var
@@ -212,13 +212,13 @@ protected:
                                                          // ONLY for moving
                                                          // inside the current
                                                          // level
-  uint find_sublevel(const Var v)
+  unsigned find_sublevel(const Var v)
       const; // find the sublevel (i.e. trail[X]) of a given variable
 
   // helper functions
   bool at_first_init() const;
   bool should_init() const;
-  bool should_check_gauss(const uint decisionlevel, const uint starts) const;
+  bool should_check_gauss(const unsigned decisionlevel, const unsigned starts) const;
   void disable_if_necessary();
   void reset_stats();
   void update_last_one_in_col(matrixset& m);
@@ -236,7 +236,7 @@ private:
   void check_matrix_against_varset(PackedMatrix& matrix,
                                    const matrixset& m) const;
   bool check_last_one_in_cols(matrixset& m) const;
-  void check_first_one_in_row(matrixset& m, const uint j);
+  void check_first_one_in_row(matrixset& m, const unsigned j);
   void print_matrix(matrixset& m) const;
   void print_last_one_in_cols(matrixset& m) const;
   static const string lbool_to_string(const lbool toprint);
@@ -247,17 +247,17 @@ inline bool Gaussian::should_init() const
   return (config.decision_until > 0);
 }
 
-inline bool Gaussian::should_check_gauss(const uint decisionlevel,
-                                         const uint starts) const
+inline bool Gaussian::should_check_gauss(const unsigned decisionlevel,
+                                         const unsigned starts) const
 {
   return (!disabled && decisionlevel < config.decision_until);
 }
 
-inline void Gaussian::canceling(const uint sublevel)
+inline void Gaussian::canceling(const unsigned sublevel)
 {
   if (disabled)
     return;
-  uint a = 0;
+  unsigned a = 0;
   for (int i = clauses_toclear.size() - 1;
        i >= 0 && clauses_toclear[i].second > sublevel; i--)
   {
@@ -286,17 +286,17 @@ inline uint32_t Gaussian::get_unit_truths() const
   return unit_truths;
 }
 
-inline uint Gaussian::get_called() const
+inline unsigned Gaussian::get_called() const
 {
   return called;
 }
 
-inline uint Gaussian::get_useful_prop() const
+inline unsigned Gaussian::get_useful_prop() const
 {
   return useful_prop;
 }
 
-inline uint Gaussian::get_useful_confl() const
+inline unsigned Gaussian::get_useful_confl() const
 {
   return useful_confl;
 }
