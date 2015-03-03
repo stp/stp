@@ -1,4 +1,4 @@
-/*******************************************************************************************[Alg.h]
+/********************************************************************************[Alg.h]
 MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
