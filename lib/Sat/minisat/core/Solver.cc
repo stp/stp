@@ -770,7 +770,7 @@ bool Solver::unitPropagate(  const vec<Lit>& assumps)
   // None of the values should be known.
   for (int i = 0; i < nVars(); i++)
     {
-    assert(value(i) == l_Undef);
+    assert(value(i) == l_Undef && "None of the values should be known");
     }
 
   assumptions.clear();
