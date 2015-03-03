@@ -34,6 +34,9 @@ THE SOFTWARE.
 #include "stp/ToSat/ASTNode/ToSAT.h"
 #include "stp/ToSat/ToSATBase.h"
 #include "stp/AST/AST.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
+
+using simplifier::constantBitP::FixedBits;
 
 class BBAsProp
 {
