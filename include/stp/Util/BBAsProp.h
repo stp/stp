@@ -82,9 +82,8 @@ public:
   void toAssumptions(FixedBits& a, FixedBits& b, FixedBits& output)
   {
     assumptions.clear();
-    int bits = a.getWidth();
 
-    for (int i = 0; i < bits; i++)
+    for (int i = 0; i < a.getWidth(); i++)
     {
       if (a[i] == '1')
       {
@@ -104,6 +103,7 @@ public:
         assumptions.push(stp::SATSolver::mkLit(m.find(i1)->second[i], true));
       }
     }
+
     for (int i = 0; i < output.getWidth(); i++)
     {
       if (output[i] == '1')
