@@ -46,6 +46,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/Util/Relations.h"
 #include "stp/Util/BBAsProp.h"
 #include "stp/Util/Functions.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -80,10 +81,6 @@ void setV(FixedBits& result, int id, int val)
       break;
   }
 }
-
-// Very rough I know. One the way to being made a class.
-
-#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 
 const bool debug_printAll = false;
 
@@ -800,6 +797,356 @@ void g()
   multiply(c, output);
 }
 
+void random_tests()
+{
+  ostream& output = cerr;
+
+  output << "signed greater than equals" << endl;
+  go(&bvSignedGreaterThanEqualsBothWays, BVSGE);
+
+  output << "unsigned less than" << endl;
+  go(&bvLessThanEqualsBothWays, BVLT);
+
+  output << "equals" << endl;
+  go(&bvEqualsBothWays, EQ);
+
+  output << "bit-vector xor" << endl;
+  go(&bvXorBothWays, BVXOR);
+
+  output << "bit-vector or" << endl;
+  go(&bvOrBothWays, BVOR);
+
+  output << "bit-vector and" << endl;
+  go(&bvAndBothWays, BVAND);
+
+  output << "right shift" << endl;
+  go(&bvRightShiftBothWays, BVRIGHTSHIFT);
+
+  output << "left shift" << endl;
+  go(&bvLeftShiftBothWays, BVLEFTSHIFT);
+
+  output << "arithmetic shift" << endl;
+  go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
+
+  output << "addition" << endl;
+  go(&bvAddBothWays, BVPLUS);
+
+  output << "multiplication" << endl;
+  go(&multiply, BVMULT);
+  output << "unsigned division" << endl;
+  go(&unsignedDivide, BVDIV);
+
+  output << "unsigned remainder" << endl;
+  go(&unsignedModulus, BVMOD);
+
+  output << "signed division" << endl;
+  go(&signedDivide, SBVDIV);
+
+  output << "signed remainder" << endl;
+  go(&signedRemainder, SBVREM);
+}
+
+void check_bvconcat(const int bits)
+{
+  if (bits >= 2)
+  {
+    for (int i = 1; i < bits; i++)
+    {
+      vector<FixedBits*> children;
+      FixedBits a(bits - i, false);
+      FixedBits b(i, false);
+
+      children.push_back(&a);
+      children.push_back(&b);
+      FixedBits output(bits, false);
+      newExhaustive(&bvConcatBothWays, BVCONCAT, children, output);
+    }
+  }
+}
+
+void check_implies()
+{
+  Signature signature;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = BOOL_TYPE;
+  signature.numberOfInputs = 2;
+  signature.maxInputWidth = 1;
+  signature.kind = IMPLIES;
+  exhaustive(&bvImpliesBothWays, signature);
+}
+
+void check_bvminus_bvnot(const int bits)
+{
+  // One input (value -> value)
+  Signature signature;
+  signature.resultType = VALUE_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.maxInputWidth = bits;
+  signature.numberOfInputs = 1;
+
+  // BVUMINUS
+  signature.kind = BVUMINUS;
+  exhaustive(&bvUnaryMinusBothWays, signature);
+
+  // BVNOT --- Same function as NOT.
+  signature.kind = BVNEG;
+  exhaustive(&bvNotBothWays, signature);
+}
+
+void check_bvsx_bvzx(const int bits)
+{
+  if (bits >= 2)
+  {
+    FixedBits output(bits, false);
+    for (int i = 1; i < bits; i++)
+    {
+      vector<FixedBits*> children;
+      FixedBits a(i, false);
+      children.push_back(&a);
+      children.push_back(&a); // To type check needs a second argument. Ignored.
+
+      newExhaustive(&bvZeroExtendBothWays, BVZX, children, output);
+      newExhaustive(&bvSignExtendBothWays, BVSX, children, output);
+    }
+  }
+}
+
+void check_propositional_ite()
+{
+  vector<FixedBits*> children;
+  FixedBits a(1, true);
+  FixedBits b(1, true);
+  FixedBits c(1, true);
+
+  children.push_back(&a);
+  children.push_back(&b);
+  children.push_back(&c);
+  FixedBits output(1, true);
+  newExhaustive(&bvITEBothWays, ITE, children, output);
+}
+
+void check_ite(const int bits)
+{
+  vector<FixedBits*> children;
+  FixedBits a(1, true);
+  FixedBits b(bits, false);
+  FixedBits c(bits, false);
+
+  children.push_back(&a);
+  children.push_back(&b);
+  children.push_back(&c);
+  FixedBits output(bits, false);
+  newExhaustive(&bvITEBothWays, ITE, children, output);
+}
+
+void check_not()
+{
+  Signature signature;
+  signature.kind = NOT;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = BOOL_TYPE;
+  signature.numberOfInputs = 1;
+  signature.maxInputWidth = 1;
+  exhaustive(&bvNotBothWays, signature);
+}
+
+void check_and_or()
+{
+  Signature signature;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = BOOL_TYPE;
+  signature.maxInputWidth = 1;
+
+  // AND.
+  signature.kind = AND;
+  signature.numberOfInputs = 3;
+  exhaustive(&bvAndBothWays, signature);
+  signature.numberOfInputs = 2;
+  exhaustive(&bvAndBothWays, signature);
+
+  // OR.
+  signature.kind = OR;
+  signature.numberOfInputs = 3;
+  exhaustive(&bvOrBothWays, signature);
+  signature.numberOfInputs = 2;
+  exhaustive(&bvOrBothWays, signature);
+}
+
+void check_xor_iff()
+{
+  Signature signature;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = BOOL_TYPE;
+  signature.maxInputWidth = 1;
+  signature.numberOfInputs = 2;
+
+  // IFF.
+  signature.kind = IFF;
+  exhaustive(&bvEqualsBothWays, signature);
+
+  // XOR.
+  signature.kind = XOR;
+  exhaustive(&bvXorBothWays, signature);
+}
+
+void check_bveq(const int bits)
+{
+  Signature signature;
+  signature.kind = EQ;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.maxInputWidth = bits;
+  signature.numberOfInputs = 2;
+  exhaustive(&bvEqualsBothWays, signature);
+}
+
+void check_bv_unsigned_comps(const int bits)
+{
+  Signature signature;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.numberOfInputs = 2;
+  signature.maxInputWidth = bits;
+  signature.kind = BVGT;
+  exhaustive(&bvGreaterThanBothWays, signature);
+  signature.kind = BVLT;
+  exhaustive(&bvLessThanBothWays, signature);
+  signature.kind = BVLE;
+  exhaustive(&bvLessThanEqualsBothWays, signature);
+  signature.kind = BVGE;
+  exhaustive(&bvGreaterThanEqualsBothWays, signature);
+}
+
+void check_bv_signed_comps(const int bits)
+{
+  Signature signature;
+  signature.resultType = BOOL_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.numberOfInputs = 2;
+  signature.maxInputWidth = bits;
+  signature.kind = BVSLT;
+  exhaustive(&bvSignedLessThanBothWays, signature);
+  signature.kind = BVSLE;
+  exhaustive(&bvSignedLessThanEqualsBothWays, signature);
+  signature.kind = BVSGT;
+  exhaustive(&bvSignedGreaterThanBothWays, signature);
+  signature.kind = BVSGE;
+  exhaustive(&bvSignedGreaterThanEqualsBothWays, signature);
+}
+
+void check_bvsrshift_bvxor(const int bits)
+{
+  // TWO INPUT. (value, value)->value
+  Signature signature;
+
+  signature.resultType = VALUE_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.maxInputWidth = bits;
+  signature.numberOfInputs = 2;
+
+  // BVaritmeticRIGHTSHIFT
+  signature.kind = BVSRSHIFT;
+  exhaustive(&bvArithmeticRightShiftBothWays, signature);
+
+  // BVXOR.
+  signature.kind = BVXOR;
+  exhaustive(&bvXorBothWays, signature);
+}
+
+void check_bvdiv_mod_mult(const int bits)
+{
+  Signature signature;
+  signature.resultType = VALUE_TYPE;
+  signature.inputType = VALUE_TYPE;
+  signature.numberOfInputs = 2;
+  signature.imprecise = true;
+  signature.kind = BVMULT;
+  signature.maxInputWidth = 2;
+  exhaustive(&multiply, signature);
+
+  signature.maxInputWidth = bits;
+  signature.imprecise = true;
+  exhaustive(&multiply, signature);
+
+  signature.imprecise = true;
+  isDivide = true;
+  signature.kind = SBVMOD;
+  exhaustive(&signedModulus, signature);
+  signature.kind = SBVREM;
+  exhaustive(&signedRemainder, signature);
+  signature.kind = BVMOD;
+  exhaustive(&unsignedModulus, signature);
+  signature.kind = BVDIV;
+  exhaustive(&unsignedDivide, signature);
+  signature.kind = SBVDIV;
+  exhaustive(&signedDivide, signature);
+  isDivide = false;
+}
+
+void exhaustive_checks()
+{
+  ostream& output = cerr;
+  const int bits = 5;
+  const int exhaustive_bits = 5;
+
+  // Header
+  cerr << "% Automatically generated!!" << endl;
+  cerr << "\\begin{figure} \\centering" << endl;
+  cerr << "\\begin{tabular}{|c|";
+  for (int i = 1; i <= exhaustive_bits; i++)
+  {
+    cerr << "c|c|";
+  }
+  cerr << "} \\hline" << endl;
+  cerr << "Operation";
+  for (int i = 1; i <= exhaustive_bits; i++)
+  {
+    cerr << "& \\multicolumn{2}{c|}{" << i << " bits}";
+  }
+  cerr << "\\\\ \\hline" << endl;
+  for (int i = 1; i <= exhaustive_bits; i++)
+  {
+    cerr << "& Prop& BB";
+  }
+  cerr << "\\\\ \\hline" << endl;
+
+  Functions f;
+  std::list<Functions::Function>::iterator it = f.l.begin();
+  while (it != f.l.end())
+  {
+    Functions::Function& f = *it;
+    cerr << f.name << endl;
+    for (int i = 1; i <= exhaustive_bits; i++)
+    {
+      // Actual checking
+      exhaustively_check(i, f.k, f.fn, f.op);
+    }
+    cerr << "\\\\ " << endl;
+    it++;
+  }
+  cerr << "\\hline";
+  cerr << "\\end{tabular}" << endl;
+  cerr << "\\caption{Percentage of all the assignments at different "
+          "bit-widths. Where the Bitblasted encoding and the propagators did "
+          "missed bits to fix, or missed a conflicting assignment.}" << endl;
+  cerr << "\\end{figure}" << endl;
+
+  check_bvdiv_mod_mult(bits);
+  check_bvsrshift_bvxor(bits);
+  check_implies();
+  check_bvminus_bvnot(bits);
+  check_bvconcat(bits);
+  check_bv_signed_comps(bits);
+  check_bv_unsigned_comps(bits);
+  check_bveq(bits);
+  check_xor_iff();
+  check_and_or();
+  check_not();
+  check_ite(bits);
+  check_propositional_ite();
+  check_bvsx_bvzx(bits);
+}
+
 int main(void)
 {
   stp::STPMgr stp;
@@ -812,335 +1159,16 @@ int main(void)
   // Add had a defect effecting bithWidth > 90.
   // Shifting had a defect effecting bitWidth > 64.
 
-  ostream& output = cerr;
-
-  const int bits = 5;
-
   if (true)
   {
-    output << "signed greater than equals" << endl;
-    go(&bvSignedGreaterThanEqualsBothWays, BVSGE);
-
-    output << "unsigned less than" << endl;
-    go(&bvLessThanEqualsBothWays, BVLT);
-
-    output << "equals" << endl;
-    go(&bvEqualsBothWays, EQ);
-
-    output << "bit-vector xor" << endl;
-    go(&bvXorBothWays, BVXOR);
-
-    output << "bit-vector or" << endl;
-    go(&bvOrBothWays, BVOR);
-
-    output << "bit-vector and" << endl;
-    go(&bvAndBothWays, BVAND);
-
-    output << "right shift" << endl;
-    go(&bvRightShiftBothWays, BVRIGHTSHIFT);
-
-    output << "left shift" << endl;
-    go(&bvLeftShiftBothWays, BVLEFTSHIFT);
-
-    output << "arithmetic shift" << endl;
-    go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
-
-    output << "addition" << endl;
-    go(&bvAddBothWays, BVPLUS);
-
-    output << "multiplication" << endl;
-    go(&multiply, BVMULT);
-    output << "unsigned division" << endl;
-    go(&unsignedDivide, BVDIV);
-
-    output << "unsigned remainder" << endl;
-    go(&unsignedModulus, BVMOD);
-
-    output << "signed division" << endl;
-    go(&signedDivide, SBVDIV);
-
-    output << "signed remainder" << endl;
-    go(&signedRemainder, SBVREM);
-
-    exit(1);
+    random_tests();
+    exit(0);
   }
-
-  const int exhaustive_bits = 5;
-
-  Functions f;
-  cerr << "% Automatically generated!!" << endl;
-  cerr << "\\begin{figure} \\centering" << endl;
-  cerr << "\\begin{tabular}{|c|";
-
-  for (int i = 1; i <= exhaustive_bits; i++)
-    cerr << "c|c|";
-
-  cerr << "} \\hline" << endl;
-
-  cerr << "Operation";
-
-  for (int i = 1; i <= exhaustive_bits; i++)
-    cerr << "& \\multicolumn{2}{c|}{" << i << " bits}";
-  cerr << "\\\\ \\hline" << endl;
-
-  for (int i = 1; i <= exhaustive_bits; i++)
-    cerr << "& Prop& BB";
-
-  cerr << "\\\\ \\hline" << endl;
-
-  std::list<Functions::Function>::iterator it = f.l.begin();
-  while (it != f.l.end())
+  else
   {
-    Functions::Function& f = *it;
-    cerr << f.name << endl;
-    for (int i = 1; i <= exhaustive_bits; i++)
-      exhaustively_check(i, f.k, f.fn, f.op);
-    cerr << "\\\\ " << endl;
-    it++;
+    exhaustive_checks();
+    cout << "Done" << endl;
   }
-  cerr << "\\hline";
-
-  cerr << "\\end{tabular}" << endl;
-  cerr << "\\caption{Percentage of all the assignments at different "
-          "bit-widths. Where the Bitblasted encoding and the propagators did "
-          "missed bits to fix, or missed a conflicting assignment.}" << endl;
-  cerr << "\\end{figure}" << endl;
-
-  exit(1);
-
-  if (true)
-  {
-    Signature signature;
-    signature.resultType = VALUE_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.numberOfInputs = 2;
-    signature.imprecise = true;
-    signature.kind = BVMULT;
-    signature.maxInputWidth = 2;
-    exhaustive(&multiply, signature);
-
-    signature.maxInputWidth = bits;
-    signature.imprecise = true;
-    exhaustive(&multiply, signature);
-
-    signature.imprecise = true;
-    isDivide = true;
-    signature.kind = SBVMOD;
-    exhaustive(&signedModulus, signature);
-    signature.kind = SBVREM;
-    exhaustive(&signedRemainder, signature);
-    signature.kind = BVMOD;
-    exhaustive(&unsignedModulus, signature);
-    signature.kind = BVDIV;
-    exhaustive(&unsignedDivide, signature);
-    signature.kind = SBVDIV;
-    exhaustive(&signedDivide, signature);
-    isDivide = false;
-  }
-
-  { // TWO INPUT. (value, value)->value
-    Signature signature;
-
-    signature.resultType = VALUE_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.maxInputWidth = bits;
-    signature.numberOfInputs = 2;
-
-    // BVaritmeticRIGHTSHIFT
-    signature.kind = BVSRSHIFT;
-    exhaustive(&bvArithmeticRightShiftBothWays, signature);
-
-    // BVXOR.
-    signature.kind = BVXOR;
-    exhaustive(&bvXorBothWays, signature);
-  }
-
-  // n Params at most. (Bool,Bool) -> Bool
-  {
-    Signature signature;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = BOOL_TYPE;
-    signature.numberOfInputs = 2;
-    signature.maxInputWidth = 1;
-    signature.kind = IMPLIES;
-    exhaustive(&bvImpliesBothWays, signature);
-  }
-
-  // One input (value -> value)
-  {
-    Signature signature;
-    signature.resultType = VALUE_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.maxInputWidth = bits;
-    signature.numberOfInputs = 1;
-
-    // BVUMINUS
-    signature.kind = BVUMINUS;
-    exhaustive(&bvUnaryMinusBothWays, signature);
-
-    // BVNOT --- Same function as NOT.
-    signature.kind = BVNEG;
-    exhaustive(&bvNotBothWays, signature);
-  }
-
-  // bvConcat
-  {
-    if (bits >= 2)
-      for (int i = 1; i < bits; i++)
-      {
-        vector<FixedBits*> children;
-        FixedBits a(bits - i, false);
-        FixedBits b(i, false);
-
-        children.push_back(&a);
-        children.push_back(&b);
-        FixedBits output(bits, false);
-        newExhaustive(&bvConcatBothWays, BVCONCAT, children, output);
-      }
-  }
-
-  // bvSignedComparisons
-  {
-    Signature signature;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.numberOfInputs = 2;
-    signature.maxInputWidth = bits;
-    signature.kind = BVSLT;
-    exhaustive(&bvSignedLessThanBothWays, signature);
-    signature.kind = BVSLE;
-    exhaustive(&bvSignedLessThanEqualsBothWays, signature);
-    signature.kind = BVSGT;
-    exhaustive(&bvSignedGreaterThanBothWays, signature);
-    signature.kind = BVSGE;
-    exhaustive(&bvSignedGreaterThanEqualsBothWays, signature);
-  }
-
-  // bvUnSignedComparisons
-  {
-    Signature signature;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.numberOfInputs = 2;
-    signature.maxInputWidth = bits;
-    signature.kind = BVGT;
-    exhaustive(&bvGreaterThanBothWays, signature);
-    signature.kind = BVLT;
-    exhaustive(&bvLessThanBothWays, signature);
-    signature.kind = BVLE;
-    exhaustive(&bvLessThanEqualsBothWays, signature);
-    signature.kind = BVGE;
-    exhaustive(&bvGreaterThanEqualsBothWays, signature);
-  }
-
-  // BVEQ.
-  {
-    Signature signature;
-    signature.kind = EQ;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = VALUE_TYPE;
-    signature.maxInputWidth = bits;
-    signature.numberOfInputs = 2;
-    exhaustive(&bvEqualsBothWays, signature);
-  }
-
-  // 2 Params at most. (Bool,Bool) -> Bool
-  {
-    Signature signature;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = BOOL_TYPE;
-    signature.maxInputWidth = 1;
-    signature.numberOfInputs = 2;
-
-    // IFF.
-    signature.kind = IFF;
-    exhaustive(&bvEqualsBothWays, signature);
-
-    // XOR.
-    signature.kind = XOR;
-    exhaustive(&bvXorBothWays, signature);
-  }
-
-  // n Params at most. (Bool,Bool) -> Bool
-  {
-    Signature signature;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = BOOL_TYPE;
-    signature.maxInputWidth = 1;
-
-    // AND.
-    signature.kind = AND;
-    signature.numberOfInputs = 3;
-    exhaustive(&bvAndBothWays, signature);
-    signature.numberOfInputs = 2;
-    exhaustive(&bvAndBothWays, signature);
-
-    // OR.
-    signature.kind = OR;
-    signature.numberOfInputs = 3;
-    exhaustive(&bvOrBothWays, signature);
-    signature.numberOfInputs = 2;
-    exhaustive(&bvOrBothWays, signature);
-  }
-
-  // NOT
-  {
-    Signature signature;
-    signature.kind = NOT;
-    signature.resultType = BOOL_TYPE;
-    signature.inputType = BOOL_TYPE;
-    signature.numberOfInputs = 1;
-    signature.maxInputWidth = 1;
-    exhaustive(&bvNotBothWays, signature);
-  }
-
-  // Term ITE.
-  {
-    vector<FixedBits*> children;
-    FixedBits a(1, true);
-    FixedBits b(bits, false);
-    FixedBits c(bits, false);
-
-    children.push_back(&a);
-    children.push_back(&b);
-    children.push_back(&c);
-    FixedBits output(bits, false);
-    newExhaustive(&bvITEBothWays, ITE, children, output);
-  }
-
-  // Propositional ITE.
-  {
-    vector<FixedBits*> children;
-    FixedBits a(1, true);
-    FixedBits b(1, true);
-    FixedBits c(1, true);
-
-    children.push_back(&a);
-    children.push_back(&b);
-    children.push_back(&c);
-    FixedBits output(1, true);
-    newExhaustive(&bvITEBothWays, ITE, children, output);
-  }
-
-  {
-    if (bits >= 2)
-    {
-      FixedBits output(bits, false);
-      for (int i = 1; i < bits; i++)
-      {
-        vector<FixedBits*> children;
-        FixedBits a(i, false);
-        children.push_back(&a);
-        children.push_back(
-            &a); // To type check needs a second argument. Ignored.
-
-        newExhaustive(&bvZeroExtendBothWays, BVZX, children, output);
-        newExhaustive(&bvSignExtendBothWays, BVSX, children, output);
-      }
-    }
-  }
-
-  cout << "Done" << endl;
 
   return 1;
 }
