@@ -49,6 +49,11 @@ public:
   ASTNode i0, i1, r;
   stp::ToSAT::ASTNodeToSATVar node_to_satvar_map;
 
+  ~BBAsProp()
+  {
+    delete ss;
+  }
+
   BBAsProp(Kind k, stp::STPMgr* mgr, int bits)
       : aig(mgr, stp::GlobalSTP->arrayTransformer)
   {
