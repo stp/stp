@@ -482,7 +482,7 @@ void exhaustively_check(const int bitwidth, Kind k,
     else if (BBFixed != maxFixed)
       BBBad++;
 
-    if (!transfer_conflict && (k != BVMULT) && (k != BVDIV) && (k != BVMOD))
+    if (!transfer_conflict && (k != stp::BVMULT) && (k != stp::BVDIV) && (k != stp::BVMOD))
     {
       if (!FixedBits::equals(*children[0], c_a))
         FatalError("First");
