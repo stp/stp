@@ -767,11 +767,11 @@ bool Solver::unitPropagate(  const vec<Lit>& assumps)
   cancelUntil(0);
   assert(decisionLevel()== 0);
 
-  // None of the values should be known.
-  for (int i = 0; i < nVars(); i++)
+  // None of the values should be known. //I don't think that's neccessary
+  /*for (int i = 0; i < nVars(); i++)
     {
     assert(value(i) == l_Undef && "None of the values should be known");
-    }
+    }*/
 
   assumptions.clear();
   assumps.copyTo(assumptions);
