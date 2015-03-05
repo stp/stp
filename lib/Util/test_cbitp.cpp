@@ -384,8 +384,9 @@ void exhaustively_check(const int bitwidth, Kind k,
   {
     int current = j;
 
-    // if (j% 100000 == 0)
-    //  cerr << j << " of " << to_iterate << endl;
+    //For progress indication
+    //if (j% 10000 == 0)
+    //    cerr << j << " of " << to_iterate << endl;
 
     int id = 0;
     int usedUp = 0;
