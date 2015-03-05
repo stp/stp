@@ -379,8 +379,6 @@ void exhaustively_check(const int bitwidth, Kind k,
   FixedBits c_a(bitwidth, false), c_b(bitwidth, false),
       c_o(resultLength, false);
 
-  BBAsProp BBP(k, mgr, bitwidth);
-
   const int to_iterate = pow(3, totalLength);
   for (long j = 0; j < to_iterate; j++)
   {
@@ -439,8 +437,9 @@ void exhaustively_check(const int bitwidth, Kind k,
                              children[1]->countFixed() + output.countFixed();
     const int maxFixed = c_a.countFixed() + c_b.countFixed() + c_o.countFixed();
 
-    BBP.toAssumptions(*children[0], *children[1], output);
-    bool bb_conflict = !BBP.unitPropagate();
+    BBAsProp BBP(k, mgr, bitwidth);
+    BBP.fill_assumps_with(*children[0], *children[1], output);
+    bool bb_conflict = !BBP.unit_prop_with_assumps();
     const int BBFixed = BBP.fixedCount();
 
     bool transfer_conflict = (transfer(children, output) == CONFLICT);

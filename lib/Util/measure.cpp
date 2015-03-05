@@ -81,7 +81,7 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     FixedBits& b = it->b;
     FixedBits& output = it->output;
 
-    bbP.toAssumptions(a, b, output);
+    bbP.fill_assumps_with(a, b, output);
 
     // Initial.
     // cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
@@ -92,7 +92,7 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 
     // simplify does propagate.
     bb.start();
-    bool ok = bbP.unitPropagate();
+    bool ok = bbP.unit_prop_with_assumps();
     bb.stop();
     assert(ok);
 
