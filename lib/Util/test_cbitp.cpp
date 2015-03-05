@@ -773,29 +773,6 @@ void go(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
   cerr << "\\\\";
 }
 
-void g()
-{
-  FixedBits a(3, false);
-  FixedBits b(3, false);
-  a.setFixed(0, true);
-  a.setValue(0, true);
-
-  b.setFixed(1, true);
-  b.setValue(1, true);
-
-  vector<FixedBits*> c;
-  c.push_back(&a);
-  c.push_back(&b);
-
-  FixedBits output(3, false);
-  output.setFixed(0, true);
-  output.setValue(0, true);
-  output.setFixed(2, true);
-  output.setValue(2, true);
-
-  multiply(c, output);
-}
-
 void random_tests()
 {
   ostream& output = cerr;
