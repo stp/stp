@@ -26,7 +26,8 @@ THE SOFTWARE.
 #define REWRITESYSTEM_H
 
 // FIXME: This header might be dead
-#include "stp/Util/find-rewrites/rewrite_rule.h"
+//#include "stp/Util/find-rewrites/rewrite_rule.h"
+#include "stp/AST/AST.h"
 
 extern const int widen_to;
 extern ASTNode v, v0, w, w0;
@@ -41,16 +42,16 @@ template <class T> void removeDuplicates(T& big);
 
 ASTNode widen(const ASTNode& w, int width);
 
-bool matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo,
+bool matchNode(const ASTNode& n0, const ASTNode& n1, stp::ASTNodeMap& fromTo,
                const int term_variable_width);
 
 bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
-                           ASTNodeMap& fromTo, const int term_variable_width);
+                           stp::ASTNodeMap& fromTo, const int term_variable_width);
 
 ASTNode renameVars(const ASTNode& n);
 
 ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
-                ASTNodeMap& seen, int depth);
+                stp::ASTNodeMap& seen, int depth);
 
 bool checkRule(const ASTNode& from, const ASTNode& to,
                VariableAssignment& assignment, bool& bad);
@@ -69,13 +70,13 @@ class Rewrite_system
 {
 public:
   // Rules to write out when we get the chance.
-  typedef list<Rewrite_rule> RewriteRuleContainer;
+  typedef std::list<Rewrite_rule> RewriteRuleContainer;
 
 private:
   friend void writeOutRules();
 
   friend ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
-                         ASTNodeMap& seen, int depth);
+                         stp::ASTNodeMap& seen, int depth);
 
   RewriteRuleContainer toWrite;
 
@@ -205,7 +206,7 @@ public:
 
       // The renamed should match the original, and vice versa.
       {
-        ASTNodeMap fromTo;
+        stp::ASTNodeMap fromTo;
         assert(commutative_matchNode(from_wide, it->getFrom(), fromTo, 2));
         fromTo.clear();
         assert(commutative_matchNode(it->getFrom(), from_wide, fromTo, 1));
@@ -215,11 +216,11 @@ public:
         assert(commutative_matchNode(it->getTo(), to_wide, fromTo, 1));
       }
 
-      ASTNodeMap seen;
+      stp::ASTNodeMap seen;
       ASTNode from_wide_rewritten = rewrite(from_wide, *it, seen, 0);
-      seen = ASTNodeMap();
+      seen = stp::ASTNodeMap();
       ASTNode to_wide_rewritten = rewrite(to_wide, *it, seen, 0);
-      seen = ASTNodeMap();
+      seen = stp::ASTNodeMap();
 
       // Also apply the AIG rules.
       to_wide_rewritten = rewriteThroughWithAIGS(to_wide_rewritten);
@@ -232,36 +233,36 @@ public:
         assert(BVTypeCheckRecursive(from_rewritten));
         assert(BVTypeCheckRecursive(to_rewritten));
 
-        assert(isConstantToSat(create(EQ, from_wide_rewritten, from_wide)));
-        assert(isConstantToSat(create(EQ, to_wide_rewritten, to_wide)));
-        assert(isConstantToSat(create(EQ, it->getFrom(), from_rewritten)));
-        assert(isConstantToSat(create(EQ, it->getTo(), to_rewritten)));
+        assert(isConstantToSat(create(stp::EQ, from_wide_rewritten, from_wide)));
+        assert(isConstantToSat(create(stp::EQ, to_wide_rewritten, to_wide)));
+        assert(isConstantToSat(create(stp::EQ, it->getFrom(), from_rewritten)));
+        assert(isConstantToSat(create(stp::EQ, it->getTo(), to_rewritten)));
 
         bool ok = orderEquivalence(from_rewritten, to_rewritten);
         if (ok)
         {
           Rewrite_rule rr(mgr, from_rewritten, to_rewritten, 0);
-          cout << "Modifying Rule\n";
-          cout << "Initially From";
-          cout << it->getFrom();
-          cout << "Initially To";
-          cout << it->getTo();
-          cout << "New From";
-          cout << from_rewritten;
-          cout << "New To";
-          cout << to_rewritten;
-          cout << "---";
-          cout << getDifficulty(rr.getFrom()) << " --> "
-               << getDifficulty(rr.getTo()) << endl;
+          std::cout << "Modifying Rule\n";
+          std::cout << "Initially From";
+          std::cout << it->getFrom();
+          std::cout << "Initially To";
+          std::cout << it->getTo();
+          std::cout << "New From";
+          std::cout << from_rewritten;
+          std::cout << "New To";
+          std::cout << to_rewritten;
+          std::cout << "---";
+          std::cout << getDifficulty(rr.getFrom()) << " --> "
+               << getDifficulty(rr.getTo()) << std::endl;
 
           *it = rr;
           lookups_invalid = true;
         }
         if (!ok)
         {
-          cout << "Erasing bad rule.\n";
-          cout << "Initially" << it->getFrom() << it->getTo();
-          cout << "Now" << from_rewritten << to_rewritten;
+          std::cout << "Erasing bad rule.\n";
+          std::cout << "Initially" << it->getFrom() << it->getTo();
+          std::cout << "Now" << from_rewritten << to_rewritten;
           erase(it--);
           i--;
           lookups_invalid = true;
@@ -270,7 +271,7 @@ public:
     }
 
     eraseDuplicates();
-    cout << "Size after rewriteAll:" << toWrite.size() << endl;
+    std::cout << "Size after rewriteAll:" << toWrite.size() << std::endl;
     buildLookupTable();
   }
 
@@ -288,7 +289,7 @@ public:
     {
       VariableAssignment assignment;
       bool bad = false;
-      const long st = getCurrentTime();
+      const long st = stp::getCurrentTime();
       bool r = checkRule(it->getFrom(), it->getTo(), assignment, bad);
       if (!r || bad)
       {
@@ -299,7 +300,7 @@ public:
         assert(!bad);
       }
       if (bits >= it->getVerifiedToBits())
-        it->setVerified(bits, getCurrentTime() - st);
+        it->setVerified(bits, stp::getCurrentTime() - st);
     }
   }
 

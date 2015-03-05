@@ -25,10 +25,12 @@ THE SOFTWARE.
 #ifndef REWRITERULE_H
 #define REWRITERULE_H
 
-// FIXME: This header might be dead
-
 #include "stp/STPManager/STPManager.h"
 #include "misc.h"
+#include <signal.h>
+using std::endl;
+using std::cout;
+using std::cerr;
 
 extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
@@ -141,7 +143,7 @@ public:
     timeout.it_value.tv_sec = timeout_ms / 1000;
     setitimer(ITIMER_VIRTUAL, &timeout, NULL);
 
-    const long st = getCurrentTime();
+    const long st = stp::getCurrentTime();
     int checked_to = 0;
 
     // Start it verifying where we left off..
@@ -153,7 +155,7 @@ public:
       children.push_back(from);
       children.push_back(to);
 
-      const ASTNode n = mgr->hashingNodeFactory->CreateNode(EQ, children);
+      const ASTNode n = mgr->hashingNodeFactory->CreateNode(stp::EQ, children);
       const ASTNode& widened = widen(n, new_bitwidth);
       if (widened == mgr->ASTUndefined)
       {
@@ -180,7 +182,7 @@ public:
     }
 
     if (getVerifiedToBits() <= checked_to)
-      setVerified(checked_to, getTime() + (getCurrentTime() - st));
+      setVerified(checked_to, getTime() + (stp::getCurrentTime() - st));
 
     // The timer might not have expired yet.
     setitimer(ITIMER_VIRTUAL, NULL, NULL);

@@ -25,10 +25,15 @@ THE SOFTWARE.
 #ifndef MISC_H
 #define MISC_H
 
+#include "stp/AST/AST.h"
+
 extern const int bits;
 extern const int widen_to;
 
-extern Simplifier* simp;
+namespace stp {
+    class Simplifier;
+}
+extern stp::Simplifier* simp;
 
 ASTNode widen(const ASTNode& w, int width);
 
@@ -39,7 +44,7 @@ int getDifficulty(const ASTNode& n_);
 bool isConstant(const ASTNode& n, VariableAssignment& different,
                 const int bits);
 
-vector<ASTNode> getVariables(const ASTNode& n);
+std::vector<ASTNode> getVariables(const ASTNode& n);
 
 ASTNode rewriteThroughWithAIGS(const ASTNode& n_);
 

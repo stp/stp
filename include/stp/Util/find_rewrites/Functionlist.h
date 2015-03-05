@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define FUNCTIONLIST_H_
 #include "stp/Util/find_rewrites/rewrite_system.h"
 #include "stp/Util/find_rewrites/misc.h"
+#include "stp/Simplifier/simplifier.h"
 
 extern Rewrite_system rewrite_system;
 
@@ -37,7 +38,7 @@ private:
   void getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVMOD, BVLEFTSHIFT};
+    Kind types[] = {stp::BVMULT, stp::BVDIV, stp::SBVDIV, stp::SBVREM, stp::SBVMOD, stp::BVMOD, stp::BVLEFTSHIFT};
 
     // Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD,
     // BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
@@ -124,7 +125,7 @@ private:
   {
     for (int i = 0; i < functions.size(); i++)
     {
-      assert(functions[i].GetType() == BITVECTOR_TYPE);
+      assert(functions[i].GetType() == stp::BITVECTOR_TYPE);
       assert(functions[i].GetValueWidth() == bits);
       assert(BVTypeCheckRecursive(functions[i]));
     }

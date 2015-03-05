@@ -39,13 +39,12 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 
 #include "stp/STPManager/STPManager.h"
-#include "stp/To-sat/AIG/ToSATAIG.h"
+//#include "stp/To-sat/AIG/ToSATAIG.h"
 #include "stp/Sat/MinisatCore.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/DifficultyScore.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-using namespace stp;
 #include "stp/AST/NodeFactory/TypeChecker.h"
 #include "stp/cpp_interface.h"
 
@@ -55,10 +54,29 @@ using namespace stp;
 #include "stp/Util/find_rewrites/rewrite_system.h"
 #include "stp/Util/find_rewrites/Functionlist.h"
 #include "stp/Util/find_rewrites/misc.h"
+#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
+#include "stp/ToSat/AIG/ToCNFAIG.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/BitBlaster.h"
+
+#include <sstream>
+#include <fstream>
+using std::stringstream;
+using std::make_pair;
+using std::deque;
+using std::swap;
+using std::ios;
+using std::map;
+using std::pair;
+using std::ofstream;
+using std::ifstream;
+using namespace stp;
 
 extern int smt2parse();
 
-using namespace stp;
+
+
+
 
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
@@ -79,7 +97,7 @@ volatile bool force_writeout = false;
 vector<ASTVec*> saved_array;
 
 // Stores the difficulties that have already been generated.
-map<ASTNode, int> difficulty_cache;
+std::map<ASTNode, int> difficulty_cache;
 
 Rewrite_system rewrite_system;
 
@@ -965,7 +983,6 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
       assert(map.size() > 0);
     }
 
-    int id = 1;
     for (it2 = map.begin(); it2 != map.end(); it2++)
     {
       ASTVec& equiv = it2->second;
@@ -1337,7 +1354,7 @@ string name(const ASTNode& n)
 }
 
 // Turns "n" into a statement in STP's C++ language to create it.
-string createString(ASTNode n, map<ASTNode, string>& val)
+string createString(ASTNode n, std::map<ASTNode, string>& val)
 {
   if (val.find(n) != val.end())
     return val.find(n)->second;

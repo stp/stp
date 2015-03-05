@@ -1,8 +1,6 @@
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp" @ONLY)
 
-# FIXME: These aren't built currently.
-#
-#
+
 # add_executable(measure
 #     measure.cpp
 #     Functions.cpp
@@ -10,8 +8,15 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BIN
 # target_link_libraries(measure
 #     stp
 # )
-#
-#
+
+add_executable(rewrite_rule_gen
+    rewrite_rule_gen.cpp
+)
+target_link_libraries(rewrite_rule_gen
+    libstp
+)
+
+
 add_executable(time_constantbitprop
     time_cbitp.cpp
 )
