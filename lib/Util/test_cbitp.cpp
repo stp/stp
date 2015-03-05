@@ -81,7 +81,268 @@ void setV(FixedBits& result, int id, int val)
   }
 }
 
-#include "checkEqual.include"
+// Very rough I know. One the way to being made a class.
+
+#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+
+const bool debug_printAll = false;
+
+void print(const vector<FixedBits*> children, const FixedBits& output, Kind k)
+{
+  if (2 == children.size())
+    cout << "(" << *(children[0]) << " " << k << " " << *(children[1]) << ")"
+         << " == " << output << endl;
+  else
+  {
+    cout << "(" << k << " ";
+    for (unsigned i = 0; i < children.size(); i++)
+      cout << *(children[i]) << " ";
+    cout << ")"
+         << " == " << output << endl;
+  }
+}
+
+void error(Kind kind, vector<FixedBits*> initialChildren,
+           FixedBits initialOutput,                               //
+           vector<FixedBits*> autoChildren, FixedBits autoOutput, //
+           vector<FixedBits*> manualChildren, FixedBits manualOutput)
+{
+
+  cerr << "difference(kind:" << kind << ")" << endl;
+  const int size = initialChildren.size();
+
+  cerr << "--------------The Initial Values that were passed to the function"
+       << endl;
+  for (int i = 0; i < size; i++)
+    cerr << ":" << *(initialChildren[i]) << endl;
+  cerr << "result:" << initialOutput << endl;
+
+  cerr << "--------------Values from the Solver" << endl;
+  for (int i = 0; i < size; i++)
+    cerr << ":" << *(autoChildren[i]) << endl;
+  cerr << "result:" << autoOutput << endl;
+
+  cerr << "--------------Values from the Implemented Transfer Function" << endl;
+  for (int i = 0; i < size; i++)
+    cerr << ":" << *(manualChildren[i]) << endl;
+  cerr << "result:" << manualOutput << endl;
+
+  FatalError("As described");
+}
+
+struct Detail
+{
+  Detail()
+  {
+    conflict = false;
+    maxFixed = 0;
+    transferFixed = 0;
+    initial = 0;
+  }
+  bool conflict;
+  int maxFixed;
+  int transferFixed;
+  int initial;
+};
+
+void checkEqual(vector<FixedBits*>& initialChildren, FixedBits& initialOutput,
+                Result (*transfer)(vector<FixedBits*>&, FixedBits&), Kind kind,
+                bool imprecise, Detail& d)
+{
+  // Make two copies of the initial values. One to send to the maximum
+  // Precision.
+  // The other to send to the manually built transfer functions.
+  vector<FixedBits*> manualChildren;
+  vector<FixedBits*> autoChildren;
+
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    manualChildren.push_back(new FixedBits(*(initialChildren[i])));
+    autoChildren.push_back(new FixedBits(*(initialChildren[i])));
+  }
+
+  FixedBits manualOutput(initialOutput);
+  FixedBits autoOutput(initialOutput);
+
+  Result manualResult = transfer(manualChildren, manualOutput);
+
+  // Make a copy of the manualResult so we can check if it varies after calling
+  // the transfer function a second time.
+  FixedBits tempOutput(manualOutput);
+  vector<FixedBits*> tempChildren;
+
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    tempChildren.push_back(new FixedBits(*(manualChildren[i])));
+    d.initial += tempChildren[i]->countFixed();
+  }
+  d.initial += initialOutput.countFixed();
+
+  Result tempResult = transfer(tempChildren, tempOutput);
+
+  for (int i = 0; i < (int)tempChildren.size(); i++)
+    d.transferFixed += tempChildren[i]->countFixed();
+  d.transferFixed += tempOutput.countFixed();
+
+  // First and second time should have the same conflict status.
+  if ((manualResult == CONFLICT) != (tempResult == CONFLICT))
+  {
+    cerr << "One conflict, both conflict";
+    error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+          manualChildren, manualOutput);
+  }
+
+  bool different = !FixedBits::equals(tempOutput, manualOutput);
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    if (!FixedBits::equals(*tempChildren[i], *manualChildren[i]))
+      different = true;
+  }
+
+  // running it immediately afterwards with the same input/output should cause
+  // no changes.
+  if (manualResult != CONFLICT && (CHANGED == tempResult || different))
+  {
+    cerr << "Result varied after second call" << endl;
+    cerr << "first";
+    print(manualChildren, manualOutput, kind);
+    cerr << "second";
+    print(tempChildren, tempOutput, kind);
+    error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+          manualChildren, manualOutput);
+  }
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    delete tempChildren[i];
+  }
+
+  // find if the values have changed. If they've changed, ensure they follow the
+  // lattice.
+  bool changed = false;
+  if (!FixedBits::equals(initialOutput, manualOutput))
+  {
+    if (!FixedBits::updateOK(initialOutput, manualOutput))
+    {
+      // BAD UPDATE.
+      cerr << "bad update."
+           << "Value changed not according to the lattice" << endl;
+      print(manualChildren, manualOutput, kind);
+      error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+            manualChildren, manualOutput);
+    }
+    changed = true;
+  }
+
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    if (!FixedBits::equals(*manualChildren[i], *initialChildren[i]))
+    {
+      if (!FixedBits::updateOK(*initialChildren[i], *manualChildren[i]))
+      {
+        FatalError("not ok");
+      }
+      changed = true;
+    }
+  }
+
+  // if they've changed the status should have changed.
+  if (changed && manualResult != NOT_IMPLEMENTED)
+  {
+    // if changed then manualResult should be conflict or changed.
+    if (!(CHANGED == manualResult || CONFLICT == manualResult))
+    {
+      cerr << "result should be changed or conflict" << endl;
+      error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+            manualChildren, manualOutput);
+    }
+  }
+
+  // If the status is changed. Then there should have been a change.
+  if (CHANGED == manualResult)
+  {
+    if (!changed)
+      FatalError("Should have changed");
+  }
+
+  bool first = maxPrecision(autoChildren, autoOutput, kind, mgr);
+  mgr->ClearAllTables();
+
+  if (first)
+    d.conflict = true;
+  for (int i = 0; i < (int)autoChildren.size(); i++)
+    d.maxFixed += autoChildren[i]->countFixed();
+  d.maxFixed += autoOutput.countFixed();
+
+  if (debug_printAll)
+  {
+    cout << "initial: ";
+    print(initialChildren, initialOutput, kind);
+
+    cout << "  manual:";
+    print(manualChildren, manualOutput, kind);
+
+    cout << "    auto:";
+    print(autoChildren, autoOutput, kind);
+  }
+
+  // if we failed on the first time through. Then the generated equation is
+  // impossible.
+  // For example: (= (bvand 1 0) 1)
+  // If it's bad, then the transfer function should have reported it.
+
+  if (first)
+  {
+    if (!imprecise && CONFLICT != manualResult)
+    {
+      cerr << "TRANSFER FUNCTION DIDN'T DETECT IT WAS BAD" << endl;
+      cerr << "result was:" << manualResult << endl;
+      error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+            manualChildren, manualOutput);
+    }
+  }
+  else
+  {
+    // if it wasn't bad, then the transfer function shouldn't say it is.
+    if (CONFLICT == manualResult)
+    {
+      cerr << "TRANSFER FUNCTION REPORTED CONFLICT WHEN THERE WAS NONE."
+           << endl;
+      cerr << "result was:" << manualResult << endl;
+      error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+            manualChildren, manualOutput);
+    }
+
+    if (imprecise)
+    {
+      if (!FixedBits::in(autoOutput, manualOutput))
+      {
+        error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+              manualChildren, manualOutput);
+      }
+    }
+    else if (!FixedBits::equals(autoOutput, manualOutput))
+      error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+            manualChildren, manualOutput);
+
+    for (int i = 0; i < (int)initialChildren.size(); i++)
+    {
+      if (imprecise)
+      {
+        if (!FixedBits::in(*(autoChildren[i]), *(manualChildren[i])))
+          error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+                manualChildren, manualOutput);
+      }
+      else if (!FixedBits::equals(*(autoChildren[i]), *(manualChildren[i])))
+        error(kind, initialChildren, initialOutput, autoChildren, autoOutput,
+              manualChildren, manualOutput);
+    }
+  }
+  for (int i = 0; i < (int)initialChildren.size(); i++)
+  {
+    delete manualChildren[i];
+    delete autoChildren[i];
+  }
+}
 
 // Exhaustively generate all the bitpatterns for the number of inputs.
 // For each input compare the solver's result to the manual Transfer functions
@@ -159,8 +420,8 @@ void exhaustive(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 }
 
 // Random.
-void runSomeRandom(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
-                   const Kind kind, int prob)
+void some_random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
+                       const Kind kind, int prob)
 {
   vector<FixedBits*> children;
 
@@ -191,7 +452,9 @@ void runSomeRandom(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
     bool imprecise = false;
     if (kind == BVDIV || kind == BVMULT || kind == BVMOD || kind == SBVDIV ||
         kind == SBVREM)
+    {
       imprecise = true;
+    }
     checkEqual(children, output, transfer, kind, imprecise, d);
 
     assert(!d.conflict);
@@ -210,7 +473,9 @@ void runSomeRandom(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
   if ((max - initial) == 0)
     percent = 100;
   clock_t t = s.stop2();
-  cerr << std::fixed << "% Count" << count << " prob" << prob << " bits" << width << endl;
+
+  cerr << std::fixed << "% Count" << count << " prob" << prob << " bits"
+       << width << endl;
   cerr << "&" << std::setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
   cerr << "&" << initial << "&" << transferC << "&" << max << "&" << percent
        << "\\%\n";
@@ -384,8 +649,8 @@ void exhaustively_check(const int bitwidth, Kind k,
   {
     int current = j;
 
-    //For progress indication
-    //if (j% 10000 == 0)
+    // For progress indication
+    // if (j% 10000 == 0)
     //    cerr << j << " of " << to_iterate << endl;
 
     int id = 0;
@@ -482,7 +747,8 @@ void exhaustively_check(const int bitwidth, Kind k,
     else if (BBFixed != maxFixed)
       BBBad++;
 
-    if (!transfer_conflict && (k != stp::BVMULT) && (k != stp::BVDIV) && (k != stp::BVMOD))
+    if (!transfer_conflict && (k != stp::BVMULT) && (k != stp::BVDIV) &&
+        (k != stp::BVMOD))
     {
       if (!FixedBits::equals(*children[0], c_a))
         FatalError("First");
@@ -495,9 +761,9 @@ void exhaustively_check(const int bitwidth, Kind k,
   for (int i = 0; i < children.size(); i++)
     delete children[i];
 
-  cerr << std::setprecision(1) << std::fixed
-  << "& " << 100 * (transferBad / (float)to_iterate) << "\\%"
-  << "& " << 100 * (BBBad / (float)to_iterate) << "\\%";
+  cerr << std::setprecision(1) << std::fixed << "& "
+       << 100 * (transferBad / (float)to_iterate) << "\\%"
+       << "& " << 100 * (BBBad / (float)to_iterate) << "\\%";
 
   transferBad = 0;
   BBBad = 0;
@@ -505,9 +771,9 @@ void exhaustively_check(const int bitwidth, Kind k,
 
 void go(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
 {
-  runSomeRandom(transfer, kind, 1);
-  runSomeRandom(transfer, kind, 5);
-  runSomeRandom(transfer, kind, 50);
+  some_random_tests(transfer, kind, 1);
+  some_random_tests(transfer, kind, 5);
+  some_random_tests(transfer, kind, 50);
   cerr << "\\\\";
 }
 
@@ -550,7 +816,7 @@ int main(void)
 
   const int bits = 5;
 
-  if (false)
+  if (true)
   {
     output << "signed greater than equals" << endl;
     go(&bvSignedGreaterThanEqualsBothWays, BVSGE);

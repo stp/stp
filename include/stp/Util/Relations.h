@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// FIXME: This header seems dead. Remove it
 #ifndef RELATIONS_H_
 #define RELATIONS_H_
 
