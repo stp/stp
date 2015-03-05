@@ -765,7 +765,7 @@ void exhaustively_check(const int bitwidth, Kind k,
   BBBad = 0;
 }
 
-void go(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
+void random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
 {
   some_random_tests(transfer, kind, 1);
   some_random_tests(transfer, kind, 5);
@@ -778,49 +778,49 @@ void random_tests()
   ostream& output = cerr;
 
   output << "signed greater than equals" << endl;
-  go(&bvSignedGreaterThanEqualsBothWays, BVSGE);
+  random_tests(&bvSignedGreaterThanEqualsBothWays, BVSGE);
 
   output << "unsigned less than" << endl;
-  go(&bvLessThanEqualsBothWays, BVLT);
+  random_tests(&bvLessThanEqualsBothWays, BVLT);
 
   output << "equals" << endl;
-  go(&bvEqualsBothWays, EQ);
+  random_tests(&bvEqualsBothWays, EQ);
 
   output << "bit-vector xor" << endl;
-  go(&bvXorBothWays, BVXOR);
+  random_tests(&bvXorBothWays, BVXOR);
 
   output << "bit-vector or" << endl;
-  go(&bvOrBothWays, BVOR);
+  random_tests(&bvOrBothWays, BVOR);
 
   output << "bit-vector and" << endl;
-  go(&bvAndBothWays, BVAND);
+  random_tests(&bvAndBothWays, BVAND);
 
   output << "right shift" << endl;
-  go(&bvRightShiftBothWays, BVRIGHTSHIFT);
+  random_tests(&bvRightShiftBothWays, BVRIGHTSHIFT);
 
   output << "left shift" << endl;
-  go(&bvLeftShiftBothWays, BVLEFTSHIFT);
+  random_tests(&bvLeftShiftBothWays, BVLEFTSHIFT);
 
   output << "arithmetic shift" << endl;
-  go(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
+  random_tests(&bvArithmeticRightShiftBothWays, BVSRSHIFT);
 
   output << "addition" << endl;
-  go(&bvAddBothWays, BVPLUS);
+  random_tests(&bvAddBothWays, BVPLUS);
 
   output << "multiplication" << endl;
-  go(&multiply, BVMULT);
+  random_tests(&multiply, BVMULT);
 
   output << "unsigned division" << endl;
-  go(&unsignedDivide, BVDIV);
+  random_tests(&unsignedDivide, BVDIV);
 
   output << "unsigned remainder" << endl;
-  go(&unsignedModulus, BVMOD);
+  random_tests(&unsignedModulus, BVMOD);
 
   output << "signed division" << endl;
-  go(&signedDivide, SBVDIV);
+  random_tests(&signedDivide, SBVDIV);
 
   output << "signed remainder" << endl;
-  go(&signedRemainder, SBVREM);
+  random_tests(&signedRemainder, SBVREM);
 }
 
 void check_bvconcat(const int bits)
