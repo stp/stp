@@ -809,6 +809,7 @@ void random_tests()
 
   output << "multiplication" << endl;
   go(&multiply, BVMULT);
+
   output << "unsigned division" << endl;
   go(&unsignedDivide, BVDIV);
 
