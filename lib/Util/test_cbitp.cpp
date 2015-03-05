@@ -416,7 +416,6 @@ void exhaustive(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
   }
 }
 
-// Random.
 void some_random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
                        const Kind kind, int prob)
 {
