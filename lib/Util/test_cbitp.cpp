@@ -1131,7 +1131,6 @@ int main(void)
   mgr->UserFlags.disableSimplifications();
   mgr->UserFlags.division_by_zero_returns_one_flag = true;
   Cpp_interface interface(*mgr);
-  srand(time(NULL));
 
   // Add had a defect effecting bithWidth > 90.
   // Shifting had a defect effecting bitWidth > 64.

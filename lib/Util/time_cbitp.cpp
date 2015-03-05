@@ -35,9 +35,12 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/cpp_interface.h"
 #include <list>
+#include <iomanip>
+#include "stp/cpp_interface.h"
 
 #include "stp/Util/StopWatch.h"
 #include "stp/Util/Relations.h"
+#include "stp/Parser/LetMgr.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -186,8 +189,8 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 
   clock_t t = s.stop2();
 
-  cerr.setf(ios::fixed);
-  cerr << "&" << setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
+  cerr << std::fixed;
+  cerr << "&" << std::setprecision(2) << (float(t) / CLOCKS_PER_SEC) << "s";
   output << " &" << initially_fixed << " & " << finally_fixed - initially_fixed
          << endl;
 
@@ -226,7 +229,7 @@ simplifier::constantBitP::Result multiply(vector<FixedBits*>& children,
 
 //
 void run_with_various_prob(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
-                           ostream& output, Kind kind = UNDEFINED)
+                           ostream& output, Kind kind = stp::UNDEFINED)
 {
   int prob;
 
@@ -240,58 +243,56 @@ int main(void)
 {
   beev = new stp::STPMgr();
 
-  Cpp_interface interface(*beev, beev->defaultNodeFactory);
+  stp::Cpp_interface interface(*beev, beev->defaultNodeFactory);
   interface.startup();
-
-  srand(time(NULL));
   stp::GlobalParserBM = beev;
 
   ostream& output = cerr;
 
   output << "signed greater than equals" << endl;
-  run_with_various_prob(&bvSignedGreaterThanEqualsBothWays, output, BVSGE);
+  run_with_various_prob(&bvSignedGreaterThanEqualsBothWays, output, stp::BVSGE);
 
   output << "unsigned less than" << endl;
-  run_with_various_prob(&bvLessThanBothWays, output, BVLT);
+  run_with_various_prob(&bvLessThanBothWays, output, stp::BVLT);
 
   output << "equals" << endl;
-  run_with_various_prob(bvEqualsBothWays, output, EQ);
+  run_with_various_prob(bvEqualsBothWays, output, stp::EQ);
 
   output << "bit-vector xor" << endl;
-  run_with_various_prob(bvXorBothWays, output, BVXOR);
+  run_with_various_prob(bvXorBothWays, output, stp::BVXOR);
 
   output << "bit-vector or" << endl;
-  run_with_various_prob(bvOrBothWays, output, BVOR);
+  run_with_various_prob(bvOrBothWays, output, stp::BVOR);
 
   output << "bit-vector and" << endl;
-  run_with_various_prob(bvAndBothWays, output, BVAND);
+  run_with_various_prob(bvAndBothWays, output, stp::BVAND);
 
   output << "right shift" << endl;
-  run_with_various_prob(bvRightShiftBothWays, output, BVRIGHTSHIFT);
+  run_with_various_prob(bvRightShiftBothWays, output, stp::BVRIGHTSHIFT);
 
   output << "left shift" << endl;
-  run_with_various_prob(bvLeftShiftBothWays, output, BVLEFTSHIFT);
+  run_with_various_prob(bvLeftShiftBothWays, output, stp::BVLEFTSHIFT);
 
   output << "arithmetic shift" << endl;
-  run_with_various_prob(bvArithmeticRightShiftBothWays, output, BVSRSHIFT);
+  run_with_various_prob(bvArithmeticRightShiftBothWays, output, stp::BVSRSHIFT);
 
   output << "addition" << endl;
-  run_with_various_prob(bvAddBothWays, output, BVPLUS);
+  run_with_various_prob(bvAddBothWays, output, stp::BVPLUS);
 
   output << "multiplication" << endl;
-  run_with_various_prob(multiply, output, BVMULT);
+  run_with_various_prob(multiply, output, stp::BVMULT);
 
   output << "unsigned division" << endl;
-  run_with_various_prob(unsignedDivision, output, BVDIV);
+  run_with_various_prob(unsignedDivision, output, stp::BVDIV);
 
   output << "unsigned remainder" << endl;
-  run_with_various_prob(signedRemainder, output, BVMOD);
+  run_with_various_prob(signedRemainder, output, stp::BVMOD);
 
   output << "signed division" << endl;
-  run_with_various_prob(signedDivision, output, SBVDIV);
+  run_with_various_prob(signedDivision, output, stp::SBVDIV);
 
   output << "signed remainder" << endl;
-  run_with_various_prob(signedRemainder, output, SBVREM);
+  run_with_various_prob(signedRemainder, output, stp::SBVREM);
 
   output << "%"
          << "iterations" << iterations;

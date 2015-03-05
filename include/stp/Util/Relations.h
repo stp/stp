@@ -36,6 +36,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/simplifier.h"
 #include <list>
 using std::list;
 
@@ -72,7 +73,7 @@ struct Relations
       ASTVec c;
       c.push_back(beev->CreateBVConst(a.GetBVConst(), bitWidth));
       c.push_back(beev->CreateBVConst(b.GetBVConst(), bitWidth));
-      ASTNode result = NonMemberBVConstEvaluator(beev, k, c, bitWidth);
+      ASTNode result = stp::NonMemberBVConstEvaluator(beev, k, c, bitWidth);
       FixedBits output = FixedBits::concreteToAbstract(result);
 
       for (int i = 0; i < a.getWidth(); i++)
