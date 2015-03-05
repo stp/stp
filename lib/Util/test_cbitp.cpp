@@ -1135,17 +1135,12 @@ int main(void)
 
   // Add had a defect effecting bithWidth > 90.
   // Shifting had a defect effecting bitWidth > 64.
+  random_tests();
 
-  if (true)
-  {
-    random_tests();
-    exit(0);
-  }
-  else
-  {
-    exhaustive_checks();
-    cout << "Done" << endl;
-  }
+  //note, originall the random was not performed, maybe it messed
+  //up the state and make the exhaustive check fail :O Never tested.
+  exhaustive_checks();
+  cout << "Done" << endl;
 
   return 1;
 }
