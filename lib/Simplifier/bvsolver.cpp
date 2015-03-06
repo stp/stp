@@ -94,7 +94,7 @@ void BVSolver::UpdateAlreadySolvedMap(const ASTNode& key, const ASTNode& value)
 {
   assert(key.GetType() == BOOLEAN_TYPE);
   FormulasAlreadySolvedMap[key] = value;
-} // end of UpdateAlreadySolvedMap()
+}
 
 // accepts an even number "in", and returns the location of
 // the lowest bit that is turned on in that number.
@@ -247,7 +247,7 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   // BVUMINUS (EXTRACT SYMBOL BV_CONST ZERO) or
   // (EXTRACT SYMBOL BV_CONST ZERO)
   return outmonom;
-} // end of choosemonom()
+}
 
 // Manipulate the lhs and rhs to get just a variable on the lhs (if possible).
 // Then add to the
@@ -462,7 +462,7 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
       output = substitute(eq, lhs, rhs, single);
     } while (output == eq);
 
-  } // end of if(BVPLUS ...)
+  }
 
   else if (BVUMINUS == lhs.GetKind())
   {
@@ -478,7 +478,7 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
 
   UpdateAlreadySolvedMap(input, output);
   return output;
-} // end of BVSolve_Odd()
+}
 
 // The toplevel bvsolver(). Checks if the formula has already been
 // solved. If not, the solver() is invoked. If yes, then simply drop
@@ -622,7 +622,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   UpdateAlreadySolvedMap(_input, output);
   _bm->GetRunTimes()->stop(RunTimes::BVSolver);
   return output;
-} // end of TopLevelBVSolve()
+}
 
 ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
 {
@@ -837,11 +837,11 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
         aaa = _bm->CreateTerm(BVMULT, newlen, coeff, lower_x);
       }
       lhs_out.push_back(aaa);
-    } // end of inner forloop()
+    }
     rhs = _bm->CreateZeroConst(newlen);
     lhs = _bm->CreateTerm(BVPLUS, newlen, lhs_out);
     formula_out.push_back(_simp->CreateSimplifiedEQ(lhs, rhs));
-  } // end of outer forloop()
+  }
 
   output = (formula_out.size() > 0)
                ? (formula_out.size() > 1) ? _bm->CreateNode(AND, formula_out)
@@ -850,5 +850,6 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
 
   UpdateAlreadySolvedMap(input, output);
   return output;
-} // end of BVSolve_Even()
+}
+
 } // end of namespace stp

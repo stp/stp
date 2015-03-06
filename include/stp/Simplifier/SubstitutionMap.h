@@ -141,9 +141,9 @@ public:
       return true;
     }
     return false;
-  } // end of UpdateSolverMap()
+  }
 
-  ASTNodeMap* Return_SolverMap() { return SolverMap; } // End of SolverMap()
+  ASTNodeMap* Return_SolverMap() { return SolverMap; } 
 
   //Returns TRUE if key is not in SolverMap
   bool InsideSubstitutionMap(const ASTNode& key)

@@ -78,5 +78,5 @@ void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)
   }
 
   flush(cout);
-} // end of PrintOutput()
+}
 }

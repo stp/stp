@@ -71,7 +71,7 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
     return -1;
 
   return 0;
-} // End of TermOrder()
+} 
 
 // idempotent.
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)

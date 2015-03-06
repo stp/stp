@@ -338,5 +338,6 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
   }
 
   return output;
-} // end of CreateSubstitutionMap()
+}
+
 }

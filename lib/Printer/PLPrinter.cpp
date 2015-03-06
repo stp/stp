@@ -335,7 +335,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       FatalError("PL_Print1: printing not implemented for this kind: ", n);
       break;
   }
-} // end of PL_Print1()
+}
 
 // print in PRESENTATION LANGUAGE
 //
@@ -408,5 +408,5 @@ ostream& PL_Print(ostream& os, const ASTNode& n, int indentation)
   // os << " )";
   os << " ";
   return os;
-} // end of PL_Print()
+}
 }

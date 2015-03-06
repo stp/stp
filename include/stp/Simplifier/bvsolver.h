@@ -149,8 +149,7 @@ public:
   void ClearAllTables(void)
   {
     FormulasAlreadySolvedMap.clear();
-  } // End of ClearAllTables()
-
-}; // end of class bvsolver
+  }
+};
 } // end of namespace stp
 #endif

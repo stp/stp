@@ -94,7 +94,7 @@ public:
   {
   }
 
-  // Copy constructor.  This copies the contents of the child nodes
+  // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
   ASTInterior(const ASTInterior& int_node) : ASTInternalWithChildren(int_node)

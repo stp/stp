@@ -1764,7 +1764,7 @@ Expr vc_parseExpr(VC vc, const char* infile)
   nodestar output = new node(o);
   delete AssertsQuery;
   return output;
-} // end of vc_parseExpr()
+}
 
 char* exprString(Expr e)
 {
@@ -1849,7 +1849,7 @@ Type vc_getType(VC vc, Expr ex)
       return vc_boolType(vc);
       break;
   }
-} // end of vc_gettype()
+}
 
 //!if e is TRUE then return 1; if e is FALSE then return 0; otherwise
 // return -1
@@ -2034,4 +2034,4 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     *(nodestar*)oasserts = new node(AssertsQuery[0]);
   }
   return 1;
-} // end of vc_parseMemExpr()
+}

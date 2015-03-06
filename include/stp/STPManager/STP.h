@@ -85,7 +85,7 @@ public:
     tosat = ts;
     arrayTransformer = a;
     Ctr_Example = ce;
-  } // End of constructor
+  } 
 
   STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
       ToSATBase* ts, AbsRefine_CounterExample* ce)
@@ -96,7 +96,7 @@ public:
     delete bsolv; // Remove from the constructor later..
     arrayTransformer = a;
     Ctr_Example = ce;
-  } // End of constructor
+  } 
 
   ~STP()
   {
@@ -140,6 +140,6 @@ public:
     // bm->ClearAllTables();
   }
 
-}; // End of Class STP
+}; 
 } // end of namespace
 #endif

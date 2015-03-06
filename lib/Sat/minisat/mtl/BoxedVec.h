@@ -89,7 +89,7 @@ public:
         } 
     }
 
-    // Constructors:
+    //  :
     altvec(void)                   : ref (NULL) { }
     altvec(int size)               : ref (Vec_t::alloc(NULL, fitSize(size))) { fill(size);      ref->sz = size; }
     altvec(int size, const T& pad) : ref (Vec_t::alloc(NULL, fitSize(size))) { fill(size, pad); ref->sz = size; }

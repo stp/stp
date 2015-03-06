@@ -287,7 +287,7 @@ public:
 
   void getConsts(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& equivs);
 };
-// end of class BitBlaster
+
 } // end of namespace
 
 #endif

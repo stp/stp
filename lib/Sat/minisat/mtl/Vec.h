@@ -50,7 +50,7 @@ class vec {
     static inline void nextCap(int& cap){ cap += ((cap >> 1) + 2) & ~1; }
 
 public:
-    // Constructors:
+    //  :
     vec()                       : data(NULL) , sz(0)   , cap(0)    { }
     explicit vec(int size)      : data(NULL) , sz(0)   , cap(0)    { growTo(size); }
     vec(int size, const T& pad) : data(NULL) , sz(0)   , cap(0)    { growTo(size, pad); }

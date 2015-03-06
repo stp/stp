@@ -72,7 +72,7 @@ bool CNFMgr::onChildDoPos(const ASTNode& varphi, unsigned int idx)
   }
 
   return result;
-} // End of onChildDoPos()
+} 
 
 bool CNFMgr::onChildDoNeg(const ASTNode& varphi, unsigned int idx)
 {
@@ -129,7 +129,7 @@ bool CNFMgr::onChildDoNeg(const ASTNode& varphi, unsigned int idx)
   }
 
   return result;
-} // End of onChildDoNeg()
+} 
 
 //########################################
 //########################################
@@ -138,27 +138,27 @@ bool CNFMgr::onChildDoNeg(const ASTNode& varphi, unsigned int idx)
 void CNFMgr::incrementSharesPos(CNFInfo& x)
 {
   x.control += ((x.control & 3) < 2) ? 1 : 0;
-} // End of incrementSharesPos()
+} 
 
 int CNFMgr::sharesPos(CNFInfo& x)
 {
   return (x.control & 3);
-} // End of sharesPos()
+} 
 
 void CNFMgr::incrementSharesNeg(CNFInfo& x)
 {
   x.control += ((x.control & 12) < 8) ? 4 : 0;
-} // End of incrementSharesNeg()
+} 
 
 int CNFMgr::sharesNeg(CNFInfo& x)
 {
   return ((x.control & 12) >> 2);
-} // End of sharesNeg()
+} 
 
 void CNFMgr::setControlBit(CNFInfo& x, unsigned int idx)
 {
   x.control |= (1 << idx);
-} // End of setControlBit()
+} 
 
 bool CNFMgr::getControlBit(CNFInfo& x, unsigned int idx)
 {
@@ -170,12 +170,12 @@ bool CNFMgr::getControlBit(CNFInfo& x, unsigned int idx)
   }
 
   return result;
-} // End of getControlBit()
+} 
 
 void CNFMgr::setIsTerm(CNFInfo& x)
 {
   setControlBit(x, 4);
-} // End of setIsTerm()
+} 
 
 bool CNFMgr::isTerm(CNFInfo& x)
 {
@@ -266,7 +266,7 @@ ClauseList* CNFMgr::SINGLETON(const ASTNode& varphi)
   ClauseList* psi = new ClauseList();
   psi->push_back(clause);
   return psi;
-} // End of SINGLETON()
+} 
 
 //########################################
 //########################################
@@ -349,7 +349,7 @@ void CNFMgr::scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild)
     }
   }
 
-} // End of ScanFormula()
+} 
 
 void CNFMgr::scanTerm(const ASTNode& varphi)
 {
@@ -408,7 +408,7 @@ void CNFMgr::scanTerm(const ASTNode& varphi)
       scanTerm(varphi[i]);
     }
   }
-} // End of scanterm()
+} 
 
 //########################################
 //########################################
@@ -478,7 +478,7 @@ void CNFMgr::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
   }
 
   setWasVisited(*x);
-} // End of convertFormulaToCNF()
+} 
 
 void CNFMgr::convertTermForCNF(const ASTNode& varphi, ClauseList* defs)
 {
@@ -522,7 +522,7 @@ void CNFMgr::convertTermForCNF(const ASTNode& varphi, ClauseList* defs)
     psi.SetIndexWidth(varphi.GetIndexWidth());
     x->termforcnf = ASTNodeToASTNodePtr(psi);
   }
-} // End of convertTermForCNF()
+} 
 
 //########################################
 //########################################
@@ -567,7 +567,7 @@ ASTNode* CNFMgr::doRenameITE(const ASTNode& varphi, ClauseList* defs)
   defs->insert(cl4);
 
   return ASTNodeToASTNodePtr(psi);
-} // End of doRenameITE()
+} 
 
 void CNFMgr::doRenamingPos(const ASTNode& varphi, ClauseList* defs)
 {
@@ -600,7 +600,7 @@ void CNFMgr::doRenamingPos(const ASTNode& varphi, ClauseList* defs)
 
   x->clausespos = SINGLETON(psi);
   setWasRenamedPos(*x);
-} // End of doRenamingPos
+} 
 
 void CNFMgr::doRenamingPosXor(const ASTNode& varphi)
 {
@@ -634,7 +634,7 @@ void CNFMgr::doRenamingPosXor(const ASTNode& varphi)
   x->clausespos = SINGLETON(psi);
   x->clausesneg = SINGLETON(bm->CreateNode(NOT, psi));
   setWasRenamedPos(*x);
-} // End of doRenamingPos
+} 
 
 //   void CNFMgr::doRenamingNegXor(const ASTNode& varphi)
 //   {
@@ -699,7 +699,7 @@ void CNFMgr::doRenamingNeg(const ASTNode& varphi, ClauseList* defs)
 
   x->clausesneg = SINGLETON(bm->CreateNode(NOT, psi));
   setWasRenamedNeg(*x);
-} // End of doRenamingNeg()
+} 
 
 //########################################
 //########################################
@@ -785,7 +785,7 @@ void CNFMgr::convertFormulaToCNFPosCases(const ASTNode& varphi,
       FatalError("");
     }
   }
-} // End of convertFormulaToCNFPosCases()
+} 
 
 void CNFMgr::convertFormulaToCNFNegCases(const ASTNode& varphi,
                                          ClauseList* defs)
@@ -886,38 +886,38 @@ void CNFMgr::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = SINGLETON(bm->CreateNode(varphi.GetKind(), psis));
-} // End of convertFormulaToCNFPosPred()
+} 
 
 void CNFMgr::convertFormulaToCNFPosFALSE(const ASTNode& varphi,
                                          ClauseList* defs)
 {
   ASTNode dummy_false_var = bm->CreateNode(NOT, dummy_true_var);
   info[varphi]->clausespos = SINGLETON(dummy_false_var);
-} // End of convertFormulaToCNFPosFALSE()
+} 
 
 void CNFMgr::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs)
 {
   info[varphi]->clausespos = SINGLETON(dummy_true_var);
-} // End of convertFormulaToCNFPosTRUE
+} 
 
 void CNFMgr::convertFormulaToCNFPosBOOLEXTRACT(const ASTNode& varphi,
                                                ClauseList* defs)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
-} // End of convertFormulaToCNFPosBOOLEXTRACT()
+} 
 
 void CNFMgr::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi,
                                           ClauseList* defs)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
-} // End of convertFormulaToCNFPosSYMBOL()
+} 
 
 void CNFMgr::convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs)
 {
   convertFormulaToCNF(varphi[0], defs);
   info[varphi]->clausespos = ClauseList::COPY(*(info[varphi[0]]->clausesneg));
   reduceMemoryFootprintNeg(varphi[0]);
-} // End of convertFormulaToCNFPosNOT()
+} 
 
 void CNFMgr::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs)
 {
@@ -957,7 +957,7 @@ void CNFMgr::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFPosAND()
+} 
 
 void CNFMgr::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs)
 {
@@ -999,7 +999,7 @@ void CNFMgr::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFPosNAND()
+} 
 
 void CNFMgr::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1040,7 +1040,7 @@ void CNFMgr::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFPosOR()
+} 
 
 void CNFMgr::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1059,7 +1059,7 @@ void CNFMgr::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFPosNOR()
+} 
 
 void CNFMgr::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi,
                                            ClauseList* defs)
@@ -1079,7 +1079,7 @@ void CNFMgr::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi,
   reduceMemoryFootprintNeg(varphi[0]);
   reduceMemoryFootprintPos(varphi[1]);
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFPosIMPLIES()
+} 
 
 void CNFMgr::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1110,7 +1110,7 @@ void CNFMgr::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs)
   reduceMemoryFootprintPos(varphi[2]);
 
   info[varphi]->clausespos = psi1;
-} // End of convertFormulaToCNFPosITE()
+} 
 
 void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1132,7 +1132,7 @@ void CNFMgr::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs)
     reduceMemoryFootprintPos(*it2);
     reduceMemoryFootprintNeg(*it2);
   }
-} // End of convertFormulaToCNFPosXOR()
+} 
 
 ClauseList* CNFMgr::convertFormulaToCNFPosXORAux(const ASTNode& varphi,
                                                  unsigned int idx,
@@ -1201,7 +1201,7 @@ ClauseList* CNFMgr::convertFormulaToCNFPosXORAux(const ASTNode& varphi,
   }
 
   return psi;
-} // End of convertFormulaToCNFPosXORAux()
+} 
 
 void CNFMgr::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1217,39 +1217,39 @@ void CNFMgr::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs)
 
   info[varphi]->clausesneg =
       SINGLETON(bm->CreateNode(NOT, bm->CreateNode(varphi.GetKind(), psis)));
-} // End of convertFormulaToCNFNegPred()
+} 
 
 void CNFMgr::convertFormulaToCNFNegFALSE(const ASTNode& varphi,
                                          ClauseList* defs)
 {
   info[varphi]->clausesneg = SINGLETON(dummy_true_var);
-} // End of convertFormulaToCNFNegFALSE()
+} 
 
 void CNFMgr::convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs)
 {
   ASTNode dummy_false_var = bm->CreateNode(NOT, dummy_true_var);
   info[varphi]->clausesneg = SINGLETON(dummy_false_var);
-} // End of convertFormulaToCNFNegTRUE()
+} 
 
 void CNFMgr::convertFormulaToCNFNegBOOLEXTRACT(const ASTNode& varphi,
                                                ClauseList* defs)
 {
   ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
   info[varphi]->clausesneg = psi;
-} // End of convertFormulaToCNFNegBOOLEXTRACT()
+} 
 
 void CNFMgr::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi,
                                           ClauseList* defs)
 {
   info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, varphi));
-} // End of convertFormulaToCNFNegSYMBOL()
+} 
 
 void CNFMgr::convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs)
 {
   convertFormulaToCNF(varphi[0], defs);
   info[varphi]->clausesneg = ClauseList::COPY(*(info[varphi[0]]->clausespos));
   reduceMemoryFootprintPos(varphi[0]);
-} // End of convertFormulaToCNFNegNOT()
+} 
 
 void CNFMgr::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1297,7 +1297,7 @@ void CNFMgr::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausesneg = psi;
-} // End of convertFormulaToCNFNegAND()
+} 
 
 void CNFMgr::convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1316,7 +1316,7 @@ void CNFMgr::convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausespos = psi;
-} // End of convertFormulaToCNFNegNAND()
+} 
 
 void CNFMgr::convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1353,7 +1353,7 @@ void CNFMgr::convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausesneg = psi;
-} // End of convertFormulaToCNFNegOR()
+} 
 
 void CNFMgr::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1394,7 +1394,7 @@ void CNFMgr::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs)
   }
 
   info[varphi]->clausesneg = psi;
-} // End of convertFormulaToCNFNegNOR()
+} 
 
 void CNFMgr::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi,
                                            ClauseList* defs)
@@ -1410,7 +1410,7 @@ void CNFMgr::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi,
   info[varphi]->clausesneg = psi;
   reduceMemoryFootprintPos(varphi[0]);
   reduceMemoryFootprintNeg(varphi[1]);
-} // End of convertFormulaToCNFNegIMPLIES()
+} 
 
 void CNFMgr::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1441,7 +1441,7 @@ void CNFMgr::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs)
   reduceMemoryFootprintNeg(varphi[2]);
 
   info[varphi]->clausesneg = psi1;
-} // End of convertFormulaToCNFNegITE()
+} 
 
 void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs)
 {
@@ -1458,7 +1458,7 @@ void CNFMgr::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs)
     reduceMemoryFootprintPos(*it2);
     reduceMemoryFootprintNeg(*it2);
   }
-} // End of convertFormulaToCNFNegXOR()
+} 
 
 ClauseList* CNFMgr::convertFormulaToCNFNegXORAux(const ASTNode& varphi,
                                                  unsigned int idx,
@@ -1533,7 +1533,7 @@ ClauseList* CNFMgr::convertFormulaToCNFNegXORAux(const ASTNode& varphi,
   }
 
   return psi;
-} // End of convertFormulaToCNFNegXORAux()
+} 
 
 //########################################
 //########################################
@@ -1552,7 +1552,7 @@ void CNFMgr::reduceMemoryFootprintPos(const ASTNode& varphi)
       info.erase(varphi);
     }
   }
-} // End of reduceMemoryFootprintPos()
+} 
 
 void CNFMgr::reduceMemoryFootprintNeg(const ASTNode& varphi)
 {
@@ -1567,7 +1567,7 @@ void CNFMgr::reduceMemoryFootprintNeg(const ASTNode& varphi)
       info.erase(varphi);
     }
   }
-} // End of reduceMemoryFootprintNeg()
+} 
 
 //########################################
 //########################################
@@ -1587,7 +1587,7 @@ ASTNode* CNFMgr::ASTNodeToASTNodePtr(const ASTNode& varphi)
   }
 
   return psi;
-} // End of ASTNodeToASTNodePtr()
+} 
 
 //########################################
 //########################################
@@ -1618,7 +1618,7 @@ void CNFMgr::cleanup(const ASTNode& varphi)
   }
 
   info.clear();
-} // End of cleanup()
+} 
 
 //########################################
 //########################################
@@ -1670,7 +1670,7 @@ ClauseList* CNFMgr::convertToCNF(const ASTNode& varphi)
   }
 
   return defs;
-} // End of convertToCNF()
+} 
 
 // All XOR clauses are stored here. Return it after CNF translation
 ClauseList* CNFMgr::ReturnXorClauses(void)
@@ -1684,5 +1684,5 @@ void CNFMgr::DELETE(ClauseList* varphi)
   varphi->deleteJustVectors();
   delete varphi;
   varphi = NULL;
-} // End of DELETE()
+} 
 } // end namespace stp

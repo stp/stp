@@ -309,9 +309,9 @@ public:
     // re-run.
     simplify_during_BB_flag = false;
 
-  } // End of constructor for UserDefinedFlags
+  } 
 
-}; // End of struct UserDefinedFlags
+}; 
 } // end of namespace
 
 #endif

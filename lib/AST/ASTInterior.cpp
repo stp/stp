@@ -36,7 +36,7 @@ void ASTInterior::CleanUp()
 {
   (GlobalParserBM)->_interior_unique_table.erase(this);
   delete this;
-} // End of Cleanup()
+} 
 
 // Returns kinds.  "lispprinter" handles printing of parenthesis
 // and childnodes. (c_friendly is for printing hex. numbers that C
@@ -44,7 +44,7 @@ void ASTInterior::CleanUp()
 void ASTInterior::nodeprint(ostream& os, bool c_friendly)
 {
   os << _kind_names[_kind];
-} // end of nodeprint()
+}
 
 /******************************************************************
  * ASTInteriorHasher and ASTInteriorEqual Member Functions        *
@@ -68,7 +68,7 @@ operator()(const ASTInterior* int_node_ptr) const
   hashval ^= (hashval >> 11);
   hashval += (hashval << 15);
   return hashval;
-} // End of ASTInteriorHasher operator()
+} 
 
 // ASTInteriorEqual operator()
 bool ASTInterior::ASTInteriorEqual::
@@ -76,6 +76,6 @@ operator()(const ASTInterior* int_node_ptr1,
            const ASTInterior* int_node_ptr2) const
 {
   return (*int_node_ptr1 == *int_node_ptr2);
-} /// End of ASTInteriorEqual operator()
+}
 
 } // end of namespace

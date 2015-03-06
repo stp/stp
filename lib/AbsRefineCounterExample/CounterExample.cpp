@@ -131,7 +131,7 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         CounterExampleMap[key] = value;
     }
   }
-} // End of ConstructCounterExample
+} 
 
 // FUNCTION: accepts a non-constant term, and returns the
 // corresponding constant term with respect to a model.
@@ -359,7 +359,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
   return output;
-} // End of TermToConstTermUsingModel
+} 
 
 // Expands read-over-write by evaluating (readIndex=writeIndex) for
 // every writeindex until, either it evaluates to TRUE or all
@@ -651,7 +651,7 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(bool t, const ASTNode& expr)
   else
     output = bm->CreateZeroConst(expr.GetValueWidth());
   return output;
-} // End of GetCounterExample
+} 
 
 // FUNCTION: queries the counterexample, and returns the number of array
 // locations for e
@@ -714,7 +714,7 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   }
 
   return entries;
-} // End of GetCounterExampleArray
+} 
 
 // FUNCTION: prints a counterexample for INVALID inputs.  iterate
 // through the CounterExampleMap data structure and print it to
@@ -803,7 +803,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   }
   os.flush();
   // os << "\nEND OF COUNTEREXAMPLE" << endl;
-} // End of PrintCounterExample
+} 
 
 /* iterate through the CounterExampleMap data structure and print it
  * to stdout. this function prints only the declared array variables
@@ -882,7 +882,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
   for (unsigned int jj = 0; jj < out_int.size(); jj++)
     cout << out_int[jj] << endl;
   cout << endl;
-} // End of PrintCounterExample_InOrder
+} 
 
 // Prints Satisfying assignment directly, for debugging.
 void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
@@ -918,7 +918,7 @@ void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
       }
     }
   }
-} // end of PrintSATModel()
+}
 
 // FUNCTION: this function accepts a boolvector and returns a BVConst
 ASTNode AbsRefine_CounterExample::BoolVectoBVConst(const vector<bool>* w,
@@ -934,7 +934,7 @@ ASTNode AbsRefine_CounterExample::BoolVectoBVConst(const vector<bool>* w,
   }
 
   return bm->CreateBVConst(cc, l);
-} // end of BoolVectoBVConst()
+}
 
 void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
 {
@@ -1023,5 +1023,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // PrintOutput(true);
     return SOLVER_ERROR;
   }
-} // end of CALLSAT_ResultCheck()
+}
+
 }

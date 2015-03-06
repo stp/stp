@@ -805,7 +805,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   assert(OutputNode.isConstant());
   // UpdateSimplifyMap(t,OutputNode,false);
   return OutputNode;
-} // End of BVConstEvaluator
+} 
 
 // Const evaluator logical and arithmetic operations.
 ASTNode NonMemberBVConstEvaluator(const ASTNode& t)

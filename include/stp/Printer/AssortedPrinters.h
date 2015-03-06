@@ -55,7 +55,7 @@ public:
     return lp._node.LispPrint(os, lp._indentation);
   };
 
-}; // End of ListPrinter
+}; 
 
 // global function which accepts an integer and looks up the
 // corresponding ASTNode and prints a string of that ASTNode

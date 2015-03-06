@@ -83,7 +83,7 @@ private:
   void PrintSATModel(SATSolver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
 public:
-  // Constructor
+   
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
       : bm(b), simp(s), ArrayTransform(at)
   {
@@ -153,11 +153,11 @@ public:
   {
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
-  } // End of ClearAllTables()
+  } 
 
-  ~AbsRefine_CounterExample() { ClearAllTables(); } // End of destructor
+  ~AbsRefine_CounterExample() { ClearAllTables(); } 
 
-}; // End of Class CounterExample
+}; 
 
 class CompleteCounterExample // not copyable
 {
@@ -195,6 +195,6 @@ public:
       return e;
     }
   }
-}; // end of Class CompleteCounterExample
+};
 } // end of namespace
 #endif

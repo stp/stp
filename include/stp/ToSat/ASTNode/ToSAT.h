@@ -87,7 +87,7 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-  // Constructor
+   
   ToSAT(STPMgr* bm) : ToSATBase(bm)
   {
     CNFFileNameCounter = 0;
@@ -106,7 +106,7 @@ public:
   }
 
   ~ToSAT() { ClearAllTables(); }
-}; // end of class ToSAT
+};
 } // end of namespace
 
 #endif

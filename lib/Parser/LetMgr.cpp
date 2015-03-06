@@ -56,13 +56,13 @@ void LETMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr)
   }
 
   LetExprMgr(var.GetName(), letExpr);
-} // end of LetExprMgr()
+}
 
 void LETMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(_letid_expr_map->find(name) == _letid_expr_map->end());
   (*_letid_expr_map)[name] = letExpr;
-} // end of LetExprMgr()
+}
 
 // this function looks up the "var to letexpr map" and returns the
 // corresponding letexpr. if there is no letexpr, then it simply
@@ -86,7 +86,7 @@ ASTNode LETMgr::ResolveID(const ASTNode& v)
   }
 
   return v;
-} // End of ResolveID()
+} 
 
 // This function simply cleans up the LetID -> LetExpr Map.
 void LETMgr::CleanupLetIDMap(void)
@@ -98,10 +98,10 @@ void LETMgr::CleanupLetIDMap(void)
   // May contain lots of buckets, so reset.
   delete _letid_expr_map;
   InitializeLetIDMap();
-} // end of CleanupLetIDMap()
+}
 
 void LETMgr::InitializeLetIDMap(void)
 {
   _letid_expr_map = new hash_map<string, ASTNode>();
-} // end of InitializeLetIDMap()
+}
 }

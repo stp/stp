@@ -685,6 +685,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // bogus return to make the compiler shut up
   return SOLVER_ERROR;
 
-} // End of TopLevelSTPAux
+} 
 
 } // end of namespace

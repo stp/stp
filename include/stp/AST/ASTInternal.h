@@ -134,7 +134,7 @@ public:
   {
   }
 
-  // Copy constructor.  This copies the contents of the child nodes
+  // This copies the contents of the child nodes
   // array, along with everything else.  Assigning the smart pointer,
   // ASTNode, does NOT invoke this; This should only be used for
   // temporary hash keys before uniquefication.
@@ -159,7 +159,7 @@ public:
     }
   }
 
-  int GetNodeNum() const { return _node_num; } // End of GetNodeNum()
+  int GetNodeNum() const { return _node_num; } 
 
   virtual bool isSimplified() const { return false; }
 
@@ -168,8 +168,8 @@ public:
     std::cerr << "astinternal has been";
   }
 
-  void SetNodeNum(int nn) { _node_num = nn; } // End of SetNodeNum()
+  void SetNodeNum(int nn) { _node_num = nn; } 
 
-}; // End of Class ASTInternal
+}; 
 } // end of namespace
 #endif

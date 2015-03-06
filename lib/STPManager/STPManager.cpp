@@ -151,7 +151,7 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // return symbol found in table.
     return *it;
   }
-} // End of LookupOrCreateSymbol
+} 
 
 bool STPMgr::LookupSymbol(ASTSymbol& s)
 {
@@ -608,7 +608,7 @@ bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 
   TermsAlreadySeenMap[term] = var;
   return false;
-} // End of VarSeenInTerm
+} 
 
 ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
                                             const ASTNode& constant)
@@ -624,7 +624,7 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
   str += ")";
   ASTNode CurrentSymbol = CreateSymbol(str.c_str(), 0, 0);
   return CurrentSymbol;
-} // End of NewParameterized_BooleanVar()
+} 
 
 // If ASTNode remain with references (somewhere), this will segfault.
 STPMgr::~STPMgr()

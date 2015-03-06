@@ -127,7 +127,7 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
   }
 
   return;
-} // End of VarSeenInTerm
+} 
 
 ASTNodeSet* VariablesInExpression::SetofVarsSeenInTerm(Symbols* symbol,
                                                        bool& destruct)

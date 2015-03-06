@@ -443,7 +443,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
       FatalError("C_Print1: printing not implemented for this kind: ", n);
       break;
   }
-} // end of C_Print1()
+}
 
 // two pass algorithm:
 //
@@ -543,5 +543,5 @@ ostream& C_Print(ostream& os, const ASTNode n, int indentation)
   // os << " ";
 
   return os;
-} // end of C_Print()
+}
 }

@@ -189,7 +189,7 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
       cll.deleteJustVectors();
       return false;
     }
-  } // End of For-loop adding the clauses
+  } 
 
   // output a CNF
   // Because we use the SAT solver incrementally, this may ouput little pieces
@@ -264,7 +264,7 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     return true;
   else
     return false;
-} // end of toSATandSolve()
+}
 
 // Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT
 ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
@@ -300,7 +300,7 @@ ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
   }
 
   return cb;
-} // End of SortClauseList_IntoBuckets()
+} 
 
 bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
                                      CNFMgr*& cm)
@@ -535,6 +535,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
       }
 
     return (CheckBBandCNFMemo[form] = result);
-  } //end of CheckBBandCNF_int()
+  }
 #endif
+
 } // end of namespace stp

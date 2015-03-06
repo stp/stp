@@ -87,7 +87,7 @@ public:
   // Delete Letid Map. Called when we move onto the expression after (let ... )
   void CleanupLetIDMap(void);
 
-}; // End of class LETMgr
+}; 
 } // end of namespace
 
 #endif

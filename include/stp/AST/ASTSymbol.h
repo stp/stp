@@ -64,7 +64,7 @@ private:
     {
       return CStringHash()(sym_ptr->_name);
     };
-  }; // End of class ASTSymbolHasher
+  }; 
 
   /****************************************************************
    * Class ASTSymbolEqual:                                        *
@@ -78,7 +78,7 @@ private:
     {
       return (*sym_ptr1 == *sym_ptr2);
     }
-  }; // End of class ASTSymbolEqual
+  }; 
 
   // comparator
   friend bool operator==(const ASTSymbol& sym1, const ASTSymbol& sym2)
@@ -119,6 +119,6 @@ public:
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }
-}; // End of ASTSymbol
+}; 
 } // end of namespace
 #endif

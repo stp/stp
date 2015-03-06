@@ -114,7 +114,7 @@ public:
     }
   }
 
-  // Constructors:
+  //  :
   altvec(void) : ref(NULL) {}
   altvec(int size) : ref(Vec_t::alloc(NULL, fitSize(size)))
   {

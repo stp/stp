@@ -251,7 +251,7 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
              in);
   return bm->ASTUndefined;
 
-} // end of TranslateSignedDivModRem()
+}
 
 // Check that the transformations have occurred.
 void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
@@ -279,7 +279,7 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   {
     assertTransformPostConditions(*it, visited);
   }
-} // End of assertTransformPostConditions()
+} 
 
 /********************************************************
  * TransformFormula()
@@ -413,7 +413,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
   if (simpleForm.Degree() > 0)
     (*TransformMap)[simpleForm] = result;
   return result;
-} // End of TransformFormula
+} 
 
 ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
 {
@@ -502,7 +502,7 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
                result);
   }
   return result;
-} // End of TransformTerm
+} 
 
 /* This function transforms Array Reads, Read over Writes, Read over
  * ITEs into flattened form.
@@ -798,7 +798,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
   assert(!result.IsNull());
   (*TransformMap)[term] = result;
   return result;
-} // end of TransformArray()
+}
 
 // Since these arrayreads are being nuked and recorded in the
 // substitutionmap, we have to also record the fact that each

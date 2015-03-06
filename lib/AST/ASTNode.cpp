@@ -49,7 +49,7 @@ ASTNode::ASTNode(ASTInternal* in) : _int_node_ptr(in)
   }
 }
 
-// Copy constructor.  Maintain _ref_count
+//Maintain _ref_count
 ASTNode::ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
 {
   if (n._int_node_ptr)

@@ -118,7 +118,7 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-  // Constructor
+   
   ArrayTransformer(STPMgr* bm, Simplifier* s)
       : TransformMap(NULL), simp(s), bm(bm)
   {
@@ -153,7 +153,7 @@ public:
     std::cerr << std::endl;
   }
 
-}; // end of class Transformer
+};
 
 } // end of namespace
 #endif

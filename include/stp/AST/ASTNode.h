@@ -221,7 +221,7 @@ public:
       return (size_t)n._int_node_ptr;
       // return (size_t)n.GetNodeNum();
     };
-  }; // End of ASTNodeHasher
+  }; 
 
   /*****************************************************************
    * Equality for ASTNode hash_set and hash_map. Returns true iff  *

@@ -241,7 +241,7 @@ public:
     const ASTNodeMap * ReadOverWriteMap()
     {
       return ReadOverWrite_NewName_Map;
-    } // End of ReadOverWriteMap()
+    } 
 #endif
 
   bool hasUnappliedSubstitutions()
@@ -252,7 +252,7 @@ public:
   ASTNodeMap* Return_SolverMap()
   {
     return substitutionMap.Return_SolverMap();
-  } // End of SolverMap()
+  } 
 
   void haveAppliedSubstitutionMap()
   {
@@ -285,6 +285,6 @@ public:
     return substitutionMap.getVariablesInExpression();
   }
 
-}; // end of class Simplifier
+};
 } // end of namespace
 #endif

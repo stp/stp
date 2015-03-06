@@ -72,7 +72,7 @@ public:
   typedef uint32_t Key;
   typedef T Datum;
 
-  // Constructors:
+  //  :
   vec(void) : data(NULL), sz(0), cap(0) {}
   vec(uint32_t size) : data(NULL), sz(0), cap(0) { growTo(size); }
   vec(uint32_t size, const T& pad) : data(NULL), sz(0), cap(0)

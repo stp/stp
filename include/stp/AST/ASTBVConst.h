@@ -34,8 +34,6 @@ class STPMgr;
 void FatalError(const char* str);
 
 /******************************************************************
- *  Class ASTBVConst:                                             *
- *                                                                *
  *  Class to represent internals of a bitvector constant          *
  ******************************************************************/
 class ASTBVConst : public ASTInternal
@@ -46,10 +44,6 @@ class ASTBVConst : public ASTInternal
   friend class ASTNodeEqual;
 
 private:
-  /****************************************************************
-   * Private Data                                                 *
-   ****************************************************************/
-
   // CBV is actually an unsigned*. The bitvector constant is
   // represented using an external library in extlib-bvconst.
   CBV _bvconst;
@@ -59,32 +53,24 @@ private:
   bool cbv_managed_outside;
 
   /****************************************************************
-   * Class ASTBVConstHasher:                                      *
-   *                                                              *
    * Hasher for ASTBVConst nodes                                  *
    ****************************************************************/
   class ASTBVConstHasher
   {
   public:
     size_t operator()(const ASTBVConst* bvc) const;
-  }; // End of class ASTBVConstHahser
+  };
 
   /****************************************************************
-   * Class ASTBVConstEqual:                                       *
-   *                                                              *
    * Equality for ASTBVConst nodes                                *
    ****************************************************************/
   class ASTBVConstEqual
   {
   public:
     bool operator()(const ASTBVConst* bvc1, const ASTBVConst* bvc2) const;
-  }; // End of class ASTBVConstEqual
+  };
 
-  /****************************************************************
-   * Private Functions (virtual defs and friends)                 *
-   ****************************************************************/
 
-  // Constructor
   ASTBVConst(CBV bv, unsigned int width);
 
   enum CBV_LIFETIME
@@ -100,7 +86,7 @@ private:
     cbv_managed_outside = true;
   }
 
-  // Copy constructor.
+   
   ASTBVConst(const ASTBVConst& sym);
 
   // friend equality operator
@@ -109,7 +95,7 @@ private:
     if (bvc1._value_width != bvc2._value_width)
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
-  } // End of operator==
+  }
 
   // Call this when deleting a node that has been stored in the the
   // unique table
@@ -125,19 +111,16 @@ private:
 public:
   virtual ASTVec const& GetChildren() const { return astbv_empty_children; }
 
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
-
-  // Destructor. Call the external destructor
+  //Call the external destructor
   virtual ~ASTBVConst()
   {
     if (!cbv_managed_outside)
       CONSTANTBV::BitVector_Destroy(_bvconst);
-  } // End of destructor
+  }
 
   // Return the bvconst. It is a const-value
   CBV GetBVConst() const;
-}; // End of ASTBVConst
+};
+
 } // end of namespace
 #endif

@@ -66,6 +66,6 @@ class SymbolPtrHasher
 {
 public:
   size_t operator()(const Symbols* n) const { return (size_t)n; };
-}; // End of ASTNodeHasher
+}; 
 
 #endif

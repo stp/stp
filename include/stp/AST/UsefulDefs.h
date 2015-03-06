@@ -99,7 +99,7 @@ public:
   int _spaces;
   Spacer(int spaces) { _spaces = spaces; }
   friend std::ostream& operator<<(std::ostream& os, const Spacer& ind);
-}; // End of class spacer
+}; 
 
 inline Spacer spaces(int width)
 {

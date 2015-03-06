@@ -155,5 +155,5 @@ void print_STPInput_Back(const ASTNode& query)
   cout << "QUERY(";
   query.PL_Print(cout);
   cout << ");\n";
-} // end of print_STPInput_Back()
+}
 } // end of namespace stp

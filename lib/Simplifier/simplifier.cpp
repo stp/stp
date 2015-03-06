@@ -522,7 +522,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
   // memoize
   UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
   return output;
-} // end of SimplifyAtomicFormula()
+}
 
 // number of constant bits in the most significant places.
 unsigned mostSignificantConstants(const ASTNode& n)
@@ -959,7 +959,7 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
 
   UpdateSimplifyMap(in, output, false, VarConstMap);
   return output;
-} // End of ITEOpts_InEqs()
+} 
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then
 // return the constructed equality
@@ -3182,7 +3182,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 #endif
 
   return output;
-} // end of SimplifyTerm()
+}
 
 // this function assumes that the input is a vector of childnodes of
 // a BVPLUS term. it combines like terms and returns a bvplus
@@ -3343,7 +3343,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
   // memoize
   // UpdateSimplifyMap(a,output,false);
   return output;
-} // end of CombineLikeTerms()
+}
 
 // accepts lhs and rhs, and returns lhs - rhs = 0. The function
 // assumes that lhs and rhs have already been simplified. although
@@ -3431,7 +3431,7 @@ ASTNode Simplifier::LhsMinusRhs(const ASTNode& eq)
   // memoize
   // UpdateSimplifyMap(eq,output,false);
   return output;
-} // end of LhsMinusRHS()
+}
 
 // THis function accepts a BVMULT(t1,t2) and distributes the mult
 // over plus if either or both t1 and t2 are BVPLUSes.
@@ -3570,7 +3570,7 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   // memoize
   // UpdateSimplifyMap(a,output,false);
   return output;
-} // end of distributemultoverplus()
+}
 
 #if 0
   //converts the BVSX(len, a0) operator into ITE( check top bit,
@@ -4036,7 +4036,7 @@ ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
   UpdateMultInverseMap(d, inverse);
   // cerr << "output of multinverse function is: " << inverse << endl;
   return inverse;
-} // end of MultiplicativeInverse()
+}
 
 // returns true if the input is odd
 bool Simplifier::BVConstIsOdd(const ASTNode& c)
@@ -4060,7 +4060,7 @@ bool Simplifier::BVConstIsOdd(const ASTNode& c)
   {
     return true;
   }
-} // end of BVConstIsOdd()
+}
 
 // in ext/hash_map, and tr/unordered_map, there is no provision to
 // shrink down the number of buckets in a hash map. If the hash_map
@@ -4103,5 +4103,6 @@ void Simplifier::printCacheStatus()
   cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
        << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 
-} // printCacheStatus()
+}
+
 } // end of namespace

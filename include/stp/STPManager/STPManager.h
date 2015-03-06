@@ -221,7 +221,7 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-  // Constructor
+   
   STPMgr()
       : _interior_unique_table(), _symbol_unique_table(),
         _bvconst_unique_table(), last_iteration(0), soft_timeout_expired(false),
@@ -451,7 +451,7 @@ public:
       return true;
     }
     return false;
-  } // End of IntroduceSymbolSet
+  } 
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
@@ -470,10 +470,10 @@ public:
     TermsAlreadySeenMap.clear();
     NodeLetVarVec.clear();
     ListOfDeclaredVars.clear();
-  } // End of ClearAllTables()
+  } 
 
   ~STPMgr();
 
-}; // End of Class STPMgr
+}; 
 } // end of namespace
 #endif
