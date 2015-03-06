@@ -59,7 +59,7 @@ struct Relations
   list<Relation> relations;
 
   Relations(int iterations, int bitWidth, Kind k, stp::STPMgr* beev,
-            int probabilityOfFixing)
+            unsigned probabilityOfFixing)
   {
     MTRand rand;
 

@@ -82,8 +82,9 @@ public:
   size_t operator()(const vector<BBNode>& n) const
   {
     int hash = 0;
-    for (int i = 0; i < std::min(n.size(), (size_t)6); i++)
+    for (size_t i = 0; i < std::min(n.size(), (size_t)6); i++) {
       hash += n[i].GetNodeNum();
+    }
     return hash;
   }
 };

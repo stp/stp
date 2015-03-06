@@ -28,15 +28,11 @@ namespace stp
 {
 const ASTVec ASTSymbol::empty_children;
 
-/****************************************************************
- * ASTSymbol Member Function definitions                        *
- ****************************************************************/
-
 // Get the name of the symbol
 const char* ASTSymbol::GetName() const
 {
   return _name;
-} 
+}
 
 // Print function for symbol -- return name. (c_friendly is for
 // printing hex. numbers that C compilers will accept)
@@ -52,19 +48,6 @@ void ASTSymbol::CleanUp()
   (GlobalParserBM)->_symbol_unique_table.erase(this);
   free((char*)this->_name);
   delete this;
-} 
-
-unsigned long long hash(unsigned char* str)
-{
-  unsigned long long hash = 5381;
-  long long c;
-
-  while ((c = *str++))
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-  // cout << "Hash value computed is: " << hash << endl;
-
-  return (unsigned long long)hash;
 }
 
 } // end of namespace

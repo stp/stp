@@ -1338,8 +1338,10 @@ namespace CONSTANTBV {
     }
   }
 
-  signed int BitVector_Compare(unsigned int *  X, unsigned int *  Y)               /* X <,=,> Y ?   */
-  {                                                           /*   signed      */
+  /* X <,=,> Y ?   */
+  /*   signed      */
+  signed int BitVector_Compare(unsigned int *  X, unsigned int *  Y)
+  {
     unsigned int  bitsX = bits_(X);
     unsigned int  bitsY = bits_(Y);
     unsigned int  size  = size_(X);

@@ -27,12 +27,11 @@ THE SOFTWARE.
 #define ASTSYMBOL_H
 
 #include "stp/Util/StringHash.h"
+#include "stp/AST/ASTInternal.h"
 
 namespace stp
 {
 /******************************************************************
- *  Class ASTSymbol:                                              *
- *                                                                *
  *  Class to represent internals of Symbol node.                  *
  ******************************************************************/
 class ASTSymbol : public ASTInternal
@@ -45,16 +44,10 @@ class ASTSymbol : public ASTInternal
   const static ASTVec empty_children;
 
 private:
-  /****************************************************************
-   * Private Data                                                 *
-   ****************************************************************/
-
   // The name of the symbol
   const char* const _name;
 
   /****************************************************************
-   * Class ASTSymbolHasher:                                       *
-   *                                                              *
    * Hasher for ASTSymbol nodes                                   *
    ****************************************************************/
   class ASTSymbolHasher
@@ -67,8 +60,6 @@ private:
   }; 
 
   /****************************************************************
-   * Class ASTSymbolEqual:                                        *
-   *                                                              *
    * Equality for ASTSymbol nodes                                 *
    ****************************************************************/
   class ASTSymbolEqual
@@ -78,17 +69,12 @@ private:
     {
       return (*sym_ptr1 == *sym_ptr2);
     }
-  }; 
+  };
 
-  // comparator
   friend bool operator==(const ASTSymbol& sym1, const ASTSymbol& sym2)
   {
     return (strcmp(sym1._name, sym2._name) == 0);
   }
-
-  /****************************************************************
-   * Private Member Functions                                     *
-   ****************************************************************/
 
   // Get the name of the symbol
   const char* GetName() const;
@@ -104,10 +90,6 @@ private:
 public:
   virtual ASTVec const& GetChildren() const { return empty_children; }
 
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
-
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(const char* const name) : ASTInternal(SYMBOL), _name(name) {}
 
@@ -119,6 +101,6 @@ public:
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }
-}; 
+};
 } // end of namespace
 #endif

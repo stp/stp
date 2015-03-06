@@ -33,7 +33,7 @@ ASTBVConst::ASTBVConst(const ASTBVConst& sym) : ASTInternal(sym._kind)
   _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
   _value_width = sym._value_width;
   cbv_managed_outside = false;
-} 
+}
 
 // Call this when deleting a node that has been stored in the the
 // unique table
@@ -102,10 +102,6 @@ CBV ASTBVConst::GetBVConst() const
   return _bvconst;
 }
 
-/****************************************************************
- * Class ASTBVConstHasher and ASTBVConstEqual Functions         *
- ****************************************************************/
-
 size_t ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
 {
   return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
@@ -119,5 +115,6 @@ bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
     return false;
   }
   return (0 == CONSTANTBV::BitVector_Compare(bvc1->_bvconst, bvc2->_bvconst));
-} 
-} 
+}
+
+} //end of namespace
