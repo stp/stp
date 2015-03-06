@@ -233,8 +233,7 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
   CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, width - copied, copied,
                                     c_val);
 
-  ASTBVConst temp_bvconst(CreateBVConstVal, width,
-                          ASTBVConst::CBV_MANAGED_OUTSIDE);
+  ASTBVConst temp_bvconst(CreateBVConstVal, width, true);
   return ASTNode(LookupOrCreateBVConst(temp_bvconst));
 }
 
@@ -281,8 +280,7 @@ ASTNode STPMgr::charToASTNode(unsigned char* strval, int base, int bit_width)
     FatalError("", ASTUndefined);
   }
 
-  ASTBVConst temp_bvconst(CreateBVConstVal, bit_width,
-                          ASTBVConst::CBV_MANAGED_OUTSIDE);
+  ASTBVConst temp_bvconst(CreateBVConstVal, bit_width, true);
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   return n;
 }
@@ -318,7 +316,7 @@ ASTNode STPMgr::CreateBVConst(const char* const strval, int base)
 // NB Assumes that it will destroy the bitvector passed to it
 ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
 {
-  ASTBVConst temp_bvconst(bv, width, ASTBVConst::CBV_MANAGED_OUTSIDE);
+  ASTBVConst temp_bvconst(bv, width, true);
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   CONSTANTBV::BitVector_Destroy(bv);
   return n;

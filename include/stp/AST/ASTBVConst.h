@@ -72,21 +72,18 @@ private:
 
 
   ASTBVConst(CBV bv, unsigned int width);
-
-  enum CBV_LIFETIME
-  {
-    CBV_MANAGED_OUTSIDE
-  };
-
-  ASTBVConst(CBV bv, unsigned int width, enum CBV_LIFETIME l)
+  ASTBVConst(CBV bv, unsigned int width, bool managed_outside = false)
       : ASTInternal(BVCONST)
   {
-    _bvconst = (bv);
+    if (managed_outside) {
+      _bvconst = (bv);
+    } else {
+      _bvconst = CONSTANTBV::BitVector_Clone(bv);
+    }
     _value_width = width;
-    cbv_managed_outside = true;
+    cbv_managed_outside = managed_outside;
   }
 
-   
   ASTBVConst(const ASTBVConst& sym);
 
   // friend equality operator

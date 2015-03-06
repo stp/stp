@@ -28,19 +28,6 @@ namespace stp
 {
 const ASTVec ASTBVConst::astbv_empty_children;
 
-/****************************************************************
- * ASTBVConst Member Function definitions                       *
- ****************************************************************/
-
-
-ASTBVConst::ASTBVConst(CBV bv, unsigned int width) : ASTInternal(BVCONST)
-{
-  _bvconst = CONSTANTBV::BitVector_Clone(bv);
-  _value_width = width;
-  cbv_managed_outside = false;
-} 
-
- 
 ASTBVConst::ASTBVConst(const ASTBVConst& sym) : ASTInternal(sym._kind)
 {
   _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
