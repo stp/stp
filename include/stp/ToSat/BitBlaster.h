@@ -69,10 +69,6 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster // not copyable
   // bitblasted equivalent
   std::map<ASTNode, BBNode> BBFormMemo;
 
-  /****************************************************************
-   * Private Member Functions                                     *
-   ****************************************************************/
-
   // Get vector of Boolean formulas for sum of two
   // vectors of Boolean formulas
   void BBPlus2(vector<BBNode>& sum, const vector<BBNode>& y, BBNode cin);
@@ -244,27 +240,18 @@ public:
   // representing the boolean formula.
   const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
 
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
-
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-      : uf(_uf), division_variant_1("1" == _uf->get("division_variant_1", "1")),
-        division_variant_2("1" == _uf->get("division_variant_2", "1")),
-        division_variant_3("1" == _uf->get("division_variant_3", "1")),
-
-        adder_variant("1" == _uf->get("adder_variant", "1")),
-
-        bbbvle_variant("1" == _uf->get("bbbvle_variant", "0")),
-
-        upper_multiplication_bound("1" ==
-                                   _uf->get("upper_multiplication_bound", "0")),
-
-        bvplus_variant("1" == _uf->get("bvplus_variant", "1")),
-
-        multiplication_variant(_uf->get("multiplication_variant", "7"))
+  : uf(_uf),
+    division_variant_1("1" == _uf->get("division_variant_1", "1")),
+    division_variant_2("1" == _uf->get("division_variant_2", "1")),
+    division_variant_3("1" == _uf->get("division_variant_3", "1")),
+    adder_variant("1" == _uf->get("adder_variant", "1")),
+    bbbvle_variant("1" == _uf->get("bbbvle_variant", "0")),
+    upper_multiplication_bound("1" ==_uf->get("upper_multiplication_bound", "0")),
+    bvplus_variant("1" == _uf->get("bvplus_variant", "1")),
+    multiplication_variant(_uf->get("multiplication_variant", "7"))
   {
     nf = bnm;
     cb = cb_;
