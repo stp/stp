@@ -161,7 +161,7 @@ bool arithless(const ASTNode n1, const ASTNode n2)
     // before ancestors).
     return (n1.GetNodeNum() < n2.GetNodeNum());
   }
-} // end of arithless
+}
 
 // counts the number of reads. Shortcut when we get to the limit.
 void numberOfReadsLessThan(const ASTNode& n, hash_set<int>& visited, int& soFar,

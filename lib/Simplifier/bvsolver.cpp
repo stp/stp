@@ -695,7 +695,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   // all is clear. the eqn in even, through and through
   evenflag = true;
   return eq;
-} // end of CheckEvenEqn
+}
 
 // solve an eqn whose monomials have only even coefficients
 ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
@@ -770,8 +770,8 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
         // monom_with_best_coeff = aaa;
       }
       power_of_2 = 0;
-    } // end of inner for loop
-  }   // end of outer for loop
+    }
+  }
 
   // get the exponent
   power_of_2 = power_of_2_lowest;

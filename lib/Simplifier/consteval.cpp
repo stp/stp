@@ -565,7 +565,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           {
             BVConstEvaluatorError(e);
           }
-        } // end of error printing
+        }
 
         // FIXME Not very standard in the current scheme
         if (BVDIV == k)

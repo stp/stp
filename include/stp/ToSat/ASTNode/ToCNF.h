@@ -268,6 +268,6 @@ public:
   static void DELETE(ClauseList* varphi);
 
   // void PrintClauseList(ostream& os, ClauseList& cll);
-}; // end of CNFMgr class
+};
 } // end of namespace
 #endif

@@ -1266,7 +1266,7 @@ ASTNode Simplifier::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
   UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
   // cerr << "output:\n" << output << endl;
   return output;
-} // end of SimplifyAndOrFormula
+}
 
 ASTNode Simplifier::SimplifyNotFormula(const ASTNode& a, bool pushNeg,
                                        ASTNodeMap* VarConstMap)
@@ -3277,7 +3277,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     }
     else
       vars_to_consts[aaa].push_back(one);
-  } // end of for loop
+  }
 
   // go over the map from variables to vector of values. combine the
   // vector of values, multiply to the variable, and put the
@@ -3312,7 +3312,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     {
       outputvec.push_back(monom);
     }
-  } // end of for loop
+  }
 
   if (constkids.size() > 1)
   {

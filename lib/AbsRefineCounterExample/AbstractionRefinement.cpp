@@ -445,7 +445,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
   bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
   return SOLVER_UNDECIDED;
-} // end of SATBased_ArrayReadRefinement
+}
 
 // This is another way of performing Ackermannisation.
 void

@@ -407,7 +407,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       }
       break;
     }
-  } // end of Switch
+  }
 
   assert(!result.IsNull());
   if (simpleForm.Degree() > 0)
@@ -643,7 +643,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       arrayToIndexToRead[arrName].insert(
           make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
       break;
-    } // end of READ over a SYMBOL
+    }
     case WRITE:
     {
       /* The input to this case is: READ((WRITE A i val) j)
@@ -737,7 +737,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
             FatalError("TransformArray: Write over bad type.");
 #endif
       break;
-    } // end of READ over a WRITE
+    }
     case ITE:
     {
       /* READ((ITE cond thn els) j)

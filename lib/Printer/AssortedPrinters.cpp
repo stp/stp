@@ -63,7 +63,7 @@ inline LispPrinter lisp(const ASTNode& node, int indentation = 0)
 {
   LispPrinter lp(node, indentation);
   return lp;
-} // end of LispPrinter_lisp
+}
 
 // FIXME: Made non-ref in the hope that it would work better.
 void lp(ASTNode node)

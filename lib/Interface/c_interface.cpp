@@ -564,7 +564,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
           */
 
   return output;
-} // end of vc_query
+}
 
 // int vc_absRefineQuery(VC vc, Expr e) {
 //   nodestar a = (nodestar)e;
@@ -708,7 +708,7 @@ int vc_getBVLength(VC vc, Expr ex)
                      "Input expression must be a bit-vector");
   }
   return e->GetValueWidth();
-} // end of vc_getBVLength
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // Expr Creation methods                                                   //
