@@ -244,18 +244,18 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # -----------------------------------------------------------------------------
 
 if(NOT BUILD_SHARED_LIBS)
-    message("Trying to use static Boost libraries")
-    set(Boost_USE_STATIC_LIBS ON)
+  message("Trying to use static Boost libraries")
+  set(Boost_USE_STATIC_LIBS ON)
 endif()
 
 option(NO_BOOST "Don't try to use boost" OFF)
 if (NOT NO_BOOST)
-    find_package( Boost 1.46 COMPONENTS program_options)
+  find_package( Boost 1.46 COMPONENTS program_options)
 endif()
 if(NOT Boost_FOUND)
-    message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
+  message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
 else()
-    include_directories(${Boost_INCLUDE_DIRS})
+  include_directories(${Boost_INCLUDE_DIRS})
 endif()
 
 
@@ -265,12 +265,12 @@ endif()
 set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat4Config.cmake")
 find_package(cryptominisat4 CONFIG)
 if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
-    message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
-    add_definitions(-DUSE_CRYPTOMINISAT4)
-    include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
-    set(USE_CRYPTOMINISAT4 ON)
+  message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
+  add_definitions(-DUSE_CRYPTOMINISAT4)
+  include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
+  set(USE_CRYPTOMINISAT4 ON)
 else()
-    message(WARNING "CryptoMiniSat4 or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat4 or C++11 support not found, not allowing --cryptominisat4 option")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -303,12 +303,12 @@ endif()
 
 # Both the testing infrastructure and python interface depend on python
 if(ENABLE_TESTING OR ENABLE_PYTHON_INTERFACE)
-    find_package(PythonInterp REQUIRED)
-    mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
+  find_package(PythonInterp REQUIRED)
+  mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
 
-    if(NOT PYTHONINTERP_FOUND)
-        message(FATAL_ERROR "Python cannot be found. Please install it or disable testing and/or python interface")
-    endif()
+  if(NOT PYTHONINTERP_FOUND)
+    message(FATAL_ERROR "Python cannot be found. Please install it or disable testing and/or python interface")
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -323,27 +323,29 @@ add_subdirectory(bindings)
 # Add uninstall target for makefiles
 # -----------------------------------------------------------------------------
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/cmake_uninstall.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-    IMMEDIATE @ONLY)
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/cmake_uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+  IMMEDIATE @ONLY
+)
 
 add_custom_target(uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake
+)
 
 # -----------------------------------------------------------------------------
 # Add tests if required
 # -----------------------------------------------------------------------------
 
 if(ENABLE_TESTING)
-    message(STATUS "Testing is enabled")
+  message(STATUS "Testing is enabled")
 
-    set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
+  set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
 
-    add_custom_target(check
-                      COMMENT "top level target to invoke all other tests"
-                     )
+  add_custom_target(check
+    COMMENT "top level target to invoke all other tests"
+  )
 
-    add_subdirectory(tests)
+  add_subdirectory(tests)
 else()
     message(WARNING "Testing is disabled")
 endif()
@@ -357,16 +359,20 @@ set(STP_CONFIG_FILENAME "STPConfig.cmake")
 
 # Export targets
 if (Boost_FOUND)
-    export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+  export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
+    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
+  )
 endif()
-export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY} FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
+export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
+  FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
+)
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")
 set(CONF_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/include")
 configure_file(STPConfig.cmake.in
-               "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
-              )
+  "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
+)
 
 # Export this package to the CMake user package registry
 # Now the user can just use find_package(STP) on their system
@@ -383,22 +389,23 @@ else()
   set(DEF_INSTALL_CMAKE_DIR lib/cmake/STP)
 endif()
 set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
-    "Installation directory for STP CMake files")
+  "Installation directory for STP CMake files"
+)
 
 # Create STPConfig file
 set(EXPORT_TYPE "installed")
 set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include")
 configure_file(STPConfig.cmake.in
-               "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
-              )
+  "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
+)
 
 install(FILES
-        "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
-        DESTINATION "${STP_INSTALL_CMAKE_DIR}"
-       )
+  "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
+  DESTINATION "${STP_INSTALL_CMAKE_DIR}"
+)
 
 # Install the export set for use with the install-tree
 install(EXPORT ${STP_EXPORT_NAME} DESTINATION
-        "${STP_INSTALL_CMAKE_DIR}"
-       )
+  "${STP_INSTALL_CMAKE_DIR}"
+)
 
