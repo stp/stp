@@ -5,7 +5,7 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(extlib-abc)
+# add_subdirectory(extlib-abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -31,7 +31,7 @@ set(stp_lib_targets
     cryptominisat2
     simplifier
     constantbv
-    abc
+    # abc
     cinterface
     cppinterface
     parser
@@ -93,6 +93,7 @@ set(libstp_link_libs ${Boost_LIBRARIES})
 if (USE_CRYPTOMINISAT4)
     set(libstp_link_libs ${libstp_link_libs} ${CRYPTOMINISAT4_LIBRARIES})
 endif()
+set(libstp_link_libs ${libstp_link_libs} ${ABC_SHARED_LIBRARY})
 target_link_libraries(libstp ${libstp_link_libs})
 
 # Set the public header so it will be installed

@@ -28,8 +28,7 @@ THE SOFTWARE.
 #include "stp/Interface/fdstream.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
-// FIXME: External library
-#include "extlib-abc/cnf_short.h"
+#include "abc/cnf.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>

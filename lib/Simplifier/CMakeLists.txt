@@ -7,6 +7,7 @@ add_library(simplifier OBJECT
     simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp
+    AIGSimplifyPropositionalCore.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp

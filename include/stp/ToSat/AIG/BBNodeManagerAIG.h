@@ -28,13 +28,11 @@ THE SOFTWARE.
 
 #include <stdint.h>
 #include "BBNodeAIG.h"
-
-// cnf_short omits some stuff that doesn't compile in g++ that we don't need
-// anyway.
-#include "extlib-abc/aig.h"
-#include "extlib-abc/cnf_short.h"
-#include "extlib-abc/dar.h"
 #include "stp/ToSat/ToSATBase.h"
+
+class Cnf_Dat_t_;
+typedef struct Aig_Man_t_            Aig_Man_t;
+typedef struct Aig_Obj_t_            Aig_Obj_t;
 
 typedef Cnf_Dat_t_ CNFData;
 typedef Aig_Obj_t AIGNode;
@@ -57,10 +55,7 @@ public:
 
   SymbolToBBNode symbolToBBNode;
 
-  int totalNumberOfNodes()
-  {
-    return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
-  }
+  int totalNumberOfNodes();
 
 private:
   // AIGs can only take two parameters. This makes a log_2 height
@@ -102,172 +97,35 @@ private:
   BBNodeManagerAIG(const BBNodeManagerAIG& other);
 
 public:
-  BBNodeManagerAIG() : aigMgr(NULL)
-  {
-    aigMgr = Aig_ManStart(0);
-    // fancier strashing.
-    aigMgr->fAddStrash = 1;
-  }
+  BBNodeManagerAIG();
 
-  void stop()
-  {
-    if (aigMgr != NULL)
-      Aig_ManStop(aigMgr);
-    aigMgr = NULL;
-  }
+  void stop();
 
-  ~BBNodeManagerAIG() { stop(); }
+  ~BBNodeManagerAIG();
 
-  BBNodeAIG getTrue() { return BBNodeAIG(Aig_ManConst1(aigMgr)); }
+  BBNodeAIG getTrue();
 
-  BBNodeAIG getFalse() { return BBNodeAIG(Aig_ManConst0(aigMgr)); }
+  BBNodeAIG getFalse();
 
   // The same symbol always needs to return the same AIG node,
   // if it doesn't you will get the wrong answer.
-  BBNodeAIG CreateSymbol(const ASTNode& n, unsigned i)
-  {
-    assert(n.GetKind() == SYMBOL);
+  BBNodeAIG CreateSymbol(const ASTNode& n, unsigned i);
 
-    // booleans have width 0.
-    const unsigned width = std::max((unsigned)1, n.GetValueWidth());
-
-    SymbolToBBNode::iterator it;
-    it = symbolToBBNode.find(n);
-    if (symbolToBBNode.end() == it)
-    {
-      symbolToBBNode[n] = vector<BBNodeAIG>(width);
-      it = symbolToBBNode.find(n);
-    }
-
-    assert(it->second.size() == width);
-    assert(i < width);
-
-    if (!it->second[i].IsNull())
-      return it->second[i];
-
-    it->second[i] = BBNodeAIG(Aig_ObjCreatePi(aigMgr));
-    it->second[i].symbol_index = aigMgr->vPis->nSize - 1;
-    return it->second[i];
-  }
-
-  BBNodeAIG CreateNode(Kind kind, vector<BBNodeAIG>& children)
-  {
-    Aig_Obj_t* pNode;
-    assert(children.size() != 0);
-
-    for (size_t i = 0, size = children.size(); i < size; ++i)
-      assert(!children[i].IsNull());
-
-    switch (kind)
-    {
-      case AND:
-        if (children.size() == 1)
-          pNode = children[0].n;
-        else if (children.size() == 2)
-          pNode = Aig_And(aigMgr, children[0].n, children[1].n);
-        else
-          pNode = makeTower(Aig_And, children);
-        break;
-
-      case OR:
-        if (children.size() == 1)
-          pNode = children[0].n;
-        else if (children.size() == 2)
-          pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
-        else
-          pNode = makeTower(Aig_Or, children);
-        break;
-
-      case NAND:
-        if (children.size() == 2)
-          pNode = Aig_And(aigMgr, children[0].n, children[1].n);
-        else
-          pNode = makeTower(Aig_And, children);
-        pNode = Aig_Not(pNode);
-        break;
-
-      case NOT:
-        assert(children.size() == 1);
-        pNode = Aig_Not(children[0].n);
-        break;
-
-      case NOR:
-        if (children.size() == 2)
-          pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
-        else
-          pNode = makeTower(Aig_Or, children);
-        pNode = Aig_Not(pNode);
-        break;
-
-      case XOR:
-        if (children.size() == 2)
-          pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
-        else
-          pNode = makeTower(Aig_Exor, children);
-        break;
-
-      case IFF:
-        assert(children.size() == 2);
-        pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
-        pNode = Aig_Not(pNode);
-        break;
-
-      case IMPLIES:
-        assert(children.size() == 2);
-        pNode = Aig_Or(aigMgr, Aig_Not(children[0].n), children[1].n);
-        break;
-
-      case ITE:
-        assert(children.size() == 3);
-        pNode = Aig_Mux(aigMgr, children[0].n, children[1].n, children[2].n);
-        break;
-
-      default:
-        cerr << "Not handled::!!" << _kind_names[kind];
-        FatalError("Never here");
-    }
-    return BBNodeAIG(pNode);
-  }
+  BBNodeAIG CreateNode(Kind kind, vector<BBNodeAIG>& children);
 
   BBNodeAIG
   CreateNode(Kind kind, const BBNodeAIG& child0,
-             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec)
-  {
-    vector<BBNodeAIG> front_children;
-    front_children.reserve(1 + back_children.size());
-    front_children.push_back(child0);
-    front_children.insert(front_children.end(), back_children.begin(),
-                          back_children.end());
-    return CreateNode(kind, front_children);
-  }
+             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec);
 
   BBNodeAIG
   CreateNode(Kind kind, const BBNodeAIG& child0, const BBNodeAIG& child1,
-             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec)
-  {
-    vector<BBNodeAIG> front_children;
-    front_children.reserve(2 + back_children.size());
-    front_children.push_back(child0);
-    front_children.push_back(child1);
-    front_children.insert(front_children.end(), back_children.begin(),
-                          back_children.end());
-    return CreateNode(kind, front_children);
-  }
+             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec);
 
   BBNodeAIG
   CreateNode(Kind kind, const BBNodeAIG& child0, const BBNodeAIG& child1,
              const BBNodeAIG& child2,
-             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec)
-  {
-    vector<BBNodeAIG> front_children;
-    front_children.reserve(3 + back_children.size());
-    front_children.push_back(child0);
-    front_children.push_back(child1);
-    front_children.push_back(child2);
-    front_children.insert(front_children.end(), back_children.begin(),
-                          back_children.end());
-    return CreateNode(kind, front_children);
-  }
+             const vector<BBNodeAIG>& back_children = _empty_BBNodeAIGVec);
+
 };
 }
 

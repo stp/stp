@@ -1,3 +1,6 @@
+include_directories("/home/soos/development/smt/libabc/src")
+add_definitions(-DLIN64 -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8 -DSIZEOF_INT=4)
+
 # FIXME: Merge into one library
 add_library(cinterface OBJECT
     c_interface.cpp

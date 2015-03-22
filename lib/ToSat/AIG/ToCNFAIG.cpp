@@ -23,6 +23,9 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/AIG/ToCNFAIG.h"
+#include "abc/aig.h"
+#include "abc/cnf.h"
+#include "abc/dar.h"
 
 namespace stp
 {

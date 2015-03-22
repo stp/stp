@@ -258,6 +258,9 @@ else()
   include_directories(${Boost_INCLUDE_DIRS})
 endif()
 
+find_package(ABC)
+include_directories(${ABC_INCLUDE_DIRS})
+
 
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat4

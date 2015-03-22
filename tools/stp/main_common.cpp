@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "main_common.h"
-#include "extlib-abc/cnf_short.h"
+#include "abc/cnf.h"
 
 extern int smtparse(void*);
 extern int smt2parse();
