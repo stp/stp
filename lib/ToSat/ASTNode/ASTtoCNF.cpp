@@ -636,7 +636,7 @@ void ASTtoCNF::doRenamingPosXor(const ASTNode& varphi)
   setWasRenamedPos(*x);
 } 
 
-//   void CNFMgr::doRenamingNegXor(const ASTNode& varphi)
+//   void ASTtoCNF::doRenamingNegXor(const ASTNode& varphi)
 //   {
 //     CNFInfo* x = info[varphi];
 
