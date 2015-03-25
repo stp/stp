@@ -83,11 +83,7 @@ private:
                                              int clause_bucket_size);
 
 public:
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
 
-   
   ToSAT(STPMgr* bm) : ToSATBase(bm)
   {
     CNFFileNameCounter = 0;

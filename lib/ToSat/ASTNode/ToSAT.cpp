@@ -365,34 +365,26 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
   else
     clause_bucket_size = 3;
 
-  // The CNFMgr is deleted inside the CallSAT_On_ClauseBuckets,
+  // The ASTtoCNF is deleted inside the CallSAT_On_ClauseBuckets,
   // just before the final call to the SAT solver.
 
-  ASTtoCNF* cm = new ASTtoCNF(bm);
-  ClauseList* cl = cm->convertToCNF(BBFormula);
-  ClauseList* xorcl = cm->ReturnXorClauses();
+  ASTtoCNF* to_cnf = new ASTtoCNF(bm);
+  ClauseList* cl = to_cnf->convertToCNF(BBFormula);
 
-  ClauseBuckets* cb = Sort_ClauseList_IntoBuckets(cl, clause_bucket_size);
+  ClauseBuckets* cl_buckets = Sort_ClauseList_IntoBuckets(cl, clause_bucket_size);
   cl->asList()->clear(); // clause buckets now point to the clauses.
   delete cl;
-  bool sat = CallSAT_On_ClauseBuckets(SatSolver, cb, cm);
 
-  for (ClauseBuckets::iterator it = cb->begin(); it != cb->end(); it++)
-    delete it->second;
-  delete cb;
+  const bool sat = CallSAT_On_ClauseBuckets(SatSolver, cl_buckets, to_cnf);
 
-  if (!sat)
+  for (ClauseBuckets::iterator it = cl_buckets->begin();
+       it != cl_buckets->end(); it++)
   {
-    xorcl->deleteJustVectors();
-    delete xorcl;
-    if (NULL != cm)
-      delete cm;
-    return sat;
+    delete it->second;
   }
+  delete cl_buckets;
+  delete to_cnf;
 
-  delete xorcl;
-  if (NULL != cm)
-    delete cm;
   return sat;
 }
 

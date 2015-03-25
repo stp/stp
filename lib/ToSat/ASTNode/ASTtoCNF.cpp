@@ -1627,7 +1627,6 @@ void ASTtoCNF::cleanup(const ASTNode& varphi)
 ASTtoCNF::ASTtoCNF(STPMgr* bmgr)
 {
   bm = bmgr;
-  clausesxor = new ClauseList();
   renameAllSiblings = bm->UserFlags.renameAllInCNF_flag;
   dummy_true_var = bmgr->CreateFreshVariable(0, 0, "*TrueDummy*");
 }
@@ -1664,17 +1663,9 @@ ClauseList* ASTtoCNF::convertToCNF(const ASTNode& varphi)
     cerr << "\nPrinting: After CNF conversion: " << endl;
     cerr << "Number of clauses:" << defs->size() << endl;
     //         PrintClauseList(cout, *defs);
-    cerr << "Number of xor-clauses:" << clausesxor->size() << endl;
-    //         PrintClauseList(cout, *clausesxor);
   }
 
   return defs;
-} 
-
-// All XOR clauses are stored here. Return it after CNF translation
-ClauseList* ASTtoCNF::ReturnXorClauses(void)
-{
-  return clausesxor;
 }
 
 //

@@ -70,9 +70,6 @@ private:
     }
   };
 
-  // Collect all XOR Clauses here
-  ClauseList* clausesxor;
-
   typedef hash_map<ASTNode, CNFInfo*, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTNodeToCNFInfoMap;
 
@@ -250,7 +247,6 @@ public:
 
   // top-level conversion function
   ClauseList* convertToCNF(const ASTNode& varphi);
-  ClauseList* ReturnXorClauses(void);
 
   // Destructors that need to be explicitly called...(yuck).
   // One deletes the thing passed into it.
