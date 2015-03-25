@@ -18,13 +18,15 @@ before_install:
   - sudo apt-get install
   - sudo apt-get install -y cmake git zlib1g-dev
 # get and install minisat
+  - mkdir minisat_git
   - git clone https://github.com/niklasso/minisat
   - cd minisat
   - mkdir build && cd build
   - cmake ..
   - make
   - sudo make install
-  - cd ../..
+  - cd ../../..
+# get LIT from pip
   - sudo pip install lit
 # Initialise our submodules
   - git submodule init
