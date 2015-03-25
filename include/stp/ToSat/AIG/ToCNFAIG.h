@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 namespace stp
 {
+class CNFMgr;
 
 class ToCNFAIG // not copyable
 {

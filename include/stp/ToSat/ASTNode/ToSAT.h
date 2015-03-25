@@ -26,14 +26,14 @@ THE SOFTWARE.
 #ifndef TOSAT_H
 #define TOSAT_H
 
-#include "ToCNF.h"
-
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATBase.h"
 
 namespace stp
 {
+
+class CNFMgr;
 class ToSAT : public ToSATBase
 {
 

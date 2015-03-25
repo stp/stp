@@ -28,6 +28,8 @@ THE SOFTWARE.
 #include <fstream>
 #include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
 #include "stp/STPManager/UserDefinedFlags.h"
+#include "stp/ToSat/ASTNode/ClauseList.h"
+#include "stp/ToSat/ASTNode/ToCNF.h"
 
 namespace stp
 {
