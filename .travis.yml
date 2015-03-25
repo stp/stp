@@ -24,7 +24,7 @@ before_install:
   - cmake ..
   - make
   - sudo make install
-  - cd ..
+  - cd ../..
   - sudo pip install lit
 # Initialise our submodules
   - git submodule init
