@@ -64,7 +64,6 @@ private:
 class ASTInternal
 {
   friend class ASTNode;
-  friend class CNFMgr;
 
 protected:
   /****************************************************************
