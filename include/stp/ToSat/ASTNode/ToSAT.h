@@ -33,7 +33,7 @@ THE SOFTWARE.
 namespace stp
 {
 
-class CNFMgr;
+class ASTtoCNF;
 class ToSAT : public ToSATBase
 {
 
@@ -72,10 +72,10 @@ private:
   // Iteratively goes through the Clause Buckets, and calls
   // toSATandSolve()
   bool CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
-                                CNFMgr*& cm);
+                                ASTtoCNF*& cm);
 
   // Converts the clause to SAT and calls SAT solver
-  bool toSATandSolve(SATSolver& S, ClauseList& cll, bool final, CNFMgr*& cm,
+  bool toSATandSolve(SATSolver& S, ClauseList& cll, bool final, ASTtoCNF*& cm,
                      bool add_xor_clauses = false,
                      bool enable_clausal_abstraction = false);
 

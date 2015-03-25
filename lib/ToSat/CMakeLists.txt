@@ -6,7 +6,7 @@ add_library(tosat OBJECT
     AIG/ToSATAIG.cpp
     ASTNode/ClauseList.cpp
     ASTNode/SimpBool.cpp
-    ASTNode/ToCNF.cpp
+    ASTNode/ASTtoCNF.cpp
     ASTNode/ToSAT.cpp
 )
 

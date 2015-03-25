@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/ToSat/ASTNode/ClauseList.h"
-#include "stp/ToSat/ASTNode/ToCNF.h"
+#include "stp/ToSat/ASTNode/ASTtoCNF.h"
 
 namespace stp
 {
@@ -111,7 +111,7 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
  * unsat. else continue.
  */
 bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
-                          CNFMgr*& cm, bool add_xor_clauses,
+                          ASTtoCNF*& cm, bool add_xor_clauses,
                           bool enable_clausal_abstraction)
 {
   CountersAndStats("SAT Solver", bm);
@@ -305,7 +305,7 @@ ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
 } 
 
 bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
-                                     CNFMgr*& cm)
+                                     ASTtoCNF*& cm)
 {
   ClauseBuckets::iterator it = cb->begin();
   ClauseBuckets::iterator itend = cb->end();
@@ -368,7 +368,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
   // The CNFMgr is deleted inside the CallSAT_On_ClauseBuckets,
   // just before the final call to the SAT solver.
 
-  CNFMgr* cm = new CNFMgr(bm);
+  ASTtoCNF* cm = new ASTtoCNF(bm);
   ClauseList* cl = cm->convertToCNF(BBFormula);
   ClauseList* xorcl = cm->ReturnXorClauses();
 

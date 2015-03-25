@@ -40,7 +40,7 @@ using std::ostream;
 class ASTNode
 {
   friend class STPMgr;
-  friend class CNFMgr;
+  friend class ASTtoCNF;
   friend class ASTInterior;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,

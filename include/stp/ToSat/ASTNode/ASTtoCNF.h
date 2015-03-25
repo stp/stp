@@ -34,7 +34,8 @@ THE SOFTWARE.
 
 namespace stp
 {
-class CNFMgr // not copyable
+
+class ASTtoCNF // not copyable
 {
 private:
   // Setting this to true changes the behaviour of when new
@@ -244,30 +245,16 @@ private:
   ASTNode dummy_true_var;
 
 public:
-  //########################################
-  //########################################
-  // constructor
-  CNFMgr(STPMgr* bmgr);
+  ASTtoCNF(STPMgr* bmgr);
+  ~ASTtoCNF();
 
-  //########################################
-  //########################################
-  // destructor
-  ~CNFMgr();
-
-  //########################################
-  //########################################
   // top-level conversion function
-
   ClauseList* convertToCNF(const ASTNode& varphi);
-
   ClauseList* ReturnXorClauses(void);
 
   // Destructors that need to be explicitly called...(yuck).
   // One deletes the thing passed into it.
-
   static void DELETE(ClauseList* varphi);
-
-  // void PrintClauseList(ostream& os, ClauseList& cll);
 };
 } // end of namespace
 #endif
