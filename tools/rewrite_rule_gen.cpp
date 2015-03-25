@@ -771,7 +771,7 @@ int startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+  ss = new MinisatCore;
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -798,7 +798,7 @@ int startup()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+  ss = new MinisatCore;
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);

@@ -18,18 +18,18 @@ target_link_libraries(rewrite_rule_gen
 )
 
 
-add_executable(time_constantbitprop
-    time_cbitp.cpp
-)
-target_link_libraries(time_constantbitprop
-    libstp
-)
-
-
-add_executable(test_constantbitprop
-    test_cbitp.cpp
-    Functions.cpp
-)
-target_link_libraries(test_constantbitprop
-    libstp
-)
+# add_executable(time_constantbitprop
+#     time_cbitp.cpp
+# )
+# target_link_libraries(time_constantbitprop
+#     libstp
+# )
+#
+#
+# add_executable(test_constantbitprop
+#     test_cbitp.cpp
+#     Functions.cpp
+# )
+# target_link_libraries(test_constantbitprop
+#     libstp
+# )

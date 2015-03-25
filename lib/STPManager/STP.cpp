@@ -27,15 +27,16 @@ THE SOFTWARE.
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
-#include "stp/Sat/SimplifyingMinisat.h"
 
-#include "stp/Sat/MinisatCore.h"
+
 #include "stp/Sat/CryptoMinisat.h"
-#include "stp/Sat/MinisatCore_prop.h"
-#include "minisat/core_prop/Solver_prop.h"
+
 #ifdef USE_CRYPTOMINISAT4
 #include "stp/Sat/CryptoMinisat4.h"
 #endif
+
+#include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/MinisatCore.h"
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/FindPureLiterals.h"
@@ -77,7 +78,7 @@ SATSolver* STP::get_new_sat_solver()
   switch (bm->UserFlags.solver_to_use)
   {
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
-      newS = new SimplifyingMinisat(bm->soft_timeout_expired);
+      newS = new SimplifyingMinisat;
       break;
     case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
       newS = new CryptoMinisat;
@@ -92,11 +93,7 @@ SATSolver* STP::get_new_sat_solver()
       #endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
-      newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
-      break;
-    case UserDefinedFlags::MINISAT_PROPAGATORS:
-      newS =
-          new MinisatCore_prop<Minisat::Solver_prop>(bm->soft_timeout_expired);
+      newS = new MinisatCore;
       break;
     default:
       std::cerr << "ERROR: Undefined solver to use." << endl;

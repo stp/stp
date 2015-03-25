@@ -168,8 +168,9 @@ void ExtraMain::create_options()
       ("cryptominisat4",
        "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
 #endif
-      ("simplifying-minisat", "use simplifying-minisat 2.2 as the solver")(
-          "minisat", "use minisat 2.2 as the solver");
+      ("simplifying-minisat", "use installed simplifying minisat version as the solver")(
+          "minisat", "use installed minisat version as the solver")
+  ;
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(

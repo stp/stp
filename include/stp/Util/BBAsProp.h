@@ -43,7 +43,7 @@ class BBAsProp
 public:
   stp::SATSolver::vec_literals assumptions;
   stp::ToSATAIG aig;
-  stp::MinisatCore<Minisat::Solver>* ss;
+  stp::MinisatCore* ss;
 
   //input1, input2, result
   ASTNode i0, i1, r;
@@ -76,13 +76,15 @@ public:
       eq = mgr->CreateNode(stp::IFF, p, r);
     }
 
-    ss = new stp::MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+    ss = new stp::MinisatCore;
 
     aig.CallSAT(*ss, eq, false);
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
   }
 
-  bool unit_prop_with_assumps() { return ss->unitPropagate(assumptions); }
+  bool unit_prop_with_assumps() {
+    return ss->unitPropagate(assumptions);
+  }
 
   void fill_assumps_with(FixedBits& a, FixedBits& b, FixedBits& output)
   {

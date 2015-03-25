@@ -40,7 +40,7 @@ class SimplifyingMinisat : public SATSolver
   Minisat::SimpSolver* s;
 
 public:
-  SimplifyingMinisat(volatile bool& timeout);
+  SimplifyingMinisat();
   ~SimplifyingMinisat();
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.

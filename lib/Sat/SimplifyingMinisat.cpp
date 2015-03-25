@@ -22,17 +22,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Sat/SimplifyingMinisat.h"
 #include "minisat/simp/SimpSolver.h"
-//#include "utils/System.h"
+#include "stp/Sat/SimplifyingMinisat.h"
 
 namespace stp
 {
 using std::cout;
 
-SimplifyingMinisat::SimplifyingMinisat(volatile bool& timeout)
+SimplifyingMinisat::SimplifyingMinisat()
 {
-  s = new Minisat::SimpSolver(timeout);
+  s = new Minisat::SimpSolver();
 }
 
 SimplifyingMinisat::~SimplifyingMinisat()

@@ -1,10 +1,8 @@
 add_subdirectory(cryptominisat2)
-add_subdirectory(minisat)
 
 set(sat_lib_to_add
     CryptoMinisat.cpp
     MinisatCore.cpp
-    MinisatCore_prop.cpp
     SimplifyingMinisat.cpp
 )
 

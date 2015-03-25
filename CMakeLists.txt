@@ -270,8 +270,20 @@ if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
   include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
   set(USE_CRYPTOMINISAT4 ON)
 else()
-  message(WARNING "CryptoMiniSat4 or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat4 (v4.2 or above) or C++11 support not found, not allowing --cryptominisat4 option")
 endif()
+
+# -----------------------------------------------------------------------------
+# Find Minisat
+# -----------------------------------------------------------------------------
+find_package(minisat)
+if (NOT MINISAT_FOUND)
+  message(FATAL_ERROR "You must install minisat from https://github.com/niklasso/minisat")
+else()
+  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+endif()
+include_directories(${MINISAT_INCLUDE_DIRS})
+set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators

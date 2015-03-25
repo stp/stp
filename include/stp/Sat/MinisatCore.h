@@ -39,12 +39,12 @@ class Solver;
 
 namespace stp
 {
-template <class T> class MinisatCore : public SATSolver
+class MinisatCore : public SATSolver
 {
-  T* s;
+  Minisat::Solver* s;
 
 public:
-  MinisatCore(volatile bool& interrupt);
+  MinisatCore();
 
   ~MinisatCore();
 
@@ -76,7 +76,7 @@ public:
 
   virtual int nClauses();
 
-  bool unitPropagate(const vec_literals& ps);
+  //bool unitPropagate(const vec_literals& ps);
 };
 }
 
