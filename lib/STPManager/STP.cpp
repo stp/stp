@@ -454,56 +454,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
 
-#if 0
-  bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", inputToSat);
-
-  bm->SimplifyWrites_InPlace_Flag = true;
-  bm->Begin_RemoveWrites = false;
-  bm->start_abstracting = false;
-  bm->TermsAlreadySeenMap_Clear();
-  do
-    {
-      tmp_inputToSAT = inputToSat;
-
-      if (bm->UserFlags.optimize_flag)
-        {
-          inputToSat = pe->topLevel(inputToSat, arrayTransformer);
-
-          if (simp->hasUnappliedSubstitutions())
-            {
-              inputToSat = simp->applySubstitutionMap(inputToSat);
-              simp->haveAppliedSubstitutionMap();
-            }
-
-          bm->ASTNodeStats(pe->message.c_str(), inputToSat);
-
-          inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
-          bm->ASTNodeStats("after simplification: ", inputToSat);
-
-
-          if (bm->UserFlags.isSet("always-true", "0"))
-            {
-              SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-              AlwaysTrue always (simp,bm,&nf);
-              inputToSat = always.topLevel(inputToSat);
-              bm->ASTNodeStats("After removing always true: ", inputToSat);
-            }
-        }
-
-      // The word level solver uses the simplifier to apply the rewrites it makes,
-      // without optimisations enabled. It will enter infinite loops on some input.
-      // Instead it could use the apply function of the substitution map, but it
-      // doesn't yet...
-      if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
-        {
-          inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
-          bm->ASTNodeStats("after solving: ", inputToSat);
-        }
-    }
-  while (tmp_inputToSAT != inputToSat);
-  bm->ASTNodeStats("After SimplifyWrites_Inplace: ", inputToSat);
-#endif
-
   if (bm->UserFlags.isSet("enable-unconstrained", "1"))
   {
     // Remove unconstrained.
