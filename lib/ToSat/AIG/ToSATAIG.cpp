@@ -67,12 +67,6 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
 
   mark_variables_as_frozen(satSolver);
 
-  if ((bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_PROPAGATORS) &&
-      !bm->UserFlags.ackermannisation)
-  {
-    use_array_prop_minisat(satSolver);
-  }
-
   return runSolver(satSolver);
 }
 

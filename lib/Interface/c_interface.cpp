@@ -106,7 +106,8 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
           stp::UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
       break;
     case MSP:
-      b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_PROPAGATORS;
+      //Array-based Minisat has been replaced with normal MiniSat
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
       break;
     default:
       stp::FatalError(

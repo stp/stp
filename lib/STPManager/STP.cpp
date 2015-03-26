@@ -659,12 +659,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     return res;
   }
 
-  assert(arrayops); // should only go to abstraction refinement if there are
-                    // array ops.
+  // should only go to abstraction refinement if there are array ops.
+  assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
-  assert(bm->UserFlags.solver_to_use !=
-         UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver shouldn't
-                                                 // have returned undecided..
 
   res = Ctr_Example->SATBased_ArrayReadRefinement(
       NewSolver, inputToSat, original_input, satBase);

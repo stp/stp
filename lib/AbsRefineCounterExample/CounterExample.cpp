@@ -1009,11 +1009,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         PrintCounterExample(true);
       }
 
-      assert(bm->UserFlags.solver_to_use !=
-             UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver
-                                                     // shouldn't have returned
-                                                     // undecided..
-
       return SOLVER_UNDECIDED;
     }
   }
