@@ -51,15 +51,6 @@ public:
   virtual bool addClause(
       const SATSolver::vec_literals& ps) = 0; // Add a clause to the solver.
 
-  virtual bool addArray(int array_id, const SATSolver::vec_literals& i,
-                        const SATSolver::vec_literals& v,
-                        const Minisat::vec<Minisat::lbool>&,
-                        const Minisat::vec<Minisat::lbool>&)
-  {
-    std::cerr << "Not implemented";
-    exit(1);
-  }
-
   virtual bool okay() const = 0; // FALSE means solver is in a conflicting state
 
   virtual bool solve() = 0; // Search without assumptions.

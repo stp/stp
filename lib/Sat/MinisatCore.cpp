@@ -32,10 +32,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-/*bool MinisatCore::unitPropagate(const vec_literals& ps) {
-  return s->unitPropagate(ps);
-}*/
-
 uint8_t MinisatCore::value(uint32_t x) const {
   return Minisat::toInt(s->value(x));
 }
