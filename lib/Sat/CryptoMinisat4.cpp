@@ -38,10 +38,10 @@ namespace stp
 
 CryptoMinisat4::CryptoMinisat4()
 {
-  CMSat::SolverConf conf;
+  //CMSat::SolverConf conf;
   // conf.verbosity = 2;
-  conf.doSQL = false;
-  s = new CMSat::SATSolver(conf);
+  //conf.doSQL = false;
+  s = new CMSat::SATSolver;
   // s->log_to_file("stp.cnf");
   // s->set_num_threads(3);
   temp_cl = (void*)new std::vector<CMSat::Lit>;
