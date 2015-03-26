@@ -44,7 +44,7 @@ TEST(timeout, one)
     int time =
         rand() %
         7000; // FIXME: non-determinsitc behaviour in a test case is BAD!!!
-    std::cout << "Timeout : " << time << " : result ";
+    std::cout << "Timeout : " << time << " : result " << std::flush;
     std::cout << vc_query_with_timeout(vc, vc_falseExpr(vc), time) << std::endl;
   }
   vc_DeleteExpr(c);

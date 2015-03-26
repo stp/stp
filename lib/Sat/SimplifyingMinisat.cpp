@@ -41,6 +41,12 @@ SimplifyingMinisat::~SimplifyingMinisat()
   delete s;
 }
 
+void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
+{
+  if (max_confl> 0)
+    s->setConfBudget(max_confl);
+}
+
 bool SimplifyingMinisat::addClause(
     const vec_literals& ps) // Add a clause to the solver.
 {
@@ -53,12 +59,16 @@ SimplifyingMinisat::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-bool SimplifyingMinisat::solve() // Search without assumptions.
+bool SimplifyingMinisat::solve(bool& timeout_expired) // Search without assumptions.
 {
   if (!s->simplify())
     return false;
 
-  return s->solve();
+  Minisat::vec<Minisat::Lit> assumps;
+  Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == Minisat::l_Undef) {
+    timeout_expired = true;
+  }
 }
 
 bool SimplifyingMinisat::simplify() // Removes already satisfied clauses.

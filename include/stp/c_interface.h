@@ -236,7 +236,7 @@ Expr vc_simplify(VC vc, Expr e);
 // The C-language doesn't allow default arguments, so to get it compiling, I've
 // split
 // it into two functions.
-int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
+int vc_query_with_timeout(VC vc, Expr e, int timeout_ms = - 1);
 int vc_query(VC vc, Expr e);
 
 //! Return the counterexample after a failed query.

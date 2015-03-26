@@ -477,11 +477,6 @@ void vc_assertFormula(VC vc, Expr e)
   b->AddAssert(*a);
 }
 
-void soft_time_out(int ignored)
-{
-  stp::GlobalParserBM->soft_timeout_expired = true;
-}
-
 //! Check validity of e in the current context. e must be a FORMULA
 //
 // if returned 0 then input is INVALID.
@@ -506,26 +501,6 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   stpstar stpObj = ((stpstar)vc);
   bmstar b = (bmstar)(stpObj->bm);
 
-  assert(!stp::GlobalParserBM->soft_timeout_expired);
-#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
-  if (timeout_ms != -1)
-  {
-    itimerval timeout;
-    signal(SIGVTALRM, soft_time_out);
-    timeout.it_interval.tv_usec = 0;
-    timeout.it_interval.tv_sec = 0;
-    timeout.it_value.tv_usec = 1000 * (timeout_ms % 1000);
-    timeout.it_value.tv_sec = timeout_ms / 1000;
-    setitimer(ITIMER_VIRTUAL, &timeout, NULL);
-  }
-#else
-  if (timeout_ms != -1)
-  {
-    stp::FatalError(
-        "CInterface: query with timeout not supported on Windows builds");
-  }
-#endif /* !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER) \
-          */
   if (!stp::is_Form_kind(a->GetKind()))
   {
     stp::FatalError("CInterface: Trying to QUERY a NON formula: ", *a);
@@ -538,6 +513,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   const stp::ASTVec v = b->GetAsserts();
   node o;
   int output;
+  stpObj->bm->UserFlags.timeout_max_conflicts = timeout_ms;
   if (!v.empty())
   {
     if (v.size() == 1)
@@ -553,16 +529,6 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   {
     output = stpObj->TopLevelSTP(b->CreateNode(stp::TRUE), *a);
   }
-
-#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
-  if (timeout_ms != -1)
-  {
-    // Reset the timer.
-    setitimer(ITIMER_VIRTUAL, NULL, NULL);
-    stp::GlobalParserBM->soft_timeout_expired = false;
-  }
-#endif /* !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__) \
-          */
 
   return output;
 }

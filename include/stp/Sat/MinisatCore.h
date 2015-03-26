@@ -52,7 +52,9 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(); // Search without assumptions.
+  bool solve(bool& timeout_expired); // Search without assumptions.
+
+  virtual void setMaxConflicts(int64_t max_confl);
 
   virtual bool simplify(); // Removes already satisfied clauses.
 

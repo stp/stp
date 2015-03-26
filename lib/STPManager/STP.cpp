@@ -59,7 +59,10 @@ const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 
-SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_input)
+SOLVER_RETURN_TYPE STP::solve_by_sat_solver(
+  SATSolver* newS,
+  ASTNode original_input
+)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
@@ -67,6 +70,9 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_in
 
   if (bm->UserFlags.random_seed_flag)
     NewSolver.setSeed(bm->UserFlags.random_seed);
+
+  if (bm->UserFlags.timeout_max_conflicts >= 0)
+    newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
 
   SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
   return result;
@@ -106,9 +112,10 @@ SATSolver* STP::get_new_sat_solver()
 
 // The absolute TopLevel function that invokes STP on the input
 // formula
-SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
-                                    const ASTNode& query)
-{
+SOLVER_RETURN_TYPE STP::TopLevelSTP(
+  const ASTNode& inputasserts,
+  const ASTNode& query
+) {
 
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
@@ -117,7 +124,6 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   ASTNode original_input;
   if (query != bm->ASTFalse)
   {
-    //BUG probably it's here that the query gets mixed up with the state
     original_input =
         bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
   } else {

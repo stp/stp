@@ -62,7 +62,7 @@ public:
   void check_infile_type();
 
   // For options
-  size_t hardTimeout;
+  int64_t max_num_confl;
   size_t random_seed;
 };
 

@@ -254,8 +254,7 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
 
   bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
   bm->GetRunTimes()->start(RunTimes::Solving);
-
-  newSolver.solve();
+  newSolver.solve(bm->soft_timeout_expired);
   bm->GetRunTimes()->stop(RunTimes::Solving);
   if (bm->UserFlags.stats_flag)
     newSolver.printStats();
@@ -301,8 +300,9 @@ ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
   return cb;
 } 
 
-bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
-                                     CNFMgr*& cm)
+bool ToSAT::CallSAT_On_ClauseBuckets(
+  SATSolver& SatSolver, ClauseBuckets* cb,
+  CNFMgr*& cm)
 {
   ClauseBuckets::iterator it = cb->begin();
   ClauseBuckets::iterator itend = cb->end();

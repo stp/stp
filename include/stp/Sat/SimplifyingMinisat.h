@@ -47,9 +47,11 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(); // Search without assumptions.
+  bool solve(bool& timeout_expired); // Search without assumptions.
 
   bool simplify(); // Removes already satisfied clauses.
+
+  virtual void setMaxConflicts(int64_t max_confl);
 
   void setVerbosity(int v);
 

@@ -77,7 +77,6 @@ public:
     }
 
     ss = new stp::MinisatCore;
-
     aig.CallSAT(*ss, eq, false);
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
   }

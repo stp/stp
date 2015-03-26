@@ -50,6 +50,8 @@ public:
   // collect statistics on certain functions
   bool stats_flag;
 
+  int64_t timeout_max_conflicts;
+
   // print DAG nodes
   bool print_nodes_flag;
 
@@ -209,6 +211,7 @@ public:
   // CONSTRUCTOR
   UserDefinedFlags()
   {
+    timeout_max_conflicts = -1;
 
     // collect statistics on certain functions
     stats_flag = false;

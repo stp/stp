@@ -33,6 +33,12 @@ using std::endl;
 // This function prints the output of the STP solver
 void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)
 {
+  if (ret == SOLVER_TIMEOUT || ret == SOLVER_UNDECIDED)
+  {
+    cout << "Timeout." << endl;
+    return;
+  }
+
   bool true_iff_valid = (SOLVER_VALID == ret);
 
   if (bm->UserFlags.print_output_flag)

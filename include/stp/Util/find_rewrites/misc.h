@@ -42,7 +42,7 @@ ASTNode create(Kind k, const ASTNode& n0, const ASTNode& n1);
 int getDifficulty(const ASTNode& n_);
 
 bool isConstant(const ASTNode& n, VariableAssignment& different,
-                const int bits);
+                const int bits, int64_t timeout_max_confl = -1);
 
 std::vector<ASTNode> getVariables(const ASTNode& n);
 

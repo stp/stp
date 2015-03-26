@@ -46,6 +46,12 @@ MinisatCore::~MinisatCore()
   delete s;
 }
 
+void MinisatCore::setMaxConflicts(int64_t max_confl)
+{
+  s->setConfBudget(max_confl);
+}
+
+
 bool MinisatCore::addClause(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
@@ -58,12 +64,18 @@ MinisatCore::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-bool MinisatCore::solve() // Search without assumptions.
+bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 {
   if (!s->simplify())
     return false;
 
-  return s->solve();
+  Minisat::vec<Minisat::Lit> assumps;
+  Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == Minisat::l_Undef) {
+    timeout_expired = true;
+  }
+
+  return ret == Minisat::l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const

@@ -60,7 +60,7 @@ ASTNode renameVarsBack(const ASTNode& n);
 
 ASTNode rename_then_rewrite(ASTNode n, const Rewrite_rule& original_rule);
 
-bool isConstantToSat(const ASTNode& query);
+bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl = -1);
 
 bool isConstant(const ASTNode& n, VariableAssignment& different);
 

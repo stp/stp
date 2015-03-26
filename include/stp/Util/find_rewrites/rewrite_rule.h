@@ -36,11 +36,6 @@ extern ASTNode v, v0, w, w0;
 extern NodeFactory* nf;
 extern stp::STPMgr* mgr;
 
-void soft_time_out(int ignored)
-{
-  mgr->soft_timeout_expired = true;
-}
-
 bool orderEquivalence(ASTNode& from, ASTNode& to);
 
 class Rewrite_rule
@@ -135,13 +130,6 @@ public:
   bool timedCheck(int timeout_ms, VariableAssignment& bad)
   {
     mgr->soft_timeout_expired = false;
-    itimerval timeout;
-    signal(SIGVTALRM, soft_time_out);
-    timeout.it_interval.tv_usec = 0;
-    timeout.it_interval.tv_sec = 0;
-    timeout.it_value.tv_usec = 1000 * (timeout_ms % 1000);
-    timeout.it_value.tv_sec = timeout_ms / 1000;
-    setitimer(ITIMER_VIRTUAL, &timeout, NULL);
 
     const long st = stp::getCurrentTime();
     int checked_to = 0;
@@ -163,7 +151,7 @@ public:
         cerr << from << to;
       }
 
-      bool result = isConstant(widened, bad, new_bitwidth);
+      bool result = isConstant(widened, bad, new_bitwidth, timeout_ms);
       if (!result && !mgr->soft_timeout_expired)
       {
         // not a constant, and not timed out!

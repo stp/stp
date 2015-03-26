@@ -118,8 +118,10 @@ public:
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
-  SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
-                                 const ASTNode& query);
+  SOLVER_RETURN_TYPE TopLevelSTP(
+    const ASTNode& inputasserts,
+    const ASTNode& query
+  );
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,

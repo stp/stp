@@ -947,12 +947,13 @@ void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
 }
 
 SOLVER_RETURN_TYPE
-AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
-                                              const ASTNode& modified_input,
-                                              const ASTNode& original_input,
-                                              ToSATBase* tosat, bool refinement)
+AbsRefine_CounterExample::CallSAT_ResultCheck(
+  SATSolver& SatSolver,
+  const ASTNode& modified_input,
+  const ASTNode& original_input,
+  ToSATBase* tosat,
+  bool refinement)
 {
-
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
   if (bm->soft_timeout_expired)

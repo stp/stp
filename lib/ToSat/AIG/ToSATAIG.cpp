@@ -199,7 +199,7 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->GetRunTimes()->start(RunTimes::Solving);
-  satSolver.solve();
+  satSolver.solve(bm->soft_timeout_expired);
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
   if (bm->UserFlags.stats_flag)
