@@ -76,8 +76,7 @@ private:
 
   // Converts the clause to SAT and calls SAT solver
   bool toSATandSolve(SATSolver& S, ClauseList& cll, bool final, CNFMgr*& cm,
-                     bool add_xor_clauses = false,
-                     bool enable_clausal_abstraction = false);
+                     bool enable_clausal_abstraction);
 
   ClauseBuckets* Sort_ClauseList_IntoBuckets(ClauseList* cl,
                                              int clause_bucket_size);

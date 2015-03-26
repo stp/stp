@@ -109,8 +109,7 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
  * unsat. else continue.
  */
 bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
-                          CNFMgr*& cm, bool add_xor_clauses,
-                          bool enable_clausal_abstraction)
+                          CNFMgr*& cm, bool enable_clausal_abstraction)
 {
   CountersAndStats("SAT Solver", bm);
   bm->GetRunTimes()->start(RunTimes::SendingToSAT);
@@ -312,7 +311,7 @@ bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
   for (size_t count = 1; it != itend; it++, count++)
   {
     ClauseList* cl = (*it).second;
-    sat = toSATandSolve(SatSolver, *cl, count == cb->size(), cm);
+    sat = toSATandSolve(SatSolver, *cl, count == cb->size(), cm, false);
 
     if (!sat)
     {
@@ -368,7 +367,6 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
 
   CNFMgr* cm = new CNFMgr(bm);
   ClauseList* cl = cm->convertToCNF(BBFormula);
-  ClauseList* xorcl = cm->ReturnXorClauses();
 
   ClauseBuckets* cb = Sort_ClauseList_IntoBuckets(cl, clause_bucket_size);
   cl->asList()->clear(); // clause buckets now point to the clauses.
@@ -379,16 +377,6 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
     delete it->second;
   delete cb;
 
-  if (!sat)
-  {
-    xorcl->deleteJustVectors();
-    delete xorcl;
-    if (NULL != cm)
-      delete cm;
-    return sat;
-  }
-
-  delete xorcl;
   if (NULL != cm)
     delete cm;
   return sat;
