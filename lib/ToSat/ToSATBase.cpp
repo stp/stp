@@ -35,7 +35,7 @@ void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)
 {
   if (ret == SOLVER_TIMEOUT || ret == SOLVER_UNDECIDED)
   {
-    cout << "Timeout." << endl;
+    cout << "Timed Out." << endl;
     return;
   }
 
