@@ -38,11 +38,11 @@ before_install:
 script:
 # Build STP
   - ../../scripts/travis-cmake.sh ../../
-  - make
+  - make VERBOSE=1
   - make check
 # Build example project. We assume that the build installed itself to the CMake
 # user package registry (~/.cmake/packages/)
   - cd ../simple_example
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
-  - make
+  - make VERBOSE=1
   - ./stp-example
