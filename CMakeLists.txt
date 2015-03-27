@@ -57,6 +57,8 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
+include(MacroPushRequiredVars)
+
 option(SANITIZE "Use Clang sanitizers. This will force using clang++ as the compiler" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
@@ -244,8 +246,10 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # -----------------------------------------------------------------------------
 
 if(NOT BUILD_SHARED_LIBS)
-  message("Trying to use static Boost libraries")
+  message("Trying to use static Boost and Minisat libraries")
   set(Boost_USE_STATIC_LIBS ON)
+  set(Minisat_USE_STATIC_LIBS ON)
+  set(CryptoMiniSat_USE_STATIC_LIBS ON)
 endif()
 
 option(NO_BOOST "Don't try to use boost" OFF)
@@ -266,6 +270,9 @@ set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat
 find_package(cryptominisat4 CONFIG)
 if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
   message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
+  message(STATUS "CryptoMiniSat4 dynamic lib: ${CRYPTOMINISAT4_LIBRARIES}")
+  message(STATUS "CryptoMiniSat4 static lib:  ${CRYPTOMINISAT4_STATIC_LIBRARIES}")
+  message(STATUS "CryptoMiniSat4 static lib deps: ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS}")
   add_definitions(-DUSE_CRYPTOMINISAT4)
   include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
   set(USE_CRYPTOMINISAT4 ON)

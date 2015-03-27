@@ -7,6 +7,7 @@ if (BUILD_STATIC_BIN)
     # See http://sourceware.org/bugzilla/show_bug.cgi?id=13490
     # https://bugzilla.redhat.com/show_bug.cgi?id=642999
     set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
+    set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
 endif()
 
 add_executable(stp_simple

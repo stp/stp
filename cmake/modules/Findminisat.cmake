@@ -13,8 +13,21 @@ find_path(MINISAT_INCLUDE_DIR minisat/core/Solver.h
           HINTS ${MINISAT_INCLUDE_DIRS}
           PATH_SUFFIXES minisat minisat2 )
 
-find_library(MINISAT_LIBRARY NAMES minisat minisat2
+if (Minisat_USE_STATIC_LIBS)
+  message(STATUS "Finding static minisat libs...")
+  macro_push_required_vars(CMAKE_FIND_LIBRARY_SUFFIXES)
+
+  if(UNIX AND WITH_MY_LIB_STATIC)
+      set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+  endif(UNIX AND WITH_MY_LIB_STATIC)
+  find_library(MINISAT_LIBRARY NAMES libminisat.a libminisat2.a
              HINTS ${MINISAT_LIBDIR} ${MINISAT_LIBRARY_DIRS} )
+  macro_pop_required_vars(CMAKE_FIND_LIBRARY_SUFFIXES)
+else()
+  message(STATUS "Finding dynamic minisat libs...")
+  find_library(MINISAT_LIBRARY NAMES minisat minisat2
+             HINTS ${MINISAT_LIBDIR} ${MINISAT_LIBRARY_DIRS} )
+endif()
 
 set(MINISAT_LIBRARIES ${MINISAT_LIBRARY} )
 set(MINISAT_INCLUDE_DIRS ${MINISAT_INCLUDE_DIR} )

@@ -1,7 +1,7 @@
 language: cpp
 compiler:
   - gcc
-  - clang
+#  - clang
 env:
     # These are used by .travis-cmake.sh to set a configuration
     - STP_CONFIG=STATIC_LIB
