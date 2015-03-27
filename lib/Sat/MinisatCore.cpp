@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+
 #define __STDC_FORMAT_MACROS
-#define __STDC_LIMIT_MACROS
 #include "minisat/core/Solver.h"
 #include "stp/Sat/MinisatCore.h"
 //#include "utils/System.h"

@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #define __STDC_FORMAT_MACROS
-#define __STDC_LIMIT_MACROS
 #include "minisat/simp/SimpSolver.h"
 #include "stp/Sat/SimplifyingMinisat.h"
 
