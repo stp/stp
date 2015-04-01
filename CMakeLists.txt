@@ -334,6 +334,7 @@ endif()
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
+message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
