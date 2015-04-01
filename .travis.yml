@@ -19,7 +19,7 @@ before_install:
   - sudo apt-get install -y cmake git zlib1g-dev
 # get and install minisat
   - mkdir minisat_git && cd minisat_git
-  - git clone https://github.com/niklasso/minisat
+  - git clone https://github.com/stp/minisat
   - cd minisat
   - mkdir build && cd build
   - cmake ..
