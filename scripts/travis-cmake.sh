@@ -89,7 +89,7 @@ case $STP_CONFIG in
          eval sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
          eval sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
          eval sudo apt-get update
-         eval sudo apt-get install gcc-4.7 g++-4.7
+         eval sudo apt-get install -y gcc-4.7 g++-4.7
          eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_SHARED_LIBS:BOOL=ON \
                    -DBUILD_STATIC_BIN:BOOL=OFF \
