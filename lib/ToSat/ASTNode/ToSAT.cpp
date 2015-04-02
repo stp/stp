@@ -107,7 +107,7 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
  * unsat. else continue.
  */
 bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
-                          ASTtoCNF*& cm, bool enable_clausal_abstraction)
+                          ASTtoCNF*& cm)
 {
   CountersAndStats("SAT Solver", bm);
   bm->GetRunTimes()->start(RunTimes::SendingToSAT);
@@ -153,26 +153,6 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     //          continue;
     //        }
     newSolver.addClause(satSolverClause);
-
-    // 	if(enable_clausal_abstraction &&
-    // 	   count++ >= input_clauselist_size*CLAUSAL_ABSTRACTION_CUTOFF)
-    // 	  {
-    // 	    //Arbitrary adding only x% of the clauses in the hopes of
-    // 	    //terminating early
-    // 	    //      cout << "Percentage clauses added: "
-    // 	    //           << percentage << endl;
-    // 	    bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-    // 	    bm->GetRunTimes()->start(RunTimes::Solving);
-    // 	    newSolver.solve();
-    // 	    bm->GetRunTimes()->stop(RunTimes::Solving);
-    // 	    if(!newSolver.okay())
-    // 	      {
-    // 		return false;
-    // 	      }
-    // 	    count = 0;
-    // 	    flag  = 1;
-    // 	    bm->GetRunTimes()->start(RunTimes::SendingToSAT);
-    // 	  }
 
     if (newSolver.okay())
     {
@@ -263,10 +243,11 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
 }
 
 // Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT
-ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
-                                                  int clause_bucket_size)
+ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(
+  ClauseList* cl,
+  int clause_bucket_size)
 {
-  ClauseBuckets* cb = new ClauseBuckets();
+  ClauseBuckets* cb = new ClauseBuckets;
   ClauseContainer* cc = cl->asList();
 
   // Sort the clauses, and bucketize by the size of the clauses
@@ -308,7 +289,7 @@ bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
   for (size_t count = 1; it != itend; it++, count++)
   {
     ClauseList* cl = (*it).second;
-    sat = toSATandSolve(SatSolver, *cl, count == cb->size(), cm, false);
+    sat = toSATandSolve(SatSolver, *cl, count == cb->size(), cm);
 
     if (!sat)
     {
@@ -347,25 +328,13 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
     file.close();
   }
 
-  //  I suspect that we can't use clause buckets with the simplifying solvers
-  // (simplifying minisat & Cryptominsat).
-  //  Because sometimes simplifying removes a variable that later clauses depend
-  //  on.
-  //  But when I set the clause_bucket_size to 1 for the other solvers, errors
-  //  down.
-  int clause_bucket_size;
-  if (bm->UserFlags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER)
-    clause_bucket_size = 3;
-  else
-    clause_bucket_size = 3;
-
   // The ASTtoCNF is deleted inside the CallSAT_On_ClauseBuckets,
   // just before the final call to the SAT solver.
 
   ASTtoCNF* to_cnf = new ASTtoCNF(bm);
   ClauseList* cl = to_cnf->convertToCNF(BBFormula);
 
-  ClauseBuckets* cl_buckets = Sort_ClauseList_IntoBuckets(cl, clause_bucket_size);
+  ClauseBuckets* cl_buckets = Sort_ClauseList_IntoBuckets(cl, 3);
   cl->asList()->clear(); // clause buckets now point to the clauses.
   delete cl;
 

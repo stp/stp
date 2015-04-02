@@ -75,8 +75,7 @@ private:
                                 ASTtoCNF*& cm);
 
   // Converts the clause to SAT and calls SAT solver
-  bool toSATandSolve(SATSolver& S, ClauseList& cll, bool final, ASTtoCNF*& cm,
-                     bool enable_clausal_abstraction);
+  bool toSATandSolve(SATSolver& S, ClauseList& cll, bool final, ASTtoCNF*& cm);
 
   ClauseBuckets* Sort_ClauseList_IntoBuckets(ClauseList* cl,
                                              int clause_bucket_size);
