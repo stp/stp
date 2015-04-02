@@ -91,13 +91,6 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
 
       SATVar_to_SymbolIndex[symbol][index] = v;
     }
-
-    // experimental. Don't add Tseitin variables as decision variables.
-    // if (!bm->UserFlags.tseitin_are_decision_variables_flag &&
-    // isTseitinVariable(n))
-    //{
-    //            newSolver.setDecisionVar(v,false);
-    //        }
   }
   else
     v = it->second;
