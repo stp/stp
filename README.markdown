@@ -13,17 +13,26 @@ Documentation: https://github.com/stp/stp/wiki
 
 [![Build Status](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
 
+## Quick build&install:
+```
+$ sudo apt-get install cmake gcc g++ libboost-all-dev bison flex python perl
+$ git clone https://github.com/stp/minisat.git
+$ cd minisat
+$ mkdir build && cd build
+$ cmake ..
+$ make
+$ sudo make install
+$ cd ../..
+$ git clone https://github.com/stp/stp.git
+$ cd stp
+$ mkdir build && cd build
+$ cmake ..
+$ make
+$ sudo make install
+```
+
 ## Authors
 
 * Vijay Ganesh
 * Trevor Hansen
 
-## Papers
-
-Paper on STP Internals:
-
-A Decision Procedure for Bit-Vectors and Arrays by Vijay Ganesh and David L. Dill. In Proceedings of Computer Aided Verification 2007 (CAV 2007), Berlin, Germany, July 2007 ([pdf](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.144.5247&rep=rep1&type=pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/STP-ganesh-07.bib))
-
-Paper on EXE Concolic Tester:
-
-EXE: Automatically Generating Inputs of Death by Cristian Cadar, Vijay Ganesh, Peter Pawlowski, Dawson Engler, David Dill. In Proceedings of ACM Conference on Computer and Communications Security 2006 (CCS 2006), Alexandria, Virginia, October, 2006 ([pdf](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.143.474&rep=rep1&type=pdf)) ([bib](http://people.csail.mit.edu/vganesh/STP_files/EXE-cadarganesh-06.bib))
