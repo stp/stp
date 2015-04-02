@@ -1674,5 +1674,6 @@ void ASTtoCNF::DELETE(ClauseList* varphi)
   varphi->deleteJustVectors();
   delete varphi;
   varphi = NULL;
-} 
+}
+
 } // end namespace stp

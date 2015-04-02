@@ -727,48 +727,6 @@ bool BVTypeCheck(const ASTNode& n)
   }
 }
 
-// callback for SIGALRM.
-void handle_time_out(int parameter)
-{
-  printf("Timed Out.\n");
-
-  abort();
-  // I replaced the exit(0) with an abort().
-  // The exit was sometimes hanging, seemingly because of a bug somewhere else
-  // (e.g. loader, glibc).
-  // In strace it output:
-
-  //--- SIGVTALRM (Virtual timer expired) @ 0 (0) ---
-  // fstat(1, {st_mode=S_IFCHR|0620, st_rdev=makedev(136, 5), ...}) = 0
-  // mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) =
-  // 0x7fabca622000
-  // write(1, "Timed Out.\n", 11Timed Out.
-  //)            = 11
-  // futex(0x7fabc9c54e40, FUTEX_WAIT, 2, NULL
-
-  // Then it would just sit there waiting for the mutex (which never came).
-  // exit(0);
-}
-
-#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
-itimerval timeout;
-void setHardTimeout(int sec)
-{
-  signal(SIGVTALRM, handle_time_out);
-  timeout.it_interval.tv_usec = 0;
-  timeout.it_interval.tv_sec = 0;
-  timeout.it_value.tv_usec = 0;
-  timeout.it_value.tv_sec = sec;
-  setitimer(ITIMER_VIRTUAL, &timeout, NULL);
-}
-#else
-void setHardTimeout(int)
-{
-  std::cerr << "WARNING: STP does not support hard timeout for Windows builds"
-            << std::endl;
-}
-#endif // !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__MINGW64__)
-
 long getCurrentTime()
 {
   timeval t;

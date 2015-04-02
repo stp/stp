@@ -305,7 +305,9 @@ int Main::main(int argc, char** argv)
       return 0;
     }
 
-    SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(asserts, query);
+    SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(
+      asserts, query);
+
     if (bm->UserFlags.quick_statistics_flag)
     {
       bm->GetRunTimes()->print();

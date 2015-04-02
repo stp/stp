@@ -22,22 +22,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Sat/SimplifyingMinisat.h"
+#define __STDC_FORMAT_MACROS
 #include "minisat/simp/SimpSolver.h"
-//#include "utils/System.h"
+#include "stp/Sat/SimplifyingMinisat.h"
 
 namespace stp
 {
 using std::cout;
 
-SimplifyingMinisat::SimplifyingMinisat(volatile bool& timeout)
+SimplifyingMinisat::SimplifyingMinisat()
 {
-  s = new Minisat::SimpSolver(timeout);
+  s = new Minisat::SimpSolver();
 }
 
 SimplifyingMinisat::~SimplifyingMinisat()
 {
   delete s;
+}
+
+void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
+{
+  if (max_confl> 0)
+    s->setConfBudget(max_confl);
 }
 
 bool SimplifyingMinisat::addClause(
@@ -52,12 +58,16 @@ SimplifyingMinisat::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-bool SimplifyingMinisat::solve() // Search without assumptions.
+bool SimplifyingMinisat::solve(bool& timeout_expired) // Search without assumptions.
 {
   if (!s->simplify())
     return false;
 
-  return s->solve();
+  Minisat::vec<Minisat::Lit> assumps;
+  Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == Minisat::l_Undef) {
+    timeout_expired = true;
+  }
 }
 
 bool SimplifyingMinisat::simplify() // Removes already satisfied clauses.

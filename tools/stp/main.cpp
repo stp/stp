@@ -38,11 +38,6 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-namespace stp
-{
-void setHardTimeout(int);
-}
-
 /********************************************************************
  * MAIN FUNCTION:
  *
@@ -168,8 +163,9 @@ void ExtraMain::create_options()
       ("cryptominisat4",
        "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
 #endif
-      ("simplifying-minisat", "use simplifying-minisat 2.2 as the solver")(
-          "minisat", "use minisat 2.2 as the solver");
+      ("simplifying-minisat", "use installed simplifying minisat version as the solver")(
+          "minisat", "use installed minisat version as the solver (default)")
+  ;
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
@@ -240,10 +236,8 @@ void ExtraMain::create_options()
   misc_options.add_options()("exit-after-CNF",
                              po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
                              "exit after the CNF has been generated")
-#ifndef _MSC_VER
-      ("timeout,g", po::value<size_t>(&hardTimeout),
-       "timeout (seconds until STP gives up)")
-#endif
+      ("timeout,g", po::value<int64_t>(&max_num_confl),
+       "Number of conflicts after which the SAT solver gives up. -1 means never (default)")
       ("seed,i", po::value<size_t>(&random_seed),
        "set random seed for STP's satisfiable output. Random_seed is an "
        "integer >= 0")("random-seed",
@@ -383,13 +377,10 @@ int ExtraMain::parse_options(int argc, char** argv)
   {
     bm->defaultNodeFactory = bm->hashingNodeFactory;
   }
-
-#ifndef _MSC_VER
   if (vm.count("timeout"))
   {
-    stp::setHardTimeout(hardTimeout);
+    bm->UserFlags.timeout_max_conflicts = max_num_confl;
   }
-#endif
 
   if (vm.count("seed"))
   {

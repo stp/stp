@@ -86,7 +86,7 @@ public:
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
-  volatile bool soft_timeout_expired;
+  bool soft_timeout_expired;
 
   // No nodes should already have the iteration number that is returned from
   // here. This never returns zero.

@@ -38,9 +38,6 @@ namespace stp
 
 CryptoMinisat4::CryptoMinisat4()
 {
-  //CMSat::SolverConf conf;
-  // conf.verbosity = 2;
-  //conf.doSQL = false;
   s = new CMSat::SATSolver;
   // s->log_to_file("stp.cnf");
   // s->set_num_threads(3);
@@ -52,6 +49,12 @@ CryptoMinisat4::~CryptoMinisat4()
   delete s;
   vector<CMSat::Lit>* real_temp_cl = (vector<CMSat::Lit>*)temp_cl;
   delete real_temp_cl;
+}
+
+void CryptoMinisat4::setMaxConflicts(int64_t max_confl)
+{
+  if (max_confl> 0)
+    s->set_max_confl(max_confl);
 }
 
 bool
@@ -76,10 +79,13 @@ CryptoMinisat4::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-bool CryptoMinisat4::solve() // Search without assumptions.
+bool CryptoMinisat4::solve(bool& timeout_expired) // Search without assumptions.
 {
   CMSat::lbool ret = s->solve();
-  return (ret == CMSat::l_True);
+  if (ret == CMSat::l_Undef) {
+    timeout_expired = true;
+  }
+  return ret == CMSat::l_True;
 }
 
 uint8_t CryptoMinisat4::modelValue(uint32_t x) const

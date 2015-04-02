@@ -50,10 +50,6 @@ private:
   ToSATAIG& operator=(const ToSATAIG& other);
   ToSATAIG(const ToSATAIG& other);
 
-  // One modified version of Minisat has an array propagator based solver built
-  // in. So this block sends the details of the arrays to it.
-  void use_array_prop_minisat(SATSolver& satSolver);
-
   // Minisat doesn't, but simplifying minisat and cryptominsat eliminate
   // variables during their
   // simplification phases. The problem is that we may later add clauses in that

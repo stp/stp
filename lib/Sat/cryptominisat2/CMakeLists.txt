@@ -21,3 +21,4 @@ add_library(cryptominisat2 OBJECT
     XorSubsumer.cpp
     time_mem.cpp
 )
+add_dependencies(cryptominisat2 ASTKind_header)

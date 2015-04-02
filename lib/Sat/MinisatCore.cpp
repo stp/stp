@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+
+#define __STDC_FORMAT_MACROS
 #include "minisat/core/Solver.h"
 #include "stp/Sat/MinisatCore.h"
 //#include "utils/System.h"
@@ -30,91 +32,90 @@ THE SOFTWARE.
 namespace stp
 {
 
-template <class T>
-bool MinisatCore<T>::unitPropagate(const vec_literals& ps) {
-  return s->unitPropagate(ps);
-}
-
-template <class T>
-uint8_t MinisatCore<T>::value(uint32_t x) const {
+uint8_t MinisatCore::value(uint32_t x) const {
   return Minisat::toInt(s->value(x));
 }
 
-template <class T> MinisatCore<T>::MinisatCore(volatile bool& interrupt)
+MinisatCore::MinisatCore()
 {
-  s = new T(interrupt);
+  s = new Minisat::Solver;
 }
 
-template <class T> MinisatCore<T>::~MinisatCore()
+MinisatCore::~MinisatCore()
 {
   delete s;
 }
 
-template <class T>
-bool MinisatCore<T>::addClause(
+void MinisatCore::setMaxConflicts(int64_t max_confl)
+{
+  s->setConfBudget(max_confl);
+}
+
+
+bool MinisatCore::addClause(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
   return s->addClause(ps);
 }
 
-template <class T>
 bool
-MinisatCore<T>::okay() const // FALSE means solver is in a conflicting state
+MinisatCore::okay() const // FALSE means solver is in a conflicting state
 {
   return s->okay();
 }
 
-template <class T> bool MinisatCore<T>::solve() // Search without assumptions.
+bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 {
   if (!s->simplify())
     return false;
 
-  return s->solve();
+  Minisat::vec<Minisat::Lit> assumps;
+  Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == Minisat::l_Undef) {
+    timeout_expired = true;
+  }
+
+  return ret == Minisat::l_True;
 }
 
-template <class T> uint8_t MinisatCore<T>::modelValue(uint32_t x) const
+uint8_t MinisatCore::modelValue(uint32_t x) const
 {
   return Minisat::toInt(s->modelValue(x));
 }
 
-template <class T> uint32_t MinisatCore<T>::newVar()
+uint32_t MinisatCore::newVar()
 {
   return s->newVar();
 }
 
-template <class T> void MinisatCore<T>::setVerbosity(int v)
+void MinisatCore::setVerbosity(int v)
 {
   s->verbosity = v;
 }
 
-template <class T> void MinisatCore<T>::setSeed(int i)
+void MinisatCore::setSeed(int i)
 {
   s->random_seed = i;
 }
 
-template <class T> unsigned long MinisatCore<T>::nVars()
+unsigned long MinisatCore::nVars()
 {
   return s->nVars();
 }
 
-template <class T> void MinisatCore<T>::printStats()
+void MinisatCore::printStats()
 {
   s->printStats();
 }
 
-template <class T> int MinisatCore<T>::nClauses()
+int MinisatCore::nClauses()
 {
   return s->nClauses();
 }
 
-template <class T> bool MinisatCore<T>::simplify()
+bool MinisatCore::simplify()
 {
   return s->simplify();
 }
 
-// I was going to make SimpSolver and Solver instances of this template.
-// But I'm not so sure now because I don't understand what eliminate() does in
-// the simp solver.
-template class MinisatCore<Minisat::Solver>;
-// template class MinisatCore<Minisat::SimpSolver>;
 }

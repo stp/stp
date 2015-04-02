@@ -39,12 +39,12 @@ class Solver;
 
 namespace stp
 {
-template <class T> class MinisatCore : public SATSolver
+class MinisatCore : public SATSolver
 {
-  T* s;
+  Minisat::Solver* s;
 
 public:
-  MinisatCore(volatile bool& interrupt);
+  MinisatCore();
 
   ~MinisatCore();
 
@@ -52,7 +52,9 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(); // Search without assumptions.
+  bool solve(bool& timeout_expired); // Search without assumptions.
+
+  virtual void setMaxConflicts(int64_t max_confl);
 
   virtual bool simplify(); // Removes already satisfied clauses.
 
@@ -76,7 +78,7 @@ public:
 
   virtual int nClauses();
 
-  bool unitPropagate(const vec_literals& ps);
+  //bool unitPropagate(const vec_literals& ps);
 };
 }
 

@@ -331,10 +331,14 @@ bool checkProp(const ASTNode& n)
 }
 
 // True if it's always true, otherwise fills the assignment.
-bool isConstant(const ASTNode& n, VariableAssignment& different,
-                const int bit_width)
+bool isConstant(
+  const ASTNode& n,
+  VariableAssignment& different,
+  const int bit_width
+  , const int64_t timeout_max_confl
+)
 {
-  if (isConstantToSat(n))
+  if (isConstantToSat(n, timeout_max_confl))
     return true;
   else
   {
@@ -771,7 +775,7 @@ int startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+  ss = new MinisatCore;
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -798,7 +802,7 @@ int startup()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore<Minisat::Solver>(mgr->soft_timeout_expired);
+  ss = new MinisatCore;
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);
@@ -806,7 +810,7 @@ void clearSAT()
 }
 
 // Return true if the negation of the query is unsatisfiable.
-bool isConstantToSat(const ASTNode& query)
+bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 {
   assert(query.GetType() == BOOLEAN_TYPE);
 
@@ -817,6 +821,7 @@ bool isConstantToSat(const ASTNode& query)
 
   assert(ss->nClauses() == 0);
   mgr->AddQuery(mgr->ASTUndefined);
+  ss->setMaxConflicts(timeout_max_confl);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
       *ss, query2, query2, GlobalSTP->tosat, false);
 

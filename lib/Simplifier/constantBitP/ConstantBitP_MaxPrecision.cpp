@@ -272,8 +272,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
   ToSAT tosat(beev);
-  bool timeout = false;
-  MinisatCore<Minisat::Solver> newS(timeout);
+  MinisatCore newS;
 
   vector<ASTNode> min_children(children.size());
   vector<ASTNode> max_children(children.size());
@@ -471,8 +470,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   Simplifier simp(beev);
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
-  bool timeout = false;
-  MinisatCore<Minisat::Solver> newS(timeout);
+  MinisatCore newS;
 
   ToSATAIG tosat(beev, &at);
 

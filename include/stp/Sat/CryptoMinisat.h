@@ -51,7 +51,7 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(); // Search without assumptions.
+  bool solve(bool& timeout_expired); // Search without assumptions.
 
   virtual uint8_t modelValue(uint32_t x) const;
 

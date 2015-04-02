@@ -27,7 +27,6 @@ set(stp_lib_targets
     abstractionrefinement
     tosat
     sat
-    minisat2
     cryptominisat2
     simplifier
     constantbv
@@ -91,8 +90,15 @@ endif()
 # -----------------------------------------------------------------------------
 set(libstp_link_libs ${Boost_LIBRARIES})
 if (USE_CRYPTOMINISAT4)
-    set(libstp_link_libs ${libstp_link_libs} ${CRYPTOMINISAT4_LIBRARIES})
+    if (NOT BUILD_SHARED_LIBS)
+      set(libstp_link_libs ${libstp_link_libs} ${CRYPTOMINISAT4_STATIC_LIBRARIES} ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS})
+    else()
+      set(libstp_link_libs ${libstp_link_libs} ${CRYPTOMINISAT4_LIBRARIES})
+    endif()
 endif()
+
+set(libstp_link_libs ${libstp_link_libs} ${MINISAT_LIBRARIES})
+
 target_link_libraries(libstp ${libstp_link_libs})
 
 # Set the public header so it will be installed

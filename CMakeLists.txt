@@ -57,6 +57,8 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
+include(MacroPushRequiredVars)
+
 option(SANITIZE "Use Clang sanitizers. This will force using clang++ as the compiler" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
@@ -126,18 +128,18 @@ if(BUILD_SHARED_LIBS)
     add_cxx_flag_if_supported("-fPIC")
 endif()
 
+check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
 check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUCPP11)
 check_cxx_compiler_flag("-std=gnu++0x" HAVE_FLAG_STD_GNUCPP0X)
-check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
 check_cxx_compiler_flag("-std=c++0x" HAVE_FLAG_STD_CPP0X)
 check_cxx_compiler_flag("-stdlib=libc++" HAVE_FLAG_STDLIB_LIBCPP)
 
-if(HAVE_FLAG_STD_GNUCPP11)
+if(HAVE_FLAG_STD_CPP11)
+  set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+elseif(HAVE_FLAG_STD_GNUCPP11)
   set(CMAKE_CXX_FLAGS "-std=gnu++11 ${CMAKE_CXX_FLAGS}")
 elseif(HAVE_FLAG_STD_GNUCPP0X)
   set(CMAKE_CXX_FLAGS "-std=gnu++0x ${CMAKE_CXX_FLAGS}")
-elseif(HAVE_FLAG_STD_CPP11)
-  set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 elseif(HAVE_FLAG_STD_CPP0X)
   set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS}")
 endif()
@@ -244,8 +246,10 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # -----------------------------------------------------------------------------
 
 if(NOT BUILD_SHARED_LIBS)
-  message("Trying to use static Boost libraries")
+  message("Trying to use static Boost and Minisat libraries")
   set(Boost_USE_STATIC_LIBS ON)
+  set(Minisat_USE_STATIC_LIBS ON)
+  set(CryptoMiniSat_USE_STATIC_LIBS ON)
 endif()
 
 option(NO_BOOST "Don't try to use boost" OFF)
@@ -266,12 +270,27 @@ set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat
 find_package(cryptominisat4 CONFIG)
 if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
   message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
+  message(STATUS "CryptoMiniSat4 dynamic lib: ${CRYPTOMINISAT4_LIBRARIES}")
+  message(STATUS "CryptoMiniSat4 static lib:  ${CRYPTOMINISAT4_STATIC_LIBRARIES}")
+  message(STATUS "CryptoMiniSat4 static lib deps: ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS}")
   add_definitions(-DUSE_CRYPTOMINISAT4)
   include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
   set(USE_CRYPTOMINISAT4 ON)
 else()
-  message(WARNING "CryptoMiniSat4 or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat4 (v4.2 or above) or C++11 support not found, not allowing --cryptominisat4 option")
 endif()
+
+# -----------------------------------------------------------------------------
+# Find Minisat
+# -----------------------------------------------------------------------------
+find_package(minisat)
+if (NOT MINISAT_FOUND)
+  message(FATAL_ERROR "You must install minisat from https://github.com/niklasso/minisat")
+else()
+  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+endif()
+include_directories(${MINISAT_INCLUDE_DIRS})
+set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
@@ -315,6 +334,7 @@ endif()
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
+message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)

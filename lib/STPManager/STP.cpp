@@ -27,15 +27,16 @@ THE SOFTWARE.
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
-#include "stp/Sat/SimplifyingMinisat.h"
 
-#include "stp/Sat/MinisatCore.h"
+
 #include "stp/Sat/CryptoMinisat.h"
-#include "stp/Sat/MinisatCore_prop.h"
-#include "minisat/core_prop/Solver_prop.h"
+
 #ifdef USE_CRYPTOMINISAT4
 #include "stp/Sat/CryptoMinisat4.h"
 #endif
+
+#include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/MinisatCore.h"
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/FindPureLiterals.h"
@@ -58,7 +59,10 @@ const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 
-SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_input)
+SOLVER_RETURN_TYPE STP::solve_by_sat_solver(
+  SATSolver* newS,
+  ASTNode original_input
+)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
@@ -66,6 +70,9 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS, ASTNode original_in
 
   if (bm->UserFlags.random_seed_flag)
     NewSolver.setSeed(bm->UserFlags.random_seed);
+
+  if (bm->UserFlags.timeout_max_conflicts >= 0)
+    newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
 
   SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
   return result;
@@ -77,7 +84,7 @@ SATSolver* STP::get_new_sat_solver()
   switch (bm->UserFlags.solver_to_use)
   {
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
-      newS = new SimplifyingMinisat(bm->soft_timeout_expired);
+      newS = new SimplifyingMinisat;
       break;
     case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
       newS = new CryptoMinisat;
@@ -92,11 +99,7 @@ SATSolver* STP::get_new_sat_solver()
       #endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
-      newS = new MinisatCore<Minisat::Solver>(bm->soft_timeout_expired);
-      break;
-    case UserDefinedFlags::MINISAT_PROPAGATORS:
-      newS =
-          new MinisatCore_prop<Minisat::Solver_prop>(bm->soft_timeout_expired);
+      newS = new MinisatCore;
       break;
     default:
       std::cerr << "ERROR: Undefined solver to use." << endl;
@@ -109,9 +112,10 @@ SATSolver* STP::get_new_sat_solver()
 
 // The absolute TopLevel function that invokes STP on the input
 // formula
-SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
-                                    const ASTNode& query)
-{
+SOLVER_RETURN_TYPE STP::TopLevelSTP(
+  const ASTNode& inputasserts,
+  const ASTNode& query
+) {
 
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
@@ -120,7 +124,6 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   ASTNode original_input;
   if (query != bm->ASTFalse)
   {
-    //BUG probably it's here that the query gets mixed up with the state
     original_input =
         bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
   } else {
@@ -457,56 +460,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
 
-#if 0
-  bm->ASTNodeStats("Before SimplifyWrites_Inplace begins: ", inputToSat);
-
-  bm->SimplifyWrites_InPlace_Flag = true;
-  bm->Begin_RemoveWrites = false;
-  bm->start_abstracting = false;
-  bm->TermsAlreadySeenMap_Clear();
-  do
-    {
-      tmp_inputToSAT = inputToSat;
-
-      if (bm->UserFlags.optimize_flag)
-        {
-          inputToSat = pe->topLevel(inputToSat, arrayTransformer);
-
-          if (simp->hasUnappliedSubstitutions())
-            {
-              inputToSat = simp->applySubstitutionMap(inputToSat);
-              simp->haveAppliedSubstitutionMap();
-            }
-
-          bm->ASTNodeStats(pe->message.c_str(), inputToSat);
-
-          inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
-          bm->ASTNodeStats("after simplification: ", inputToSat);
-
-
-          if (bm->UserFlags.isSet("always-true", "0"))
-            {
-              SimplifyingNodeFactory nf(*(bm->hashingNodeFactory), *bm);
-              AlwaysTrue always (simp,bm,&nf);
-              inputToSat = always.topLevel(inputToSat);
-              bm->ASTNodeStats("After removing always true: ", inputToSat);
-            }
-        }
-
-      // The word level solver uses the simplifier to apply the rewrites it makes,
-      // without optimisations enabled. It will enter infinite loops on some input.
-      // Instead it could use the apply function of the substitution map, but it
-      // doesn't yet...
-      if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
-        {
-          inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
-          bm->ASTNodeStats("after solving: ", inputToSat);
-        }
-    }
-  while (tmp_inputToSAT != inputToSat);
-  bm->ASTNodeStats("After SimplifyWrites_Inplace: ", inputToSat);
-#endif
-
   if (bm->UserFlags.isSet("enable-unconstrained", "1"))
   {
     // Remove unconstrained.
@@ -662,12 +615,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     return res;
   }
 
-  assert(arrayops); // should only go to abstraction refinement if there are
-                    // array ops.
+  // should only go to abstraction refinement if there are array ops.
+  assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
-  assert(bm->UserFlags.solver_to_use !=
-         UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver shouldn't
-                                                 // have returned undecided..
 
   res = Ctr_Example->SATBased_ArrayReadRefinement(
       NewSolver, inputToSat, original_input, satBase);

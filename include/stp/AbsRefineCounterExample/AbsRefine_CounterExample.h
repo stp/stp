@@ -124,9 +124,10 @@ public:
    * Array Refinement functions                                   *
    ****************************************************************/
   SOLVER_RETURN_TYPE
-  CallSAT_ResultCheck(SATSolver& SatSolver, const ASTNode& modified_input,
-                      const ASTNode& original_input, ToSATBase* tosat,
-                      bool refinement);
+  CallSAT_ResultCheck(
+    SATSolver& SatSolver, const ASTNode& modified_input,
+    const ASTNode& original_input, ToSATBase* tosat,
+    bool refinement);
 
   SOLVER_RETURN_TYPE
   SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& modified_input,

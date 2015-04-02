@@ -65,9 +65,13 @@ bool CryptoMinisat::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-bool CryptoMinisat::solve() // Search without assumptions.
+bool CryptoMinisat::solve(bool& timeout_expired) // Search without assumptions.
 {
-  return s->solve().getchar();
+  CMSat2::lbool ret = s->solve();
+  if (ret == CMSat2::l_Undef) {
+    timeout_expired = true;
+  }
+  return ret == CMSat2::l_True;
 }
 
 uint8_t CryptoMinisat::modelValue(uint32_t x) const

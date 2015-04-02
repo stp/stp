@@ -50,6 +50,8 @@ public:
   // collect statistics on certain functions
   bool stats_flag;
 
+  int64_t timeout_max_conflicts;
+
   // print DAG nodes
   bool print_nodes_flag;
 
@@ -153,8 +155,7 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT_SOLVER,
-    CRYPTOMINISAT4_SOLVER,
-    MINISAT_PROPAGATORS
+    CRYPTOMINISAT4_SOLVER
   };
 
   enum SATSolvers solver_to_use;
@@ -210,6 +211,7 @@ public:
   // CONSTRUCTOR
   UserDefinedFlags()
   {
+    timeout_max_conflicts = -1;
 
     // collect statistics on certain functions
     stats_flag = false;
@@ -288,7 +290,7 @@ public:
     tseitin_are_decision_variables_flag = true;
 
     // use minisat by default.
-    solver_to_use = MINISAT_PROPAGATORS;
+    solver_to_use = MINISAT_SOLVER;
 
     // The special Cryptominisat2 CNF generation with this flag enabled seems to
     // go into an infinite loop.

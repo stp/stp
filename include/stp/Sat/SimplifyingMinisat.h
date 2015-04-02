@@ -40,16 +40,18 @@ class SimplifyingMinisat : public SATSolver
   Minisat::SimpSolver* s;
 
 public:
-  SimplifyingMinisat(volatile bool& timeout);
+  SimplifyingMinisat();
   ~SimplifyingMinisat();
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(); // Search without assumptions.
+  bool solve(bool& timeout_expired); // Search without assumptions.
 
   bool simplify(); // Removes already satisfied clauses.
+
+  virtual void setMaxConflicts(int64_t max_confl);
 
   void setVerbosity(int v);
 

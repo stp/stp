@@ -947,12 +947,13 @@ void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
 }
 
 SOLVER_RETURN_TYPE
-AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
-                                              const ASTNode& modified_input,
-                                              const ASTNode& original_input,
-                                              ToSATBase* tosat, bool refinement)
+AbsRefine_CounterExample::CallSAT_ResultCheck(
+  SATSolver& SatSolver,
+  const ASTNode& modified_input,
+  const ASTNode& original_input,
+  ToSATBase* tosat,
+  bool refinement)
 {
-
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
   if (bm->soft_timeout_expired)
@@ -1008,11 +1009,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         cout << "Supposedly bogus one: \n";
         PrintCounterExample(true);
       }
-
-      assert(bm->UserFlags.solver_to_use !=
-             UserDefinedFlags::MINISAT_PROPAGATORS); // The array solver
-                                                     // shouldn't have returned
-                                                     // undecided..
 
       return SOLVER_UNDECIDED;
     }
