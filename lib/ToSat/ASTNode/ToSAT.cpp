@@ -346,9 +346,6 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
   return sat;
 }
 
-//##################################################
-//##################################################
-
 /*******************************************************************
  * Helper Functions
  *******************************************************************/
@@ -474,8 +471,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
               if (result != replit_eval)
                 {
                   // Hit the panic button.
-                  FatalError("Truth value of BitBlasted formula "\
-                             "disagrees with representative literal in CNF.");
+                  FatalError("Truth value of BitBlasted formula disagrees with representative literal in CNF.");
                 }
             }
           else
