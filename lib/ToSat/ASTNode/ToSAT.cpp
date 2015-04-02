@@ -93,7 +93,10 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
     }
   }
   else
+  {
     v = it->second;
+  }
+
   return v;
 }
 
