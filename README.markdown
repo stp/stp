@@ -27,6 +27,8 @@ $ make
 $ sudo make install
 ```
 
+Optionally, you can build and CryptoMiniSat4 and it will be autodetected during build. Get it from  https://github.com/msoos/cryptominisat
+
 Get stp:
 ```
 $ git clone https://github.com/stp/stp.git
