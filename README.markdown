@@ -48,6 +48,11 @@ The file based input formats that STP reads are the: CVC, SMT-LIB1, and SMT-LIB2
 stp myproblem.smt
 ```
 
+## Architecture
+
+The system performs word-level preprocessing followed by translation to SAT which is then solved by a SAT solver. In particular, we introduce several new heuristics for the preprocessing step, including abstraction-refinement in the context of arrays, a new bitvector linear arithmetic equation solver, and some interesting simplifications. These heuristics help us achieve several magnitudes of order performance over other tools, and also over straight-forward translation to SAT. STP has been heavily tested on thousands of examples sourced from various real-world applications such as program analysis and bug-finding tools like EXE, and equivalence checking tools and theorem-provers.
+
+
 ## Authors
 
 * Vijay Ganesh
