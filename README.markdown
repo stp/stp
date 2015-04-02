@@ -39,6 +39,15 @@ $ make
 $ sudo make install
 ```
 
+## Input format
+
+The file based input formats that STP reads are the: CVC, SMT-LIB1, and SMT-LIB2 formats. The SMT-LIB2 format is the recommended file format, because it is parsed by all modern bitvector solvers. Only quantifier-free bitvectors and arrays are implemented from the SMTLibv2 format.
+
+### Usage
+```
+stp myproblem.smt
+```
+
 ## Authors
 
 * Vijay Ganesh
