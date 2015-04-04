@@ -6,8 +6,8 @@
 #  MINISAT_DEFINITIONS - Compiler switches required for using minisat
 
 find_package(PkgConfig)
-pkg_check_modules(PC_MINISAT QUIET minisat)
-set(MINISAT_DEFINITIONS ${PC_LIBXML_CFLAGS_OTHER})
+# pkg_check_modules(PC_MINISAT QUIET minisat) # MiniSat deoes not have pkg-config
+# set(MINISAT_DEFINITIONS if_needed_fill_here)
 
 find_path(MINISAT_INCLUDE_DIR minisat/core/Solver.h
           HINTS ${MINISAT_INCLUDE_DIRS}
