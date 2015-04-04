@@ -108,7 +108,6 @@ private:
 public:
   virtual ASTVec const& GetChildren() const { return astbv_empty_children; }
 
-  //Call the external destructor
   virtual ~ASTBVConst()
   {
     if (!cbv_managed_outside)

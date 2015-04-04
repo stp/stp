@@ -1555,7 +1555,6 @@ ASTtoCNF::ASTtoCNF(STPMgr* bmgr)
   dummy_true_var = bmgr->CreateFreshVariable(0, 0, "*TrueDummy*");
 }
 
-// destructor
 ASTtoCNF::~ASTtoCNF()
 {
   ASTNodeToASTNodePtrMap::const_iterator it1 = store.begin();

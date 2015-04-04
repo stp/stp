@@ -83,7 +83,6 @@ public:
   // Copy constructor
   ASTNode(const ASTNode& n);
 
-  // Destructor
   ~ASTNode();
 
   // Print the arguments in lisp format

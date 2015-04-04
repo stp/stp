@@ -66,9 +66,6 @@ using namespace CMSat2;
 using std::cout;
 using std::endl;
 
-//=================================================================================================
-// Constructor/Destructor:
-
 Solver::Solver()
     : // Parameters: (formerly in 'SearchParams')
       random_var_freq(0.02),

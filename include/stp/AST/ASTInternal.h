@@ -112,7 +112,6 @@ protected:
   // Cleanup function for removing from hash table
   virtual void CleanUp() = 0;
 
-  // Destructor (does nothing, but is declared virtual here.
   virtual ~ASTInternal() {}
 
   // Abstract virtual print function for internal node. c_friendly

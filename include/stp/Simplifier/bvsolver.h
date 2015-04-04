@@ -139,7 +139,6 @@ public:
     nf = bm->defaultNodeFactory;
   };
 
-  // Destructor
   ~BVSolver() { ClearAllTables(); }
 
   // Top Level Solver: Goes over the input DAG, identifies the

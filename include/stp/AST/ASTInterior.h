@@ -101,7 +101,6 @@ public:
   {
   }
 
-  // Destructor (does nothing, but is declared virtual here).
   virtual ~ASTInterior() {}
 };
 

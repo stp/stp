@@ -172,8 +172,6 @@ public:
 class Solver
 {
 public:
-  // Constructor/Destructor:
-  //
   Solver();
   ~Solver();
 

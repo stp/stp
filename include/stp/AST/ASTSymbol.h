@@ -93,7 +93,6 @@ public:
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(const char* const name) : ASTInternal(SYMBOL), _name(name) {}
 
-  // Destructor (does nothing, but is declared virtual here.
   virtual ~ASTSymbol() {}
 
   // Copy constructor
