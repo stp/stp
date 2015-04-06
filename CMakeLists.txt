@@ -1,6 +1,9 @@
 project(STP)
 cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
 
+# FIXME: We need to find a proper way to get the LOCATION property of a target
+cmake_policy(SET CMP0026 OLD) # See cmake --help-policy CMP0026
+
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
