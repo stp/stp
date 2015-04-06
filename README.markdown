@@ -10,34 +10,9 @@ Documentation: https://github.com/stp/stp/wiki
 
 [![Build Status](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
 
-## Quick build&install:
+## Build & Install:
 
-Get all prerequisites:
-```
-$ sudo apt-get install cmake gcc g++ libboost-all-dev bison flex python perl
-```
-
-Get minisat:
-```
-$ git clone https://github.com/stp/minisat.git
-$ cd minisat
-$ mkdir build && cd build
-$ cmake ..
-$ make
-$ sudo make install
-```
-
-Optionally, you can build and CryptoMiniSat4 and it will be autodetected during build. Get it from  https://github.com/msoos/cryptominisat
-
-Get stp:
-```
-$ git clone https://github.com/stp/stp.git
-$ cd stp
-$ mkdir build && cd build
-$ cmake ..
-$ make
-$ sudo make install
-```
+See [the INSTALL file](INSTALL.md)
 
 ## Input format
 
