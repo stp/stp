@@ -5,9 +5,7 @@
 #  MINISAT_LIBRARIES - The libraries needed to use minisat
 #  MINISAT_DEFINITIONS - Compiler switches required for using minisat
 
-find_package(PkgConfig)
-# pkg_check_modules(PC_MINISAT QUIET minisat) # MiniSat deoes not have pkg-config
-# set(MINISAT_DEFINITIONS if_needed_fill_here)
+set(MINISAT_DEFINITIONS "")
 
 find_path(MINISAT_INCLUDE_DIR minisat/core/Solver.h
           HINTS ${MINISAT_INCLUDE_DIRS}
@@ -34,7 +32,7 @@ set(MINISAT_INCLUDE_DIRS ${MINISAT_INCLUDE_DIR} )
 
 include(FindPackageHandleStandardArgs)
 # handle the QUIETLY and REQUIRED arguments and set MINISAT_FOUND to TRUE
-# if all listed variables are TRUE
+# if all listed variables are set
 find_package_handle_standard_args(minisat  DEFAULT_MSG
                                   MINISAT_LIBRARY MINISAT_INCLUDE_DIR)
 
