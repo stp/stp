@@ -24,10 +24,15 @@ THE SOFTWARE.
 
 
 #define __STDC_FORMAT_MACROS
+#define MINISAT_CONSTANTS_AS_MACROS
 #include "minisat/core/Solver.h"
 #include "stp/Sat/MinisatCore.h"
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
+
+namespace MiniSat {
+}
+using namespace MiniSat;
 
 namespace stp
 {
@@ -71,11 +76,11 @@ bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == Minisat::l_Undef) {
+  if (ret == (Minisat::lbool)l_Undef) {
     timeout_expired = true;
   }
 
-  return ret == Minisat::l_True;
+  return ret == (Minisat::lbool)l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const
@@ -105,7 +110,7 @@ unsigned long MinisatCore::nVars()
 
 void MinisatCore::printStats()
 {
-  s->printStats();
+  //s->printStats();
 }
 
 int MinisatCore::nClauses()
