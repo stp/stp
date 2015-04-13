@@ -140,6 +140,9 @@ check_cxx_compiler_flag("-std=gnu++0x" HAVE_FLAG_STD_GNUCPP0X)
 check_cxx_compiler_flag("-std=c++0x" HAVE_FLAG_STD_CPP0X)
 check_cxx_compiler_flag("-stdlib=libc++" HAVE_FLAG_STDLIB_LIBCPP)
 
+#needed for MiniSat's PRi64 to set stdc++ to 03 temporarily
+check_cxx_compiler_flag("-std=c++03" HAVE_FLAG_CPP03)
+
 if(HAVE_FLAG_STD_CPP11)
   set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 elseif(HAVE_FLAG_STD_GNUCPP11)
