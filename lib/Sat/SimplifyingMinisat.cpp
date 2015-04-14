@@ -73,6 +73,8 @@ bool SimplifyingMinisat::solve(bool& timeout_expired) // Search without assumpti
   if (ret == (Minisat::lbool)l_Undef) {
     timeout_expired = true;
   }
+
+  return s->okay();
 }
 
 bool SimplifyingMinisat::simplify() // Removes already satisfied clauses.
