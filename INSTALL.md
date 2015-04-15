@@ -46,7 +46,7 @@ $ sudo make install
 
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including Cryptominisat4. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
 
-You can get it fromhttps://github.com/msoos/cryptominisat
+You can get it from https://github.com/msoos/cryptominisat
 
 ### Testing
 
