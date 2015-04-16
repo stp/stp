@@ -109,7 +109,7 @@ set_target_properties(libstp
 
 install(TARGETS libstp
             EXPORT ${STP_EXPORT_NAME}
-            LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-            ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-            PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include/stp"
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            PUBLIC_HEADER DESTINATION include/stp
        )
