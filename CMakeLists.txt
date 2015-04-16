@@ -12,6 +12,8 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Output directory for libraries")
 
+set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
+
 # -----------------------------------------------------------------------------
 # Make RelWithDebInfo the default build type if otherwise not set
 # -----------------------------------------------------------------------------
