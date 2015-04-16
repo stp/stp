@@ -26,7 +26,8 @@
 
 use Getopt::Long;
 my $fname = "ASTKind.kinds";
-GetOptions ("file=s" => \$fname);
+my $timestamp = 1;
+GetOptions ("file=s" => \$fname, "timestamp!" => \$timestamp);
 
 #globals
 @kindnames = ();
@@ -36,7 +37,11 @@ $maxkids = 0;
 @category_names = ();
 %cat_index = ();
 
-$now = localtime time;
+if ($timestamp) {
+  $now = " " . localtime time;
+} else {
+  $now = "";
+}
 
 sub read_kind_defs {
   open(KFILE, "< $fname") || die "Cannot open .kinds file $fname: $!\n";
@@ -79,7 +84,7 @@ sub gen_h_file {
   print HFILE
     "#ifndef TESTKINDS_H\n",
     "#define TESTKINDS_H\n",
-    "// Generated automatically by genkinds.pl from ASTKind.kinds $now.\n",
+    "// Generated automatically by genkinds.pl from ASTKind.kinds$now.\n",
     "// Do not edit\n",
     "#include <iostream>\n",
     "namespace stp {\n  typedef enum {\n";
@@ -120,7 +125,7 @@ sub gen_cpp_file {
   open(CPPFILE, "> ASTKind.cpp") || die "Cannot open .h file: $!\n";
 
   print CPPFILE
-    "// Generated automatically by genkinds.h from ASTKind.kinds $now.\n",
+    "// Generated automatically by genkinds.h from ASTKind.kinds$now.\n",
     "// Do not edit\n",
     "namespace stp {\n",
     "const char * _kind_names[] =  {\n";

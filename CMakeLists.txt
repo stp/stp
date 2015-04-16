@@ -10,6 +10,10 @@ endif()
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
+set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Output directory for libraries")
+
+set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
+
 # -----------------------------------------------------------------------------
 # Make RelWithDebInfo the default build type if otherwise not set
 # -----------------------------------------------------------------------------
@@ -415,7 +419,7 @@ export(PACKAGE STP)
 if(WIN32 AND NOT CYGWIN)
   set(DEF_INSTALL_CMAKE_DIR CMake)
 else()
-  set(DEF_INSTALL_CMAKE_DIR lib/cmake/STP)
+  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
 endif()
 set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
   "Installation directory for STP CMake files"

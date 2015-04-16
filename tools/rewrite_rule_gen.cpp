@@ -747,13 +747,13 @@ void do_usr2(int ignore)
   debug_usr2 = !debug_usr2;
 }
 
-int startup()
+void startup()
 {
   CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Boot();
   if (0 != ec)
   {
     cout << CONSTANTBV::BitVector_Error(ec) << endl;
-    return 0;
+    return;
   }
 
   mgr = new stp::STPMgr();
@@ -2042,7 +2042,7 @@ void testProps()
     doProp(propKinds[k], a);
 }
 
-int test()
+void test()
 {
   // Test code.
   load_old_rules("test.smt2");
