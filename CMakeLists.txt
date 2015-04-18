@@ -10,7 +10,7 @@ endif()
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
-set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Output directory for libraries")
+set(CMAKE_INSTALL_LIBDIR lib CACHE STRING "Output directory for libraries")
 
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 
