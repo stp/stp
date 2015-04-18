@@ -146,12 +146,6 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
       satSolverClause.push(l);
     }
 
-    // ASTNode theClause = bm->CreateNode(OR, clauseVec);
-    //      if(flag
-    //         && ASTTrue == CheckBBandCNF(newSolver, theClause))
-    //        {
-    //          continue;
-    //        }
     newSolver.addClause(satSolverClause);
 
     if (newSolver.okay())
