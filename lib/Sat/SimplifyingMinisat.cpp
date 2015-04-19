@@ -102,7 +102,7 @@ uint32_t SimplifyingMinisat::newVar()
   return s->newVar();
 }
 
-unsigned long SimplifyingMinisat::nVars()
+unsigned long SimplifyingMinisat::nVars() const
 {
   return s->nVars();
 }

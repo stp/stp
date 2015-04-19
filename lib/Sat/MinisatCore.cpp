@@ -103,7 +103,7 @@ void MinisatCore::setSeed(int i)
   s->random_seed = i;
 }
 
-unsigned long MinisatCore::nVars()
+unsigned long MinisatCore::nVars() const
 {
   return s->nVars();
 }

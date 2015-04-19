@@ -104,7 +104,7 @@ void CryptoMinisat4::setVerbosity(int v)
   // s->conf.verbosity = v;
 }
 
-unsigned long CryptoMinisat4::nVars()
+unsigned long CryptoMinisat4::nVars() const
 {
   return s->nVars();
 }

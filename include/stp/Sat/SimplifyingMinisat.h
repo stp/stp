@@ -59,7 +59,7 @@ public:
 
   virtual uint32_t newVar();
 
-  unsigned long nVars();
+  unsigned long nVars() const;
 
   void printStats();
 

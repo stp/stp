@@ -61,7 +61,7 @@ public:
 
   void setVerbosity(int v);
 
-  unsigned long nVars();
+  unsigned long nVars() const;
 
   void printStats();
 

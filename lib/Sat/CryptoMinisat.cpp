@@ -89,7 +89,7 @@ void CryptoMinisat::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long CryptoMinisat::nVars()
+unsigned long CryptoMinisat::nVars() const
 {
   return s->nVars();
 }
