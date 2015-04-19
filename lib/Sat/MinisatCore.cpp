@@ -108,7 +108,7 @@ unsigned long MinisatCore::nVars() const
   return s->nVars();
 }
 
-void MinisatCore::printStats()
+void MinisatCore::printStats() const
 {
   //s->printStats();
 }

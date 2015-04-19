@@ -61,7 +61,7 @@ public:
 
   unsigned long nVars() const;
 
-  void printStats();
+  void printStats() const;
 
   virtual void setSeed(int i);
 

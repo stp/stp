@@ -352,7 +352,7 @@ public:
       const; // Get the number of variables being replaced by other variables
   double getTotalTimeSubsumer() const;
   double getTotalTimeXorSubsumer() const;
-  void printStats();
+  void printStats() const;
 
 protected:
 #ifdef USE_GAUSS

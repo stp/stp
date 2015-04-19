@@ -63,7 +63,7 @@ public:
 
   unsigned long nVars() const;
 
-  void printStats();
+  void printStats() const;
 
   // nb CMS2 has different literal values to the other minisats.
   virtual lbool true_literal() { return ((uint8_t)1); }

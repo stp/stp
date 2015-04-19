@@ -3027,7 +3027,7 @@ bool Solver::noLearntBinaries() const
   return true;
 }
 
-void Solver::printStats()
+void Solver::printStats() const
 {
   double cpu_time = cpuTime();
   double mem_used = memUsed();

@@ -107,7 +107,7 @@ unsigned long SimplifyingMinisat::nVars() const
   return s->nVars();
 }
 
-void SimplifyingMinisat::printStats()
+void SimplifyingMinisat::printStats() const
 {
   //s->printStats();
 }

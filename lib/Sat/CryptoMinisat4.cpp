@@ -109,7 +109,7 @@ unsigned long CryptoMinisat4::nVars() const
   return s->nVars();
 }
 
-void CryptoMinisat4::printStats()
+void CryptoMinisat4::printStats() const
 {
   // s->printStats();
 }
