@@ -94,9 +94,9 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
   }
 }
 
-/* FUNCTION: convert ASTClauses to MINISAT clauses and solve.
- * Accepts ASTClauses and converts them to MINISAT clauses. Then
- * adds the newly minted MINISAT clauses to the local SAT instance,
+/* Convert ASTClauses to CNF clauses and solve.
+ * Accepts ASTClauses and converts them to CNF clauses. Then
+ * adds the newly minted CNF clauses to the local SAT instance,
  * and calls solve(). If solve returns unsat, then stop and return
  * unsat. else continue.
  */
