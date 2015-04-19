@@ -127,8 +127,8 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
   SATSolver::vec_literals satSolverClause;
 
   // iterate through the list (conjunction) of ASTclauses cll
-  ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
-  for (; i != iend; i++)
+  for (ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
+       i != iend; i++)
   {
     satSolverClause.clear();
     vector<const ASTNode*>::const_iterator j = (*i)->begin();
@@ -162,42 +162,9 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     }
   } 
 
-  // output a CNF
-  // Because we use the SAT solver incrementally, this may ouput little pieces
-  // of the
-  // CNF that need to be joined together. Nicer would be to read it out of the
-  // solver each time.
   if (bm->UserFlags.output_CNF_flag && true)
   {
-    std::ofstream file;
-    std::stringstream fileName;
-    fileName << "output_" << CNFFileNameCounter++ << ".cnf";
-    file.open(fileName.str().c_str());
-
-    file << "p cnf " << newSolver.nVars() << " " << cll.size() << endl;
-    i = cc.begin(), iend = cc.end();
-    for (; i != iend; i++)
-    {
-      vector<const ASTNode*>::iterator j = (*i)->begin(), jend = (*i)->end();
-      for (; j != jend; j++)
-      {
-        const ASTNode& node = *(*j);
-        bool negate = (NOT == node.GetKind()) ? true : false;
-        ASTNode n = negate ? node[0] : node;
-
-        ASTtoSATMap::iterator it = _ASTNode_to_SATVar_Map.find(n);
-        assert(it != _ASTNode_to_SATVar_Map.end());
-
-        uint32_t v = it->second;
-
-        if (negate)
-          file << "-" << (v + 1) << " ";
-        else
-          file << (v + 1) << " ";
-      }
-      file << "0" << endl;
-    }
-    file.close();
+    dump_to_cnf_file(newSolver, cll, &cc);
   }
 
   // Free the clause list before SAT solving.
@@ -234,6 +201,47 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     return true;
   else
     return false;
+}
+
+void ToSAT::dump_to_cnf_file(const SATSolver& newSolver,
+                             const ClauseList& cll,
+                             const ClauseContainer* cc
+                            )
+{
+  // output a CNF
+
+  // Because we use the SAT solver incrementally, this may ouput little pieces
+  // of the CNF that need to be joined together. Nicer would be to read it out
+  // of the solver each time.
+  std::ofstream file;
+  std::stringstream fileName;
+  fileName << "output_" << CNFFileNameCounter++ << ".cnf";
+  file.open(fileName.str().c_str());
+
+  file << "p cnf " << newSolver.nVars() << " " << cll.size() << endl;
+  for(ClauseContainer::const_iterator i = cc->begin(), iend = cc->end();
+     i != iend; i++)
+  {
+    vector<const ASTNode*>::iterator j = (*i)->begin(), jend = (*i)->end();
+    for (; j != jend; j++)
+    {
+      const ASTNode& node = *(*j);
+      bool negate = (NOT == node.GetKind()) ? true : false;
+      ASTNode n = negate ? node[0] : node;
+
+      ASTtoSATMap::iterator it = _ASTNode_to_SATVar_Map.find(n);
+      assert(it != _ASTNode_to_SATVar_Map.end());
+
+      uint32_t v = it->second;
+
+      if (negate)
+        file << "-" << (v + 1) << " ";
+      else
+        file << (v + 1) << " ";
+    }
+    file << "0" << endl;
+  }
+  file.close();
 }
 
 // Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT

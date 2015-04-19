@@ -34,6 +34,9 @@ namespace stp
 {
 
 class ASTtoCNF;
+typedef vector<const ASTNode*>* ClausePtr;
+typedef std::deque<ClausePtr> ClauseContainer;
+
 class ToSAT : public ToSATBase
 {
 
@@ -79,6 +82,11 @@ private:
 
   ClauseBuckets* Sort_ClauseList_IntoBuckets(ClauseList* cl,
                                              int clause_bucket_size);
+
+  void dump_to_cnf_file(const SATSolver& newSolver,
+                             const ClauseList& cll,
+                             const ClauseContainer* cc
+                       );
 
 public:
 
