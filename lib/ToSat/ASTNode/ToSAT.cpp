@@ -55,49 +55,43 @@ bool isTseitinVariable(const ASTNode& n)
 
 uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
 {
-  ASTtoSATMap::iterator it;
-  uint32_t v;
-
   // look for the symbol in the global map from ASTNodes to ints. if
   // not found, create a S.newVar(), else use the existing one.
-  if ((it = _ASTNode_to_SATVar_Map.find(n)) == _ASTNode_to_SATVar_Map.end())
+  ASTtoSATMap::iterator it = _ASTNode_to_SATVar_Map.find(n);
+  if ( it != _ASTNode_to_SATVar_Map.end())
+    return it->second;
+
+  //We have to create it.
+  const uint32_t v = newSolver.newVar();
+  _ASTNode_to_SATVar_Map[n] = v;
+
+  // WARNING ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
+  // by 1 each time it is called, and the initial value of a
+  // uint32_t is 0.
+
+  // Copies the symbol into the map that is used to build the counter example.
+  // For boolean we create a vector of size 1.
+  if ((n.GetKind() == BOOLEXTRACT && n[0].GetKind() == SYMBOL) ||
+      (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
   {
-    v = newSolver.newVar();
-    _ASTNode_to_SATVar_Map[n] = v;
+    const ASTNode& symbol = n.GetKind() == BOOLEXTRACT ? n[0] : n;
+    const unsigned index =
+        n.GetKind() == BOOLEXTRACT ? n[1].GetUnsignedConst() : 0;
+    const unsigned width =
+        n.GetKind() == BOOLEXTRACT ? symbol.GetValueWidth() : 1;
 
-    // ASSUMPTION: I am assuming that the newSolver.newVar() call increments v
-    // by 1 each time it is called, and the initial value of a
-    // uint32_t is 0.
-
-    // Copies the symbol into the map that is used to build the counter example.
-    // For boolean we create a vector of size 1.
-    if ((n.GetKind() == BOOLEXTRACT && n[0].GetKind() == SYMBOL) ||
-        (n.GetKind() == SYMBOL && !isTseitinVariable(n)))
+    if (SATVar_to_SymbolIndex.find(symbol) == SATVar_to_SymbolIndex.end())
     {
-      const ASTNode& symbol = n.GetKind() == BOOLEXTRACT ? n[0] : n;
-      const unsigned index =
-          n.GetKind() == BOOLEXTRACT ? n[1].GetUnsignedConst() : 0;
-      const unsigned width =
-          n.GetKind() == BOOLEXTRACT ? symbol.GetValueWidth() : 1;
-
-      if (SATVar_to_SymbolIndex.find(symbol) == SATVar_to_SymbolIndex.end())
-      {
-        // In the SAT solver these are signed...
-        vector<unsigned> vec(width, ~((unsigned)0));
-        SATVar_to_SymbolIndex.insert(make_pair(symbol, vec));
-      }
-      assert(index < width);
-      assert(SATVar_to_SymbolIndex[symbol].size() > index);
-
-      SATVar_to_SymbolIndex[symbol][index] = v;
+      // In the SAT solver these are signed...
+      vector<unsigned> vec(width, ~((unsigned)0));
+      SATVar_to_SymbolIndex.insert(make_pair(symbol, vec));
     }
-  }
-  else
-  {
-    v = it->second;
-  }
+    assert(index < width);
+    assert(SATVar_to_SymbolIndex[symbol].size() > index);
 
-  return v;
+    SATVar_to_SymbolIndex[symbol][index] = v;
+    return v;
+  }
 }
 
 /* FUNCTION: convert ASTClauses to MINISAT clauses and solve.
