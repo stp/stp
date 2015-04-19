@@ -125,14 +125,11 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
        i != iend; i++)
   {
     satSolverClause.clear();
-    vector<const ASTNode*>::const_iterator j = (*i)->begin();
-    vector<const ASTNode*>::const_iterator jend = (*i)->end();
-    // ASTVec  clauseVec;
-    // j is a disjunct in the ASTclause (*i)
-    for (; j != jend; j++)
+    for(vector<const ASTNode*>::const_iterator
+      j = (*i)->begin(), jend = (*i)->end();
+      j != jend; j++)
     {
       ASTNode node = **j;
-      // clauseVec.push_back(node);
       bool negate = (NOT == node.GetKind()) ? true : false;
       ASTNode n = negate ? node[0] : node;
       uint32_t v = LookupOrCreateSATVar(newSolver, n);
