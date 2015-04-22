@@ -88,6 +88,9 @@ private:
                              const ClauseContainer* cc
                        );
 
+  bool fill_satsolver_with_clauses(ClauseContainer& cc,
+                                   SATSolver& newSolver);
+
 public:
 
   ToSAT(STPMgr* bm) : ToSATBase(bm)

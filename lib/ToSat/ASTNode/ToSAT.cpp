@@ -117,49 +117,16 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
   }
 
   ClauseContainer& cc = *cll.asList();
-  // Clause for the SATSolver
-  SATSolver::vec_literals satSolverClause;
-
-  // iterate through the list (conjunction) of ASTclauses cll
-  for (ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
-       i != iend; i++)
-  {
-    satSolverClause.clear();
-    for(vector<const ASTNode*>::const_iterator
-      j = (*i)->begin(), jend = (*i)->end();
-      j != jend; j++)
-    {
-      ASTNode node = **j;
-      bool negate = (NOT == node.GetKind()) ? true : false;
-      ASTNode n = negate ? node[0] : node;
-      uint32_t v = LookupOrCreateSATVar(newSolver, n);
-      Minisat::Lit l = SATSolver::mkLit(v, negate);
-      satSolverClause.push(l);
-    }
-
-    newSolver.addClause(satSolverClause);
-
-    if (newSolver.okay())
-    {
-      continue;
-    }
-    else
-    {
-      if (bm->UserFlags.stats_flag)
-        newSolver.printStats();
-      bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
-      cll.deleteJustVectors();
-      return false;
-    }
-  } 
 
   if (bm->UserFlags.output_CNF_flag && true)
   {
     dump_to_cnf_file(newSolver, cll, &cc);
   }
 
-  // Free the clause list before SAT solving.
+  bool ret = fill_satsolver_with_clauses(cc, newSolver);
   cll.deleteJustVectors();
+  if (!ret)
+    return false;
 
   // Remove references to Tseitin variables.
   // Delete the cnf generator.
@@ -192,6 +159,43 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     return true;
   else
     return false;
+}
+
+bool ToSAT::fill_satsolver_with_clauses(ClauseContainer& cc,
+                                        SATSolver& newSolver)
+{
+  // Clause for the SATSolver
+  SATSolver::vec_literals satSolverClause;
+
+  // iterate through the list (conjunction) of ASTclauses cll
+  for (ClauseContainer::const_iterator i = cc.begin(), iend = cc.end();
+       i != iend; i++)
+  {
+    satSolverClause.clear();
+    for(vector<const ASTNode*>::const_iterator
+      j = (*i)->begin(), jend = (*i)->end();
+      j != jend; j++)
+    {
+      ASTNode node = **j;
+      bool negate = (NOT == node.GetKind()) ? true : false;
+      ASTNode n = negate ? node[0] : node;
+      uint32_t v = LookupOrCreateSATVar(newSolver, n);
+      Minisat::Lit l = SATSolver::mkLit(v, negate);
+      satSolverClause.push(l);
+    }
+
+    newSolver.addClause(satSolverClause);
+
+    if (!newSolver.okay()) {
+      if (bm->UserFlags.stats_flag)
+        newSolver.printStats();
+      bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void ToSAT::dump_to_cnf_file(const SATSolver& newSolver,
