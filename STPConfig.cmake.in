@@ -3,7 +3,9 @@
 #  STP_INCLUDE_DIRS - include directories for STP
 #  STP_STATIC_LIBRARY - static library target (empty if not built)
 #  STP_SHARED_LIBRARY - dynamic library target (empty if not built)
-#  STP_EXECUTABLE   - the stp executable
+#  STP_EXECUTABLE     - the stp executable
+#  STP_*_VERSION      - the stp MAJOR/MINOR/PATCH versions
+#  STP_MAJOR_VERSION  - the stp complete version string
 
 # Compute paths
 get_filename_component(STP_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
@@ -17,3 +19,7 @@ set(STP_EXECUTABLE stp)
 
 set(STP_STATIC_LIBRARY @STP_STATIC_LIBRARY@)
 set(STP_SHARED_LIBRARY @STP_SHARED_LIBRARY@)
+set(STP_MAJOR_VERSION @CPACK_PACKAGE_VERSION_MAJOR@)
+set(STP_MINOR_VERSION @CPACK_PACKAGE_VERSION_MINOR@)
+set(STP_PATCH_VERSION @CPACK_PACKAGE_VERSION_PATCH@)
+set(STP_VERSION @CPACK_PACKAGE_VERSION@)
