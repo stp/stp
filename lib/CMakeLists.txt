@@ -56,6 +56,8 @@ add_library(libstp ${stp_lib_objects})
 set_target_properties(libstp PROPERTIES
                         OUTPUT_NAME stp
                         PUBLIC_HEADER "${stp_public_headers}"
+                        VERSION ${CPACK_PACKAGE_VERSION}
+                        SOVERSION ${CPACK_PACKAGE_VERSION}
                      )
 
 # -----------------------------------------------------------------------------
@@ -66,6 +68,8 @@ if (BUILD_SHARED_LIBS AND ALSO_BUILD_STATIC_LIB)
 
   set_target_properties(libstp_static PROPERTIES
                           OUTPUT_NAME stp
+                          VERSION ${CPACK_PACKAGE_VERSION}
+                          SOVERSION ${CPACK_PACKAGE_VERSION}
                        )
 
   install(TARGETS libstp_static

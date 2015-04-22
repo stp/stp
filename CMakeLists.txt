@@ -1,6 +1,12 @@
 project(STP)
 cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
 
+set(CPACK_PACKAGE_VERSION_MAJOR "3")
+set(CPACK_PACKAGE_VERSION_MINOR "0")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+
+
 if (CMAKE_MAJOR_VERSION GREATER 2)
     # FIXME: We need to find a proper way to get the LOCATION property of a target
     # when using CMake >= 3.0

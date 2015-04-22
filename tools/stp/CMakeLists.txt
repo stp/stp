@@ -22,7 +22,10 @@ if (Boost_FOUND)
         set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
     endif()
 
-    set_target_properties(stp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+    set_target_properties(stp PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+      VERSION ${CPACK_PACKAGE_VERSION}
+    )
     target_link_libraries(stp libstp)
     install(TARGETS stp
         EXPORT ${STP_EXPORT_NAME}
