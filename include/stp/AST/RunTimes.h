@@ -33,8 +33,7 @@ THE SOFTWARE.
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-// FIXME: External library include
-#include "Sat/cryptominisat2/time_mem.h"
+#include "time_mem.h"
 
 class RunTimes // not copyable
 {

@@ -58,11 +58,6 @@ TEST(stp_test, MS)
   go(MS);
 }
 
-TEST(stp_test, CMS2)
-{
-  go(CMS2);
-}
-
 TEST(stp_test, MSP)
 {
   go(MSP);

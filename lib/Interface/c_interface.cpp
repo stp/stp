@@ -98,9 +98,6 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       b->UserFlags.solver_to_use =
           stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
       break;
-    case CMS2:
-      b->UserFlags.solver_to_use = stp::UserDefinedFlags::CRYPTOMINISAT_SOLVER;
-      break;
     case CMS4:
       b->UserFlags.solver_to_use =
           stp::UserDefinedFlags::CRYPTOMINISAT4_SOLVER;

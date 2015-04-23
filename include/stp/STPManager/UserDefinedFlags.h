@@ -154,7 +154,6 @@ public:
   {
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
-    CRYPTOMINISAT_SOLVER,
     CRYPTOMINISAT4_SOLVER
   };
 
@@ -292,9 +291,6 @@ public:
     // use minisat by default.
     solver_to_use = MINISAT_SOLVER;
 
-    // The special Cryptominisat2 CNF generation with this flag enabled seems to
-    // go into an infinite loop.
-    // beware of turning this on if you are using cryptominsat2.
     renameAllInCNF_flag = false;
 
     // Should constant bit propagation be enabled?

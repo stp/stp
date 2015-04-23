@@ -157,8 +157,7 @@ void ExtraMain::create_options()
       "disable-equality", "disable equality propagation");
 
   po::options_description solver_options("SAT Solver options");
-  solver_options.add_options()("cryptominisat",
-                               "use cryptominisat2 as the solver")
+  solver_options.add_options()
 #ifdef USE_CRYPTOMINISAT4
       ("cryptominisat4",
        "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
@@ -316,11 +315,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
 
-  if (vm.count("cryptominisat"))
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT_SOLVER;
-  }
-
 #ifdef USE_CRYPTOMINISAT4
   if (vm.count("cryptominisat4"))
   {
@@ -338,16 +332,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     cout << "ERROR: You may only give one solver to use: minisat, "
             "simplifying-minisat, or cryptominisat" << endl;
     exit(-1);
-  }
-
-  if (vm.count("gauss"))
-  {
-    if (bm->UserFlags.solver_to_use != UserDefinedFlags::CRYPTOMINISAT_SOLVER)
-    {
-      cout << "ERROR: you specified a Gaussian elimination length" << endl
-           << "       but you didn't ask cryptominisat to be used" << endl;
-      exit(-1);
-    }
   }
 
   if (vm.count("oldstyle-refinement"))

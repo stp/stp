@@ -72,7 +72,6 @@ enum ifaceflag_t
   EXPRDELETE,
   MS,
   SMS,
-  CMS2,
   CMS4,
   MSP
 

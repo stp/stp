@@ -28,9 +28,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 
-
-#include "stp/Sat/CryptoMinisat.h"
-
 #ifdef USE_CRYPTOMINISAT4
 #include "stp/Sat/CryptoMinisat4.h"
 #endif
@@ -85,9 +82,6 @@ SATSolver* STP::get_new_sat_solver()
   {
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
       newS = new SimplifyingMinisat;
-      break;
-    case UserDefinedFlags::CRYPTOMINISAT_SOLVER:
-      newS = new CryptoMinisat;
       break;
     case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
       #ifdef USE_CRYPTOMINISAT4

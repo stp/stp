@@ -27,7 +27,6 @@ set(stp_lib_targets
     abstractionrefinement
     tosat
     sat
-    cryptominisat2
     simplifier
     constantbv
     abc

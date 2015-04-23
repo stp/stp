@@ -37,7 +37,6 @@ THE SOFTWARE.
 #include <iostream>
 #include <utility>
 #include "stp/AST/RunTimes.h"
-//#include "stp/Sat/cryptominisat2/time_mem.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
 std::string RunTimes::CategoryNames[] = {
