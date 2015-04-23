@@ -15,6 +15,10 @@ message("STP include paths are: ${STP_INCLUDE_DIRS}")
 message("STP Static Library target is: ${STP_STATIC_LIBRARY}")
 message("STP Shared Library target is: ${STP_SHARED_LIBRARY}")
 message("STP executable: ${STP_EXECUTABLE}")
+message("STP version: ${STP_VERSION}")
+message("STP major version: ${STP_VERSION_MAJOR}")
+message("STP minor version: ${STP_VERSION_MINOR}")
+message("STP patch version: ${STP_VERSION_PATCH}")
 
 # -----------------------------------------------------------------------------
 # Pick which STP library to use

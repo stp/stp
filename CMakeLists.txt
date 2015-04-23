@@ -418,6 +418,7 @@ endif()
 # -----------------------------------------------------------------------------
 set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
+set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
 # Export targets
 if (Boost_FOUND)
@@ -434,6 +435,9 @@ set(EXPORT_TYPE "Build-tree")
 set(CONF_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/include")
 configure_file(STPConfig.cmake.in
   "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
+)
+configure_file(STPConfigVersion.cmake.in
+  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}" @ONLY
 )
 
 # Export this package to the CMake user package registry
@@ -463,6 +467,7 @@ configure_file(STPConfig.cmake.in
 
 install(FILES
   "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}"
+  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}"
   DESTINATION "${STP_INSTALL_CMAKE_DIR}"
 )
 
