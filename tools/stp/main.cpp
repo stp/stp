@@ -144,7 +144,10 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
 void ExtraMain::create_options()
 {
   po::options_description hiddenOptions("Hidden options");
-  hiddenOptions.add_options()("file", po::value<string>(&infile), "input file");
+  hiddenOptions.add_options()
+  ("file", po::value<string>(&infile), "input file")
+  ("cryptominisat", "same as --cryptominisat4")
+  ;
 
   // Declare the supported options.
   po::options_description general_options("Most important options");
@@ -316,23 +319,11 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 
 #ifdef USE_CRYPTOMINISAT4
-  if (vm.count("cryptominisat4"))
+  if (vm.count("cryptominisat4") || vm.count("cryptominisat"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
   }
 #endif
-
-  if (vm.count("cryptominisat")
-#ifdef USE_CRYPTOMINISAT4
-          + vm.count("cryptominisat4")
-#endif
-          + vm.count("minisat") + vm.count("simplifying-minisat") >
-      1)
-  {
-    cout << "ERROR: You may only give one solver to use: minisat, "
-            "simplifying-minisat, or cryptominisat" << endl;
-    exit(-1);
-  }
 
   if (vm.count("oldstyle-refinement"))
   {
