@@ -69,7 +69,6 @@ if (BUILD_SHARED_LIBS AND ALSO_BUILD_STATIC_LIB)
   set_target_properties(libstp_static PROPERTIES
                           OUTPUT_NAME stp
                           VERSION ${PROJECT_VERSION}
-                          SOVERSION ${PROJECT_VERSION_MAJOR}
                        )
 
   install(TARGETS libstp_static
