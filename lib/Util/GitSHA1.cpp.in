@@ -18,11 +18,17 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#define GIT_SHA1 "@GIT_SHA1@"
-static const char version[] = GIT_SHA1;
-const char* get_git_version()
+#define GIT_SHA "@GIT_SHA@"
+#define GIT_TAG "@GIT_TAG@"
+static const char version_sha[] = GIT_SHA;
+static const char version_tag[] = GIT_TAG;
+
+const char* get_git_version_sha()
 {
-    return version;
+    return version_sha;
 }
 
-
+const char* get_git_version_tag()
+{
+    return version_tag;
+}
