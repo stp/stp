@@ -57,7 +57,7 @@ set_target_properties(libstp PROPERTIES
                         OUTPUT_NAME stp
                         PUBLIC_HEADER "${stp_public_headers}"
                         VERSION ${PROJECT_VERSION}
-                        SOVERSION ${PROJECT_VERSION_MAJOR}
+                        SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
                      )
 
 # -----------------------------------------------------------------------------
