@@ -1,11 +1,6 @@
 project(STP)
 cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
 
-set(CPACK_PACKAGE_VERSION_MAJOR "3")
-set(CPACK_PACKAGE_VERSION_MINOR "0")
-set(CPACK_PACKAGE_VERSION_PATCH "0")
-set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
-
 
 if (CMAKE_MAJOR_VERSION GREATER 2)
     # FIXME: We need to find a proper way to get the LOCATION property of a target
@@ -227,6 +222,42 @@ include(CheckCxxHashMap)
 check_cxx_hashmap()
 
 # -----------------------------------------------------------------------------
+# Add GIT version
+# -----------------------------------------------------------------------------
+function(SetVersionNumber PREFIX VERSION_MAJOR VERSION_MINOR VERSION_PATCH)
+  set(${PREFIX}_VERSION_MAJOR ${VERSION_MAJOR} PARENT_SCOPE)
+  set(${PREFIX}_VERSION_MINOR ${VERSION_MINOR} PARENT_SCOPE)
+  set(${PREFIX}_VERSION_PATCH ${VERSION_PATCH} PARENT_SCOPE)
+  set(${PREFIX}_VERSION
+        "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+        PARENT_SCOPE)
+endfunction()
+
+find_program (GIT_EXECUTABLE git)
+if (GIT_EXECUTABLE)
+  include(GetGitRevisionDescription)
+  get_git_head_revision(GIT_REFSPEC GIT_SHA1)
+  git_get_closest_tag(GIT_TAG)
+  MESSAGE(STATUS "GIT tag found: ${GIT_TAG}")
+  MESSAGE(STATUS "GIT version found: ${GIT_SHA1}")
+  string(REGEX REPLACE ".*(NOTFOUND).*" "\\1" NO_TAG "${GIT_TAG}")
+  if ("NOTFOUND" STREQUAL ${NO_TAG})
+    set(GIT_TAG "2.9.99")
+  endif()
+else()
+  message(WARNING "This tarball should have been created with file describing the version")
+  set(GIT_SHA1 "GIT-notfound")
+  set(GIT_TAG "2.9.99")
+endif()
+
+string(REPLACE "." ";" GIT_TAG_LIST ${GIT_TAG})
+SetVersionNumber("CPACK_PACKAGE" ${GIT_TAG_LIST})
+MESSAGE(STATUS "CPACK_PACKAGE_VERSION: ${CPACK_PACKAGE_VERSION}")
+MESSAGE(STATUS "CPACK_PACKAGE_VERSION_MAJOR: ${CPACK_PACKAGE_VERSION_MAJOR}")
+MESSAGE(STATUS "CPACK_PACKAGE_VERSION_MINOR: ${CPACK_PACKAGE_VERSION_MINOR}")
+MESSAGE(STATUS "CPACK_PACKAGE_VERSION_PATCH: ${CPACK_PACKAGE_VERSION_PATCH}")
+
+# -----------------------------------------------------------------------------
 # Write out the config.h
 # -----------------------------------------------------------------------------
 
@@ -234,7 +265,6 @@ configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
 )
-
 
 # -----------------------------------------------------------------------------
 # Set up includes
@@ -252,13 +282,6 @@ include_directories(# For extlib-abc and extlib-constbv
 # -----------------------------------------------------------------------------
 # Uncomment these for static compilation under Linux (messes up Valgrind)
 # -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# Add Git revision
-# -----------------------------------------------------------------------------
-
-include(GetGitRevisionDescription)
-get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 
 # -----------------------------------------------------------------------------
 # Find the Boost package components
