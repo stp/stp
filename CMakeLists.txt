@@ -422,13 +422,14 @@ set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
 # Export targets
 if (Boost_FOUND)
-  export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
+  export(TARGETS stp stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
+    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
+  )
+else()
+  export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
     FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
   )
 endif()
-export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
-  FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
-)
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")
