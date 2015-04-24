@@ -87,9 +87,8 @@ SATSolver* STP::get_new_sat_solver()
       #ifdef USE_CRYPTOMINISAT4
       newS = new CryptoMinisat4;
       #else
-      std::cerr << "WARNING: Falling back to CryptoMiniSatv2 since v4 \
-            was not available at STP library compile time" << std::endl;
-      newS = new CryptoMinisat;
+      std::cerr << "CryptoMinisat4 support was not enabled at configure time." << std::endl;
+      exit(-1);
       #endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
