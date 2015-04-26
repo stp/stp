@@ -275,8 +275,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 # FIXME: External library includes
 include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
-                    # For minisat and cryptominisat4
-                    ${PROJECT_SOURCE_DIR}/lib/Sat
                    )
 
 # -----------------------------------------------------------------------------
