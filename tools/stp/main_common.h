@@ -39,7 +39,7 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 #include <stdio.h>
-#include "Util/GitSHA1.h"
+#include "stp/Util/GitSHA1.h"
 
 class Main
 {

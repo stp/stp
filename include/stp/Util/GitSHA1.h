@@ -27,6 +27,7 @@ ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 **************************************************************************************************/
-
-const char* get_git_version_sha();
-const char* get_git_version_tag();
+namespace stp {
+  const char* get_git_version_sha();
+  const char* get_git_version_tag();
+}

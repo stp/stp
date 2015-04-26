@@ -377,8 +377,8 @@ int ExtraMain::parse_options(int argc, char** argv)
 
   if (vm.count("version"))
   {
-    cout << "STP version SHA string " << get_git_version_sha() << std::endl;
-    cout << "STP version number " << get_git_version_tag() << std::endl;
+    cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
+    cout << "STP version number " << stp::get_git_version_tag() << std::endl;
     exit(0);
   }
 

@@ -12,8 +12,6 @@ add_subdirectory(ToSat)
 add_subdirectory(Sat)
 add_subdirectory(Util)
 
-#add_subdirectory(Utils)
-
 
 # FIXME: Do we need all these targets
 # in the client library? Maybe
@@ -34,6 +32,7 @@ set(stp_lib_targets
     cppinterface
     parser
     printer
+    util
 )
 
 # Create list of objects and gather list of

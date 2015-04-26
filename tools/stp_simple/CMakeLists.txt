@@ -14,7 +14,6 @@ add_executable(stp_simple
     main_simple.cpp
     ../stp/main_common.cpp
     ../stp/STPProgramGlobals.cpp
-    ${PROJECT_BINARY_DIR}/lib/Util/GitSHA1.cpp
 )
 
 if (BUILD_STATIC_BIN)

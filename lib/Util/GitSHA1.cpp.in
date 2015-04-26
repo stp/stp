@@ -20,15 +20,18 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #define GIT_SHA "@GIT_SHA@"
 #define GIT_TAG "@GIT_TAG@"
-static const char version_sha[] = GIT_SHA;
-static const char version_tag[] = GIT_TAG;
-
-const char* get_git_version_sha()
+namespace stp
 {
-    return version_sha;
-}
+  static const char version_sha[] = GIT_SHA;
+  static const char version_tag[] = GIT_TAG;
 
-const char* get_git_version_tag()
-{
-    return version_tag;
+  const char* get_git_version_sha()
+  {
+      return version_sha;
+  }
+
+  const char* get_git_version_tag()
+  {
+      return version_tag;
+  }
 }

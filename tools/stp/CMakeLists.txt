@@ -15,7 +15,6 @@ if (Boost_FOUND)
         main.cpp
         main_common.cpp
         STPProgramGlobals.cpp
-        ${PROJECT_BINARY_DIR}/lib/Util/GitSHA1.cpp
     )
     if (BUILD_STATIC_BIN)
         set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
