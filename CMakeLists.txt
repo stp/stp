@@ -486,15 +486,6 @@ install(EXPORT ${STP_EXPORT_NAME} DESTINATION
 set(CPACK_SOURCE_GENERATOR "TBZ2")
 set(CPACK_SOURCE_PACKAGE_FILE_NAME
   "${CMAKE_PROJECT_NAME}-${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
-# set(CPACK_SOURCE_IGNORE_FILES
-#   "/build/"
-#   "/tests/"
-#   "/scripts/"
-#   "/.git/"
-#   "/.gitignore"
-#   "/.gitmodules"
-#   ".travis.yml"
-# )
 
 file(GLOB SourceIgnoreFiles "${CMAKE_SOURCE_DIR}/*")
 set(SourceKeepFiles
