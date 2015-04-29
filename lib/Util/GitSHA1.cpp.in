@@ -18,12 +18,10 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#define GIT_SHA "@GIT_SHA@"
-#define GIT_TAG "@GIT_TAG@"
-namespace stp
+const char* get_git_version_sha()
 {
-  static const char version_sha[] = GIT_SHA;
-  static const char version_tag[] = GIT_TAG;
+  static const char version_sha[] = "@GIT_SHA@";
+  static const char version_tag[] = "@STP_FULL_VERSION@";
 
   const char* get_git_version_sha()
   {
