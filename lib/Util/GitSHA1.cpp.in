@@ -20,16 +20,12 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 const char* get_git_version_sha()
 {
-  static const char version_sha[] = "@GIT_SHA@";
-  static const char version_tag[] = "@STP_FULL_VERSION@";
+    static const char version_sha[] = "@GIT_SHA@";
+    return version_sha;
+}
 
-  const char* get_git_version_sha()
-  {
-      return version_sha;
-  }
-
-  const char* get_git_version_tag()
-  {
-      return version_tag;
-  }
+const char* get_git_version_tag()
+{
+    static const char version_tag[] = "@STP_FULL_VERSION@";
+    return version_tag;
 }
