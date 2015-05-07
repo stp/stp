@@ -13,10 +13,6 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 set(CMAKE_INSTALL_LIBDIR lib CACHE STRING "Output directory for libraries")
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
-set(CPACK_PACKAGE_NAME "STP")
-set(CPACK_PACKAGE_VENDOR "http://stp.github.io/")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A versatile and fast SMT solver for bitvectors and arrays")
-
 
 # -----------------------------------------------------------------------------
 # Make RelWithDebInfo the default build type if otherwise not set
@@ -248,7 +244,6 @@ set(STP_FULL_VERSION "2.0.99")
 
 string(REPLACE "." ";" STP_FULL_VERSION_LIST ${STP_FULL_VERSION})
 SetVersionNumber("PROJECT" ${STP_FULL_VERSION_LIST})
-SetVersionNumber("CPACK_PACKAGE" ${STP_FULL_VERSION_LIST})
 MESSAGE(STATUS "PROJECT_VERSION: ${PROJECT_VERSION}")
 MESSAGE(STATUS "PROJECT_VERSION_MAJOR: ${PROJECT_VERSION_MAJOR}")
 MESSAGE(STATUS "PROJECT_VERSION_MINOR: ${PROJECT_VERSION_MINOR}")
@@ -471,41 +466,3 @@ install(FILES
 install(EXPORT ${STP_EXPORT_NAME} DESTINATION
   "${STP_INSTALL_CMAKE_DIR}"
 )
-
-
-# -----------------------------------------------------------------------------
-# CPack
-# -----------------------------------------------------------------------------
-
-set(CPACK_SOURCE_GENERATOR "TBZ2")
-string(TOLOWER "${CMAKE_PROJECT_NAME}" LOWERCASE_PROJECT_NAME)
-set(CPACK_SOURCE_PACKAGE_FILE_NAME
-    "${LOWERCASE_PROJECT_NAME}-${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}-src")
-
-file(GLOB SourceIgnoreFiles "${CMAKE_SOURCE_DIR}/*")
-set(SourceKeepFiles
-  "${CMAKE_SOURCE_DIR}/bindings"
-  "${CMAKE_SOURCE_DIR}/cmake"
-  "${CMAKE_SOURCE_DIR}/examples"
-  "${CMAKE_SOURCE_DIR}/include"
-  "${CMAKE_SOURCE_DIR}/lib"
-  "${CMAKE_SOURCE_DIR}/papers"
-  "${CMAKE_SOURCE_DIR}/tools"
-  "${CMAKE_SOURCE_DIR}/windows"
-
-  "${CMAKE_SOURCE_DIR}/AUTHORS"
-  "${CMAKE_SOURCE_DIR}/CMakeLists.txt"
-  "${CMAKE_SOURCE_DIR}/INSTALL.md"
-  "${CMAKE_SOURCE_DIR}/LICENSE"
-  "${CMAKE_SOURCE_DIR}/LICENSE_COMPONENTS"
-  "${CMAKE_SOURCE_DIR}/README.markdown"
-  "${CMAKE_SOURCE_DIR}/STPConfig.cmake.in"
-  "${CMAKE_SOURCE_DIR}/STPConfigVersion.cmake.in"
-)
-list(REMOVE_ITEM SourceIgnoreFiles ${SourceKeepFiles})
-# Escape any '.' characters
-string(REPLACE "." "\\\\." SourceIgnoreFiles "${SourceIgnoreFiles}")
-set(CPACK_SOURCE_IGNORE_FILES "${SourceIgnoreFiles}")
-include(CPack)
-
-add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
