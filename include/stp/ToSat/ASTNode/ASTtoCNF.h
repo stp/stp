@@ -38,15 +38,6 @@ namespace stp
 class ASTtoCNF // not copyable
 {
 private:
-  // Setting this to true changes the behaviour of when new
-  // Tseitin variables are created.  Normally a Tseitin
-  // variable is created only if: (the number of clauses is
-  // >1) && (renaming of the node is enabled || the node is
-  // shared). When this is set, every node is replaced by a
-  // new tseitin variable.
-  bool renameAllSiblings;
-
-  //########################################
   //########################################
   // data types
 

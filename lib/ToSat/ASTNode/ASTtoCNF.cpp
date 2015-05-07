@@ -400,23 +400,17 @@ void ASTtoCNF::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
     return;
   }
 
-  // do work
+  // Non-term below
 
   if (sharesPos(*x) > 0 && !wasVisited(*x))
   {
     convertFormulaToCNFPosCases(varphi, defs);
   }
 
-  if (x->clausespos != NULL &&
-      (x->clausespos->size() > 1 ||
-       (renameAllSiblings &&
-        !(x->clausespos->size() == 1 && x->clausespos[0].size() == 1) &&
-        !wasRenamedNeg(*x))))
+  if ((x->clausespos != NULL && x->clausespos->size() > 1) &&
+    (doSibRenamingPos(*x) || sharesPos(*x) > 1))
   {
-    if (doSibRenamingPos(*x) || sharesPos(*x) > 1 || renameAllSiblings)
-    {
-      doRenamingPos(varphi, defs);
-    }
+    doRenamingPos(varphi, defs);
   }
 
   if (sharesNeg(*x) > 0 && !wasVisited(*x))
@@ -424,29 +418,13 @@ void ASTtoCNF::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
     convertFormulaToCNFNegCases(varphi, defs);
   }
 
-  if (x->clausesneg != NULL &&
-      (x->clausesneg->size() > 1 ||
-       (renameAllSiblings &&
-        !(x->clausesneg->size() == 1 && x->clausesneg[0].size() == 1) &&
-        !wasRenamedNeg(*x))))
+  if ((x->clausesneg != NULL && x->clausesneg->size() > 1) &&
+    (doSibRenamingNeg(*x) || sharesNeg(*x) > 1))
   {
-    if (doSibRenamingNeg(*x) || sharesNeg(*x) > 1 || renameAllSiblings)
-    {
-      doRenamingNeg(varphi, defs);
-    }
+    doRenamingNeg(varphi, defs);
   }
 
   // mark that we've already done the hard work
-
-  if (renameAllSiblings)
-  {
-    assert(info[varphi]->clausesneg == NULL ||
-           info[varphi]->clausesneg->size() == 1);
-
-    assert(info[varphi]->clausespos == NULL ||
-           info[varphi]->clausespos->size() == 1);
-  }
-
   setWasVisited(*x);
 }
 
@@ -887,11 +865,6 @@ void ASTtoCNF::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs
       reduceMemoryFootprintPos(*it);
     }
   }
-  if (renameAllSiblings)
-  {
-    assert(((unsigned)psi->size()) == varphi.GetChildren().size());
-  }
-
   info[varphi]->clausespos = psi;
 }
 
@@ -1054,11 +1027,6 @@ void ASTtoCNF::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs
   for (; it != varphi.GetChildren().end(); it++)
   {
     convertFormulaToCNF(*it, defs); // make pos and neg clause sets
-    if (renameAllSiblings)
-    {
-      assert(info[*it]->clausespos->size() == 1);
-      assert(info[*it]->clausesneg->size() == 1);
-    }
   }
   ClauseList* psi = convertFormulaToCNFPosXORAux(varphi, 0, defs);
   info[varphi]->clausespos = psi;
@@ -1551,7 +1519,6 @@ void ASTtoCNF::cleanup(const ASTNode& varphi)
 ASTtoCNF::ASTtoCNF(STPMgr* bmgr)
 {
   bm = bmgr;
-  renameAllSiblings = bm->UserFlags.renameAllInCNF_flag;
   dummy_true_var = bmgr->CreateFreshVariable(0, 0, "*TrueDummy*");
 }
 

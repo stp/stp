@@ -136,9 +136,6 @@ public:
 
   bool tseitin_are_decision_variables_flag;
 
-  // Create a new Tseitin variable for every intermediate value.
-  bool renameAllInCNF_flag;
-
   bool bitConstantProp_flag;
 
   bool cBitP_propagateForDivisionByZero;
@@ -290,8 +287,6 @@ public:
 
     // use minisat by default.
     solver_to_use = MINISAT_SOLVER;
-
-    renameAllInCNF_flag = false;
 
     // Should constant bit propagation be enabled?
     bitConstantProp_flag = true;
