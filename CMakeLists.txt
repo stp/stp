@@ -221,6 +221,18 @@ include(CheckCxxHashMap)
 check_cxx_hashmap()
 
 # -----------------------------------------------------------------------------
+# Setup symbol visibility flags
+# -----------------------------------------------------------------------------
+include(GenerateExportHeader)
+# FIXME: YUCK! I know this is deprecated but *_VISIBILITY_PRESET and VISIBILITY_INLINES_HIDDEN
+# properties don't work on shared libraries built from OBJECT libraries.
+add_compiler_export_flags(CXX_SYMBOL_VISIBILITY_FLAGS)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_SYMBOL_VISIBILITY_FLAGS}")
+# Note -fvisibility-inlines-hidden is not a valid option when compiling C
+string(REPLACE -fvisibility-inlines-hidden "" C_SYMBOL_VISIBILITY_FLAGS ${CXX_SYMBOL_VISIBILITY_FLAGS})
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_SYMBOL_VISIBILITY_FLAGS}")
+
+# -----------------------------------------------------------------------------
 # Add GIT version
 # -----------------------------------------------------------------------------
 function(SetVersionNumber PREFIX VERSION_MAJOR VERSION_MINOR VERSION_PATCH)
@@ -367,6 +379,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
+message(STATUS "Final C flags ${CMAKE_C_FLAGS}")
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
