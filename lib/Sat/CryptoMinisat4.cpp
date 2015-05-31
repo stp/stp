@@ -23,12 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Sat/CryptoMinisat4.h"
-
-#undef var_Undef
-#undef l_True
-#undef l_False
-#undef l_Undef
-
 #include "cryptominisat4/cryptominisat.h"
 #include <vector>
 using std::vector;
