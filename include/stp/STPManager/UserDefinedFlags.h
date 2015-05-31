@@ -155,6 +155,7 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+  int num_solver_threads;
 
   std::map<std::string, std::string> config_options;
 
@@ -287,6 +288,7 @@ public:
 
     // use minisat by default.
     solver_to_use = MINISAT_SOLVER;
+    num_solver_threads = 1;
 
     // Should constant bit propagation be enabled?
     bitConstantProp_flag = true;

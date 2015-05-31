@@ -43,7 +43,7 @@ class CryptoMinisat4 : public SATSolver
   CMSat::SATSolver* s;
 
 public:
-  CryptoMinisat4();
+  CryptoMinisat4(int num_threads);
 
   ~CryptoMinisat4();
 

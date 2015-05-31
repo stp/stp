@@ -85,7 +85,7 @@ SATSolver* STP::get_new_sat_solver()
       break;
     case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
       #ifdef USE_CRYPTOMINISAT4
-      newS = new CryptoMinisat4;
+      newS = new CryptoMinisat4(bm->UserFlags.num_solver_threads);
       #else
       std::cerr << "CryptoMinisat4 support was not enabled at configure time." << std::endl;
       exit(-1);

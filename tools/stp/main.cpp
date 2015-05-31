@@ -164,6 +164,8 @@ void ExtraMain::create_options()
 #ifdef USE_CRYPTOMINISAT4
       ("cryptominisat4",
        "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
+      ("threads", po::value<int>(&bm->UserFlags.num_solver_threads)->default_value(bm->UserFlags.num_solver_threads)
+      , "Number of threads for cryptominisat")
 #endif
       ("simplifying-minisat", "use installed simplifying minisat version as the solver")(
           "minisat", "use installed minisat version as the solver (default)")
