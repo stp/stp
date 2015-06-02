@@ -21,6 +21,6 @@ macro(AddGTestSuite TESTSUITENAME)
     # Setup lit configuration
     configure_file(${CMAKE_SOURCE_DIR}/tests/lit-unit-tests-common.site.cfg.in
                    ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg
-                   @ONLY@
+                   @ONLY
                   )
 endmacro()
