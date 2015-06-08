@@ -24,7 +24,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Util/Relations.h"
 #include "stp/Sat/MinisatCore.h"
-#include "stp/Sat/core/Solver.h"
+#include "minisat/core/Solver.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Util/Functions.h"
 #include "stp/Printer/printers.h"
