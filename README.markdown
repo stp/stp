@@ -10,6 +10,11 @@ Documentation: https://github.com/stp/stp/wiki
 
 [![Build Status](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
 
+<a href="https://scan.coverity.com/projects/861">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/861/badge.svg"/>
+</a>
+
 ## Build & Install:
 
 See [the INSTALL file](INSTALL.md)
