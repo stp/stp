@@ -3,6 +3,7 @@ compiler:
   - gcc
 #  - clang
 env:
+  matrix:
     # These are used by .travis-cmake.sh to set a configuration
     - STP_CONFIG=STATIC_LIB
     - STP_CONFIG=DYNAMIC_LIB
@@ -11,6 +12,12 @@ env:
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
+
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "LKuESXWzXHaVDYyxosy8VZA7vQ3W3PKvbgkLzeKExy0I50o8b4AVgWOpzOuxqj/Ty6XdF5mugC9hoMepzalYfuVFhXpRbziXLZOTdvGj9ARHHSxmZnZ//xXXTGoiTWH+8MwT2UhfEU679isSekqdS72jrLuUBeDtNC3IWX9+3hQ="
+
 before_install:
 #get neccessary libraries and headers
   - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
@@ -46,3 +53,13 @@ script:
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
   - make VERBOSE=1
   - ./stp-example
+
+addons:
+  coverity_scan:
+    project:
+      name: "stp/stp"
+      description: "Simple Theorem Prover"
+    notification_email: soos.mate@gmail.com
+    build_command_prepend: "mkdir build && cd build && cmake .."
+    build_command:   "make"
+    branch_pattern: coverity_scan
