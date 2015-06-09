@@ -24,6 +24,23 @@ See [the INSTALL file](INSTALL.md)
 The file based input formats that STP reads are the: CVC, SMT-LIB1, and SMT-LIB2 formats. The SMT-LIB2 format is the recommended file format, because it is parsed by all modern bitvector solvers. Only quantifier-free bitvectors and arrays are implemented from the SMTLibv2 format.
 
 ### Usage
+Fun use case, STP overflowing a 32b integer:
+```
+import stp
+In [1]: import stp
+In [2]: a = stp.Solver()
+In [3]: x = a.bitvec('x')
+In [4]: y = a.bitvec('y')
+In [5]: a.add(x + y < 20)
+In [6]: a.add(x  > 10)
+In [7]: a.add(y  > 10)
+In [8]: a.check()
+Out[8]: True
+In [9]: a.model()
+Out[9]: {'x': 4294967287L, 'y': 11L}
+```
+
+Traditional use-case:
 ```
 stp myproblem.smt
 ```
