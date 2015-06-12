@@ -3,6 +3,11 @@ compiler:
   - gcc
 #  - clang
 env:
+  global:
+    # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+    #   via the "travis encrypt" command using the project repo's public key
+    - secure: "bCbWf/B++9y5YDn/ugMKVaV+ZmGCNNtxeWiPFfl7D/xwaj3yjy9yILMkqLcmNNc7rMQruEVx371rn+VURcLIFQtCJ+Uqj4vKdx7kSnhe2oNxKBMViAZU04nLSBB9ZNiH6TKvfqm4eUFprQd6AJ6T0GmB//lC1AgKSKNwSUJBMKc="
+
   matrix:
     # These are used by .travis-cmake.sh to set a configuration
     - STP_CONFIG=STATIC_LIB
@@ -13,15 +18,21 @@ env:
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
 
-  global:
-   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
-   #   via the "travis encrypt" command using the project repo's public key
-   - secure: "bCbWf/B++9y5YDn/ugMKVaV+ZmGCNNtxeWiPFfl7D/xwaj3yjy9yILMkqLcmNNc7rMQruEVx371rn+VURcLIFQtCJ+Uqj4vKdx7kSnhe2oNxKBMViAZU04nLSBB9ZNiH6TKvfqm4eUFprQd6AJ6T0GmB//lC1AgKSKNwSUJBMKc="
+addons:
+  coverity_scan:
+    project:
+      name: "stp/stp"
+      description: "Simple Theorem Prover"
+    notification_email: soos.mate@gmail.com
+    build_command_prepend: "cmake .."
+    build_command:   "make"
+    branch_pattern: coverity_scan
 
 before_install:
-#get neccessary libraries and headers
   - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
   - sudo apt-get update
+
+install:
   - sudo apt-get install
   - sudo apt-get install -y cmake git zlib1g-dev
 # get and install minisat
@@ -40,26 +51,18 @@ before_install:
   - git submodule update
 #set up build environment
   - mkdir build && cd build
+
+script:
   - mkdir simple_example
   - mkdir stp && cd stp
-script:
-# Build STP
+
   - ../../scripts/travis-cmake.sh ../../
   - make VERBOSE=1
   - make check
+
 # Build example project. We assume that the build installed itself to the CMake
-# user package registry (~/.cmake/packages/)
   - cd ../simple_example
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
   - make VERBOSE=1
   - ./stp-example
 
-addons:
-  coverity_scan:
-    project:
-      name: "stp/stp"
-      description: "Simple Theorem Prover"
-    notification_email: soos.mate@gmail.com
-    build_command_prepend: "mkdir build; cd build; cmake .."
-    build_command:   "make"
-    branch_pattern: coverity_scan
