@@ -183,15 +183,6 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
                                          children[1][0]);
       }
 
-      //1st part is the same -> only care about 2nd part
-      if (children[0].GetKind() == BVCONCAT &&
-          children[1].GetKind() == BVCONCAT &&
-          children[0][0] == children[1][0])
-      {
-        result = NodeFactory::CreateNode(stp::BVSGT, children[0][1],
-                                         children[1][1]);
-      }
-
       break;
 
     case stp::BVGT:
