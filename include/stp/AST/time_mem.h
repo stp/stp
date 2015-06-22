@@ -116,7 +116,10 @@ static inline double memUsedPeak(void)
 }
 
 #elif defined(__APPLE__)
-double memUsed(void);
+static inline double memUsed(void)
+{
+  return 0;
+}
 static inline double memUsedPeak(void)
 {
   return memUsed();
