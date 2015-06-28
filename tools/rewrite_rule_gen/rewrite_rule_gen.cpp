@@ -356,9 +356,9 @@ bool isConstant(
       assert(symbols[i].GetValueWidth() == bit_width);
 
       if (strncmp(symbols[i].GetName(), "v", 1) == 0)
-        vN = GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]);
+        vN = GlobalSTP->Ctr_Example->GetCounterExample(symbols[i]);
       else if (strncmp(symbols[i].GetName(), "w", 1) == 0)
-        wN = GlobalSTP->Ctr_Example->GetCounterExample(true, symbols[i]);
+        wN = GlobalSTP->Ctr_Example->GetCounterExample(symbols[i]);
     }
 
     different.setValues(vN, wN);
