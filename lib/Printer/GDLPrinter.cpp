@@ -118,7 +118,7 @@ void GDL_Print1(ostream& os, const ASTNode& n, hash_set<int>* alreadyOutput,
   }
 }
 
-string empty(const ASTNode& n)
+string empty(const ASTNode& /*n*/)
 {
   return "";
 }

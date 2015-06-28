@@ -49,7 +49,7 @@ THE SOFTWARE.
     FatalError("");
     return YY_EXIT_FAILURE;
   }
-  int yyerror(void* AssertsQuery, const char* s) { return yyerror(s); }
+  int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
   
   %}
 

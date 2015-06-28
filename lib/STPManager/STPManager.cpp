@@ -64,7 +64,7 @@ ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
   return *it;
 }
 
-ASTInterior* STPMgr::CreateInteriorNode(Kind kind,
+ASTInterior* STPMgr::CreateInteriorNode(Kind /*kind*/,
                                         // children array of this
                                         // node will be modified.
                                         ASTInterior* n_ptr,

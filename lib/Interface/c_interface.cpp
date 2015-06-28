@@ -70,7 +70,7 @@ extern int cvcparse(void*);
 extern int smtparse(void*);
 
 // TODO remove this, it's really ugly
-void vc_setFlags(VC vc, char c, int param_value)
+void vc_setFlags(VC vc, char c, int /*param_value*/)
 {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   process_argument(c, b);
@@ -153,7 +153,7 @@ VC vc_createValidityChecker(void)
 }
 
 // Expr I/O
-void vc_printExpr(VC vc, Expr e)
+void vc_printExpr(VC /*vc*/, Expr e)
 {
   // do not print in lisp mode
   // bmstar b = (bmstar)vc;
@@ -164,7 +164,7 @@ void vc_printExpr(VC vc, Expr e)
   q.PL_Print(cout);
 }
 
-char* vc_printSMTLIB(VC vc, Expr e)
+char* vc_printSMTLIB(VC /*vc*/, Expr e)
 {
   stringstream ss;
   printer::SMTLIB1_PrintBack(ss, *((nodestar)e));
@@ -207,14 +207,14 @@ void vc_printExprCCode(VC vc, Expr e)
   printer::C_Print(cout, q);
 }
 
-void vc_printExprFile(VC vc, Expr e, int fd)
+void vc_printExprFile(VC /*vc*/, Expr e, int fd)
 {
   fdostream os(fd);
   ((nodestar)e)->PL_Print(os);
   // os.flush();
 }
 
-static void vc_printVarDeclsToStream(VC vc, ostream& os)
+static void vc_printVarDeclsToStream(VC /*vc*/, ostream& os)
 {
   for (stp::ASTVec::iterator i = decls->begin(), iend = decls->end();
        i != iend; i++)
@@ -248,7 +248,7 @@ void vc_printVarDecls(VC vc)
   vc_printVarDeclsToStream(vc, cout);
 }
 
-void vc_clearDecls(VC vc)
+void vc_clearDecls(VC /*vc*/)
 {
   decls->clear();
 }
@@ -351,7 +351,7 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
   memcpy(*buf, cstr, size);
 }
 
-void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
+void vc_printExprToBuffer(VC /*vc*/, Expr e, char** buf, unsigned long* len)
 {
   stringstream os;
   // bmstar b = (bmstar)(((stpstar)vc)->bm);
@@ -646,7 +646,7 @@ WholeCounterExample vc_getWholeCounterExample(VC vc)
   return c;
 }
 
-Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample cc)
+Expr vc_getTermFromCounterExample(VC /*vc*/, Expr e, WholeCounterExample cc)
 {
   nodestar n = (nodestar)e;
   CompleteCEStar c = (CompleteCEStar)cc;
@@ -662,7 +662,7 @@ void vc_deleteWholeCounterExample(WholeCounterExample cc)
   delete c;
 }
 
-int vc_getBVLength(VC vc, Expr ex)
+int vc_getBVLength(VC /*vc*/, Expr ex)
 {
   nodestar e = (nodestar)ex;
 
