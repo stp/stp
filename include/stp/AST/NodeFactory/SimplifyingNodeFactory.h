@@ -94,6 +94,7 @@ private:
     const ASTVec& children,
     ASTNode& result
   );
+  ASTNode create_gt_node(const ASTVec& children);
 
 public:
   virtual stp::ASTNode CreateNode(stp::Kind kind,

@@ -112,6 +112,72 @@ ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
   return bm.CreateBVConst(max, width);
 }
 
+ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
+{
+  if (children[0] == children[1]) {
+    return ASTFalse;
+  }
+
+  if (children[0].isConstant() &&
+      CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+  {
+    return ASTFalse;
+  }
+
+  if (children[1].isConstant() &&
+      CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+  {
+    return ASTFalse;
+  }
+
+  if (children[0].GetKind() == BVRIGHTSHIFT &&
+      children[0][0] == children[1])
+  {
+    return ASTFalse;
+  }
+
+  ASTNode result;
+
+  //2nd part is the same ->only care about 1st part
+  if (children[0].GetKind() == BVCONCAT &&
+      children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
+  {
+    result =
+        NodeFactory::CreateNode(stp::BVGT, children[0][0], children[1][0]);
+  }
+
+  //1st part is the same ->only care about 2nd part
+  if (children[0].GetKind() == BVCONCAT &&
+      children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
+  {
+    result =
+        NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
+  }
+
+  //If child 1 is constant, GT == NOT EQ
+  if (children[1].isConstant() &&
+      CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+  {
+    result = NodeFactory::CreateNode(
+        stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+  }
+
+  //If child 0 is constant, GT == NOT EQ
+  if (children[0].isConstant() &&
+      CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+  {
+    result = NodeFactory::CreateNode(
+        stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+  }
+
+  if (children[0].GetKind() == stp::BVAND && children[0].Degree() > 1 &&
+      ((children[0][0] == children[1]) || children[0][1] == children[1]))
+  {
+    return ASTFalse;
+  }
+
+  return result;
+}
 
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
 {
@@ -187,70 +253,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
 
     case stp::BVGT:
       assert(children.size() == 2);
-      if (children[0] == children[1]) {
-        result = ASTFalse;
-        break;
-      }
-
-      if (children[0].isConstant() &&
-          CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
-      {
-        result = ASTFalse;
-        break;
-      }
-
-      if (children[1].isConstant() &&
-          CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
-      {
-        result = ASTFalse;
-        break;
-      }
-
-      if (children[0].GetKind() == BVRIGHTSHIFT &&
-          children[0][0] == children[1])
-      {
-        result = ASTFalse;
-        break;
-      }
-
-      //2nd part is the same ->only care about 1st part
-      if (children[0].GetKind() == BVCONCAT &&
-          children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
-      {
-        result =
-            NodeFactory::CreateNode(stp::BVGT, children[0][0], children[1][0]);
-      }
-
-      //1st part is the same ->only care about 2nd part
-      if (children[0].GetKind() == BVCONCAT &&
-          children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
-      {
-        result =
-            NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
-      }
-
-      //If child 1 is constant, GT == NOT EQ
-      if (children[1].isConstant() &&
-          CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
-      {
-        result = NodeFactory::CreateNode(
-            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
-      }
-
-      //If child 0 is constant, GT == NOT EQ
-      if (children[0].isConstant() &&
-          CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
-      {
-        result = NodeFactory::CreateNode(
-            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
-      }
-
-      if (children[0].GetKind() == stp::BVAND && children[0].Degree() > 1 &&
-          ((children[0][0] == children[1]) || children[0][1] == children[1]))
-      {
-        result = ASTFalse;
-        break;
-      }
+      result = create_gt_node(children);
       break;
 
     case stp::BVGE:
