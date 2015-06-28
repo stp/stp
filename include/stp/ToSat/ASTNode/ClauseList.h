@@ -94,11 +94,6 @@ public:
 
   void push_back(ClausePtr p) { cont.push_back(p); }
 
-  void reserve(int v)
-  {
-    // cont.reserve(v);
-  }
-
   static ClauseList* UNION(const ClauseList& varphi1, const ClauseList& varphi2)
   {
     ClauseList* psi1 = ClauseList::COPY(varphi1);
@@ -135,7 +130,6 @@ public:
   {
 
     ClauseList* psi = new ClauseList();
-    psi->reserve(varphi1.size() * varphi2.size());
 
     ClauseContainer::const_iterator it1 = varphi1.cont.begin();
     for (; it1 != varphi1.cont.end(); it1++)
@@ -159,7 +153,6 @@ public:
   {
 
     ClauseList* psi = new ClauseList();
-    psi->reserve(varphi.size());
 
     ClauseContainer::const_iterator it = varphi.cont.begin();
     for (; it != varphi.cont.end(); it++)
