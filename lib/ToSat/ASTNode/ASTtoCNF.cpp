@@ -803,25 +803,25 @@ void ASTtoCNF::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* def
 }
 
 void ASTtoCNF::convertFormulaToCNFPosFALSE(const ASTNode& varphi,
-                                         ClauseList* defs)
+                                         ClauseList* /*defs*/)
 {
   ASTNode dummy_false_var = bm->CreateNode(NOT, dummy_true_var);
   info[varphi]->clausespos = SINGLETON(dummy_false_var);
 }
 
-void ASTtoCNF::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(dummy_true_var);
 }
 
 void ASTtoCNF::convertFormulaToCNFPosBOOLEXTRACT(const ASTNode& varphi,
-                                               ClauseList* defs)
+                                               ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
 }
 
 void ASTtoCNF::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi,
-                                          ClauseList* defs)
+                                          ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
 }
@@ -1124,26 +1124,27 @@ void ASTtoCNF::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* def
 }
 
 void ASTtoCNF::convertFormulaToCNFNegFALSE(const ASTNode& varphi,
-                                         ClauseList* defs)
+                                         ClauseList* /*defs*/)
 {
   info[varphi]->clausesneg = SINGLETON(dummy_true_var);
 }
 
-void ASTtoCNF::convertFormulaToCNFNegTRUE(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegTRUE(const ASTNode& varphi,
+                                          ClauseList* /*defs*/)
 {
   ASTNode dummy_false_var = bm->CreateNode(NOT, dummy_true_var);
   info[varphi]->clausesneg = SINGLETON(dummy_false_var);
 }
 
 void ASTtoCNF::convertFormulaToCNFNegBOOLEXTRACT(const ASTNode& varphi,
-                                               ClauseList* defs)
+                                               ClauseList* /*defs*/)
 {
   ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
   info[varphi]->clausesneg = psi;
 }
 
 void ASTtoCNF::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi,
-                                          ClauseList* defs)
+                                          ClauseList* /*defs*/)
 {
   info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, varphi));
 }
