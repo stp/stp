@@ -64,7 +64,7 @@ public:
     return p;
   }
 
-  virtual void setMaxConflicts(int64_t max_confl)
+  virtual void setMaxConflicts(int64_t /*max_confl*/)
   {
     std::cerr
     << "Warning: Max conflict setting is not supported by this SAT solver"

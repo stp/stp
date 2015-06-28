@@ -116,7 +116,7 @@ protected:
 
   // Abstract virtual print function for internal node. c_friendly
   // is for printing hex. numbers that C compilers will accept
-  virtual void nodeprint(ostream& os, bool c_friendly = false) { os << "*"; };
+  virtual void nodeprint(ostream& os, bool /*c_friendly*/) { os << "*"; };
 
   // Treat the result as const pleases
   virtual Kind GetKind() const { return _kind; }
