@@ -321,13 +321,13 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
 
       for (int i = 0; i < numberOfChildren; i++)
       {
-        ASTNode n = (ce.GetCounterExample(true, variables[i]));
+        ASTNode n = (ce.GetCounterExample(variables[i]));
         min_children[i] = n;
         max_children[i] = n;
         concretiseB(variables[i], n, n, ors, beev);
       }
 
-      ASTNode n = (ce.GetCounterExample(true, outputNode));
+      ASTNode n = (ce.GetCounterExample(outputNode));
       min_output = n;
       max_output = n;
       concretiseB(outputNode, n, n, ors, beev);
@@ -336,7 +336,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
     {
       for (int i = 0; i < numberOfChildren; i++)
       {
-        ASTNode n = (ce.GetCounterExample(true, variables[i]));
+        ASTNode n = (ce.GetCounterExample(variables[i]));
         // cerr << variables[i].GetName() << " " << n << endl;
         ASTNode t = beev->CreateNode(BVLT, n, min_children[i]);
         if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
@@ -347,7 +347,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
         concretiseB(variables[i], min_children[i], max_children[i], ors, beev);
       }
 
-      ASTNode n = (ce.GetCounterExample(true, outputNode));
+      ASTNode n = (ce.GetCounterExample(outputNode));
       // cerr << variables[i].GetName() << " " << n << endl;
       ASTNode t = beev->CreateNode(BVLT, n, min_output);
       if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
@@ -510,13 +510,13 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
 
       for (int i = 0; i < numberOfChildren; i++)
       {
-        ASTNode n = (ce.GetCounterExample(true, variables[i]));
+        ASTNode n = (ce.GetCounterExample(variables[i]));
         *children[i] = FixedBits::concreteToAbstract(n);
         concretise(variables[i], *(children[i]), satSolverClause, beev,
                    tosat.SATVar_to_SymbolIndexMap());
       }
 
-      ASTNode n = (ce.GetCounterExample(true, outputNode));
+      ASTNode n = (ce.GetCounterExample(outputNode));
       output = FixedBits::concreteToAbstract(n);
       // cerr << resultNode.GetName() << " " << n << endl;
       concretise(outputNode, output, satSolverClause, beev,
@@ -526,7 +526,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
     {
       for (int i = 0; i < numberOfChildren; i++)
       {
-        ASTNode n = (ce.GetCounterExample(true, variables[i]));
+        ASTNode n = (ce.GetCounterExample(variables[i]));
         // cerr << variables[i].GetName() << " " << n << endl;
         *children[i] =
             FixedBits::meet(FixedBits::concreteToAbstract(n), *children[i]);
@@ -534,7 +534,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
                    tosat.SATVar_to_SymbolIndexMap());
       }
 
-      ASTNode n = (ce.GetCounterExample(true, outputNode));
+      ASTNode n = (ce.GetCounterExample(outputNode));
       output = FixedBits::meet(FixedBits::concreteToAbstract(n), output);
       // cerr << resultNode.GetName() << " " << n << endl;
       concretise(outputNode, output, satSolverClause, beev,

@@ -596,7 +596,7 @@ Expr vc_getCounterExample(VC vc, Expr e)
   bool t = false;
   if (ce->CounterExampleSize())
     t = true;
-  nodestar output = new node(ce->GetCounterExample(t, *a));
+  nodestar output = new node(ce->GetCounterExample(*a));
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;
 }

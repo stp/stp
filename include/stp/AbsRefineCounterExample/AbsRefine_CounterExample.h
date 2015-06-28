@@ -104,7 +104,7 @@ public:
 
   // queries the counterexample, and returns the value corresponding
   // to e
-  ASTNode GetCounterExample(bool t, const ASTNode& e);
+  ASTNode GetCounterExample(const ASTNode& e);
 
   // queries the counterexample, and returns a vector of index-value pairs for e
   std::vector<std::pair<ASTNode, ASTNode>>

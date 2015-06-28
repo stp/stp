@@ -628,7 +628,7 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
 /* FUNCTION: queries the CounterExampleMap object with 'expr' and
  * returns the corresponding counterexample value.
  */
-ASTNode AbsRefine_CounterExample::GetCounterExample(bool t, const ASTNode& expr)
+ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
 {
   // input is valid, no counterexample to get
   if (bm->ValidFlag)
@@ -870,7 +870,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
         ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);
         ASTNode readexpr =
             bm->CreateTerm(READ, it->GetValueWidth(), *it, index);
-        ASTNode val = GetCounterExample(t, readexpr);
+        ASTNode val = GetCounterExample(readexpr);
         // cout << "ASSERT( ";
         // cout << " = ";
         out_int.push_back(val.GetUnsignedConst());
