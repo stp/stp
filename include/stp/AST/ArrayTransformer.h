@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 #include "AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 
 namespace stp
 {
