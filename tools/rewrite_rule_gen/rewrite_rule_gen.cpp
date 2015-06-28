@@ -1356,6 +1356,8 @@ string name(const ASTNode& n)
     return "1";
 
   FatalError("@!#$@#$@#");
+  assert(false);
+  exit(-1);
 }
 
 // Turns "n" into a statement in STP's C++ language to create it.
