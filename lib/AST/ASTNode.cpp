@@ -72,7 +72,7 @@ const ASTVec& ASTNode::GetChildren() const
 }
 
 // Access node number
-int ASTNode::GetNodeNum() const
+unsigned ASTNode::GetNodeNum() const
 {
   return _int_node_ptr->_node_num;
 }
