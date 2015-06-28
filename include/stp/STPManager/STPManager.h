@@ -428,7 +428,7 @@ public:
   void printVarDeclsToStream(ostream& os, ASTNodeSet& symbols);
 
   // Print assertions to the input stream
-  void printAssertsToStream(ostream& os, int simplify);
+  void printAssertsToStream(ostream& os);
 
   // Variables are added automatically to the introduced_symbolset. Variables
   // in the set aren't printed out as part of the counter example.

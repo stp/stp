@@ -123,7 +123,7 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
   }
 } // printVarDeclsToStream
 
-void STPMgr::printAssertsToStream(ostream& os, int simplify_print)
+void STPMgr::printAssertsToStream(ostream& os)
 {
   ASTVec v = GetAsserts();
   for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
@@ -151,7 +151,7 @@ void print_STPInput_Back(const ASTNode& query)
     buildListOfSymbols(*i, visited, symbols);
 
   (stp::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
-  (stp::GlobalSTP->bm)->printAssertsToStream(cout, 0);
+  (stp::GlobalSTP->bm)->printAssertsToStream(cout);
   cout << "QUERY(";
   query.PL_Print(cout);
   cout << ");\n";
