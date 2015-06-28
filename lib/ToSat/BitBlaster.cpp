@@ -2903,6 +2903,7 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBcompare(const ASTNode& form,
     default:
       cerr << "BBCompare: Illegal kind" << form << endl;
       FatalError("", form);
+      exit(-1);
   }
 }
 
