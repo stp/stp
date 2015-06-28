@@ -337,8 +337,6 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
       a = nf->CreateNode(kind, ca);
   }
 
-  kind = a.GetKind();
-
   a = PullUpITE(a);
   kind = a.GetKind(); // pullUpITE can change the Kind of the node.
 
