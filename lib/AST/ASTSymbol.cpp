@@ -34,9 +34,8 @@ const char* ASTSymbol::GetName() const
   return _name;
 }
 
-// Print function for symbol -- return name. (c_friendly is for
-// printing hex. numbers that C compilers will accept)
-void ASTSymbol::nodeprint(ostream& os, bool c_friendly)
+// Print function for symbol
+void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
 {
   os << _name;
 }
