@@ -339,34 +339,6 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
 
   kind = a.GetKind();
 
-  if (false)
-  {
-    if (!a.isConstant() &&
-        kind != SYMBOL) // const and symbols need to be created specially.
-    {
-      assert(a.Degree() > 0);
-      ASTVec v;
-      v.reserve(a.Degree());
-      for (unsigned i = 0; i < a.Degree(); i++)
-        if (a[i].GetType() == BITVECTOR_TYPE)
-          v.push_back(SimplifyTerm(a[i], VarConstMap));
-        else if (a[i].GetType() == BOOLEAN_TYPE)
-          v.push_back(SimplifyFormula(a[i], VarConstMap));
-        else
-          v.push_back(a[i]);
-
-      // TODO: Should check if the children arrays are different and only
-      // create then.
-      ASTNode output = nf->CreateNode(kind, v);
-
-      if (a != output)
-      {
-        UpdateSimplifyMap(a, output, false, VarConstMap);
-        a = output;
-      }
-    }
-  }
-
   a = PullUpITE(a);
   kind = a.GetKind(); // pullUpITE can change the Kind of the node.
 
