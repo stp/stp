@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/STP.h"
 #include "stp/AST/NodeFactory/TypeChecker.h"
-#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/cpp_interface.h"
 #include <sys/time.h>
 #include <memory>
