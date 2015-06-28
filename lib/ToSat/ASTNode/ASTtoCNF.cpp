@@ -266,10 +266,8 @@ ClauseList* ASTtoCNF::SINGLETON(const ASTNode& varphi)
 void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
 {
   CNFInfo* x;
-  Kind k = varphi.GetKind();
 
   // step 1, get the info associated with this node
-
   if (info.find(varphi) == info.end())
   {
     x = new CNFInfo();
