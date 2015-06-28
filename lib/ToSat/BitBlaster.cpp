@@ -2948,7 +2948,7 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBEQ(const BBNodeVec& left,
     return nf->CreateNode(IFF, *lit, *rit);
 }
 
-std::ostream& operator<<(std::ostream& output, const BBNodeAIG& h)
+std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
 {
   FatalError("This isn't implemented  yet sorry;");
   return output;
