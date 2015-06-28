@@ -399,12 +399,8 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
   ASTNode left, right;
   if (a.Degree() == 2)
   {
-    // cerr << "Input to simplifyterm: left: " << a[0] << endl;
     left = SimplifyTerm(a[0], VarConstMap);
-    // cerr << "Output of simplifyterm:left: " << left << endl;
-    // cerr << "Input to simplifyterm: right: " << a[1] << endl;
     right = SimplifyTerm(a[1], VarConstMap);
-    // cerr << "Output of simplifyterm:left: " << right << endl;
   }
 
   Kind kind = a.GetKind();
