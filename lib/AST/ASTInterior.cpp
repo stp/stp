@@ -41,7 +41,7 @@ void ASTInterior::CleanUp()
 // Returns kinds.  "lispprinter" handles printing of parenthesis
 // and childnodes. (c_friendly is for printing hex. numbers that C
 // compilers will accept)
-void ASTInterior::nodeprint(ostream& os, bool c_friendly)
+void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
 {
   os << _kind_names[_kind];
 }

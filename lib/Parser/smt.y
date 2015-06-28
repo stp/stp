@@ -56,7 +56,7 @@
     FatalError("");
     return 1;
   }
-  int yyerror(void* AssertsQuery, const char* s) { return yyerror(s); }
+  int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
 
   ASTNode query;
 #define YYLTYPE_IS_TRIVIAL 1
