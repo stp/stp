@@ -279,7 +279,6 @@ void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
   }
 
   // step 2, we only need to know if shares >= 2
-
   if (isPos && sharesPos(*x) == 2)
   {
     return;
@@ -291,7 +290,6 @@ void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
   }
 
   // step 3, set appropriate information fields
-
   if (isPos)
   {
     incrementSharesPos(*x);
@@ -303,7 +301,6 @@ void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
   }
 
   // step 4, recurse over children
-
   if (varphi.isAtom())
   {
     return;
