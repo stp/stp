@@ -613,7 +613,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
   res = Ctr_Example->SATBased_ArrayReadRefinement(
-      NewSolver, inputToSat, original_input, satBase);
+      NewSolver, original_input, satBase);
   if (SOLVER_UNDECIDED != res)
   {
     if (toSATAIG.cbIsDestructed())

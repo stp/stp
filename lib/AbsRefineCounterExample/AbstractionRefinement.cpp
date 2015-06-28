@@ -261,7 +261,7 @@ bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
 
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
-    SATSolver& SatSolver, const ASTNode& inputAlreadyInSAT,
+    SATSolver& SatSolver,
     const ASTNode& original_input, ToSATBase* tosat)
 {
   vector<AxiomToBe> RemainingAxiomsVec;

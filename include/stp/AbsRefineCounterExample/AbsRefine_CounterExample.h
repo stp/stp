@@ -130,7 +130,7 @@ public:
     bool refinement);
 
   SOLVER_RETURN_TYPE
-  SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& modified_input,
+  SATBased_ArrayReadRefinement(SATSolver& newS,
                                const ASTNode& original_input, ToSATBase* tosat);
 
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
