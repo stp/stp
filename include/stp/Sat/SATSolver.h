@@ -79,7 +79,7 @@ public:
 
   virtual void printStats() const = 0;
 
-  virtual void setSeed(int i)
+  virtual void setSeed(int /*seed*/)
   {
     std::cerr << "Setting the random seen is not implemented for this solver"
               << std::endl;
@@ -93,7 +93,7 @@ public:
   virtual lbool undef_literal() = 0;
 
   // The simplifying solvers shouldn't eliminate index / value variables.
-  virtual void setFrozen(uint32_t x) {}
+  virtual void setFrozen(uint32_t /*var*/) {}
 
   virtual int nClauses()
   {

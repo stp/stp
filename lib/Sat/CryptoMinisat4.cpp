@@ -97,7 +97,7 @@ uint32_t CryptoMinisat4::newVar()
 
 void CryptoMinisat4::setVerbosity(int v)
 {
-  // s->conf.verbosity = v;
+  s->set_verbosity(v);
 }
 
 unsigned long CryptoMinisat4::nVars() const
