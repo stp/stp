@@ -130,7 +130,7 @@ public:
   STPMgr* GetSTPMgr() const;
 
   // Access node number
-  int GetNodeNum() const;
+  unsigned GetNodeNum() const;
 
   // Access kind.
   Kind GetKind() const;
