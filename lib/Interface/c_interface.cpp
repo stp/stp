@@ -715,6 +715,8 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
       break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
+      assert(false);
+      exit(-1);
       break;
   }
   node o = b->CreateSymbol(name, indexWidth, valueWidth);
