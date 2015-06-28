@@ -65,9 +65,13 @@ private:
 
   ASTNode CreateSimpleFormITE(const ASTVec& children);
   ASTNode CreateSimpleXor(const ASTVec& children);
+
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTVec& children);
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTNode& form1,
                             const ASTNode& form2);
+  ASTNode handle_2_children(bool IsAnd,
+                                     const ASTVec& children);
+
   ASTNode CreateSimpleNot(const ASTNode& form);
   ASTNode CreateSimpleNot(const ASTVec& children);
 

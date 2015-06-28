@@ -393,43 +393,57 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   return CreateSimpleAndOr(IsAnd, children);
 }
 
+ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
+                                                  const ASTVec& children)
+{
+  if (children.size() == 2) {
+    const Kind k = IsAnd ? stp::AND : stp::OR;
+    const ASTNode& c0 = children[0];
+    const ASTNode& c1 = children[1];
+
+    if (k == stp::OR)
+    {
+      //case of a || ~a which is constant TRUE
+
+      if (c0.GetKind() == stp::NOT && c0[0] == c1)
+        return ASTTrue;
+      if (c1.GetKind() == stp::NOT && c1[0] == c0)
+        return ASTTrue;
+    }
+    else
+    {
+      assert(k == stp::AND);
+      //case of a && ~a which is constant FALSE
+
+      if (c0.GetKind() == stp::NOT && c0[0] == c1)
+        return ASTFalse;
+      if (c1.GetKind() == stp::NOT && c1[0] == c0)
+        return ASTFalse;
+    }
+  }
+  return ASTUndefined;
+}
+
 ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
                                                   const ASTVec& children)
 {
-  const Kind k = IsAnd ? stp::AND : stp::OR;
-
-  if (k == stp::OR && children.size() == 2)
-  {
-    const ASTNode& c0 = children[0];
-    const ASTNode& c1 = children[1];
-    if (c0.GetKind() == stp::NOT && c0[0] == c1)
-      return ASTTrue;
-    if (c1.GetKind() == stp::NOT && c1[0] == c0)
-      return ASTTrue;
-  }
-  if (k == stp::AND && children.size() == 2)
-  {
-    const ASTNode& c0 = children[0];
-    const ASTNode& c1 = children[1];
-    if (c0.GetKind() == stp::NOT && c0[0] == c1)
-      return ASTFalse;
-    if (c1.GetKind() == stp::NOT && c1[0] == c0)
-      return ASTFalse;
-  }
+  ASTNode retval = handle_2_children(IsAnd, children);
+  if (retval != ASTUndefined)
+    return retval;
 
   const ASTNode& annihilator = (IsAnd ? ASTFalse : ASTTrue);
   const ASTNode& identity = (IsAnd ? ASTTrue : ASTFalse);
 
-  ASTNode retval;
   ASTVec new_children;
   new_children.reserve(children.size());
 
-  const ASTVec::const_iterator it_end = children.end();
-  for (ASTVec::const_iterator it = children.begin(); it != it_end; it++)
+  for (ASTVec::const_iterator it = children.begin(),
+    it_end = children.end()
+    ;it != it_end; it++)
   {
     ASTVec::const_iterator next_it;
 
-    bool nextexists = (it + 1 < it_end);
+    const bool nextexists = (it + 1 < it_end);
     if (nextexists)
       next_it = it + 1;
     else
@@ -448,27 +462,29 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
       // just drop it
     }
     else
+    {
       new_children.push_back(*it);
+    }
   }
 
   // If we get here, we saw no annihilators, and children should
   // be only the non-True nodes.
+  switch(new_children.size()) {
+    case 0:
+      return identity;
+      break;
 
-  if (0 == new_children.size())
-  {
-    retval = identity;
+    case 1:
+      return new_children[0];
+      break;
+
+    default:
+      // 2 or more children.  Create a new node.
+      return hashing.CreateNode(IsAnd ? stp::AND : stp::OR, new_children);
+      break;
   }
-  else if (1 == new_children.size())
-  {
-    // there is just one child
-    retval = new_children[0];
-  }
-  else
-  {
-    // 2 or more children.  Create a new node.
-    retval = hashing.CreateNode(IsAnd ? stp::AND : stp::OR, new_children);
-  }
-  return retval;
+  assert(false);
+  exit(-1);
 }
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then
