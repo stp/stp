@@ -157,7 +157,7 @@ public:
     }
   }
 
-  int GetNodeNum() const { return _node_num; } 
+  unsigned GetNodeNum() const { return _node_num; }
 
   virtual bool isSimplified() const { return false; }
 
