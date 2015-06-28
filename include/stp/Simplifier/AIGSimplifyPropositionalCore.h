@@ -143,6 +143,8 @@ private:
     {
       FatalError("Unknown type");
     }
+    assert(false);
+    exit(-1);
   }
 
 public:
