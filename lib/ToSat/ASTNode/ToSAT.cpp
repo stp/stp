@@ -92,6 +92,9 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
     SATVar_to_SymbolIndex[symbol][index] = v;
     return v;
   }
+
+  assert(false);
+  exit(-1);
 }
 
 /* Convert ASTClauses to CNF clauses and solve.
