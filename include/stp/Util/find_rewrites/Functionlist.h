@@ -45,7 +45,7 @@ private:
     const int number_types = sizeof(types) / sizeof(Kind);
 
     // all two argument functions.
-    for (int i = 0; i < number_types; i++)
+    for (size_t i = 0; i < number_types; i++)
       result.push_back(create(types[i], v, w));
   }
 
@@ -54,7 +54,7 @@ private:
     rewrite_system.buildLookupTable();
     cerr << "Applying:" << rewrite_system.size() << "rewrite rules" << endl;
 
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       if (functions[i] == mgr->ASTUndefined)
         continue;
@@ -78,7 +78,7 @@ private:
   // NB: Can only apply at the top level.
   void removeSingleVariable()
   {
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       vector<ASTNode> symbols = getVariables(functions[i]);
 
@@ -97,7 +97,7 @@ private:
 
   void removeSingleUndefined()
   {
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       if (functions[i] == mgr->ASTUndefined)
       {
@@ -109,7 +109,7 @@ private:
 
   void applySpeculative()
   {
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       if (functions[i] == mgr->ASTUndefined)
         continue;
@@ -123,7 +123,7 @@ private:
 
   void checkFunctions()
   {
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       assert(functions[i].GetType() == stp::BITVECTOR_TYPE);
       assert(functions[i].GetValueWidth() == bits);
@@ -133,7 +133,7 @@ private:
 
   void removeNonWidened()
   {
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       if (mgr->ASTUndefined == functions[i])
         continue;
@@ -154,7 +154,7 @@ private:
   // Triples the number of functions by adding all the unary ones.
   void allUnary()
   {
-    for (int i = 0, size = functions.size(); i < size; i++)
+    for (size_t i = 0, size = functions.size(); i < size; i++)
     {
       if (functions[i] == mgr->ASTUndefined)
         continue;
@@ -169,7 +169,7 @@ private:
     ASTNode f = mgr->LookupOrCreateSymbol("rewriteThroughWithAIGS");
     f.SetValueWidth(bits);
 
-    for (int i = 0; i < functions.size(); i++)
+    for (size_t i = 0; i < functions.size(); i++)
     {
       if (functions[i] == mgr->ASTUndefined)
         continue;
@@ -199,9 +199,9 @@ public:
 
     // We've got the leaves, and their unary operations,
     // now get the binary operations of all of those.
-    int size = functions.size();
-    for (int i = 0; i < size; i++)
-      for (int j = 0; j < size; j++)
+    size_t size = functions.size();
+    for (size_t i = 0; i < size; i++)
+      for (size_t j = 0; j < size; j++)
         getAllFunctions(functions[i], functions[j], functions);
 
     allUnary();
@@ -219,11 +219,10 @@ public:
 
     if (two_level)
     {
-      int last = 0;
       ASTVec functions_copy(functions);
       size = functions_copy.size();
-      for (int i = 0; i < size; i++)
-        for (int j = 0; j < size; j++)
+      for (size_t i = 0; i < size; i++)
+        for (size_t j = 0; j < size; j++)
           getAllFunctions(functions_copy[i], functions_copy[j], functions);
 
       removeNonWidened();

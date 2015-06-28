@@ -94,11 +94,11 @@ private:
 public:
   bool checkInvariant()
   {
-    int size = 0;
+    size_t size = 0;
     std::map<Kind, vector<Rewrite_rule>>::iterator it;
     for (it = kind_to_rr.begin(); it != kind_to_rr.end(); it++)
     {
-      for (int i = 0; i < it->second.size(); i++)
+      for (size_t i = 0; i < it->second.size(); i++)
       {
         assert(it->second[i].getFrom().GetKind() == it->first);
         // All have the same kind as the lookup kind.

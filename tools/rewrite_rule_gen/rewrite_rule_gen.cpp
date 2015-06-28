@@ -148,7 +148,7 @@ ASTNode withNF(const ASTNode& n)
     return n;
 
   ASTVec c;
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
     c.push_back(withNF(n[i]));
 
   if (n.GetType() == BOOLEAN_TYPE)
@@ -235,7 +235,7 @@ void getVariables(const ASTNode& n, vector<ASTNode>& symbols,
       (find(symbols.begin(), symbols.end(), n) == symbols.end()))
     symbols.push_back(n);
 
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
     getVariables(n[i], symbols, visited);
 }
 
@@ -276,7 +276,7 @@ ASTNode eval(const ASTNode& n, ASTNodeMap& map, int count = 0)
   ASTVec& new_children = *saved_array[count];
   new_children.clear();
 
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
     new_children.push_back(eval(n[i], map, count + 1));
 
   ASTNode r = NonMemberBVConstEvaluator(mgr, n.GetKind(), new_children,
@@ -351,7 +351,7 @@ bool isConstant(
     ASTNode vN = mgr->CreateZeroConst(bit_width);
     ASTNode wN = mgr->CreateZeroConst(bit_width);
 
-    for (int i = 0; i < symbols.size(); i++)
+    for (size_t i = 0; i < symbols.size(); i++)
     {
       assert(symbols[i].GetValueWidth() == bit_width);
 
@@ -423,7 +423,7 @@ ASTNode widen(const ASTNode& w, int width)
   }
 
   ASTVec ch;
-  for (int i = 0; i < w.Degree(); i++)
+  for (size_t i = 0; i < w.Degree(); i++)
   {
     ch.push_back(widen(w[i], width));
     if (ch.back() == mgr->ASTUndefined)
@@ -833,7 +833,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 uint64_t getHash(const ASTNode& n_, const vector<VariableAssignment>& values)
 {
   assert(values.size() > 0);
-  const int ass_bitwidth = values[0].getV().GetValueWidth();
+  const size_t ass_bitwidth = values[0].getV().GetValueWidth();
   assert(ass_bitwidth >= bits);
 
   ASTNode n = n_;
@@ -849,19 +849,19 @@ uint64_t getHash(const ASTNode& n_, const vector<VariableAssignment>& values)
 
   uint64_t hash = 0;
 
-  for (int j = 0; j < symbols.size(); j++)
+  for (size_t j = 0; j < symbols.size(); j++)
   {
     assert(symbols[j].GetValueWidth() == ass_bitwidth);
   }
 
-  for (int i = 0; i < values.size(); i++)
+  for (size_t i = 0; i < values.size(); i++)
   {
     // They both should be set..
     assert(values[i].getV().GetValueWidth() == ass_bitwidth);
     assert(values[i].getW().GetValueWidth() == ass_bitwidth);
 
     ASTNodeMap mapToVal;
-    for (int j = 0; j < symbols.size(); j++)
+    for (size_t j = 0; j < symbols.size(); j++)
     {
       assert(symbols[j].GetValueWidth() == ass_bitwidth);
 
@@ -890,7 +890,7 @@ bool contained_in(ASTNode from, ASTNode to)
   if (from == to)
     return true;
 
-  for (int i = 0; i < from.Degree(); i++)
+  for (size_t i = 0; i < from.Degree(); i++)
     if (contained_in(from[i], to))
       return true;
 
@@ -915,7 +915,7 @@ bool is_subgraph(const ASTNode& g, const ASTNode& h)
   if (g == h)
     return true;
 
-  for (int i = 0; i < h.Degree(); i++)
+  for (size_t i = 0; i < h.Degree(); i++)
     if (is_subgraph(g, h[i]))
       return true;
 
@@ -966,7 +966,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
 
     // Put the functions in buckets based on their results on the values.
     hash_map<uint64_t, ASTVec> map;
-    for (int i = 0; i < expressions.size(); i++)
+    for (size_t i = 0; i < expressions.size(); i++)
     {
       if (expressions[i] == mgr->ASTUndefined)
         continue; // omit undefined.
@@ -1002,7 +1002,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
   // Sort so that constants, and smaller expressions will be checked first.
   // std::sort(equiv.begin(), equiv.end(), lessThan);
 
-  for (int i = 0; i < equiv.size(); i++)
+  for (size_t i = 0; i < equiv.size(); i++)
   {
     if (equiv[i].GetKind() == UNDEFINED)
       continue;
@@ -1118,7 +1118,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
         ass.push_back(different);
 
         // Discard the ones we've checked entirely.
-        ASTVec newEquiv(equiv.begin() + std::max(i - 1, 0), equiv.end());
+        ASTVec newEquiv(equiv.begin() + std::max((int)i - (int)1, 0), equiv.end());
         equiv.clear();
 
         findRewrites(newEquiv, ass, depth + 1);
@@ -1225,7 +1225,7 @@ void rule_to_string(const ASTNode& n, ASTNodeString& names, string& current,
       break;
   }
 
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
     sprintf(t, "%s[%d]", current.c_str(), i);
@@ -1244,7 +1244,7 @@ string containsNode(const ASTNode& n, const ASTNode& hunting, string& current)
   if (n.isAtom())
     return "";
 
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
     sprintf(t, "%s[%d]", current.c_str(), i);
@@ -1319,7 +1319,7 @@ template <class T> void removeDuplicates(T& big)
 void bucket(string substring, vector<string>& inputs,
             hash_map<string, vector<string>>& buckets)
 {
-  for (int i = 0; i < inputs.size(); i++)
+  for (size_t i = 0; i < inputs.size(); i++)
   {
     string current = inputs[i];
     size_t from = current.find(substring);
@@ -1451,7 +1451,7 @@ string createString(ASTNode n, std::map<ASTNode, string>& val)
   }
 
   if (n.GetKind() != BVEXTRACT)
-    for (int i = 0; i < n.Degree(); i++)
+    for (size_t i = 0; i < n.Degree(); i++)
     {
       if (i > 0)
         result += ",";
@@ -1472,7 +1472,7 @@ void visit_all(const ASTNode& n, map<ASTNode, string>& visited, string current)
 
   visited.insert(make_pair(n, current));
 
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
     sprintf(t, "%s[%d]", current.c_str(), i);
@@ -1522,7 +1522,7 @@ void writeOutRules()
 
           getVariables(to, symbols, visited);
           map<ASTNode, string> val;
-          for (int i = 0; i < symbols.size(); i++)
+          for (size_t i = 0; i < symbols.size(); i++)
             val.insert(make_pair(symbols[i], getToName(symbols[i], from)));
 
           val.insert(make_pair(one, "one"));
@@ -1667,7 +1667,7 @@ ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
 
   ASTVec v;
   v.reserve(n.Degree());
-  for (int i = 0; i < n.Degree(); i++)
+  for (size_t i = 0; i < n.Degree(); i++)
     v.push_back(rewrite(n[i], original_rule, seen, depth + 1));
 
   assert(v.size() > 0);
@@ -1691,7 +1691,7 @@ ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
 
   vector<Rewrite_rule>& rr = rewrite_system.kind_to_rr[n.GetKind()];
 
-  for (int i = 0; i < rr.size(); i++)
+  for (size_t i = 0; i < rr.size(); i++)
   {
     // If they are the same rule. Then don't match them.
     if (original_rule == (rr[i]))
@@ -1983,7 +1983,7 @@ void load_old_rules(string fileName)
 
   cout << "Rewrite rule size:" << values.size() << endl;
 
-  for (int i = 0; i < values.size(); i++)
+  for (size_t i = 0; i < values.size(); i++)
   {
     if ((values[i].GetKind() != EQ))
     {
@@ -2018,7 +2018,7 @@ void load_old_rules(string fileName)
   rewrite_system.buildLookupTable();
 
   ASTVec vvv = mgr->GetAsserts();
-  for (int i = 0; i < vvv.size(); i++)
+  for (size_t i = 0; i < vvv.size(); i++)
     cout << vvv[i];
 
   // So we don't output as soon as one is discovered...
@@ -2194,7 +2194,7 @@ int main(int argc, const char* argv[])
     t2();
   }
 
-  for (int i = 0; i < saved_array.size(); i++)
+  for (size_t i = 0; i < saved_array.size(); i++)
     delete saved_array[i];
 }
 
@@ -2226,7 +2226,7 @@ matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int te
     if (n0.GetKind() != n1.GetKind())
     return false;
 
-    for (int i = 0; i < n0.Degree(); i++)
+    for (size_t i = 0; i < n0.Degree(); i++)
       {
         if (!matchNode(n0[i], n1[i], fromTo, term_variable_width))
         return false;
@@ -2304,7 +2304,7 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
   }
   else
   {
-    for (int i = 0; i < n0.Degree(); i++)
+    for (size_t i = 0; i < n0.Degree(); i++)
     {
       if (!commutative_matchNode(n0[i], n1[i], term_variable_width, commutative,
                                  vNode, wNode))
@@ -2336,7 +2336,7 @@ bool c_matchNode(const ASTNode& n0, const ASTNode& n1,
     cerr << "======Commut-match=======" << r << endl;
     cerr << "given" << n0 << n1;
     cerr << "Commutative still to match:" << endl;
-    for (int j = 0; j < commutative_to_check.size(); j++)
+    for (size_t j = 0; j < commutative_to_check.size(); j++)
     {
       cerr << "++++++++++" << endl;
       cerr << "first" << commutative_to_check[j].first;
@@ -2399,7 +2399,7 @@ bool c_matchNode(const ASTNode& n0, const ASTNode& n1,
     // Check each of the operands matches. Store Extra away in
     // "commutative_to_check".
     bool good = true;
-    for (int i = 0; i < f.size(); i++)
+    for (size_t i = 0; i < f.size(); i++)
     {
       if (!commutative_matchNode(f[i], s[i], term_variable_width,
                                  commutative_to_check, vNode, wNode))
