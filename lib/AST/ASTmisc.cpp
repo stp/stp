@@ -256,8 +256,9 @@ void FatalError(const char* str, const ASTNode& a, int w)
   else
   {
     assert(false);
-    exit(-1);
   }
+  assert(false);
+  exit(-1);
 }
 
 void FatalError(const char* str)
@@ -266,6 +267,7 @@ void FatalError(const char* str)
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
+    assert(false);
     exit(-1);
   }
   else
