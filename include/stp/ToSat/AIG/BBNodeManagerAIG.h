@@ -225,6 +225,8 @@ public:
       default:
         cerr << "Not handled::!!" << _kind_names[kind];
         FatalError("Never here");
+        assert(false);
+        exit(-1);
     }
     return BBNodeAIG(pNode);
   }
