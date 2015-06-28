@@ -266,6 +266,7 @@ void FatalError(const char* str)
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
+    exit(-1);
   }
   else
   {
