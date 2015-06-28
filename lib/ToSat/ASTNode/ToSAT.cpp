@@ -302,7 +302,7 @@ bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
 // Call the SAT solver, and check the result before returning. This
 // can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
 // SOLVER_UNDECIDED
-bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool refinement)
+bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinement*/)
 {
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
 

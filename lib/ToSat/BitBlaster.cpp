@@ -1195,7 +1195,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2(BBNodeVec& sum,
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::BBSub(BBNodeVec& result,
                                                const BBNodeVec& y,
-                                               BBNodeSet& support)
+                                               BBNodeSet& /*support*/)
 {
   BBNodeVec compsubtrahend = BBNeg(y);
   BBPlus2(result, compsubtrahend, nf->getTrue());
