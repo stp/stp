@@ -414,14 +414,6 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
   return output;
 }
 
-ASTNode Simplifier::SimplifyForFormula(const ASTNode& a, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
-{
-  // FIXME: Code this up properly later. Mainly pushing the negation
-  // down
-  return a;
-}
-
 ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
                                           ASTNodeMap* VarConstMap)
 {

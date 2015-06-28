@@ -202,9 +202,6 @@ public:
   ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg,
                              ASTNodeMap* VarConstMap = NULL);
 
-  ASTNode SimplifyForFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
-
   ASTNode CombineLikeTerms(const ASTNode& a);
   ASTNode CombineLikeTerms(const ASTVec& a);
 
