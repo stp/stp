@@ -2324,7 +2324,7 @@ bool c_matchNode(const ASTNode& n0, const ASTNode& n1,
   ASTNode vNode_copy = vNode;
   ASTNode wNode_copy = wNode;
 
-  const int init_comm_size = commutative_to_check.size();
+  const size_t init_comm_size = commutative_to_check.size();
 
   bool r = commutative_matchNode(n0, n1, term_variable_width,
                                  commutative_to_check, vNode, wNode);
