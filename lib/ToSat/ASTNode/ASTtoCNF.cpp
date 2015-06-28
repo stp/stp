@@ -263,7 +263,7 @@ ClauseList* ASTtoCNF::SINGLETON(const ASTNode& varphi)
 
 // prep. for cnf conversion
 
-void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild)
+void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
 {
   CNFInfo* x;
   Kind k = varphi.GetKind();
@@ -323,11 +323,11 @@ void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild)
     {
       if (onChildDoPos(varphi, i))
       {
-        scanFormula(varphi[i], isPos, k == XOR);
+        scanFormula(varphi[i], isPos);
       }
       if (onChildDoNeg(varphi, i))
       {
-        scanFormula(varphi[i], !isPos, false);
+        scanFormula(varphi[i], !isPos);
       }
     }
   }
@@ -371,8 +371,8 @@ void ASTtoCNF::scanTerm(const ASTNode& varphi)
   }
   else if (varphi.isITE())
   {
-    scanFormula(varphi[0], true, false);
-    scanFormula(varphi[0], false, false);
+    scanFormula(varphi[0], true);
+    scanFormula(varphi[0], false);
     scanTerm(varphi[1]);
     scanTerm(varphi[2]);
   }
@@ -1537,7 +1537,7 @@ ASTtoCNF::~ASTtoCNF()
 ClauseList* ASTtoCNF::convertToCNF(const ASTNode& varphi)
 {
   bm->GetRunTimes()->start(RunTimes::CNFConversion);
-  scanFormula(varphi, true, false);
+  scanFormula(varphi, true);
   ClauseList* defs = SINGLETON(dummy_true_var);
   convertFormulaToCNF(varphi, defs);
   ClauseList* top = info[varphi]->clausespos;

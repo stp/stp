@@ -143,7 +143,7 @@ private:
   //########################################
   // prep. for cnf conversion
 
-  void scanFormula(const ASTNode& varphi, bool isPos, bool isXorChild);
+  void scanFormula(const ASTNode& varphi, bool isPos);
 
   void scanTerm(const ASTNode& varphi);
 
