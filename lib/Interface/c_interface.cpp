@@ -593,9 +593,6 @@ Expr vc_getCounterExample(VC vc, Expr e)
   nodestar a = (nodestar)e;
   ctrexamplestar ce = (ctrexamplestar)(((stpstar)vc)->Ctr_Example);
 
-  bool t = false;
-  if (ce->CounterExampleSize())
-    t = true;
   nodestar output = new node(ce->GetCounterExample(*a));
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;
