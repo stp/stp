@@ -43,10 +43,6 @@ class Simplifier // not copyable
   friend class counterexample;
 
 private:
-  /****************************************************************
-   * Private Data and TypeDefs                                    *
-   ****************************************************************/
-
   // Handy defs
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
