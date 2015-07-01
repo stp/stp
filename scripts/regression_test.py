@@ -35,6 +35,7 @@ import optparse
 maxTime = 200
 maxTimeDiff = 20
 
+
 class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
         if description:
@@ -65,9 +66,8 @@ parser.add_option("--extraopts", "-e", metavar="OPTS", dest="extra_options",
                   default="",
                   help="Extra options to give to STP")
 
-parser.add_option("-f", "--fuzz", dest="fuzz_test",
-                  default=False, action="store_true",
-                  help="Fuzz-test")
+parser.add_option("-n", "--num", dest="num_todo", type=int,
+                  help="How many fuzzings to do")
 
 (options, args) = parser.parse_args()
 
@@ -306,26 +306,30 @@ class Tester:
         fuzzers = [["fuzzsmt", "./fuzzsmt QF_ABV"]]
 
         directory = "../../"
-        while True:
-            for fuzzer in fuzzers:
-                file_name = unique_fuzz_file("fuzzTest");
+        for fuzzer in fuzzers:
+            file_name = unique_fuzz_file("fuzzTest");
 
-                #create the fuzz file
-                call = self.callFromFuzzer(directory, fuzzer, file_name)
-                print "calling ", fuzzer, " : ", call
-                out = commands.getstatusoutput(call)
+            #create the fuzz file
+            call = self.callFromFuzzer(directory, fuzzer, file_name)
+            print "calling ", fuzzer, " : ", call
+            out = commands.getstatusoutput(call)
 
-                #check file
-                self.check(fname=file_name, needToLimitTime=True)
+            #check file
+            self.check(fname=file_name, needToLimitTime=True)
 
-                #remove temporary filenames
-                os.unlink(file_name)
+            #remove temporary filenames
+            os.unlink(file_name)
 
 tester = Tester()
 
-if options.fuzz_test:
-    tester.check_unsat = True
-    tester.fuzz_test()
-else:
-    print "Please pass '--help' to see all the options. By default, the script does nothing"
 
+tester.check_unsat = True
+if options.num_todo:
+    for _ in xrange(options.num_todo):
+        tester.fuzz_test()
+
+else:
+    while(True):
+        tester.fuzz_test()
+
+exit(0)
