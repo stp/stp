@@ -1971,6 +1971,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       output = inputterm;
       break;
+
     case BVMULT:
     // follow on.
     case BVPLUS:
@@ -2123,6 +2124,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       break;
     }
+
     case BVSUB:
     {
       assert(inputterm.Degree() == 2);
@@ -2142,6 +2144,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       break;
     }
+
     case BVUMINUS:
     {
       // important to treat BVUMINUS as a special case, because it
@@ -2259,6 +2262,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       break;
     }
+
     case BVEXTRACT:
     {
       // it is important to take care of wordlevel transformation in
@@ -2452,6 +2456,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       break;
     }
+
     case BVNEG:
     {
       const ASTNode& a0 = inputterm[0];
@@ -2591,6 +2596,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
       break;
     }
+
     case BVZX:
     {
       // a0 is the expr which is being zero-extended
@@ -2602,6 +2608,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         output = inputterm;
       break;
     }
+
     case BVAND:
     case BVOR:
     {
@@ -2848,7 +2855,6 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 
     case BVLEFTSHIFT:
     case BVRIGHTSHIFT:
-
     { // If the shift amount is known. Then replace it by an extract.
       const ASTNode a = inputterm[0];
       const ASTNode b = inputterm[1];
@@ -2862,10 +2868,11 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       {
         output = _bm->CreateZeroConst(width);
       }
-      else
+      else {
         output = inputterm;
+      }
+      break;
     }
-    break;
 
     case BVDIV:
     {
@@ -2909,12 +2916,14 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 
       ASTNode lessThan = SimplifyFormula(
           nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-      if (lessThan == ASTTrue)
+      if (lessThan == ASTTrue) {
         output = _bm->CreateZeroConst(inputValueWidth);
-      else
+      } else {
         output = inputterm;
+      }
+      break;
     }
-    break;
+
     case BVMOD:
     {
       if (inputterm[0] == inputterm[1])
@@ -2960,12 +2969,15 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       ASTNode lessThan = SimplifyFormula(
           nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
 
-      if (lessThan == ASTTrue)
+      if (lessThan == ASTTrue) {
         output = inputterm[0];
+      }
       else
+      {
         output = inputterm;
+      }
+      break;
     }
-    break;
 
     case BVXOR:
     {
@@ -2996,6 +3008,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
 
       output = inputterm;
       break;
+
     case BVXNOR:
     case BVNAND:
     case BVNOR:
@@ -3005,6 +3018,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       output = inputterm;
       break;
     }
+
     case READ:
     {
       ASTNode out1;
@@ -3071,12 +3085,14 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         output = out1;
       break;
     }
+
     case ITE:
     {
       output =
           CreateSimplifiedTermITE(inputterm[0], inputterm[1], inputterm[2]);
       break;
     }
+
     case SBVREM:
     case SBVMOD:
     {
@@ -3089,6 +3105,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       output = inputterm;
       break;
     }
+
     case SBVDIV:
     {
       output = inputterm;

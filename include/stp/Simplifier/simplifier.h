@@ -81,9 +81,6 @@ public:
   static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children,
                                          STPMgr& bm, NodeFactory* nf);
 
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
   Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(this, bm)
   {
     SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
@@ -103,10 +100,6 @@ public:
     delete SimplifyNegMap;
     // delete ReadOverWrite_NewName_Map;
   }
-
-  /****************************************************************
-   * Functions to check and update various Maps                   *
-   ****************************************************************/
 
   // Check the map passed to SimplifyTerm
   bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
@@ -224,18 +217,7 @@ public:
 
   ASTNode SimplifyArrayTerm(const ASTNode& term, ASTNodeMap* VarConstMap);
 
-  // ASTNode ReadOverWrite_To_ITE(const ASTNode& term,
-  //                              ASTNodeMap* VarConstMap=NULL);
-
   void printCacheStatus();
-
-#if 0
-    //FIXME: Get rid of this horrible function
-    const ASTNodeMap * ReadOverWriteMap()
-    {
-      return ReadOverWrite_NewName_Map;
-    } 
-#endif
 
   bool hasUnappliedSubstitutions()
   {
