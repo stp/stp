@@ -45,7 +45,7 @@ before_install:
   - sudo apt-get update
 
 install:
-  - sudo apt-get install
+  - sudo apt-get install -y
   - sudo apt-get install -y cmake git zlib1g-dev
 #
 # get and install minisat
