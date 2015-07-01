@@ -84,10 +84,10 @@ script:
 #
 # get fuzzsmt
   - sudo apt-get install -y default-jre
-  - git clone --depth 1 https://github.com/fuzzsmt/fuzzsmt.git
+  - git clone --depth 1 https://github.com/msoos/fuzzsmt.git
 #
 # get boolector
-  - git clone --depth 1 https://github.com/boolector/boolector.git
+  - git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
   - cd boolector
   - ./configure
   - make
