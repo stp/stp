@@ -81,4 +81,20 @@ script:
   #- make VERBOSE=1
   #- ./stp-example
 
+#
+# get fuzzsmt
+  - sudo apt-get install -y default-jre
+  - git clone --depth 1 https://github.com/fuzzsmt/fuzzsmt.git
+#
+# get boolector
+  - git clone --depth 1 https://github.com/boolector/boolector.git
+  - cd boolector
+  - ./configure
+  - make
+  - sudo cp boolector /usr/bin/
+  - cd ..
+#
+#fuzz
+  - cd stp/scripts/
+  - ./fuzz_test.py -n 20
 
