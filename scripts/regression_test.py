@@ -107,16 +107,16 @@ class Tester:
 
         #output options
         #--output-CNF --output-bench --exit-after-CNF
-        opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp"
-                , "--disable-equality"
-                , "--oldstyle-refinement", "-r"]
+        opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp",
+                "--disable-equality",
+                "--oldstyle-refinement", "-r"]
 
         for opt in opts:
-            if random.randint(0,1) == 0 :
+            if random.randint(0,1) == 0:
                 cmd += opt + " "
 
-        choose_solver = ["", "--cryptominisat" , "--simplifying-minisat", "--minisat", "--cryptominisat4"]
-        cmd += random.choice(choose_solver) + " ";
+        choose_solver = ["", "--simplifying-minisat", "--minisat"]
+        cmd += random.choice(choose_solver) + " "
 
         #if random.randint(0,1) == 1 :
         #    cmd += "-i %d " % random.randint(0,1000)
@@ -146,11 +146,10 @@ class Tester:
             print "CPU limit of parent (pid %d)" % os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)
 
         #if need time limit, then limit
-        if (needToLimitTime) :
+        if needToLimitTime:
             p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
         else:
             p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE)
-
 
         #print time limit after child startup
         if options.verbose:
@@ -172,7 +171,6 @@ class Tester:
             print "Error code 500"
             exit(500)
 
-
         #solution will be put here
         satunsatfound = False
         vlinefound = False
@@ -182,18 +180,18 @@ class Tester:
         for line in output_lines:
             #skip comment
             if (re.match('^c ', line)):
-                continue;
+                continue
 
             #solution
             if (re.match('^sat', line)):
                 unsat = False
                 satunsatfound = True
-                continue;
+                continue
 
             if (re.match('^unsat', line)):
                 unsat = True
                 satunsatfound = True
-                continue;
+                continue
 
             #parse in solution
             if (re.match('^ASSERT', line)):
@@ -209,7 +207,7 @@ class Tester:
 
         return (unsat, value)
 
-    def checkUNSAT(self, fname) :
+    def checkUNSAT(self, fname):
         #execute with the other solver
         toexec = "%s %s" % (options.checker, fname)
         print "Solving with other solver.. '%s'" % toexec
@@ -232,7 +230,6 @@ class Tester:
         return otherSolverUNSAT
 
     def check(self, fname, fnameSolution=None, needSolve=True, needToLimitTime=False):
-
         currTime = time.time()
 
         #Do we need to solve the problem, or is it already solved?
@@ -267,17 +264,17 @@ class Tester:
             #self.test_found_solution(value, fname)
 
             ret = self.checkUNSAT(fname)
-            if ret == None :
+            if ret is None :
                 print "Other solver time-outed, cannot check"
-            elif ret == False:
+            elif ret is False:
                 print "SAT verified by other solver"
-            else :
+            else:
                 print "Grave bug: UNSAT-> SAT : Other solver didn't find a solution!!"
                 exit()
-            return;
+            return
 
         #it's UNSAT and we should not check, so exit
-        if self.check_unsat == False:
+        if self.check_unsat is False:
             print "Cannot check -- output is UNSAT"
             return
 
@@ -292,23 +289,25 @@ class Tester:
             exit()
 
     def callFromFuzzer(self, directory, fuzzer, file_name) :
-        if (len(fuzzer) == 2) :
-            call = "sh -c \"cd {0}/{1} && {2} > {3}/{4}\"".format(directory, fuzzer[0], fuzzer[1], os.getcwd(), file_name)
-        elif(len(fuzzer) == 3) :
+        if (len(fuzzer) == 2):
+            call = "sh -c \"cd {0}/{1} && {2} > {3}/{4}\""
+            call = call.format(directory,fuzzer[0], fuzzer[1], os.getcwd(),
+                               file_name)
+
+        elif(len(fuzzer) == 3):
             seed = struct.unpack("<L", os.urandom(4))[0]
             hashbits = (random.getrandbits(20) % 79) + 1
-            call = "%s %s %d %s %d > %s" % (fuzzer[0], fuzzer[1], hashbits, fuzzer[2], seed, file_name)
+            call = "%s %s %d %s %d > %s" % (fuzzer[0], fuzzer[1], hashbits,
+                                            fuzzer[2], seed, file_name)
 
         return call
 
-    def fuzz_test(self) :
-        fuzzers = [
-            ["fuzzsmt", "./fuzzsmt  QF_ABV"] \
-        ]
+    def fuzz_test(self):
+        fuzzers = [["fuzzsmt", "./fuzzsmt QF_ABV"]]
 
-        directory = "../.."
+        directory = "../../fuzzsmt/"
         while True:
-            for fuzzer in fuzzers :
+            for fuzzer in fuzzers:
                 file_name = unique_fuzz_file("fuzzTest");
 
                 #create the fuzz file
