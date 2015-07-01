@@ -50,30 +50,24 @@ desc = """Example usages:
 """
 
 parser = optparse.OptionParser(usage=usage, description=desc, formatter=PlainHelpFormatter())
-parser.add_option("--exec", metavar= "SOLVER", dest="solver"
-                    , default="../build/stp"
-                    , help="STP executable. Default: %default"
-                    )
-parser.add_option("--check", metavar= "CHECKER", dest="checker"
-                    , default="../../boolector/boolector"
-                    , help="Boolector executable. Default: %default"
-                    )
+parser.add_option("--exec", metavar="SOLVER", dest="solver",
+                  default="../build/stp",
+                  help="STP executable. Default: %default")
+parser.add_option("--check", metavar="CHECKER", dest="checker",
+                  default="boolector",
+                  help="Boolector executable. Default: %default")
 
-parser.add_option("--verbose", "-v", action="store_true"
-                    , default=False, dest="verbose"
-                    , help="Print more output"
-                    )
+parser.add_option("--verbose", "-v", action="store_true",
+                  default=False, dest="verbose",
+                  help="Print more output")
 
-parser.add_option("--extraopts", "-e", metavar= "OPTS", dest="extra_options"
-                    , default=""
-                    , help="Extra options to give to STP"
-                    )
+parser.add_option("--extraopts", "-e", metavar="OPTS", dest="extra_options",
+                  default="",
+                  help="Extra options to give to STP")
 
-#for fuzz-testing
-parser.add_option("-f", "--fuzz", dest="fuzz_test"
-                    , default=False, action="store_true"
-                    , help="Fuzz-test"
-                    )
+parser.add_option("-f", "--fuzz", dest="fuzz_test",
+                  default=False, action="store_true",
+                  help="Fuzz-test")
 
 (options, args) = parser.parse_args()
 
@@ -81,6 +75,7 @@ parser.add_option("-f", "--fuzz", dest="fuzz_test"
 def setlimits():
     #sys.stdout.write("Setting resource limit in child (pid %d): %d s\n" % (os.getpid(), maxTime))
     resource.setrlimit(resource.RLIMIT_CPU, (maxTime, maxTime))
+
 
 def unique_fuzz_file(file_name_begin):
     counter = 1
@@ -94,9 +89,10 @@ def unique_fuzz_file(file_name_begin):
             pass
         counter += 1
 
+
 class Tester:
 
-    def random_options(self) :
+    def random_options(self):
         cmd = " "
         #opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
 
@@ -234,7 +230,6 @@ class Tester:
 
         #check if the other solver agrees with us
         return otherSolverUNSAT
-
 
     def check(self, fname, fnameSolution=None, needSolve=True, needToLimitTime=False):
 
