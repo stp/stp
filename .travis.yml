@@ -50,7 +50,7 @@ install:
 #
 # get and install minisat
   - mkdir minisat_git && cd minisat_git
-  - git clone https://github.com/stp/minisat
+  - git clone --depth 1 https://github.com/stp/minisat
   - cd minisat
   - mkdir build && cd build
   - cmake ..
