@@ -305,7 +305,7 @@ class Tester:
     def fuzz_test(self):
         fuzzers = [["fuzzsmt", "./fuzzsmt QF_ABV"]]
 
-        directory = "../../fuzzsmt/"
+        directory = "../../"
         while True:
             for fuzzer in fuzzers:
                 file_name = unique_fuzz_file("fuzzTest");
