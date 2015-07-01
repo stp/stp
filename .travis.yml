@@ -88,7 +88,7 @@ script:
 #
 # get boolector
   - git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
-  - cd boolector
+  - cd boolector-1.5.118
   - ./configure
   - make
   - sudo cp boolector /usr/bin/
