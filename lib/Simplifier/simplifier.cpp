@@ -1955,11 +1955,54 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
     }
   }
 
+  ASTNode ret = simplify_term_switch(actualInputterm, inputterm,
+                                     output, VarConstMap, k,
+                                     inputValueWidth);
+  if (ret != ASTUndefined) {
+    return ret;
+  }
+  assert(!output.IsNull());
+
+  if (inputterm != output)
+    output = SimplifyTerm(output);
+  // memoize
+  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
+  UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
+
+  // cerr << "SimplifyTerm: output" << output << endl;
+
+  assert(!output.IsNull());
+  assert(inputterm.GetValueWidth() == output.GetValueWidth());
+  assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
+  assert(hasBeenSimplified(output));
+
+#ifndef NDEBUG
+  for (size_t i = 0; i < output.Degree(); i++)
+  {
+    if (output[i].GetType() != ARRAY_TYPE)
+      if (!hasBeenSimplified(output[i]))
+      {
+        std::cerr << output;
+        std::cerr << i;
+        assert(false);
+      }
+  }
+#endif
+
+  return output;
+}
+
+ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
+                                         ASTNode& inputterm, ASTNode& output,
+                                         ASTNodeMap* VarConstMap, Kind k,
+                                         const unsigned int inputValueWidth)
+{
   switch (k)
   {
     case BVCONST:
       output = inputterm;
       break;
+
     case SYMBOL:
       if (CheckMap(VarConstMap, inputterm, output))
       {
@@ -3125,38 +3168,12 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
     default:
       FatalError("SimplifyTerm: Control should never reach here:", inputterm,
                  k);
-      return inputterm;
+      assert(false);
+      exit(-1);
       break;
   }
-  assert(!output.IsNull());
 
-  if (inputterm != output)
-    output = SimplifyTerm(output);
-  // memoize
-  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
-  UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
-
-  // cerr << "SimplifyTerm: output" << output << endl;
-
-  assert(!output.IsNull());
-  assert(inputterm.GetValueWidth() == output.GetValueWidth());
-  assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
-  assert(hasBeenSimplified(output));
-
-#ifndef NDEBUG
-  for (size_t i = 0; i < output.Degree(); i++)
-  {
-    if (output[i].GetType() != ARRAY_TYPE)
-      if (!hasBeenSimplified(output[i]))
-      {
-        std::cout << output;
-        std::cout << i;
-        assert(hasBeenSimplified(output[i]));
-      }
-  }
-#endif
-
-  return output;
+  return ASTUndefined;
 }
 
 // this function assumes that the input is a vector of childnodes of

@@ -74,6 +74,11 @@ private:
 
   ASTNode pullUpBVSX(const ASTNode output);
 
+  ASTNode simplify_term_switch(const ASTNode& actualInputterm,
+                               ASTNode& inputterm, ASTNode& output,
+                               ASTNodeMap* VarConstMap, Kind k,
+                               const unsigned int inputValueWidth);
+
 public:
   static ASTNode convertArithmeticKnownShiftAmount(const Kind k,
                                                    const ASTVec& children,
