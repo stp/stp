@@ -18,6 +18,18 @@ env:
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
 
+matrix:
+  include:
+    # Covertiy scan should only run once
+    - os: linux
+      compiler: gcc
+      env: COVERITY_SCAN=1 STP_CONFIG=DYNAMIC_LIB
+
+  allow_failures:
+    # Covertiy scan might fail
+    - env: COVERITY_SCAN=1 STP_CONFIG=DYNAMIC_LIB
+
+
 addons:
   coverity_scan:
     project:
@@ -35,6 +47,7 @@ before_install:
 install:
   - sudo apt-get install
   - sudo apt-get install -y cmake git zlib1g-dev
+#
 # get and install minisat
   - mkdir minisat_git && cd minisat_git
   - git clone https://github.com/stp/minisat
@@ -44,24 +57,25 @@ install:
   - make
   - sudo make install
   - cd ../../..
+#
 # get LIT from pip
   - sudo pip install lit
+#
 # Initialise our submodules
   - git submodule init
   - git submodule update
+#
 #set up build environment
   - mkdir build && cd build
 
 script:
-  - mkdir simple_example
-  - mkdir stp && cd stp
-
-  - ../../scripts/travis-cmake.sh ../../
+  - ../scripts/travis-cmake.sh ../
   - make VERBOSE=1
   - make check
 
 # Build example project. We assume that the build installed itself to the CMake
-  - cd ../simple_example
+  - mkdir simple_example
+  - cd simple_example
   - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
   - make VERBOSE=1
   - ./stp-example
