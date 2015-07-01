@@ -72,6 +72,7 @@ script:
   - ../scripts/travis-cmake.sh ../
   - make VERBOSE=1
   - make check
+  - cd ../..
 
 # Build example project. We assume that the build installed itself to the CMake
   #- mkdir simple_example
