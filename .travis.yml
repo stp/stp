@@ -74,9 +74,10 @@ script:
   - make check
 
 # Build example project. We assume that the build installed itself to the CMake
-  - mkdir simple_example
-  - cd simple_example
-  - cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
-  - make VERBOSE=1
-  - ./stp-example
+  #- mkdir simple_example
+  #- cd simple_example
+  #- cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
+  #- make VERBOSE=1
+  #- ./stp-example
+
 
