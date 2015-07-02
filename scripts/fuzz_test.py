@@ -280,11 +280,11 @@ class Tester:
 
         #check with other solver
         ret = self.checkUNSAT(fname)
-        if ret == None :
+        if ret is None:
             print "Other solver time-outed, cannot check"
-        elif ret == True:
+        elif ret is True:
             print "UNSAT verified by other solver"
-        else :
+        else:
             print "Grave bug: SAT-> UNSAT : Other solver found solution!!"
             exit()
 
