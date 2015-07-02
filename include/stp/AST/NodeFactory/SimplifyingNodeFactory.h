@@ -56,7 +56,21 @@ using stp::ASTVec;
 class SimplifyingNodeFactory : public NodeFactory
 {
 
+public:
+  virtual stp::ASTNode CreateNode(stp::Kind kind,
+                                   const stp::ASTVec& children);
+  virtual stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                                   const stp::ASTVec& children);
+
+  virtual std::string getName() { return "simplifying"; }
+
+  SimplifyingNodeFactory(NodeFactory& raw_, stp::STPMgr& bm_)
+      : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
+        ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
+  ~SimplifyingNodeFactory() {}
+
 private:
+  SimplifyingNodeFactory(const SimplifyingNodeFactory&);
   NodeFactory& hashing;
 
   const ASTNode& ASTTrue;
@@ -77,7 +91,6 @@ private:
 
   ASTNode CreateSimpleEQ(const ASTVec& children);
 
-  SimplifyingNodeFactory(const SimplifyingNodeFactory&);
   SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&);
 
   ASTNode chaseRead(const ASTVec& children, unsigned int width);
@@ -95,19 +108,6 @@ private:
     ASTNode& result
   );
   ASTNode create_gt_node(const ASTVec& children);
-
-public:
-  virtual stp::ASTNode CreateNode(stp::Kind kind,
-                                   const stp::ASTVec& children);
-  virtual stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                                   const stp::ASTVec& children);
-
-  virtual std::string getName() { return "simplifying"; }
-
-  SimplifyingNodeFactory(NodeFactory& raw_, stp::STPMgr& bm_)
-      : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
-        ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
-  ~SimplifyingNodeFactory() {}
 };
 
 #endif
