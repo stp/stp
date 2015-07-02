@@ -288,10 +288,10 @@ class Tester:
             print "Grave bug: SAT-> UNSAT : Other solver found solution!!"
             exit()
 
-    def callFromFuzzer(self, directory, fuzzer, file_name) :
+    def callFromFuzzer(self, directory, fuzzer, file_name):
         if (len(fuzzer) == 2):
             call = "sh -c \"cd {0}/{1} && {2} > {3}/{4}\""
-            call = call.format(directory,fuzzer[0], fuzzer[1], os.getcwd(),
+            call = call.format(directory, fuzzer[0], fuzzer[1], os.getcwd(),
                                file_name)
 
         elif(len(fuzzer) == 3):
@@ -307,7 +307,7 @@ class Tester:
 
         directory = "../../"
         for fuzzer in fuzzers:
-            file_name = unique_fuzz_file("fuzzTest");
+            file_name = unique_fuzz_file("fuzzTest")
 
             #create the fuzz file
             call = self.callFromFuzzer(directory, fuzzer, file_name)
