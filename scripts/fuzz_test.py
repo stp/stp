@@ -124,7 +124,7 @@ class Tester:
         return cmd
 
     def execute(self, fname, needToLimitTime=False):
-        if os.path.isfile(options.solver) != True:
+        if os.path.isfile(options.solver) is not True:
             print "Error: Cannot find STP executable. Searched in: '%s'" % \
                 options.solver
             print "Error code 300"
