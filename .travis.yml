@@ -104,5 +104,5 @@ script:
 #
 #fuzz
   - cd stp/scripts/
-  - ./fuzz_test.py -n 20
+  - if [ "$STP_CONFIG" != "NO_BOOST" ]; then ./fuzz_test.py -n 20; fi
 
