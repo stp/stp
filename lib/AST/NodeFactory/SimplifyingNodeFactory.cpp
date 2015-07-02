@@ -324,8 +324,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
     }
     case stp::NOT:
     {
+      // NOT NOT cancellation
       return form[0];
-    } // NOT NOT cancellation
+    }
     default:
     {
       ASTVec children;
@@ -350,8 +351,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTVec& children)
     }
     case stp::NOT:
     {
+      // NOT NOT cancellation
       return children[0][0];
-    } // NOT NOT cancellation
+    }
     default:
     {
       return hashing.CreateNode(stp::NOT, children);
