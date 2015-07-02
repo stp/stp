@@ -24,7 +24,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 /* A node factory that:
- * 	    * Sorts children to increases sharing,
+ *	    * Sorts children to increases sharing,
  *	    * Performs constant evaluation,
  *	    * performs simplify boolean simplifications,
  *	    * converts less thans to greater thans.
@@ -35,7 +35,7 @@ THE SOFTWARE.
  *
  * The intention is to never create nodes that will later be simplified by
  * single level re-write rules. So we will never create the node (NOT(NOT x))
- * This is and example of a multi-level rule that never increases the global
+ * This is an example of a multi-level rule that never increases the global
  * number of nodes.
  *
  * These rules never increase the total number of nodes.  They are complimented
