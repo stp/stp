@@ -38,10 +38,20 @@ THE SOFTWARE.
  * This is an example of a multi-level rule that never increases the global
  * number of nodes.
  *
- * These rules never increase the total number of nodes.  They are complimented
+ * BUG: below are two different, contradictory claims.
+ * 1) These rules never increase the total number of nodes.  They are complimented
  * by multi-level re-write rules that consider the global reference count when
  * simplifying.
  *
+ * 2) These rules (mostly) don't increase the total number of nodes by more than
+ * one.
+ *
+ * Sometimes the number of nodes is increased. e.g. creating BVSLT(x,y), will
+ * create NOT(BVGT(y,x)). i.e. it will create an extra node.
+ *
+ * I think we've got all the two input cases that either map to a constant, or
+ * to an input value. e.g.
+ * (a >> a), (a xor a), (a or a), (a and a), (a + 0), (a-0)..
  */
 
 #ifndef SIMPLIFYINGNODEFACTORY_H

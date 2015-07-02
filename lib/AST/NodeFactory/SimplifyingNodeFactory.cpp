@@ -22,33 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-/* A node factory that:
- * 	    * Sorts children to increases sharing,
- *	    * Performs constant evaluation,
- *	    * performs simplify boolean simplifications,
- *	    * converts less thans to greater thans.
- *
- * NOTE: CreateNode doesn't necessary return a node with the same Kind as what
- * it was called with. For example: (AND TRUE FALSE) will return FALSE. Which
- * isn't an AND node.
- *
- * The intention is to never create nodes that will later be simplified by
- * single level re-write rules. So we will never create the node (NOT(NOT x)).
- * This is and example of a multi-level rule that never increases the global
- * number of nodes.
- *
- * These rules (mostly) don't increase the total number of nodes by more than
- * one.
- *
- * Sometimes the number of nodes is increased. e.g. creating BVSLT(x,y), will
- * create NOT(BVGT(y,x)). i.e. it will create an extra node.
- *
- * I think we've got all the two input cases that either map to a constant, or
- * to an input value. e.g.
- * (a >> a), (a xor a), (a or a), (a and a), (a + 0), (a-0)..
- *
- */
-
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/simplifier.h"
