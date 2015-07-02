@@ -86,6 +86,14 @@ script:
   - sudo apt-get install -y default-jre
   - git clone --depth 1 https://github.com/msoos/fuzzsmt.git
 #
+#lingeling
+  - git clone https://github.com/msoos/lingeling-ala lingeling
+  - cd lingeling
+  - ./configure
+  - make
+  - sudo cp lingeling /usr/bin/
+  - cd ..
+#
 # get boolector
   - git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
   - cd boolector-1.5.118
