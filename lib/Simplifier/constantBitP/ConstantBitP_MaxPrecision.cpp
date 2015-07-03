@@ -129,7 +129,7 @@ void concretise(const ASTNode& variable, const FixedBits& fixed, ASTVec& list,
 
 // Concretisation function. Gamma.
 void concretise(const ASTNode& variable, const FixedBits& fixed,
-                SATSolver::vec_literals& satSolverClause, STPMgr* beev,
+                SATSolver::vec_literals& satSolverClause, STPMgr* /*beev*/,
                 ToSATBase::ASTNodeToSATVar& map)
 {
   if (BOOLEAN_TYPE == variable.GetType())

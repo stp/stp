@@ -231,8 +231,6 @@ simplifier::constantBitP::Result multiply(vector<FixedBits*>& children,
 void run_with_various_prob(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
                            ostream& output, Kind kind = stp::UNDEFINED)
 {
-  int prob;
-
   runSimple(transfer, 1, cerr, kind);
   runSimple(transfer, 5, cerr, kind);
   runSimple(transfer, 50, cerr, kind);
