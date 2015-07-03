@@ -1121,7 +1121,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   assert(bm.hashingNodeFactory == &hashing);
 
   // If all the parameters are constant, return the constant value.
-  if (children_all_constants(children)) {
+  if (children_all_constants(children))
+  {
     const ASTNode& hash = hashing.CreateTerm(kind, width, children);
     const ASTNode& c = NonMemberBVConstEvaluator(hash);
     assert(c.isConstant());
