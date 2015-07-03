@@ -236,13 +236,13 @@ class Tester:
         if needSolve:
             consoleOutput = self.execute(fname, needToLimitTime)
         else:
-            if not os.path.isfile(fnameSolution) :
+            if not os.path.isfile(fnameSolution):
                 print "ERROR! Solution file '%s' is not a file!" % fnameSolution
                 exit(-1)
             f = open(fnameSolution, "r")
             consoleOutput = f.read()
             f.close()
-            print "Read solution from file " , fnameSolution
+            print "Read solution from file ", fnameSolution
 
         #if time was limited, we need to know if we were over the time limit
         #and that is why there is no solution
@@ -288,18 +288,12 @@ class Tester:
             print "Grave bug: SAT-> UNSAT : Other solver found solution!!"
             exit()
 
-    def callFromFuzzer(self, directory, fuzzer, file_name):
-        if (len(fuzzer) == 2):
-            call = "sh -c \"cd {0}/{1} && {2} > {3}/{4}\""
-            call = call.format(directory, fuzzer[0], fuzzer[1], os.getcwd(),
-                               file_name)
-
-        elif(len(fuzzer) == 3):
-            seed = struct.unpack("<L", os.urandom(4))[0]
-            hashbits = (random.getrandbits(20) % 79) + 1
-            call = "%s %s %d %s %d > %s" % (fuzzer[0], fuzzer[1], hashbits,
-                                            fuzzer[2], seed, file_name)
-
+    def callFromFuzzer(self, base_dir, fuzzer, file_name):
+        seed = struct.unpack("<L", os.urandom(4))[0]
+        seed %= 10000000
+        call = "sh -c \"cd {0}/{1} && {2} -seed {5} > {3}/{4}\""
+        call = call.format(base_dir, fuzzer[0], fuzzer[1], os.getcwd(),
+                           file_name, seed)
         return call
 
     def fuzz_test(self):
