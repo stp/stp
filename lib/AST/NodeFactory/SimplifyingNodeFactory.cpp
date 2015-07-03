@@ -338,6 +338,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
 
 ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTVec& children)
 {
+  assert(children.size() == 1);
   const Kind k = children[0].GetKind();
   switch (k)
   {
