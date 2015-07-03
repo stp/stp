@@ -28,6 +28,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "misc.h"
 #include <signal.h>
+#include <sys/time.h>
+
 using std::endl;
 using std::cout;
 using std::cerr;
