@@ -602,6 +602,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       else
         OutputNode = ASTFalse;
       break;
+
     case BVLT:
       assert(2 == number_of_children);
       if (-1 == CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1))
@@ -609,6 +610,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       else
         OutputNode = ASTFalse;
       break;
+
     case BVLE:
     {
       assert(2 == number_of_children);
@@ -619,6 +621,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         OutputNode = ASTFalse;
       break;
     }
+
     case BVGT:
       assert(2 == number_of_children);
       if (1 == CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1))
@@ -626,16 +629,18 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       else
         OutputNode = ASTFalse;
       break;
+
     case BVGE:
     {
       assert(2 == number_of_children);
-      int comp = CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1);
+      const int comp = CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1);
       if (comp >= 0)
         OutputNode = ASTTrue;
       else
         OutputNode = ASTFalse;
       break;
     }
+
     case BVSLT:
       assert(2 == number_of_children);
       if (-1 == CONSTANTBV::BitVector_Compare(tmp0, tmp1))
@@ -703,15 +708,19 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       ASTNode o = ASTFalse;
       for (ASTVec::const_iterator it = children.begin(), itend = children.end();
            it != itend; it++)
+      {
         if (ASTTrue == (*it))
         {
           o = ASTTrue;
           break;
         }
+      }
+
       if (o == ASTTrue)
         OutputNode = ASTFalse;
       else
         OutputNode = ASTTrue;
+
       break;
     }
 
