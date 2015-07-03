@@ -69,6 +69,9 @@ parser.add_option("--extraopts", "-e", metavar="OPTS", dest="extra_options",
 parser.add_option("-n", "--num", dest="num_todo", type=int,
                   help="How many fuzzings to do")
 
+parser.add_option("--novalgrind", dest="novalgrind", default=False,
+                  action="store_true", help="No valgrind installed")
+
 (options, args) = parser.parse_args()
 
 
@@ -131,7 +134,11 @@ class Tester:
             exit(300)
 
         #construct command
-        command = options.solver
+        command = ""
+        if not options.novalgrind and random.randint(0, 10) == 0:
+            command += "valgrind -q --leak-check=full  --error-exitcode=173 "
+
+        command += options.solver
         command += self.random_options()
         #if options.verbose == False:
         #    command += "--verb 0 "
@@ -161,6 +168,12 @@ class Tester:
         if options.verbose:
             print "CPU limit of parent (pid %d) after child finished executing" % \
                 os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)
+
+        if p.returncode == 173:
+            print "Valgrind is indicating an error!"
+            print err
+            print consoleOutput
+            exit(-1)
 
         return consoleOutput
 
