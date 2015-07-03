@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include "time_mem.h"
 
 class RunTimes // not copyable
 {
@@ -86,16 +85,7 @@ public:
   void stop(Category c);
   void print();
 
-  std::string getDifference()
-  {
-    std::stringstream s;
-    long val = getCurrentTime();
-    s << (val - lastTime) << "ms";
-    lastTime = val;
-    s << ":" << std::fixed << std::setprecision(0)
-      << memUsed() / (1024.0 * 1024.0) << "MB";
-    return s.str();
-  }
+  std::string getDifference();
 
   void resetDifference() { getDifference(); }
 

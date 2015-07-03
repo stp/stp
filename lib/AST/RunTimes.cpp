@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <utility>
 #include "stp/AST/RunTimes.h"
+#include "minisat/utils/System.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
 std::string RunTimes::CategoryNames[] = {
@@ -100,12 +101,24 @@ void RunTimes::print()
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
-  std::cerr << "CPU Time Used   : " << cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << memUsedPeak() / (1024.0 * 1024.0) << "MB"
+  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0) << "MB"
             << std::endl;
 
   clear();
 }
+
+std::string RunTimes::getDifference()
+{
+  std::stringstream s;
+  long val = getCurrentTime();
+  s << (val - lastTime) << "ms";
+  lastTime = val;
+  s << ":" << std::fixed << std::setprecision(0)
+    << Minisat::memUsed() / (1024.0 * 1024.0) << "MB";
+  return s.str();
+}
+
 
 void RunTimes::addTime(Category c, long milliseconds)
 {
