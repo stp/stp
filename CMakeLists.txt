@@ -321,12 +321,14 @@ endif()
 # Find Minisat
 # -----------------------------------------------------------------------------
 find_package(minisat)
+set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
+set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
 if (NOT MINISAT_FOUND)
   message(FATAL_ERROR "You must install minisat from https://github.com/niklasso/minisat")
 else()
-  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
 endif()
-include_directories(${MINISAT_INCLUDE_DIRS})
+include_directories(${MINISAT_INCLUDE_DIR})
 set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
