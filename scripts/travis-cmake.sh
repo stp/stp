@@ -1,4 +1,5 @@
 #!/bin/bash -x
+set -e
 
 # AUTHORS: Dan Liew
 #
@@ -39,6 +40,13 @@ case $STP_CONFIG in
                    -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DBUILD_STATIC_BIN:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+                   ${SOURCE_DIR}
+    ;;
+
+    COVERAGE)
+        eval sudo apt-get install -y libboost-all-dev
+        eval cmake ${COMMON_CMAKE_ARGS} \
+                    -DCOVERAGE:BOOL=ON \
                    ${SOURCE_DIR}
     ;;
 
@@ -102,5 +110,26 @@ case $STP_CONFIG in
         exit 1
 esac
 
-exit $?
+make VERBOSE=1
+make check
 
+# Build example project. We assume that the build installed itself to the CMake
+#- mkdir simple_example
+#- cd simple_example
+#- cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
+#- make VERBOSE=1
+#- ./stp-example
+
+if [ "$STP_CONFIG" = "COVERAGE" ]; then
+  # capture coverage info
+  lcov --directory build/stp/CMakeFiles/temp_lib_norm.dir --capture --output-file coverage.info
+
+  # filter out system and test code
+  lcov --remove coverage.info 'tests/*' '/usr/*' --output-file coverage.info
+
+  # debug before upload
+  lcov --list coverage.info
+  coveralls-lcov --repo-token $COVERTOKEN coverage.info # uploads to coveralls
+fi
+
+exit 0

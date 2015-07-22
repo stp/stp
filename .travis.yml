@@ -7,6 +7,7 @@ env:
     # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
     #   via the "travis encrypt" command using the project repo's public key
     - secure: "bCbWf/B++9y5YDn/ugMKVaV+ZmGCNNtxeWiPFfl7D/xwaj3yjy9yILMkqLcmNNc7rMQruEVx371rn+VURcLIFQtCJ+Uqj4vKdx7kSnhe2oNxKBMViAZU04nLSBB9ZNiH6TKvfqm4eUFprQd6AJ6T0GmB//lC1AgKSKNwSUJBMKc="
+    - secure: "eYyuFa5eNIl/i/hInmCoVZv5pxPrFzLNPIQrMpWZNW6efDsQi/voxLUuTzD6L9HqnUgmLF+kVnGETYUTNMHHaWUqVT8Rhiu10UNBnEmIfZbe/SXKEJsvci0o0KrGgxtKDuCil7tdLF5IEcird/94zocPtCHdH4W8r/NzG0tFtDA="
 
   matrix:
     # These are used by .travis-cmake.sh to set a configuration
@@ -17,6 +18,7 @@ env:
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
+    - STP_CONFIG=COVERAGE
 
 matrix:
   include:
@@ -57,6 +59,12 @@ install:
   - make
   - sudo make install
   - cd ../../..
+#coveralls
+  - sudo pip install cpp-coveralls
+  - wget http://ftp.de.debian.org/debian/pool/main/l/lcov/lcov_1.11.orig.tar.gz
+  - tar xf lcov_1.11.orig.tar.gz
+  - sudo make -C lcov-1.11/ install
+  - gem install coveralls-lcov
 #
 # get LIT from pip
   - sudo pip install lit
@@ -70,16 +78,7 @@ install:
 
 script:
   - ../scripts/travis-cmake.sh ../
-  - make VERBOSE=1
-  - make check
   - cd ../..
-
-# Build example project. We assume that the build installed itself to the CMake
-  #- mkdir simple_example
-  #- cd simple_example
-  #- cmake -G "Unix Makefiles" -DUSE_STP_SHARED_LIBRARY=$( test -f ../stp/lib/libstp.so && echo ON || echo OFF) ../../examples/simple
-  #- make VERBOSE=1
-  #- ./stp-example
 
 #
 # get fuzzsmt

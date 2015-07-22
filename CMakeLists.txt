@@ -184,7 +184,10 @@ if(TUNE_NATIVE)
   add_cxx_flag_if_supported("-mtune=native")
 endif()
 
-
+option(COVERAGE "Build with coverage check" OFF)
+if (COVERAGE)
+    add_cxx_flag("--coverage")
+endif()
 
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
