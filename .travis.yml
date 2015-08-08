@@ -103,5 +103,5 @@ script:
 #
 #fuzz
   - cd stp/scripts/
-  - if [ "$STP_CONFIG" != "NO_BOOST" ]; then ./fuzz_test.py -n 20 --novalgrind; fi
+  - if [ "$STP_CONFIG" != "NO_BOOST" ]  && [ "$STP_CONFIG" != "COVERAGE" ]; then ./fuzz_test.py -n 20 --novalgrind; fi
 
