@@ -122,7 +122,7 @@ make check
 
 if [ "$STP_CONFIG" = "COVERAGE" ]; then
   # capture coverage info
-  lcov --directory build/stp/CMakeFiles/temp_lib_norm.dir --capture --output-file coverage.info
+  lcov --directory stp/CMakeFiles/temp_lib_norm.dir --capture --output-file coverage.info
 
   # filter out system and test code
   lcov --remove coverage.info 'tests/*' '/usr/*' --output-file coverage.info
