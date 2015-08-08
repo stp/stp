@@ -317,7 +317,7 @@ if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
   include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
   set(USE_CRYPTOMINISAT4 ON)
 else()
-  message(WARNING "CryptoMiniSat4 (v4.2 or above) or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat4 (v4.5 or above) or C++11 support not found, not allowing --cryptominisat4 option")
 endif()
 
 # -----------------------------------------------------------------------------
