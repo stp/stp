@@ -66,5 +66,3 @@ add_library(abc OBJECT
     aig/kit/kitSop.c
     aig/kit/kitTruth.c
 )
-
-#add_dependencies(AST ASTKind_header)
