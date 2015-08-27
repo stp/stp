@@ -344,14 +344,15 @@ class Expr(object):
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
 
-    def _2w(self, cb, other):
-        """Wrapper around double-expression with width STP functions."""
+    def _2wo(self, cb, other):
+        """Wrapper around double-expression with width STP functions
+        with swapped operands."""
         other = self._toexpr(other)
         assert isinstance(other, Expr), \
             'Other object must be an Expr instance'
         assert self.width == other.width, 'Width must be equal'
-        expr = cb(self.s.vc, self.width, self.expr, other.expr)
-        return Expr(self.s, self.width, expr)
+        expr = cb(other.s.vc, self.width, other.expr, self.expr)
+        return Expr(other.s, other.width, expr)
 
     def add(self, other):
         return self._2w(_lib.vc_bvPlusExpr, other)
@@ -463,14 +464,20 @@ class Expr(object):
     def shl(self, other):
         return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
 
+    def shlo(self, other):
+        return self._2wo(_lib.vc_bvLeftShiftExprExpr, other)
+
     __lshift__ = shl
-    __rlshift__ = shl
+    __rlshift__ = shlo
 
     def shr(self, other):
         return self._2w(_lib.vc_bvRightShiftExprExpr, other)
 
+    def shro(self, other):
+        return self._2wo(_lib.vc_bvRightShiftExprExpr, other)
+
     __rshift__ = shr
-    __rrshift__ = shr
+    __rrshift__ = shro
 
     def sar(self, other):
         return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
