@@ -4,7 +4,6 @@ import sys
 # Do not edit!
 config.stp_src_root = "@STP_SOURCE_DIR@"
 config.stp_obj_root = "@STP_BINARY_DIR@"
-config.python_executable = "@PYTHON_EXECUTABLE@"
 config.stp_executable = "@STP_EXECUTABLE_PATH@"
 
 # Let the main config do the real work.
