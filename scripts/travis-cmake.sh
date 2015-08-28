@@ -50,6 +50,15 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
+    INTREE)
+        cd ..
+        SOURCE_DIR="."
+        eval sudo apt-get install -y libboost-all-dev
+        eval cmake ${COMMON_CMAKE_ARGS} \
+                   ${SOURCE_DIR}
+
+    ;;
+
     DYNAMIC_LIB)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \

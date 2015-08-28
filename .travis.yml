@@ -19,6 +19,7 @@ env:
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
     - STP_CONFIG=COVERAGE
+    - STP_CONFIG=INTREE
 
 matrix:
   include:
