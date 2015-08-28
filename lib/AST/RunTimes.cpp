@@ -66,7 +66,7 @@ long RunTimes::getCurrentTime()
 
 void RunTimes::print()
 {
-  if (0 != category_stack.size())
+  if (!category_stack.empty())
   {
     std::cerr << "size:" << category_stack.size() << std::endl;
     std::cerr << "top:" << CategoryNames[category_stack.top().first]
