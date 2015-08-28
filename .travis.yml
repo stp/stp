@@ -77,31 +77,5 @@ install:
   - mkdir build && cd build
 
 script:
-  - ../scripts/travis-cmake.sh ../
-  - cd ../..
-
-#
-# get fuzzsmt
-  - sudo apt-get install -y default-jre
-  - git clone --depth 1 https://github.com/msoos/fuzzsmt.git
-#
-#lingeling
-  - git clone https://github.com/msoos/lingeling-ala lingeling
-  - cd lingeling
-  - ./configure
-  - make
-  - sudo cp lingeling /usr/bin/
-  - cd ..
-#
-# get boolector
-  - git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
-  - cd boolector-1.5.118
-  - ./configure
-  - make
-  - sudo cp boolector /usr/bin/
-  - cd ..
-#
-#fuzz
-  - cd stp/scripts/
-  - if [ "$STP_CONFIG" != "NO_BOOST" ]  && [ "$STP_CONFIG" != "COVERAGE" ]; then ./fuzz_test.py -n 20 --novalgrind; fi
+  - ../scripts/travis-cmake.sh
 

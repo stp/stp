@@ -29,7 +29,7 @@ set -e
 # that would create two ways of setting the same thing which doesn't seem like
 # a good idea.
 
-SOURCE_DIR="$1"
+SOURCE_DIR=".."
 COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
@@ -121,15 +121,48 @@ make check
 #- ./stp-example
 
 if [ "$STP_CONFIG" = "COVERAGE" ]; then
-  # capture coverage info
-  lcov --directory stp/CMakeFiles/temp_lib_norm.dir --capture --output-file coverage.info
+    cd ..
 
-  # filter out system and test code
-  lcov --remove coverage.info 'tests/*' '/usr/*' --output-file coverage.info
+    # capture coverage info
+    lcov --directory  build/lib/ --capture --output-file coverage.info
 
-  # debug before upload
-  lcov --list coverage.info
-  coveralls-lcov --repo-token $COVERTOKEN coverage.info # uploads to coveralls
+    # filter out system and test code
+    lcov --remove coverage.info 'tests/*' '/usr/*' --output-file coverage.info
+
+    # debug before upload
+    lcov --list coverage.info
+    coveralls-lcov --repo-token $COVERTOKEN coverage.info # uploads to coveralls
+
+    exit 0
+fi
+
+if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE" ] ; then
+    cd ../..
+
+    #
+    # get fuzzsmt
+    sudo apt-get install -y default-jre
+    git clone --depth 1 https://github.com/msoos/fuzzsmt.git
+
+    #lingeling
+    git clone https://github.com/msoos/lingeling-ala lingeling
+    cd lingeling
+    ./configure
+    make
+    sudo cp lingeling /usr/bin/
+    cd ..
+
+    # get boolector
+    git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
+    cd boolector-1.5.118
+    ./configure
+    make
+    sudo cp boolector /usr/bin/
+    cd ..
+
+    #fuzz
+    cd stp/scripts/
+    ./fuzz_test.py -n 20 --novalgrind; fi
 fi
 
 exit 0
