@@ -35,7 +35,7 @@ __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
 ]
 
-Py3 = sys.version > '3'
+Py3 = sys.version_info >= (3, 0, 0)
 
 if Py3:
     long = int
