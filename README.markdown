@@ -15,6 +15,8 @@ Documentation: https://github.com/stp/stp/wiki
        src="https://scan.coverity.com/projects/861/badge.svg"/>
 </a>
 
+[![Coverage Status](https://coveralls.io/repos/stp/stp/badge.svg?branch=master&service=github)](https://coveralls.io/github/stp/stp?branch=master)
+
 ## Build & Install:
 
 See [the INSTALL file](INSTALL.md)
