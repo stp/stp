@@ -97,7 +97,9 @@ public:
   {
     counts.clear();
     times.clear();
-    category_stack.empty();
+    while (!category_stack.empty()) {
+      category_stack.pop();
+    }
   }
 };
 
