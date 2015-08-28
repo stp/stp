@@ -171,7 +171,7 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE" ] ; then
 
     #fuzz
     cd stp/scripts/
-    ./fuzz_test.py -n 20 --novalgrind; fi
+    ./fuzz_test.py -n 20 --novalgrind
 fi
 
 sudo make install
