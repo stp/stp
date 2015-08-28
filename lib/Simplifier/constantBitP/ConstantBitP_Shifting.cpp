@@ -439,7 +439,7 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   // Then, that bit must be fixed.
   // E.g.  [--] << [0-] == [00]
 
-  bool* candidates = (bool*)alloca(sizeof(bool*) * bitWidth);
+  bool* candidates = (bool*)alloca(sizeof(bool) * bitWidth);
   for (unsigned i = 0; i < bitWidth; i++)
   {
     candidates[i] = !op.isFixed(i);
