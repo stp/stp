@@ -78,5 +78,5 @@ install:
   - mkdir build && cd build
 
 script:
-  - ../scripts/travis-cmake.sh
+  - if [ "$COVERITY_SCAN" != "1" ]; then ../scripts/travis-cmake.sh ; fi
 
