@@ -253,12 +253,7 @@ void FatalError(const char* str, const ASTNode& a, int w)
   {
     vc_error_hdlr(str);
   }
-  else
-  {
-    assert(false);
-  }
-  assert(false);
-  exit(-1);
+  abort();
 }
 
 void FatalError(const char* str)
@@ -267,14 +262,8 @@ void FatalError(const char* str)
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
-    assert(false);
-    exit(-1);
   }
-  else
-  {
-    assert(false);
-    exit(-1);
-  }
+  abort();
 }
 
 void SortByExprNum(ASTVec& v)
