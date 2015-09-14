@@ -41,17 +41,15 @@ $ sudo make install
 $ sudo ldconfig
 ```
 
-## Optional
-
 ### Cryptominisat4
 
-STP uses minisat as its SAT solver by default but it also supports other SAT solvers including Cryptominisat4. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
+STP uses minisat as its SAT solver by default but it also supports other SAT solvers including Cryptominisat4 as an optional extra. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
 
 You can get it from https://github.com/msoos/cryptominisat
 
 ### Testing
 
-STP's testing depends on [GoogleTest][1], [lit][2] and [OutputCheck][3]. To obtain these run
+Testing is optional. STP's testing depends on [GoogleTest][1], [lit][2] and [OutputCheck][3]. To obtain these run
 
 ```
 $ git submodule init
