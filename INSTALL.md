@@ -108,23 +108,9 @@ You can easily tweak the build configuration in several ways
   It is probably best if you **only** configure this way if you are writing
   scripts.
 
-You can also tweak configuration later by running
+You can also tweak configuration later by running `make edit_cache`. Then edit any configuration variables, reconfigure and then regenerate the build system. After configuration you can build by running `make`.
 
-```
-$ make edit_cache
-```
-
-Then edit any configuration variables, reconfigure and then regenerate the
-build system.
-
-After configuration you can build by running
-
-```
-$ make
-```
-
-Remember you can use the `-j<n>` flag to significantly to decrease build
-time by running `<n>` jobs in parallel (e.g. `make -j4`).
+Remember you can use the `-j<n>` flag to significantly to decrease build time by running `<n>` jobs in parallel (e.g. `make -j4`).
 
 ### Testing (optional)
 
