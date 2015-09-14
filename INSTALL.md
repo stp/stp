@@ -66,8 +66,6 @@ $ pip install lit
 
 # Building
 
-## Using Make
-
 ### Quick start
 To build STP make sure you have its dependencies installed then run
 
