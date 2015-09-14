@@ -128,40 +128,14 @@ time by running `<n>` jobs in parallel (e.g. `make -j4`).
 
 ### Testing (optional)
 
-To run the tests (CMake must of been configured to enable testing) run
-
-```
-$ make check
-```
-
-See http://stp.github.io/testing/ for more information on testing.
-
+To run the tests (CMake must of been configured to enable testing) run `make check`. See http://stp.github.io/testing/ for more information on testing.
 
 ### Install (optional)
 
 STP and its library can be used directly from the build directory but it can be installed if desired.
 
 
-To install run
-
-```
-$ make install
-```
-
-and to uninstall run
-
-```
-$ make uninstall
-```
-
-The root of installation is controlled by the ``CMAKE_INSTALL_PREFIX`` variable
-at configure time. Remember you can easily change this at anytime by running
-
-```
-$ make edit_cache
-```
-
-and editing the value of ``CMAKE_INSTALL_PREFIX``.
+To install run `make install` and to uninstall run `make uninstall`. The root of installation is controlled by the ``CMAKE_INSTALL_PREFIX`` variable at configure time. Remember you can easily change this at anytime by running `make edit_cache` and editing the value of ``CMAKE_INSTALL_PREFIX``.
 
 ## Ninja
 
