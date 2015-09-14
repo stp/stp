@@ -17,7 +17,7 @@ Documentation: https://github.com/stp/stp/wiki
 
 [![Coverage Status](https://coveralls.io/repos/stp/stp/badge.svg?branch=master&service=github)](https://coveralls.io/github/stp/stp?branch=master)
 
-## Build, innstall and test:
+## Build, install and test:
 
 See [the INSTALL file](INSTALL.md)
 
