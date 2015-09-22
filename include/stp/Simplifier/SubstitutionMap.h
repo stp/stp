@@ -1,6 +1,5 @@
-// -*- c++ -*-
 /********************************************************************
- * AUTHORS: Unknown
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew, Mate Soos
  *
  * BEGIN DATE: November, 2005
  *
