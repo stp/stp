@@ -34,7 +34,8 @@
 /*    Free Software Foundation, Inc.,                                        */
 /*    59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                  */
 /*                                                                           */
-/*    or download a copy from ftp://ftp.gnu.org/pub/gnu/COPYING.LIB-2.0      */
+/*    or download a copy from                                                */
+/*    http://www.gnu.org/licenses/old-licenses/lgpl-2.0.en.html              */
 /*                                                                           */
 /*****************************************************************************/
 
