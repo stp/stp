@@ -103,7 +103,7 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
   {
     cout << "Some option you gave was wrong. Please give '--help' to get help"
          << endl;
-    cout << "Unkown option: " << c.what() << endl;
+    cout << "Unknown option: " << c.what() << endl;
     exit(-1);
   }
   catch (boost::bad_any_cast& e)
