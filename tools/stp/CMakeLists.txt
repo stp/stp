@@ -1,4 +1,8 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# Copyright (c)
+#     2015 Dan Liew
+#     2015 Ryan Gvostes
+#     2015 Mate Soos
+#     2015 Marko Dimjašević
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -30,24 +34,22 @@ if (BUILD_STATIC_BIN)
     set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
 endif()
 
-if (Boost_FOUND)
-    add_executable(stp
-        main.cpp
-        main_common.cpp
-        STPProgramGlobals.cpp
+add_executable(stp
+    main.cpp
+    main_common.cpp
+    STPProgramGlobals.cpp
     )
-    if (BUILD_STATIC_BIN)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
-    endif()
-
-    set_target_properties(stp PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-      VERSION "${PROJECT_VERSION}"
-    )
-    target_link_libraries(stp libstp)
-    install(TARGETS stp
-        EXPORT ${STP_EXPORT_NAME}
-        RUNTIME DESTINATION bin
-    )
+if (BUILD_STATIC_BIN)
+    set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
+    set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
 endif()
+
+set_target_properties(stp PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+    )
+target_link_libraries(stp libstp)
+
+install(TARGETS stp
+    EXPORT ${STP_EXPORT_NAME}
+    RUNTIME DESTINATION bin
+    )
