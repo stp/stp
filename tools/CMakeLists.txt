@@ -1,4 +1,8 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# Copyright (c)
+#     2015 Dan Liew
+#     2015 Ryan Gvostes
+#     2015 Mate Soos
+#     2015 Marko Dimjašević
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,7 +23,6 @@
 # THE SOFTWARE.
 
 add_subdirectory(stp)
-add_subdirectory(stp_simple)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" ON)
 if (BUILD_EXTRA_TOOLS)

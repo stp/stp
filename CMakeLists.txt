@@ -1,4 +1,8 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# Copyright (c)
+#     2015 Dan Liew
+#     2015 Ryan Gvostes
+#     2015 Mate Soos
+#     2015 Marko Dimjašević
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -305,23 +309,20 @@ include_directories(# For extlib-abc and extlib-constbv
 # Find the Boost package components
 # -----------------------------------------------------------------------------
 
+find_package( Boost 1.46 COMPONENTS program_options)
+if (NOT Boost_FOUND)
+  message(FATAL_ERROR "You must install the Boost program_options library")
+else()
+  message(STATUS "OK, found the Boost program_options library")
+endif()
+include_directories(${Boost_INCLUDE_DIRS})
+
 if(NOT BUILD_SHARED_LIBS)
   message("Trying to use static Boost and Minisat libraries")
   set(Boost_USE_STATIC_LIBS ON)
   set(Minisat_USE_STATIC_LIBS ON)
   set(CryptoMiniSat_USE_STATIC_LIBS ON)
 endif()
-
-option(NO_BOOST "Don't try to use boost" OFF)
-if (NOT NO_BOOST)
-  find_package( Boost 1.46 COMPONENTS program_options)
-endif()
-if(NOT Boost_FOUND)
-  message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
-else()
-  include_directories(${Boost_INCLUDE_DIRS})
-endif()
-
 
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat4
@@ -442,11 +443,7 @@ set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
 # Export targets
 if (Boost_FOUND)
-  export(TARGETS stp stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
-    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
-  )
-else()
-  export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
+  export(TARGETS stp ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
     FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
   )
 endif()
