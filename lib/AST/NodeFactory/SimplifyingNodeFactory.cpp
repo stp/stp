@@ -276,9 +276,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       assert(children.size() == 2);
       ASTVec newCh;
       newCh.reserve(2);
-      newCh.push_back(CreateSimpleNot(children[0]));
-      newCh.push_back(children[1]);
-      result = CreateSimpleXor(newCh);
+      if (bm.UserFlags.isSet("xor_variation","0"))
+      {
+        newCh.push_back(CreateSimpleNot(children[0]));
+        newCh.push_back(children[1]);
+        result = CreateSimpleXor(newCh);
+      }
+      else
+      {
+        result = CreateSimpleXor(children);
+        result = CreateSimpleNot(result);
+      }
       break;
     }
     case stp::IMPLIES:
@@ -786,12 +794,13 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
   }
   else
   {
-    // negate first child if accumconst == 1
+    retval = hashing.CreateNode(stp::XOR, new_children);
+
+    // negate the result if accumulated negation
     if (accumconst)
     {
-      new_children[0] = CreateSimpleNot(new_children[0]);
+      retval = CreateSimpleNot(retval);
     }
-    retval = hashing.CreateNode(stp::XOR, new_children);
   }
 
   if (debug_simplifyingNodeFactory)
