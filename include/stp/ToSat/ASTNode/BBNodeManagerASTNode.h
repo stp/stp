@@ -36,8 +36,7 @@ namespace stp
 class ASTNode;
 typedef vector<ASTNode> ASTVec;
 
-// Called by the bitblaster. This returns ASTNodes after applying the
-// CreateSimpForm(..) simplifications.
+// Called by the bitblaster. 
 class BBNodeManagerASTNode
 {
   ASTNode ASTTrue, ASTFalse;
@@ -72,26 +71,25 @@ public:
       return stpMgr->CreateNode(BOOLEXTRACT, n, stpMgr->CreateBVConst(32, i));
   }
 
-  // CreateSimpForm removes IFF which aren't handled by the cnf converter.
   ASTNode CreateNode(Kind kind, vector<ASTNode>& children)
   {
-    return stpMgr->CreateSimpForm(kind, children);
+    return stpMgr->CreateNode(kind, children);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0)
   {
-    return stpMgr->CreateSimpForm(kind, child0);
+    return stpMgr->CreateNode(kind, child0);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1)
   {
-    return stpMgr->CreateSimpForm(kind, child0, child1);
+    return stpMgr->CreateNode(kind, child0, child1);
   }
 
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
                      const ASTNode& child2)
   {
-    return stpMgr->CreateSimpForm(kind, child0, child1, child2);
+    return stpMgr->CreateNode(kind, child0, child1, child2);
   }
 };
 }

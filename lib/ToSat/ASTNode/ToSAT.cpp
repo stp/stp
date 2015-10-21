@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
  *
@@ -368,9 +368,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinemen
   // satisfying assignment.  While doing that, it checks that every
   // subformula has the same truth value as its representative
   // literal, if it has one.  If this condition is violated, it halts
-  // immediately (on the leftmost lowest term).  Use CreateSimpForm to
-  // evaluate, even though it's expensive, so that we can use the
-  // partial truth assignment.
+  // immediately (on the leftmost lowest term).  
   ASTNode ToSAT::CheckBBandCNF(SATSolver& newSolver, ASTNode form)
   {
     // Clear memo table (in case newSolver has changed).
@@ -429,7 +427,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinemen
             {
               eval_children.push_back(CheckBBandCNF_int(newSolver, *it));
             }
-          result = bm->CreateSimpForm(k, eval_children);
+          result = bm->CreateNode(k, eval_children);
 
           //           cout << "================" 
           //                << endl 
@@ -453,7 +451,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinemen
                 {
                   // It's (NOT sym).  Get value of sym and complement.
                   replit_eval = 
-                    bm->CreateSimpNot(SymbolTruthValue(newSolver, replit[0]));
+                    bm->CreateNode(NOT,SymbolTruthValue(newSolver, replit[0]));
                 }
 
               //               cout << "----------------" 

@@ -252,23 +252,6 @@ public:
   }
   unsigned int NodeSize(const ASTNode& a);
 
-  // Simplifying create functions
-  ASTNode CreateSimpForm(Kind kind, ASTVec& children);
-  ASTNode CreateSimpForm(Kind kind, const ASTNode& child0);
-  ASTNode CreateSimpForm(Kind kind, const ASTNode& child0,
-                         const ASTNode& child1);
-  ASTNode CreateSimpForm(Kind kind, const ASTNode& child0,
-                         const ASTNode& child1, const ASTNode& child2);
-  ASTNode CreateSimpNot(const ASTNode& form);
-
-  ASTNode CreateSimpXor(const ASTNode& form1, const ASTNode& form2);
-  ASTNode CreateSimpXor(ASTVec& children);
-  ASTNode CreateSimpAndOr(bool isAnd, const ASTNode& form1,
-                          const ASTNode& form2);
-  ASTNode CreateSimpAndOr(bool IsAnd, ASTVec& children);
-  ASTNode CreateSimpFormITE(const ASTNode& child0, const ASTNode& child1,
-                            const ASTNode& child2);
-
   /****************************************************************
    * Create Symbol and BVConst functions                          *
    ****************************************************************/

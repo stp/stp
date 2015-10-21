@@ -25,7 +25,6 @@ add_library(tosat OBJECT
     AIG/ToCNFAIG.cpp
     AIG/ToSATAIG.cpp
     ASTNode/ClauseList.cpp
-    ASTNode/SimpBool.cpp
     ASTNode/ASTtoCNF.cpp
     ASTNode/ToSAT.cpp
 )
