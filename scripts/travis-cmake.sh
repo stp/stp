@@ -29,7 +29,9 @@ set -e
 # that would create two ways of setting the same thing which doesn't seem like
 # a good idea.
 
-SOURCE_DIR=".."
+SOURCE_DIR=`pwd`
+cd build
+BUILD_DIR=`pwd`
 COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
@@ -50,7 +52,7 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    INTREE)
+    INTREE_BUILD)
         cd ..
         SOURCE_DIR="."
         eval sudo apt-get install -y libboost-all-dev
@@ -145,7 +147,7 @@ if [ "$STP_CONFIG" = "COVERAGE" ]; then
     exit 0
 fi
 
-if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE" ] ; then
+if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ../..
 
     #
