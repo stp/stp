@@ -134,8 +134,8 @@ if (BUILD_SHARED_LIBS)
     list(APPEND TARGETS_TO_EXPORT libstp_static)
     set(STP_STATIC_LIBRARY libstp_static) # Used for exporting target
   endif()
-
 else()
+  #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -lc -Wl,--no-whole-archive")
   set(STP_STATIC_LIBRARY libstp) # Used for exporting target
   unset(ALSO_BUILD_STATIC_LIB CACHE) # Hide this option for ccmake and cmake-gui users
 endif()

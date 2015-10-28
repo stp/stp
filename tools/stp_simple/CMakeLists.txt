@@ -29,6 +29,10 @@ if (BUILD_STATIC_BIN)
     set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
     set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
 endif()
+if(NOT BUILD_SHARED_LIBS)
+  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
+endif()
+
 
 add_executable(stp_simple
     main_simple.cpp

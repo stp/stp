@@ -18,6 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+if(NOT BUILD_SHARED_LIBS)
+  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
+endif()
+
 add_executable(rewrite_rule_gen
     rewrite_rule_gen.cpp
 )

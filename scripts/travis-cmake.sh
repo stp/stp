@@ -95,6 +95,14 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
+    KLEE)
+        eval sudo apt-get install -y libboost-all-dev
+        eval cmake ${COMMON_CMAKE_ARGS} \
+                   -DBUILD_SHARED_LIBS:BOOL=OFF \
+                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+                   ${SOURCE_DIR}
+    ;;
+
     NO_BOOST)
         eval cmake ${COMMON_CMAKE_ARGS} \
                    -DNO_BOOSTS:BOOL=ON \
