@@ -132,6 +132,34 @@ esac
 make VERBOSE=1
 make check
 
+if [ "$STP_CONFIG" = "KLEE" ]; then
+    sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python-minimal python-pip unzip
+
+    #install llvm+clang 3.4
+    sudo bash -c "echo 'deb http://llvm.org/apt/precise/ llvm-toolchain-precise main' >> /etc/apt/sources.list"
+    wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
+    sudo apt-get update
+    sudo apt-get -y install clang-3.4 llvm-3.4 llvm-3.4-dev llvm-3.4-tools
+    sudo ln -sf /usr/bin/llvm-config-3.4 /usr/bin/llvm-config
+
+    #install klee-uclibc
+    git clone https://github.com/klee/klee-uclibc.git
+    cd klee-uclibc
+    ./configure --make-llvm-lib
+    make -j2
+    cd ..
+
+    #build klee
+    wget https://github.com/klee/klee/archive/v1.0.0.zip
+    unzip v1.0.0.zip
+    cd klee-1.0.0
+    ./configure \
+        --with-stp=${BUILD_DIR} \
+        --with-uclibc=${BUILD_DIR}/klee-uclibc \
+        --enable-posix-runtime
+    make -j2
+fi
+
 # Build example project. We assume that the build installed itself to the CMake
 #- mkdir simple_example
 #- cd simple_example
