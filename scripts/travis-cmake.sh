@@ -141,6 +141,8 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
     sudo apt-get update
     sudo apt-get -y install clang-3.4 llvm-3.4 llvm-3.4-dev
     sudo ln -sf /usr/bin/llvm-config-3.4 /usr/bin/llvm-config
+    sudo ln -sf /usr/bin/clang-3.4 /usr/bin/clang
+    sudo ln -sf /usr/bin/llvm-3.4 /usr/bin/llvm
 
     #install klee-uclibc
     git clone https://github.com/klee/klee-uclibc.git
