@@ -133,33 +133,61 @@ make VERBOSE=1
 make check
 
 if [ "$STP_CONFIG" = "KLEE" ]; then
-    sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python-minimal python-pip unzip
-
-    #install llvm+clang 3.4
-    sudo bash -c "echo 'deb http://llvm.org/apt/precise/ llvm-toolchain-precise main' >> /etc/apt/sources.list"
+    sudo sh -c 'echo "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.4 main" >> /etc/apt/sources.list.d/llvm.list'
+    sudo sh -c 'echo "deb-src http://llvm.org/apt/precise/ llvm-toolchain-precise-3.4 main" >> /etc/apt/sources.list.d/llvm.list'
+    sudo sh -c 'echo "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.5 main" >> /etc/apt/sources.list.d/llvm.list'
+    sudo sh -c 'echo "deb-src http://llvm.org/apt/precise/ llvm-toolchain-precise-3.5 main" >> /etc/apt/sources.list.d/llvm.list'
+    # Needed for new libstdc++ and gcc4.8
+    sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
     wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
     sudo apt-get update
-    sudo apt-get -y install clang-3.4 llvm-3.4 llvm-3.4-dev
-    sudo ln -sf /usr/bin/llvm-config-3.4 /usr/bin/llvm-config
-    sudo ln -sf /usr/bin/clang-3.4 /usr/bin/clang
-    sudo ln -sf /usr/bin/llvm-3.4 /usr/bin/llvm
+    sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python-minimal python-pip unzip
 
-    #install klee-uclibc
-    git clone https://github.com/klee/klee-uclibc.git
+    sudo apt-get install gcc-4.8 g++-4.8 libcap-dev cmake
+    # Make gcc4.8 the default gcc version
+    sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 20
+    sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 20
+    # Make Clang3.4 the default clang version
+    sudo apt-get install clang-3.4
+    sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-3.4 20
+    sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-3.4 20
+
+    # Install LLVM and the LLVM bitcode compiler we require to build KLEE
+    LLVM_VERSION=3.4
+    STP_VERSION=master
+    KLEE_UCLIBC=1
+    DISABLE_ASSERTIONS=0
+    ENABLE_OPTIMIZED=1
+    COVERAGE=0
+    sudo apt-get install llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev
+    KLEE_CC=/usr/bin/clang-${LLVM_VERSION}
+    KLEE_CXX=/usr/bin/clang++-${LLVM_VERSION}
+
+    #build klee-uclibc
+    git clone --depth 1 git://github.com/klee/klee-uclibc.git
     cd klee-uclibc
-    ./configure --make-llvm-lib
-    make -j2
-    cd ..
+    ./configure --make-llvm-lib --with-cc "${KLEE_CC}" --with-llvm-config /usr/bin/llvm-config-${LLVM_VERSION}
+    make
+    KLEE_UCLIBC_CONFIGURE_OPTION="--with-uclibc=$(pwd) --enable-posix-runtime"
+    cd ../
 
-    #build klee
-    wget https://github.com/klee/klee/archive/v1.0.0.zip
-    unzip v1.0.0.zip
+    #klee
+    wget https://github.com/klee/klee/archive/v1.0.0.tar.gz
+    tar xzvf v1.0.0.tar.gz
     cd klee-1.0.0
-    ./configure \
-        --with-stp=${BUILD_DIR} \
-        --with-uclibc=${BUILD_DIR}/klee-uclibc \
-        --enable-posix-runtime
-    make -j2
+    ./configure --with-llvmsrc=/usr/lib/llvm-${LLVM_VERSION}/build \
+        --with-llvmobj=/usr/lib/llvm-${LLVM_VERSION}/build \
+        --with-llvmcc=${KLEE_CC} \
+        --with-llvmcxx=${KLEE_CXX} \
+        --with-stp="${BUILD_DIR}" \
+        ${KLEE_UCLIBC_CONFIGURE_OPTION} \
+        CXXFLAGS="${COVERAGE_FLAGS}"
+
+    make DISABLE_ASSERTIONS=${DISABLE_ASSERTIONS} \
+        ENABLE_OPTIMIZED=${ENABLE_OPTIMIZED} \
+        ENABLE_SHARED=0
+
+    cd ${BUILD_DIR}
 fi
 
 # Build example project. We assume that the build installed itself to the CMake
