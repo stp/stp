@@ -139,7 +139,7 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
     sudo bash -c "echo 'deb http://llvm.org/apt/precise/ llvm-toolchain-precise main' >> /etc/apt/sources.list"
     wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
     sudo apt-get update
-    sudo apt-get -y install clang-3.4 llvm-3.4 llvm-3.4-dev llvm-3.4-tools
+    sudo apt-get -y install clang-3.4 llvm-3.4 llvm-3.4-dev llvm-tools
     sudo ln -sf /usr/bin/llvm-config-3.4 /usr/bin/llvm-config
 
     #install klee-uclibc
