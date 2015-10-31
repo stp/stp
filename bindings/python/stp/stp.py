@@ -344,6 +344,14 @@ class Expr(object):
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
 
+    def _2r(self, cb, other):
+        """Wrapper around double-expression STP functions."""
+        other = self._toexpr(other)
+        assert isinstance(other, Expr), \
+            'Other object must be an Expr instance'
+        expr = cb(other.s.vc, other.expr, self.expr)
+        return Expr(other.s, other.width, expr)
+
     def _2w(self, cb, other):
         """Wrapper around double-expression with width STP functions."""
         other = self._toexpr(other)
@@ -353,35 +361,60 @@ class Expr(object):
         expr = cb(self.s.vc, self.width, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
 
+    def _2wr(self, cb, other):
+        """Wrapper around double-expression with width STP functions
+        with swapped operands."""
+        other = self._toexpr(other)
+        assert isinstance(other, Expr), \
+            'Other object must be an Expr instance'
+        assert self.width == other.width, 'Width must be equal'
+        expr = cb(other.s.vc, self.width, other.expr, self.expr)
+        return Expr(other.s, other.width, expr)
+
     def add(self, other):
         return self._2w(_lib.vc_bvPlusExpr, other)
 
+    def radd(self, other):
+        return self._2wr(_lib.vc_bvPlusExpr, other)
+
     __add__ = add
-    __radd__ = add
+    __radd__ = radd
 
     def sub(self, other):
         return self._2w(_lib.vc_bvMinusExpr, other)
 
+    def rsub(self, other):
+        return self._2wr(_lib.vc_bvMinusExpr, other)
+
     __sub__ = sub
-    __rsub__ = sub
+    __rsub__ = rsub
 
     def mul(self, other):
         return self._2w(_lib.vc_bvMultExpr, other)
 
+    def rmul(self, other):
+        return self._2wr(_lib.vc_bvMultExpr, other)
+
     __mul__ = mul
-    __rmul__ = mul
+    __rmul__ = rmul
 
     def div(self, other):
         return self._2w(_lib.vc_bvDivExpr, other)
 
+    def rdiv(self, other):
+        return self._2wr(_lib.vc_bvDivExpr, other)
+
     __div__ = div
-    __rdiv__ = div
+    __rdiv__ = rdiv
 
     def mod(self, other):
         return self._2w(_lib.vc_bvModExpr, other)
 
+    def rmod(self, other):
+        return self._2wr(_lib.vc_bvModExpr, other)
+
     __mod__ = mod
-    __rmod__ = mod
+    __rmod__ = rmod
 
     def rem(self, other):
         return self._2w(_lib.vc_bvRemExpr, other)
@@ -440,20 +473,29 @@ class Expr(object):
     def and_(self, other):
         return self._2(_lib.vc_bvAndExpr, other)
 
+    def rand_(self, other):
+        return self._2r(_lib.vc_bvAndExpr, other)
+
     __and__ = and_
-    __rand__ = and_
+    __rand__ = rand_
 
     def or_(self, other):
         return self._2(_lib.vc_bvOrExpr, other)
 
+    def ror_(self, other):
+        return self._2r(_lib.vc_bvOrExpr, other)
+
     __or__ = or_
-    __ror__ = or_
+    __ror__ = ror_
 
     def xor(self, other):
         return self._2(_lib.vc_bvXorExpr, other)
 
+    def rxor(self, other):
+        return self._2r(_lib.vc_bvXorExpr, other)
+
     __xor__ = xor
-    __rxor__ = xor
+    __rxor__ = rxor
 
     def not_(self):
         return self._1(_lib.vc_bvNotExpr)
@@ -463,14 +505,20 @@ class Expr(object):
     def shl(self, other):
         return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
 
+    def rshl(self, other):
+        return self._2wr(_lib.vc_bvLeftShiftExprExpr, other)
+
     __lshift__ = shl
-    __rlshift__ = shl
+    __rlshift__ = rshl
 
     def shr(self, other):
         return self._2w(_lib.vc_bvRightShiftExprExpr, other)
 
+    def rshr(self, other):
+        return self._2wr(_lib.vc_bvRightShiftExprExpr, other)
+
     __rshift__ = shr
-    __rrshift__ = shr
+    __rrshift__ = rshr
 
     def sar(self, other):
         return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
