@@ -625,8 +625,7 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
                bm->GetQuery());
 }
 
-/* FUNCTION: queries the CounterExampleMap object with 'expr' and
- * returns the corresponding counterexample value.
+/* FUNCTION: queries the value of expr given the current counterexample.
  */
 ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
 {
@@ -639,18 +638,7 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
     return ComputeFormulaUsingModel(expr);
   }
 
-  if (BVCONST == expr.GetKind())
-  {
-    return expr;
-  }
-
-  ASTNodeMap::iterator it;
-  ASTNode output;
-  if ((it = CounterExampleMap.find(expr)) != CounterExampleMap.end())
-    output = TermToConstTermUsingModel(CounterExampleMap[expr], false);
-  else
-    output = bm->CreateZeroConst(expr.GetValueWidth());
-  return output;
+  return TermToConstTermUsingModel(expr, false);
 } 
 
 // FUNCTION: queries the counterexample, and returns the number of array
