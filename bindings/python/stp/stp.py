@@ -344,56 +344,83 @@ class Expr(object):
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
 
-    def _2w(self, cb, other):
+    def _2w(self, cb, a, b):
         """Wrapper around double-expression with width STP functions."""
-        other = self._toexpr(other)
-        assert isinstance(other, Expr), \
-            'Other object must be an Expr instance'
-        assert self.width == other.width, 'Width must be equal'
-        expr = cb(self.s.vc, self.width, self.expr, other.expr)
+        a, b = self._toexpr(a), self._toexpr(b)
+        assert isinstance(a, Expr), \
+            'Left operand must be an Expr instance'
+        assert isinstance(b, Expr), \
+            'Right operand must be an Expr instance'
+        assert self.width == a.width, 'Width must be equal'
+        assert self.width == b.width, 'Width must be equal'
+        expr = cb(self.s.vc, self.width, a.expr, b.expr)
         return Expr(self.s, self.width, expr)
 
     def add(self, other):
-        return self._2w(_lib.vc_bvPlusExpr, other)
+        return self._2w(_lib.vc_bvPlusExpr, self, other)
 
     __add__ = add
     __radd__ = add
 
     def sub(self, other):
-        return self._2w(_lib.vc_bvMinusExpr, other)
+        return self._2w(_lib.vc_bvMinusExpr, self, other)
 
     __sub__ = sub
-    __rsub__ = sub
+
+    def rsub(self, other):
+        return self._2w(_lib.vc_bvMinusExpr, other, self)
+
+    __rsub__ = rsub
 
     def mul(self, other):
-        return self._2w(_lib.vc_bvMultExpr, other)
+        return self._2w(_lib.vc_bvMultExpr, self, other)
 
     __mul__ = mul
     __rmul__ = mul
 
     def div(self, other):
-        return self._2w(_lib.vc_bvDivExpr, other)
+        return self._2w(_lib.vc_bvDivExpr, self, other)
 
     __div__ = div
-    __rdiv__ = div
+
+    def rdiv(self, other):
+        return self._2w(_lib.vc_bvDivExpr, other, self)
+
+    __rdiv__ = rdiv
 
     def mod(self, other):
-        return self._2w(_lib.vc_bvModExpr, other)
+        return self._2w(_lib.vc_bvModExpr, self, other)
 
     __mod__ = mod
-    __rmod__ = mod
+
+    def rmod(self, other):
+        return self._2w(_lib.vc_bvModExpr, other, self)
+
+    __rmod__ = rmod
 
     def rem(self, other):
-        return self._2w(_lib.vc_bvRemExpr, other)
+        return self._2w(_lib.vc_bvRemExpr, self, other)
+
+    def rrem(self, other):
+        return self._2w(_lib.vc_bvRemExpr, other, self)
 
     def sdiv(self, other):
-        return self._2w(_lib.vc_sbvDivExpr, other)
+        return self._2w(_lib.vc_sbvDivExpr, self, other)
+
+    def rsdiv(self, other):
+        return self._2w(_lib.vc_sbvDivExpr, other, self)
 
     def smod(self, other):
-        return self._2w(_lib.vc_sbvModExpr, other)
+        return self._2w(_lib.vc_sbvModExpr, self, other)
+
+    def rsmod(self, other):
+        return self._2w(_lib.vc_sbvModExpr, other, self)
 
     def srem(self, other):
-        return self._2w(_lib.vc_sbvRemExpr, other)
+        return self._2w(_lib.vc_sbvRemExpr, self, other)
+
+    def rsrem(self, other):
+        return self._2w(_lib.vc_sbvRemExpr, other, self)
 
     def eq(self, other):
         return self._2(_lib.vc_eqExpr, other)
@@ -461,19 +488,30 @@ class Expr(object):
     __invert__ = not_
 
     def shl(self, other):
-        return self._2w(_lib.vc_bvLeftShiftExprExpr, other)
+        return self._2w(_lib.vc_bvLeftShiftExprExpr, self, other)
 
     __lshift__ = shl
-    __rlshift__ = shl
+
+    def rshl(self, other):
+        return self._2w(_lib.vc_bvLeftShiftExprExpr, other, self)
+
+    __rlshift__ = rshl
 
     def shr(self, other):
-        return self._2w(_lib.vc_bvRightShiftExprExpr, other)
+        return self._2w(_lib.vc_bvRightShiftExprExpr, self, other)
 
     __rshift__ = shr
-    __rrshift__ = shr
+
+    def rshr(self, other):
+        return self._2w(_lib.vc_bvRightShiftExprExpr, other, self)
+
+    __rrshift__ = rshr
 
     def sar(self, other):
-        return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other)
+        return self._2w(_lib.vc_bvSignedRightShiftExprExpr, self, other)
+
+    def rsar(self, other):
+        return self._2w(_lib.vc_bvSignedRightShiftExprExpr, other, self)
 
     def extract(self, high, low):
         expr = _lib.vc_bvExtract(self.s.vc, self.expr, high, low)

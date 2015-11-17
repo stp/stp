@@ -217,17 +217,43 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(b == 2))
         s.pop()
 
-    def test_reflected(self):
-        # Reflected/swapped stuff is like "y+x" instead of "x+y" where "y"
-        # is not an Expr instance, e.g., a plain integer.
+    def test_operator_overloading(self):
         s = self.s
+        a, b, c = s.bitvecs('a b c')
+        A, B = 42, 52
+        s.add(a == 42, b == 52)
 
-        a, b = s.bitvecs('a b')
-        self.assertTrue(s.check(42 == a))
-        self.assertEqual(s['a'], 42)
+        # bv OP bv => bv
+        for opname in "+ - * / % << >> & | ^".split():
+            op = eval("lambda a, b: a %s b" % opname)
 
-        self.assertTrue(s.check(456 == 123 + a))
-        self.assertEqual(s['a'], 456-123)
+            # Test symbolic OP symbolic.
+            s.check(c == op(a, b))
+            self.assertEqual(s.model()['c'], op(A, B) % 2**32)
+            s.check(c == op(b, a))
+            self.assertEqual(s.model()['c'], op(B, A) % 2**32)
+
+            # Test symbolic OP constant.
+            s.check(c == op(a, B))
+            self.assertEqual(s.model()['c'], op(A, B) % 2**32)
+
+            # Test constant OP symbolic.
+            s.check(c == op(B, a))
+            self.assertEqual(s.model()['c'], op(B, A) % 2**32)
+
+        # bv OP bv => bool
+        for opname in "< > <= >= == !=".split():
+            op = eval("lambda a, b: a %s b" % opname)
+
+            # Test symbolic OP symbolic.
+            self.assertEqual(s.check(op(a, b)), op(A, B))
+            self.assertEqual(s.check(op(b, a)), op(B, A))
+
+            # Test symbolic OP constant.
+            self.assertEqual(s.check(op(a, B)), op(A, B))
+
+            # Test constant OP symbolic.
+            self.assertEqual(s.check(op(B, a)), op(B, A))
 
 
 if __name__ == '__main__':
