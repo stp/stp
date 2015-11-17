@@ -224,7 +224,7 @@ class TestSTP(unittest.TestCase):
         s.add(a == 42, b == 52)
 
         # bv OP bv => bv
-        for opname in "+ - * / % << >> & | ^".split():
+        for opname in "+ - * // % << >> & | ^".split():
             op = eval("lambda a, b: a %s b" % opname)
 
             # Test symbolic OP symbolic.
@@ -254,6 +254,13 @@ class TestSTP(unittest.TestCase):
 
             # Test constant OP symbolic.
             self.assertEqual(s.check(op(B, a)), op(B, A))
+
+        # OP bv => bv
+        for opname in "- + ~".split():
+            op = eval("lambda a: %s a" % opname)
+
+            s.check(c == op(a))
+            self.assertEqual(s.model()['c'], op(A) % 2**32)
 
 
 if __name__ == '__main__':

@@ -382,11 +382,13 @@ class Expr(object):
         return self._2w(_lib.vc_bvDivExpr, self, other)
 
     __div__ = div
+    __floordiv__ = div
 
     def rdiv(self, other):
         return self._2w(_lib.vc_bvDivExpr, other, self)
 
     __rdiv__ = rdiv
+    __rfloordiv__ = rdiv
 
     def mod(self, other):
         return self._2w(_lib.vc_bvModExpr, self, other)
@@ -481,6 +483,14 @@ class Expr(object):
 
     __xor__ = xor
     __rxor__ = xor
+
+    def neg(self):
+        return self._1(_lib.vc_bvUMinusExpr)
+
+    __neg__ = neg
+
+    def __pos__(self):
+        return self
 
     def not_(self):
         return self._1(_lib.vc_bvNotExpr)
