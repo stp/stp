@@ -14,6 +14,7 @@ generators.
 - ``ENABLE_ASSERTIONS`` - If TRUE STP will be built with asserts.
 - ``ENABLE_TESTING`` - Enable running tests
 - ``ENABLE_PYTHON_INTERFACE`` - Enable building the Python interface
+- ``PYTHON_EXECUTABLE`` - Set python executable in case you have more than one python installed
 - ``SANITIZE`` - Use Clang's sanitization checks
 - ``NO_BOOST`` - Build without using the Boost library
 - ``TEST_QUERY_FILES`` -  Test STP externally by passing it query files in tests/query-files
