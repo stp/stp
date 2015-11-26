@@ -130,6 +130,10 @@ VC vc_createValidityChecker(void)
   }
 
   stp::STPMgr* bm = new stp::STPMgr();
+
+  simpNF = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+  bm->defaultNodeFactory = simpNF;
+
   stp::Simplifier* simp = new stp::Simplifier(bm);
   stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
   stp::ToSAT* tosat = new stp::ToSAT(bm);
@@ -141,9 +145,6 @@ VC vc_createValidityChecker(void)
   stp::GlobalParserBM = bm;
   stpstar stpObj =
       new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
-
-  simpNF = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
-  bm->defaultNodeFactory = simpNF;
 
   stp::GlobalSTP = stpObj;
   decls = new stp::ASTVec();
