@@ -457,6 +457,8 @@ public:
 
   ~STPMgr();
 
-}; 
+};
+
 } // end of namespace
+
 #endif
