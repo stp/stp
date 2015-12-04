@@ -34,7 +34,7 @@ HashingNodeFactory::~HashingNodeFactory()
 
 // Get structurally hashed version of the node.
 ASTNode HashingNodeFactory::CreateNode(const Kind kind,
-                                             const ASTVec& back_children)
+                                       const ASTVec& back_children)
 {
   // We can't create NOT(NOT (..)) nodes because of how the numbering scheme we
   // use works. So you can't trust the hashing node factory even to return
