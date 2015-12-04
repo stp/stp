@@ -245,19 +245,10 @@ public:
     CreateBVConstVal = NULL;
   }
 
-  RunTimes* GetRunTimes(void) { return runTimes; }
-
-#if 0
-    void SetRemoveWritesFlag(bool in)
-    {
-      Begin_RemoveWrites = in;
-    }
-
-    bool GetRemoveWritesFlag(void)
-    {
-      return Begin_RemoveWrites;
-    }
-#endif
+  RunTimes* GetRunTimes(void)
+  {
+    return runTimes;
+  }
 
   int NewNodeNum()
   {
