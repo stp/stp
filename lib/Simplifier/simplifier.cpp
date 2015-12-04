@@ -1015,7 +1015,7 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
       sort(l0.begin(), l0.end());
       sort(l1.begin(), l1.end());
       vector<ASTNode> result(l0.size() + l1.size());
-      std::vector<ASTNode>::iterator it = set_intersection(
+      vector<ASTNode>::iterator it = set_intersection(
           l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
       if (it == result.begin())
         return ASTFalse;

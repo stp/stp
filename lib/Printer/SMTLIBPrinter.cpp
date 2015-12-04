@@ -46,7 +46,7 @@ stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-std::vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
+vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
@@ -79,8 +79,8 @@ ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,
   // os << "(";
   if (0 < NodeLetVarMap.size())
   {
-    std::vector<pair<ASTNode, ASTNode>>::iterator it = NodeLetVarVec.begin();
-    const std::vector<pair<ASTNode, ASTNode>>::iterator itend =
+    vector<pair<ASTNode, ASTNode>>::iterator it = NodeLetVarVec.begin();
+    const vector<pair<ASTNode, ASTNode>>::iterator itend =
         NodeLetVarVec.end();
 
     os << "(let (";

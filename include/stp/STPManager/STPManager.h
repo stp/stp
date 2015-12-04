@@ -133,7 +133,7 @@ private:
   // logical context is represented by a ptr to a vector of
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
-  std::vector<ASTVec*> _asserts;
+  vector<ASTVec*> _asserts;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -398,7 +398,7 @@ public:
 
   // This is a vector which stores the Node to LetVars pairs. It
   // allows for sorted printing, as opposed to NodeLetVarMap
-  std::vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
+  vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
 
   // A partial Map from ASTNodes to LetVars. Needed in order to
   // correctly print shared subterms inside the LET itself

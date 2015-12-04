@@ -34,7 +34,7 @@ THE SOFTWARE.
 namespace stp
 {
 class ASTNode;
-typedef std::vector<ASTNode> ASTVec;
+typedef vector<ASTNode> ASTVec;
 
 // Called by the bitblaster. This returns ASTNodes after applying the
 // CreateSimpForm(..) simplifications.

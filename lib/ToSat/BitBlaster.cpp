@@ -57,7 +57,7 @@ using simplifier::constantBitP::FixedBits;
 using simplifier::constantBitP::NodeToFixedBitsMap;
 using std::make_pair;
 
-#define BBNodeVec std::vector<BBNode>
+#define BBNodeVec vector<BBNode>
 #define BBNodeVecMap std::map<ASTNode, vector<BBNode>>
 #define BBNodeSet std::set<BBNode>
 
@@ -835,7 +835,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
           results.push_back(BBTerm(term[i], support));
 
         const int bitWidth = term[0].GetValueWidth();
-        std::vector<list<BBNode>> products(bitWidth + 1);
+        vector<list<BBNode>> products(bitWidth + 1);
         for (int i = 0; i < bitWidth; i++)
         {
           for (int j = 0; j < results.size(); j++)
@@ -1977,7 +1977,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
   assert(x.size() == bitWidth);
   assert(y.size() == bitWidth);
 
-  std::vector<list<BBNode>> products(
+  vector<list<BBNode>> products(
       bitWidth + 1); // Create one extra to avoid special cases.
 
   if (multiplication_variant == "1")
@@ -2333,8 +2333,8 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode>>& products,
   if (!upper_multiplication_bound)
     ms = NULL;
 
-  std::vector<list<BBNode>> later(bitWidth + 1);
-  std::vector<list<BBNode>> next(bitWidth + 1);
+  vector<list<BBNode>> later(bitWidth + 1);
+  vector<list<BBNode>> next(bitWidth + 1);
 
   for (int i = 0; i < bitWidth; i++)
   {
@@ -2403,8 +2403,8 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v8(vector<list<BBNode>>& products,
   if (!upper_multiplication_bound)
     ms = NULL;
 
-  std::vector<list<BBNode>> later(bitWidth + 1); // +1 then ignore the topmost.
-  std::vector<list<BBNode>> next(bitWidth + 1);
+  vector<list<BBNode>> later(bitWidth + 1); // +1 then ignore the topmost.
+  vector<list<BBNode>> next(bitWidth + 1);
 
   for (int i = 0; i < bitWidth; i++)
   {

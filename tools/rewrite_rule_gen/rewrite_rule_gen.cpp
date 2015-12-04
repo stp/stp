@@ -1504,7 +1504,7 @@ void writeOutRules()
   force_writeout = false;
 
 #if 0
-  std::vector<string> output;
+  vector<string> output;
   std::map<string, Rewrite_rule> dup;
 
   for (Rewrite_system::RewriteRuleContainer::iterator it = rewrite_system.toWrite.begin();

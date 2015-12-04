@@ -27,11 +27,12 @@ THE SOFTWARE.
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
+using std::vector;
 
 namespace stp
 {
 class ASTNode;
-typedef std::vector<ASTNode> ASTVec;
+typedef vector<ASTNode> ASTVec;
 extern ASTVec _empty_ASTVec;
 class STPMgr;
 typedef unsigned int* CBV;

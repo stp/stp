@@ -51,7 +51,7 @@ using simplifier::constantBitP::MultiplicationStats;
 
 class Simplifier;
 class ASTNode;
-typedef std::vector<ASTNode> ASTVec;
+typedef vector<ASTNode> ASTVec;
 
 template <class BBNode, class BBNodeManagerT> class BitBlaster;
 

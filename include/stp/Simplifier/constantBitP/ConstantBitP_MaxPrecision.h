@@ -61,7 +61,7 @@ struct Signature
   Signature() { imprecise = false; }
 };
 
-bool maxPrecision(std::vector<FixedBits*> children, FixedBits& output,
+bool maxPrecision(vector<FixedBits*> children, FixedBits& output,
                   stp::Kind kind, stp::STPMgr* beev);
 }
 }

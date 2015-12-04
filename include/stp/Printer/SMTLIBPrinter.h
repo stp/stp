@@ -35,7 +35,7 @@ extern stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-extern std::vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
+extern vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself

@@ -643,10 +643,10 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
 
 // FUNCTION: queries the counterexample, and returns the number of array
 // locations for e
-std::vector<std::pair<ASTNode, ASTNode>>
+vector<std::pair<ASTNode, ASTNode>>
 AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
 {
-  std::vector<std::pair<ASTNode, ASTNode>> entries;
+  vector<std::pair<ASTNode, ASTNode>> entries;
 
   // input is valid, no counterexample to print
   if (bm->ValidFlag)
@@ -827,7 +827,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
   }
 
   // vector to store the integer values
-  std::vector<int> out_int;
+  vector<int> out_int;
   cout << "% ";
   for (ASTVec::iterator it = bm->ListOfDeclaredVars.begin(),
                         itend = bm->ListOfDeclaredVars.end();

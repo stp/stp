@@ -595,7 +595,7 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
   if (ce->CounterExampleSize())
     t = true;
 
-  std::vector<std::pair<ASTNode, ASTNode>> entries =
+  vector<std::pair<ASTNode, ASTNode>> entries =
       ce->GetCounterExampleArray(t, *a);
   *size = entries.size();
   if (*size != 0)
@@ -1815,7 +1815,7 @@ int vc_isBool(Expr e)
 
 void vc_Destroy(VC vc)
 {
-  // for(std::vector<stp::ASTNode *>::iterator it=created_exprs.begin(),
+  // for(vector<stp::ASTNode *>::iterator it=created_exprs.begin(),
   //    itend=created_exprs.end();it!=itend;it++) {
   //     stp::ASTNode * aaa = *it;
   //     delete aaa;

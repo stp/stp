@@ -479,9 +479,9 @@ ostream& C_Print(ostream& os, const ASTNode n, int indentation)
   {
     // ASTNodeMap::iterator it=bm->NodeLetVarMap.begin();
     // ASTNodeMap::iterator itend=bm->NodeLetVarMap.end();
-    std::vector<std::pair<ASTNode, ASTNode>>::iterator it =
+    vector<std::pair<ASTNode, ASTNode>>::iterator it =
         bm->NodeLetVarVec.begin();
-    std::vector<std::pair<ASTNode, ASTNode>>::iterator itend =
+    vector<std::pair<ASTNode, ASTNode>>::iterator itend =
         bm->NodeLetVarVec.end();
 
     // start a new block to create new static scope

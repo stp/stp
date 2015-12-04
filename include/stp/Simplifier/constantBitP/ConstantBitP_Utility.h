@@ -40,7 +40,7 @@ Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
 void setSignedMinMax(FixedBits& v, stp::CBV min, stp::CBV max);
 void setUnsignedMinMax(const FixedBits& v, stp::CBV min, stp::CBV max);
 unsigned cbvTOInt(const stp::CBV v);
-void fixUnfixedTo(std::vector<FixedBits*>& operands, const unsigned position,
+void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
                   bool toFix);
 int toInt(stp::CBV value);
 
@@ -58,7 +58,7 @@ struct stats
 
 Result merge(Result r1, Result r2);
 
-stats getStats(const std::vector<FixedBits*>& operands, const unsigned position);
+stats getStats(const vector<FixedBits*>& operands, const unsigned position);
 }
 }
 

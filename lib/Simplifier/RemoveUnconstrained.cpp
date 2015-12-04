@@ -131,7 +131,7 @@ void RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
     ASTNode& var = extracts[i]->n;
     assert(var.GetKind() == SYMBOL);
     const int size = var.GetValueWidth();
-    std::vector<ASTNode> toVar(size);
+    vector<ASTNode> toVar(size);
 
     // Create a mutable copy that we can iterate over.
     vector<MutableASTNode*> mut;

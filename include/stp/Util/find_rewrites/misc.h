@@ -44,7 +44,7 @@ int getDifficulty(const ASTNode& n_);
 bool isConstant(const ASTNode& n, VariableAssignment& different,
                 const int bits, int64_t timeout_max_confl = -1);
 
-std::vector<ASTNode> getVariables(const ASTNode& n);
+vector<ASTNode> getVariables(const ASTNode& n);
 
 ASTNode rewriteThroughWithAIGS(const ASTNode& n_);
 

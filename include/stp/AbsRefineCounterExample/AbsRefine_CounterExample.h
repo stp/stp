@@ -107,7 +107,7 @@ public:
   ASTNode GetCounterExample(const ASTNode& e);
 
   // queries the counterexample, and returns a vector of index-value pairs for e
-  std::vector<std::pair<ASTNode, ASTNode>>
+  vector<std::pair<ASTNode, ASTNode>>
   GetCounterExampleArray(bool t, const ASTNode& e);
 
   int CounterExampleSize(void) const { return CounterExampleMap.size(); }
