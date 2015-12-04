@@ -97,7 +97,7 @@ public:
     if (n0.size() != n1.size())
       return false;
 
-    for (int i = 0; i < n0.size(); i++)
+    for (size_t i = 0; i < n0.size(); i++)
     {
       if (!(n0[i] == n1[i]))
         return false;
