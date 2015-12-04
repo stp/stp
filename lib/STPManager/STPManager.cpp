@@ -468,7 +468,6 @@ void STPMgr::Pop(void)
     FatalError("POP on empty.");
 
   ASTVec* c = _asserts.back();
-  c->clear();
   delete c;
   _asserts.pop_back();
 }
