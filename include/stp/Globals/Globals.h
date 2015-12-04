@@ -31,7 +31,6 @@ THE SOFTWARE.
 #ifndef GLOBALS_H
 #define GLOBALS_H
 #include <vector>
-using std::vector;
 
 /* FIXME: Clients who import this header file have to have
  * ASTNode already declarted (eurgh)
@@ -80,7 +79,7 @@ enum SOLVER_RETURN_TYPE
 };
 
 // Empty vector. Useful commonly used ASTNodes
-extern vector<ASTNode> _empty_ASTVec;
+extern std::vector<ASTNode> _empty_ASTVec;
 
 // Needed by the SMTLIB printer
 extern enum inputStatus input_status;
