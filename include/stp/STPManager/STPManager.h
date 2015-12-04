@@ -221,13 +221,10 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-   
   STPMgr()
-      : _interior_unique_table(), _symbol_unique_table(),
-        _bvconst_unique_table(), last_iteration(0), soft_timeout_expired(false),
-        UserFlags(), _symbol_count(0), CNFFileNameCounter(0)
+      : _max_node_num(0), last_iteration(0), soft_timeout_expired(false),
+        _symbol_count(0), CNFFileNameCounter(0)
   {
-    _max_node_num = 0;
     // Begin_RemoveWrites = false;
     ValidFlag = false;
     bvdiv_exception_occured = false;
