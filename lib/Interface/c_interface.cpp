@@ -158,9 +158,6 @@ void vc_printExpr(VC /*vc*/, Expr e)
   // do not print in lisp mode
   // bmstar b = (bmstar)vc;
   stp::ASTNode q = (*(nodestar)e);
-  //   b->Begin_RemoveWrites = true;
-  //   stp::ASTNode q = b->SimplifyFormula_TopLevel(*((nodestar)e),false);
-  //   b->Begin_RemoveWrites = false;
   q.PL_Print(cout);
 }
 
@@ -260,11 +257,9 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
   stp::Simplifier* simp = new stp::Simplifier(b);
   for (stp::ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
   {
-    // b->Begin_RemoveWrites = true;
     stp::ASTNode q =
         (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i, false) : *i;
     q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q, false) : q;
-    // b->Begin_RemoveWrites = false;
     os << "ASSERT( ";
     q.PL_Print(os);
     os << ");" << endl;
@@ -295,11 +290,9 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   vc_printAssertsToStream(vc, os, simplify_print);
   os << "%----------------------------------------------------" << endl;
   os << "QUERY( ";
-  // b->Begin_RemoveWrites = true;
   stp::ASTNode q = (simplify_print == 1)
                         ? simp->SimplifyFormula_TopLevel(*((nodestar)e), false)
                         : *(nodestar)e;
-  // b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   os << " );" << endl;
 
@@ -356,9 +349,6 @@ void vc_printExprToBuffer(VC /*vc*/, Expr e, char** buf, unsigned long* len)
   stringstream os;
   // bmstar b = (bmstar)(((stpstar)vc)->bm);
   stp::ASTNode q = *((nodestar)e);
-  // b->Begin_RemoveWrites = true;
-  //   stp::ASTNode q = b->SimplifyFormula_TopLevel(*((nodestar)e),false);
-  //   b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   //((nodestar)e)->PL_Print(os);
   string s = os.str();
@@ -374,10 +364,7 @@ void vc_printQuery(VC vc)
   ostream& os = std::cout;
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   os << "QUERY(";
-  // b->Begin_RemoveWrites = true;
-  // stp::ASTNode q = b->SimplifyFormula_TopLevel(b->GetQuery(),false);
   stp::ASTNode q = b->GetQuery();
-  // b->Begin_RemoveWrites = false;
   q.PL_Print(os);
   // b->GetQuery().PL_Print(os);
   os << ");" << endl;
@@ -1574,20 +1561,14 @@ Expr vc_simplify(VC vc, Expr e)
   if (stp::BOOLEAN_TYPE == a->GetType())
   {
     nodestar round1 = new node(simp->SimplifyFormula_TopLevel(*a, false));
-    // b->Begin_RemoveWrites = true;
     nodestar output = new node(simp->SimplifyFormula_TopLevel(*round1, false));
-    // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    // b->Begin_RemoveWrites = false;
     delete round1;
     return output;
   }
   else
   {
     nodestar round1 = new node(simp->SimplifyTerm(*a));
-    // b->Begin_RemoveWrites = true;
     nodestar output = new node(simp->SimplifyTerm(*round1));
-    // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    // b->Begin_RemoveWrites = false;
     delete round1;
     return output;
   }

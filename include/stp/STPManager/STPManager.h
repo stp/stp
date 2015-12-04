@@ -207,8 +207,6 @@ public:
   // Flags indicates that counterexample will now be checked by the
   // counterexample checker, and hence simplifyterm must switch off
   // certain optimizations. In particular, array write optimizations
-  // bool start_abstracting;
-  // bool Begin_RemoveWrites;
   bool SimplifyWrites_InPlace_Flag;
 
   // count is used in the creation of new variables
@@ -225,12 +223,9 @@ public:
       : _max_node_num(0), last_iteration(0), soft_timeout_expired(false),
         _symbol_count(0), CNFFileNameCounter(0)
   {
-    // Begin_RemoveWrites = false;
     ValidFlag = false;
     bvdiv_exception_occured = false;
     counterexample_checking_during_refinement = false;
-    // start_abstracting = false;
-    // Begin_RemoveWrites = false;
     SimplifyWrites_InPlace_Flag = false;
 
     // Need to initiate the node factories before any nodes are created.

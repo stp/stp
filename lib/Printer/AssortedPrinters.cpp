@@ -128,11 +128,7 @@ void STPMgr::printAssertsToStream(ostream& os)
   ASTVec v = GetAsserts();
   for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
   {
-    // Begin_RemoveWrites = true; ASTNode q = (simplify_print == 1) ?
-    // SimplifyFormula_TopLevel(*i,false) : *i; q = (simplify_print
-    //== 1) ? SimplifyFormula_TopLevel(q,false) : q;
     ASTNode q = *i;
-    // Begin_RemoveWrites = false;
     os << "ASSERT( ";
     q.PL_Print(os);
     os << ");" << endl;
