@@ -312,8 +312,8 @@ if(NOT BUILD_SHARED_LIBS)
   set(CryptoMiniSat_USE_STATIC_LIBS ON)
 endif()
 
-option(NO_BOOST "Don't try to use boost" OFF)
-if (NOT NO_BOOST)
+option(ONLY_SIMPLE "Don't try to use boost" OFF)
+if (NOT ONLY_SIMPLE)
   find_package( Boost 1.46 COMPONENTS program_options)
 endif()
 if(NOT Boost_FOUND)
@@ -338,6 +338,11 @@ if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
   set(USE_CRYPTOMINISAT4 ON)
 else()
   message(WARNING "CryptoMiniSat4 (v4.5 or above) or C++11 support not found, not allowing --cryptominisat4 option")
+endif()
+
+option(FORCE_CMS "Build with coverage check" OFF)
+if (FORCE_CMS AND NOT USE_CRYPTOMINISAT4)
+    message(FATAL_ERROR "CryptoMiniSat was not found but it was requiested. Exiting.")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -376,7 +381,11 @@ set(STP_EXPORT_NAME "STPTargets")
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
-option(ENABLE_PYTHON_INTERFACE "Enable Python interface" ON)
+if (BUILD_SHARED_LIBS)
+    option(ENABLE_PYTHON_INTERFACE "Enable Python interface" ON)
+else()
+    option(ENABLE_PYTHON_INTERFACE "Enable Python interface" OFF)
+endif()
 
 if (ENABLE_PYTHON_INTERFACE AND NOT BUILD_SHARED_LIBS)
     message(FATAL_ERROR "Python interface requires shared library")

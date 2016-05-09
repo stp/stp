@@ -16,19 +16,12 @@
 from __future__ import with_statement  # Required in 2.5
 import subprocess
 import os
-import fnmatch
-import gzip
 import re
 import commands
-import getopt
-import sys
-import signal
 import resource
 import time
 import struct
 import random
-from random import choice
-from subprocess import Popen, PIPE, STDOUT
 #from optparse import OptionParser
 import optparse
 
@@ -47,12 +40,12 @@ usage = "usage: %prog [options] --fuzz"
 desc = """Example usages:
 
 * fuzz the solver with fuzz-generator
-   ./regression_test.py -f
+   ./fuzz_test.py -f
 """
 
 parser = optparse.OptionParser(usage=usage, description=desc, formatter=PlainHelpFormatter())
 parser.add_option("--exec", metavar="SOLVER", dest="solver",
-                  default="../build/stp",
+                  default="../../build/stp",
                   help="STP executable. Default: %default")
 parser.add_option("--check", metavar="CHECKER", dest="checker",
                   default="boolector",
@@ -76,7 +69,6 @@ parser.add_option("--novalgrind", dest="novalgrind", default=False,
 
 
 def setlimits():
-    #sys.stdout.write("Setting resource limit in child (pid %d): %d s\n" % (os.getpid(), maxTime))
     resource.setrlimit(resource.RLIMIT_CPU, (maxTime, maxTime))
 
 
@@ -312,7 +304,7 @@ class Tester:
     def fuzz_test(self):
         fuzzers = [["fuzzsmt", "./fuzzsmt QF_ABV"]]
 
-        directory = "../../"
+        directory = "../../../"
         for fuzzer in fuzzers:
             file_name = unique_fuzz_file("fuzzTest")
 
