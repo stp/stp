@@ -242,7 +242,7 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ..
 
     #fuzz
-    cd stp/scripts/
+    cd stp/scripts/fuzz/
     ./fuzz_test.py -n 20 --novalgrind
 
     #test install
