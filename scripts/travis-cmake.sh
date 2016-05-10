@@ -246,7 +246,7 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     ./fuzz_test.py -n 20 --novalgrind
 
     #test install
-    cd ../build/
+    cd ../../build/
     sudo make install
 fi
 
