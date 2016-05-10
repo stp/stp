@@ -43,9 +43,6 @@ int SimpleMain::create_and_parse_options(int argc, char** argv)
 
   if (argc > 1)
   {
-    #ifdef USE_CRYPTOMINISAT4
-        bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
-    #endif
     infile = argv[1];
     check_infile_type();
   }
