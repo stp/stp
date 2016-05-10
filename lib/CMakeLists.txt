@@ -128,6 +128,7 @@ target_link_libraries(libstp ${libstp_link_libs})
 # Set the public header so it will be installed
 set_target_properties(libstp
                       PROPERTIES
+                      VERSION ${PROJECT_VERSION}
                       PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
                      )
 
