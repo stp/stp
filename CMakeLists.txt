@@ -340,7 +340,7 @@ else()
   message(WARNING "CryptoMiniSat4 (v4.5 or above) or C++11 support not found, not allowing --cryptominisat4 option")
 endif()
 
-option(FORCE_CMS "Build with coverage check" OFF)
+option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
 if (FORCE_CMS AND NOT USE_CRYPTOMINISAT4)
     message(FATAL_ERROR "CryptoMiniSat was not found but it was requiested. Exiting.")
 endif()
