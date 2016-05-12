@@ -95,6 +95,10 @@ public:
   // The simplifying solvers shouldn't eliminate index / value variables.
   virtual void setFrozen(uint32_t /*var*/) {}
 
+  virtual void enableRefinement(const bool enable)
+  {
+  }
+
   virtual int nClauses()
   {
     std::cerr << "Not yet implemented.";

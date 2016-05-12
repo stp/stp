@@ -30,11 +30,19 @@ using std::vector;
 namespace stp
 {
 
+void CryptoMinisat4::enableRefinement(const bool enable)
+{
+  // might break if we simplify with refinement enabled..
+  if (enable)
+  {
+    s->set_no_simplify_at_startup();
+  }
+}
+
 CryptoMinisat4::CryptoMinisat4(int num_threads)
 {
   s = new CMSat::SATSolver;
   // s->log_to_file("stp.cnf");
-  s->set_no_simplify_at_startup();
   s->set_num_threads(num_threads);
   s->set_default_polarity(false);
   temp_cl = (void*)new vector<CMSat::Lit>;

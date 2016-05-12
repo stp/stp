@@ -65,6 +65,8 @@ public:
 
   void printStats() const;
 
+  virtual void enableRefinement(const bool enable);
+
   // nb CryptoMiniSat has different literal values to the other minisats.
   virtual lbool true_literal() { return ((uint8_t)1); }
   virtual lbool false_literal() { return ((uint8_t)-1); }

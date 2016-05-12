@@ -579,6 +579,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;
 
+  NewSolver.enableRefinement(maybeRefinement);
+
   // If it doesn't contain array operations, use ABC's CNF generation.
   res = Ctr_Example->CallSAT_ResultCheck(
       NewSolver, inputToSat, original_input, satBase,
