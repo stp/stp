@@ -118,7 +118,8 @@ class Tester:
             choose_solver.append("--cryptominisat4")
 
         cmd += " %s " % random.choice(choose_solver)
-        cmd += " --threads %d " % random.choice([1, 4, 10])
+        if self.cryptominisat4_available:
+            cmd += " --threads %d " % random.choice([1, 4, 10])
 
         #if random.randint(0,1) == 1 :
         #    cmd += "-i %d " % random.randint(0,1000)
