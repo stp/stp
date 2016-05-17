@@ -87,6 +87,9 @@ def unique_fuzz_file(file_name_begin):
 
 class Tester:
 
+    def __init__(self):
+        self.cryptominisat4_available = self.check_cryptominisat4()
+
     def random_options(self):
         cmd = " "
         #opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
@@ -111,19 +114,26 @@ class Tester:
                 cmd += opt + " "
 
         choose_solver = ["", "--simplifying-minisat", "--minisat"]
-        cmd += random.choice(choose_solver) + " "
+        if self.cryptominisat4_available:
+            choose_solver.append("--cryptominisat4")
+
+        cmd += " %s " % random.choice(choose_solver)
+        cmd += " --threads %d " % random.choice([1, 4, 10])
 
         #if random.randint(0,1) == 1 :
         #    cmd += "-i %d " % random.randint(0,1000)
 
         return cmd
 
-    def execute(self, fname, needToLimitTime=False):
+    def _check_solver_exists(self):
         if os.path.isfile(options.solver) is not True:
             print "Error: Cannot find STP executable. Searched in: '%s'" % \
                 options.solver
             print "Error code 300"
             exit(300)
+
+    def execute(self, fname, needToLimitTime=False):
+        self._check_solver_exists()
 
         #construct command
         command = ""
@@ -233,6 +243,16 @@ class Tester:
 
         #check if the other solver agrees with us
         return otherSolverUNSAT
+
+    def check_cryptominisat4(self):
+        command = options.solver
+        command += " -h"
+        p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
+        consoleOutput, _ = p.communicate()
+        for line in consoleOutput.split("\n"):
+            if "cryptominisat4" in line:
+                return True
+        return False
 
     def check(self, fname, fnameSolution=None, needSolve=True, needToLimitTime=False):
         currTime = time.time()
