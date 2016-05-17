@@ -40,7 +40,6 @@ case $STP_CONFIG in
                    -DBUILD_STATIC_BIN:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
-        TEST=0
     ;;
 
     COVERAGE)
@@ -100,6 +99,7 @@ case $STP_CONFIG in
                    -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
+        TEST=0
     ;;
 
     NO_BOOST)
