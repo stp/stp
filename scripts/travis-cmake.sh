@@ -24,10 +24,6 @@ set -e
 
 # This file wraps CMake invocation for TravisCI
 # so we can set different configurations via environment variables.
-#
-# We could modify our CMake scripts to read environment variables directly but
-# that would create two ways of setting the same thing which doesn't seem like
-# a good idea.
 
 SOURCE_DIR=`pwd`
 cd build
