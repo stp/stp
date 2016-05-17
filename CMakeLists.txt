@@ -383,10 +383,13 @@ set(STP_EXPORT_NAME "STPTargets")
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
+
 if (BUILD_SHARED_LIBS)
     option(ENABLE_PYTHON_INTERFACE "Enable Python interface" ON)
 else()
     option(ENABLE_PYTHON_INTERFACE "Enable Python interface" OFF)
+    message(STATUS "Cannot enable testing if shared libs are not built.")
+    set(ENABLE_TESTING OFF)
 endif()
 
 if (ENABLE_PYTHON_INTERFACE AND NOT BUILD_SHARED_LIBS)

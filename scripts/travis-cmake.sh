@@ -32,6 +32,7 @@ set -e
 SOURCE_DIR=`pwd`
 cd build
 BUILD_DIR=`pwd`
+TEST=1
 COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
@@ -43,6 +44,7 @@ case $STP_CONFIG in
                    -DBUILD_STATIC_BIN:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
+        TEST=0
     ;;
 
     COVERAGE)
@@ -85,6 +87,7 @@ case $STP_CONFIG in
                    -DBUILD_STATIC_BIN:BOOL=ON \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
+        TEST=0
     ;;
 
     RELEASE)
@@ -128,8 +131,10 @@ case $STP_CONFIG in
         exit 1
 esac
 
-make VERBOSE=1
-make check
+make -j2 VERBOSE=1
+if [ "$TEST" = "1" ]; then
+    make check
+fi
 
 if [ "$STP_CONFIG" = "KLEE" ]; then
     sudo sh -c 'echo "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.4 main" >> /etc/apt/sources.list.d/llvm.list'
