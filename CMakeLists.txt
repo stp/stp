@@ -135,7 +135,7 @@ if (BUILD_SHARED_LIBS)
     set(STP_STATIC_LIBRARY libstp_static) # Used for exporting target
   endif()
 else()
-  set(CMAKE_EXE_LINKER_FLAGS "-static ${CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
   SET(BUILD_SHARED_LIBRARIES OFF)
   set(STP_STATIC_LIBRARY libstp) # Used for exporting target
