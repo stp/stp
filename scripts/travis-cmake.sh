@@ -84,7 +84,6 @@ case $STP_CONFIG in
 
     NO_BOOST)
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DNO_BOOSTS:BOOL=ON \
                    ${SOURCE_DIR}
     ;;
 
