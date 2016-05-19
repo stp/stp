@@ -116,30 +116,15 @@ if (WIN32)
   # building of shared lib on windows is not done at source level
   set(BUILD_SHARED_LIBS OFF)
   message(WARNING "Disabling building of shared library on Windows")
-else()
-    option(BUILD_STATIC_BIN "Build a static binary (and no shared libs)" OFF)
-
-    if (BUILD_STATIC_BIN)
-        set(BUILD_SHARED_LIBS OFF)
-        # Flags for the linker will be set later
-    endif()
 endif()
 
 if (BUILD_SHARED_LIBS)
-  option(ALSO_BUILD_STATIC_LIB "IF building shared library, also build the static library" ON)
-
   set(STP_SHARED_LIBRARY libstp) # Used for exporting target
-
-  if (ALSO_BUILD_STATIC_LIB AND NOT WIN32)
-    list(APPEND TARGETS_TO_EXPORT libstp_static)
-    set(STP_STATIC_LIBRARY libstp_static) # Used for exporting target
-  endif()
 else()
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
   SET(BUILD_SHARED_LIBRARIES OFF)
   set(STP_STATIC_LIBRARY libstp) # Used for exporting target
-  unset(ALSO_BUILD_STATIC_LIB CACHE) # Hide this option for ccmake and cmake-gui users
 endif()
 
 # -----------------------------------------------------------------------------
@@ -328,9 +313,10 @@ endif()
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat4
 # -----------------------------------------------------------------------------
+option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
 set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat4Config.cmake")
 find_package(cryptominisat4 CONFIG)
-if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11)
+if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
   message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
   message(STATUS "CryptoMiniSat4 dynamic lib: ${CRYPTOMINISAT4_LIBRARIES}")
   message(STATUS "CryptoMiniSat4 static lib:  ${CRYPTOMINISAT4_STATIC_LIBRARIES}")

@@ -33,15 +33,6 @@ COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STR
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
 case $STP_CONFIG in
-    STATIC_LIB)
-        eval sudo apt-get install -y libboost-all-dev
-        eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=OFF \
-                   -DBUILD_STATIC_BIN:BOOL=OFF \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
-                   ${SOURCE_DIR}
-    ;;
-
     COVERAGE)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
@@ -61,18 +52,7 @@ case $STP_CONFIG in
     DYNAMIC_LIB)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=ON \
-                   -DBUILD_STATIC_BIN:BOOL=OFF \
-                   -DALSO_BUILD_STATIC_LIB:BOOL=OFF \
-                   ${SOURCE_DIR}
-    ;;
-
-    DYNAMIC_AND_STATIC_LIB)
-        eval sudo apt-get install -y libboost-all-dev
-        eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=ON \
-                   -DBUILD_STATIC_BIN:BOOL=OFF \
-                   -DALSO_BUILD_STATIC_LIB:BOOL=ON \
+                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 
@@ -96,7 +76,7 @@ case $STP_CONFIG in
     KLEE)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=OFF \
+                   -DBUILD_STATIC_BIN:BOOL=ON \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
         TEST=0
@@ -118,7 +98,6 @@ case $STP_CONFIG in
          eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_SHARED_LIBS:BOOL=ON \
                    -DBUILD_STATIC_BIN:BOOL=OFF \
-                   -DALSO_BUILD_STATIC_LIB:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 

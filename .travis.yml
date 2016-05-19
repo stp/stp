@@ -11,10 +11,7 @@ env:
 
   matrix:
     # These are used by .travis-cmake.sh to set a configuration
-    - STP_CONFIG=STATIC_LIB
     - STP_CONFIG=DYNAMIC_LIB
-    - STP_CONFIG=DYNAMIC_AND_STATIC_LIB
-    - STP_CONFIG=STATIC_BINARY
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
