@@ -146,7 +146,9 @@ void ExtraMain::create_options()
   po::options_description hiddenOptions("Hidden options");
   hiddenOptions.add_options()
   ("file", po::value<string>(&infile), "input file")
+  #ifdef USE_CRYPTOMINISAT4
   ("cryptominisat", "same as --cryptominisat4")
+  #endif
   ;
 
   // Declare the supported options.
