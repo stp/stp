@@ -56,15 +56,6 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    STATIC_BINARY)
-        eval sudo apt-get install -y libboost-all-dev
-        eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_STATIC_BIN:BOOL=ON \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
-                   ${SOURCE_DIR}
-        TEST=0
-    ;;
-
     RELEASE)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
@@ -77,6 +68,7 @@ case $STP_CONFIG in
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_STATIC_BIN:BOOL=ON \
+                   -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
         TEST=0
