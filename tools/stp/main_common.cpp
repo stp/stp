@@ -86,6 +86,18 @@ Main::~Main()
   delete bm;
 }
 
+void Main::printVersionInfo()
+{
+    cout << "STP version " << stp::get_git_version_tag() << std::endl;
+    cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
+    cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
+    #ifdef __GNUC__
+    cout << "c compiled with gcc version " << __VERSION__ << endl;
+    #else
+    cout << "c compiled with non-gcc compiler" << endl;
+    #endif
+}
+
 void Main::parse_file(ASTVec* AssertsQuery)
 {
   TypeChecker nfTypeCheckSimp(*bm->defaultNodeFactory, *bm);

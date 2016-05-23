@@ -354,6 +354,17 @@ find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
 # -----------------------------------------------------------------------------
+# Query definitions
+# -----------------------------------------------------------------------------
+get_directory_property( DirDefs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITIONS )
+set(COMPILE_DEFINES)
+foreach( d ${DirDefs} )
+    # message( STATUS "Found Define: " ${d} )
+    set(COMPILE_DEFINES "${COMPILE_DEFINES} -D${d}")
+endforeach()
+message(STATUS "All defines at startup: ${COMPILE_DEFINES}")
+
+# -----------------------------------------------------------------------------
 # Setup library build path (this is **not** the library install path)
 # -----------------------------------------------------------------------------
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)

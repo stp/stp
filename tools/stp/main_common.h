@@ -49,6 +49,7 @@ public:
   void parse_file(ASTVec* AssertsQuery);
   void print_back(ASTNode& query, ASTNode& asserts);
   void read_file();
+  void printVersionInfo();
 
   STPMgr* bm;
   bool onePrintBack;

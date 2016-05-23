@@ -30,4 +30,5 @@ SOFTWARE.
 namespace stp {
   const char* get_git_version_sha();
   const char* get_git_version_tag();
+  const char* get_compilation_env();
 }
