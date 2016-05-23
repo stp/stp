@@ -72,6 +72,10 @@ foreach (build_config ${build_types})
 endforeach()
 
 option(ENABLE_ASSERTIONS "Build with assertions enabled" ON)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(ENABLE_ASSERTIONS OFF)
+endif()
+
 if (ENABLE_ASSERTIONS)
     # NDEBUG was already removed.
 else()
