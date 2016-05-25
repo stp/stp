@@ -65,9 +65,6 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(
   if (bm->UserFlags.stats_flag)
     NewSolver.setVerbosity(1);
 
-  if (bm->UserFlags.random_seed_flag)
-    NewSolver.setSeed(bm->UserFlags.random_seed);
-
   if (bm->UserFlags.timeout_max_conflicts >= 0)
     newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
 

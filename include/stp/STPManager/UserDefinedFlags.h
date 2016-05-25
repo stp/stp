@@ -79,11 +79,6 @@ public:
   // different printer. do not use this printer.
   bool print_arrayval_declaredorder_flag;
 
-  // Flag that determines whether the Boolean SAT solver should
-  // assign random polarity to the Boolean variables
-  bool random_seed_flag;
-  int random_seed;
-
   // Flag that allows the printing of the DIMACS format of the input
   bool print_cnf_flag;
   char* cnf_dump_filename;
@@ -243,11 +238,6 @@ public:
     // if this option is true then print the way dawson wants using a
     // different printer. do not use this printer.
     print_arrayval_declaredorder_flag = false;
-
-    // Flag that determines whether the Boolean SAT solver should
-    // assign random polarity to the Boolean variables
-    random_seed_flag = false;
-    random_seed = 0;
 
     // flag to decide whether to print "valid/invalid" or not
     print_output_flag = false;

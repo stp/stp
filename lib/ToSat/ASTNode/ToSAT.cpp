@@ -114,11 +114,6 @@ bool ToSAT::toSATandSolve(SATSolver& newSolver, ClauseList& cll, bool final,
     FatalError("toSATandSolve: Nothing to Solve", ASTUndefined);
   }
 
-  if (bm->UserFlags.random_seed_flag)
-  {
-    newSolver.setSeed(bm->UserFlags.random_seed);
-  }
-
   ClauseContainer& cc = *cll.asList();
 
   if (bm->UserFlags.output_CNF_flag && true)

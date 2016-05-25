@@ -245,11 +245,7 @@ void ExtraMain::create_options()
                              "exit after the CNF has been generated")
       ("timeout,g", po::value<int64_t>(&max_num_confl),
        "Number of conflicts after which the SAT solver gives up. -1 means never (default)")
-      ("seed,i", po::value<size_t>(&random_seed),
-       "set random seed for STP's satisfiable output. Random_seed is an "
-       "integer >= 0")("random-seed",
-                       "generate a random number for the SAT solver.")(
-          "check-sanity,d", "construct counterexample and check it");
+      ("check-sanity,d", "construct counterexample and check it");
 
   cmdline_options.add(general_options)
       .add(solver_options)
@@ -345,13 +341,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.propagate_equalities = false;
   }
 
-  if (vm.count("random-seed"))
-  {
-    srand(time(NULL));
-    bm->UserFlags.random_seed_flag = true;
-    bm->UserFlags.random_seed = rand();
-  }
-
   // TODO this is not actually exposed by original main.cpp code
   if (vm.count("hash-nf"))
   {
@@ -360,12 +349,6 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("timeout"))
   {
     bm->UserFlags.timeout_max_conflicts = max_num_confl;
-  }
-
-  if (vm.count("seed"))
-  {
-    bm->UserFlags.random_seed_flag = true;
-    bm->UserFlags.random_seed = random_seed;
   }
 
   if (vm.count("constr-check-counterex"))
