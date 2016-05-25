@@ -61,7 +61,7 @@ struct Relations
   Relations(int iterations, int bitWidth, Kind k, stp::STPMgr* beev,
             unsigned probabilityOfFixing)
   {
-    MTRand rand;
+    MTRand rand(10U);
 
     for (int i = 0; i < iterations; i++)
     {

@@ -60,7 +60,7 @@ void run(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 
   unsigned calls = 0;
 
-  MTRand rand;
+  MTRand rand(10U);
 
   unsigned long totalOutputBits = 0;
   unsigned long totalOutputOneBits = 0;
