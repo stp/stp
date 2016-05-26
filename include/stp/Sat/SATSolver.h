@@ -79,13 +79,6 @@ public:
 
   virtual void printStats() const = 0;
 
-  virtual void setSeed(int /*seed*/)
-  {
-    std::cerr << "Setting the random seen is not implemented for this solver"
-              << std::endl;
-    exit(1);
-  }
-
   virtual void setVerbosity(int v) = 0;
 
   virtual lbool true_literal() = 0;

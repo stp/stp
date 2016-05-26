@@ -92,11 +92,6 @@ void SimplifyingMinisat::setVerbosity(int v)
   s->verbosity = v;
 }
 
-void SimplifyingMinisat::setSeed(int i)
-{
-  s->random_seed = i;
-}
-
 uint32_t SimplifyingMinisat::newVar()
 {
   return s->newVar();
