@@ -63,7 +63,6 @@ public:
 
   // For options
   int64_t max_num_confl;
-  size_t random_seed;
 };
 
 #endif //__MAIN_COMMON_H__
