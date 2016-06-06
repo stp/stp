@@ -257,7 +257,7 @@ public:
 
     // Flag to switch on the smtlib parser
     smtlib1_parser_flag = false;
-    smtlib2_parser_flag = false;
+    smtlib2_parser_flag = true;
 
     // print the input back
     print_STPinput_back_flag = false;
@@ -270,7 +270,7 @@ public:
 
     // If enabled. division, mod and remainder by zero will evaluate to
     // 1.
-    division_by_zero_returns_one_flag = false;
+    division_by_zero_returns_one_flag = true;
 
     quick_statistics_flag = false;
 

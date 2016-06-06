@@ -118,6 +118,7 @@
 	}
 %}
 
+%option always-interactive
 %option noyywrap
 %option nounput
 %option noreject
