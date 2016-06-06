@@ -375,7 +375,7 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.check_counterexample_flag = true;
   }
 
-  if (!bm->UserFlags.smtlib1_parser_flag && !bm->UserFlags.smtlib2_parser_flag)
+  if (selected_type == 0)
   {
     // No parser is explicity requested.
     check_infile_type();
