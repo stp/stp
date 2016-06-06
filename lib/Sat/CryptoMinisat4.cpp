@@ -45,6 +45,7 @@ CryptoMinisat4::CryptoMinisat4(int num_threads)
   // s->log_to_file("stp.cnf");
   s->set_num_threads(num_threads);
   s->set_default_polarity(false);
+  //s->set_allow_otf_gauss();
   temp_cl = (void*)new vector<CMSat::Lit>;
 }
 
