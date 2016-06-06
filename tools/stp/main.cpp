@@ -295,6 +295,7 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("CVC"))
   {
     selected_type++;
+    bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = false;
     bm->UserFlags.division_by_zero_returns_one_flag = false;
   }
@@ -302,29 +303,28 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("SMTLIB2"))
   {
     selected_type++;
+    bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = true;
     bm->UserFlags.division_by_zero_returns_one_flag = true;
-    if (bm->UserFlags.smtlib1_parser_flag)
-    {
-      FatalError("Can't use both the smtlib and smtlib2 parsers");
-    }
   }
 
   if (vm.count("SMTLIB1"))
   {
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = true;
+    bm->UserFlags.smtlib2_parser_flag = false;
     bm->UserFlags.division_by_zero_returns_one_flag = true;
-    if (bm->UserFlags.smtlib2_parser_flag)
-    {
-      FatalError("Can't use both the smtlib and smtlib2 parsers");
-    }
   }
 
   if (selected_type > 1) {
       cout << "ERROR: You have selected more than one parsing option from"
       "CVC/SMTLIB1/SMTLIB2" << endl;
       std::exit(-1);
+  }
+
+  if (selected_type == 0) {
+    bm->UserFlags.smtlib2_parser_flag = true;
+    bm->UserFlags.division_by_zero_returns_one_flag = true;
   }
 
   if (vm.count("simplifying-minisat"))

@@ -41,6 +41,9 @@ int SimpleMain::create_and_parse_options(int argc, char** argv)
     exit(0);
   }
 
+  bm->UserFlags.smtlib2_parser_flag = true;
+  bm->UserFlags.division_by_zero_returns_one_flag = true;
+
   if (argc > 1)
   {
     infile = argv[1];
