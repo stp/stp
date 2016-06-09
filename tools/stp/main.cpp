@@ -184,49 +184,49 @@ void ExtraMain::create_options()
       "flatten XORs");
 
   po::options_description print_options("Printing options");
-  print_options.add_options()(
-      "print-stpinput,b",
+  print_options.add_options()
+  ("print-stpinput,b",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_flag)),
-      "print STP input back to cout")(
-      "print-back-CVC",
+      "print STP input back to cout")
+  ("print-back-CVC",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_CVC_flag)),
-      "print input in CVC format, then exit")(
-      "print-back-SMTLIB2",
+      "print input in CVC format, then exit")
+  ("print-back-SMTLIB2",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_SMTLIB2_flag)),
-      "print input in SMT-LIB2 format, then exit")(
-      "print-back-SMTLIB1",
+      "print input in SMT-LIB2 format, then exit")
+  ("print-back-SMTLIB1",
       po::bool_switch((&bm->UserFlags.print_STPinput_back_SMTLIB1_flag)),
-      "print input in SMT-LIB1 format, then exit")(
-      "print-back-GDL",
+      "print input in SMT-LIB1 format, then exit")
+  ("print-back-GDL",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_GDL_flag)),
-      "print AiSee's graph format, then exit")(
-      "print-back-dot",
+      "print AiSee's graph format, then exit")
+  ("print-back-dot",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_dot_flag)),
-      "print dotty/neato's graph format, then exit")(
-      "print-counterex,p",
+      "print dotty/neato's graph format, then exit")
+  ("print-counterex,p",
       po::bool_switch(&(bm->UserFlags.print_counterexample_flag)),
-      "print counterexample")(
-      "print-counterexbin,y",
+      "print counterexample")
+  ("print-counterexbin,y",
       po::bool_switch(&(bm->UserFlags.print_binary_flag)),
-      "print counterexample in binary")(
-      "print-arrayval,q",
+      "print counterexample in binary")
+  ("print-arrayval,q",
       po::bool_switch(&(bm->UserFlags.print_arrayval_declaredorder_flag)),
-      "print arrayval declared order")(
-      "print-functionstat,s", po::bool_switch(&(bm->UserFlags.stats_flag)),
-      "print function statistics")(
-      "print-quickstat,t",
+      "print arrayval declared order")
+  ("print-functionstat,s", po::bool_switch(&(bm->UserFlags.stats_flag)),
+      "print function statistics")
+  ("print-quickstat,t",
       po::bool_switch(&(bm->UserFlags.quick_statistics_flag)),
-      "print quick statistics")(
-      "print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
+      "print quick statistics")
+  ("print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
       "print nodes ")
-      /*("constr-counterex,c",
-         po::bool_switch(&(bm->UserFlags.construct_counterexample_flag))
-          , "construct counterexample")*/
-      ("print-varorder,z",
-       po::bool_switch(&(bm->UserFlags.print_sat_varorder_flag)),
-       "Print SAT variable order")(
-          "print-output,n", po::bool_switch(&(bm->UserFlags.print_output_flag)),
-          "Print output");
+  /*("constr-counterex,c",
+     po::bool_switch(&(bm->UserFlags.construct_counterexample_flag))
+      , "construct counterexample")*/
+  ("print-varorder,z",
+      po::bool_switch(&(bm->UserFlags.print_sat_varorder_flag)),
+      "Print SAT variable order")
+  ("print-output,n", po::bool_switch(&(bm->UserFlags.print_output_flag)),
+      "Print output");
 
   po::options_description input_options("Input options");
   input_options.add_options()
