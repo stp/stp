@@ -759,7 +759,6 @@ void startup()
   mgr = new stp::STPMgr();
   stp::GlobalParserBM = mgr;
 
-  mgr->UserFlags.division_by_zero_returns_one_flag = true;
 
   simp = new Simplifier(mgr);
   ArrayTransformer* at = new ArrayTransformer(mgr, simp);

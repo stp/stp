@@ -71,7 +71,6 @@ void process_argument(const char ch, STPMgr* bm)
       break;
     case 'm':
       bm->UserFlags.smtlib1_parser_flag = true;
-      bm->UserFlags.division_by_zero_returns_one_flag = true;
       if (bm->UserFlags.smtlib2_parser_flag)
         FatalError("Can't use both the smtlib and smtlib2 parsers");
       break;

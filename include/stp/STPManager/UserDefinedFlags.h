@@ -270,7 +270,7 @@ public:
 
     // If enabled. division, mod and remainder by zero will evaluate to
     // 1.
-    division_by_zero_returns_one_flag = false;
+    division_by_zero_returns_one_flag = true;
 
     quick_statistics_flag = false;
 

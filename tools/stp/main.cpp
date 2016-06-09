@@ -297,7 +297,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = false;
-    bm->UserFlags.division_by_zero_returns_one_flag = false;
   }
 
   if (vm.count("SMTLIB2"))
@@ -305,7 +304,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = true;
-    bm->UserFlags.division_by_zero_returns_one_flag = true;
   }
 
   if (vm.count("SMTLIB1"))
@@ -313,7 +311,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = true;
     bm->UserFlags.smtlib2_parser_flag = false;
-    bm->UserFlags.division_by_zero_returns_one_flag = true;
   }
 
   if (selected_type > 1) {
@@ -324,7 +321,6 @@ int ExtraMain::parse_options(int argc, char** argv)
 
   if (selected_type == 0) {
     bm->UserFlags.smtlib2_parser_flag = true;
-    bm->UserFlags.division_by_zero_returns_one_flag = true;
   }
 
   if (vm.count("simplifying-minisat"))

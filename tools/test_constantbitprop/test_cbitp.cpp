@@ -1129,7 +1129,6 @@ int main(void)
   stp::STPMgr stp;
   mgr = &stp;
   mgr->UserFlags.disableSimplifications();
-  mgr->UserFlags.division_by_zero_returns_one_flag = true;
   Cpp_interface interface(*mgr);
 
   // Add had a defect effecting bithWidth > 90.

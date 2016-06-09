@@ -184,7 +184,6 @@ int main()
 {
   mgr = new STPMgr;
   Cpp_interface interface(*mgr);
-  mgr->UserFlags.division_by_zero_returns_one_flag = true;
   // mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;

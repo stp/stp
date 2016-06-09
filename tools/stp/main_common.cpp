@@ -250,20 +250,17 @@ void Main::check_infile_type()
   {
     if (!infile.compare(infile.length() - 4, 4, ".cvc"))
     {
-      bm->UserFlags.division_by_zero_returns_one_flag = false;
       bm->UserFlags.smtlib1_parser_flag = false;
       bm->UserFlags.smtlib2_parser_flag = false;
     }
 
     if (!infile.compare(infile.length() - 4, 4, ".smt"))
     {
-      bm->UserFlags.division_by_zero_returns_one_flag = true;
       bm->UserFlags.smtlib1_parser_flag = true;
       bm->UserFlags.smtlib2_parser_flag = false;
     }
     if (!infile.compare(infile.length() - 5, 5, ".smt2"))
     {
-      bm->UserFlags.division_by_zero_returns_one_flag = true;
       bm->UserFlags.smtlib1_parser_flag = false;
       bm->UserFlags.smtlib2_parser_flag = true;
     }

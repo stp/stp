@@ -113,10 +113,10 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
   }
 }
 
+// Division is now always total
 void make_division_total(VC vc)
 {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
-  b->UserFlags.division_by_zero_returns_one_flag = true;
+
 }
 
 // Create a validity Checker. This is the global STPMgr
