@@ -8,9 +8,9 @@ platform, consult `cmake --help`.
 Here are a few interesting configuration variables. These apply to all
 generators.
 
-- ``BUILD_SHARED_LIBS`` - Build shared libraries rather than static
 - ``CMAKE_BUILD_TYPE`` - The build type (e.g. Release)
 - ``CMAKE_INSTALL_PREFIX`` - The prefix for install (e.g. /usr/local )
+- ``DBUILD_STATIC_BIN``- Build static binary and library
 - ``ENABLE_ASSERTIONS`` - If TRUE STP will be built with asserts.
 - ``ENABLE_TESTING`` - Enable running tests
 - ``ENABLE_PYTHON_INTERFACE`` - Enable building the Python interface
@@ -47,6 +47,8 @@ $ sudo ldconfig
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including Cryptominisat4 as an optional extra. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
 
 You can get it from https://github.com/msoos/cryptominisat
+
+Note that in case you want to create a statically linked STP binary or a static STP library, you will need to build cryptominisat with ``-DSTATICCOMPILE=ON``.
 
 ### Testing
 
