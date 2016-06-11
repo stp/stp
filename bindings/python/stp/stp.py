@@ -339,18 +339,15 @@ class Expr(object):
     def _2(self, cb, other):
         """Wrapper around double-expression STP functions."""
         other = self._toexpr(other)
-        assert isinstance(other, Expr), \
-            'Other object must be an Expr instance'
+        assert isinstance(other, Expr), 'Other object must be an Expr instance'
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
 
     def _2w(self, cb, a, b):
         """Wrapper around double-expression with width STP functions."""
         a, b = self._toexpr(a), self._toexpr(b)
-        assert isinstance(a, Expr), \
-            'Left operand must be an Expr instance'
-        assert isinstance(b, Expr), \
-            'Right operand must be an Expr instance'
+        assert isinstance(a, Expr), 'Left operand must be an Expr instance'
+        assert isinstance(b, Expr), 'Right operand must be an Expr instance'
         assert self.width == a.width, 'Width must be equal'
         assert self.width == b.width, 'Width must be equal'
         expr = cb(self.s.vc, self.width, a.expr, b.expr)
