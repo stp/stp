@@ -259,7 +259,7 @@ class Solver(object):
         """Check whether the various expressions are satisfiable."""
 
         _, length = self._n_exprs(*exprs)
-        if (length > 0) :
+        if (length > 0):
             expr = self.and_(*exprs)
             expr = _lib.vc_notExpr(self.vc, expr.expr)
         else:
