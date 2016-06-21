@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include <cassert>
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {

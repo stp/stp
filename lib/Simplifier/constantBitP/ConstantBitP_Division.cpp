@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include <set>
 #include <stdexcept>
 #include "stp/AST/AST.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace simplifier
 {

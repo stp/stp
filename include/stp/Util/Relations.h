@@ -36,7 +36,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include <list>
 using std::list;
 

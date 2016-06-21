@@ -19,12 +19,12 @@
 # THE SOFTWARE.
 
 add_library(simplifier OBJECT
-    bvsolver.cpp
+    BVSolver.cpp
     consteval.cpp
     MutableASTNode.cpp
     PropagateEqualities.cpp
     RemoveUnconstrained.cpp
-    simplifier.cpp
+    Simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp
 

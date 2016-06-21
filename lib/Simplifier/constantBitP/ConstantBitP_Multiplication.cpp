@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include <set>
 #include <stdexcept>
 #include "stp/AST/AST.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnCounts.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"

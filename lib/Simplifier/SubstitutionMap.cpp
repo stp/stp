@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/SubstitutionMap.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
 
 namespace stp

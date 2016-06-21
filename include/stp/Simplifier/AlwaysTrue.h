@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include <map>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {

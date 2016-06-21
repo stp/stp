@@ -30,7 +30,7 @@ THE SOFTWARE.
  */
 #include "stp/AST/ArrayTransformer.h"
 #include <cassert>
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>

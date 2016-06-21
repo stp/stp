@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 // This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ
 // SYMBOL BVCONST)),

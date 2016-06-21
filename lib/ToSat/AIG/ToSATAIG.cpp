@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {

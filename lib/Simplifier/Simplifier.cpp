@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include <cassert>
 #include <cmath>
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 
 #ifdef _MSC_VER

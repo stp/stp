@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/bvsolver.h"
+#include "stp/Simplifier/BVSolver.h"
 
 // This file contains the implementation of member functions of
 // bvsolver class, which represents the bitvector arithmetic linear

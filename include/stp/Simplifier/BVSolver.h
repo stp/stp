@@ -26,7 +26,7 @@ THE SOFTWARE.
 #ifndef BVSOLVER_H
 #define BVSOLVER_H
 
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/Symbols.h"
 #include "stp/Simplifier/VariablesInExpression.h"
 

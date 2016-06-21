@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "extlib-constbv/constantbv.h"
 #include "stp/Printer/printers.h"
 #include "stp/AST/NodeFactory/NodeFactory.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include <iostream>
 #include <fstream>

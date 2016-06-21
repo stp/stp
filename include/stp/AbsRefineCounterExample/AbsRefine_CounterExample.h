@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
 #include "stp/ToSat/ToSATBase.h"
 

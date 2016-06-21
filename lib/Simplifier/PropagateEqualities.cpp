@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include <string>
 #include "stp/Simplifier/PropagateEqualities.h"
-#include "stp/Simplifier/simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/AST/ArrayTransformer.h"
 
 namespace stp
