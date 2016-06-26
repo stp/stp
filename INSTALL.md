@@ -48,7 +48,41 @@ STP uses minisat as its SAT solver by default but it also supports other SAT sol
 
 You can get it from https://github.com/msoos/cryptominisat
 
-Note that in case you want to create a statically linked STP binary or a static STP library, you will need to build cryptominisat with ``-DSTATICCOMPILE=ON``.
+```
+$ git clone https://github.com/msoos/cryptominisat
+$ cd cryptominisat
+$ mkdir build && cd build
+$ cmake ..
+$ make
+$ sudo make install
+$ sudo ldconfig
+```
+
+### Static library and binary
+
+In case you wish to use CryptoMiniSat4, you need to build it to create a static library:
+
+```
+$ git clone https://github.com/msoos/cryptominisat
+$ cd cryptominisat
+$ mkdir build && cd build
+$ cmake -DSTATICCOMPILE=ON ..
+$ make
+$ sudo make install
+$ sudo ldconfig
+```
+
+Otherwise, just build STP statically:
+
+```
+$ git clone https://github.com/stp/stp.git
+$ cd stp
+$ mkdir build && cd build
+$ cmake -DBUILD_STATIC_BIN=ON -DBUILD_SHARED_LIBS=OFF ..
+$ make
+$ sudo make install
+$ sudo ldconfig
+```
 
 ### Testing
 
