@@ -42,9 +42,9 @@ $ sudo make install
 $ sudo ldconfig
 ```
 
-### Cryptominisat4
+### CryptoMiniSat4
 
-STP uses minisat as its SAT solver by default but it also supports other SAT solvers including Cryptominisat4 as an optional extra. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
+STP uses minisat as its SAT solver by default but it also supports other SAT solvers including CryptoMiniSat4 as an optional extra. If it is installed it will be detected during the CMake configure and will be available for use in ``stp``.
 
 You can get it from https://github.com/msoos/cryptominisat
 
