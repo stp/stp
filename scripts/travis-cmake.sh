@@ -109,7 +109,8 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
     sudo sh -c 'echo "deb-src http://llvm.org/apt/precise/ llvm-toolchain-precise-3.5 main" >> /etc/apt/sources.list.d/llvm.list'
     # Needed for new libstdc++ and gcc4.8
     sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
-    wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
+    wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+
     sudo apt-get update
     sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python-minimal python-pip unzip
 
