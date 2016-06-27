@@ -21,16 +21,13 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-if(NOT BUILD_SHARED_LIBS)
-  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
-endif()
-
 if (Boost_FOUND)
     add_executable(stp
         main.cpp
         main_common.cpp
         STPProgramGlobals.cpp
     )
+
     if (BUILD_STATIC_BIN)
         set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
         set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)

@@ -21,13 +21,6 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-if (BUILD_STATIC_BIN)
-    # FIXME: We should check if the linker supports these flags
-    # FIXME: -Wl,--no-export-dynamic is a workaround for a bug in binutils
-    # See http://sourceware.org/bugzilla/show_bug.cgi?id=13490
-    # https://bugzilla.redhat.com/show_bug.cgi?id=642999
-    set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
-endif()
 
 # add_executable(stp_constantbitprop
 #     constantbitprop.cpp

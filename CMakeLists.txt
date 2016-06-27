@@ -300,6 +300,13 @@ if(NOT BUILD_SHARED_LIBS)
   set(Boost_USE_STATIC_LIBS ON)
   set(Minisat_USE_STATIC_LIBS ON)
   set(CryptoMiniSat_USE_STATIC_LIBS ON)
+
+  # FIXME: We should check if the linker supports these flags
+  # FIXME: -Wl,--no-export-dynamic is a workaround for a bug in binutils
+  # See http://sourceware.org/bugzilla/show_bug.cgi?id=13490
+  # https://bugzilla.redhat.com/show_bug.cgi?id=642999
+  set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
+  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
 endif()
 
 option(ONLY_SIMPLE "Don't try to use boost" OFF)
