@@ -21,7 +21,6 @@
 add_library(simplifier OBJECT
     BVSolver.cpp
     consteval.cpp
-    MutableASTNode.cpp
     PropagateEqualities.cpp
     RemoveUnconstrained.cpp
     Simplifier.cpp

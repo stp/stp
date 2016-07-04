@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Simplifier/MutableASTNode.h"
+#include "stp/AST/MutableASTNode.h"
 namespace stp
 {
 

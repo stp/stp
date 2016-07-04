@@ -31,7 +31,7 @@ THE SOFTWARE.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
-#include "stp/Simplifier/MutableASTNode.h"
+#include "stp/AST/MutableASTNode.h"
 
 namespace stp
 {

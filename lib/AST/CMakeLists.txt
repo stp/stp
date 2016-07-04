@@ -44,6 +44,7 @@ add_library(AST OBJECT
     ASTBVConst.cpp
     ASTmisc.cpp
     ASTSymbol.cpp
+    MutableASTNode.cpp
     RunTimes.cpp
 
     NodeFactory/HashingNodeFactory.cpp

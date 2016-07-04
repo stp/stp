@@ -32,7 +32,7 @@ THE SOFTWARE.
 #define MUTABLEASTNODE_H_
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "Simplifier.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {

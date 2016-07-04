@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/MutableASTNode.h"
+#include "stp/AST/MutableASTNode.h"
 
 namespace stp
 {
