@@ -21,5 +21,6 @@
 add_library(abstractionrefinement OBJECT
     AbstractionRefinement.cpp
     CounterExample.cpp
+    ArrayTransformer.cpp
 )
 add_dependencies(abstractionrefinement ASTKind_header)

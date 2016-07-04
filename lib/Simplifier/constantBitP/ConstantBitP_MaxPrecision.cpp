@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/AST/AST.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"

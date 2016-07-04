@@ -37,7 +37,6 @@ add_custom_target(ASTKind_header ALL DEPENDS ${AST_KIND_HEADER_LOCATION})
 
 add_library(AST OBJECT
     ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp
-    ArrayTransformer.cpp
     ASTInterior.cpp
     ASTNode.cpp
     ASTUtil.cpp
@@ -45,7 +44,6 @@ add_library(AST OBJECT
     ASTmisc.cpp
     ASTSymbol.cpp
     MutableASTNode.cpp
-    RunTimes.cpp
 
     NodeFactory/HashingNodeFactory.cpp
     NodeFactory/NodeFactory.cpp

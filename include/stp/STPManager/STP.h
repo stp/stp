@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define STP_H
 
 #include "stp/AST/AST.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/BVSolver.h"
 #include "stp/Simplifier/Simplifier.h"

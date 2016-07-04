@@ -28,12 +28,12 @@ THE SOFTWARE.
 #include <cmath>
 
 #include "stp/AST/AST.h"
-#include "stp/AST/RunTimes.h"
+#include "stp/Util/RunTimes.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 #include "stp/ToSat/AIG/ToCNFAIG.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 
 namespace stp
 {

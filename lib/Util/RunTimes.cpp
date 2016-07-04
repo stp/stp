@@ -36,7 +36,7 @@ THE SOFTWARE.
 #include <sstream>
 #include <iostream>
 #include <utility>
-#include "stp/AST/RunTimes.h"
+#include "stp/Util/RunTimes.h"
 #include "minisat/utils/System.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.

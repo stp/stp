@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 
 namespace stp
 {

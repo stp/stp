@@ -28,7 +28,7 @@ THE SOFTWARE.
  * unsigned counterparts. Removes array selects and stores from
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include <cassert>
 #include "stp/Simplifier/Simplifier.h"
 #include <cstdlib>

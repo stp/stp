@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>

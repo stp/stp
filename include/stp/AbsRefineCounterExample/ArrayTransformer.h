@@ -26,7 +26,7 @@ THE SOFTWARE.
 #ifndef TRANSFORM_H
 #define TRANSFORM_H
 
-#include "AST.h"
+#include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
 namespace stp

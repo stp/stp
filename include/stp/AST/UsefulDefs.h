@@ -41,7 +41,7 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 // FIXME: External library header
 #include "extlib-constbv/constantbv.h"
-#include "RunTimes.h"
+#include "stp/Util/RunTimes.h"
 #include "stp/Util/StringHash.h"
 
 #include "stp/config.h"

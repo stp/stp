@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AST/ArrayTransformer.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/AST/ASTKind.h"
 #include <cassert>
 #include <cmath>
