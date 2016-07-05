@@ -26,24 +26,18 @@ THE SOFTWARE.
 #define HASHINGNODEFACTORY_H_
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
-#include "stp/AST/ASTKind.h"
-
-namespace stp
-{
-class STPMgr;
-}
 
 // A Node factory that only does structural hashing.
 class HashingNodeFactory : public NodeFactory
 {
 public:
-  HashingNodeFactory(stp::STPMgr& bm_) : NodeFactory(bm_) {}
+  HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
 
   virtual ~HashingNodeFactory();
-  stp::ASTNode CreateNode(const stp::Kind kind,
-                           const stp::ASTVec& back_children);
-  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                           const stp::ASTVec& children);
+  ASTNode CreateNode(const Kind kind,
+                           const ASTVec& back_children);
+  ASTNode CreateTerm(Kind kind, unsigned int width,
+                           const ASTVec& children);
 
   virtual std::string getName() { return "hashing"; }
 };

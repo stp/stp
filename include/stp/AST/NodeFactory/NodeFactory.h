@@ -31,37 +31,38 @@ using std::vector;
 
 namespace stp
 {
-class ASTNode;
-typedef vector<ASTNode> ASTVec;
-extern ASTVec _empty_ASTVec;
-class STPMgr;
-typedef unsigned int* CBV;
+  class ASTNode;
+  typedef vector<ASTNode> ASTVec;
+  extern ASTVec _empty_ASTVec;
+  class STPMgr;
+  typedef unsigned int* CBV;
 }
 
 using stp::ASTNode;
 using stp::Kind;
 using stp::ASTVec;
 using stp::_empty_ASTVec;
+using stp::STPMgr;
 
 // Abstract base class for all the node factories.
 class NodeFactory // not copyable
 {
 protected:
-  stp::STPMgr& bm;
+  STPMgr& bm;
 
 public:
-  NodeFactory(stp::STPMgr& bm_) : bm(bm_) {}
+  NodeFactory(STPMgr& bm_) : bm(bm_) {}
 
   virtual ~NodeFactory();
 
-  virtual stp::ASTNode CreateTerm(Kind kind, unsigned int width,
-                                   const stp::ASTVec& children) = 0;
+  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+                                   const ASTVec& children) = 0;
 
-  virtual stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+  virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
                                         unsigned int width,
-                                        const stp::ASTVec& children);
+                                        const ASTVec& children);
 
-  virtual stp::ASTNode CreateNode(Kind kind, const stp::ASTVec& children) = 0;
+  virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
 
   ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                        unsigned valueWidth);

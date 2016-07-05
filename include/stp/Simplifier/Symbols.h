@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 #include <vector>
 #include "assert.h"
+#include "stp/AST/AST.h"
 
 using std::vector;
 

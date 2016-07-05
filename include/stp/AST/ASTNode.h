@@ -25,7 +25,6 @@ THE SOFTWARE.
 #define ASTNODE_H
 
 #include "stp/AST/ASTInternal.h"
-#include "stp/AST/ASTKind.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 
 namespace stp

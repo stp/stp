@@ -33,13 +33,11 @@ THE SOFTWARE.
 #define REMOVEUNCONSTRAINED_H_
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/constantBitP/Dependencies.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/AST/MutableASTNode.h"
 
 namespace stp
 {
-using simplifier::constantBitP::Dependencies;
 
 class RemoveUnconstrained // not copyable
 {

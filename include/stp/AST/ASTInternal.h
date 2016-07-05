@@ -26,7 +26,6 @@ THE SOFTWARE.
 #define ASTINTERNAL_H
 
 #include <iostream>
-#include "stp/AST/ASTKind.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/UsefulDefs.h"
 

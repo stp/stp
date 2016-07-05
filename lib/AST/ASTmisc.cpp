@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/STPManager/NodeIterator.h"
+#include "stp/Util/NodeIterator.h"
 #ifdef _MSC_VER
 // avoid TRUE and FALSE to be set to 1 and 0 in winmin.h
 #define TRUE TRUE

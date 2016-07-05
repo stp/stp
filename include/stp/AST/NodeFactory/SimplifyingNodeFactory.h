@@ -60,21 +60,18 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
-using stp::ASTNode;
-using stp::ASTVec;
-
 class SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  virtual stp::ASTNode CreateNode(stp::Kind kind,
-                                   const stp::ASTVec& children);
-  virtual stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                                   const stp::ASTVec& children);
+  virtual ASTNode CreateNode(Kind kind,
+                                   const ASTVec& children);
+  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+                                   const ASTVec& children);
 
   virtual std::string getName() { return "simplifying"; }
 
-  SimplifyingNodeFactory(NodeFactory& raw_, stp::STPMgr& bm_)
+  SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
       : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
         ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
   ~SimplifyingNodeFactory() {}

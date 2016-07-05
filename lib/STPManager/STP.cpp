@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
-#include "stp/STPManager/DifficultyScore.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
@@ -35,6 +34,7 @@ THE SOFTWARE.
 #include "stp/Sat/SimplifyingMinisat.h"
 #include "stp/Sat/MinisatCore.h"
 
+#include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/EstablishIntervals.h"

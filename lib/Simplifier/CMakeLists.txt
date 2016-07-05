@@ -26,6 +26,10 @@ add_library(simplifier OBJECT
     Simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp
+    DifficultyScore.cpp
+    UseITEContext.cpp
+    FindPureLiterals.cpp
+    AIGSimplifyPropositionalCore.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp

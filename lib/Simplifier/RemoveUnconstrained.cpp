@@ -32,6 +32,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
+#include "stp/Simplifier/constantBitP/Dependencies.h"
 
 namespace stp
 {

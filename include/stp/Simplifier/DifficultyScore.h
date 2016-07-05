@@ -1,7 +1,8 @@
+// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
- * BEGIN DATE: Feb, 2010
+ * BEGIN DATE: June, 2010
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,31 +23,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-/*
-  A decorator pattern, which calls some base node factory, then type checks each
-  of the results.
- */
+#ifndef DIFFICULTYSCORE_H_
+#define DIFFICULTYSCORE_H_
 
-#ifndef TYPECHECKER_H_
-#define TYPECHECKER_H_
+#include "stp/AST/AST.h"
 
-#include "stp/AST/NodeFactory/NodeFactory.h"
+// estimate how difficult that input is to solve based on some simple rules.
 
-class TypeChecker : public NodeFactory
+namespace stp
 {
-  NodeFactory& f;
+class DifficultyScore // not copyable
+{
+private:
+  // maps from nodeNumber to the previously calculated difficulty score..
+  std::map<int, int> cache;
 
 public:
-  TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_) {}
-
-  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                           const stp::ASTVec& children);
-  stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
-  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                                unsigned int width,
-                                const ASTVec& children);
-
-  virtual std::string getName() { return "type checking"; }
+  int score(const ASTNode& top);
 };
+}
 
-#endif /* TYPECHECKER_H_ */
+#endif /* DIFFICULTYSCORE_H_ */

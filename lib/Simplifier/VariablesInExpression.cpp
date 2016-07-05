@@ -223,4 +223,25 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
   }
   return result;
 }
+
+  void VariablesInExpression::ClearAllTables()
+  {
+    std::set<Symbols*> deleted;
+    for (ASTNodeToNodes::iterator it = symbol_graph.begin();
+         it != symbol_graph.end(); it++)
+    {
+      if (deleted.find(it->second) == deleted.end())
+      {
+        deleted.insert(it->second);
+        delete it->second;
+      }
+    }
+
+    for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin();
+         it != TermsAlreadySeenMap.end(); it++)
+      delete (it->second);
+
+    symbol_graph.clear();
+    TermsAlreadySeenMap.clear();
+  }
 }

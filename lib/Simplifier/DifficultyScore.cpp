@@ -23,21 +23,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef DIFFICULTYSCORE_H_
-#define DIFFICULTYSCORE_H_
 
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include <list>
-#include "stp/STPManager/NodeIterator.h"
-
-// estimate how difficult that input is to solve based on some simple rules.
+#include "stp/Util/NodeIterator.h"
+#include "stp/Simplifier/DifficultyScore.h"
 
 namespace stp
 {
-struct DifficultyScore // not copyable
-{
-private:
+// estimate how difficult that input is to solve based on some simple rules.
+
+  static bool isLikeDivision(const Kind& k)
+  {
+    return k == BVMULT || k == BVDIV || k == BVMOD || k == SBVDIV ||
+           k == SBVREM || k == SBVMOD;
+  }
+
   int eval(const ASTNode& b)
   {
     const Kind k = b.GetKind();
@@ -72,17 +74,10 @@ private:
     return score;
   }
 
-  static bool isLikeDivision(const Kind& k)
-  {
-    return k == BVMULT || k == BVDIV || k == BVMOD || k == SBVDIV ||
-           k == SBVREM || k == SBVMOD;
-  }
-
   // maps from nodeNumber to the previously calculated difficulty score..
   std::map<int, int> cache;
 
-public:
-  int score(const ASTNode& top)
+  int DifficultyScore::score(const ASTNode& top)
   {
     if (cache.find(top.GetNodeNum()) != cache.end())
       return cache.find(top.GetNodeNum())->second;
@@ -96,7 +91,4 @@ public:
     cache.insert(std::make_pair(top.GetNodeNum(), result));
     return result;
   }
-};
 }
-
-#endif /* DIFFICULTYSCORE_H_ */

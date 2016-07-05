@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include <cmath>
 #include "stp/STPManager/STPManager.h"
 #include "stp/Printer/SMTLIBPrinter.h"
-#include "stp/STPManager/NodeIterator.h"
+#include "stp/Util/NodeIterator.h"
 
 namespace stp
 {
