@@ -26,6 +26,11 @@ THE SOFTWARE.
 #ifndef STPMGR_H
 #define STPMGR_H
 
+#include "stp/AST/ASTNode.h"
+#include "stp/AST/ASTInterior.h"
+#include "stp/AST/ASTSymbol.h"
+#include "stp/AST/ASTBVConst.h"
+
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
