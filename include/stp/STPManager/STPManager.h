@@ -203,12 +203,6 @@ public:
   // to be valid or not by this tool
   bool ValidFlag;
 
-  // This flag, when true, indicates that a BVDIV divide by zero
-  // exception occured. However, the program must not exit with a
-  // fatalerror. Instead, it should evaluate the whole formula
-  // (which contains the BVDIV term) to be FALSE.
-  bool bvdiv_exception_occured;
-
   // Flags indicates that counterexample will now be checked by the
   // counterexample checker, and hence simplifyterm must switch off
   // certain optimizations. In particular, array write optimizations
@@ -229,7 +223,6 @@ public:
         _symbol_count(0), CNFFileNameCounter(0)
   {
     ValidFlag = false;
-    bvdiv_exception_occured = false;
     counterexample_checking_during_refinement = false;
     SimplifyWrites_InPlace_Flag = false;
 

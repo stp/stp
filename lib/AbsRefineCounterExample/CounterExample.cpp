@@ -515,13 +515,6 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       output = NonMemberBVConstEvaluator(form.GetSTPMgr(), k, children,
                                          form.GetValueWidth());
 
-      // evaluate formula to false if bvdiv execption occurs while
-      // counterexample is being checked during refinement.
-      if (bm->bvdiv_exception_occured &&
-          bm->counterexample_checking_during_refinement)
-      {
-        output = ASTFalse;
-      }
     }
     break;
 
@@ -545,14 +538,6 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
 
       output = NonMemberBVConstEvaluator(form.GetSTPMgr(), k, children,
                                          form.GetValueWidth());
-
-      // evaluate formula to false if bvdiv execption occurs while
-      // counterexample is being checked during refinement.
-      if (bm->bvdiv_exception_occured &&
-          bm->counterexample_checking_during_refinement)
-      {
-        output = ASTFalse;
-      }
     }
     break;
 
@@ -966,8 +951,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
       PrintSATModel(SatSolver, m);
     }
     // check if the counterexample is good or not
-    if (bm->counterexample_checking_during_refinement)
-      bm->bvdiv_exception_occured = false;
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "

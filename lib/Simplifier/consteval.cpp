@@ -556,8 +556,6 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           {
             output = CONSTANTBV::BitVector_Create(inputwidth, true);
             OutputNode = _bm->CreateBVConst(output, outputwidth);
-            _bm->bvdiv_exception_occured = true;
-
             //  CONSTANTBV::BitVector_Destroy(output);
             break;
           }
