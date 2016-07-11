@@ -287,28 +287,6 @@ include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
 
-# -----------------------------------------------------------------------------
-# Uncomment these for static compilation under Linux (messes up Valgrind)
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# Find the Boost package components
-# -----------------------------------------------------------------------------
-
-if(NOT BUILD_SHARED_LIBS)
-  message("Trying to use static Boost and Minisat libraries")
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Minisat_USE_STATIC_LIBS ON)
-  set(CryptoMiniSat_USE_STATIC_LIBS ON)
-
-  # FIXME: We should check if the linker supports these flags
-  # FIXME: -Wl,--no-export-dynamic is a workaround for a bug in binutils
-  # See http://sourceware.org/bugzilla/show_bug.cgi?id=13490
-  # https://bugzilla.redhat.com/show_bug.cgi?id=642999
-  set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
-  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
-endif()
-
 option(ONLY_SIMPLE "Don't try to use boost" OFF)
 if (NOT ONLY_SIMPLE)
   find_package( Boost 1.46 COMPONENTS program_options)
