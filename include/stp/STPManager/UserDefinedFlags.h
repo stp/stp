@@ -146,7 +146,7 @@ public:
   {
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
-    CRYPTOMINISAT4_SOLVER
+    CRYPTOMINISAT5_SOLVER
   };
 
   enum SATSolvers solver_to_use;

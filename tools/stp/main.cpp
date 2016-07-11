@@ -146,9 +146,6 @@ void ExtraMain::create_options()
   po::options_description hiddenOptions("Hidden options");
   hiddenOptions.add_options()
   ("file", po::value<string>(&infile), "input file")
-  #ifdef USE_CRYPTOMINISAT4
-  ("cryptominisat", "same as --cryptominisat4")
-  #endif
   ;
 
   // Declare the supported options.
@@ -164,9 +161,9 @@ void ExtraMain::create_options()
 
   po::options_description solver_options("SAT Solver options");
   solver_options.add_options()
-#ifdef USE_CRYPTOMINISAT4
-      ("cryptominisat4",
-       "use cryptominisat4 as the solver. Only use CryptoMiniSat 4.2 or above.")
+#ifdef USE_CRYPTOMINISAT
+      ("cryptominisat",
+       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above.")
       ("threads", po::value<int>(&bm->UserFlags.num_solver_threads)->default_value(bm->UserFlags.num_solver_threads)
       , "Number of threads for cryptominisat")
 #endif
@@ -333,10 +330,10 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
 
-#ifdef USE_CRYPTOMINISAT4
-  if (vm.count("cryptominisat4") || vm.count("cryptominisat"))
+#ifdef USE_CRYPTOMINISAT
+  if (vm.count("cryptominisat"))
   {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
+    bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
   }
 #endif
 

@@ -299,26 +299,26 @@ endif()
 
 
 # -----------------------------------------------------------------------------
-# Find CryptoMiniSat4
+# Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
-set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat4Config.cmake")
-find_package(cryptominisat4 CONFIG)
-if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-  message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
-  message(STATUS "CryptoMiniSat4 dynamic lib: ${CRYPTOMINISAT4_LIBRARIES}")
-  message(STATUS "CryptoMiniSat4 static lib:  ${CRYPTOMINISAT4_STATIC_LIBRARIES}")
-  message(STATUS "CryptoMiniSat4 static lib deps: ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS}")
-  add_definitions(-DUSE_CRYPTOMINISAT4)
-  include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
-  set(USE_CRYPTOMINISAT4 ON)
+set(cryptominisat_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
+find_package(cryptominisat5 CONFIG)
+if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
+  message(STATUS "Found CryptoMiniSat 5.x and C++11, allowing --cryptominisat5 option")
+  message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
+  message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
+  message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
+  add_definitions(-DUSE_CRYPTOMINISAT)
+  include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})
+  set(USE_CRYPTOMINISAT ON)
 else()
-  message(WARNING "CryptoMiniSat4 (v4.5 or above) or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat5 (5.0 or above) or C++11 support not found, not allowing --cryptominisat option")
 endif()
 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
-if (FORCE_CMS AND NOT USE_CRYPTOMINISAT4)
-    message(FATAL_ERROR "CryptoMiniSat was not found but it was requiested. Exiting.")
+if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
+    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requiested. Exiting.")
 endif()
 
 # -----------------------------------------------------------------------------

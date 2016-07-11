@@ -27,8 +27,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 
-#ifdef USE_CRYPTOMINISAT4
-#include "stp/Sat/CryptoMinisat4.h"
+#ifdef USE_CRYPTOMINISAT
+#include "stp/Sat/CryptoMinisat5.h"
 #endif
 
 #include "stp/Sat/SimplifyingMinisat.h"
@@ -80,11 +80,11 @@ SATSolver* STP::get_new_sat_solver()
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
       newS = new SimplifyingMinisat;
       break;
-    case UserDefinedFlags::CRYPTOMINISAT4_SOLVER:
-      #ifdef USE_CRYPTOMINISAT4
-      newS = new CryptoMinisat4(bm->UserFlags.num_solver_threads);
+    case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
+      #ifdef USE_CRYPTOMINISAT
+      newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
       #else
-      std::cerr << "CryptoMinisat4 support was not enabled at configure time." << std::endl;
+      std::cerr << "CryptoMiniSat5 support was not enabled at configure time." << std::endl;
       exit(-1);
       #endif
       break;

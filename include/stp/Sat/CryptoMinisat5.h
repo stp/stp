@@ -26,8 +26,8 @@ THE SOFTWARE.
 /*
  * Wraps around Cryptominisat minisat.
  */
-#ifndef CRYPTOMINISAT4_H_
-#define CRYPTOMINISAT4_H_
+#ifndef CRYPTOMINISAT5_H_
+#define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
 
@@ -38,14 +38,14 @@ class SATSolver;
 
 namespace stp
 {
-class CryptoMinisat4 : public SATSolver
+class CryptoMiniSat5 : public SATSolver
 {
   CMSat::SATSolver* s;
 
 public:
-  CryptoMinisat4(int num_threads);
+  CryptoMiniSat5(int num_threads);
 
-  ~CryptoMinisat4();
+  ~CryptoMiniSat5();
 
   virtual void setMaxConflicts(int64_t max_confl);
 
