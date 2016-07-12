@@ -124,10 +124,6 @@ public:
   // Assignment (for ref counting)
   ASTNode& operator=(const ASTNode& n);
 
-  // Get the STPMgr pointer. FIXME: Currently uses a global
-  // ptr. BAD!!
-  STPMgr* GetSTPMgr() const;
-
   // Access node number
   unsigned GetNodeNum() const;
 
@@ -187,10 +183,10 @@ public:
   ostream& LispPrint_indent(ostream& os, int indentation) const;
 
   // Presentation Language Printer
-  ostream& PL_Print(ostream& os, int indentation = 0) const;
+  ostream& PL_Print(ostream& os , STPMgr *mgr, int indentation = 0) const;
 
   // Construct let variables for shared subterms
-  void LetizeNode(void) const;
+  void LetizeNode(STPMgr* bm) const;
 
   // Attempt to define something that will work in the gdb
   friend void lp(ASTNode& node);

@@ -92,7 +92,7 @@ string functionToCVCName(const Kind k)
   }
 }
 
-void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
+void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize, STPMgr* bm )
 {
   // os << spaces(indentation);
   // os << endl << spaces(indentation);
@@ -102,14 +102,11 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
     return;
   }
 
-  // if this node is present in the letvar Map, then print the letvar
-  STPMgr* bm = n.GetSTPMgr();
-
   // this is to print letvars for shared subterms inside the printing
   // of "(LET v0 = term1, v1=term1@term2,...
   if ((bm->NodeLetVarMap1.find(n) != bm->NodeLetVarMap1.end()) && !letize)
   {
-    PL_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize);
+    PL_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize,bm);
     return;
   }
 
@@ -117,7 +114,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
   // term to be printed
   if ((bm->NodeLetVarMap.find(n) != bm->NodeLetVarMap.end()) && letize)
   {
-    PL_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize);
+    PL_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize,bm);
     return;
   }
 
@@ -127,9 +124,9 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
   switch (kind)
   {
     case BOOLEXTRACT:
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << "{";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << "}";
       break;
     case BITVECTOR:
@@ -151,18 +148,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       n.nodeprint(os, true);
       break;
     case READ:
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << "[";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << "]";
       break;
     case WRITE:
       os << "(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << " WITH [";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << "] := ";
-      PL_Print1(os, c[2], indentation, letize);
+      PL_Print1(os, c[2], indentation, letize,bm);
       os << ")";
       os << endl;
       break;
@@ -173,11 +170,11 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       os << "( ";
       os << functionToCVCName(kind);
       os << "( ";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << "))";
       break;
     case BVEXTRACT:
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << "[";
       os << c[1].GetUnsignedConst();
       os << ":";
@@ -189,7 +186,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       if (c[1].isConstant())
       {
         os << "(";
-        PL_Print1(os, c[0], indentation, letize);
+        PL_Print1(os, c[0], indentation, letize,bm);
         os << " << ";
         os << c[1].GetUnsignedConst();
         os << ")";
@@ -201,9 +198,9 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       else
       {
         os << "BVSHL(";
-        PL_Print1(os, c[0], indentation, letize);
+        PL_Print1(os, c[0], indentation, letize,bm);
         os << ", ";
-        PL_Print1(os, c[1], indentation, letize);
+        PL_Print1(os, c[1], indentation, letize,bm);
         os << ")" << endl;
       }
       break;
@@ -212,7 +209,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       if (c[1].isConstant())
       {
         os << "(";
-        PL_Print1(os, c[0], indentation, letize);
+        PL_Print1(os, c[0], indentation, letize,bm);
         os << " << ";
         os << c[1].GetUnsignedConst();
         os << ")";
@@ -220,18 +217,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       else
       {
         os << "BVLSHR(";
-        PL_Print1(os, c[0], indentation, letize);
+        PL_Print1(os, c[0], indentation, letize,bm);
         os << ", ";
-        PL_Print1(os, c[1], indentation, letize);
+        PL_Print1(os, c[1], indentation, letize,bm);
         os << ")" << endl;
       }
       break;
     case BVSRSHIFT:
       assert(2 == c.size());
       os << "BVASHR(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << ", ";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << ")" << endl;
       break;
 
@@ -250,24 +247,24 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
            it++)
       {
         os << ", " << endl;
-        PL_Print1(os, *it, indentation, letize);
+        PL_Print1(os, *it, indentation, letize,bm);
       }
       os << ")" << endl;
       break;
     case ITE:
       os << "IF(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << ")" << endl;
       os << "THEN ";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << endl << "ELSE ";
-      PL_Print1(os, c[2], indentation, letize);
+      PL_Print1(os, c[2], indentation, letize,bm);
       os << endl << "ENDIF";
       break;
     case PARAMBOOL:
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << "(";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << ")";
       break;
 
@@ -285,9 +282,9 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
     case BVSGE:
       assert(2 == c.size());
       os << functionToCVCName(kind) << "(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << ",";
-      PL_Print1(os, c[1], indentation, letize);
+      PL_Print1(os, c[1], indentation, letize,bm);
       os << ")" << endl;
       break;
 
@@ -306,7 +303,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
     case XOR:
     {
       os << "(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       ASTVec::const_iterator it = c.begin();
       ASTVec::const_iterator itend = c.end();
 
@@ -314,7 +311,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
       for (; it != itend; it++)
       {
         os << " " << functionToCVCName(kind) << " ";
-        PL_Print1(os, *it, indentation, letize);
+        PL_Print1(os, *it, indentation, letize,bm);
         os << endl;
       }
       os << ")";
@@ -323,7 +320,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
     case BVSX:
     case BVZX:
       os << kind << "(";
-      PL_Print1(os, c[0], indentation, letize);
+      PL_Print1(os, c[0], indentation, letize,bm);
       os << ",";
       os << n.GetValueWidth();
       os << ")" << endl;
@@ -347,17 +344,16 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize)
 // 2. In the second pass print a "global let" and then print N
 // 2. as follows: Every occurence of a node occuring more than
 // 2. once is replaced with the corresponding let variable.
-ostream& PL_Print(ostream& os, const ASTNode& n, int indentation)
+ostream& PL_Print(ostream& os, const ASTNode& n,STPMgr * bm, int indentation)
 {
   // Clear the PrintMap
-  STPMgr* bm = n.GetSTPMgr();
   bm->PLPrintNodeSet.clear();
   bm->NodeLetVarMap.clear();
   bm->NodeLetVarVec.clear();
   bm->NodeLetVarMap1.clear();
 
   // pass 1: letize the node
-  n.LetizeNode();
+  n.LetizeNode(bm);
 
   // pass 2:
   //
@@ -378,10 +374,10 @@ ostream& PL_Print(ostream& os, const ASTNode& n, int indentation)
 
     os << "(LET ";
     // print the let var first
-    PL_Print1(os, it->first, indentation, false);
+    PL_Print1(os, it->first, indentation, false,bm);
     os << " = ";
     // print the expr
-    PL_Print1(os, it->second, indentation, false);
+    PL_Print1(os, it->second, indentation, false,bm);
 
     // update the second map for proper printing of LET
     bm->NodeLetVarMap1[it->second] = it->first;
@@ -390,21 +386,21 @@ ostream& PL_Print(ostream& os, const ASTNode& n, int indentation)
     {
       os << "," << std::endl;
       // print the let var first
-      PL_Print1(os, it->first, indentation, false);
+      PL_Print1(os, it->first, indentation, false,bm);
       os << " = ";
       // print the expr
-      PL_Print1(os, it->second, indentation, false);
+      PL_Print1(os, it->second, indentation, false,bm);
 
       // update the second map for proper printing of LET
       bm->NodeLetVarMap1[it->second] = it->first;
     }
 
     os << " IN " << std::endl;
-    PL_Print1(os, n, indentation, true);
+    PL_Print1(os, n, indentation, true,bm);
     os << ") ";
   }
   else
-    PL_Print1(os, n, indentation, false);
+    PL_Print1(os, n, indentation, false,bm);
   // os << " )";
   os << " ";
   return os;

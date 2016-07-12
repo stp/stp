@@ -171,22 +171,22 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
   if (bm->UserFlags.print_STPinput_back_CVC_flag)
   {
     // needs just the query. Reads the asserts out of the data structure.
-    print_STPInput_Back(original_input);
+    print_STPInput_Back(original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
   {
-    printer::SMTLIB1_PrintBack(cout, original_input);
+    printer::SMTLIB1_PrintBack(cout, original_input,bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
   {
-    printer::SMTLIB2_PrintBack(cout, original_input);
+    printer::SMTLIB2_PrintBack(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_C_flag)
   {
-    printer::C_Print(cout, original_input);
+    printer::C_Print(cout, original_input,bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_GDL_flag)

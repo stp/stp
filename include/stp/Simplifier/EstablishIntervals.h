@@ -361,7 +361,7 @@ public:
 
       bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
       return SubstitutionMap::replace(result, fromTo, cache,
-                                      top.GetSTPMgr()->defaultNodeFactory);
+                                      nf);
     }
 
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);

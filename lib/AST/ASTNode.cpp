@@ -134,11 +134,6 @@ ASTNode::~ASTNode()
   }
 }
 
-STPMgr* ASTNode::GetSTPMgr() const
-{
-  return GlobalParserBM;
-}
-
 // Print the node
 void ASTNode::nodeprint(ostream& os, bool c_friendly) const
 {
@@ -233,13 +228,11 @@ void ASTNode::hasBeenSimplfied() const
 
 // traverse "*this", and construct "let variables" for terms that
 // occur more than once in "*this".
-void ASTNode::LetizeNode(void) const
+void ASTNode::LetizeNode(STPMgr* bm) const
 {
   if (isAtom())
     return;
 
-  // FIXME: this is ugly.
-  STPMgr* bm = GetSTPMgr();
   const ASTVec& c = this->GetChildren();
   for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
        it++)
@@ -256,7 +249,7 @@ void ASTNode::LetizeNode(void) const
       bm->PLPrintNodeSet.insert(ccc);
       // debugging
       // cerr << ccc;
-      ccc.LetizeNode();
+      ccc.LetizeNode(bm);
     }
     else
     {

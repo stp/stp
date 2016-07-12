@@ -63,7 +63,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     if (input_children[i].isConstant())
       children.push_back(input_children[i]);
     else
-      children.push_back(NonMemberBVConstEvaluator(input_children[i]));
+      children.push_back(NonMemberBVConstEvaluator(_bm, input_children[i]));
   }
 
   if ((number_of_children == 2 || number_of_children == 1) &&
@@ -815,12 +815,12 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 } 
 
 // Const evaluator logical and arithmetic operations.
-ASTNode NonMemberBVConstEvaluator(const ASTNode& t)
+ASTNode NonMemberBVConstEvaluator(STPMgr * mgr, const ASTNode& t)
 {
   if (t.isConstant())
     return t;
 
-  return NonMemberBVConstEvaluator(t.GetSTPMgr(), t.GetKind(), t.GetChildren(),
+  return NonMemberBVConstEvaluator(mgr, t.GetKind(), t.GetChildren(),
                                    t.GetValueWidth());
 }
 
@@ -834,7 +834,7 @@ ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
   if (InsideSubstitutionMap(t, OutputNode))
     return OutputNode;
 
-  OutputNode = NonMemberBVConstEvaluator(t);
+  OutputNode = NonMemberBVConstEvaluator(_bm, t);
   UpdateSolverMap(t, OutputNode);
   return OutputNode;
 }

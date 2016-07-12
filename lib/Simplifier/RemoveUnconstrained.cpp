@@ -445,13 +445,13 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
             if (kind == BVSGE || kind == BVGE)
               n = nf->CreateNode(
                   OR, v,
-                  nf->CreateNode(EQ, mutable_children[1]->toASTNode(nf), c1));
+                  nf->CreateNode(EQ, mutable_children[1]->toASTNode(&bm), c1));
             else
               n = nf->CreateNode(
                   AND, v,
                   nf->CreateNode(
                       NOT, nf->CreateNode(
-                               EQ, mutable_children[1]->toASTNode(nf), c1)));
+                               EQ, mutable_children[1]->toASTNode(&bm), c1)));
           }
           else
           {
@@ -460,13 +460,13 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
             if (kind == BVSGE || kind == BVGE)
               n = nf->CreateNode(
                   OR, v,
-                  nf->CreateNode(EQ, mutable_children[0]->toASTNode(nf), c2));
+                  nf->CreateNode(EQ, mutable_children[0]->toASTNode(&bm), c2));
             else
               n = nf->CreateNode(
                   AND, v,
                   nf->CreateNode(
                       NOT, nf->CreateNode(
-                               EQ, mutable_children[0]->toASTNode(nf), c2)));
+                               EQ, mutable_children[0]->toASTNode(&bm), c2)));
           }
           replace(var, rhs);
           MutableASTNode* newN = MutableASTNode::build(n, create);
@@ -523,7 +523,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         for (size_t i = 0; i < numberOfChildren; i++)
         {
           if (children[i] != var)
-            others.push_back(mutable_children[i]->toASTNode(nf));
+            others.push_back(mutable_children[i]->toASTNode(&bm));
         }
         assert(others.size() + 1 == numberOfChildren);
         assert(others.size() >= 1);
@@ -647,8 +647,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
 
           ASTNode rhs =
-              nf->CreateNode(ITE, v, muteOther->toASTNode(nf),
-                             nf->CreateNode(NOT, muteOther->toASTNode(nf)));
+              nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
+                             nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
           replace(var, rhs);
         }
         break;
@@ -658,8 +658,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
           width = var.GetValueWidth();
           ASTNode rhs = nf->CreateTerm(
-              ITE, width, v, muteOther->toASTNode(nf),
-              nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(nf),
+              ITE, width, v, muteOther->toASTNode(&bm),
+              nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
                              bm.CreateOneConst(width)));
 
           replace(var, rhs);
@@ -674,9 +674,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode rhs;
 
           if (children[0] == var)
-            rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(nf));
+            rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
           if (children[1] == var)
-            rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(nf), v);
+            rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
 
           replace(var, rhs);
         }
@@ -687,7 +687,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTVec other;
           for (size_t i = 0; i < children.size(); i++)
             if (children[i] != var)
-              other.push_back(mutable_children[i]->toASTNode(nf));
+              other.push_back(mutable_children[i]->toASTNode(&bm));
 
           assert(other.size() == children.size() - 1);
           assert(other.size() >= 1);
@@ -755,7 +755,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     }
   }
 
-  ASTNode result = topMutable->toASTNode(nf);
+  ASTNode result = topMutable->toASTNode(&bm);
   topMutable->cleanup();
   // cout << result;
   return result;

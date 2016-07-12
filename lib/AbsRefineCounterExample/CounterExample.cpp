@@ -341,7 +341,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
         o.push_back(ff);
       }
 
-      output = NonMemberBVConstEvaluator(term.GetSTPMgr(), k, o,
+      output = NonMemberBVConstEvaluator(bm, k, o,
                                          term.GetValueWidth());
       break;
     }
@@ -512,7 +512,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(TermToConstTermUsingModel(*it, false));
       }
 
-      output = NonMemberBVConstEvaluator(form.GetSTPMgr(), k, children,
+      output = NonMemberBVConstEvaluator(bm, k, children,
                                          form.GetValueWidth());
 
     }
@@ -536,7 +536,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(ComputeFormulaUsingModel(*it));
       }
 
-      output = NonMemberBVConstEvaluator(form.GetSTPMgr(), k, children,
+      output = NonMemberBVConstEvaluator(bm, k, children,
                                          form.GetValueWidth());
     }
     break;
@@ -749,7 +749,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
          f[1].GetKind() == BVCONST))
     {
       os << "ASSERT( ";
-      printer::PL_Print1(os, f, 0, false);
+      printer::PL_Print1(os, f, 0, false,bm);
       if (BOOLEAN_TYPE == f.GetType())
       {
         os << "<=>";
@@ -769,7 +769,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
         rhs = ComputeFormulaUsingModel(se);
       }
       assert(rhs.isConstant());
-      printer::PL_Print1(os, rhs, 0, false);
+      printer::PL_Print1(os, rhs, 0, false,bm);
 
       os << " );" << endl;
     }
@@ -837,7 +837,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
       reverse(sss.begin(), sss.end());
       int n = atoi(sss.c_str());
 
-      it->PL_Print(cout, 2);
+      it->PL_Print(cout,bm, 2);
       for (int j = 0; j < n; j++)
       {
         ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);

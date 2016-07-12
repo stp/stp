@@ -46,7 +46,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   runTimes->start(RunTimes::Transforming);
 
   assert(TransformMap == NULL);
-  assert(form.GetSTPMgr() == this->bm);
   TransformMap = new ASTNodeMap(100);
   ASTNode result = TransformFormula(form);
 
@@ -121,7 +120,7 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
 // Translates signed BVDIV,BVMOD and BVREM into unsigned variety
 ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
-                                                   NodeFactory* nf, STPMgr* bm)
+                                                   NodeFactory* nf)
 {
   assert(in.GetChildren().size() == 2);
 
@@ -129,9 +128,9 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
   const ASTNode& divisor = in[1];
   const unsigned len = in.GetValueWidth();
 
-  ASTNode hi1 = bm->CreateBVConst(32, len - 1);
-  ASTNode one = bm->CreateOneConst(1);
-  ASTNode zero = bm->CreateZeroConst(1);
+  ASTNode hi1 = nf->CreateBVConst(32, len - 1);
+  ASTNode one = nf->CreateOneConst(1);
+  ASTNode zero = nf->CreateZeroConst(1);
   // create the condition for the dividend
   ASTNode cond_dividend =
       nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
@@ -203,7 +202,7 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
     ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
     ASTNode neZ = nf->CreateNode(
         NOT, nf->CreateNode(EQ, rev_node,
-                            bm->CreateZeroConst(divisor.GetValueWidth())));
+                            nf->CreateZeroConst(divisor.GetValueWidth())));
     ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
     ASTNode n = nf->CreateTerm(ITE, len, cond,
                                nf->CreateTerm(BVPLUS, len, rev_node, divisor),
@@ -249,8 +248,6 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
   FatalError("TranslateSignedDivModRem:"
              "input must be signed DIV/MOD/REM",
              in);
-  return bm->ASTUndefined;
-
 }
 
 // Check that the transformations have occurred.

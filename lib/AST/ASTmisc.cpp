@@ -126,10 +126,10 @@ bool numberOfReadsLessThan(const ASTNode& n, int limit)
 }
 
 // True if any descendants are arrays.
-bool containsArrayOps(const ASTNode& n)
+bool containsArrayOps(const ASTNode& n, STPMgr *mgr)
 {
 
-  NodeIterator ni(n, n.GetSTPMgr()->ASTUndefined, *n.GetSTPMgr());
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
     if (current.GetIndexWidth() > 0)

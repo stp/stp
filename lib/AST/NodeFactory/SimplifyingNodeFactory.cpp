@@ -165,7 +165,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       children_all_constants(children))
   {
       const ASTNode& hash = hashing.CreateNode(kind, children);
-      const ASTNode& c = NonMemberBVConstEvaluator(hash);
+      const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
       assert(c.isConstant());
       return c;
   }
@@ -324,11 +324,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
   {
     case stp::FALSE:
     {
-      return form.GetSTPMgr()->ASTTrue;
+      return ASTTrue;
     }
     case stp::TRUE:
     {
-      return form.GetSTPMgr()->ASTFalse;
+      return ASTFalse;
     }
     case stp::NOT:
     {
@@ -352,11 +352,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTVec& children)
   {
     case stp::FALSE:
     {
-      return children[0].GetSTPMgr()->ASTTrue;
+      return ASTTrue;
     }
     case stp::TRUE:
     {
-      return children[0].GetSTPMgr()->ASTFalse;
+      return ASTFalse;
     }
     case stp::NOT:
     {
@@ -492,12 +492,12 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 
   if (in1 == in2)
     // terms are syntactically the same
-    return in1.GetSTPMgr()->ASTTrue;
+    return ASTTrue;
 
   // here the terms are definitely not syntactically equal but may be
   // semantically equal.
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
-    return in1.GetSTPMgr()->ASTFalse;
+    return ASTFalse;
 
   if ((k1 == BVNEG && k2 == BVNEG) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
@@ -513,7 +513,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
                                    NodeFactory::CreateTerm(k2, width, in1));
 
   if ((k1 == BVNEG && in1[0] == in2) || (k2 == BVNEG && in2[0] == in1))
-    return in1.GetSTPMgr()->ASTFalse;
+    return ASTFalse;
 
   if (k2 == stp::BVDIV && k1 == stp::BVCONST &&
       (in1 == bm.CreateZeroConst(width)))
@@ -1133,7 +1133,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   if (children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateTerm(kind, width, children);
-    const ASTNode& c = NonMemberBVConstEvaluator(hash);
+    const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
     assert(c.isConstant());
     return c;
   }

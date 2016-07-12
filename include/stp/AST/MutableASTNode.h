@@ -129,7 +129,7 @@ public:
     return **(parents.begin());
   }
 
-  ASTNode toASTNode(NodeFactory* nf)
+  ASTNode toASTNode(stp::STPMgr* stpMgr)
   {
     if (!dirty)
       return n;
@@ -139,9 +139,9 @@ public:
 
     ASTVec newChildren;
     for (size_t i = 0; i < children.size(); i++)
-      newChildren.push_back(children[i]->toASTNode(nf));
+      newChildren.push_back(children[i]->toASTNode(stpMgr));
 
-    // Don't use the hashing node factory here. Imagine CreateNode simplified
+    // Don't use the simplifying node factory here. Imagine CreateNode simplified
     // down,
     // from (= 1 ite( x , 1,0)) to x (say). Then this node will become a symbol,
     // but, this object will still have the equal's children. i.e. 1, and the
@@ -150,17 +150,17 @@ public:
 
     if (n.GetType() == BOOLEAN_TYPE)
     {
-      n = n.GetSTPMgr()->hashingNodeFactory->CreateNode(n.GetKind(),
+      n = stpMgr->hashingNodeFactory->CreateNode(n.GetKind(),
                                                         newChildren);
     }
     else if (n.GetType() == BITVECTOR_TYPE)
     {
-      n = n.GetSTPMgr()->hashingNodeFactory->CreateTerm(
+      n = stpMgr->hashingNodeFactory->CreateTerm(
           n.GetKind(), n.GetValueWidth(), newChildren);
     }
     else
     {
-      n = n.GetSTPMgr()->hashingNodeFactory->CreateArrayTerm(
+      n = stpMgr->hashingNodeFactory->CreateArrayTerm(
           n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), newChildren);
     }
 

@@ -71,11 +71,11 @@ namespace stp
           polarity != bothPolarity)
       {
         if (polarity == truePolarity)
-          simplifier->UpdateSubstitutionMap(n, n.GetSTPMgr()->ASTTrue);
+          simplifier->UpdateSubstitutionMap(n, stpMgr->ASTTrue);
         else
         {
           assert(polarity == falsePolarity);
-          simplifier->UpdateSubstitutionMap(n, n.GetSTPMgr()->ASTFalse);
+          simplifier->UpdateSubstitutionMap(n, stpMgr->ASTFalse);
         }
         changed = true;
       }

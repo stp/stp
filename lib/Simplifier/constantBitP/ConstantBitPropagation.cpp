@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include <fstream>
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/STPManager/STPManager.h"
 
 using std::endl;
 using std::cout;
@@ -58,7 +59,7 @@ namespace constantBitP
 {
 NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
-Result dispatchToTransferFunctions(const Kind k, vector<FixedBits*>& children,
+Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
                                    FixedBits& output, const ASTNode n,
                                    MultiplicationStatsMap* msm = NULL);
 
@@ -99,10 +100,9 @@ string toString(const ASTNode& n)
 }
 
 // If the bits are totally fixed, then return a new matching ASTNode.
-ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits)
+ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node, const FixedBits& bits)
 {
   ASTNode result;
-  STPMgr& beev = *node.GetSTPMgr();
 
   assert(bits.isTotallyFixed());
   assert(!node.isConstant()); // Peformance. Shouldn't waste time calling it on
@@ -112,16 +112,16 @@ ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits)
   {
     if (bits.getValue(0))
     {
-      result = beev.CreateNode(TRUE);
+      result = nf->getTrue();
     }
     else
     {
-      result = beev.CreateNode(FALSE);
+      result = nf->getFalse();
     }
   }
   else if (node.GetType() == BITVECTOR_TYPE)
   {
-    result = beev.CreateBVConst(bits.GetBVConst(), node.GetValueWidth());
+    result = nf->CreateConstant(bits.GetBVConst(), node.GetValueWidth());
   }
   else
     FatalError("sadf234s");
@@ -173,12 +173,14 @@ void ConstantBitPropagation::setNodeToTrue(const ASTNode& top)
 }
 
 // Propagates. No writing in of values. Doesn't assume the top is true.
-ConstantBitPropagation::ConstantBitPropagation(stp::Simplifier* _sm,
+ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr * mgr_, stp::Simplifier* _sm,
                                                NodeFactory* _nf,
                                                const ASTNode& top)
 {
   assert(BOOLEAN_TYPE == top.GetType());
-  assert(top.GetSTPMgr()->UserFlags.bitConstantProp_flag);
+  //assert(mgr->UserFlags.bitConstantProp_flag);
+
+  mgr = mgr_;
 
   status = NO_CHANGE;
   simplifier = _sm;
@@ -238,7 +240,7 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
                                                  bool setTopToTrue,
                                                  bool conjoinToTop)
 {
-  assert(top.GetSTPMgr()->UserFlags.bitConstantProp_flag);
+  //assert(mgr->UserFlags.bitConstantProp_flag);
   assert(BOOLEAN_TYPE == top.GetType());
 
   propagate();
@@ -283,7 +285,7 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
 
   // propagate may have stopped with a conflict.
   if (CONFLICT == status)
-    return top.GetSTPMgr()->CreateNode(FALSE);
+    return nf->getFalse();
 
   ASTVec toConjoin;
 
@@ -310,13 +312,13 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       int new_width = mostFixed - leastFixed + 1;
       assert(new_width > 0);
       ASTNode fresh =
-          node.GetSTPMgr()->CreateFreshVariable(0, new_width, "STP_REPLACE");
+          mgr->CreateFreshVariable(0, new_width, "STP_REPLACE");
       ASTNode a, b;
       if (leastFixed > 0)
-        a = node.GetSTPMgr()->CreateBVConst(bits.GetBVConst(leastFixed - 1, 0),
+        a = nf->CreateConstant(bits.GetBVConst(leastFixed - 1, 0),
                                             leastFixed);
       if (mostFixed != width - 1)
-        b = node.GetSTPMgr()->CreateBVConst(
+        b = nf->CreateConstant(
             bits.GetBVConst(width - 1, mostFixed + 1), width - 1 - mostFixed);
       if (!a.IsNull())
         fresh = nf->CreateTerm(
@@ -670,7 +672,7 @@ FixedBits* ConstantBitPropagation::getUpdatedFixedBits(const ASTNode& n)
   }
 
   assert(status != CONFLICT);
-  status = dispatchToTransferFunctions(k, children, *output, n, msm);
+  status = dispatchToTransferFunctions(mgr, k, children, *output, n, msm);
   // result = dispatchToMaximallyPrecise(k, children, *output, n,msm);
 
   assert(((unsigned)output->getWidth()) == n.GetValueWidth() ||
@@ -679,7 +681,7 @@ FixedBits* ConstantBitPropagation::getUpdatedFixedBits(const ASTNode& n)
   return output;
 }
 
-Result dispatchToTransferFunctions(const Kind k, vector<FixedBits*>& children,
+Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
                                    FixedBits& output, const ASTNode n,
                                    MultiplicationStatsMap* msm)
 {
@@ -765,29 +767,29 @@ Result dispatchToTransferFunctions(const Kind k, vector<FixedBits*>& children,
   if (k == BVMULT)
   {
     MultiplicationStats ms;
-    result = bvMultiplyBothWays(children, output, n.GetSTPMgr(), &ms);
+    result = bvMultiplyBothWays(children, output, mgr, &ms);
     if (CONFLICT != result)
       msm->map[n] = ms;
     mult_like = true;
   }
   else if (k == BVDIV)
   {
-    result = bvUnsignedDivisionBothWays(children, output, n.GetSTPMgr());
+    result = bvUnsignedDivisionBothWays(children, output, mgr);
     mult_like = true;
   }
   else if (k == BVMOD)
   {
-    result = bvUnsignedModulusBothWays(children, output, n.GetSTPMgr());
+    result = bvUnsignedModulusBothWays(children, output, mgr);
     mult_like = true;
   }
   else if (k == SBVDIV)
   {
-    result = bvSignedDivisionBothWays(children, output, n.GetSTPMgr());
+    result = bvSignedDivisionBothWays(children, output, mgr);
     mult_like = true;
   }
   else if (k == SBVREM)
   {
-    result = bvSignedRemainderBothWays(children, output, n.GetSTPMgr());
+    result = bvSignedRemainderBothWays(children, output, mgr);
     mult_like = true;
   }
   else if (k == SBVMOD)
@@ -803,7 +805,7 @@ Result dispatchToTransferFunctions(const Kind k, vector<FixedBits*>& children,
   {
     int bits_before = output.countFixed() + children[0]->countFixed() +
                       children[1]->countFixed();
-    result = merge(result, maxPrecision(children, output, k, n.GetSTPMgr())
+    result = merge(result, maxPrecision(children, output, k, mgr)
                                ? CONFLICT
                                : NOT_IMPLEMENTED);
     int difference = (output.countFixed() + children[0]->countFixed() +

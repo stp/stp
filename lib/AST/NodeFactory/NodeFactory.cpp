@@ -155,3 +155,18 @@ ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width)
 {
   return bm.CreateBVConst(cbv, width);
 }
+
+ASTNode NodeFactory::CreateOneConst(unsigned width)
+{
+    return bm.CreateOneConst(width);
+}
+
+ASTNode NodeFactory::CreateZeroConst(unsigned width)
+{
+    return bm.CreateZeroConst(width);
+}
+
+ASTNode NodeFactory::CreateBVConst(unsigned int width, unsigned long long int bvconst)
+{
+  return bm.CreateBVConst(width, bvconst);
+}

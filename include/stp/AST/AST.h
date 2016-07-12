@@ -40,7 +40,7 @@ bool exprless(const ASTNode n1, const ASTNode n2);
 bool arithless(const ASTNode n1, const ASTNode n2);
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
-bool containsArrayOps(const ASTNode& n);
+bool containsArrayOps(const ASTNode& n, STPMgr *stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
 
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the

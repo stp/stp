@@ -339,10 +339,10 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
         ASTNode n = (ce.GetCounterExample(variables[i]));
         // cerr << variables[i].GetName() << " " << n << endl;
         ASTNode t = beev->CreateNode(BVLT, n, min_children[i]);
-        if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
+        if (beev->ASTTrue == NonMemberBVConstEvaluator(beev,t))
           min_children[i] = n;
         t = beev->CreateNode(BVGT, n, max_children[i]);
-        if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
+        if (beev->ASTTrue == NonMemberBVConstEvaluator(beev,t))
           max_children[i] = n;
         concretiseB(variables[i], min_children[i], max_children[i], ors, beev);
       }
@@ -350,10 +350,10 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
       ASTNode n = (ce.GetCounterExample(outputNode));
       // cerr << variables[i].GetName() << " " << n << endl;
       ASTNode t = beev->CreateNode(BVLT, n, min_output);
-      if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
+      if (beev->ASTTrue == NonMemberBVConstEvaluator(beev,t))
         min_output = n;
       t = beev->CreateNode(BVGT, n, max_output);
-      if (beev->ASTTrue == NonMemberBVConstEvaluator(t))
+      if (beev->ASTTrue == NonMemberBVConstEvaluator(beev,t))
         max_output = n;
       concretiseB(outputNode, min_output, max_output, ors, beev);
     }

@@ -77,12 +77,12 @@ namespace stp
   // maps from nodeNumber to the previously calculated difficulty score..
   std::map<int, int> cache;
 
-  int DifficultyScore::score(const ASTNode& top)
+  int DifficultyScore::score(const ASTNode& top, STPMgr *mgr)
   {
     if (cache.find(top.GetNodeNum()) != cache.end())
       return cache.find(top.GetNodeNum())->second;
 
-    NonAtomIterator ni(top, top.GetSTPMgr()->ASTUndefined, *top.GetSTPMgr());
+    NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
     ASTNode current;
     int result = 0;
     while ((current = ni.next()) != ni.end())

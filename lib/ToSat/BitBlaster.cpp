@@ -137,9 +137,9 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
 
       ASTNode result;
       if (x == BBTrue)
-        result = n.GetSTPMgr()->ASTTrue;
+        result = ASTNF->getTrue();
       else
-        result = n.GetSTPMgr()->ASTFalse;
+        result = ASTNF->getFalse();
 
       if (n.GetKind() != SYMBOL)
         fromTo.insert(std::make_pair(n, result));
@@ -179,14 +179,14 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
         CONSTANTBV::BitVector_Bit_On(val, i);
     }
 
-    ASTNode r = n.GetSTPMgr()->CreateBVConst(val, n.GetValueWidth());
+    ASTNode r = ASTNF->CreateConstant(val, n.GetValueWidth());
     if (n.GetKind() == SYMBOL)
       simp->UpdateSubstitutionMap(n, r);
     else
       fromTo.insert(std::make_pair(n, r));
   }
 
-  if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv", "1"))
+  if (uf->isSet("bb-equiv", "1"))
   {
     hash_map<intptr_t, ASTNode> nodeToFn;
     typename std::map<ASTNode, BBNode>::iterator it;
@@ -224,7 +224,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
 
   typedef hash_map<vector<BBNode>, ASTNode, BBVecHasher<BBNode>,
                    BBVecEquals<BBNode>> M;
-  if (form.GetSTPMgr()->UserFlags.isSet("bb-equiv", "1"))
+  if (uf->isSet("bb-equiv", "1"))
   {
     M lookup;
     typename std::map<ASTNode, vector<BBNode>>::iterator it;
@@ -881,8 +881,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case SBVMOD:
     case SBVDIV:
     {
-      ASTNode p = ArrayTransformer::TranslateSignedDivModRem(term, ASTNF,
-                                                             term.GetSTPMgr());
+      ASTNode p = ArrayTransformer::TranslateSignedDivModRem(term, ASTNF);
       result = BBTerm(p, support);
       break;
     }

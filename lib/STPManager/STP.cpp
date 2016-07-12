@@ -215,7 +215,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-    simplifier::constantBitP::ConstantBitPropagation cb(
+    simplifier::constantBitP::ConstantBitPropagation cb(bm,
         simp, bm->defaultNodeFactory, inputToSat);
 
     inputToSat = cb.topLevelBothWays(inputToSat, true, false);
@@ -272,7 +272,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input) << endl;
+    cerr << "Difficulty Initially:" << difficulty.score(original_input,bm) << endl;
 
   // A heap object so I can easily control its lifetime.
   std::auto_ptr<BVSolver> bvSolver(new BVSolver(bm, simp));
@@ -305,14 +305,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     removed = true;
   }
 
-  const bool arrayops = containsArrayOps(inputToSat);
+  const bool arrayops = containsArrayOps(inputToSat, bm);
   if (removed) {
     assert(!arrayops);
   }
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
-  unsigned initial_difficulty_score = difficulty.score(inputToSat);
+  unsigned initial_difficulty_score = difficulty.score(inputToSat,bm);
   int bitblasted_difficulty = -1;
 
   // Fixed point it if it's not too difficult.
@@ -327,7 +327,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
   {
-    initial_difficulty_score = difficulty.score(inputToSat);
+    initial_difficulty_score = difficulty.score(inputToSat,bm);
   }
 
   if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
@@ -399,7 +399,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
-        simp, bm->defaultNodeFactory, inputToSat);
+        bm, simp, bm->defaultNodeFactory, inputToSat);
     inputToSat = cb.topLevelBothWays(inputToSat);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
@@ -460,7 +460,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   bm->TermsAlreadySeenMap_Clear();
   bm->SimplifyWrites_InPlace_Flag = false;
 
-  long final_difficulty_score = difficulty.score(inputToSat);
+  long final_difficulty_score = difficulty.score(inputToSat,bm);
 
   bool worse = false;
   if (final_difficulty_score > 1.1 * initial_difficulty_score)
@@ -559,7 +559,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     cb = new simplifier::constantBitP::ConstantBitPropagation(
-        simp, bm->defaultNodeFactory, inputToSat);
+        bm, simp, bm->defaultNodeFactory, inputToSat);
     cleaner.reset(cb);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 

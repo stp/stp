@@ -72,15 +72,13 @@ extern int smtparse(void*);
 // TODO remove this, it's really ugly
 void vc_setFlags(VC vc, char c, int /*param_value*/)
 {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
-  process_argument(c, b);
+  process_argument(c, vc);
 }
 
 // TODO remove this, it's really ugly
 void vc_setFlag(VC vc, char c)
 {
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
-  process_argument(c, b);
+  process_argument(c, vc);
 }
 
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
@@ -114,9 +112,8 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
 }
 
 // Division is now always total
-void make_division_total(VC vc)
+void make_division_total(VC /*vc*/)
 {
-
 }
 
 // Create a validity Checker. This is the global STPMgr
@@ -154,18 +151,20 @@ VC vc_createValidityChecker(void)
 }
 
 // Expr I/O
-void vc_printExpr(VC /*vc*/, Expr e)
+void vc_printExpr(VC vc, Expr e)
 {
   // do not print in lisp mode
   // bmstar b = (bmstar)vc;
   stp::ASTNode q = (*(nodestar)e);
-  q.PL_Print(cout);
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  q.PL_Print(cout,b);
 }
 
-char* vc_printSMTLIB(VC /*vc*/, Expr e)
+char* vc_printSMTLIB(VC vc, Expr e)
 {
   stringstream ss;
-  printer::SMTLIB1_PrintBack(ss, *((nodestar)e));
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  printer::SMTLIB1_PrintBack(ss, *((nodestar)e),b);
   string s = ss.str();
   char* copy = strdup(s.c_str());
   return copy;
@@ -202,18 +201,21 @@ void vc_printExprCCode(VC vc, Expr e)
   cout << endl;
 
   // print constraints and assert
-  printer::C_Print(cout, q);
+  printer::C_Print(cout, q, b);
 }
 
-void vc_printExprFile(VC /*vc*/, Expr e, int fd)
+void vc_printExprFile(VC vc, Expr e, int fd)
 {
   fdostream os(fd);
-  ((nodestar)e)->PL_Print(os);
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  ((nodestar)e)->PL_Print(os,b);
   // os.flush();
 }
 
-static void vc_printVarDeclsToStream(VC /*vc*/, ostream& os)
+static void vc_printVarDeclsToStream(VC vc, ostream& os)
 {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+
   for (stp::ASTVec::iterator i = decls->begin(), iend = decls->end();
        i != iend; i++)
   {
@@ -221,17 +223,17 @@ static void vc_printVarDeclsToStream(VC /*vc*/, ostream& os)
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
-        a.PL_Print(os);
+        a.PL_Print(os,b);
         os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::ARRAY_TYPE:
-        a.PL_Print(os);
+        a.PL_Print(os,b);
         os << " : ARRAY "
            << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
         os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::BOOLEAN_TYPE:
-        a.PL_Print(os);
+        a.PL_Print(os,b);
         os << " : BOOLEAN;" << endl;
         break;
       default:
@@ -262,7 +264,7 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
         (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i, false) : *i;
     q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q, false) : q;
     os << "ASSERT( ";
-    q.PL_Print(os);
+    q.PL_Print(os,b);
     os << ");" << endl;
   }
   delete simp;
@@ -294,7 +296,7 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   stp::ASTNode q = (simplify_print == 1)
                         ? simp->SimplifyFormula_TopLevel(*((nodestar)e), false)
                         : *(nodestar)e;
-  q.PL_Print(os);
+  q.PL_Print(os,b);
   os << " );" << endl;
 
   delete simp;
@@ -345,12 +347,12 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
   memcpy(*buf, cstr, size);
 }
 
-void vc_printExprToBuffer(VC /*vc*/, Expr e, char** buf, unsigned long* len)
+void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
 {
   stringstream os;
-  // bmstar b = (bmstar)(((stpstar)vc)->bm);
+   bmstar b = (bmstar)(((stpstar)vc)->bm);
   stp::ASTNode q = *((nodestar)e);
-  q.PL_Print(os);
+  q.PL_Print(os,b);
   //((nodestar)e)->PL_Print(os);
   string s = os.str();
   const char* cstr = s.c_str();
@@ -366,7 +368,7 @@ void vc_printQuery(VC vc)
   bmstar b = (bmstar)(((stpstar)vc)->bm);
   os << "QUERY(";
   stp::ASTNode q = b->GetQuery();
-  q.PL_Print(os);
+  q.PL_Print(os,b);
   // b->GetQuery().PL_Print(os);
   os << ");" << endl;
 }

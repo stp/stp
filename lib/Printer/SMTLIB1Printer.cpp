@@ -47,11 +47,11 @@ void SMTLIB1_Print1(ostream& os, const stp::ASTNode n, int indentation,
                     bool letize);
 void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
-void SMTLIB1_PrintBack(ostream& os, const ASTNode& n)
+void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr * mgr)
 {
   os << "(" << endl;
   os << "benchmark blah" << endl;
-  if (containsArrayOps(n))
+  if (containsArrayOps(n, mgr))
     os << ":logic QF_AUFBV" << endl;
   else
     os << ":logic QF_BV" << endl;
@@ -71,7 +71,7 @@ void SMTLIB1_PrintBack(ostream& os, const ASTNode& n)
   buildListOfSymbols(n, visited, symbols);
   printSMTLIB1VarDeclsToStream(symbols, os);
   os << ":formula ";
-  SMTLIB_Print(os, n, 0, &SMTLIB1_Print1, true);
+  SMTLIB_Print(os, mgr, n, 0, &SMTLIB1_Print1, true);
   os << ")" << endl;
 }
 
@@ -133,8 +133,9 @@ void outputBitVec(const ASTNode n, ostream& os)
   // Prepend with zero to convert to unsigned.
 
   os << "bv";
+  CBV zero = CONSTANTBV::BitVector_Create(1, true); // TODO need to destroy???
   CBV unsign = CONSTANTBV::BitVector_Concat(
-      n.GetSTPMgr()->CreateZeroConst(1).GetBVConst(), op.GetBVConst());
+      zero, op.GetBVConst());
   unsigned char* str = CONSTANTBV::BitVector_to_Dec(unsign);
   CONSTANTBV::BitVector_Destroy(unsign);
   os << str << "[" << op.GetValueWidth() << "]";

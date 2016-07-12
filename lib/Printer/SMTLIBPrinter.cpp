@@ -53,7 +53,7 @@ vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 stp::ASTNodeMap NodeLetVarMap1;
 
 // copied from Presentation Langauge printer.
-ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,
+ostream& SMTLIB_Print(ostream& os, STPMgr *mgr, const ASTNode n, const int indentation,
                       void (*SMTLIB1_Print1)(ostream&, const ASTNode, int,
                                              bool),
                       bool smtlib1)
@@ -66,7 +66,7 @@ ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,
   // pass 1: letize the node
   {
     ASTNodeSet PLPrintNodeSet;
-    LetizeNode(n, PLPrintNodeSet, smtlib1);
+    LetizeNode(n, PLPrintNodeSet, smtlib1, mgr);
   }
 
   // pass 2:
@@ -130,7 +130,7 @@ ostream& SMTLIB_Print(ostream& os, const ASTNode n, const int indentation,
   return os;
 }
 
-void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
+void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1, STPMgr *stp)
 {
   if (n.isAtom())
     return;
@@ -152,7 +152,7 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
       //
       // 2. Letize its childNodes
       PLPrintNodeSet.insert(ccc);
-      LetizeNode(ccc, PLPrintNodeSet, smtlib1);
+      LetizeNode(ccc,  PLPrintNodeSet, smtlib1, stp);
     }
     else
     {
@@ -172,7 +172,7 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1)
         std::ostringstream oss;
         oss << "?let_k_" << sz;
 
-        ASTNode CurrentSymbol = n.GetSTPMgr()->CreateSymbol(
+        ASTNode CurrentSymbol = stp->CreateSymbol(
             oss.str().c_str(), n.GetIndexWidth(), n.GetValueWidth());
         /* If for some reason the variable being created here is
          * already declared by the user then the printed output will

@@ -613,8 +613,8 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
   std::ostringstream outVar;
   std::ostringstream outNum;
   // Get the name of Boolean Var
-  var.PL_Print(outVar);
-  constant.PL_Print(outNum);
+  var.PL_Print(outVar, this);
+  constant.PL_Print(outNum,this);
   std::string str(outVar.str());
   str += "(";
   str += outNum.str();

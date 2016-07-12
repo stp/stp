@@ -52,9 +52,9 @@ ostream& ASTNode::LispPrint_indent(ostream& os, int indentation) const
   return printer::Lisp_Print_indent(os, *this, indentation);
 }
 
-ostream& ASTNode::PL_Print(ostream& os, int indentation) const
+ostream& ASTNode::PL_Print(ostream& os, STPMgr *mgr, int indentation) const
 {
-  return printer::PL_Print(os, *this, indentation);
+  return printer::PL_Print(os, *this, mgr, indentation);
 }
 
 // This is the IO manipulator.  It builds an object of class
@@ -103,17 +103,17 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
-        a.PL_Print(os);
+        a.PL_Print( os, this);
         os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::ARRAY_TYPE:
-        a.PL_Print(os);
+        a.PL_Print(os, this);
         os << " : ARRAY "
            << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
         os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::BOOLEAN_TYPE:
-        a.PL_Print(os);
+        a.PL_Print( os, this);
         os << " : BOOLEAN;" << endl;
         break;
       default:
@@ -130,12 +130,12 @@ void STPMgr::printAssertsToStream(ostream& os)
   {
     ASTNode q = *i;
     os << "ASSERT( ";
-    q.PL_Print(os);
+    q.PL_Print(os, this);
     os << ");" << endl;
   }
 }
 
-void print_STPInput_Back(const ASTNode& query)
+void print_STPInput_Back(const ASTNode& query, STPMgr *mgr)
 {
 
   // Determine the symbols in the query and asserts.
@@ -149,7 +149,7 @@ void print_STPInput_Back(const ASTNode& query)
   (stp::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
   (stp::GlobalSTP->bm)->printAssertsToStream(cout);
   cout << "QUERY(";
-  query.PL_Print(cout);
+  query.PL_Print(cout,mgr);
   cout << ");\n";
 }
 } // end of namespace stp

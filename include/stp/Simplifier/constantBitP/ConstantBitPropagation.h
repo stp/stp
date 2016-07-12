@@ -37,6 +37,7 @@ namespace stp
 class ASTNode;
 typedef unsigned int* CBV;
 class Simplifier;
+class STPMgr;
 }
 
 namespace simplifier
@@ -62,6 +63,7 @@ class ConstantBitPropagation
 {
   NodeFactory* nf;
   Simplifier* simplifier;
+  STPMgr * mgr;
 
   Result status;
   WorkList* workList;
@@ -87,7 +89,7 @@ public:
   bool isUnsatisfiable() { return status == CONFLICT; }
 
   // propagates.
-  ConstantBitPropagation(stp::Simplifier* _sm, NodeFactory* _nf,
+  ConstantBitPropagation(stp::STPMgr * mgr, stp::Simplifier* _sm, NodeFactory* _nf,
                          const ASTNode& top);
 
   ~ConstantBitPropagation() { clearTables(); };
@@ -120,6 +122,8 @@ public:
   void setNodeToTrue(const ASTNode& top);
 
   stp::ASTNodeMap getAllFixed();
+
+  ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits);
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
 };

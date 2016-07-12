@@ -38,10 +38,10 @@ namespace printer
 using std::ostream;
 ostream& Dot_Print(ostream& os, const stp::ASTNode n);
 
-ostream& C_Print(ostream& os, const stp::ASTNode n, const int indentation = 0);
-ostream& PL_Print(ostream& os, const stp::ASTNode& n, int indentation = 0);
+ostream& C_Print(ostream& os, const stp::ASTNode n, STPMgr *, const int indentation = 0);
+ostream& PL_Print(ostream& os, const stp::ASTNode& n,  STPMgr* bm, int indentation = 0);
 
-void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize);
+void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize, STPMgr* bm );
 
 ostream& Lisp_Print(ostream& os, const stp::ASTNode& n, int indentation = 0);
 extern stp::ASTNodeSet Lisp_AlreadyPrintedSet;
@@ -49,10 +49,9 @@ ostream& Lisp_Print_indent(ostream& os, const stp::ASTNode& n,
                            int indentation = 0);
 
 // The "PrintBack" functions also define all the variables that are used.
-void SMTLIB1_PrintBack(ostream& os, const stp::ASTNode& n);
+void SMTLIB1_PrintBack(ostream& os, const stp::ASTNode& n, STPMgr * mgr);
 
-void SMTLIB2_PrintBack(ostream& os, const ASTNode& n,
-                       bool definately_bv = false);
+void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr *stp, bool definately_bv = false);
 
 ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 ostream& GDL_Print(ostream& os, const ASTNode n,
