@@ -31,8 +31,6 @@ THE SOFTWARE.
 TEST(print, one)
 {
   VC vc = vc_createValidityChecker();
-  VC vc2 = vc_createValidityChecker();
-
   vc_setFlags(vc, 'n');
   vc_setFlags(vc, 'd');
   vc_setFlags(vc, 'p');
@@ -46,21 +44,6 @@ TEST(print, one)
   printf("\n");
 
   vc_Destroy(vc);
-
-  vc_setFlags(vc2, 'n');
-  vc_setFlags(vc2, 'd');
-  vc_setFlags(vc2, 'p');
-
-  ct_3 = vc_bvConstExprFromStr(vc2, "00000000000000000000000000000011");
-  vc_printExpr(vc2, ct_3);
-  printf("\n");
-
-  ct_3 = vc_bvConstExprFromInt(vc2, 32, 5);
-  vc_printExpr(vc2, ct_3);
-  printf("\n");
-
-  vc_Destroy(vc2);
-
   // FIXME: Actually test something
   // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
