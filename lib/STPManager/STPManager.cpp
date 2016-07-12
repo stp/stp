@@ -109,7 +109,7 @@ ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
 ////////////////////////////////////////////////////////////////
 ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
 {
-  ASTSymbol temp_sym(name);
+  ASTSymbol temp_sym(this, name);
   ASTNode n(LookupOrCreateSymbol(temp_sym));
   return n;
 }
@@ -139,7 +139,7 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // _name because it's const).  Can cast the iterator to
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
-    ASTSymbol* s_ptr1 = new ASTSymbol(strdup(s_ptr->GetName()));
+    ASTSymbol* s_ptr1 = new ASTSymbol(this, strdup(s_ptr->GetName()));
     s_ptr1->SetNodeNum(NewNodeNum());
     s_ptr1->_value_width = s_ptr->_value_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
@@ -165,7 +165,7 @@ bool STPMgr::LookupSymbol(ASTSymbol& s)
 
 bool STPMgr::LookupSymbol(const char* const name)
 {
-  ASTSymbol s(name);
+  ASTSymbol s(this, name);
   ASTSymbol* s_ptr = &s; // it's a temporary key.
 
   if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
@@ -176,7 +176,7 @@ bool STPMgr::LookupSymbol(const char* const name)
 
 bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 {
-  ASTSymbol temp_sym(name);
+  ASTSymbol temp_sym(this, name);
   ASTSymbolSet::const_iterator it = _symbol_unique_table.find(&temp_sym);
   if (it != _symbol_unique_table.end())
   {
@@ -233,7 +233,7 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
   CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, width - copied, copied,
                                     c_val);
 
-  ASTBVConst temp_bvconst(CreateBVConstVal, width, true);
+  ASTBVConst temp_bvconst(this, CreateBVConstVal, width, true);
   return ASTNode(LookupOrCreateBVConst(temp_bvconst));
 }
 
@@ -280,7 +280,7 @@ ASTNode STPMgr::charToASTNode(unsigned char* strval, int base, int bit_width)
     FatalError("", ASTUndefined);
   }
 
-  ASTBVConst temp_bvconst(CreateBVConstVal, bit_width, true);
+  ASTBVConst temp_bvconst(this, CreateBVConstVal, bit_width, true);
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   return n;
 }
@@ -316,7 +316,7 @@ ASTNode STPMgr::CreateBVConst(const char* const strval, int base)
 // NB Assumes that it will destroy the bitvector passed to it
 ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
 {
-  ASTBVConst temp_bvconst(bv, width, true);
+  ASTBVConst temp_bvconst(this, bv, width, true);
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   CONSTANTBV::BitVector_Destroy(bv);
   return n;

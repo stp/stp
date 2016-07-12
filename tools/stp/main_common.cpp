@@ -286,9 +286,10 @@ int Main::main(int argc, char** argv)
     return ret;
   }
 
-  GlobalSTP = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
+  STP *stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
                       Ctr_Example.get());
 
+  GlobalSTP = stp;
   // If we're not reading the file from stdin.
   if (!infile.empty())
     read_file();
@@ -300,6 +301,8 @@ int Main::main(int argc, char** argv)
   bm->GetRunTimes()->start(RunTimes::Parsing);
   parse_file(AssertsQuery);
   bm->GetRunTimes()->stop(RunTimes::Parsing);
+
+  GlobalSTP = NULL;
 
   /*  The SMTLIB2 has a command language. The parser calls all the functions,
    *  so when we get to here the parser has already called "exit". i.e. if the
@@ -323,14 +326,14 @@ int Main::main(int argc, char** argv)
       return 0;
     }
 
-    SOLVER_RETURN_TYPE ret = GlobalSTP->TopLevelSTP(
+    SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(
       asserts, query);
 
     if (bm->UserFlags.quick_statistics_flag)
     {
       bm->GetRunTimes()->print();
     }
-    GlobalSTP->tosat->PrintOutput(ret);
+    stp->tosat->PrintOutput(ret);
 
     asserts = ASTNode();
     query = ASTNode();
@@ -344,7 +347,7 @@ int Main::main(int argc, char** argv)
   AssertsQuery->clear();
   delete AssertsQuery;
   _empty_ASTVec.clear();
-  delete GlobalSTP;
+  delete stp;
   Cnf_ClearMemory();
 
   return 0;

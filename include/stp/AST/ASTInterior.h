@@ -88,9 +88,9 @@ private:
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
 public:
-  ASTInterior(Kind kind) : ASTInternalWithChildren(kind) {}
-  ASTInterior(Kind kind, ASTVec& children)
-      : ASTInternalWithChildren(kind, children)
+  ASTInterior(STPMgr *mgr, Kind kind) : ASTInternalWithChildren(mgr, kind) {}
+  ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
+      : ASTInternalWithChildren(mgr, kind, children)
   {
   }
 

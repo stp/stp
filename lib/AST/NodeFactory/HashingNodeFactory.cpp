@@ -52,7 +52,7 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
     SortByArith(children);
   }
 
-  ASTInterior* n_ptr = new ASTInterior(kind, children);
+  ASTInterior* n_ptr = new ASTInterior(&bm, kind, children);
   ASTNode n(bm.LookupOrCreateInterior(n_ptr));
   return n;
 }

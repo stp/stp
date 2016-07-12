@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
+#include "stp/AST/ASTSymbol.h"
+
 namespace stp
 {
 const ASTVec ASTSymbol::empty_children;
@@ -44,7 +46,7 @@ void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
 // unique table
 void ASTSymbol::CleanUp()
 {
-  (GlobalParserBM)->_symbol_unique_table.erase(this);
+  nodeManager->_symbol_unique_table.erase(this);
   free((char*)this->_name);
   delete this;
 }

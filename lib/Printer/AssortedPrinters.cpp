@@ -142,12 +142,12 @@ void print_STPInput_Back(const ASTNode& query, STPMgr *mgr)
   ASTNodeSet visited;
   ASTNodeSet symbols;
   buildListOfSymbols(query, visited, symbols);
-  ASTVec v = (stp::GlobalSTP->bm)->GetAsserts();
+  ASTVec v = mgr->GetAsserts();
   for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
     buildListOfSymbols(*i, visited, symbols);
 
-  (stp::GlobalSTP->bm)->printVarDeclsToStream(cout, symbols);
-  (stp::GlobalSTP->bm)->printAssertsToStream(cout);
+  mgr->printVarDeclsToStream(cout, symbols);
+  mgr->printAssertsToStream(cout);
   cout << "QUERY(";
   query.PL_Print(cout,mgr);
   cout << ");\n";

@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STP.h"
+#include "stp/AST/ASTInterior.h"
+#include "stp/STPManager/STPManager.h"
 namespace stp
 {
 /******************************************************************
@@ -34,7 +34,7 @@ namespace stp
 // the unique table
 void ASTInterior::CleanUp()
 {
-  (GlobalParserBM)->_interior_unique_table.erase(this);
+  nodeManager->_interior_unique_table.erase(this);
   delete this;
 } 
 

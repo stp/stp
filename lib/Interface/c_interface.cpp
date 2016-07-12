@@ -57,7 +57,6 @@ typedef stp::AbsRefine_CounterExample* ctrexamplestar;
 typedef stp::ASTVec nodelist;
 typedef stp::CompleteCounterExample* CompleteCEStar;
 stp::ASTVec* decls = NULL;
-SimplifyingNodeFactory* simpNF = NULL;
 // vector<stp::ASTNode *> created_exprs;
 
 // persist holds a copy of ASTNodes so that the reference count of
@@ -116,7 +115,7 @@ void make_division_total(VC /*vc*/)
 {
 }
 
-// Create a validity Checker. This is the global STPMgr
+// Create a validity Checker.
 VC vc_createValidityChecker(void)
 {
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
@@ -128,8 +127,7 @@ VC vc_createValidityChecker(void)
 
   stp::STPMgr* bm = new stp::STPMgr();
 
-  simpNF = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
-  bm->defaultNodeFactory = simpNF;
+  bm->defaultNodeFactory = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
   stp::Simplifier* simp = new stp::Simplifier(bm);
   stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
@@ -139,11 +137,9 @@ VC vc_createValidityChecker(void)
   stp::AbsRefine_CounterExample* Ctr_Example =
       new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 
-  stp::GlobalParserBM = bm;
   stpstar stpObj =
       new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
 
-  stp::GlobalSTP = stpObj;
   decls = new stp::ASTVec();
   // created_exprs.clear();
   vc_setFlags(stpObj, 'd');
@@ -1680,7 +1676,6 @@ Expr vc_parseExpr(VC vc, const char* infile)
     return 0;
   }
 
-  // stp::GlobalSTP = (stpstar)vc;
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if (0 != c)
   {
@@ -1696,11 +1691,19 @@ Expr vc_parseExpr(VC vc, const char* infile)
   {
     smtin = cvcin;
     cvcin = NULL;
+    stp::GlobalSTP = ((stpstar)vc);
+    stp::GlobalParserBM = b;
     smtparse((void*)AssertsQuery);
+    stp::GlobalSTP = NULL;
+    stp::GlobalParserBM = NULL;
   }
   else
   {
+    stp::GlobalSTP = ((stpstar)vc);
+    stp::GlobalParserBM = b;
     cvcparse((void*)AssertsQuery);
+    stp::GlobalSTP = NULL;
+    stp::GlobalParserBM = NULL;
   }
 
   stp::ASTNode asserts = (*(stp::ASTVec*)AssertsQuery)[0];
@@ -1835,11 +1838,9 @@ void vc_Destroy(VC vc)
   Cnf_ClearMemory();
 
   delete decls;
-  delete (stpstar) vc;
-  stp::GlobalSTP = NULL;
-  delete stp::GlobalParserBM;
-  stp::GlobalParserBM = NULL;
-  delete simpNF;
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  delete b->defaultNodeFactory;
+  delete b;
 }
 
 void vc_DeleteExpr(Expr e)
@@ -2031,17 +2032,26 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   {
     // YY_BUFFER_STATE bstat = smt_scan_string(s);
     // smt_switch_to_buffer(bstat);
+    stp::GlobalSTP = ((stpstar)vc);
+    stp::GlobalParserBM = b;
     smt_scan_string(s);
     smtparse((void*)&AssertsQuery);
     // smt_delete_buffer(bstat);
+    stp::GlobalSTP = NULL;
+    stp::GlobalParserBM = NULL;
+
   }
   else
   {
     // YY_BUFFER_STATE bstat = cvc_scan_string(s);
     // cvc_switch_to_buffer(bstat);
+    stp::GlobalSTP = ((stpstar)vc);
+    stp::GlobalParserBM = b;
     cvc_scan_string(s);
     cvcparse((void*)&AssertsQuery);
     // cvc_delete_buffer(bstat);
+    stp::GlobalSTP = NULL;
+    stp::GlobalParserBM = NULL;
   }
 
   if (oquery)

@@ -54,15 +54,15 @@ public:
   void hasBeenSimplified() const { is_simplified = true; }
 
   // Constructor (kind and children).
-  ASTInternalWithChildren(Kind kind, const ASTVec& children, int nodenum = 0)
-      : ASTInternal(kind, nodenum), _children(children)
+  ASTInternalWithChildren(STPMgr * mgr, Kind kind, const ASTVec& children, int nodenum = 0)
+      : ASTInternal(mgr, kind, nodenum), _children(children)
   {
     is_simplified = false;
   }
 
   // Constructor (kind only, empty children, int nodenum)
-  ASTInternalWithChildren(Kind kind, int nodenum = 0)
-      : ASTInternal(kind, nodenum)
+  ASTInternalWithChildren(STPMgr * mgr, Kind kind, int nodenum = 0)
+      : ASTInternal(mgr, kind, nodenum)
   {
     is_simplified = false;
   }

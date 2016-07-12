@@ -69,6 +69,9 @@ protected:
    * Protected Data                                               *
    ****************************************************************/
 
+  // Pointer back to the node manager that holds this.
+  STPMgr * nodeManager;
+
   mutable uint8_t iteration;
 
   // reference counting for garbage collection
@@ -125,8 +128,8 @@ protected:
 
 public:
   // Constructor (kind only, empty children, int nodenum)
-  ASTInternal(Kind kind, int nodenum = 0)
-      : iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
+  ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
+      : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
         _index_width(0), _value_width(0)
   {
   }
@@ -137,7 +140,7 @@ public:
   // temporary hash keys before uniquefication.
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
-      : iteration(0), _ref_count(0), _kind(int_node._kind),
+      : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
         _node_num(int_node._node_num), _index_width(int_node._index_width),
         _value_width(int_node._value_width)
   {

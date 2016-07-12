@@ -72,8 +72,8 @@ private:
 
 
   ASTBVConst(CBV bv, unsigned int width);
-  ASTBVConst(CBV bv, unsigned int width, bool managed_outside = false)
-      : ASTInternal(BVCONST)
+  ASTBVConst(STPMgr * mgr, CBV bv, unsigned int width, bool managed_outside = false)
+      : ASTInternal(mgr, BVCONST)
   {
     if (managed_outside) {
       _bvconst = (bv);

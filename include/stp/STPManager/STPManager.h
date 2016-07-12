@@ -39,10 +39,8 @@ THE SOFTWARE.
 namespace stp
 {
 /*
- * This holds all "global" variables for the system,
- * such as unique tables for the various kinds of nodes.
- * not copyable
-*/
+ * STP Node Manager. Tools for managing AST nodes.
+ */
 class STPMgr
 {
   friend class ASTNode;
