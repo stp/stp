@@ -22,15 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Sat/CryptoMinisat4.h"
-#include "cryptominisat4/cryptominisat.h"
+#include "stp/Sat/CryptoMinisat5.h"
+#include "cryptominisat5/cryptominisat.h"
 #include <vector>
 using std::vector;
 
 namespace stp
 {
 
-void CryptoMinisat4::enableRefinement(const bool enable)
+void CryptoMiniSat5::enableRefinement(const bool enable)
 {
   // might break if we simplify with refinement enabled..
   if (enable)
@@ -39,7 +39,7 @@ void CryptoMinisat4::enableRefinement(const bool enable)
   }
 }
 
-CryptoMinisat4::CryptoMinisat4(int num_threads)
+CryptoMiniSat5::CryptoMiniSat5(int num_threads)
 {
   s = new CMSat::SATSolver;
   // s->log_to_file("stp.cnf");
@@ -49,21 +49,21 @@ CryptoMinisat4::CryptoMinisat4(int num_threads)
   temp_cl = (void*)new vector<CMSat::Lit>;
 }
 
-CryptoMinisat4::~CryptoMinisat4()
+CryptoMiniSat5::~CryptoMiniSat5()
 {
   delete s;
   vector<CMSat::Lit>* real_temp_cl = (vector<CMSat::Lit>*)temp_cl;
   delete real_temp_cl;
 }
 
-void CryptoMinisat4::setMaxConflicts(int64_t max_confl)
+void CryptoMiniSat5::setMaxConflicts(int64_t max_confl)
 {
   if (max_confl> 0)
     s->set_max_confl(max_confl);
 }
 
 bool
-CryptoMinisat4::addClause(const vec_literals& ps) // Add a clause to the solver.
+CryptoMiniSat5::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
   // Cryptominisat uses a slightly different vec class.
   // Cryptominisat uses a slightly different Lit class too.
@@ -79,12 +79,12 @@ CryptoMinisat4::addClause(const vec_literals& ps) // Add a clause to the solver.
 }
 
 bool
-CryptoMinisat4::okay() const // FALSE means solver is in a conflicting state
+CryptoMiniSat5::okay() const // FALSE means solver is in a conflicting state
 {
   return s->okay();
 }
 
-bool CryptoMinisat4::solve(bool& timeout_expired) // Search without assumptions.
+bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
 {
   CMSat::lbool ret = s->solve();
   if (ret == CMSat::l_Undef) {
@@ -93,28 +93,28 @@ bool CryptoMinisat4::solve(bool& timeout_expired) // Search without assumptions.
   return ret == CMSat::l_True;
 }
 
-uint8_t CryptoMinisat4::modelValue(uint32_t x) const
+uint8_t CryptoMiniSat5::modelValue(uint32_t x) const
 {
   return (s->get_model().at(x) == CMSat::l_True);
 }
 
-uint32_t CryptoMinisat4::newVar()
+uint32_t CryptoMiniSat5::newVar()
 {
   s->new_var();
   return s->nVars() - 1;
 }
 
-void CryptoMinisat4::setVerbosity(int v)
+void CryptoMiniSat5::setVerbosity(int v)
 {
   s->set_verbosity(v);
 }
 
-unsigned long CryptoMinisat4::nVars() const
+unsigned long CryptoMiniSat5::nVars() const
 {
   return s->nVars();
 }
 
-void CryptoMinisat4::printStats() const
+void CryptoMiniSat5::printStats() const
 {
   // s->printStats();
 }

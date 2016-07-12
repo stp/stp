@@ -287,28 +287,6 @@ include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
 
-# -----------------------------------------------------------------------------
-# Uncomment these for static compilation under Linux (messes up Valgrind)
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# Find the Boost package components
-# -----------------------------------------------------------------------------
-
-if(NOT BUILD_SHARED_LIBS)
-  message("Trying to use static Boost and Minisat libraries")
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Minisat_USE_STATIC_LIBS ON)
-  set(CryptoMiniSat_USE_STATIC_LIBS ON)
-
-  # FIXME: We should check if the linker supports these flags
-  # FIXME: -Wl,--no-export-dynamic is a workaround for a bug in binutils
-  # See http://sourceware.org/bugzilla/show_bug.cgi?id=13490
-  # https://bugzilla.redhat.com/show_bug.cgi?id=642999
-  set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--no-export-dynamic")
-  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
-endif()
-
 option(ONLY_SIMPLE "Don't try to use boost" OFF)
 if (NOT ONLY_SIMPLE)
   find_package( Boost 1.46 COMPONENTS program_options)
@@ -321,26 +299,26 @@ endif()
 
 
 # -----------------------------------------------------------------------------
-# Find CryptoMiniSat4
+# Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
-set(cryptominisat4_DIR "" CACHE PATH "Path to directory containing cryptominisat4Config.cmake")
-find_package(cryptominisat4 CONFIG)
-if (cryptominisat4_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-  message(STATUS "Found CryptoMiniSat4 and C++11, allowing --cryptominisat4 option")
-  message(STATUS "CryptoMiniSat4 dynamic lib: ${CRYPTOMINISAT4_LIBRARIES}")
-  message(STATUS "CryptoMiniSat4 static lib:  ${CRYPTOMINISAT4_STATIC_LIBRARIES}")
-  message(STATUS "CryptoMiniSat4 static lib deps: ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS}")
-  add_definitions(-DUSE_CRYPTOMINISAT4)
-  include_directories(${CRYPTOMINISAT4_INCLUDE_DIRS})
-  set(USE_CRYPTOMINISAT4 ON)
+set(cryptominisat_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
+find_package(cryptominisat5 CONFIG)
+if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
+  message(STATUS "Found CryptoMiniSat 5.x and C++11, allowing --cryptominisat5 option")
+  message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
+  message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
+  message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
+  add_definitions(-DUSE_CRYPTOMINISAT)
+  include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})
+  set(USE_CRYPTOMINISAT ON)
 else()
-  message(WARNING "CryptoMiniSat4 (v4.5 or above) or C++11 support not found, not allowing --cryptominisat4 option")
+  message(WARNING "CryptoMiniSat5 (5.0 or above) or C++11 support not found, not allowing --cryptominisat option")
 endif()
 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
-if (FORCE_CMS AND NOT USE_CRYPTOMINISAT4)
-    message(FATAL_ERROR "CryptoMiniSat was not found but it was requiested. Exiting.")
+if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
+    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requiested. Exiting.")
 endif()
 
 # -----------------------------------------------------------------------------

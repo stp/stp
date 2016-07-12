@@ -98,7 +98,7 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       break;
     case CMS4:
       b->UserFlags.solver_to_use =
-          stp::UserDefinedFlags::CRYPTOMINISAT4_SOLVER;
+          stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
       break;
     case MSP:
       //Array-based Minisat has been replaced with normal MiniSat

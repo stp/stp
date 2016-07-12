@@ -110,16 +110,16 @@ set_target_properties(libstp PROPERTIES
 # in manually.
 # -----------------------------------------------------------------------------
 set(libstp_link_libs ${Boost_LIBRARIES} ${MINISAT_LIBRARIES})
-if (USE_CRYPTOMINISAT4)
+if (USE_CRYPTOMINISAT)
     if (NOT BUILD_SHARED_LIBS)
       set(libstp_link_libs
         ${libstp_link_libs}
-        /usr/local/lib/${CRYPTOMINISAT4_STATIC_LIBRARIES}
-        ${CRYPTOMINISAT4_STATIC_LIBRARIES_DEPS})
+        /usr/local/lib/${CRYPTOMINISAT5_STATIC_LIBRARIES}
+        ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS})
     else()
       set(libstp_link_libs
         ${libstp_link_libs}
-        ${CRYPTOMINISAT4_LIBRARIES})
+        ${CRYPTOMINISAT5_LIBRARIES})
     endif()
 endif()
 
