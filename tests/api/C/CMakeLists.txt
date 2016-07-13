@@ -36,6 +36,7 @@ AddSTPGTest(parsefile-using-cinterface.cpp
            )
 AddSTPGTest(parsestring-using-cinterface.cpp)
 AddSTPGTest(print.cpp)
+AddSTPGTest(multi-print.cpp)
 AddSTPGTest(push-no-pop.cpp)
 AddSTPGTest(push-pop.cpp)
 AddSTPGTest(sbvdiv.cpp)

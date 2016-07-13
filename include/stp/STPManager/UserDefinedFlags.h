@@ -50,6 +50,9 @@ public:
   // collect statistics on certain functions
   bool stats_flag;
 
+  //collect and delete objects via interface.
+  bool cinterface_exprdelete_on_flag;
+
   int64_t timeout_max_conflicts;
 
   // print DAG nodes
@@ -207,6 +210,8 @@ public:
 
     // collect statistics on certain functions
     stats_flag = false;
+
+    cinterface_exprdelete_on_flag = true;
 
     // print DAG nodes
     print_nodes_flag = false;

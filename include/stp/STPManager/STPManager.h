@@ -436,6 +436,14 @@ public:
 
   ~STPMgr();
 
+  // Used just via the C-Interface.
+  // persist holds a copy of ASTNodes so that the reference count of
+  // objects we have pointers to doesn't hit zero.
+  vector<stp::ASTNode*> persist;
+
+  // Used just via the C-interface.
+  // Keeps a list of the variable that have been defined, in case you want to print them back out.
+  vector<stp::ASTNode> decls;
 };
 
 } // end of namespace

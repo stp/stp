@@ -56,13 +56,6 @@ typedef stp::BVSolver* bvsolverstar;
 typedef stp::AbsRefine_CounterExample* ctrexamplestar;
 typedef stp::ASTVec nodelist;
 typedef stp::CompleteCounterExample* CompleteCEStar;
-stp::ASTVec* decls = NULL;
-// vector<stp::ASTNode *> created_exprs;
-
-// persist holds a copy of ASTNodes so that the reference count of
-// objects we have pointers to doesn't hit zero.
-vector<stp::ASTNode*> persist;
-bool cinterface_exprdelete_on_flag = true;
 
 // GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
@@ -86,7 +79,7 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
   switch (f)
   {
     case EXPRDELETE:
-      cinterface_exprdelete_on_flag = param_value != 0;
+      b->UserFlags.cinterface_exprdelete_on_flag = param_value != 0;
       break;
     case MS:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
@@ -140,7 +133,6 @@ VC vc_createValidityChecker(void)
   stpstar stpObj =
       new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
 
-  decls = new stp::ASTVec();
   // created_exprs.clear();
   vc_setFlags(stpObj, 'd');
   return (VC)stpObj;
@@ -212,7 +204,7 @@ static void vc_printVarDeclsToStream(VC vc, ostream& os)
 {
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
-  for (stp::ASTVec::iterator i = decls->begin(), iend = decls->end();
+  for (stp::ASTVec::iterator i = b->decls.begin(), iend = b->decls.end();
        i != iend; i++)
   {
     node a = *i;
@@ -244,9 +236,10 @@ void vc_printVarDecls(VC vc)
   vc_printVarDeclsToStream(vc, cout);
 }
 
-void vc_clearDecls(VC /*vc*/)
+void vc_clearDecls(VC vc)
 {
-  decls->clear();
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+  b->decls.clear();
 }
 
 static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
@@ -369,11 +362,13 @@ void vc_printQuery(VC vc)
   os << ");" << endl;
 }
 
-nodestar persistNode(node n)
+nodestar persistNode(VC vc, node n)
 {
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
+
   nodestar np = new node(n);
-  if (cinterface_exprdelete_on_flag)
-    persist.push_back(np);
+  if (b->UserFlags.cinterface_exprdelete_on_flag)
+    b->persist.push_back(np);
   return np;
 }
 
@@ -403,7 +398,7 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
   }
   node output = b->CreateNode(stp::ARRAY, (*ti)[0], (*td)[0]);
 
-  return persistNode(output);
+  return persistNode(vc, output);
 }
 
 //! Create an expression for the value of array at the given index
@@ -673,7 +668,7 @@ Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth)
   assert(BVTypeCheck(*output));
 
   // store the decls in a vector for printing purposes
-  decls->push_back(o);
+  b->decls.push_back(o);
   return output;
 }
 
@@ -712,7 +707,7 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   assert(BVTypeCheck(*output));
 
   // store the decls in a vector for printing purposes
-  decls->push_back(o);
+  b->decls.push_back(o);
   return output;
 }
 
@@ -738,7 +733,7 @@ Expr vc_boolType(VC vc)
   bmstar b = (bmstar)(((stpstar)vc)->bm);
 
   node output = b->CreateNode(stp::BOOLEAN);
-  return persistNode(output);
+  return persistNode(vc, output);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -989,7 +984,7 @@ Type vc_bvType(VC vc, int num_bits)
 
   node e = b->CreateBVConst(32, num_bits);
   node output = (b->CreateNode(stp::BITVECTOR, e));
-  return persistNode(output);
+  return persistNode(vc, output);
 }
 
 Type vc_bv32Type(VC vc)
@@ -1034,7 +1029,7 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   }
   node n = b->CreateBVConst(n_bits, v);
   assert(BVTypeCheck(n));
-  return persistNode(n);
+  return persistNode(vc, n);
 }
 
 Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value)
@@ -1821,24 +1816,19 @@ int vc_isBool(Expr e)
 
 void vc_Destroy(VC vc)
 {
-  // for(vector<stp::ASTNode *>::iterator it=created_exprs.begin(),
-  //    itend=created_exprs.end();it!=itend;it++) {
-  //     stp::ASTNode * aaa = *it;
-  //     delete aaa;
-  //   }
+  bmstar b = (bmstar)(((stpstar)vc)->bm);
 
-  if (cinterface_exprdelete_on_flag)
+  if (b->UserFlags.cinterface_exprdelete_on_flag)
   {
-    for (vector<nodestar>::iterator it = persist.begin(); it != persist.end();
+    for (vector<nodestar>::iterator it = b->persist.begin(); it != b->persist.end();
          it++)
       delete *it;
-    persist.clear();
+    b->persist.clear();
   }
 
   Cnf_ClearMemory();
+  vc_clearDecls(vc);
 
-  delete decls;
-  bmstar b = (bmstar)(((stpstar)vc)->bm);
   delete b->defaultNodeFactory;
   delete b;
 }
