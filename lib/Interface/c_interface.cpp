@@ -1821,6 +1821,7 @@ void vc_Destroy(VC vc)
   Cnf_ClearMemory();
   vc_clearDecls(vc);
 
+  delete ((stp::STP*)vc);
   delete b->defaultNodeFactory;
   delete b;
 }
