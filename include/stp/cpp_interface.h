@@ -160,6 +160,9 @@ public:
   // We can't pop off the zeroeth level.
   void popToFirstLevel();
 
+  // Reset STP back to "just started up" state.
+  void reset();
+
   void pop();
 
   void push();

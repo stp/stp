@@ -187,6 +187,7 @@
 %token FORMULA_TOK
 %token PUSH_TOK
 %token POP_TOK
+%token RESET_TOK
 
  /* Functions for QF_AUFBV. */
 %token SELECT_TOK;
@@ -209,7 +210,11 @@ commands: commands cmdi
 ;
 
 cmdi:
-    LPAREN_TOK EXIT_TOK RPAREN_TOK
+    LPAREN_TOK RESET_TOK RPAREN_TOK
+    {
+       GlobalParserInterface->reset();
+    }
+|     LPAREN_TOK EXIT_TOK RPAREN_TOK
     {
        GlobalParserInterface->cleanUp();
        YYACCEPT;

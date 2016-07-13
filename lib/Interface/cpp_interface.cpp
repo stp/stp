@@ -288,6 +288,34 @@ void Cpp_interface::resetSolver()
   GlobalSTP->ClearAllTables();
 }
 
+// Can clear away the base frame..
+void Cpp_interface::reset()
+{
+  popToFirstLevel();
+
+  if (symbols.size() > 0)
+  {
+    ASTVec& current = symbols.back();
+    for (size_t i = 0, size = current.size(); i < size; ++i)
+      letMgr->_parser_symbol_table.erase(current[i]);
+
+    symbols.erase(symbols.end() - 1);
+  }
+
+  assert(symbols.size() ==0);
+  
+  // These tables might hold references to symbols that have been
+  // removed.
+  resetSolver();
+
+  cleanUp();
+  
+  checkInvariant();
+
+  init();
+}
+
+
 void Cpp_interface::popToFirstLevel()
 {
   while (symbols.size() > 1)

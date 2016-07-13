@@ -203,6 +203,7 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 	"get-info" 
 */
 "exit" {return EXIT_TOK;}
+"reset" {return RESET_TOK;}
 
  /* Types for QF_BV and QF_AUFBV. */
 "BitVec"        { return BITVEC_TOK;}
