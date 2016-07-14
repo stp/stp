@@ -175,37 +175,42 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 ":difficulty"    { return DIFFICULTY_TOK; }
 ":smt-lib-version"  { return VERSION_TOK; }
 ":status"        { return STATUS_TOK; }
-":print-success"        { return PRINT_TOK; }
 
+":"        { return COLON_TOK; }
 
  /* COMMANDS */
-"set-logic"         { return LOGIC_TOK; }  
-"set-info"  		{ return NOTES_TOK;  }
-"set-option"  		{ return OPTION_TOK;  }
-"declare-fun"		{ return DECLARE_FUNCTION_TOK; }
-"define-fun"		{ return DEFINE_FUNCTION_TOK; }
-"push"				{ return PUSH_TOK;}
-"pop"				{ return POP_TOK;}
- 
- /*
-	"declare-sort" 
-	"define-sort"  
-*/ 
-"assert" 			{ return FORMULA_TOK; }
-"check-sat"			{ return CHECK_SAT_TOK; }
- /*
-	"get-assertions" 
-	"get-proof" 
-	"get-unsat-core" 
-	"get-value"   
-	"get-assignment" 
-	"get-option" 
-	"get-info" 
-*/
-"exit" {return EXIT_TOK;}
-"reset" {return RESET_TOK;}
+"assert"                  { return ASSERT_TOK; }
+"check-sat"               { return CHECK_SAT_TOK; }
+"check-sat-assuming"      { return CHECK_SAT_ASSUMING_TOK;}
+"declare-const"           { return DECLARE_CONST_TOK;}
+"declare-fun"             { return DECLARE_FUNCTION_TOK; }
+"declare-sort"            { return DECLARE_SORT_TOK;}
+"define-fun"              { return DEFINE_FUNCTION_TOK; }
+"define-fun-rec"          { return DECLARE_FUN_REC_TOK;}
+"define-funs-rec"         { return DECLARE_FUNS_REC_TOK;}
+"define-sort"             { return DEFINE_SORT_TOK;}
+"echo"                    { return ECHO_TOK;}
+"exit"                    { return EXIT_TOK;}
+"get-assertions"          { return GET_ASSERTIONS_TOK;}
+"get-assignment"          { return GET_ASSIGNMENT_TOK;}
+"get-info"                { return GET_INFO_TOK;}
+"get-model"               { return GET_MODEL_TOK;}
+"get-option"              { return GET_OPTION_TOK;}
+"get-proof"               { return GET_PROOF_TOK;}
+"get-unsat-assumption"    { return GET_UNSAT_ASSUMPTION_TOK;}
+"get-unsat-core"          { return GET_UNSAT_CORE_TOK;}
+"get-value"               { return GET_VALUE_TOK;}
+"pop"                     { return POP_TOK;}
+"push"                    { return PUSH_TOK;}
+"reset"                   { return RESET_TOK;}
+"reset-assertions"        { return RESET_ASSERTIONS_TOK;} 
+"set-info"                { return NOTES_TOK;  }
+"set-logic"               { return LOGIC_TOK; }
+"set-option"  		        { return SET_OPTION_TOK; }
 
- /* Types for QF_BV and QF_AUFBV. */
+
+
+ /* Types for QF_BV and QF_ABV. */
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
 "Bool"          { return BOOL_TOK;}

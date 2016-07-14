@@ -61,9 +61,7 @@
   extern int smt2lex(void);
 
   int yyerror(const char *s) {
-    cout << "syntax error: line " << smt2lineno << "\n" << s << endl;
-    cout << "  token: " << smt2text << endl;
-    FatalError("");
+    cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << std::endl;
     return 1;
   }
 
@@ -109,7 +107,6 @@
 %token DIFFICULTY_TOK
 %token VERSION_TOK
 %token STATUS_TOK
-%token PRINT_TOK
 
  /* ASCII Symbols */
  /* Semicolons (comments) are ignored by the lexer */
@@ -176,20 +173,39 @@
 %token DISTINCT_TOK; 
 %token LET_TOK; 
 
-// COMMANDS
-%token EXIT_TOK
-%token CHECK_SAT_TOK
-%token LOGIC_TOK
-%token NOTES_TOK
-%token OPTION_TOK
-%token DECLARE_FUNCTION_TOK
-%token DEFINE_FUNCTION_TOK
-%token FORMULA_TOK
-%token PUSH_TOK
-%token POP_TOK
-%token RESET_TOK
+%token COLON_TOK
 
- /* Functions for QF_AUFBV. */
+// COMMANDS
+%token ASSERT_TOK 
+%token CHECK_SAT_TOK 
+%token CHECK_SAT_ASSUMING_TOK
+%token DECLARE_CONST_TOK
+%token DECLARE_FUNCTION_TOK 
+%token DECLARE_SORT_TOK
+%token DEFINE_FUNCTION_TOK 
+%token DECLARE_FUN_REC_TOK
+%token DECLARE_FUNS_REC_TOK
+%token DEFINE_SORT_TOK
+%token ECHO_TOK
+%token EXIT_TOK
+%token GET_ASSERTIONS_TOK
+%token GET_ASSIGNMENT_TOK
+%token GET_INFO_TOK
+%token GET_MODEL_TOK
+%token GET_OPTION_TOK
+%token GET_PROOF_TOK
+%token GET_UNSAT_ASSUMPTION_TOK
+%token GET_UNSAT_CORE_TOK
+%token GET_VALUE_TOK
+%token POP_TOK
+%token PUSH_TOK
+%token RESET_TOK
+%token RESET_ASSERTIONS_TOK 
+%token NOTES_TOK  
+%token LOGIC_TOK   
+%token SET_OPTION_TOK  
+
+ /* Functions for QF_ABV. */
 %token SELECT_TOK;
 %token STORE_TOK; 
 
@@ -204,75 +220,131 @@ cmd: commands END
 ;
 
 
-commands: commands cmdi  
-| cmdi
+commands: commands LPAREN_TOK cmdi RPAREN_TOK  
+| LPAREN_TOK cmdi RPAREN_TOK
 {}
 ;
 
 cmdi:
-    LPAREN_TOK RESET_TOK RPAREN_TOK
+     ASSERT_TOK an_formula 
     {
-       GlobalParserInterface->reset();
-    }
-|     LPAREN_TOK EXIT_TOK RPAREN_TOK
-    {
-       GlobalParserInterface->cleanUp();
-       YYACCEPT;
-    }
-|    LPAREN_TOK CHECK_SAT_TOK RPAREN_TOK
-    {
-        GlobalParserInterface->checkSat(GlobalParserInterface->getAssertVector());
+      GlobalParserInterface->AddAssert(*$2);
+      GlobalParserInterface->deleteNode($2);
+      GlobalParserInterface->success();
     }
 |
-    LPAREN_TOK LOGIC_TOK STRING_TOK RPAREN_TOK
+     CHECK_SAT_TOK 
     {
-      if (!(0 == strcmp($3->c_str(),"QF_BV") ||
-            0 == strcmp($3->c_str(),"QF_ABV") ||
-            0 == strcmp($3->c_str(),"QF_AUFBV"))) {
-        yyerror("Wrong input logic:");
-      }
+      GlobalParserInterface->checkSat(GlobalParserInterface->getAssertVector());
+    }
+|
+     CHECK_SAT_ASSUMING_TOK LPAREN_TOK an_term RPAREN_TOK 
+    {
+      GlobalParserInterface->unsupported();
+    }
+|
+     DECLARE_CONST_TOK LPAREN_TOK an_term RPAREN_TOK 
+    {
+      GlobalParserInterface->unsupported();
+    }
+|
+     DECLARE_FUNCTION_TOK var_decl 
+    {
       GlobalParserInterface->success();
-      delete $3;
     }
-|    LPAREN_TOK NOTES_TOK attribute STRING_TOK RPAREN_TOK
+|
+     DEFINE_FUNCTION_TOK function_decl 
     {
-    delete $4;
+      GlobalParserInterface->success();
     }
-|    LPAREN_TOK OPTION_TOK attribute RPAREN_TOK
+|
+     ECHO_TOK 
     {
+      GlobalParserInterface->unsupported();
     }
-|    LPAREN_TOK NOTES_TOK attribute DECIMAL_TOK RPAREN_TOK
-    {}
-|    LPAREN_TOK NOTES_TOK attribute RPAREN_TOK
-    {}
-|    LPAREN_TOK PUSH_TOK NUMERAL_TOK RPAREN_TOK
+|
+     EXIT_TOK 
     {
-        for (unsigned i=0; i < $3;i++)
-        {
+       GlobalParserInterface->cleanUp();
+       GlobalParserInterface->success();
+       YYACCEPT;
+    }
+|     
+     GET_VALUE_TOK LPAREN_TOK an_term RPAREN_TOK 
+    {
+       // TODO!!
+       GlobalParserInterface->unsupported();
+    }
+| 
+     GET_VALUE_TOK LPAREN_TOK STRING_TOK RPAREN_TOK 
+    {
+       // TODO!!
+      GlobalParserInterface->unsupported();
+    }
+| 
+     GET_VALUE_TOK LPAREN_TOK an_formula RPAREN_TOK 
+    {
+       // TODO!!
+      GlobalParserInterface->unsupported();
+    }
+| 
+     SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK 
+    {
+       GlobalParserInterface->setOption(*$3,*$4);
+    }
+|
+     SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK 
+    {
+       GlobalParserInterface->setOption(*$3,"false");
+    }
+|
+     SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK 
+    {
+       GlobalParserInterface->setOption(*$3,"true");
+    }
+|
+     PUSH_TOK NUMERAL_TOK 
+    {
+        for (unsigned i=0; i < $2;i++)
             GlobalParserInterface->push();
-        }
         GlobalParserInterface->success();
     }
-|    LPAREN_TOK POP_TOK NUMERAL_TOK RPAREN_TOK
+|
+     POP_TOK NUMERAL_TOK 
     {
-        for (unsigned i=0; i < $3;i++)
+        for (unsigned i=0; i < $2;i++)
             GlobalParserInterface->pop();
         GlobalParserInterface->success();
     }
-|   LPAREN_TOK DECLARE_FUNCTION_TOK var_decl RPAREN_TOK
+|
+     RESET_TOK 
     {
-    GlobalParserInterface->success();
+       GlobalParserInterface->reset();
+       GlobalParserInterface->success();
     }
-|   LPAREN_TOK DEFINE_FUNCTION_TOK function_decl RPAREN_TOK
+|   
+     LOGIC_TOK STRING_TOK 
     {
-    GlobalParserInterface->success();
+      if (!(0 == strcmp($2->c_str(),"QF_BV") ||
+            0 == strcmp($2->c_str(),"QF_ABV") ||
+            0 == strcmp($2->c_str(),"QF_AUFBV"))) {
+        yyerror("Wrong input logic");
+      }
+      GlobalParserInterface->success();
+      delete $2;
     }
-|   LPAREN_TOK FORMULA_TOK an_formula RPAREN_TOK
+|    
+     NOTES_TOK attribute STRING_TOK 
     {
-    GlobalParserInterface->AddAssert(*$3);
-    GlobalParserInterface->deleteNode($3);
-    GlobalParserInterface->success();
+      delete $3;
     }
+|   
+     NOTES_TOK attribute DECIMAL_TOK 
+    {}
+|  
+     NOTES_TOK attribute 
+    {}
+
 ;
 
 
@@ -392,15 +464,6 @@ SOURCE_TOK
 {}
 | STATUS_TOK status
 {} 
-| PRINT_TOK TRUE_TOK
-{
-    GlobalParserInterface->setPrintSuccess(true);
-    GlobalParserInterface->success();
-}
-| PRINT_TOK FALSE_TOK
-{
-    GlobalParserInterface->setPrintSuccess(false);
-}
 ;
 
 

@@ -151,7 +151,11 @@ public:
 
   void deleteNode(ASTNode* n);
   void addSymbol(ASTNode& s);
+  
   void success();
+  void error(std::string msg);
+  void unsupported();
+
 
   // Resets the tables used by STP, but keeps all the nodes that have been
   // created.
@@ -177,6 +181,9 @@ public:
   void deleteGlobal();
 
   void cleanUp();
+
+  void setOption(std::string , std::string);
+  void getOption(std::string );
 };
 }
 

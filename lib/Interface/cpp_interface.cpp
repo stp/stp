@@ -35,6 +35,7 @@ using std::endl;
 
 namespace stp
 {
+
 void Cpp_interface::checkInvariant()
 {
   assert(bm.getAssertLevel() == cache.size());
@@ -238,6 +239,7 @@ bool Cpp_interface::isSymbolAlreadyDeclared(char* name)
 void Cpp_interface::setPrintSuccess(bool ps)
 {
   print_success = ps;
+  success();
 }
 
 bool Cpp_interface::isSymbolAlreadyDeclared(string name)
@@ -281,6 +283,20 @@ void Cpp_interface::success()
     flush(cout);
   }
 }
+
+//TODO escape string.
+void Cpp_interface::error(std::string msg)
+{
+  cout << "error(\"" << msg << "\")" << endl;
+  flush(cout);
+}
+
+void Cpp_interface::unsupported()
+{
+  cout << "unsupported" << endl;
+  flush(cout);
+}
+
 
 void Cpp_interface::resetSolver()
 {
@@ -470,4 +486,41 @@ void Cpp_interface::cleanUp()
   cache.clear();
   symbols.clear();
 }
+
+  void Cpp_interface::setOption(std::string option, std::string value)
+  {
+      /*
+      :diagnostic-output-channel
+      :global-declarations
+      :interactive-mode
+      :produce-assertions
+      :produce-assignments
+      :produce-models
+      :produce-proofs
+      :produce-unsat-assumptions
+      :produce-unsat-cores
+      :random-seed
+      :regular-output-channel
+      :reproducible-resource-limit
+      :verbosity
+      */
+
+     if(option == "print-success")
+      {
+        if (value =="true")
+          setPrintSuccess(true);
+        else if (value =="false")
+          setPrintSuccess(false);
+        else
+          unsupported();
+      }
+      else
+        unsupported();
+  }
+  
+  void Cpp_interface::getOption(std::string )
+  {
+      unsupported();
+  }
+
 }
