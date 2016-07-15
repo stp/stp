@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "main_common.h"
-#include "extlib-abc/cnf_short.h"
+#include "sat/cnf/cnf.h"
 
 extern int smtparse(void*);
 extern int smt2parse();
@@ -348,7 +348,7 @@ int Main::main(int argc, char** argv)
   delete AssertsQuery;
   _empty_ASTVec.clear();
   delete stp;
-  Cnf_ClearMemory();
+  Cnf_ManFree();
 
   return 0;
 }

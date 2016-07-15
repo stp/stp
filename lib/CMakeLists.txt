@@ -25,7 +25,6 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(extlib-abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -47,7 +46,6 @@ set(stp_lib_targets
     sat
     simplifier
     constantbv
-    abc
     cinterface
     cppinterface
     parser
@@ -122,6 +120,12 @@ if (USE_CRYPTOMINISAT)
         ${CRYPTOMINISAT5_LIBRARIES})
     endif()
 endif()
+
+#Where I install the abc library to on my machine..
+set(libstp_link_libs ${libstp_link_libs} /home/ec2-user/abc/libabc.a)
+set(libstp_link_libs ${libstp_link_libs} dl)
+set(libstp_link_libs ${libstp_link_libs} readline)
+ 
 
 target_link_libraries(libstp ${libstp_link_libs})
 

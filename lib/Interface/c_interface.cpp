@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
 // FIXME: External library
-#include "extlib-abc/cnf_short.h"
+#include "sat/cnf/cnf.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -1818,7 +1818,7 @@ void vc_Destroy(VC vc)
     b->persist.clear();
   }
 
-  Cnf_ClearMemory();
+  Cnf_ManFree();
   vc_clearDecls(vc);
 
   delete ((stp::STP*)vc);

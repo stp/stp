@@ -77,7 +77,7 @@ void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
   // If CNF generation is going to be called lots, we'd rather keep it around.
   // because the datatables are expensive to generate.
   if (cnf_calls == 0)
-    Cnf_ClearMemory();
+    Cnf_ManFree();
 
   Cnf_DataFree(cnfData);
   cnf_calls++;
@@ -89,7 +89,7 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
   {
     std::stringstream fileName;
     fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
-    Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0);
+    Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0,0,0);
   }
 
   if (bm->UserFlags.exit_after_CNF)
