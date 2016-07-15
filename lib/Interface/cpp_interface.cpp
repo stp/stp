@@ -55,6 +55,7 @@ void Cpp_interface::init()
 
   print_success = false;
   ignoreCheckSatRequest = false;
+  produce_models = false;
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)

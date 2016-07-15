@@ -85,7 +85,7 @@ class Cpp_interface
   void checkInvariant();
   void init();
 
-  bool produce_models=false;
+  bool produce_models;
 
 public:
   std::unique_ptr<LETMgr> letMgr;
