@@ -10,7 +10,7 @@
 ; Reset on empty. 
 (reset)
 
-(declare-fun v0 () (_ BitVec 1))
+(declare-fun v0 () (_ BitVec 10))
 
 ; Should clear away v0.
 (reset)
@@ -19,6 +19,7 @@
 (declare-fun v0 () (_ BitVec 1))
 
 (assert (= (_ bv0 1) ((_ extract 1 1) (bvnor (_ bv0 2) (bvnor (_ bv2 2) (concat (_ bv0 1) v0))))))
+(set-info :status unsat)
 ; CHECK-NEXT: ^unsat
 (check-sat)
 
