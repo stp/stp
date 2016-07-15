@@ -495,7 +495,6 @@ void Cpp_interface::cleanUp()
       :interactive-mode
       :produce-assertions
       :produce-assignments
-      :produce-models
       :produce-proofs
       :produce-unsat-assumptions
       :produce-unsat-cores
@@ -514,6 +513,21 @@ void Cpp_interface::cleanUp()
         else
           unsupported();
       }
+     else if(option == "produce-models")
+      {
+        if (value =="true")
+          {
+            produce_models = true;
+            success();
+          }
+        else if (value =="false")
+          {
+            produce_models = false;
+            success();
+          }
+        else
+          unsupported();
+      }
       else
         unsupported();
   }
@@ -523,4 +537,36 @@ void Cpp_interface::cleanUp()
       unsupported();
   }
 
+  void Cpp_interface::getValue(const ASTVec &v)
+  {
+    std::ostringstream os;
+
+    os << "("<< std::endl;
+    
+    for (ASTNode n: v)
+      {
+        if (n.GetKind() != SYMBOL)
+        {
+          unsupported();
+          return;
+        }
+        GlobalSTP->Ctr_Example->PrintSMTLIB2(os,n);
+        os << std::endl;        
+      }
+    os << ")" << std::endl;
+
+    cout << os.str();
+  }
+
+  void Cpp_interface::getModel()
+  {
+    //TODO check that produce-models is turned on.
+    //Check that check-sat was just called.
+    cout << "("<< std::endl;
+
+    std::ostringstream os;
+    GlobalSTP->Ctr_Example->PrintCounterExampleSMTLIB2(os);
+    cout << os.str();
+    cout << ")" << std::endl;
+  }
 }

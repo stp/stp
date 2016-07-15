@@ -85,6 +85,8 @@ class Cpp_interface
   void checkInvariant();
   void init();
 
+  bool produce_models=false;
+
 public:
   std::unique_ptr<LETMgr> letMgr;
   NodeFactory* nf;
@@ -184,6 +186,10 @@ public:
 
   void setOption(std::string , std::string);
   void getOption(std::string );
+
+  void getModel();
+
+  void getValue(const ASTVec &v);
 };
 }
 

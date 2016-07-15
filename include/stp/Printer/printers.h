@@ -53,6 +53,8 @@ void SMTLIB1_PrintBack(ostream& os, const stp::ASTNode& n, STPMgr * mgr);
 
 void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr *stp, bool definately_bv = false);
 
+void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
+
 ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 ostream& GDL_Print(ostream& os, const ASTNode n,
                    std::string (*annotate)(const ASTNode&));

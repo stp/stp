@@ -689,6 +689,112 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   return entries;
 } 
 
+// TODO printing of expressions.
+// TODO move to printer file.
+void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode &n)
+{
+  if (n.GetKind() == SYMBOL)
+  {
+    os << "( ";
+
+      os << "|";
+      n.nodeprint(os);
+      os << "| ";
+  
+    if (n.GetType() == stp::BITVECTOR_TYPE)
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false),os);
+    else
+      {
+        if (ASTTrue == ComputeFormulaUsingModel(n))
+            os << "true";
+          else 
+            os << "false";
+      }
+    os << " )";
+  } 
+}
+
+
+void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
+{
+  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+  // changes it. Which breaks the iterator otherwise.
+  const ASTNodeMap c(CounterExampleMap);
+
+  ASTNodeMap::const_iterator it = c.begin();
+  ASTNodeMap::const_iterator itend = c.end();
+  for (; it != itend; it++)
+  {
+    const ASTNode& f = it->first;
+    const ASTNode& se = it->second;
+
+    if (ARRAY_TYPE == se.GetType())
+    {
+      FatalError("PrintCounterExampleSMTLIB2: "
+                 "entry in counterexample is an arraytype. bogus:",
+                 se);
+    }
+
+    // skip over introduced variables
+    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    {
+      continue;
+    }
+    
+    if (f.GetKind() == SYMBOL)
+    {
+      os << "( define-fun ";
+      os << "|";
+      f.nodeprint(os);
+      os << "|";
+      
+      if (f.GetType() == stp::BITVECTOR_TYPE)
+      {
+        os << " () (";
+        os << "_ BitVec " << f.GetValueWidth() << ")";
+        printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
+      }
+      else if (f.GetType() == stp::BOOLEAN_TYPE)
+      {
+        os << " () Bool ";        
+      }
+      else
+      {
+        FatalError("Wrong Type");
+      }
+
+      os << " )" <<std::endl;  
+    }
+
+    //TODO completely the wrong format.
+    if (
+        (f.GetKind() == READ && 
+         f[0].GetKind() == SYMBOL &&
+         f[1].GetKind() == BVCONST))
+    {
+
+      os << "( define-fun ";
+      
+      os << "|";
+      f[0].nodeprint(os);
+      os << "| ";
+
+      os << " (";
+      os << "_ BitVec " << f[0].GetIndexWidth() << ")";
+
+      os << " (";
+      os << "_ BitVec " << f[0].GetValueWidth() << ")";
+
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false),os);
+
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
+      os << " )" << endl;
+    }
+  }
+  os.flush();
+}
+
+
 // FUNCTION: prints a counterexample for INVALID inputs.  iterate
 // through the CounterExampleMap data structure and print it to
 // stdout
@@ -748,7 +854,10 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
         (f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
          f[1].GetKind() == BVCONST))
     {
-      os << "ASSERT( ";
+
+        os << "ASSERT( ";
+
+
       printer::PL_Print1(os, f, 0, false,bm);
       if (BOOLEAN_TYPE == f.GetType())
       {
@@ -771,7 +880,10 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
       assert(rhs.isConstant());
       printer::PL_Print1(os, rhs, 0, false,bm);
 
-      os << " );" << endl;
+
+        os << " );" << endl;
+
+
     }
   }
   os.flush();

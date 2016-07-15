@@ -127,7 +127,7 @@ void outputBitVec(const ASTNode n, ostream& os)
     op = n;
   }
   else
-    FatalError("nsadfsdaf");
+    FatalError("nsadfsdaf2");
 
   // CONSTANTBV::BitVector_to_Dec returns a signed representation by default.
   // Prepend with zero to convert to unsigned.

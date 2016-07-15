@@ -269,38 +269,35 @@ cmdi:
        GlobalParserInterface->success();
        YYACCEPT;
     }
-|     
-     GET_VALUE_TOK LPAREN_TOK an_term RPAREN_TOK 
+|    
+     GET_MODEL_TOK 
     {
-       // TODO!!
-       GlobalParserInterface->unsupported();
+       GlobalParserInterface->getModel();
     }
-| 
-     GET_VALUE_TOK LPAREN_TOK STRING_TOK RPAREN_TOK 
+|    
+     GET_VALUE_TOK LPAREN_TOK an_mixed RPAREN_TOK 
     {
-       // TODO!!
-      GlobalParserInterface->unsupported();
-    }
-| 
-     GET_VALUE_TOK LPAREN_TOK an_formula RPAREN_TOK 
-    {
-       // TODO!!
-      GlobalParserInterface->unsupported();
+      GlobalParserInterface->getValue(*$3);
+      delete $3;
     }
 | 
      SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK 
     {
        GlobalParserInterface->setOption(*$3,*$4);
+       delete $3;
+       delete $4;
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK 
     {
        GlobalParserInterface->setOption(*$3,"false");
+       delete $3;
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK 
     {
        GlobalParserInterface->setOption(*$3,"true");
+       delete $3;
     }
 |
      PUSH_TOK NUMERAL_TOK 

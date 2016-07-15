@@ -94,6 +94,9 @@ public:
 
   // Prints the counterexample to stdout
   void PrintCounterExample(bool t, std::ostream& os = std::cout);
+  void PrintCounterExampleSMTLIB2(std::ostream& os);
+  void PrintSMTLIB2(std::ostream& os, const ASTNode &n);
+  
 
   void ClearCounterExampleMap(void) { CounterExampleMap.clear(); }
 

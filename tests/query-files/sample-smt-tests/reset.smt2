@@ -4,13 +4,10 @@
 (set-info :category "check")
 (set-info :status sat)
 
-; CHECK-NEXT: ^unsat
+; CHECK-NEXT: ^sat
 (check-sat)
 
-(set-info :status unsat)
-
-; Double reset on empty. 
-(reset)
+; Reset on empty. 
 (reset)
 
 (declare-fun v0 () (_ BitVec 1))
@@ -45,10 +42,10 @@
 (assert (= (_ bv0 1) ((_ extract 1 1) (bvnor (_ bv0 2) (bvnor (_ bv2 2) (concat (_ bv0 1) v0))))))
 ; CHECK-NEXT: ^unsat
 (check-sat)
-(pop 1)
-(pop 1) 
 
 (reset)
+; Should have cleared away everythiung, so should be able to create it again..
+(declare-fun v0 () (_ BitVec 1))
 
 
 (exit)
