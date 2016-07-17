@@ -22,10 +22,17 @@ project(STP)
 cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
 
 
-if (CMAKE_MAJOR_VERSION GREATER 2)
-    # FIXME: We need to find a proper way to get the LOCATION property of a target
-    # when using CMake >= 3.0
-    cmake_policy(SET CMP0026 OLD) # See cmake --help-policy CMP0026
+if(NOT (CMAKE_MAJOR_VERSION LESS 2))
+    if(POLICY CMP0026)
+        # FIXME: We need to find a proper way to get the LOCATION property of a target
+        # when using CMake >= 3.0
+        cmake_policy(SET CMP0026 OLD) # See cmake --help-policy CMP0026
+    endif()
+
+    if(POLICY CMP0048)
+        #policy for VERSION in cmake 3.0
+        cmake_policy(SET CMP0048 OLD)
+    endif()
 endif()
 
 # Search paths for custom CMake modules
