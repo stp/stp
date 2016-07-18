@@ -475,10 +475,13 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   {
     stp::FatalError("CInterface: Trying to QUERY a NON formula: ", *a);
   }
-  // a->LispPrint(cout, 0);
-  // printf("##################################################\n");
+
   assert(BVTypeCheck(*a));
+  //  It seems weird to assert this here. It's not what I expect.
+  //  It's a type of convenience it seems? 
   b->AddQuery(*a);
+
+  stpObj->ClearAllTables();
 
   const stp::ASTVec v = b->GetAsserts();
   node o;
