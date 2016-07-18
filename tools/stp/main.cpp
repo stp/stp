@@ -163,12 +163,16 @@ void ExtraMain::create_options()
   solver_options.add_options()
 #ifdef USE_CRYPTOMINISAT
       ("cryptominisat",
-       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above.")
+       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above (default).")
       ("threads", po::value<int>(&bm->UserFlags.num_solver_threads)->default_value(bm->UserFlags.num_solver_threads)
       , "Number of threads for cryptominisat")
 #endif
-      ("simplifying-minisat", "use installed simplifying minisat version as the solver")(
-          "minisat", "use installed minisat version as the solver (default)")
+      ("simplifying-minisat", "use installed simplifying minisat version as the solver")
+      ("minisat", "use installed minisat version as the solver "
+#ifndef USE_CRYPTOMINISAT
+"(default)"
+#endif
+        )
   ;
 
   po::options_description refinement_options("Refinement options");

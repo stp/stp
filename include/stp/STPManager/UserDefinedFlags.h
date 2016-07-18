@@ -281,8 +281,13 @@ public:
 
     tseitin_are_decision_variables_flag = true;
 
-    // use minisat by default.
+    // If cryptominisat is installed, use it as default, otherwise minisat.
+#ifdef USE_CRYPTOMINISAT
+    solver_to_use = CRYPTOMINISAT5_SOLVER;
+#else
     solver_to_use = MINISAT_SOLVER;
+#endif    
+
     num_solver_threads = 1;
 
     // Should constant bit propagation be enabled?
