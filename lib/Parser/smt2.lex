@@ -55,13 +55,6 @@
 
   // File-static (local to this file) variables and functions
   static std::string _string_lit;  
-  static char escapeChar(char c) {
-    switch(c) {
-    case 'n': return '\n';
-    case 't': return '\t';
-    default: return c;
-    }
-  }    
    
   static int lookup(const char* s)
   {
@@ -154,9 +147,8 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 <INITIAL>"\""		{ BEGIN STRING_LITERAL;
                           _string_lit.erase(_string_lit.begin(),
                                             _string_lit.end()); }
-<STRING_LITERAL>"\\".	{ /* escape characters (like \n or \") */
-                          _string_lit.insert(_string_lit.end(),
-                                             escapeChar(smt2text[1])); }
+<STRING_LITERAL>"\"\""	{ /* double quote is the only escape. */
+                          _string_lit.insert(_string_lit.end(),'"'); }
 <STRING_LITERAL>"\""	{ BEGIN INITIAL; 
 			  smt2lval.str = new std::string(_string_lit);
                           return STRING_TOK; }

@@ -258,9 +258,11 @@ cmdi:
       GlobalParserInterface->success();
     }
 |
-     ECHO_TOK 
+     ECHO_TOK STRING_TOK
     {
-      GlobalParserInterface->unsupported();
+      std::cout << "\"" << *$2  << "\"" << std::endl;
+      delete $2;
+      GlobalParserInterface->success();
     }
 |
      EXIT_TOK 
