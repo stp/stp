@@ -750,9 +750,9 @@ TRUE_TOK
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_formula RPAREN_TOK
 {
+  GlobalParserInterface->letMgr->push();
   $$ = $6;
-  //Cleanup the LetIDToExprMap
-  GlobalParserInterface->letMgr->CleanupLetIDMap();
+  GlobalParserInterface->letMgr->pop();
 }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
@@ -1216,9 +1216,9 @@ TERMID_TOK
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_term RPAREN_TOK
 {
+  GlobalParserInterface->letMgr->push();
   $$ = $6;
-  //Cleanup the LetIDToExprMap
-  GlobalParserInterface->letMgr->CleanupLetIDMap();
+  GlobalParserInterface->letMgr->pop();
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {

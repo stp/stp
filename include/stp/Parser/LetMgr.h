@@ -47,6 +47,9 @@ private:
   // a call to CleanupLetIDMap().
   MapType* _letid_expr_map;
 
+  // Need to pop/push the let nodes, they can be nested.
+  std::stack<vector <string> > stack;
+
   // Allocate LetID map
   void InitializeLetIDMap(void);
 
@@ -86,6 +89,21 @@ public:
 
   // Delete Letid Map. Called when we move onto the expression after (let ... )
   void CleanupLetIDMap(void);
+
+  void push()
+  {
+    // new frame.
+    stack.push(vector<string>());
+  }
+
+  void pop()
+  {
+    vector<string> v =  stack.top();
+    for (string s: v)
+      _letid_expr_map->erase(s);
+    stack.pop();
+  }
+
 
 }; 
 } // end of namespace
