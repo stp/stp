@@ -10,7 +10,7 @@ generators.
 
 - ``CMAKE_BUILD_TYPE`` - The build type (e.g. Release)
 - ``CMAKE_INSTALL_PREFIX`` - The prefix for install (e.g. /usr/local )
-- ``DBUILD_STATIC_BIN``- Build static binary and library
+- ``BUILD_STATIC_BIN``- Build static binary and library
 - ``ENABLE_ASSERTIONS`` - If TRUE STP will be built with asserts.
 - ``ENABLE_TESTING`` - Enable running tests
 - ``ENABLE_PYTHON_INTERFACE`` - Enable building the Python interface
@@ -19,6 +19,7 @@ generators.
 - ``NO_BOOST`` - Build without using the Boost library
 - ``TEST_QUERY_FILES`` -  Test STP externally by passing it query files in tests/query-files
 - ``TUNE_NATIVE`` - Tune compilation to native architecture
+- ``BUILD_SHARED_LIBS`` - Build shared libraries instead of static libraries (default: on)
 
 # Dependencies
 
@@ -33,7 +34,7 @@ $ sudo apt-get install cmake bison flex libboost-all-dev python perl
 Installing minisat can be achieved by running
 
 ```
-$ git clone https://github.com/stp/minisat.git
+$ git clone https://github.com/niklasso/minisat.git
 $ cd minisat
 $ mkdir build && cd build
 $ cmake ..

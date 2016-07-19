@@ -114,7 +114,7 @@ if (USE_CRYPTOMINISAT)
     if (NOT BUILD_SHARED_LIBS)
       set(libstp_link_libs
         ${libstp_link_libs}
-        /usr/local/lib/${CRYPTOMINISAT5_STATIC_LIBRARIES}
+        ${CRYPTOMINISAT5_STATIC_LIBRARIES}
         ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS})
     else()
       set(libstp_link_libs
