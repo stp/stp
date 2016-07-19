@@ -114,6 +114,10 @@
 %token LPAREN_TOK
 %token RPAREN_TOK
 
+/* Used for attributed expressions */
+%token EXCLAIMATION_MARK_TOK
+%token NAMED_ATTRIBUTE_TOK
+
  
  /*BV SPECIFIC TOKENS*/
 %token BVLEFTSHIFT_1_TOK
@@ -762,6 +766,28 @@ TRUE_TOK
   $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$1,empty));
   delete $1;
 }
+| LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+{
+  /* 
+    This implements (! <an_formula> :named foo) 
+    "foo" is created as a symbol that can be refered to by later commands.
+  */
+
+  // TODO, will fail if name is already defined?
+  ASTNode s(GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
+  s.SetIndexWidth($3->GetIndexWidth());
+  s.SetValueWidth($3->GetValueWidth());
+
+  GlobalParserInterface->addSymbol(s);
+
+  ASTNode n = GlobalParserInterface->CreateNode(IFF,s, *$3);
+ 
+  GlobalParserInterface->AddAssert(n);
+
+  delete $5;
+
+  $$ = $3;
+}
 ;
 
 lets: let lets 
@@ -1194,7 +1220,24 @@ TERMID_TOK
   //Cleanup the LetIDToExprMap
   GlobalParserInterface->letMgr->CleanupLetIDMap();
 }
+| LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+{
+  /* This implements (! <an_term> :named foo) */
 
+  ASTNode s(GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
+  delete $5;
+
+  s.SetIndexWidth($3->GetIndexWidth());
+  s.SetValueWidth($3->GetValueWidth());
+
+  GlobalParserInterface->addSymbol(s);
+
+  ASTNode n = GlobalParserInterface->CreateNode(EQ,s, *$3);
+ 
+  GlobalParserInterface->AddAssert(n);
+
+  $$ = $3;
+}
 ;
 
 %%
