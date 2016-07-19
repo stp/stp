@@ -478,6 +478,7 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
 
 void Cpp_interface::deleteGlobal()
 {
+  GlobalSTP->deleteObjects();
   delete GlobalSTP;
 }
 

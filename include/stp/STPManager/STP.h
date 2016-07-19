@@ -101,7 +101,10 @@ public:
   ~STP()
   {
     ClearAllTables();
+  }
 
+  void deleteObjects()
+  {
     delete Ctr_Example;
     Ctr_Example = NULL;
 
@@ -113,7 +116,6 @@ public:
 
     delete simp;
     simp = NULL;
-    // delete bm;
   }
 
   // The absolute TopLevel function that invokes STP on the input

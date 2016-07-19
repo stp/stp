@@ -339,8 +339,10 @@ int Main::main(int argc, char** argv)
     query = ASTNode();
   }
 
-  // Without cleanup
-  if (bm->UserFlags.isSet("fast-exit", "1"))
+  // Previously we used fast-exit to avoid destroying lots of objects, for example in the node manager.
+  // We use auto_ptr now on lots of stuff, so there seems little difference in the time it takes to 
+  // exit normally vs. not.
+  if (bm->UserFlags.isSet("fast-exit", "0"))
     exit(0);
 
   //Cleanup
