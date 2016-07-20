@@ -55,7 +55,7 @@ private:
 
 public:
   // I think this keeps a reference to symbols so they don't get garbage
-  // collected.
+  // collected. Used only by the CVC parser.
   ASTNodeSet _parser_symbol_table;
 
   // A let with this name has already been declared.

@@ -229,7 +229,6 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(assumptions);
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
-  GlobalParserInterface->letMgr->cleanupParserSymbolTable();
   query = ASTNode();
   YYACCEPT;
 }
@@ -429,7 +428,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   //var
   s.SetIndexWidth($3.indexwidth);
   s.SetValueWidth($3.valuewidth);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
+  GlobalParserInterface->addSymbol(s);
   delete $2;
 }
 | LPAREN_TOK STRING_TOK RPAREN_TOK
@@ -437,7 +436,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
+  GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   delete $2;
@@ -627,7 +626,6 @@ TRUE_TOK
   //| letexpr_mgmt an_formula annotations RPAREN_TOK
 {
   $$ = $2;
-  //Cleanup the LetIDToExprMap
   GlobalParserInterface->letMgr->CleanupLetIDMap();                      
 }
 ;

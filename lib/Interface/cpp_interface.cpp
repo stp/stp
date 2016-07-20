@@ -162,7 +162,6 @@ void Cpp_interface::removeSymbol(ASTNode s)
   if (!removed)
     FatalError("Should have been removed...");
 
-  letMgr->_parser_symbol_table.erase(s);
 }
 
 void Cpp_interface::storeFunction(const string name, const ASTVec& params,
@@ -273,7 +272,6 @@ void Cpp_interface::deleteNode(ASTNode* n)
 void Cpp_interface::addSymbol(ASTNode& s)
 {
   symbols.back().push_back(s);
-  letMgr->_parser_symbol_table.insert(s);
 }
 
 void Cpp_interface::success()
@@ -312,9 +310,8 @@ void Cpp_interface::reset()
 
   if (symbols.size() > 0)
   {
-    ASTVec& current = symbols.back();
-    for (size_t i = 0, size = current.size(); i < size; ++i)
-      letMgr->_parser_symbol_table.erase(current[i]);
+    // used just by cvc parser. 
+    assert(letMgr->_parser_symbol_table.size() == 0); 
 
     symbols.erase(symbols.end() - 1);
   }
@@ -357,10 +354,9 @@ void Cpp_interface::pop()
   resetSolver();
 
   cache.erase(cache.end() - 1);
-  ASTVec& current = symbols.back();
-  for (size_t i = 0, size = current.size(); i < size; ++i)
-    letMgr->_parser_symbol_table.erase(current[i]);
 
+  assert(letMgr->_parser_symbol_table.size() == 0); 
+  
   symbols.erase(symbols.end() - 1);
   checkInvariant();
 }
