@@ -819,7 +819,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
   ASTNode query2 = nf->CreateNode(NOT, query);
 
   assert(ss->nClauses() == 0);
-  mgr->AddQuery(mgr->ASTUndefined);
+  mgr->SetQuery(mgr->ASTUndefined);
   ss->setMaxConflicts(timeout_max_confl);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
       *ss, query2, query2, GlobalSTP->tosat, false);

@@ -94,10 +94,11 @@ void Cpp_interface::AddAssert(const ASTNode& assert)
   bm.AddAssert(assert);
 }
 
-void Cpp_interface::AddQuery(const ASTNode& q)
+void Cpp_interface::SetQuery(const ASTNode& q)
 {
-  bm.AddQuery(q);
+  bm.SetQuery(q);
 }
+
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {

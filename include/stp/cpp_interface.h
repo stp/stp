@@ -103,7 +103,7 @@ public:
   UserDefinedFlags& getUserFlags();
 
   void AddAssert(const ASTNode& assert);
-  void AddQuery(const ASTNode& q);
+  void SetQuery(const ASTNode& q);
 
   // NODES//
   ASTNode CreateNode(stp::Kind kind,

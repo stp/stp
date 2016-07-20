@@ -483,7 +483,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
 
     if (first)
     {
-      beev->AddQuery(beev->ASTUndefined);
+      beev->SetQuery(beev->ASTUndefined);
       result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat, true);
     }
     else
@@ -492,7 +492,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
       newS.addClause(satSolverClause);
       satSolverClause.clear();
 
-      beev->AddQuery(beev->ASTUndefined);
+      beev->SetQuery(beev->ASTUndefined);
       result = ce.CallSAT_ResultCheck(newS, beev->ASTTrue, beev->ASTTrue,
                                       &tosat, true);
     }

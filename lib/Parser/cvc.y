@@ -314,7 +314,7 @@ Assert          :      ASSERT_TOK Formula ';'
  }                
 ;
 
-Query           :      QUERY_TOK Formula ';' { GlobalParserInterface->AddQuery(*$2); $$ = $2;}
+Query           :      QUERY_TOK Formula ';' { GlobalParserInterface->SetQuery(*$2); $$ = $2;}
 ; 
 
 

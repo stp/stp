@@ -474,18 +474,9 @@ void STPMgr::Pop(void)
 
 //BUG this is most probably wrongly handled. It gets propagated and messed up
 //with the state. On the next query, this mixed state then causes trouble
-void STPMgr::AddQuery(const ASTNode& q)
+void STPMgr::SetQuery(const ASTNode& q)
 {
-  //_current_query = TransformFormula(q);
-  // cerr << "\nThe current query is: " << q << endl;
   _current_query = q;
-}
-
-const ASTNode STPMgr::PopQuery()
-{
-  ASTNode q = _current_query;
-  _current_query = ASTTrue;
-  return q;
 }
 
 const ASTNode STPMgr::GetQuery()

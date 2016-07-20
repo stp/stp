@@ -350,7 +350,6 @@ void vc_printQuery(VC vc)
   os << "QUERY(";
   stp::ASTNode q = b->GetQuery();
   q.PL_Print(os,b);
-  // b->GetQuery().PL_Print(os);
   os << ");" << endl;
 }
 
@@ -477,9 +476,8 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   }
 
   assert(BVTypeCheck(*a));
-  //  It seems weird to assert this here. It's not what I expect.
-  //  It's a type of convenience it seems? 
-  b->AddQuery(*a);
+  // Cached in case someone runs PrintQuery()
+  b->SetQuery(*a);
 
   stpObj->ClearAllTables();
 
@@ -537,6 +535,7 @@ void vc_push(VC vc)
   b->Push();
 }
 
+//NB, doesn't remove symbols from decls, so they will be kept alive.
 void vc_pop(VC vc)
 {
   stp::STPMgr* b = (stp::STPMgr*)(((stp::STP*)vc)->bm);

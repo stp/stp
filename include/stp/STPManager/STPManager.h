@@ -352,13 +352,16 @@ public:
 
   void Pop(void);
   void Push(void);
-  const ASTNode PopQuery();
+  
+  // Queries aren't maintained on a stack.
+  // Used by CVC & C-interface.
   const ASTNode GetQuery();
+  void SetQuery(const ASTNode& q);
+
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();
 
   // add a query/assertion to the current logical context
-  void AddQuery(const ASTNode& q);
   void AddAssert(const ASTNode& assert);
 
   /****************************************************************
@@ -371,7 +374,9 @@ public:
 
   // For printing purposes
   // Used just via the C-interface.
+  // Note, not maintained properly wrt push/pops
   vector<stp::ASTNode> decls;
+
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
