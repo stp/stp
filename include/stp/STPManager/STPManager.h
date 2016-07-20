@@ -366,8 +366,12 @@ public:
    ****************************************************************/
 
   // For printing purposes
-  // Not filled in by the smtlib parser.
+  // Used just by the CVC parser.
   ASTVec ListOfDeclaredVars;
+
+  // For printing purposes
+  // Used just via the C-interface.
+  vector<stp::ASTNode> decls;
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -439,9 +443,6 @@ public:
   // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
   vector<stp::ASTNode*> persist;
 
-  // Used just via the C-interface.
-  // Keeps a list of the variable that have been defined, in case you want to print them back out.
-  vector<stp::ASTNode> decls;
 };
 
 } // end of namespace

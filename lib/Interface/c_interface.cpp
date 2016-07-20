@@ -157,7 +157,7 @@ void vc_printExprCCode(VC vc, Expr e)
   stp::STPMgr* b = (stp::STPMgr*)(((stp::STP*)vc)->bm);
 
   // print variable declarations
-  stp::ASTVec declsFromParser = (stp::ASTVec)b->ListOfDeclaredVars;
+  stp::ASTVec declsFromParser = (stp::ASTVec)b->decls;
 
   for (stp::ASTVec::iterator it = declsFromParser.begin(),
                               itend = declsFromParser.end();
