@@ -180,9 +180,7 @@ void ExtraMain::create_options()
       "oldstyle-refinement",
       "Do abstraction-refinement outside the SAT solver")(
       "ackermanize,r", po::bool_switch(&(bm->UserFlags.ackermannisation)),
-      "eagerly encode array-read axioms (Ackermannistaion)")(
-      "flatten,x", po::bool_switch(&(bm->UserFlags.xor_flatten_flag)),
-      "flatten XORs");
+      "eagerly encode array-read axioms (Ackermannistaion)");
 
   po::options_description print_options("Printing options");
   print_options.add_options()

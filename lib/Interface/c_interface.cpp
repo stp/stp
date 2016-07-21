@@ -1959,9 +1959,6 @@ void process_argument(const char ch, VC vc)
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
       break;
-    case 'x':
-      bm->UserFlags.xor_flatten_flag = true;
-      break;
     case 'y':
       bm->UserFlags.print_binary_flag = true;
       break;

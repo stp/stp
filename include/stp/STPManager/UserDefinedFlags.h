@@ -82,10 +82,6 @@ public:
   // different printer. do not use this printer.
   bool print_arrayval_declaredorder_flag;
 
-  // Flag that allows the printing of the DIMACS format of the input
-  bool print_cnf_flag;
-  char* cnf_dump_filename;
-
   // flag to decide whether to print "valid/invalid" or not
   bool print_output_flag;
 
@@ -97,12 +93,6 @@ public:
   bool wordlevel_solve_flag;
 
   bool propagate_equalities;
-
-  // XOR flattening optimizations.
-  bool xor_flatten_flag;
-
-  // this flag indicates that the BVSolver() succeeded
-  bool toplevel_solved_flag;
 
   // print the input back
   bool print_STPinput_back_flag;
@@ -256,9 +246,6 @@ public:
 
     // propagate equalities.
     propagate_equalities = true;
-
-    // turn off XOR flattening
-    xor_flatten_flag = false;
 
     // Flag to switch on the smtlib parser
     smtlib1_parser_flag = false;
