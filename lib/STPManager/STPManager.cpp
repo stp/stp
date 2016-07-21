@@ -265,13 +265,9 @@ ASTNode STPMgr::charToASTNode(unsigned char* strval, int base, int bit_width)
   {
     e = CONSTANTBV::BitVector_from_Dec(CreateBVConstVal, strval);
   }
-  else if (16 == base)
+  else // (16 == base)
   {
     e = CONSTANTBV::BitVector_from_Hex(CreateBVConstVal, strval);
-  }
-  else
-  {
-    e = CONSTANTBV::ErrCode_Pars;
   }
 
   if (0 != e)
