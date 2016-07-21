@@ -78,6 +78,11 @@ set_target_properties(libstp PROPERTIES
                         SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
                      )
 
+generate_export_header(libstp EXPORT_FILE_NAME "${PROJECT_BINARY_DIR}/include/stp/stp_export.h")
+# Make sure the header file gets installed
+install(FILES "${PROJECT_BINARY_DIR}/include/stp/stp_export.h"
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/include/stp/")
+
 # -----------------------------------------------------------------------------
 # Support building both static and dynamic library
 # -----------------------------------------------------------------------------
