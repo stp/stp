@@ -62,7 +62,6 @@ TEST(simplify, two)
     vc_setFlags(vc, 'n');
     vc_setFlags(vc, 'd');
     vc_setFlags(vc, 'p');
-    vc_setFlags(vc, 'x');
 
     Type bv8 = vc_bvType(vc, 8);
     Expr a = vc_bvCreateMemoryArray(vc, "a");

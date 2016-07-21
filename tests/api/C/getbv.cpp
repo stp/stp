@@ -42,7 +42,6 @@ TEST(getbv, INT64)
     vc_setFlags(vc, 'n');
     vc_setFlags(vc, 'd');
     vc_setFlags(vc, 'p');
-    vc_setFlags(vc, 'x');
 
     Type bv8 = vc_bvType(vc, 8); // Why do we need this?
     ASSERT_NE(bv8, (void*)0);
@@ -71,7 +70,6 @@ TEST(getbv, INT32)
     vc_setFlags(vc, 'n');
     vc_setFlags(vc, 'd');
     vc_setFlags(vc, 'p');
-    vc_setFlags(vc, 'x');
 
     Type bv8 = vc_bvType(vc, 8);
     ASSERT_NE(bv8, (void*)0);
