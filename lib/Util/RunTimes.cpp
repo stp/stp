@@ -97,6 +97,9 @@ void RunTimes::print()
     it1++;
   }
   std::cerr << result.str();
+  
+  std::ios_base::fmtflags f( std::cerr.flags() );
+  
   std::cerr << std::fixed;
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
@@ -105,6 +108,7 @@ void RunTimes::print()
   std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0) << "MB"
             << std::endl;
 
+  std::cerr.flags( f );
   clear();
 }
 

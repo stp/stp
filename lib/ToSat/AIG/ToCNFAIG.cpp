@@ -110,7 +110,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   {
     Aig_ManCleanup(mgr.aigMgr); // remove nodes not connected to the PO.
   }
-  Aig_ManCheck(mgr.aigMgr); // check that AIG looks ok.
+  assert(Aig_ManCheck(mgr.aigMgr)); // check that AIG looks ok.
 
   assert(Aig_ManPoNum(mgr.aigMgr) == 1);
 

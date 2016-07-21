@@ -160,7 +160,7 @@ using std::make_pair;
 
     Aig_ObjCreatePo(mgr.aigMgr, blasted.n);
     Aig_ManCleanup(mgr.aigMgr); // remove nodes not connected to the PO.
-    Aig_ManCheck(mgr.aigMgr);   // check that AIG looks ok.
+    assert(Aig_ManCheck(mgr.aigMgr));   // check that AIG looks ok.
 
     assert(Aig_ManPoNum(mgr.aigMgr) == 1);
 

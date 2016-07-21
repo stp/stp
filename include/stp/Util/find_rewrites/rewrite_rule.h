@@ -55,6 +55,8 @@ class Rewrite_rule
     from = mgr->CreateZeroConst(1);
     to = mgr->CreateZeroConst(1);
     n = mgr->ASTTrue;
+    time_to_verify = 0;
+    verified_to_bits=0;
   }
 
 public:

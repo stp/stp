@@ -291,7 +291,7 @@ bool checkProp(const ASTNode& n)
   vector<ASTNode> symbols;
   ASTNodeSet visited;
   getVariables(n, symbols, visited);
-  int value;
+  int value = -1;
 
   if (n.isConstant())
     return true;
@@ -1007,7 +1007,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
       continue;
 
     // nb. I haven't rebuilt the map, it's done by writeOutRules().
-    equiv[i] == rewrite_system.rewriteNode(equiv[i]);
+    equiv[i] = rewrite_system.rewriteNode(equiv[i]);
 
     for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
     {

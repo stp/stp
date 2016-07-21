@@ -711,12 +711,12 @@ private:
         // case BVLEFTSHIFT:
         // case BVAND:
         // case BVSRSHIFT:
-        {
+        //{
           // Todo two cases.
           // 1) The maximum shift of the maximum value doesn't overflow, and,
           // 2) The minimum shift of the minimum value completely overflows (to
           // zero).
-        }
+        //}
 
       case BVRIGHTSHIFT:
         if (knownC0 || knownC1)
