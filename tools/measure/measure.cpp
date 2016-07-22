@@ -31,6 +31,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/Util/StopWatch.h"
 #include "stp/Util/BBAsProp.h"
 
+#include <iostream>
+
 using namespace stp;
 
 int bits = 64;
@@ -38,7 +40,7 @@ int iterations = 100000;
 ostream& out = cout;
 STPMgr* mgr = new STPMgr;
 
-void print(MinisatCore<Minisat::Solver>* ss, ASTNode i0,
+void print(MinisatCore* ss, ASTNode i0,
            ToSAT::ASTNodeToSATVar& m)
 {
   const int bits = std::max(1U, i0.GetValueWidth());
@@ -138,11 +140,11 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
   if (transfer - initial == 0)
     percent = 100;
 
-  cerr.setf(ios::fixed);
-  cerr << "&" << setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC) << "s";
+  cerr.setf(std::ios::fixed);
+  cerr << "&" << std::setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC) << "s";
 
-  cerr.setf(ios::fixed);
-  cerr << "&" << setprecision(2) << (float(prop.elapsed) / CLOCKS_PER_SEC)
+  cerr.setf(std::ios::fixed);
+  cerr << "&" << std::setprecision(2) << (float(prop.elapsed) / CLOCKS_PER_SEC)
        << "s";
 
   cerr << "&" << (clause - initial) << "&" << (transfer - initial) << "&"

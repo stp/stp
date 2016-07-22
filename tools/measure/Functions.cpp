@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew
+ * AUTHORS: Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *

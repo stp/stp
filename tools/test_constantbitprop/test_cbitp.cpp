@@ -426,7 +426,7 @@ void some_random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
   int transferC = 0;
   int max = 0;
 
-  int count = 1000;
+  int count = 50;
   const int width = 32;
 
   Relations r(count, width, kind, mgr, prob);
@@ -1135,7 +1135,7 @@ int main(void)
   // Shifting had a defect effecting bitWidth > 64.
   random_tests();
 
-  //note, originall the random was not performed, maybe it messed
+  //note, originaly the random was not performed, maybe it messed
   //up the state and make the exhaustive check fail :O Never tested.
   exhaustive_checks();
   cout << "Done" << endl;

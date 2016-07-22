@@ -35,9 +35,9 @@ THE SOFTWARE.
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
-Result multiply(vector<FixedBits*>& children, FixedBits& output);
+//Result multiply(vector<FixedBits*>& children, FixedBits& output);
 
-Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output);
+//Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output);
 
 Result signedDivide(vector<FixedBits*>& children, FixedBits& output);
 
@@ -45,7 +45,7 @@ Result signedRemainder(vector<FixedBits*>& children, FixedBits& output);
 
 Result signedModulus(vector<FixedBits*>& children, FixedBits& output);
 
-Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output);
+//Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output);
 
 int bvOrF(int a, int b);
 int bvXOrF(int a, int b);
@@ -115,10 +115,10 @@ struct Functions
 
     l.push_back(Function(stp::BVPLUS, "addition", &bvAddBothWays, &plusF));
     l.push_back(Function(stp::BVSUB, "subtraction", &bvSubtractBothWays, &subF));
-    l.push_back(Function(stp::BVMULT, "multiplication", &multiply, &multiplyF));
-    l.push_back(
-        Function(stp::BVDIV, "unsigned division", &unsignedDivide, &divideF));
-    l.push_back(Function(stp::BVMOD, "unsigned remainder", &unsignedModulus, &remF));
+    //l.push_back(Function(stp::BVMULT, "multiplication", &multiply, &multiplyF));
+    //l.push_back(
+      //  Function(stp::BVDIV, "unsigned division", &unsignedDivide, &divideF));
+    //l.push_back(Function(stp::BVMOD, "unsigned remainder", &unsignedModulus, &remF));
   }
 };
 
