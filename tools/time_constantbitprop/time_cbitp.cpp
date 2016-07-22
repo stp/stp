@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew
+ * AUTHORS: Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -21,6 +21,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
+
+// Times how long running constant bit propagation takes per transfer function.
 
 #include <ctime>
 #include <vector>

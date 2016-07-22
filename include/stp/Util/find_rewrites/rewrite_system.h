@@ -28,6 +28,7 @@ THE SOFTWARE.
 // FIXME: This header might be dead
 //#include "stp/Util/find-rewrites/rewrite_rule.h"
 #include "stp/AST/AST.h"
+#include <list>
 
 extern const int widen_to;
 extern ASTNode v, v0, w, w0;

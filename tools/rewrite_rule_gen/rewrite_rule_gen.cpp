@@ -23,11 +23,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// This generates C++ code that implements automatically discovered rewrite
-// rules.
-// Expressions are generated, then pairwise checked over a range of bit-widths
-// to see if they are the same.
-// If they are the same, then C++ code is written out that implements the rule.
+/*This automatically discovers rewrite rules for us to build into STP.
+  The structure of the rules is limited, so that we can make a rewrite system
+  that doesn't cause infinite loops.
+
+  Expressions are generated, then pairwise checked over a range of bit-widths
+  to see if they are the same.
+  
+  If they are the same, then C++ code can be written out that implements the rule.
+*/
+
 
 #include <ctime>
 #include <vector>
@@ -39,10 +44,9 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 
 #include "stp/STPManager/STPManager.h"
-//#include "stp/To-sat/AIG/ToSATAIG.h"
 #include "stp/Sat/MinisatCore.h"
 #include "stp/STPManager/STP.h"
-#include "stp/STPManager/DifficultyScore.h"
+#include "stp/Simplifier/DifficultyScore.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/AST/NodeFactory/TypeChecker.h"
@@ -73,10 +77,6 @@ using std::ifstream;
 using namespace stp;
 
 extern int smt2parse();
-
-
-
-
 
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
@@ -1307,11 +1307,11 @@ bool checkRule(const ASTNode& from, const ASTNode& to,
 
 template <class T> void removeDuplicates(T& big)
 {
-  cout << "Before removing duplicates:" << big.size();
+  cout << "Before removing duplicates: " << big.size();
   std::sort(big.begin(), big.end());
   typename T::iterator it = std::unique(big.begin(), big.end());
   big.erase(it, big.end());
-  cout << ".After removing duplicates:" << big.size() << endl;
+  cout << ". After removing duplicates: " << big.size() << endl;
 }
 
 // Put all the inputs containing the substring together in the same bucket.
@@ -1632,7 +1632,7 @@ void writeOutRules()
   if (v.size() > 0)
   {
     ASTNode n = mgr->CreateNode(AND, v);
-    printer::SMTLIB2_PrintBack(outputFile, n, true);
+    printer::SMTLIB2_PrintBack(outputFile, n, mgr, true);
   }
   outputFile.close();
 }
@@ -1885,7 +1885,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
       cout << "discarding rule that can't be ordered";
       cout << from << to;
       cout << "----";
-      mgr->PopQuery();
+      //mgr->PopQuery();
       GlobalParserInterface->popToFirstLevel();
       continue;
     }
@@ -1895,7 +1895,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
     rewrite_system.push_back(r);
 
-    mgr->PopQuery();
+    //mgr->PopQuery();
     GlobalParserInterface->popToFirstLevel();
   }
 
@@ -2011,7 +2011,7 @@ void load_old_rules(string fileName)
     rewrite_system.push_back(r);
   }
 
-  mgr->PopQuery();
+  //mgr->PopQuery();
   GlobalParserInterface->popToFirstLevel();
   GlobalParserInterface->cleanUp();
   GlobalParserInterface = NULL;
@@ -2112,6 +2112,7 @@ int main(int argc, const char* argv[])
 
   if (argc == 1) // Read the current rule set, find new rules.
   {
+    std::cout << "Waiting for rules, press enter to skip.";
     load_new_rules();
     createVariables();
     ////////////

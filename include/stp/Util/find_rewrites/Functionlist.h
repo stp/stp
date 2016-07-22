@@ -38,7 +38,7 @@ private:
   void getAllFunctions(const ASTNode v, const ASTNode w, ASTVec& result)
   {
 
-    Kind types[] = {stp::BVMULT, stp::BVDIV, stp::SBVDIV, stp::SBVREM, stp::SBVMOD, stp::BVMOD, stp::BVLEFTSHIFT};
+    Kind types[] = {stp::BVOR, stp::BVAND, stp::BVXOR, stp::BVLEFTSHIFT};
 
     // Kind types[] = {BVMULT, BVDIV, SBVDIV, SBVREM, SBVMOD, BVPLUS, BVMOD,
     // BVRIGHTSHIFT, BVLEFTSHIFT, BVOR, BVAND, BVXOR, BVSRSHIFT};
@@ -52,7 +52,7 @@ private:
   void applyRewritesToAll(ASTVec& functions)
   {
     rewrite_system.buildLookupTable();
-    cerr << "Applying:" << rewrite_system.size() << "rewrite rules" << endl;
+    cerr << "Applying: " << rewrite_system.size() << "rewrite rules" << endl;
 
     for (size_t i = 0; i < functions.size(); i++)
     {
@@ -60,7 +60,7 @@ private:
         continue;
 
       if (i % 100000 == 0)
-        cerr << "applyRewritesToAll:" << i << " of " << functions.size()
+        cerr << "applyRewritesToAll: " << i << " of " << functions.size()
              << endl;
 
       ASTNode r = rewrite_system.rewriteNode(functions[i]);
@@ -139,7 +139,7 @@ private:
         continue;
 
       if (i % 100000 == 0)
-        cerr << "Widen check:" << i << " of " << functions.size() << endl;
+        cerr << "Widen check: " << i << " of " << functions.size() << endl;
 
       if (mgr->ASTUndefined == widen(functions[i], bits + 1))
       {
@@ -175,7 +175,7 @@ private:
         continue;
 
       if (i % 100000 == 0)
-        cerr << "ApplyAigs:" << i << " of " << functions.size() << endl;
+        cerr << "ApplyAigs: " << i << " of " << functions.size() << endl;
 
       functions[i] = rewriteThroughWithAIGS(functions[i]);
     }

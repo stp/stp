@@ -72,7 +72,7 @@ public:
                    << getDifficulty(/*getTo()*/ mgr->CreateBVConst(32, 0))
                    << "\n";
     outputFileSMT2 << "(push 1)" << endl;
-    printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), true);
+    printer::SMTLIB2_PrintBack(outputFileSMT2, getN(), mgr, true);
     outputFileSMT2 << "(exit)" << endl;
   }
 
