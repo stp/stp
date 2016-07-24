@@ -21,6 +21,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Measures how precise the AIG encodings are compared with the propagators.
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include "stp/cpp_interface.h"
 #include "stp/Util/Relations.h"
 #include "stp/Sat/MinisatCore.h"
