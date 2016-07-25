@@ -69,13 +69,15 @@ MinisatCore::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
+// Doesn't solve, just does a single propagate.
+// returns false if UNSAT.
 bool MinisatCore::propagateWithAssumptions(const stp::SATSolver::vec_literals & assumps) 
 {
   if (!s->simplify())
     return false;
  
   Minisat::lbool ret = s->solveLimited(assumps);
-  return ret == (Minisat::lbool)l_True;
+  return ret != (Minisat::lbool)l_False;
 }
 
 
