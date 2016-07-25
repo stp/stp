@@ -52,12 +52,12 @@ THE SOFTWARE.
 #include "stp/AST/NodeFactory/TypeChecker.h"
 #include "stp/cpp_interface.h"
 
-#include "stp/Util/find_rewrites/VariableAssignment.h"
+#include "VariableAssignment.h"
+#include "rewrite_rule.h"
+#include "rewrite_system.h"
+#include "Functionlist.h"
+#include "misc.h"
 
-#include "stp/Util/find_rewrites/rewrite_rule.h"
-#include "stp/Util/find_rewrites/rewrite_system.h"
-#include "stp/Util/find_rewrites/Functionlist.h"
-#include "stp/Util/find_rewrites/misc.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 #include "stp/ToSat/AIG/ToCNFAIG.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
