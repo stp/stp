@@ -31,8 +31,8 @@ THE SOFTWARE.
 #define UNSIGNEDINTERVAL_H_
 
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/Simplifier.h"
+//#include "stp/STPManager/STPManager.h"
+//#include "stp/Simplifier/Simplifier.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>
