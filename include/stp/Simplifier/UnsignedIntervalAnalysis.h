@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/UnsignedInterval.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -46,60 +47,6 @@ using std::make_pair;
 
 class UnsignedIntervalAnalysis // not copyable
 {
-private:
-  struct UnsignedInterval
-  {
-    CBV minV;
-    CBV maxV;
-    UnsignedInterval(CBV _min, CBV _max)
-    {
-      minV = _min;
-      maxV = _max;
-      assert(minV != NULL);
-      assert(maxV != NULL);
-      assert(size_(minV) == size_(maxV));
-    }
-
-    void print()
-    {
-
-      unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
-      unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
-      std::cerr << a << " " << b << std::endl;
-      free(a);
-      free(b);
-    }
-
-    bool isConstant() { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
-
-    bool isComplete()
-    {
-      return (CONSTANTBV::BitVector_is_empty(minV) &&
-              CONSTANTBV::BitVector_is_full(maxV));
-    }
-
-    void checkUnsignedInvariant()
-    {
-      assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
-
-      // We use NULL to represent the complete domain.
-      assert(!isComplete());
-    }
-
-    // If the interval is interpreted as a clockwise interval.
-    bool crossesSignedUnsigned(int width)
-    {
-      bool minMSB = CONSTANTBV::BitVector_bit_test(minV, width - 1);
-      bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV, width - 1);
-
-      // If the min is zero, and the max is one, then it must cross.
-      if (!minMSB && maxMSB)
-        return true;
-      if (!(minMSB ^ maxMSB)) // bits are the same.
-        return CONSTANTBV::BitVector_Compare(minV, maxV) > 0;
-      return false;
-    }
-  };
 
   vector<UnsignedInterval*> toDeleteLater;
   vector<CBV> likeAutoPtr;
