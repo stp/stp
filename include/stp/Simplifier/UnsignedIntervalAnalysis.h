@@ -27,8 +27,8 @@ THE SOFTWARE.
  * Performs a basic unsigned interval analysis.
  */
 
-#ifndef ESTABLISHINTERVALS_H_
-#define ESTABLISHINTERVALS_H_
+#ifndef UNSIGNEDINTERVALANALYSIS_H_
+#define UNSIGNEDINTERVALANALYSIS_H_
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
@@ -44,14 +44,14 @@ namespace stp
 {
 using std::make_pair;
 
-class EstablishIntervals // not copyable
+class UnsignedIntervalAnalysis // not copyable
 {
 private:
-  struct IntervalType
+  struct UnsignedInterval
   {
     CBV minV;
     CBV maxV;
-    IntervalType(CBV _min, CBV _max)
+    UnsignedInterval(CBV _min, CBV _max)
     {
       minV = _min;
       maxV = _max;
@@ -101,20 +101,20 @@ private:
     }
   };
 
-  vector<EstablishIntervals::IntervalType*> toDeleteLater;
+  vector<UnsignedInterval*> toDeleteLater;
   vector<CBV> likeAutoPtr;
 
-  IntervalType* freshUnsignedInterval(int width)
+  UnsignedInterval* freshUnsignedInterval(int width)
   {
     assert(width > 0);
-    IntervalType* it = createInterval(makeCBV(width), makeCBV(width));
+    UnsignedInterval* it = createInterval(makeCBV(width), makeCBV(width));
     CONSTANTBV::BitVector_Fill(it->maxV);
     return it;
   }
 
-  IntervalType* createInterval(CBV min, CBV max)
+  UnsignedInterval* createInterval(CBV min, CBV max)
   {
-    IntervalType* it = new IntervalType(min, max);
+    UnsignedInterval* it = new UnsignedInterval(min, max);
     toDeleteLater.push_back(it);
     return it;
   }
@@ -178,16 +178,16 @@ public:
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
   {
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-    map<const ASTNode, IntervalType*> visited;
-    map<const ASTNode, IntervalType*> clockwise;
+    map<const ASTNode, UnsignedInterval*> visited;
+    map<const ASTNode, UnsignedInterval*> clockwise;
     visit(top, visited, clockwise);
     ASTNodeMap fromTo;
     ASTNodeMap onePass;
-    for (map<const ASTNode, IntervalType*>::const_iterator it = visited.begin();
+    for (map<const ASTNode, UnsignedInterval*>::const_iterator it = visited.begin();
          it != visited.end(); it++)
     {
       const ASTNode& n = it->first;
-      IntervalType* interval = it->second;
+      UnsignedInterval* interval = it->second;
       const int width = n.GetValueWidth();
 
       if (n.isConstant())
@@ -202,9 +202,9 @@ public:
           (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT ||
            k == SBVREM || k == BVSX))
       {
-        map<const ASTNode, IntervalType*>::const_iterator l =
+        map<const ASTNode, UnsignedInterval*>::const_iterator l =
             visited.find(n[0]);
-        map<const ASTNode, IntervalType*>::const_iterator r =
+        map<const ASTNode, UnsignedInterval*>::const_iterator r =
             visited.find(n[1]);
 
         bool lhs, rhs; // isFalse.
@@ -213,7 +213,7 @@ public:
           lhs = false;
         else
         {
-          IntervalType* a = (*l).second;
+          UnsignedInterval* a = (*l).second;
           if (a == NULL)
             lhs = false;
           else
@@ -227,7 +227,7 @@ public:
           rhs = false;
         else
         {
-          IntervalType* b = (*r).second;
+          UnsignedInterval* b = (*r).second;
           if (b == NULL)
             rhs = false;
           else
@@ -373,23 +373,23 @@ private:
   // false.
   // clockwise are intervals that go clockwise around the circle from low to
   // high.
-  IntervalType* visit(const ASTNode& n,
-                      map<const ASTNode, IntervalType*>& visited,
-                      map<const ASTNode, IntervalType*>& clockwise)
+  UnsignedInterval* visit(const ASTNode& n,
+                      map<const ASTNode, UnsignedInterval*>& visited,
+                      map<const ASTNode, UnsignedInterval*>& clockwise)
   {
-    map<const ASTNode, IntervalType*>::iterator it;
+    map<const ASTNode, UnsignedInterval*>::iterator it;
     if ((it = visited.find(n)) != visited.end())
       return it->second;
 
     const int number_children = n.Degree();
-    vector<IntervalType*> children;
+    vector<UnsignedInterval*> children;
     children.reserve(number_children);
     for (int i = 0; i < number_children; i++)
     {
       children.push_back(visit(n[i], visited, clockwise));
     }
 
-    IntervalType* result = NULL;
+    UnsignedInterval* result = NULL;
     const unsigned int width = n.GetValueWidth();
     const bool knownC0 = number_children < 1 ? false : (children[0] != NULL);
     const bool knownC1 = number_children < 2 ? false : (children[1] != NULL);
@@ -449,10 +449,10 @@ private:
         }
         if (BVSGT == n.GetKind() && result == NULL)
         {
-          map<const ASTNode, IntervalType*>::iterator clock_it;
+          map<const ASTNode, UnsignedInterval*>::iterator clock_it;
           clock_it = clockwise.find(n[0]);
-          IntervalType* clock0 = NULL;
-          IntervalType* clock1 = NULL;
+          UnsignedInterval* clock0 = NULL;
+          UnsignedInterval* clock1 = NULL;
           if (clock_it != clockwise.end())
             clock0 = clock_it->second;
           clock_it = clockwise.find(n[1]);
@@ -518,7 +518,7 @@ private:
           // When we're dividing by zero, we know nothing.
           if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
           {
-            IntervalType* top = (children[0] == NULL)
+            UnsignedInterval* top = (children[0] == NULL)
                                     ? freshUnsignedInterval(width)
                                     : children[0];
             result = freshUnsignedInterval(width);
@@ -590,7 +590,7 @@ private:
         {
           // Ignores what's already there for now..
 
-          IntervalType* circ_result = freshUnsignedInterval(n.GetValueWidth());
+          UnsignedInterval* circ_result = freshUnsignedInterval(n.GetValueWidth());
           for (int i = 0; i < (int)n[0].GetValueWidth() - 1; i++)
           {
             CONSTANTBV::BitVector_Bit_On(circ_result->maxV, i);
@@ -872,7 +872,7 @@ private:
   NodeFactory* nf;
 
 public:
-  EstablishIntervals(STPMgr& _bm) : bm(_bm)
+  UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
   {
     littleZero = makeCBV(1);
     littleOne = makeCBV(1);
@@ -880,7 +880,7 @@ public:
     nf = bm.defaultNodeFactory;
   }
 
-  ~EstablishIntervals()
+  ~UnsignedIntervalAnalysis()
   {
     for (size_t i = 0; i < toDeleteLater.size(); i++)
       delete toDeleteLater[i];
@@ -894,4 +894,4 @@ public:
 };
 }
 
-#endif /* ESTABLISHINTERVALS_H_ */
+#endif
