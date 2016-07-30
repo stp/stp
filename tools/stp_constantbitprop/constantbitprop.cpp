@@ -86,7 +86,7 @@ int main(int argc, char** argv)
 
   // Apply cbitp ----------------------------------------
   simplifier::constantBitP::ConstantBitPropagation cb(
-      simp, mgr->defaultNodeFactory, n);
+      mgr, simp, mgr->defaultNodeFactory, n);
   if (cb.isUnsatisfiable())
     n = mgr->ASTFalse;
   else
@@ -99,7 +99,7 @@ int main(int argc, char** argv)
   }
 
   // Print back out.
-  printer::SMTLIB2_PrintBack(cout, n);
+  printer::SMTLIB2_PrintBack(cout, n, mgr);
   cout << "(check-sat)\n";
   cout << "(exit)\n";
   return 0;
