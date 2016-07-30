@@ -25,6 +25,8 @@ THE SOFTWARE.
 
 /*
  * Performs a basic unsigned interval analysis.
+ * The analysis is only bottom up (without assuming that the root node is true).
+ * Some of the transfer functions are approximations (they're marked with comments).
  */
 
 #ifndef UNSIGNEDINTERVALANALYSIS_H_
@@ -60,6 +62,7 @@ class UnsignedIntervalAnalysis // not copyable
     return it;
   }
 
+  // We create all intervals through here. Handles collection
   UnsignedInterval* createInterval(CBV min, CBV max)
   {
     UnsignedInterval* it = new UnsignedInterval(min, max);
@@ -74,53 +77,8 @@ class UnsignedIntervalAnalysis // not copyable
     return result;
   }
 
-  // A special version that handles the lhs appearing in the rhs of the fromTo
-  // map.
-  ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache)
-  {
-    if (n.isAtom())
-      return n;
-
-    if (cache.find(n) != cache.end())
-      return (*(cache.find(n))).second;
-
-    ASTNode result = n;
-
-    if (fromTo.find(n) != fromTo.end())
-    {
-      result = (*fromTo.find(n)).second;
-      fromTo.erase(n); // this is how it differs from the everyday replace.
-    }
-
-    ASTVec new_children;
-    new_children.reserve(result.GetChildren().size());
-
-    for (size_t i = 0; i < result.Degree(); i++)
-      new_children.push_back(replace(result[i], fromTo, cache));
-
-    if (new_children == result.GetChildren())
-    {
-      cache.insert(make_pair(n, result));
-      return result;
-    }
-
-    if (n.GetValueWidth() == 0) // n.GetType() == BOOLEAN_TYPE
-    {
-      result = nf->CreateNode(result.GetKind(), new_children);
-    }
-    else
-    {
-      // If the index and value width aren't saved, they are reset sometimes
-      // (??)
-      result = nf->CreateArrayTerm(result.GetKind(), result.GetIndexWidth(),
-                                   result.GetValueWidth(), new_children);
-    }
-
-    cache.insert(make_pair(n, result));
-    return result;
-  }
-
 public:
+
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
@@ -197,7 +155,7 @@ private:
         }
         break;
       case BVGT:
-      case BVSGT:
+      case BVSGT: // OVER-APPROXIMATION
         if ((BVGT == n.GetKind() && knownC0 && knownC1) ||
             (BVSGT == n.GetKind() && knownC0 && knownC1 &&
              !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
@@ -262,7 +220,7 @@ private:
 
         break;
       case BVGE:
-      case BVSGE:
+      case BVSGE: // OVER-APPROXIMATION
         if ((BVGE == n.GetKind() && knownC0 && knownC1) ||
             (BVSGE == n.GetKind() && knownC0 && knownC1 &&
              !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
@@ -278,7 +236,7 @@ private:
             result = createInterval(littleZero, littleZero);
         }
         break;
-      case BVDIV:
+      case BVDIV: // OVER-APPROXIMATION
         if (knownC1)
         {
           // When we're dividing by zero, we know nothing.
@@ -307,7 +265,7 @@ private:
           }
         }
         break;
-      case BVMOD:
+      case BVMOD: //OVER-APPROXIMATION
         if (knownC1)
         {
           // When we're dividing by zero, we know nothing.
@@ -426,7 +384,7 @@ private:
           CONSTANTBV::BitVector_Copy(result->maxV, max);
         }
         break;
-      case BVMULT:
+      case BVMULT: //OVER-APPROXIMATION
         if (knownC0 && knownC1)
         {
           //  >=2 arity.
@@ -484,7 +442,7 @@ private:
           // zero).
         //}
 
-      case BVRIGHTSHIFT:
+      case BVRIGHTSHIFT: //OVER-APPROXIMATION
         if (knownC0 || knownC1)
         {
           result = freshUnsignedInterval(width);

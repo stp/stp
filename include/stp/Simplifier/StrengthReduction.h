@@ -24,7 +24,9 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
- * Performs a basic unsigned interval analysis.
+ *  Takes the result of an analysis and uses it to simplify, for example,
+ *  if both operands of a signed division have the same MSB, it can be converted
+ *  to an unsigned division instead.
  */
 
 #ifndef STRENGTHREDUCTION_H_
@@ -48,30 +50,7 @@ using std::make_pair;
 
 class StrengthReduction // not copyable
 {
-  vector<UnsignedInterval*> toDeleteLater;
-  vector<CBV> likeAutoPtr;
 
-  UnsignedInterval* freshUnsignedInterval(int width)
-  {
-    assert(width > 0);
-    UnsignedInterval* it = createInterval(makeCBV(width), makeCBV(width));
-    CONSTANTBV::BitVector_Fill(it->maxV);
-    return it;
-  }
-
-  UnsignedInterval* createInterval(CBV min, CBV max)
-  {
-    UnsignedInterval* it = new UnsignedInterval(min, max);
-    toDeleteLater.push_back(it);
-    return it;
-  }
-
-  CBV makeCBV(int width)
-  {
-    CBV result = CONSTANTBV::BitVector_Create(width, true);
-    likeAutoPtr.push_back(result);
-    return result;
-  }
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
@@ -320,22 +299,16 @@ private:
 public:
   StrengthReduction(STPMgr& _bm) : bm(_bm)
   {
-    littleZero = makeCBV(1);
-    littleOne = makeCBV(1);
+    littleOne = CONSTANTBV::BitVector_Create(1, true);
+    littleZero = CONSTANTBV::BitVector_Create(1, true);
     CONSTANTBV::BitVector_Fill(littleOne);
     nf = bm.defaultNodeFactory;
   }
 
   ~StrengthReduction()
   {
-    for (size_t i = 0; i < toDeleteLater.size(); i++)
-      delete toDeleteLater[i];
-
-    for (size_t i = 0; i < likeAutoPtr.size(); i++)
-      CONSTANTBV::BitVector_Destroy(likeAutoPtr[i]);
-
-    likeAutoPtr.clear();
-    toDeleteLater.clear();
+    CONSTANTBV::BitVector_Destroy(littleOne);
+    CONSTANTBV::BitVector_Destroy(littleZero);
   }
 };
 }
