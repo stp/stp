@@ -27,6 +27,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 
+#include "stp/Simplifier/UpwardsCBitP.h"
+
+
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
@@ -215,14 +218,11 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-    simplifier::constantBitP::ConstantBitPropagation cb(bm,
-        simp, bm->defaultNodeFactory, inputToSat);
 
-    inputToSat = cb.topLevelBothWays(inputToSat, true, false);
+    UpwardsCBitP cb(bm,simp);
+    inputToSat = cb.topLevel(inputToSat);
+
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
-
-    if (cb.isUnsatisfiable())
-      inputToSat = bm->ASTFalse;
 
     if (simp->hasUnappliedSubstitutions())
     {
