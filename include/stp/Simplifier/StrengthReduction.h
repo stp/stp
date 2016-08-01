@@ -26,7 +26,7 @@ THE SOFTWARE.
 /*
  *  Takes the result of an analysis and uses it to simplify, for example,
  *  if both operands of a signed division have the same MSB, it can be converted
- *  to an unsigned division instead.
+ *  to an unsigned division, instead.
  */
 
 #ifndef STRENGTHREDUCTION_H_
@@ -52,7 +52,6 @@ using simplifier::constantBitP::FixedBits;
 
 class StrengthReduction // not copyable
 {
-
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
@@ -102,7 +101,7 @@ class StrengthReduction // not copyable
 
 public:
 
-  //TODO merge these two toplevel funtions, they should do the same thing..
+  //TODO merge these two toplevel funtions, they do the same thing..
   ASTNode topLevel(const ASTNode& top, std::map<ASTNode, FixedBits*> visited)
   {
     ASTNodeMap fromTo;
@@ -139,7 +138,7 @@ public:
       return top;
 
    // std::cerr << "Bottom up cbitp has repalcements of:"  << fromTo.size() << std::endl;
-//    std::cerr << "Visited size:"  << visited.size() << std::endl;
+   // std::cerr << "Visited size:"  << visited.size() << std::endl;
 
     ASTNodeMap cache;
     return SubstitutionMap::replace(top, fromTo, cache, nf);
@@ -326,10 +325,7 @@ public:
     if (fromTo.size() > 0)
     {
       ASTNodeMap cache;
-
-      bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-      return SubstitutionMap::replace(result, fromTo, cache,
-                                      nf);
+      return SubstitutionMap::replace(result, fromTo, cache,nf);
     }
 
     return result;

@@ -80,26 +80,20 @@ class UnsignedIntervalAnalysis // not copyable
 public:
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  // Reduce from signed to unsigned if possible.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
   {
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
     map<const ASTNode, UnsignedInterval*> visited;
-    map<const ASTNode, UnsignedInterval*> clockwise;
-    visit(top, visited, clockwise);
+    visit(top, visited);
+    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
     StrengthReduction sr(bm);
     return sr.topLevel(top,visited);
   }
 
 private:
-  // A single pass through the problem replacing things that must be true of
-  // false.
-  // clockwise are intervals that go clockwise around the circle from low to
-  // high.
   UnsignedInterval* visit(const ASTNode& n,
-                      map<const ASTNode, UnsignedInterval*>& visited,
-                      map<const ASTNode, UnsignedInterval*>& clockwise)
+                      map<const ASTNode, UnsignedInterval*>& visited)
   {
     map<const ASTNode, UnsignedInterval*>::iterator it;
     if ((it = visited.find(n)) != visited.end())
@@ -110,7 +104,7 @@ private:
     children.reserve(number_children);
     for (int i = 0; i < number_children; i++)
     {
-      children.push_back(visit(n[i], visited, clockwise));
+      children.push_back(visit(n[i], visited));
     }
 
     UnsignedInterval* result = NULL;
@@ -171,53 +165,6 @@ private:
                                                 children[0]->maxV) >= 0)
             result = createInterval(littleZero, littleZero);
         }
-        if (BVSGT == n.GetKind() && result == NULL)
-        {
-          map<const ASTNode, UnsignedInterval*>::iterator clock_it;
-          clock_it = clockwise.find(n[0]);
-          UnsignedInterval* clock0 = NULL;
-          UnsignedInterval* clock1 = NULL;
-          if (clock_it != clockwise.end())
-            clock0 = clock_it->second;
-          clock_it = clockwise.find(n[1]);
-          if (clock_it != clockwise.end())
-            clock1 = clock_it->second;
-
-          if (clock0 != NULL || clock1 != NULL)
-          {
-            if (clock0 == NULL)
-              clock0 = children[0];
-            if (clock1 == NULL)
-              clock1 = children[1];
-
-            if (clock0 != NULL && clock1 != NULL)
-            {
-              /*
-                                clock0->print();
-                                clock1->print();
-                                std::cerr <<
-                 clock0->crossesSignedUnsigned(n[0].GetValueWidth()) << std::endl;
-                                std::cerr <<
-                 clock1->crossesSignedUnsigned(n[0].GetValueWidth()) << std::endl;
-                                std::cerr << n;
-              */
-
-              // if the rhs doesn't cross +ve/-ve boundary, and the min > max
-              if (!clock0->crossesSignedUnsigned(n[0].GetValueWidth()) &&
-                  !clock1->crossesSignedUnsigned(n[1].GetValueWidth()))
-              {
-                if (CONSTANTBV::BitVector_Compare(clock0->minV, clock1->maxV) >
-                    0)
-                  result = createInterval(littleOne, littleOne);
-
-                if (CONSTANTBV::BitVector_Compare(clock1->minV, clock0->maxV) >=
-                    0)
-                  result = createInterval(littleZero, littleZero);
-              }
-            }
-          }
-        }
-
         break;
       case BVGE:
       case BVSGE: // OVER-APPROXIMATION
@@ -310,27 +257,6 @@ private:
               CONSTANTBV::BitVector_Bit_Off(result->maxV, i);
           }
         }
-        else if (knownC1)
-        {
-          // Ignores what's already there for now..
-
-          UnsignedInterval* circ_result = freshUnsignedInterval(n.GetValueWidth());
-          for (int i = 0; i < (int)n[0].GetValueWidth() - 1; i++)
-          {
-            CONSTANTBV::BitVector_Bit_On(circ_result->maxV, i);
-            CONSTANTBV::BitVector_Bit_Off(circ_result->minV, i);
-          }
-
-          for (int i = (int)n[0].GetValueWidth() - 1;
-               i < (int)n.GetValueWidth(); i++)
-          {
-            CONSTANTBV::BitVector_Bit_Off(circ_result->maxV, i);
-            CONSTANTBV::BitVector_Bit_On(circ_result->minV, i);
-          }
-
-          clockwise.insert(make_pair(n, circ_result));
-        }
-
         break;
       case BVNEG:
         if (knownC0) // NOT of the bitvector.
