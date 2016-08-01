@@ -417,28 +417,28 @@ private:
           result = freshUnsignedInterval(width);
           CONSTANTBV::BitVector_Flip(result->maxV); // make the max zero too.
 
-          bool carry = false;
+          bool min_carry = false;
+          bool max_carry = false;
 
           for (size_t i = 0; i < children.size(); i++)
           {
             if (children[i] == NULL)
             {
-              carry = true;
+              result = NULL;
               break;
             }
 
             CONSTANTBV::BitVector_add(result->maxV, result->maxV,
-                                      children[i]->maxV, &carry);
-            if (carry)
-              break;
+                                      children[i]->maxV, &max_carry);
             CONSTANTBV::BitVector_add(result->minV, result->minV,
-                                      children[i]->minV, &carry);
-            if (carry)
+                                      children[i]->minV, &min_carry);
+            if (min_carry != max_carry)
+            {
+              result = NULL;
               break;
+            }
           }
 
-          if (carry)
-            result = NULL;
         }
         break;
       case BVCONCAT:

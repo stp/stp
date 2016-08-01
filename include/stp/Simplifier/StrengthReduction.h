@@ -52,6 +52,8 @@ using simplifier::constantBitP::FixedBits;
 
 class StrengthReduction // not copyable
 {
+  unsigned replaceWithConstant;
+  unsigned replaceWithSimpler;
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
@@ -102,43 +104,91 @@ class StrengthReduction // not copyable
 public:
 
   //TODO merge these two toplevel funtions, they do the same thing..
-  ASTNode topLevel(const ASTNode& top, std::map<ASTNode, FixedBits*> visited)
+  ASTNode topLevel(const ASTNode& top, const std::map<ASTNode, FixedBits*>& visited)
   {
     ASTNodeMap fromTo;
 
     for (auto it = visited.begin(); it != visited.end(); it++)
     {
-      const FixedBits* b = it->second;
-      if (b == NULL)
-        continue;
-
-      if (!b->isTotallyFixed())
-        continue;
-
       const ASTNode& n = it->first;
-
       if (n.isConstant())
         continue;
 
-      ASTNode newN;
-      if (n.GetType() == BOOLEAN_TYPE)
+      const FixedBits* b = it->second;
+      if (n.GetKind() == BVSGT && (b==NULL || !b->isTotallyFixed()))
       {
-          if (b->getValue(0)) // true
-            newN = nf->getTrue();
+        if (visited.find(n[0]) != visited.end() && visited.find(n[1]) != visited.end())
+         if (visited.find(n[0])->second != NULL && visited.find(n[1])->second != NULL)
+          {
+             FixedBits * l =  visited.find(n[0])->second;
+             FixedBits * r =  visited.find(n[1])->second;
+             unsigned bw = n[0].GetValueWidth();
+             if (l->isFixed(bw-1) && r->isFixed(bw-1) && (l->getValue(bw-1) == r->getValue(bw-1)))
+              {
+                  // replace with unsigned comparison.
+                  ASTNode newN = nf->CreateNode(BVGT, n[0], n[1]);
+                  fromTo.insert(make_pair(n, newN));
+                  replaceWithSimpler++;
+                  //std::cerr << n << *l << *r << newN << std::endl;
+              }
+          }
+      }
+
+      if (b==NULL)
+        continue;
+
+      if (!b->isTotallyFixed())
+      {
+        if (n.GetKind() == BVSRSHIFT && b->isFixed(n.GetValueWidth()-1) && !b->getValue(n.GetValueWidth()-1) )
+        {
+          // Reduce from signed right shift, to ordinary right shift.
+          ASTNode newN = nf->CreateTerm(BVRIGHTSHIFT, n.GetValueWidth(), n[0], n[1]);
+          fromTo.insert(make_pair(n, newN));
+          replaceWithSimpler++;
+        }
+        else if (n.GetKind() == BVSX && b->isFixed(n.GetValueWidth()-1) && n[0].GetValueWidth() != n.GetValueWidth())
+        {
+          // We can replace the BVSX with a concat.
+          ASTNode concat;
+          if (b->getValue(n.GetValueWidth()-1))
+          {
+            concat = bm.CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
+          }
           else
-            newN = nf->getFalse();
+          {
+            concat = bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
+          }
+          // It can be a concat instead.
+          ASTNode newN = nf->CreateTerm(
+              BVCONCAT, n.GetValueWidth(),
+              concat,
+              n[0]);
+          fromTo.insert(make_pair(n, newN));
+          replaceWithSimpler++;
+        }
       }
       else
-         newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+      { // Can replace with a constant.
+        ASTNode newN;
+        if (n.GetType() == BOOLEAN_TYPE)
+        {
+            if (b->getValue(0)) // true
+              newN = nf->getTrue();
+            else
+              newN = nf->getFalse();
+        }
+        else
+           newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
 
-       fromTo.insert(std::make_pair(n,newN));
+         fromTo.insert(std::make_pair(n,newN));
+         replaceWithConstant++;
+      }
     }
 
     if (fromTo.size() == 0)
       return top;
 
-   // std::cerr << "Bottom up cbitp has repalcements of:"  << fromTo.size() << std::endl;
-   // std::cerr << "Visited size:"  << visited.size() << std::endl;
+    //stats();
 
     ASTNodeMap cache;
     return SubstitutionMap::replace(top, fromTo, cache, nf);
@@ -146,7 +196,7 @@ public:
 
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
-  ASTNode topLevel(const ASTNode& top, std::map<const ASTNode, UnsignedInterval*> visited)
+  ASTNode topLevel(const ASTNode& top, const std::map<const ASTNode, UnsignedInterval*>& visited)
   {
     ASTNodeMap fromTo;
     ASTNodeMap onePass;
@@ -345,12 +395,21 @@ public:
     littleZero = CONSTANTBV::BitVector_Create(1, true);
     CONSTANTBV::BitVector_Fill(littleOne);
     nf = bm.defaultNodeFactory;
+
+    replaceWithConstant=0;
+    replaceWithSimpler=0;
   }
 
   ~StrengthReduction()
   {
     CONSTANTBV::BitVector_Destroy(littleOne);
     CONSTANTBV::BitVector_Destroy(littleZero);
+  }
+
+  void stats()
+  {
+    std::cerr << "replace with constant: " << replaceWithConstant << std::endl;
+    std::cerr << "replace with simpler operation: " << replaceWithSimpler << std::endl;
   }
 };
 }

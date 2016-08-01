@@ -107,6 +107,7 @@ private:
         (n.GetKind() == WRITE) ||
         (children.size() > 0 && nothingKnown) ||
         (n.GetKind() == BVEXTRACT && children[0] == NULL) ||
+        (n.GetKind() == BVSX && children[0] == NULL) ||
         (n.GetKind() == SYMBOL)
        )
     {
