@@ -25,14 +25,18 @@ THE SOFTWARE.
 
 /*
  * Performs a basic unsigned interval analysis.
+ * The analysis is only bottom up (without assuming that the root node is true).
+ * Some of the transfer functions are approximations (they're marked with comments).
  */
 
-#ifndef ESTABLISHINTERVALS_H_
-#define ESTABLISHINTERVALS_H_
+#ifndef UNSIGNEDINTERVALANALYSIS_H_
+#define UNSIGNEDINTERVALANALYSIS_H_
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/StrengthReduction.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -44,77 +48,24 @@ namespace stp
 {
 using std::make_pair;
 
-class EstablishIntervals // not copyable
+class UnsignedIntervalAnalysis // not copyable
 {
-private:
-  struct IntervalType
-  {
-    CBV minV;
-    CBV maxV;
-    IntervalType(CBV _min, CBV _max)
-    {
-      minV = _min;
-      maxV = _max;
-      assert(minV != NULL);
-      assert(maxV != NULL);
-      assert(size_(minV) == size_(maxV));
-    }
 
-    void print()
-    {
-
-      unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
-      unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
-      std::cerr << a << " " << b << std::endl;
-      free(a);
-      free(b);
-    }
-
-    bool isConstant() { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
-
-    bool isComplete()
-    {
-      return (CONSTANTBV::BitVector_is_empty(minV) &&
-              CONSTANTBV::BitVector_is_full(maxV));
-    }
-
-    void checkUnsignedInvariant()
-    {
-      assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
-
-      // We use NULL to represent the complete domain.
-      assert(!isComplete());
-    }
-
-    // If the interval is interpreted as a clockwise interval.
-    bool crossesSignedUnsigned(int width)
-    {
-      bool minMSB = CONSTANTBV::BitVector_bit_test(minV, width - 1);
-      bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV, width - 1);
-
-      // If the min is zero, and the max is one, then it must cross.
-      if (!minMSB && maxMSB)
-        return true;
-      if (!(minMSB ^ maxMSB)) // bits are the same.
-        return CONSTANTBV::BitVector_Compare(minV, maxV) > 0;
-      return false;
-    }
-  };
-
-  vector<EstablishIntervals::IntervalType*> toDeleteLater;
+  vector<UnsignedInterval*> toDeleteLater;
   vector<CBV> likeAutoPtr;
 
-  IntervalType* freshUnsignedInterval(int width)
+  UnsignedInterval* freshUnsignedInterval(int width)
   {
     assert(width > 0);
-    IntervalType* it = createInterval(makeCBV(width), makeCBV(width));
+    UnsignedInterval* it = createInterval(makeCBV(width), makeCBV(width));
     CONSTANTBV::BitVector_Fill(it->maxV);
     return it;
   }
 
-  IntervalType* createInterval(CBV min, CBV max)
+  // We create all intervals through here. Handles collection
+  UnsignedInterval* createInterval(CBV min, CBV max)
   {
-    IntervalType* it = new IntervalType(min, max);
+    UnsignedInterval* it = new UnsignedInterval(min, max);
     toDeleteLater.push_back(it);
     return it;
   }
@@ -126,246 +77,19 @@ private:
     return result;
   }
 
-  // A special version that handles the lhs appearing in the rhs of the fromTo
-  // map.
-  ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache)
-  {
-    if (n.isAtom())
-      return n;
-
-    if (cache.find(n) != cache.end())
-      return (*(cache.find(n))).second;
-
-    ASTNode result = n;
-
-    if (fromTo.find(n) != fromTo.end())
-    {
-      result = (*fromTo.find(n)).second;
-      fromTo.erase(n); // this is how it differs from the everyday replace.
-    }
-
-    ASTVec new_children;
-    new_children.reserve(result.GetChildren().size());
-
-    for (size_t i = 0; i < result.Degree(); i++)
-      new_children.push_back(replace(result[i], fromTo, cache));
-
-    if (new_children == result.GetChildren())
-    {
-      cache.insert(make_pair(n, result));
-      return result;
-    }
-
-    if (n.GetValueWidth() == 0) // n.GetType() == BOOLEAN_TYPE
-    {
-      result = nf->CreateNode(result.GetKind(), new_children);
-    }
-    else
-    {
-      // If the index and value width aren't saved, they are reset sometimes
-      // (??)
-      result = nf->CreateArrayTerm(result.GetKind(), result.GetIndexWidth(),
-                                   result.GetValueWidth(), new_children);
-    }
-
-    cache.insert(make_pair(n, result));
-    return result;
-  }
-
 public:
+
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
   {
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-    map<const ASTNode, IntervalType*> visited;
-    map<const ASTNode, IntervalType*> clockwise;
+    map<const ASTNode, UnsignedInterval*> visited;
+    map<const ASTNode, UnsignedInterval*> clockwise;
     visit(top, visited, clockwise);
-    ASTNodeMap fromTo;
-    ASTNodeMap onePass;
-    for (map<const ASTNode, IntervalType*>::const_iterator it = visited.begin();
-         it != visited.end(); it++)
-    {
-      const ASTNode& n = it->first;
-      IntervalType* interval = it->second;
-      const int width = n.GetValueWidth();
 
-      if (n.isConstant())
-        continue;
-
-      const Kind k = n.GetKind();
-
-      // We do this rule if we don't know for certain the result.
-      // If the leading bits are false then we can reduce from signed to
-      // unsigned comparison.
-      if ((interval == NULL || !interval->isConstant()) &&
-          (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT ||
-           k == SBVREM || k == BVSX))
-      {
-        map<const ASTNode, IntervalType*>::const_iterator l =
-            visited.find(n[0]);
-        map<const ASTNode, IntervalType*>::const_iterator r =
-            visited.find(n[1]);
-
-        bool lhs, rhs; // isFalse.
-
-        if (l == visited.end())
-          lhs = false;
-        else
-        {
-          IntervalType* a = (*l).second;
-          if (a == NULL)
-            lhs = false;
-          else
-          {
-            lhs = !CONSTANTBV::BitVector_bit_test(a->maxV,
-                                                  n[0].GetValueWidth() - 1);
-          }
-        }
-
-        if (r == visited.end())
-          rhs = false;
-        else
-        {
-          IntervalType* b = (*r).second;
-          if (b == NULL)
-            rhs = false;
-          else
-            rhs = !CONSTANTBV::BitVector_bit_test(b->maxV,
-                                                  n[0].GetValueWidth() - 1);
-        }
-
-        switch (n.GetKind())
-        {
-          case BVSGT:
-          case BVSGE:
-            if (lhs && rhs)
-            {
-              ASTNode newN = nf->CreateNode(n.GetKind() == BVSGT ? BVGT : BVGE,
-                                            n[0], n[1]);
-              fromTo.insert(make_pair(n, newN));
-            }
-            break;
-
-          case SBVDIV:
-            if (lhs && rhs)
-            {
-              ASTNode newN =
-                  nf->CreateTerm(BVDIV, n.GetValueWidth(), n[0], n[1]);
-              fromTo.insert(make_pair(n, newN));
-            }
-            break;
-
-          case SBVREM:
-            if (lhs && rhs)
-            {
-              ASTNode newN =
-                  nf->CreateTerm(BVMOD, n.GetValueWidth(), n[0], n[1]);
-              fromTo.insert(make_pair(n, newN));
-            }
-            break;
-
-          case BVSRSHIFT:
-            if (lhs)
-            {
-              ASTNode newN =
-                  nf->CreateTerm(BVRIGHTSHIFT, n.GetValueWidth(), n[0], n[1]);
-              fromTo.insert(make_pair(n, newN));
-            }
-            break;
-
-          case BVSX:
-            if (lhs && n[0].GetValueWidth() != n.GetValueWidth())
-            {
-              // If it's really a zero extend..
-              ASTNode copyN = nf->CreateTerm(
-                  BVCONCAT, n.GetValueWidth(),
-                  bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth()),
-                  n[0]);
-              fromTo.insert(make_pair(n, copyN));
-            }
-            break;
-          default:
-            FatalError("Never here");
-        }
-      }
-      if (interval == NULL)
-        continue;
-      if (interval->isConstant() && n.GetType() == BOOLEAN_TYPE)
-      {
-        if (0 == CONSTANTBV::BitVector_Lexicompare(interval->maxV, littleOne))
-          fromTo.insert(make_pair(n, bm.ASTTrue));
-        else
-          fromTo.insert(make_pair(n, bm.ASTFalse));
-      }
-      else if (interval->isConstant() && n.GetType() == BITVECTOR_TYPE)
-      {
-        CBV clone = CONSTANTBV::BitVector_Clone(interval->maxV);
-        ASTNode new_const = bm.CreateBVConst(clone, n.GetValueWidth());
-        fromTo.insert(make_pair(n, new_const));
-      }
-      else if (false && n.GetType() == BITVECTOR_TYPE &&
-               n.GetKind() != SYMBOL && n.GetKind() != BVCONCAT)
-      {
-        // Looks for leading or trailing zeroes/ones, and replaces the node with
-        // a
-        // concat and an extract.
-
-        // This slows things down. I suspect because the extracts are
-        // "simplified" and split too many things.
-        bool leadingValue =
-            CONSTANTBV::BitVector_bit_test(interval->maxV, width - 1);
-        int leadingSame = 0;
-        for (int i = width - 1; i >= 0; i--)
-        {
-          if (CONSTANTBV::BitVector_bit_test(interval->maxV, i) ^ leadingValue)
-            break;
-
-          if (CONSTANTBV::BitVector_bit_test(interval->minV, i) ^ leadingValue)
-            break;
-          leadingSame++;
-        }
-
-        assert(leadingSame != width); // That'd be a constant (another case).
-
-        if (leadingSame > 0)
-        {
-          ASTNode prefix;
-          if (leadingValue)
-            prefix = bm.CreateMaxConst(leadingSame);
-          else
-            prefix = bm.CreateZeroConst(leadingSame);
-
-          ASTNode top = bm.CreateBVConst(32, width - leadingSame - 1);
-          ASTNode bottom = bm.CreateZeroConst(32);
-          ASTNode remainder =
-              nf->CreateTerm(BVEXTRACT, width - leadingSame, n, top, bottom);
-          ASTNode replaced = nf->CreateTerm(BVCONCAT, width, prefix, remainder);
-          onePass.insert(make_pair(n, replaced));
-        }
-      }
-    }
-
-    ASTNode result = top;
-    if (onePass.size() > 0)
-    {
-      // The rhs of the map contains the lhs, so it needs to be applied
-      // specially.
-      ASTNodeMap cache;
-      result = replace(top, onePass, cache);
-    }
-
-    if (fromTo.size() > 0)
-    {
-      ASTNodeMap cache;
-
-      bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-      return SubstitutionMap::replace(result, fromTo, cache,
-                                      nf);
-    }
-
-    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-    return result;
+    StrengthReduction sr(bm);
+    return sr.topLevel(top,visited);
   }
 
 private:
@@ -373,23 +97,23 @@ private:
   // false.
   // clockwise are intervals that go clockwise around the circle from low to
   // high.
-  IntervalType* visit(const ASTNode& n,
-                      map<const ASTNode, IntervalType*>& visited,
-                      map<const ASTNode, IntervalType*>& clockwise)
+  UnsignedInterval* visit(const ASTNode& n,
+                      map<const ASTNode, UnsignedInterval*>& visited,
+                      map<const ASTNode, UnsignedInterval*>& clockwise)
   {
-    map<const ASTNode, IntervalType*>::iterator it;
+    map<const ASTNode, UnsignedInterval*>::iterator it;
     if ((it = visited.find(n)) != visited.end())
       return it->second;
 
     const int number_children = n.Degree();
-    vector<IntervalType*> children;
+    vector<UnsignedInterval*> children;
     children.reserve(number_children);
     for (int i = 0; i < number_children; i++)
     {
       children.push_back(visit(n[i], visited, clockwise));
     }
 
-    IntervalType* result = NULL;
+    UnsignedInterval* result = NULL;
     const unsigned int width = n.GetValueWidth();
     const bool knownC0 = number_children < 1 ? false : (children[0] != NULL);
     const bool knownC1 = number_children < 2 ? false : (children[1] != NULL);
@@ -431,7 +155,7 @@ private:
         }
         break;
       case BVGT:
-      case BVSGT:
+      case BVSGT: // OVER-APPROXIMATION
         if ((BVGT == n.GetKind() && knownC0 && knownC1) ||
             (BVSGT == n.GetKind() && knownC0 && knownC1 &&
              !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
@@ -449,10 +173,10 @@ private:
         }
         if (BVSGT == n.GetKind() && result == NULL)
         {
-          map<const ASTNode, IntervalType*>::iterator clock_it;
+          map<const ASTNode, UnsignedInterval*>::iterator clock_it;
           clock_it = clockwise.find(n[0]);
-          IntervalType* clock0 = NULL;
-          IntervalType* clock1 = NULL;
+          UnsignedInterval* clock0 = NULL;
+          UnsignedInterval* clock1 = NULL;
           if (clock_it != clockwise.end())
             clock0 = clock_it->second;
           clock_it = clockwise.find(n[1]);
@@ -496,7 +220,7 @@ private:
 
         break;
       case BVGE:
-      case BVSGE:
+      case BVSGE: // OVER-APPROXIMATION
         if ((BVGE == n.GetKind() && knownC0 && knownC1) ||
             (BVSGE == n.GetKind() && knownC0 && knownC1 &&
              !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
@@ -512,13 +236,13 @@ private:
             result = createInterval(littleZero, littleZero);
         }
         break;
-      case BVDIV:
+      case BVDIV: // OVER-APPROXIMATION
         if (knownC1)
         {
           // When we're dividing by zero, we know nothing.
           if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
           {
-            IntervalType* top = (children[0] == NULL)
+            UnsignedInterval* top = (children[0] == NULL)
                                     ? freshUnsignedInterval(width)
                                     : children[0];
             result = freshUnsignedInterval(width);
@@ -541,7 +265,7 @@ private:
           }
         }
         break;
-      case BVMOD:
+      case BVMOD: //OVER-APPROXIMATION
         if (knownC1)
         {
           // When we're dividing by zero, we know nothing.
@@ -590,7 +314,7 @@ private:
         {
           // Ignores what's already there for now..
 
-          IntervalType* circ_result = freshUnsignedInterval(n.GetValueWidth());
+          UnsignedInterval* circ_result = freshUnsignedInterval(n.GetValueWidth());
           for (int i = 0; i < (int)n[0].GetValueWidth() - 1; i++)
           {
             CONSTANTBV::BitVector_Bit_On(circ_result->maxV, i);
@@ -660,7 +384,7 @@ private:
           CONSTANTBV::BitVector_Copy(result->maxV, max);
         }
         break;
-      case BVMULT:
+      case BVMULT: //OVER-APPROXIMATION
         if (knownC0 && knownC1)
         {
           //  >=2 arity.
@@ -718,7 +442,7 @@ private:
           // zero).
         //}
 
-      case BVRIGHTSHIFT:
+      case BVRIGHTSHIFT: //OVER-APPROXIMATION
         if (knownC0 || knownC1)
         {
           result = freshUnsignedInterval(width);
@@ -872,7 +596,7 @@ private:
   NodeFactory* nf;
 
 public:
-  EstablishIntervals(STPMgr& _bm) : bm(_bm)
+  UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
   {
     littleZero = makeCBV(1);
     littleOne = makeCBV(1);
@@ -880,7 +604,7 @@ public:
     nf = bm.defaultNodeFactory;
   }
 
-  ~EstablishIntervals()
+  ~UnsignedIntervalAnalysis()
   {
     for (size_t i = 0; i < toDeleteLater.size(); i++)
       delete toDeleteLater[i];
@@ -894,4 +618,4 @@ public:
 };
 }
 
-#endif /* ESTABLISHINTERVALS_H_ */
+#endif

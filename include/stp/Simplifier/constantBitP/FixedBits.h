@@ -138,6 +138,7 @@ public:
 
   // True if all bits are fixed (irrespective of what value they are fixed to).
   bool isTotallyFixed() const;
+  bool isTotallyUnfixed() const;
 
   // set value of bit "n" to the value.
   void setValue(unsigned n, bool value)

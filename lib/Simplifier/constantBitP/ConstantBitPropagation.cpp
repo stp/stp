@@ -59,10 +59,6 @@ namespace constantBitP
 {
 NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
-Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
-                                   FixedBits& output, const ASTNode n,
-                                   MultiplicationStatsMap* msm = NULL);
-
 const bool debug_cBitProp_messages = false;
 const bool output_mult_like = false;
 const bool debug_print_graph_after = false;
@@ -681,7 +677,7 @@ FixedBits* ConstantBitPropagation::getUpdatedFixedBits(const ASTNode& n)
   return output;
 }
 
-Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
+Result ConstantBitPropagation::dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
                                    FixedBits& output, const ASTNode n,
                                    MultiplicationStatsMap* msm)
 {

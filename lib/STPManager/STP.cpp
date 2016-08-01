@@ -27,6 +27,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 
+#include "stp/Simplifier/UpwardsCBitP.h"
+
+
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
@@ -37,7 +40,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/FindPureLiterals.h"
-#include "stp/Simplifier/EstablishIntervals.h"
+#include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/AlwaysTrue.h"
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
@@ -50,7 +53,7 @@ namespace stp
 const static string cb_message = "After Constant Bit Propagation. ";
 const static string bb_message = "After Bitblast simplification. ";
 const static string uc_message = "After Removing Unconstrained. ";
-const static string int_message = "After Establishing Intervals. ";
+const static string int_message = "After Unsigned Interval Analysis. ";
 const static string pl_message = "After Pure Literals. ";
 const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
@@ -207,7 +210,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 
   if (bm->UserFlags.isSet("use-intervals", "1"))
   {
-    EstablishIntervals intervals(*bm);
+    UnsignedIntervalAnalysis intervals(*bm);
     inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
     bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }
@@ -215,14 +218,11 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-    simplifier::constantBitP::ConstantBitPropagation cb(bm,
-        simp, bm->defaultNodeFactory, inputToSat);
 
-    inputToSat = cb.topLevelBothWays(inputToSat, true, false);
+    UpwardsCBitP cb(bm);
+    inputToSat = cb.topLevel(inputToSat);
+
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
-
-    if (cb.isUnsatisfiable())
-      inputToSat = bm->ASTFalse;
 
     if (simp->hasUnappliedSubstitutions())
     {
@@ -412,7 +412,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.isSet("use-intervals", "1"))
   {
-    EstablishIntervals intervals(*bm);
+    UnsignedIntervalAnalysis intervals(*bm);
     inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
     bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }

@@ -119,6 +119,17 @@ bool FixedBits::isTotallyFixed() const
   return true;
 }
 
+bool FixedBits::isTotallyUnfixed() const
+{
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (fixed[i])
+      return false;
+  }
+
+  return true;
+}
+
 FixedBits::FixedBits(unsigned n, bool isbool)
 {
   assert(n > 0);
