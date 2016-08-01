@@ -219,7 +219,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
 
-    UpwardsCBitP cb(bm,simp);
+    UpwardsCBitP cb(bm);
     inputToSat = cb.topLevel(inputToSat);
 
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);

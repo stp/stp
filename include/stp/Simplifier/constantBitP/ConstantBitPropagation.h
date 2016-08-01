@@ -126,6 +126,11 @@ public:
   ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits);
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
+
+  static Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
+                                   FixedBits& output, const ASTNode n,
+                                   MultiplicationStatsMap* msm = NULL);
+
 };
 }
 }

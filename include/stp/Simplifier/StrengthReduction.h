@@ -33,6 +33,7 @@ THE SOFTWARE.
 #define STRENGTHREDUCTION_H_
 
 #include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -47,6 +48,7 @@ THE SOFTWARE.
 namespace stp
 {
 using std::make_pair;
+using simplifier::constantBitP::FixedBits;
 
 class StrengthReduction // not copyable
 {
@@ -99,13 +101,57 @@ class StrengthReduction // not copyable
   }
 
 public:
+
+  //TODO merge these two toplevel funtions, they should do the same thing..
+  ASTNode topLevel(const ASTNode& top, std::map<ASTNode, FixedBits*> visited)
+  {
+    ASTNodeMap fromTo;
+
+    for (auto it = visited.begin(); it != visited.end(); it++)
+    {
+      const FixedBits* b = it->second;
+      if (b == NULL)
+        continue;
+
+      if (!b->isTotallyFixed())
+        continue;
+
+      const ASTNode& n = it->first;
+
+      if (n.isConstant())
+        continue;
+
+      ASTNode newN;
+      if (n.GetType() == BOOLEAN_TYPE)
+      {
+          if (b->getValue(0)) // true
+            newN = nf->getTrue();
+          else
+            newN = nf->getFalse();
+      }
+      else
+         newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+
+       fromTo.insert(std::make_pair(n,newN));
+    }
+
+    if (fromTo.size() == 0)
+      return top;
+
+   // std::cerr << "Bottom up cbitp has repalcements of:"  << fromTo.size() << std::endl;
+//    std::cerr << "Visited size:"  << visited.size() << std::endl;
+
+    ASTNodeMap cache;
+    return SubstitutionMap::replace(top, fromTo, cache, nf);
+  }
+
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
   ASTNode topLevel(const ASTNode& top, std::map<const ASTNode, UnsignedInterval*> visited)
   {
     ASTNodeMap fromTo;
     ASTNodeMap onePass;
-    for (map<const ASTNode, UnsignedInterval*>::const_iterator it = visited.begin();
+    for (std::map<const ASTNode, UnsignedInterval*>::const_iterator it = visited.begin();
          it != visited.end(); it++)
     {
       const ASTNode& n = it->first;
@@ -124,9 +170,9 @@ public:
           (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT ||
            k == SBVREM || k == BVSX))
       {
-        map<const ASTNode, UnsignedInterval*>::const_iterator l =
+        std::map<const ASTNode, UnsignedInterval*>::const_iterator l =
             visited.find(n[0]);
-        map<const ASTNode, UnsignedInterval*>::const_iterator r =
+        std::map<const ASTNode, UnsignedInterval*>::const_iterator r =
             visited.find(n[1]);
 
         bool lhs, rhs; // isFalse.

@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <map>
-//#include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Simplifier/StrengthReduction.h"
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -43,77 +43,162 @@ THE SOFTWARE.
 #include <iostream>
 
 
+
 namespace stp
 {
 using simplifier::constantBitP::FixedBits;
-
 
 class UpwardsCBitP // not copyable
 {
 
 public:
 
+  // Apply an upwards constant bit propagation, and do strength reduction using the results.
   ASTNode topLevel(const ASTNode& top)
   {
-    simplifier::constantBitP::ConstantBitPropagation cb(&bm,
-        simp, bm.defaultNodeFactory, top);
+    std::map<ASTNode, FixedBits*> visited;
 
-    return cb.topLevelBothWays(top, false, false);
+    visit(top, visited);
 
+    StrengthReduction sr(bm);
+    ASTNode result = sr.topLevel(top,visited);
 
-    //map<const ASTNode, FixedBits*> visited;
-    // visit(top, visited, clockwise);
+    for (auto it : visited)
+      if (it.second != NULL)
+        delete it.second;
 
-    // StrengthReduction sr(bm);
-    // return sr.topLevel(top,visited);
+    return result;
+
   }
-#if 0
+
+private:
+
+  FixedBits* fresh(const ASTNode &n)
+  {
+      return  new FixedBits(n.GetValueWidth() > 0 ? n.GetValueWidth() : 1, (BOOLEAN_TYPE == n.GetType()));
+  }
+
   FixedBits* visit(const ASTNode& n, std::map<ASTNode, FixedBits *> &visited)
   {
-
-    std::map<const ASTNode, FixedBits*>::iterator it;
-    if ((it = visited.find(n)) != visited.end())
-      return it->second;
-
+    {
+      std::map<const ASTNode, FixedBits*>::iterator it;
+      if ((it = visited.find(n)) != visited.end())
+        return it->second;
+    }
+    
     const int number_children = n.Degree();
+
     vector<FixedBits*> children;
     children.reserve(number_children);
+
+    bool nothingKnown=true;
+
     for (int i = 0; i < number_children; i++)
     {
-      children.push_back(visit(n[i], visited, clockwise));
+      FixedBits * op = visit(n[i], visited);
+      if (op != NULL)
+          nothingKnown=false;
+      children.push_back(op);
     }
 
-    FixedBits* result = NULL;
-    const unsigned int width = n.GetValueWidth();
-    const bool knownC0 = number_children < 1 ? false : (children[0] != NULL);
-    const bool knownC1 = number_children < 2 ? false : (children[1] != NULL);
+    // We need to know something about the children if we want to know something about the parent.
+    if (
+        (n.GetKind() == READ) ||
+        (n.GetKind() == WRITE) ||
+        (children.size() > 0 && nothingKnown) ||
+        (n.GetKind() == BVEXTRACT && children[0] == NULL) ||
+        (n.GetKind() == SYMBOL)
+       )
+    {
+      visited.insert(std::make_pair(n,(FixedBits*)NULL));
+      return NULL;
+    }
 
-  // call the transfer functions.
+    FixedBits* result =  fresh(n);
 
-    if (result != NULL && result->isComplete())
+    if (n.GetKind() == BVCONST)
+    {
+      // the CBV doesn't leak. it is a copy of the cbv inside the node.
+      CBV cbv = n.GetBVConst();
+
+     for (unsigned int j = 0; j < n.GetValueWidth(); j++)
+      {
+         result->setFixed(j, true);
+         result->setValue(j, CONSTANTBV::BitVector_bit_test(cbv, j));
+      }
+    }
+    else if (TRUE == n.GetKind())
+    {
+     result->setFixed(0, true);
+     result->setValue(0, true);
+    }
+    else if (FALSE == n.GetKind())
+    {
+      result->setFixed(0, true);
+      result->setValue(0, false);
+    }
+    else
+    {
+      for (unsigned i =0; i < children.size(); i++)
+         if (children[i] == NULL)
+             children[i] =  getEmpty(n[i]);
+
+      if (n.GetKind() == BVMULT)
+      {
+        simplifier::constantBitP::MultiplicationStatsMap msm;
+        simplifier::constantBitP::ConstantBitPropagation::dispatchToTransferFunctions(&bm, n.GetKind(), children, *result, n, &msm);
+      }
+      else
+      {
+       simplifier::constantBitP::ConstantBitPropagation::dispatchToTransferFunctions(&bm, n.GetKind(), children, *result, n, NULL);
+      }
+    }
+
+    if (result->isTotallyUnfixed())
+    {
+      delete result;
       result = NULL;
+    }
 
-    if (result != NULL)
-      result->checkUnsignedInvariant();
-
-    // result will often be null (which we take to mean the maximum range).
-    visited.insert(make_pair(n, result));
+    visited.insert(std::make_pair(n, result));
     return result;
   }
-#endif
+
+  // When we call the transfer functions, we can't send nulls, send unfixed instead.
+  FixedBits * getEmpty(const ASTNode &n)
+  {
+     if (n.GetType() == BOOLEAN_TYPE)
+      {
+        assert(emptyBoolean->isTotallyUnfixed());
+         return emptyBoolean;
+      }
+     if (emptyBitVector.find(n.GetValueWidth()) == emptyBitVector.end())
+        emptyBitVector[n.GetValueWidth()] = fresh(n);
+
+     FixedBits * r = emptyBitVector[n.GetValueWidth()];
+     assert(r->isTotallyUnfixed());
+     return r;
+  }
 
   STPMgr& bm;
-  Simplifier * simp;
+  FixedBits * emptyBoolean;
+  std::unordered_map<unsigned, FixedBits*> emptyBitVector;
 
 public:
 
-  UpwardsCBitP(STPMgr* _bm, Simplifier* simp_) : bm(*_bm)
+  UpwardsCBitP(STPMgr* _bm) : bm(*_bm)
   {
-  simp = simp_;
+     emptyBoolean = new FixedBits(1,true);
   }
 
   ~UpwardsCBitP()
   {
+    for (auto it: emptyBitVector)
+    {
+      assert(it.second->isTotallyUnfixed());
+      delete it.second;
+    }
+     delete emptyBoolean;
   }
 };
 }
