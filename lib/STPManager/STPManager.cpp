@@ -618,7 +618,8 @@ STPMgr::~STPMgr()
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();
   printer::NodeLetVarMap1.clear();
-
+  printer::Lisp_AlreadyPrintedSet.clear();
+  
   delete runTimes;
   runTimes = NULL;
   ASTFalse = ASTNode(0);
