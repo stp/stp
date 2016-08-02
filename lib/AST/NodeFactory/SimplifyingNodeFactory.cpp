@@ -1141,6 +1141,23 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   ASTNode result;
   switch (kind)
   {
+    case stp::BVZX:
+    {
+      if (width - children[0].GetValueWidth() >0)
+      {
+        ASTNode zero = bm.CreateZeroConst(width- children[0].GetValueWidth());
+        result = NodeFactory::CreateTerm(BVCONCAT, width, zero, children[0]);
+      }
+      else if (width == children[0].GetValueWidth())
+      {
+        result = children[0];
+      }
+      else
+      {
+        FatalError("Negative zero extend",children[0]);
+      }
+      break;
+    }
 
     case ITE:
     {
