@@ -202,7 +202,6 @@ public:
             ASTNode newN= nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
             replaceWithSimpler++;
             fromTo.insert(make_pair(n, newN));
-            std::cerr << n << newN;
           }
         }
       }
