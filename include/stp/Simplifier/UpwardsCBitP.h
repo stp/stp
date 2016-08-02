@@ -108,6 +108,7 @@ private:
         (children.size() > 0 && nothingKnown) ||
         (n.GetKind() == BVEXTRACT && children[0] == NULL) ||
         (n.GetKind() == BVSX && children[0] == NULL) ||
+        (n.GetKind() == BVZX && children[0] == NULL) ||
         (n.GetKind() == SYMBOL)
        )
     {
@@ -152,6 +153,14 @@ private:
       else
       {
        simplifier::constantBitP::ConstantBitPropagation::dispatchToTransferFunctions(&bm, n.GetKind(), children, *result, n, NULL);
+      }
+
+      if (false)  
+      {
+        std::cerr << n.GetKind();
+        for (unsigned i =0; i < children.size(); i++)
+              std::cerr << *children[i];
+        std::cerr << " = " << *result << std::endl;
       }
     }
 

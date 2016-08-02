@@ -54,6 +54,7 @@ class StrengthReduction // not copyable
 {
   unsigned replaceWithConstant;
   unsigned replaceWithSimpler;
+  unsigned unimplementedReduction;
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
@@ -114,32 +115,100 @@ public:
       if (n.isConstant())
         continue;
 
+      const Kind kind = n.GetKind();
       const FixedBits* b = it->second;
-      if (n.GetKind() == BVSGT && (b==NULL || !b->isTotallyFixed()))
+      
+      if (b!= NULL && b->isTotallyFixed()) // Replace with a constant.
+      { 
+        ASTNode newN;
+        if (n.GetType() == BOOLEAN_TYPE)
+        {
+          if (b->getValue(0)) // true
+            newN = nf->getTrue();
+          else
+            newN = nf->getFalse();
+        }
+        else
+          newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+
+        fromTo.insert(std::make_pair(n,newN));
+        replaceWithConstant++;
+      }
+      else if (kind == BVSGT || kind == SBVDIV || kind == SBVMOD || kind == SBVREM)
       {
         if (visited.find(n[0]) != visited.end() && visited.find(n[1]) != visited.end())
          if (visited.find(n[0])->second != NULL && visited.find(n[1])->second != NULL)
           {
-             FixedBits * l =  visited.find(n[0])->second;
-             FixedBits * r =  visited.find(n[1])->second;
-             unsigned bw = n[0].GetValueWidth();
-             if (l->isFixed(bw-1) && r->isFixed(bw-1) && (l->getValue(bw-1) == r->getValue(bw-1)))
+             const FixedBits * l =  visited.find(n[0])->second;
+             const FixedBits * r =  visited.find(n[1])->second;
+             const unsigned bw = n[0].GetValueWidth();
+             if (l->isFixed(bw-1) && r->isFixed(bw-1))
               {
+                if (kind == BVSGT && (l->getValue(bw-1) == r->getValue(bw-1)))
+                {
                   // replace with unsigned comparison.
                   ASTNode newN = nf->CreateNode(BVGT, n[0], n[1]);
                   fromTo.insert(make_pair(n, newN));
                   replaceWithSimpler++;
                   //std::cerr << n << *l << *r << newN << std::endl;
+                }
+                else if (kind == SBVDIV)
+                {
+                  unimplementedReduction++; 
+                }
+                else if (kind == SBVMOD)
+                {
+                  unimplementedReduction++; 
+                }
+                else if (kind == SBVREM)
+                {
+                  unimplementedReduction++; 
+                }
               }
           }
       }
-
-      if (b==NULL)
-        continue;
-
-      if (!b->isTotallyFixed())
+      else if (kind == BVPLUS || kind == BVXOR)
       {
-        if (n.GetKind() == BVSRSHIFT && b->isFixed(n.GetValueWidth()-1) && !b->getValue(n.GetValueWidth()-1) )
+        // If all the bits are zero except for one, in each position, replace by OR
+        vector<FixedBits*> children;
+        bool bad=false;
+        for (ASTNode c: n.GetChildren())
+        {
+          if (visited.find(c) == visited.end())
+            bad = true;
+          children.push_back(visited.find(c)->second);
+          if (children.back() == NULL)
+            bad=true;
+        }
+        if(!bad)
+        {
+          unsigned nonZero = 0;
+          for (unsigned i =0; i < n.GetValueWidth();i++)
+          {
+            nonZero =0;
+            for (unsigned j =0; j < children.size(); j++)
+            {
+              if (!children[j]->isFixed(i))
+                nonZero++;
+              else if (children[j]->getValue(i))
+                nonZero++;
+            }
+            if (nonZero > 1)  
+              break;
+          }
+          
+          if (nonZero <=1) // OK can reduce.
+          {
+            ASTNode newN= nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
+            replaceWithSimpler++;
+            fromTo.insert(make_pair(n, newN));
+            std::cerr << n << newN;
+          }
+        }
+      }
+      else if (b!= NULL)
+      {
+        if (kind== BVSRSHIFT && b->isFixed(n.GetValueWidth()-1) && !b->getValue(n.GetValueWidth()-1) )
         {
           // Reduce from signed right shift, to ordinary right shift.
           ASTNode newN = nf->CreateTerm(BVRIGHTSHIFT, n.GetValueWidth(), n[0], n[1]);
@@ -151,44 +220,21 @@ public:
           // We can replace the BVSX with a concat.
           ASTNode concat;
           if (b->getValue(n.GetValueWidth()-1))
-          {
             concat = bm.CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
-          }
           else
-          {
             concat = bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
-          }
-          // It can be a concat instead.
-          ASTNode newN = nf->CreateTerm(
-              BVCONCAT, n.GetValueWidth(),
-              concat,
-              n[0]);
+
+          ASTNode newN = nf->CreateTerm(BVCONCAT, n.GetValueWidth(),concat, n[0]);
           fromTo.insert(make_pair(n, newN));
           replaceWithSimpler++;
         }
       }
-      else
-      { // Can replace with a constant.
-        ASTNode newN;
-        if (n.GetType() == BOOLEAN_TYPE)
-        {
-            if (b->getValue(0)) // true
-              newN = nf->getTrue();
-            else
-              newN = nf->getFalse();
-        }
-        else
-           newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
-
-         fromTo.insert(std::make_pair(n,newN));
-         replaceWithConstant++;
-      }
     }
+
+    //stats();
 
     if (fromTo.size() == 0)
       return top;
-
-    //stats();
 
     ASTNodeMap cache;
     return SubstitutionMap::replace(top, fromTo, cache, nf);
@@ -398,6 +444,7 @@ public:
 
     replaceWithConstant=0;
     replaceWithSimpler=0;
+    unimplementedReduction=0;
   }
 
   ~StrengthReduction()
@@ -410,6 +457,8 @@ public:
   {
     std::cerr << "replace with constant: " << replaceWithConstant << std::endl;
     std::cerr << "replace with simpler operation: " << replaceWithSimpler << std::endl;
+    std::cerr << "TODO replace with simpler operation: " << unimplementedReduction << std::endl;
+    
   }
 };
 }
