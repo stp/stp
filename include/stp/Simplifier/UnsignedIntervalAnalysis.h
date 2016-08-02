@@ -146,6 +146,11 @@ private:
               (CONSTANTBV::BitVector_Lexicompare(children[0]->minV,
                                                  children[1]->maxV) > 0))
             result = createInterval(littleZero, littleZero);
+          
+          else if (children[0]->isConstant() && 
+                children[1]->isConstant() && 
+                CONSTANTBV::BitVector_Lexicompare(children[0]->minV, children[1]->minV) ==0)
+            result = createInterval(littleOne, littleOne);
         }
         break;
       case BVGT:
@@ -231,30 +236,27 @@ private:
         }
         break;
       case BVSX:
-        if (knownC0 && knownC1)
+        if (knownC0)
         {
-          // If the maximum doesn't have the top bit set, then zero extend it.
-          if (!CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                              n[0].GetValueWidth() - 1))
+          result = freshUnsignedInterval(n.GetValueWidth());
+          CONSTANTBV::BitVector_Empty(result->maxV);
+
+          // Copy the max/min into the new bigger answer.
+          for (unsigned i = 0; i < n[0].GetValueWidth(); i++)
           {
-            result = freshUnsignedInterval(n.GetValueWidth());
+            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, i))
+              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
 
-            // Copy in the minimum and maximum.
-            for (unsigned i = 0; i < n[0].GetValueWidth(); i++)
-            {
-              if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, i))
-                CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->maxV, i);
+            if (CONSTANTBV::BitVector_bit_test(children[0]->minV, i))
+              CONSTANTBV::BitVector_Bit_On(result->minV, i);
+          }
+          for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth() ; i++)
+          {
+            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, n[0].GetValueWidth() -1))
+              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
 
-              if (CONSTANTBV::BitVector_bit_test(children[0]->minV, i))
-                CONSTANTBV::BitVector_Bit_On(result->minV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->minV, i);
-            }
-
-            for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth(); i++)
-              CONSTANTBV::BitVector_Bit_Off(result->maxV, i);
+            if (CONSTANTBV::BitVector_bit_test(children[0]->minV, n[0].GetValueWidth() -1))
+              CONSTANTBV::BitVector_Bit_On(result->minV, i);
           }
         }
         break;
