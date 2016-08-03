@@ -704,8 +704,6 @@ public:
     if (result != NULL)
     {
       result->checkUnsignedInvariant();
-      std::cerr << n;
-      result->print();
     }
 
     // result will often be null (which we take to mean the maximum range).
