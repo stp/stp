@@ -308,7 +308,7 @@ public:
         }
         break;
 
-      case BVNOT:
+      case BVNEG:
         if (knownC0) // NOT of the bitvector.
         {
           result = freshUnsignedInterval(width);
