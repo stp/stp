@@ -38,6 +38,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include <map>
+using std::map;
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -50,37 +51,12 @@ namespace stp
 using std::make_pair;
 
 unsigned propagatorNotImplemented =0;
+unsigned iterations =0;
 
-// We need to know something about the children if we want to know something about the parent.
-bool unknowable(const Kind k, const vector<bool>& known)
-{
-  if (
-      (k == READ) ||
-      (k == WRITE) ||
-      (k == BVEXTRACT && !known[0]) ||
-      (k == BVSX && !known[0]) ||
-      (k == BVZX && !known[0]) ||
-      (k == SYMBOL)
-     )
-    return true;
-
-  if (known.size() > 0)
-  {
-    bool noKnown = true;
-    for (bool b: known)
-      if (b)
-        noKnown = false;
-
-    if (noKnown)
-      return true; // no children are known.
-  }  
-  
-  return false;
-}
-
-void stats()
+void print_stats()
 {
   std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: " << propagatorNotImplemented << std::endl;
+  std::cerr << "{UnsignedIntervalAnalysis} Iterations: " << iterations << std::endl;
 }
 
 class UnsignedIntervalAnalysis // not copyable
@@ -128,14 +104,13 @@ public:
 
     if (bm.UserFlags.stats_flag)
     {
-      stats();
+      print_stats();
       sr.stats("UnsignedIntervalAnalysis");
     }
 
     return r;
   }
 
-private:
   UnsignedInterval* visit(const ASTNode& n,
                       map<const ASTNode, UnsignedInterval*>& visited)
   {
@@ -144,7 +119,7 @@ private:
       return it->second;
 
     if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-      return NULL; // Never know anything about these..
+      return NULL; // Never know anything about these.
 
     const int number_children = n.Degree();
     vector<UnsignedInterval*> children;
@@ -164,18 +139,12 @@ private:
       children.push_back(r);
     }
 
-#if 0
-    if (unknowable(n.GetKind(), known))
-    {
-      visited.insert(make_pair(n,(UnsignedInterval *) NULL));
-      return NULL;
-    }
-#endif
-
     UnsignedInterval* result = NULL;
     const unsigned int width = n.GetValueWidth();
     const bool knownC0 = number_children < 1 ? false : (children[0] != NULL);
     const bool knownC1 = number_children < 2 ? false : (children[1] != NULL);
+
+    iterations++;
 
     switch (n.GetKind())
     {
@@ -339,7 +308,7 @@ private:
         }
         break;
 
-      case BVNEG:
+      case BVNOT:
         if (knownC0) // NOT of the bitvector.
         {
           result = freshUnsignedInterval(width);
@@ -718,13 +687,14 @@ private:
       case BVLEFTSHIFT:
       case BVSRSHIFT:
       case SBVMOD:
-        propagatorNotImplemented++;
+      default:
+          propagatorNotImplemented++;
         break;
     
-      default:
+      
       {
-        std::cerr <<  n.GetKind() << std::endl;
-        FatalError("Unhandled");
+        //std::cerr <<  n.GetKind() << std::endl;
+        //FatalError("Unhandled");
       }
     }
 
@@ -734,7 +704,8 @@ private:
     if (result != NULL)
     {
       result->checkUnsignedInvariant();
-      assert(!unknowable(n.GetKind(), known));
+      std::cerr << n;
+      result->print();
     }
 
     // result will often be null (which we take to mean the maximum range).
