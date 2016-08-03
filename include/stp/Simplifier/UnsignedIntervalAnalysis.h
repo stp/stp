@@ -143,8 +143,8 @@ private:
     if ((it = visited.find(n)) != visited.end())
       return it->second;
 
-    if (n.GetKind() == SYMBOL)
-      return NULL; // Never know anything about symbols..
+    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
+      return NULL; // Never know anything about these..
 
     const int number_children = n.Degree();
     vector<UnsignedInterval*> children;
