@@ -225,25 +225,9 @@ if(WIN32)
 
       # inline is not a keyword in visual studios old C version, allow its redefinition
       add_definitions("-D_ALLOW_KEYWORD_MACROS")
-  else()
-      # mingw
-      set(STP_DEFS_COMM ${STP_DEFS_COMM} -DEXT_HASH_MAP)
   endif()
   add_definitions(${STP_DEFS_COMM})
 endif()
-
-# -----------------------------------------------------------------------------
-# Determine the locations of C++ hash_set and hash_map
-# -----------------------------------------------------------------------------
-
-include(CheckCxxHashSet)
-check_cxx_hashset()
-
-include(CheckCxxHashMultiSet)
-check_cxx_hashmultiset()
-
-include(CheckCxxHashMap)
-check_cxx_hashmap()
 
 # -----------------------------------------------------------------------------
 # Add GIT version

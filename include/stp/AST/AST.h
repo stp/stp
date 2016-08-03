@@ -66,19 +66,19 @@ bool BVTypeCheckRecursive(const ASTNode& n);
 // Takes a BVCONST and returns its constant value
 unsigned int GetUnsignedConst(const ASTNode n);
 
-typedef hash_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
+typedef std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
                  ASTNode::ASTNodeEqual> ASTNodeMap;
 
-typedef hash_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
+typedef std::unordered_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
                  ASTNode::ASTNodeEqual> ASTNodeCountMap;
 
-typedef hash_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
     ASTNodeSet;
 
-typedef hash_multiset<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_multiset<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
     ASTNodeMultiSet;
 
-typedef hash_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
     ASTNodeToVecMap;
 
 void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,

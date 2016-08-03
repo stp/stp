@@ -80,7 +80,7 @@ class Cpp_interface
     std::string name;
   };
 
-  hash_map<std::string, Function> functions;
+  std::unordered_map<std::string, Function> functions;
 
   void checkInvariant();
   void init();

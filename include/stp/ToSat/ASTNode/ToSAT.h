@@ -50,7 +50,7 @@ private:
   // The map is populated while ASTclauses are read from the AST
   // ClauseList returned by CNF converter. For every new boolean
   // variable in ASTClause a new variable is created
-  typedef hash_map<ASTNode, uint32_t, ASTNode::ASTNodeHasher,
+  typedef std::unordered_map<ASTNode, uint32_t, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTtoSATMap;
   ASTtoSATMap _ASTNode_to_SATVar_Map;
 

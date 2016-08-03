@@ -197,7 +197,7 @@ string Bench_Print1(ostream& os, const ASTNode& n,
   return thisNode;
 }
 
-void OutputInputs(ostream& os, const ASTNode& n, hash_set<int>* alreadyOutput)
+void OutputInputs(ostream& os, const ASTNode& n, std::unordered_set<int>* alreadyOutput)
 {
   if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
     return;
@@ -229,7 +229,7 @@ void OutputInputs(ostream& os, const ASTNode& n, hash_set<int>* alreadyOutput)
 
 ostream& Bench_Print(ostream& os, const ASTNode n)
 {
-  hash_set<int> alreadyOutput2;
+  std::unordered_set<int> alreadyOutput2;
 
   OutputInputs(os, n, &alreadyOutput2);
 

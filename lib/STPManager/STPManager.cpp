@@ -118,7 +118,7 @@ ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
 // because it tries not to copy the string unless it needs to.  How
 // do I avoid copying children in ASTInterior?  Perhaps I don't!
 
-// Note: There seems to be a limitation of hash_set, in that insert
+// Note: There seems to be a limitation of std::unordered_set, in that insert
 // returns a const iterator to the value.  That prevents us from
 // modifying the name (in a hash-preserving way) after the symbol is
 // inserted.  FIXME: Is there a way to do this with insert?  Need a

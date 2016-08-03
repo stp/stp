@@ -91,7 +91,7 @@ ASTNode LETMgr::ResolveID(const ASTNode& v)
 // This function simply cleans up the LetID -> LetExpr Map.
 void LETMgr::CleanupLetIDMap(void)
 {
-  // ext/hash_map::clear() is very expensive on big empty maps. shortcut.
+  // std::unordered_map::clear() is very expensive on big empty maps. shortcut.
   if (_letid_expr_map->size() == 0)
     return;
 
@@ -102,6 +102,6 @@ void LETMgr::CleanupLetIDMap(void)
 
 void LETMgr::InitializeLetIDMap(void)
 {
-  _letid_expr_map = new hash_map<string, ASTNode>();
+  _letid_expr_map = new std::unordered_map<string, ASTNode>();
 }
 }

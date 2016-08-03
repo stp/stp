@@ -55,7 +55,7 @@ class PropagateEqualities // not copyable
   bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
 
   ASTNode propagate(const ASTNode& a, ArrayTransformer* at);
-  hash_set<int> alreadyVisited;
+  std::unordered_set<int> alreadyVisited;
 
   const bool always_true;
 

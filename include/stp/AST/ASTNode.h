@@ -203,7 +203,7 @@ public:
   bool IsDefined() const { return _int_node_ptr != NULL; }
 
   /*****************************************************************
-   * Hasher class for STL hash_maps and hash_sets that use ASTNodes*
+   * Hasher class for STL std::unordered_map-s and std::unordered_set-s that use ASTNodes*
    * as keys.  Needs to be public so people can define hash tables *
    * (and use ASTNodeMap class)                                    *
    *****************************************************************/
@@ -218,7 +218,7 @@ public:
   }; 
 
   /*****************************************************************
-   * Equality for ASTNode hash_set and hash_map. Returns true iff  *
+   * Equality for ASTNode std::unordered_set and std::unordered_map. Returns true iff  *
    * internal pointers are the same.  Needs to be public so people *
    * can define hash tables (and use ASTNodeSet class)             *
    *****************************************************************/
