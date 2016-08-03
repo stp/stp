@@ -40,7 +40,7 @@ using std::endl;
 class Dependencies
 {
 private:
-  typedef hash_map<stp::ASTNode, set<stp::ASTNode>*,
+  typedef std::unordered_map<stp::ASTNode, set<stp::ASTNode>*,
                    stp::ASTNode::ASTNodeHasher,
                    stp::ASTNode::ASTNodeEqual> NodeToDependentNodeMap;
   NodeToDependentNodeMap dependents;

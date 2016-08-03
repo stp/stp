@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 
 /*
- * g++ -DEXT_HASH_MAP tree.cpp -I ../../c_interface -L ../../lib -lstp -o cc
+ * g++ tree.cpp -I ../../c_interface -L ../../lib -lstp -o cc
  */
 
 #include "/home/taking/stp/timking_expt/AST/AST.h"

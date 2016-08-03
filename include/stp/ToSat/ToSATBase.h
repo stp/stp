@@ -39,10 +39,10 @@ protected:
   STPMgr* bm;
 
 public:
-  typedef hash_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
+  typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTNodeToSATVar;
 
-   
+
   ToSATBase(STPMgr* bm) : bm(bm)
   {
     ASTTrue = bm->CreateNode(TRUE);

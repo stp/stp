@@ -46,7 +46,7 @@ namespace stp
 
   struct UnsignedInterval
   {
-    
+
     CBV minV;
     CBV maxV;
     UnsignedInterval(CBV _min, CBV _max)

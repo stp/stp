@@ -60,12 +60,12 @@ class AIGSimplifyPropositionalCore // not copyable
 
 public:
   AIGSimplifyPropositionalCore(STPMgr* _bm);
- 
+
 
 private:
   // Convert theory nodes to fresh variables.
   ASTNode theoryToFresh(const ASTNode& n, ASTNodeMap& fromTo);
-  
+
   typedef std::map<Aig_Obj_t*, ASTNode> cacheType;
 
   // Convert the AIG back to an ASTNode.

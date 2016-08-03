@@ -144,6 +144,6 @@ public:
     // bm->ClearAllTables();
   }
 
-}; 
+};
 } // end of namespace
 #endif

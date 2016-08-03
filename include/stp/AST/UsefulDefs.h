@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include <map>
 #include <set>
 #include <algorithm>
-#include <assert.h>
+#include <cassert>
 
 #include "stp/Globals/Globals.h"
 #include "stp/AST/ASTKind.h"
@@ -46,14 +46,8 @@ THE SOFTWARE.
 
 #include "stp/config.h"
 
-#include HASH_SET_H
-#include HASH_MAP_H
-#include HASH_MULTISET_H
-
-#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
-#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
-#define hash_multiset HASH_MULTISET_NAMESPACE::HASH_MULTISET_CLASS
-
+#include <unordered_set>
+#include <unordered_map>
 #define INITIAL_TABLE_SIZE 100
 
 namespace stp
@@ -76,7 +70,7 @@ class BVSolver;
  * Useful typedefs:                                               *
  *                                                                *
  * Vector of ASTNodes, used for child nodes among other things.   *
- * It is good to define hash_map and hash_set in case we want to  *
+ * It is good to define std::unordered_map and std::unordered_set in case we want to  *
  * use libraries other than STL.                                  *
  ******************************************************************/
 typedef vector<ASTNode> ASTVec;
@@ -99,7 +93,7 @@ public:
   int _spaces;
   Spacer(int spaces) { _spaces = spaces; }
   friend std::ostream& operator<<(std::ostream& os, const Spacer& ind);
-}; 
+};
 
 inline Spacer spaces(int width)
 {
@@ -108,7 +102,7 @@ inline Spacer spaces(int width)
 }
 
 // function_counters: Table for storing function count stats.
-typedef hash_map<const char*, int, CStringHash, CStringEqualityPredicate>
+typedef std::unordered_map<const char*, int, CStringHash, CStringEqualityPredicate>
     function_counters;
 } // end of namespace
 

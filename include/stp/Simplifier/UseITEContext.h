@@ -49,19 +49,19 @@ class UseITEContext // not copyable
   ASTNode ASTTrue, ASTFalse;
 
   void addToContext(const ASTNode& n, ASTNodeSet& context);
-  
+
 
   // Unfortunately there can be a lot of paths through a small formula.
   // So we limit how often each node is visited.
 
   ASTNode visit(const ASTNode& n, std::map<ASTNode, int>& visited,
                 ASTNodeSet& visited_empty, ASTNodeSet& context);
-  
+
 public:
   ASTNode topLevel(const ASTNode& n);
-  
+
   UseITEContext(STPMgr* bm);
-  
+
 };
 }
 

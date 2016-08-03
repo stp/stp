@@ -61,10 +61,10 @@ private:
     }
   };
 
-  typedef hash_map<ASTNode, CNFInfo*, ASTNode::ASTNodeHasher,
+  typedef std::unordered_map<ASTNode, CNFInfo*, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTNodeToCNFInfoMap;
 
-  typedef hash_map<ASTNode, ASTNode*, ASTNode::ASTNodeHasher,
+  typedef std::unordered_map<ASTNode, ASTNode*, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTNodeToASTNodePtrMap;
 
   //########################################

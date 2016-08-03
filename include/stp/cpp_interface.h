@@ -80,7 +80,7 @@ class Cpp_interface
     std::string name;
   };
 
-  hash_map<std::string, Function> functions;
+  std::unordered_map<std::string, Function> functions;
 
   void checkInvariant();
   void init();
@@ -153,7 +153,7 @@ public:
 
   void deleteNode(ASTNode* n);
   void addSymbol(ASTNode& s);
-  
+
   void success();
   void error(std::string msg);
   void unsupported();

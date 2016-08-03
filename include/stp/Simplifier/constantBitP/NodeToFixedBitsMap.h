@@ -41,7 +41,7 @@ namespace constantBitP
 class NodeToFixedBitsMap
 {
 public:
-  typedef hash_map<stp::ASTNode, FixedBits*, stp::ASTNode::ASTNodeHasher,
+  typedef std::unordered_map<stp::ASTNode, FixedBits*, stp::ASTNode::ASTNodeHasher,
                    stp::ASTNode::ASTNodeEqual> NodeToFixedBitsMapType;
 
   NodeToFixedBitsMapType* map;

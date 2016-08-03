@@ -117,7 +117,7 @@ public:
 
       const Kind kind = n.GetKind();
       const FixedBits* b = it->second;
-      
+
       if (b!= NULL && b->isTotallyFixed()) // Replace with a constant.
       { 
         ASTNode newN;
@@ -154,15 +154,15 @@ public:
                 }
                 else if (kind == SBVDIV)
                 {
-                  unimplementedReduction++; 
+                  unimplementedReduction++;
                 }
                 else if (kind == SBVMOD)
                 {
-                  unimplementedReduction++; 
+                  unimplementedReduction++;
                 }
                 else if (kind == SBVREM)
                 {
-                  unimplementedReduction++; 
+                  unimplementedReduction++;
                 }
               }
           }
@@ -196,7 +196,7 @@ public:
             if (nonZero > 1)  
               break;
           }
-          
+
           if (nonZero <=1) // OK can reduce.
           {
             ASTNode newN= nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());

@@ -57,7 +57,7 @@ private:
     {
       return CStringHash()(sym_ptr->_name);
     };
-  }; 
+  };
 
   /****************************************************************
    * Equality for ASTSymbol nodes                                 *

@@ -57,15 +57,15 @@ private:
    ****************************************************************/
 
   // Typedef for unique Interior node table.
-  typedef hash_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
+  typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
                    ASTInterior::ASTInteriorEqual> ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
-  typedef hash_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
+  typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
                    ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
-  typedef hash_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
+  typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
                    ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing
@@ -352,7 +352,7 @@ public:
 
   void Pop(void);
   void Push(void);
-  
+
   // Queries aren't maintained on a stack.
   // Used by CVC & C-interface.
   const ASTNode GetQuery();

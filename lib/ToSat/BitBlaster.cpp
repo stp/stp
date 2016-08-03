@@ -188,7 +188,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
 
   if (uf->isSet("bb-equiv", "1"))
   {
-    hash_map<intptr_t, ASTNode> nodeToFn;
+    std::unordered_map<intptr_t, ASTNode> nodeToFn;
     typename std::map<ASTNode, BBNode>::iterator it;
     for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
     {
@@ -222,7 +222,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
     }
   }
 
-  typedef hash_map<vector<BBNode>, ASTNode, BBVecHasher<BBNode>,
+  typedef std::unordered_map<vector<BBNode>, ASTNode, BBVecHasher<BBNode>,
                    BBVecEquals<BBNode>> M;
   if (uf->isSet("bb-equiv", "1"))
   {

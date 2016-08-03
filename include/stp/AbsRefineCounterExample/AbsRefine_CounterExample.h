@@ -83,7 +83,7 @@ private:
   void PrintSATModel(SATSolver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
 public:
-   
+
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
       : bm(b), simp(s), ArrayTransform(at)
   {
@@ -96,7 +96,7 @@ public:
   void PrintCounterExample(bool t, std::ostream& os = std::cout);
   void PrintCounterExampleSMTLIB2(std::ostream& os);
   void PrintSMTLIB2(std::ostream& os, const ASTNode &n);
-  
+
 
   void ClearCounterExampleMap(void) { CounterExampleMap.clear(); }
 
@@ -161,7 +161,7 @@ public:
 
   ~AbsRefine_CounterExample() { ClearAllTables(); } 
 
-}; 
+};
 
 class CompleteCounterExample // not copyable
 {

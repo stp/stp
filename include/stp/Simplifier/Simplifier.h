@@ -50,7 +50,7 @@ private:
   // value is simplified node.
   ASTNodeMap* SimplifyMap;
   ASTNodeMap* SimplifyNegMap;
-  hash_set<int> AlwaysTrueHashSet;
+  std::unordered_set<int> AlwaysTrueHashSet;
   ASTNodeMap MultInverseMap;
 
   // For ArrayWrite Abstraction: map from read-over-write term to

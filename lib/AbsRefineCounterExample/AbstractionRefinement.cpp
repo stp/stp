@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <assert.h>
+#include <cassert>
 #include <math.h>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"

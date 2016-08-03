@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define SYMBOLS_H
 
 #include <vector>
-#include "assert.h"
+#include "cassert"
 #include "stp/AST/AST.h"
 
 using std::vector;
@@ -67,6 +67,6 @@ class SymbolPtrHasher
 {
 public:
   size_t operator()(const Symbols* n) const { return (size_t)n; };
-}; 
+};
 
 #endif

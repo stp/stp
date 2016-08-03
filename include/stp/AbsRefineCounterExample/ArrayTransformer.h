@@ -116,7 +116,7 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-   
+
   ArrayTransformer(STPMgr* bm, Simplifier* s)
       : TransformMap(NULL), simp(s), bm(bm)
   {
