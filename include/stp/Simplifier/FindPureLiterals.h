@@ -55,7 +55,7 @@ class FindPureLiterals // not copyable
   map<ASTNode, polarity_type> nodeToPolarity;
 
   int swap(polarity_type polarity);
-  
+
 public:
   FindPureLiterals() {}
   virtual ~FindPureLiterals() {}
@@ -64,7 +64,7 @@ public:
   bool topLevel(ASTNode& n, Simplifier* simplifier, STPMgr* stpMgr);
 
   void build(const ASTNode& n, polarity_type polarity);
- 
+
 };
 }
 #endif /* FINDPURELITERALS_H_ */

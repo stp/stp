@@ -352,7 +352,7 @@ public:
 
   void Pop(void);
   void Push(void);
-  
+
   // Queries aren't maintained on a stack.
   // Used by CVC & C-interface.
   const ASTNode GetQuery();

@@ -153,7 +153,7 @@ public:
 
   void deleteNode(ASTNode* n);
   void addSymbol(ASTNode& s);
-  
+
   void success();
   void error(std::string msg);
   void unsupported();

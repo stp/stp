@@ -85,7 +85,7 @@ private:
       if ((it = visited.find(n)) != visited.end())
         return it->second;
     }
-    
+
     const int number_children = n.Degree();
 
     vector<FixedBits*> children;

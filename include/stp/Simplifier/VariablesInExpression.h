@@ -65,7 +65,7 @@ public:
                      vector<Symbols*>& av);
 
   void ClearAllTables();
-  
+
 };
 }
 

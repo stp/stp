@@ -42,7 +42,7 @@ public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
                    ASTNode::ASTNodeEqual> ASTNodeToSATVar;
 
-   
+
   ToSATBase(STPMgr* bm) : bm(bm)
   {
     ASTTrue = bm->CreateNode(TRUE);

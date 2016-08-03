@@ -146,7 +146,7 @@ private:
               (CONSTANTBV::BitVector_Lexicompare(children[0]->minV,
                                                  children[1]->maxV) > 0))
             result = createInterval(littleZero, littleZero);
-          
+
           else if (children[0]->isConstant() && 
                 children[1]->isConstant() && 
                 CONSTANTBV::BitVector_Lexicompare(children[0]->minV, children[1]->minV) ==0)
