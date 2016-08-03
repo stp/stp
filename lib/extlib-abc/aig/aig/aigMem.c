@@ -190,6 +190,8 @@ char * Aig_MmFixedEntryFetch( Aig_MmFixed_t * p )
             p->pChunks = REALLOC( char *, p->pChunks, p->nChunksAlloc ); 
         }
         p->pEntriesFree = ALLOC( char, p->nEntrySize * p->nChunkSize );
+        if (p->pEntriesFree)
+            memset(p->pEntriesFree,0, p->nEntrySize * p->nChunkSize );
         p->nMemoryAlloc += p->nEntrySize * p->nChunkSize;
         // transform these entries into a linked list
         pTemp = p->pEntriesFree;
