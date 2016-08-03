@@ -359,12 +359,15 @@ public:
           fromTo.insert(make_pair(n, bm.ASTTrue));
         else
           fromTo.insert(make_pair(n, bm.ASTFalse));
+
+        replaceWithConstant++;
       }
       else if (interval->isConstant() && n.GetType() == BITVECTOR_TYPE)
       {
         CBV clone = CONSTANTBV::BitVector_Clone(interval->maxV);
         ASTNode new_const = bm.CreateBVConst(clone, n.GetValueWidth());
         fromTo.insert(make_pair(n, new_const));
+        replaceWithConstant++;
       }
       else if (false && n.GetType() == BITVECTOR_TYPE &&
                n.GetKind() != SYMBOL && n.GetKind() != BVCONCAT)
@@ -452,12 +455,11 @@ public:
     CONSTANTBV::BitVector_Destroy(littleZero);
   }
 
-  void stats()
+  void stats(string name = "StrengthReduction")
   {
-    std::cerr << "replace with constant: " << replaceWithConstant << std::endl;
-    std::cerr << "replace with simpler operation: " << replaceWithSimpler << std::endl;
-    std::cerr << "TODO replace with simpler operation: " << unimplementedReduction << std::endl;
-    
+    std::cerr << "{" << name <<"} replace with constant: " << replaceWithConstant << std::endl;
+    std::cerr << "{" << name <<"} replace with simpler operation: " << replaceWithSimpler << std::endl;
+    std::cerr << "{" << name <<"} TODO replace with simpler operation: " << unimplementedReduction << std::endl;
   }
 };
 }

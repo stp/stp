@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
+#include <map>
 
 #ifdef _MSC_VER
 #include <compdep.h>
@@ -48,9 +49,42 @@ namespace stp
 {
 using std::make_pair;
 
+unsigned propagatorNotImplemented =0;
+
+// We need to know something about the children if we want to know something about the parent.
+bool unknowable(const Kind k, const vector<bool>& known)
+{
+  if (
+      (k == READ) ||
+      (k == WRITE) ||
+      (k == BVEXTRACT && !known[0]) ||
+      (k == BVSX && !known[0]) ||
+      (k == BVZX && !known[0]) ||
+      (k == SYMBOL)
+     )
+    return true;
+
+  if (known.size() > 0)
+  {
+    bool noKnown = true;
+    for (bool b: known)
+      if (b)
+        noKnown = false;
+
+    if (noKnown)
+      return true; // no children are known.
+  }  
+  
+  return false;
+}
+
+void stats()
+{
+  std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: " << propagatorNotImplemented << std::endl;
+}
+
 class UnsignedIntervalAnalysis // not copyable
 {
-
   vector<UnsignedInterval*> toDeleteLater;
   vector<CBV> likeAutoPtr;
 
@@ -82,13 +116,23 @@ public:
   // Replace some of the things that unsigned intervals can figure out for us.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
   {
+    propagatorNotImplemented =0;
+
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
     map<const ASTNode, UnsignedInterval*> visited;
     visit(top, visited);
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
     StrengthReduction sr(bm);
-    return sr.topLevel(top,visited);
+    ASTNode r= sr.topLevel(top,visited);
+
+    if (bm.UserFlags.stats_flag)
+    {
+      stats();
+      sr.stats("UnsignedIntervalAnalysis");
+    }
+
+    return r;
   }
 
 private:
@@ -99,13 +143,34 @@ private:
     if ((it = visited.find(n)) != visited.end())
       return it->second;
 
+    if (n.GetKind() == SYMBOL)
+      return NULL; // Never know anything about symbols..
+
     const int number_children = n.Degree();
     vector<UnsignedInterval*> children;
+    vector<bool> known;
+
     children.reserve(number_children);
+    known.reserve(number_children);
+
     for (int i = 0; i < number_children; i++)
     {
-      children.push_back(visit(n[i], visited));
+      UnsignedInterval* r = visit(n[i], visited);
+      if (r != NULL)
+      {
+        assert(!r->isComplete());
+      }
+      known.push_back(r!=NULL);
+      children.push_back(r);
     }
+
+#if 0
+    if (unknowable(n.GetKind(), known))
+    {
+      visited.insert(make_pair(n,(UnsignedInterval *) NULL));
+      return NULL;
+    }
+#endif
 
     UnsignedInterval* result = NULL;
     const unsigned int width = n.GetValueWidth();
@@ -122,12 +187,15 @@ private:
         result = createInterval(cbv, cbv);
       }
       break;
+      
       case TRUE:
         result = createInterval(littleOne, littleOne);
         break;
+      
       case FALSE:
         result = createInterval(littleZero, littleZero);
         break;
+
       case NOT:
         if (knownC0)
         {
@@ -138,6 +206,7 @@ private:
             result = createInterval(littleOne, littleOne);
         }
         break;
+
       case EQ:
         if (knownC0 && knownC1)
         {
@@ -153,41 +222,48 @@ private:
             result = createInterval(littleOne, littleOne);
         }
         break;
+
       case BVGT:
       case BVSGT: // OVER-APPROXIMATION
-        if ((BVGT == n.GetKind() && knownC0 && knownC1) ||
-            (BVSGT == n.GetKind() && knownC0 && knownC1 &&
-             !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                             n[0].GetValueWidth() - 1) &&
-             !CONSTANTBV::BitVector_bit_test(children[1]->maxV,
-                                             n[0].GetValueWidth() - 1)))
+        if (knownC1 || knownC0)
         {
-          if (CONSTANTBV::BitVector_Lexicompare(children[0]->minV,
-                                                children[1]->maxV) > 0)
+          const unsigned bitwidth = n[0].GetValueWidth();
+
+          UnsignedInterval c0 = knownC0? *children[0] : *freshUnsignedInterval(bitwidth);
+          UnsignedInterval c1 = knownC1? *children[1] : *freshUnsignedInterval(bitwidth);
+
+          if (CONSTANTBV::BitVector_Lexicompare(c0.minV, c1.maxV) > 0)
             result = createInterval(littleOne, littleOne);
 
-          if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,
-                                                children[0]->maxV) >= 0)
+          if (CONSTANTBV::BitVector_Lexicompare(c1.minV, c0.maxV) >= 0)
             result = createInterval(littleZero, littleZero);
-        }
+
+          if (BVSGT == n.GetKind() && result != NULL)
+          {
+            bool c0Min = CONSTANTBV::BitVector_bit_test(c0.minV, bitwidth -1);
+            bool c0Max = CONSTANTBV::BitVector_bit_test(c0.maxV, bitwidth -1);
+
+            bool c1Min = CONSTANTBV::BitVector_bit_test(c1.minV, bitwidth -1);
+            bool c1Max = CONSTANTBV::BitVector_bit_test(c1.maxV, bitwidth -1);
+
+            // BVGT xor MSB xor MSB
+            if ((c0Min == c0Max) && (c1Min == c1Max) )
+            {
+              assert(result->isConstant());
+
+              if ((c0Min != c1Min) != CONSTANTBV::BitVector_bit_test(result->minV,0))
+                result = createInterval(littleOne, littleOne);              
+              else
+                result = createInterval(littleZero, littleZero);              
+
+//              std::cerr << c0Min << c1Min << CONSTANTBV::BitVector_bit_test(result->minV,0) << std::endl;
+            }
+            else
+              result = freshUnsignedInterval(1);
+          }
+        } 
         break;
-      case BVGE:
-      case BVSGE: // OVER-APPROXIMATION
-        if ((BVGE == n.GetKind() && knownC0 && knownC1) ||
-            (BVSGE == n.GetKind() && knownC0 && knownC1 &&
-             !CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                             n[0].GetValueWidth() - 1) &&
-             !CONSTANTBV::BitVector_bit_test(children[1]->maxV,
-                                             n[0].GetValueWidth() - 1)))
-        {
-          if (CONSTANTBV::BitVector_Lexicompare(children[0]->minV,
-                                                children[1]->maxV) >= 0)
-            result = createInterval(littleOne, littleOne);
-          if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,
-                                                children[0]->maxV) > 0)
-            result = createInterval(littleZero, littleZero);
-        }
-        break;
+
       case BVDIV: // OVER-APPROXIMATION
         if (knownC1)
         {
@@ -217,6 +293,7 @@ private:
           }
         }
         break;
+
       case BVMOD: //OVER-APPROXIMATION
         if (knownC1)
         {
@@ -235,6 +312,7 @@ private:
           }
         }
         break;
+
       case BVSX:
         if (knownC0)
         {
@@ -260,6 +338,7 @@ private:
           }
         }
         break;
+
       case BVNEG:
         if (knownC0) // NOT of the bitvector.
         {
@@ -270,6 +349,7 @@ private:
           CONSTANTBV::BitVector_Flip(result->minV);
         }
         break;
+
       case BVUMINUS:
         if (knownC0)
         {
@@ -288,10 +368,35 @@ private:
             CONSTANTBV::BitVector_Flip(result->minV);
             CONSTANTBV::BitVector_increment(result->minV);
           }
+          if (
+            (CONSTANTBV::BitVector_is_empty(children[0]->minV))&&
+            (CONSTANTBV::BitVector_is_empty(children[0]->maxV))
+            )
+          {
+              result = freshUnsignedInterval(width);
+              CONSTANTBV::BitVector_Empty(result->maxV);
+              CONSTANTBV::BitVector_Empty(result->minV);
+          }
         }
         break;
+
       case ITE:
-        if (children[1] != NULL && children[2] != NULL)
+        if (children[0] != NULL)
+        {
+          assert(children[0]->isConstant());
+          result = freshUnsignedInterval(width == 0 ? 1 : width);
+          if (CONSTANTBV::BitVector_bit_test(children[0]->minV,0) && children[1]!=NULL)
+          {
+            CONSTANTBV::BitVector_Copy(result->minV, children[1]->minV);
+            CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
+          }
+          else if (!CONSTANTBV::BitVector_bit_test(children[0]->minV,0) && children[2]!=NULL)
+          {
+            CONSTANTBV::BitVector_Copy(result->minV, children[2]->minV);
+            CONSTANTBV::BitVector_Copy(result->maxV, children[2]->maxV);
+          }
+        }
+        else if (children[1] != NULL && children[2] != NULL)
         {
           // Both terms and propositions.
           result = freshUnsignedInterval(width == 0 ? 1 : width);
@@ -310,8 +415,9 @@ private:
 
           CONSTANTBV::BitVector_Copy(result->minV, min);
           CONSTANTBV::BitVector_Copy(result->maxV, max);
-        }
+         }
         break;
+
       case BVMULT: //OVER-APPROXIMATION
         if (knownC0 && knownC1)
         {
@@ -360,15 +466,129 @@ private:
             result = NULL;
         }
         break;
-        // case BVLEFTSHIFT:
-        // case BVAND:
-        // case BVSRSHIFT:
-        //{
-          // Todo two cases.
-          // 1) The maximum shift of the maximum value doesn't overflow, and,
-          // 2) The minimum shift of the minimum value completely overflows (to
-          // zero).
-        //}
+
+      case AND:
+      {
+        // If any are definately zero then the answer is zero.
+        for (unsigned i=0; i < children.size() ; i++)
+          if (children[i] != NULL && (CONSTANTBV::BitVector_is_empty(children[i]->maxV)))
+          {
+            result = createInterval(littleZero, littleZero);
+            break;
+          }
+        // If all are definately one the answer is one.
+        bool allok=true;
+        for (unsigned i=0; i < children.size() ; i++)
+          if (children[i] == NULL || (CONSTANTBV::BitVector_is_empty(children[i]->minV)))
+            {
+              allok=false;
+              break;
+            }
+        if (allok)
+            result = createInterval(littleOne, littleOne);
+
+      }
+      break;
+
+      case OR:
+      {
+        // If any are definately one then the answer is  one.
+        for (unsigned i=0; i < children.size() ; i++)
+          if (children[i] != NULL && (CONSTANTBV::BitVector_is_full(children[i]->minV)))
+          {
+            result = createInterval(littleOne, littleOne);
+            break;
+          }
+        // If all are definately false the answer is false.
+        bool allfalse=true;
+        for (unsigned i=0; i < children.size() ; i++)
+          if (children[i] == NULL || (CONSTANTBV::BitVector_is_full(children[i]->maxV)))
+            {
+              allfalse=false;
+              break;
+            }
+        if (allfalse)
+            result = createInterval(littleZero, littleZero);
+
+      }
+      break;
+
+      case XOR:
+      {
+        bool allOK=true;
+        unsigned count=0;
+        for (unsigned i=0; i < children.size() ; i++)
+          if (children[i] != NULL && children[i]->isConstant())
+          {
+            if (!CONSTANTBV::BitVector_is_empty(children[i]->maxV))
+              count++;
+          }
+          else
+          {
+            allOK = false;
+            break;
+          }
+
+        if (allOK && (count%2) ==0)
+            result = createInterval(littleZero, littleZero);
+        if (allOK && (count%2) ==1)
+            result = createInterval(littleOne, littleOne);
+
+        break;
+      }
+
+      case BVAND:
+      {
+        if (knownC0 || knownC1)
+        {
+          if (!knownC1)
+          {
+            result = createInterval(makeCBV(width),children[0]->maxV);
+          }
+          else if (!knownC0)
+          {
+            result = createInterval(makeCBV(width),children[1]->maxV);
+          }
+          else
+          {
+            if(CONSTANTBV::BitVector_Lexicompare(children[0]->maxV, children[1]->maxV) > 0)
+            {
+              result = createInterval(makeCBV(width),children[1]->maxV);
+            }
+            else
+              result = createInterval(makeCBV(width),children[0]->maxV);
+          }
+        }
+      break;
+     }
+
+      case BVEXTRACT: // OVER-APPROXIMATION
+       {
+         if (knownC0) // others are always known..
+         {
+            unsigned shift_amount = *(children[2]->minV);
+
+            CBV clone = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+            while (shift_amount-- > 0)
+            {
+              CONSTANTBV::BitVector_shift_right(clone, 0);
+            }
+
+            //  If the max bit of clone is greater than the width, ok to continue.
+            if (CONSTANTBV::Set_Max(clone) < width)
+            {
+              CBV max = makeCBV(width); // new width.
+              for (unsigned i=0; i < width;i++)
+                 if (CONSTANTBV::BitVector_bit_test(clone, i))
+                    CONSTANTBV::BitVector_Bit_On(max, i);
+
+              result = createInterval(makeCBV(width), max);
+            }
+
+            CONSTANTBV::BitVector_Destroy(clone);
+         }
+         break;
+       }
 
       case BVRIGHTSHIFT: //OVER-APPROXIMATION
         if (knownC0 || knownC1)
@@ -412,6 +632,7 @@ private:
           }
         }
         break;
+      
       case BVPLUS:
         if (knownC0 && knownC1)
         {
@@ -443,6 +664,8 @@ private:
 
         }
         break;
+      
+      // TODO, this is one of the slowest propagators. Check if we can bulk copy over.
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
@@ -485,25 +708,23 @@ private:
             }
           }
         }
+      break;
+     
+      // TODO
+      case BVXOR:
+      case BVOR:
+      case SBVDIV:
+      case SBVREM:
+      case BVLEFTSHIFT:
+      case BVSRSHIFT:
+      case SBVMOD:
+        propagatorNotImplemented++;
         break;
+    
       default:
       {
-        // Debugging!
-
-        bool nonNull = true;
-        // If all the children are known, output 'em.
-        for (size_t i = 0; i < n.Degree(); i++)
-        {
-          if (children[i] == NULL)
-            nonNull = false;
-        }
-
-        if (false && nonNull && n.GetKind() != SYMBOL && n.GetKind() != AND)
-        {
-          std::cerr << n;
-          for (size_t i = 0; i < n.Degree(); i++)
-            children[i]->print();
-        }
+        std::cerr <<  n.GetKind() << std::endl;
+        FatalError("Unhandled");
       }
     }
 
@@ -511,7 +732,10 @@ private:
       result = NULL;
 
     if (result != NULL)
+    {
       result->checkUnsignedInvariant();
+      assert(!unknowable(n.GetKind(), known));
+    }
 
     // result will often be null (which we take to mean the maximum range).
     visited.insert(make_pair(n, result));
