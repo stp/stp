@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define SYMBOLS_H
 
 #include <vector>
-#include "assert.h"
+#include "cassert"
 #include "stp/AST/AST.h"
 
 using std::vector;

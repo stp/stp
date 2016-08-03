@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 #include <map>
 #include <string>
-#include <assert.h>
+#include <cassert>
 #include <iostream>
 #include <set>
 

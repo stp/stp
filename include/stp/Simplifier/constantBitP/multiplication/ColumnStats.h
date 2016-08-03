@@ -27,7 +27,7 @@ THE SOFTWARE.
 #define COLUMNSTATS_H_
 
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include <assert.h>
+#include <cassert>
 #include <ostream>
 using std::endl;
 

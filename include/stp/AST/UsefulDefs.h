@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include <map>
 #include <set>
 #include <algorithm>
-#include <assert.h>
+#include <cassert>
 
 #include "stp/Globals/Globals.h"
 #include "stp/AST/ASTKind.h"
