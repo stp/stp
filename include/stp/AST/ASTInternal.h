@@ -170,6 +170,6 @@ public:
 
   void SetNodeNum(int nn) { _node_num = nn; } 
 
-}; 
+};
 } // end of namespace
 #endif

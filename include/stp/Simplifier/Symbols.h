@@ -67,6 +67,6 @@ class SymbolPtrHasher
 {
 public:
   size_t operator()(const Symbols* n) const { return (size_t)n; };
-}; 
+};
 
 #endif

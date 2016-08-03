@@ -161,7 +161,7 @@ public:
 
   ~AbsRefine_CounterExample() { ClearAllTables(); } 
 
-}; 
+};
 
 class CompleteCounterExample // not copyable
 {

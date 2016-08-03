@@ -215,7 +215,7 @@ public:
       return (size_t)n._int_node_ptr;
       // return (size_t)n.GetNodeNum();
     };
-  }; 
+  };
 
   /*****************************************************************
    * Equality for ASTNode std::unordered_set and std::unordered_map. Returns true iff  *
