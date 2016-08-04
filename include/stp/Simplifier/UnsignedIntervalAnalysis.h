@@ -609,8 +609,8 @@ public:
           result = freshUnsignedInterval(width);
           CONSTANTBV::BitVector_Flip(result->maxV); // make the max zero too.
 
-          bool min_carry = false;
-          bool max_carry = false;
+          bool min_carry;
+          bool max_carry;
 
           for (size_t i = 0; i < children.size(); i++)
           {
@@ -619,6 +619,9 @@ public:
               result = NULL;
               break;
             }
+
+            max_carry =false; 
+            min_carry =false;
 
             CONSTANTBV::BitVector_add(result->maxV, result->maxV,
                                       children[i]->maxV, &max_carry);
