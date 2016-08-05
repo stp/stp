@@ -55,7 +55,7 @@ class ASTNode
   // Equal iff ASTIntNode pointers are the same.
   friend bool operator==(const ASTNode& node1, const ASTNode& node2)
   {
-    return ((size_t)node1._int_node_ptr) == ((size_t)node2._int_node_ptr);
+    return (node1.Hash() == node2.Hash());
   }
 
   friend bool operator!=(const ASTNode& node1, const ASTNode& node2)
@@ -65,7 +65,7 @@ class ASTNode
 
   friend bool operator<(const ASTNode& node1, const ASTNode& node2)
   {
-    return ((size_t)node1._int_node_ptr) < ((size_t)node2._int_node_ptr);
+    return (node1.Hash() < node2.Hash());
   }
 
 public:
@@ -174,7 +174,7 @@ public:
   types GetType(void) const;
 
   // Hash using pointer value of _int_node_ptr.
-  size_t Hash() const { return (size_t)_int_node_ptr; }
+  size_t Hash() const ;
 
   void NFASTPrint(int l, int max, int prefix) const;
 
@@ -212,7 +212,7 @@ public:
   public:
     size_t operator()(const ASTNode& n) const
     {
-      return (size_t)n._int_node_ptr;
+      return n.Hash();
       // return (size_t)n.GetNodeNum();
     };
   };
@@ -227,7 +227,7 @@ public:
   public:
     bool operator()(const ASTNode& n1, const ASTNode& n2) const
     {
-      return (n1._int_node_ptr == n2._int_node_ptr);
+      return (n1.Hash() == n2.Hash());
     }
   };
 
