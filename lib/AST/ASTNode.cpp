@@ -185,6 +185,9 @@ unsigned int ASTNode::GetUnsignedConst() const
   return (unsigned int)*((unsigned int*)n.GetBVConst());
 }
 
+size_t ASTNode::Hash() const { return (_int_node_ptr? _int_node_ptr->node_uid: 0); }
+
+
 void ASTNode::NFASTPrint(int l, int max, int prefix) const
 {
   //****************************************
