@@ -139,7 +139,7 @@ class Tester:
         #construct command
         command = ""
         if not options.novalgrind and random.randint(0, 10) == 0:
-            command += "valgrind -q --leak-check=full  --error-exitcode=173 "
+            command += "valgrind -q --leak-check=full --track-origins=yes  --error-exitcode=173 "
 
         command += options.solver
         command += self.random_options()

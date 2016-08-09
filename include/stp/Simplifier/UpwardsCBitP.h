@@ -81,8 +81,8 @@ private:
   FixedBits* visit(const ASTNode& n, std::map<ASTNode, FixedBits *> &visited)
   {
     {
-      std::map<const ASTNode, FixedBits*>::iterator it;
-      if ((it = visited.find(n)) != visited.end())
+      auto it = visited.find(n);
+      if (it != visited.end())
         return it->second;
     }
 

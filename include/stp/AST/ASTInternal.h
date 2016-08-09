@@ -104,6 +104,9 @@ protected:
    *******************************************************************/
   unsigned int _value_width;
 
+  uint64_t node_uid;
+  static uint64_t node_uid_cntr;
+
   /****************************************************************
    * Protected Member Functions                                   *
    ****************************************************************/
@@ -130,7 +133,7 @@ public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
       : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
-        _index_width(0), _value_width(0)
+        _index_width(0), _value_width(0), node_uid(++node_uid_cntr)
   {
   }
 
@@ -142,7 +145,7 @@ public:
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
         _node_num(int_node._node_num), _index_width(int_node._index_width),
-        _value_width(int_node._value_width)
+        _value_width(int_node._value_width), node_uid(int_node.node_uid)
   {
   }
 
