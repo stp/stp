@@ -254,7 +254,8 @@ public:
             CONSTANTBV::BitVector_Bit_On(result->minV,0);
             CONSTANTBV::BitVector_Empty(result->maxV);
             CONSTANTBV::BitVector_Bit_On(result->maxV,0);
-            break; // result should be 1.
+            CONSTANTBV::BitVector_Destroy(c1Min);
+            break; // result is [1,1] (because we currently evaluate division-by-zero to 1.)
           }            
 
           CONSTANTBV::BitVector_Bit_On(c1Min,0); // if it can be zero, set to one.
