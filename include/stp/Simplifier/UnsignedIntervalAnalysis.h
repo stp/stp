@@ -233,35 +233,72 @@ public:
         } 
         break;
 
-      case BVDIV: // OVER-APPROXIMATION
-        if (knownC1)
+      case BVDIV:
+      {
+        UnsignedInterval * c1;
+        if (!knownC1)
         {
-          // When we're dividing by zero, we know nothing.
-          if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
-          {
-            UnsignedInterval* top = (children[0] == NULL)
-                                    ? freshUnsignedInterval(width)
-                                    : children[0];
-            result = freshUnsignedInterval(width);
-
-            CBV remainder = CONSTANTBV::BitVector_Create(width, true);
-
-            CBV tmp0 = CONSTANTBV::BitVector_Clone(top->minV);
-            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-                result->minV, tmp0, children[1]->maxV, remainder);
-            assert(0 == e);
-            CONSTANTBV::BitVector_Destroy(tmp0);
-
-            tmp0 = CONSTANTBV::BitVector_Clone(top->maxV);
-            e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0,
-                                              children[1]->minV, remainder);
-            assert(0 == e);
-
-            CONSTANTBV::BitVector_Destroy(tmp0);
-            CONSTANTBV::BitVector_Destroy(remainder);
-          }
+          c1 = freshUnsignedInterval(width);
         }
+        else
+          c1 = children[1];
+
+        result = freshUnsignedInterval(width);
+
+        CBV c1Min =  CONSTANTBV::BitVector_Clone(c1->minV);
+        bool bottomChanged = false;
+        if (CONSTANTBV::BitVector_is_empty(c1->minV))
+        {
+          if (CONSTANTBV::BitVector_is_empty(c1->maxV))
+          {
+            CONSTANTBV::BitVector_Bit_On(result->minV,0);
+            CONSTANTBV::BitVector_Empty(result->maxV);
+            CONSTANTBV::BitVector_Bit_On(result->maxV,0);
+            break; // result should be 1.
+          }            
+
+          CONSTANTBV::BitVector_Bit_On(c1Min,0); // if it can be zero, set to one.
+          bottomChanged = true;
+        }
+
+        UnsignedInterval* top = (children[0] == NULL)
+                                ? freshUnsignedInterval(width)
+                                : children[0];
+        result = freshUnsignedInterval(width);
+
+        CBV remainder = CONSTANTBV::BitVector_Create(width, true);
+
+        CBV tmp0 = CONSTANTBV::BitVector_Clone(top->minV);
+        CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+            result->minV, tmp0, c1->maxV, remainder);
+        assert(0 == e);
+        CONSTANTBV::BitVector_Destroy(tmp0);
+
+        tmp0 = CONSTANTBV::BitVector_Clone(top->maxV);
+        e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0,
+                                          c1Min, remainder);
+        assert(0 == e);
+
+        CONSTANTBV::BitVector_Destroy(tmp0);
+        CONSTANTBV::BitVector_Destroy(remainder);
+
+        if (bottomChanged) // might have been zero.
+        {
+          if (CONSTANTBV::BitVector_Lexicompare(result->minV, c1Min) > 0)
+          {
+            CONSTANTBV::BitVector_Copy(result->minV, c1Min); //c1 should still be 1
+          }
+
+          if (CONSTANTBV::BitVector_Lexicompare(result->maxV, c1Min) < 0)
+          {
+            CONSTANTBV::BitVector_Copy(result->maxV, c1Min); //c1 should still be 1
+          }
+
+        }
+        CONSTANTBV::BitVector_Destroy(c1Min);
+
         break;
+      }
 
       case BVMOD: //OVER-APPROXIMATION
         if (knownC1)
@@ -506,7 +543,7 @@ public:
         break;
       }
 
-      case BVAND:
+      case BVAND:// OVER-APPROXIMATION
       {
         if (knownC0 || knownC1)
         {
