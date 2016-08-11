@@ -159,7 +159,7 @@ bool isCommutative(const Kind k)
     case NOR:
     case XOR:
     case IFF:
-    case BVNEG:
+    case BVNOT:
     case NOT:
     case BVUMINUS:
       return true;
@@ -470,7 +470,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       break;
 
     case BVUMINUS:
-    case BVNEG:
+    case BVNOT:
       checkChildrenAreBV(v, n);
       if (n.Degree() != 1)
         FatalError("BVTypeCheck: should have exactly 1 args\n", n);

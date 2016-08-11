@@ -78,12 +78,12 @@ bool PropagateEqualities::searchXOR(const ASTNode& lhs, const ASTNode& rhs)
   {
     bool result =
         searchTerm(lhs[0], nf->CreateTerm(ITE, 1, rhs, lhs[1],
-                                          nf->CreateTerm(BVNEG, 1, lhs[1])));
+                                          nf->CreateTerm(BVNOT, 1, lhs[1])));
 
     if (!result)
       result =
           searchTerm(lhs[1], nf->CreateTerm(ITE, 1, rhs, lhs[0],
-                                            nf->CreateTerm(BVNEG, 1, lhs[0])));
+                                            nf->CreateTerm(BVNOT, 1, lhs[0])));
   }
 
   return result;
@@ -104,8 +104,8 @@ bool PropagateEqualities::searchTerm(const ASTNode& lhs, const ASTNode& rhs)
   if (lhs.GetKind() == BVUMINUS)
     return searchTerm(lhs[0], nf->CreateTerm(BVUMINUS, width, rhs));
 
-  if (lhs.GetKind() == BVNEG)
-    return searchTerm(lhs[0], nf->CreateTerm(BVNEG, width, rhs));
+  if (lhs.GetKind() == BVNOT)
+    return searchTerm(lhs[0], nf->CreateTerm(BVNOT, width, rhs));
 
   if (lhs.GetKind() == BVXOR || lhs.GetKind() == BVPLUS)
     for (size_t i = 0; i < lhs.Degree(); i++)
@@ -229,7 +229,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
         // (XOR (NOT(= (1 v)))  ... )
         const ASTNode& symbol = a[0][0][1];
         const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNEG, 1, a[0][0][0]));
+            ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNOT, 1, a[0][0][0]));
 
         if (simp->UpdateSolverMap(symbol, newN))
         {
@@ -243,7 +243,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
       {
         const ASTNode& symbol = a[1][0][1];
         const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNEG, 1, a[1][0][0]));
+            ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNOT, 1, a[1][0][0]));
 
         if (simp->UpdateSolverMap(symbol, newN))
         {
@@ -258,7 +258,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
 
         const ASTNode& symbol = a[0][1];
         const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[1], nf->CreateTerm(BVNEG, 1, a[0][0]), a[0][0]);
+            ITE, 1, a[1], nf->CreateTerm(BVNOT, 1, a[0][0]), a[0][0]);
 
         if (simp->UpdateSolverMap(symbol, newN))
         {
@@ -271,7 +271,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
       {
         const ASTNode& symbol = a[1][1];
         const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[0], nf->CreateTerm(BVNEG, 1, a[1][0]), a[1][0]);
+            ITE, 1, a[0], nf->CreateTerm(BVNOT, 1, a[1][0]), a[1][0]);
 
         if (simp->UpdateSolverMap(symbol, newN))
         {

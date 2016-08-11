@@ -33,7 +33,7 @@ THE SOFTWARE.
 using stp::Kind;
 
 using stp::SYMBOL;
-using stp::BVNEG;
+using stp::BVNOT;
 using stp::BVMOD;
 using stp::BVUMINUS;
 using stp::BVMULT;
@@ -499,20 +499,20 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
     return ASTFalse;
 
-  if ((k1 == BVNEG && k2 == BVNEG) || (k1 == BVUMINUS && k2 == BVUMINUS))
+  if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
 
   if ((k1 == BVUMINUS && k2 == stp::BVCONST) ||
-      (k1 == BVNEG && k2 == stp::BVCONST))
+      (k1 == BVNOT && k2 == stp::BVCONST))
     return NodeFactory::CreateNode(EQ, in1[0],
                                    NodeFactory::CreateTerm(k1, width, in2));
 
   if ((k2 == BVUMINUS && k1 == stp::BVCONST) ||
-      (k2 == BVNEG && k1 == stp::BVCONST))
+      (k2 == BVNOT && k1 == stp::BVCONST))
     return NodeFactory::CreateNode(EQ, in2[0],
                                    NodeFactory::CreateTerm(k2, width, in1));
 
-  if ((k1 == BVNEG && in1[0] == in2) || (k2 == BVNEG && in2[0] == in1))
+  if ((k1 == BVNOT && in1[0] == in2) || (k2 == BVNOT && in2[0] == in1))
     return ASTFalse;
 
   if (k2 == stp::BVDIV && k1 == stp::BVCONST &&
@@ -684,10 +684,10 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
     }
   }
 
-  if (k1 == BVNEG && k2 == BVUMINUS && in1[0] == in2[0])
+  if (k1 == BVNOT && k2 == BVUMINUS && in1[0] == in2[0])
     return ASTFalse;
 
-  if (k1 == BVUMINUS && k2 == BVNEG && in1[0] == in2[0])
+  if (k1 == BVUMINUS && k2 == BVNOT && in1[0] == in2[0])
     return ASTFalse;
 
   // last resort is to CreateNode
@@ -966,7 +966,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   else if (n1.GetKind() == BVUMINUS && n0.GetKind() == BVPLUS &&
            n0.Degree() == 2 && n1[0] == n0[0])
     result = n0[1];
-  else if (n1.GetKind() == BVNEG && n1[0] == n0)
+  else if (n1.GetKind() == BVNOT && n1[0] == n0)
     result = bm.CreateMaxConst(width);
   else if (n0.GetKind() == stp::BVCONST && n1.GetKind() == BVPLUS &&
            n1.Degree() == 2 && n1[0].GetKind() == stp::BVCONST)
@@ -980,7 +980,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   else if (n1.GetKind() == BVUMINUS &&
            (n0.isConstant() && CONSTANTBV::BitVector_is_full(n0.GetBVConst())))
   {
-    result = NodeFactory::CreateTerm(BVNEG, width, n1[0]);
+    result = NodeFactory::CreateTerm(BVNOT, width, n1[0]);
   }
   else if (n1.GetKind() == BVUMINUS && n0.GetKind() == BVUMINUS)
   {
@@ -1108,9 +1108,9 @@ void SimplifyingNodeFactory::handle_bvand(
 
   if (children.size() == 2)
   {
-    if (children[1].GetKind() == BVNEG && children[1][0] == children[0])
+    if (children[1].GetKind() == BVNOT && children[1][0] == children[0])
       result = bm.CreateZeroConst(width);
-    if (children[0].GetKind() == BVNEG && children[0][0] == children[1])
+    if (children[0].GetKind() == BVNOT && children[0][0] == children[1])
       result = bm.CreateZeroConst(width);
   }
 }
@@ -1309,22 +1309,22 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             ITE, width,
             NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
             children[0], bm.CreateZeroConst(width));
-      else if (width >= 3 && children[0].GetKind() == BVNEG &&
+      else if (width >= 3 && children[0].GetKind() == BVNOT &&
                children[1] == children[0][0])
         result = NodeFactory::CreateTerm(BVRIGHTSHIFT, width,
                                          bm.CreateMaxConst(width),
                                          children[0][0]); // 320 -> 170
-      else if (width >= 3 && children[1].GetKind() == BVNEG &&
+      else if (width >= 3 && children[1].GetKind() == BVNOT &&
                children[1][0] == children[0])
         result = NodeFactory::CreateTerm(BVRIGHTSHIFT, width,
                                          bm.CreateMaxConst(width),
                                          children[1]); // 320 -> 170
       else if (width >= 3 && children[0].GetKind() == BVUMINUS &&
-               children[1].GetKind() == BVNEG &&
+               children[1].GetKind() == BVNOT &&
                children[1][0] == children[0][0])
         result = NodeFactory::CreateTerm(BVDIV, width, bm.CreateOneConst(width),
                                          children[1]); // 402 -> 76
-      else if (width >= 3 && children[0].GetKind() == BVNEG &&
+      else if (width >= 3 && children[0].GetKind() == BVNOT &&
                children[1].GetKind() == BVUMINUS &&
                children[1][0] == children[0][0])
         result = NodeFactory::CreateTerm(
@@ -1382,14 +1382,14 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                                width - 1))
         result = NodeFactory::CreateTerm(BVRIGHTSHIFT, width, children[0],
                                          children[1]);
-      else if (width >= 3 && children[0].GetKind() == BVNEG &&
+      else if (width >= 3 && children[0].GetKind() == BVNOT &&
                children[1].GetKind() == BVUMINUS &&
                children[1][0] == children[0][0])
         result = NodeFactory::CreateTerm(BVSRSHIFT, width, children[0],
                                          children[0][0]); // 414 -> 361
-      else if (children[0].GetKind() == BVNEG)
+      else if (children[0].GetKind() == BVNOT)
         result = NodeFactory::CreateTerm(
-            BVNEG, width, NodeFactory::CreateTerm(BVSRSHIFT, width,
+            BVNOT, width, NodeFactory::CreateTerm(BVSRSHIFT, width,
                                                   children[0][0], children[1]));
     }
     break;
@@ -1437,9 +1437,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
           result = children[1];
 
-        if (children[1].GetKind() == BVNEG && children[0] == children[1][0])
+        if (children[1].GetKind() == BVNOT && children[0] == children[1][0])
           result = bm.CreateMaxConst(width);
-        if (children[0].GetKind() == BVNEG && children[1] == children[0][0])
+        if (children[0].GetKind() == BVNOT && children[1] == children[0][0])
           result = bm.CreateMaxConst(width);
       }
     }
@@ -1460,22 +1460,22 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
         if (children[1].isConstant() &&
             CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
-          result = NodeFactory::CreateTerm(BVNEG, width, children[0]);
+          result = NodeFactory::CreateTerm(BVNOT, width, children[0]);
 
         if (children[0].isConstant() &&
             CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
-          result = NodeFactory::CreateTerm(BVNEG, width, children[1]);
+          result = NodeFactory::CreateTerm(BVNOT, width, children[1]);
 
-        if (children[1].GetKind() == BVNEG)
+        if (children[1].GetKind() == BVNOT)
         {
           result = NodeFactory::CreateTerm(
-              BVNEG, width, NodeFactory::CreateTerm(BVXOR, width, children[0],
+              BVNOT, width, NodeFactory::CreateTerm(BVXOR, width, children[0],
                                                     children[1][0]));
         }
-        else if (children[0].GetKind() == BVNEG)
+        else if (children[0].GetKind() == BVNOT)
         {
           result = NodeFactory::CreateTerm(
-              BVNEG, width, NodeFactory::CreateTerm(BVXOR, width, children[1],
+              BVNOT, width, NodeFactory::CreateTerm(BVXOR, width, children[1],
                                                     children[0][0]));
         }
       }
@@ -1495,8 +1495,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       break;
     }
 
-    case BVNEG:
-      if (children[0].GetKind() == BVNEG)
+    case BVNOT:
+      if (children[0].GetKind() == BVNOT)
         result = children[0][0];
       if (children[0].GetKind() == BVPLUS && children[0].Degree() == 2 &&
           children[0][0].GetKind() == stp::BVCONST &&
@@ -1505,7 +1505,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       if (children[0].GetKind() == BVUMINUS)
         result = NodeFactory::CreateTerm(BVPLUS, width, children[0][0],
                                          bm.CreateMaxConst(width));
-      if (children[0].GetKind() == BVMOD && children[0][0].GetKind() == BVNEG &&
+      if (children[0].GetKind() == BVMOD && children[0][0].GetKind() == BVNOT &&
           children[0][1].GetKind() == BVUMINUS &&
           children[0][1][0] == children[0][0][0])
         result = children[0][0][0];
@@ -1520,8 +1520,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (children[0].GetKind() == BVPLUS && children[0].Degree() == 2 &&
                children[0][0].GetKind() == stp::BVCONST &&
                children[0][0] == bm.CreateOneConst(width))
-        result = NodeFactory::CreateTerm(BVNEG, width, children[0][1]);
-      else if (children[0].GetKind() == BVNEG)
+        result = NodeFactory::CreateTerm(BVNOT, width, children[0][1]);
+      else if (children[0].GetKind() == BVNOT)
         result = NodeFactory::CreateTerm(BVPLUS, width, children[0][0],
                                          bm.CreateOneConst(width));
       else if (children[0].GetKind() == stp::BVSX &&
@@ -1615,11 +1615,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                children[1][0] == children[0])
         result = bm.CreateZeroConst(width);
 #if 0
-    else if ( width >= 4 && children[0].GetKind() == BVNEG && children[1] == children[0][0] )
+    else if ( width >= 4 && children[0].GetKind() == BVNOT && children[1] == children[0][0] )
       result = bm.CreateTerm(SBVMOD,width,max,children[0][0]);//9759 -> 542 | 4842 ms
-    else if ( width >= 4 && children[1].GetKind() == BVNEG && children[1][0] == children[0] )
+    else if ( width >= 4 && children[1].GetKind() == BVNOT && children[1][0] == children[0] )
       result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9759 -> 542 | 4005 ms
-    else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0] )
+    else if ( width >= 4 &&  children[0].GetKind() == BVNOT && children[1].GetKind() == BVUMINUS && children[1][0] == children[0][0] )
       result =  bm.CreateTerm(SBVMOD,width,max,children[1]);//9807 -> 674 | 2962 ms
 #endif
     }
@@ -1654,7 +1654,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
             bm.CreateOneConst(width), bm.CreateZeroConst(width));
       else if (bm.UserFlags.division_by_zero_returns_one_flag && width >= 2 &&
-               children[0].GetKind() == BVNEG &&
+               children[0].GetKind() == BVNOT &&
                children[1].GetKind() == BVUMINUS &&
                children[1][0] == children[0][0])
         result = NodeFactory::CreateTerm(
@@ -1714,9 +1714,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                children[0][0] == children[1])
         result = bm.CreateZeroConst(width);
 #if 0
-    else if ( width >= 4 &&  children[0].GetKind() == BVNEG && children[1] == children[0][0] )
+    else if ( width >= 4 &&  children[0].GetKind() == BVNOT && children[1] == children[0][0] )
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[0][0]));//9350 -> 624 | 3072 ms
-    else if ( width >= 4 &&  children[1].GetKind() == BVNEG && children[1][0] == children[0] )
+    else if ( width >= 4 &&  children[1].GetKind() == BVNOT && children[1][0] == children[0] )
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVMOD,width,one,children[1]));//9350 -> 624 | 2402 ms
     else if ( width >= 4 &&  children[0].GetKind() == BVUMINUS && children[1] == max)
       result =  bm.CreateTerm(BVUMINUS,width,bm.CreateTerm(SBVREM,width,children[0][0],children[1]));//123 -> 83 | 1600 ms
@@ -1745,7 +1745,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
       const ASTNode one = bm.CreateOneConst(width);
 
-      if (children[0].GetKind() == BVNEG && children[1].GetKind() == BVUMINUS &&
+      if (children[0].GetKind() == BVNOT && children[1].GetKind() == BVUMINUS &&
           children[1][0] == children[0][0])
         result = children[0];
 
@@ -1757,13 +1757,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             ITE, width, NodeFactory::CreateNode(EQ, children[1], one),
             bm.CreateZeroConst(width), one);
 #if 0
-      if ( width >= 3 && children[0].GetKind() == BVNEG && children[1] == children[0][0] )
+      if ( width >= 3 && children[0].GetKind() == BVNOT && children[1] == children[0][0] )
         result =  NodeFactory::CreateTerm(BVMOD,width,bm.CreateMaxConst(width),children[0][0]);//3285 -> 3113
 
-      if ( width >= 3 && children[1].GetKind() == BVNEG && children[1][0] == children[0] )
+      if ( width >= 3 && children[1].GetKind() == BVNOT && children[1][0] == children[0] )
         result =  NodeFactory::CreateTerm(BVMOD,width,bm.CreateMaxConst(width),children[1]);//3285 -> 3113
 
-      if ( width >= 4 && children[0].GetKind() == BVUMINUS && children[1].GetKind() == BVNEG && children[1][0] == children[0][0] )
+      if ( width >= 4 && children[0].GetKind() == BVUMINUS && children[1].GetKind() == BVNOT && children[1][0] == children[0][0] )
         result  =   NodeFactory::CreateTerm(SBVREM,width,one,children[1]); //8883 -> 206 | 1566 ms
 #endif
     }

@@ -745,7 +745,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 |      BVNEG_TOK Expr 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2));
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
   delete $2;
 }

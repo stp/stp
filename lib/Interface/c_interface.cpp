@@ -1228,7 +1228,7 @@ Expr vc_bvNotExpr(VC vc, Expr ccc)
   stp::ASTNode* a = (stp::ASTNode*)ccc;
 
   assert(BVTypeCheck(*a));
-  node o = b->CreateTerm(stp::BVNEG, a->GetValueWidth(), *a);
+  node o = b->CreateTerm(stp::BVNOT, a->GetValueWidth(), *a);
   assert(BVTypeCheck(o));
   stp::ASTNode* output = new node(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);

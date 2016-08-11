@@ -107,7 +107,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       }
       break;
     }
-    case BVNEG:
+    case BVNOT:
     {
       output = CONSTANTBV::BitVector_Create(inputwidth, true);
       CONSTANTBV::Set_Complement(output, tmp0);

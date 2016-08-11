@@ -936,7 +936,7 @@ TERMID_TOK
 {
   //this is the BVNEG (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2));
+  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
   GlobalParserInterface->deleteNode( $2);
 }
@@ -980,8 +980,8 @@ TERMID_TOK
   GlobalParserInterface->nf->CreateTerm( BVOR, width,
     GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3),
       GlobalParserInterface->nf->CreateTerm(BVAND, width,
-        GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2),
-        GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$3)
+        GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2),
+        GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$3)
       )
     )
   );
@@ -1072,7 +1072,7 @@ TERMID_TOK
 |  BVNAND_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
+  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   $$ = n;
   GlobalParserInterface->deleteNode( $2);
   GlobalParserInterface->deleteNode( $3);
@@ -1080,7 +1080,7 @@ TERMID_TOK
 |  BVNOR_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3))); 
+  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3))); 
   $$ = n;
   GlobalParserInterface->deleteNode( $2);
   GlobalParserInterface->deleteNode( $3);

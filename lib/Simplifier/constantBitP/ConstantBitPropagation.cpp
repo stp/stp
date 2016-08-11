@@ -728,7 +728,7 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(stp::STPMgr * mgr, co
       MAPTFN(EQ, bvEqualsBothWays)
       MAPTFN(IMPLIES, bvImpliesBothWays)
       MAPTFN(NOT, bvNotBothWays)
-      MAPTFN(BVNEG, bvNotBothWays)
+      MAPTFN(BVNOT, bvNotBothWays)
 
       // OTHER
       MAPTFN(BVZX, bvZeroExtendBothWays)

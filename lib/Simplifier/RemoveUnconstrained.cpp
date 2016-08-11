@@ -330,7 +330,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
 
       case BVUMINUS:
-      case BVNEG:
+      case BVNOT:
       {
         assert(numberOfChildren == 1);
         ASTNode v = replaceParentWithFresh(muteParent, variable_array);

@@ -2087,7 +2087,7 @@ void unit_test()
   // commutative matching.
   ASTVec c;
   c.push_back(v);
-  ASTNode not_v = create(stp::BVNEG, c);
+  ASTNode not_v = create(stp::BVNOT, c);
   ASTNode neg_v = create(stp::BVUMINUS, c);
 
   ASTNode plus_v = create(BVPLUS, not_v, neg_v);
@@ -2095,7 +2095,7 @@ void unit_test()
   c.clear();
   c.push_back(w);
   ASTNode neg_w = create(stp::BVUMINUS, c);
-  ASTNode not_w = create(stp::BVNEG, c);
+  ASTNode not_w = create(stp::BVNOT, c);
   ASTNode plus_w = create(BVPLUS, not_w, neg_w);
 
   ASTNodeMap sub;

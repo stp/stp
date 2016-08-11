@@ -241,8 +241,8 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
       return "bvurem";
     case BVMULT:
       return "bvmul";
-    case BVNEG:
-      return "bvnot"; // CONFUSSSSINNG. (1/2)
+    case BVNOT:
+      return "bvnot"; 
     case BVPLUS:
       return "bvadd";
     case BVRIGHTSHIFT:
@@ -250,7 +250,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVSRSHIFT:
       return "bvashr"; // arithmetic.
     case BVUMINUS:
-      return "bvneg"; // CONFUSSSSINNG. (2/2)
+      return "bvneg"; 
     case EQ:
       return "=";
     case READ:

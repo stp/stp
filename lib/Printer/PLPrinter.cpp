@@ -73,7 +73,7 @@ string functionToCVCName(const Kind k)
       return "<=>";
     case IMPLIES:
       return "=>";
-    case BVNEG:
+    case BVNOT:
       return "~";
     case EQ:
       return "=";
@@ -165,7 +165,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize, STPM
       break;
     case BVUMINUS:
     case NOT:
-    case BVNEG:
+    case BVNOT:
       assert(1 == c.size());
       os << "( ";
       os << functionToCVCName(kind);

@@ -26,7 +26,7 @@ SYMBOL		0	0	Term	Form
 
 # These always produce terms
 BVCONST		0	0	Term
-BVNEG		1	1	Term
+BVNOT		1	1	Term
 BVCONCAT	2	-	Term
 BVOR		1	-	Term
 BVAND		1	-	Term

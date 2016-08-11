@@ -638,7 +638,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
   const unsigned int num_bits = term.GetValueWidth();
   switch (k)
   {
-    case BVNEG:
+    case BVNOT:
     {
       // bitwise complement
       const BBNodeVec& bbkids = BBTerm(term[0], support);

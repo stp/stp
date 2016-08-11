@@ -394,7 +394,7 @@ enum exprkind_t
   UNDEFINED,
   SYMBOL,
   BVCONST,
-  BVNEG,
+  BVNOT,
   BVCONCAT,
   BVOR,
   BVAND,

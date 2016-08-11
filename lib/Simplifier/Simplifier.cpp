@@ -2204,7 +2204,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         case BVUMINUS:
           output = a0[0];
           break;
-        case BVNEG:
+        case BVNOT:
         {
           output = nf->CreateTerm(BVPLUS, inputValueWidth, a0[0], one);
           break;
@@ -2448,13 +2448,13 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
               break;
             }
 #endif
-        case BVNEG:
+        case BVNOT:
         {
           // (~t)[i:j] <==> ~(t[i:j])
           ASTNode t = a0[0];
           t = SimplifyTerm(nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j),
                            VarConstMap);
-          output = nf->CreateTerm(BVNEG, inputValueWidth, t);
+          output = nf->CreateTerm(BVNOT, inputValueWidth, t);
           break;
         }
         // case BVSX:{ //(BVSX(t,n)[i:j] <==> BVSX(t,i+1), if n
@@ -2499,7 +2499,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       break;
     }
 
-    case BVNEG:
+    case BVNOT:
     {
       const ASTNode& a0 = inputterm[0];
 
@@ -2507,16 +2507,16 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       switch (a0.GetKind())
       {
-        case BVNEG:
+        case BVNOT:
           output = a0[0];
           break;
         case ITE:
           if (a0[1].isConstant() && a0[2].isConstant())
           {
             ASTNode t =
-                SimplifyTerm(nf->CreateTerm(BVNEG, inputValueWidth, a0[1]));
+                SimplifyTerm(nf->CreateTerm(BVNOT, inputValueWidth, a0[1]));
             ASTNode f =
-                SimplifyTerm(nf->CreateTerm(BVNEG, inputValueWidth, a0[2]));
+                SimplifyTerm(nf->CreateTerm(BVNOT, inputValueWidth, a0[2]));
             output = nf->CreateTerm(ITE, inputValueWidth, a0[0],
                                     BVConstEvaluator(t), BVConstEvaluator(f));
             break;
@@ -2562,7 +2562,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       switch (a0.GetKind())
       {
-        case BVNEG:
+        case BVNOT:
           output =
               nf->CreateTerm(a0.GetKind(), inputValueWidth,
                              nf->CreateTerm(BVSX, inputValueWidth, a0[0], a1));
@@ -2700,7 +2700,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
         // nb: There's no guarantee that the bvneg will immediately follow
         // the thing it's negating if the degree > 2.
-        if (o.size() > 0 && aaa.GetKind() == BVNEG && o.back() == aaa[0])
+        if (o.size() > 0 && aaa.GetKind() == BVNOT && o.back() == aaa[0])
         {
           output = annihilator;
           UpdateSimplifyMap(inputterm, output, false, VarConstMap);
@@ -3058,6 +3058,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       output = inputterm;
       break;
     }
+
+    case BVSRSHIFT:
+      break;
+
 
     case READ:
     {

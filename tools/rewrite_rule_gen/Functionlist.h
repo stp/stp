@@ -159,7 +159,7 @@ private:
       if (functions[i] == mgr->ASTUndefined)
         continue;
 
-      functions.push_back(nf->CreateTerm(stp::BVNEG, bits, functions[i]));
+      functions.push_back(nf->CreateTerm(stp::BVNOT, bits, functions[i]));
       functions.push_back(nf->CreateTerm(stp::BVUMINUS, bits, functions[i]));
     }
   }

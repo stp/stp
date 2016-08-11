@@ -130,7 +130,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       C_Print1(os, c[0], indentation, letize,bm);
       os << ") " << endl;
       break;
-    case BVNEG:
+    case BVNOT:
       os << " ~(";
       C_Print1(os, c[0], indentation, letize,bm);
       os << ")";
