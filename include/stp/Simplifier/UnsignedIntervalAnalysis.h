@@ -679,44 +679,13 @@ public:
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
-          result = freshUnsignedInterval(n.GetValueWidth());
+          UnsignedInterval* c0 = knownC0 ? children[0]:  freshUnsignedInterval(n[0].GetValueWidth());
+          UnsignedInterval* c1 = knownC1 ? children[1]:  freshUnsignedInterval(n[1].GetValueWidth());
+          
+          CBV min = CONSTANTBV::BitVector_Concat(c1->minV,c0->minV);
+          CBV max = CONSTANTBV::BitVector_Concat(c1->maxV,c0->maxV);
 
-          // Copy in the lower part.
-          if (knownC1)
-          {
-            // Copy in the minimum and maximum.
-            for (unsigned i = 0; i < n[1].GetValueWidth(); i++)
-            {
-              if (CONSTANTBV::BitVector_bit_test(children[1]->maxV, i))
-                CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->maxV, i);
-
-              if (CONSTANTBV::BitVector_bit_test(children[1]->minV, i))
-                CONSTANTBV::BitVector_Bit_On(result->minV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->minV, i);
-            }
-          }
-
-          if (knownC0)
-          {
-            // Copy in the minimum and maximum.
-            for (unsigned i = n[1].GetValueWidth(); i < n.GetValueWidth(); i++)
-            {
-              if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                                 i - n[1].GetValueWidth()))
-                CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->maxV, i);
-
-              if (CONSTANTBV::BitVector_bit_test(children[0]->minV,
-                                                 i - n[1].GetValueWidth()))
-                CONSTANTBV::BitVector_Bit_On(result->minV, i);
-              else
-                CONSTANTBV::BitVector_Bit_Off(result->minV, i);
-            }
-          }
+          result = createInterval(min,max);
         }
       break;
      
