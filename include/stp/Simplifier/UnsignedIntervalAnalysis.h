@@ -681,8 +681,8 @@ public:
           UnsignedInterval* c0 = knownC0 ? children[0]:  freshUnsignedInterval(n[0].GetValueWidth());
           UnsignedInterval* c1 = knownC1 ? children[1]:  freshUnsignedInterval(n[1].GetValueWidth());
           
-          CBV min = CONSTANTBV::BitVector_Concat(c1->minV,c0->minV);
-          CBV max = CONSTANTBV::BitVector_Concat(c1->maxV,c0->maxV);
+          CBV min = CONSTANTBV::BitVector_Concat(c0->minV,c1->minV);
+          CBV max = CONSTANTBV::BitVector_Concat(c0->maxV,c1->maxV);
 
           likeAutoPtr.push_back(min);
           likeAutoPtr.push_back(max);
