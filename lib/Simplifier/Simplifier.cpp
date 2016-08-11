@@ -3054,8 +3054,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case BVXNOR:
     case BVNAND:
     case BVNOR:
-    case BVVARSHIFT:
-    case BVSRSHIFT:
     {
       output = inputterm;
       break;

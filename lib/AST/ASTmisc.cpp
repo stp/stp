@@ -410,7 +410,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case BVLEFTSHIFT:
     case BVRIGHTSHIFT:
     case BVSRSHIFT:
-    case BVVARSHIFT:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
     // run on.
