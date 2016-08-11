@@ -409,7 +409,6 @@ enum exprkind_t
   BVPLUS,
   BVSUB,
   BVUMINUS,
-  BVMULTINVERSE,
   BVMULT,
   BVDIV,
   BVMOD,
