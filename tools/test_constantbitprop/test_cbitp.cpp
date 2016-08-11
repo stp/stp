@@ -31,32 +31,27 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
+
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
-#include "stp/AST/AST.h"
 
+#include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Sat/MinisatCore.h"
 #include "stp/STPManager/STP.h"
 #include "stp/cpp_interface.h"
-
 #include "stp/Util/StopWatch.h"
 #include "stp/Util/Relations.h"
 #include "stp/Util/BBAsProp.h"
 #include "stp/Util/Functions.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
-
-namespace simplifier
-{
-namespace constantBitP
-{
-
 using namespace stp;
+
+const bool debug_printAll = false;
 
 STPMgr* mgr;
 bool isDivide = false;
@@ -81,8 +76,6 @@ void setV(FixedBits& result, int id, int val)
       break;
   }
 }
-
-const bool debug_printAll = false;
 
 void print(const vector<FixedBits*> children, const FixedBits& output, Kind k)
 {
@@ -421,13 +414,13 @@ void some_random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 {
   vector<FixedBits*> children;
 
-  int conflicts = 0;
+  //int conflicts = 0;
   int initial = 0;
   int transferC = 0;
   int max = 0;
 
-  int count = 50;
-  const int width = 32;
+  int count = 1000;
+  const int width = 64;
 
   Relations r(count, width, kind, mgr, prob);
 
@@ -542,42 +535,40 @@ void newExhaustive(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
   for (unsigned i = 0; i < children.size(); i++)
     delete children[i];
 }
-}
-}
 
 Result multiply(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvMultiplyBothWays(children, output, simplifier::constantBitP::mgr, 0);
+  return bvMultiplyBothWays(children, output, mgr, 0);
 }
 
 Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvUnsignedDivisionBothWays(children, output,
-                                    simplifier::constantBitP::mgr);
+                                    mgr);
 }
 
 Result signedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvSignedDivisionBothWays(children, output,
-                                  simplifier::constantBitP::mgr);
+                                  mgr);
 }
 
 Result signedRemainder(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvSignedRemainderBothWays(children, output,
-                                   simplifier::constantBitP::mgr);
+                                   mgr);
 }
 
 Result signedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvSignedModulusBothWays(children, output,
-                                 simplifier::constantBitP::mgr);
+                                 mgr);
 }
 
 Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
   return bvUnsignedModulusBothWays(children, output,
-                                   simplifier::constantBitP::mgr);
+                                   mgr);
 }
 
 struct D
@@ -673,7 +664,7 @@ void exhaustively_check(const int bitwidth, Kind k,
     }
 
     bool max_conflict = true;
-    for (int j = 0; j < list.size(); j++)
+    for (unsigned j = 0; j < list.size(); j++)
     {
       D& d = list[j];
       if (children[0]->unsignedHolds(d.a) && children[1]->unsignedHolds(d.b) &&
@@ -754,7 +745,7 @@ void exhaustively_check(const int bitwidth, Kind k,
         FatalError("Third");
     }
   }
-  for (int i = 0; i < children.size(); i++)
+  for (unsigned i = 0; i < children.size(); i++)
     delete children[i];
 
   cerr << std::setprecision(1) << std::fixed << "& "
@@ -771,6 +762,11 @@ void random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kin
   some_random_tests(transfer, kind, 5);
   some_random_tests(transfer, kind, 50);
   cerr << "\\\\";
+}
+
+void single_test()
+{
+  random_tests(&unsignedModulus, BVMOD);
 }
 
 void random_tests()
@@ -866,7 +862,7 @@ void check_bvminus_bvnot(const int bits)
   exhaustive(&bvUnaryMinusBothWays, signature);
 
   // BVNOT --- Same function as NOT.
-  signature.kind = BVNEG;
+  signature.kind = BVNOT;
   exhaustive(&bvNotBothWays, signature);
 }
 
@@ -1062,7 +1058,7 @@ void check_bvdiv_mod_mult(const int bits)
 
 void exhaustive_checks()
 {
-  ostream& output = cerr;
+  //ostream& output = cerr;
   const int bits = 5;
   const int exhaustive_bits = 5;
 
@@ -1131,13 +1127,12 @@ int main(void)
   mgr->UserFlags.disableSimplifications();
   Cpp_interface interface(*mgr);
 
-  // Add had a defect effecting bithWidth > 90.
-  // Shifting had a defect effecting bitWidth > 64.
   random_tests();
 
-  //note, originaly the random was not performed, maybe it messed
-  //up the state and make the exhaustive check fail :O Never tested.
-  exhaustive_checks();
+  //single_test();
+
+  //TODO BBasProp required for this.
+  //exhaustive_checks();
   cout << "Done" << endl;
 
   return 1;
