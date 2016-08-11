@@ -675,7 +675,6 @@ public:
         }
         break;
       
-      // TODO, this is one of the slowest propagators. Check if we can bulk copy over.
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
@@ -684,6 +683,9 @@ public:
           
           CBV min = CONSTANTBV::BitVector_Concat(c1->minV,c0->minV);
           CBV max = CONSTANTBV::BitVector_Concat(c1->maxV,c0->maxV);
+
+          likeAutoPtr.push_back(min);
+          likeAutoPtr.push_back(max);
 
           result = createInterval(min,max);
         }
