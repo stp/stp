@@ -113,7 +113,7 @@ class TestSTP(unittest.TestCase):
         a, b, c = s.bitvecs('a b c')
         s.add(a != b, a != c, b != c)
         self.assertTrue(s.check(s.or_(a + b == 1, a + c == 1)))
-        self.assertTrue(s['a'] + s['b'] == 1 or s['a'] + s['c'] == 1)
+        self.assertTrue((s['a'] + s['b'])%(2**32) == 1 or (s['a'] + s['c'])%(2**32) == 1)
 
     def test_ast(self):
         models = [
