@@ -57,9 +57,9 @@ using simplifier::constantBitP::FixedBits;
 using simplifier::constantBitP::NodeToFixedBitsMap;
 using std::make_pair;
 
-#define BBNodeVec vector<BBNode>
-#define BBNodeVecMap std::map<ASTNode, vector<BBNode>>
-#define BBNodeSet std::set<BBNode>
+typedef vector<BBNode> BBNodeVec;
+typedef std::map<ASTNode, vector<BBNode>> BBNodeVecMap;
+typedef std::set<BBNode> BBNodeSet;
 
 vector<BBNodeAIG> _empty_BBNodeAIGVec;
 
