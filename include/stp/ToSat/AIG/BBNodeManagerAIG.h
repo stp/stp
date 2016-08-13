@@ -54,7 +54,6 @@ public:
 
   // Map from symbols to their AIG nodes.
   typedef std::map<ASTNode, vector<BBNodeAIG>> SymbolToBBNode;
-
   SymbolToBBNode symbolToBBNode;
 
   int totalNumberOfNodes()
@@ -116,11 +115,17 @@ public:
     aigMgr = NULL;
   }
 
-  ~BBNodeManagerAIG() { stop(); }
+  ~BBNodeManagerAIG() {
+    stop();
+  }
 
-  BBNodeAIG getTrue() { return BBNodeAIG(Aig_ManConst1(aigMgr)); }
+  BBNodeAIG getTrue() {
+    return BBNodeAIG(Aig_ManConst1(aigMgr));
+  }
 
-  BBNodeAIG getFalse() { return BBNodeAIG(Aig_ManConst0(aigMgr)); }
+  BBNodeAIG getFalse() {
+    return BBNodeAIG(Aig_ManConst0(aigMgr));
+  }
 
   // The same symbol always needs to return the same AIG node,
   // if it doesn't you will get the wrong answer.
