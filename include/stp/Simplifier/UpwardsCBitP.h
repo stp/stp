@@ -36,8 +36,6 @@ THE SOFTWARE.
 #include <map>
 #include <iostream>
 
-
-
 namespace stp
 {
 using simplifier::constantBitP::FixedBits;
