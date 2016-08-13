@@ -454,7 +454,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::updateTerm(const ASTNode& n,
 template <class BBNode, class BBNodeManagerT>
 bool BitBlaster<BBNode, BBNodeManagerT>::isConstant(const BBNodeVec& v)
 {
-  for (int i = 0; i < v.size(); i++)
+  for (unsigned i = 0; i < v.size(); i++)
   {
     if (v[i] != nf->getTrue() && v[i] != nf->getFalse())
       return false;
@@ -477,7 +477,7 @@ ASTNode BitBlaster<BBNode, BBNodeManagerT>::getConstant(const BBNodeVec& v,
 
   CBV bv = CONSTANTBV::BitVector_Create(v.size(), true);
 
-  for (int i = 0; i < v.size(); i++)
+  for (unsigned i = 0; i < v.size(); i++)
     if (v[i] == nf->getTrue())
       CONSTANTBV::BitVector_Bit_On(bv, i);
 
@@ -831,14 +831,14 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       {
         // Add all the children up using an addition network.
         vector<BBNodeVec> results;
-        for (int i = 0; i < term.Degree(); i++)
+        for (unsigned i = 0; i < term.Degree(); i++)
           results.push_back(BBTerm(term[i], support));
 
         const int bitWidth = term[0].GetValueWidth();
         vector<list<BBNode>> products(bitWidth + 1);
         for (int i = 0; i < bitWidth; i++)
         {
-          for (int j = 0; j < results.size(); j++)
+          for (unsigned j = 0; j < results.size(); j++)
             products[i].push_back(results[j][i]);
         }
 
@@ -2569,7 +2569,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
 
   // check if y is already zero.
   bool isZero = true;
-  for (int i = 0; i < rwidth; i++)
+  for (unsigned i = 0; i < rwidth; i++)
     if (y[i] != nf->getFalse())
     {
       isZero = false;
