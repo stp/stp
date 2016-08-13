@@ -33,10 +33,6 @@ THE SOFTWARE.
 //#include "stp/STPManager/STPManager.h"
 //#include "stp/Simplifier/Simplifier.h"
 
-#ifdef _MSC_VER
-#include <compdep.h>
-#endif
-
 #include <iostream>
 
 namespace stp

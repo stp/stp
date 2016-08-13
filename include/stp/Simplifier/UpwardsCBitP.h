@@ -32,13 +32,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include <map>
 #include "stp/Simplifier/StrengthReduction.h"
-
-#ifdef _MSC_VER
-#include <compdep.h>
-#endif
-
+#include <map>
 #include <iostream>
 
 

@@ -31,12 +31,6 @@ THE SOFTWARE.
 // FIXME: External library
 #include "extlib-abc/cnf_short.h"
 
-#ifdef _MSC_VER
-#include <compdep.h>
-#else
-#include <signal.h>
-#endif
-
 using std::cout;
 using std::ostream;
 using std::stringstream;
@@ -1536,7 +1530,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
   unsigned* bv = a->GetBVConst();
 
   char* str_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
-  unsigned long long int tmp = strtoull(str_bv, NULL, 2);
+  unsigned long long int tmp = std::strtoull(str_bv, NULL, 2);
   CONSTANTBV::BitVector_Dispose((unsigned char*)str_bv);
   return tmp;
 }

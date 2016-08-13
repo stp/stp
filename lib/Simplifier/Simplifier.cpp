@@ -27,10 +27,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 
-#ifdef _MSC_VER
-#include <compdep.h>
-#endif
-
 namespace stp
 {
 

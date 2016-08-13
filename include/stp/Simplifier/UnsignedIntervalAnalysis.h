@@ -37,13 +37,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include <map>
-using std::map;
-
-#ifdef _MSC_VER
-#include <compdep.h>
-#endif
-
 #include <iostream>
+
+using std::map;
 
 namespace stp
 {

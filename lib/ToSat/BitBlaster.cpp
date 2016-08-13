@@ -32,10 +32,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 
-#ifdef _MSC_VER
-#include <compdep.h>
-#endif
-
 namespace stp
 {
 
