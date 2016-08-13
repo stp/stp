@@ -1726,7 +1726,7 @@ ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k,
   assert(b.isConstant());
   assert(k == BVSRSHIFT);
 
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
+  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
   {
     ASTNode top = bm.CreateBVConst(32, width - 1);
     return nf->CreateTerm(BVSX, width,
@@ -1760,7 +1760,7 @@ ASTNode Simplifier::convertKnownShiftAmount(const Kind k,
   assert(b.isConstant());
   assert(k == BVLEFTSHIFT || BVRIGHTSHIFT == k);
 
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + log2(width))
+  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
   {
     // Intended to remove shifts by very large amounts
     // that don't fit into the unsigned.  at thhe start

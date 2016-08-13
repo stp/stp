@@ -610,7 +610,7 @@ public:
             children[1] = freshUnsignedInterval(width);
 
           // The maximum result is the maximum >> (minimum shift).
-          if (CONSTANTBV::Set_Max(children[1]->minV) > 1 + log2(width) ||
+          if (CONSTANTBV::Set_Max(children[1]->minV) > 1 + std::log2(width) ||
               *(children[1]->minV) > width)
           {
             // The maximum is zero.
@@ -627,7 +627,7 @@ public:
           }
 
           // The minimum result is the minimum >> (maximum shift).
-          if (CONSTANTBV::Set_Max(children[1]->maxV) > 1 + log2(width) ||
+          if (CONSTANTBV::Set_Max(children[1]->maxV) > 1 + std::log2(width) ||
               *(children[1]->maxV) > width)
           {
             // The mimimum is zero. (which it's set to by default.).

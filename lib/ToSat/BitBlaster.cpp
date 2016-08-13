@@ -669,7 +669,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       // 8.2 so round up to 9.
 
       const unsigned width = bbarg1.size();
-      const unsigned log2Width = (unsigned)log2(width) + 1;
+      const unsigned log2Width = (unsigned)std::log2(width) + 1;
 
       if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
         for (unsigned int i = 0; i < log2Width; i++)
