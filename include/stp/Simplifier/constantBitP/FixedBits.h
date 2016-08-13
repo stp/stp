@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew, Mate Soos
  *
