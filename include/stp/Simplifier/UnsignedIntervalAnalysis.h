@@ -156,11 +156,11 @@ public:
         result = createInterval(cbv, cbv);
       }
       break;
-      
+
       case TRUE:
         result = createInterval(littleOne, littleOne);
         break;
-      
+
       case FALSE:
         result = createInterval(littleZero, littleZero);
         break;
@@ -185,10 +185,13 @@ public:
                                                  children[1]->maxV) > 0))
             result = createInterval(littleZero, littleZero);
 
-          else if (children[0]->isConstant() && 
-                children[1]->isConstant() && 
-                CONSTANTBV::BitVector_Lexicompare(children[0]->minV, children[1]->minV) ==0)
+          else if (
+              children[0]->isConstant() &&
+              children[1]->isConstant() &&
+              CONSTANTBV::BitVector_Lexicompare(children[0]->minV, children[1]->minV) == 0
+          ) {
             result = createInterval(littleOne, littleOne);
+          }
         }
         break;
 
@@ -221,16 +224,16 @@ public:
               assert(result->isConstant());
 
               if ((c0Min != c1Min) != CONSTANTBV::BitVector_bit_test(result->minV,0))
-                result = createInterval(littleOne, littleOne);              
+                result = createInterval(littleOne, littleOne);
               else
-                result = createInterval(littleZero, littleZero);              
+                result = createInterval(littleZero, littleZero);
 
 //              std::cerr << c0Min << c1Min << CONSTANTBV::BitVector_bit_test(result->minV,0) << std::endl;
             }
             else
               result = freshUnsignedInterval(1);
           }
-        } 
+        }
         break;
 
       case BVDIV:
@@ -256,7 +259,7 @@ public:
             CONSTANTBV::BitVector_Bit_On(result->maxV,0);
             CONSTANTBV::BitVector_Destroy(c1Min);
             break; // result is [1,1] (because we currently evaluate division-by-zero to 1.)
-          }            
+          }
 
           CONSTANTBV::BitVector_Bit_On(c1Min,0); // if it can be zero, set to one.
           bottomChanged = true;
@@ -639,7 +642,7 @@ public:
           }
         }
         break;
-      
+
       case BVPLUS:
         if (knownC0 && knownC1)
         {
@@ -658,7 +661,7 @@ public:
               break;
             }
 
-            max_carry =false; 
+            max_carry =false;
             min_carry =false;
 
             CONSTANTBV::BitVector_add(result->maxV, result->maxV,
@@ -674,13 +677,13 @@ public:
 
         }
         break;
-      
+
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
           UnsignedInterval* c0 = knownC0 ? children[0]:  freshUnsignedInterval(n[0].GetValueWidth());
           UnsignedInterval* c1 = knownC1 ? children[1]:  freshUnsignedInterval(n[1].GetValueWidth());
-          
+
           CBV min = CONSTANTBV::BitVector_Concat(c0->minV,c1->minV);
           CBV max = CONSTANTBV::BitVector_Concat(c0->maxV,c1->maxV);
 
@@ -690,7 +693,7 @@ public:
           result = createInterval(min,max);
         }
       break;
-     
+
       // TODO
       case BVXOR:
       case BVOR:
@@ -701,13 +704,7 @@ public:
       case SBVMOD:
       default:
           propagatorNotImplemented++;
-        break;
-    
-      
-      {
-        //std::cerr <<  n.GetKind() << std::endl;
-        //FatalError("Unhandled");
-      }
+          break;
     }
 
     if (result != NULL && result->isComplete())

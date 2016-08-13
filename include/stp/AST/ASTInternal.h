@@ -171,7 +171,7 @@ public:
     std::cerr << "astinternal has been";
   }
 
-  void SetNodeNum(int nn) { _node_num = nn; } 
+  void SetNodeNum(int nn) { _node_num = nn; }
 
 };
 } // end of namespace

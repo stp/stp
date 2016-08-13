@@ -422,7 +422,7 @@ public:
       return true;
     }
     return false;
-  } 
+  }
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
@@ -441,7 +441,7 @@ public:
     TermsAlreadySeenMap.clear();
     NodeLetVarVec.clear();
     ListOfDeclaredVars.clear();
-  } 
+  }
 
   ~STPMgr();
 

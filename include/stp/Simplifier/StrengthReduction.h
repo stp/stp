@@ -119,7 +119,7 @@ public:
       const FixedBits* b = it->second;
 
       if (b!= NULL && b->isTotallyFixed()) // Replace with a constant.
-      { 
+      {
         ASTNode newN;
         if (n.GetType() == BOOLEAN_TYPE)
         {
@@ -193,7 +193,7 @@ public:
               else if (children[j]->getValue(i))
                 nonZero++;
             }
-            if (nonZero > 1)  
+            if (nonZero > 1)
               break;
           }
 

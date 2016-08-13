@@ -139,7 +139,7 @@ public:
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
 
 #if 0
-    SOLVER_RETURN_TYPE 
+    SOLVER_RETURN_TYPE
     SATBased_ArrayWriteRefinement(SATSolver& newS,
                                   const ASTNode& orig_input,
                                   ToSATBase *tosat);
@@ -157,9 +157,9 @@ public:
   {
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
-  } 
+  }
 
-  ~AbsRefine_CounterExample() { ClearAllTables(); } 
+  ~AbsRefine_CounterExample() { ClearAllTables(); }
 
 };
 

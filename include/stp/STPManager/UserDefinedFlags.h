@@ -273,7 +273,7 @@ public:
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
-#endif    
+#endif
 
     num_solver_threads = 1;
 
@@ -291,7 +291,7 @@ public:
     // re-run.
     simplify_during_BB_flag = false;
 
-  } 
+  }
 
 };
 } // end of namespace

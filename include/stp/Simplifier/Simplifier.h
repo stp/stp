@@ -232,7 +232,7 @@ public:
   ASTNodeMap* Return_SolverMap()
   {
     return substitutionMap.Return_SolverMap();
-  } 
+  }
 
   void haveAppliedSubstitutionMap()
   {

@@ -57,7 +57,7 @@ int main(int argc, char** argv)
 
     // Create bitvector constant 2
     Expr two = vc_bvConstExprFromInt(handle, width, 2);
-    
+
     // Create bitvector 2*x
     Expr xTimes2 = vc_bvMultExpr(handle, width, two, x);
 

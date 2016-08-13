@@ -155,7 +155,7 @@ private:
        simplifier::constantBitP::ConstantBitPropagation::dispatchToTransferFunctions(&bm, n.GetKind(), children, *result, n, NULL);
       }
 
-      if (false)  
+      if (false)
       {
         std::cerr << n.GetKind();
         for (unsigned i =0; i < children.size(); i++)

@@ -36,7 +36,7 @@ namespace stp
 class ASTNode;
 typedef vector<ASTNode> ASTVec;
 
-// Called by the bitblaster. 
+// Called by the bitblaster
 class BBNodeManagerASTNode
 {
   ASTNode ASTTrue, ASTFalse;
