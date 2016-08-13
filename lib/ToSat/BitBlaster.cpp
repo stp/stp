@@ -1375,7 +1375,7 @@ void convert(const BBNodeVec& v, BBNodeManagerT* nf, mult_type* result)
   if (lastOne != -1 && (v.size() - lastOne > 1))
   {
     result[lastOne] = MINUS_ONE_MT;
-    for (int j = lastOne + 1; j < v.size(); j++)
+    for (unsigned j = lastOne + 1; j < v.size(); j++)
       result[j] = ZERO_MT;
   }
 }
