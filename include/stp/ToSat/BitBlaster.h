@@ -238,6 +238,10 @@ public:
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
   const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
+  typename std::map<ASTNode, vector<BBNode>>::iterator simplify_during_bb(
+    ASTNode& term
+    , std::set<BBNode>& support
+  );
 
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,

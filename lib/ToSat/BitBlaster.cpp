@@ -481,13 +481,151 @@ ASTNode BitBlaster<BBNode, BBNodeManagerT>::getConstant(const BBNodeVec& v,
   return ASTNF->CreateConstant(bv, v.size());
 }
 
+// This block checks if the bitblasting/fixed bits have discovered
+// any new constants. If they've discovered a new constant, then
+// the simplification function is called on a new term with the constant
+// value replacing what used to be a variable child. For instance, if
+// the term is ite(x,y,z), and we now know that x is true. Then we will
+// call SimplifyTerm on ite(true,y,z), which will do the expected
+// simplification.
+// Then the term that we bitblast will by "y".
+template <class BBNode, class BBNodeManagerT>
+typename std::map<ASTNode, vector<BBNode>>::iterator
+BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(
+  ASTNode& term
+  , BBNodeSet& support
+) {
+  const int numberOfChildren = term.Degree();
+  vector<BBNodeVec> ch;
+  ch.reserve(numberOfChildren);
+
+  for (int i = 0; i < numberOfChildren; i++)
+  {
+    if (term[i].GetType() == BITVECTOR_TYPE)
+    {
+      ch.push_back(BBTerm(term[i], support));
+    }
+    else if (term[i].GetType() == BOOLEAN_TYPE)
+    {
+      //Single-length bbnodevec to simulate 1-bit bitvector
+      BBNodeVec t;
+      t.push_back(BBForm(term[i], support));
+      ch.push_back(t);
+    }
+    else {
+      assert(false);
+      exit(-1);
+    }
+  }
+
+  bool newConst = false;
+  for (int i = 0; i < numberOfChildren; i++)
+  {
+    if (term[i].isConstant())
+      continue;
+
+    if (isConstant(ch[i]))
+    {
+      // it's only interesting if the child isn't a constant,
+      // but the bitblasted version is.
+      newConst = true;
+      break;
+    }
+  }
+
+  // Something is now constant that didn't use to be.
+  if (newConst)
+  {
+    ASTVec new_ch;
+    new_ch.reserve(numberOfChildren);
+    for (size_t i = 0; i < numberOfChildren; i++)
+    {
+      if (!term[i].isConstant() && isConstant(ch[i]))
+        new_ch.push_back(getConstant(ch[i], term[i]));
+      else
+        new_ch.push_back(term[i]);
+    }
+
+    ASTNode n_term = simp->SimplifyTerm(
+        ASTNF->CreateTerm(term.GetKind(), term.GetValueWidth(), new_ch));
+    assert(BVTypeCheck(n_term));
+    // n_term is the potentially simplified version of term.
+
+    if (cb != NULL)
+    {
+      // Add all the nodes to the worklist that have a constant as a child.
+      cb->initWorkList(n_term);
+
+      simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::
+          iterator it;
+      it = cb->fixedMap->map->find(n_term);
+      FixedBits* nBits;
+      if (it == cb->fixedMap->map->end())
+      {
+        nBits = new FixedBits(std::max((unsigned)1, n_term.GetValueWidth()),
+                              term.GetType() == BOOLEAN_TYPE);
+        cb->fixedMap->map->insert(
+            std::pair<ASTNode, FixedBits*>(n_term, nBits));
+      }
+      else
+        nBits = it->second;
+
+      if (n_term.isConstant())
+      {
+        // It's assumed elsewhere that constants map to themselves in the
+        // fixed map.
+        // That doesn't happen here unless it's added explicitly.
+        *nBits = FixedBits::concreteToAbstract(n_term);
+      }
+
+      it = cb->fixedMap->map->find(term);
+      if (it != cb->fixedMap->map->end())
+      {
+        // Copy over to the (potentially) new node. Everything we know about
+        // the old node.
+        nBits->mergeIn(*(it->second));
+      }
+
+      cb->scheduleUp(n_term);
+      cb->scheduleNode(n_term);
+      cb->propagate();
+
+      if (it != cb->fixedMap->map->end())
+      {
+        // Copy to the old node, all we know about the new node. This means
+        // that
+        // all the parents of the old node get the (potentially) updated
+        // fixings.
+        it->second->mergeIn(*nBits);
+      }
+      // Propagate through all the parents of term.
+      cb->scheduleUp(term);
+      cb->scheduleNode(term);
+      cb->propagate();
+      // Now we've propagated.
+    }
+    term = n_term;
+
+    // check if we've already done the simplified one.
+    auto it = BBTermMemo.find(term);
+    if (it != BBTermMemo.end())
+    {
+      // Constant bit propagation may have updated something.
+      updateTerm(term, it->second, support);
+      return it;
+    }
+  }
+
+  return BBTermMemo.end();
+}
+
 template <class BBNode, class BBNodeManagerT>
 const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
                                                            BBNodeSet& support)
 {
   ASTNode term = _term; // mutable local copy.
 
-  typename BBNodeVecMap::iterator it = BBTermMemo.find(term);
+  auto it = BBTermMemo.find(term);
   if (it != BBTermMemo.end())
   {
     // Constant bit propagation may have updated something.
@@ -495,133 +633,11 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     return it->second;
   }
 
-  // This block checks if the bitblasting/fixed bits have discovered
-  // any new constants. If they've discovered a new constant, then
-  // the simplification function is called on a new term with the constant
-  // value replacing what used to be a variable child. For instance, if
-  // the term is ite(x,y,z), and we now know that x is true. Then we will
-  // call SimplifyTerm on ite(true,y,z), which will do the expected
-  // simplification.
-  // Then the term that we bitblast will by "y".
-
   if (uf != NULL && uf->optimize_flag && uf->simplify_during_BB_flag)
   {
-    const int numberOfChildren = term.Degree();
-    vector<BBNodeVec> ch;
-    ch.reserve(numberOfChildren);
-
-    for (int i = 0; i < numberOfChildren; i++)
-    {
-      if (term[i].GetType() == BITVECTOR_TYPE)
-      {
-        ch.push_back(BBTerm(term[i], support));
-      }
-      else if (term[i].GetType() == BOOLEAN_TYPE)
-      {
-        BBNodeVec t;
-        t.push_back(BBForm(term[i], support));
-        ch.push_back(t);
-      }
-      else
-        throw "sdfssfa";
-    }
-
-    bool newConst = false;
-    for (int i = 0; i < numberOfChildren; i++)
-    {
-      if (term[i].isConstant())
-        continue;
-
-      if (isConstant(ch[i]))
-      {
-        // it's only interesting if the child isn't a constant,
-        // but the bitblasted version is.
-        newConst = true;
-        break;
-      }
-    }
-
-    // Something is now constant that didn't used to be.
-    if (newConst)
-    {
-      ASTVec new_ch;
-      new_ch.reserve(numberOfChildren);
-      for (int i = 0; i < numberOfChildren; i++)
-      {
-        if (!term[i].isConstant() && isConstant(ch[i]))
-          new_ch.push_back(getConstant(ch[i], term[i]));
-        else
-          new_ch.push_back(term[i]);
-      }
-
-      ASTNode n_term = simp->SimplifyTerm(
-          ASTNF->CreateTerm(term.GetKind(), term.GetValueWidth(), new_ch));
-      assert(BVTypeCheck(n_term));
-      // n_term is the potentially simplified version of term.
-
-      if (cb != NULL)
-      {
-        // Add all the nodes to the worklist that have a constant as a child.
-        cb->initWorkList(n_term);
-
-        simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::
-            iterator it;
-        it = cb->fixedMap->map->find(n_term);
-        FixedBits* nBits;
-        if (it == cb->fixedMap->map->end())
-        {
-          nBits = new FixedBits(std::max((unsigned)1, n_term.GetValueWidth()),
-                                term.GetType() == BOOLEAN_TYPE);
-          cb->fixedMap->map->insert(
-              std::pair<ASTNode, FixedBits*>(n_term, nBits));
-        }
-        else
-          nBits = it->second;
-
-        if (n_term.isConstant())
-        {
-          // It's assumed elsewhere that constants map to themselves in the
-          // fixed map.
-          // That doesn't happen here unless it's added explicitly.
-          *nBits = FixedBits::concreteToAbstract(n_term);
-        }
-
-        it = cb->fixedMap->map->find(term);
-        if (it != cb->fixedMap->map->end())
-        {
-          // Copy over to the (potentially) new node. Everything we know about
-          // the old node.
-          nBits->mergeIn(*(it->second));
-        }
-
-        cb->scheduleUp(n_term);
-        cb->scheduleNode(n_term);
-        cb->propagate();
-
-        if (it != cb->fixedMap->map->end())
-        {
-          // Copy to the old node, all we know about the new node. This means
-          // that
-          // all the parents of the old node get the (potentially) updated
-          // fixings.
-          it->second->mergeIn(*nBits);
-        }
-        // Propagate through all the parents of term.
-        cb->scheduleUp(term);
-        cb->scheduleNode(term);
-        cb->propagate();
-        // Now we've propagated.
-      }
-      term = n_term;
-
-      // check if we've already done the simplified one.
-      it = BBTermMemo.find(term);
-      if (it != BBTermMemo.end())
-      {
-        // Constant bit propagation may have updated something.
-        updateTerm(term, it->second, support);
-        return it->second;
-      }
+    auto it = simplify_during_bb(term, support);
+    if (it != BBTermMemo.end()) {
+      return it->second;
     }
   }
 
