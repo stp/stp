@@ -25,15 +25,14 @@ THE SOFTWARE.
 #ifndef BBNodeManagerAIG_H_
 #define BBNodeManagerAIG_H_
 
-#include <stdint.h>
-#include "BBNodeAIG.h"
+#include <cstdint>
 
-// cnf_short omits some stuff that doesn't compile in g++ that we don't need
-// anyway.
+#include "BBNodeAIG.h"
+#include "stp/ToSat/ToSATBase.h"
+
 #include "extlib-abc/aig.h"
 #include "extlib-abc/cnf_short.h"
 #include "extlib-abc/dar.h"
-#include "stp/ToSat/ToSATBase.h"
 
 typedef Cnf_Dat_t_ CNFData;
 typedef Aig_Obj_t AIGNode;

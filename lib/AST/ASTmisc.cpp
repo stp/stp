@@ -32,7 +32,6 @@ THE SOFTWARE.
 #else
 // Needed for signal()
 #include <unistd.h>
-#include <signal.h>
 #endif
 
 #include <sys/time.h>

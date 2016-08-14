@@ -25,7 +25,7 @@ THE SOFTWARE.
 #define USEFULDEFS_H
 
 #include <stdio.h>
-#include <stdint.h>
+#include <cstdint>
 #include <stdlib.h>
 #include <vector>
 #include <iostream>

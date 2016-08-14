@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#include <inttypes.h>
+#include <cstdint>
 #include <cmath>
 #include "stp/STPManager/STPManager.h"
 #include "stp/Printer/SMTLIBPrinter.h"

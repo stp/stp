@@ -137,7 +137,7 @@ ASTNode Cpp_interface::CreateBVConst(const char* const strval, int base)
   return bm.CreateBVConst(strval, base);
 }
 
-// FIXME: unsigned long long int is disgusting! use intN_t from cstdint.h
+// FIXME: unsigned long long int is wong. Use intN_t from cstdint
 ASTNode Cpp_interface::CreateBVConst(unsigned int width,
                                      unsigned long long int bvconst)
 {

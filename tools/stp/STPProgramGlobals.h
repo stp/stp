@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include <algorithm>
 #include <ctime>
 #include <unistd.h>
-#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <vector>

@@ -24,10 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Printer/printers.h"
 #include "stp/Printer/AssortedPrinters.h"
-
-// to get the PRIu64 macro from inttypes, this needs to be defined.
-#include <inttypes.h>
-//#undef __STDC_FORMAT_MACROS
+#include <cstdint>
 
 namespace stp
 {
