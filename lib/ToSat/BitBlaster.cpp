@@ -114,7 +114,6 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
 
   BBNodeSet support;
   BBForm(form, support);
-
   assert(support.size() == 0);
 
   {
@@ -218,10 +217,10 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
     }
   }
 
-  typedef std::unordered_map<vector<BBNode>, ASTNode, BBVecHasher<BBNode>,
-                   BBVecEquals<BBNode>> M;
   if (uf->isSet("bb-equiv", "1"))
   {
+    typedef std::unordered_map<
+      vector<BBNode>, ASTNode, BBVecHasher<BBNode>, BBVecEquals<BBNode>> M;
     M lookup;
     typename std::map<ASTNode, vector<BBNode>>::iterator it;
     for (it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
@@ -1060,8 +1059,6 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     return it->second;
   }
 
-  BBNode result;
-
   const Kind k = form.GetKind();
   if (!is_Form_kind(k))
   {
@@ -1072,6 +1069,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
   // to trace coherently.
 
   // Various special cases
+  BBNode result;
   switch (k)
   {
 
