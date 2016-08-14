@@ -236,7 +236,7 @@ void Main::read_file()
   }
 }
 
-int Main::create_and_parse_options(int argc, char** argv)
+int Main::create_and_parse_options(int /*argc*/, char** /*argv*/)
 {
   return 0;
 }
