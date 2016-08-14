@@ -95,8 +95,8 @@ private:
   }
 
   // no copy. no assignment.
-  BBNodeManagerAIG& operator=(const BBNodeManagerAIG& other);
-  BBNodeManagerAIG(const BBNodeManagerAIG& other);
+  BBNodeManagerAIG& operator=(const BBNodeManagerAIG& other) = delete;
+  BBNodeManagerAIG(const BBNodeManagerAIG& other) = delete;
 
 public:
   BBNodeManagerAIG() : aigMgr(NULL)
