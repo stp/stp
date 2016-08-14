@@ -103,11 +103,8 @@ public:
   bool IsNull() const { return n == NULL; }
 
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
-
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
-
-  bool operator<(const BBNodeAIG& other) const { return n < other.n; }
-
+  bool operator<(const BBNodeAIG& other)  const { return n < other.n; }
   void print() const { print(n); }
 };
 }

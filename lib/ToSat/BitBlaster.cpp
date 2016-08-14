@@ -106,7 +106,7 @@ public:
 
 // Look through the maps to see what the bitblaster has discovered (if anything)
 // is constant.
-// then looks through for AIGS that are mapped to from different ASTNodes.
+// Then look through for AIGS that are mapped to from different ASTNodes.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
                                                    ASTNodeMap& fromTo,
