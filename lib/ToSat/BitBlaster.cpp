@@ -72,12 +72,14 @@ const bool debug_bitblaster = false;
 
 const bool conjoin_to_top = true;
 
+//"Hash" (=add) first 5 node IDs together
+//TODO pretty bad hash
 template <class BBNode> class BBVecHasher
 {
 public:
   size_t operator()(const vector<BBNode>& n) const
   {
-    int hash = 0;
+    size_t hash = 0;
     for (size_t i = 0; i < std::min(n.size(), (size_t)6); i++) {
       hash += n[i].GetNodeNum();
     }
