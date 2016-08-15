@@ -257,7 +257,7 @@ cmdi:
       GlobalParserInterface->success();
     }
 |
-     DEFINE_FUNCTION_TOK function_decl 
+     DEFINE_FUNCTION_TOK function_def 
     {
       GlobalParserInterface->success();
     }
@@ -377,7 +377,7 @@ function_param
 };
 
 
-function_decl:
+function_def:
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term  
 {
   if ($10->GetValueWidth() != $8)
@@ -434,6 +434,44 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 
   delete $1;
   delete $9;
+}
+|
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term 
+{
+  GlobalParserInterface->unsupported();
+  delete $1;
+  delete $18;
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term 
+{
+  GlobalParserInterface->unsupported();
+  delete $1;
+  delete $17;
+
+#if 0
+  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  GlobalParserInterface->addSymbol(s);
+  unsigned int index_len = $9;
+  unsigned int value_len = $14;
+  if(index_len > 0) {
+    s.SetIndexWidth($9);
+  }
+  else {
+    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+  }
+
+  if(value_len > 0) {
+    s.SetValueWidth($14);
+  }
+  else {
+    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+  }
+
+  ASTVec empty;
+  GlobalParserInterface->storeFunction(*$1,empty, *$17);
+#endif 
+
 }
 ;
 
