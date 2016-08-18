@@ -84,10 +84,6 @@ public:
   // flag to decide whether to print "valid/invalid" or not
   bool print_output_flag;
 
-  // print the variable order chosen by the sat solver while it is
-  // solving.
-  bool print_sat_varorder_flag;
-
   // turn on word level bitvector solver
   bool wordlevel_solve_flag;
 
@@ -235,10 +231,6 @@ public:
 
     // flag to decide whether to print "valid/invalid" or not
     print_output_flag = false;
-
-    // print the variable order chosen by the sat solver while it is
-    // solving.
-    print_sat_varorder_flag = false;
 
     // turn on word level bitvector solver
     wordlevel_solve_flag = true;

@@ -218,9 +218,6 @@ void ExtraMain::create_options()
   /*("constr-counterex,c",
      po::bool_switch(&(bm->UserFlags.construct_counterexample_flag))
       , "construct counterexample")*/
-  ("print-varorder,z",
-      po::bool_switch(&(bm->UserFlags.print_sat_varorder_flag)),
-      "Print SAT variable order")
   ("print-output,n", po::bool_switch(&(bm->UserFlags.print_output_flag)),
       "Print output");
 

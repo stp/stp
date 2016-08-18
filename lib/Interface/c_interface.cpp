@@ -1956,9 +1956,6 @@ void process_argument(const char ch, VC vc)
     case 'y':
       bm->UserFlags.print_binary_flag = true;
       break;
-    case 'z':
-      bm->UserFlags.print_sat_varorder_flag = true;
-      break;
     default:
       // fprintf(stderr,usage,prog);
       // cout << helpstring;
