@@ -1738,6 +1738,15 @@ ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k,
                             nf->CreateTerm(BVEXTRACT, 1, children[0], top, top),
                             bm.CreateBVConst(32, width));
     }
+    else
+    {
+      ASTNode top = bm.CreateBVConst(32, width - 1);
+      ASTNode bottom = bm.CreateBVConst(32, b.GetUnsignedConst());
+
+      return nf->CreateTerm(BVSX, width,
+                            nf->CreateTerm(BVEXTRACT, width - b.GetUnsignedConst() , children[0], top, bottom),
+                            bm.CreateBVConst(32, width));
+    }
   }
 
   return ASTNode();
