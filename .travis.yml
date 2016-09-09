@@ -18,8 +18,7 @@ env:
     - STP_CONFIG=KLEE
     - STP_CONFIG=COVERAGE
     - STP_CONFIG=INTREE_BUILD
-    - STP_CONFIG=CLANG_STATIC
-      compiler: clang
+    - compiler: clang
       addons:
         apt:
           sources:
@@ -27,6 +26,7 @@ env:
             - llvm-toolchain-precise-3.7
           packages:
             - clang-3.7
+      env: STP_CONFIG=CLANG_STATIC
 
 matrix:
   include:
