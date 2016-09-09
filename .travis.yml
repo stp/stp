@@ -18,6 +18,15 @@ env:
     - STP_CONFIG=KLEE
     - STP_CONFIG=COVERAGE
     - STP_CONFIG=INTREE_BUILD
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.7
+          packages:
+            - clang-3.7
+      env: STP_CONFIG=CLANG_STATIC
 
 matrix:
   include:

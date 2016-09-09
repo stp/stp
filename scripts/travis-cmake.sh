@@ -92,6 +92,16 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
+    CLANG_STATIC)
+         eval sudo apt-get install -y libboost-all-dev
+         export CC="/usr/bin/clang"
+         export CXX="/usr/bin/clang++"
+         eval cmake ${COMMON_CMAKE_ARGS} \
+                   -DBUILD_SHARED_LIBS:BOOL=OFF \
+                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+                   ${SOURCE_DIR}
+    ;;
+    
     *)
         echo "\"${STP_CONFIG}\" configuration not recognised"
         exit 1
