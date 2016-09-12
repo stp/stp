@@ -350,7 +350,6 @@ cmdi:
 
 ;
 
-
 function_param:
 LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
@@ -786,12 +785,15 @@ TRUE_TOK
   GlobalParserInterface->deleteNode( $3);
   GlobalParserInterface->deleteNode( $4);
 }
-| LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_formula RPAREN_TOK
-{
-  GlobalParserInterface->letMgr->push();
-  $$ = $6;
-  GlobalParserInterface->letMgr->pop();
-}
+| LPAREN_TOK LET_TOK LPAREN_TOK 
+  {
+    GlobalParserInterface->letMgr->push();  // TODO this isn't going to clear properly if it's an_term later.
+  }
+  lets RPAREN_TOK an_formula RPAREN_TOK
+  {
+    $$ = $7;
+    GlobalParserInterface->letMgr->pop();
+  }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
   $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$2,*$3));
@@ -1252,12 +1254,6 @@ TERMID_TOK
 
   delete $1;
 }
-| LPAREN_TOK LET_TOK LPAREN_TOK lets RPAREN_TOK an_term RPAREN_TOK
-{
-  GlobalParserInterface->letMgr->push();
-  $$ = $6;
-  GlobalParserInterface->letMgr->pop();
-}
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
   /* This implements (! <an_term> :named foo) */
@@ -1276,6 +1272,16 @@ TERMID_TOK
 
   $$ = $3;
 }
+| LPAREN_TOK LET_TOK LPAREN_TOK 
+  {
+    GlobalParserInterface->letMgr->push();  
+  }
+  lets RPAREN_TOK an_term RPAREN_TOK
+  {
+    $$ = $7;
+    GlobalParserInterface->letMgr->pop();
+  }
+
 ;
 
 %%

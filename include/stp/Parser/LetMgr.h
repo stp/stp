@@ -99,7 +99,9 @@ public:
   {
     vector<string> v =  stack.top();
     for (string s: v)
-      _letid_expr_map->erase(s);
+      {
+        _letid_expr_map->erase(s);
+      }
     stack.pop();
   }
 

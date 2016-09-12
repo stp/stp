@@ -62,6 +62,9 @@ void LETMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(_letid_expr_map->find(name) == _letid_expr_map->end());
   (*_letid_expr_map)[name] = letExpr;
+  
+  if (stack.size() > 0) // only smtlib2 maintains the stack.
+    stack.top().push_back(name);
 }
 
 // this function looks up the "var to letexpr map" and returns the
@@ -91,6 +94,11 @@ ASTNode LETMgr::ResolveID(const ASTNode& v)
 // This function simply cleans up the LetID -> LetExpr Map.
 void LETMgr::CleanupLetIDMap(void)
 {
+  while (!stack.empty() )
+  {
+    stack.pop();
+  }
+
   // std::unordered_map::clear() is very expensive on big empty maps. shortcut.
   if (_letid_expr_map->size() == 0)
     return;
