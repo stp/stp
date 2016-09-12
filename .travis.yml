@@ -39,7 +39,7 @@ matrix:
   allow_failures:
     # Covertiy scan might fail
     - env: COVERITY_SCAN=1 STP_CONFIG=DYNAMIC_LIB
-
+    - compiler: clang
 
 addons:
   coverity_scan:
