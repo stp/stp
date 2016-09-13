@@ -94,6 +94,8 @@ case $STP_CONFIG in
 
     CLANG_STATIC)
          eval sudo apt-get install -y libboost-all-dev
+         export CC="clang-3.7"
+         export CXX="clang++-3.7"
          eval cmake ${COMMON_CMAKE_ARGS} \
                    -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
