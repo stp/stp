@@ -100,6 +100,8 @@ case $STP_CONFIG in
                    -DBUILD_SHARED_LIBS:BOOL=OFF \
                    -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
+         # static build doesn't currently support testing..
+         TEST=0
     ;;
     
     *)
