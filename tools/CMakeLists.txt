@@ -18,6 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+if (NOT BUILD_SHARED_LIBS)
+    SET(CMAKE_EXE_LINKER_FLAGS "-static")
+endif()
+
+
 add_subdirectory(stp)
 add_subdirectory(stp_simple)
 
