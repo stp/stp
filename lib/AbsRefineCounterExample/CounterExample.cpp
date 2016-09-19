@@ -65,6 +65,17 @@ void AbsRefine_CounterExample::ConstructCounterExample(
     for (size_t index = 0; index < v.size(); index++)
     {
       const unsigned sat_variable_index = v[index];
+        
+        cout << "VarDump: ";
+        symbol.nodeprint(cout);
+        cout << " bit " << index << " is ";
+        if (sat_variable_index == ~((unsigned) 0))
+            cout << "not sent to solver";
+        else if (newS.modelValue(sat_variable_index) == newS.undef_literal())
+            cout << "undef";
+        else
+            cout << "SAT var " << (sat_variable_index + 1);
+        cout << endl;
 
       if (sat_variable_index == ~((unsigned)0)) // not sent to the sat solver.
         continue;
