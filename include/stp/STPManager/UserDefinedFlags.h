@@ -73,9 +73,11 @@ public:
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
-  bool construct_counterexample_flag;
   bool print_counterexample_flag;
   bool print_binary_flag;
+
+  //This is derived from other settings.
+  bool construct_counterexample_flag;
 
   // if this option is true then print the way dawson wants using a
   // different printer. do not use this printer.
@@ -214,11 +216,12 @@ public:
     // arraywrite_refinement_flag = true;
 
     // check the counterexample against the original input to STP
-    check_counterexample_flag = true;
+    check_counterexample_flag = false;
 
     // construct the counterexample in terms of original variable based
     // on the counterexample returned by SAT solver
-    construct_counterexample_flag = true;
+    construct_counterexample_flag = false;
+
     print_counterexample_flag = false;
     print_binary_flag = false;
 
@@ -258,6 +261,7 @@ public:
     quick_statistics_flag = false;
 
     tseitin_are_decision_variables_flag = true;
+
 
     // If cryptominisat is installed, use it as default, otherwise minisat.
 #ifdef USE_CRYPTOMINISAT

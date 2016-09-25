@@ -310,6 +310,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     assert(!arrayops);
   }
 
+  if (bm->UserFlags.check_counterexample_flag || bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
+    bm->UserFlags.construct_counterexample_flag = true;
+  else
+    bm->UserFlags.construct_counterexample_flag = false;
+
+  #ifndef NDEBUG
+      bm->UserFlags.construct_counterexample_flag = true;
+  #endif
+
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
   unsigned initial_difficulty_score = difficulty.score(inputToSat,bm);

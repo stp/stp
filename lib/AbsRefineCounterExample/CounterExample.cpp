@@ -1046,11 +1046,13 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
 
   if (!sat)
   {
-    // PrintOutput(true);
     return SOLVER_VALID;
   }
   else if (SatSolver.okay())
   {
+    if (!bm->UserFlags.construct_counterexample_flag)
+      return SOLVER_INVALID;
+
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
@@ -1067,7 +1069,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");
-
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
     // if the counterexample is indeed a good one, then return
