@@ -92,7 +92,7 @@ class Tester:
 
     def random_options(self):
         cmd = " "
-        #opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
+        #opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
 
         #print options
         # --print-back-CVC", "--print-back-SMTLIB2"
