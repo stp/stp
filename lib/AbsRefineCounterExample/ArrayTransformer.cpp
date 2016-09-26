@@ -572,7 +572,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
         // result is a variable here; it is an ite in the
         // else-branch
       }
-      else if (bm->UserFlags.isSet("old_ack", "0"))
+      else if (false)
       {
 
         /* oops.

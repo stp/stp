@@ -62,7 +62,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(
 {
   const int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
 
-  if (!needAbsRef && uf.isSet("aig-rewrite", "0"))
+  if (!needAbsRef && uf.enable_AIG_rewrites_flag)
   {
     Dar_LibStart();
     Aig_Man_t* pTemp;
@@ -125,7 +125,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   dag_aware_aig_rewrite(needAbsRef, mgr);
 
-  if (!uf.isSet("simple-cnf", "0"))
+  if (!uf.simple_cnf)
   {
     cnfData = Cnf_Derive(mgr.aigMgr, 0);
     if (uf.stats_flag)

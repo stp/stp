@@ -237,7 +237,7 @@ void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
   // the constraint is lost. This is subsumed by constant bit propagation, so I
   // suspect
   // it's not a big loss.
-  if (!_bm->UserFlags.isSet("bb-equiv", "1"))
+  if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
     AlwaysTrueHashSet.insert(key.GetNodeNum());
 }
 
@@ -634,7 +634,7 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
 
   const unsigned len = left.GetValueWidth();
 
-  if (_bm->UserFlags.isSet("inequality-simplifications", "1"))
+  if (true)
   {
 
     const int constStart = std::min(mostSignificantConstants(left),
@@ -996,8 +996,7 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     return r;
   }
 
-  if ((k1 == ITE || k1 == BVCONST) && (k2 == ITE || k2 == BVCONST) &&
-      _bm->UserFlags.isSet("ite-const", "1"))
+  if ((k1 == ITE || k1 == BVCONST) && (k2 == ITE || k2 == BVCONST))
   {
     // If it can only evaluate to constants on the LHS and the RHS, and those
     // constants are never equal,

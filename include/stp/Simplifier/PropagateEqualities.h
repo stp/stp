@@ -61,7 +61,7 @@ class PropagateEqualities // not copyable
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
       : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-        always_true(bm_->UserFlags.isSet("always_true", "1"))
+        always_true(bm_->UserFlags.enable_always_true)
   {
     simp = simp_;
     nf = nf_;

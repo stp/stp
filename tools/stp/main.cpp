@@ -149,7 +149,10 @@ void ExtraMain::create_options()
   po::options_description general_options("Most important options");
   general_options.add_options()
     ("help,h", "print this help")
-    ("version", "print version number")
+    ("version", "print version number");
+
+  po::options_description simplification_options("Simplifications");
+  simplification_options.add_options() 
     ("disable-simplifications", "disable all simplifications")
     ("switch-word,w", "switch off wordlevel solver")
     ("disable-opt-inc,a", "disable potentially size-increasing optimisations")
@@ -174,8 +177,6 @@ void ExtraMain::create_options()
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
-      "oldstyle-refinement",
-      "Do abstraction-refinement outside the SAT solver")(
       "ackermanize,r", po::bool_switch(&(bm->UserFlags.ackermannisation)),
       "eagerly encode array-read axioms (Ackermannistaion)");
 
@@ -215,9 +216,6 @@ void ExtraMain::create_options()
       "print quick statistics")
   ("print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
       "print nodes ")
-  /*("constr-counterex,c",
-     po::bool_switch(&(bm->UserFlags.construct_counterexample_flag))
-      , "construct counterexample")*/
   ("print-output,n", po::bool_switch(&(bm->UserFlags.print_output_flag)),
       "Print output");
 
@@ -225,7 +223,7 @@ void ExtraMain::create_options()
   input_options.add_options()
   ("SMTLIB1,m", "use the SMT-LIB1 format parser")
   ("SMTLIB2", "use the SMT-LIB2 format parser")
-  ("CVC,m", "use the CVC format parser");
+  ("CVC", "use the CVC format parser");
 
   po::options_description output_options("Output options");
   output_options.add_options()(
@@ -243,6 +241,7 @@ void ExtraMain::create_options()
       ("check-sanity,d", "construct counterexample and check it");
 
   cmdline_options.add(general_options)
+      .add(simplification_options)
       .add(solver_options)
       .add(refinement_options)
       .add(print_options)
@@ -253,6 +252,7 @@ void ExtraMain::create_options()
 
   // Register everything except hiddenOptions
   visible_options.add(general_options)
+      .add(simplification_options)
       .add(solver_options)
       .add(refinement_options)
       .add(print_options)
@@ -269,7 +269,7 @@ int ExtraMain::parse_options(int argc, char** argv)
   try_parsing_options(argc, argv, vm, pos_options);
   onePrintBack = bm->UserFlags.get_print_output_at_all();
 
-  if (vm.count("disable-size"))
+  if (vm.count("disable-opt-inc"))
   {
     bm->UserFlags.optimize_flag = false;
   }
@@ -348,11 +348,6 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.propagate_equalities = false;
   }
 
-  // TODO this is not actually exposed by original main.cpp code
-  if (vm.count("hash-nf"))
-  {
-    bm->defaultNodeFactory = bm->hashingNodeFactory;
-  }
   if (vm.count("timeout"))
   {
     bm->UserFlags.timeout_max_conflicts = max_num_confl;

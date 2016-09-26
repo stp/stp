@@ -608,9 +608,6 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   if (evens != ASTTrue)
     output = nf->CreateNode(AND, output, evens);
 
-  // if (_bm->UserFlags.isSet("xor-solve","1"))
-  //  output = solveForAndOfXOR(output);
-
   // Imagine in the last conjunct A is replaced by B. But there could
   // be variable A's in the first conjunct. This gets rid of 'em.
   if (_simp->hasUnappliedSubstitutions())

@@ -147,7 +147,7 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
   actualBBSize = -1;
 
   // Expensive, so only want to do it once.
-  if (bm->UserFlags.isSet("bitblast-simplification", "1") &&
+  if (bm->UserFlags.enable_bitblast_simplification &&
       initial_difficulty_score < 250000)
   {
     BBNodeManagerAIG bitblast_nodemgr;
@@ -200,7 +200,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.isSet("enable-unconstrained", "1"))
+  if (bm->UserFlags.enable_unconstrained)
   {
     // Remove unconstrained.
     RemoveUnconstrained r1(*bm);
@@ -208,7 +208,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.isSet("use-intervals", "1"))
+  if (bm->UserFlags.enable_use_intervals)
   {
     UnsignedIntervalAnalysis intervals(*bm);
     inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
@@ -234,7 +234,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   }
 
   // Find pure literals.
-  if (bm->UserFlags.isSet("pure-literals", "1"))
+  if (bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;
     bool changed = fpl.topLevel(inputToSat, simp, bm);
@@ -246,7 +246,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     }
   }
 
-  if (bm->UserFlags.isSet("always-true", "0"))
+  if (bm->UserFlags.enable_always_true)
   {
     AlwaysTrue always(simp, bm, bm->defaultNodeFactory);
     inputToSat = always.topLevel(inputToSat);
@@ -290,9 +290,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  if (((bm->UserFlags.ackermannisation &&
+  if ((bm->UserFlags.ackermannisation &&
         numberOfReadsLessThan(inputToSat, 50)) ||
-        bm->UserFlags.isSet("upfront-ack", "0")) ||
       numberOfReadsLessThan(inputToSat, 10))
   {
     // If the number of axioms that would be added it small. Remove them.
@@ -327,14 +326,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if ((!arrayops && initial_difficulty_score < 1000000) ||
-      bm->UserFlags.isSet("preserving-fixedpoint", "0"))
+  if ((!arrayops && initial_difficulty_score < 1000000))
   {
     inputToSat = callSizeReducing(inputToSat, bvSolver.get(), pe.get(),
                          initial_difficulty_score, bitblasted_difficulty);
   }
 
-  if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
+  if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
     initial_difficulty_score = difficulty.score(inputToSat,bm);
   }
@@ -349,7 +347,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // So we can delete the object and release all the hash-buckets storage.
   std::auto_ptr<Revert_to> revert(new Revert_to());
 
-  if ((!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")))
+  if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
     revert->initialSolverMap.insert(simp->Return_SolverMap()->begin(),
                                     simp->Return_SolverMap()->end());
@@ -419,7 +417,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.isSet("use-intervals", "1"))
+  if (bm->UserFlags.enable_use_intervals)
   {
     UnsignedIntervalAnalysis intervals(*bm);
     inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
@@ -427,7 +425,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   // Find pure literals.
-  if (bm->UserFlags.isSet("pure-literals", "1"))
+  if (bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;
     bool changed = fpl.topLevel(inputToSat, simp, bm);
@@ -443,21 +441,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     return SOLVER_TIMEOUT;
 
   // Simplify using Ite context
-  if (bm->UserFlags.optimize_flag && bm->UserFlags.isSet("ite-context", "0"))
+  if (bm->UserFlags.optimize_flag && bm->UserFlags.enable_ite_context)
   {
     UseITEContext iteC(bm);
     inputToSat = iteC.topLevel(inputToSat);
     bm->ASTNodeStats("After ITE Context: ", inputToSat);
   }
 
-  if (bm->UserFlags.isSet("aig-core-simplify", "0"))
+  if (bm->UserFlags.enable_aig_core_simplify)
   {
     AIGSimplifyPropositionalCore aigRR(bm);
     inputToSat = aigRR.topLevel(inputToSat);
     bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
 
-  if (bm->UserFlags.isSet("enable-unconstrained", "1"))
+  if (bm->UserFlags.enable_unconstrained)
   {
     // Remove unconstrained.
     RemoveUnconstrained r(*bm);
@@ -502,8 +500,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   bool optimize_enabled = bm->UserFlags.optimize_flag;
   if (worse &&
-      (!arrayops || bm->UserFlags.isSet("array-difficulty-reversion", "1")) &&
-      bm->UserFlags.isSet("difficulty-reversion", "1"))
+      (!arrayops || bm->UserFlags.array_difficulty_reversion) &&
+      bm->UserFlags.difficulty_reversion)
   {
     // If the simplified problem is harder, than the
     // initial problem we revert back to the initial
@@ -580,7 +578,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
   ToSATBase* satBase =
-      bm->UserFlags.isSet("traditional-cnf", "0") ? tosat : &toSATAIG;
+      bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;

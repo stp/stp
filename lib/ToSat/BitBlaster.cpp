@@ -183,7 +183,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
       fromTo.insert(std::make_pair(n, r));
   }
 
-  if (uf->isSet("bb-equiv", "1"))
+  if (true) //(uf->isSet("bb-equiv", "1"))
   {
     std::unordered_map<intptr_t, ASTNode> nodeToFn;
     typename std::map<ASTNode, BBNode>::iterator it;
@@ -219,7 +219,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
     }
   }
 
-  if (uf->isSet("bb-equiv", "1"))
+  if (true)//(uf->isSet("bb-equiv", "1"))
   {
     typedef std::unordered_map<
       vector<BBNode>, ASTNode, BBVecHasher<BBNode>, BBVecEquals<BBNode>> M;
@@ -1972,8 +1972,8 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
                                                      const ASTNode& n)
 {
 
-  if (uf->isSet("print_on_mult", "0"))
-    cerr << "--mult--";
+//  if (uf->isSet("print_on_mult", "0"))
+ //   cerr << "--mult--";
 
   BBNodeVec x = _x;
   BBNodeVec y = _y;

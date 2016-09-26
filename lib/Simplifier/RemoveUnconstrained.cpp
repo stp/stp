@@ -598,7 +598,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained() &&
-            bm.UserFlags.isSet("unconstrained-bvmod", "0"))
+            false) // TODO why don't we do it for bvmod??
         {
           assert(children[0] != children[1]);
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);

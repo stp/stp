@@ -247,14 +247,14 @@ public:
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
   : uf(_uf),
-    division_variant_1("1" == _uf->get("division_variant_1", "1")),
-    division_variant_2("1" == _uf->get("division_variant_2", "1")),
-    division_variant_3("1" == _uf->get("division_variant_3", "1")),
-    adder_variant("1" == _uf->get("adder_variant", "1")),
-    bbbvle_variant("1" == _uf->get("bbbvle_variant", "0")),
-    upper_multiplication_bound("1" ==_uf->get("upper_multiplication_bound", "0")),
-    bvplus_variant("1" == _uf->get("bvplus_variant", "1")),
-    multiplication_variant(_uf->get("multiplication_variant", "7"))
+    division_variant_1(true),
+    division_variant_2(true),
+    division_variant_3(true),
+    adder_variant(true),
+    bbbvle_variant(false),
+    upper_multiplication_bound(false),
+    bvplus_variant(true),
+    multiplication_variant("7")
   {
     nf = bnm;
     cb = cb_;
