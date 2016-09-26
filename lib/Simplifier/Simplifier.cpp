@@ -1244,7 +1244,7 @@ ASTNode Simplifier::SimplifyNotFormula(const ASTNode& a, bool pushNeg,
   // pushnegation if there are odd number of NOTs
   bool pn = (NotCount % 2 == 0) ? false : true;
 
-  bool alwaysTrue;
+  bool alwaysTrue = false;
   if (CheckAlwaysTrueFormSet(o, alwaysTrue))
   {
     if (alwaysTrue)
