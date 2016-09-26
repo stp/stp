@@ -211,9 +211,9 @@ public:
     num_solver_threads =1;
 
     #ifdef USE_CRYPTOMINISAT
-    SATSolvers solver_to_use = CRYPTOMINISAT5_SOLVER;
+    solver_to_use = CRYPTOMINISAT5_SOLVER;
     #else
-    SATSolvers solver_to_use = MINISAT_SOLVER;
+    solver_to_use = MINISAT_SOLVER;
     #endif
   }
 
