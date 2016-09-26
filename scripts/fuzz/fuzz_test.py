@@ -105,9 +105,9 @@ class Tester:
 
         #output options
         #--output-CNF --output-bench --exit-after-CNF
-        opts = ["--disable-simplify", "-w", "-a", "--disable-cbitp",
+        opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp",
                 "--disable-equality",
-                "--oldstyle-refinement", "-r"]
+                 "-r"]
 
         for opt in opts:
             if random.randint(0,1) == 0:
