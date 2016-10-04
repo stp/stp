@@ -72,7 +72,7 @@ public:
   bool enable_aig_core_simplify;
   bool enable_use_intervals;
   bool enable_pure_literals;
-  bool enable_always_true ;;
+  bool enable_always_true ;
   bool enable_bitblast_simplification ;
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
