@@ -585,6 +585,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   NewSolver.enableRefinement(maybeRefinement);
 
+  if (bm->UserFlags.stats_flag)
+    bm->print_stats();
+
   // If it doesn't contain array operations, use ABC's CNF generation.
   res = Ctr_Example->CallSAT_ResultCheck(
       NewSolver, inputToSat, original_input, satBase,

@@ -52,10 +52,6 @@ class ASTInterior : public ASTInternal
   // The vector of children
   ASTVec _children;
 
-  /// todo. This should be a bitfield in a superclass if it can fit without
-  /// increasing the sizeof..
-  mutable bool is_simplified;
-
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
    ******************************************************************/

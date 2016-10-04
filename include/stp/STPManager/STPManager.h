@@ -447,6 +447,37 @@ public:
   // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
   vector<stp::ASTNode*> persist;
 
+  void print_stats() const
+  {
+   
+    if (_interior_unique_table.size() > 0)
+    {
+      std::cerr << "Interiors:" << _interior_unique_table.size() << " of ";
+      std::cerr <<  sizeof(**_interior_unique_table.begin()) << " bytes each" << std::endl;
+    }
+  
+    std::map<Kind, int> freq;
+    size_t cum =0;
+    for (auto it : _interior_unique_table)
+      {
+         freq[it->GetKind()]++;
+      }
+    
+    for (auto it: freq)
+      std::cerr << it.first << " " << it.second << std::endl;
+
+    if (_symbol_unique_table.size() > 0)
+    {
+      std::cerr << "Symbols:" << _symbol_unique_table.size() << " of ";
+      std::cerr <<  sizeof(**_symbol_unique_table.begin()) << " bytes each" << std::endl;
+    }
+    
+    if (_bvconst_unique_table.size() > 0)
+    {
+      std::cerr << "BVConsts:" << _bvconst_unique_table.size()  << " of ";
+      std::cerr <<  sizeof(**_bvconst_unique_table.begin()) << " bytes each" << std::endl;
+    }
+  }
 };
 
 } // end of namespace

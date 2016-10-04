@@ -47,10 +47,6 @@ private:
   // represented using an external library in extlib-bvconst.
   CBV _bvconst;
 
-  // If the CBV is managed outside of this class. Then a defensive copy isn't
-  // taken.
-  bool cbv_managed_outside;
-
   /****************************************************************
    * Hasher for ASTBVConst nodes                                  *
    ****************************************************************/

@@ -71,19 +71,17 @@ protected:
   // Pointer back to the node manager that holds this.
   STPMgr * nodeManager;
 
-  mutable uint8_t iteration;
+  uint64_t node_uid;
+  static uint64_t node_uid_cntr;
 
   // reference counting for garbage collection
-  unsigned int _ref_count;
-
-  // Kind. It's a type tag and the operator.
-  enumeration<Kind, unsigned char> _kind;
+  uint32_t _ref_count;
 
   // Nodenum is a unique positive integer for the node.  The nodenum
   // of a node should always be greater than its descendents (which
   // is easily achieved by incrementing the number each time a new
   // node is created).
-  unsigned int _node_num;
+  uint32_t _node_num;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -92,7 +90,7 @@ protected:
    *                                                                 *
    * Width of the index of an array. Positive for array, 0 otherwise *
    *******************************************************************/
-  unsigned int _index_width;
+  uint32_t _index_width;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -101,10 +99,18 @@ protected:
    *                                                                 *
    * Number of bits of bitvector. +ve for array/bitvector,0 otherwise*
    *******************************************************************/
-  unsigned int _value_width;
+  uint32_t _value_width;
 
-  uint64_t node_uid;
-  static uint64_t node_uid_cntr;
+  // Kind. It's a type tag and the operator.
+  enumeration<Kind, unsigned char> _kind;
+
+  //Used just by ASTInterior, but storing it here saves 8-bytes in ASTInterior, sizeof this class is unchanged.
+  mutable bool is_simplified;
+
+  //Used just by ASTBVConst, but storing it here saves 8-bytes in ASTBVConst, sizeof this class is unchanged.
+  bool cbv_managed_outside;
+
+  mutable uint8_t iteration;
 
   /****************************************************************
    * Protected Member Functions                                   *
@@ -171,7 +177,6 @@ public:
   }
 
   void SetNodeNum(int nn) { _node_num = nn; }
-
 };
 } // end of namespace
 #endif
