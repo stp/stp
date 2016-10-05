@@ -76,9 +76,6 @@ private:
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
 
-  // Global for assigning new node numbers.
-  int _max_node_num;
-
   uint8_t last_iteration;
 
 public:
@@ -216,7 +213,7 @@ public:
    ****************************************************************/
 
   STPMgr()
-      : _max_node_num(0), last_iteration(0), soft_timeout_expired(false),
+      :  last_iteration(0), soft_timeout_expired(false),
         _symbol_count(0), CNFFileNameCounter(0)
   {
     ValidFlag = false;
@@ -240,11 +237,6 @@ public:
     return runTimes;
   }
 
-  int NewNodeNum()
-  {
-    _max_node_num += 2;
-    return _max_node_num;
-  }
   unsigned int NodeSize(const ASTNode& a);
 
   /****************************************************************

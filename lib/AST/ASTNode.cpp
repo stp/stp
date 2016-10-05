@@ -76,7 +76,7 @@ const ASTVec& ASTNode::GetChildren() const
 // Access node number
 unsigned ASTNode::GetNodeNum() const
 {
-  return _int_node_ptr->_node_num;
+  return _int_node_ptr->GetNodeNum();
 }
 
 unsigned int ASTNode::GetIndexWidth() const

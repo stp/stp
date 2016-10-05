@@ -89,12 +89,12 @@ class ASTInterior : public ASTInternal
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
 public:
-  //ASTInterior(STPMgr *mgr, Kind kind) : ASTInternal(mgr, kind) {}
-  
   ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
       : ASTInternal(mgr, kind), _children(children)
   {
     is_simplified = false;
+    if (kind == NOT)
+      node_uid = children[0].GetNodeNum()+1;
   }
 
   // This copies the contents of the child nodes

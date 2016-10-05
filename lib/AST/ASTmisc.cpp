@@ -589,6 +589,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: NOT formula can have exactly one childNode",
                    n);
       }
+      assert( n.GetNodeNum() == n[0].GetNodeNum()+1);
       break;
 
     case AND:

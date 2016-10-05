@@ -47,11 +47,6 @@ ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
       // 1 to the NOT's node number, meaning we'd hit an even number,
       // which could duplicate the next newNodeNum().
       assert(n_ptr->GetChildren()[0].GetKind() != NOT);
-      n_ptr->SetNodeNum(n_ptr->GetChildren()[0].GetNodeNum() + 1);
-    }
-    else
-    {
-      n_ptr->SetNodeNum(NewNodeNum());
     }
 
     std::pair<ASTInteriorSet::const_iterator, bool> p =
@@ -140,7 +135,6 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
     ASTSymbol* s_ptr1 = new ASTSymbol(this, strdup(s_ptr->GetName()));
-    s_ptr1->SetNodeNum(NewNodeNum());
     s_ptr1->_value_width = s_ptr->_value_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
         _symbol_unique_table.insert(s_ptr1);
@@ -401,7 +395,6 @@ ASTBVConst* STPMgr::LookupOrCreateBVConst(ASTBVConst& s)
     // Make a new ASTBVConst with duplicated constant.
 
     ASTBVConst* s_copy = new ASTBVConst(s);
-    s_copy->SetNodeNum(NewNodeNum());
 
     std::pair<ASTBVConstSet::const_iterator, bool> p =
         _bvconst_unique_table.insert(s_copy);

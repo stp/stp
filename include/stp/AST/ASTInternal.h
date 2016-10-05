@@ -71,17 +71,17 @@ protected:
   // Pointer back to the node manager that holds this.
   STPMgr * nodeManager;
 
+  // node_uid is a unique positive integer for the node.  The node_uid
+  // of a node should always be greater than its descendents (which
+  // is easily achieved by incrementing the number each time a new
+  // node is created). NOT nodes are odd, and one more than the thing
+  // the are NOTs of.
+  // 
   uint64_t node_uid;
   static uint64_t node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
-
-  // Nodenum is a unique positive integer for the node.  The nodenum
-  // of a node should always be greater than its descendents (which
-  // is easily achieved by incrementing the number each time a new
-  // node is created).
-  uint32_t _node_num;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -137,8 +137,8 @@ protected:
 public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
-      : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
-        _index_width(0), _value_width(0), node_uid(++node_uid_cntr)
+      : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), 
+        _index_width(0), _value_width(0), node_uid(node_uid_cntr+=2)
   {
   }
 
@@ -149,7 +149,7 @@ public:
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
-        _node_num(int_node._node_num), _index_width(int_node._index_width),
+         _index_width(int_node._index_width),
         _value_width(int_node._value_width), node_uid(int_node.node_uid)
   {
   }
@@ -167,7 +167,7 @@ public:
     }
   }
 
-  unsigned GetNodeNum() const { return _node_num; }
+  unsigned GetNodeNum() const { return node_uid; }
 
   virtual bool isSimplified() const { return false; }
 
@@ -175,8 +175,6 @@ public:
   {
     std::cerr << "astinternal has been";
   }
-
-  void SetNodeNum(int nn) { _node_num = nn; }
 };
 } // end of namespace
 #endif
