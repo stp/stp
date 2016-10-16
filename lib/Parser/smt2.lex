@@ -56,59 +56,71 @@
   // File-static (local to this file) variables and functions
   static std::string _string_lit;  
    
-  static int lookup(const char* s)
+  static int lookup(char* s)
   {
-    std::string str(s);
-  
+    char * cleaned = NULL;
+    size_t len;
+
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
-    if (s[0] == '|' && s[str.size()-1] == '|')
-    	str = str.substr(1,str.length()-2);
-    
+    if (s[0] == '|' && s[(len = strlen(s))-1] == '|')
+      {
+        cleaned = (char*) malloc(len);
+        strncpy(cleaned,s+1,len-2); // chop off first and last characters.
+        cleaned[len-2] = '\0';
+        s = cleaned;
+      }
+
     stp::ASTNode nptr;
     bool found = false;
     
-    if (stp::GlobalParserInterface->isSymbolAlreadyDeclared(str)) // it's a symbol.
+    if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
     {
-    	nptr= stp::GlobalParserInterface->LookupOrCreateSymbol(str);
-    	found = true;
+      found = true;
     }
-    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(s)) // a let.
     {
-    	nptr = stp::GlobalParserInterface->letMgr->resolveLet(str);
-    	found = true;
+      nptr = stp::GlobalParserInterface->letMgr->resolveLet(s);
+      found = true;
     }
-    else if (stp::GlobalParserInterface->isBitVectorFunction(str))
+    else if (stp::GlobalParserInterface->isBitVectorFunction(s))
     {
-		smt2lval.str = new std::string(str);
-		return  BITVECTOR_FUNCTIONID_TOK;
+      smt2lval.str = new std::string(s);
+      if (cleaned) 
+        free (cleaned);
+      return  BITVECTOR_FUNCTIONID_TOK;
     }
-   else if (stp::GlobalParserInterface->isBooleanFunction(str))
-   {
-               smt2lval.str = new std::string(str);
-               return  BOOLEAN_FUNCTIONID_TOK;
-   }
-    
-    
+    else if (stp::GlobalParserInterface->isBooleanFunction(s))
+    {
+       smt2lval.str = new std::string(s);
+       if (cleaned) 
+         free (cleaned);
+       return  BOOLEAN_FUNCTIONID_TOK;
+    }
+   
+    if (found)
+    {
+       if (cleaned) 
+         free (cleaned);
 
-	if (found)
-	{
-	  // Check valuesize to see if it's a prop var.  I don't like doing
-	  // type determination in the lexer, but it's easier than rewriting
-	  // the whole grammar to eliminate the term/formula distinction.  
-	  smt2lval.node = stp::GlobalParserInterface->newNode(nptr);
-	  if ((smt2lval.node)->GetType() == stp::BOOLEAN_TYPE)
-	    return FORMID_TOK;
-	  else 
-	    return TERMID_TOK;
-	   }
-	else
-	{
-		// it has not been seen before.
-		smt2lval.str = new std::string(str);
-		return STRING_TOK;
-	}
-	}
+      // Check valuesize to see if it's a prop var.  I don't like doing
+      // type determination in the lexer, but it's easier than rewriting
+      // the whole grammar to eliminate the term/formula distinction.  
+      smt2lval.node = stp::GlobalParserInterface->newNode(nptr);
+      if ((smt2lval.node)->GetType() == stp::BOOLEAN_TYPE)
+        return FORMID_TOK;
+      else 
+        return TERMID_TOK;
+    }
+    else
+    {
+      // it has not been seen before.
+      smt2lval.str = new std::string(s);
+      if (cleaned) 
+        free (cleaned);
+      return STRING_TOK;
+    }
+  }
 %}
 
 %option always-interactive
