@@ -73,6 +73,12 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
+  static int copy;
+  static int move;
+  static int assign;
+  static int assign_move;
+  static int destroy;
+
   uint8_t getIteration() const;
   void setIteration(uint8_t v) const;
 
@@ -83,6 +89,8 @@ public:
   ASTNode(const ASTNode& n);
 
   ~ASTNode();
+
+  ASTNode ( ASTNode && other ) noexcept;
 
   // Print the arguments in lisp format
   friend ostream& LispPrintVec(ostream& os, const ASTVec& v, int indentation);
@@ -123,7 +131,8 @@ public:
 
   // Assignment (for ref counting)
   ASTNode& operator=(const ASTNode& n);
-
+  ASTNode& operator=(ASTNode&& n);
+  
   // Access node number
   unsigned GetNodeNum() const;
 

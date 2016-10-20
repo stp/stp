@@ -51,14 +51,59 @@ ASTNode::ASTNode(ASTInternal* in) : _int_node_ptr(in)
   }
 }
 
+//#define ASTNODE_COUNT_OPS
+
+#ifdef ASTNODE_COUNT_OPS
+int ASTNode::copy =0;
+int ASTNode::move =0;
+int ASTNode::assign =0;
+int ASTNode::destroy =0;
+int ASTNode::assign_move =0;
+#endif
+
+
+
 //Maintain _ref_count
 ASTNode::ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
 {
+  #ifdef ASTNODE_COUNT_OPS
+  if (++copy %1000000 == 0 )
+    std::cerr << "copy" << copy << std::endl;
+  #endif
+
   if (n._int_node_ptr)
   {
     n._int_node_ptr->IncRef();
   }
 }
+
+ASTNode::ASTNode ( ASTNode && other ) noexcept : _int_node_ptr(other._int_node_ptr)
+{
+  #ifdef ASTNODE_COUNT_OPS
+  if (++move %1000000 == 0 )
+    std::cerr << "move" << move << std::endl;
+  #endif
+
+  other._int_node_ptr =0;
+}
+
+ASTNode& ASTNode::operator=(ASTNode&& n)
+{
+  #ifdef ASTNODE_COUNT_OPS
+  if (++assign_move %1000000 == 0 )
+    std::cerr << "assign_move" << assign_move << std::endl;
+  #endif  
+
+  if (_int_node_ptr)
+    _int_node_ptr->DecRef();
+
+  _int_node_ptr = n._int_node_ptr;
+
+  n._int_node_ptr = 0;
+  return *this; 
+}
+
+
 
 // ASTNode accessor function.
 Kind ASTNode::GetKind() const
@@ -118,6 +163,11 @@ types ASTNode::GetType() const
 
 ASTNode& ASTNode::operator=(const ASTNode& n)
 {
+  #ifdef ASTNODE_COUNT_OPS
+  if (++assign %1000000 == 0 )
+    std::cerr << "assign" << assign << std::endl;
+  #endif
+
   if (n._int_node_ptr)
     n._int_node_ptr->IncRef();
 
@@ -130,6 +180,11 @@ ASTNode& ASTNode::operator=(const ASTNode& n)
 
 ASTNode::~ASTNode()
 {
+ #ifdef ASTNODE_COUNT_OPS
+ if (destroy++ %1000000 == 0 )
+   std::cerr << "destroy" << destroy << std::endl;
+ #endif
+
   if (_int_node_ptr)
   {
     _int_node_ptr->DecRef();
