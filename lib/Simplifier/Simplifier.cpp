@@ -501,6 +501,7 @@ unsigned getConstantBit(const ASTNode& n, const int i)
     return getConstantBit(n[0], i);
 
   assert(false);
+  abort();
 }
 
 ASTNode replaceIteConst(const ASTNode& n, const ASTNode& newVal,
