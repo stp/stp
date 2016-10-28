@@ -75,7 +75,6 @@ private:
     } else {
       _bvconst = CONSTANTBV::BitVector_Clone(bv);
     }
-    _value_width = width;
     cbv_managed_outside = managed_outside;
   }
 
@@ -84,7 +83,7 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1._value_width != bvc2._value_width)
+    if (bvc1.getValueWidth() != bvc2.getValueWidth())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
@@ -99,6 +98,13 @@ private:
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
   const static ASTVec astbv_empty_children;
+
+  void setIndexWidth(uint32_t i)  { assert(i==0);}
+  uint32_t getIndexWidth() const {return 0;}
+  
+  void setValueWidth(uint32_t v ) { assert(v == getValueWidth());}
+  uint32_t getValueWidth()  const {return bits_(_bvconst);}
+
 
 public:
   virtual ASTVec const& GetChildren() const { return astbv_empty_children; }

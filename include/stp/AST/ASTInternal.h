@@ -90,7 +90,11 @@ protected:
    *                                                                 *
    * Width of the index of an array. Positive for array, 0 otherwise *
    *******************************************************************/
-  uint32_t _index_width;
+  virtual void setIndexWidth(uint32_t) = 0;
+  virtual uint32_t getIndexWidth() const = 0;
+  
+  virtual void setValueWidth(uint32_t) = 0;
+  virtual uint32_t getValueWidth() const = 0;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -99,7 +103,6 @@ protected:
    *                                                                 *
    * Number of bits of bitvector. +ve for array/bitvector,0 otherwise*
    *******************************************************************/
-  uint32_t _value_width;
 
   // Kind. It's a type tag and the operator.
   enumeration<Kind, unsigned char> _kind;
@@ -138,7 +141,7 @@ public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
       : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), 
-        _index_width(0), _value_width(0), node_uid(node_uid_cntr+=2)
+         node_uid(node_uid_cntr+=2)
   {
   }
 
@@ -149,8 +152,7 @@ public:
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
-         _index_width(int_node._index_width),
-        _value_width(int_node._value_width), node_uid(int_node.node_uid)
+          node_uid(int_node.node_uid)
   {
   }
 

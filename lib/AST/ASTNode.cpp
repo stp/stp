@@ -40,6 +40,12 @@ void ASTNode::setIteration(uint8_t v) const
   _int_node_ptr->iteration = v;
 }
 
+STPMgr * ASTNode::GetSTPMgr() const
+{
+  return _int_node_ptr->nodeManager;
+}
+
+
 // Constructor;
 //
 // creates a new pointer, increments refcount of pointed-to object.
@@ -126,22 +132,22 @@ unsigned ASTNode::GetNodeNum() const
 
 unsigned int ASTNode::GetIndexWidth() const
 {
-  return _int_node_ptr->_index_width;
+  return _int_node_ptr->getIndexWidth();
 }
 
-void ASTNode::SetIndexWidth(unsigned int iw) const
+void ASTNode::SetIndexWidth(unsigned int _iw) const
 {
-  _int_node_ptr->_index_width = iw;
+  _int_node_ptr->setIndexWidth(_iw);
 }
 
 unsigned int ASTNode::GetValueWidth() const
 {
-  return _int_node_ptr->_value_width;
+  return _int_node_ptr->getValueWidth();
 }
 
 void ASTNode::SetValueWidth(unsigned int vw) const
 {
-  _int_node_ptr->_value_width = vw;
+  _int_node_ptr->setValueWidth(vw);
 }
 
 // return the type of the ASTNode:

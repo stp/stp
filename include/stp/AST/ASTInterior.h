@@ -88,9 +88,19 @@ class ASTInterior : public ASTInternal
   // compilers will accept)
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
+  uint32_t _value_width;
+  uint32_t _index_width;
+  
+  virtual void setIndexWidth(uint32_t i)  { _index_width =i;}
+  virtual uint32_t getIndexWidth() const {return _index_width;}
+  
+  virtual void setValueWidth(uint32_t v) {_value_width=v; }
+  virtual uint32_t getValueWidth() const  {return _value_width;}
+
+
 public:
   ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
-      : ASTInternal(mgr, kind), _children(children)
+      : ASTInternal(mgr, kind), _children(children), _index_width(0), _value_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -100,7 +110,7 @@ public:
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node) : ASTInternal(int_node), _children(int_node._children)
+  ASTInterior(const ASTInterior& int_node) : ASTInternal(int_node), _children(int_node._children), _index_width(int_node._index_width), _value_width(int_node._value_width)
   {
     is_simplified = false;
   }

@@ -86,16 +86,28 @@ private:
   // unique table
   virtual void CleanUp();
 
+  uint32_t _value_width;
+  uint32_t _index_width;
+  
+  virtual void setIndexWidth(uint32_t i)  { _index_width =i;}
+  virtual uint32_t getIndexWidth() const {return _index_width;}
+  
+  virtual void setValueWidth(uint32_t v) {_value_width=v; }
+  virtual uint32_t getValueWidth()  const {return _value_width;}
+
+
+
+
 public:
   virtual ASTVec const& GetChildren() const { return empty_children; }
 
   // Constructor.  This does NOT copy its argument.
-  ASTSymbol(STPMgr *mgr, const char* const name) : ASTInternal(mgr, SYMBOL), _name(name) {}
+  ASTSymbol(STPMgr *mgr, const char* const name) : ASTInternal(mgr, SYMBOL), _name(name), _index_width(0), _value_width(0) {}
 
   virtual ~ASTSymbol() {}
 
   // Copy constructor
-  ASTSymbol(const ASTSymbol& sym) : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name)
+  ASTSymbol(const ASTSymbol& sym) : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name), _index_width(sym._index_width), _value_width(sym._value_width)
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }

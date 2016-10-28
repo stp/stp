@@ -68,6 +68,9 @@ class ASTNode
     return (node1.Hash() < node2.Hash());
   }
 
+  STPMgr * GetSTPMgr() const;
+  
+
 public:
   /****************************************************************
    * Public Member Functions                                      *
