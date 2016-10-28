@@ -193,6 +193,10 @@ public:
 
   // Presentation Language Printer
   ostream& PL_Print(ostream& os , STPMgr *mgr, int indentation = 0) const;
+  ostream& PL_Print(ostream& os , int indentation = 0) const
+  {
+    return PL_Print(os, GetSTPMgr(), 0);
+  }
 
   // Construct let variables for shared subterms
   void LetizeNode(STPMgr* bm) const;
