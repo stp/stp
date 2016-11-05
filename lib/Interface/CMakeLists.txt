@@ -29,6 +29,7 @@ add_library(cppinterface OBJECT
 )
 
 add_dependencies(cinterface ASTKind_header)
+add_dependencies(cppinterface ASTKind_header)
 
 # FIXME: Remove this
 # For legacy reasons make the interface header files available in include/stp/ in the build directory
