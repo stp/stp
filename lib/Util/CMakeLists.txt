@@ -20,7 +20,6 @@
 
 add_library(util OBJECT
             ${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp
-            ASTUtil.cpp
             RunTimes.cpp
            )
 
