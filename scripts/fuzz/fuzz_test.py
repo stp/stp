@@ -9,11 +9,12 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 
 from __future__ import with_statement  # Required in 2.5
+from __future__ import print_function
 import subprocess
 import os
 import re
@@ -22,7 +23,6 @@ import resource
 import time
 import struct
 import random
-#from optparse import OptionParser
 import optparse
 
 maxTime = 200
@@ -92,25 +92,26 @@ class Tester:
 
     def random_options(self):
         cmd = " "
-        #opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp", "--disable-equality", "-r", "--oldstyle-refinement"]
+        # opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp"
+        # , "--disable-equality", "-r", "--oldstyle-refinement"]
 
-        #print options
+        # print options
         # --print-back-CVC", "--print-back-SMTLIB2"
         # --print-back-SMTLIB1", "--print-back-GDL", "--print-back-dot"
         # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes), -y (counterexample in binary)
         # -b (print back input to output)
 
-        #input options
+        # input options
         # , "--SMTLIB1", "-m", "--SMTLIB2"
 
-        #output options
-        #--output-CNF --output-bench --exit-after-CNF
+        # output options
+        # --output-CNF --output-bench --exit-after-CNF
         opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp",
                 "--disable-equality",
-                 "-r"]
+                "-r"]
 
         for opt in opts:
-            if random.randint(0,1) == 0:
+            if random.randint(0, 1) == 0:
                 cmd += opt + " "
 
         choose_solver = ["", "--simplifying-minisat", "--minisat"]
@@ -128,77 +129,74 @@ class Tester:
 
     def _check_solver_exists(self):
         if os.path.isfile(options.solver) is not True:
-            print "Error: Cannot find STP executable. Searched in: '%s'" % \
-                options.solver
-            print "Error code 300"
+            print("Error: Cannot find STP executable. Searched in: '%s'" % options.solver)
+            print("Error code 300")
             exit(300)
 
     def execute(self, fname, needToLimitTime=False):
         self._check_solver_exists()
 
-        #construct command
+        # construct command
         command = ""
         if not options.novalgrind and random.randint(0, 10) == 0:
             command += "valgrind -q --leak-check=full --track-origins=yes  --error-exitcode=173 "
 
         command += options.solver
         command += self.random_options()
-        #if options.verbose == False:
-        #    command += "--verb 0 "
-        command += "-p " #yes, print counterexample
+        command += "-p "  # yes, print counterexample
 
         command += options.extra_options + " "
         command += fname
-        print "Executing: %s " % command
+        print("Executing: %s " % command)
 
-        #print time limit
+        # print time limit
         if options.verbose:
-            print "CPU limit of parent (pid %d)" % os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)
+            print("CPU limit of parent (pid %d)" % os.getpid(), resource.getrlimit(resource.RLIMIT_CPU))
 
-        #if need time limit, then limit
+        # if need time limit, then limit
         if needToLimitTime:
             p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
         else:
             p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE)
 
-        #print time limit after child startup
+        # print time limit after child startup
         if options.verbose:
-            print "CPU limit of parent (pid %d) after startup of child" % \
-                os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)
+            print("CPU limit of parent (pid %d) after startup of child" %
+                  (os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)))
 
-        #Get solver output
+        # Get solver output
         consoleOutput, err = p.communicate()
         if options.verbose:
-            print "CPU limit of parent (pid %d) after child finished executing" % \
-                os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)
+            print("CPU limit of parent (pid %d) after child finished executing" %
+                  (os.getpid(), resource.getrlimit(resource.RLIMIT_CPU)))
 
         if p.returncode == 173:
-            print "Valgrind is indicating an error!"
-            print err
-            print consoleOutput
+            print("Valgrind is indicating an error!")
+            print(err)
+            print(consoleOutput)
             exit(-1)
 
         return consoleOutput
 
     def parse_solution_from_output(self, output_lines):
         if len(output_lines) == 0:
-            print "Error! SMT solver output is empty!"
-            print "output lines: ", output_lines
-            print "Error code 500"
+            print("Error! SMT solver output is empty!")
+            print("output lines: ", output_lines)
+            print("Error code 500")
             exit(500)
 
-        #solution will be put here
+        # solution will be put here
         satunsatfound = False
         vlinefound = False
         value = {}
 
-        #parse in solution
+        # parse in solution
         for line in output_lines:
-            #skip comment
+            # skip comment
             if (re.match('^c ', line)):
                 continue
 
-            #solution
+            # solution
             if (re.match('^sat', line)):
                 unsat = False
                 satunsatfound = True
@@ -209,40 +207,40 @@ class Tester:
                 satunsatfound = True
                 continue
 
-            #parse in solution
+            # parse in solution
             if (re.match('^ASSERT', line)):
                 vlinefound = True
-                print line
-                #ignoring this
+                print(line)
+                # ignoring this
 
         if satunsatfound == False:
-            print "Error: Cannot find line 'sat/unsat' in output!"
-            print output_lines
-            print "Error code 500"
+            print("Error: Cannot find line 'sat/unsat' in output!")
+            print(output_lines)
+            print("Error code 500")
             exit(500)
 
         return (unsat, value)
 
     def checkUNSAT(self, fname):
-        #execute with the other solver
+        # execute with the other solver
         toexec = "%s %s" % (options.checker, fname)
-        print "Solving with other solver.. '%s'" % toexec
+        print("Solving with other solver.. '%s'" % toexec)
         currTime = time.time()
         p = subprocess.Popen(toexec.rsplit(), stdout=subprocess.PIPE,
                              preexec_fn=setlimits)
         consoleOutput2 = p.communicate()[0]
 
-        #if other solver was out of time, then we can't say anything
+        # if other solver was out of time, then we can't say anything
         diffTime = time.time() - currTime
         if diffTime > maxTime-maxTimeDiff:
-            print "Other solver: too much time to solve, aborted!"
+            print("Other solver: too much time to solve, aborted!")
             return None
 
-        #extract output from the other solver
-        print "Checking other solver output..."
+        # extract output from the other solver
+        print("Checking other solver output...")
         (otherSolverUNSAT, otherSolverValue) = self.parse_solution_from_output(consoleOutput2.split("\n"))
 
-        #check if the other solver agrees with us
+        # check if the other solver agrees with us
         return otherSolverUNSAT
 
     def check_cryptominisat4(self):
@@ -258,60 +256,60 @@ class Tester:
     def check(self, fname, fnameSolution=None, needSolve=True, needToLimitTime=False):
         currTime = time.time()
 
-        #Do we need to solve the problem, or is it already solved?
+        # Do we need to solve the problem, or is it already solved?
         if needSolve:
             consoleOutput = self.execute(fname, needToLimitTime)
         else:
             if not os.path.isfile(fnameSolution):
-                print "ERROR! Solution file '%s' is not a file!" % fnameSolution
+                print("ERROR! Solution file '%s' is not a file!" % fnameSolution)
                 exit(-1)
             f = open(fnameSolution, "r")
             consoleOutput = f.read()
             f.close()
-            print "Read solution from file ", fnameSolution
+            print("Read solution from file ", fnameSolution)
 
-        #if time was limited, we need to know if we were over the time limit
-        #and that is why there is no solution
+        # if time was limited, we need to know if we were over the time limit
+        # and that is why there is no solution
         if needToLimitTime:
             diffTime = time.time() - currTime
             if diffTime > maxTime - maxTimeDiff:
-                print "Too much time to solve, aborted!"
+                print("Too much time to solve, aborted!")
                 return
             else:
-                print "Within time limit: %f s" % (time.time() - currTime)
+                print("Within time limit: %f s" % (time.time() - currTime))
 
-        print "filename: %s" % fname
-        print "Checking console output..."
+        print("filename: %s" % fname)
+        print("Checking console output...")
         (unsat, value) = self.parse_solution_from_output(consoleOutput.split("\n"))
         otherSolverUNSAT = True
 
-        if not unsat :
-            print "TODO: must test solution is correct SAT!"
+        if not unsat:
+            print("TODO: must test solution is correct SAT!")
             #self.test_found_solution(value, fname)
 
             ret = self.checkUNSAT(fname)
-            if ret is None :
-                print "Other solver time-outed, cannot check"
+            if ret is None:
+                print("Other solver time-outed, cannot check")
             elif ret is False:
-                print "SAT verified by other solver"
+                print("SAT verified by other solver")
             else:
-                print "Grave bug: UNSAT-> SAT : Other solver didn't find a solution!!"
+                print("Grave bug: UNSAT-> SAT : Other solver didn't find a solution!!")
                 exit()
             return
 
-        #it's UNSAT and we should not check, so exit
+        # it's UNSAT and we should not check, so exit
         if self.check_unsat is False:
-            print "Cannot check -- output is UNSAT"
+            print("Cannot check -- output is UNSAT")
             return
 
-        #check with other solver
+        # check with other solver
         ret = self.checkUNSAT(fname)
         if ret is None:
-            print "Other solver time-outed, cannot check"
+            print("Other solver time-outed, cannot check")
         elif ret is True:
-            print "UNSAT verified by other solver"
+            print("UNSAT verified by other solver")
         else:
-            print "Grave bug: SAT-> UNSAT : Other solver found solution!!"
+            print("Grave bug: SAT-> UNSAT : Other solver found solution!!")
             exit()
 
     def callFromFuzzer(self, base_dir, fuzzer, file_name):
@@ -329,15 +327,15 @@ class Tester:
         for fuzzer in fuzzers:
             file_name = unique_fuzz_file("fuzzTest")
 
-            #create the fuzz file
+            # create the fuzz file
             call = self.callFromFuzzer(directory, fuzzer, file_name)
-            print "calling ", fuzzer, " : ", call
+            print("calling ", fuzzer, " : ", call)
             out = commands.getstatusoutput(call)
 
-            #check file
+            # check file
             self.check(fname=file_name, needToLimitTime=True)
 
-            #remove temporary filenames
+            # remove temporary filenames
             os.unlink(file_name)
 
 tester = Tester()
