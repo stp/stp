@@ -1476,7 +1476,7 @@ void visit_all(const ASTNode& n, map<ASTNode, string>& visited, string current)
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     visit_all(n[i], visited, s);
   }
