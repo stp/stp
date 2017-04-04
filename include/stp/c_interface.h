@@ -349,7 +349,6 @@ Expr vc_bvCreateMemoryArray(VC vc, const char* arrayName);
 Expr vc_bvReadMemoryArray(VC vc, Expr array, Expr byteIndex, int numOfBytes);
 Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
                              int numOfBytes);
-Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
 
 // return a string representation of the Expr e. The caller is responsible
 // for deallocating the string with free()
