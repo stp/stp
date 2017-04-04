@@ -335,6 +335,7 @@ bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinemen
 
   const bool sat = CallSAT_On_ClauseBuckets(SatSolver, cl_buckets, to_cnf);
 
+  delete cl_buckets;
   if (NULL != to_cnf)
     delete to_cnf;
 
