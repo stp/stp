@@ -1445,7 +1445,6 @@ void ASTtoCNF::reduceMemoryFootprintPos(const ASTNode& varphi)
   if (sharesPos(*x) == 1)
   {
     DELETE(x->clausespos);
-    x->clausespos = NULL;
     if (x->clausesneg == NULL)
     {
       delete x;
@@ -1460,7 +1459,6 @@ void ASTtoCNF::reduceMemoryFootprintNeg(const ASTNode& varphi)
   if (sharesNeg(*x) == 1)
   {
     DELETE(x->clausesneg);
-    x->clausesneg = NULL;
     if (x->clausespos == NULL)
     {
       delete x;
@@ -1552,7 +1550,7 @@ ClauseList* ASTtoCNF::convertToCNF(const ASTNode& varphi)
   return defs;
 }
 
-void ASTtoCNF::DELETE(ClauseList* varphi)
+void ASTtoCNF::DELETE(ClauseList*& varphi)
 {
   varphi->deleteJustVectors();
   delete varphi;

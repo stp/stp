@@ -240,7 +240,7 @@ public:
 
   // Destructors that need to be explicitly called...(yuck).
   // One deletes the thing passed into it.
-  static void DELETE(ClauseList* varphi);
+  static void DELETE(ClauseList*& varphi);
 };
 } // end of namespace
 #endif
