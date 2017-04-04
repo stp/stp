@@ -225,11 +225,16 @@ bool BVTypeCheckRecursive(const ASTNode& n)
 {
   const ASTVec& c = n.GetChildren();
 
-  BVTypeCheck(n);
+  if (!BVTypeCheck(n)) {
+    return false;
+  }
 
   for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
-       it++)
-    BVTypeCheckRecursive(*it);
+       it++) {
+    if (!BVTypeCheckRecursive(*it)) {
+      return false;
+    }
+  }
 
   return true;
 }
