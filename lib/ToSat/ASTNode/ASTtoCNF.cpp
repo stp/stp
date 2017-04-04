@@ -491,11 +491,13 @@ ASTNode* ASTtoCNF::doRenameITE(const ASTNode& varphi, ClauseList* defs)
   ClauseList* cl2 = ClauseList::PRODUCT(*(info[varphi[0]]->clausesneg), *cl1);
   DELETE(cl1);
   defs->insert(cl2);
+  delete cl2;
 
   ClauseList* cl3 = SINGLETON(bm->CreateNode(EQ, psi, t2));
   ClauseList* cl4 = ClauseList::PRODUCT(*(info[varphi[0]]->clausespos), *cl3);
   DELETE(cl3);
   defs->insert(cl4);
+  delete cl4;
 
   return ASTNodeToASTNodePtr(psi);
 }
