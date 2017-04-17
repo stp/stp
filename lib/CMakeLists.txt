@@ -53,6 +53,7 @@ set(stp_lib_targets
     parser
     printer
     util
+    ${PLATFORM_COMPAT_LIBRARIES}
 )
 
 # Create list of objects and gather list of

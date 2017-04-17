@@ -25,11 +25,8 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/NodeIterator.h"
-#ifdef _MSC_VER
-// avoid TRUE and FALSE to be set to 1 and 0 in winmin.h
-#define TRUE TRUE
-#define FALSE FALSE
-#else
+
+#if !defined(_MSC_VER)
 // Needed for signal()
 #include <unistd.h>
 #endif
