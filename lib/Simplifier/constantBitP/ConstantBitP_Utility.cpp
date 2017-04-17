@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/Attributes.h"
 #include "extlib-constbv/constantbv.h"
 
 // Utility functions used by the transfer functions.
@@ -32,7 +33,7 @@ using std::vector;
 namespace stp
 {
 typedef unsigned int* CBV;
-void FatalError(const char* str);
+ATTR_NORETURN void FatalError(const char* str);
 }
 
 namespace simplifier

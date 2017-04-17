@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <utility>
 #include "stp/Util/RunTimes.h"
+#include "stp/Util/Attributes.h"
 #include "minisat/utils/System.h"
 
 // BE VERY CAREFUL> Update the Category Names to match.
@@ -54,7 +55,7 @@ std::string RunTimes::CategoryNames[] = {
 
 namespace stp
 {
-void FatalError(const char* str);
+ATTR_NORETURN void FatalError(const char* str);
 }
 
 long RunTimes::getCurrentTime()

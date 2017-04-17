@@ -30,7 +30,6 @@ THE SOFTWARE.
 namespace stp
 {
 class STPMgr;
-void FatalError(const char* str);
 
 /******************************************************************
  *  Class to represent internals of a bitvector constant          *

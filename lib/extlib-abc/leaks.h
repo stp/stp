@@ -28,7 +28,7 @@ SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #ifndef __LEAKS_H__
 #define __LEAKS_H__
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && !defined(__cplusplus)
 #define _CRTDBG_MAP_ALLOC // include Microsoft memory leak detection procedures
 //#define _INC_MALLOC	     // exclude standard memory alloc procedures
 

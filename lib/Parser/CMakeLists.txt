@@ -36,13 +36,23 @@
 # bison --debug -v -o parsesmt2.cpp -d -p smt2 smt2.y
 # flex -Cfe -olexsmt2.cpp -Psmt2 smt2.lex
 
+include(CheckIncludeFile)
+
 set(SOURCES LetMgr.cpp)
 set(TOLEX cvc smt2 smt)
+
+check_include_file("unistd.h" HAVE_UNISTD_H)
+if (HAVE_UNISTD_H)
+  set(FLEX_COMPATIBILITY_ARGS "")
+else()
+  set(FLEX_COMPATIBILITY_ARGS "--nounistd")
+endif()
+
 foreach(_file ${TOLEX})
     add_custom_command(
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp  ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
         COMMAND ${BISON_EXECUTABLE} --debug -v -o ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp -d -p ${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
-        COMMAND ${FLEX_EXECUTABLE} -Ce -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
         DEPENDS ${_file}.lex ${_file}.y
     )
     add_custom_target(parser_header${_file} ALL

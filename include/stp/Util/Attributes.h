@@ -1,8 +1,7 @@
-/**************
+/********************************************************************
+ * AUTHOR: Felix Kutzner
  *
- * Author: Trevor Hansen
- *
- * Date: Jun, 2011
+ * BEGIN DATE: Apr, 2017
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,38 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// C++ windows related time implementation
-
-#ifndef __TIME_H__
-#define __TIME_H__ 1
+#ifndef ATTRIBUTES_H_
+#define ATTRIBUTES_H_
 
 #if defined(_MSC_VER)
-// windows missed gettimeofday function
-struct timezone
-{
-  int tz_minuteswest; /* minutes W of Greenwich */
-  int tz_dsttime;     /* type of dst correction */
-};
-
-#if !defined(WINDOWS_H_INCLUDED)
-struct timeval
-{
-  long tv_sec;
-  long tv_usec;
-};
+#define ATTR_NORETURN _declspec(noreturn)
+#elif defined(__GNUC__) || defined(__clang__)
+#define ATTR_NORETURN __attribute__((noreturn))
+#else
+#define ATTR_NORETURN
 #endif
 
-namespace stp
-{
-int gettimeofdayWin32(struct timeval* tv, struct timezone* tz);
-}
-
-#if !defined(gettimeofday)
-// #define'ing gettimeofday to avoid generating the symbol gettimeofday
-#define gettimeofday(tv, tz) stp::gettimeofdayWin32(tv, tz);
-#endif
-
-#endif // defined(_MSC_VER)
-
-/************************************************************************/
 #endif

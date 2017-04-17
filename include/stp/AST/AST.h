@@ -27,13 +27,12 @@ THE SOFTWARE.
 
 #include "UsefulDefs.h"
 #include "ASTNode.h"
-
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
-void FatalError(const char* str, const ASTNode& a, int w = 0)
-                __attribute__((noreturn));
-void FatalError(const char* str) __attribute__((noreturn));
+ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w = 0);
+ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool exprless(const ASTNode n1, const ASTNode n2);

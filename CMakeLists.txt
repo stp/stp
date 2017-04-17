@@ -218,6 +218,8 @@ if(WIN32)
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
       set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
       include_directories(${STP_INCL_COMM})
+      add_subdirectory(windows)
+      set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
 
       # stack size of MSVC must be specified
       string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
