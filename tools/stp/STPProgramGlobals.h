@@ -29,10 +29,12 @@ THE SOFTWARE.
 #include <string>
 #include <algorithm>
 #include <ctime>
-#include <unistd.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <vector>
+
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
+#include <unistd.h>
+#endif
 
 namespace stp
 {
