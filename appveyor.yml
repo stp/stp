@@ -49,7 +49,7 @@ build_script:
   - cd c:\projects\stp
   - mkdir boost_1_59_0_install
 
-  - ps: . .\scripts\appveyor.ps1
+  - ps: . .\scripts\build\appveyor.ps1
   - cd boost_1_59_0
   - echo "Building boost.."
   - bootstrap.bat --with-libraries=program_options
