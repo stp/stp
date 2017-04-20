@@ -1,0 +1,100 @@
+# branches to build
+branches:
+  # whitelist
+  only:
+    - master
+    - appveyor_debug
+
+# Operating system (build VM template)
+os: Visual Studio 2015
+
+# scripts that are called at very beginning, before repo cloning
+init:
+  - git config --global core.autocrlf input
+
+
+# clone directory
+clone_folder: c:\projects\stp
+
+platform:
+  - x64
+#  - x86
+
+environment:
+  global:
+    #BOOST_ROOT: C:/Libraries/boost_1_59_0
+    BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
+    #BOOST_INCLUDEDIR: C:/Libraries/boost_1_59_0
+    MINISAT_ROOT: C:\projects\stp\minisat\myinstall
+    BUILD_TYPE: Release
+    MSBUILD_FLAGS: /maxcpucount /nologo
+
+configuration:
+  - Release
+
+build_script:
+  #- IF "%PLATFORM%" == "x86" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib32-msvc-14.0)
+  - IF "%PLATFORM%" == "x86" ( SET CMAKE_GENERATOR="Visual Studio 14 2015")
+
+  #- IF "%PLATFORM%" == "x64" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib64-msvc-14.0)
+  - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 14 2015 Win64")
+
+  - echo %PLATFORM%
+  - echo %BOOST_LIBRARYDIR%
+  - echo %CMAKE_GENERATOR%
+  - echo %configuration%
+  - echo %APPVEYOR_BUILD_FOLDER%
+
+  - echo %cd%
+  - cd c:\projects\stp
+  - mkdir boost_1_59_0_install
+
+  - ps: . .\scripts\appveyor.ps1
+  - cd boost_1_59_0
+  - echo "Building boost.."
+  - bootstrap.bat --with-libraries=program_options
+  - cat project-config.jam
+  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
+
+  # minisat
+  - cd C:\projects\stp
+  - git clone https://github.com/niklasso/minisat
+  - cd minisat
+  - echo %cd%
+  - mkdir build
+  - mkdir myinstall
+  - cd build
+  - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% ..
+  - cmake --build . --config %CONFIGURATION%
+  - ls ../myinstall/
+
+  - echo Running cmake...
+  - cd c:\projects\stp
+  - git submodule update --init --recursive
+  - mkdir build
+  - cd build
+  - cmake --version
+  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DMINISAT_LIBDIR=%MINISAT_ROOT%\libs -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include ..
+  - cmake --build . --config %CONFIGURATION%
+
+
+build:
+  # project: INSTALL.vcxproj      # path to Visual Studio solution or project
+  parallel: true
+  verbosity: minimal
+
+
+# scripts to run after build
+after_build:
+  - 7z a c:\projects\stp\stp.zip %APPVEYOR_BUILD_FOLDER%\build -tzip
+  - cd c:\projects\stp
+
+artifacts:
+  - path: stp.zip
+    name: stp.zip
+
+deploy_script:
+  #- cd c:\projects\stp
+  #- curl -T stp.zip --user %ACCOUNT% https://someplace/
+
+test: off
