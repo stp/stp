@@ -19,7 +19,7 @@
 # THE SOFTWARE.
 
 project(STP)
-cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
 
 if(NOT (CMAKE_MAJOR_VERSION LESS 2))
@@ -174,7 +174,7 @@ if(APPLE AND HAVE_FLAG_STDLIB_LIBCPP)
 endif()
 
 
-if (NOT WIN32)
+if (NOT MSVC)
     add_cxx_flag_if_supported("-Wall")
     add_cxx_flag_if_supported("-Wextra")
     add_cxx_flag_if_supported("-Wunused")
