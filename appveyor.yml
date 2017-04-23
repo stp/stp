@@ -73,7 +73,7 @@ build_script:
 
   # minisat
   - cd C:\projects\stp
-  - git clone https://github.com/niklasso/minisat
+  - git clone https://github.com/msoos/minisat
   - cd minisat
   - echo %cd%
   - mkdir build
