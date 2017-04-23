@@ -80,7 +80,7 @@ build_script:
   - mkdir myinstall
   - cd build
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
-  - cmake --build . --config %CONFIGURATION%
+  - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
   - dir ..\myinstall\
 
   # finally STP
@@ -90,7 +90,7 @@ build_script:
   - cd build
   - cmake --version
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DMINISAT_LIBDIR=%MINISAT_ROOT%\libs -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include ..
-  - cmake --build . --config %CONFIGURATION%
+  - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
 
 
 build:
