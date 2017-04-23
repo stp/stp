@@ -48,7 +48,7 @@ else()
   message(STATUS "Finding dynamic minisat libs...")
   message(STATUS "looking at:  ${MINISAT_LIBDIR}")
   find_library(MINISAT_LIBRARY NAMES minisat minisat2
-             PATHS ${MINISAT_LIBDIR} ${MINISAT_LIBRARY_DIRS} )
+             PATHS ${MINISAT_LIBDIR} ${MINISAT_LIBDIR}\lib ${MINISAT_LIBRARY_DIRS} )
  message(STATUS "found: MINISAT_LIBRARY: ${MINISAT_LIBRARY}")
 endif()
 
