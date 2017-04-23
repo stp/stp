@@ -32,3 +32,4 @@ add_custom_target(python-interface-tests
 
 # Make sure this test-suite runs when "check" is target
 add_dependencies(check python-interface-tests)
+add_dependencies(python-interface-tests pre-check)
