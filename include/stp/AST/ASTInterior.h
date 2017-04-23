@@ -117,7 +117,7 @@ public:
 
   ASTInterior & operator= (const ASTInterior & other) =delete;
 
-  virtual ~ASTInterior() {}
+  virtual ~ASTInterior();
 
   virtual ASTVec const& GetChildren() const { return _children; }
 

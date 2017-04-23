@@ -78,4 +78,6 @@ operator()(const ASTInterior* int_node_ptr1,
   return (*int_node_ptr1 == *int_node_ptr2);
 }
 
+ASTInterior::~ASTInterior() {}
+
 } // end of namespace
