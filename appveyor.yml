@@ -26,7 +26,7 @@ environment:
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     BUILD_TYPE: Release
-    MSBUILD_FLAGS: /maxcpucount /nologo
+    MSBUILD_FLAGS: /maxcpucount /nologo /p:WarningLevel=1
 
 configuration:
   - Release
