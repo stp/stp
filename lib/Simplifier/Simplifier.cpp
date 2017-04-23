@@ -237,8 +237,9 @@ void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
   // the constraint is lost. This is subsumed by constant bit propagation, so I
   // suspect
   // it's not a big loss.
-  if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
-    AlwaysTrueHashSet.insert(key.GetNodeNum());
+
+    /*if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
+    AlwaysTrueHashSet.insert(key.GetNodeNum());*/
 }
 
 ASTNode Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b,
@@ -519,7 +520,6 @@ ASTNode replaceIteConst(const ASTNode& n, const ASTNode& newVal,
                           replaceIteConst(n[2], newVal, nf));
   }
   FatalError("never here", n);
-  exit(-1);
 }
 
 bool getPossibleValues(const ASTNode& n, ASTNodeSet& visited,
@@ -1687,7 +1687,6 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
 
     default:
       FatalError("Unexpected.");
-      maxLength = 0;
   }
 
   if (maxLength < output.GetValueWidth())
@@ -3468,10 +3467,6 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
         nf->CreateTerm(BVMULT, a.GetValueWidth(), left, right[0]));
     c = nf->CreateTerm(BVMULT, a.GetValueWidth(), c, right[1]);
     return c;
-    left = c[0];
-    right = c[1];
-    left_kind = left.GetKind();
-    right_kind = right.GetKind();
   }
 
   // special case optimization: c1*(t1*c2) <==> (c1*c2)*t1
@@ -3482,10 +3477,6 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
         nf->CreateTerm(BVMULT, a.GetValueWidth(), left, right[1]));
     c = nf->CreateTerm(BVMULT, a.GetValueWidth(), c, right[0]);
     return c;
-    left = c[0];
-    right = c[1];
-    left_kind = left.GetKind();
-    right_kind = right.GetKind();
   }
 
   // atleast one of left or right have to be BVPLUS

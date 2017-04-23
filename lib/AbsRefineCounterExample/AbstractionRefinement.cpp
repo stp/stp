@@ -175,7 +175,6 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
   }
   else {
     FatalError("Unexpected, both must be constants..");
-    exit(-1);
   }
 }
 

@@ -1615,7 +1615,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
     const ASTNode& xN, const ASTNode& yN, vector<list<BBNode>>& products,
     const ASTNode& n)
 {
-  const int bitWidth = x_i.size();
+  const unsigned bitWidth = x_i.size();
   assert(x_i.size() == y_i.size());
 
   const BBNodeVec& x = x_i;
@@ -1624,13 +1624,13 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
   const BBNode& BBTrue = nf->getTrue();
   const BBNode& BBFalse = nf->getFalse();
 
-  for (int i = 0; i < bitWidth; i++)
+  for (unsigned i = 0; i < bitWidth; i++)
   {
     assert(products[i].size() == 0);
   }
 
   BBNodeVec notY;
-  for (int i = 0; i < y.size(); i++)
+  for (unsigned i = 0; i < y.size(); i++)
   {
     notY.push_back(nf->CreateNode(NOT, y[i]));
   }
@@ -1659,7 +1659,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
   // We store them into here before sorting them.
   vector<vector<BBNode>> t_products(bitWidth);
 
-  for (int i = 0; i < bitWidth; i++)
+  for (unsigned i = 0; i < bitWidth; i++)
   {
     if (x[i] != BBTrue && x[i] != BBFalse)
     {
@@ -1683,7 +1683,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
       t_products[i].push_back(BBFalse);
 
     sort(t_products[i].begin(), t_products[i].end());
-    for (int j = 0; j < t_products[i].size(); j++)
+    for (unsigned j = 0; j < t_products[i].size(); j++)
       products[i].push_back(t_products[i][j]);
   }
 }
@@ -1693,7 +1693,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
 // I've not measured if this is better than the current variant.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::mult_allPairs(
-    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support,
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
     vector<list<BBNode>>& products)
 {
   // Make a table of partial products.
@@ -1739,10 +1739,10 @@ MultiplicationStats* BitBlaster<BBNode, BBNodeManagerT>::getMS(const ASTNode& n,
 
       assert(ms->x.getWidth() == ms->y.getWidth());
       assert(ms->r.getWidth() == ms->y.getWidth());
-      assert(ms->r.getWidth() == (int)ms->bitWidth);
+      assert(ms->r.getWidth() == ms->bitWidth);
     }
 
-    for (int i = 0; i < n.GetValueWidth(); i++)
+    for (unsigned i = 0; i < n.GetValueWidth(); i++)
       if (ms->sumH[i] == 0)
         highestZero = i;
 
@@ -1816,7 +1816,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_BubbleSorterWithBounds(
 {
 
   // Add the carry from the prior column. i.e. each second sorted formula.
-  for (int k = 1; k < priorSorted.size(); k += 2)
+  for (unsigned k = 1; k < priorSorted.size(); k += 2)
   {
     current.push_back(priorSorted[k]);
   }
@@ -1901,7 +1901,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::checkFixed(const BBNodeVec& v,
   if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end())
   {
     FixedBits* b = cb->fixedMap->map->find(n)->second;
-    for (int i = 0; i < b->getWidth(); i++)
+    for (unsigned i = 0; i < b->getWidth(); i++)
     {
       if (b->isFixed(i))
       {
@@ -1984,7 +1984,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
     y = _x;
   }
 
-  const int bitWidth = n.GetValueWidth();
+  const unsigned bitWidth = n.GetValueWidth();
   assert(x.size() == bitWidth);
   assert(y.size() == bitWidth);
 
@@ -2010,7 +2010,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
     mult_Booth(_x, _y, support, n[0], n[1], products, n);
     vector<BBNode> prior;
 
-    for (int i = 0; i < bitWidth; i++)
+    for (unsigned i = 0; i < bitWidth; i++)
     {
       vector<BBNode> output;
       mult_BubbleSorterWithBounds(support, products[i], output, prior);
@@ -2082,18 +2082,18 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::batcher(const vector<BBNode>& in)
   vector<BBNode> b;
 
   // half way rounded up.
-  const int halfWay = (((in.size() % 2) == 0 ? 0 : 1) + (in.size() / 2));
-  for (int i = 0; i < halfWay; i++)
+  const unsigned halfWay = (((in.size() % 2) == 0 ? 0 : 1) + (in.size() / 2));
+  for (unsigned i = 0; i < halfWay; i++)
     a.push_back(in[i]);
 
-  for (int i = halfWay; i < in.size(); i++)
+  for (unsigned i = halfWay; i < in.size(); i++)
     b.push_back(in[i]);
 
   assert(a.size() >= b.size());
   assert(a.size() + b.size() == in.size());
   vector<BBNode> result = mergeSorted(batcher(a), batcher(b));
 
-  for (int k = 0; k < result.size(); k++)
+  for (unsigned k = 0; k < result.size(); k++)
     assert(!result[k].IsNull());
 
   assert(result.size() == in.size());
@@ -2123,7 +2123,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::sortingNetworkAdd(
   assert(sorted.size() == toSort.size());
 
   vector<BBNode> sortedCarryIn;
-  for (int k = 1; k < priorSorted.size(); k += 2)
+  for (unsigned k = 1; k < priorSorted.size(); k += 2)
   {
     sortedCarryIn.push_back(priorSorted[k]);
   }
@@ -2261,22 +2261,22 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
                                                  set<BBNode>& support,
                                                  const ASTNode& n)
 {
-  const int bitWidth = n.GetValueWidth();
+  const unsigned bitWidth = n.GetValueWidth();
 
   vector<vector<BBNode>> toAdd(bitWidth);
 
-  for (int column = 0; column < bitWidth; column++)
+  for (unsigned column = 0; column < bitWidth; column++)
   {
     vector<BBNode> sorted; // The current column (sorted) gets put into here.
     vector<BBNode> prior;  // Prior is always empty in this..
 
-    const int size = products[column].size();
+    const unsigned size = products[column].size();
     sortingNetworkAdd(support, products[column], sorted, prior);
 
     assert(products[column].size() == 1);
     assert(sorted.size() == size);
 
-    for (int k = 2; k <= sorted.size(); k++)
+    for (unsigned k = 2; k <= sorted.size(); k++)
     {
       BBNode part;
       if (k == sorted.size())
@@ -2307,12 +2307,12 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
       }
     }
 
-    for (int carry_column = column + 1; carry_column < bitWidth; carry_column++)
+    for (unsigned carry_column = column + 1; carry_column < bitWidth; carry_column++)
     {
       if (toAdd[carry_column].size() == 0)
         continue;
       BBNode disjunct = BBFalse;
-      for (int l = 0; l < toAdd[carry_column].size(); l++)
+      for (unsigned l = 0; l < toAdd[carry_column].size(); l++)
       {
         disjunct = nf->CreateNode(OR, disjunct, toAdd[carry_column][l]);
       }
@@ -2322,7 +2322,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
       toAdd[carry_column].clear();
     }
   }
-  for (int i = 0; i < bitWidth; i++)
+  for (unsigned i = 0; i < bitWidth; i++)
   {
     assert(toAdd[i].size() == 0);
   }
@@ -2477,7 +2477,7 @@ BitBlaster<BBNode, BBNodeManagerT>::compareOddEven(const vector<BBNode>& in)
 {
   vector<BBNode> result(in);
 
-  for (int i = 2; i < in.size(); i = i + 2)
+  for (unsigned i = 2; i < in.size(); i += 2)
   {
     BBNode a = in[i - 1];
     BBNode b = in[i];
@@ -2513,7 +2513,7 @@ BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1,
   {
     vector<BBNode> evenL;
     vector<BBNode> oddL;
-    for (int i = 0; i < in1.size(); i++)
+    for (unsigned i = 0; i < in1.size(); i++)
     {
       if (i % 2 == 0)
         evenL.push_back(in1[i]);
@@ -2523,7 +2523,7 @@ BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1,
 
     vector<BBNode> evenR; // Take the even of each.
     vector<BBNode> oddR;  // Take the odd of each
-    for (int i = 0; i < in2.size(); i++)
+    for (unsigned i = 0; i < in2.size(); i++)
     {
       if (i % 2 == 0)
         evenR.push_back(in2[i]);
@@ -2537,7 +2537,7 @@ BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1,
     vector<BBNode> odd = oddL.size() < oddR.size() ? mergeSorted(oddR, oddL)
                                                    : mergeSorted(oddL, oddR);
 
-    for (int i = 0; i < std::max(even.size(), odd.size()); i++)
+    for (unsigned i = 0; i < std::max(even.size(), odd.size()); i++)
     {
       if (even.size() > i)
         result.push_back(even[i]);

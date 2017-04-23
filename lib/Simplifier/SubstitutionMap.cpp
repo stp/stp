@@ -38,10 +38,6 @@ SubstitutionMap::~SubstitutionMap()
   delete SolverMap;
 }
 
-// if false. Don't simplify while creating the substitution map.
-// This makes it easier to spot how long is spent in the simplifier.
-const bool simplify_during_create_subM = false;
-
 // if a is READ(Arr,const) and b is BVCONST then return 1.
 // if a is a symbol SYMBOL, return 1.
 // if b is READ(Arr,const) and a is BVCONST then return -1

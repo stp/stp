@@ -276,17 +276,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       assert(children.size() == 2);
       ASTVec newCh;
       newCh.reserve(2);
-      if (false)
-      {
-        newCh.push_back(CreateSimpleNot(children[0]));
-        newCh.push_back(children[1]);
-        result = CreateSimpleXor(newCh);
-      }
-      else
-      {
-        result = CreateSimpleXor(children);
-        result = CreateSimpleNot(result);
-      }
+      result = CreateSimpleXor(children);
+      result = CreateSimpleNot(result);
       break;
     }
     case stp::IMPLIES:
