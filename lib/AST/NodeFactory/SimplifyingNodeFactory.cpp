@@ -640,7 +640,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   }
 
   if (k1 == stp::BVCONST && k2 == stp::BVSX &&
-      (in2[0].GetValueWidth() != width))
+      (in2[0].GetValueWidth() != (unsigned)width))
   {
     // Each of the bits in the extended part, and one into the un-extended part
     // must be the same.
