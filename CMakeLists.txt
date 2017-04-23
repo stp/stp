@@ -285,10 +285,9 @@ option(ONLY_SIMPLE "Don't try to use boost" OFF)
 if (NOT ONLY_SIMPLE)
   find_package( Boost 1.46 COMPONENTS program_options)
 endif()
+
 if(NOT Boost_FOUND)
   message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
-else()
-  include_directories(${Boost_INCLUDE_DIRS})
 endif()
 
 

@@ -45,15 +45,15 @@ build_script:
   - echo %APPVEYOR_BUILD_FOLDER%
   - echo %cd%
 
-  # boost
-  #- cd c:\projects\stp
-  #- mkdir boost_1_59_0_install
-  #- ps: . .\scripts\build\appveyor.ps1
-  #- cd boost_1_59_0
-  #- echo "Building boost.."
-  #- bootstrap.bat --with-libraries=program_options
-  #- cat project-config.jam
-  #- b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
+  boost
+  - cd c:\projects\stp
+  - mkdir boost_1_59_0_install
+  - ps: . .\scripts\build\appveyor.ps1
+  - cd boost_1_59_0
+  - echo "Building boost.."
+  - bootstrap.bat --with-libraries=program_options
+  - cat project-config.jam
+  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
 
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
