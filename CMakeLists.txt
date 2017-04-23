@@ -316,6 +316,15 @@ if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
 endif()
 
 # -----------------------------------------------------------------------------
+# Find ZLIB (needed for MiniSat)
+# yes, we need to include the zlib header location or STP will not build
+# thanks to MiniSat include-ing it n the header
+# -----------------------------------------------------------------------------
+find_package(ZLIB)
+include_directories(${ZLIB_INCLUDE_DIR})
+include_directories(${minisat_SOURCE_DIR})
+
+# -----------------------------------------------------------------------------
 # Find Minisat
 # -----------------------------------------------------------------------------
 find_package(minisat)
