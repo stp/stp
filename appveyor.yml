@@ -43,11 +43,11 @@ build_script:
   - echo %CMAKE_GENERATOR%
   - echo %configuration%
   - echo %APPVEYOR_BUILD_FOLDER%
-
   - echo %cd%
+
+  # boost
   - cd c:\projects\stp
   - mkdir boost_1_59_0_install
-
   - ps: . .\scripts\build\appveyor.ps1
   - cd boost_1_59_0
   - echo "Building boost.."
@@ -83,7 +83,7 @@ build_script:
   - cmake --build . --config %CONFIGURATION%
   - dir ..\myinstall\
 
-  - echo Running cmake...
+  # finally STP
   - cd c:\projects\stp
   - git submodule update --init --recursive
   - mkdir build
