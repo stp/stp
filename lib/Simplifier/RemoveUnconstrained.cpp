@@ -247,7 +247,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     unsigned indexWidth = muteNode.getParent().n.GetIndexWidth();
 
     ASTNode other;
-    MutableASTNode* muteOther;
+    MutableASTNode* muteOther = NULL;
 
     if (numberOfChildren == 2)
     {
