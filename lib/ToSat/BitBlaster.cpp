@@ -538,7 +538,7 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(
   {
     ASTVec new_ch;
     new_ch.reserve(numberOfChildren);
-    for (size_t i = 0; i < numberOfChildren; i++)
+    for (size_t i = 0; i < (size_t)numberOfChildren; i++)
     {
       if (!term[i].isConstant() && isConstant(ch[i]))
         new_ch.push_back(getConstant(ch[i], term[i]));
@@ -1351,7 +1351,7 @@ void convert(const BBNodeVec& v, BBNodeManagerT* nf, mult_type* result)
   const BBNode& BBTrue = nf->getTrue();
   const BBNode& BBFalse = nf->getFalse();
 
-  for (int i = 0; i < v.size(); i++)
+  for (size_t i = 0; i < v.size(); i++)
   {
     if (v[i] == BBTrue)
       result[i] = ONE_MT;
@@ -1363,7 +1363,7 @@ void convert(const BBNodeVec& v, BBNodeManagerT* nf, mult_type* result)
 
   // find runs of ones.
   int lastOne = -1;
-  for (int i = 0; i < v.size(); i++)
+  for (size_t i = 0; i < v.size(); i++)
   {
     assert(result[i] != MINUS_ONE_MT);
 
@@ -1373,7 +1373,7 @@ void convert(const BBNodeVec& v, BBNodeManagerT* nf, mult_type* result)
     if (result[i] != ONE_MT && lastOne != -1 && (i - lastOne >= 3))
     {
       result[lastOne] = MINUS_ONE_MT;
-      for (int j = lastOne + 1; j < i; j++)
+      for (int j = lastOne + 1; j < (int)i; j++)
         result[j] = ZERO_MT;
       // Should this be lastOne = i?
       lastOne = i;

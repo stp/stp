@@ -102,12 +102,14 @@ public:
   virtual ASTVec const& GetChildren() const { return empty_children; }
 
   // Constructor.  This does NOT copy its argument.
-  ASTSymbol(STPMgr *mgr, const char* const name) : ASTInternal(mgr, SYMBOL), _name(name), _index_width(0), _value_width(0) {}
+  ASTSymbol(STPMgr *mgr, const char* const name) : ASTInternal(mgr, SYMBOL),
+     _name(name), _value_width(0), _index_width(0) {}
 
   virtual ~ASTSymbol() {}
 
   // Copy constructor
-  ASTSymbol(const ASTSymbol& sym) : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name), _index_width(sym._index_width), _value_width(sym._value_width)
+  ASTSymbol(const ASTSymbol& sym) : ASTInternal(sym.nodeManager, sym._kind),
+     _name(sym._name), _value_width(sym._value_width), _index_width(sym._index_width)
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }

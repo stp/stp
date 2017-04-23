@@ -139,9 +139,9 @@ protected:
 
 public:
   // Constructor (kind only, empty children, int nodenum)
-  ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
-      : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), 
-         node_uid(node_uid_cntr+=2)
+  ASTInternal(STPMgr* mgr, Kind kind)
+      : nodeManager(mgr), node_uid(node_uid_cntr+=2),
+         _ref_count(0), _kind(kind), iteration(0)
   {
   }
 
@@ -151,8 +151,9 @@ public:
   // temporary hash keys before uniquefication.
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
-      : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
-          node_uid(int_node.node_uid)
+      : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
+         _ref_count(0), _kind(int_node._kind), iteration(0)
+
   {
   }
 

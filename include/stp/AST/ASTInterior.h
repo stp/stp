@@ -100,7 +100,7 @@ class ASTInterior : public ASTInternal
 
 public:
   ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
-      : ASTInternal(mgr, kind), _children(children), _index_width(0), _value_width(0)
+      : ASTInternal(mgr, kind), _children(children), _value_width(0), _index_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -110,7 +110,7 @@ public:
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node) : ASTInternal(int_node), _children(int_node._children), _index_width(int_node._index_width), _value_width(int_node._value_width)
+  ASTInterior(const ASTInterior& int_node) : ASTInternal(int_node), _children(int_node._children), _value_width(int_node._value_width), _index_width(int_node._index_width)
   {
     is_simplified = false;
   }

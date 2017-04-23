@@ -449,7 +449,6 @@ public:
     }
   
     std::map<Kind, int> freq;
-    size_t cum =0;
     for (auto it : _interior_unique_table)
       {
          freq[it->GetKind()]++;
