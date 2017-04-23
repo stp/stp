@@ -43,6 +43,7 @@ if (Minisat_USE_STATIC_LIBS)
   macro_pop_required_vars(CMAKE_FIND_LIBRARY_SUFFIXES)
 else()
   message(STATUS "Finding dynamic minisat libs...")
+  message(STATUS "looking at:  ${MINISAT_LIBDIR}")
   find_library(MINISAT_LIBRARY NAMES minisat minisat2
              HINTS ${MINISAT_LIBDIR} ${MINISAT_LIBRARY_DIRS} )
 endif()

@@ -82,6 +82,8 @@ build_script:
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
   - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
   - dir ..\myinstall\
+  - dir ..\myinstall\lib\
+  - dir ..\myinstall\bin\
 
   # finally STP
   - cd c:\projects\stp
@@ -89,7 +91,7 @@ build_script:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DMINISAT_LIBDIR=%MINISAT_ROOT%\lib -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include ..
+  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include ..
   - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
 
 
