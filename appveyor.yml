@@ -84,6 +84,7 @@ build_script:
   - dir ..\myinstall\
   - dir ..\myinstall\lib\
   - dir ..\myinstall\bin\
+  - dir ..\myinstall\include\
 
   # finally STP
   - cd c:\projects\stp
