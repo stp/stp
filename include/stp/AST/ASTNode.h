@@ -69,13 +69,8 @@ class ASTNode
   }
 
   STPMgr * GetSTPMgr() const;
-  
 
 public:
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
-
   static int copy;
   static int move;
   static int assign;
