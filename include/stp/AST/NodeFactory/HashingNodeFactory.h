@@ -26,17 +26,18 @@ THE SOFTWARE.
 #define HASHINGNODEFACTORY_H_
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
+#include "Util/constants.h"
 
 // A Node factory that only does structural hashing.
 class HashingNodeFactory : public NodeFactory
 {
 public:
-  HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
+  DLL_PUBLIC HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
+  DLL_PUBLIC virtual ~HashingNodeFactory();
 
-  virtual ~HashingNodeFactory();
-  ASTNode CreateNode(const Kind kind,
+  DLL_PUBLIC ASTNode CreateNode(const Kind kind,
                            const ASTVec& back_children);
-  ASTNode CreateTerm(Kind kind, unsigned int width,
+  DLL_PUBLIC ASTNode CreateTerm(Kind kind, unsigned int width,
                            const ASTVec& children);
 
   virtual std::string getName() { return "hashing"; }

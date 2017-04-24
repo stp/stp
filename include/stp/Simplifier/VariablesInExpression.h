@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "Symbols.h"
+#include "Util/constants.h"
 
 namespace stp
 {
@@ -40,8 +41,8 @@ private:
   ASTNodeToNodes symbol_graph;
 
 public:
-  VariablesInExpression();
-  virtual ~VariablesInExpression();
+  DLL_PUBLIC VariablesInExpression();
+  DLL_PUBLIC virtual ~VariablesInExpression();
 
   // When solving, we're interested in whether variables appear multiple times.
   typedef std::unordered_set<Symbols*, SymbolPtrHasher> SymbolPtrSet;

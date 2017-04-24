@@ -58,22 +58,23 @@ THE SOFTWARE.
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
+#include "Util/constants.h"
 
 class SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  virtual ASTNode CreateNode(Kind kind,
+  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind,
                                    const ASTVec& children);
-  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+  DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
                                    const ASTVec& children);
 
-  virtual std::string getName() { return "simplifying"; }
+  DLL_PUBLIC virtual std::string getName() { return "simplifying"; }
 
-  SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
+  DLL_PUBLIC SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
       : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
         ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
-  ~SimplifyingNodeFactory() {}
+  DLL_PUBLIC ~SimplifyingNodeFactory() {}
 
 private:
   SimplifyingNodeFactory(const SimplifyingNodeFactory&);

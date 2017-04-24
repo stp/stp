@@ -74,10 +74,10 @@ class BVSolver;
  ******************************************************************/
 typedef vector<ASTNode> ASTVec;
 typedef unsigned int* CBV;
-extern ASTVec _empty_ASTVec;
+DLL_PUBLIC extern ASTVec _empty_ASTVec;
 
 // Error handling function
-extern void (*vc_error_hdlr)(const char* err_msg);
+DLL_PUBLIC extern void (*vc_error_hdlr)(const char* err_msg);
 
 /******************************************************************
  * Class Spacer:

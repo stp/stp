@@ -28,11 +28,12 @@ THE SOFTWARE.
 #include "UsefulDefs.h"
 #include "ASTNode.h"
 #include "stp/Util/Attributes.h"
+#include "Util/constants.h"
 
 namespace stp
 {
-ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w = 0);
-ATTR_NORETURN void FatalError(const char* str);
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w = 0);
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool exprless(const ASTNode n1, const ASTNode n2);

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATBase.h"
+#include "Util/constants.h"
 
 namespace stp
 {
@@ -92,7 +93,7 @@ private:
 
 public:
 
-  ToSAT(STPMgr* bm) : ToSATBase(bm)
+  DLL_PUBLIC ToSAT(STPMgr* bm) : ToSATBase(bm)
   {
     CNFFileNameCounter = 0;
     benchFileNameCounter = 0;
@@ -109,7 +110,7 @@ public:
     SATVar_to_SymbolIndex.clear();
   }
 
-  ~ToSAT() { ClearAllTables(); }
+  DLL_PUBLIC ~ToSAT() { ClearAllTables(); }
 };
 } // end of namespace
 

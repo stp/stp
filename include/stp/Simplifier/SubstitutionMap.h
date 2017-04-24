@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/VariablesInExpression.h"
+#include "Util/constants.h"
 
 namespace stp
 {
@@ -87,7 +88,7 @@ public:
     substitutionsLastApplied = SolverMap->size();
   }
 
-  SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
+  DLL_PUBLIC SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
   {
     simp = _simp;
     bm = _bm;
@@ -108,7 +109,7 @@ public:
     haveAppliedSubstitutionMap();
   }
 
-  virtual ~SubstitutionMap();
+  DLL_PUBLIC virtual ~SubstitutionMap();
 
   // check the solver map for 'key'. If key is present, then return the
   // value by reference in the argument 'output'

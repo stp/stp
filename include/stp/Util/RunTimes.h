@@ -28,10 +28,10 @@ THE SOFTWARE.
 #include <stack>
 #include <map>
 #include <string>
-//#include "../sat/utils/System.h"
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include "Util/constants.h"
 
 class RunTimes // not copyable
 {
@@ -73,16 +73,16 @@ private:
   std::stack<Element> category_stack;
 
   // millisecond precision timer.
-  long getCurrentTime();
+  DLL_PUBLIC long getCurrentTime();
   void addTime(Category c, long milliseconds);
 
   long lastTime;
 
 public:
-  void addCount(Category c);
-  void start(Category c);
-  void stop(Category c);
-  void print();
+  DLL_PUBLIC void addCount(Category c);
+  DLL_PUBLIC void start(Category c);
+  DLL_PUBLIC void stop(Category c);
+  DLL_PUBLIC void print();
 
   std::string getDifference();
 

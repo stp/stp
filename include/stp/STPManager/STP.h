@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include "stp/Parser/LetMgr.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Simplifier/PropagateEqualities.h"
+#include "Util/constants.h"
 
 namespace stp
 {
@@ -119,7 +120,7 @@ public:
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
-  SOLVER_RETURN_TYPE TopLevelSTP(
+  DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(
     const ASTNode& inputasserts,
     const ASTNode& query
   );

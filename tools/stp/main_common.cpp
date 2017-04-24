@@ -35,9 +35,9 @@ extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
 extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
-extern FILE* cvcin;
-extern FILE* smtin;
-extern FILE* smt2in;
+DLL_PUBLIC extern FILE* cvcin;
+DLL_PUBLIC extern FILE* smtin;
+DLL_PUBLIC extern FILE* smt2in;
 
 using namespace stp;
 using std::auto_ptr;
@@ -323,8 +323,7 @@ int Main::main(int argc, char** argv)
       return 0;
     }
 
-    SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(
-      asserts, query);
+    SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(asserts, query);
 
     if (bm->UserFlags.quick_statistics_flag)
     {

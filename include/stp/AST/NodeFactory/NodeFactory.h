@@ -27,8 +27,9 @@ THE SOFTWARE.
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
-using std::vector;
+#include "Util/constants.h"
 
+using std::vector;
 namespace stp
 {
   class ASTNode;
@@ -51,18 +52,17 @@ protected:
   STPMgr& bm;
 
 public:
-  NodeFactory(STPMgr& bm_) : bm(bm_) {}
+  DLL_PUBLIC NodeFactory(STPMgr& bm_) : bm(bm_) {}
+  DLL_PUBLIC virtual ~NodeFactory();
 
-  virtual ~NodeFactory();
-
-  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+  DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
                                    const ASTVec& children) = 0;
 
-  virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+  DLL_PUBLIC virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
                                         unsigned int width,
                                         const ASTVec& children);
 
-  virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
+  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
 
   ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                        unsigned valueWidth);
@@ -76,9 +76,9 @@ public:
                      const ASTNode& child1, const ASTNode& child2,
                      const ASTVec& children = _empty_ASTVec);
 
-  ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0,
                      const ASTVec& back_children = _empty_ASTVec);
-  ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
+  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
                      const ASTVec& back_children = _empty_ASTVec);
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
                      const ASTNode& child2,
@@ -98,7 +98,7 @@ public:
   ASTNode CreateZeroConst(unsigned width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
 
-  virtual std::string getName() = 0;
+  DLL_PUBLIC virtual std::string getName() = 0;
 };
 
 #endif

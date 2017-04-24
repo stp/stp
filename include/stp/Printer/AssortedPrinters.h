@@ -26,6 +26,8 @@ THE SOFTWARE.
 #define PRINTER_H
 
 #include "stp/AST/AST.h"
+#include "Util/constants.h"
+
 namespace stp
 {
 
@@ -61,6 +63,7 @@ public:
 void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision,
                                          int polarity = 0);
 
-void print_STPInput_Back(const ASTNode& query, STPMgr *);
+DLL_PUBLIC void print_STPInput_Back(const ASTNode& query, STPMgr *);
+
 } // end of namespace stp
 #endif

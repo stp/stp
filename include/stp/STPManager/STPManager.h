@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/Sat/SATSolver.h"
+#include "Util/constants.h"
 
 namespace stp
 {
@@ -51,10 +52,6 @@ class STPMgr
                                  const ASTVec& back_children);
 
 private:
-  /****************************************************************
-   * Private Typedefs and Data                                    *
-   ****************************************************************/
-
   // Typedef for unique Interior node table.
   typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
                    ASTInterior::ASTInteriorEqual> ASTInteriorSet;
@@ -212,7 +209,7 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-  STPMgr()
+  DLL_PUBLIC STPMgr()
       :  last_iteration(0), soft_timeout_expired(false),
         _symbol_count(0), CNFFileNameCounter(0)
   {
@@ -261,33 +258,33 @@ public:
    * Create Node functions                                        *
    ****************************************************************/
 
-  inline ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
+  DLL_PUBLIC inline ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                               unsigned valueWidth)
   {
     return defaultNodeFactory->CreateSymbol(name, indexWidth, valueWidth);
   }
 
   // Create and return an interior ASTNode
-  inline ASTNode CreateNode(stp::Kind kind,
+  DLL_PUBLIC inline ASTNode CreateNode(stp::Kind kind,
                                   const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
                             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, back_children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
                             const ASTNode& child1,
                             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, child1, back_children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
                             const ASTNode& child1, const ASTNode& child2,
                             const ASTVec& back_children = _empty_ASTVec)
   {
@@ -434,7 +431,7 @@ public:
     ListOfDeclaredVars.clear();
   }
 
-  ~STPMgr();
+  DLL_PUBLIC ~STPMgr();
 
   // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
   vector<stp::ASTNode*> persist;
