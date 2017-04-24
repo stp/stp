@@ -158,8 +158,7 @@ public:
   // Get back() element for child nodes
   const ASTNode back() const { return GetChildren().back(); };
 
-  // Get the name from a symbol (char *).  It's an error if kind !=
-  // SYMBOL.
+  // Get the name from a symbol (char *).  It's an error if kind != SYMBOL.
   const char* GetName() const;
 
   // Get the BVCONST value.

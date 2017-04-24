@@ -64,10 +64,6 @@ class ASTInternal
   friend class ASTNode;
 
 protected:
-  /****************************************************************
-   * Protected Data                                               *
-   ****************************************************************/
-
   // Pointer back to the node manager that holds this.
   STPMgr * nodeManager;
 

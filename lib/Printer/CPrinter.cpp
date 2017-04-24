@@ -76,22 +76,12 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
   {
     case BOOLEXTRACT:
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << "{";
-      C_Print1(os, c[1], indentation, letize,bm);
-      os << "}";
       break;
     case BITVECTOR:
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "BITVECTOR(";
-      unsigned char* str;
-      str = CONSTANTBV::BitVector_to_Hex(c[0].GetBVConst());
-      os << str << ")";
-      CONSTANTBV::BitVector_Dispose(str);
       break;
     case BOOLEAN:
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "BOOLEAN";
       break;
     case FALSE:
       os << "0";
@@ -138,11 +128,6 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
     case BVCONCAT:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << " @ ";
-      C_Print1(os, c[1], indentation, letize,bm);
-      os << ")" << endl;
       break;
     case BVOR:
       os << "(";
@@ -189,20 +174,10 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
     case BVLEFTSHIFT:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << " << ";
-      os << c[1].GetUnsignedConst();
-      os << ")";
       break;
     case BVRIGHTSHIFT:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << " >> ";
-      os << c[1].GetUnsignedConst();
-      os << ")";
       break;
     case BVMULT:
     case BVSUB:
@@ -390,6 +365,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
             break;
           default:
             FatalError("unsupported boolean type in C_Print1");
+            break;
         }
         C_Print1(os, *it, indentation, letize,bm);
       }
@@ -399,40 +375,14 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
     case IFF:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "(";
-      os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << ")";
-      os << " <=> ";
-      os << "(";
-      C_Print1(os, c[1], indentation, letize,bm);
-      os << ")";
-      os << ")";
-      os << endl;
       break;
     case IMPLIES:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-      os << "(";
-      os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << ")";
-      os << " => ";
-      os << "(";
-      C_Print1(os, c[1], indentation, letize,bm);
-      os << ")";
-      os << ")";
-      os << endl;
       break;
     case BVSX:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
-
-      os << kind << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
-      os << ",";
-      os << n.GetValueWidth();
-      os << ")" << endl;
       break;
     default:
       // remember to use LispPrinter here. Otherwise this function will

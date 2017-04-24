@@ -297,36 +297,6 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     const FixedBits& bits = *it->second;
     const ASTNode& node = (it->first);
 
-    if (false && node.GetKind() == SYMBOL && !bits.isTotallyFixed() &&
-        bits.countFixed() > 0)
-    {
-      // replace partially known variables with new variables.
-      int leastFixed = bits.leastUnfixed();
-      int mostFixed = bits.mostUnfixed();
-      const int width = node.GetValueWidth();
-
-      int new_width = mostFixed - leastFixed + 1;
-      assert(new_width > 0);
-      ASTNode fresh =
-          mgr->CreateFreshVariable(0, new_width, "STP_REPLACE");
-      ASTNode a, b;
-      if (leastFixed > 0)
-        a = nf->CreateConstant(bits.GetBVConst(leastFixed - 1, 0),
-                                            leastFixed);
-      if (mostFixed != width - 1)
-        b = nf->CreateConstant(
-            bits.GetBVConst(width - 1, mostFixed + 1), width - 1 - mostFixed);
-      if (!a.IsNull())
-        fresh = nf->CreateTerm(
-            BVCONCAT, a.GetValueWidth() + fresh.GetValueWidth(), fresh, a);
-      if (!b.IsNull())
-        fresh = nf->CreateTerm(
-            BVCONCAT, b.GetValueWidth() + fresh.GetValueWidth(), b, fresh);
-      assert(fresh.GetValueWidth() == node.GetValueWidth());
-      bool r = simplifier->UpdateSubstitutionMap(node, fresh);
-      assert(r);
-    }
-
     if (!bits.isTotallyFixed())
       continue;
 

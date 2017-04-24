@@ -398,9 +398,6 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       else
       {
         FatalError("TransformFormula: Illegal kind: ", ASTUndefined, k);
-        std::cerr << "The input is: " << simpleForm << std::endl;
-        std::cerr << "The valuewidth of input is : "
-                  << simpleForm.GetValueWidth() << std::endl;
       }
       break;
     }
@@ -571,40 +568,6 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       {
         // result is a variable here; it is an ite in the
         // else-branch
-      }
-      else if (false)
-      {
-
-        /* oops.
-         * This version of ack. doesn't do what I thought it did. The STP 0.1
-         * version of Ack. produces simpler
-         * expressions. I've put that in the next block. Trevor's thesis
-         * measures AckITE using this implementation,
-         * rather than the next one like it should have!!!!
-         */
-
-        // Full Array transform if we're not doing read refinement.
-
-        // list of array-read indices corresponding to arrName, seen while
-        // traversing the AST tree. we need this list to construct the ITEs
-        const arrTypeMap& new_read_Indices = arrayToIndexToRead[arrName];
-
-        arrTypeMap::const_iterator it2 = new_read_Indices.begin();
-        arrTypeMap::const_iterator it2end = new_read_Indices.end();
-        for (; it2 != it2end; it2++)
-        {
-          ASTNode cond = simp->CreateSimplifiedEQ(readIndex, it2->first);
-          if (ASTFalse == cond)
-            continue;
-
-          if (ASTTrue == cond)
-          {
-            result = it2->second.ite;
-            break;
-          }
-
-          result = simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
-        }
       }
       else
       {
