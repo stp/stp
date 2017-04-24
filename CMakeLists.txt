@@ -230,6 +230,7 @@ if(WIN32)
 
   if(MSVC)
       set(OPTIMIZITION_FLAGS  "/GL /Ox /Oi /Ot /Oy")
+      set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /W1")
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
       set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
       include_directories(${STP_INCL_COMM})
