@@ -224,7 +224,7 @@ bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
   return false;
 }
 
-void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& key)
+void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& /*key*/)
 {
   // The always true/ always false relies on the top level constraint not being
   // removed.
