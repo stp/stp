@@ -266,7 +266,6 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                      "cannot compute ITE conditional against model: ",
                      term);
         }
-        FatalError("bn23143 Never Here");
       }
 
       ASTNode modelentry;
