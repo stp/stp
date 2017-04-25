@@ -911,15 +911,15 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       BBDivMod(dvdd, dvsr, q, r, num_bits, support);
       if (k == BVDIV)
       {
-        if (uf->division_by_zero_returns_one_flag)
+        if (true) // todo. apparently this is not required.
         {
           BBNodeVec zero(term.GetValueWidth(), BBFalse);
 
           BBNode eq = BBEQ(zero, dvsr);
-          BBNodeVec one(term.GetValueWidth(), BBFalse);
-          one[0] = BBTrue;
+          BBNodeVec max(term.GetValueWidth(), BBTrue);
+         
 
-          result = BBITE(eq, one, q);
+          result = BBITE(eq, max, q);
         }
         else
         {

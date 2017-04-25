@@ -124,8 +124,6 @@ public:
   bool smtlib1_parser_flag ;
   bool smtlib2_parser_flag ;
 
-  bool division_by_zero_returns_one_flag ;
-
   bool quick_statistics_flag ;
 
   bool exit_after_CNF;
@@ -205,7 +203,6 @@ public:
     output_bench_flag = false;
     smtlib1_parser_flag = false;
     smtlib2_parser_flag = false;
-    division_by_zero_returns_one_flag = true;
     quick_statistics_flag = false;
     exit_after_CNF =false;
     num_solver_threads =1;

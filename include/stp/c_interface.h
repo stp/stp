@@ -82,8 +82,7 @@ enum ifaceflag_t
 };
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
 
-// defines division by zero to equal 1, x%0 to equal x.
-// avoids division by zero errors.
+// Does nothing. Division is now always total.
 void make_division_total(VC vc);
 
 //! Flags can be NULL

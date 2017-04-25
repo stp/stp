@@ -332,8 +332,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
       CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
         // Expecting a division by zero. Just return one.
         if (k == SBVREM)
@@ -341,9 +340,9 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         else
         {
           if (CONSTANTBV::BitVector_bit_test(tmp0, inputwidth - 1))
-            OutputNode = _bm->CreateMaxConst(inputwidth);
-          else
             OutputNode = _bm->CreateOneConst(inputwidth);
+          else
+            OutputNode = _bm->CreateMaxConst(inputwidth);
         }
 
         CONSTANTBV::BitVector_Destroy(remainder);
@@ -406,11 +405,18 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
       tmp1 = CONSTANTBV::BitVector_Clone(tmp1);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
-        // Return the top for a division be zero.
-        OutputNode = children[0];
+         if (CONSTANTBV::BitVector_bit_test(tmp0, inputwidth - 1)) // negative.
+            {
+              // negate first operand.
+              CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
+              CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
+              OutputNode = _bm->CreateBVConst(tmp0b, outputwidth);  
+            }  
+          else
+            OutputNode = children[0];
+
         CONSTANTBV::BitVector_Destroy(remainder);
       }
       else
@@ -519,8 +525,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     {
       assert(2 == number_of_children);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
         // a = bq + r, where b!=0 implies r < b. q is quotient, r remainder.
         // i.e. a/b = q.
@@ -528,7 +533,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         if (k == BVMOD)
           OutputNode = children[0];
         else
-          OutputNode = _bm->CreateOneConst(outputwidth);
+          OutputNode = _bm->CreateMaxConst(outputwidth);
         // Expecting a division by zero. Just return one.
       }
       else
