@@ -407,16 +407,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 
       if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
-         if (CONSTANTBV::BitVector_bit_test(tmp0, inputwidth - 1)) // negative.
-            {
-              // negate first operand.
-              CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
-              CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
-              OutputNode = _bm->CreateBVConst(tmp0b, outputwidth);  
-            }  
-          else
-            OutputNode = children[0];
-
+        OutputNode = children[0];
         CONSTANTBV::BitVector_Destroy(remainder);
       }
       else

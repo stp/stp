@@ -2,7 +2,7 @@
 ; CHECK-NEXT: ^sat
 (set-logic QF_BV)
 (set-info :source |
-	Test new division/remainder by zero semantics.
+	Test new division/remainder by zero semantics. v2.
 |)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
@@ -15,6 +15,7 @@
 
 (declare-fun a () (_ BitVec 2))
 (assert (= #b11 (bvudiv #b00 a)))
+(assert (= #b11 (bvudiv a a)))
 
 ;;;;; remainder by zero evaluates to the first operand.
 (assert (= #b0 (bvurem #b0 #b0)))
@@ -38,7 +39,7 @@
 (assert (= #b00 (bvsmod #b00 #b00)))
 (assert (= #b01 (bvsmod #b01 #b00)))
 (assert (= #b10 (bvsmod #b10 #b00)))
-(assert (= #b01 (bvsmod #b11 #b00)))
+(assert (= #b11 (bvsmod #b11 #b00)))
 
 
 (check-sat)
