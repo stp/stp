@@ -2922,11 +2922,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
     case BVDIV:
     {
-      if (inputterm[0] == inputterm[1])
-      {
-        output = _bm->CreateOneConst(inputValueWidth);
-        break;
-      }
       if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
       {
         output = inputterm[0];
@@ -2934,7 +2929,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
       unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
       nlz = std::min(inputValueWidth - 1, nlz);
-      if (nlz > 0)
+      
+      // We can't do this if the second operand might be zero.
+      ASTNode eq = nf->CreateNode(EQ, inputterm[1], _bm->CreateZeroConst(inputValueWidth));
+      if (nlz > 0 && eq == ASTFalse)
       {
         int rest = inputValueWidth - nlz;
         ASTNode low = _bm->CreateBVConst(32, rest);
@@ -3141,12 +3139,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case SBVREM:
     case SBVMOD:
     {
-      if (inputterm[0] == inputterm[1])
-      {
-        output = _bm->CreateZeroConst(inputValueWidth);
-        break;
-      }
-
       output = inputterm;
       break;
     }
@@ -3154,11 +3146,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case SBVDIV:
     {
       output = inputterm;
-      if (inputterm[0] == inputterm[1])
-      {
-        output = _bm->CreateOneConst(inputValueWidth);
-        break;
-      }
       if (SBVDIV == output.GetKind() && output.GetChildren().size() == 2 &&
           output.GetChildren()[0].GetKind() == BVSX &&
           output.GetChildren()[1].GetKind() == BVSX)

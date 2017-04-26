@@ -212,6 +212,10 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   // need to clean up these at end.
   stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_increment(one);
+
+  stp::CBV  max= CONSTANTBV::BitVector_Create(width, true);
+  CONSTANTBV::BitVector_Fill(max);
+
   // quotient and remainder.
   stp::CBV q = CONSTANTBV::BitVector_Create(width, true);
   stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
@@ -250,11 +254,10 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       CONSTANTBV::ErrCode e;
 
       // The main loop doesn't work if there is a division by zero possible.
-      // If the minimum bottom is zero, but the minimum quotient is > 1, then in
-      // our semantics
-      // of 1/0 = 1
+      // If the minimum bottom is zero, but the minimum quotient is > 111.1111, then in
+      // our semantics of a/0 = 1..1, it can't be zero.
       if (CONSTANTBV::BitVector_is_empty(minBottom) &&
-          CONSTANTBV::BitVector_Lexicompare(minQuotient, one) > 0)
+          CONSTANTBV::BitVector_Lexicompare(maxQuotient, max) < 0)
       {
         CONSTANTBV::BitVector_increment(minBottom);
         if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
@@ -552,6 +555,8 @@ end:
   CONSTANTBV::BitVector_Destroy(q);
   CONSTANTBV::BitVector_Destroy(r);
   CONSTANTBV::BitVector_Destroy(one);
+  CONSTANTBV::BitVector_Destroy(max);
+
 
   if (result == CONFLICT)
     return CONFLICT;
@@ -732,26 +737,27 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
 {
   Result r0 = NO_CHANGE;
 
+  // If the second operand can't be zero..
   // Enforce that the output must be less than the numerator.
-  // Make special allowance for 0/0 = 1.
-  for (int i = children[0]->getWidth() - 1; i > 0; i--)
-  {
-    if (children[0]->isFixedToZero(i))
+  if (!children[1]->containsZero())
+    for (int i = children[0]->getWidth() - 1; i >= 0; i--)
     {
-      if (output.isFixedToOne(i))
-        return CONFLICT;
-      else if (!output.isFixed(i))
+      if (children[0]->isFixedToZero(i))
       {
-        output.setFixed(i, true);
-        output.setValue(i, false);
-        r0 = CHANGED;
+        if (output.isFixedToOne(i))
+          return CONFLICT;
+        else if (!output.isFixed(i))
+        {
+          output.setFixed(i, true);
+          output.setValue(i, false);
+          r0 = CHANGED;
+        }
+      }
+      else
+      {
+        break;
       }
     }
-    else
-    {
-      break;
-    }
-  }
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);

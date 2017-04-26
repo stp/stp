@@ -249,16 +249,16 @@ public:
         {
           if (CONSTANTBV::BitVector_is_empty(c1->maxV))
           {
-            CONSTANTBV::BitVector_Bit_On(result->minV,0);
-            CONSTANTBV::BitVector_Empty(result->maxV);
-            CONSTANTBV::BitVector_Bit_On(result->maxV,0);
+            CONSTANTBV::BitVector_Fill(result->minV);
+            CONSTANTBV::BitVector_Fill(result->maxV);
             CONSTANTBV::BitVector_Destroy(c1Min);
-            break; // result is [1,1] (because we currently evaluate division-by-zero to 1.)
+            break; // result is [1111..111, 11...11111] 
           }
 
-          CONSTANTBV::BitVector_Bit_On(c1Min,0); // if it can be zero, set to one.
           bottomChanged = true;
+          break; // TODO fix so that it can run-on.
         }
+
 
         UnsignedInterval* top = (children[0] == NULL)
                                 ? freshUnsignedInterval(width)
