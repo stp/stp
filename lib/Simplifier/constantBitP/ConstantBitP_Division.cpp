@@ -737,10 +737,11 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
 {
   Result r0 = NO_CHANGE;
 
-  // If the second operand can't be zero..
+  if (children[1]->containsZero())
+    return r0; // TODO fix so we learn something if we might be dividing by zero..
+
   // Enforce that the output must be less than the numerator.
-  if (!children[1]->containsZero())
-    for (int i = children[0]->getWidth() - 1; i >= 0; i--)
+   for (int i = children[0]->getWidth() - 1; i >= 0; i--)
     {
       if (children[0]->isFixedToZero(i))
       {
