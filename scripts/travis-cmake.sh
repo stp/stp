@@ -114,6 +114,15 @@ if [ "$TEST" = "1" ]; then
     make check
 fi
 
+if [ "$STP_CONFIG" = "CLANG_STATIC" ] ; then
+     ldd ./stp
+     RETVAL=$?
+     if [ $RETVAL -eq 0 ] ; then
+        # Not static.
+        exit 1
+     fi 
+fi
+
 if [ "$STP_CONFIG" = "KLEE" ]; then
     sudo sh -c 'echo "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.4 main" >> /etc/apt/sources.list.d/llvm.list'
     sudo sh -c 'echo "deb-src http://llvm.org/apt/precise/ llvm-toolchain-precise-3.4 main" >> /etc/apt/sources.list.d/llvm.list'
