@@ -200,7 +200,7 @@ if [ "$STP_CONFIG" = "COVERAGE" ]; then
     exit 0
 fi
 
-if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
+if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] && [ "$STP_CONFIG" != "CLANG_STATIC" ] ; then
     cd ../..
 
     #
