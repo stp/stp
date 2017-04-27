@@ -3,9 +3,6 @@ compiler:
   - gcc
 #  - clang
 
-dist: trusty
-sudo: required
-
 env:
   global:
     # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
@@ -34,7 +31,7 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-trusty-3.7
+            - llvm-toolchain-precise-3.7
           packages:
             - clang-3.7
       env: STP_CONFIG=CLANG_STATIC
@@ -55,6 +52,7 @@ addons:
 
 before_install:
   - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
+  - sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo add-apt-repository -y ppa:kalakris/cmake
   - sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu trusty-backports main universe"
