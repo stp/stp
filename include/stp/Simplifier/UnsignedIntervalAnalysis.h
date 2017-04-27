@@ -256,6 +256,7 @@ public:
           }
 
           bottomChanged = true;
+          CONSTANTBV::BitVector_Destroy(c1Min);
           break; // TODO fix so that it can run-on.
         }
 
