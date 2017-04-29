@@ -49,10 +49,9 @@ case $STP_CONFIG in
 
     ;;
 
-    DYNAMIC_LIB)
+    NORM)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 

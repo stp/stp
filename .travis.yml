@@ -15,7 +15,7 @@ env:
 
   matrix:
     # These are used by .travis-cmake.sh to set a configuration
-    - STP_CONFIG=DYNAMIC_LIB
+    - STP_CONFIG=NORM
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
     - STP_CONFIG=CPP11
@@ -28,7 +28,7 @@ matrix:
     # Covertiy scan should only run once
     - os: linux
       compiler: gcc
-      env: COVERITY_SCAN=1 STP_CONFIG=DYNAMIC_LIB
+      env: COVERITY_SCAN=1 STP_CONFIG=NORM
     - compiler: clang
       addons:
         apt:
@@ -41,7 +41,7 @@ matrix:
 
   allow_failures:
     # Covertiy scan might fail
-    - env: COVERITY_SCAN=1 STP_CONFIG=DYNAMIC_LIB
+    - env: COVERITY_SCAN=1 STP_CONFIG=NORM
 
 addons:
   coverity_scan:
