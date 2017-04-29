@@ -96,10 +96,30 @@ case $STP_CONFIG in
          eval sudo apt-get install -y libboost-all-dev
          export CC="clang-3.7"
          export CXX="clang++-3.7"
-         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=OFF \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+
+         wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
+         tar xzvf m4ri-20140914.tar.gz
+         cd m4ri-20140914/
+         ./configure
+         make
+         sudo make install
+         cd ..
+
+         wget https://github.com/msoos/cryptominisat/archive/5.0.1.tar.gz
+         tar xzvf 5.0.1.tar.gz
+         cd cryptominisat-5.0.1
+         mkdir build
+         cd build
+         cmake -DENABLE_TESTING=ON -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF ..
+         sudo make install
+
+         cd ..
+         cmake ${COMMON_CMAKE_ARGS} \
+                   -DBUILD_STATIC_BIN=ON \
+                   -DBUILD_SHARED_LIBS=OFF \
+                   -DENABLE_PYTHON_INTERFACE=OFF \
                    ${SOURCE_DIR}
+
          # static build doesn't currently support testing..
          TEST=0
     ;;
