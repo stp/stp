@@ -37,7 +37,7 @@ matrix:
             - llvm-toolchain-precise-3.7
           packages:
             - clang-3.7
-      env: STP_CONFIG=CLANG_STATIC
+      env: STP_CONFIG=CLANG_STATIC_CMS
 
   allow_failures:
     # Covertiy scan might fail

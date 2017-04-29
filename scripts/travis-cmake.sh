@@ -92,7 +92,7 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    CLANG_STATIC)
+    CLANG_STATIC_CMS)
          eval sudo apt-get install -y libboost-all-dev
          export CC="clang-3.7"
          export CXX="clang++-3.7"
