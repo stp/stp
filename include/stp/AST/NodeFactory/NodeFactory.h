@@ -34,7 +34,7 @@ namespace stp
 {
   class ASTNode;
   typedef vector<ASTNode> ASTVec;
-  extern ASTVec _empty_ASTVec;
+  DLL_PUBLIC extern ASTVec _empty_ASTVec;
   class STPMgr;
   typedef unsigned int* CBV;
 }
