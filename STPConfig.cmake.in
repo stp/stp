@@ -17,7 +17,7 @@ include("${STP_CMAKE_DIR}/@STP_TARGETS_FILENAME@")
 # These are IMPORTED targets created by @STP_TARGETS_FILENAME@
 set(STP_EXECUTABLE stp)
 
-set(STP_STATIC_LIBRARY @STP_STATIC_LIBRARY@)
-set(STP_SHARED_LIBRARY @STP_SHARED_LIBRARY@)
+set(STP_STATIC_LIBRARY libstp)
+set(STP_SHARED_LIBRARY libstp)
 
 # Note version variables are implicitly set by STPConfigVersion.cmake

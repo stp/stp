@@ -66,9 +66,7 @@ case $STP_CONFIG in
     KLEE)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_STATIC_BIN:BOOL=ON \
-                   -DBUILD_SHARED_LIBS:BOOL=OFF \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+                   -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
         TEST=0
     ;;
@@ -86,8 +84,6 @@ case $STP_CONFIG in
          eval sudo apt-get update
          eval sudo apt-get install -y gcc-4.7 g++-4.7
          eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=ON \
-                   -DBUILD_STATIC_BIN:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 
@@ -109,14 +105,39 @@ case $STP_CONFIG in
          cd cryptominisat-5.0.1
          mkdir build
          cd build
-         cmake -DENABLE_TESTING=ON -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF ..
+         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
 
          cd ..
          cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_STATIC_BIN=ON \
-                   -DBUILD_SHARED_LIBS=OFF \
-                   -DENABLE_PYTHON_INTERFACE=OFF \
+                   -DSTATICCOMPILE:BOOL=ON \
+                   ${SOURCE_DIR}
+
+         # static build doesn't currently support testing..
+         TEST=0
+    ;;
+
+    GCC_STATIC_CMS)
+         eval sudo apt-get install -y libboost-all-dev
+         wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
+         tar xzvf m4ri-20140914.tar.gz
+         cd m4ri-20140914/
+         ./configure
+         make
+         sudo make install
+         cd ..
+
+         wget https://github.com/msoos/cryptominisat/archive/5.0.1.tar.gz
+         tar xzvf 5.0.1.tar.gz
+         cd cryptominisat-5.0.1
+         mkdir build
+         cd build
+         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
+         sudo make install
+
+         cd ..
+         cmake ${COMMON_CMAKE_ARGS} \
+                   -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
 
          # static build doesn't currently support testing..

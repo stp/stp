@@ -121,20 +121,19 @@ endif()
 # Let the user decide if they want to build shared or static client library.
 # STP will link against this client library
 # -----------------------------------------------------------------------------
-option(BUILD_SHARED_LIBS "Build client library as a shared library" ON)
-
-if (WIN32)
-  # building of shared lib on windows is not done at source level
-  set(BUILD_SHARED_LIBS OFF)
-  message(WARNING "Disabling building of shared library on Windows")
+option(STATICCOMPILE "Compile static library and executable" OFF)
+if (MSVC)
+  # building of shared lib does not work on windows for the moment
+  set(STATICCOMPILE ON)
 endif()
 
-if (BUILD_SHARED_LIBS)
-  set(STP_SHARED_LIBRARY libstp) # Used for exporting target
-else()
+if (MSVC AND STATICCOMPILE)
+    set(Boost_USE_STATIC_LIBS ON)
+endif()
+
+if (STATICCOMPILE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-  set(STP_STATIC_LIBRARY libstp) # Used for exporting target
 endif()
 
 # -----------------------------------------------------------------------------
@@ -149,11 +148,6 @@ macro(add_cxx_flag_if_supported flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
   endif()
 endmacro()
-
-if(BUILD_SHARED_LIBS)
-    message(STATUS "Building shared library currently broken due to mix of C++/C code")
-    add_cxx_flag_if_supported("-fPIC")
-endif()
 
 check_cxx_compiler_flag("-std=c++11" HAVE_FLAG_STD_CPP11)
 check_cxx_compiler_flag("-std=gnu++11" HAVE_FLAG_STD_GNUCPP11)
@@ -179,7 +173,8 @@ if(APPLE AND HAVE_FLAG_STDLIB_LIBCPP)
 endif()
 
 
-if (NOT WIN32)
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
     add_cxx_flag_if_supported("-Wall")
     add_cxx_flag_if_supported("-Wextra")
     add_cxx_flag_if_supported("-Wunused")
@@ -229,8 +224,23 @@ if(WIN32)
   set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
 
   if(MSVC)
-      set(OPTIMIZITION_FLAGS  "/GL /Ox /Oi /Ot /Oy")
-      set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /W1")
+      # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
+      # /ZI = include debug info
+      # /W3 = warning level 3
+      # /Wall = all warnings
+      SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ox /ZI")
+      SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O3 /D NDEBUG /ZI")
+      SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Od")
+
+      #whole program optimisation
+      add_compile_options(/GL)
+
+      #omit frame pointers
+      add_compile_options(/Oy)
+
+      #don't give too many warnings
+      add_compile_options(/W1)
+
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
       set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
       include_directories(${STP_INCL_COMM})
@@ -386,27 +396,26 @@ set(STP_EXPORT_NAME "STPTargets")
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
+set(CHECK_FOR_PYTHON ON)
 
-if (BUILD_SHARED_LIBS)
-    option(ENABLE_PYTHON_INTERFACE "Enable Python interface" ON)
-else()
-    option(ENABLE_PYTHON_INTERFACE "Enable Python interface" OFF)
-    message(STATUS "Cannot enable testing if shared libs are not built.")
+if (STATICCOMPILE)
+    set(CHECK_FOR_PYTHON OFF)
+    message(STATUS "Testing and the Python interface cannot work on statically compiled code")
+endif()
+
+if (CHECK_FOR_PYTHON)
+    find_package(PythonInterp)
+    mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
+endif()
+
+if(ENABLE_TESTING AND NOT PYTHONINTERP_FOUND)
+    message(STATUS "Python interpreter and development headers cannot be found. Please install it to have the python interface and to enable testing")
     set(ENABLE_TESTING OFF)
 endif()
 
-if (ENABLE_PYTHON_INTERFACE AND NOT BUILD_SHARED_LIBS)
-    message(FATAL_ERROR "Python interface requires shared library")
-endif()
-
-# Both the testing infrastructure and python interface depend on python
-if(ENABLE_TESTING OR ENABLE_PYTHON_INTERFACE)
-  find_package(PythonInterp REQUIRED)
-  mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
-
-  if(NOT PYTHONINTERP_FOUND)
-    message(FATAL_ERROR "Python cannot be found. Please install it or disable testing and/or python interface")
-  endif()
+if (PYTHONINTERP_FOUND)
+    message(STATUS "Python found, enabling python interface")
+    set(ENABLE_PYTHON_INTERFACE ON)
 endif()
 
 # -----------------------------------------------------------------------------
@@ -437,13 +446,10 @@ add_custom_target(uninstall
 
 if(ENABLE_TESTING)
   message(STATUS "Testing is enabled")
-
   set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
-
   add_custom_target(check
     COMMENT "top level target to invoke all other tests"
   )
-
   add_subdirectory(tests)
 else()
     message(WARNING "Testing is disabled")
@@ -459,14 +465,10 @@ set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
 # Export targets
 if (Boost_FOUND)
-  export(TARGETS stp stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
-    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
-  )
-else()
-  export(TARGETS stp_simple ${STP_SHARED_LIBRARY} ${STP_STATIC_LIBRARY}
-    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}"
-  )
+    set(EXTRA_EXPORT_TARGETS stp)
 endif()
+export(TARGETS stp_simple libstp ${EXTRA_EXPORT_TARGETS}
+    FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file
 set(EXPORT_TYPE "Build-tree")

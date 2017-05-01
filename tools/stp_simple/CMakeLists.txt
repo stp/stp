@@ -27,12 +27,14 @@ add_executable(stp_simple
     ../stp/STPProgramGlobals.cpp
 )
 
-if (BUILD_STATIC_BIN)
-    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_END_STATIC 1)
-    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_START_STATIC 0)
+if (STATICCOMPILE)
+    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_START_STATIC 1)
 endif()
-
-set_target_properties(stp_simple PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+set_target_properties(stp_simple PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+if (STATICCOMPILE)
+    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_END_STATIC 1)
+endif()
 target_link_libraries(stp_simple libstp)
 
 install(TARGETS stp_simple
