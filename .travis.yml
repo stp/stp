@@ -38,12 +38,17 @@ matrix:
           packages:
             - clang-3.7
       env:
-        global:
-        matrix:
-          - STP_CONFIG=STATIC_CMS
-          - STP_CONFIG=NORM
-          - STP_CONFIG=RELEASE
-          - STP_CONFIG=INTREE_BUILD
+        global: STP_CONFIG=STATIC_CMS
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.7
+          packages:
+            - clang-3.7
+      env:
+        global: STP_CONFIG=NORM
 
   allow_failures:
     # Covertiy scan might fail
