@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTInternal.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

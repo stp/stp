@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp {
   DLL_PUBLIC const char* get_git_version_sha();

@@ -26,7 +26,7 @@ THE SOFTWARE.
 #define HASHINGNODEFACTORY_H_
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 // A Node factory that only does structural hashing.
 class HashingNodeFactory : public NodeFactory

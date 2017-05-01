@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/Sat/SATSolver.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

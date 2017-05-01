@@ -31,7 +31,7 @@ THE SOFTWARE.
 #ifndef GLOBALS_H
 #define GLOBALS_H
 #include <vector>
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 /* FIXME: Clients who import this header file have to have
  * ASTNode already declarted (eurgh)

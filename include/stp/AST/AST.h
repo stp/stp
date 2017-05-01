@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "UsefulDefs.h"
 #include "ASTNode.h"
 #include "stp/Util/Attributes.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

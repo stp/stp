@@ -133,6 +133,10 @@ if (MSVC AND STATICCOMPILE)
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif()
 
+if (MSVC AND NOT STATICCOMPILE)
+    add_definitions(-D STP_SHARED_LIB) # Used for symbol visibilty control
+endif()
+
 # -----------------------------------------------------------------------------
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------

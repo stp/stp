@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STP.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace printer
 {
