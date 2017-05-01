@@ -122,10 +122,6 @@ endif()
 # STP will link against this client library
 # -----------------------------------------------------------------------------
 option(STATICCOMPILE "Compile static library and executable" OFF)
-if (MSVC)
-  # building of shared lib does not work on windows for the moment
-  set(STATICCOMPILE ON)
-endif()
 
 if (STATICCOMPILE)
     set(Boost_USE_STATIC_LIBS ON)
