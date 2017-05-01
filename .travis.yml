@@ -39,6 +39,7 @@ matrix:
           packages:
             - clang-3.7
       env:
+        global:
         matrix:
           - STP_CONFIG=STATIC_CMS
           - STP_CONFIG=NORM
