@@ -87,37 +87,7 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    CLANG_STATIC_CMS)
-         eval sudo apt-get install -y libboost-all-dev
-         export CC="clang-3.7"
-         export CXX="clang++-3.7"
-
-         wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
-         tar xzvf m4ri-20140914.tar.gz
-         cd m4ri-20140914/
-         ./configure
-         make
-         sudo make install
-         cd ..
-
-         wget https://github.com/msoos/cryptominisat/archive/5.0.1.tar.gz
-         tar xzvf 5.0.1.tar.gz
-         cd cryptominisat-5.0.1
-         mkdir build
-         cd build
-         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
-         sudo make install
-
-         cd ..
-         cmake ${COMMON_CMAKE_ARGS} \
-                   -DSTATICCOMPILE:BOOL=ON \
-                   ${SOURCE_DIR}
-
-         # static build doesn't currently support testing..
-         TEST=0
-    ;;
-
-    GCC_STATIC_CMS)
+    STATIC_CMS)
          eval sudo apt-get install -y libboost-all-dev
          wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
          tar xzvf m4ri-20140914.tar.gz
@@ -154,7 +124,7 @@ if [ "$TEST" = "1" ]; then
     make check
 fi
 
-if [ "$STP_CONFIG" = "CLANG_STATIC_CMS" ] || [ "$STP_CONFIG" = "GCC_STATIC_CMS" ] ; then
+if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
      ldd ./stp
      RETVAL=$?
      if [ $RETVAL -eq 0 ] ; then
@@ -249,7 +219,7 @@ if [ "$STP_CONFIG" = "COVERAGE" ]; then
     exit 0
 fi
 
-if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] && [ "$STP_CONFIG" != "CLANG_STATIC" ] ; then
+if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ../..
 
     #

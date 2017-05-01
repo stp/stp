@@ -21,7 +21,7 @@ env:
     - STP_CONFIG=CPP11
     - STP_CONFIG=KLEE
     - STP_CONFIG=COVERAGE
-    - STP_CONFIG=GCC_STATIC_CMS
+    - STP_CONFIG=STATIC_CMS
     - STP_CONFIG=INTREE_BUILD
 
 matrix:
@@ -38,7 +38,12 @@ matrix:
             - llvm-toolchain-precise-3.7
           packages:
             - clang-3.7
-      env: STP_CONFIG=CLANG_STATIC_CMS
+      env:
+        matrix:
+          - STP_CONFIG=STATIC_CMS
+          - STP_CONFIG=NORM
+          - STP_CONFIG=RELEASE
+          - STP_CONFIG=INTREE_BUILD
 
   allow_failures:
     # Covertiy scan might fail
