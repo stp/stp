@@ -50,7 +50,8 @@
 
 #ifdef _MSC_VER
   #include <io.h>
-  int isatty(int fd) { return _isatty(fd); }
+  // defining isatty to avoid dll symbol export inconsistencies
+  #define isatty(x) _isatty(x)
 #endif
 
   // File-static (local to this file) variables and functions
