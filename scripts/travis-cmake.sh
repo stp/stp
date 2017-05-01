@@ -116,12 +116,7 @@ fi
 echo `ldd ./stp_simple`
 echo `ldd ./stp`
 if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
-     ldd ./stp
-     RETVAL=$?
-     if [ $RETVAL -eq 0 ] ; then
-        # Not static.
-        exit 1
-     fi 
+     ldd ./stp | grep "not a dynamic"
 fi
 
 if [ "$STP_CONFIG" = "KLEE" ]; then
