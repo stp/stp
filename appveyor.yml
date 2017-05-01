@@ -27,6 +27,10 @@ environment:
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     BUILD_TYPE: Release
     MSBUILD_FLAGS: /maxcpucount /nologo
+	PYTHON: "C:\Python36-x64"
+
+install:
+    "%PYTHON%\python.exe -m pip install lit"
 
 configuration:
   - Release
@@ -96,7 +100,7 @@ build_script:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..
+  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DPYTHON_EXECUTABLE="%PYTHON%\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\Scripts\lit-script.py" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..
   - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
 
 
