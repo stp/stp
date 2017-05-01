@@ -29,7 +29,7 @@ SOURCE_DIR=`pwd`
 cd build
 BUILD_DIR=`pwd`
 TEST=1
-COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
+COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
 case $STP_CONFIG in
