@@ -22,10 +22,6 @@
 # Create binary
 # -----------------------------------------------------------------------------
 
-# if(STATICCOMPILE)
-#   set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
-# endif()
-
  add_executable(stp_constantbitprop
      constantbitprop.cpp
      ${PROJECT_BINARY_DIR}/lib/Util/GitSHA1.cpp

@@ -93,14 +93,11 @@ case $STP_CONFIG in
          cd build
          cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
-
          cd ..
+
          cmake ${COMMON_CMAKE_ARGS} \
                    -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
-
-         # static build doesn't currently support testing..
-         TEST=0
     ;;
     
     *)
@@ -206,7 +203,7 @@ if [ "$STP_CONFIG" = "COVERAGE" ]; then
 fi
 
 if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
-    cd ../..
+    cd ${SOURCE_DIR}/..
 
     #
     # get fuzzsmt

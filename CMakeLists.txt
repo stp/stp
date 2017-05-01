@@ -402,24 +402,26 @@ set(STP_EXPORT_NAME "STPTargets")
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
-set(CHECK_FOR_PYTHON ON)
 
-if (STATICCOMPILE)
-    set(CHECK_FOR_PYTHON OFF)
-    message(STATUS "Testing and the Python interface cannot work on statically compiled code")
+find_package (PythonInterp 2.7)
+find_package (PythonLibs 2.7)
+if (PYTHON_EXECUTABLE AND PYTHON_LIBRARY AND PYTHON_INCLUDE_DIR)
+    message(STATUS "PYTHON_EXECUTABLE:FILEPATH=${PYTHON_EXECUTABLE}")
+    message(STATUS "PYTHON_LIBRARY:FILEPATH=${PYTHON_LIBRARY}")
+    message(STATUS "PYTHON_INCLUDE_DIR:FILEPATH=${PYTHON_INCLUDE_DIR}")
+    message(STATUS "PYTHONLIBS_VERSION_STRING=${PYTHONLIBS_VERSION_STRING}")
+    set(PYTHON_OK ON)
+    message(STATUS "OK, found python interpreter, libs and header files")
+else()
+    message(WARNING "Cannot find python interpreter, libs and header files, cannot build python interface")
 endif()
 
-if (CHECK_FOR_PYTHON)
-    find_package(PythonInterp)
-    mark_as_advanced(CLEAR PYTHON_EXECUTABLE) # Make visible in cmake-gui/ccmake
-endif()
-
-if(ENABLE_TESTING AND NOT PYTHONINTERP_FOUND)
+if(ENABLE_TESTING AND NOT PYTHON_OK)
     message(STATUS "Python interpreter and development headers cannot be found. Please install it to have the python interface and to enable testing")
     set(ENABLE_TESTING OFF)
 endif()
 
-if (PYTHONINTERP_FOUND)
+if (PYTHON_OK AND NOT STATICCOMPILE)
     message(STATUS "Python found, enabling python interface")
     set(ENABLE_PYTHON_INTERFACE ON)
 endif()
