@@ -46,7 +46,7 @@ const char* stp::get_compilation_env()
     "COMPILE_DEFINES = @COMPILE_DEFINES@ | "
     "ONLY_SIMPLE = @ONLY_SIMPLE@ | "
     "Boost_FOUND = @Boost_FOUND@ | "
-    "BUILD_SHARED_LIBS = @BUILD_SHARED_LIBS@ | "
+    "STATICCOMPILE = @STATICCOMPILE@ | "
     "TUNE_NATIVE = @TUNE_NATIVE@ | "
     "COVERAGE = @COVERAGE@ | "
     "FORCE_CMS = @FORCE_CMS@ | "
