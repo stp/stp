@@ -24,14 +24,14 @@
 
 # The binary path isn't known until the build process starts
 # (e.g. when building with MSBuild), so generate the file lately.
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE})
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/library_path.py
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/library_path.py
               INPUT ${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in)
 
 # Copy rest of files to build directory
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/stp.py
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/stp.py
               INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/stp.py)
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/__init__.py
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/__init__.py
               INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py)
 
 # -----------------------------------------------------------------------------
