@@ -112,6 +112,8 @@ if [ "$TEST" = "1" ]; then
     make check
 fi
 
+echo `ldd ./stp_simple`
+echo `ldd ./stp`
 if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
      ldd ./stp
      RETVAL=$?
