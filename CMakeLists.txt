@@ -202,6 +202,7 @@ if (NOT MSVC)
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         # almost working
         # add_cxx_flag_if_supported("-fvisibility=hidden")
+        set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
     add_cxx_flag_if_supported("-Wpointer-arith")
     add_cxx_flag_if_supported("-Wformat-nonliteral")
