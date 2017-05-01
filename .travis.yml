@@ -18,7 +18,6 @@ env:
     - STP_CONFIG=NORM
     - STP_CONFIG=RELEASE
     - STP_CONFIG=NO_BOOST
-    - STP_CONFIG=CPP11
     - STP_CONFIG=KLEE
     - STP_CONFIG=COVERAGE
     - STP_CONFIG=STATIC_CMS
@@ -39,11 +38,17 @@ matrix:
           packages:
             - clang-3.7
       env:
-        matrix:
-          - STP_CONFIG=STATIC_CMS
-          - STP_CONFIG=NORM
-          - STP_CONFIG=RELEASE
-          - STP_CONFIG=INTREE_BUILD
+        - STP_CONFIG=STATIC_CMS
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.7
+          packages:
+            - clang-3.7
+      env:
+        - STP_CONFIG=NORM
 
   allow_failures:
     # Covertiy scan might fail

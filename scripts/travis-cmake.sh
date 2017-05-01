@@ -76,17 +76,6 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    CPP11)
-         eval sudo apt-get install -y libboost-all-dev
-         export CC="gcc-4.7"
-         export CXX="g++-4.7"
-         eval sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
-         eval sudo apt-get update
-         eval sudo apt-get install -y gcc-4.7 g++-4.7
-         eval cmake ${COMMON_CMAKE_ARGS} \
-                   ${SOURCE_DIR}
-    ;;
-
     STATIC_CMS)
          eval sudo apt-get install -y libboost-all-dev
          wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
@@ -97,9 +86,8 @@ case $STP_CONFIG in
          sudo make install
          cd ..
 
-         wget https://github.com/msoos/cryptominisat/archive/5.0.1.tar.gz
-         tar xzvf 5.0.1.tar.gz
-         cd cryptominisat-5.0.1
+         git clone --depth 1 https://github.com/cryptominisat/cryptominisat.git
+         cd cryptominisat
          mkdir build
          cd build
          cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -124,6 +112,8 @@ if [ "$TEST" = "1" ]; then
     make check
 fi
 
+echo `ldd ./stp_simple`
+echo `ldd ./stp`
 if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
      ldd ./stp
      RETVAL=$?

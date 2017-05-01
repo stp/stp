@@ -33,14 +33,12 @@ file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg
 if (Boost_FOUND)
     add_custom_target(query-file-tests
                   DEPENDS stp
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     )
 else()
     add_custom_target(query-file-tests
                   DEPENDS stp_simple
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     )
 endif()
 
