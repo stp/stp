@@ -256,4 +256,12 @@ namespace stp {
   void SMTScanString (const char *yy_str) {
     smt_scan_string(yy_str);
   }
+
+  FILE* getSMTIn() {
+    return smtin;
+  }
+
+  void setSMTIn(FILE* file) {
+    smtin = file;
+  }
 }

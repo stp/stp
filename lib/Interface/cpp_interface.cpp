@@ -568,4 +568,8 @@ void Cpp_interface::cleanUp()
     cout << os.str();
     cout << ")" << std::endl;
   }
+
+  void CNFClearMemory() {
+    Cnf_ClearMemory();
+  }
 }

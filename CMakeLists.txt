@@ -123,12 +123,6 @@ endif()
 # -----------------------------------------------------------------------------
 option(BUILD_SHARED_LIBS "Build client library as a shared library" ON)
 
-if (WIN32)
-  # building of shared lib on windows is not done at source level
-  set(BUILD_SHARED_LIBS OFF)
-  message(WARNING "Disabling building of shared library on Windows")
-endif()
-
 if (BUILD_SHARED_LIBS)
   set(STP_SHARED_LIBRARY libstp) # Used for exporting target
   add_definitions(-D STP_SHARED_LIB) # Used for symbol visibilty control

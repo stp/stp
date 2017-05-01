@@ -183,6 +183,11 @@ public:
   DLL_PUBLIC void getModel();
   DLL_PUBLIC void getValue(const ASTVec &v);
 };
+
+// Functions used by C++ clients of STP. TODO: either export abc cleanly or don't use this in clients.
+
+/// Export version of Cnf_ClearMemory.
+DLL_PUBLIC void CNFClearMemory();
 }
 
 #endif

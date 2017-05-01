@@ -164,4 +164,12 @@ namespace stp {
   void CVCScanString (const char *yy_str) {
     cvc_scan_string(yy_str);
   }
+
+  FILE* getCVCIn() {
+    return cvcin;
+  }
+
+  void setCVCIn(FILE* file) {
+    cvcin = file;
+  }
 }

@@ -176,7 +176,7 @@ public:
   types GetType(void) const;
 
   // Hash using pointer value of _int_node_ptr.
-  size_t Hash() const ;
+  DLL_PUBLIC size_t Hash() const ;
 
   void NFASTPrint(int l, int max, int prefix) const;
 

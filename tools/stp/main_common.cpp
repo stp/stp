@@ -24,20 +24,13 @@ THE SOFTWARE.
 
 #include "main_common.h"
 #include "extlib-abc/cnf_short.h"
+#include "stp/Parser/parser.h"
+#include "stp/cpp_interface.h"
 
-extern int smtparse(void*);
-extern int smt2parse();
-extern int cvcparse(void*);
-extern int cvclex_destroy(void);
-extern int smtlex_destroy(void);
-extern int smt2lex_destroy(void);
 extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
 extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
-DLL_PUBLIC extern FILE* cvcin;
-DLL_PUBLIC extern FILE* smtin;
-DLL_PUBLIC extern FILE* smt2in;
 
 using namespace stp;
 using std::auto_ptr;
@@ -58,9 +51,9 @@ Main::Main() : onePrintBack(false)
 {
   bm = NULL;
   toClose = NULL;
-  cvcin = NULL;
-  smtin = NULL;
-  smt2in = NULL;
+  setCVCIn(NULL);
+  setSMTIn(NULL);
+  setSMT2In(NULL);
 
   // Register the error handler
   vc_error_hdlr = errorHandler;
@@ -128,17 +121,17 @@ void Main::parse_file(ASTVec* AssertsQuery)
 
   if (bm->UserFlags.smtlib1_parser_flag)
   {
-    smtparse((void*)AssertsQuery);
+    SMTParse((void*)AssertsQuery);
     smtlex_destroy();
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
-    smt2parse();
+    SMT2Parse();
     smt2lex_destroy();
   }
   else
   {
-    cvcparse((void*)AssertsQuery);
+    CVCParse((void*)AssertsQuery);
     cvclex_destroy();
   }
   GlobalParserInterface = NULL;
@@ -202,27 +195,27 @@ void Main::read_file()
   bool error = false;
   if (bm->UserFlags.smtlib1_parser_flag)
   {
-    smtin = fopen(infile.c_str(), "r");
-    toClose = smtin;
-    if (smtin == NULL)
+    setSMTIn(fopen(infile.c_str(), "r"));
+    toClose = getSMTIn();
+    if (getSMTIn() == NULL)
     {
       error = true;
     }
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
-    smt2in = fopen(infile.c_str(), "r");
-    toClose = smt2in;
-    if (smt2in == NULL)
+    setSMT2In(fopen(infile.c_str(), "r"));
+    toClose = getSMT2In();
+    if (getSMT2In() == NULL)
     {
       error = true;
     }
   }
   else
   {
-    cvcin = fopen(infile.c_str(), "r");
-    toClose = cvcin;
-    if (cvcin == NULL)
+    setCVCIn(fopen(infile.c_str(), "r"));
+    toClose = getCVCIn();
+    if (getCVCIn() == NULL)
     {
       error = true;
     }
@@ -346,7 +339,7 @@ int Main::main(int argc, char** argv)
   delete AssertsQuery;
   _empty_ASTVec.clear();
   delete stp;
-  Cnf_ClearMemory();
+  CNFClearMemory();
 
   return 0;
 }

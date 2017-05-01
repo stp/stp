@@ -290,4 +290,12 @@ namespace stp {
   void SMT2ScanString (const char *yy_str) {
     smt2_scan_string(yy_str);
   }
+
+  FILE* getSMT2In() {
+    return smt2in;
+  }
+
+  void setSMT2In(FILE* file) {
+    smt2in = file;
+  }
 }
