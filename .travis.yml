@@ -38,7 +38,7 @@ matrix:
           packages:
             - clang-3.7
       env:
-        global: STP_CONFIG=STATIC_CMS
+        - STP_CONFIG=STATIC_CMS
     - compiler: clang
       addons:
         apt:
@@ -48,7 +48,7 @@ matrix:
           packages:
             - clang-3.7
       env:
-        global: STP_CONFIG=NORM
+        - STP_CONFIG=NORM
 
   allow_failures:
     # Covertiy scan might fail
