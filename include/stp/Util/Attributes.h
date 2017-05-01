@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHOR: Felix Kutzner
+ * AUTHOR: Felix Kutzner, Mate Soos
  *
  * BEGIN DATE: Apr, 2017
  *
@@ -56,6 +56,5 @@ THE SOFTWARE.
     #define DLL_PUBLIC
     #define DLL_LOCAL
 #endif
-
 
 #endif

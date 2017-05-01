@@ -60,6 +60,11 @@ if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
     message(FATAL_ERROR "Could not find GTest. Did you remember to add the submodules (``git submodule init && git submodule update``)?")
 endif()
 
+if (MSVC)
+  # STP is built with the shared version of the CRT, gtest defaults to the
+  # static one, and they can't be mixed. Foring gtest to use the dynamic one.
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+endif()
 
 add_subdirectory(${GTEST_PREFIX} gtest)
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)

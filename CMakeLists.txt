@@ -19,7 +19,7 @@
 # THE SOFTWARE.
 
 project(STP)
-cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
 
 if(NOT (CMAKE_MAJOR_VERSION LESS 2))
@@ -122,10 +122,6 @@ endif()
 # STP will link against this client library
 # -----------------------------------------------------------------------------
 option(STATICCOMPILE "Compile static library and executable" OFF)
-if (MSVC)
-  # building of shared lib does not work on windows for the moment
-  set(STATICCOMPILE ON)
-endif()
 
 if (STATICCOMPILE)
     set(Boost_USE_STATIC_LIBS ON)
@@ -177,7 +173,6 @@ endif()
 
 
 if (NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
     add_cxx_flag_if_supported("-Wall")
     add_cxx_flag_if_supported("-Wextra")
     add_cxx_flag_if_supported("-Wunused")
@@ -249,7 +244,7 @@ if(WIN32)
 
       # stack size of MSVC must be specified
       string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:256000000")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:512000000")
 
       # inline is not a keyword in visual studios old C version, allow its redefinition
       add_definitions("-D_ALLOW_KEYWORD_MACROS")
@@ -449,7 +444,35 @@ if(ENABLE_TESTING)
   add_custom_target(check
     COMMENT "top level target to invoke all other tests"
   )
+
+  add_custom_target(pre-check
+    COMMENT "top level target to make sure shared libraries can be linked to tests"
+  )
+
   add_subdirectory(tests)
+
+  if(MSVC AND (NOT STATICCOMPILE))
+    if(Boost_FOUND)
+      set(STP_TARGET stp)
+    else()
+      set(STP_TARGET stp_simple)
+    endif()
+
+    add_custom_command(TARGET pre-check PRE_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E
+                       copy $<TARGET_FILE:libstp> $<TARGET_FILE_DIR:${STP_TARGET}>)
+
+    # TODO: move this to the C API test target?
+    add_custom_command(TARGET pre-check PRE_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E
+                       copy $<TARGET_FILE:libstp> tests/api/C/$<CONFIG>)
+    add_custom_command(TARGET pre-check PRE_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E
+                       copy $<TARGET_FILE:gtest> tests/api/C/$<CONFIG>)
+    add_custom_command(TARGET pre-check PRE_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E
+                       copy $<TARGET_FILE:gtest_main> tests/api/C/$<CONFIG>)
+  endif()
 else()
     message(WARNING "Testing is disabled")
 endif()

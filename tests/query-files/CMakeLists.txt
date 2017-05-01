@@ -19,25 +19,29 @@
 # THE SOFTWARE.
 
 if (Boost_FOUND)
-    get_target_property(STP_EXECUTABLE_PATH stp LOCATION)
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp>")
 else()
-    get_target_property(STP_EXECUTABLE_PATH stp_simple LOCATION)
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple>")
 endif()
 
 # Create llvm-lit configuration file
-configure_file(lit.site.cfg.in lit.site.cfg @ONLY)
+configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg
+              INPUT ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.g)
+
 
 if (Boost_FOUND)
     add_custom_target(query-file-tests
                   DEPENDS stp
-                  COMMAND ${LIT_TOOL} ${LIT_ARGS} .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     )
 else()
     add_custom_target(query-file-tests
                   DEPENDS stp_simple
-                  COMMAND ${LIT_TOOL} ${LIT_ARGS} .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     )
 endif()
 
 # Make sure this test-suite runs when "check" is target
 add_dependencies(check query-file-tests)
+add_dependencies(query-file-tests pre-check)

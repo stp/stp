@@ -46,6 +46,7 @@
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
 
   using namespace stp;
   using std::cout;
@@ -1285,3 +1286,9 @@ TERMID_TOK
 ;
 
 %%
+
+namespace stp {
+  int SMT2Parse() {
+    return smt2parse();
+  }
+}

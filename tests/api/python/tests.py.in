@@ -26,7 +26,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@") # Make sure we can find the STP python package
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp/$<CONFIG>") # Make sure we can find the STP python package
 
 from stp import stp, Solver
 import unittest

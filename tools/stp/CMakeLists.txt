@@ -32,6 +32,7 @@ if (Boost_FOUND)
     if (STATICCOMPILE)
         set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 1)
     endif()
+
     set_target_properties(stp PROPERTIES
       RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
       VERSION "${PROJECT_VERSION}"

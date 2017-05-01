@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include "extlib-constbv/constantbv.h"
 #include "stp/Util/RunTimes.h"
 #include "stp/Util/StringHash.h"
+#include "stp/Util/Attributes.h"
 
 #include "stp/config.h"
 

@@ -50,7 +50,8 @@
 
 #ifdef _MSC_VER
   #include <io.h>
-  int isatty(int fd) { return _isatty(fd); }
+  // defining isatty to avoid dll symbol export inconsistencies
+  #define isatty(x) _isatty(x)
 #endif
 
   // File-static (local to this file) variables and functions
@@ -285,3 +286,17 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 
 . { smt2error("Illegal input character."); }
 %%
+
+namespace stp {
+  void SMT2ScanString (const char *yy_str) {
+    smt2_scan_string(yy_str);
+  }
+
+  FILE* getSMT2In() {
+    return smt2in;
+  }
+
+  void setSMT2In(FILE* file) {
+    smt2in = file;
+  }
+}

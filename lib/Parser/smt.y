@@ -36,6 +36,7 @@
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
 
   using namespace stp;
   using std::cout;
@@ -1106,3 +1107,9 @@ DOLLAR_TOK FORMID_TOK
 }   
 ;
 %%
+
+namespace stp {
+  int SMTParse(void* AssertsQuery) {
+    return smtparse(AssertsQuery);
+  }
+}

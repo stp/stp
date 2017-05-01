@@ -63,3 +63,5 @@ AddSTPGTest(counterexample.cpp)
 AddSTPGTest(example_broken.cpp)
 AddSTPGTest(counter-example-reading.cpp)
 AddSTPGTest(failing_solvermap.cpp)
+
+add_dependencies(C-api-tests pre-check)
