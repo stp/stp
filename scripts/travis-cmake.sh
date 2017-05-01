@@ -69,6 +69,7 @@ case $STP_CONFIG in
                    -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
         TEST=0
+        sudo make install
     ;;
 
     NO_BOOST)
