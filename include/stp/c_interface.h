@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 #include <stdio.h>
+#include <stp/Util/Attributes.h>
 
 #ifdef STP_STRONG_TYPING
 #else
@@ -66,7 +67,7 @@ typedef void* WholeCounterExample;
 //!  - 'y': Enables printing binaries. TODO: What is meant with this?
 //! 
 //! This function panics if given an unsupported or unknown flag.
-void process_argument(const char ch, VC bm);
+DLL_PUBLIC void process_argument(const char ch, VC bm);
 
 //! \brief Deprecated: use process_argument instead!
 //! 
@@ -76,14 +77,14 @@ void process_argument(const char ch, VC bm);
 //! Parameter num_absrefine has no effect in the current implementation.
 //! It is left for compatibility with existing code.
 //! 
-void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
+DLL_PUBLIC void vc_setFlags(VC vc, char c, int num_absrefine _CVCL_DEFAULT_ARG(0));
 
 //! \brief Deprecated: use process_argument instead!
 //! 
 //! Sets flags for the validity checker.
 //! For more information about this look into the documentation of process_argument.
 //! 
-void vc_setFlag(VC vc, char c);
+DLL_PUBLIC void vc_setFlag(VC vc, char c);
 
 //! Interface-only flags.
 //! 
@@ -140,12 +141,12 @@ enum ifaceflag_t
 //! Use this to set the underlying SAT solver used by STP or to change
 //! the global behaviour for expression ownership semantics via EXPRDELETE.
 //! 
-void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
+DLL_PUBLIC void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value);
 
 //! \brief Deprecated: this functionality is no longer needed!
 //! 
 //! Since recent versions of STP division is always total.
-void make_division_total(VC vc);
+DLL_PUBLIC void make_division_total(VC vc);
 
 //! \brief Creates a new instance of an STP validity checker.
 //! 
@@ -154,18 +155,18 @@ void make_division_total(VC vc);
 //! 
 //! It is also the interface for assertions and queries.
 //! 
-VC vc_createValidityChecker(void);
+DLL_PUBLIC VC vc_createValidityChecker(void);
 
 //! \brief Returns the boolean type for the given validity checker.
 //! 
-Type vc_boolType(VC vc);
+DLL_PUBLIC Type vc_boolType(VC vc);
 
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
 //! 
 //! Note that index type and data type must both be of bitvector (bv) type.
 //! 
-Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
+DLL_PUBLIC Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 
 /////////////////////////////////////////////////////////////////////////////
 /// EXPR MANUPULATION METHODS
@@ -178,7 +179,7 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 //! The variable name must only consist of alphanumerics and underscore 
 //! characters, otherwise this may behave in undefined ways, e.g. segfault.
 //! 
-Expr vc_varExpr(VC vc, const char* name, Type type);
+DLL_PUBLIC Expr vc_varExpr(VC vc, const char* name, Type type);
 
 //! \brief Similar to vc_varExpr but more bare metal. Do not use this unless
 //!        you really know what you are doing!
@@ -189,7 +190,7 @@ Expr vc_varExpr(VC vc, const char* name, Type type);
 //! The variable name must only consist of alphanumerics and underscore 
 //! characters, otherwise this may behave in undefined ways, e.g. segfault.
 //!  
-Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth);
+DLL_PUBLIC Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth);
 
 // //! \brief Deprecated! This API is not supported.
 // //! 
@@ -201,17 +202,17 @@ Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth);
 
 //! \brief Returns the type of the given expression.
 //! 
-Type vc_getType(VC vc, Expr e);
+DLL_PUBLIC Type vc_getType(VC vc, Expr e);
 
 //! \brief Returns the bit-width of the given bitvector.
 //! 
-int vc_getBVLength(VC vc, Expr e);
+DLL_PUBLIC int vc_getBVLength(VC vc, Expr e);
 
 //! \brief Create an equality expression. The two children must have the same type.
 //! 
 //! Returns a boolean expression.
 //! 
-Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
+DLL_PUBLIC Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BOOLEAN EXPRESSIONS
@@ -228,59 +229,59 @@ Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
 
 //! \brief Creates a boolean expression that represents true.
 //! 
-Expr vc_trueExpr(VC vc);
+DLL_PUBLIC Expr vc_trueExpr(VC vc);
 
 //! \brief Creates a boolean expression that represents false.
 //! 
-Expr vc_falseExpr(VC vc);
+DLL_PUBLIC Expr vc_falseExpr(VC vc);
 
 //! \brief Creates a boolean not expression that logically negates its child.
 //! 
-Expr vc_notExpr(VC vc, Expr child);
+DLL_PUBLIC Expr vc_notExpr(VC vc, Expr child);
 
 //! \brief Creates a binary and-expression that represents a conjunction
 //!        of the given boolean child expressions.
 //! 
-Expr vc_andExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_andExpr(VC vc, Expr left, Expr right);
 
 //! \brief Creates an and-expression with multiple child boolean expressions
 //!        that represents the conjunction of all of its child expressions.
 //! 
 //! This API is useful since SMTLib2 defines non-binary expressions for logical-and.
 //! 
-Expr vc_andExprN(VC vc, Expr* children, int numOfChildNodes);
+DLL_PUBLIC Expr vc_andExprN(VC vc, Expr* children, int numOfChildNodes);
 
 //! \brief Creates a binary or-expression that represents a disjunction
 //!        of the given boolean child expressions.
 //! 
-Expr vc_orExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_orExpr(VC vc, Expr left, Expr right);
 
 //! \brief Creates an or-expression with multiple child boolean expressions
 //!        that represents the disjunction of all of its child expressions.
 //! 
 //! This API is useful since SMTLib2 defines non-binary expressions for logical-or.
 //! 
-Expr vc_orExprN(VC vc, Expr* children, int numOfChildNodes);
+DLL_PUBLIC Expr vc_orExprN(VC vc, Expr* children, int numOfChildNodes);
 
 //! \brief Creates a binary xor-expressions for the given boolean child expressions.
 //! 
-Expr vc_xorExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_xorExpr(VC vc, Expr left, Expr right);
 
 //! \brief Creates an implies-expression for the given hyp (hypothesis) and
 //!        conc (conclusion) boolean expressions.
 //! 
-Expr vc_impliesExpr(VC vc, Expr hyp, Expr conc);
+DLL_PUBLIC Expr vc_impliesExpr(VC vc, Expr hyp, Expr conc);
 
 //! \brief Creates an if-and-only-if-expression for the given boolean expressions.
 //! 
-Expr vc_iffExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_iffExpr(VC vc, Expr left, Expr right);
 
 //! \brief Creates an if-then-else-expression for the given conditional boolean expression
 //!        and its then and else expressions which must be of the same type.
 //! 
 //! The output type of this API may be of boolean or bitvector type.
 //! 
-Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr, Expr elseExpr);
+DLL_PUBLIC Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr, Expr elseExpr);
 
 //! \brief Returns a bitvector expression from the given boolean expression.
 //! 
@@ -290,14 +291,14 @@ Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr, Expr elseExpr);
 //! 
 //! Panics if the given expression is not of boolean type.
 //! 
-Expr vc_boolToBVExpr(VC vc, Expr form);
+DLL_PUBLIC Expr vc_boolToBVExpr(VC vc, Expr form);
 
 // Parameterized Boolean Expression (PARAMBOOL, Boolean_Var, parameter)
 
 //! \brief Creates a parameterized boolean expression with the given boolean
 //!        variable expression and the parameter param.
 //! 
-Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
+DLL_PUBLIC Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 
 /////////////////////////////////////////////////////////////////////////////
 /// ARRAY EXPRESSIONS
@@ -308,14 +309,14 @@ Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 //! 
 //! The array parameter must be of type array and index must be of type bitvector.
 //! 
-Expr vc_readExpr(VC vc, Expr array, Expr index);
+DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 
 //! \brief Returns an array-write-expressions representing the writing of
 //!        the given new value into the given array at the given entry index.
 //! 
 //! The array parameter must be of type array, and index and newValue of type bitvector.
 //! 
-Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
+DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 
 //! \brief Parses the expression stored in the file of the given filepath
 //!        and returns it on success.
@@ -324,24 +325,24 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 //!       Does the user have to deallocate resources for the returned expression?
 //!       Why exactly is this "pretty cool!"?
 //! 
-Expr vc_parseExpr(VC vc, const char* filepath);
+DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
 //! \brief Prints the given expression to stdout in the presentation language.
 //! 
-void vc_printExpr(VC vc, Expr e);
+DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
 //! \brief Prints the given expression to stdout as C code.
 //! 
-void vc_printExprCCode(VC vc, Expr e);
+DLL_PUBLIC void vc_printExprCCode(VC vc, Expr e);
 
 //! \brief Prints the given expression to stdout in the STMLib2 format.
 //! 
-char* vc_printSMTLIB(VC vc, Expr e);
+DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
 
 //! \brief Prints the given expression into the file with the given file descriptor
 //!        in the presentation language.
 //! 
-void vc_printExprFile(VC vc, Expr e, int fd);
+DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 
 // //! \brief Prints the state of the given validity checker into
 // //!        buffer allocated by STP stores it into the given 'buf' alongside
@@ -355,17 +356,17 @@ void vc_printExprFile(VC vc, Expr e, int fd);
 //! 
 //! The buffer is returned via output parameter 'buf' alongside its length 'len'.
 //! It is the responsibility of the caller to free the memory afterwards.
-void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len);
+DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len);
 
 //! \brief Prints the counter example after an invalid query to stdout.
 //! 
 //! This method should only be called after a query which returns false.
 //! 
-void vc_printCounterExample(VC vc);
+DLL_PUBLIC void vc_printCounterExample(VC vc);
 
 //! \brief Prints variable declarations to stdout.
 //! 
-void vc_printVarDecls(VC vc);
+DLL_PUBLIC void vc_printVarDecls(VC vc);
 
 //! \brief Clears the internal list of variables that are maintained 
 //!        for printing purposes via 'vc_printVarDecls'.
@@ -374,14 +375,14 @@ void vc_printVarDecls(VC vc);
 //! declarations to prevent memory leaks.
 //! This is also useful if printing of declarations is never wanted.
 //! 
-void vc_clearDecls(VC vc);
+DLL_PUBLIC void vc_clearDecls(VC vc);
 
 //! \brief Prints assertions to stdout.
 //! 
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the asserted formulas during printing.
 //!  
-void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
+DLL_PUBLIC void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 
 //! \brief Prints the state of the query to a buffer allocated by STP
 //!        that is returned via output parameter 'buf' alongside its
@@ -392,7 +393,7 @@ void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the query state during printing.
 //! 
-void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
+DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
                                 int simplify_print);
 
 //! \brief Prints the found counter example to a buffer allocated by STP
@@ -404,11 +405,11 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the counter example during printing.
 //! 
-void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len);
+DLL_PUBLIC void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len);
 
 //! \brief Prints the query to stdout in presentation language.
 //! 
-void vc_printQuery(VC vc);
+DLL_PUBLIC void vc_printQuery(VC vc);
 
 /////////////////////////////////////////////////////////////////////////////
 /// CONTEXT RELATED METHODS
@@ -418,11 +419,11 @@ void vc_printQuery(VC vc);
 //! 
 //! The expression must be of type boolean.
 //! 
-void vc_assertFormula(VC vc, Expr e);
+DLL_PUBLIC void vc_assertFormula(VC vc, Expr e);
 
 //! \brief Simplifies the given expression with respect to the given validity checker.
 //! 
-Expr vc_simplify(VC vc, Expr e);
+DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 
 //! \brief Checks the validity of the given expression 'e' in the given context.
 //! 
@@ -441,7 +442,7 @@ Expr vc_simplify(VC vc, Expr e);
 //! 
 //! Note: The cryptominisat solver does not check the timeout, yet!
 //! 
-int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
+DLL_PUBLIC int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
 
 //! \brief Checks the validity of the given expression 'e' in the given context
 //!        with an unlimited timeout.
@@ -451,11 +452,11 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
 //! Note: Read the documentation of 'vc_query_with_timeout' for more information
 //!       about subtle details.
 //! 
-int vc_query(VC vc, Expr e);
+DLL_PUBLIC int vc_query(VC vc, Expr e);
 
 //! \brief Returns the counter example after an invalid query.
 //! 
-Expr vc_getCounterExample(VC vc, Expr e);
+DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 
 //! \brief Returns an array from a counter example after an invalid query.
 //! 
@@ -465,38 +466,38 @@ Expr vc_getCounterExample(VC vc, Expr e);
 //! 
 //! It is the caller's responsibility to free the memory afterwards.
 //! 
-void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices, Expr** outValues,
+DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices, Expr** outValues,
                                int* outSize);
 
 //! \brief Returns the size of the counter example array,
 //!        i.e. the number of variable and array locations
 //!        in the counter example.
 //! 
-int vc_counterexample_size(VC vc);
+DLL_PUBLIC int vc_counterexample_size(VC vc);
 
 //! \brief Checkpoints the current context and increases the scope level.
 //! 
 //! TODO: What effects has this?
 //! 
-void vc_push(VC vc);
+DLL_PUBLIC void vc_push(VC vc);
 
 //! \brief Restores the current context to its state at the last checkpoint.
 //! 
 //! TODO: What effects has this?
 //! 
-void vc_pop(VC vc);
+DLL_PUBLIC void vc_pop(VC vc);
 
 //! \brief Returns the associated integer from the given bitvector expression.
 //! 
 //! Panics if the given bitvector cannot be represented by an 'int'.
 //! 
-int getBVInt(Expr e);
+DLL_PUBLIC int getBVInt(Expr e);
 
 //! \brief Returns the associated unsigned integer from the given bitvector expression.
 //! 
 //! Panics if the given bitvector cannot be represented by an 'unsigned int'.
 //! 
-unsigned int getBVUnsigned(Expr e);
+DLL_PUBLIC unsigned int getBVUnsigned(Expr e);
 
 //! Return an unsigned long long int from a constant bitvector expressions
 
@@ -504,7 +505,7 @@ unsigned int getBVUnsigned(Expr e);
 //! 
 //! Panics if the given bitvector cannot be represented by an 'unsigned long long int'.
 //! 
-unsigned long long int getBVUnsignedLongLong(Expr e);
+DLL_PUBLIC unsigned long long int getBVUnsignedLongLong(Expr e);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR OPERATIONS
@@ -512,7 +513,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e);
 
 //! \brief Returns the bitvector type for the given validity checker.
 //! 
-Type vc_bvType(VC vc, int no_bits);
+DLL_PUBLIC Type vc_bvType(VC vc, int no_bits);
 
 //! \brief Returns the bitvector type with a bit-width of 32 for the
 //!        given validity checker.
@@ -521,7 +522,7 @@ Type vc_bvType(VC vc, int no_bits);
 //! 
 //! Note: This is a convenience function that simply forwards its input.
 //! 
-Type vc_bv32Type(VC vc);
+DLL_PUBLIC Type vc_bv32Type(VC vc);
 
 //Const expressions for string, int, long-long, etc
 
@@ -529,32 +530,32 @@ Type vc_bv32Type(VC vc);
 //! 
 //! This function expects the input string to be of decimal format.
 //! 
-Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput);
+DLL_PUBLIC Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput);
 
 //! \brief Parses the given string and returns an associated bitvector expression.
 //! 
 //! This function expects the input string to be of binary format.
 //! 
-Expr vc_bvConstExprFromStr(VC vc, const char* binaryInput);
+DLL_PUBLIC Expr vc_bvConstExprFromStr(VC vc, const char* binaryInput);
 
 //! \brief Returns a bitvector with 'bitWidth' bit-width from the given
 //!        unsigned integer value.
 //! 
 //! The 'bitWidth' must be large enough to fully store the given value's bit representation.
 //! 
-Expr vc_bvConstExprFromInt(VC vc, int bitWidth, unsigned int value);
+DLL_PUBLIC Expr vc_bvConstExprFromInt(VC vc, int bitWidth, unsigned int value);
 
 //! \brief Returns a bitvector with 'bitWidth' bit-width from the given
 //!        unsigned long long integer value.
 //! 
 //! The 'bitWidth' must be large enough to fully store the given value's bit representation.
 //! 
-Expr vc_bvConstExprFromLL(VC vc, int bitWidth, unsigned long long value);
+DLL_PUBLIC Expr vc_bvConstExprFromLL(VC vc, int bitWidth, unsigned long long value);
 
 //! \brief Returns a bitvector with a bit-width of 32 from the given
 //!        unsigned integer value.
 //! 
-Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
+DLL_PUBLIC Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR ARITHMETIC OPERATIONS
@@ -569,28 +570,28 @@ Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value);
 //! Example: Given bitvector 'a = 1101' and 'b = 1000' then 'vc_bvConcatExpr(vc, a, b)'
 //!          results in 'c = 11011000'.
 //! 
-Expr vc_bvConcatExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvConcatExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression representing the addition of the two
 //!        given bitvector expressions.
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvPlusExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvPlusExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression representing the addition of the N
 //!        given bitvector expressions in the 'children' array.
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvPlusExprN(VC vc, int bitWidth, Expr* children, int numOfChildNodes);
+DLL_PUBLIC Expr vc_bvPlusExprN(VC vc, int bitWidth, Expr* children, int numOfChildNodes);
 
 //! \brief Returns a bitvector expression with a bit-width of 32
 //!        representing the addition of the two given bitvector expressions.
 //! 
 //! The given bitvector expressions must have a bit-width of 32.
 //! 
-Expr vc_bv32PlusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bv32PlusExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the subtraction '(left - right)' of the two
@@ -598,7 +599,7 @@ Expr vc_bv32PlusExpr(VC vc, Expr left, Expr right);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvMinusExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvMinusExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 32
 //!        representing the subtraction '(left - right)' of the given
@@ -606,7 +607,7 @@ Expr vc_bvMinusExpr(VC vc, int bitWidth, Expr left, Expr right);
 //! 
 //! The given bitvector expressions must have a bit-width of 32.
 //! 
-Expr vc_bv32MinusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bv32MinusExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the multiplication '(left * right)' of the two
@@ -614,7 +615,7 @@ Expr vc_bv32MinusExpr(VC vc, Expr left, Expr right);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvMultExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvMultExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 32
 //!        representing the multiplication '(left * right)' of the given
@@ -622,7 +623,7 @@ Expr vc_bvMultExpr(VC vc, int bitWidth, Expr left, Expr right);
 //! 
 //! The given bitvector expressions must have a bit-width of 32.
 //! 
-Expr vc_bv32MultExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bv32MultExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the division '(dividend / divisor)' of the two
@@ -630,7 +631,7 @@ Expr vc_bv32MultExpr(VC vc, Expr left, Expr right);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+DLL_PUBLIC Expr vc_bvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the modulo '(dividend % divisor)' of the two
@@ -638,7 +639,7 @@ Expr vc_bvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_bvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+DLL_PUBLIC Expr vc_bvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
 //! \brief Returns a (signed) bitvector expression with a bit-width of 'bitWidth'
 //!        representing the signed division '(dividend / divisor)' of the two
@@ -646,7 +647,7 @@ Expr vc_bvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_sbvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+DLL_PUBLIC Expr vc_sbvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
 //! \brief Returns a (signed) bitvector expression with a bit-width of 'bitWidth'
 //!        representing the signed modulo '(dividend % divisor)' of the two
@@ -654,7 +655,7 @@ Expr vc_sbvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_sbvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+DLL_PUBLIC Expr vc_sbvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
 //! \brief Returns a (signed) bitvector expression with a bit-width of 'bitWidth'
 //!        representing the signed remainder of the two
@@ -662,7 +663,7 @@ Expr vc_sbvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //! 
 //! The given bitvector expressions must have the same bit-width as 'bitWidth'
 //! 
-Expr vc_sbvRemExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+DLL_PUBLIC Expr vc_sbvRemExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR COMPARISON OPERATIONS
@@ -671,42 +672,42 @@ Expr vc_sbvRemExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //! \brief Returns a boolean expression representing the less-than
 //!        operation '(left < right)' of the given bitvector expressions.
 //! 
-Expr vc_bvLtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvLtExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the less-equals
 //!        operation '(left <= right)' of the given bitvector expressions.
 //! 
-Expr vc_bvLeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvLeExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the greater-than
 //!        operation '(left > right)' of the given bitvector expressions.
 //! 
-Expr vc_bvGtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvGtExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the greater-equals
 //!        operation '(left >= right)' of the given bitvector expressions.
 //! 
-Expr vc_bvGeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvGeExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the signed less-than
 //!        operation '(left < right)' of the given signed bitvector expressions.
 //! 
-Expr vc_sbvLtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_sbvLtExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the signed less-equals
 //!        operation '(left <= right)' of the given signed bitvector expressions.
 //! 
-Expr vc_sbvLeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_sbvLeExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the signed greater-than
 //!        operation '(left > right)' of the given signed bitvector expressions.
 //! 
-Expr vc_sbvGtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_sbvGtExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a boolean expression representing the signed greater-equals
 //!        operation '(left >= right)' of the given signed bitvector expressions.
 //! 
-Expr vc_sbvGeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_sbvGeExpr(VC vc, Expr left, Expr right);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR BITWISE OPERATIONS
@@ -715,35 +716,35 @@ Expr vc_sbvGeExpr(VC vc, Expr left, Expr right);
 //! \brief Returns a bitvector expression representing the arithmetic
 //!        negation '(-a)' (unary minus) of the given child bitvector expression.
 //! 
-Expr vc_bvUMinusExpr(VC vc, Expr child);
+DLL_PUBLIC Expr vc_bvUMinusExpr(VC vc, Expr child);
 
 //! \brief Returns a bitvector expression representing the bitwise-and
 //!        operation '(a & b)' for the given bitvector expressions.
 //! 
 //! The given bitvector expressions must have the same bit-width.
 //! 
-Expr vc_bvAndExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvAndExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression representing the bitwise-or
 //!        operation '(a | b)' for the given bitvector expressions.
 //! 
 //! The given bitvector expressions must have the same bit-width.
 //! 
-Expr vc_bvOrExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvOrExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression representing the bitwise-xor
 //!        operation '(a ^ b)' for the given bitvector expressions.
 //! 
 //! The given bitvector expressions must have the same bit-width.
 //! 
-Expr vc_bvXorExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvXorExpr(VC vc, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression representing the bitwise-not
 //!        operation '~a' for the given bitvector expressions.
 //! 
 //! The given bitvector expressions must have the same bit-width.
 //! 
-Expr vc_bvNotExpr(VC vc, Expr child);
+DLL_PUBLIC Expr vc_bvNotExpr(VC vc, Expr child);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR SHIFT OPERATIONS
@@ -757,7 +758,7 @@ Expr vc_bvNotExpr(VC vc, Expr child);
 //! 
 //! Note: This is the new API for this kind of operation!
 //! 
-Expr vc_bvLeftShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvLeftShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the right-shift operation '(left << right)' of the
@@ -765,7 +766,7 @@ Expr vc_bvLeftShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 //! 
 //! Note: This is the new API for this kind of operation!
 //! 
-Expr vc_bvRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the signed right-shift operation '(left >> right)' of the
@@ -773,7 +774,7 @@ Expr vc_bvRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 //! 
 //! Note: This is the new API for this kind of operation!
 //! 
-Expr vc_bvSignedRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
+DLL_PUBLIC Expr vc_bvSignedRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -782,7 +783,7 @@ Expr vc_bvSignedRightShiftExprExpr(VC vc, int bitWidth, Expr left, Expr right);
 //! 
 //! Note: Use 'vc_bvLeftShiftExprExpr' instead!
 //! 
-Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -791,7 +792,7 @@ Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvRightShiftExprExpr' instead!
 //! 
-Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -801,7 +802,7 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvLeftShiftExprExpr' instead!
 //! 
-Expr vc_bv32LeftShiftExpr(VC vc, int sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bv32LeftShiftExpr(VC vc, int sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -811,7 +812,7 @@ Expr vc_bv32LeftShiftExpr(VC vc, int sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvRightShiftExprExpr' instead!
 //! 
-Expr vc_bv32RightShiftExpr(VC vc, int sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bv32RightShiftExpr(VC vc, int sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -821,7 +822,7 @@ Expr vc_bv32RightShiftExpr(VC vc, int sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvLeftShiftExprExpr' instead!
 //! 
-Expr vc_bvVar32LeftShiftExpr(VC vc, Expr sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bvVar32LeftShiftExpr(VC vc, Expr sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -831,7 +832,7 @@ Expr vc_bvVar32LeftShiftExpr(VC vc, Expr sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvRightShiftExprExpr' instead!
 //! 
-Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child);
+DLL_PUBLIC Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child);
 
 //! \brief Deprecated: Use the new API instead!
 //! 
@@ -841,7 +842,7 @@ Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child);
 //! 
 //! Note: Use 'vc_bvSignedRightShiftExprExpr' instead!
 //! 
-Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
+DLL_PUBLIC Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR EXTRACTION & EXTENSION
@@ -852,7 +853,7 @@ Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
 //! 
 //! Note: The resulting bitvector expression has a bit-width of 'high_bit_no - low_bit_no'.
 //! 
-Expr vc_bvExtract(VC vc, Expr child, int high_bit_no, int low_bit_no);
+DLL_PUBLIC Expr vc_bvExtract(VC vc, Expr child, int high_bit_no, int low_bit_no);
 
 //! \brief Superseeded: Use 'vc_bvBoolExtract_Zero' or 'vc_bvBoolExtract_One' instead.
 //! 
@@ -861,24 +862,24 @@ Expr vc_bvExtract(VC vc, Expr child, int high_bit_no, int low_bit_no);
 //! 
 //! Note: This is equal to calling 'vc_bvBoolExtract_Zero'.
 //! 
-Expr vc_bvBoolExtract(VC vc, Expr x, int bit_no);
+DLL_PUBLIC Expr vc_bvBoolExtract(VC vc, Expr x, int bit_no);
 
 //! \brief Returns a boolean expression that accepts a bitvector expression 'x'
 //!        and represents the following equation: '(x[bit_no:bit_no] == 0)'.
 //! 
-Expr vc_bvBoolExtract_Zero(VC vc, Expr x, int bit_no);
+DLL_PUBLIC Expr vc_bvBoolExtract_Zero(VC vc, Expr x, int bit_no);
 
 //! \brief Returns a boolean expression that accepts a bitvector expression 'x'
 //!        and represents the following equation: '(x[bit_no:bit_no] == 1)'.
 //! 
-Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);
+DLL_PUBLIC Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);
 
 //! \brief Returns a bitvector expression representing the extension of the given
 //!        to the amount of bits given by 'newWidth'.
 //! 
 //! Note: This operation retains the signedness of the bitvector is existant.
 //! 
-Expr vc_bvSignExtend(VC vc, Expr child, int newWidth);
+DLL_PUBLIC Expr vc_bvSignExtend(VC vc, Expr child, int newWidth);
 
 /////////////////////////////////////////////////////////////////////////////
 /// CONVENIENCE FUNCTIONS FOR ARRAYS
@@ -889,20 +890,20 @@ Expr vc_bvSignExtend(VC vc, Expr child, int newWidth);
 //! \brief Convenience function to create a named array expression with
 //!        an index bit-width of 32 and a value bit-width of 8.
 //! 
-Expr vc_bvCreateMemoryArray(VC vc, const char* arrayName);
+DLL_PUBLIC Expr vc_bvCreateMemoryArray(VC vc, const char* arrayName);
 
 //! \brief Convenience function to read a bitvector with byte-width 'numOfBytes' of an 
 //!        array expression created by 'vc_bvCreateMemoryArray' and return it.
 //! 
 //! Note: This returns a bitvector expression with a bit-width of 'numOfBytes'.
 //! 
-Expr vc_bvReadMemoryArray(VC vc, Expr array, Expr byteIndex, int numOfBytes);
+DLL_PUBLIC Expr vc_bvReadMemoryArray(VC vc, Expr array, Expr byteIndex, int numOfBytes);
 
 //! \brief Convenience function to write a bitvector 'element' with byte-width 'numOfBytes'
 //!        into the given array expression at offset 'byteIndex'.
 //! 
-Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
-                             int numOfBytes);
+DLL_PUBLIC Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
+                                        int numOfBytes);
 
 /////////////////////////////////////////////////////////////////////////////
 /// GENERAL EXPRESSION OPERATIONS
@@ -914,7 +915,7 @@ Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
 //!     The caller is responsible for deallocating the string afterwards.
 //!     The buffer that stores the string is allocated by STP.
 //! 
-char* exprString(Expr e);
+DLL_PUBLIC char* exprString(Expr e);
 
 //! \brief Returns a string representation of the given type.
 //! 
@@ -922,11 +923,11 @@ char* exprString(Expr e);
 //!     The caller is responsible for deallocating the string afterwards.
 //!     The buffer that stores the string is allocated by STP.
 //! 
-char* typeString(Type t);
+DLL_PUBLIC char* typeString(Type t);
 
 //! \brief Returns the n-th child of the given expression.
 //! 
-Expr getChild(Expr e, int n);
+DLL_PUBLIC Expr getChild(Expr e, int n);
 
 //! \brief Misleading name!
 //! 
@@ -935,39 +936,39 @@ Expr getChild(Expr e, int n);
 //! or returns '-1' otherwise, i.e. if the given expression was not a 
 //! boolean expression.
 //! 
-int vc_isBool(Expr e);
+DLL_PUBLIC int vc_isBool(Expr e);
 
 //! \brief Registers the given error handler function to be called for each
 //!        fatal error that occures while running STP.
 //! 
-void vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));
+DLL_PUBLIC void vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));
 
 //! \brief Returns the hash of the given query state.
 //! 
-int vc_getHashQueryStateToBuffer(VC vc, Expr query);
+DLL_PUBLIC int vc_getHashQueryStateToBuffer(VC vc, Expr query);
 
 //! \brief Destroy the given validity checker.
 //! 
 //! Removes all associated expressions with it if 'EXPRDELETE' was set to 'true'
 //! via 'vc_setInterfaceFlags' during the process.
 //! 
-void vc_Destroy(VC vc);
+DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
 //! 
-void vc_DeleteExpr(Expr e);
+DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
 //! \brief Returns the whole counterexample from the given validity checker.
 //! 
-WholeCounterExample vc_getWholeCounterExample(VC vc);
+DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
 //! \brief Returns the value of the given term expression from the given whole counter example.
 //! 
-Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample c);
+DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e, WholeCounterExample c);
 
 //! \brief Destroys the given whole counter example, freeing all of its associated memory.
 //! 
-void vc_deleteWholeCounterExample(WholeCounterExample cc);
+DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
 //! Covers all kinds of expressions that exist in STP.
 //! 
@@ -1030,15 +1031,15 @@ enum exprkind_t
 
 //! \brief Returns the expression-kind of the given expression.
 //! 
-enum exprkind_t getExprKind(Expr e);
+DLL_PUBLIC enum exprkind_t getExprKind(Expr e);
 
 //! \brief Returns the number of child expressions of the given expression.
 //! 
-int getDegree(Expr e);
+DLL_PUBLIC int getDegree(Expr e);
 
 //! \brief Returns the bit-width of the given bitvector expression.
 //! 
-int getBVLength(Expr e);
+DLL_PUBLIC int getBVLength(Expr e);
 
 //! Covers all kinds of types that exist in STP.
 //! 
@@ -1052,7 +1053,7 @@ enum type_t
 
 //! \brief Returns the type-kind of the given expression.
 //! 
-enum type_t getType(Expr e);
+DLL_PUBLIC enum type_t getType(Expr e);
 
 // get value bit width
 
@@ -1060,26 +1061,26 @@ enum type_t getType(Expr e);
 //! 
 //! This is mainly useful for array expression.
 //! 
-int getVWidth(Expr e);
+DLL_PUBLIC int getVWidth(Expr e);
 
 //! \brief Returns the index bit-width of the given expression.
 //! 
 //! This is mainly useful for array expression.
 //! 
-int getIWidth(Expr e);
+DLL_PUBLIC int getIWidth(Expr e);
 
 //! \brief Prints the given counter example to the file that is
 //!        associated with the given open file descriptor.
 //! 
-void vc_printCounterExampleFile(VC vc, int fd);
+DLL_PUBLIC void vc_printCounterExampleFile(VC vc, int fd);
 
 //! \brief Returns the name of the given variable expression.
 //! 
-const char* exprName(Expr e);
+DLL_PUBLIC const char* exprName(Expr e);
 
 //! \brief Returns the internal node ID of the given expression.
 //! 
-int getExprID(Expr ex);
+DLL_PUBLIC int getExprID(Expr ex);
 
 //! \brief Parses the given string in CVC or SMTLib1.0 format and extracts
 //!        query and assertion information into the 'outQuery' and 'outAsserts'
@@ -1091,7 +1092,7 @@ int getExprID(Expr ex);
 //! 
 //! Returns '1' if parsing was successful.
 //! 
-int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery, Expr* outAsserts);
+DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery, Expr* outAsserts);
 
 #ifdef __cplusplus
 }
