@@ -18,6 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+# Enable symbol exports
+add_definitions(-D STP_EXPORTS)
+
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)

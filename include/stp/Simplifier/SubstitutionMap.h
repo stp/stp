@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/VariablesInExpression.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

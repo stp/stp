@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 #include <vector>
 #include "stp/AST/ASTKind.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 using std::vector;
 namespace stp

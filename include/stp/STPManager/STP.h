@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/Parser/LetMgr.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Simplifier/PropagateEqualities.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

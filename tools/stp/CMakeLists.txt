@@ -33,6 +33,8 @@ if (Boost_FOUND)
         set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
     endif()
 
+    include_directories(${Boost_INCLUDE_DIR})
+
     set_target_properties(stp PROPERTIES
       RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
       VERSION "${PROJECT_VERSION}"

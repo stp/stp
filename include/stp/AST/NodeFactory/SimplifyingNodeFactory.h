@@ -58,7 +58,7 @@ THE SOFTWARE.
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 class SimplifyingNodeFactory : public NodeFactory
 {

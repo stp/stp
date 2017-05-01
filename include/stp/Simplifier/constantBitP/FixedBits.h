@@ -26,7 +26,6 @@ THE SOFTWARE.
 #define FIXEDBITS_H_
 
 #include <stp/Util/Attributes.h>
-#include <Util/constants.h>
 
 #include <vector>
 #include <iostream>

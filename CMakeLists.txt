@@ -131,6 +131,7 @@ endif()
 
 if (BUILD_SHARED_LIBS)
   set(STP_SHARED_LIBRARY libstp) # Used for exporting target
+  add_definitions(-D STP_SHARED_LIB) # Used for symbol visibilty control
 else()
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")

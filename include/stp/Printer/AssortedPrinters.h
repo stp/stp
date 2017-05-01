@@ -26,7 +26,7 @@ THE SOFTWARE.
 #define PRINTER_H
 
 #include "stp/AST/AST.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {

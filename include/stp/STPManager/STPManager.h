@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/Sat/SATSolver.h"
-#include "Util/constants.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
@@ -438,19 +438,19 @@ public:
 
   void print_stats() const
   {
-   
+
     if (_interior_unique_table.size() > 0)
     {
       std::cerr << "Interiors:" << _interior_unique_table.size() << " of ";
       std::cerr <<  sizeof(**_interior_unique_table.begin()) << " bytes each" << std::endl;
     }
-  
+
     std::map<Kind, int> freq;
     for (auto it : _interior_unique_table)
       {
          freq[it->GetKind()]++;
       }
-    
+
     for (auto it: freq)
       std::cerr << it.first << " " << it.second << std::endl;
 
@@ -459,7 +459,7 @@ public:
       std::cerr << "Symbols:" << _symbol_unique_table.size() << " of ";
       std::cerr <<  sizeof(**_symbol_unique_table.begin()) << " bytes each" << std::endl;
     }
-    
+
     if (_bvconst_unique_table.size() > 0)
     {
       std::cerr << "BVConsts:" << _bvconst_unique_table.size()  << " of ";
