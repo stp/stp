@@ -86,9 +86,8 @@ case $STP_CONFIG in
          sudo make install
          cd ..
 
-         wget https://github.com/msoos/cryptominisat/archive/5.0.1.tar.gz
-         tar xzvf 5.0.1.tar.gz
-         cd cryptominisat-5.0.1
+         git clone --depth 1 https://github.com/cryptominisat/cryptominisat.git
+         cd cryptominisat
          mkdir build
          cd build
          cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
