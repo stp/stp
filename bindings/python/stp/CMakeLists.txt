@@ -23,16 +23,15 @@
 # -----------------------------------------------------------------------------
 
 # The binary path isn't known until the build process starts
-# (e.g. when building with MSBuild), so generate the file lately.
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/library_path.py
+# (e.g. when building with MSBuild), so generate the file lately.)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/library_path.py
               INPUT ${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in)
 
 # Copy rest of files to build directory
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/stp.py
-              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/stp.py)
-file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/__init__.py
-              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/stp.py
+              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/__init__.py
+              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in)
 
 # -----------------------------------------------------------------------------
 # Handle installation
@@ -62,8 +61,8 @@ endif()
 
 # Install main files
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/stp.py
-              ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/__init__.py
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
+              ${CMAKE_CURRENT_BINARY_DIR}/__init__.py
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
 
 # Generate and install file describing install location of stp shared library
