@@ -76,17 +76,6 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    CPP11)
-         eval sudo apt-get install -y libboost-all-dev
-         export CC="gcc-4.7"
-         export CXX="g++-4.7"
-         eval sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
-         eval sudo apt-get update
-         eval sudo apt-get install -y gcc-4.7 g++-4.7
-         eval cmake ${COMMON_CMAKE_ARGS} \
-                   ${SOURCE_DIR}
-    ;;
-
     STATIC_CMS)
          eval sudo apt-get install -y libboost-all-dev
          wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
