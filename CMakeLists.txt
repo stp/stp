@@ -128,10 +128,7 @@ if (MSVC)
 endif()
 
 if (MSVC AND STATICCOMPILE)
-    set(Boost_USE_STATIC_LIBS ON)
-endif()
-
-if (STATICCOMPILE)
+  set(Boost_USE_STATIC_LIBS ON)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
   SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif()
