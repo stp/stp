@@ -88,7 +88,7 @@ def unique_fuzz_file(file_name_begin):
 class Tester:
 
     def __init__(self):
-        self.cryptominisat4_available = self.check_cryptominisat4()
+        self.cryptominisat_available = self.check_cryptominisat()
 
     def random_options(self):
         cmd = " "
@@ -115,11 +115,11 @@ class Tester:
                 cmd += opt + " "
 
         choose_solver = ["", "--simplifying-minisat", "--minisat"]
-        if self.cryptominisat4_available:
-            choose_solver.append("--cryptominisat4")
+        if self.cryptominisat_available:
+            choose_solver.append("--cryptominisat")
 
         cmd += " %s " % random.choice(choose_solver)
-        if self.cryptominisat4_available:
+        if self.cryptominisat_available:
             cmd += " --threads %d " % random.choice([1, 4, 10])
 
         #if random.randint(0,1) == 1 :
@@ -243,13 +243,15 @@ class Tester:
         # check if the other solver agrees with us
         return otherSolverUNSAT
 
-    def check_cryptominisat4(self):
+    def check_cryptominisat(self):
         command = options.solver
         command += " -h"
+        if options.verbose:
+            print("Running: %s" % command)
         p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
         consoleOutput, _ = p.communicate()
         for line in consoleOutput.split("\n"):
-            if "cryptominisat4" in line:
+            if "cryptominisat" in line:
                 return True
         return False
 
