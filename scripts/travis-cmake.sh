@@ -76,6 +76,9 @@ case $STP_CONFIG in
     ;;
 
     STATIC_CMS)
+         pwd
+         ls
+
          eval sudo apt-get install -y libboost-all-dev
          wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
          tar xzvf m4ri-20140914.tar.gz
@@ -96,6 +99,8 @@ case $STP_CONFIG in
          cmake ${COMMON_CMAKE_ARGS} \
                    -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
+         pwd
+         ls
     ;;
     
     *)
@@ -200,6 +205,8 @@ fi
 
 if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ${SOURCE_DIR}/..
+    pwd
+    ls
 
     #
     # get fuzzsmt
@@ -223,6 +230,8 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ..
 
     #fuzz
+    pwd
+    ls
     cd stp/scripts/fuzz/
     ./fuzz_test.py -n 20 --novalgrind
 
