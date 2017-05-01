@@ -30,14 +30,12 @@ configure_file(lit.site.cfg.in lit.site.cfg @ONLY)
 if (Boost_FOUND)
     add_custom_target(query-file-tests
                   DEPENDS stp
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} .
     )
 else()
     add_custom_target(query-file-tests
                   DEPENDS stp_simple
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} .
+                  COMMAND ${LIT_TOOL} ${LIT_ARGS} .
     )
 endif()
 
