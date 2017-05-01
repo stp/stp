@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include <assert.h>
 #include "stp/Interface/fdstream.h"
 #include "stp/Printer/printers.h"
+#include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 // FIXME: External library
 #include "extlib-abc/cnf_short.h"
@@ -1969,23 +1970,6 @@ void process_argument(const char ch, VC vc)
 //////////////////////////////////////////////////////////////////////////
 // extended version
 
-#if 0
-/#ifndef YY_TYPEDEF_YY_BUFFER_STATE
-struct yy_buffer_state;
-#define YY_TYPEDEF_YY_BUFFER_STATE
-typedef struct yy_buffer_state *YY_BUFFER_STATE;
-
-
-extern YY_BUFFER_STATE cvc_scan_string (const char *yy_str  );
-extern void cvc_delete_buffer (YY_BUFFER_STATE  b );
-extern YY_BUFFER_STATE smt_scan_string (const char *yy_str  );
-extern void smt_delete_buffer (YY_BUFFER_STATE  b );
-extern void cvc_switch_to_buffer (YY_BUFFER_STATE new_buffer  );
-extern void smt_switch_to_buffer (YY_BUFFER_STATE new_buffer  );
-#endif
-
-int smt_scan_string(const char* yy_str);
-int cvc_scan_string(const char* yy_str);
 
 int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
 {
@@ -2010,7 +1994,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     // smt_switch_to_buffer(bstat);
     stp::GlobalSTP = ((stp::STP*)vc);
     stp::GlobalParserBM = b;
-    smt_scan_string(s);
+    stp::SMTScanString(s);
     smtparse((void*)&AssertsQuery);
     // smt_delete_buffer(bstat);
     stp::GlobalSTP = NULL;
@@ -2023,7 +2007,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     // cvc_switch_to_buffer(bstat);
     stp::GlobalSTP = ((stp::STP*)vc);
     stp::GlobalParserBM = b;
-    cvc_scan_string(s);
+    stp::CVCScanString(s);
     cvcparse((void*)&AssertsQuery);
     // cvc_delete_buffer(bstat);
     stp::GlobalSTP = NULL;

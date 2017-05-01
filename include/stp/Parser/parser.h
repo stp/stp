@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Felix Kutzner
  *
  * BEGIN DATE: November, 2005
  *
@@ -28,10 +28,14 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/STP.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
 // external parser table for declared symbols.
 // extern ASTNodeSet _parser_symbol_table;
+void SMTScanString (const char *yy_str);
+void SMT2ScanSctring (const char *yy_str);
+void CVCScanString (const char *yy_str);
 } // end of namespace
 #endif

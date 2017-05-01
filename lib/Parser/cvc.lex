@@ -159,3 +159,9 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 .                { cvcerror("Illegal input character."); }
 %%
+
+namespace stp {
+  void CVCScanString (const char *yy_str) {
+    cvc_scan_string(yy_str);
+  }
+}

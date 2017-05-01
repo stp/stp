@@ -285,3 +285,9 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 
 . { smt2error("Illegal input character."); }
 %%
+
+namespace stp {
+  void SMT2ScanString (const char *yy_str) {
+    smt2_scan_string(yy_str);
+  }
+}
