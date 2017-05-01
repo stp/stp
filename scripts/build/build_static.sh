@@ -6,4 +6,4 @@ rm -rf stp* tests tools lib bindings include
 rm -rf cmake* CM* Makefile ./*.cmake
 cmake -DENABLE_TESTING=ON -DSTATICCOMPILE=ON -DFORCE_CMS=ON   ..
 make -j4 VERBOSE=1
-make check -j4
+make -j4 check
