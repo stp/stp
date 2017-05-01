@@ -22,15 +22,16 @@ platform:
 
 environment:
   global:
-    BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
+    # TODO: building STP with boost is not supported yet on Windows (the problem seems to be easily fixable: stp.pdb gets generated for stp.dll as well as stp.exe, which causes an error.)
+    #BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     BUILD_TYPE: Release
     MSBUILD_FLAGS: /maxcpucount /nologo
-	PYTHON: "C:\Python36-x64"
+    PYTHON: "C:\\Python36-x64"
 
 install:
-    "%PYTHON%\python.exe -m pip install lit"
+    "%PYTHON%\\python.exe -m pip install lit"
 
 configuration:
   - Release
@@ -43,21 +44,21 @@ build_script:
   - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 14 2015 Win64")
 
   - echo %PLATFORM%
-  - echo %BOOST_LIBRARYDIR%
+  #- echo %BOOST_LIBRARYDIR%
   - echo %CMAKE_GENERATOR%
   - echo %configuration%
   - echo %APPVEYOR_BUILD_FOLDER%
   - echo %cd%
 
   # boost
-  - cd c:\projects\stp
-  - mkdir boost_1_59_0_install
-  - ps: . .\scripts\build\appveyor.ps1
-  - cd boost_1_59_0
-  - echo "Building boost.."
-  - bootstrap.bat --with-libraries=program_options
-  - cat project-config.jam
-  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
+  #- cd c:\projects\stp
+  #- mkdir boost_1_59_0_install
+  #- ps: . .\scripts\build\appveyor.ps1
+  #- cd boost_1_59_0
+  #- echo "Building boost.."
+  #- bootstrap.bat --with-libraries=program_options
+  #- cat project-config.jam
+  #- b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
 
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
@@ -100,7 +101,7 @@ build_script:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DPYTHON_EXECUTABLE="%PYTHON%\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\Scripts\lit-script.py" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..
+  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit-script.py" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..
   - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
 
 
