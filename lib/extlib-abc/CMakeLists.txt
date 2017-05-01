@@ -33,7 +33,7 @@ macro(add_c_flag_if_supported flagname)
   endif()
 endmacro()
 
-if(BUILD_SHARED_LIBS)
+if(NOT STATICCOMPILE)
   add_c_flag_if_supported("-fPIC")
 endif()
 

@@ -22,23 +22,25 @@
 # Create binary
 # -----------------------------------------------------------------------------
 if (Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIR})
     add_executable(stp
         main.cpp
         main_common.cpp
         STPProgramGlobals.cpp
     )
 
-    if (BUILD_STATIC_BIN)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 0)
+    if (STATICCOMPILE)
+        set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 1)
     endif()
-
-    include_directories(${Boost_INCLUDE_DIR})
 
     set_target_properties(stp PROPERTIES
       RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
       VERSION "${PROJECT_VERSION}"
     )
+    if (STATICCOMPILE)
+        set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
+    endif()
+
     target_link_libraries(stp libstp)
     install(TARGETS stp
         EXPORT ${STP_EXPORT_NAME}

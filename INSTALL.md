@@ -10,7 +10,6 @@ generators.
 
 - ``CMAKE_BUILD_TYPE`` - The build type (e.g. Release)
 - ``CMAKE_INSTALL_PREFIX`` - The prefix for install (e.g. /usr/local )
-- ``BUILD_STATIC_BIN``- Build static binary and library
 - ``ENABLE_ASSERTIONS`` - If TRUE STP will be built with asserts.
 - ``ENABLE_TESTING`` - Enable running tests
 - ``ENABLE_PYTHON_INTERFACE`` - Enable building the Python interface
@@ -19,7 +18,7 @@ generators.
 - ``NO_BOOST`` - Build without using the Boost library
 - ``TEST_QUERY_FILES`` -  Test STP externally by passing it query files in tests/query-files
 - ``TUNE_NATIVE`` - Tune compilation to native architecture
-- ``BUILD_SHARED_LIBS`` - Build shared libraries instead of static libraries (default: on)
+- ``STATICCOMPILE`` - Build static libraries and binaries (default: off)
 
 # Dependencies
 
@@ -61,25 +60,11 @@ $ sudo ldconfig
 
 ### Static library and binary
 
-In case you wish to use CryptoMiniSat4, you need to build it to create a static library:
-
-```
-$ git clone https://github.com/msoos/cryptominisat
-$ cd cryptominisat
-$ mkdir build && cd build
-$ cmake -DSTATICCOMPILE=ON ..
-$ make
-$ sudo make install
-$ sudo ldconfig
-```
-
-Otherwise, just build STP statically:
-
 ```
 $ git clone https://github.com/stp/stp.git
 $ cd stp
 $ mkdir build && cd build
-$ cmake -DBUILD_STATIC_BIN=ON -DBUILD_SHARED_LIBS=OFF ..
+$ cmake -DSTATICCOMPILE=ON ..
 $ make
 $ sudo make install
 $ sudo ldconfig

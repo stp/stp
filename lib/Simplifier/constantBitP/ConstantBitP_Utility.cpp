@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-constbv/constantbv.h"
+#include "stp/Util/Attributes.h"
 
 // Utility functions used by the transfer functions.
 
