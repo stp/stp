@@ -28,7 +28,6 @@ set -e
 SOURCE_DIR=`pwd`
 cd build
 BUILD_DIR=`pwd`
-TEST=1
 COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
@@ -68,7 +67,6 @@ case $STP_CONFIG in
         eval cmake ${COMMON_CMAKE_ARGS} \
                    -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
-        TEST=0
         sudo make install
     ;;
 
@@ -106,9 +104,7 @@ case $STP_CONFIG in
 esac
 
 make -j2 VERBOSE=1
-if [ "$TEST" = "1" ]; then
-    make check
-fi
+make check
 
 echo `ldd ./stp_simple`
 echo `ldd ./stp`
