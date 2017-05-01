@@ -154,7 +154,7 @@ if [ "$TEST" = "1" ]; then
     make check
 fi
 
-if [ "$STP_CONFIG" = "CLANG_STATIC" ] ; then
+if [ "$STP_CONFIG" = "CLANG_STATIC_CMS" ] || [ "$STP_CONFIG" = "GCC_STATIC_CMS" ] ; then
      ldd ./stp
      RETVAL=$?
      if [ $RETVAL -eq 0 ] ; then
