@@ -86,7 +86,7 @@ case $STP_CONFIG in
          sudo make install
          cd ..
 
-         git clone --depth 1 https://github.com/cryptominisat/cryptominisat.git
+         git clone --depth 1 https://github.com/msoos/cryptominisat.git
          cd cryptominisat
          mkdir build
          cd build
