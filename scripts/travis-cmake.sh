@@ -94,7 +94,7 @@ case $STP_CONFIG in
          cd build
          cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
-         cd ..
+         cd ../..
 
          cmake ${COMMON_CMAKE_ARGS} \
                    -DSTATICCOMPILE:BOOL=ON \
