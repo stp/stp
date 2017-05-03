@@ -36,7 +36,41 @@ extern "C" {
 #endif
 
 #include <stdio.h>
-#include <stp/Util/Attributes.h>
+
+/////////////////////////////////////////////////////////////////////////////
+/// STP API INTERNAL MACROS FOR LINKING
+/// 
+/// These are undefined at the end of this file to prevent them from leaking
+/// into code that includes it.
+/////////////////////////////////////////////////////////////////////////////
+
+#if defined(_MSC_VER)
+    // NOTE: for now, we need STP_SHARED_LIB for clients of the statically linked
+    // STP library, for which linking fails when DLL_PUBLIC is __declspec(dllimport).
+    #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
+        // This is visible when building the STP library as a DLL.
+        #define DLL_PUBLIC __declspec(dllexport)
+    #elif defined(STP_SHARED_LIB)
+        // This is visible for STP clients.
+        #define DLL_PUBLIC __declspec(dllimport)
+    #else
+        #define DLL_PUBLIC
+    #endif
+
+    // Symbols are hidden by default in MSVC.
+    #define DLL_LOCAL
+
+#elif defined(__GNUC__) || defined(__clang__)
+    #define DLL_PUBLIC __attribute__ ((visibility ("default")))
+    #define DLL_LOCAL  __attribute__ ((visibility ("hidden")))
+#else
+    #define DLL_PUBLIC
+    #define DLL_LOCAL
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+/// STP API Types
+/////////////////////////////////////////////////////////////////////////////
 
 #ifdef STP_STRONG_TYPING
 #else
@@ -48,6 +82,10 @@ typedef void* Expr;
 typedef void* Type;
 typedef void* WholeCounterExample;
 #endif
+
+/////////////////////////////////////////////////////////////////////////////
+/// START API
+/////////////////////////////////////////////////////////////////////////////
 
 //! \brief Processes the given flag represented as char for the given validity checker.
 //! 
@@ -1097,6 +1135,9 @@ DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery, Expr* outAs
 #ifdef __cplusplus
 }
 #endif
+
+#undef DLL_PUBLIC // Undefine internal macro to prevent it from leaking into the API.
+#undef DLL_LOCAL  // Undefine internal macro to prevent it from leaking into the API.
 
 #undef _CVCL_DEFAULT_ARG // Undefine macro to not pollute global macro namespace!
 
