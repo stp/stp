@@ -26,7 +26,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp") # Make sure we can find the STP python package
+# Make sure we can find the STP python package
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp/@CMAKE_BUILD_TYPE@")
 
 from stp import stp, Solver
 import unittest

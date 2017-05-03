@@ -28,5 +28,5 @@
 
 # Search paths for the stp shared library
 PATHS = [
-    '$<TARGET_FILE:libstp>',
+    '@STP_LIB_LOCATION@'
 ]
