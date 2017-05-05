@@ -24,6 +24,7 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <assert.h>
 #include "stp/Interface/fdstream.h"
 #include "stp/Printer/printers.h"

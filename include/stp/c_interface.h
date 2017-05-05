@@ -35,8 +35,6 @@ THE SOFTWARE.
 extern "C" {
 #endif
 
-#include <stdio.h>
-
 /////////////////////////////////////////////////////////////////////////////
 /// STP API INTERNAL MACROS FOR LINKING
 /// 
@@ -70,17 +68,18 @@ extern "C" {
 
 /////////////////////////////////////////////////////////////////////////////
 /// STP API Types
+///
+/// This gives absolutely no pointer typing at compile-time. Most C
+/// users prefer this over stronger typing. User is the king. A
+/// stronger typed interface is in the works.
 /////////////////////////////////////////////////////////////////////////////
 
-#ifdef STP_STRONG_TYPING
+#ifdef STP_STRONG_TYPING // not used for now!
 #else
-// This gives absolutely no pointer typing at compile-time. Most C
-// users prefer this over stronger typing. User is the king. A
-// stronger typed interface is in the works.
-typedef void* VC;
-typedef void* Expr;
-typedef void* Type;
-typedef void* WholeCounterExample;
+  typedef void* VC;
+  typedef void* Expr;
+  typedef void* Type;
+  typedef void* WholeCounterExample;
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -105,6 +104,7 @@ typedef void* WholeCounterExample;
 //!  - 'y': Enables printing binaries. TODO: What is meant with this?
 //! 
 //! This function panics if given an unsupported or unknown flag.
+//! 
 DLL_PUBLIC void process_argument(const char ch, VC bm);
 
 //! \brief Deprecated: use process_argument instead!
@@ -128,12 +128,6 @@ DLL_PUBLIC void vc_setFlag(VC vc, char c);
 //! 
 enum ifaceflag_t
 {
-  /*! EXPRDELETE: boolean, default true. For objects created by
-    vc_arrayType, vc_boolType, vc_bvType, vc_bv32Type, vc_bvConstExprFromInt, if
-    this flag is set both at the time the objects are created and at
-    the time that vc_Destroy is called, vc_Destroy will automatically
-    delete them. */
-
   //! Tells the validity checker that it is responsible for resource
   //! deallocation of its allocated expressions.
   //! 
@@ -230,14 +224,6 @@ DLL_PUBLIC Expr vc_varExpr(VC vc, const char* name, Type type);
 //!  
 DLL_PUBLIC Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth);
 
-// //! \brief Deprecated! This API is not supported.
-// //! 
-// //! Get the expression and type associated with a name.
-// //! 
-// //!  If there is no such Expr, a NULL Expr is returned.
-// //! 
-// Expr vc_lookupVar(VC vc, char* name, Type* type);
-
 //! \brief Returns the type of the given expression.
 //! 
 DLL_PUBLIC Type vc_getType(VC vc, Expr e);
@@ -330,8 +316,6 @@ DLL_PUBLIC Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr, Expr elseExpr
 //! Panics if the given expression is not of boolean type.
 //! 
 DLL_PUBLIC Expr vc_boolToBVExpr(VC vc, Expr form);
-
-// Parameterized Boolean Expression (PARAMBOOL, Boolean_Var, parameter)
 
 //! \brief Creates a parameterized boolean expression with the given boolean
 //!        variable expression and the parameter param.
@@ -787,8 +771,6 @@ DLL_PUBLIC Expr vc_bvNotExpr(VC vc, Expr child);
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR SHIFT OPERATIONS
 /////////////////////////////////////////////////////////////////////////////
-
-// Shift an expression by another expression. This is newstyle.
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
 //!        representing the left-shift operation '(left >> right)' of the
