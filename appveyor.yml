@@ -71,9 +71,11 @@ build_script:
   - mkdir myinstall
   - cd build
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
-  - if %PLATFORM%==x86 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x86" zlib.sln
-  - if %PLATFORM%==x64 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x64" zlib.sln
-  - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
+  - #if %PLATFORM%==x86 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x86" zlib.sln
+  - #if %PLATFORM%==x64 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x64" zlib.sln
+  - #msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
+  - cmake --build . --config %BUILD_TYPE%
+  - cmake --build . --config %BUILD_TYPE% --target install
   - dir ..\myinstall\
 
   # minisat
@@ -85,7 +87,8 @@ build_script:
   - mkdir myinstall
   - cd build
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
-  - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
+  - cmake --build . --config %BUILD_TYPE%
+  - cmake --build . --config %BUILD_TYPE% --target install
   - dir ..\myinstall\
   - dir ..\myinstall\lib\
   - dir ..\myinstall\bin\
@@ -98,11 +101,14 @@ build_script:
   # finally STP
   - cd c:\projects\stp
   - git submodule update --init --recursive
-  - mkdir build
-  - cd build
+  # building in c:\projects\stp\build causes ASTKind.h not to be found
+  - mkdir ..\stp.build
+  - cd ..\stp.build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..
-  - msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
+  - cmake -G %CMAKE_GENERATOR% -DENABLE_TESTING=ON -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
+  - cmake --build . --config %BUILD_TYPE%
+  - cmake --build . --config %BUILD_TYPE% --target check
+  - cmake --build . --config %BUILD_TYPE% --target install
 
 
 build:
