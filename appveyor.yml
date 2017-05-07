@@ -60,6 +60,16 @@ build_script:
   #- cat project-config.jam
   #- b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
 
+  # The STP query-file-tests require the "not" tool. For now, we use the one
+  # provided by LLVM.
+  - cd C:\projects\stp
+  - git clone --depth=1 --branch release_40 http://github.com/llvm-mirror/llvm
+  - cd llvm
+  - mkdir build
+  - cmake -G %CMAKE_GENERATOR% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
+  - cmake --build . --config Release --target not
+  - set PATH=%PATH%;%cd%\Release\bin
+
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
   - cd C:\projects\stp
@@ -71,9 +81,6 @@ build_script:
   - mkdir myinstall
   - cd build
   - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
-  - #if %PLATFORM%==x86 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x86" zlib.sln
-  - #if %PLATFORM%==x64 call msbuild %MSBUILD_FLAGS% /t:Build /p:Configuration=%CONFIGURATION% /p:Platform="x64" zlib.sln
-  - #msbuild %MSBUILD_FLAGS% INSTALL.vcxproj
   - cmake --build . --config %BUILD_TYPE%
   - cmake --build . --config %BUILD_TYPE% --target install
   - dir ..\myinstall\
@@ -101,7 +108,6 @@ build_script:
   # finally STP
   - cd c:\projects\stp
   - git submodule update --init --recursive
-  # building in c:\projects\stp\build causes ASTKind.h not to be found
   - mkdir ..\stp.build
   - cd ..\stp.build
   - cmake --version
