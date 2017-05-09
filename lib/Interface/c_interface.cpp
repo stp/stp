@@ -1945,7 +1945,7 @@ void process_argument(const char ch, VC vc)
       bm->UserFlags.quick_statistics_flag = true;
       break;
     case 'v':
-      bm->UserFlags.print_stp_nodes_flag = true;
+      bm->UserFlags.print_nodes_flag = true;
       break;
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
