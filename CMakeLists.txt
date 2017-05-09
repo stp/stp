@@ -236,16 +236,18 @@ if(WIN32)
   if(MSVC)
       # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
       # /ZI = include debug info
-      # /W3 = warning level 3
       # /Oy omit frame pointers
       # /Wall = all warnings
       # /GL whole program optimisation
       SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ox /ZI")
-      SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oy /Ox /D NDEBUG /GL")
-      SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Od /ZI")
+      SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O3 /D NDEBUG /ZI")
+      SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Od")
 
       #don't give too many warnings
       add_compile_options(/W1)
+
+      # buffers security check
+      add_compile_options(/GS)
 
       set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
       set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
