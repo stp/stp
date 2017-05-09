@@ -28,5 +28,5 @@
 
 # Search paths for the stp shared library
 PATHS = [
-    '@LIBSTP_PATH@/@CMAKE_SHARED_LIBRARY_PREFIX@@LIBSTP_FILENAME@@CMAKE_SHARED_LIBRARY_SUFFIX@',
+    '@LIBSTP_PATH@/$<TARGET_FILE_NAME:libstp>',
 ]

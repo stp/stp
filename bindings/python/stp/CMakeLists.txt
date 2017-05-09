@@ -26,15 +26,15 @@
 # (e.g. when building with MSBuild), so generate the file lately.)
 
 get_property(STP_LIB_LOCATION TARGET libstp PROPERTY LOCATION)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
-              ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/library_path.py)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/library_path.py
+              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in)
 
 # Copy rest of files to build directory
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in
-              ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/stp.py)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/stp.py
+              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in
-              ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/__init__.py)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/__init__.py
+              INPUT  ${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in)
 
 # -----------------------------------------------------------------------------
 # Handle installation
@@ -64,17 +64,16 @@ endif()
 
 # Install main files
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/stp.py
-              ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/__init__.py
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/stp.py
+              ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/__init__.py
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
 
 # Generate and install file describing install location of stp shared library
-get_target_property(LIBSTP_OUTPUTNAME libstp OUTPUT_NAME)
-get_filename_component(LIBSTP_FILENAME ${LIBSTP_OUTPUTNAME} DIRECTORY)
-get_target_property(LIBSTP_SUFFIX libstp SUFFIX)
 set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/lib/${LIBSTP_FILENAME}) # FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
-configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
+configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py.g" @ONLY)
+file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/$<CONFIG>/library_path.py"
+              INPUT "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py.g")
 
-install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
+install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/$<CONFIG>/library_path.py"
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp"
        )
