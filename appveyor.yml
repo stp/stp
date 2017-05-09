@@ -94,6 +94,7 @@ build_script:
   - dir ..\myinstall\bin\
   - dir ..\myinstall\include\
 
+  # get flex, bison, perl
   - C:\cygwin64\setup-x86_64.exe  -qnNd -R C:/cygwin64 -s http://cygwin.mirror.constant.com -l C:/cygwin64/var/cache/setup --packages "flex,bison,perl"
 
 
