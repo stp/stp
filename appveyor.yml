@@ -22,17 +22,22 @@ platform:
 
 environment:
   global:
-    BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
+    BOOST_ROOT: C:\Libraries\boost_1_59_0
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     MSBUILD_FLAGS: /maxcpucount /nologo
     PYTHON: "C:\\Python36-x64"
+    APPVEYOR_SAVE_CACHE_ON_ERROR: true
 
 install:
     "%PYTHON%\\python.exe -m pip install lit"
 
 configuration:
   - Release
+
+cache:
+  - C:\projects\stp\llvm -> appveyor.yml
+  - C:\projects\stp\llvm.build -> appveyor.yml
 
 build_script:
   - IF "%PLATFORM%" == "x86" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib32-msvc-14.0)
@@ -48,25 +53,14 @@ build_script:
   - echo %APPVEYOR_BUILD_FOLDER%
   - echo %cd%
 
-  # boost
-  - cd c:\projects\stp
-  - mkdir boost_1_59_0_install
-  - ps: . .\scripts\build\appveyor.ps1
-  - cd boost_1_59_0
-  - echo "Building boost.."
-  - bootstrap.bat --with-libraries=program_options
-  - cat project-config.jam
-  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release link=static threading=multi runtime-link=static install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
-
   # The STP query-file-tests require the "not" tool. For now, we use the one
   # provided by LLVM.
   - cd C:\projects\stp
-  - git clone --depth=1 --branch release_40 https://github.com/llvm-mirror/llvm
-  - cd llvm
-  - mkdir build
-  - cd build
-  - cmake -G %CMAKE_GENERATOR% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..
-  - cmake --build . --config Release --target not
+  - if not exist llvm git clone --depth=1 --branch release_40 https://github.com/llvm-mirror/llvm
+  - if not exist llvm.build mkdir llvm.build
+  - cd llvm.build
+  - if not exist Release\bin\not.exe cmake -G %CMAKE_GENERATOR% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
+  - if not exist Release\bin\not.exe cmake --build . --config Release --target not
   - set PATH=%PATH%;%cd%\Release\bin
 
   # zlib
