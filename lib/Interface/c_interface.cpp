@@ -23,9 +23,10 @@ THE SOFTWARE.
 ********************************************************************/
 #include "stp/c_interface.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cassert>
+
 #include "stp/Interface/fdstream.h"
 #include "stp/Printer/printers.h"
 #include "stp/Parser/parser.h"
