@@ -187,7 +187,6 @@ class Tester:
 
         # solution will be put here
         satunsatfound = False
-        vlinefound = False
         value = {}
 
         # parse in solution
@@ -209,7 +208,6 @@ class Tester:
 
             # parse in solution
             if (re.match('^ASSERT', line)):
-                vlinefound = True
                 print(line)
                 # ignoring this
 
@@ -283,7 +281,6 @@ class Tester:
         print("filename: %s" % fname)
         print("Checking console output...")
         (unsat, value) = self.parse_solution_from_output(consoleOutput.split("\n"))
-        otherSolverUNSAT = True
 
         if not unsat:
             print("TODO: must test solution is correct SAT!")
