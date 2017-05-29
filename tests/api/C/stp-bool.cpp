@@ -28,12 +28,7 @@ THE SOFTWARE.
 
 TEST(stp_bool, one)
 {
-  VC vc;
-  int query_result;
-  int count = 0;
-
-  vc = vc_createValidityChecker();
-
+  VC vc = vc_createValidityChecker();
   Type type64 = vc_boolType(vc);
 
   vc_Destroy(vc);

@@ -178,26 +178,6 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
   assert(CONSTANTBV::BitVector_Lexicompare(min, max) <= 0);
 }
 
-// Convert from arbitary precision.
-unsigned cbvTOInt(const stp::CBV v)
-{
-  unsigned result = 0;
-  const unsigned bitSize = sizeof(unsigned) * 8;
-
-  for (unsigned j = 0; j < (bits_(v)); j++)
-  {
-    if (CONSTANTBV::BitVector_bit_test(v, j))
-    {
-      if (j >= bitSize)
-      {
-        stp::FatalError(LOCATION "Can't fix a bit so very much way up high (limited to unsiged here)");
-      }
-      result += (1U << j);
-    }
-  }
-  return result;
-}
-
 int unsignedCompare(const stp::CBV& lhs, const stp::CBV& rhs)
 {
   /// NB: Uses the memory layout of the constant bit library to extract the

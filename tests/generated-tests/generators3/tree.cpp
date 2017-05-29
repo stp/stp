@@ -63,17 +63,12 @@ Expr randconst(){
 char buf[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
 void shufflebuf(){
   unsigned N = BUF_LENGTH;
-  unsigned i;
   while(N--){
-    i = trand()%BUF_LENGTH;
+    unsigned i = trand()%BUF_LENGTH;
     char c = buf[i];
     buf[i] = buf[N]; 
     buf[N] = c;
   }
-}
-
-void nonsense(){
- gen_arrays.push_back(NULL);
 }
 
 char* rstr(unsigned len){

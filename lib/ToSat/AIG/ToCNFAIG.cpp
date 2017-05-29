@@ -65,7 +65,6 @@ void ToCNFAIG::dag_aware_aig_rewrite(
   if (!needAbsRef && uf.enable_AIG_rewrites_flag)
   {
     Dar_LibStart();
-    Aig_Man_t* pTemp;
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
@@ -81,6 +80,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(
 
     for (int i = 0; i < iterations; i++)
     {
+      Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
       Aig_ManStop(pTemp);
       Dar_ManRewrite(mgr.aigMgr, pPars);

@@ -870,7 +870,6 @@ void ASTtoCNF::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* def
   bool renamesibs = false;
   ClauseList* clauses;
   ClauseList* psi;
-  ClauseList* oldpsi;
 
   //****************************************
   // (pos) NAND ~> PRODUCT NOT
@@ -898,7 +897,7 @@ void ASTtoCNF::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* def
     {
       renamesibs = true;
     }
-    oldpsi = psi;
+    ClauseList* oldpsi = psi;
     psi = ClauseList::PRODUCT(*psi, *clauses);
     reduceMemoryFootprintNeg(*it);
     DELETE(oldpsi);

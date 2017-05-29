@@ -557,7 +557,7 @@ bool getPossibleValues(const ASTNode& n, ASTNodeSet& visited,
 unsigned numberOfLeadingZeroes(const ASTNode& n)
 {
   unsigned c = mostSignificantConstants(n);
-  if (c <= 0)
+  if (c == 0)
     return 0;
 
   for (unsigned i = 0; i < c; i++)

@@ -167,7 +167,6 @@ using std::make_pair;
     // cerr << "Nodes before AIG rewrite:" << initial_nodeCount << endl;
 
     Dar_LibStart(); // About 150M instructions. Very expensive.
-    Aig_Man_t* pTemp;
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
@@ -179,6 +178,7 @@ using std::make_pair;
     int lastNodeCount = initial_nodeCount;
     for (int i = 0; i < iterations; i++)
     {
+      Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
       Aig_ManStop(pTemp);
       Dar_ManRewrite(mgr.aigMgr, pPars);
