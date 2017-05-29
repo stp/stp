@@ -140,11 +140,11 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
 
     # Install LLVM and the LLVM bitcode compiler we require to build KLEE
     LLVM_VERSION=3.4
-    STP_VERSION=master
-    KLEE_UCLIBC=1
     DISABLE_ASSERTIONS=0
     ENABLE_OPTIMIZED=1
-    COVERAGE=0
+#     STP_VERSION=master
+#     KLEE_UCLIBC=1
+#     COVERAGE=0
     sudo apt-get install llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev
     KLEE_CC=/usr/bin/clang-${LLVM_VERSION}
     KLEE_CXX=/usr/bin/clang++-${LLVM_VERSION}
