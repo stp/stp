@@ -596,7 +596,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (bm->soft_timeout_expired)
   {
     if (toSATAIG.cbIsDestructed())
-      cleaner.release();
+      cleaner.reset();
 
     return SOLVER_TIMEOUT;
   }
@@ -606,7 +606,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     // If the aig converter knows that it is never going to be called again,
     // it deletes the constant bit stuff before calling the SAT solver.
     if (toSATAIG.cbIsDestructed())
-      cleaner.release();
+      cleaner.reset();
 
     CountersAndStats("print_func_stats", bm);
     return res;
@@ -621,7 +621,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (SOLVER_UNDECIDED != res)
   {
     if (toSATAIG.cbIsDestructed())
-      cleaner.release();
+      cleaner.reset();
 
     CountersAndStats("print_func_stats", bm);
     return res;
