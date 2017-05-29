@@ -23,15 +23,9 @@ cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
 
 if(NOT (CMAKE_MAJOR_VERSION LESS 2))
-    if(POLICY CMP0026)
-        # FIXME: We need to find a proper way to get the LOCATION property of a target
-        # when using CMake >= 3.0
-        cmake_policy(SET CMP0026 OLD) # See cmake --help-policy CMP0026
-    endif()
-
     if(POLICY CMP0048)
         #policy for VERSION in cmake 3.0
-        cmake_policy(SET CMP0048 OLD)
+        cmake_policy(SET CMP0048 NEW)
     endif()
 endif()
 

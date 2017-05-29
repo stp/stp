@@ -27,7 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import sys
 # Make sure we can find the STP python package
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp/$<CONFIG>")
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
 
 from stp import stp, Solver
 import unittest
