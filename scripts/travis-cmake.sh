@@ -25,9 +25,9 @@ set -e
 # This file wraps CMake invocation for TravisCI
 # so we can set different configurations via environment variables.
 
-SOURCE_DIR=`pwd`
+SOURCE_DIR=$(pwd)
 cd build
-BUILD_DIR=`pwd`
+BUILD_DIR=$(pwd)
 COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
@@ -111,8 +111,8 @@ esac
 make -j2 VERBOSE=1
 make check
 
-echo `ldd ./stp_simple`
-echo `ldd ./stp`
+echo $(ldd ./stp_simple)
+echo $(ldd ./stp)
 if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
      ldd ./stp | grep "not a dynamic"
 fi
