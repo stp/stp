@@ -385,8 +385,32 @@ message(STATUS "All defines at startup: ${COMPILE_DEFINES}")
 # -----------------------------------------------------------------------------
 # Setup library build path (this is **not** the library install path)
 # -----------------------------------------------------------------------------
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+if(NOT WIN32)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+else()
+  # Create a single bin/ output directory so that DLL files can be
+  # readily found.
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+
+  # Placing the binaries in ${CMAKE_*_OUTPUT_DIRECTORY} without regard to
+  # the debug/release/... configuration. This is needed for build systems
+  # where files for multiple configurations are kept within the same build
+  # directory (eg. MSBuild), since some targets (e.g. python-interface-tests)
+  # require the path to the stp library to be given in a configuration file.
+  # Note: the paths could be determined in a cleaner fashion by using generator
+  # expressions, which were used up to commit 1af1f5. However, that solution
+  # was not feasible, since CMake versions provided by recent Debian versions
+  # are buggy w.r.t. generator expressions.
+  foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+      string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
+      set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+      set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+      set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
+  endforeach(OUTPUTCONFIG CMAKE_CONFIGURATION_TYPES)
+endif()
 
 # -----------------------------------------------------------------------------
 # Provide an export name to be used by targets that wish to export themselves.
@@ -468,9 +492,9 @@ if(ENABLE_TESTING)
       set(STP_TARGET stp_simple)
     endif()
 
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:libstp> $<TARGET_FILE_DIR:${STP_TARGET}>)
+    #add_custom_command(TARGET pre-check PRE_BUILD
+    #                   COMMAND ${CMAKE_COMMAND} -E
+    #                   copy $<TARGET_FILE:libstp> $<TARGET_FILE_DIR:${STP_TARGET}>)
 
     # TODO: move this to the C API test target?
     add_custom_command(TARGET pre-check PRE_BUILD
