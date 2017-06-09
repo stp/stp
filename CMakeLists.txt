@@ -479,34 +479,7 @@ if(ENABLE_TESTING)
     COMMENT "top level target to invoke all other tests"
   )
 
-  add_custom_target(pre-check
-    COMMENT "top level target to make sure shared libraries can be linked to tests"
-  )
-
   add_subdirectory(tests)
-
-  if(MSVC AND (NOT STATICCOMPILE))
-    if(Boost_FOUND)
-      set(STP_TARGET stp)
-    else()
-      set(STP_TARGET stp_simple)
-    endif()
-
-    #add_custom_command(TARGET pre-check PRE_BUILD
-    #                   COMMAND ${CMAKE_COMMAND} -E
-    #                   copy $<TARGET_FILE:libstp> $<TARGET_FILE_DIR:${STP_TARGET}>)
-
-    # TODO: move this to the C API test target?
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:libstp> tests/api/C/$<CONFIG>)
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:gtest> tests/api/C/$<CONFIG>)
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:gtest_main> tests/api/C/$<CONFIG>)
-  endif()
 else()
     message(WARNING "Testing is disabled")
 endif()

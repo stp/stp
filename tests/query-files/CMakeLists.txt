@@ -44,4 +44,3 @@ endif()
 
 # Make sure this test-suite runs when "check" is target
 add_dependencies(check query-file-tests)
-add_dependencies(query-file-tests pre-check)
