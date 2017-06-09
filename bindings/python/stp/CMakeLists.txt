@@ -71,10 +71,16 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
 
 # Generate and install file describing install location of stp shared library
-set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/lib/${LIBSTP_FILENAME}) # FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
-configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py.g" @ONLY)
-file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
-              INPUT "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py.g")
+# FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
+# FIXME: the concrete binary filename should be obtained via generator
+#         expressions, but they can't be used for now due to bugs in older
+#         versions of CMake
+if(WIN32)
+  set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/bin/stp.dll) 
+else()
+  set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/lib/libstp.so)
+endif()
+configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
 
 install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp"
