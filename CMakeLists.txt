@@ -33,6 +33,7 @@ endif()
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 set(CMAKE_INSTALL_LIBDIR lib CACHE STRING "Output directory for libraries")
+set(CMAKE_INSTALL_BINDIR bin CACHE STRING "Output directory for executables")
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 
 # -----------------------------------------------------------------------------
