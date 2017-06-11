@@ -182,6 +182,8 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 ":difficulty"    { return DIFFICULTY_TOK; }
 ":smt-lib-version"  { return VERSION_TOK; }
 ":status"        { return STATUS_TOK; }
+":license"        { return LICENSE_TOK; }
+
 
   /* Attributes */
 ":named"        { return NAMED_ATTRIBUTE_TOK; }
