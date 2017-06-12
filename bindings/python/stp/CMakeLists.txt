@@ -73,7 +73,6 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
 
 # Generate and install file describing install location of stp shared library
-# FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
 # FIXME: the concrete binary filename should be obtained via generator
 #         expressions, but they can't be used for now due to bugs in older
 #         versions of CMake
