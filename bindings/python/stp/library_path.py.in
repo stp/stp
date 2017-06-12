@@ -28,6 +28,5 @@
 
 # Search paths for the stp shared library
 PATHS = [
-    '${CMAKE_BINARY_DIR}/lib/libstp.so',
-    '${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/stp.dll'
+    '@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@'
 ]
