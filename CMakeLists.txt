@@ -33,6 +33,7 @@ endif()
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 set(CMAKE_INSTALL_LIBDIR lib CACHE STRING "Output directory for libraries")
+set(CMAKE_INSTALL_BINDIR bin CACHE STRING "Output directory for executables")
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 
 # -----------------------------------------------------------------------------
@@ -385,8 +386,34 @@ message(STATUS "All defines at startup: ${COMPILE_DEFINES}")
 # -----------------------------------------------------------------------------
 # Setup library build path (this is **not** the library install path)
 # -----------------------------------------------------------------------------
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+if(WIN32)
+  # Create a single bin/ output directory so that DLL files can be
+  # readily found on DLL platforms.
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+endif()
+
+if(DEFINED CMAKE_CONFIGURATION_TYPES)
+  # Placing the binaries in ${CMAKE_*_OUTPUT_DIRECTORY} without regard to
+  # the debug/release/... configuration. This is needed for build systems
+  # where files for multiple configurations are kept within the same build
+  # directory (eg. MSBuild), since some targets (e.g. python-interface-tests)
+  # require the path to the stp library to be given in a configuration file.
+  # Note: the paths could be determined in a cleaner fashion by using generator
+  # expressions, which were used up to commit 1af1f5. However, that solution
+  # was not feasible, since CMake versions provided by recent Debian versions
+  # are buggy w.r.t. generator expressions.
+  foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+    string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
+  endforeach(OUTPUTCONFIG CMAKE_CONFIGURATION_TYPES)
+else()
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+endif()
 
 # -----------------------------------------------------------------------------
 # Provide an export name to be used by targets that wish to export themselves.
@@ -455,34 +482,7 @@ if(ENABLE_TESTING)
     COMMENT "top level target to invoke all other tests"
   )
 
-  add_custom_target(pre-check
-    COMMENT "top level target to make sure shared libraries can be linked to tests"
-  )
-
   add_subdirectory(tests)
-
-  if(MSVC AND (NOT STATICCOMPILE))
-    if(Boost_FOUND)
-      set(STP_TARGET stp)
-    else()
-      set(STP_TARGET stp_simple)
-    endif()
-
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:libstp> $<TARGET_FILE_DIR:${STP_TARGET}>)
-
-    # TODO: move this to the C API test target?
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:libstp> tests/api/C/$<CONFIG>)
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:gtest> tests/api/C/$<CONFIG>)
-    add_custom_command(TARGET pre-check PRE_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E
-                       copy $<TARGET_FILE:gtest_main> tests/api/C/$<CONFIG>)
-  endif()
 else()
     message(WARNING "Testing is disabled")
 endif()
