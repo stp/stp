@@ -92,7 +92,7 @@ case $STP_CONFIG in
          cd cryptominisat
          mkdir build
          cd build
-         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
+         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
          cd ../..
 
