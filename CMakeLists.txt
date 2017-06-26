@@ -330,6 +330,7 @@ endif()
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
+
 if (NOT NOCRYPTOMINISAT)
   set(cryptominisat_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
   find_package(cryptominisat5 CONFIG)
@@ -348,7 +349,7 @@ endif()
 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
 if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
-    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requiested. Exiting.")
+    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requested. Exiting.")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -433,31 +434,32 @@ set(STP_EXPORT_NAME "STPTargets")
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
-option(ENABLE_PYTHON "Enable Python interface" ON)
 
-if (ENABLE_PYTHON OR ENABLE_TESTING)
-  find_package (PythonInterp 2.7)
-  find_package (PythonLibs 2.7)
-  if (PYTHON_EXECUTABLE AND PYTHON_LIBRARY AND PYTHON_INCLUDE_DIR)
-    message(STATUS "PYTHON_EXECUTABLE:FILEPATH=${PYTHON_EXECUTABLE}")
-    message(STATUS "PYTHON_LIBRARY:FILEPATH=${PYTHON_LIBRARY}")
-    message(STATUS "PYTHON_INCLUDE_DIR:FILEPATH=${PYTHON_INCLUDE_DIR}")
-    message(STATUS "PYTHONLIBS_VERSION_STRING=${PYTHONLIBS_VERSION_STRING}")
-    set(PYTHON_OK ON)
-    message(STATUS "OK, found python interpreter, libs and header files")
-  else()
-    message(WARNING "Cannot find python interpreter, libs and header files, cannot build python interface")
-  endif()
+# try finding python if the user did not explicitly said that
+# he/she does not want python bindings
+if ((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
+    find_package (PythonInterp 2.7)
+    find_package (PythonLibs 2.7)
+    if (PYTHON_EXECUTABLE AND PYTHON_LIBRARY AND PYTHON_INCLUDE_DIR)
+        message(STATUS "PYTHON_EXECUTABLE:FILEPATH=${PYTHON_EXECUTABLE}")
+        message(STATUS "PYTHON_LIBRARY:FILEPATH=${PYTHON_LIBRARY}")
+        message(STATUS "PYTHON_INCLUDE_DIR:FILEPATH=${PYTHON_INCLUDE_DIR}")
+        message(STATUS "PYTHONLIBS_VERSION_STRING=${PYTHONLIBS_VERSION_STRING}")
+        set(PYTHON_OK ON)
+        message(STATUS "OK, found python interpreter, libs and header files")
+    else()
+        message(WARNING "Cannot find python interpreter, libs and header files, cannot build python interface")
+    endif()
 
-  if(ENABLE_TESTING AND NOT PYTHON_OK)
-    message(STATUS "Python interpreter and development headers cannot be found. Please install it to have the python interface and to enable testing")
-    set(ENABLE_TESTING OFF)
-  endif()
+    if(ENABLE_TESTING AND NOT PYTHON_OK)
+        message(STATUS "Python interpreter and development headers cannot be found. Please install it to have the python interface and to enable testing")
+        set(ENABLE_TESTING OFF)
+    endif()
 
-  if (PYTHON_OK AND NOT STATICCOMPILE)
-    message(STATUS "Python found, enabling python interface")
-    set(ENABLE_PYTHON_INTERFACE ON)
-  endif()
+    if (PYTHON_OK AND NOT STATICCOMPILE)
+        message(STATUS "Python found, enabling python interface")
+        set(ENABLE_PYTHON_INTERFACE ON)
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
