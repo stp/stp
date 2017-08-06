@@ -55,15 +55,21 @@ addons:
 
 before_install:
   - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
-  #- sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-  #- sudo add-apt-repository -y ppa:kalakris/cmake
-  #- sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu trusty-backports main universe"
   - sudo apt-get update
+  - sudo apt-get install -y --force-yes cmake valgrind git zlib1g-dev
 
 install:
-  - sudo apt-get install -y --force-yes cmake valgrind git zlib1g-dev
-#
+#cmake
+  - wget http://www.cmake.org/files/v3.4/cmake-3.4.1.tar.gz
+  - tar -xzf cmake-3.4.1.tar.gz
+  - cd cmake-3.4.1/
+  - ./configure
+  - make
+  - sudo make install
+  - sudo update-alternatives --install /usr/bin/cmake cmake /usr/local/bin/cmake 1 --force
+  - cmake --version
+  - cd ..
 # get and install minisat
   - mkdir minisat_git && cd minisat_git
   - git clone --depth 1 https://github.com/stp/minisat
