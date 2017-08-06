@@ -53,7 +53,7 @@ foreach(_file ${TOLEX})
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp  ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
         COMMAND ${BISON_EXECUTABLE} --debug -v -o ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp -d -p ${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
         COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
-        DEPENDS ${_file}.lex ${_file}.y
+        DEPENDS ${_file}.lex ${_file}.y ASTKind_header
     )
     add_custom_target(parser_header${_file} ALL
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
