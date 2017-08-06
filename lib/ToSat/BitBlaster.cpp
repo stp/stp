@@ -1070,7 +1070,7 @@ template <class BBNode, class BBNodeManagerT>
 const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
                                                         BBNodeSet& support)
 {
-  typename std::map<ASTNode, BBNode>::iterator it = BBFormMemo.find(form);
+  auto it = BBFormMemo.find(form);
   if (it != BBFormMemo.end())
   {
     // already there.  Just return it.
