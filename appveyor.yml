@@ -27,7 +27,7 @@ environment:
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     MSBUILD_FLAGS: /maxcpucount /nologo
     PYTHON: "C:\\Python36-x64"
-    APPVEYOR_SAVE_CACHE_ON_ERROR: true
+    APPVEYOR_SAVE_CACHE_ON_ERROR: false
 
 install:
     "%PYTHON%\\python.exe -m pip install lit"
@@ -35,9 +35,9 @@ install:
 configuration:
   - Release
 
-cache:
-  # - C:\projects\stp\llvm -> appveyor.yml
-  # - C:\projects\stp\llvm.build -> appveyor.yml
+#cache:
+  #- C:\projects\stp\llvm -> appveyor.yml
+  #- C:\projects\stp\llvm.build -> appveyor.yml
 
 build_script:
   - IF "%PLATFORM%" == "x86" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib32-msvc-14.0)
