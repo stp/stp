@@ -451,11 +451,6 @@ if ((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
         message(WARNING "Cannot find python interpreter, libs and header files, cannot build python interface")
     endif()
 
-    if(ENABLE_TESTING AND NOT PYTHON_OK)
-        message(STATUS "Python interpreter and development headers cannot be found. Please install it to have the python interface and to enable testing")
-        set(ENABLE_TESTING OFF)
-    endif()
-
     if (PYTHON_OK AND NOT STATICCOMPILE)
         message(STATUS "Python found, enabling python interface")
         set(ENABLE_PYTHON_INTERFACE ON)
@@ -487,6 +482,11 @@ add_custom_target(uninstall
 # -----------------------------------------------------------------------------
 # Add tests if required
 # -----------------------------------------------------------------------------
+
+if(ENABLE_TESTING AND NOT PYTHON_EXECUTABLE)
+    message(STATUS "Python interpreter cannot be found. Please install it to have the python interface and to enable testing")
+    set(ENABLE_TESTING OFF)
+endif()
 
 if(ENABLE_TESTING)
   message(STATUS "Testing is enabled")
