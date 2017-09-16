@@ -42,7 +42,7 @@ using namespace stp;
 void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr *bm)
 {
 
-  unsigned int upper, lower, num_bytes;
+  unsigned int num_bytes;
   Kind LHSkind, RHSkind;
 
   // os << spaces(indentation);
@@ -148,8 +148,8 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       // we only accept indices that are byte-aligned
       // (e.g., [15:8], [23:16])
       // and round down to byte indices rather than bit indices
-      upper = c[1].GetUnsignedConst();
-      lower = c[2].GetUnsignedConst();
+      unsigned upper = c[1].GetUnsignedConst();
+      unsigned lower = c[2].GetUnsignedConst();
       assert(upper > lower);
       assert(lower % 8 == 0);
       assert((upper + 1) % 8 == 0);
@@ -297,14 +297,14 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       // comparison
       if (LHSkind == BVEXTRACT)
       {
-        upper = c[0].GetChildren()[1].GetUnsignedConst();
-        lower = c[0].GetChildren()[2].GetUnsignedConst();
+        unsigned upper = c[0].GetChildren()[1].GetUnsignedConst();
+        unsigned lower = c[0].GetChildren()[2].GetUnsignedConst();
         num_bytes = (upper - lower + 1) / 8;
       }
       else if (RHSkind == BVEXTRACT)
       {
-        upper = c[1].GetChildren()[1].GetUnsignedConst();
-        lower = c[1].GetChildren()[2].GetUnsignedConst();
+        unsigned upper = c[1].GetChildren()[1].GetUnsignedConst();
+        unsigned lower = c[1].GetChildren()[2].GetUnsignedConst();
         num_bytes = (upper - lower + 1) / 8;
       }
 
@@ -412,7 +412,7 @@ ostream& C_Print(ostream& os, const ASTNode n,  STPMgr* bm , int indentation)
   // pass 1: letize the node
   n.LetizeNode(bm);
 
-  unsigned int lower, upper, num_bytes = 0;
+  unsigned int num_bytes = 0;
 
   // pass 2:
   //
@@ -440,8 +440,8 @@ ostream& C_Print(ostream& os, const ASTNode n,  STPMgr* bm , int indentation)
       // see if it's a BVEXTRACT, and if so, whether it's multi-byte
       if (it->second.GetKind() == BVEXTRACT)
       {
-        upper = it->second.GetChildren()[1].GetUnsignedConst();
-        lower = it->second.GetChildren()[2].GetUnsignedConst();
+        unsigned upper = it->second.GetChildren()[1].GetUnsignedConst();
+        unsigned lower = it->second.GetChildren()[2].GetUnsignedConst();
         num_bytes = (upper - lower + 1) / 8;
         assert(num_bytes > 0);
       }
