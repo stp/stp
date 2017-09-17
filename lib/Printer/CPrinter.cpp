@@ -143,7 +143,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       C_Print1(os, c[1], indentation, letize,bm);
       os << ")";
       break;
-    case BVEXTRACT:
+    case BVEXTRACT: {
 
       // we only accept indices that are byte-aligned
       // (e.g., [15:8], [23:16])
@@ -171,6 +171,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       }
 
       break;
+    }
     case BVLEFTSHIFT:
       // stopgap for un-implemented features
       FatalError("C_Print1: printing not implemented for this kind: ", n);
