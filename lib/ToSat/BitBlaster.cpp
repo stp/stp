@@ -367,17 +367,6 @@ void BitBlaster<BBNode, BBNodeManagerT>::updateTerm(const ASTNode& n,
 
   if (n.isConstant())
   {
-// This doesn't hold any longer because we convert BVSDIV and friends to
-// ASTNodes.
-#if 0
-        simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it;
-        it = cb->fixedMap->map->find(n);
-        if (it == cb->fixedMap->map->end())
-          {
-          cerr << n;
-          assert(it != cb->fixedMap->map->end());
-          }assert(it->second->isTotallyFixed());
-#endif
     return;
   }
 
