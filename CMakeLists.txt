@@ -29,12 +29,33 @@ if(NOT (CMAKE_MAJOR_VERSION LESS 2))
         cmake_policy(SET CMP0048 NEW)
     endif()
 endif()
+# use, i.e. don't skip the full RPATH for the build tree
+SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
+
+# when building, don't use the install RPATH already
+# (but later on when installing)
+SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+
+SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+
+# add the automatically determined parts of the RPATH
+# which point to directories outside the build tree to the install RPATH
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+
+# the RPATH to be used when installing, but only if it's not a system directory
+LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
+IF("${isSystemDir}" STREQUAL "-1")
+   SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+ENDIF("${isSystemDir}" STREQUAL "-1")
+
 
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
-set(CMAKE_INSTALL_LIBDIR lib CACHE STRING "Output directory for libraries")
-set(CMAKE_INSTALL_BINDIR bin CACHE STRING "Output directory for executables")
+set(LIBDIR lib CACHE STRING "Output directory for libraries")
+set(BINDIR bin CACHE STRING "Output directory for executables")
+set(INCLUDEDIR include CACHE STRING "Output directory for include headers")
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 
 # -----------------------------------------------------------------------------
@@ -520,7 +541,7 @@ export(PACKAGE STP)
 if(WIN32 AND NOT CYGWIN)
   set(DEF_INSTALL_CMAKE_DIR CMake)
 else()
-  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
+  set(DEF_INSTALL_CMAKE_DIR ${LIBDIR}/cmake/STP)
 endif()
 set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
   "Installation directory for STP CMake files"
