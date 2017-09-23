@@ -16,6 +16,19 @@ Homepage:      http://stp.github.io/
 
 Ubuntu PPA:    https://launchpad.net/~simple-theorem-prover/+archive/ubuntu/ppa/+packages
 
+## Docker usage
+
+```
+docker pull msoos/stp
+echo "(set-logic QF_BV)
+(set-info :smt-lib-version 2.0)
+(set-info :status sat)
+(assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
+(check-sat)
+(exit)" | docker run --rm -i -a stdin -a stdout stp
+```
+
+
 ## Build, install and test:
 
 See [the INSTALL file](INSTALL.md)

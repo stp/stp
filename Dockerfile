@@ -44,7 +44,7 @@ RUN cmake .. \
 # set up for running
 USER solver
 WORKDIR /home/solver/
-ENTRYPOINT ["stp", "-m"]
+ENTRYPOINT ["stp", "--SMTLIB2"]
 
 # --------------------
 # HOW TO USE
