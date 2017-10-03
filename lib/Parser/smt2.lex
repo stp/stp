@@ -1,46 +1,44 @@
 %{
-  /********************************************************************
-   * AUTHORS:  Trevor Hansen
-   *
-   * BEGIN DATE: May, 2010
-   *
-   * This file is modified version of the STP's smtlib.lex file. Please
-   * see CVCL license below
-   ********************************************************************/
+/********************************************************************
+* AUTHORS:  Trevor Hansen
+*
+* BEGIN DATE: May, 2010
+*
+* This file is modified version of the STP's smtlib.lex file. Please
+* see CVCL license below
+********************************************************************/
 
-  /********************************************************************
-   * AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
-   *
-   * BEGIN DATE: July, 2006
-   *
-   * This file is modified version of the CVCL's smtlib.lex file. Please
-   * see CVCL license below
-   ********************************************************************/
-   
-  /********************************************************************
-   * \file smtlib.lex
-   * 
-   * Author: Sergey Berezin, Clark Barrett
-   * 
-   * Created: Apr 30 2005
-   *
-   * <hr>
-   * Copyright (C) 2004 by the Board of Trustees of Leland Stanford
-   * Junior University and by New York University. 
-   *
-   * License to use, copy, modify, sell and/or distribute this software
-   * and its documentation for any purpose is hereby granted without
-   * royalty, subject to the terms and conditions defined in the \ref
-   * LICENSE file provided with this distribution.  In particular:
-   *
-   * - The above copyright notice and this permission notice must appear
-   * in all copies of the software and related documentation.
-   *
-   * - THE SOFTWARE IS PROVIDED "AS-IS", WITHOUT ANY WARRANTIES,
-   * EXPRESSED OR IMPLIED.  USE IT AT YOUR OWN RISK.
-   * 
-   * <hr>
-   ********************************************************************/
+/********************************************************************
+* AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
+*
+* BEGIN DATE: July, 2006
+*
+* This file is modified version of the CVCL's smtlib.lex file. Please
+* see CVCL license below
+********************************************************************/
+
+/********************************************************************
+* \file smtlib.lex
+*
+* Author: Sergey Berezin, Clark Barrett
+*
+* Created: Apr 30 2005
+*
+* Copyright (C) 2004 by the Board of Trustees of Leland Stanford
+* Junior University and by New York University.
+*
+* License to use, copy, modify, sell and/or distribute this software
+* and its documentation for any purpose is hereby granted without
+* royalty, subject to the terms and conditions defined in the \ref
+* LICENSE file provided with this distribution.  In particular:
+*
+* - The above copyright notice and this permission notice must appear
+* in all copies of the software and related documentation.
+*
+* - THE SOFTWARE IS PROVIDED "AS-IS", WITHOUT ANY WARRANTIES,
+* EXPRESSED OR IMPLIED.  USE IT AT YOUR OWN RISK.
+*
+********************************************************************/
 #include "stp/Parser/parser.h"
 #include "parsesmt2.hpp"
 #include "stp/cpp_interface.h"
@@ -56,7 +54,7 @@
 
   // File-static (local to this file) variables and functions
   static THREAD_LOCAL std::string _string_lit;
-   
+
   static int lookup(char* s)
   {
     char * cleaned = NULL;
@@ -74,7 +72,7 @@
 
     stp::ASTNode nptr;
     bool found = false;
-    
+
     if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
     {
       found = true;
@@ -98,7 +96,7 @@
          free (cleaned);
        return  BOOLEAN_FUNCTIONID_TOK;
     }
-   
+
     if (found)
     {
        if (cleaned) 
@@ -142,31 +140,29 @@ OPCHAR	([~!@$%^&*\_\-+=<>\.?/])
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
-[ \n\t\r\f]	{ /* sk'ip whitespace */ }
+[ \n\t\r\f] { /* skip whitespace */ }
 
  /* We limit numerals to maxint, in the specification they are arbitary precision.*/
-{DIGIT}+	{ smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
-
-bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
-#b{DIGIT}+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
+{DIGIT}+               { smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
+bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
+#b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
+{DIGIT}+"."{DIGIT}+    { return DECIMAL_TOK;}
 
-{DIGIT}+"."{DIGIT}+ { return DECIMAL_TOK;}
+";" { BEGIN COMMENT; }
+<COMMENT>"\n" { BEGIN INITIAL; /* return to normal mode */}
+<COMMENT>.    { /* stay in comment mode */ }
 
-";"		{ BEGIN COMMENT; }
-<COMMENT>"\n"	{ BEGIN INITIAL; /* return to normal mode */}
-<COMMENT>.	{ /* stay in comment mode */ }
-
-<INITIAL>"\""		{ BEGIN STRING_LITERAL;
-                          _string_lit.erase(_string_lit.begin(),
-                                            _string_lit.end()); }
-<STRING_LITERAL>"\"\""	{ /* double quote is the only escape. */
-                          _string_lit.insert(_string_lit.end(),'"'); }
-<STRING_LITERAL>"\""	{ BEGIN INITIAL; 
-			  smt2lval.str = new std::string(_string_lit);
-                          return STRING_TOK; }
-<STRING_LITERAL>.	{ _string_lit.insert(_string_lit.end(),*smt2text); }                           
-<STRING_LITERAL>"\n"	{ _string_lit.insert(_string_lit.end(),*smt2text); }
+<INITIAL>"\""   { BEGIN STRING_LITERAL;
+          _string_lit.erase(_string_lit.begin(),_string_lit.end()); }
+<STRING_LITERAL>"\"\""	{
+            /* double quote is the only escape. */
+          _string_lit.insert(_string_lit.end(),'"'); }
+<STRING_LITERAL>"\""  { BEGIN INITIAL;
+          smt2lval.str = new std::string(_string_lit);
+          return STRING_TOK; }
+<STRING_LITERAL>.     { _string_lit.insert(_string_lit.end(),*smt2text); }
+<STRING_LITERAL>"\n"  { _string_lit.insert(_string_lit.end(),*smt2text); }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
@@ -177,12 +173,12 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 
  /* Set info types */
  /* This is a very restricted set of the possible keywords */
-":source"        { return SOURCE_TOK;}
-":category"      { return CATEGORY_TOK;} 
-":difficulty"    { return DIFFICULTY_TOK; }
+":source"           { return SOURCE_TOK;}
+":category"         { return CATEGORY_TOK;}
+":difficulty"       { return DIFFICULTY_TOK; }
 ":smt-lib-version"  { return VERSION_TOK; }
-":status"        { return STATUS_TOK; }
-":license"        { return LICENSE_TOK; }
+":status"           { return STATUS_TOK; }
+":license"          { return LICENSE_TOK; }
 
 
   /* Attributes */
@@ -217,7 +213,7 @@ bv{DIGIT}+	{ smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_
 "reset-assertions"        { return RESET_ASSERTIONS_TOK;} 
 "set-info"                { return NOTES_TOK;  }
 "set-logic"               { return LOGIC_TOK; }
-"set-option"  		        { return SET_OPTION_TOK; }
+"set-option"              { return SET_OPTION_TOK; }
 
 
 
