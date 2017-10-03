@@ -1,14 +1,5 @@
 %{
 /********************************************************************
-* AUTHORS:  Trevor Hansen
-*
-* BEGIN DATE: May, 2010
-*
-* This file is modified version of the STP's smtlib.lex file. Please
-* see CVCL license below
-********************************************************************/
-
-/********************************************************************
 * AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
 *
 * BEGIN DATE: July, 2006
@@ -18,8 +9,6 @@
 ********************************************************************/
 
 /********************************************************************
-* \file smtlib.lex
-*
 * Author: Sergey Berezin, Clark Barrett
 *
 * Created: Apr 30 2005
