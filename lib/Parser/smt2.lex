@@ -42,7 +42,7 @@
 #endif
 
   // File-static (local to this file) variables and functions
-  static THREAD_LOCAL std::string _string_lit;
+  static thread_local std::string _string_lit;
 
   static int lookup(char* s)
   {
