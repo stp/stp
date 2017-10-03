@@ -42,7 +42,7 @@ DLL_PUBLIC ostream& PL_Print(ostream& os, const stp::ASTNode& n,  STPMgr* bm, in
 DLL_PUBLIC void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize, STPMgr* bm );
 
 ostream& Lisp_Print(ostream& os, const stp::ASTNode& n, int indentation = 0);
-extern stp::ASTNodeSet Lisp_AlreadyPrintedSet;
+extern THREAD_LOCAL stp::ASTNodeSet Lisp_AlreadyPrintedSet;
 ostream& Lisp_Print_indent(ostream& os, const stp::ASTNode& n,
                            int indentation = 0);
 

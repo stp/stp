@@ -42,15 +42,15 @@ static string tolower(const char* name)
 }
 
 // Map from ASTNodes to LetVars
-stp::ASTNodeMap NodeLetVarMap;
+THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
+THREAD_LOCAL vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
-stp::ASTNodeMap NodeLetVarMap1;
+THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap1;
 
 // copied from Presentation Langauge printer.
 ostream& SMTLIB_Print(ostream& os, STPMgr *mgr, const ASTNode n, const int indentation,

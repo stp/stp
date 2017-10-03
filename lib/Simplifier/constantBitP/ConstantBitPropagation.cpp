@@ -57,7 +57,7 @@ namespace simplifier
 {
 namespace constantBitP
 {
-NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
+THREAD_LOCAL NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
 const bool debug_cBitProp_messages = false;
 const bool output_mult_like = false;

@@ -84,7 +84,7 @@ bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
 }
 
 //Global variable TODO!! This is really bad.
-Simplifier* simplifier_convenient;
+THREAD_LOCAL Simplifier* simplifier_convenient;
 
 ASTNode
 RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,

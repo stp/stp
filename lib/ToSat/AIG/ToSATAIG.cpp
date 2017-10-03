@@ -29,7 +29,7 @@ THE SOFTWARE.
 namespace stp
 {
 
-int ToSATAIG::cnf_calls = 0;
+THREAD_LOCAL int ToSATAIG::cnf_calls = 0;
 
 bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
                        bool needAbsRef)

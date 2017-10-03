@@ -50,6 +50,7 @@
 #include <ctype.h>                                  /*  MODULE TYPE:  (sys)  */
 #include <cassert>
 #include "constantbv.h"
+#include "stp/Util/Attributes.h"
 
 
 namespace CONSTANTBV {
@@ -66,24 +67,26 @@ namespace CONSTANTBV {
   /* global machine-dependent constants (set by "BitVector_Boot"): */
   /*****************************************************************/
 
-  static unsigned int BITS;     /* = # of bits in machine word (must be power of 2)  */
-  static unsigned int MODMASK;  /* = BITS - 1 (mask for calculating modulo BITS)     */
-  static unsigned int LOGBITS;  /* = ld(BITS) (logarithmus dualis)                   */
-  static unsigned int FACTOR;   /* = ld(BITS / 8) (ld of # of bytes)                 */
+  /* FIXME: use a thread-safe Singleton pattern instead */
 
-  static unsigned int LSB = 1;  /* = mask for least significant bit                  */
-  static unsigned int MSB;      /* = mask for most significant bit                   */
+  static THREAD_LOCAL unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
+  static THREAD_LOCAL unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
+  static THREAD_LOCAL unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
+  static THREAD_LOCAL unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
 
-  static unsigned int LONGBITS; /* = # of bits in unsigned long                      */
+  static THREAD_LOCAL unsigned int LSB = 1; /* = mask for least significant bit */
+  static THREAD_LOCAL unsigned int MSB; /* = mask for most significant bit */
 
-  static unsigned int LOG10;    /* = logarithm to base 10 of BITS - 1                */
-  static unsigned int EXP10;    /* = largest possible power of 10 in signed int      */
+  static THREAD_LOCAL unsigned int LONGBITS; /* = # of bits in unsigned long */
+
+  static THREAD_LOCAL unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
+  static THREAD_LOCAL unsigned int EXP10; /* = largest possible power of 10 in signed int */
 
   /********************************************************************/
   /* global bit mask table for fast access (set by "BitVector_Boot"): */
   /********************************************************************/
 
-  static unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
+  static THREAD_LOCAL unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
 
   /*****************************/
   /* global macro definitions: */

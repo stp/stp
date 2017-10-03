@@ -42,7 +42,7 @@ SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ///                        DECLARATIONS                              ///
 ////////////////////////////////////////////////////////////////////////
 
-static Cnf_Man_t * s_pManCnf = NULL;
+static THREAD_LOCAL Cnf_Man_t * s_pManCnf = NULL;
 
 ////////////////////////////////////////////////////////////////////////
 ///                     FUNCTION DEFINITIONS                         ///

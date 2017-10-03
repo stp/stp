@@ -72,11 +72,11 @@ class ASTNode
   STPMgr * GetSTPMgr() const;
 
 public:
-  static int copy;
-  static int move;
-  static int assign;
-  static int assign_move;
-  static int destroy;
+  static THREAD_LOCAL int copy;
+  static THREAD_LOCAL int move;
+  static THREAD_LOCAL int assign;
+  static THREAD_LOCAL int assign_move;
+  static THREAD_LOCAL int destroy;
 
   uint8_t getIteration() const;
   void setIteration(uint8_t v) const;

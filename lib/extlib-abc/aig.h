@@ -54,6 +54,7 @@ extern "C" {
 #include <time.h>
 
 #include "vec.h"
+#include "stp/Util/Attributes.h"
 
 ////////////////////////////////////////////////////////////////////////
 ///                         PARAMETERS                               ///

@@ -44,7 +44,7 @@
   extern int smterror (const char *msg);
 
   // File-static (local to this file) variables and functions
-  static std::string _string_lit;  
+  static THREAD_LOCAL std::string _string_lit;
   static char escapeChar(char c) {
     switch(c) {
     case 'n': return '\n';
