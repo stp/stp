@@ -48,9 +48,9 @@ namespace stp
 using std::make_pair;
 
 
-  ASTNodeMap varToNodeMap;
-  STPMgr* bm;
-  NodeFactory* nf;
+  THREAD_LOCAL ASTNodeMap varToNodeMap;
+  THREAD_LOCAL STPMgr* bm;
+  THREAD_LOCAL NodeFactory* nf;
 
 
   AIGSimplifyPropositionalCore::AIGSimplifyPropositionalCore(STPMgr* _bm)

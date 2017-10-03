@@ -39,7 +39,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-uint64_t ASTInternal::node_uid_cntr = 0;
+THREAD_LOCAL uint64_t ASTInternal::node_uid_cntr = 0;
 
 /****************************************************************
  * Universal Helper Functions                                   *

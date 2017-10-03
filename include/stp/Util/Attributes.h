@@ -57,4 +57,11 @@ THE SOFTWARE.
     #define DLL_LOCAL
 #endif
 
+// Provide thread safety if possible
+#if __cplusplus >= 201103L
+    #define THREAD_LOCAL thread_local
+#else
+    #define THREAD_LOCAL
+#endif
+
 #endif

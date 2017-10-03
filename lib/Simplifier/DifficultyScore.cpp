@@ -73,9 +73,6 @@ namespace stp
     return score;
   }
 
-  // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<int, int> cache;
-
   int DifficultyScore::score(const ASTNode& top, STPMgr *mgr)
   {
     if (cache.find(top.GetNodeNum()) != cache.end())

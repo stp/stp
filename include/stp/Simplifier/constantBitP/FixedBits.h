@@ -52,7 +52,7 @@ namespace constantBitP
 #define CONSTANTBITP_UTILITY_XSTR(s) CONSTANTBITP_UTILITY_STR(s)
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
 
-static int staticUniqueId = 1;
+static THREAD_LOCAL int staticUniqueId = 1;
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]

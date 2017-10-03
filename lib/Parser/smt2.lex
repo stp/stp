@@ -55,7 +55,7 @@
 #endif
 
   // File-static (local to this file) variables and functions
-  static std::string _string_lit;  
+  static THREAD_LOCAL std::string _string_lit;
    
   static int lookup(char* s)
   {

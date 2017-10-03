@@ -269,7 +269,7 @@ unsigned Dar_TruthPermute( unsigned Truth, char * pPerms, int nVars, int fRevers
 unsigned Dar_TruthPolarize( unsigned uTruth, int Polarity, int nVars )
 {
     // elementary truth tables
-    static unsigned Signs[5] = {
+    static const unsigned Signs[5] = {
         0xAAAAAAAA,    // 1010 1010 1010 1010 1010 1010 1010 1010
         0xCCCCCCCC,    // 1010 1010 1010 1010 1010 1010 1010 1010
         0xF0F0F0F0,    // 1111 0000 1111 0000 1111 0000 1111 0000

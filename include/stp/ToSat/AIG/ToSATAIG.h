@@ -74,7 +74,7 @@ private:
     first = true;
   }
 
-  static int cnf_calls;
+  static THREAD_LOCAL int cnf_calls;
 
 public:
   bool cbIsDestructed() { return cb == NULL; }

@@ -37,6 +37,7 @@ SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ***********************************************************************/
 
 #include "kit.h"
+#include "stp/Util/Attributes.h"
 
 ////////////////////////////////////////////////////////////////////////
 ///                        DECLARATIONS                              ///
@@ -60,7 +61,7 @@ SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ***********************************************************************/
 void Kit_TruthSwapAdjacentVars( unsigned * pOut, unsigned * pIn, int nVars, int iVar )
 {
-    static unsigned PMasks[4][3] = {
+    static const unsigned PMasks[4][3] = {
         { 0x99999999, 0x22222222, 0x44444444 },
         { 0xC3C3C3C3, 0x0C0C0C0C, 0x30303030 },
         { 0xF00FF00F, 0x00F000F0, 0x0F000F00 },
@@ -984,7 +985,7 @@ void Kit_TruthMuxVarPhase( unsigned * pOut, unsigned * pCof0, unsigned * pCof1, 
 ***********************************************************************/
 int Kit_TruthVarsSymm( unsigned * pTruth, int nVars, int iVar0, int iVar1 )
 {
-    static unsigned uTemp0[16], uTemp1[16];
+    static THREAD_LOCAL unsigned uTemp0[16], uTemp1[16];
     assert( nVars <= 9 );
     // compute Cof01
     Kit_TruthCopy( uTemp0, pTruth, nVars );
@@ -1011,7 +1012,7 @@ int Kit_TruthVarsSymm( unsigned * pTruth, int nVars, int iVar0, int iVar1 )
 ***********************************************************************/
 int Kit_TruthVarsAntiSymm( unsigned * pTruth, int nVars, int iVar0, int iVar1 )
 {
-    static unsigned uTemp0[16], uTemp1[16];
+    static THREAD_LOCAL unsigned uTemp0[16], uTemp1[16];
     assert( nVars <= 9 );
     // compute Cof00
     Kit_TruthCopy( uTemp0, pTruth, nVars );
@@ -1094,7 +1095,7 @@ void Kit_TruthChangePhase( unsigned * pTruth, int nVars, int iVar )
 ***********************************************************************/
 int Kit_TruthMinCofSuppOverlap( unsigned * pTruth, int nVars, int * pVarMin )
 {
-    static unsigned uCofactor[16];
+    static THREAD_LOCAL unsigned uCofactor[16];
     int i, ValueCur, ValueMin, VarMin;
     unsigned uSupp0, uSupp1;
     int nVars0, nVars1;
@@ -1287,7 +1288,7 @@ unsigned Kit_TruthHash( unsigned * pIn, int nWords )
 {
     // The 1,024 smallest prime numbers used to compute the hash value
     // http://www.math.utah.edu/~alfeld/math/primelist.html
-    static int HashPrimes[1024] = { 2, 3, 5, 
+    static const int HashPrimes[1024] = { 2, 3, 5, 
     7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 
     101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 
     193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 
@@ -1560,7 +1561,7 @@ unsigned Kit_TruthSemiCanonicize( unsigned * pInOut, unsigned * pAux, int nVars,
 int Kit_TruthCountMinterms( unsigned * pTruth, int nVars, int * pRes, int * pBytes )
 {
     // the number of 1s if every byte as well as in the 0-cofactors w.r.t. three variables
-    static unsigned Table[256] = {
+    static const unsigned Table[256] = {
         0x00000000, 0x01010101, 0x01010001, 0x02020102, 0x01000101, 0x02010202, 0x02010102, 0x03020203,
         0x01000001, 0x02010102, 0x02010002, 0x03020103, 0x02000102, 0x03010203, 0x03010103, 0x04020204,
         0x00010101, 0x01020202, 0x01020102, 0x02030203, 0x01010202, 0x02020303, 0x02020203, 0x03030304,
@@ -1720,7 +1721,7 @@ void Kit_TruthCountMintermsPrecomp()
 ***********************************************************************/
 char * Kit_TruthDumpToFile( unsigned * pTruth, int nVars, int nFile )
 {
-    static char pFileName[100];
+    static THREAD_LOCAL char pFileName[100];
     FILE * pFile;
     sprintf( pFileName, "tt\\s%04d", nFile );
     pFile = fopen( pFileName, "w" );
