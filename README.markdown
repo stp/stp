@@ -14,7 +14,7 @@ Ubuntu PPA:    https://launchpad.net/~simple-theorem-prover/+archive/ubuntu/ppa/
 Docker image:  docker pull msoos/stp
 
 
-## Build, install and test:
+## Build and install
 
 For a quick install:
 
