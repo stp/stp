@@ -87,9 +87,9 @@ extern THREAD_LOCAL enum inputStatus input_status;
 
 
 // Useful global variables. Use for parsing only
-DLL_PUBLIC extern THREAD_LOCAL STP* GlobalSTP;
-DLL_PUBLIC extern THREAD_LOCAL STPMgr* GlobalParserBM;
-DLL_PUBLIC extern THREAD_LOCAL Cpp_interface* GlobalParserInterface;
+extern THREAD_LOCAL STP* GlobalSTP;
+extern THREAD_LOCAL STPMgr* GlobalParserBM;
+extern THREAD_LOCAL Cpp_interface* GlobalParserInterface;
 
 // Function that computes various kinds of statistics for the phases
 // of STP
