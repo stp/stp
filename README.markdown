@@ -74,13 +74,13 @@ echo "(set-logic QF_BV)
 The system performs word-level preprocessing followed by translation to SAT which is then solved by a SAT solver. In particular, we introduce several new heuristics for the preprocessing step, including abstraction-refinement in the context of arrays, a new bitvector linear arithmetic equation solver, and some interesting simplifications. These heuristics help us achieve several magnitudes of order performance over other tools, and also over straight-forward translation to SAT. STP has been heavily tested on thousands of examples sourced from various real-world applications such as program analysis and bug-finding tools like EXE, and equivalence checking tools and theorem-provers.
 
 
-# Detailed Building and Installation
+## Detailed Building and Installation
 
 STP is built with [CMake](http://cmake.org/), version 3.0.2 or newer. CMake is a
 meta build system that generates build files for other tools such as
 make(1), Visual Studio, Xcode, etc.
 
-## Configuration variables
+### Configuration variables
 Here are a few interesting configuration variables. These apply to all
 generators.
 
@@ -93,14 +93,12 @@ generators.
 - ``SANITIZE`` - Use Clang's sanitization checks
 - ``STATICCOMPILE`` - Build static libraries and binaries instead of dynamic
 
-## Dependencies
+### Dependencies
 STP relies on : boost, flex, bison and minisat. You can install these by:
 
 ```
 $ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 ```
-
-### CryptoMiniSat
 
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and used:
 
@@ -114,27 +112,17 @@ $ sudo make install
 $ sudo ldconfig
 ```
 
-## Building a static library and binary
+### Building a static library and binary
 
 ```
 $ mkdir build && cd build
 $ cmake -DSTATICCOMPILE=ON ..
 $ make
 $ sudo make install
-$ sudo ldconfig
-```
+$ sudo ldconfig```
 
-## Testing
 
-Testing depends on GoogleTest, lit  and Outputcheck:
-
-```
-$ git submodule init
-$ git submodule update
-$ pip install lit
-```
-
-## Configuration and build options
+### Configuration and build options
 ```
 
 To tweak the build configuration:
@@ -154,10 +142,12 @@ You can also tweak configuration later by running `make edit_cache` and edit any
 
 You can use the `-j<n>` flag to significantly to decrease build time by running `<n>` jobs in parallel (e.g. `make -j4`).
 
-## Testing
+### Testing
 
 ```
-#we are in the source directory
+git clone https://github.com/stp/stp
+git submodule update --init
+pip install lit
 mkdir build
 cd build
 cmake -DENABLE_TESTING=ON ..
@@ -165,12 +155,12 @@ make
 make check
 ```
 
-## Installing
+### Installing
 
 To install run `make install` and to uninstall run `make uninstall`. The root of installation is controlled by the `CMAKE_INSTALL_PREFIX` variable at configure time. You can change this by running `make edit_cache` and editing the value of `CMAKE_INSTALL_PREFIX`.
 
 
-## Building on Visual Studio
+### Building on Visual Studio
 
 Let's assume you put STP's source into c:\projects\stp and you have cygwin and
 git installed. Get zlib:
