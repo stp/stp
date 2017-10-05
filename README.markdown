@@ -1,10 +1,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Linux build](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
 [![Windows build](https://ci.appveyor.com/api/projects/status/35983b7cnrg37whk?svg=true)](https://ci.appveyor.com/project/msoos/stp)
-<a href="https://scan.coverity.com/projects/stp-stp">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/861/badge.svg"/>
-</a>
+[![Coverity](https://scan.coverity.com/projects/861/badge.svg)](https://scan.coverity.com/projects/861)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/f043efa22ea64e9ba44fde0f3a4fb09f)](https://www.codacy.com/app/soos.mate/cryptominisat?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=msoos/cryptominisat&amp;utm_campaign=Badge_Grade)
 [![Coverage](https://coveralls.io/repos/stp/stp/badge.svg?branch=master&service=github)](https://coveralls.io/github/stp/stp?branch=master)
 
@@ -35,25 +32,18 @@ sudo make install
 For more detailed instructions, see towards the end of the page.
 
 
-## Docker usage
-
-```
-docker pull msoos/stp
-echo "(set-logic QF_BV)
-(set-info :smt-lib-version 2.0)
-(set-info :status sat)
-(assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
-(check-sat)
-(exit)" | docker run --rm -i -a stdin -a stdout stp
-```
-
-
 ## Input format
 
 The file based input formats that STP reads are the: CVC, SMT-LIB1, and SMT-LIB2 formats. The SMT-LIB2 format is the recommended file format, because it is parsed by all modern bitvector solvers. Only quantifier-free bitvectors and arrays are implemented from the SMTLibv2 format.
 
 ### Usage
-Fun use case, STP overflowing a 32b integer:
+
+Run with an SMTLibv2 file:
+```
+stp myproblem.smt
+```
+
+Overflowing a 32b integer using the python interface:
 ```
 import stp
 In [1]: import stp
@@ -69,9 +59,14 @@ In [9]: a.model()
 Out[9]: {'x': 4294967287L, 'y': 11L}
 ```
 
-Traditional use-case:
+With Docker:
 ```
-stp myproblem.smt
+docker pull msoos/stp
+echo "(set-logic QF_BV)
+(set-info :smt-lib-version 2.0)
+(assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
+(check-sat)
+(exit)" | docker run --rm -i -a stdin -a stdout stp
 ```
 
 ## Architecture
