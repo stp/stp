@@ -45,8 +45,8 @@ namespace stp
 {
 using std::make_pair;
 
-unsigned propagatorNotImplemented =0;
-unsigned iterations =0;
+THREAD_LOCAL unsigned propagatorNotImplemented =0;
+THREAD_LOCAL unsigned iterations =0;
 
 void print_stats()
 {
