@@ -40,14 +40,10 @@ configuration:
   #- C:\projects\stp\llvm.build -> appveyor.yml
 
 build_script:
-  - IF "%PLATFORM%" == "x86" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib32-msvc-14.0)
   - IF "%PLATFORM%" == "x86" ( SET CMAKE_GENERATOR="Visual Studio 14 2015")
-
-  - IF "%PLATFORM%" == "x64" ( SET BOOST_LIBRARYDIR=C:/Libraries/boost_1_59_0/lib64-msvc-14.0)
   - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 14 2015 Win64")
 
   - echo %PLATFORM%
-  - echo %BOOST_LIBRARYDIR%
   - echo %CMAKE_GENERATOR%
   - echo %configuration%
   - echo %APPVEYOR_BUILD_FOLDER%
