@@ -102,14 +102,14 @@ case $STP_CONFIG in
          pwd
          ls
     ;;
-    
+
     *)
         echo "\"${STP_CONFIG}\" configuration not recognised"
         exit 1
 esac
 
 make -j2 VERBOSE=1
-make check
+ctest -V
 
 echo $(ldd ./stp_simple)
 echo $(ldd ./stp)

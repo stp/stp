@@ -31,16 +31,13 @@ file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg
 
 
 if (Boost_FOUND)
-    add_custom_target(query-file-tests
-                  DEPENDS stp
-                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
-    )
+  add_test(NAME query-files
+            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  )
 else()
-    add_custom_target(query-file-tests
-                  DEPENDS stp_simple
-                  COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
-    )
+  add_test(NAME query-files
+            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  )
 endif()
-
-# Make sure this test-suite runs when "check" is target
-add_dependencies(check query-file-tests)

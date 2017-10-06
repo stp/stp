@@ -493,11 +493,12 @@ if(ENABLE_TESTING AND NOT PYTHON_EXECUTABLE)
 endif()
 
 if(ENABLE_TESTING)
+  enable_testing()
   message(STATUS "Testing is enabled")
   set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
-  add_custom_target(check
-    COMMENT "top level target to invoke all other tests"
-  )
+#   add_custom_target(check
+#     COMMENT "top level target to invoke all other tests"
+#   )
 
   add_subdirectory(tests)
 else()

@@ -31,4 +31,9 @@ add_custom_target(python-interface-tests
                  )
 
 # Make sure this test-suite runs when "check" is target
-add_dependencies(check python-interface-tests)
+add_test (
+  NAME python-interface-tests
+  COMMAND ${PYTHON_EXECUTABLE} tests.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
