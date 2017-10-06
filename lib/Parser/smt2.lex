@@ -118,13 +118,13 @@
 %option noyymore
 %option yylineno
 
-%x	COMMENT
-%x	STRING_LITERAL
+%x  COMMENT
+%x  STRING_LITERAL
 %x  SYMBOL
 
-LETTER	([a-zA-Z])
-DIGIT	([0-9])
-OPCHAR	([~!@$%^&*\_\-+=<>\.?/])
+LETTER  ([a-zA-Z])
+DIGIT  ([0-9])
+OPCHAR  ([~!@$%^&*\_\-+=<>\.?/])
 
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
@@ -144,7 +144,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 <INITIAL>"\""   { BEGIN STRING_LITERAL;
           _string_lit.erase(_string_lit.begin(),_string_lit.end()); }
-<STRING_LITERAL>"\"\""	{
+<STRING_LITERAL>"\"\""  {
             /* double quote is the only escape. */
           _string_lit.insert(_string_lit.end(),'"'); }
 <STRING_LITERAL>"\""  { BEGIN INITIAL;
@@ -221,7 +221,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "xor"           { return XOR_TOK;}
 "ite"           { return ITE_TOK;} // PARAMETRIC
 "="             { return EQ_TOK;}
-"=>"       		{ return IMPLIES_TOK; }
+"=>"           { return IMPLIES_TOK; }
 
  /* CORE THEORY. But not on pg 29. */
 "distinct"      { return DISTINCT_TOK; }  // variadic
@@ -268,7 +268,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "select"        { return SELECT_TOK; }
 "store"         { return STORE_TOK; }
 
-({LETTER}|{OPCHAR})({ANYTHING})*	{return lookup(smt2text);}
+({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|([^\|]|\n)*\| {return lookup(smt2text);}
 
 . { smt2error("Illegal input character."); }
