@@ -74,37 +74,37 @@
     else if (stp::GlobalParserInterface->isBitVectorFunction(s))
     {
       smt2lval.str = new std::string(s);
-      if (cleaned) 
+      if (cleaned)
         free (cleaned);
       return  BITVECTOR_FUNCTIONID_TOK;
     }
     else if (stp::GlobalParserInterface->isBooleanFunction(s))
     {
        smt2lval.str = new std::string(s);
-       if (cleaned) 
+       if (cleaned)
          free (cleaned);
        return  BOOLEAN_FUNCTIONID_TOK;
     }
 
     if (found)
     {
-       if (cleaned) 
+       if (cleaned)
          free (cleaned);
 
       // Check valuesize to see if it's a prop var.  I don't like doing
       // type determination in the lexer, but it's easier than rewriting
-      // the whole grammar to eliminate the term/formula distinction.  
+      // the whole grammar to eliminate the term/formula distinction.
       smt2lval.node = stp::GlobalParserInterface->newNode(nptr);
       if ((smt2lval.node)->GetType() == stp::BOOLEAN_TYPE)
         return FORMID_TOK;
-      else 
+      else
         return TERMID_TOK;
     }
     else
     {
       // it has not been seen before.
       smt2lval.str = new std::string(s);
-      if (cleaned) 
+      if (cleaned)
         free (cleaned);
       return STRING_TOK;
     }
@@ -124,7 +124,7 @@
 
 LETTER	([a-zA-Z])
 DIGIT	([0-9])
-OPCHAR	([~!@$%^&*\_\-+=<>\.?/]) 
+OPCHAR	([~!@$%^&*\_\-+=<>\.?/])
 
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
@@ -199,7 +199,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "pop"                     { return POP_TOK;}
 "push"                    { return PUSH_TOK;}
 "reset"                   { return RESET_TOK;}
-"reset-assertions"        { return RESET_ASSERTIONS_TOK;} 
+"reset-assertions"        { return RESET_ASSERTIONS_TOK;}
 "set-info"                { return NOTES_TOK;  }
 "set-logic"               { return LOGIC_TOK; }
 "set-option"              { return SET_OPTION_TOK; }
@@ -213,56 +213,56 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
-"true"          { return TRUE_TOK; } 
-"false"         { return FALSE_TOK; } 
-"not"           { return NOT_TOK; } 
-"and"           { return AND_TOK; } 
-"or"            { return OR_TOK; } 
-"xor"           { return XOR_TOK;}  
-"ite"           { return ITE_TOK;} // PARAMETRIC 
-"="             { return EQ_TOK;} 
-"=>"       		{ return IMPLIES_TOK; } 
+"true"          { return TRUE_TOK; }
+"false"         { return FALSE_TOK; }
+"not"           { return NOT_TOK; }
+"and"           { return AND_TOK; }
+"or"            { return OR_TOK; }
+"xor"           { return XOR_TOK;}
+"ite"           { return ITE_TOK;} // PARAMETRIC
+"="             { return EQ_TOK;}
+"=>"       		{ return IMPLIES_TOK; }
 
  /* CORE THEORY. But not on pg 29. */
 "distinct"      { return DISTINCT_TOK; }  // variadic
 "let"           { return LET_TOK; }
 
  /* Functions for QF_BV and QF_AUFBV.  */
-"bvshl"         { return BVLEFTSHIFT_1_TOK;} 
-"bvlshr"        { return BVRIGHTSHIFT_1_TOK;} 
-"bvashr"        { return BVARITHRIGHTSHIFT_TOK;} 
-"bvadd"         { return BVPLUS_TOK;} 
-"bvsub"         { return BVSUB_TOK;} 
-"bvnot"         { return BVNOT_TOK;} 
-"bvmul"         { return BVMULT_TOK;} 
-"bvudiv"        { return BVDIV_TOK;} 
-"bvsdiv"        { return SBVDIV_TOK;} 
-"bvurem"        { return BVMOD_TOK;}  
-"bvsrem"        { return SBVREM_TOK;} 
-"bvsmod"        { return SBVMOD_TOK;} 
-"bvneg"         { return BVNEG_TOK;} 
-"bvand"         { return BVAND_TOK;} 
-"bvor"          { return BVOR_TOK;} 
-"bvxor"         { return BVXOR_TOK;} 
-"bvnand"        { return BVNAND_TOK;} 
-"bvnor"         { return BVNOR_TOK;} 
-"bvxnor"        { return BVXNOR_TOK;} 
-"concat"        { return BVCONCAT_TOK;} 
-"extract"       { return BVEXTRACT_TOK;} 
-"bvult"         { return BVLT_TOK;} 
-"bvugt"         { return BVGT_TOK;} 
-"bvule"         { return BVLE_TOK;} 
-"bvuge"         { return BVGE_TOK;} 
-"bvslt"         { return BVSLT_TOK;} 
-"bvsgt"         { return BVSGT_TOK;} 
-"bvsle"         { return BVSLE_TOK;} 
-"bvsge"         { return BVSGE_TOK;} 
-"bvcomp"        { return BVCOMP_TOK;} 
-"zero_extend"   { return BVZX_TOK;} 
-"sign_extend"   { return BVSX_TOK;}  
-"repeat"        { return BVREPEAT_TOK;}  
-"rotate_left"   { return BVROTATE_LEFT_TOK;} 
-"rotate_right"  { return BVROTATE_RIGHT_TOK;}  
+"bvshl"         { return BVLEFTSHIFT_1_TOK;}
+"bvlshr"        { return BVRIGHTSHIFT_1_TOK;}
+"bvashr"        { return BVARITHRIGHTSHIFT_TOK;}
+"bvadd"         { return BVPLUS_TOK;}
+"bvsub"         { return BVSUB_TOK;}
+"bvnot"         { return BVNOT_TOK;}
+"bvmul"         { return BVMULT_TOK;}
+"bvudiv"        { return BVDIV_TOK;}
+"bvsdiv"        { return SBVDIV_TOK;}
+"bvurem"        { return BVMOD_TOK;}
+"bvsrem"        { return SBVREM_TOK;}
+"bvsmod"        { return SBVMOD_TOK;}
+"bvneg"         { return BVNEG_TOK;}
+"bvand"         { return BVAND_TOK;}
+"bvor"          { return BVOR_TOK;}
+"bvxor"         { return BVXOR_TOK;}
+"bvnand"        { return BVNAND_TOK;}
+"bvnor"         { return BVNOR_TOK;}
+"bvxnor"        { return BVXNOR_TOK;}
+"concat"        { return BVCONCAT_TOK;}
+"extract"       { return BVEXTRACT_TOK;}
+"bvult"         { return BVLT_TOK;}
+"bvugt"         { return BVGT_TOK;}
+"bvule"         { return BVLE_TOK;}
+"bvuge"         { return BVGE_TOK;}
+"bvslt"         { return BVSLT_TOK;}
+"bvsgt"         { return BVSGT_TOK;}
+"bvsle"         { return BVSLE_TOK;}
+"bvsge"         { return BVSGE_TOK;}
+"bvcomp"        { return BVCOMP_TOK;}
+"zero_extend"   { return BVZX_TOK;}
+"sign_extend"   { return BVSX_TOK;}
+"repeat"        { return BVREPEAT_TOK;}
+"rotate_left"   { return BVROTATE_LEFT_TOK;}
+"rotate_right"  { return BVROTATE_RIGHT_TOK;}
 
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }
