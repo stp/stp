@@ -1600,7 +1600,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(
 
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
-    const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& support,
+    const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& /*support*/,
     const ASTNode& xN, const ASTNode& yN, vector<list<BBNode>>& products,
     const ASTNode& n)
 {
