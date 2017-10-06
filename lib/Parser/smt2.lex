@@ -52,12 +52,12 @@
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
     if (s[0] == '|' && s[(len = strlen(s))-1] == '|')
-      {
-        cleaned = (char*) malloc(len);
-        strncpy(cleaned,s+1,len-2); // chop off first and last characters.
-        cleaned[len-2] = '\0';
-        s = cleaned;
-      }
+    {
+      cleaned = (char*) malloc(len);
+      strncpy(cleaned,s+1,len-2); // chop off first and last characters.
+      cleaned[len-2] = '\0';
+      s = cleaned;
+    }
 
     stp::ASTNode nptr;
     bool found = false;
