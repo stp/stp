@@ -48,10 +48,133 @@
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
 
-  using namespace stp;
   using std::cout;
   using std::cerr;
   using std::endl;
+
+  using stp::SYMBOL;       //!< Named expression (or variable), i.e. created via 'vc_varExpr'.
+  using stp::BVNOT;        //!< Bitvector bitwise-not
+  using stp::BVCONCAT;     //!< Bitvector concatenation
+  using stp::BVOR;         //!< Bitvector bitwise-or
+  using stp::BVAND;        //!< Bitvector bitwise-and
+  using stp::BVXOR;        //!< Bitvector bitwise-xor
+  using stp::BVNAND;       //!< Bitvector bitwise not-and; OR nand (TODO: does this still exist?)
+  using stp::BVNOR;        //!< Bitvector bitwise not-or; OR nor (TODO: does this still exist?)
+  using stp::BVXNOR;       //!< Bitvector bitwise not-xor; OR xnor (TODO: does this still exist?)
+  using stp::BVEXTRACT;    //!< Bitvector extraction, i.e. via 'vc_bvExtract'.
+  using stp::BVLEFTSHIFT;  //!< Bitvector left-shift
+  using stp::BVRIGHTSHIFT; //!< Bitvector right-right
+  using stp::BVSRSHIFT;    //!< Bitvector signed right-shift
+  using stp::BVPLUS;       //!< Bitvector addition
+  using stp::BVSUB;        //!< Bitvector subtraction
+  using stp::BVUMINUS;     //!< Bitvector unary minus; OR negate expression
+  using stp::BVMULT;       //!< Bitvector multiplication
+  using stp::BVDIV;        //!< Bitvector division
+  using stp::BVMOD;        //!< Bitvector modulo operation
+  using stp::SBVDIV;       //!< Signed bitvector division
+  using stp::SBVREM;       //!< Signed bitvector remainder
+  using stp::SBVMOD;       //!< Signed bitvector modulo operation
+  using stp::BVSX;         //!< Bitvector signed extend
+  using stp::BVZX;         //!< Bitvector zero extend
+  using stp::ITE;          //!< If-then-else
+  using stp::BOOLEXTRACT;  //!< Bitvector boolean extraction
+  using stp::BVLT;         //!< Bitvector less-than
+  using stp::BVLE;         //!< Bitvector less-equals
+  using stp::BVGT;         //!< Bitvector greater-than
+  using stp::BVGE;         //!< Bitvector greater-equals
+  using stp::BVSLT;        //!< Signed bitvector less-than
+  using stp::BVSLE;        //!< Signed bitvector less-equals
+  using stp::BVSGT;        //!< Signed bitvector greater-than
+  using stp::BVSGE;        //!< Signed bitvector greater-equals
+  using stp::EQ;           //!< Equality comparator
+  using stp::FALSE;        //!< Constant false boolean expression
+  using stp::TRUE;         //!< Constant true boolean expression
+  using stp::NOT;          //!< Logical-not boolean expression
+  using stp::AND;          //!< Logical-and boolean expression
+  using stp::OR;           //!< Logical-or boolean expression
+  using stp::NAND;         //!< Logical-not-and boolean expression (TODO: Does this still exist?)
+  using stp::NOR;          //!< Logical-not-or boolean expression (TODO: Does this still exist?)
+  using stp::XOR;          //!< Logical-xor (either-or) boolean expression
+  using stp::IFF;          //!< If-and-only-if boolean expression
+  using stp::IMPLIES;      //!< Implication boolean expression
+  using stp::PARAMBOOL;    //!< Parameterized boolean expression
+  using stp::READ;         //!< Array read expression
+  using stp::WRITE;        //!< Array write expression
+  using stp::ARRAY;        //!< Array creation expression
+  using stp::BITVECTOR;    //!< Bitvector creation expression
+  using stp::BOOLEAN;      //!< Boolean creation expression
+
+  using stp::UNDEFINED;    //!< An undefined expression.
+  using stp::SYMBOL;       //!< Named expression (or variable), i.e. created via 'vc_varExpr'.
+  using stp::BVCONST;      //!< Bitvector constant expression, i.e. created via 'vc_bvConstExprFromInt'.
+  using stp::BVNOT;        //!< Bitvector bitwise-not
+  using stp::BVCONCAT;     //!< Bitvector concatenation
+  using stp::BVOR;         //!< Bitvector bitwise-or
+  using stp::BVAND;        //!< Bitvector bitwise-and
+  using stp::BVXOR;        //!< Bitvector bitwise-xor
+  using stp::BVNAND;       //!< Bitvector bitwise not-and; OR nand (TODO: does this still exist?)
+  using stp::BVNOR;        //!< Bitvector bitwise not-or; OR nor (TODO: does this still exist?)
+  using stp::BVXNOR;       //!< Bitvector bitwise not-xor; OR xnor (TODO: does this still exist?)
+  using stp::BVEXTRACT;    //!< Bitvector extraction, i.e. via 'vc_bvExtract'.
+  using stp::BVLEFTSHIFT;  //!< Bitvector left-shift
+  using stp::BVRIGHTSHIFT; //!< Bitvector right-right
+  using stp::BVSRSHIFT;    //!< Bitvector signed right-shift
+  using stp::BVPLUS;       //!< Bitvector addition
+  using stp::BVSUB;        //!< Bitvector subtraction
+  using stp::BVUMINUS;     //!< Bitvector unary minus; OR negate expression
+  using stp::BVMULT;       //!< Bitvector multiplication
+  using stp::BVDIV;        //!< Bitvector division
+  using stp::BVMOD;        //!< Bitvector modulo operation
+  using stp::SBVDIV;       //!< Signed bitvector division
+  using stp::SBVREM;       //!< Signed bitvector remainder
+  using stp::SBVMOD;       //!< Signed bitvector modulo operation
+  using stp::BVSX;         //!< Bitvector signed extend
+  using stp::BVZX;         //!< Bitvector zero extend
+  using stp::ITE;          //!< If-then-else
+  using stp::BOOLEXTRACT;  //!< Bitvector boolean extraction
+  using stp::BVLT;         //!< Bitvector less-than
+  using stp::BVLE;         //!< Bitvector less-equals
+  using stp::BVGT;         //!< Bitvector greater-than
+  using stp::BVGE;         //!< Bitvector greater-equals
+  using stp::BVSLT;        //!< Signed bitvector less-than
+  using stp::BVSLE;        //!< Signed bitvector less-equals
+  using stp::BVSGT;        //!< Signed bitvector greater-than
+  using stp::BVSGE;        //!< Signed bitvector greater-equals
+  using stp::EQ;           //!< Equality comparator
+  using stp::FALSE;        //!< Constant false boolean expression
+  using stp::TRUE;         //!< Constant true boolean expression
+  using stp::NOT;          //!< Logical-not boolean expression
+  using stp::AND;          //!< Logical-and boolean expression
+  using stp::OR;           //!< Logical-or boolean expression
+  using stp::NAND;         //!< Logical-not-and boolean expression (TODO: Does this still exist?)
+  using stp::NOR;          //!< Logical-not-or boolean expression (TODO: Does this still exist?)
+  using stp::XOR;          //!< Logical-xor (either-or) boolean expression
+  using stp::IFF;          //!< If-and-only-if boolean expression
+  using stp::IMPLIES;      //!< Implication boolean expression
+  using stp::PARAMBOOL;    //!< Parameterized boolean expression
+  using stp::READ;         //!< Array read expression
+  using stp::WRITE;        //!< Array write expression
+  using stp::ARRAY;        //!< Array creation expression
+  using stp::BITVECTOR;    //!< Bitvector creation expression
+  using stp::BOOLEAN;      //!< Boolean creation expression
+
+  using stp::NOT_DECLARED;
+  using stp::TO_BE_SATISFIABLE;
+  using stp::TO_BE_UNSATISFIABLE;
+  using stp::TO_BE_UNKNOWN;
+
+  using stp::BOOLEAN_TYPE;
+  using stp::BITVECTOR_TYPE;
+  using stp::ARRAY_TYPE;
+  using stp::UNKNOWN_TYPE;
+
+  using stp::SOLVER_INVALID;
+  using stp::SOLVER_VALID;
+  using stp::SOLVER_UNDECIDED;
+  using stp::SOLVER_TIMEOUT;
+  using stp::SOLVER_ERROR;
+  using stp::SOLVER_UNSATISFIABLE;
+  using stp::SOLVER_SATISFIABLE;
 
   // Suppress the bogus warning suppression in bison (it generates
   // compile error)
@@ -221,7 +344,7 @@
 %%
 cmd: commands END
 {
-       GlobalParserInterface->cleanUp();
+       stp::GlobalParserInterface->cleanUp();
        YYACCEPT;
 }
 ;
@@ -235,98 +358,98 @@ commands: commands LPAREN_TOK cmdi RPAREN_TOK
 cmdi:
      ASSERT_TOK an_formula
     {
-      GlobalParserInterface->AddAssert(*$2);
-      GlobalParserInterface->deleteNode($2);
-      GlobalParserInterface->success();
+      stp::GlobalParserInterface->AddAssert(*$2);
+      stp::GlobalParserInterface->deleteNode($2);
+      stp::GlobalParserInterface->success();
     }
 |
      CHECK_SAT_TOK
     {
-      GlobalParserInterface->checkSat(GlobalParserInterface->getAssertVector());
+      stp::GlobalParserInterface->checkSat(stp::GlobalParserInterface->getAssertVector());
     }
 |
      CHECK_SAT_ASSUMING_TOK LPAREN_TOK an_term RPAREN_TOK
     {
-      GlobalParserInterface->unsupported();
+      stp::GlobalParserInterface->unsupported();
     }
 |
      DECLARE_CONST_TOK LPAREN_TOK an_term RPAREN_TOK
     {
-      GlobalParserInterface->unsupported();
+      stp::GlobalParserInterface->unsupported();
     }
 |
      DECLARE_FUNCTION_TOK var_decl
     {
-      GlobalParserInterface->success();
+      stp::GlobalParserInterface->success();
     }
 |
      DEFINE_FUNCTION_TOK function_def
     {
-      GlobalParserInterface->success();
+      stp::GlobalParserInterface->success();
     }
 |
      ECHO_TOK STRING_TOK
     {
       std::cout << "\"" << *$2  << "\"" << endl;
       delete $2;
-      GlobalParserInterface->success();
+      stp::GlobalParserInterface->success();
     }
 |
      EXIT_TOK
     {
-       GlobalParserInterface->cleanUp();
-       GlobalParserInterface->success();
+       stp::GlobalParserInterface->cleanUp();
+       stp::GlobalParserInterface->success();
        YYACCEPT;
     }
 |
      GET_MODEL_TOK
     {
-       GlobalParserInterface->getModel();
+       stp::GlobalParserInterface->getModel();
     }
 |
      GET_VALUE_TOK LPAREN_TOK an_mixed RPAREN_TOK
     {
-      GlobalParserInterface->getValue(*$3);
+      stp::GlobalParserInterface->getValue(*$3);
       delete $3;
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK
     {
-       GlobalParserInterface->setOption(*$3,*$4);
+       stp::GlobalParserInterface->setOption(*$3,*$4);
        delete $3;
        delete $4;
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK
     {
-       GlobalParserInterface->setOption(*$3,"false");
+       stp::GlobalParserInterface->setOption(*$3,"false");
        delete $3;
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK
     {
-       GlobalParserInterface->setOption(*$3,"true");
+       stp::GlobalParserInterface->setOption(*$3,"true");
        delete $3;
     }
 |
      PUSH_TOK NUMERAL_TOK
     {
         for (unsigned i=0; i < $2;i++)
-            GlobalParserInterface->push();
-        GlobalParserInterface->success();
+            stp::GlobalParserInterface->push();
+        stp::GlobalParserInterface->success();
     }
 |
      POP_TOK NUMERAL_TOK
     {
         for (unsigned i=0; i < $2;i++)
-            GlobalParserInterface->pop();
-        GlobalParserInterface->success();
+            stp::GlobalParserInterface->pop();
+        stp::GlobalParserInterface->success();
     }
 |
      RESET_TOK
     {
-       GlobalParserInterface->reset();
-       GlobalParserInterface->success();
+       stp::GlobalParserInterface->reset();
+       stp::GlobalParserInterface->success();
     }
 |
      LOGIC_TOK STRING_TOK
@@ -336,7 +459,7 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AUFBV"))) {
         yyerror("Wrong input logic");
       }
-      GlobalParserInterface->success();
+      stp::GlobalParserInterface->success();
       delete $2;
     }
 |
@@ -356,8 +479,8 @@ cmdi:
 function_param:
 LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  $$ = new ASTNode(GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
-  GlobalParserInterface->addSymbol(*$$);
+  $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
+  stp::GlobalParserInterface->addSymbol(*$$);
   $$->SetIndexWidth(0);
   $$->SetValueWidth($6);
   delete $2;
@@ -389,11 +512,11 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
     yyerror(msg);
   }
 
-  GlobalParserInterface->storeFunction(*$1, *$3, *$10);
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$10);
 
   // Next time the variable is used, we want it to be fresh.
   for (size_t i = 0; i < $3->size(); i++)
-    GlobalParserInterface->removeSymbol((*$3)[i]);
+    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
   delete $1;
   delete $3;
@@ -402,11 +525,11 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 {
-  GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
 
   // Next time the variable is used, we want it to be fresh.
   for (size_t i = 0; i < $3->size(); i++)
-   GlobalParserInterface->removeSymbol((*$3)[i]);
+   stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
   delete $1;
   delete $3;
@@ -416,7 +539,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 {
   ASTVec empty;
-  GlobalParserInterface->storeFunction(*$1, empty, *$5);
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
   delete $1;
   delete $5;
@@ -432,7 +555,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   }
 
   ASTVec empty;
-  GlobalParserInterface->storeFunction(*$1,empty, *$9);
+  stp::GlobalParserInterface->storeFunction(*$1,empty, *$9);
 
   delete $1;
   delete $9;
@@ -440,20 +563,20 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  GlobalParserInterface->unsupported();
+  stp::GlobalParserInterface->unsupported();
   delete $1;
   delete $18;
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  GlobalParserInterface->unsupported();
+  stp::GlobalParserInterface->unsupported();
   delete $1;
   delete $17;
 
 #if 0
-  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  GlobalParserInterface->addSymbol(s);
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
   unsigned int index_len = $9;
   unsigned int value_len = $14;
   if(index_len > 0) {
@@ -471,7 +594,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
   }
 
   ASTVec empty;
-  GlobalParserInterface->storeFunction(*$1,empty, *$17);
+  stp::GlobalParserInterface->storeFunction(*$1,empty, *$17);
 #endif
 
 }
@@ -483,11 +606,11 @@ STRING_TOK {
 
   std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
   if (0 == strcmp($1->c_str(), "sat"))
-      input_status = TO_BE_SATISFIABLE;
+      stp::input_status = TO_BE_SATISFIABLE;
   else if (0 == strcmp($1->c_str(), "unsat"))
-    input_status = TO_BE_UNSATISFIABLE;
+    stp::input_status = TO_BE_UNSATISFIABLE;
   else if (0 == strcmp($1->c_str(), "unknown"))
-      input_status = TO_BE_UNKNOWN;
+      stp::input_status = TO_BE_UNKNOWN;
   else
       yyerror($1->c_str());
   delete $1;
@@ -514,8 +637,8 @@ SOURCE_TOK
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  GlobalParserInterface->addSymbol(s);
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   s.SetIndexWidth(0);
@@ -524,30 +647,30 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
-  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
-  GlobalParserInterface->addSymbol(s);
+  stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  ASTNode s = GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  GlobalParserInterface->addSymbol(s);
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
   unsigned int index_len = $9;
   unsigned int value_len = $14;
   if(index_len > 0) {
     s.SetIndexWidth($9);
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    stp::FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
 
   if(value_len > 0) {
     s.SetValueWidth($14);
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    stp::FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
   delete $1;
 }
@@ -559,7 +682,7 @@ an_formula
   $$ = new ASTVec;
   if ($1 != NULL) {
     $$->push_back(*$1);
-    GlobalParserInterface->deleteNode($1);
+    stp::GlobalParserInterface->deleteNode($1);
   }
 }
 |
@@ -568,7 +691,7 @@ an_term
   $$ = new ASTVec;
   if ($1 != NULL) {
     $$->push_back(*$1);
-    GlobalParserInterface->deleteNode($1);
+    stp::GlobalParserInterface->deleteNode($1);
   }
 }
 |
@@ -577,7 +700,7 @@ an_mixed an_formula
   if ($1 != NULL && $2 != NULL) {
     $1->push_back(*$2);
     $$ = $1;
-    GlobalParserInterface->deleteNode($2);
+    stp::GlobalParserInterface->deleteNode($2);
   }
 }
 |
@@ -586,7 +709,7 @@ an_mixed an_term
   if ($1 != NULL && $2 != NULL) {
     $1->push_back(*$2);
     $$ = $1;
-    GlobalParserInterface->deleteNode($2);
+    stp::GlobalParserInterface->deleteNode($2);
   }
 };
 
@@ -598,7 +721,7 @@ an_formula
   $$ = new ASTVec;
   if ($1 != NULL) {
     $$->push_back(*$1);
-    GlobalParserInterface->deleteNode($1);
+    stp::GlobalParserInterface->deleteNode($1);
   }
 }
 |
@@ -607,7 +730,7 @@ an_formulas an_formula
   if ($1 != NULL && $2 != NULL) {
     $1->push_back(*$2);
     $$ = $1;
-    GlobalParserInterface->deleteNode($2);
+    stp::GlobalParserInterface->deleteNode($2);
   }
 }
 ;
@@ -615,27 +738,27 @@ an_formulas an_formula
 an_formula:
 TRUE_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(TRUE));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(TRUE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
 }
 | FALSE_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(FALSE));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(FALSE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
 }
 | FORMID_TOK
 {
-  $$ = GlobalParserInterface->newNode(*$1);
-  GlobalParserInterface->deleteNode($1);
+  $$ = stp::GlobalParserInterface->newNode(*$1);
+  stp::GlobalParserInterface->deleteNode($1);
 }
 | LPAREN_TOK EQ_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(EQ,*$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(EQ,*$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode($3);
-  GlobalParserInterface->deleteNode($4);
+  stp::GlobalParserInterface->deleteNode($3);
+  stp::GlobalParserInterface->deleteNode($4);
 }
 | LPAREN_TOK DISTINCT_TOK an_terms RPAREN_TOK
 {
@@ -649,7 +772,7 @@ TRUE_TOK
   {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
       ASTNode n =
-        GlobalParserInterface->nf->CreateNode(NOT, GlobalParserInterface->CreateNode(EQ, *it, *it2));
+        stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(EQ, *it, *it2));
 
       forms.push_back(n);
     }
@@ -659,8 +782,8 @@ TRUE_TOK
     FatalError("empty distinct");
 
   $$ = (forms.size() == 1) ?
-    GlobalParserInterface->newNode(forms[0]) :
-    GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(AND, forms));
+    stp::GlobalParserInterface->newNode(forms[0]) :
+    stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, forms));
 
   delete $3;
 }
@@ -674,7 +797,7 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (GlobalParserInterface->nf->CreateNode(NOT, GlobalParserInterface->CreateNode(IFF, *it, *it2)));
+      ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(IFF, *it, *it2)));
       forms.push_back(n);
     }
   }
@@ -683,66 +806,66 @@ TRUE_TOK
     FatalError("empty distinct");
 
   $$ = (forms.size() == 1) ?
-    GlobalParserInterface->newNode(forms[0]) :
-    GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(AND, forms));
+    stp::GlobalParserInterface->newNode(forms[0]) :
+    stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, forms));
 
   delete $3;
 }
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVSLT, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSLT, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode($3);
-  GlobalParserInterface->deleteNode($4);
+  stp::GlobalParserInterface->deleteNode($3);
+  stp::GlobalParserInterface->deleteNode($4);
 }
 | LPAREN_TOK BVSLE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVSLE, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSLE, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVSGT, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSGT, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVSGE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVSGE, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSGE, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVLT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVLT, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVLT, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVLE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVLE, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVLE, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVGT_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVGT, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVGT, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode * n = GlobalParserInterface->newNode(BVGE, *$3, *$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVGE, *$3, *$4);
   $$ = n;
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK an_formula RPAREN_TOK
 {
@@ -750,63 +873,63 @@ TRUE_TOK
 }
 | LPAREN_TOK NOT_TOK an_formula RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateNode(NOT, *$3));
-    GlobalParserInterface->deleteNode( $3);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(NOT, *$3));
+    stp::GlobalParserInterface->deleteNode( $3);
 }
 | LPAREN_TOK IMPLIES_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(IMPLIES, *$3, *$4);
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  $$ = stp::GlobalParserInterface->newNode(IMPLIES, *$3, *$4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateNode(ITE, *$3, *$4, *$5));
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
-  GlobalParserInterface->deleteNode( $5);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(ITE, *$3, *$4, *$5));
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $5);
 }
 | LPAREN_TOK AND_TOK an_formulas RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(AND, *$3));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, *$3));
   delete $3;
 }
 | LPAREN_TOK OR_TOK an_formulas RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateNode(OR, *$3));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(OR, *$3));
   delete $3;
 }
 | LPAREN_TOK XOR_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(XOR, *$3, *$4);
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  $$ = stp::GlobalParserInterface->newNode(XOR, *$3, *$4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK EQ_TOK an_formula an_formula RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(IFF, *$3, *$4);
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  $$ = stp::GlobalParserInterface->newNode(IFF, *$3, *$4);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK
   {
-    GlobalParserInterface->letMgr->push();  // TODO this isn't going to clear properly if it's an_term later.
+    stp::GlobalParserInterface->letMgr->push();  // TODO this isn't going to clear properly if it's an_term later.
   }
   lets RPAREN_TOK an_formula RPAREN_TOK
   {
     $$ = $7;
-    GlobalParserInterface->letMgr->pop();
+    stp::GlobalParserInterface->letMgr->pop();
   }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$2,*$3));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
   delete $2;
   delete $3;
 }
 | BOOLEAN_FUNCTIONID_TOK
 {
   ASTVec empty;
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
   delete $1;
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
@@ -817,15 +940,15 @@ TRUE_TOK
   */
 
   // TODO, will fail if name is already defined?
-  ASTNode s(GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
+  ASTNode s(stp::GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
   s.SetIndexWidth($3->GetIndexWidth());
   s.SetValueWidth($3->GetValueWidth());
 
-  GlobalParserInterface->addSymbol(s);
+  stp::GlobalParserInterface->addSymbol(s);
 
-  ASTNode n = GlobalParserInterface->CreateNode(IFF,s, *$3);
+  ASTNode n = stp::GlobalParserInterface->CreateNode(IFF,s, *$3);
 
-  GlobalParserInterface->AddAssert(n);
+  stp::GlobalParserInterface->AddAssert(n);
 
   delete $5;
 
@@ -847,9 +970,9 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
+  stp::GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
   delete $2;
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 | LPAREN_TOK STRING_TOK an_term RPAREN_TOK
 {
@@ -861,9 +984,9 @@ let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
   //
   //2. Ensure that LET variables are not
   //2. defined more than once
-  GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
+  stp::GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
   delete $2;
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $3);
 
 }
 ;
@@ -874,7 +997,7 @@ an_term
   $$ = new ASTVec;
   if ($1 != NULL) {
     $$->push_back(*$1);
-    GlobalParserInterface->deleteNode( $1);
+    stp::GlobalParserInterface->deleteNode( $1);
 
   }
 }
@@ -884,7 +1007,7 @@ an_terms an_term
   if ($1 != NULL && $2 != NULL) {
     $1->push_back(*$2);
     $$ = $1;
-    GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $2);
   }
 }
 ;
@@ -892,8 +1015,8 @@ an_terms an_term
 an_term:
 TERMID_TOK
 {
-  $$ = GlobalParserInterface->newNode((*$1));
-  GlobalParserInterface->deleteNode( $1);
+  $$ = stp::GlobalParserInterface->newNode((*$1));
+  stp::GlobalParserInterface->deleteNode( $1);
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {
@@ -907,10 +1030,10 @@ TERMID_TOK
   ASTNode index = *$3;
   unsigned int width = array.GetValueWidth();
   ASTNode * n =
-    GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
+    stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 | STORE_TOK an_term an_term an_term
 {
@@ -919,12 +1042,12 @@ TERMID_TOK
   ASTNode array = *$2;
   ASTNode index = *$3;
   ASTNode writeval = *$4;
-  ASTNode write_term = GlobalParserInterface->nf->CreateArrayTerm(WRITE,$2->GetIndexWidth(),width,array,index,writeval);
-  ASTNode * n = GlobalParserInterface->newNode(write_term);
+  ASTNode write_term = stp::GlobalParserInterface->nf->CreateArrayTerm(WRITE,$2->GetIndexWidth(),width,array,index,writeval);
+  ASTNode * n = stp::GlobalParserInterface->newNode(write_term);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 | LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
@@ -935,225 +1058,225 @@ TERMID_TOK
   if((unsigned)$4 >= $7->GetValueWidth())
     yyerror("Parsing: Wrong width in BVEXTRACT\n");
 
-  ASTNode hi  =  GlobalParserInterface->CreateBVConst(32, $4);
-  ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
-  ASTNode output = GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$7,hi,low);
-  ASTNode * n = GlobalParserInterface->newNode(output);
+  ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $4);
+  ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $5);
+  ASTNode output = stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$7,hi,low);
+  ASTNode * n = stp::GlobalParserInterface->newNode(output);
   $$ = n;
-    GlobalParserInterface->deleteNode( $7);
+    stp::GlobalParserInterface->deleteNode( $7);
 }
 | LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
   unsigned w = $6->GetValueWidth() + $4;
-  ASTNode width = GlobalParserInterface->CreateBVConst(32,w);
-  ASTNode *n =  GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVZX,w,*$6,width));
+  ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
+  ASTNode *n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$6,width));
   $$ = n;
-  GlobalParserInterface->deleteNode( $6);
+  stp::GlobalParserInterface->deleteNode( $6);
 }
 |  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
   unsigned w = $6->GetValueWidth() + $4;
-  ASTNode width = GlobalParserInterface->CreateBVConst(32,w);
-  ASTNode *n =  GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVSX,w,*$6,width));
+  ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
+  ASTNode *n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$6,width));
   $$ = n;
-  GlobalParserInterface->deleteNode( $6);
+  stp::GlobalParserInterface->deleteNode( $6);
 }
 
 |  ITE_TOK an_formula an_term an_term
 {
   const unsigned int width = $3->GetValueWidth();
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
-  GlobalParserInterface->deleteNode( $4);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
 }
 |  BVCONCAT_TOK an_term an_term
 {
   const unsigned int width = $2->GetValueWidth() + $3->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVNOT_TOK an_term
 {
   //this is the BVNEG (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $2);
 }
 |  BVNEG_TOK an_term
 {
   //this is the BVUMINUS term in CVCL langauge
   unsigned width = $2->GetValueWidth();
-  ASTNode * n =  GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$2));
+  ASTNode * n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$2));
   $$ = n;
-    GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $2);
 }
 |  BVAND_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVAND, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVAND, width, *$2, *$3);
   $$ = n;
-    GlobalParserInterface->deleteNode( $2);
-    GlobalParserInterface->deleteNode( $3);
+    stp::GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVOR_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVOR, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVOR, width, *$2, *$3);
   $$ = n;
-    GlobalParserInterface->deleteNode( $2);
-    GlobalParserInterface->deleteNode( $3);
+    stp::GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVXOR_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVXOR, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVXOR, width, *$2, *$3);
   $$ = n;
-    GlobalParserInterface->deleteNode( $2);
-    GlobalParserInterface->deleteNode( $3);
+    stp::GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $3);
 }
 | BVXNOR_TOK an_term an_term
 {
 //   (bvxnor s t) abbreviates (bvor (bvand s t) (bvand (bvnot s) (bvnot t)))
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(
-  GlobalParserInterface->nf->CreateTerm( BVOR, width,
-    GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3),
-      GlobalParserInterface->nf->CreateTerm(BVAND, width,
-        GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2),
-        GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$3)
+  ASTNode * n = stp::GlobalParserInterface->newNode(
+  stp::GlobalParserInterface->nf->CreateTerm( BVOR, width,
+    stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3),
+      stp::GlobalParserInterface->nf->CreateTerm(BVAND, width,
+        stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2),
+        stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$3)
       )
     )
   );
 
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVCOMP_TOK an_term an_term
 {
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(ITE, 1,
-  GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
-  GlobalParserInterface->CreateOneConst(1),
-  GlobalParserInterface->CreateZeroConst(1)));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(ITE, 1,
+  stp::GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
+  stp::GlobalParserInterface->CreateOneConst(1),
+  stp::GlobalParserInterface->CreateZeroConst(1)));
 
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVSUB_TOK an_term an_term
 {
   const unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVSUB, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSUB, width, *$2, *$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVPLUS_TOK an_term an_term
 {
   const unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVPLUS, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVPLUS, width, *$2, *$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 
 }
 |  BVMULT_TOK an_term an_term
 {
   const unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVMULT, width, *$2, *$3));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVMULT, width, *$2, *$3));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |      BVDIV_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVDIV, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVDIV, width, *$2, *$3);
   $$ = n;
 
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |      BVMOD_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVMOD, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVMOD, width, *$2, *$3);
   $$ = n;
 
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |      SBVDIV_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(SBVDIV, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(SBVDIV, width, *$2, *$3);
   $$ = n;
 
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |      SBVREM_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(SBVREM, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(SBVREM, width, *$2, *$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |      SBVMOD_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(SBVMOD, width, *$2, *$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(SBVMOD, width, *$2, *$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVNAND_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVNOR_TOK an_term an_term
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
+  ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVLEFTSHIFT_1_TOK an_term an_term
 {
   // shifting left by who know how much?
   unsigned int w = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVLEFTSHIFT,w,*$2,*$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVLEFTSHIFT,w,*$2,*$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 | BVRIGHTSHIFT_1_TOK an_term an_term
 {
   // shifting right by who know how much?
   unsigned int w = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVRIGHTSHIFT,w,*$2,*$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVRIGHTSHIFT,w,*$2,*$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 |  BVARITHRIGHTSHIFT_TOK an_term an_term
 {
   // shifting arithmetic right by who know how much?
   unsigned int w = $2->GetValueWidth();
-  ASTNode * n = GlobalParserInterface->newNode(BVSRSHIFT,w,*$2,*$3);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVSRSHIFT,w,*$2,*$3);
   $$ = n;
-  GlobalParserInterface->deleteNode( $2);
-  GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
 }
 | LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
@@ -1166,15 +1289,15 @@ TERMID_TOK
   }
   else
   {
-    ASTNode high = GlobalParserInterface->CreateBVConst(32,width-1);
-    ASTNode zero = GlobalParserInterface->CreateBVConst(32,0);
-    ASTNode cut = GlobalParserInterface->CreateBVConst(32,width-rotate);
-    ASTNode cutMinusOne = GlobalParserInterface->CreateBVConst(32,width-rotate-1);
+    ASTNode high = stp::GlobalParserInterface->CreateBVConst(32,width-1);
+    ASTNode zero = stp::GlobalParserInterface->CreateBVConst(32,0);
+    ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,width-rotate);
+    ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,width-rotate-1);
 
-    ASTNode top =  GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,high, cut);
-    ASTNode bottom =  GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,cutMinusOne,zero);
-    n =  GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    GlobalParserInterface->deleteNode( $6);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,high, cut);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,cutMinusOne,zero);
+    n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
+    stp::GlobalParserInterface->deleteNode( $6);
   }
   $$ = n;
 }
@@ -1189,15 +1312,15 @@ TERMID_TOK
   }
   else
   {
-    ASTNode high = GlobalParserInterface->CreateBVConst(32,width-1);
-    ASTNode zero = GlobalParserInterface->CreateBVConst(32,0);
-    ASTNode cut = GlobalParserInterface->CreateBVConst(32,rotate);
-    ASTNode cutMinusOne = GlobalParserInterface->CreateBVConst(32,rotate-1);
+    ASTNode high = stp::GlobalParserInterface->CreateBVConst(32,width-1);
+    ASTNode zero = stp::GlobalParserInterface->CreateBVConst(32,0);
+    ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,rotate);
+    ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,rotate-1);
 
-    ASTNode bottom =  GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,cutMinusOne, zero);
-    ASTNode top =  GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,high,cut);
-    n =  GlobalParserInterface->newNode(GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    GlobalParserInterface->deleteNode( $6);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,cutMinusOne, zero);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,high,cut);
+    n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
+    stp::GlobalParserInterface->deleteNode( $6);
   }
   $$ = n;
 }
@@ -1205,41 +1328,41 @@ TERMID_TOK
 {
   unsigned count = $4;
   if (count < 1)
-      FatalError("One or more repeats please");
+      stp::FatalError("One or more repeats please");
 
   unsigned w = $6->GetValueWidth();
   ASTNode n =  *$6;
 
   for (unsigned i =1; i < count; i++)
   {
-        n = GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
+        n = stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
   }
-  $$ = GlobalParserInterface->newNode(n);
-  GlobalParserInterface->deleteNode( $6);
+  $$ = stp::GlobalParserInterface->newNode(n);
+  stp::GlobalParserInterface->deleteNode( $6);
 }
 | UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$2, 10, $3));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
   $$->SetValueWidth($3);
   delete $2;
 }
 | BVCONST_HEXIDECIMAL_TOK
 {
   unsigned width = $1->length()*4;
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 16, width));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
   $$->SetValueWidth(width);
   delete $1;
 }
 | BVCONST_BINARY_TOK
 {
   unsigned width = $1->length();
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->CreateBVConst(*$1, 2, width));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
   $$->SetValueWidth(width);
   delete $1;
 }
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$2,*$3));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
 
   if ($$->GetType() != BITVECTOR_TYPE)
       yyerror("Must be bitvector type");
@@ -1250,7 +1373,7 @@ TERMID_TOK
 | BITVECTOR_FUNCTIONID_TOK
 {
   ASTVec empty;
-  $$ = GlobalParserInterface->newNode(GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
 
   if ($$->GetType() != BITVECTOR_TYPE)
     yyerror("Must be bitvector type");
@@ -1261,28 +1384,28 @@ TERMID_TOK
 {
   /* This implements (! <an_term> :named foo) */
 
-  ASTNode s(GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
+  ASTNode s(stp::GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
   delete $5;
 
   s.SetIndexWidth($3->GetIndexWidth());
   s.SetValueWidth($3->GetValueWidth());
 
-  GlobalParserInterface->addSymbol(s);
+  stp::GlobalParserInterface->addSymbol(s);
 
-  ASTNode n = GlobalParserInterface->CreateNode(EQ,s, *$3);
+  ASTNode n = stp::GlobalParserInterface->CreateNode(EQ,s, *$3);
 
-  GlobalParserInterface->AddAssert(n);
+  stp::GlobalParserInterface->AddAssert(n);
 
   $$ = $3;
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK
   {
-    GlobalParserInterface->letMgr->push();
+    stp::GlobalParserInterface->letMgr->push();
   }
   lets RPAREN_TOK an_term RPAREN_TOK
   {
     $$ = $7;
-    GlobalParserInterface->letMgr->pop();
+    stp::GlobalParserInterface->letMgr->pop();
   }
 
 ;
