@@ -143,7 +143,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 <COMMENT>.    { /* stay in comment mode */ }
 
 <INITIAL>"\""   { BEGIN STRING_LITERAL;
-          _string_lit.erase(_string_lit.begin(),_string_lit.end()); }
+          _string_lit.clear(); }
 <STRING_LITERAL>"\"\""  {
             /* double quote is the only escape. */
           _string_lit.insert(_string_lit.end(),'"'); }
