@@ -62,7 +62,7 @@
   extern int smt2lex(void);
 
   int yyerror(const char *s) {
-    cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << std::endl;
+    cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << endl;
     return 1;
   }
 
@@ -267,7 +267,7 @@ cmdi:
 |
      ECHO_TOK STRING_TOK
     {
-      std::cout << "\"" << *$2  << "\"" << std::endl;
+      std::cout << "\"" << *$2  << "\"" << endl;
       delete $2;
       GlobalParserInterface->success();
     }
@@ -481,8 +481,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
 status:
 STRING_TOK {
 
- std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
-
+  std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
   if (0 == strcmp($1->c_str(), "sat"))
       input_status = TO_BE_SATISFIABLE;
   else if (0 == strcmp($1->c_str(), "unsat"))
