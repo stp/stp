@@ -48,8 +48,8 @@ TEST(y, one)
   printf("vc_query result = %d\n", x);
   vc_printCounterExample(vc);
 
-  Expr cex = vc_getCounterExample(vc, res);
-  // vc_printExpr(vc, cex);
+  vc_getCounterExample(vc, res);
+  // vc_printExpr(vc, counter_example);
   //
   vc_Destroy(vc);
   // ASSERT_TRUE(false && "FIXME: Actually test something");
