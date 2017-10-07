@@ -176,10 +176,6 @@
   using stp::SOLVER_UNSATISFIABLE;
   using stp::SOLVER_SATISFIABLE;
 
-  // Suppress the bogus warning suppression in bison (it generates
-  // compile error)
-#undef __GNUC_MINOR__
-
   extern char* smt2text;
   extern int smt2lineno;
   extern int smt2lex(void);
