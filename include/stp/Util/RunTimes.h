@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <vector>
 #include "stp/Util/Attributes.h"
 
 class RunTimes // not copyable
@@ -60,7 +61,17 @@ public:
     AlwaysTrue
   };
 
-  static std::string CategoryNames[];
+  std::vector<std::string> CategoryNames = {
+    "Transforming",           "Simplifying",
+    "Parsing",                "CNF Conversion",
+    "Bit Blasting",           "SAT Solving",
+    "Bitvector Solving",      "Variable Elimination",
+    "Sending to SAT Solver",  "Counter Example Generation",
+    "SAT Simplification",     "Constant Bit Propagation",
+    "Array Read Refinement",  "Applying Substitutions",
+    "Removing Unconstrained", "Pure Literals",
+    "ITE Contexts",           "AIG core simplification",
+    "Interval Propagation",   "Always True"};
 
   typedef std::pair<Category, long> Element;
 

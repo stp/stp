@@ -40,19 +40,6 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "minisat/utils/System.h"
 
-// BE VERY CAREFUL> Update the Category Names to match.
-std::string RunTimes::CategoryNames[] = {
-    "Transforming",           "Simplifying",
-    "Parsing",                "CNF Conversion",
-    "Bit Blasting",           "SAT Solving",
-    "Bitvector Solving",      "Variable Elimination",
-    "Sending to SAT Solver",  "Counter Example Generation",
-    "SAT Simplification",     "Constant Bit Propagation",
-    "Array Read Refinement",  "Applying Substitutions",
-    "Removing Unconstrained", "Pure Literals",
-    "ITE Contexts",           "AIG core simplification",
-    "Interval Propagation",   "Always True"};
-
 namespace stp
 {
 ATTR_NORETURN void FatalError(const char* str);
