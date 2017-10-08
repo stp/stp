@@ -31,9 +31,7 @@ namespace stp
 {
 class STPMgr;
 
-/******************************************************************
- *  Class to represent internals of a bitvector constant          *
- ******************************************************************/
+//Class to represent internals of a bitvector constant
 class ASTBVConst : public ASTInternal
 {
   friend class STPMgr;
@@ -46,18 +44,14 @@ private:
   // represented using an external library in extlib-bvconst.
   CBV _bvconst;
 
-  /****************************************************************
-   * Hasher for ASTBVConst nodes                                  *
-   ****************************************************************/
+  //Hasher for ASTBVConst nodes
   class ASTBVConstHasher
   {
   public:
     size_t operator()(const ASTBVConst* bvc) const;
   };
 
-  /****************************************************************
-   * Equality for ASTBVConst nodes                                *
-   ****************************************************************/
+  //Equality for ASTBVConst nodes
   class ASTBVConstEqual
   {
   public:
