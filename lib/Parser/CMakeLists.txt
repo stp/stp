@@ -18,24 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-
-# bison --debug -v -o parsecvc.cpp -d -p cvc cvc.y
-# flex -Cfe -olexcvc.cpp -Pcvc cvc.lex
-# bison --debug -v -o parsesmt.cpp -d -p smt smt.y
-# flex -Cfe -olexsmt.cpp -Psmt smt.lex
-# bison --debug -v -o parsesmt2.cpp -d -p smt2 smt2.y
-# flex -Cfe -olexsmt2.cpp -Psmt2 smt2.lex
-# Making dependencies
-# rm parsesmt.hpp parsecvc.hpp parsesmt2.hpp
-# make[1]: Leaving directory `/home/soos/development/stp-fast-prover-code/stp/src/parser'
-# make[1]: Entering directory `/home/soos/development/stp-fast-prover-code/stp/src/parser'
-# bison --debug -v -o parsecvc.cpp -d -p cvc cvc.y
-# flex -Cfe -olexcvc.cpp -Pcvc cvc.lex
-# bison --debug -v -o parsesmt.cpp -d -p smt smt.y
-# flex -Cfe -olexsmt.cpp -Psmt smt.lex
-# bison --debug -v -o parsesmt2.cpp -d -p smt2 smt2.y
-# flex -Cfe -olexsmt2.cpp -Psmt2 smt2.lex
-
 include(CheckIncludeFile)
 
 set(SOURCES LetMgr.cpp)
