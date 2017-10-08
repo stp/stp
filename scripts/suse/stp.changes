@@ -1,0 +1,282 @@
+-------------------------------------------------------------------
+Thu Aug 17 12:01:28 UTC 2017 - jslaby@suse.com
+
+- Update to version 2.2+20170815:
+  * Removing broken link
+  * PEP8 + print function in fuzzer
+  * More correct printf
+  * Fixing double-declaration
+  * Fixing memory leak
+  * NULL-ing ptr sent to DELETE is now automatic and more meaningful
+  * Deleting buckets after they have been used
+  * This will fatal error anyway, so just use the pattern and return false
+  * added support for MSVC attributes
+  * disabled crtdbg.h inclusion in extlib-abc for C++ debug builds
+  * fixed unistd.h dependencies for Windows builds
+  * added missing include directive
+  * refactored gettimeofday() for Win32
+  * Adding appveyor file
+  * Adding missing appveyor file
+  * Fixing paths
+  * Adding zlib for minisat to appveyor
+  * Using minisat that's been fixed to build in VS
+  * Better comments in the AppVeyor filBetter comments in the AppVeyor filee
+  * Temporarily disable boost
+  * Install for appveyor minisat
+  * Fixing "libs" to "lib" for minisat
+  * Debugging MiniSat finding in AppVeyor
+  * Debugging Windows build
+  * Debugging Windows build
+  * Debugging Windows build
+  * Installing CygWin
+  * Use 64b CygWin
+  * Trying a different way of installing CygWin
+  * Fixing CygWin
+  * Fixing local package dir
+  * Fixing CygWin site location
+  * Adding CygWin prefix path
+  * Fixing some warnings
+  * Fixing one more signed vs unsigned issue
+  * Suppress warning messages from msbuild
+  * Moving implementation of destructor
+  * No warnings from msbuild
+  * We need ZLIB in STP thanks to MiniSat
+  * Warnings cannot be suppressed in msbuild
+  * Trying to fix Boost in AppVeyor
+  * Removing unused cygwin install command
+  * Fixing yml for AppVeyor
+  * Removing a warning
+  * Fixing signedness and unreachable code warnings
+  * Removing useless comments
+  * Removing dead code
+  * Removing more dead code
+  * Fixing unused parameter warning
+  * Trying to make symbol-hiding work
+  * Trying to remove too much warnings
+  * change semantics of division / remainder by zero
+  * fix bvsmod-by-zero for negative first operand.
+  * Adding constants.h that was missing
+  * Removing unused include
+  * Revert "Removing unused include"
+  * Fix simplifications rules made incorrect by change in semantics of division-by-zero.
+  * Work-around another division by zero semantics defect.
+  * documented the entire old C API interface header with doxygen comments
+  * Try to get clang/static build passing on travis ci.
+  * Try to move from precise to trusty on travis ci. Precise ends support soon.
+  * Revert "Try to move from precise to trusty on travis ci. Precise ends support soon."
+  * test that static binary is really staitc.
+  * Fix leak introduced in #f452c0e
+  * Trying again to upgrade to trusty.
+  * fixed DLL_PUBLIC-related linkage errors
+  * Trying to fix static clang build
+  * Renaming clang static build
+  * Renaming build type in Travis
+  * Trying to fix shared/static library building
+  * Updating static binary check
+  * moved DLL_PUBLIC definition, added __declspec(dllimport) definition
+  * Trying to fix AppVeyor
+  * Trying to fix Appveyor -- wrong staticcompile check fix
+  * Importing Felix Kutzner's fixes. Thanks a lot!
+  * added declarations for ..._scan_string functions
+  * Fixing boost library include, thanks to Felix Kutzner
+  * Some obvious fix for MSVC compile
+  * enabled shared library building with MSVC
+  * fixed DLL export warning for isatty
+  * no -static for MSVC linker
+  * Testing more of clang
+  * made the Python binding build scripts usable with MSBuild
+  * re-enabled DLL building with MSVC
+  * Adding an empty global to compiler clang
+  * No need for CPP11 build check, Trusty has CPP11 compiler
+  * added DLL_PUBLIC markers to the C interface
+  * Fixing Travis build instructions
+  * made the query-file-tests usable with MSBuild
+  * Fixing the environment for clang builds
+  * Fixing LIT issue
+  * Final fixes to static compilation
+  * added DLL copying for tests
+  * forcing gtest to use the right C/C++ runtime
+  * added python to AppVeyor (for tests)
+  * Just use CryptoMiniSat from GIT, it's more stable for static compilation
+  * Better visibility into executable files generated
+  * deactivated boost in AppVeyor (not supported yet)
+  * adjusted lit tool path
+  * Fixing cryptominisat GIT link
+  * Fixing clang build issue
+  * Adding build SHA1
+  * Don't specify makefile type
+  * Trying to fix KLEE build
+  * Fixing static binary check
+  * Adding clang static build script
+  * Fixing tests for static builds
+  * All builds should run "make check"
+  * Debugging fuzzing
+  * Fixing Windows build
+  * Adding clang build files
+  * Fixing static compilation of tests
+  * Fixing local build scripts
+  * Fixing python test generation
+  * Fixing cryptominisat selection in fuzzer
+  * Debugging fuzzing issue in Travis
+  * Fixing directory of build for static CMS
+  * Building all combinations for gcc&clang
+  * KLEE doesn't want to build, so let's not build it
+  * Don't build COVERAGE using clang, it doesn't work
+  * fixed #253: DLL_IMPORT in c_interfaces leaks API and breaks installation of STP
+  * Leave an empty line before "exclude" in TravisCI
+  * Specify OS for Travis
+  * Making python build again both for Windows and Linux
+  * removed unnecesary include of <stdio.h> in c_interface.h and moved it into implementation
+  * reverted the python interface build scripts
+  * enabled tests in AppVeyor
+  * added the not tool (test dependency) to AppVeyor
+  * repaired the installed version of library_path.py
+  * removed node typedef in c interface
+  * fixed bug introduced in replacing all the things
+  * replaced 'stdX.h' headers with C++-style <cstdX> headers
+  * enabled building with boost in AppVeyor
+  * improved AppVeyor build time
+  * Playing around a bit with build flags
+  * Don't display test output of LIT, it's too much
+  * Adding some comments to AppVeyor
+  * Removing unused variables
+  * Adding EOL to files
+  * Using $() instead of ``
+  * Removing unused code&variables, reducing scope
+  * Removing unsued code in TravisCI
+  * Adding badges
+  * Fixing badges
+  * Adding coverity badge
+  * Fixing potential memory leak
+  * Code cleanup
+  * Revert "Fixing potential memory leak"
+  * Fixing Linux build
+  * using a single output binary directory on Windows
+  * removed the pre-check target
+  * fixed the python binding installation configuration
+  * installing stp.dll in bin/ on Windows
+  * parse license directive in smt2 format.
+  * fixed output directory setup (thanks @delcypher)
+  * made python binding paths more platform independent
+  * cleaned up a fixme comment
+  * disabled test execution on AppVeyor
+  * Adding explanation to option --output-CNF
+  * No need to build CMS's python interface. This will fix TravisCI
+  * cmake: fix ENABLE_PYTHON_INTERFACE option
+  * Some improvements in CMakeLists.txt - Enable RPATH on MacOS X: the STP dynamic library can thus be found more reliably by applications using it - Do not search for Cryptominisat, if NOCRYPTOMINISAT is set to ON - Added configuration option to disable Python interface (ENABLE_PYTHON, default ON)
+  * [CMake] Fix #192
+  * Fixing cmake in TravisCI
+  * Using auto type
+  * Don't print cmake build&install to Travis
+  * Use ccache
+  * Don't cache in AppVeyor
+  * Making cmake with 2 cores in Travis
+  * No need for the cmake config in TravisCI
+  * We only need the python interpreter for the tests
+  * circumvent Xcode bug with CMake's TARGET_OBJECTS
+  * Using a cleaner way to set C++11 and C99 standards
+
+-------------------------------------------------------------------
+Mon Feb 27 09:22:51 UTC 2017 - jslaby@suse.com
+
+- require only boost-program-options in tumbleweed
+
+-------------------------------------------------------------------
+Sat Feb 18 18:19:46 UTC 2017 - jslaby@suse.com
+
+- create libstp2_1 for library as required by policy
+
+-------------------------------------------------------------------
+Sun Nov 20 18:29:42 UTC 2016 - jslaby@suse.com
+
+- require minisat-devel and boost-devel in -devel
+
+-------------------------------------------------------------------
+Fri Nov 18 15:09:25 UTC 2016 - jslaby@suse.com
+
+- package also stp_simple, needed for cmake find_package
+- Update to version 2.2+20161105:
+  * Improve performance by creating fewer strings.
+  * GitSHA1: really disable timestamp when requested
+  * ASTNode rvalue reference assignment and copy constructor.
+  * simplifier: use abort() after assert(false)
+  * bug fix.
+  * (1) fix building. (2) make index width / value width out of the base class. Saves 8 bytes in bvconst.
+  * Might fix the issue described in #235. Missing dependencies.
+  * oops. fix build.
+
+-------------------------------------------------------------------
+Fri Oct 28 06:59:23 UTC 2016 - jslaby@suse.com
+
+- update to 20161028
+- remove simplifier-use-abort-instead-of-assert-false.patch
+- remove GitSHA1-really-disable-timestamp-when-requested.patch
+
+-------------------------------------------------------------------
+Wed Oct 19 06:12:01 UTC 2016 - jslaby@suse.com
+
+- update to 20161005
+- switch to ninja and %cmake macros
+- disable timestamps
+- add simplifier-use-abort-instead-of-assert-false.patch
+- add GitSHA1-really-disable-timestamp-when-requested.patch
+
+-------------------------------------------------------------------
+Fri Nov 27 10:58:16 UTC 2015 - jslaby@suse.com
+
+- update to 20151122
+
+-------------------------------------------------------------------
+Tue Nov  3 10:40:57 UTC 2015 - jslaby@suse.com
+
+- update to 20151030
+- package AUTHORS and LICENSE
+
+-------------------------------------------------------------------
+Fri Sep  4 08:31:18 UTC 2015 - jslaby@suse.com
+
+- update to 20150904
+  * remove: AST-simplify-FatalError-and-mark-as-noreturn.patch
+
+-------------------------------------------------------------------
+Fri Sep  4 08:09:59 UTC 2015 - jslaby@suse.com
+
+- remove: fix-no-return-in-nonvoid.patch
+- add: AST-simplify-FatalError-and-mark-as-noreturn.patch
+
+-------------------------------------------------------------------
+Thu Sep  3 17:56:22 UTC 2015 - jslaby@suse.com
+
+- update to 20150828
+  * drop one hunk from fix-no-return-in-nonvoid.patch
+
+-------------------------------------------------------------------
+Mon Apr 20 12:14:45 UTC 2015 - jslaby@suse.com
+
+- update to 20150418
+  * remove: fix-install-paths.patch
+  * remove: no-build-timestamps.patch
+
+-------------------------------------------------------------------
+Thu Apr 16 09:09:41 UTC 2015 - jslaby@suse.com
+
+- update to 20150415
+  * drop one hunk from fix-no-return-in-nonvoid.patch
+
+-------------------------------------------------------------------
+Thu Oct 30 10:36:12 UTC 2014 - jslaby@suse.com
+
+- add no-build-timestamps.patch
+
+-------------------------------------------------------------------
+Mon Oct 20 13:51:24 UTC 2014 - jslaby@suse.com
+
+- update to 20140928
+  * many fixes
+  * remove-broken-functions.patch: remove, upstream
+
+-------------------------------------------------------------------
+Tue Apr 15 09:49:38 UTC 2014 - jslaby@suse.com
+
+- initial commit
+
