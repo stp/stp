@@ -42,9 +42,9 @@ SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ///                        DECLARATIONS                              ///
 ////////////////////////////////////////////////////////////////////////
 
-static char s_Data3[81] = "!#&()*+,-.0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz|";
+static const char s_Data3[82] = "!#&()*+,-.0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz|";
 
-static char * s_Data4[] = {
+static const char * s_Data4[] = {
 "! B a . 8 .B 8a K !K T Ta j 8j Tj s ( + (B +a (. +8 .B( +8a (K +K T( +T j( ",
 "+j Tj( s+ E !E H Ha E. 8E H. H8 EK EK! HT HTa jE 8jE Hj sH d +d Hd g d. 8d ",
 "Hd. g8 dK +dK Td gT dj +jd Hjd gs 2 !2 2B a2 5 58 5B 5a 2K 2K! T2 Ta2 5j 58",
@@ -4557,29 +4557,29 @@ void Cnf_ReadMsops( char ** ppSopSizes, char *** ppSops )
         { 0x0F0F, 0xF0F0 },
         { 0x00FF, 0xFF00 }
     };
-    char Map[256], * pPrev, * pMemory;
+    signed char Map[256], * pPrev, * pMemory;
     char * pSopSizes, ** pSops;
     int i, k, b, Size;
 
     // map chars into their numbers
     for ( i = 0; i < 256; i++ )
-        Map[i] = -1;
+        Map[i] = (char)(-1);
     for ( i = 0; i < 81; i++ )
-        Map[s_Data3[i]] = i;
+        Map[(int)s_Data3[i]] = (char)i;
 
     // count the number of strings
     for ( Size = 0; s_Data4[Size] && Size < 100000; Size++ );
     assert( Size < 100000 );
 
     // allocate memory
-    pMemory = ALLOC( char, Size * 75 );
+    pMemory = ALLOC( signed char, Size * 75 );
     // copy the array into memory
     for ( i = 0; i < Size; i++ )
         for ( k = 0; k < 75; k++ )
             if ( s_Data4[i][k] == ' ' )
-                pMemory[i*75+k] = -1;
+                pMemory[i*75+k] = (char)(-1);
             else
-                pMemory[i*75+k] = Map[s_Data4[i][k]];
+                pMemory[i*75+k] = Map[(int)s_Data4[i][k]];
 
     // set pointers and compute SOP sizes
     pSopSizes = ALLOC( char, 65536 );
@@ -4588,7 +4588,7 @@ void Cnf_ReadMsops( char ** ppSopSizes, char *** ppSops )
     pSops[0] = NULL;
     pPrev = pMemory;
     for ( k = 0, i = 1; i < 65536; k++ )
-        if ( pMemory[k] == -1 )
+        if ( pMemory[k] == (char)(-1) )
         {
             pSopSizes[i] = pMemory + k - pPrev; 
             pSops[i++] = pPrev;
