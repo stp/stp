@@ -52,17 +52,17 @@ protected:
   STPMgr& bm;
 
 public:
-  DLL_PUBLIC NodeFactory(STPMgr& bm_) : bm(bm_) {}
-  DLL_PUBLIC virtual ~NodeFactory() {}
+  NodeFactory(STPMgr& bm_) : bm(bm_) {}
+  virtual ~NodeFactory() {}
 
-  DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
                                         const ASTVec& children) = 0;
 
-  DLL_PUBLIC virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+  virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
                                              unsigned int width,
                                              const ASTVec& children);
 
-  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
+  virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
 
   ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                        unsigned valueWidth);
@@ -76,9 +76,9 @@ public:
                      const ASTNode& child1, const ASTNode& child2,
                      const ASTVec& children = _empty_ASTVec);
 
-  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  ASTNode CreateNode(Kind kind, const ASTNode& child0,
                                 const ASTVec& back_children = _empty_ASTVec);
-  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0,
+  ASTNode CreateNode(Kind kind, const ASTNode& child0,
                                 const ASTNode& child1,
                                 const ASTVec& back_children = _empty_ASTVec);
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
@@ -99,7 +99,7 @@ public:
   ASTNode CreateZeroConst(unsigned width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
 
-  DLL_PUBLIC virtual std::string getName() = 0;
+  virtual std::string getName() = 0;
 };
 
 #endif

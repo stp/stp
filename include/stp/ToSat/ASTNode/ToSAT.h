@@ -27,8 +27,8 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/ToSATBase.h"
 #include "stp/Util/Attributes.h"
+#include "stp/ToSat/ToSATBase.h"
 
 namespace stp
 {
@@ -82,7 +82,7 @@ private:
   bool fill_satsolver_with_clauses(ClauseContainer& cc, SATSolver& newSolver);
 
 public:
-  DLL_PUBLIC ToSAT(STPMgr* bm) : ToSATBase(bm)
+  ToSAT(STPMgr* bm) : ToSATBase(bm)
   {
     CNFFileNameCounter = 0;
     benchFileNameCounter = 0;
@@ -99,7 +99,7 @@ public:
     SATVar_to_SymbolIndex.clear();
   }
 
-  DLL_PUBLIC ~ToSAT() { ClearAllTables(); }
+  ~ToSAT() { ClearAllTables(); }
 };
 } // end of namespace
 

@@ -85,7 +85,7 @@ public:
     substitutionsLastApplied = SolverMap->size();
   }
 
-  DLL_PUBLIC SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
+  SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
   {
     simp = _simp;
     bm = _bm;
@@ -106,7 +106,7 @@ public:
     haveAppliedSubstitutionMap();
   }
 
-  DLL_PUBLIC virtual ~SubstitutionMap();
+  virtual ~SubstitutionMap();
 
   // check the solver map for 'key'. If key is present, then return the
   // value by reference in the argument 'output'

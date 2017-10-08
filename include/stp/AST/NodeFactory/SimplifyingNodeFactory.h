@@ -64,16 +64,16 @@ class DLL_PUBLIC SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind, const ASTVec& children);
-  DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+  virtual ASTNode CreateNode(Kind kind, const ASTVec& children);
+  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
                                         const ASTVec& children);
 
-  DLL_PUBLIC virtual std::string getName() { return "simplifying"; }
+  virtual std::string getName() { return "simplifying"; }
 
-  DLL_PUBLIC SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
+  SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
       : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
         ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
-  DLL_PUBLIC ~SimplifyingNodeFactory() {}
+  ~SimplifyingNodeFactory() {}
 
 private:
   SimplifyingNodeFactory(const SimplifyingNodeFactory&);

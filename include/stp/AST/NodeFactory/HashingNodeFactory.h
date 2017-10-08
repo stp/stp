@@ -32,11 +32,11 @@ THE SOFTWARE.
 class DLL_PUBLIC HashingNodeFactory : public NodeFactory
 {
 public:
-  DLL_PUBLIC HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
-  DLL_PUBLIC virtual ~HashingNodeFactory();
+  HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
+  virtual ~HashingNodeFactory();
 
-  DLL_PUBLIC ASTNode CreateNode(const Kind kind, const ASTVec& back_children);
-  DLL_PUBLIC ASTNode CreateTerm(Kind kind, unsigned int width,
+  ASTNode CreateNode(const Kind kind, const ASTVec& back_children);
+  ASTNode CreateTerm(Kind kind, unsigned int width,
                                 const ASTVec& children);
 
   virtual std::string getName() { return "hashing"; }

@@ -30,7 +30,7 @@ THE SOFTWARE.
 
 namespace stp
 {
-class ToSATBase // not copyable
+class DLL_PUBLIC ToSATBase // not copyable
 {
 protected:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
@@ -53,7 +53,7 @@ public:
   virtual ~ToSATBase() {}
 
   // print the STP solver output
-  DLL_PUBLIC void PrintOutput(SOLVER_RETURN_TYPE ret);
+  void PrintOutput(SOLVER_RETURN_TYPE ret);
 
   // Bitblasts, CNF conversion and calls toSATandSolve()
   virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
