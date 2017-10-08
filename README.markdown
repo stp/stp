@@ -63,10 +63,9 @@ With Docker:
 ```
 docker pull msoos/stp
 echo "(set-logic QF_BV)
-(set-info :smt-lib-version 2.0)
 (assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
 (check-sat)
-(exit)" | docker run --rm -i -a stdin -a stdout stp
+(exit)" | docker run --rm -i stp
 ```
 
 ## Architecture
