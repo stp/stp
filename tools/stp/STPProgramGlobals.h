@@ -42,7 +42,6 @@ namespace stp
 // set, these globals will remain constants. These vars are not used
 // in the STP library.
 extern const char* prog;
-extern int linenum;
 extern const char* usage;
 extern std::string helpstring;
 

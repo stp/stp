@@ -30,7 +30,6 @@ namespace stp
 // set, these globals will remain constants. These vars are not used
 // in the STP library.
 const char* prog = "stp";
-int linenum = 1;
 const char* usage = "Usage: %s [-option] [infile]\n";
 std::string helpstring = "\n";
 } // end of namespace stp
