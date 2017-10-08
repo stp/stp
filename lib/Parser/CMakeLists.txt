@@ -54,7 +54,7 @@ foreach(_file ${TOLEX})
 
         COMMAND ${BISON_EXECUTABLE} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix={${_file}} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
 
-        COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
 
         COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
 
