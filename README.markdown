@@ -65,7 +65,7 @@ docker pull msoos/stp
 echo "(set-logic QF_BV)
 (assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
 (check-sat)
-(exit)" | docker run --rm -i stp
+(exit)" | docker run --rm -i msoos/stp
 ```
 
 ## Architecture
