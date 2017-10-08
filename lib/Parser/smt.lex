@@ -34,7 +34,7 @@
    ********************************************************************/
 #include <iostream>
 #include "stp/Parser/parser.h"
-#include "parsesmt.hpp"
+#include "parsesmt.tab.h"
 #include "stp/cpp_interface.h"
 
   using namespace std;

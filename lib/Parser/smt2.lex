@@ -1,3 +1,12 @@
+/*%option reentrant
+%option bison-bridge*/
+%option always-interactive
+%option noyywrap
+%option nounput
+%option noreject
+%option noyymore
+%option yylineno
+
 %{
 /********************************************************************
 * AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
@@ -29,8 +38,8 @@
 *
 ********************************************************************/
 #include "stp/Parser/parser.h"
-#include "parsesmt2.hpp"
 #include "stp/cpp_interface.h"
+#include "parsesmt2.tab.h"
 
   extern char *smt2text;
   extern int smt2error (const char *msg);
@@ -113,13 +122,6 @@
     }
   }
 %}
-
-%option always-interactive
-%option noyywrap
-%option nounput
-%option noreject
-%option noyymore
-%option yylineno
 
 %x  COMMENT
 %x  STRING_LITERAL

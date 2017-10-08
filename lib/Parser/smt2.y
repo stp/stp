@@ -1,3 +1,8 @@
+/* %define api.pure full */
+/*%lex-param {void *scanner}
+%parse-param {void *scanner}*/
+%define parse.error verbose
+
 %{
   /********************************************************************
    * AUTHORS:  Trevor Hansen
@@ -47,6 +52,8 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "parsesmt2.tab.h"
+#include "smt2_flex_header.h"
 
   using std::cout;
   using std::cerr;
@@ -178,7 +185,6 @@
 
   extern char* smt2text;
   extern int smt2lineno;
-  extern int smt2lex(void);
 
   int yyerror(const char *s) {
     cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << endl;
@@ -191,13 +197,15 @@
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 
-  %}
+%}
 
 %union {
-  unsigned uintval;                  /* for numerals in types. */
+  unsigned uintval; /* for numerals in types. */
+
   //ASTNode,ASTVec
-  ASTNode *node;
-  ASTVec *vec;
+  stp::ASTNode *node;
+  stp::ASTVec *vec;
+
   std::string *str;
 };
 

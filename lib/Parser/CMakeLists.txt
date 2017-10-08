@@ -50,18 +50,24 @@ endif()
 
 foreach(_file ${TOLEX})
     add_custom_command(
-        OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp  ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
-        COMMAND ${BISON_EXECUTABLE} --debug -v -o ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp -d -p ${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
-        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp -P${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+        OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.h ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
+
+        COMMAND ${BISON_EXECUTABLE} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix={${_file}} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
+
+        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+
+        #COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
+
         DEPENDS ${_file}.lex ${_file}.y ASTKind_header
     )
     add_custom_target(parser_header${_file} ALL
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
     )
+
     set(SOURCES
         ${SOURCES}
         ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
-        ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c
     )
 endforeach()
 

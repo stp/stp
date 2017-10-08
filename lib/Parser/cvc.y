@@ -436,7 +436,7 @@ IfExpr          :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
 {
   unsigned int width = $4->GetValueWidth();
   if (width != $5->GetValueWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");                   
+    yyerror("Width mismatch in IF-THEN-ELSE");
   if($4->GetIndexWidth() != $5->GetIndexWidth())
     yyerror("Width mismatch in IF-THEN-ELSE");
 
@@ -655,7 +655,7 @@ ElseRestForm    :      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol"); 
+   yyerror("bad symbol");
 }
 ;
 
@@ -735,7 +735,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
     yyerror("Negative width in extract");
                          
   if((unsigned)$3 >= $1->GetValueWidth())
-    yyerror("Parsing: Wrong width in BVEXTRACT\n");                      
+    yyerror("Parsing: Wrong width in BVEXTRACT\n");
 
   ASTNode hi  =  GlobalParserInterface->CreateBVConst(32, $3);
   ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
@@ -1016,7 +1016,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol"); 
+   yyerror("bad symbol");
 }
 ;
 
