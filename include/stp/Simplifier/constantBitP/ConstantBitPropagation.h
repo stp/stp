@@ -25,11 +25,11 @@ THE SOFTWARE.
 #ifndef CONSTANTBITPROPAGATION_H_
 #define CONSTANTBITPROPAGATION_H_
 
-#include "FixedBits.h"
 #include "Dependencies.h"
+#include "FixedBits.h"
+#include "MultiplicationStats.h"
 #include "NodeToFixedBitsMap.h"
 #include "WorkList.h"
-#include "MultiplicationStats.h"
 
 namespace stp
 {
@@ -62,7 +62,7 @@ class ConstantBitPropagation
 {
   NodeFactory* nf;
   Simplifier* simplifier;
-  STPMgr * mgr;
+  STPMgr* mgr;
 
   Result status;
   WorkList* workList;
@@ -88,15 +88,15 @@ public:
   bool isUnsatisfiable() { return status == CONFLICT; }
 
   // propagates.
-  ConstantBitPropagation(stp::STPMgr * mgr, stp::Simplifier* _sm, NodeFactory* _nf,
-                         const ASTNode& top);
+  ConstantBitPropagation(stp::STPMgr* mgr, stp::Simplifier* _sm,
+                         NodeFactory* _nf, const ASTNode& top);
 
   ~ConstantBitPropagation() { clearTables(); };
 
   // Returns the node after writing in simplifications from constant Bit
   // propagation.
   stp::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
-                                 bool conjoinToTop = true);
+                                bool conjoinToTop = true);
 
   void clearTables()
   {
@@ -126,10 +126,10 @@ public:
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
 
-  static Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
-                                   FixedBits& output, const ASTNode n,
-                                   MultiplicationStatsMap* msm = NULL);
-
+  static Result dispatchToTransferFunctions(stp::STPMgr* mgr, const Kind k,
+                                            vector<FixedBits*>& children,
+                                            FixedBits& output, const ASTNode n,
+                                            MultiplicationStatsMap* msm = NULL);
 };
 }
 }

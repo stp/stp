@@ -27,10 +27,10 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/NodeFactory.h"
+#include "stp/Util/Attributes.h"
 #include <memory>
 #include <string>
 #include <vector>
-#include "stp/Util/Attributes.h"
 
 namespace stp
 {
@@ -108,19 +108,21 @@ public:
 
   // NODES//
   DLL_PUBLIC ASTNode CreateNode(stp::Kind kind,
-                     const stp::ASTVec& children = _empty_ASTVec);
+                                const stp::ASTVec& children = _empty_ASTVec);
 
   DLL_PUBLIC ASTNode CreateNode(stp::Kind kind, const stp::ASTNode n0,
-                     const stp::ASTNode n1);
+                                const stp::ASTNode n1);
 
   //	These belong in the node factory..
 
   // TERMS//
   DLL_PUBLIC ASTNode CreateZeroConst(unsigned int width);
   DLL_PUBLIC ASTNode CreateOneConst(unsigned int width);
-  DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base, int bit_width);
+  DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
+                                   int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
-  DLL_PUBLIC ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
+                                   unsigned long long int bvconst);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   void removeSymbol(ASTNode s);
@@ -128,9 +130,10 @@ public:
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
   DLL_PUBLIC void storeFunction(const std::string name, const ASTVec& params,
-                     const ASTNode& function);
+                                const ASTNode& function);
 
-  DLL_PUBLIC ASTNode applyFunction(const std::string name, const ASTVec& params);
+  DLL_PUBLIC ASTNode applyFunction(const std::string name,
+                                   const ASTVec& params);
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string name);
   DLL_PUBLIC bool isBooleanFunction(const std::string name);
@@ -142,11 +145,12 @@ public:
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
   // Create the node, then "new" it.
-  DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0, const ASTNode& n1);
+  DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0,
+                              const ASTNode& n1);
 
   // Create the node, then "new" it.
   DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTNode& n0,
-                   const ASTNode& n1);
+                              const ASTNode& n1);
 
   // On testcase20 it took about 4.2 seconds to parse using the standard
   // allocator and the pool allocator.
@@ -177,11 +181,11 @@ public:
   DLL_PUBLIC void deleteGlobal();
   DLL_PUBLIC void cleanUp();
 
-  DLL_PUBLIC void setOption(std::string , std::string);
-  DLL_PUBLIC void getOption(std::string );
+  DLL_PUBLIC void setOption(std::string, std::string);
+  DLL_PUBLIC void getOption(std::string);
 
   DLL_PUBLIC void getModel();
-  DLL_PUBLIC void getValue(const ASTVec &v);
+  DLL_PUBLIC void getValue(const ASTVec& v);
 };
 
 // Functions used by C++ clients of STP. TODO: either export abc cleanly or don't use this in clients.

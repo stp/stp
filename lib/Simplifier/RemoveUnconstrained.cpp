@@ -57,10 +57,10 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
   // in the substitution map.
   result = topLevel_other(result, simplifier);
 
-  // It is idempotent if there are no big ANDS (we have a special hack), and,
-  // if we don't introduced any new "disjoint extracts."
+// It is idempotent if there are no big ANDS (we have a special hack), and,
+// if we don't introduced any new "disjoint extracts."
 
-  #if 0
+#if 0
   ASTNode result2 = topLevel_other(result, simplifier);
   if (result2 != result)
   {
@@ -69,7 +69,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
       cerr << result2;
       assert(result2 == result);
   }
-  #endif
+#endif
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
   return result;
 }
@@ -183,9 +183,9 @@ void RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
     for (size_t i = 1; i < concatVec.size(); i++)
     {
       assert(!concat.IsNull());
-      concat = bm.CreateTerm(BVCONCAT, concat.GetValueWidth() +
-                                           concatVec[i].GetValueWidth(),
-                             concatVec[i], concat);
+      concat = bm.CreateTerm(
+          BVCONCAT, concat.GetValueWidth() + concatVec[i].GetValueWidth(),
+          concatVec[i], concat);
     }
 
     replace(var, concat);
@@ -263,9 +263,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       }
 
       if (kind != AND && kind != OR && kind != BVOR && kind != BVAND &&
-        other == var)
+          other == var)
       {
-          continue; // Most rules don't like duplicate variables.
+        continue; // Most rules don't like duplicate variables.
       }
     }
     else
@@ -382,7 +382,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           c2 = biggestNumber;
         }
 
-
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained())
         {
@@ -450,8 +449,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
               n = nf->CreateNode(
                   AND, v,
                   nf->CreateNode(
-                      NOT, nf->CreateNode(
-                               EQ, mutable_children[1]->toASTNode(&bm), c1)));
+                      NOT,
+                      nf->CreateNode(EQ, mutable_children[1]->toASTNode(&bm),
+                                     c1)));
           }
           else
           {
@@ -465,8 +465,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
               n = nf->CreateNode(
                   AND, v,
                   nf->CreateNode(
-                      NOT, nf->CreateNode(
-                               EQ, mutable_children[0]->toASTNode(&bm), c2)));
+                      NOT,
+                      nf->CreateNode(EQ, mutable_children[0]->toASTNode(&bm),
+                                     c2)));
           }
           replace(var, rhs);
           MutableASTNode* newN = MutableASTNode::build(n, create);

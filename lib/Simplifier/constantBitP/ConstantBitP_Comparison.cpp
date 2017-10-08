@@ -148,7 +148,8 @@ bool fast_exit(FixedBits& c0, FixedBits& c1)
 
     if (c_0 == '0')
     {
-      if (c_1 == '0') {
+      if (c_1 == '0')
+      {
         continue;
       }
       return false;
@@ -156,7 +157,8 @@ bool fast_exit(FixedBits& c0, FixedBits& c1)
 
     if (c_0 == '1')
     {
-      if (c_1 == '1') {
+      if (c_1 == '1')
+      {
         continue;
       }
       return false;

@@ -71,9 +71,9 @@ int ExtraMain::create_and_parse_options(int argc, char** argv)
   return 0;
 }
 
-void
-ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
-                               po::positional_options_description& pos_options)
+void ExtraMain::try_parsing_options(
+    int argc, char** argv, po::variables_map& vm,
+    po::positional_options_description& pos_options)
 {
   try
   {
@@ -87,7 +87,8 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     {
       cout << "USAGE: " << argv[0] << " [options] <input-file>" << endl
            << " where input is SMTLIB1/2 or CVC depending on options and file "
-              "extension" << endl;
+              "extension"
+           << endl;
 
       cout << cmdline_options << endl;
       exit(0);
@@ -96,7 +97,7 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     po::notify(vm);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::unknown_option>>& c)
+         boost::exception_detail::error_info_injector<po::unknown_option>>& c)
   {
     cout << "Some option you gave was wrong. Please give '--help' to get help"
          << endl;
@@ -111,8 +112,8 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::invalid_option_value>>&
-             what)
+         boost::exception_detail::error_info_injector<
+             po::invalid_option_value>>& what)
   {
     cerr << "Invalid value '" << what.what() << "'"
          << " given to option '" << what.get_option_name() << "'" << endl;
@@ -120,8 +121,8 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::multiple_occurrences>>&
-             what)
+         boost::exception_detail::error_info_injector<
+             po::multiple_occurrences>>& what)
   {
     cerr << "Error: " << what.what() << " of option '" << what.get_option_name()
          << "'" << endl;
@@ -129,7 +130,8 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
     exit(-1);
   }
   catch (boost::exception_detail::clone_impl<
-      boost::exception_detail::error_info_injector<po::required_option>>& what)
+         boost::exception_detail::error_info_injector<po::required_option>>&
+             what)
   {
     cerr << "You forgot to give a required option '" << what.get_option_name()
          << "'" << endl;
@@ -141,39 +143,38 @@ ExtraMain::try_parsing_options(int argc, char** argv, po::variables_map& vm,
 void ExtraMain::create_options()
 {
   po::options_description hiddenOptions("Hidden options");
-  hiddenOptions.add_options()
-  ("file", po::value<string>(&infile), "input file")
-  ;
+  hiddenOptions.add_options()("file", po::value<string>(&infile), "input file");
 
   // Declare the supported options.
   po::options_description general_options("Most important options");
-  general_options.add_options()
-    ("help,h", "print this help")
-    ("version", "print version number");
+  general_options.add_options()("help,h", "print this help")(
+      "version", "print version number");
 
   po::options_description simplification_options("Simplifications");
-  simplification_options.add_options() 
-    ("disable-simplifications", "disable all simplifications")
-    ("switch-word,w", "switch off wordlevel solver")
-    ("disable-opt-inc,a", "disable potentially size-increasing optimisations")
-    ("disable-cbitp", "disable constant bit propagation")
-    ("disable-equality", "disable equality propagation");
+  simplification_options.add_options()("disable-simplifications",
+                                       "disable all simplifications")(
+      "switch-word,w", "switch off wordlevel solver")(
+      "disable-opt-inc,a", "disable potentially size-increasing optimisations")(
+      "disable-cbitp", "disable constant bit propagation")(
+      "disable-equality", "disable equality propagation");
 
   po::options_description solver_options("SAT Solver options");
   solver_options.add_options()
 #ifdef USE_CRYPTOMINISAT
       ("cryptominisat",
-       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above (default).")
-      ("threads", po::value<int>(&bm->UserFlags.num_solver_threads)->default_value(bm->UserFlags.num_solver_threads)
-      , "Number of threads for cryptominisat")
+       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above "
+       "(default).")("threads",
+                     po::value<int>(&bm->UserFlags.num_solver_threads)
+                         ->default_value(bm->UserFlags.num_solver_threads),
+                     "Number of threads for cryptominisat")
 #endif
-      ("simplifying-minisat", "use installed simplifying minisat version as the solver")
-      ("minisat", "use installed minisat version as the solver "
+          ("simplifying-minisat",
+           "use installed simplifying minisat version as the solver")(
+              "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
-"(default)"
+                         "(default)"
 #endif
-        )
-  ;
+              );
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
@@ -181,64 +182,65 @@ void ExtraMain::create_options()
       "eagerly encode array-read axioms (Ackermannistaion)");
 
   po::options_description print_options("Printing options");
-  print_options.add_options()
-  ("print-stpinput,b",
+  print_options.add_options()(
+      "print-stpinput,b",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_flag)),
-      "print STP input back to cout")
-  ("print-back-CVC",
+      "print STP input back to cout")(
+      "print-back-CVC",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_CVC_flag)),
-      "print input in CVC format, then exit")
-  ("print-back-SMTLIB2",
+      "print input in CVC format, then exit")(
+      "print-back-SMTLIB2",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_SMTLIB2_flag)),
-      "print input in SMT-LIB2 format, then exit")
-  ("print-back-SMTLIB1",
+      "print input in SMT-LIB2 format, then exit")(
+      "print-back-SMTLIB1",
       po::bool_switch((&bm->UserFlags.print_STPinput_back_SMTLIB1_flag)),
-      "print input in SMT-LIB1 format, then exit")
-  ("print-back-GDL",
+      "print input in SMT-LIB1 format, then exit")(
+      "print-back-GDL",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_GDL_flag)),
-      "print AiSee's graph format, then exit")
-  ("print-back-dot",
+      "print AiSee's graph format, then exit")(
+      "print-back-dot",
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_dot_flag)),
-      "print dotty/neato's graph format, then exit")
-  ("print-counterex,p",
+      "print dotty/neato's graph format, then exit")(
+      "print-counterex,p",
       po::bool_switch(&(bm->UserFlags.print_counterexample_flag)),
-      "print counterexample")
-  ("print-counterexbin,y",
+      "print counterexample")(
+      "print-counterexbin,y",
       po::bool_switch(&(bm->UserFlags.print_binary_flag)),
-      "print counterexample in binary")
-  ("print-arrayval,q",
+      "print counterexample in binary")(
+      "print-arrayval,q",
       po::bool_switch(&(bm->UserFlags.print_arrayval_declaredorder_flag)),
-      "print arrayval declared order")
-  ("print-functionstat,s", po::bool_switch(&(bm->UserFlags.stats_flag)),
-      "print function statistics")
-  ("print-quickstat,t",
+      "print arrayval declared order")(
+      "print-functionstat,s", po::bool_switch(&(bm->UserFlags.stats_flag)),
+      "print function statistics")(
+      "print-quickstat,t",
       po::bool_switch(&(bm->UserFlags.quick_statistics_flag)),
-      "print quick statistics")
-  ("print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
-      "print nodes ")
-  ("print-output,n", po::bool_switch(&(bm->UserFlags.print_output_flag)),
-      "Print output");
+      "print quick statistics")(
+      "print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
+      "print nodes ")("print-output,n",
+                      po::bool_switch(&(bm->UserFlags.print_output_flag)),
+                      "Print output");
 
   po::options_description input_options("Input options");
-  input_options.add_options()
-  ("SMTLIB1,m", "use the SMT-LIB1 format parser")
-  ("SMTLIB2", "use the SMT-LIB2 format parser")
-  ("CVC", "use the CVC format parser");
+  input_options.add_options()("SMTLIB1,m", "use the SMT-LIB1 format parser")(
+      "SMTLIB2", "use the SMT-LIB2 format parser")("CVC",
+                                                   "use the CVC format parser");
 
   po::options_description output_options("Output options");
-  output_options.add_options()
-  ("output-CNF", po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
-      "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped back, and problems solved by the preprocessing simplifier alone will not generate any CNF as the SAT solver is never invoked")
-  ("output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
+  output_options.add_options()(
+      "output-CNF", po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
+      "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped "
+      "back, and problems solved by the preprocessing simplifier alone will "
+      "not generate any CNF as the SAT solver is never invoked")(
+      "output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
       "save in ABC's bench format to output.bench");
 
   po::options_description misc_options("Output options");
   misc_options.add_options()("exit-after-CNF",
                              po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
-                             "exit after the CNF has been generated")
-      ("timeout,g", po::value<int64_t>(&max_num_confl),
-       "Number of conflicts after which the SAT solver gives up. -1 means never (default)")
-      ("check-sanity,d", "construct counterexample and check it");
+                             "exit after the CNF has been generated")(
+      "timeout,g", po::value<int64_t>(&max_num_confl),
+      "Number of conflicts after which the SAT solver gives up. -1 means never "
+      "(default)")("check-sanity,d", "construct counterexample and check it");
 
   cmdline_options.add(general_options)
       .add(simplification_options)
@@ -306,13 +308,16 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.smtlib2_parser_flag = false;
   }
 
-  if (selected_type > 1) {
-      cout << "ERROR: You have selected more than one parsing option from"
-      "CVC/SMTLIB1/SMTLIB2" << endl;
-      std::exit(-1);
+  if (selected_type > 1)
+  {
+    cout << "ERROR: You have selected more than one parsing option from"
+            "CVC/SMTLIB1/SMTLIB2"
+         << endl;
+    std::exit(-1);
   }
 
-  if (selected_type == 0) {
+  if (selected_type == 0)
+  {
     bm->UserFlags.smtlib2_parser_flag = true;
   }
 

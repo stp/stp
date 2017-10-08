@@ -23,27 +23,26 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
 
 #include "stp/Simplifier/UpwardsCBitP.h"
-
 
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
 
-#include "stp/Sat/SimplifyingMinisat.h"
 #include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SimplifyingMinisat.h"
 
+#include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
+#include "stp/Simplifier/AlwaysTrue.h"
 #include "stp/Simplifier/DifficultyScore.h"
-#include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/FindPureLiterals.h"
+#include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UseITEContext.h"
-#include "stp/Simplifier/AlwaysTrue.h"
-#include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include <memory>
 using std::cout;
 
@@ -59,10 +58,8 @@ const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 
-SOLVER_RETURN_TYPE STP::solve_by_sat_solver(
-  SATSolver* newS,
-  ASTNode original_input
-)
+SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
+                                            ASTNode original_input)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
@@ -84,12 +81,13 @@ SATSolver* STP::get_new_sat_solver()
       newS = new SimplifyingMinisat;
       break;
     case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
-      #ifdef USE_CRYPTOMINISAT
+#ifdef USE_CRYPTOMINISAT
       newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
-      #else
-      std::cerr << "CryptoMiniSat5 support was not enabled at configure time." << std::endl;
+#else
+      std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
+                << std::endl;
       exit(-1);
-      #endif
+#endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
       newS = new MinisatCore;
@@ -105,10 +103,9 @@ SATSolver* STP::get_new_sat_solver()
 
 // The absolute TopLevel function that invokes STP on the input
 // formula
-SOLVER_RETURN_TYPE STP::TopLevelSTP(
-  const ASTNode& inputasserts,
-  const ASTNode& query
-) {
+SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
+                                    const ASTNode& query)
+{
 
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
@@ -119,7 +116,9 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(
   {
     original_input =
         bm->CreateNode(AND, inputasserts, bm->CreateNode(NOT, query));
-  } else {
+  }
+  else
+  {
     original_input = inputasserts;
   }
 
@@ -131,8 +130,8 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(
   return result;
 }
 
-ASTNode STP::callSizeReducing(ASTNode inputToSat,
-                              BVSolver* bvSolver, PropagateEqualities* pe,
+ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
+                              PropagateEqualities* pe,
                               const int initial_difficulty_score,
                               int& actualBBSize)
 {
@@ -169,17 +168,16 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
        * difficult looking ASTNodes.
       */
       ASTNodeMap cache;
-      inputToSat =
-          SubstitutionMap::replace(inputToSat, equivs, cache,
-                                   bm->defaultNodeFactory, false, true);
+      inputToSat = SubstitutionMap::replace(
+          inputToSat, equivs, cache, bm->defaultNodeFactory, false, true);
       bm->ASTNodeStats(bb_message.c_str(), inputToSat);
     }
 
     if (fromTo.size() > 0)
     {
       ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(
-          inputToSat, fromTo, cache, bm->defaultNodeFactory);
+      inputToSat = SubstitutionMap::replace(inputToSat, fromTo, cache,
+                                            bm->defaultNodeFactory);
       bm->ASTNodeStats(bb_message.c_str(), inputToSat);
     }
     actualBBSize = bitblast_nodemgr.totalNumberOfNodes();
@@ -188,8 +186,8 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
 }
 
 // These transformations should never increase the size of the DAG.
-ASTNode STP::sizeReducing(ASTNode inputToSat,
-                          BVSolver* bvSolver, PropagateEqualities* pe)
+ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
+                          PropagateEqualities* pe)
 {
 
   inputToSat = pe->topLevel(inputToSat, arrayTransformer);
@@ -272,7 +270,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input,bm) << endl;
+    cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
+         << endl;
 
   // A heap object so I can easily control its lifetime.
   std::auto_ptr<BVSolver> bvSolver(new BVSolver(bm, simp));
@@ -291,7 +290,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
   if ((bm->UserFlags.ackermannisation &&
-        numberOfReadsLessThan(inputToSat, 50)) ||
+       numberOfReadsLessThan(inputToSat, 50)) ||
       numberOfReadsLessThan(inputToSat, 10))
   {
     // If the number of axioms that would be added it small. Remove them.
@@ -305,22 +304,24 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   const bool arrayops = containsArrayOps(inputToSat, bm);
-  if (removed) {
+  if (removed)
+  {
     assert(!arrayops);
   }
 
-  if (bm->UserFlags.check_counterexample_flag || bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
+  if (bm->UserFlags.check_counterexample_flag ||
+      bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
     bm->UserFlags.construct_counterexample_flag = true;
   else
     bm->UserFlags.construct_counterexample_flag = false;
 
-  #ifndef NDEBUG
-      bm->UserFlags.construct_counterexample_flag = true;
-  #endif
+#ifndef NDEBUG
+  bm->UserFlags.construct_counterexample_flag = true;
+#endif
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
-  unsigned initial_difficulty_score = difficulty.score(inputToSat,bm);
+  unsigned initial_difficulty_score = difficulty.score(inputToSat, bm);
   int bitblasted_difficulty = -1;
 
   // Fixed point it if it's not too difficult.
@@ -328,13 +329,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // so it's expensive to call.
   if ((!arrayops && initial_difficulty_score < 1000000))
   {
-    inputToSat = callSizeReducing(inputToSat, bvSolver.get(), pe.get(),
+    inputToSat =
+        callSizeReducing(inputToSat, bvSolver.get(), pe.get(),
                          initial_difficulty_score, bitblasted_difficulty);
   }
 
   if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
-    initial_difficulty_score = difficulty.score(inputToSat,bm);
+    initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
   if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
@@ -342,7 +344,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.stats_flag)
     cout << "Difficulty After Size reducing:" << initial_difficulty_score
-              << endl;
+         << endl;
 
   // So we can delete the object and release all the hash-buckets storage.
   std::auto_ptr<Revert_to> revert(new Revert_to());
@@ -410,7 +412,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     inputToSat = cb.topLevelBothWays(inputToSat);
     bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
 
-    if (cb.isUnsatisfiable()) {
+    if (cb.isUnsatisfiable())
+    {
       inputToSat = bm->ASTFalse;
     }
 
@@ -459,15 +462,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
     // Remove unconstrained.
     RemoveUnconstrained r(*bm);
-    inputToSat =
-        r.topLevel(inputToSat, simp);
+    inputToSat = r.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
   bm->TermsAlreadySeenMap_Clear();
   bm->SimplifyWrites_InPlace_Flag = false;
 
-  long final_difficulty_score = difficulty.score(inputToSat,bm);
+  long final_difficulty_score = difficulty.score(inputToSat, bm);
 
   bool worse = false;
   if (final_difficulty_score > 1.1 * initial_difficulty_score)
@@ -499,8 +501,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   bool optimize_enabled = bm->UserFlags.optimize_flag;
-  if (worse &&
-      (!arrayops || bm->UserFlags.array_difficulty_reversion) &&
+  if (worse && (!arrayops || bm->UserFlags.array_difficulty_reversion) &&
       bm->UserFlags.difficulty_reversion)
   {
     // If the simplified problem is harder, than the
@@ -577,8 +578,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
-  ToSATBase* satBase =
-      bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
+  ToSATBase* satBase = bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;
@@ -589,9 +589,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(
-      NewSolver, inputToSat, original_input, satBase,
-      maybeRefinement);
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+                                         satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
   {
@@ -616,8 +615,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
-  res = Ctr_Example->SATBased_ArrayReadRefinement(
-      NewSolver, original_input, satBase);
+  res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, original_input,
+                                                  satBase);
   if (SOLVER_UNDECIDED != res)
   {
     if (toSATAIG.cbIsDestructed())
@@ -631,7 +630,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
              "a bug in STP");
   // bogus return to make the compiler shut up
   return SOLVER_ERROR;
-
-} 
+}
 
 } // end of namespace

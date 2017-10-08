@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/ToSat/ASTNode/ASTtoCNF.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/ASTNode/ASTtoCNF.h"
 
 namespace stp
 {
@@ -326,7 +326,6 @@ void ASTtoCNF::scanFormula(const ASTNode& varphi, bool isPos)
       }
     }
   }
-
 }
 
 void ASTtoCNF::scanTerm(const ASTNode& varphi)
@@ -403,7 +402,7 @@ void ASTtoCNF::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
   }
 
   if ((x->clausespos != NULL && x->clausespos->size() > 1) &&
-    (doSibRenamingPos(*x) || sharesPos(*x) > 1))
+      (doSibRenamingPos(*x) || sharesPos(*x) > 1))
   {
     doRenamingPos(varphi, defs);
   }
@@ -414,7 +413,7 @@ void ASTtoCNF::convertFormulaToCNF(const ASTNode& varphi, ClauseList* defs)
   }
 
   if ((x->clausesneg != NULL && x->clausesneg->size() > 1) &&
-    (doSibRenamingNeg(*x) || sharesNeg(*x) > 1))
+      (doSibRenamingNeg(*x) || sharesNeg(*x) > 1))
   {
     doRenamingNeg(varphi, defs);
   }
@@ -619,7 +618,7 @@ void ASTtoCNF::doRenamingNeg(const ASTNode& varphi, ClauseList* defs)
 // main switch for individual cnf conversion cases
 
 void ASTtoCNF::convertFormulaToCNFPosCases(const ASTNode& varphi,
-                                         ClauseList* defs)
+                                           ClauseList* defs)
 {
   if (varphi.isPred())
   {
@@ -701,7 +700,7 @@ void ASTtoCNF::convertFormulaToCNFPosCases(const ASTNode& varphi,
 }
 
 void ASTtoCNF::convertFormulaToCNFNegCases(const ASTNode& varphi,
-                                         ClauseList* defs)
+                                           ClauseList* defs)
 {
 
   if (varphi.isPred())
@@ -785,7 +784,8 @@ void ASTtoCNF::convertFormulaToCNFNegCases(const ASTNode& varphi,
 
 // individual cnf conversion cases
 
-void ASTtoCNF::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosPred(const ASTNode& varphi,
+                                          ClauseList* defs)
 {
   ASTVec psis;
 
@@ -800,37 +800,40 @@ void ASTtoCNF::convertFormulaToCNFPosPred(const ASTNode& varphi, ClauseList* def
 }
 
 void ASTtoCNF::convertFormulaToCNFPosFALSE(const ASTNode& varphi,
-                                         ClauseList* /*defs*/)
+                                           ClauseList* /*defs*/)
 {
   ASTNode dummy_false_var = bm->CreateNode(NOT, dummy_true_var);
   info[varphi]->clausespos = SINGLETON(dummy_false_var);
 }
 
-void ASTtoCNF::convertFormulaToCNFPosTRUE(const ASTNode& varphi, ClauseList* /*defs*/)
+void ASTtoCNF::convertFormulaToCNFPosTRUE(const ASTNode& varphi,
+                                          ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(dummy_true_var);
 }
 
 void ASTtoCNF::convertFormulaToCNFPosBOOLEXTRACT(const ASTNode& varphi,
-                                               ClauseList* /*defs*/)
+                                                 ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
 }
 
 void ASTtoCNF::convertFormulaToCNFPosSYMBOL(const ASTNode& varphi,
-                                          ClauseList* /*defs*/)
+                                            ClauseList* /*defs*/)
 {
   info[varphi]->clausespos = SINGLETON(varphi);
 }
 
-void ASTtoCNF::convertFormulaToCNFPosNOT(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosNOT(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   convertFormulaToCNF(varphi[0], defs);
   info[varphi]->clausespos = ClauseList::COPY(*(info[varphi[0]]->clausesneg));
   reduceMemoryFootprintNeg(varphi[0]);
 }
 
-void ASTtoCNF::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosAND(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   //****************************************
   // (pos) AND ~> UNION
@@ -865,7 +868,8 @@ void ASTtoCNF::convertFormulaToCNFPosAND(const ASTNode& varphi, ClauseList* defs
   info[varphi]->clausespos = psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFPosNAND(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosNAND(const ASTNode& varphi,
+                                          ClauseList* defs)
 {
   bool renamesibs = false;
   ClauseList* clauses;
@@ -947,7 +951,8 @@ void ASTtoCNF::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
   info[varphi]->clausespos = psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosNOR(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   //****************************************
   // (pos) NOR ~> UNION NOT
@@ -967,7 +972,7 @@ void ASTtoCNF::convertFormulaToCNFPosNOR(const ASTNode& varphi, ClauseList* defs
 }
 
 void ASTtoCNF::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi,
-                                           ClauseList* defs)
+                                             ClauseList* defs)
 {
   //****************************************
   // (pos) IMPLIES ~> PRODUCT NOT [0] ; [1]
@@ -986,7 +991,8 @@ void ASTtoCNF::convertFormulaToCNFPosIMPLIES(const ASTNode& varphi,
   info[varphi]->clausespos = psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosITE(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   //****************************************
   // (pos) ITE ~> UNION (PRODUCT NOT [0] ; [1])
@@ -1017,7 +1023,8 @@ void ASTtoCNF::convertFormulaToCNFPosITE(const ASTNode& varphi, ClauseList* defs
   info[varphi]->clausespos = psi1;
 }
 
-void ASTtoCNF::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFPosXOR(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   ASTVec::const_iterator it = varphi.GetChildren().begin();
   for (; it != varphi.GetChildren().end(); it++)
@@ -1035,8 +1042,8 @@ void ASTtoCNF::convertFormulaToCNFPosXOR(const ASTNode& varphi, ClauseList* defs
 }
 
 ClauseList* ASTtoCNF::convertFormulaToCNFPosXORAux(const ASTNode& varphi,
-                                                 unsigned int idx,
-                                                 ClauseList* defs)
+                                                   unsigned int idx,
+                                                   ClauseList* defs)
 {
   bool renamesibs;
   ClauseList* psi;
@@ -1103,7 +1110,8 @@ ClauseList* ASTtoCNF::convertFormulaToCNFPosXORAux(const ASTNode& varphi,
   return psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegPred(const ASTNode& varphi,
+                                          ClauseList* defs)
 {
 
   ASTVec psis;
@@ -1120,7 +1128,7 @@ void ASTtoCNF::convertFormulaToCNFNegPred(const ASTNode& varphi, ClauseList* def
 }
 
 void ASTtoCNF::convertFormulaToCNFNegFALSE(const ASTNode& varphi,
-                                         ClauseList* /*defs*/)
+                                           ClauseList* /*defs*/)
 {
   info[varphi]->clausesneg = SINGLETON(dummy_true_var);
 }
@@ -1133,26 +1141,28 @@ void ASTtoCNF::convertFormulaToCNFNegTRUE(const ASTNode& varphi,
 }
 
 void ASTtoCNF::convertFormulaToCNFNegBOOLEXTRACT(const ASTNode& varphi,
-                                               ClauseList* /*defs*/)
+                                                 ClauseList* /*defs*/)
 {
   ClauseList* psi = SINGLETON(bm->CreateNode(NOT, varphi));
   info[varphi]->clausesneg = psi;
 }
 
 void ASTtoCNF::convertFormulaToCNFNegSYMBOL(const ASTNode& varphi,
-                                          ClauseList* /*defs*/)
+                                            ClauseList* /*defs*/)
 {
   info[varphi]->clausesneg = SINGLETON(bm->CreateNode(NOT, varphi));
 }
 
-void ASTtoCNF::convertFormulaToCNFNegNOT(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegNOT(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   convertFormulaToCNF(varphi[0], defs);
   info[varphi]->clausesneg = ClauseList::COPY(*(info[varphi[0]]->clausespos));
   reduceMemoryFootprintPos(varphi[0]);
 }
 
-void ASTtoCNF::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegAND(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   bool renamesibs = false;
   ClauseList* clauses;
@@ -1200,7 +1210,8 @@ void ASTtoCNF::convertFormulaToCNFNegAND(const ASTNode& varphi, ClauseList* defs
   info[varphi]->clausesneg = psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFNegNAND(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegNAND(const ASTNode& varphi,
+                                          ClauseList* defs)
 {
   //****************************************
   // (neg) NAND ~> UNION
@@ -1256,7 +1267,8 @@ void ASTtoCNF::convertFormulaToCNFNegOR(const ASTNode& varphi, ClauseList* defs)
   info[varphi]->clausesneg = psi;
 }
 
-void ASTtoCNF::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegNOR(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   bool renamesibs = false;
   ClauseList* clauses;
@@ -1298,7 +1310,7 @@ void ASTtoCNF::convertFormulaToCNFNegNOR(const ASTNode& varphi, ClauseList* defs
 }
 
 void ASTtoCNF::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi,
-                                           ClauseList* defs)
+                                             ClauseList* defs)
 {
   //****************************************
   // (neg) IMPLIES ~> UNION [0] ; NOT [1]
@@ -1313,7 +1325,8 @@ void ASTtoCNF::convertFormulaToCNFNegIMPLIES(const ASTNode& varphi,
   reduceMemoryFootprintNeg(varphi[1]);
 }
 
-void ASTtoCNF::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegITE(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   //****************************************
   // (neg) ITE ~> UNION (PRODUCT NOT [0] ; NOT [1])
@@ -1344,7 +1357,8 @@ void ASTtoCNF::convertFormulaToCNFNegITE(const ASTNode& varphi, ClauseList* defs
   info[varphi]->clausesneg = psi1;
 }
 
-void ASTtoCNF::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs)
+void ASTtoCNF::convertFormulaToCNFNegXOR(const ASTNode& varphi,
+                                         ClauseList* defs)
 {
   ASTVec::const_iterator it = varphi.GetChildren().begin();
   for (; it != varphi.GetChildren().end(); it++)
@@ -1362,8 +1376,8 @@ void ASTtoCNF::convertFormulaToCNFNegXOR(const ASTNode& varphi, ClauseList* defs
 }
 
 ClauseList* ASTtoCNF::convertFormulaToCNFNegXORAux(const ASTNode& varphi,
-                                                 unsigned int idx,
-                                                 ClauseList* defs)
+                                                   unsigned int idx,
+                                                   ClauseList* defs)
 {
   bool renamesibs;
   ClauseList* psi;

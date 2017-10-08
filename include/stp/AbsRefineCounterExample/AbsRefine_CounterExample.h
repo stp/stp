@@ -26,9 +26,9 @@ THE SOFTWARE.
 #define CTREXAMPLE_H
 
 #include "stp/AST/AST.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/ToSat/ToSATBase.h"
 
 namespace stp
@@ -82,7 +82,6 @@ private:
   void PrintSATModel(SATSolver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
 public:
-
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
       : bm(b), simp(s), ArrayTransform(at)
   {
@@ -94,8 +93,7 @@ public:
   // Prints the counterexample to stdout
   void PrintCounterExample(bool t, std::ostream& os = std::cout);
   void PrintCounterExampleSMTLIB2(std::ostream& os);
-  void PrintSMTLIB2(std::ostream& os, const ASTNode &n);
-
+  void PrintSMTLIB2(std::ostream& os, const ASTNode& n);
 
   void ClearCounterExampleMap(void) { CounterExampleMap.clear(); }
 
@@ -109,8 +107,8 @@ public:
   ASTNode GetCounterExample(const ASTNode& e);
 
   // queries the counterexample, and returns a vector of index-value pairs for e
-  vector<std::pair<ASTNode, ASTNode>>
-  GetCounterExampleArray(bool t, const ASTNode& e);
+  vector<std::pair<ASTNode, ASTNode>> GetCounterExampleArray(bool t,
+                                                             const ASTNode& e);
 
   int CounterExampleSize(void) const { return CounterExampleMap.size(); }
 
@@ -126,14 +124,13 @@ public:
    * Array Refinement functions                                   *
    ****************************************************************/
   SOLVER_RETURN_TYPE
-  CallSAT_ResultCheck(
-    SATSolver& SatSolver, const ASTNode& modified_input,
-    const ASTNode& original_input, ToSATBase* tosat,
-    bool refinement);
+  CallSAT_ResultCheck(SATSolver& SatSolver, const ASTNode& modified_input,
+                      const ASTNode& original_input, ToSATBase* tosat,
+                      bool refinement);
 
   SOLVER_RETURN_TYPE
-  SATBased_ArrayReadRefinement(SATSolver& newS,
-                               const ASTNode& original_input, ToSATBase* tosat);
+  SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& original_input,
+                               ToSATBase* tosat);
 
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
 
@@ -159,7 +156,6 @@ public:
   }
 
   ~AbsRefine_CounterExample() { ClearAllTables(); }
-
 };
 
 class CompleteCounterExample // not copyable

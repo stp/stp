@@ -36,7 +36,7 @@ void ASTInterior::CleanUp()
 {
   nodeManager->_interior_unique_table.erase(this);
   delete this;
-} 
+}
 
 // Returns kinds.  "lispprinter" handles printing of parenthesis
 // and childnodes. (c_friendly is for printing hex. numbers that C
@@ -68,7 +68,7 @@ operator()(const ASTInterior* int_node_ptr) const
   hashval ^= (hashval >> 11);
   hashval += (hashval << 15);
   return hashval;
-} 
+}
 
 // ASTInteriorEqual operator()
 bool ASTInterior::ASTInteriorEqual::
@@ -78,6 +78,8 @@ operator()(const ASTInterior* int_node_ptr1,
   return (*int_node_ptr1 == *int_node_ptr2);
 }
 
-ASTInterior::~ASTInterior() {}
+ASTInterior::~ASTInterior()
+{
+}
 
 } // end of namespace

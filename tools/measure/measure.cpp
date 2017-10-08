@@ -22,16 +22,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Measures how precise the AIG encodings are compared with the propagators.
 
 #define __STDC_FORMAT_MACROS
-#include <cstdint>
-#include "stp/cpp_interface.h"
-#include "stp/Util/Relations.h"
-#include "stp/Sat/MinisatCore.h"
 #include "minisat/core/Solver.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/Util/Functions.h"
 #include "stp/Printer/printers.h"
-#include "stp/Util/StopWatch.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Util/BBAsProp.h"
+#include "stp/Util/Functions.h"
+#include "stp/Util/Relations.h"
+#include "stp/Util/StopWatch.h"
+#include "stp/cpp_interface.h"
+#include <cstdint>
 
 #include <iostream>
 
@@ -42,8 +42,7 @@ int iterations = 100000;
 ostream& out = cout;
 STPMgr* mgr = new STPMgr;
 
-void print(MinisatCore* ss, ASTNode i0,
-           ToSAT::ASTNodeToSATVar& m)
+void print(MinisatCore* ss, ASTNode i0, ToSAT::ASTNodeToSATVar& m)
 {
   const int bits = std::max(1U, i0.GetValueWidth());
   out << "<";
@@ -143,7 +142,8 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     percent = 100;
 
   cerr.setf(std::ios::fixed);
-  cerr << "&" << std::setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC) << "s";
+  cerr << "&" << std::setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC)
+       << "s";
 
   cerr.setf(std::ios::fixed);
   cerr << "&" << std::setprecision(2) << (float(prop.elapsed) / CLOCKS_PER_SEC)

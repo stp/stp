@@ -35,10 +35,10 @@ THE SOFTWARE.
 #ifndef FINDPURELITERALS_H_
 #define FINDPURELITERALS_H_
 
-#include <map>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <map>
 
 namespace stp
 {
@@ -63,7 +63,6 @@ public:
   bool topLevel(ASTNode& n, Simplifier* simplifier, STPMgr* stpMgr);
 
   void build(const ASTNode& n, polarity_type polarity);
-
 };
 }
 #endif /* FINDPURELITERALS_H_ */

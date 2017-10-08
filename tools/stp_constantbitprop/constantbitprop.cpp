@@ -21,14 +21,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Parses, runs constant bit propagation, then outputs the result.
 
-#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/AST/AST.h"
 #include "stp/Printer/printers.h"
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
-#include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/Sat/MinisatCore.h"
 #include "stp/STPManager/STP.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/cpp_interface.h"
 
 using namespace simplifier::constantBitP;

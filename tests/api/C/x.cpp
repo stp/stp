@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 
 // FIXME: this test name sucks!
 TEST(x, one)
@@ -46,8 +46,9 @@ TEST(x, one)
       vc_bvGtExpr(vc, nresp1, vc_bv32ConstExprFromInt(vc, 0)),
 
       // sz == nresp1 * 4
-      vc_eqExpr(vc, sz, d0 = vc_bv32MultExpr(vc, nresp1,
-                                             vc_bv32ConstExprFromInt(vc, 4))),
+      vc_eqExpr(
+          vc, sz,
+          d0 = vc_bv32MultExpr(vc, nresp1, vc_bv32ConstExprFromInt(vc, 4))),
 
       // sz > nresp1 || sz < 0
       vc_orExpr(vc, d1 = vc_sbvGeExpr(vc, sz, nresp1),

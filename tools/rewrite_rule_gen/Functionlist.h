@@ -24,8 +24,8 @@ THE SOFTWARE.
 
 #ifndef FUNCTIONLIST_H_
 #define FUNCTIONLIST_H_
-#include "rewrite_system.h"
 #include "misc.h"
+#include "rewrite_system.h"
 #include "stp/Simplifier/Simplifier.h"
 
 extern Rewrite_system rewrite_system;

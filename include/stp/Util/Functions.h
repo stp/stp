@@ -105,19 +105,22 @@ struct Functions
     l.push_back(
         Function(stp::BVLT, "unsigned less than", &bvLessThanBothWays, &ltF));
     l.push_back(Function(stp::EQ, "equals", &bvEqualsBothWays, &eqF));
-    l.push_back(Function(stp::BVXOR, "bit-vector xor", &bvXorBothWays, &bvXOrF));
+    l.push_back(
+        Function(stp::BVXOR, "bit-vector xor", &bvXorBothWays, &bvXOrF));
     l.push_back(Function(stp::BVOR, "bit-vector or", &bvOrBothWays, &bvOrF));
-    l.push_back(Function(stp::BVAND, "bit-vector and", &bvAndBothWays, &bvAndF));
     l.push_back(
-        Function(stp::BVRIGHTSHIFT, "right shift", &bvRightShiftBothWays, &rightSF));
-    l.push_back(
-        Function(stp::BVLEFTSHIFT, "left shift", &bvLeftShiftBothWays, &leftSF));
+        Function(stp::BVAND, "bit-vector and", &bvAndBothWays, &bvAndF));
+    l.push_back(Function(stp::BVRIGHTSHIFT, "right shift",
+                         &bvRightShiftBothWays, &rightSF));
+    l.push_back(Function(stp::BVLEFTSHIFT, "left shift", &bvLeftShiftBothWays,
+                         &leftSF));
 
     l.push_back(Function(stp::BVPLUS, "addition", &bvAddBothWays, &plusF));
-    l.push_back(Function(stp::BVSUB, "subtraction", &bvSubtractBothWays, &subF));
+    l.push_back(
+        Function(stp::BVSUB, "subtraction", &bvSubtractBothWays, &subF));
     //l.push_back(Function(stp::BVMULT, "multiplication", &multiply, &multiplyF));
     //l.push_back(
-      //  Function(stp::BVDIV, "unsigned division", &unsignedDivide, &divideF));
+    //  Function(stp::BVDIV, "unsigned division", &unsignedDivide, &divideF));
     //l.push_back(Function(stp::BVMOD, "unsigned remainder", &unsignedModulus, &remF));
   }
 };

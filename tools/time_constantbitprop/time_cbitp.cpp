@@ -25,22 +25,21 @@ THE SOFTWARE.
 // Times how long running constant bit propagation takes per transfer function.
 
 #include <ctime>
-#include <vector>
-#include <list>
 #include <iomanip>
+#include <list>
+#include <vector>
 
 #include "extlib-constbv/constantbv.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
-#include "stp/cpp_interface.h"
-#include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/Util/Relations.h"
 #include "stp/Util/StopWatch.h"
+#include "stp/cpp_interface.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -85,10 +84,10 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 
     if (false)
     {
-        std::cerr << "after" << a;
-        std::cerr << b;
-        std::cerr << output;
-        std::cerr << std::endl;
+      std::cerr << "after" << a;
+      std::cerr << b;
+      std::cerr << output;
+      std::cerr << std::endl;
     }
 
     assert(r != CONFLICT);
@@ -129,7 +128,6 @@ simplifier::constantBitP::Result unsignedModulus(vector<FixedBits*>& children,
   return bvUnsignedModulusBothWays(children, output, beev);
 }
 
-
 simplifier::constantBitP::Result unsignedDivision(vector<FixedBits*>& children,
                                                   FixedBits& output)
 {
@@ -169,7 +167,7 @@ int main(void)
   ostream& output = cerr;
 
   output << "%"
-         << "iterations" << iterations<< std::endl;
+         << "iterations" << iterations << std::endl;
   output << "%"
          << "bit-width" << bitWidth << std::endl;
 

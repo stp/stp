@@ -149,13 +149,12 @@ public:
 
     if (n.GetType() == BOOLEAN_TYPE)
     {
-      n = stpMgr->hashingNodeFactory->CreateNode(n.GetKind(),
-                                                        newChildren);
+      n = stpMgr->hashingNodeFactory->CreateNode(n.GetKind(), newChildren);
     }
     else if (n.GetType() == BITVECTOR_TYPE)
     {
-      n = stpMgr->hashingNodeFactory->CreateTerm(
-          n.GetKind(), n.GetValueWidth(), newChildren);
+      n = stpMgr->hashingNodeFactory->CreateTerm(n.GetKind(), n.GetValueWidth(),
+                                                 newChildren);
     }
     else
     {

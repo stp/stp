@@ -42,7 +42,7 @@ class BBNodeAIG
   // This is only useful for printing small instances for debuging.
   void print(Aig_Obj_t* node) const
   {
-    Aig_Obj_t* c0 = node->pFanin0, *c1 = node->pFanin1;
+    Aig_Obj_t *c0 = node->pFanin0, *c1 = node->pFanin1;
     bool c0Not = Aig_IsComplement(c0), c1Not = Aig_IsComplement(c1);
     if (c0Not)
       c0 = Aig_Not(c0);
@@ -104,7 +104,7 @@ public:
 
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
-  bool operator<(const BBNodeAIG& other)  const { return n < other.n; }
+  bool operator<(const BBNodeAIG& other) const { return n < other.n; }
   void print() const { print(n); }
 };
 }

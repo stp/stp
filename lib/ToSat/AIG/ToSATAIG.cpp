@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
 namespace stp
 {
@@ -59,9 +59,11 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   assert(satSolver.nVars() == 0);
   add_cnf_to_solver(satSolver, cnfData);
 
-  if (bm->UserFlags.output_bench_flag) {
+  if (bm->UserFlags.output_bench_flag)
+  {
     cerr << "Converting to CNF via ABC's AIG package can't yet print out bench "
-            "format" << endl;
+            "format"
+         << endl;
   }
   release_cnf_memory(cnfData);
 
@@ -97,11 +99,12 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
     if (bm->UserFlags.quick_statistics_flag)
       bm->GetRunTimes()->print();
 
-    if (needAbsRef) {
+    if (needAbsRef)
+    {
       cerr << "Warning: STP is exiting after generating the first CNF."
-        << " But the CNF is probably partial which you probably don't want."
-        << " You probably want to disable"
-        << " refinement with the \"-r\" command line option." << endl;
+           << " But the CNF is probably partial which you probably don't want."
+           << " You probably want to disable"
+           << " refinement with the \"-r\" command line option." << endl;
     }
 
     exit(0);
@@ -149,7 +152,7 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
   for (int i = 0; i < cnfData->nClauses; i++)
   {
     satSolverClause.clear();
-    for (int* pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
          pLit < pStop; pLit++)
     {
       uint32_t var = (*pLit) >> 1;

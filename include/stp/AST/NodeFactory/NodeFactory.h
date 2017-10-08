@@ -25,18 +25,18 @@ THE SOFTWARE.
 #ifndef NODEFACTORY_H
 #define NODEFACTORY_H
 
-#include <vector>
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/Attributes.h"
+#include <vector>
 
 using std::vector;
 namespace stp
 {
-  class ASTNode;
-  typedef vector<ASTNode> ASTVec;
-  DLL_PUBLIC extern ASTVec _empty_ASTVec;
-  class STPMgr;
-  typedef unsigned int* CBV;
+class ASTNode;
+typedef vector<ASTNode> ASTVec;
+DLL_PUBLIC extern ASTVec _empty_ASTVec;
+class STPMgr;
+typedef unsigned int* CBV;
 }
 
 using stp::ASTNode;
@@ -56,11 +56,11 @@ public:
   DLL_PUBLIC virtual ~NodeFactory();
 
   DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
-                                   const ASTVec& children) = 0;
+                                        const ASTVec& children) = 0;
 
   DLL_PUBLIC virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                                        unsigned int width,
-                                        const ASTVec& children);
+                                             unsigned int width,
+                                             const ASTVec& children);
 
   DLL_PUBLIC virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
 
@@ -77,9 +77,10 @@ public:
                      const ASTVec& children = _empty_ASTVec);
 
   DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                     const ASTVec& back_children = _empty_ASTVec);
-  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
-                     const ASTVec& back_children = _empty_ASTVec);
+                                const ASTVec& back_children = _empty_ASTVec);
+  DLL_PUBLIC ASTNode CreateNode(Kind kind, const ASTNode& child0,
+                                const ASTNode& child1,
+                                const ASTVec& back_children = _empty_ASTVec);
   ASTNode CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
                      const ASTNode& child2,
                      const ASTVec& back_children = _empty_ASTVec);

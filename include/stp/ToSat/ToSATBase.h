@@ -40,8 +40,8 @@ protected:
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
-                   ASTNode::ASTNodeEqual> ASTNodeToSATVar;
-
+                             ASTNode::ASTNodeEqual>
+      ASTNodeToSATVar;
 
   ToSATBase(STPMgr* bm) : bm(bm)
   {

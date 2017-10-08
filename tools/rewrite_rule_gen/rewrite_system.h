@@ -47,7 +47,8 @@ bool matchNode(const ASTNode& n0, const ASTNode& n1, stp::ASTNodeMap& fromTo,
                const int term_variable_width);
 
 bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
-                           stp::ASTNodeMap& fromTo, const int term_variable_width);
+                           stp::ASTNodeMap& fromTo,
+                           const int term_variable_width);
 
 ASTNode renameVars(const ASTNode& n);
 
@@ -234,7 +235,8 @@ public:
         assert(BVTypeCheckRecursive(from_rewritten));
         assert(BVTypeCheckRecursive(to_rewritten));
 
-        assert(isConstantToSat(create(stp::EQ, from_wide_rewritten, from_wide)));
+        assert(
+            isConstantToSat(create(stp::EQ, from_wide_rewritten, from_wide)));
         assert(isConstantToSat(create(stp::EQ, to_wide_rewritten, to_wide)));
         assert(isConstantToSat(create(stp::EQ, it->getFrom(), from_rewritten)));
         assert(isConstantToSat(create(stp::EQ, it->getTo(), to_rewritten)));
@@ -254,7 +256,7 @@ public:
           std::cout << to_rewritten;
           std::cout << "---";
           std::cout << getDifficulty(rr.getFrom()) << " --> "
-               << getDifficulty(rr.getTo()) << std::endl;
+                    << getDifficulty(rr.getTo()) << std::endl;
 
           *it = rr;
           lookups_invalid = true;

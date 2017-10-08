@@ -55,7 +55,6 @@ public:
   {
     return lp._node.LispPrint(os, lp._indentation);
   };
-
 };
 
 // global function which accepts an integer and looks up the
@@ -63,7 +62,7 @@ public:
 void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision,
                                          int polarity = 0);
 
-DLL_PUBLIC void print_STPInput_Back(const ASTNode& query, STPMgr *);
+DLL_PUBLIC void print_STPInput_Back(const ASTNode& query, STPMgr*);
 
 } // end of namespace stp
 #endif

@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 #include <iostream>
 
 // FIXME: Find better test name
@@ -2550,7 +2550,8 @@ TEST(b4_c2, one)
   vc_assertFormula(vc, e5286030);
   vc_push(vc);
   Expr e5286031 = vc_falseExpr(vc);
-  if (false) {
+  if (false)
+  {
     char* cc;
     unsigned long len;
     vc_printQueryStateToBuffer(vc, e5286031, &cc, &len, 1);

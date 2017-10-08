@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <cassert>
 #include "stp/Printer/printers.h"
+#include <cassert>
 namespace printer
 {
 
@@ -39,7 +39,8 @@ using namespace stp;
 
 // helper function for printing C code (copied from PL_Print1())
 // if this node is present in the letvar Map, then print the letvar
-void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr *bm)
+void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
+              STPMgr* bm)
 {
 
   unsigned int num_bytes;
@@ -57,7 +58,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
   // of "(LET v0 = term1, v1=term1@term2,...
   if ((bm->NodeLetVarMap1.find(n) != bm->NodeLetVarMap1.end()) && !letize)
   {
-    C_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize,bm);
+    C_Print1(os, (bm->NodeLetVarMap1[n]), indentation, letize, bm);
     return;
   }
 
@@ -65,7 +66,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
   // term to be printed
   if ((bm->NodeLetVarMap.find(n) != bm->NodeLetVarMap.end()) && letize)
   {
-    C_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize,bm);
+    C_Print1(os, (bm->NodeLetVarMap[n]), indentation, letize, bm);
     return;
   }
 
@@ -95,34 +96,34 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       n.nodeprint(os, true);
       break;
     case READ:
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << "[";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << "]";
       break;
     case WRITE:
       os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " WITH [";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << "] := ";
-      C_Print1(os, c[2], indentation, letize,bm);
+      C_Print1(os, c[2], indentation, letize, bm);
       os << ")";
       os << endl;
       break;
     case BVUMINUS:
       os << kind << "( ";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << ")";
       break;
     case NOT:
       os << "!(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << ") " << endl;
       break;
     case BVNOT:
       os << " ~(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << ")";
       break;
     case BVCONCAT:
@@ -131,19 +132,20 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       break;
     case BVOR:
       os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " | ";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVAND:
       os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " & ";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
-    case BVEXTRACT: {
+    case BVEXTRACT:
+    {
 
       // we only accept indices that are byte-aligned
       // (e.g., [15:8], [23:16])
@@ -160,13 +162,13 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       if (num_bytes > 1)
       {
         os << "&";
-        C_Print1(os, c[0], indentation, letize,bm);
+        C_Print1(os, c[0], indentation, letize, bm);
         os << "[" << lower / 8 << "]";
       }
       // for single-byte extraction, use the VALUE
       else
       {
-        C_Print1(os, c[0], indentation, letize,bm);
+        C_Print1(os, c[0], indentation, letize, bm);
         os << "[" << lower / 8 << "]";
       }
 
@@ -193,54 +195,54 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
            it++)
       {
         os << ", " << endl;
-        C_Print1(os, *it, indentation, letize,bm);
+        C_Print1(os, *it, indentation, letize, bm);
       }
       os << ")" << endl;
       break;
     case ITE:
       os << "if (";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << ")" << endl;
       os << "{";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << endl << "} else {";
-      C_Print1(os, c[2], indentation, letize,bm);
+      C_Print1(os, c[2], indentation, letize, bm);
       os << endl << "}";
       break;
     case BVLT:
       // convert to UNSIGNED before doing comparison!
       os << "((unsigned char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " < ";
       os << "(unsigned char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVLE:
       // convert to UNSIGNED before doing comparison!
       os << "((unsigned char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " <= ";
       os << "(unsigned char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVGT:
       // convert to UNSIGNED before doing comparison!
       os << "((unsigned char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " > ";
       os << "(unsigned char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVGE:
       // convert to UNSIGNED before doing comparison!
       os << "((unsigned char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " >= ";
       os << "(unsigned char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVXOR:
@@ -253,37 +255,37 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
     case BVSLT:
       // convert to SIGNED before doing comparison!
       os << "((signed char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " < ";
       os << "(signed char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVSLE:
       // convert to SIGNED before doing comparison!
       os << "((signed char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " <= ";
       os << "(signed char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVSGT:
       // convert to SIGNED before doing comparison!
       os << "((signed char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " > ";
       os << "(signed char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case BVSGE:
       // convert to SIGNED before doing comparison!
       os << "((signed char)";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       os << " >= ";
       os << "(signed char)";
-      C_Print1(os, c[1], indentation, letize,bm);
+      C_Print1(os, c[1], indentation, letize, bm);
       os << ")";
       break;
     case EQ:
@@ -312,9 +314,9 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       if (num_bytes > 1)
       {
         os << "(memcmp(";
-        C_Print1(os, c[0], indentation, letize,bm);
+        C_Print1(os, c[0], indentation, letize, bm);
         os << ", ";
-        C_Print1(os, c[1], indentation, letize,bm);
+        C_Print1(os, c[1], indentation, letize, bm);
         os << ", ";
         os << num_bytes;
         os << ") == 0)";
@@ -322,9 +324,9 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
       else if (num_bytes == 1)
       {
         os << "(";
-        C_Print1(os, c[0], indentation, letize,bm);
+        C_Print1(os, c[0], indentation, letize, bm);
         os << " == ";
-        C_Print1(os, c[1], indentation, letize,bm);
+        C_Print1(os, c[1], indentation, letize, bm);
         os << ")";
       }
       else
@@ -340,7 +342,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
     case XOR:
     {
       os << "(";
-      C_Print1(os, c[0], indentation, letize,bm);
+      C_Print1(os, c[0], indentation, letize, bm);
       ASTVec::const_iterator it = c.begin();
       ASTVec::const_iterator itend = c.end();
 
@@ -368,7 +370,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
             FatalError("unsupported boolean type in C_Print1");
             break;
         }
-        C_Print1(os, *it, indentation, letize,bm);
+        C_Print1(os, *it, indentation, letize, bm);
       }
       os << ")";
       break;
@@ -402,7 +404,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize, STPMgr
 // 2. In the second pass print a "global let" and then print N
 // 2. as follows: Every occurence of a node occuring more than
 // 2. once is replaced with the corresponding let variable.
-ostream& C_Print(ostream& os, const ASTNode n,  STPMgr* bm , int indentation)
+ostream& C_Print(ostream& os, const ASTNode n, STPMgr* bm, int indentation)
 {
   // Clear the PrintMap
   bm->PLPrintNodeSet.clear();
@@ -452,23 +454,23 @@ ostream& C_Print(ostream& os, const ASTNode n,  STPMgr* bm , int indentation)
       {
         // for multi-byte assignment, use 'memcpy' and array notation
         os << "unsigned char ";
-        C_Print1(os, it->first, indentation, false,bm);
+        C_Print1(os, it->first, indentation, false, bm);
         os << "[" << num_bytes << "]; ";
         os << "memcpy(";
-        C_Print1(os, it->first, indentation, false,bm);
+        C_Print1(os, it->first, indentation, false, bm);
         os << ", ";
         // print the expr
-        C_Print1(os, it->second, indentation, false,bm);
+        C_Print1(os, it->second, indentation, false, bm);
         os << ", " << num_bytes << ");";
       }
       else
       {
         // for single-byte assignment, use '='
         os << "unsigned char ";
-        C_Print1(os, it->first, indentation, false,bm);
+        C_Print1(os, it->first, indentation, false, bm);
         os << " = ";
         // print the expr
-        C_Print1(os, it->second, indentation, false,bm);
+        C_Print1(os, it->second, indentation, false, bm);
         os << ";" << endl;
       }
 
@@ -477,14 +479,14 @@ ostream& C_Print(ostream& os, const ASTNode n,  STPMgr* bm , int indentation)
     }
 
     os << endl << "stp_assert ";
-    C_Print1(os, n, indentation, true,bm);
+    C_Print1(os, n, indentation, true, bm);
 
     os << ";" << endl << "}";
   }
   else
   {
     os << "stp_assert ";
-    C_Print1(os, n, indentation, false,bm);
+    C_Print1(os, n, indentation, false, bm);
     os << ";";
   }
   // os << " )";

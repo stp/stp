@@ -23,13 +23,13 @@ THE SOFTWARE.
 ********************************************************************/
 #include "stp/c_interface.h"
 
-#include <cstdlib>
-#include <cstdio>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
 
 #include "stp/Interface/fdstream.h"
-#include "stp/Printer/printers.h"
 #include "stp/Parser/parser.h"
+#include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
 // FIXME: External library
 #include "extlib-abc/cnf_short.h"
@@ -74,16 +74,14 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
           stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
       break;
     case CMS4:
-      b->UserFlags.solver_to_use =
-          stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
       break;
     case MSP:
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
       break;
     default:
-      stp::FatalError(
-          "C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
+      stp::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
       break;
   }
 }
@@ -105,13 +103,13 @@ VC vc_createValidityChecker(void)
 
   stp::STPMgr* bm = new stp::STPMgr();
 
-  bm->defaultNodeFactory = new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+  bm->defaultNodeFactory =
+      new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
   stp::Simplifier* simp = new stp::Simplifier(bm);
   stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
   stp::ToSAT* tosat = new stp::ToSAT(bm);
-  stp::ArrayTransformer* arrayTransformer =
-      new stp::ArrayTransformer(bm, simp);
+  stp::ArrayTransformer* arrayTransformer = new stp::ArrayTransformer(bm, simp);
   stp::AbsRefine_CounterExample* Ctr_Example =
       new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 
@@ -130,7 +128,7 @@ void vc_printExpr(VC vc, Expr e)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode q = (*(stp::ASTNode*)e);
   stp::STPMgr* b = stp_i->bm;
-  q.PL_Print(cout,b);
+  q.PL_Print(cout, b);
 }
 
 char* vc_printSMTLIB(VC vc, Expr e)
@@ -139,7 +137,7 @@ char* vc_printSMTLIB(VC vc, Expr e)
   stp::STPMgr* b = stp_i->bm;
 
   stringstream ss;
-  printer::SMTLIB1_PrintBack(ss, *((stp::ASTNode*)e),b);
+  printer::SMTLIB1_PrintBack(ss, *((stp::ASTNode*)e), b);
   string s = ss.str();
   char* copy = strdup(s.c_str());
   return copy;
@@ -156,7 +154,7 @@ void vc_printExprCCode(VC vc, Expr e)
   stp::ASTVec declsFromParser = (stp::ASTVec)b->decls;
 
   for (stp::ASTVec::iterator it = declsFromParser.begin(),
-                              itend = declsFromParser.end();
+                             itend = declsFromParser.end();
        it != itend; it++)
   {
     if (stp::BITVECTOR_TYPE == it->GetType())
@@ -187,7 +185,7 @@ void vc_printExprFile(VC vc, Expr e, int fd)
 
   fdostream os(fd);
 
-  ((stp::ASTNode*)e)->PL_Print(os,b);
+  ((stp::ASTNode*)e)->PL_Print(os, b);
   // os.flush();
 }
 
@@ -203,17 +201,17 @@ static void vc_printVarDeclsToStream(VC vc, ostream& os)
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
-        a.PL_Print(os,b);
+        a.PL_Print(os, b);
         os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::ARRAY_TYPE:
-        a.PL_Print(os,b);
+        a.PL_Print(os, b);
         os << " : ARRAY "
            << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
         os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::BOOLEAN_TYPE:
-        a.PL_Print(os,b);
+        a.PL_Print(os, b);
         os << " : BOOLEAN;" << endl;
         break;
       default:
@@ -247,7 +245,7 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
         (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i, false) : *i;
     q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q, false) : q;
     os << "ASSERT( ";
-    q.PL_Print(os,b);
+    q.PL_Print(os, b);
     os << ");" << endl;
   }
   delete simp;
@@ -278,10 +276,11 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   vc_printAssertsToStream(vc, os, simplify_print);
   os << "%----------------------------------------------------" << endl;
   os << "QUERY( ";
-  stp::ASTNode q = (simplify_print == 1)
-                        ? simp->SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
-                        : *(stp::ASTNode*)e;
-  q.PL_Print(os,b);
+  stp::ASTNode q =
+      (simplify_print == 1)
+          ? simp->SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
+          : *(stp::ASTNode*)e;
+  q.PL_Print(os, b);
   os << " );" << endl;
 
   delete simp;
@@ -309,7 +308,8 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
 
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
   // formate the state of the query
   std::ostringstream os;
@@ -341,7 +341,7 @@ void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
   stp::ASTNode q = *((stp::ASTNode*)e);
 
   stringstream os;
-  q.PL_Print(os,b);
+  q.PL_Print(os, b);
   string s = os.str();
   const char* cstr = s.c_str();
   unsigned long size = s.size() + 1; // number of chars + terminating null
@@ -358,7 +358,7 @@ void vc_printQuery(VC vc)
   ostream& os = std::cout;
   os << "QUERY(";
   stp::ASTNode q = b->GetQuery();
-  q.PL_Print(os,b);
+  q.PL_Print(os, b);
   os << ");" << endl;
 }
 
@@ -384,19 +384,17 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
   stp::ASTNode* ti = (stp::ASTNode*)typeIndex;
   stp::ASTNode* td = (stp::ASTNode*)typeData;
 
-  if (!(ti->GetKind() == stp::BITVECTOR &&
-        (*ti)[0].GetKind() == stp::BVCONST))
+  if (!(ti->GetKind() == stp::BITVECTOR && (*ti)[0].GetKind() == stp::BVCONST))
   {
     stp::FatalError("Tyring to build array whose"
-                     "indextype i is not a BITVECTOR, where i = ",
-                     *ti);
+                    "indextype i is not a BITVECTOR, where i = ",
+                    *ti);
   }
-  if (!(td->GetKind() == stp::BITVECTOR &&
-        (*td)[0].GetKind() == stp::BVCONST))
+  if (!(td->GetKind() == stp::BITVECTOR && (*td)[0].GetKind() == stp::BVCONST))
   {
     stp::FatalError("Trying to build an array whose"
-                     "valuetype v is not a BITVECTOR. where a = ",
-                     *td);
+                    "valuetype v is not a BITVECTOR. where a = ",
+                    *td);
   }
   stp::ASTNode output = b->CreateNode(stp::ARRAY, (*ti)[0], (*td)[0]);
 
@@ -563,7 +561,8 @@ void vc_printCounterExample(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
   bool currentPrint = b->UserFlags.print_counterexample_flag;
   b->UserFlags.print_counterexample_flag = true;
@@ -586,7 +585,8 @@ Expr vc_getCounterExample(VC vc, Expr e)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
   stp::ASTNode* output = new stp::ASTNode(ce->GetCounterExample(*a));
   return output;
 }
@@ -596,7 +596,8 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
   bool t = false;
   if (ce->CounterExampleSize())
@@ -623,7 +624,8 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
 int vc_counterexample_size(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
   return ce->CounterExampleSize();
 }
 
@@ -631,7 +633,8 @@ WholeCounterExample vc_getWholeCounterExample(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
   stp::CompleteCounterExample* c =
       new stp::CompleteCounterExample(ce->GetCompleteCounterExample(), b);
@@ -661,7 +664,7 @@ int vc_getBVLength(VC /*vc*/, Expr ex)
   if (stp::BITVECTOR_TYPE != e->GetType())
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
-                     "Input expression must be a bit-vector");
+                    "Input expression must be a bit-vector");
   }
   return e->GetValueWidth();
 }
@@ -846,7 +849,8 @@ Expr vc_andExprN(VC vc, Expr* cc, int n)
   assert(n > 0);
 
   stp::ASTVec d;
-  for (int i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++)
+  {
     d.push_back(*c[i]);
   }
 
@@ -967,8 +971,8 @@ Expr vc_boolToBVExpr(VC vc, Expr form)
   if (!is_Form_kind(c->GetKind()))
   {
     stp::FatalError("CInterface: vc_BoolToBVExpr: "
-                     "You have input a NON formula:",
-                     *c);
+                    "You have input a NON formula:",
+                    *c);
   }
 
   stp::ASTNode o;
@@ -1011,8 +1015,8 @@ Type vc_bvType(VC vc, int num_bits)
   if (!(0 < num_bits))
   {
     stp::FatalError("CInterface: number of bits in a bvtype"
-                     " must be a positive integer:",
-                     b->CreateNode(stp::UNDEFINED));
+                    " must be a positive integer:",
+                    b->CreateNode(stp::UNDEFINED));
   }
 
   stp::ASTNode e = b->CreateBVConst(32, num_bits);
@@ -1090,8 +1094,8 @@ Expr vc_bvConcatExpr(VC vc, Expr left, Expr right)
 
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
-  stp::ASTNode o = b->CreateTerm(stp::BVCONCAT,
-                         l->GetValueWidth() + r->GetValueWidth(), *l, *r);
+  stp::ASTNode o = b->CreateTerm(
+      stp::BVCONCAT, l->GetValueWidth() + r->GetValueWidth(), *l, *r);
   assert(BVTypeCheck(o));
   stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -1255,20 +1259,20 @@ Expr vc_bvUMinusExpr(VC vc, Expr ccc)
 // bitwise operations: these are terms not formulas
 Expr vc_bvAndExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(), stp::BVAND,
-                          left, right);
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVAND, left, right);
 }
 
 Expr vc_bvOrExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(), stp::BVOR,
-                          left, right);
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVOR, left, right);
 }
 
 Expr vc_bvXorExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(), stp::BVXOR,
-                          left, right);
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVXOR, left, right);
 }
 
 Expr vc_bvNotExpr(VC vc, Expr ccc)
@@ -1323,7 +1327,8 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
     stp::ASTNode len = b->CreateBVConst(sh_amt, 0);
     stp::ASTNode hi = b->CreateBVConst(32, w - 1);
     stp::ASTNode low = b->CreateBVConst(32, sh_amt);
-    stp::ASTNode extract = b->CreateTerm(stp::BVEXTRACT, w - sh_amt, *a, hi, low);
+    stp::ASTNode extract =
+        b->CreateTerm(stp::BVEXTRACT, w - sh_amt, *a, hi, low);
 
     stp::ASTNode n = b->CreateTerm(stp::BVCONCAT, w, len, extract);
     BVTypeCheck(n);
@@ -1343,8 +1348,8 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
     if (0 == w)
     {
       stp::FatalError("CInterface: vc_bvRightShiftExpr: "
-                       "cannot have a bitvector of length 0:",
-                       *a);
+                      "cannot have a bitvector of length 0:",
+                      *a);
     }
     stp::ASTNode* output = new stp::ASTNode(b->CreateBVConst(w, 0));
     // if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -1458,7 +1463,8 @@ Expr vc_bvExtract(VC vc, Expr ccc, int hi_num, int low_num)
 
   stp::ASTNode hi = b->CreateBVConst(32, hi_num);
   stp::ASTNode low = b->CreateBVConst(32, low_num);
-  stp::ASTNode o = b->CreateTerm(stp::BVEXTRACT, hi_num - low_num + 1, *a, hi, low);
+  stp::ASTNode o =
+      b->CreateTerm(stp::BVEXTRACT, hi_num - low_num + 1, *a, hi, low);
   BVTypeCheck(o);
   stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -1561,8 +1567,8 @@ int getBVInt(Expr e)
   if (stp::BVCONST != a->GetKind())
   {
     stp::FatalError("CInterface: getBVInt: Attempting to "
-                     "extract int value from a NON-constant BITVECTOR: ",
-                     *a);
+                    "extract int value from a NON-constant BITVECTOR: ",
+                    *a);
   }
   return (int)a->GetUnsignedConst();
 }
@@ -1575,8 +1581,8 @@ unsigned int getBVUnsigned(Expr e)
   if (stp::BVCONST != a->GetKind())
   {
     stp::FatalError("getBVUnsigned: Attempting to extract int "
-                     "value from a NON-constant BITVECTOR: ",
-                     *a);
+                    "value from a NON-constant BITVECTOR: ",
+                    *a);
   }
   return (unsigned int)a->GetUnsignedConst();
 }
@@ -1588,8 +1594,8 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
 
   if (stp::BVCONST != a->GetKind())
     stp::FatalError("getBVUnsigned: Attempting to extract int value"
-                     "from a NON-constant BITVECTOR: ",
-                     *a);
+                    "from a NON-constant BITVECTOR: ",
+                    *a);
   unsigned* bv = a->GetBVConst();
 
   char* str_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
@@ -1606,8 +1612,10 @@ Expr vc_simplify(VC vc, Expr e)
 
   if (stp::BOOLEAN_TYPE == a->GetType())
   {
-    stp::ASTNode* round1 = new stp::ASTNode(simp->SimplifyFormula_TopLevel(*a, false));
-    stp::ASTNode* output = new stp::ASTNode(simp->SimplifyFormula_TopLevel(*round1, false));
+    stp::ASTNode* round1 =
+        new stp::ASTNode(simp->SimplifyFormula_TopLevel(*a, false));
+    stp::ASTNode* output =
+        new stp::ASTNode(simp->SimplifyFormula_TopLevel(*round1, false));
     delete round1;
     return output;
   }
@@ -1714,7 +1722,7 @@ Expr vc_parseExpr(VC vc, const char* infile)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  extern FILE* cvcin, *smtin;
+  extern FILE *cvcin, *smtin;
   const char* prog = "stp";
   cvcin = fopen(infile, "r");
   if (cvcin == NULL)
@@ -1798,8 +1806,8 @@ Expr getChild(Expr e, int i)
   else
   {
     stp::FatalError("getChild: Error accessing childNode "
-                     "in expression: ",
-                     *a);
+                    "in expression: ",
+                    *a);
   }
   return a;
 }
@@ -1818,8 +1826,7 @@ int vc_getHashQueryStateToBuffer(VC vc, Expr query)
   assert(query);
 
   stp::ASTVec v = b->GetAsserts();
-  stp::ASTNode out =
-      b->CreateNode(stp::AND, b->CreateNode(stp::NOT, *qry), v);
+  stp::ASTNode out = b->CreateNode(stp::AND, b->CreateNode(stp::NOT, *qry), v);
   return out.Hash();
 }
 
@@ -1844,8 +1851,8 @@ Type vc_getType(VC vc, Expr ex)
     }
     default:
       stp::FatalError("c_interface: vc_GetType: "
-                       "expression with bad typing: "
-                       "please check your expression construction");
+                      "expression with bad typing: "
+                      "please check your expression construction");
       return vc_boolType(vc);
       break;
   }
@@ -1876,8 +1883,8 @@ void vc_Destroy(VC vc)
 
   if (b->UserFlags.cinterface_exprdelete_on_flag)
   {
-    for (vector<stp::ASTNode*>::iterator it = b->persist.begin(); it != b->persist.end();
-         it++)
+    for (vector<stp::ASTNode*>::iterator it = b->persist.begin();
+         it != b->persist.end(); it++)
       delete *it;
     b->persist.clear();
   }
@@ -1916,7 +1923,7 @@ int getBVLength(Expr ex)
   if (stp::BITVECTOR_TYPE != e->GetType())
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
-                     "Input expression must be a bit-vector");
+                    "Input expression must be a bit-vector");
   }
 
   return e->GetValueWidth();
@@ -1946,7 +1953,8 @@ void vc_printCounterExampleFile(VC vc, int fd)
   stp::STPMgr* b = stp_i->bm;
 
   fdostream os(fd);
-  stp::AbsRefine_CounterExample* ce = (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
   bool currentPrint = b->UserFlags.print_counterexample_flag;
   b->UserFlags.print_counterexample_flag = true;
@@ -1966,7 +1974,6 @@ int getExprID(Expr ex)
   stp::ASTNode q = (*(stp::ASTNode*)ex);
   return q.GetNodeNum();
 }
-
 
 void process_argument(const char ch, VC vc)
 {
@@ -2031,10 +2038,8 @@ void process_argument(const char ch, VC vc)
   }
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // extended version
-
 
 int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
 {
@@ -2065,7 +2070,6 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     // smt_delete_buffer(bstat);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
-
   }
   else
   {

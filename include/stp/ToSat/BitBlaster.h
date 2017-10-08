@@ -25,12 +25,12 @@ THE SOFTWARE.
 #ifndef BITBLASTNEW_H
 #define BITBLASTNEW_H
 
-#include <cmath>
-#include <cassert>
-#include <map>
 #include "stp/STPManager/STPManager.h"
-#include <list>
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
+#include <cassert>
+#include <cmath>
+#include <list>
+#include <map>
 
 namespace simplifier
 {
@@ -238,23 +238,16 @@ public:
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
   const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
-  typename std::map<ASTNode, vector<BBNode>>::iterator simplify_during_bb(
-    ASTNode& term
-    , std::set<BBNode>& support
-  );
+  typename std::map<ASTNode, vector<BBNode>>::iterator
+  simplify_during_bb(ASTNode& term, std::set<BBNode>& support);
 
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-  : uf(_uf),
-    division_variant_1(true),
-    division_variant_2(true),
-    division_variant_3(true),
-    adder_variant(true),
-    bbbvle_variant(false),
-    upper_multiplication_bound(false),
-    bvplus_variant(true),
-    multiplication_variant("7")
+      : uf(_uf), division_variant_1(true), division_variant_2(true),
+        division_variant_3(true), adder_variant(true), bbbvle_variant(false),
+        upper_multiplication_bound(false), bvplus_variant(true),
+        multiplication_variant("7")
   {
     nf = bnm;
     cb = cb_;

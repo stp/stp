@@ -25,14 +25,14 @@ THE SOFTWARE.
 #ifndef RUNTIMES_H
 #define RUNTIMES_H
 
-#include <stack>
-#include <map>
-#include <string>
+#include "stp/Util/Attributes.h"
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
+#include <stack>
+#include <string>
 #include <vector>
-#include "stp/Util/Attributes.h"
 
 class RunTimes // not copyable
 {
@@ -61,17 +61,26 @@ public:
     AlwaysTrue
   };
 
-  std::vector<std::string> CategoryNames = {
-    "Transforming",           "Simplifying",
-    "Parsing",                "CNF Conversion",
-    "Bit Blasting",           "SAT Solving",
-    "Bitvector Solving",      "Variable Elimination",
-    "Sending to SAT Solver",  "Counter Example Generation",
-    "SAT Simplification",     "Constant Bit Propagation",
-    "Array Read Refinement",  "Applying Substitutions",
-    "Removing Unconstrained", "Pure Literals",
-    "ITE Contexts",           "AIG core simplification",
-    "Interval Propagation",   "Always True"};
+  std::vector<std::string> CategoryNames = {"Transforming",
+                                            "Simplifying",
+                                            "Parsing",
+                                            "CNF Conversion",
+                                            "Bit Blasting",
+                                            "SAT Solving",
+                                            "Bitvector Solving",
+                                            "Variable Elimination",
+                                            "Sending to SAT Solver",
+                                            "Counter Example Generation",
+                                            "SAT Simplification",
+                                            "Constant Bit Propagation",
+                                            "Array Read Refinement",
+                                            "Applying Substitutions",
+                                            "Removing Unconstrained",
+                                            "Pure Literals",
+                                            "ITE Contexts",
+                                            "AIG core simplification",
+                                            "Interval Propagation",
+                                            "Always True"};
 
   typedef std::pair<Category, long> Element;
 
@@ -107,7 +116,8 @@ public:
   {
     counts.clear();
     times.clear();
-    while (!category_stack.empty()) {
+    while (!category_stack.empty())
+    {
       category_stack.pop();
     }
   }

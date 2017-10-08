@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Printer/printers.h"
-#include <string>
 #include "stp/AST/ASTKind.h"
+#include "stp/Printer/printers.h"
 #include <deque>
+#include <string>
 
 /*
  * Bench format  which the ABC logic synthesis tool can read.
@@ -197,7 +197,8 @@ string Bench_Print1(ostream& os, const ASTNode& n,
   return thisNode;
 }
 
-void OutputInputs(ostream& os, const ASTNode& n, std::unordered_set<int>* alreadyOutput)
+void OutputInputs(ostream& os, const ASTNode& n,
+                  std::unordered_set<int>* alreadyOutput)
 {
   if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
     return;

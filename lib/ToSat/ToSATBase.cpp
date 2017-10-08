@@ -48,12 +48,14 @@ void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)
       if (true_iff_valid && (input_status == TO_BE_SATISFIABLE))
       {
         cerr << "Warning. Expected satisfiable,"
-                " FOUND unsatisfiable" << endl;
+                " FOUND unsatisfiable"
+             << endl;
       }
       else if (!true_iff_valid && (input_status == TO_BE_UNSATISFIABLE))
       {
         cerr << "Warning. Expected unsatisfiable,"
-                " FOUND satisfiable" << endl;
+                " FOUND satisfiable"
+             << endl;
       }
     }
   }

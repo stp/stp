@@ -60,7 +60,6 @@ class AIGSimplifyPropositionalCore // not copyable
 public:
   AIGSimplifyPropositionalCore(STPMgr* _bm);
 
-
 private:
   // Convert theory nodes to fresh variables.
   ASTNode theoryToFresh(const ASTNode& n, ASTNodeMap& fromTo);
@@ -72,7 +71,6 @@ private:
 
 public:
   ASTNode topLevel(const ASTNode& top);
-
 };
 }
 #endif /* AIGSIMPLIFYPROPOSITIONALCORE_H_ */

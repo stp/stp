@@ -27,10 +27,10 @@ THE SOFTWARE.
 
 // Applies the AlwaysTrueSet to the input node.
 
-#include <map>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <map>
 
 namespace stp
 {

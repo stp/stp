@@ -25,10 +25,10 @@ THE SOFTWARE.
 // g++ <this-filename> -I/home/vganesh/stp/c_interface
 // -L/home/vganesh/stp/lib -lstp -o cc
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "stp/c_interface.h"
 
 TEST(stp_counterex, one)
 {

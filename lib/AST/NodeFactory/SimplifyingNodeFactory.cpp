@@ -22,11 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
-#include "stp/Simplifier/Simplifier.h"
-#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 #include <cmath>
 
@@ -56,9 +56,10 @@ using std::endl;
 static bool debug_simplifyingNodeFactory = false;
 
 bool SimplifyingNodeFactory::children_all_constants(
-  const ASTVec& children
-) const {
-  for (unsigned i = 0; i < children.size(); i++) {
+    const ASTVec& children) const
+{
+  for (unsigned i = 0; i < children.size(); i++)
+  {
     if (!children[i].isConstant())
     {
       return false;
@@ -87,7 +88,8 @@ ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
 
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
 {
-  if (children[0] == children[1]) {
+  if (children[0] == children[1])
+  {
     return ASTFalse;
   }
 
@@ -103,8 +105,7 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     return ASTFalse;
   }
 
-  if (children[0].GetKind() == BVRIGHTSHIFT &&
-      children[0][0] == children[1])
+  if (children[0].GetKind() == BVRIGHTSHIFT && children[0][0] == children[1])
   {
     return ASTFalse;
   }
@@ -112,19 +113,17 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
   ASTNode result;
 
   //2nd part is the same ->only care about 1st part
-  if (children[0].GetKind() == BVCONCAT &&
-      children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
+  if (children[0].GetKind() == BVCONCAT && children[1].GetKind() == BVCONCAT &&
+      children[0][1] == children[1][1])
   {
-    result =
-        NodeFactory::CreateNode(stp::BVGT, children[0][0], children[1][0]);
+    result = NodeFactory::CreateNode(stp::BVGT, children[0][0], children[1][0]);
   }
 
   //1st part is the same ->only care about 2nd part
-  if (children[0].GetKind() == BVCONCAT &&
-      children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
+  if (children[0].GetKind() == BVCONCAT && children[1].GetKind() == BVCONCAT &&
+      children[0][0] == children[1][0])
   {
-    result =
-        NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
+    result = NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
   }
 
   //If child 1 is constant, GT == NOT EQ
@@ -164,10 +163,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       kind != stp::BITVECTOR && kind != stp::ARRAY &&
       children_all_constants(children))
   {
-      const ASTNode& hash = hashing.CreateNode(kind, children);
-      const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
-      assert(c.isConstant());
-      return c;
+    const ASTNode& hash = hashing.CreateNode(kind, children);
+    const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
+    assert(c.isConstant());
+    return c;
   }
 
   ASTNode result;
@@ -215,11 +214,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
 
       //2nd part is the same -> only care about 1st part
       if (children[0].GetKind() == BVCONCAT &&
-          children[1].GetKind() == BVCONCAT &&
-          children[0][1] == children[1][1])
+          children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])
       {
-        result = NodeFactory::CreateNode(stp::BVSGT, children[0][0],
-                                         children[1][0]);
+        result =
+            NodeFactory::CreateNode(stp::BVSGT, children[0][0], children[1][0]);
       }
 
       break;
@@ -230,22 +228,20 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       break;
 
     case stp::BVGE:
-      {
-        assert(children.size() == 2);
-        ASTNode a =
-            NodeFactory::CreateNode(stp::BVGT, children[1], children[0]);
-        result = NodeFactory::CreateNode(stp::NOT, a);
-      }
-      break;
+    {
+      assert(children.size() == 2);
+      ASTNode a = NodeFactory::CreateNode(stp::BVGT, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::NOT, a);
+    }
+    break;
 
     case stp::BVSGE:
-      {
-        assert(children.size() == 2);
-        ASTNode a =
-            NodeFactory::CreateNode(stp::BVSGT, children[1], children[0]);
-        result = NodeFactory::CreateNode(stp::NOT, a);
-      }
-      break;
+    {
+      assert(children.size() == 2);
+      ASTNode a = NodeFactory::CreateNode(stp::BVSGT, children[1], children[0]);
+      result = NodeFactory::CreateNode(stp::NOT, a);
+    }
+    break;
 
     case stp::NOT:
       result = CreateSimpleNot(children);
@@ -374,7 +370,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
                                                   const ASTVec& children)
 {
-  if (children.size() == 2) {
+  if (children.size() == 2)
+  {
     const Kind k = IsAnd ? stp::AND : stp::OR;
     const ASTNode& c0 = children[0];
     const ASTNode& c1 = children[1];
@@ -415,9 +412,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   ASTVec new_children;
   new_children.reserve(children.size());
 
-  for (ASTVec::const_iterator it = children.begin(),
-    it_end = children.end()
-    ;it != it_end; it++)
+  for (ASTVec::const_iterator it = children.begin(), it_end = children.end();
+       it != it_end; it++)
   {
     ASTVec::const_iterator next_it;
 
@@ -447,7 +443,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 
   // If we get here, we saw no annihilators, and children should
   // be only the non-True nodes.
-  switch(new_children.size()) {
+  switch (new_children.size())
+  {
     case 0:
       return identity;
       break;
@@ -661,10 +658,12 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   }
 
   // Simplifiy (5 = 4/x) to FALSE.
-  if (k1 == stp::BVCONST && k2 == stp::BVDIV && in2[0].GetKind() == stp::BVCONST)
+  if (k1 == stp::BVCONST && k2 == stp::BVDIV &&
+      in2[0].GetKind() == stp::BVCONST)
   {
     ASTNode maxV = bm.CreateMaxConst(width);
-    if (CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(), maxV.GetBVConst()) != 0 &&
+    if (CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(),
+                                          maxV.GetBVConst()) != 0 &&
         CONSTANTBV::BitVector_Lexicompare(in1.GetBVConst(),
                                           in2[0].GetBVConst()) > 0)
     {
@@ -808,8 +807,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 
   if (debug_simplifyingNodeFactory)
   {
-    cout << "========" << endl << "CreateSimpleFormITE " << child0 << child1
-         << child2 << endl;
+    cout << "========" << endl
+         << "CreateSimpleFormITE " << child0 << child1 << child2 << endl;
   }
 
   if (ASTTrue == child0)
@@ -979,12 +978,10 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   return result;
 }
 
-void SimplifyingNodeFactory::handle_bvand(
-  Kind kind,
-  unsigned int width,
-  const ASTVec& children,
-  ASTNode& result
-) {
+void SimplifyingNodeFactory::handle_bvand(Kind kind, unsigned int width,
+                                          const ASTVec& children,
+                                          ASTNode& result)
+{
   bool all_one_found = false;
   bool all_zero_found = false;
 
@@ -1103,7 +1100,6 @@ void SimplifyingNodeFactory::handle_bvand(
   }
 }
 
-
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                            const ASTVec& children)
 {
@@ -1131,9 +1127,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   {
     case stp::BVZX:
     {
-      if (width - children[0].GetValueWidth() >0)
+      if (width - children[0].GetValueWidth() > 0)
       {
-        ASTNode zero = bm.CreateZeroConst(width- children[0].GetValueWidth());
+        ASTNode zero = bm.CreateZeroConst(width - children[0].GetValueWidth());
         result = NodeFactory::CreateTerm(BVCONCAT, width, zero, children[0]);
       }
       else if (width == children[0].GetValueWidth())
@@ -1142,7 +1138,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       else
       {
-        FatalError("Negative zero extend",children[0]);
+        FatalError("Negative zero extend", children[0]);
       }
       break;
     }
@@ -1270,7 +1266,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = bm.CreateZeroConst(width);
       else if (children[1].isConstant())
         result = stp::Simplifier::convertKnownShiftAmount(kind, children, bm,
-                                                           &hashing);
+                                                          &hashing);
       else if (width == 1 && children[0] == children[1])
         result = bm.CreateZeroConst(1);
       else if (children[0].GetKind() == BVUMINUS)
@@ -1290,7 +1286,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = bm.CreateZeroConst(width);
       else if (children[1].isConstant())
         result = stp::Simplifier::convertKnownShiftAmount(kind, children, bm,
-                                                           &hashing);
+                                                          &hashing);
       else if (children[0].isConstant() &&
                children[0] == bm.CreateOneConst(width))
         result = NodeFactory::CreateTerm(
@@ -1389,7 +1385,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         {
           result = bm.CreateZeroConst(width);
         }
-        else if (children.size() == 2 && children[1] == bm.CreateZeroConst(width))
+        else if (children.size() == 2 &&
+                 children[1] == bm.CreateZeroConst(width))
         {
           result = children[0];
         }
@@ -1471,13 +1468,14 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     case stp::BVAND:
     {
-      handle_bvand(kind,width, children, result);
+      handle_bvand(kind, width, children, result);
       break;
     }
 
     case stp::BVSX:
     {
-      if (width == children[0].GetValueWidth()) {
+      if (width == children[0].GetValueWidth())
+      {
         result = children[0];
       }
       break;
@@ -1636,7 +1634,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             ITE, width,
             NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
             bm.CreateMaxConst(width), bm.CreateZeroConst(width));
-      
+
       break;
 
     case SBVDIV:

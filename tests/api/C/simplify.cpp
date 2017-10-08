@@ -25,10 +25,10 @@ THE SOFTWARE.
 /* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp
  * -g */
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "stp/c_interface.h"
 
 TEST(simplify, one)
 {

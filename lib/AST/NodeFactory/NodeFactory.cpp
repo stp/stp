@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/ASTKind.h"
 #include "stp/AST/AST.h"
+#include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
 
 NodeFactory::~NodeFactory()
@@ -31,7 +31,7 @@ NodeFactory::~NodeFactory()
 }
 
 stp::ASTNode NodeFactory::CreateTerm(stp::Kind kind, unsigned int width,
-                                      const stp::ASTVec& children)
+                                     const stp::ASTVec& children)
 {
   return CreateTerm(kind, width, children);
 }
@@ -125,8 +125,8 @@ ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
 }
 
 stp::ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
-                                           unsigned int width,
-                                           const stp::ASTVec& children)
+                                          unsigned int width,
+                                          const stp::ASTVec& children)
 {
   ASTNode result = CreateTerm(kind, width, children);
   result.SetIndexWidth(index);
@@ -158,15 +158,16 @@ ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width)
 
 ASTNode NodeFactory::CreateOneConst(unsigned width)
 {
-    return bm.CreateOneConst(width);
+  return bm.CreateOneConst(width);
 }
 
 ASTNode NodeFactory::CreateZeroConst(unsigned width)
 {
-    return bm.CreateZeroConst(width);
+  return bm.CreateZeroConst(width);
 }
 
-ASTNode NodeFactory::CreateBVConst(unsigned int width, unsigned long long int bvconst)
+ASTNode NodeFactory::CreateBVConst(unsigned int width,
+                                   unsigned long long int bvconst)
 {
   return bm.CreateBVConst(width, bvconst);
 }

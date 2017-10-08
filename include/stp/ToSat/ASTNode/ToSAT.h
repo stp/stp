@@ -51,7 +51,8 @@ private:
   // ClauseList returned by CNF converter. For every new boolean
   // variable in ASTClause a new variable is created
   typedef std::unordered_map<ASTNode, uint32_t, ASTNode::ASTNodeHasher,
-                   ASTNode::ASTNodeEqual> ASTtoSATMap;
+                             ASTNode::ASTNodeEqual>
+      ASTtoSATMap;
   ASTtoSATMap _ASTNode_to_SATVar_Map;
 
   // MAP: This is a map from  ASTNodes to variables(uint32_t-s) for SYMBOLS>
@@ -83,16 +84,12 @@ private:
   ClauseBuckets* Sort_ClauseList_IntoBuckets(ClauseList* cl,
                                              int clause_bucket_size);
 
-  void dump_to_cnf_file(const SATSolver& newSolver,
-                             const ClauseList& cll,
-                             const ClauseContainer* cc
-                       );
+  void dump_to_cnf_file(const SATSolver& newSolver, const ClauseList& cll,
+                        const ClauseContainer* cc);
 
-  bool fill_satsolver_with_clauses(ClauseContainer& cc,
-                                   SATSolver& newSolver);
+  bool fill_satsolver_with_clauses(ClauseContainer& cc, SATSolver& newSolver);
 
 public:
-
   DLL_PUBLIC ToSAT(STPMgr* bm) : ToSATBase(bm)
   {
     CNFFileNameCounter = 0;

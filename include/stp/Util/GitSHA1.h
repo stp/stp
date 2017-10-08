@@ -24,8 +24,9 @@ THE SOFTWARE.
 
 #include "stp/Util/Attributes.h"
 
-namespace stp {
-  DLL_PUBLIC const char* get_git_version_sha();
-  DLL_PUBLIC const char* get_git_version_tag();
-  DLL_PUBLIC const char* get_compilation_env();
+namespace stp
+{
+DLL_PUBLIC const char* get_git_version_sha();
+DLL_PUBLIC const char* get_git_version_tag();
+DLL_PUBLIC const char* get_compilation_env();
 }

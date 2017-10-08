@@ -48,7 +48,8 @@ class SubstitutionMap // not copyable
   NodeFactory* nf;
 
   // These are used to avoid substituting {x = f(y,z), z = f(x)}
-  typedef std::unordered_map<ASTNode, Symbols*, ASTNode::ASTNodeHasher> DependsType;
+  typedef std::unordered_map<ASTNode, Symbols*, ASTNode::ASTNodeHasher>
+      DependsType;
   DependsType dependsOn; // The lhs depends on the variables in the rhs.
   ASTNodeSet rhs;        // All the rhs that have been seeen.
   std::set<ASTNodeSet*> rhsAlreadyAdded;
@@ -66,11 +67,7 @@ class SubstitutionMap // not copyable
   VariablesInExpression vars;
 
 public:
-
-  VariablesInExpression& getVariablesInExpression()
-  {
-    return vars;
-  }
+  VariablesInExpression& getVariablesInExpression() { return vars; }
 
   bool hasUnappliedSubstitutions()
   {

@@ -34,10 +34,10 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
-#include <map>
+#include "stp/Simplifier/UnsignedInterval.h"
 #include <iostream>
+#include <map>
 
 using std::map;
 
@@ -45,13 +45,15 @@ namespace stp
 {
 using std::make_pair;
 
-THREAD_LOCAL unsigned propagatorNotImplemented =0;
-THREAD_LOCAL unsigned iterations =0;
+THREAD_LOCAL unsigned propagatorNotImplemented = 0;
+THREAD_LOCAL unsigned iterations = 0;
 
 void print_stats()
 {
-  std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: " << propagatorNotImplemented << std::endl;
-  std::cerr << "{UnsignedIntervalAnalysis} Iterations: " << iterations << std::endl;
+  std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: "
+            << propagatorNotImplemented << std::endl;
+  std::cerr << "{UnsignedIntervalAnalysis} Iterations: " << iterations
+            << std::endl;
 }
 
 class UnsignedIntervalAnalysis // not copyable
@@ -83,11 +85,10 @@ class UnsignedIntervalAnalysis // not copyable
   }
 
 public:
-
   // Replace some of the things that unsigned intervals can figure out for us.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top)
   {
-    propagatorNotImplemented =0;
+    propagatorNotImplemented = 0;
 
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
     map<const ASTNode, UnsignedInterval*> visited;
@@ -95,7 +96,7 @@ public:
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
     StrengthReduction sr(bm);
-    ASTNode r= sr.topLevel(top,visited);
+    ASTNode r = sr.topLevel(top, visited);
 
     if (bm.UserFlags.stats_flag)
     {
@@ -107,7 +108,7 @@ public:
   }
 
   UnsignedInterval* visit(const ASTNode& n,
-                      map<const ASTNode, UnsignedInterval*>& visited)
+                          map<const ASTNode, UnsignedInterval*>& visited)
   {
     map<const ASTNode, UnsignedInterval*>::iterator it;
     if ((it = visited.find(n)) != visited.end())
@@ -130,7 +131,7 @@ public:
       {
         assert(!r->isComplete());
       }
-      known.push_back(r!=NULL);
+      known.push_back(r != NULL);
       children.push_back(r);
     }
 
@@ -180,11 +181,10 @@ public:
                                                  children[1]->maxV) > 0))
             result = createInterval(littleZero, littleZero);
 
-          else if (
-              children[0]->isConstant() &&
-              children[1]->isConstant() &&
-              CONSTANTBV::BitVector_Lexicompare(children[0]->minV, children[1]->minV) == 0
-          ) {
+          else if (children[0]->isConstant() && children[1]->isConstant() &&
+                   CONSTANTBV::BitVector_Lexicompare(children[0]->minV,
+                                                     children[1]->minV) == 0)
+          {
             result = createInterval(littleOne, littleOne);
           }
         }
@@ -196,8 +196,10 @@ public:
         {
           const unsigned bitwidth = n[0].GetValueWidth();
 
-          UnsignedInterval c0 = knownC0? *children[0] : *freshUnsignedInterval(bitwidth);
-          UnsignedInterval c1 = knownC1? *children[1] : *freshUnsignedInterval(bitwidth);
+          UnsignedInterval c0 =
+              knownC0 ? *children[0] : *freshUnsignedInterval(bitwidth);
+          UnsignedInterval c1 =
+              knownC1 ? *children[1] : *freshUnsignedInterval(bitwidth);
 
           if (CONSTANTBV::BitVector_Lexicompare(c0.minV, c1.maxV) > 0)
             result = createInterval(littleOne, littleOne);
@@ -207,23 +209,24 @@ public:
 
           if (BVSGT == n.GetKind() && result != NULL)
           {
-            bool c0Min = CONSTANTBV::BitVector_bit_test(c0.minV, bitwidth -1);
-            bool c0Max = CONSTANTBV::BitVector_bit_test(c0.maxV, bitwidth -1);
+            bool c0Min = CONSTANTBV::BitVector_bit_test(c0.minV, bitwidth - 1);
+            bool c0Max = CONSTANTBV::BitVector_bit_test(c0.maxV, bitwidth - 1);
 
-            bool c1Min = CONSTANTBV::BitVector_bit_test(c1.minV, bitwidth -1);
-            bool c1Max = CONSTANTBV::BitVector_bit_test(c1.maxV, bitwidth -1);
+            bool c1Min = CONSTANTBV::BitVector_bit_test(c1.minV, bitwidth - 1);
+            bool c1Max = CONSTANTBV::BitVector_bit_test(c1.maxV, bitwidth - 1);
 
             // BVGT xor MSB xor MSB
-            if ((c0Min == c0Max) && (c1Min == c1Max) )
+            if ((c0Min == c0Max) && (c1Min == c1Max))
             {
               assert(result->isConstant());
 
-              if ((c0Min != c1Min) != CONSTANTBV::BitVector_bit_test(result->minV,0))
+              if ((c0Min != c1Min) !=
+                  CONSTANTBV::BitVector_bit_test(result->minV, 0))
                 result = createInterval(littleOne, littleOne);
               else
                 result = createInterval(littleZero, littleZero);
 
-//              std::cerr << c0Min << c1Min << CONSTANTBV::BitVector_bit_test(result->minV,0) << std::endl;
+              //              std::cerr << c0Min << c1Min << CONSTANTBV::BitVector_bit_test(result->minV,0) << std::endl;
             }
             else
               result = freshUnsignedInterval(1);
@@ -233,7 +236,7 @@ public:
 
       case BVDIV:
       {
-        UnsignedInterval * c1;
+        UnsignedInterval* c1;
         if (!knownC1)
         {
           c1 = freshUnsignedInterval(width);
@@ -243,7 +246,7 @@ public:
 
         result = freshUnsignedInterval(width);
 
-        CBV c1Min =  CONSTANTBV::BitVector_Clone(c1->minV);
+        CBV c1Min = CONSTANTBV::BitVector_Clone(c1->minV);
         bool bottomChanged = false;
         if (CONSTANTBV::BitVector_is_empty(c1->minV))
         {
@@ -252,7 +255,7 @@ public:
             CONSTANTBV::BitVector_Fill(result->minV);
             CONSTANTBV::BitVector_Fill(result->maxV);
             CONSTANTBV::BitVector_Destroy(c1Min);
-            break; // result is [1111..111, 11...11111] 
+            break; // result is [1111..111, 11...11111]
           }
 
           bottomChanged = true;
@@ -260,10 +263,8 @@ public:
           break; // TODO fix so that it can run-on.
         }
 
-
-        UnsignedInterval* top = (children[0] == NULL)
-                                ? freshUnsignedInterval(width)
-                                : children[0];
+        UnsignedInterval* top =
+            (children[0] == NULL) ? freshUnsignedInterval(width) : children[0];
         result = freshUnsignedInterval(width);
 
         CBV remainder = CONSTANTBV::BitVector_Create(width, true);
@@ -275,8 +276,7 @@ public:
         CONSTANTBV::BitVector_Destroy(tmp0);
 
         tmp0 = CONSTANTBV::BitVector_Clone(top->maxV);
-        e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0,
-                                          c1Min, remainder);
+        e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0, c1Min, remainder);
         assert(0 == e);
 
         CONSTANTBV::BitVector_Destroy(tmp0);
@@ -286,14 +286,15 @@ public:
         {
           if (CONSTANTBV::BitVector_Lexicompare(result->minV, c1Min) > 0)
           {
-            CONSTANTBV::BitVector_Copy(result->minV, c1Min); //c1 should still be 1
+            CONSTANTBV::BitVector_Copy(result->minV,
+                                       c1Min); //c1 should still be 1
           }
 
           if (CONSTANTBV::BitVector_Lexicompare(result->maxV, c1Min) < 0)
           {
-            CONSTANTBV::BitVector_Copy(result->maxV, c1Min); //c1 should still be 1
+            CONSTANTBV::BitVector_Copy(result->maxV,
+                                       c1Min); //c1 should still be 1
           }
-
         }
         CONSTANTBV::BitVector_Destroy(c1Min);
 
@@ -334,12 +335,14 @@ public:
             if (CONSTANTBV::BitVector_bit_test(children[0]->minV, i))
               CONSTANTBV::BitVector_Bit_On(result->minV, i);
           }
-          for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth() ; i++)
+          for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth(); i++)
           {
-            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, n[0].GetValueWidth() -1))
+            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,
+                                               n[0].GetValueWidth() - 1))
               CONSTANTBV::BitVector_Bit_On(result->maxV, i);
 
-            if (CONSTANTBV::BitVector_bit_test(children[0]->minV, n[0].GetValueWidth() -1))
+            if (CONSTANTBV::BitVector_bit_test(children[0]->minV,
+                                               n[0].GetValueWidth() - 1))
               CONSTANTBV::BitVector_Bit_On(result->minV, i);
           }
         }
@@ -374,14 +377,12 @@ public:
             CONSTANTBV::BitVector_Flip(result->minV);
             CONSTANTBV::BitVector_increment(result->minV);
           }
-          if (
-            (CONSTANTBV::BitVector_is_empty(children[0]->minV))&&
-            (CONSTANTBV::BitVector_is_empty(children[0]->maxV))
-            )
+          if ((CONSTANTBV::BitVector_is_empty(children[0]->minV)) &&
+              (CONSTANTBV::BitVector_is_empty(children[0]->maxV)))
           {
-              result = freshUnsignedInterval(width);
-              CONSTANTBV::BitVector_Empty(result->maxV);
-              CONSTANTBV::BitVector_Empty(result->minV);
+            result = freshUnsignedInterval(width);
+            CONSTANTBV::BitVector_Empty(result->maxV);
+            CONSTANTBV::BitVector_Empty(result->minV);
           }
         }
         break;
@@ -391,12 +392,14 @@ public:
         {
           assert(children[0]->isConstant());
           result = freshUnsignedInterval(width == 0 ? 1 : width);
-          if (CONSTANTBV::BitVector_bit_test(children[0]->minV,0) && children[1]!=NULL)
+          if (CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
+              children[1] != NULL)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[1]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
           }
-          else if (!CONSTANTBV::BitVector_bit_test(children[0]->minV,0) && children[2]!=NULL)
+          else if (!CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
+                   children[2] != NULL)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[2]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[2]->maxV);
@@ -421,7 +424,7 @@ public:
 
           CONSTANTBV::BitVector_Copy(result->minV, min);
           CONSTANTBV::BitVector_Copy(result->maxV, max);
-         }
+        }
         break;
 
       case BVMULT: //OVER-APPROXIMATION
@@ -476,54 +479,56 @@ public:
       case AND:
       {
         // If any are definately zero then the answer is zero.
-        for (unsigned i=0; i < children.size() ; i++)
-          if (children[i] != NULL && (CONSTANTBV::BitVector_is_empty(children[i]->maxV)))
+        for (unsigned i = 0; i < children.size(); i++)
+          if (children[i] != NULL &&
+              (CONSTANTBV::BitVector_is_empty(children[i]->maxV)))
           {
             result = createInterval(littleZero, littleZero);
             break;
           }
         // If all are definately one the answer is one.
-        bool allok=true;
-        for (unsigned i=0; i < children.size() ; i++)
-          if (children[i] == NULL || (CONSTANTBV::BitVector_is_empty(children[i]->minV)))
-            {
-              allok=false;
-              break;
-            }
+        bool allok = true;
+        for (unsigned i = 0; i < children.size(); i++)
+          if (children[i] == NULL ||
+              (CONSTANTBV::BitVector_is_empty(children[i]->minV)))
+          {
+            allok = false;
+            break;
+          }
         if (allok)
-            result = createInterval(littleOne, littleOne);
-
+          result = createInterval(littleOne, littleOne);
       }
       break;
 
       case OR:
       {
         // If any are definately one then the answer is  one.
-        for (unsigned i=0; i < children.size() ; i++)
-          if (children[i] != NULL && (CONSTANTBV::BitVector_is_full(children[i]->minV)))
+        for (unsigned i = 0; i < children.size(); i++)
+          if (children[i] != NULL &&
+              (CONSTANTBV::BitVector_is_full(children[i]->minV)))
           {
             result = createInterval(littleOne, littleOne);
             break;
           }
         // If all are definately false the answer is false.
-        bool allfalse=true;
-        for (unsigned i=0; i < children.size() ; i++)
-          if (children[i] == NULL || (CONSTANTBV::BitVector_is_full(children[i]->maxV)))
-            {
-              allfalse=false;
-              break;
-            }
+        bool allfalse = true;
+        for (unsigned i = 0; i < children.size(); i++)
+          if (children[i] == NULL ||
+              (CONSTANTBV::BitVector_is_full(children[i]->maxV)))
+          {
+            allfalse = false;
+            break;
+          }
         if (allfalse)
-            result = createInterval(littleZero, littleZero);
-
+          result = createInterval(littleZero, littleZero);
       }
       break;
 
       case XOR:
       {
-        bool allOK=true;
-        unsigned count=0;
-        for (unsigned i=0; i < children.size() ; i++)
+        bool allOK = true;
+        unsigned count = 0;
+        for (unsigned i = 0; i < children.size(); i++)
           if (children[i] != NULL && children[i]->isConstant())
           {
             if (!CONSTANTBV::BitVector_is_empty(children[i]->maxV))
@@ -535,66 +540,67 @@ public:
             break;
           }
 
-        if (allOK && (count%2) ==0)
-            result = createInterval(littleZero, littleZero);
-        if (allOK && (count%2) ==1)
-            result = createInterval(littleOne, littleOne);
+        if (allOK && (count % 2) == 0)
+          result = createInterval(littleZero, littleZero);
+        if (allOK && (count % 2) == 1)
+          result = createInterval(littleOne, littleOne);
 
         break;
       }
 
-      case BVAND:// OVER-APPROXIMATION
+      case BVAND: // OVER-APPROXIMATION
       {
         if (knownC0 || knownC1)
         {
           if (!knownC1)
           {
-            result = createInterval(makeCBV(width),children[0]->maxV);
+            result = createInterval(makeCBV(width), children[0]->maxV);
           }
           else if (!knownC0)
           {
-            result = createInterval(makeCBV(width),children[1]->maxV);
+            result = createInterval(makeCBV(width), children[1]->maxV);
           }
           else
           {
-            if(CONSTANTBV::BitVector_Lexicompare(children[0]->maxV, children[1]->maxV) > 0)
+            if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
+                                                  children[1]->maxV) > 0)
             {
-              result = createInterval(makeCBV(width),children[1]->maxV);
+              result = createInterval(makeCBV(width), children[1]->maxV);
             }
             else
-              result = createInterval(makeCBV(width),children[0]->maxV);
+              result = createInterval(makeCBV(width), children[0]->maxV);
           }
         }
-      break;
-     }
+        break;
+      }
 
       case BVEXTRACT: // OVER-APPROXIMATION
-       {
-         if (knownC0) // others are always known..
-         {
-            unsigned shift_amount = *(children[2]->minV);
+      {
+        if (knownC0) // others are always known..
+        {
+          unsigned shift_amount = *(children[2]->minV);
 
-            CBV clone = CONSTANTBV::BitVector_Clone(children[0]->maxV);
-            while (shift_amount-- > 0)
-            {
-              CONSTANTBV::BitVector_shift_right(clone, 0);
-            }
+          CBV clone = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+          while (shift_amount-- > 0)
+          {
+            CONSTANTBV::BitVector_shift_right(clone, 0);
+          }
 
-            //  If the max bit of clone is greater than the width, ok to continue.
-            if (CONSTANTBV::Set_Max(clone) < width)
-            {
-              CBV max = makeCBV(width); // new width.
-              for (unsigned i=0; i < width;i++)
-                 if (CONSTANTBV::BitVector_bit_test(clone, i))
-                    CONSTANTBV::BitVector_Bit_On(max, i);
+          //  If the max bit of clone is greater than the width, ok to continue.
+          if (CONSTANTBV::Set_Max(clone) < width)
+          {
+            CBV max = makeCBV(width); // new width.
+            for (unsigned i = 0; i < width; i++)
+              if (CONSTANTBV::BitVector_bit_test(clone, i))
+                CONSTANTBV::BitVector_Bit_On(max, i);
 
-              result = createInterval(makeCBV(width), max);
-            }
+            result = createInterval(makeCBV(width), max);
+          }
 
-            CONSTANTBV::BitVector_Destroy(clone);
-         }
-         break;
-       }
+          CONSTANTBV::BitVector_Destroy(clone);
+        }
+        break;
+      }
 
       case BVRIGHTSHIFT: //OVER-APPROXIMATION
         if (knownC0 || knownC1)
@@ -657,8 +663,8 @@ public:
               break;
             }
 
-            max_carry =false;
-            min_carry =false;
+            max_carry = false;
+            min_carry = false;
 
             CONSTANTBV::BitVector_add(result->maxV, result->maxV,
                                       children[i]->maxV, &max_carry);
@@ -670,25 +676,28 @@ public:
               break;
             }
           }
-
         }
         break;
 
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
-          UnsignedInterval* c0 = knownC0 ? children[0]:  freshUnsignedInterval(n[0].GetValueWidth());
-          UnsignedInterval* c1 = knownC1 ? children[1]:  freshUnsignedInterval(n[1].GetValueWidth());
+          UnsignedInterval* c0 =
+              knownC0 ? children[0]
+                      : freshUnsignedInterval(n[0].GetValueWidth());
+          UnsignedInterval* c1 =
+              knownC1 ? children[1]
+                      : freshUnsignedInterval(n[1].GetValueWidth());
 
-          CBV min = CONSTANTBV::BitVector_Concat(c0->minV,c1->minV);
-          CBV max = CONSTANTBV::BitVector_Concat(c0->maxV,c1->maxV);
+          CBV min = CONSTANTBV::BitVector_Concat(c0->minV, c1->minV);
+          CBV max = CONSTANTBV::BitVector_Concat(c0->maxV, c1->maxV);
 
           likeAutoPtr.push_back(min);
           likeAutoPtr.push_back(max);
 
-          result = createInterval(min,max);
+          result = createInterval(min, max);
         }
-      break;
+        break;
 
       // TODO
       case BVXOR:
@@ -699,8 +708,8 @@ public:
       case BVSRSHIFT:
       case SBVMOD:
       default:
-          propagatorNotImplemented++;
-          break;
+        propagatorNotImplemented++;
+        break;
     }
 
     if (result != NULL && result->isComplete())

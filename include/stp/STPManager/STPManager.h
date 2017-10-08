@@ -25,14 +25,14 @@ THE SOFTWARE.
 #ifndef STPMGR_H
 #define STPMGR_H
 
-#include "stp/AST/ASTNode.h"
-#include "stp/AST/ASTInterior.h"
-#include "stp/AST/ASTSymbol.h"
 #include "stp/AST/ASTBVConst.h"
+#include "stp/AST/ASTInterior.h"
+#include "stp/AST/ASTNode.h"
+#include "stp/AST/ASTSymbol.h"
 
-#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
+#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
 
@@ -47,22 +47,24 @@ class STPMgr
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTSymbol;
-  friend ASTNode
-  HashingNodeFactory::CreateNode(const Kind kind,
-                                 const ASTVec& back_children);
+  friend ASTNode HashingNodeFactory::CreateNode(const Kind kind,
+                                                const ASTVec& back_children);
 
 private:
   // Typedef for unique Interior node table.
   typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
-                   ASTInterior::ASTInteriorEqual> ASTInteriorSet;
+                             ASTInterior::ASTInteriorEqual>
+      ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
   typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
-                   ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
+                             ASTSymbol::ASTSymbolEqual>
+      ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
   typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
-                   ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
+                             ASTBVConst::ASTBVConstEqual>
+      ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing
   ASTInteriorSet _interior_unique_table;
@@ -210,8 +212,8 @@ public:
    ****************************************************************/
 
   DLL_PUBLIC STPMgr()
-      :  last_iteration(0), soft_timeout_expired(false),
-        _symbol_count(0), CNFFileNameCounter(0)
+      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0),
+        CNFFileNameCounter(0)
   {
     ValidFlag = false;
     counterexample_checking_during_refinement = false;
@@ -229,10 +231,7 @@ public:
     CreateBVConstVal = NULL;
   }
 
-  RunTimes* GetRunTimes(void)
-  {
-    return runTimes;
-  }
+  RunTimes* GetRunTimes(void) { return runTimes; }
 
   unsigned int NodeSize(const ASTNode& a);
 
@@ -258,35 +257,36 @@ public:
    * Create Node functions                                        *
    ****************************************************************/
 
-  DLL_PUBLIC inline ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
-                              unsigned valueWidth)
+  DLL_PUBLIC inline ASTNode
+  CreateSymbol(const char* const name, unsigned indexWidth, unsigned valueWidth)
   {
     return defaultNodeFactory->CreateSymbol(name, indexWidth, valueWidth);
   }
 
   // Create and return an interior ASTNode
   DLL_PUBLIC inline ASTNode CreateNode(stp::Kind kind,
-                                  const ASTVec& children = _empty_ASTVec)
+                                       const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, children);
   }
 
-  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0,
+             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, back_children);
   }
 
-  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTNode& child1,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
+             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, child1, back_children);
   }
 
-  DLL_PUBLIC inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTNode& child1, const ASTNode& child2,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
+             const ASTNode& child2, const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, child1, child2,
                                           back_children);
@@ -298,14 +298,14 @@ public:
 
   // Create and return an ASTNode for a term
   inline ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                                  const ASTVec& children = _empty_ASTVec)
+                            const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateTerm(kind, width, children);
   }
 
-  inline ASTNode
-  CreateArrayTerm(stp::Kind kind, unsigned int indexWidth, unsigned int width,
-                  const ASTVec& children = _empty_ASTVec)
+  inline ASTNode CreateArrayTerm(stp::Kind kind, unsigned int indexWidth,
+                                 unsigned int width,
+                                 const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateArrayTerm(kind, indexWidth, width,
                                                children);
@@ -364,7 +364,6 @@ public:
   // Used just via the C-interface.
   // Note, not maintained properly wrt push/pops
   vector<stp::ASTNode> decls;
-
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -442,28 +441,31 @@ public:
     if (_interior_unique_table.size() > 0)
     {
       std::cerr << "Interiors:" << _interior_unique_table.size() << " of ";
-      std::cerr <<  sizeof(**_interior_unique_table.begin()) << " bytes each" << std::endl;
+      std::cerr << sizeof(**_interior_unique_table.begin()) << " bytes each"
+                << std::endl;
     }
 
     std::map<Kind, int> freq;
     for (auto it : _interior_unique_table)
-      {
-         freq[it->GetKind()]++;
-      }
+    {
+      freq[it->GetKind()]++;
+    }
 
-    for (auto it: freq)
+    for (auto it : freq)
       std::cerr << it.first << " " << it.second << std::endl;
 
     if (_symbol_unique_table.size() > 0)
     {
       std::cerr << "Symbols:" << _symbol_unique_table.size() << " of ";
-      std::cerr <<  sizeof(**_symbol_unique_table.begin()) << " bytes each" << std::endl;
+      std::cerr << sizeof(**_symbol_unique_table.begin()) << " bytes each"
+                << std::endl;
     }
 
     if (_bvconst_unique_table.size() > 0)
     {
-      std::cerr << "BVConsts:" << _bvconst_unique_table.size()  << " of ";
-      std::cerr <<  sizeof(**_bvconst_unique_table.begin()) << " bytes each" << std::endl;
+      std::cerr << "BVConsts:" << _bvconst_unique_table.size() << " of ";
+      std::cerr << sizeof(**_bvconst_unique_table.begin()) << " bytes each"
+                << std::endl;
     }
   }
 };

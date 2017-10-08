@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/STP.h"
+#include "stp/STPManager/STPManager.h"
 
 // FIXME: We can't include this first!
 // Circular dependecies (AST ends up including

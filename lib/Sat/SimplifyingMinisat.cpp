@@ -24,10 +24,11 @@ THE SOFTWARE.
 
 #define __STDC_FORMAT_MACROS
 #define MINISAT_CONSTANTS_AS_MACROS
-#include "minisat/simp/SimpSolver.h"
 #include "stp/Sat/SimplifyingMinisat.h"
+#include "minisat/simp/SimpSolver.h"
 
-namespace MiniSat {
+namespace MiniSat
+{
 }
 using namespace MiniSat;
 
@@ -47,7 +48,7 @@ SimplifyingMinisat::~SimplifyingMinisat()
 
 void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
 {
-  if (max_confl> 0)
+  if (max_confl > 0)
     s->setConfBudget(max_confl);
 }
 
@@ -57,20 +58,22 @@ bool SimplifyingMinisat::addClause(
   return s->addClause(ps);
 }
 
-bool
-SimplifyingMinisat::okay() const // FALSE means solver is in a conflicting state
+bool SimplifyingMinisat::okay()
+    const // FALSE means solver is in a conflicting state
 {
   return s->okay();
 }
 
-bool SimplifyingMinisat::solve(bool& timeout_expired) // Search without assumptions.
+bool SimplifyingMinisat::solve(
+    bool& timeout_expired) // Search without assumptions.
 {
   if (!s->simplify())
     return false;
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef) {
+  if (ret == (Minisat::lbool)l_Undef)
+  {
     timeout_expired = true;
   }
 

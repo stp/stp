@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <stdlib.h>
 #include "stp/Parser/LetMgr.h"
+#include <stdlib.h>
 
 namespace stp
 {
@@ -62,7 +62,7 @@ void LETMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(_letid_expr_map->find(name) == _letid_expr_map->end());
   (*_letid_expr_map)[name] = letExpr;
-  
+
   if (stack.size() > 0) // only smtlib2 maintains the stack.
     stack.top().push_back(name);
 }
@@ -89,12 +89,12 @@ ASTNode LETMgr::ResolveID(const ASTNode& v)
   }
 
   return v;
-} 
+}
 
 // This function simply cleans up the LetID -> LetExpr Map.
 void LETMgr::CleanupLetIDMap(void)
 {
-  while (!stack.empty() )
+  while (!stack.empty())
   {
     stack.pop();
   }

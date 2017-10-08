@@ -43,10 +43,11 @@ extern THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap1;
 
 std::string functionToSMTLIBName(const Kind k, bool smtlib1);
 
-void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet,
-                bool smtlib1, STPMgr *);
+void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
+                STPMgr*);
 
-ostream& SMTLIB_Print(ostream& os, STPMgr *, const ASTNode n, const int indentation,
+ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
+                      const int indentation,
                       void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
                       bool smtlib1);
 

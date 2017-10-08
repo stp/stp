@@ -58,12 +58,12 @@ CryptoMiniSat5::~CryptoMiniSat5()
 
 void CryptoMiniSat5::setMaxConflicts(int64_t max_confl)
 {
-  if (max_confl> 0)
+  if (max_confl > 0)
     s->set_max_confl(max_confl);
 }
 
-bool
-CryptoMiniSat5::addClause(const vec_literals& ps) // Add a clause to the solver.
+bool CryptoMiniSat5::addClause(
+    const vec_literals& ps) // Add a clause to the solver.
 {
   // Cryptominisat uses a slightly different vec class.
   // Cryptominisat uses a slightly different Lit class too.
@@ -78,8 +78,8 @@ CryptoMiniSat5::addClause(const vec_literals& ps) // Add a clause to the solver.
   return s->add_clause(real_temp_cl);
 }
 
-bool
-CryptoMiniSat5::okay() const // FALSE means solver is in a conflicting state
+bool CryptoMiniSat5::okay()
+    const // FALSE means solver is in a conflicting state
 {
   return s->okay();
 }
@@ -87,7 +87,8 @@ CryptoMiniSat5::okay() const // FALSE means solver is in a conflicting state
 bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
 {
   CMSat::lbool ret = s->solve();
-  if (ret == CMSat::l_Undef) {
+  if (ret == CMSat::l_Undef)
+  {
     timeout_expired = true;
   }
   return ret == CMSat::l_True;

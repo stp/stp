@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <cassert>
 #include "stp/Simplifier/Simplifier.h"
+#include <cassert>
 
 namespace stp
 {
@@ -67,7 +67,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   }
 
   if ((number_of_children == 2 || number_of_children == 1) &&
-    input_children[0].GetType() == BITVECTOR_TYPE)
+      input_children[0].GetType() == BITVECTOR_TYPE)
   {
     // saving some typing. BVPLUS does not use these variables. if the
     // input BVPLUS has two nodes, then we want to avoid setting these
@@ -808,10 +808,10 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   assert(OutputNode.isConstant());
   // UpdateSimplifyMap(t,OutputNode,false);
   return OutputNode;
-} 
+}
 
 // Const evaluator logical and arithmetic operations.
-ASTNode NonMemberBVConstEvaluator(STPMgr * mgr, const ASTNode& t)
+ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
 {
   if (t.isConstant())
     return t;

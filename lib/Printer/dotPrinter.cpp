@@ -37,7 +37,8 @@ using namespace stp;
 
 void outputBitVec(const ASTNode n, ostream& os);
 
-void Dot_Print1(ostream& os, const ASTNode n, std::unordered_set<int>* alreadyOutput)
+void Dot_Print1(ostream& os, const ASTNode n,
+                std::unordered_set<int>* alreadyOutput)
 {
 
   // check if this node has already been printed. If so return.

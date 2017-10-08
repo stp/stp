@@ -26,26 +26,26 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // NB: This is testing code that I don't expect anyone else will use, it's hard
 // to follow what it does!
 
-#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <cmath>
 
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/Sat/MinisatCore.h"
 #include "stp/STPManager/STP.h"
-#include "stp/cpp_interface.h"
-#include "stp/Util/StopWatch.h"
-#include "stp/Util/Relations.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/Util/BBAsProp.h"
 #include "stp/Util/Functions.h"
+#include "stp/Util/Relations.h"
+#include "stp/Util/StopWatch.h"
+#include "stp/cpp_interface.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
@@ -543,32 +543,27 @@ Result multiply(vector<FixedBits*>& children, FixedBits& output)
 
 Result unsignedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvUnsignedDivisionBothWays(children, output,
-                                    mgr);
+  return bvUnsignedDivisionBothWays(children, output, mgr);
 }
 
 Result signedDivide(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedDivisionBothWays(children, output,
-                                  mgr);
+  return bvSignedDivisionBothWays(children, output, mgr);
 }
 
 Result signedRemainder(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedRemainderBothWays(children, output,
-                                   mgr);
+  return bvSignedRemainderBothWays(children, output, mgr);
 }
 
 Result signedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvSignedModulusBothWays(children, output,
-                                 mgr);
+  return bvSignedModulusBothWays(children, output, mgr);
 }
 
 Result unsignedModulus(vector<FixedBits*>& children, FixedBits& output)
 {
-  return bvUnsignedModulusBothWays(children, output,
-                                   mgr);
+  return bvUnsignedModulusBothWays(children, output, mgr);
 }
 
 struct D
@@ -756,7 +751,8 @@ void exhaustively_check(const int bitwidth, Kind k,
   BBBad = 0;
 }
 
-void random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&), const Kind kind)
+void random_tests(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
+                  const Kind kind)
 {
   some_random_tests(transfer, kind, 1);
   some_random_tests(transfer, kind, 5);
@@ -1101,7 +1097,8 @@ void exhaustive_checks()
   cerr << "\\end{tabular}" << endl;
   cerr << "\\caption{Percentage of all the assignments at different "
           "bit-widths. Where the Bitblasted encoding and the propagators did "
-          "missed bits to fix, or missed a conflicting assignment.}" << endl;
+          "missed bits to fix, or missed a conflicting assignment.}"
+       << endl;
   cerr << "\\end{figure}" << endl;
 
   check_bvdiv_mod_mult(bits);

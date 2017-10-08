@@ -64,10 +64,9 @@ class SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind,
-                                   const ASTVec& children);
+  DLL_PUBLIC virtual ASTNode CreateNode(Kind kind, const ASTVec& children);
   DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
-                                   const ASTVec& children);
+                                        const ASTVec& children);
 
   DLL_PUBLIC virtual std::string getName() { return "simplifying"; }
 
@@ -90,8 +89,7 @@ private:
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTVec& children);
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTNode& form1,
                             const ASTNode& form2);
-  ASTNode handle_2_children(bool IsAnd,
-                                     const ASTVec& children);
+  ASTNode handle_2_children(bool IsAnd, const ASTVec& children);
 
   ASTNode CreateSimpleNot(const ASTNode& form);
   ASTNode CreateSimpleNot(const ASTVec& children);
@@ -108,12 +106,8 @@ private:
   bool children_all_constants(const ASTVec& children) const;
   ASTNode get_smallest_number(const unsigned width);
   ASTNode get_largest_number(const unsigned width);
-  void handle_bvand(
-    Kind kind,
-    unsigned int width,
-    const ASTVec& children,
-    ASTNode& result
-  );
+  void handle_bvand(Kind kind, unsigned int width, const ASTVec& children,
+                    ASTNode& result);
   ASTNode create_gt_node(const ASTVec& children);
 };
 

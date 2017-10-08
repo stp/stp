@@ -144,10 +144,7 @@ public:
   // equation to be solved, solves them,
   ASTNode TopLevelBVSolve(const ASTNode& a, const bool enable_simplify = true);
 
-  void ClearAllTables(void)
-  {
-    FormulasAlreadySolvedMap.clear();
-  }
+  void ClearAllTables(void) { FormulasAlreadySolvedMap.clear(); }
 };
 } // end of namespace stp
 #endif

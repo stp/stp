@@ -50,7 +50,6 @@ class UseITEContext // not copyable
 
   void addToContext(const ASTNode& n, ASTNodeSet& context);
 
-
   // Unfortunately there can be a lot of paths through a small formula.
   // So we limit how often each node is visited.
 
@@ -61,7 +60,6 @@ public:
   ASTNode topLevel(const ASTNode& n);
 
   UseITEContext(STPMgr* bm);
-
 };
 }
 

@@ -37,15 +37,16 @@ class TypeChecker : public NodeFactory
   NodeFactory& f;
 
 public:
-  DLL_PUBLIC TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_) {}
-  DLL_PUBLIC virtual ~TypeChecker() {};
+  DLL_PUBLIC TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_)
+  {
+  }
+  DLL_PUBLIC virtual ~TypeChecker(){};
 
   stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                           const stp::ASTVec& children);
+                          const stp::ASTVec& children);
   stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
   stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                           unsigned int width,
-                           const ASTVec& children);
+                               unsigned int width, const ASTVec& children);
 
   DLL_PUBLIC virtual std::string getName() { return "type checking"; }
 };

@@ -40,7 +40,8 @@ using namespace stp;
 
 void outputBitVec(const ASTNode n, ostream& os);
 
-void GDL_Print1(ostream& os, const ASTNode& n, std::unordered_set<int>* alreadyOutput,
+void GDL_Print1(ostream& os, const ASTNode& n,
+                std::unordered_set<int>* alreadyOutput,
                 string (*annotate)(const ASTNode&))
 {
   // check if this node has already been printed. If so return.

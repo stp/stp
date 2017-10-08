@@ -37,61 +37,61 @@ THE SOFTWARE.
 
 namespace stp
 {
-  using std::make_pair;
+using std::make_pair;
 
-  struct UnsignedInterval
+struct UnsignedInterval
+{
+
+  CBV minV;
+  CBV maxV;
+  UnsignedInterval(CBV _min, CBV _max)
+  {
+    minV = _min;
+    maxV = _max;
+    assert(minV != NULL);
+    assert(maxV != NULL);
+    assert(size_(minV) == size_(maxV));
+  }
+
+  void print()
   {
 
-    CBV minV;
-    CBV maxV;
-    UnsignedInterval(CBV _min, CBV _max)
-    {
-      minV = _min;
-      maxV = _max;
-      assert(minV != NULL);
-      assert(maxV != NULL);
-      assert(size_(minV) == size_(maxV));
-    }
+    unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
+    unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
+    std::cerr << a << " " << b << std::endl;
+    free(a);
+    free(b);
+  }
 
-    void print()
-    {
+  bool isConstant() { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
 
-      unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
-      unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
-      std::cerr << a << " " << b << std::endl;
-      free(a);
-      free(b);
-    }
+  bool isComplete()
+  {
+    return (CONSTANTBV::BitVector_is_empty(minV) &&
+            CONSTANTBV::BitVector_is_full(maxV));
+  }
 
-    bool isConstant() { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
+  void checkUnsignedInvariant()
+  {
+    assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
 
-    bool isComplete()
-    {
-      return (CONSTANTBV::BitVector_is_empty(minV) &&
-              CONSTANTBV::BitVector_is_full(maxV));
-    }
+    // We use NULL to represent the complete domain.
+    assert(!isComplete());
+  }
 
-    void checkUnsignedInvariant()
-    {
-      assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
+  // If the interval is interpreted as a clockwise interval.
+  bool crossesSignedUnsigned(int width)
+  {
+    bool minMSB = CONSTANTBV::BitVector_bit_test(minV, width - 1);
+    bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV, width - 1);
 
-      // We use NULL to represent the complete domain.
-      assert(!isComplete());
-    }
-
-    // If the interval is interpreted as a clockwise interval.
-    bool crossesSignedUnsigned(int width)
-    {
-      bool minMSB = CONSTANTBV::BitVector_bit_test(minV, width - 1);
-      bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV, width - 1);
-
-      // If the min is zero, and the max is one, then it must cross.
-      if (!minMSB && maxMSB)
-        return true;
-      if (!(minMSB ^ maxMSB)) // bits are the same.
-        return CONSTANTBV::BitVector_Compare(minV, maxV) > 0;
-      return false;
-    }
-  };
+    // If the min is zero, and the max is one, then it must cross.
+    if (!minMSB && maxMSB)
+      return true;
+    if (!(minMSB ^ maxMSB)) // bits are the same.
+      return CONSTANTBV::BitVector_Compare(minV, maxV) > 0;
+    return false;
+  }
+};
 }
 #endif

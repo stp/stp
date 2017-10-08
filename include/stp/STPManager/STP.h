@@ -26,14 +26,14 @@ THE SOFTWARE.
 #define STP_H
 
 #include "stp/AST/AST.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/BVSolver.h"
+#include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ASTNode/ToSAT.h"
-#include "stp/Parser/LetMgr.h"
-#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
-#include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Util/Attributes.h"
 
 namespace stp
@@ -63,14 +63,12 @@ class STP
   SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
                                     const ASTNode& modified_input);
 
-  SOLVER_RETURN_TYPE solve_by_sat_solver(
-    SATSolver* newS,
-    ASTNode original_input);
+  SOLVER_RETURN_TYPE solve_by_sat_solver(SATSolver* newS,
+                                         ASTNode original_input);
 
   SATSolver* get_new_sat_solver();
 
 public:
-
   STPMgr* bm;
   Simplifier* simp;
   ToSATBase* tosat;
@@ -98,10 +96,7 @@ public:
     Ctr_Example = ce;
   }
 
-  ~STP()
-  {
-    ClearAllTables();
-  }
+  ~STP() { ClearAllTables(); }
 
   void deleteObjects()
   {
@@ -120,10 +115,8 @@ public:
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
-  DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(
-    const ASTNode& inputasserts,
-    const ASTNode& query
-  );
+  DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
+                                            const ASTNode& query);
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
@@ -143,7 +136,6 @@ public:
       Ctr_Example->ClearAllTables();
     // bm->ClearAllTables();
   }
-
 };
 } // end of namespace
 #endif

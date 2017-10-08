@@ -22,11 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/AST/AST.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/STPManager/STPManager.h"
 #include <cassert>
 #include <math.h>
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 
 namespace stp
 {
@@ -173,7 +173,8 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
       SatSolver.addClause(all);
     return result;
   }
-  else {
+  else
+  {
     FatalError("Unexpected, both must be constants..");
   }
 }
@@ -262,8 +263,7 @@ bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
 
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
-    SATSolver& SatSolver,
-    const ASTNode& original_input, ToSATBase* tosat)
+    SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat)
 {
   vector<AxiomToBe> RemainingAxiomsVec;
   vector<AxiomToBe> FalseAxiomsVec;
@@ -449,9 +449,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 }
 
 // This is another way of performing Ackermannisation.
-void
-AbsRefine_CounterExample::applyAllCongruenceConstraints(SATSolver& SatSolver,
-                                                        ToSATBase* tosat)
+void AbsRefine_CounterExample::applyAllCongruenceConstraints(
+    SATSolver& SatSolver, ToSATBase* tosat)
 {
   // if (bm->UserFlags.stats_flag)
   std::cerr << "~CNF~" << std::endl;

@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
-#include <iostream>
 #include <cassert>
+#include <gtest/gtest.h>
+#include <iostream>
 #include <stdexcept>
 
 // FIXME: This is a terrible name, all of the tests in this directory are

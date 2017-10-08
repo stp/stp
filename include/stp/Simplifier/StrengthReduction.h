@@ -31,13 +31,13 @@ THE SOFTWARE.
 #ifndef STRENGTHREDUCTION_H_
 #define STRENGTHREDUCTION_H_
 
-#include "stp/Simplifier/UnsignedInterval.h"
-#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include <map>
+#include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <iostream>
+#include <map>
 
 namespace stp
 {
@@ -97,9 +97,9 @@ class StrengthReduction // not copyable
   }
 
 public:
-
   //TODO merge these two toplevel funtions, they do the same thing..
-  ASTNode topLevel(const ASTNode& top, const std::map<ASTNode, FixedBits*>& visited)
+  ASTNode topLevel(const ASTNode& top,
+                   const std::map<ASTNode, FixedBits*>& visited)
   {
     ASTNodeMap fromTo;
 
@@ -112,7 +112,7 @@ public:
       const Kind kind = n.GetKind();
       const FixedBits* b = it->second;
 
-      if (b!= NULL && b->isTotallyFixed()) // Replace with a constant.
+      if (b != NULL && b->isTotallyFixed()) // Replace with a constant.
       {
         ASTNode newN;
         if (n.GetType() == BOOLEAN_TYPE)
@@ -125,62 +125,65 @@ public:
         else
           newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
 
-        fromTo.insert(std::make_pair(n,newN));
+        fromTo.insert(std::make_pair(n, newN));
         replaceWithConstant++;
       }
-      else if (kind == BVSGT || kind == SBVDIV || kind == SBVMOD || kind == SBVREM)
+      else if (kind == BVSGT || kind == SBVDIV || kind == SBVMOD ||
+               kind == SBVREM)
       {
-        if (visited.find(n[0]) != visited.end() && visited.find(n[1]) != visited.end())
-         if (visited.find(n[0])->second != NULL && visited.find(n[1])->second != NULL)
+        if (visited.find(n[0]) != visited.end() &&
+            visited.find(n[1]) != visited.end())
+          if (visited.find(n[0])->second != NULL &&
+              visited.find(n[1])->second != NULL)
           {
-             const FixedBits * l =  visited.find(n[0])->second;
-             const FixedBits * r =  visited.find(n[1])->second;
-             const unsigned bw = n[0].GetValueWidth();
-             if (l->isFixed(bw-1) && r->isFixed(bw-1))
+            const FixedBits* l = visited.find(n[0])->second;
+            const FixedBits* r = visited.find(n[1])->second;
+            const unsigned bw = n[0].GetValueWidth();
+            if (l->isFixed(bw - 1) && r->isFixed(bw - 1))
+            {
+              if (kind == BVSGT && (l->getValue(bw - 1) == r->getValue(bw - 1)))
               {
-                if (kind == BVSGT && (l->getValue(bw-1) == r->getValue(bw-1)))
-                {
-                  // replace with unsigned comparison.
-                  ASTNode newN = nf->CreateNode(BVGT, n[0], n[1]);
-                  fromTo.insert(make_pair(n, newN));
-                  replaceWithSimpler++;
-                  //std::cerr << n << *l << *r << newN << std::endl;
-                }
-                else if (kind == SBVDIV)
-                {
-                  unimplementedReduction++;
-                }
-                else if (kind == SBVMOD)
-                {
-                  unimplementedReduction++;
-                }
-                else if (kind == SBVREM)
-                {
-                  unimplementedReduction++;
-                }
+                // replace with unsigned comparison.
+                ASTNode newN = nf->CreateNode(BVGT, n[0], n[1]);
+                fromTo.insert(make_pair(n, newN));
+                replaceWithSimpler++;
+                //std::cerr << n << *l << *r << newN << std::endl;
               }
+              else if (kind == SBVDIV)
+              {
+                unimplementedReduction++;
+              }
+              else if (kind == SBVMOD)
+              {
+                unimplementedReduction++;
+              }
+              else if (kind == SBVREM)
+              {
+                unimplementedReduction++;
+              }
+            }
           }
       }
       else if (kind == BVPLUS || kind == BVXOR)
       {
         // If all the bits are zero except for one, in each position, replace by OR
         vector<FixedBits*> children;
-        bool bad=false;
-        for (ASTNode c: n.GetChildren())
+        bool bad = false;
+        for (ASTNode c : n.GetChildren())
         {
           if (visited.find(c) == visited.end())
             bad = true;
           children.push_back(visited.find(c)->second);
           if (children.back() == NULL)
-            bad=true;
+            bad = true;
         }
-        if(!bad)
+        if (!bad)
         {
           unsigned nonZero = 0;
-          for (unsigned i =0; i < n.GetValueWidth();i++)
+          for (unsigned i = 0; i < n.GetValueWidth(); i++)
           {
-            nonZero =0;
-            for (unsigned j =0; j < children.size(); j++)
+            nonZero = 0;
+            for (unsigned j = 0; j < children.size(); j++)
             {
               if (!children[j]->isFixed(i))
                 nonZero++;
@@ -191,33 +194,40 @@ public:
               break;
           }
 
-          if (nonZero <=1) // OK can reduce.
+          if (nonZero <= 1) // OK can reduce.
           {
-            ASTNode newN= nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
+            ASTNode newN =
+                nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
             replaceWithSimpler++;
             fromTo.insert(make_pair(n, newN));
           }
         }
       }
-      else if (b!= NULL)
+      else if (b != NULL)
       {
-        if (kind== BVSRSHIFT && b->isFixed(n.GetValueWidth()-1) && !b->getValue(n.GetValueWidth()-1) )
+        if (kind == BVSRSHIFT && b->isFixed(n.GetValueWidth() - 1) &&
+            !b->getValue(n.GetValueWidth() - 1))
         {
           // Reduce from signed right shift, to ordinary right shift.
-          ASTNode newN = nf->CreateTerm(BVRIGHTSHIFT, n.GetValueWidth(), n[0], n[1]);
+          ASTNode newN =
+              nf->CreateTerm(BVRIGHTSHIFT, n.GetValueWidth(), n[0], n[1]);
           fromTo.insert(make_pair(n, newN));
           replaceWithSimpler++;
         }
-        else if (n.GetKind() == BVSX && b->isFixed(n.GetValueWidth()-1) && n[0].GetValueWidth() != n.GetValueWidth())
+        else if (n.GetKind() == BVSX && b->isFixed(n.GetValueWidth() - 1) &&
+                 n[0].GetValueWidth() != n.GetValueWidth())
         {
           // We can replace the BVSX with a concat.
           ASTNode concat;
-          if (b->getValue(n.GetValueWidth()-1))
-            concat = bm.CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
+          if (b->getValue(n.GetValueWidth() - 1))
+            concat =
+                bm.CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
           else
-            concat = bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
+            concat =
+                bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
 
-          ASTNode newN = nf->CreateTerm(BVCONCAT, n.GetValueWidth(),concat, n[0]);
+          ASTNode newN =
+              nf->CreateTerm(BVCONCAT, n.GetValueWidth(), concat, n[0]);
           fromTo.insert(make_pair(n, newN));
           replaceWithSimpler++;
         }
@@ -235,11 +245,13 @@ public:
 
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
-  ASTNode topLevel(const ASTNode& top, const std::map<const ASTNode, UnsignedInterval*>& visited)
+  ASTNode topLevel(const ASTNode& top,
+                   const std::map<const ASTNode, UnsignedInterval*>& visited)
   {
     ASTNodeMap fromTo;
     ASTNodeMap onePass;
-    for (std::map<const ASTNode, UnsignedInterval*>::const_iterator it = visited.begin();
+    for (std::map<const ASTNode, UnsignedInterval*>::const_iterator it =
+             visited.begin();
          it != visited.end(); it++)
     {
       const ASTNode& n = it->first;
@@ -417,14 +429,13 @@ public:
     if (fromTo.size() > 0)
     {
       ASTNodeMap cache;
-      return SubstitutionMap::replace(result, fromTo, cache,nf);
+      return SubstitutionMap::replace(result, fromTo, cache, nf);
     }
 
     return result;
   }
 
 private:
-
   STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
@@ -438,9 +449,9 @@ public:
     CONSTANTBV::BitVector_Fill(littleOne);
     nf = bm.defaultNodeFactory;
 
-    replaceWithConstant=0;
-    replaceWithSimpler=0;
-    unimplementedReduction=0;
+    replaceWithConstant = 0;
+    replaceWithSimpler = 0;
+    unimplementedReduction = 0;
   }
 
   ~StrengthReduction()
@@ -451,9 +462,14 @@ public:
 
   void stats(string name = "StrengthReduction")
   {
-    std::cerr << "{" << name <<"} replace with constant: " << replaceWithConstant << std::endl;
-    std::cerr << "{" << name <<"} replace with simpler operation: " << replaceWithSimpler << std::endl;
-    std::cerr << "{" << name <<"} TODO replace with simpler operation: " << unimplementedReduction << std::endl;
+    std::cerr << "{" << name
+              << "} replace with constant: " << replaceWithConstant
+              << std::endl;
+    std::cerr << "{" << name
+              << "} replace with simpler operation: " << replaceWithSimpler
+              << std::endl;
+    std::cerr << "{" << name << "} TODO replace with simpler operation: "
+              << unimplementedReduction << std::endl;
   }
 };
 }

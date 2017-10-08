@@ -25,9 +25,9 @@ THE SOFTWARE.
 #ifndef SYMBOLS_H
 #define SYMBOLS_H
 
-#include <vector>
 #include "cassert"
 #include "stp/AST/AST.h"
+#include <vector>
 
 using std::vector;
 

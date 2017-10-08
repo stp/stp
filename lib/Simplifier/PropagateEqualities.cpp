@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <string>
 #include "stp/Simplifier/PropagateEqualities.h"
-#include "stp/Simplifier/Simplifier.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/Simplifier.h"
+#include <string>
 
 namespace stp
 {
@@ -76,14 +76,14 @@ bool PropagateEqualities::searchXOR(const ASTNode& lhs, const ASTNode& rhs)
 
   if (k == EQ && lhs[0].GetValueWidth() == 1)
   {
-    bool result =
-        searchTerm(lhs[0], nf->CreateTerm(ITE, 1, rhs, lhs[1],
-                                          nf->CreateTerm(BVNOT, 1, lhs[1])));
+    bool result = searchTerm(
+        lhs[0],
+        nf->CreateTerm(ITE, 1, rhs, lhs[1], nf->CreateTerm(BVNOT, 1, lhs[1])));
 
     if (!result)
-      result =
-          searchTerm(lhs[1], nf->CreateTerm(ITE, 1, rhs, lhs[0],
-                                            nf->CreateTerm(BVNOT, 1, lhs[0])));
+      result = searchTerm(lhs[1],
+                          nf->CreateTerm(ITE, 1, rhs, lhs[0],
+                                         nf->CreateTerm(BVNOT, 1, lhs[0])));
   }
 
   return result;
@@ -339,5 +339,4 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
 
   return output;
 }
-
 }

@@ -38,7 +38,7 @@ private:
   std::map<int, int> cache;
 
 public:
-  int score(const ASTNode& top, STPMgr *);
+  int score(const ASTNode& top, STPMgr*);
 };
 }
 

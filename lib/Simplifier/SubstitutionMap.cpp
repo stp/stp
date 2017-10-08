@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/SubstitutionMap.h"
-#include "stp/Simplifier/Simplifier.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {
@@ -67,7 +67,7 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
     return -1;
 
   return 0;
-} 
+}
 
 // idempotent.
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)

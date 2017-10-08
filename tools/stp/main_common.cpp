@@ -32,7 +32,6 @@ THE SOFTWARE.
 #include <unistd.h>
 #endif
 
-
 extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
@@ -84,14 +83,14 @@ Main::~Main()
 
 void Main::printVersionInfo()
 {
-    cout << "STP version " << stp::get_git_version_tag() << std::endl;
-    cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
-    cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
-    #ifdef __GNUC__
-    cout << "c compiled with gcc version " << __VERSION__ << endl;
-    #else
-    cout << "c compiled with non-gcc compiler" << endl;
-    #endif
+  cout << "STP version " << stp::get_git_version_tag() << std::endl;
+  cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
+  cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
+#ifdef __GNUC__
+  cout << "c compiled with gcc version " << __VERSION__ << endl;
+#else
+  cout << "c compiled with non-gcc compiler" << endl;
+#endif
 }
 
 void Main::parse_file(ASTVec* AssertsQuery)
@@ -172,7 +171,7 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
   {
-    printer::SMTLIB1_PrintBack(cout, original_input,bm);
+    printer::SMTLIB1_PrintBack(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
@@ -182,7 +181,7 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
 
   if (bm->UserFlags.print_STPinput_back_C_flag)
   {
-    printer::C_Print(cout, original_input,bm);
+    printer::C_Print(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_GDL_flag)
@@ -270,7 +269,8 @@ int Main::main(int argc, char** argv)
   bm->defaultNodeFactory = simplifyingNF.get();
 
   auto_ptr<Simplifier> simp(new Simplifier(bm));
-  auto_ptr<ArrayTransformer> arrayTransformer(new ArrayTransformer(bm, simp.get()));
+  auto_ptr<ArrayTransformer> arrayTransformer(
+      new ArrayTransformer(bm, simp.get()));
   auto_ptr<ToSAT> tosat(new ToSAT(bm));
 
   auto_ptr<AbsRefine_CounterExample> Ctr_Example(
@@ -282,8 +282,8 @@ int Main::main(int argc, char** argv)
     return ret;
   }
 
-  STP *stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
-                      Ctr_Example.get());
+  STP* stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
+                     Ctr_Example.get());
 
   GlobalSTP = stp;
   // If we're not reading the file from stdin.
@@ -335,7 +335,7 @@ int Main::main(int argc, char** argv)
   }
 
   // Previously we used fast-exit to avoid destroying lots of objects, for example in the node manager.
-  // We use auto_ptr now on lots of stuff, so there seems little difference in the time it takes to 
+  // We use auto_ptr now on lots of stuff, so there seems little difference in the time it takes to
   // exit normally vs. not.
   //if (bm->UserFlags.isSet("fast-exit", "0"))
   //  exit(0);

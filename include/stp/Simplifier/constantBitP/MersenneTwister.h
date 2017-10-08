@@ -63,9 +63,9 @@
 
 #include <iostream>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <time.h>
-#include <math.h>
 
 class MTRand
 {
@@ -359,7 +359,8 @@ inline MTRand::uint32 MTRand::hash(time_t t, clock_t c)
   // Better than uint32(x) in case x is floating point in [0,1]
   // Based on code by Lawrence Kirby (fred@genesis.demon.co.uk)
 
-  static THREAD_LOCAL uint32 differ = 0; // guarantee time-based seeds will change
+  static THREAD_LOCAL uint32 differ =
+      0; // guarantee time-based seeds will change
 
   uint32 h1 = 0;
   unsigned char* p = (unsigned char*)&t;

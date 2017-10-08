@@ -23,11 +23,11 @@ THE SOFTWARE.
 ********************************************************************/
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#include <cstdint>
-#include <cmath>
 #include "stp/STPManager/STPManager.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/NodeIterator.h"
+#include <cmath>
+#include <cstdint>
 
 namespace stp
 {
@@ -145,7 +145,7 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // return symbol found in table.
     return *it;
   }
-} 
+}
 
 bool STPMgr::LookupSymbol(ASTSymbol& s)
 {
@@ -540,18 +540,14 @@ unsigned int STPMgr::NodeSize(const ASTNode& a)
 
 bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 {
-  if (READ == term.GetKind() &&
-      WRITE ==
-          term[0].GetKind()
-          /*&& !GetRemoveWritesFlag()*/)
+  if (READ == term.GetKind() && WRITE == term[0].GetKind()
+      /*&& !GetRemoveWritesFlag()*/)
   {
     return false;
   }
 
-  if (READ == term.GetKind() &&
-      WRITE ==
-          term[0].GetKind()
-          /*&& GetRemoveWritesFlag()*/)
+  if (READ == term.GetKind() && WRITE == term[0].GetKind()
+      /*&& GetRemoveWritesFlag()*/)
   {
     return true;
   }
@@ -585,7 +581,7 @@ bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 
   TermsAlreadySeenMap[term] = var;
   return false;
-} 
+}
 
 ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
                                             const ASTNode& constant)
@@ -594,14 +590,14 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
   std::ostringstream outNum;
   // Get the name of Boolean Var
   var.PL_Print(outVar, this);
-  constant.PL_Print(outNum,this);
+  constant.PL_Print(outNum, this);
   std::string str(outVar.str());
   str += "(";
   str += outNum.str();
   str += ")";
   ASTNode CurrentSymbol = CreateSymbol(str.c_str(), 0, 0);
   return CurrentSymbol;
-} 
+}
 
 // If ASTNode remain with references (somewhere), this will segfault.
 STPMgr::~STPMgr()
@@ -612,7 +608,7 @@ STPMgr::~STPMgr()
   printer::NodeLetVarVec.clear();
   printer::NodeLetVarMap1.clear();
   printer::Lisp_AlreadyPrintedSet.clear();
-  
+
   delete runTimes;
   runTimes = NULL;
   ASTFalse = ASTNode(0);

@@ -25,8 +25,8 @@ THE SOFTWARE.
 #ifndef VARIABLESINEXPRESSION_H_
 #define VARIABLESINEXPRESSION_H_
 
-#include "stp/AST/AST.h"
 #include "Symbols.h"
+#include "stp/AST/AST.h"
 #include "stp/Util/Attributes.h"
 
 namespace stp
@@ -53,7 +53,8 @@ public:
   // identifying variables in the those terms. Prevents double
   // counting.
 
-  typedef std::unordered_map<Symbols*, ASTNodeSet*, SymbolPtrHasher> SymbolPtrToNode;
+  typedef std::unordered_map<Symbols*, ASTNodeSet*, SymbolPtrHasher>
+      SymbolPtrToNode;
   SymbolPtrToNode TermsAlreadySeenMap;
 
   // this function return true if the var occurs in term, else the
@@ -65,7 +66,6 @@ public:
                      vector<Symbols*>& av);
 
   void ClearAllTables();
-
 };
 }
 

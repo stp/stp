@@ -24,30 +24,30 @@ THE SOFTWARE.
 #ifndef USEFULDEFS_H
 #define USEFULDEFS_H
 
-#include <stdio.h>
-#include <cstdint>
-#include <stdlib.h>
-#include <vector>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <map>
-#include <set>
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <iostream>
+#include <map>
+#include <set>
+#include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <vector>
 
-#include "stp/Globals/Globals.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/Globals/Globals.h"
 // FIXME: External library header
 #include "extlib-constbv/constantbv.h"
+#include "stp/Util/Attributes.h"
 #include "stp/Util/RunTimes.h"
 #include "stp/Util/StringHash.h"
-#include "stp/Util/Attributes.h"
 
 #include "stp/config.h"
 
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 #define INITIAL_TABLE_SIZE 100
 
 namespace stp
@@ -102,7 +102,8 @@ inline Spacer spaces(int width)
 }
 
 // function_counters: Table for storing function count stats.
-typedef std::unordered_map<const char*, int, CStringHash, CStringEqualityPredicate>
+typedef std::unordered_map<const char*, int, CStringHash,
+                           CStringEqualityPredicate>
     function_counters;
 } // end of namespace
 

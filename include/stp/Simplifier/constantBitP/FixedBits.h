@@ -25,13 +25,13 @@ THE SOFTWARE.
 #ifndef FIXEDBITS_H_
 #define FIXEDBITS_H_
 
-#include <stp/Util/Attributes.h>
 #include "stp/Util/Attributes.h"
+#include <stp/Util/Attributes.h>
 
-#include <vector>
-#include <iostream>
-#include <cassert>
 #include <algorithm>
+#include <cassert>
+#include <iostream>
+#include <vector>
 
 class MTRand;
 

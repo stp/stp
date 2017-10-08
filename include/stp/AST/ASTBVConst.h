@@ -64,14 +64,17 @@ private:
     bool operator()(const ASTBVConst* bvc1, const ASTBVConst* bvc2) const;
   };
 
-
   ASTBVConst(CBV bv, unsigned int width);
-  ASTBVConst(STPMgr * mgr, CBV bv, unsigned int /*width*/, bool managed_outside = false)
+  ASTBVConst(STPMgr* mgr, CBV bv, unsigned int /*width*/,
+             bool managed_outside = false)
       : ASTInternal(mgr, BVCONST)
   {
-    if (managed_outside) {
+    if (managed_outside)
+    {
       _bvconst = (bv);
-    } else {
+    }
+    else
+    {
       _bvconst = CONSTANTBV::BitVector_Clone(bv);
     }
     cbv_managed_outside = managed_outside;
@@ -98,12 +101,11 @@ private:
 
   const static ASTVec astbv_empty_children;
 
-  void setIndexWidth(uint32_t i)  { assert(i==0);}
-  uint32_t getIndexWidth() const {return 0;}
-  
-  void setValueWidth(uint32_t v ) { assert(v == getValueWidth());}
-  uint32_t getValueWidth()  const {return bits_(_bvconst);}
+  void setIndexWidth(uint32_t i) { assert(i == 0); }
+  uint32_t getIndexWidth() const { return 0; }
 
+  void setValueWidth(uint32_t v) { assert(v == getValueWidth()); }
+  uint32_t getValueWidth() const { return bits_(_bvconst); }
 
 public:
   virtual ASTVec const& GetChildren() const { return astbv_empty_children; }

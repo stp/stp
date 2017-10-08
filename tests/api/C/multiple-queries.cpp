@@ -25,9 +25,9 @@ THE SOFTWARE.
 /* g++ -I$(HOME)/stp/c_interface multiple-queries.c -L$(HOME)/stp/lib -lstp -o
  * cc*/
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 TEST(multiple_queries, one)
 {

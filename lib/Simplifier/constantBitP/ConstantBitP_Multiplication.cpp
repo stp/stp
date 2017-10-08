@@ -22,15 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
-#include <set>
-#include <stdexcept>
 #include "stp/AST/AST.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnCounts.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"
+#include <set>
+#include <stdexcept>
 // Multiply.
 
 using namespace stp;

@@ -47,7 +47,7 @@ private:
   MapType* _letid_expr_map;
 
   // Need to pop/push the let nodes, they can be nested.
-  std::stack<vector <string> > stack;
+  std::stack<vector<string>> stack;
 
   // Allocate LetID map
   void InitializeLetIDMap(void);
@@ -97,15 +97,13 @@ public:
 
   void pop()
   {
-    vector<string> v =  stack.top();
-    for (string s: v)
-      {
-        _letid_expr_map->erase(s);
-      }
+    vector<string> v = stack.top();
+    for (string s : v)
+    {
+      _letid_expr_map->erase(s);
+    }
     stack.pop();
   }
-
-
 };
 } // end of namespace
 

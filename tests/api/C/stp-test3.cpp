@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 void go(enum ifaceflag_t f)
 {

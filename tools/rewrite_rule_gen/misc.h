@@ -30,8 +30,9 @@ THE SOFTWARE.
 extern const int bits;
 extern const int widen_to;
 
-namespace stp {
-    class Simplifier;
+namespace stp
+{
+class Simplifier;
 }
 extern stp::Simplifier* simp;
 
@@ -41,8 +42,8 @@ ASTNode create(Kind k, const ASTNode& n0, const ASTNode& n1);
 
 int getDifficulty(const ASTNode& n_);
 
-bool isConstant(const ASTNode& n, VariableAssignment& different,
-                const int bits, int64_t timeout_max_confl = -1);
+bool isConstant(const ASTNode& n, VariableAssignment& different, const int bits,
+                int64_t timeout_max_confl = -1);
 
 vector<ASTNode> getVariables(const ASTNode& n);
 

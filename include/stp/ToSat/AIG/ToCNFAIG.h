@@ -28,8 +28,8 @@ THE SOFTWARE.
 #include "extlib-abc/aig.h"
 #include "extlib-abc/cnf_short.h"
 #include "extlib-abc/dar.h"
-#include "stp/ToSat/ToSATBase.h"
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
+#include "stp/ToSat/ToSATBase.h"
 
 namespace stp
 {
@@ -39,14 +39,11 @@ class ToCNFAIG // not copyable
 {
   UserDefinedFlags& uf;
 
-  void dag_aware_aig_rewrite(
-    const bool needAbsRef,
-    BBNodeManagerAIG& mgr);
+  void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
 
-  void fill_node_to_var(
-    Cnf_Dat_t* cnfData,
-    ToSATBase::ASTNodeToSATVar& nodeToVars,
-    BBNodeManagerAIG& mgr);
+  void fill_node_to_var(Cnf_Dat_t* cnfData,
+                        ToSATBase::ASTNodeToSATVar& nodeToVars,
+                        BBNodeManagerAIG& mgr);
 
 public:
   ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}

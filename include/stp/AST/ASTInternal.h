@@ -24,9 +24,9 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 
-#include <iostream>
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/UsefulDefs.h"
+#include <iostream>
 
 using std::ostream;
 
@@ -65,14 +65,14 @@ class ASTInternal
 
 protected:
   // Pointer back to the node manager that holds this.
-  STPMgr * nodeManager;
+  STPMgr* nodeManager;
 
   // node_uid is a unique positive integer for the node.  The node_uid
   // of a node should always be greater than its descendents (which
   // is easily achieved by incrementing the number each time a new
   // node is created). NOT nodes are odd, and one more than the thing
   // the are NOTs of.
-  // 
+  //
   uint64_t node_uid;
   static THREAD_LOCAL uint64_t node_uid_cntr;
 
@@ -88,7 +88,7 @@ protected:
    *******************************************************************/
   virtual void setIndexWidth(uint32_t) = 0;
   virtual uint32_t getIndexWidth() const = 0;
-  
+
   virtual void setValueWidth(uint32_t) = 0;
   virtual uint32_t getValueWidth() const = 0;
 
@@ -136,8 +136,8 @@ protected:
 public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind)
-      : nodeManager(mgr), node_uid(node_uid_cntr+=2),
-         _ref_count(0), _kind(kind), iteration(0)
+      : nodeManager(mgr), node_uid(node_uid_cntr += 2), _ref_count(0),
+        _kind(kind), iteration(0)
   {
   }
 
@@ -148,7 +148,7 @@ public:
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
-         _ref_count(0), _kind(int_node._kind), iteration(0)
+        _ref_count(0), _kind(int_node._kind), iteration(0)
 
   {
   }

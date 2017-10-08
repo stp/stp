@@ -25,10 +25,10 @@ THE SOFTWARE.
 #ifndef SIMPLIFIER_H
 #define SIMPLIFIER_H
 
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
 #include "SubstitutionMap.h"
+#include "stp/AST/AST.h"
+#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/STPManager/STPManager.h"
 
 namespace stp
 {
@@ -228,10 +228,7 @@ public:
     return substitutionMap.hasUnappliedSubstitutions();
   }
 
-  ASTNodeMap* Return_SolverMap()
-  {
-    return substitutionMap.Return_SolverMap();
-  }
+  ASTNodeMap* Return_SolverMap() { return substitutionMap.Return_SolverMap(); }
 
   void haveAppliedSubstitutionMap()
   {
@@ -263,7 +260,6 @@ public:
   {
     return substitutionMap.getVariablesInExpression();
   }
-
 };
 } // end of namespace
 #endif

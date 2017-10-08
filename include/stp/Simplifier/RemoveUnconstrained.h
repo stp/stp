@@ -31,9 +31,9 @@ THE SOFTWARE.
 #ifndef REMOVEUNCONSTRAINED_H_
 #define REMOVEUNCONSTRAINED_H_
 #include "stp/AST/AST.h"
+#include "stp/AST/MutableASTNode.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AST/MutableASTNode.h"
 
 namespace stp
 {

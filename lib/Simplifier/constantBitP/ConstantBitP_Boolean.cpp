@@ -182,7 +182,7 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
       }
     }
     // ones ==0, zeroes != numberChildren.
-    else if (answerKnown && !answer) 
+    else if (answerKnown && !answer)
     {
       // set all the column to false.
       for (int j = 0; j < numberOfChildren; j++)
@@ -196,7 +196,7 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
       }
     }
     else if (unks == 1 && answerKnown && answer &&
-        (zeroes == (numberOfChildren - 1)))
+             (zeroes == (numberOfChildren - 1)))
     {
       // A single unknown, everything else is false. The answer is true. So the
       // unknown is true.

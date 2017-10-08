@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/AST/AST.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include <set>
 #include <stdexcept>
-#include "stp/AST/AST.h"
-#include "stp/Simplifier/Simplifier.h"
 
 namespace simplifier
 {
@@ -213,7 +213,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_increment(one);
 
-  stp::CBV  max= CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_Fill(max);
 
   // quotient and remainder.
@@ -557,7 +557,6 @@ end:
   CONSTANTBV::BitVector_Destroy(one);
   CONSTANTBV::BitVector_Destroy(max);
 
-
   if (result == CONFLICT)
     return CONFLICT;
 
@@ -741,24 +740,24 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
     return r0; // TODO fix so we learn something if we might be dividing by zero..
 
   // Enforce that the output must be less than the numerator.
-   for (int i = children[0]->getWidth() - 1; i >= 0; i--)
+  for (int i = children[0]->getWidth() - 1; i >= 0; i--)
+  {
+    if (children[0]->isFixedToZero(i))
     {
-      if (children[0]->isFixedToZero(i))
+      if (output.isFixedToOne(i))
+        return CONFLICT;
+      else if (!output.isFixed(i))
       {
-        if (output.isFixedToOne(i))
-          return CONFLICT;
-        else if (!output.isFixed(i))
-        {
-          output.setFixed(i, true);
-          output.setValue(i, false);
-          r0 = CHANGED;
-        }
-      }
-      else
-      {
-        break;
+        output.setFixed(i, true);
+        output.setValue(i, false);
+        r0 = CHANGED;
       }
     }
+    else
+    {
+      break;
+    }
+  }
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);

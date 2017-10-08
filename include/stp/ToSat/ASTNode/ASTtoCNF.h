@@ -25,11 +25,11 @@ THE SOFTWARE.
 #ifndef TOCNF_H
 #define TOCNF_H
 
-#include <cmath>
-#include <cassert>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ASTNode/ClauseList.h"
+#include <cassert>
+#include <cmath>
 
 namespace stp
 {
@@ -46,8 +46,7 @@ private:
   {
     int control;
     ClauseList* clausespos;
-    union
-    {
+    union {
       ClauseList* clausesneg;
       ASTNode* termforcnf;
     };
@@ -61,10 +60,12 @@ private:
   };
 
   typedef std::unordered_map<ASTNode, CNFInfo*, ASTNode::ASTNodeHasher,
-                   ASTNode::ASTNodeEqual> ASTNodeToCNFInfoMap;
+                             ASTNode::ASTNodeEqual>
+      ASTNodeToCNFInfoMap;
 
   typedef std::unordered_map<ASTNode, ASTNode*, ASTNode::ASTNodeHasher,
-                   ASTNode::ASTNodeEqual> ASTNodeToASTNodePtrMap;
+                             ASTNode::ASTNodeEqual>
+      ASTNodeToASTNodePtrMap;
 
   //########################################
   //########################################

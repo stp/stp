@@ -22,11 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/c_interface.h"
 #include <fstream>
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <string>
-#include "stp/c_interface.h"
 
 static unsigned int errorCount = 0;
 static std::string errorMsg;
@@ -53,7 +53,6 @@ void errorHandler(const char* err_msg)
   errorMsg = std::string(err_msg);
   ++errorCount;
 }
-
 
 //Disabling test because error handling is horrible and WILL break
 //a running system

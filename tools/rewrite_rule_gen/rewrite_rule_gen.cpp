@@ -33,38 +33,36 @@ THE SOFTWARE.
   If they are the same, then C++ code can be written out that implements the rule.
 */
 
-
-#include <ctime>
-#include <vector>
 #include <algorithm>
-#include <iostream>
+#include <ctime>
 #include <fstream>
+#include <iostream>
+#include <vector>
 
 #include "stp/AST/AST.h"
 #include "stp/Printer/printers.h"
 
+#include "stp/AST/AST.h"
+#include "stp/AST/NodeFactory/TypeChecker.h"
+#include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/MinisatCore.h"
-#include "stp/STPManager/STP.h"
 #include "stp/Simplifier/DifficultyScore.h"
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/AST/NodeFactory/TypeChecker.h"
 #include "stp/cpp_interface.h"
 
+#include "Functionlist.h"
 #include "VariableAssignment.h"
+#include "misc.h"
 #include "rewrite_rule.h"
 #include "rewrite_system.h"
-#include "Functionlist.h"
-#include "misc.h"
 
 #include "stp/ToSat/AIG/BBNodeManagerAIG.h"
 #include "stp/ToSat/AIG/ToCNFAIG.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
-#include <sstream>
 #include <fstream>
+#include <sstream>
 using std::stringstream;
 using std::make_pair;
 using std::deque;
@@ -124,7 +122,8 @@ vector<ASTNode> getVariables(const ASTNode& n);
 bool matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo,
                const int term_variable_width);
 
-typedef std::unordered_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_map<ASTNode, string, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
     ASTNodeString;
 
 stp::STPMgr* mgr;
@@ -300,9 +299,9 @@ bool checkProp(const ASTNode& n)
   {
     ASTNodeMap mapToVal;
     for (int j = 0; j < symbols.size(); j++)
-      mapToVal.insert(make_pair(symbols[j], (0x1 & (i >> (j * bits))) == 0
-                                                ? mgr->ASTFalse
-                                                : mgr->ASTTrue));
+      mapToVal.insert(make_pair(symbols[j],
+                                (0x1 & (i >> (j * bits))) == 0 ? mgr->ASTFalse
+                                                               : mgr->ASTTrue));
 
     if (i == 0)
     {
@@ -331,12 +330,8 @@ bool checkProp(const ASTNode& n)
 }
 
 // True if it's always true, otherwise fills the assignment.
-bool isConstant(
-  const ASTNode& n,
-  VariableAssignment& different,
-  const int bit_width
-  , const int64_t timeout_max_confl
-)
+bool isConstant(const ASTNode& n, VariableAssignment& different,
+                const int bit_width, const int64_t timeout_max_confl)
 {
   if (isConstantToSat(n, timeout_max_confl))
     return true;
@@ -662,7 +657,7 @@ int getDifficulty(const ASTNode& n_)
   for (int i = 0; i < cnfData->nClauses; i++)
   {
     satSolverClause.clear();
-    for (int* pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
          pLit < pStop; pLit++)
     {
       uint32_t var = (*pLit) >> 1;
@@ -758,7 +753,6 @@ void startup()
 
   mgr = new stp::STPMgr();
   stp::GlobalParserBM = mgr;
-
 
   simp = new Simplifier(mgr);
   ArrayTransformer* at = new ArrayTransformer(mgr, simp);
@@ -949,7 +943,8 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     return;
   }
 
-  cout << '\n' << "depth:" << depth << ", size:" << expressions.size()
+  cout << '\n'
+       << "depth:" << depth << ", size:" << expressions.size()
        << " values:" << values.size() << " found: " << rewrite_system.size()
        << " done:" << discarded << "\n";
 
@@ -1117,7 +1112,8 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
         ass.push_back(different);
 
         // Discard the ones we've checked entirely.
-        ASTVec newEquiv(equiv.begin() + std::max((int)i - (int)1, 0), equiv.end());
+        ASTVec newEquiv(equiv.begin() + std::max((int)i - (int)1, 0),
+                        equiv.end());
         equiv.clear();
 
         findRewrites(newEquiv, ass, depth + 1);
@@ -2526,8 +2522,8 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
 
   if (debug_matching)
   {
-    cerr << "=======" << endl << "The result is: " << r << "for the inputs"
-         << n0 << n1 << "=-===";
+    cerr << "=======" << endl
+         << "The result is: " << r << "for the inputs" << n0 << n1 << "=-===";
   }
 
   if (!r)

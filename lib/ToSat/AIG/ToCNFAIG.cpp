@@ -56,9 +56,8 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
   }
 }
 
-void ToCNFAIG::dag_aware_aig_rewrite(
-  const bool needAbsRef,
-  BBNodeManagerAIG& mgr)
+void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
+                                     BBNodeManagerAIG& mgr)
 {
   const int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
 
@@ -118,9 +117,10 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   // Rewriting is sometimes very slow. Can it be configured to be faster?
   // What about refactoring???
 
-  if (uf.stats_flag) {
+  if (uf.stats_flag)
+  {
     cerr << "Nodes before AIG rewrite:" << mgr.aigMgr->nObjs[AIG_OBJ_AND]
-    << endl;
+         << endl;
   }
 
   dag_aware_aig_rewrite(needAbsRef, mgr);
@@ -142,10 +142,9 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   fill_node_to_var(cnfData, nodeToVars, mgr);
 }
 
-void ToCNFAIG::fill_node_to_var(
-  Cnf_Dat_t* cnfData,
-  ToSATBase::ASTNodeToSATVar& nodeToVars,
-  BBNodeManagerAIG& mgr)
+void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
+                                ToSATBase::ASTNodeToSATVar& nodeToVars,
+                                BBNodeManagerAIG& mgr)
 {
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
   assert(nodeToVars.size() == 0);
@@ -176,5 +175,4 @@ void ToCNFAIG::fill_node_to_var(
     nodeToVars.insert(make_pair(n, v));
   }
 }
-
 }

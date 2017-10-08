@@ -29,10 +29,10 @@ THE SOFTWARE.
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
-#include <cassert>
 #include "stp/Simplifier/Simplifier.h"
-#include <cstdlib>
+#include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
@@ -201,8 +201,9 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
     // absolute value).
     ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
     ASTNode neZ = nf->CreateNode(
-        NOT, nf->CreateNode(EQ, rev_node,
-                            nf->CreateZeroConst(divisor.GetValueWidth())));
+        NOT,
+        nf->CreateNode(EQ, rev_node,
+                       nf->CreateZeroConst(divisor.GetValueWidth())));
     ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
     ASTNode n = nf->CreateTerm(ITE, len, cond,
                                nf->CreateTerm(BVPLUS, len, rev_node, divisor),
@@ -276,7 +277,7 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   {
     assertTransformPostConditions(*it, visited);
   }
-} 
+}
 
 /********************************************************
  * TransformFormula()
@@ -407,7 +408,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
   if (simpleForm.Degree() > 0)
     (*TransformMap)[simpleForm] = result;
   return result;
-} 
+}
 
 ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
 {
@@ -496,7 +497,7 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
                result);
   }
   return result;
-} 
+}
 
 /* This function transforms Array Reads, Read over Writes, Read over
  * ITEs into flattened form.

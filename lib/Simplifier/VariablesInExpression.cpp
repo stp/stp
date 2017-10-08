@@ -127,7 +127,7 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
   }
 
   return;
-} 
+}
 
 ASTNodeSet* VariablesInExpression::SetofVarsSeenInTerm(Symbols* symbol,
                                                        bool& destruct)
@@ -224,24 +224,24 @@ bool VariablesInExpression::VarSeenInTerm(const ASTNode& var,
   return result;
 }
 
-  void VariablesInExpression::ClearAllTables()
+void VariablesInExpression::ClearAllTables()
+{
+  std::set<Symbols*> deleted;
+  for (ASTNodeToNodes::iterator it = symbol_graph.begin();
+       it != symbol_graph.end(); it++)
   {
-    std::set<Symbols*> deleted;
-    for (ASTNodeToNodes::iterator it = symbol_graph.begin();
-         it != symbol_graph.end(); it++)
+    if (deleted.find(it->second) == deleted.end())
     {
-      if (deleted.find(it->second) == deleted.end())
-      {
-        deleted.insert(it->second);
-        delete it->second;
-      }
+      deleted.insert(it->second);
+      delete it->second;
     }
-
-    for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin();
-         it != TermsAlreadySeenMap.end(); it++)
-      delete (it->second);
-
-    symbol_graph.clear();
-    TermsAlreadySeenMap.clear();
   }
+
+  for (SymbolPtrToNode::iterator it = TermsAlreadySeenMap.begin();
+       it != TermsAlreadySeenMap.end(); it++)
+    delete (it->second);
+
+  symbol_graph.clear();
+  TermsAlreadySeenMap.clear();
+}
 }

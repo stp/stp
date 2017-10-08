@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/UsefulDefs.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/Globals/Globals.h"
+#include "stp/STPManager/STPManager.h"
 namespace stp
 {
 using std::cout;

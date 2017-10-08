@@ -22,14 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/ASTNode/ToSAT.h"
-#include "stp/ToSat/BitBlaster.h"
 #include "stp/Printer/printers.h"
-#include <iostream>
-#include <fstream>
-#include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
 #include "stp/STPManager/UserDefinedFlags.h"
-#include "stp/ToSat/ASTNode/ClauseList.h"
 #include "stp/ToSat/ASTNode/ASTtoCNF.h"
+#include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
+#include "stp/ToSat/ASTNode/ClauseList.h"
+#include "stp/ToSat/BitBlaster.h"
+#include <fstream>
+#include <iostream>
 
 namespace stp
 {
@@ -58,7 +58,7 @@ uint32_t ToSAT::LookupOrCreateSATVar(SATSolver& newSolver, const ASTNode& n)
   // look for the symbol in the global map from ASTNodes to ints. if
   // not found, create a S.newVar(), else use the existing one.
   ASTtoSATMap::iterator it = _ASTNode_to_SATVar_Map.find(n);
-  if ( it != _ASTNode_to_SATVar_Map.end())
+  if (it != _ASTNode_to_SATVar_Map.end())
     return it->second;
 
   //We have to create it.
@@ -170,9 +170,9 @@ bool ToSAT::fill_satsolver_with_clauses(ClauseContainer& cc,
        i != iend; i++)
   {
     satSolverClause.clear();
-    for(vector<const ASTNode*>::const_iterator
-      j = (*i)->begin(), jend = (*i)->end();
-      j != jend; j++)
+    for (vector<const ASTNode*>::const_iterator j = (*i)->begin(),
+                                                jend = (*i)->end();
+         j != jend; j++)
     {
       ASTNode node = **j;
       bool negate = (NOT == node.GetKind()) ? true : false;
@@ -184,7 +184,8 @@ bool ToSAT::fill_satsolver_with_clauses(ClauseContainer& cc,
 
     newSolver.addClause(satSolverClause);
 
-    if (!newSolver.okay()) {
+    if (!newSolver.okay())
+    {
       if (bm->UserFlags.stats_flag)
         newSolver.printStats();
       bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
@@ -196,10 +197,8 @@ bool ToSAT::fill_satsolver_with_clauses(ClauseContainer& cc,
   return true;
 }
 
-void ToSAT::dump_to_cnf_file(const SATSolver& newSolver,
-                             const ClauseList& cll,
-                             const ClauseContainer* cc
-                            )
+void ToSAT::dump_to_cnf_file(const SATSolver& newSolver, const ClauseList& cll,
+                             const ClauseContainer* cc)
 {
   // output a CNF
 
@@ -212,8 +211,8 @@ void ToSAT::dump_to_cnf_file(const SATSolver& newSolver,
   file.open(fileName.str().c_str());
 
   file << "p cnf " << newSolver.nVars() << " " << cll.size() << endl;
-  for(ClauseContainer::const_iterator i = cc->begin(), iend = cc->end();
-     i != iend; i++)
+  for (ClauseContainer::const_iterator i = cc->begin(), iend = cc->end();
+       i != iend; i++)
   {
     vector<const ASTNode*>::iterator j = (*i)->begin(), jend = (*i)->end();
     for (; j != jend; j++)
@@ -238,9 +237,8 @@ void ToSAT::dump_to_cnf_file(const SATSolver& newSolver,
 }
 
 // Bucketize clauses into buckets of size 1,2,...CLAUSAL_BUCKET_LIMIT
-ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(
-  ClauseList* cl,
-  int clause_bucket_size)
+ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(ClauseList* cl,
+                                                  int clause_bucket_size)
 {
   ClauseBuckets* cb = new ClauseBuckets;
   ClauseContainer* cc = cl->asList();
@@ -272,7 +270,7 @@ ClauseBuckets* ToSAT::Sort_ClauseList_IntoBuckets(
   }
 
   return cb;
-} 
+}
 
 bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
                                      ASTtoCNF*& cm)
@@ -297,7 +295,8 @@ bool ToSAT::CallSAT_On_ClauseBuckets(SATSolver& SatSolver, ClauseBuckets* cb,
 // Call the SAT solver, and check the result before returning. This
 // can return one of 3 values, SOLVER_VALID, SOLVER_INVALID or
 // SOLVER_UNDECIDED
-bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input, bool /*refinement*/)
+bool ToSAT::CallSAT(SATSolver& SatSolver, const ASTNode& input,
+                    bool /*refinement*/)
 {
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
 

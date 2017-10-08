@@ -131,7 +131,7 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         CounterExampleMap[key] = value;
     }
   }
-} 
+}
 
 // FUNCTION: accepts a non-constant term, and returns the
 // corresponding constant term with respect to a model.
@@ -340,8 +340,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
         o.push_back(ff);
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, o,
-                                         term.GetValueWidth());
+      output = NonMemberBVConstEvaluator(bm, k, o, term.GetValueWidth());
       break;
     }
   }
@@ -358,7 +357,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
   return output;
-} 
+}
 
 // Expands read-over-write by evaluating (readIndex=writeIndex) for
 // every writeindex until, either it evaluates to TRUE or all
@@ -511,9 +510,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(TermToConstTermUsingModel(*it, false));
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, children,
-                                         form.GetValueWidth());
-
+      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
     }
     break;
 
@@ -535,8 +532,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(ComputeFormulaUsingModel(*it));
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, children,
-                                         form.GetValueWidth());
+      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
     }
     break;
 
@@ -623,7 +619,7 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
   }
 
   return TermToConstTermUsingModel(expr, false);
-} 
+}
 
 // FUNCTION: queries the counterexample, and returns the number of array
 // locations for e
@@ -686,33 +682,32 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   }
 
   return entries;
-} 
+}
 
 // TODO printing of expressions.
 // TODO move to printer file.
-void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode &n)
+void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
 {
   if (n.GetKind() == SYMBOL)
   {
     os << "( ";
 
-      os << "|";
-      n.nodeprint(os);
-      os << "| ";
-  
-    if (n.GetType() == stp::BITVECTOR_TYPE)
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false),os);
-    else
-      {
-        if (ASTTrue == ComputeFormulaUsingModel(n))
-            os << "true";
-          else 
-            os << "false";
-      }
-    os << " )";
-  } 
-}
+    os << "|";
+    n.nodeprint(os);
+    os << "| ";
 
+    if (n.GetType() == stp::BITVECTOR_TYPE)
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
+    else
+    {
+      if (ASTTrue == ComputeFormulaUsingModel(n))
+        os << "true";
+      else
+        os << "false";
+    }
+    os << " )";
+  }
+}
 
 void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
 {
@@ -739,41 +734,39 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
     {
       continue;
     }
-    
+
     if (f.GetKind() == SYMBOL)
     {
       os << "( define-fun ";
       os << "|";
       f.nodeprint(os);
       os << "|";
-      
+
       if (f.GetType() == stp::BITVECTOR_TYPE)
       {
         os << " () (";
         os << "_ BitVec " << f.GetValueWidth() << ")";
-        printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
+        printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
       }
       else if (f.GetType() == stp::BOOLEAN_TYPE)
       {
-        os << " () Bool ";        
+        os << " () Bool ";
       }
       else
       {
         FatalError("Wrong Type");
       }
 
-      os << " )" <<std::endl;  
+      os << " )" << std::endl;
     }
 
     //TODO completely the wrong format.
-    if (
-        (f.GetKind() == READ && 
-         f[0].GetKind() == SYMBOL &&
+    if ((f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
          f[1].GetKind() == BVCONST))
     {
 
       os << "( define-fun ";
-      
+
       os << "|";
       f[0].nodeprint(os);
       os << "| ";
@@ -784,15 +777,14 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
       os << " (";
       os << "_ BitVec " << f[0].GetValueWidth() << ")";
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false),os);
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false), os);
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
       os << " )" << endl;
     }
   }
   os.flush();
 }
-
 
 // FUNCTION: prints a counterexample for INVALID inputs.  iterate
 // through the CounterExampleMap data structure and print it to
@@ -854,10 +846,9 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
          f[1].GetKind() == BVCONST))
     {
 
-        os << "ASSERT( ";
+      os << "ASSERT( ";
 
-
-      printer::PL_Print1(os, f, 0, false,bm);
+      printer::PL_Print1(os, f, 0, false, bm);
       if (BOOLEAN_TYPE == f.GetType())
       {
         os << "<=>";
@@ -877,17 +868,14 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
         rhs = ComputeFormulaUsingModel(se);
       }
       assert(rhs.isConstant());
-      printer::PL_Print1(os, rhs, 0, false,bm);
+      printer::PL_Print1(os, rhs, 0, false, bm);
 
-
-        os << " );" << endl;
-
-
+      os << " );" << endl;
     }
   }
   os.flush();
   // os << "\nEND OF COUNTEREXAMPLE" << endl;
-} 
+}
 
 /* iterate through the CounterExampleMap data structure and print it
  * to stdout. this function prints only the declared array variables
@@ -948,7 +936,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
       reverse(sss.begin(), sss.end());
       int n = atoi(sss.c_str());
 
-      it->PL_Print(cout,bm, 2);
+      it->PL_Print(cout, bm, 2);
       for (int j = 0; j < n; j++)
       {
         ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);
@@ -966,7 +954,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
   for (unsigned int jj = 0; jj < out_int.size(); jj++)
     cout << out_int[jj] << endl;
   cout << endl;
-} 
+}
 
 // Prints Satisfying assignment directly, for debugging.
 void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
@@ -1031,12 +1019,10 @@ void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
 }
 
 SOLVER_RETURN_TYPE
-AbsRefine_CounterExample::CallSAT_ResultCheck(
-  SATSolver& SatSolver,
-  const ASTNode& modified_input,
-  const ASTNode& original_input,
-  ToSATBase* tosat,
-  bool refinement)
+AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
+                                              const ASTNode& modified_input,
+                                              const ASTNode& original_input,
+                                              ToSATBase* tosat, bool refinement)
 {
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
@@ -1103,5 +1089,4 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
     return SOLVER_ERROR;
   }
 }
-
 }

@@ -35,10 +35,9 @@ public:
   DLL_PUBLIC HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
   DLL_PUBLIC virtual ~HashingNodeFactory();
 
-  DLL_PUBLIC ASTNode CreateNode(const Kind kind,
-                           const ASTVec& back_children);
+  DLL_PUBLIC ASTNode CreateNode(const Kind kind, const ASTVec& back_children);
   DLL_PUBLIC ASTNode CreateTerm(Kind kind, unsigned int width,
-                           const ASTVec& children);
+                                const ASTVec& children);
 
   virtual std::string getName() { return "hashing"; }
 };

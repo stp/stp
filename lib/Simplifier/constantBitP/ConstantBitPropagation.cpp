@@ -26,15 +26,15 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
-#include "stp/Printer/printers.h"
 #include "stp/AST/NodeFactory/NodeFactory.h"
-#include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
-#include <iostream>
-#include <fstream>
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include <fstream>
+#include <iostream>
 
 using std::endl;
 using std::cout;
@@ -96,7 +96,8 @@ string toString(const ASTNode& n)
 }
 
 // If the bits are totally fixed, then return a new matching ASTNode.
-ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node, const FixedBits& bits)
+ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node,
+                                           const FixedBits& bits)
 {
   ASTNode result;
 
@@ -169,7 +170,8 @@ void ConstantBitPropagation::setNodeToTrue(const ASTNode& top)
 }
 
 // Propagates. No writing in of values. Doesn't assume the top is true.
-ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr * mgr_, stp::Simplifier* _sm,
+ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr* mgr_,
+                                               stp::Simplifier* _sm,
                                                NodeFactory* _nf,
                                                const ASTNode& top)
 {
@@ -647,9 +649,9 @@ FixedBits* ConstantBitPropagation::getUpdatedFixedBits(const ASTNode& n)
   return output;
 }
 
-Result ConstantBitPropagation::dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
-                                   FixedBits& output, const ASTNode n,
-                                   MultiplicationStatsMap* msm)
+Result ConstantBitPropagation::dispatchToTransferFunctions(
+    stp::STPMgr* mgr, const Kind k, vector<FixedBits*>& children,
+    FixedBits& output, const ASTNode n, MultiplicationStatsMap* msm)
 {
   Result result = NO_CHANGE;
 
@@ -771,9 +773,9 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(stp::STPMgr * mgr, co
   {
     int bits_before = output.countFixed() + children[0]->countFixed() +
                       children[1]->countFixed();
-    result = merge(result, maxPrecision(children, output, k, mgr)
-                               ? CONFLICT
-                               : NOT_IMPLEMENTED);
+    result = merge(result,
+                   maxPrecision(children, output, k, mgr) ? CONFLICT
+                                                          : NOT_IMPLEMENTED);
     int difference = (output.countFixed() + children[0]->countFixed() +
                       children[1]->countFixed()) -
                      bits_before;

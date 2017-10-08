@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <cassert>
-#include <cmath>
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
+#include <cassert>
+#include <cmath>
 
 namespace stp
 {
@@ -200,7 +200,8 @@ void Simplifier::UpdateMultInverseMap(const ASTNode& key, const ASTNode& value)
 bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
 {
   std::unordered_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
-  std::unordered_set<int>::const_iterator it2 = AlwaysTrueHashSet.find(key.GetNodeNum());
+  std::unordered_set<int>::const_iterator it2 =
+      AlwaysTrueHashSet.find(key.GetNodeNum());
 
   if (it2 != it_end_2)
   {
@@ -238,7 +239,7 @@ void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& /*key*/)
   // suspect
   // it's not a big loss.
 
-    /*if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
+  /*if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
     AlwaysTrueHashSet.insert(key.GetNodeNum());*/
 }
 
@@ -913,7 +914,7 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
 
   UpdateSimplifyMap(in, output, false, VarConstMap);
   return output;
-} 
+}
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then
 // return the constructed equality
@@ -1743,7 +1744,9 @@ ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k,
       ASTNode bottom = bm.CreateBVConst(32, b.GetUnsignedConst());
 
       return nf->CreateTerm(BVSX, width,
-                            nf->CreateTerm(BVEXTRACT, width - b.GetUnsignedConst() , children[0], top, bottom),
+                            nf->CreateTerm(BVEXTRACT,
+                                           width - b.GetUnsignedConst(),
+                                           children[0], top, bottom),
                             bm.CreateBVConst(32, width));
     }
   }
@@ -1958,10 +1961,10 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
     }
   }
 
-  ASTNode ret = simplify_term_switch(actualInputterm, inputterm,
-                                     output, VarConstMap, k,
-                                     inputValueWidth);
-  if (ret != ASTUndefined) {
+  ASTNode ret = simplify_term_switch(actualInputterm, inputterm, output,
+                                     VarConstMap, k, inputValueWidth);
+  if (ret != ASTUndefined)
+  {
     return ret;
   }
   assert(!output.IsNull());
@@ -2914,7 +2917,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         output = _bm->CreateZeroConst(width);
       }
-      else {
+      else
+      {
         output = inputterm;
       }
       break;
@@ -2929,9 +2933,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
       unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
       nlz = std::min(inputValueWidth - 1, nlz);
-      
+
       // We can't do this if the second operand might be zero.
-      ASTNode eq = nf->CreateNode(EQ, inputterm[1], _bm->CreateZeroConst(inputValueWidth));
+      ASTNode eq = nf->CreateNode(EQ, inputterm[1],
+                                  _bm->CreateZeroConst(inputValueWidth));
       if (nlz > 0 && eq == ASTFalse)
       {
         int rest = inputValueWidth - nlz;
@@ -2960,9 +2965,12 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       ASTNode lessThan = SimplifyFormula(
           nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-      if (lessThan == ASTTrue) {
+      if (lessThan == ASTTrue)
+      {
         output = _bm->CreateZeroConst(inputValueWidth);
-      } else {
+      }
+      else
+      {
         output = inputterm;
       }
       break;
@@ -3013,7 +3021,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       ASTNode lessThan = SimplifyFormula(
           nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
 
-      if (lessThan == ASTTrue) {
+      if (lessThan == ASTTrue)
+      {
         output = inputterm[0];
       }
       else
@@ -3745,7 +3754,6 @@ void Simplifier::printCacheStatus()
 #endif
   cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
        << substitutionMap.Return_SolverMap()->bucket_count() << endl;
-
 }
 
 } // end of namespace

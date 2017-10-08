@@ -25,9 +25,9 @@ THE SOFTWARE.
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
 
-#include "UsefulDefs.h"
 #include "ASTInternal.h"
 #include "NodeFactory/HashingNodeFactory.h"
+#include "UsefulDefs.h"
 
 namespace stp
 {
@@ -90,32 +90,34 @@ class ASTInterior : public ASTInternal
 
   uint32_t _value_width;
   uint32_t _index_width;
-  
-  virtual void setIndexWidth(uint32_t i)  { _index_width =i;}
-  virtual uint32_t getIndexWidth() const {return _index_width;}
-  
-  virtual void setValueWidth(uint32_t v) {_value_width=v; }
-  virtual uint32_t getValueWidth() const  {return _value_width;}
 
+  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
+  virtual uint32_t getIndexWidth() const { return _index_width; }
+
+  virtual void setValueWidth(uint32_t v) { _value_width = v; }
+  virtual uint32_t getValueWidth() const { return _value_width; }
 
 public:
-  ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
-      : ASTInternal(mgr, kind), _children(children), _value_width(0), _index_width(0)
+  ASTInterior(STPMgr* mgr, Kind kind, ASTVec& children)
+      : ASTInternal(mgr, kind), _children(children), _value_width(0),
+        _index_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
-      node_uid = children[0].GetNodeNum()+1;
+      node_uid = children[0].GetNodeNum() + 1;
   }
 
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node) : ASTInternal(int_node), _children(int_node._children), _value_width(int_node._value_width), _index_width(int_node._index_width)
+  ASTInterior(const ASTInterior& int_node)
+      : ASTInternal(int_node), _children(int_node._children),
+        _value_width(int_node._value_width), _index_width(int_node._index_width)
   {
     is_simplified = false;
   }
 
-  ASTInterior & operator= (const ASTInterior & other) =delete;
+  ASTInterior& operator=(const ASTInterior& other) = delete;
 
   virtual ~ASTInterior();
 

@@ -24,13 +24,15 @@ THE SOFTWARE.
 #ifndef ASTNODE_H
 #define ASTNODE_H
 
-#include "stp/AST/ASTInternal.h"
 #include "stp/AST/NodeFactory/HashingNodeFactory.h"
 #include "stp/Util/Attributes.h"
+#include "ASTInternal.h"
+#include "stp/Globals/Globals.h"
 
 namespace stp
 {
 using std::ostream;
+class ASTInternal;
 
 /******************************************************************
  *  A Kind of Smart pointer to actual ASTInternal datastructure.  *
@@ -44,7 +46,7 @@ class ASTNode
   friend class ASTInterior;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
-                                             const ASTVec& back_children);
+                                                const ASTVec& back_children);
   friend bool exprless(const ASTNode n1, const ASTNode n2);
   friend bool arithless(const ASTNode n1, const ASTNode n2);
 
@@ -69,7 +71,7 @@ class ASTNode
     return (node1.Hash() < node2.Hash());
   }
 
-  STPMgr * GetSTPMgr() const;
+  STPMgr* GetSTPMgr() const;
 
 public:
   static THREAD_LOCAL int copy;
@@ -84,7 +86,7 @@ public:
   DLL_PUBLIC ASTNode() : _int_node_ptr(NULL){};
   DLL_PUBLIC ASTNode(const ASTNode& n);
   DLL_PUBLIC ~ASTNode();
-  DLL_PUBLIC ASTNode ( ASTNode && other ) noexcept;
+  DLL_PUBLIC ASTNode(ASTNode&& other) noexcept;
 
   // Print the arguments in lisp format
   friend ostream& LispPrintVec(ostream& os, const ASTVec& v, int indentation);
@@ -104,7 +106,7 @@ public:
   bool isITE() const
   {
     Kind k = GetKind();
-    return k== ITE;
+    return k == ITE;
   }
 
   bool isAtom() const
@@ -116,8 +118,8 @@ public:
   bool isPred() const
   {
     const Kind k = GetKind();
-    return k == BVLT || k == BVLE || k == BVGT || k == BVGE ||
-            k == BVSLT || k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
+    return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
+           k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
   }
 
   // delegates to the ASTInternal node.
@@ -126,7 +128,7 @@ public:
   // Assignment (for ref counting)
   DLL_PUBLIC ASTNode& operator=(const ASTNode& n);
   DLL_PUBLIC ASTNode& operator=(ASTNode&& n);
-  
+
   // Access node number
   unsigned GetNodeNum() const;
 
@@ -176,7 +178,7 @@ public:
   types GetType(void) const;
 
   // Hash using pointer value of _int_node_ptr.
-  DLL_PUBLIC size_t Hash() const ;
+  DLL_PUBLIC size_t Hash() const;
 
   void NFASTPrint(int l, int max, int prefix) const;
 
@@ -185,8 +187,8 @@ public:
   ostream& LispPrint_indent(ostream& os, int indentation) const;
 
   // Presentation Language Printer
-  ostream& PL_Print(ostream& os , STPMgr *mgr, int indentation = 0) const;
-  ostream& PL_Print(ostream& os , int /*indentation = 0*/) const
+  ostream& PL_Print(ostream& os, STPMgr* mgr, int indentation = 0) const;
+  ostream& PL_Print(ostream& os, int /*indentation = 0*/) const
   {
     return PL_Print(os, GetSTPMgr(), 0);
   }
@@ -236,7 +238,6 @@ public:
       return (n1.Hash() == n2.Hash());
     }
   };
-
 };
 
 } // end of namespace

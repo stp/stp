@@ -29,12 +29,12 @@ THE SOFTWARE.
 #ifndef BBASPROP_H_
 #define BBASPROP_H_
 
+#include "stp/AST/AST.h"
 #include "stp/Sat/MinisatCore.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/ToSat/ASTNode/ToSAT.h"
 #include "stp/ToSat/ToSATBase.h"
-#include "stp/AST/AST.h"
-#include "stp/Simplifier/constantBitP/FixedBits.h"
 
 using simplifier::constantBitP::FixedBits;
 
@@ -49,10 +49,7 @@ public:
   ASTNode i0, i1, r;
   stp::ToSAT::ASTNodeToSATVar node_to_satvar_map;
 
-  ~BBAsProp()
-  {
-    delete ss;
-  }
+  ~BBAsProp() { delete ss; }
 
   BBAsProp(Kind k, stp::STPMgr* mgr, int bits)
       : aig(mgr, stp::GlobalSTP->arrayTransformer)
@@ -81,7 +78,8 @@ public:
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
   }
 
-  bool unit_prop_with_assumps() {
+  bool unit_prop_with_assumps()
+  {
     // will propagate then stop when the number of conflicts >=0.
     // That is, before searching.
     ss->setMaxConflicts(0);
@@ -97,23 +95,23 @@ public:
       if (a[i] == '1')
       {
         assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(i0)->second[i], false));
+            node_to_satvar_map.find(i0)->second[i], false));
       }
       else if (a[i] == '0')
       {
         assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(i0)->second[i], true));
+            node_to_satvar_map.find(i0)->second[i], true));
       }
 
       if (b[i] == '1')
       {
         assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(i1)->second[i], false));
+            node_to_satvar_map.find(i1)->second[i], false));
       }
       else if (b[i] == '0')
       {
         assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(i1)->second[i], true));
+            node_to_satvar_map.find(i1)->second[i], true));
       }
     }
 
@@ -122,12 +120,12 @@ public:
       if (output[i] == '1')
       {
         assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(r)->second[i], false));
+            node_to_satvar_map.find(r)->second[i], false));
       }
       else if (output[i] == '0')
       {
-        assumptions.push(stp::SATSolver::mkLit(
-          node_to_satvar_map.find(r)->second[i], true));
+        assumptions.push(
+            stp::SATSolver::mkLit(node_to_satvar_map.find(r)->second[i], true));
       }
     }
   }
@@ -148,7 +146,8 @@ public:
     const int bits = std::max(1U, n.GetValueWidth());
     for (int i = bits - 1; i >= 0; i--)
     {
-      stp::SATSolver::lbool r = ss->value(node_to_satvar_map.find(n)->second[i]);
+      stp::SATSolver::lbool r =
+          ss->value(node_to_satvar_map.find(n)->second[i]);
 
       if (r == ss->true_literal() || r == ss->false_literal())
         result++;

@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 
 stp::ASTNode TypeChecker::CreateTerm(stp::Kind kind, unsigned int width,
-                                      const stp::ASTVec& children)
+                                     const stp::ASTVec& children)
 {
   stp::ASTNode r = f.CreateTerm(kind, width, children);
   BVTypeCheck(r);
@@ -36,7 +36,7 @@ stp::ASTNode TypeChecker::CreateTerm(stp::Kind kind, unsigned int width,
 // virtual stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec&
 // children);
 stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
-                                      const stp::ASTVec& children)
+                                     const stp::ASTVec& children)
 {
   stp::ASTNode r = f.CreateNode(kind, children);
   BVTypeCheck(r);
@@ -44,8 +44,8 @@ stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
 }
 
 stp::ASTNode TypeChecker::CreateArrayTerm(Kind kind, unsigned int index,
-                                           unsigned int width,
-                                           const stp::ASTVec& children)
+                                          unsigned int width,
+                                          const stp::ASTVec& children)
 {
   ASTNode r = f.CreateTerm(kind, width, children);
   r.SetIndexWidth(index);

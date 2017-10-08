@@ -53,7 +53,7 @@ public:
 
   bool solve(bool& timeout_expired); // Search without assumptions.
 
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals & assumps);
+  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 
   virtual void setMaxConflicts(int64_t max_confl);
 

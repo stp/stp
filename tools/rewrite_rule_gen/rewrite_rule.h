@@ -25,8 +25,8 @@ THE SOFTWARE.
 #ifndef REWRITERULE_H
 #define REWRITERULE_H
 
-#include "stp/STPManager/STPManager.h"
 #include "misc.h"
+#include "stp/STPManager/STPManager.h"
 #include <signal.h>
 #include <sys/time.h>
 

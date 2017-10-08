@@ -45,7 +45,6 @@ THREAD_LOCAL uint64_t ASTInternal::node_uid_cntr = 0;
  * Universal Helper Functions                                   *
  ****************************************************************/
 
-
 // Sort ASTNodes by expression numbers
 bool exprless(const ASTNode n1, const ASTNode n2)
 {
@@ -93,8 +92,8 @@ bool arithless(const ASTNode n1, const ASTNode n2)
 }
 
 // counts the number of reads. Shortcut when we get to the limit.
-void numberOfReadsLessThan(const ASTNode& n, std::unordered_set<int>& visited, int& soFar,
-                           const int limit)
+void numberOfReadsLessThan(const ASTNode& n, std::unordered_set<int>& visited,
+                           int& soFar, const int limit)
 {
   if (n.isAtom())
     return;
@@ -124,7 +123,7 @@ bool numberOfReadsLessThan(const ASTNode& n, int limit)
 }
 
 // True if any descendants are arrays.
-bool containsArrayOps(const ASTNode& n, STPMgr *mgr)
+bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
 
   NodeIterator ni(n, mgr->ASTUndefined, *mgr);
@@ -222,13 +221,16 @@ bool BVTypeCheckRecursive(const ASTNode& n)
 {
   const ASTVec& c = n.GetChildren();
 
-  if (!BVTypeCheck(n)) {
+  if (!BVTypeCheck(n))
+  {
     return false;
   }
 
   for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
-       it++) {
-    if (!BVTypeCheckRecursive(*it)) {
+       it++)
+  {
+    if (!BVTypeCheckRecursive(*it))
+    {
       return false;
     }
   }
@@ -348,8 +350,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-      if (BOOLEAN_TYPE != n[0].GetType() ||
-          (n[1].GetType() != n[2].GetType()))
+      if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       if (n[1].GetValueWidth() != n[2].GetValueWidth())
@@ -426,11 +427,12 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     {
       if (!(v.size() >= 2))
         FatalError("BVTypeCheck:bitwise Booleans and BV arith operators must "
-                   "have at least two arguments\n",n);
+                   "have at least two arguments\n",
+                   n);
 
       unsigned int width = n.GetValueWidth();
-      for (ASTVec::const_iterator it = v.begin(), itend = v.end();
-           it != itend; it++)
+      for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend;
+           it++)
       {
         if (width != it->GetValueWidth())
         {
@@ -438,13 +440,13 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
                   "operators must be of equal length\n";
           cerr << n << endl;
           cerr << "width of term:" << width << endl;
-          cerr << "width of offending operand:" << it->GetValueWidth()
-               << endl;
+          cerr << "width of offending operand:" << it->GetValueWidth() << endl;
           FatalError("BVTypeCheck:Offending operand:\n", *it);
         }
         if (BITVECTOR_TYPE != it->GetType())
           FatalError("BVTypeCheck: ChildNodes of bitvector-terms must be "
-                     "bitvectors\n", n);
+                     "bitvectors\n",
+                     n);
       }
       break;
     }
@@ -455,11 +457,13 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       if (n[0].GetValueWidth() > n.GetValueWidth())
       {
         FatalError("BVTypeCheck: BV[SZ]X(t,bv[sz]x_len) : length of 't' must "
-                   "be <= bv[sz]x_len\n", n);
+                   "be <= bv[sz]x_len\n",
+                   n);
       }
       if ((v.size() != 2))
         FatalError("BVTypeCheck:BV[SZ]X must have two arguments. The second "
-                   "is the new width\n", n);
+                   "is the new width\n",
+                   n);
       break;
 
     case BVCONCAT:
@@ -526,8 +530,8 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: index should be BVCONST\n", n);
       if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
       {
-        FatalError(
-            "BVTypeCheck: index is greater or equal to the bitwidth.\n", n);
+        FatalError("BVTypeCheck: index is greater or equal to the bitwidth.\n",
+                   n);
       }
       break;
 
@@ -552,8 +556,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         cerr << "indexwidth of lhs of EQ: " << n[0].GetIndexWidth() << endl;
         cerr << "indexwidth of rhs of EQ: " << n[1].GetIndexWidth() << endl;
         FatalError(
-            "BVTypeCheck: terms in atomic formulas must be of equal length",
-            n);
+            "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       }
       break;
 
@@ -567,21 +570,18 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case BVSGE:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-      if (BITVECTOR_TYPE != n[0].GetType() &&
-          BITVECTOR_TYPE != n[1].GetType())
+      if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())
       {
-        FatalError("BVTypeCheck: terms in atomic formulas must be bitvectors"
-                   ,n);
+        FatalError("BVTypeCheck: terms in atomic formulas must be bitvectors",
+                   n);
       }
       if (n[0].GetValueWidth() != n[1].GetValueWidth())
         FatalError(
-            "BVTypeCheck: terms in atomic formulas must be of equal length",
-            n);
+            "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       if (n[0].GetIndexWidth() != n[1].GetIndexWidth())
       {
         FatalError(
-            "BVTypeCheck: terms in atomic formulas must be of equal length",
-            n);
+            "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       }
       break;
 
@@ -591,7 +591,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: NOT formula can have exactly one childNode",
                    n);
       }
-      assert( n.GetNodeNum() == n[0].GetNodeNum()+1);
+      assert(n.GetNodeNum() == n[0].GetNodeNum() + 1);
       break;
 
     case AND:
@@ -611,8 +611,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case IMPLIES:
       if (2 != n.Degree())
       {
-        FatalError("BVTypeCheck:IFF/IMPLIES must have exactly 2 ChildNodes",
-                   n);
+        FatalError("BVTypeCheck:IFF/IMPLIES must have exactly 2 ChildNodes", n);
       }
       break;
 

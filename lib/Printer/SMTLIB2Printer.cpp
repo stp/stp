@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
 #include <cassert>
 #include <cctype>
-#include "stp/Printer/SMTLIBPrinter.h"
 
 // Outputs in the SMTLIB format. If you want something that can be parsed by
 // other tools call
@@ -41,7 +41,8 @@ void SMTLIB2_Print1(ostream& os, const stp::ASTNode n, int indentation,
                     bool letize);
 void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
-void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr *mgr, const bool definately_bv)
+void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
+                       const bool definately_bv)
 {
   if (!definately_bv && containsArrayOps(n, mgr))
     os << "(set-logic QF_ABV)\n";
@@ -129,9 +130,8 @@ void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
   // Prepend with zero to convert to unsigned.
 
   os << "(_ bv";
-  CBV zero = CONSTANTBV::BitVector_Create(1, true); 
-  CBV unsign = CONSTANTBV::BitVector_Concat(
-      zero, op.GetBVConst());
+  CBV zero = CONSTANTBV::BitVector_Create(1, true);
+  CBV unsign = CONSTANTBV::BitVector_Concat(zero, op.GetBVConst());
   unsigned char* str = CONSTANTBV::BitVector_to_Dec(unsign);
   CONSTANTBV::BitVector_Destroy(unsign);
   CONSTANTBV::BitVector_Destroy(zero);

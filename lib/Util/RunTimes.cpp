@@ -31,14 +31,14 @@ THE SOFTWARE.
 // This is intended as a low overhead profiling class. So runtimes can
 // always be tracked.
 
-#include <cassert>
-#include <sys/time.h>
-#include <sstream>
-#include <iostream>
-#include <utility>
 #include "stp/Util/RunTimes.h"
-#include "stp/Util/Attributes.h"
 #include "minisat/utils/System.h"
+#include "stp/Util/Attributes.h"
+#include <cassert>
+#include <iostream>
+#include <sstream>
+#include <sys/time.h>
+#include <utility>
 
 namespace stp
 {
@@ -85,18 +85,18 @@ void RunTimes::print()
     it1++;
   }
   std::cerr << result.str();
-  
-  std::ios_base::fmtflags f( std::cerr.flags() );
-  
+
+  std::ios_base::fmtflags f(std::cerr.flags());
+
   std::cerr << std::fixed;
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
   std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0) << "MB"
-            << std::endl;
+  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0)
+            << "MB" << std::endl;
 
-  std::cerr.flags( f );
+  std::cerr.flags(f);
   clear();
 }
 
@@ -110,7 +110,6 @@ std::string RunTimes::getDifference()
     << Minisat::memUsed() / (1024.0 * 1024.0) << "MB";
   return s.str();
 }
-
 
 void RunTimes::addTime(Category c, long milliseconds)
 {
