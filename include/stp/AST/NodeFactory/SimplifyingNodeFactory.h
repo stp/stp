@@ -60,7 +60,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/Attributes.h"
 
-class SimplifyingNodeFactory : public NodeFactory
+class DLL_PUBLIC SimplifyingNodeFactory : public NodeFactory
 {
 
 public:

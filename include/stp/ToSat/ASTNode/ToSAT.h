@@ -37,14 +37,10 @@ class ASTtoCNF;
 typedef vector<const ASTNode*>* ClausePtr;
 typedef std::deque<ClausePtr> ClauseContainer;
 
-class ToSAT : public ToSATBase
+class DLL_PUBLIC ToSAT : public ToSATBase
 {
 
 private:
-  /****************************************************************
-   * Private Typedefs and Data                                    *
-   ****************************************************************/
-
   // MAP: This is a map from ASTNodes to Variables(uint32_t-s).
   //
   // The map is populated while ASTclauses are read from the AST
@@ -64,10 +60,6 @@ private:
 
   int CNFFileNameCounter;
   int benchFileNameCounter;
-
-  /****************************************************************
-   * Private Member Functions                                     *
-   ****************************************************************/
 
   // looksup a MINISAT var from the minisat-var memo-table. if none
   // exists, then creates one.  Treat the result as const.

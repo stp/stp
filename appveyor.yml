@@ -115,6 +115,12 @@ build_script:
   # - cmake --build . --config %CONFIGURATION% --target check
 
   - cmake --build . --config %CONFIGURATION% --target install
+  - call ctest -V -C %CONFIGURATION%
+
+  # Install&run CMS
+  - ls
+  - msbuild .\INSTALL.vcxproj
+  - call "C:\Program Files\stp\bin\stp.exe" --help
 
 
 build:

@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 
 // A Node factory that only does structural hashing.
-class HashingNodeFactory : public NodeFactory
+class DLL_PUBLIC HashingNodeFactory : public NodeFactory
 {
 public:
   DLL_PUBLIC HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}

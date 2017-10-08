@@ -32,7 +32,7 @@ THE SOFTWARE.
 
 #include "stp/AST/NodeFactory/NodeFactory.h"
 
-class TypeChecker : public NodeFactory
+class DLL_PUBLIC TypeChecker : public NodeFactory
 {
   NodeFactory& f;
 

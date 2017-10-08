@@ -95,8 +95,7 @@ else()
 endif()
 
 # Set the public header so it will be installed
-set_target_properties(libstp
-    PROPERTIES
+set_target_properties(libstp PROPERTIES
     OUTPUT_NAME stp
     PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}

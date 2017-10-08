@@ -38,7 +38,7 @@ class ArrayTransformer;
 
 const bool debug_substn = false;
 
-class SubstitutionMap // not copyable
+class DLL_PUBLIC SubstitutionMap // not copyable
 {
 
   ASTNodeMap* SolverMap;

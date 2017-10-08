@@ -62,7 +62,13 @@ THE SOFTWARE.
 #define THREAD_LOCAL thread_local
 #elif defined _WIN32 && (defined _MSC_VER || defined __ICL ||                  \
                          defined __DMC__ || defined __BORLANDC__)
-#define THREAD_LOCAL __declspec(thread)
+
+//********************
+// For windows, this does not work, DLL_PUBLIC and THREAD_LOCAL together die
+//********************
+//#define THREAD_LOCAL __declspec(thread)
+#define THREAD_LOCAL
+
 /* note that ICC (linux) and Clang are covered by __GNUC__ */
 #elif defined __GNUC__ || defined __SUNPRO_C || defined __xlC__
 #define THREAD_LOCAL __thread

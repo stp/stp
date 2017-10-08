@@ -46,14 +46,14 @@ using stp::_empty_ASTVec;
 using stp::STPMgr;
 
 // Abstract base class for all the node factories.
-class NodeFactory // not copyable
+class DLL_PUBLIC NodeFactory // not copyable
 {
 protected:
   STPMgr& bm;
 
 public:
   DLL_PUBLIC NodeFactory(STPMgr& bm_) : bm(bm_) {}
-  DLL_PUBLIC virtual ~NodeFactory();
+  DLL_PUBLIC virtual ~NodeFactory() {}
 
   DLL_PUBLIC virtual ASTNode CreateTerm(Kind kind, unsigned int width,
                                         const ASTVec& children) = 0;

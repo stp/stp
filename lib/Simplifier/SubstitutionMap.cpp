@@ -33,7 +33,7 @@ using std::make_pair;
 using std::set;
 using std::cout;
 
-SubstitutionMap::~SubstitutionMap()
+DLL_PUBLIC SubstitutionMap::~SubstitutionMap()
 {
   delete SolverMap;
 }
