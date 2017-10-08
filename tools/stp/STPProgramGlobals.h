@@ -43,7 +43,6 @@ namespace stp
 // in the STP library.
 extern const char* prog;
 extern const char* usage;
-extern std::string helpstring;
 
 } // end of namespace stp
 

@@ -1988,8 +1988,6 @@ void process_argument(const char ch, VC vc)
 
     case 'h':
       assert(0 && "This API is dumb, don't use it!");
-      // fprintf(stderr,usage,prog);
-      // std::cout << helpstring;
       exit(-1);
       break;
     case 'm':
