@@ -43,6 +43,7 @@ matrix:
   allow_failures:
     # Covertiy scan might fail
     - env: COVERITY_SCAN=1 STP_CONFIG=NORM
+    - env: STP_CONFIG=COVERAGE
 
 addons:
   coverity_scan:
