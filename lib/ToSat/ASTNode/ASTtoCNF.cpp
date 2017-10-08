@@ -915,7 +915,6 @@ void ASTtoCNF::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
   bool renamesibs = false;
   ClauseList* clauses;
   ClauseList* psi;
-  ClauseList* oldpsi;
 
   //****************************************
   // (pos) OR ~> PRODUCT
@@ -942,7 +941,7 @@ void ASTtoCNF::convertFormulaToCNFPosOR(const ASTNode& varphi, ClauseList* defs)
     {
       renamesibs = true;
     }
-    oldpsi = psi;
+    ClauseList* oldpsi = psi;
     psi = ClauseList::PRODUCT(*psi, *clauses);
     reduceMemoryFootprintPos(*it);
     DELETE(oldpsi);

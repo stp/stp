@@ -29,9 +29,9 @@ THE SOFTWARE.
 TEST(x, one)
 {
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc, 'n');
+  //vc_setFlags(vc, 'n');
   vc_setFlags(vc, 'd');
-  vc_setFlags(vc, 'p');
+  //vc_setFlags(vc, 'p');
 
   Expr nresp1 = vc_varExpr(vc, "nresp1", vc_bv32Type(vc));
   Expr packet_get_int0 = vc_varExpr(vc, "packet_get_int0", vc_bv32Type(vc));
@@ -57,7 +57,8 @@ TEST(x, one)
 
   Expr res = vc_andExprN(vc, exprs, sizeof(exprs) / sizeof(exprs[0]));
   // vc_printExpr(vc, res);
-  vc_query(vc, res);
+  int query = vc_query(vc, res);
+  ASSERT_FALSE(query);
 
   vc_DeleteExpr(nresp1);
   vc_DeleteExpr(packet_get_int0);
@@ -74,6 +75,4 @@ TEST(x, one)
   vc_DeleteExpr(res);
 
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

@@ -808,7 +808,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   // false
   if (!t)
   {
-    cerr << "PrintCounterExample: No CounterExample to print: " << endl;
+    os << "PrintCounterExample: No CounterExample to print: " << endl;
     return;
   }
 
@@ -821,7 +821,6 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   // changes it. Which breaks the iterator otherwise.
   const ASTNodeMap c(CounterExampleMap);
 
-  // os << "\nCOUNTEREXAMPLE: \n" << endl;
   ASTNodeMap::const_iterator it = c.begin();
   ASTNodeMap::const_iterator itend = c.end();
   for (; it != itend; it++)
@@ -873,8 +872,6 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
       os << " );" << endl;
     }
   }
-  os.flush();
-  // os << "\nEND OF COUNTEREXAMPLE" << endl;
 }
 
 /* iterate through the CounterExampleMap data structure and print it

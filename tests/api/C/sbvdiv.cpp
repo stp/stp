@@ -30,7 +30,8 @@ THE SOFTWARE.
 TEST(sbdiv, one)
 {
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc, 'p');
+  //vc_setFlags(vc, 'p');
+  vc_setFlags(vc, 'd');
 
   Type int_type = vc_bv32Type(vc);
   Expr zero = vc_bv32ConstExprFromInt(vc, 0);
@@ -39,7 +40,6 @@ TEST(sbdiv, one)
   Expr b = vc_varExpr(vc, "b", int_type);
   vc_assertFormula(vc, vc_sbvGtExpr(vc, b, zero));
   vc_assertFormula(vc, vc_sbvLeExpr(vc, a, vc_sbvDivExpr(vc, 32, int_max, b)));
-  std::cout << vc_query(vc, vc_falseExpr(vc)) << std::endl;
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
+  int query = vc_query(vc, vc_falseExpr(vc));
+  ASSERT_FALSE(query);
 }

@@ -1674,14 +1674,12 @@ Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
   else
   {
     int count = 1;
-    int low = newBitsPerElem - 8;
     int low_elem = 0;
     int hi_elem = low_elem + 7;
     Expr c = vc_bvExtract(vc, element, hi_elem, low_elem);
     Expr newarray = vc_writeExpr(vc, array, byteIndex, c);
     while (--numOfBytes > 0)
     {
-      low = low - 8;
       low_elem = low_elem + 8;
       hi_elem = low_elem + 7;
 
@@ -1723,11 +1721,10 @@ Expr vc_parseExpr(VC vc, const char* infile)
   stp::STPMgr* b = stp_i->bm;
 
   extern FILE *cvcin, *smtin;
-  const char* prog = "stp";
   cvcin = fopen(infile, "r");
   if (cvcin == NULL)
   {
-    fprintf(stderr, "%s: Error: cannot open %s\n", prog, infile);
+    fprintf(stderr, "STP: Error: cannot open %s\n", infile);
     stp::FatalError("Cannot open file");
     return 0;
   }

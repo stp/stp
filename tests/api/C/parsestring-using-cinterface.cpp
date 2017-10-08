@@ -29,9 +29,9 @@ THE SOFTWARE.
 TEST(parse_string, CVC)
 {
   VC vc = vc_createValidityChecker();
-  vc_setFlags(vc, 'n');
+  //vc_setFlags(vc, 'n');
   vc_setFlags(vc, 'd');
-  vc_setFlags(vc, 'p');
+  //vc_setFlags(vc, 'p');
 
   Expr q;
   Expr asserts;
