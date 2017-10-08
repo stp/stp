@@ -27,6 +27,12 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 
+//for srbk() function
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
+#include <unistd.h>
+#endif
+
+
 extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
@@ -40,7 +46,7 @@ using std::endl;
 
 void errorHandler(const char* error_msg)
 {
-  cerr << prog << ": Error: " << error_msg << endl;
+  cerr << "STP Error: " << error_msg << endl;
   exit(-1);
 }
 

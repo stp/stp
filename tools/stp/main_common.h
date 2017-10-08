@@ -25,8 +25,6 @@ THE SOFTWARE.
 #ifndef __MAIN_COMMON_H__
 #define __MAIN_COMMON_H__
 
-#include <stdio.h>
-#include "STPProgramGlobals.h"
 #include "stp/AST/AST.h"
 #include "stp/Printer/AssortedPrinters.h"
 #include "stp/Printer/printers.h"

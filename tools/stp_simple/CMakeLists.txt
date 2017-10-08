@@ -24,7 +24,6 @@
 add_executable(stp_simple
     main_simple.cpp
     ../stp/main_common.cpp
-    ../stp/STPProgramGlobals.cpp
 )
 
 if (STATICCOMPILE)

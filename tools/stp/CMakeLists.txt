@@ -26,7 +26,6 @@ if (Boost_FOUND)
     add_executable(stp
         main.cpp
         main_common.cpp
-        STPProgramGlobals.cpp
     )
 
     if (STATICCOMPILE)
