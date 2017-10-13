@@ -43,6 +43,6 @@ if (Boost_FOUND)
     target_link_libraries(stp libstp)
     install(TARGETS stp
         EXPORT ${STP_EXPORT_NAME}
-        RUNTIME DESTINATION "${BINDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 endif()

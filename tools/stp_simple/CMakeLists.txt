@@ -38,5 +38,5 @@ target_link_libraries(stp_simple libstp)
 
 install(TARGETS stp_simple
         EXPORT ${STP_EXPORT_NAME}
-        RUNTIME DESTINATION ${BINDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
