@@ -119,10 +119,9 @@ $ cmake -DSTATICCOMPILE=ON ..
 $ make
 $ sudo make install
 $ sudo ldconfig```
-
+```
 
 ### Configuration and build options
-```
 
 To tweak the build configuration:
 
@@ -165,37 +164,31 @@ Let's assume you put STP's source into c:\projects\stp and you have cygwin and
 git installed. Get zlib:
 
 ```
-cd C:\projects\stp
+cd C:\projects
 git clone https://github.com/madler/zlib
 cd zlib
 git checkout v1.2.8
-echo %cd%
 mkdir build
 mkdir myinstall
 cd build
-cmake -G %"Visual Studio 14 2015 Win64"% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
-cmake --build . --config %CONFIGURATION%
-cmake --build . --config %CONFIGURATION% --target install
+cmake -DCMAKE_INSTALL_PREFIX="..\myinstall" ..
+cmake --build .
+cmake --build . --target install
 dir ..\myinstall\
 ```
 
 Get minisat:
 
 ```
-cd C:\projects\stp
+cd C:\projects
 git clone https://github.com/msoos/minisat
 cd minisat
-echo %cd%
 mkdir build
 mkdir myinstall
 cd build
-cmake -G %"Visual Studio 14 2015 Win64"% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
-cmake --build . --config %CONFIGURATION%
-cmake --build . --config %CONFIGURATION% --target install
-dir ..\myinstall\
-dir ..\myinstall\lib\
-dir ..\myinstall\bin\
-dir ..\myinstall\include\
+cmake -DCMAKE_INSTALL_PREFIX="..\myinstall" -DZLIB_ROOT="..\..\zlib\myinstall" ..
+cmake --build .
+cmake --build . --target install
 ```
 
 
@@ -208,14 +201,14 @@ C:\cygwin64\setup-x86_64.exe  -qnNd -R C:/cygwin64 -s http://cygwin.mirror.const
 Finally, Build STP:
 
 ```
-cd c:\projects\stp
+cd C:\projects
+git clone https://github.com/stp/stp
 git submodule update --init --recursive
-mkdir ..\stp.build
-cd ..\stp.build
-cmake --version
-cmake -G %"Visual Studio 14 2015 Win64"% -DBoost_USE_STATIC_LIBS=ON -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
-cmake --build . --config %CONFIGURATION%
-cmake --build . --config %CONFIGURATION% --target install
+mkdir build
+cd build
+cmake -DBoost_USE_STATIC_LIBS=ON -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="C:\Program Files\Python36\\python.exe" -DLIT_TOOL="C:\Program Files\Python36\Scripts\\lit.exe" -DMINISAT_LIBDIR="..\..\minisat\myinstall\lib" -DMINISAT_INCLUDE_DIRS="..\..\minisat\myinstall\include" -DZLIB_ROOT="..\..\zlib\myinstall" -DCMAKE_PREFIX_PATH="C:\cygwin64" ..
+cmake --build .
+cmake --build . --target install
 ```
 
 
