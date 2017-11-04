@@ -33,6 +33,9 @@ endif()
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
+# generate JSON file of compile commands -- useful for code extension
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 set(INCLUDEDIR include CACHE STRING "Output directory for include headers")
 set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 
