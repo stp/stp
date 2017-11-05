@@ -174,7 +174,6 @@ cd build
 cmake -DCMAKE_INSTALL_PREFIX="..\myinstall" ..
 cmake --build .
 cmake --build . --target install
-dir ..\myinstall\
 ```
 
 Get minisat:
