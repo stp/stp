@@ -112,6 +112,7 @@ before_build:
 
 
 build:
+  project: build\INSTALL.vcxproj
   parallel: true
   verbosity: minimal
 
