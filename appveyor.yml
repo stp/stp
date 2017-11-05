@@ -120,7 +120,6 @@ build:
 # scripts to run after build
 after_build:
   - call ctest -V -C %CONFIGURATION%
-  - cmake --build . --install
   - call "C:\Program Files\stp\bin\stp.exe" --help
   - 7z a c:\projects\stp\stp.zip %APPVEYOR_BUILD_FOLDER%\..\stp.build -tzip
   - cd c:\projects\stp
