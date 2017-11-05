@@ -227,4 +227,8 @@ echo "(set-logic QF_BV)
 
 * Vijay Ganesh
 * Trevor Hansen
+* Mate Soos
+* Dan Liew
+* Ryan Govostes
+* And many others...
 
