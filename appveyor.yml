@@ -108,11 +108,7 @@ before_build:
   - cd ..\stp.build
   - cmake --version
   - cmake -G %CMAKE_GENERATOR% -DBoost_USE_STATIC_LIBS=ON -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
-  - cmake --build . --config %CONFIGURATION%
-
-  # Disabling test execution on AppVeyor for now. The tests pass locally, but fail
-  # on AppVeyor for reasons yet unknown. See the discussion of issue #247.
-  # - cmake --build . --config %CONFIGURATION% --target check
+  - ls
 
 
 build:
