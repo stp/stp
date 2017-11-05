@@ -1,7 +1,7 @@
 /* %define api.pure full */
 /*%lex-param {void *scanner}
-%parse-param {void *scanner}*/
-%define parse.error verbose
+%parse-param {void *scanner}
+%define parse.error verbose*/
 
 %{
   /********************************************************************
