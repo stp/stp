@@ -22,6 +22,7 @@ project(STP)
 cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 11)
+include(GNUInstallDirs)
 
 if(NOT (CMAKE_MAJOR_VERSION LESS 2))
     if(POLICY CMP0048)
