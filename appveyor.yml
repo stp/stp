@@ -39,7 +39,7 @@ configuration:
   #- C:\projects\stp\llvm -> appveyor.yml
   #- C:\projects\stp\llvm.build -> appveyor.yml
 
-build_script:
+before_build:
   - IF "%PLATFORM%" == "x86" ( SET CMAKE_GENERATOR="Visual Studio 14 2015")
   - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 14 2015 Win64")
 
@@ -114,23 +114,17 @@ build_script:
   # on AppVeyor for reasons yet unknown. See the discussion of issue #247.
   # - cmake --build . --config %CONFIGURATION% --target check
 
-  - cmake --build . --config %CONFIGURATION% --target install
-  - call ctest -V -C %CONFIGURATION%
-
-  # Install&run CMS
-  - ls
-  - msbuild .\INSTALL.vcxproj
-  - call "C:\Program Files\stp\bin\stp.exe" --help
-
 
 build:
-  # project: INSTALL.vcxproj      # path to Visual Studio solution or project
   parallel: true
   verbosity: minimal
 
 
 # scripts to run after build
 after_build:
+  - call ctest -V
+  - cmake --build . --install
+  - call "C:\Program Files\stp\bin\stp.exe" --help
   - 7z a c:\projects\stp\stp.zip %APPVEYOR_BUILD_FOLDER%\..\stp.build -tzip
   - cd c:\projects\stp
 
