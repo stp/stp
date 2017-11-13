@@ -34,7 +34,7 @@ foreach(_file ${TOLEX})
     add_custom_command(
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.h ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
 
-        COMMAND ${BISON_EXECUTABLE} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix={${_file}} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
+        COMMAND ${BISON_EXECUTABLE} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
 
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
 
