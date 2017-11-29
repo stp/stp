@@ -49,6 +49,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <assert.h>
 #include <time.h>
@@ -195,10 +196,29 @@ static inline int          Aig_WordCountOnes( unsigned uWord )
     return  (uWord & 0x0000FFFF) + (uWord>>16);
 }
 
-static inline Aig_Obj_t *  Aig_Regular( Aig_Obj_t * p )           { return (Aig_Obj_t *)((unsigned long)(p) & ~01); }
-static inline Aig_Obj_t *  Aig_Not( Aig_Obj_t * p )               { return (Aig_Obj_t *)((unsigned long)(p) ^  01); }
-static inline Aig_Obj_t *  Aig_NotCond( Aig_Obj_t * p, int c )    { return (Aig_Obj_t *)((unsigned long)(p) ^ (c)); }
-static inline int          Aig_IsComplement( Aig_Obj_t * p )      { return (int )(((unsigned long)p) & 01);         }
+static inline Aig_Obj_t *  Aig_Regular( Aig_Obj_t * p )
+{
+    uintptr_t mask = 01;
+    return (Aig_Obj_t *)((uintptr_t)(p) & ~mask);
+}
+
+static inline Aig_Obj_t *  Aig_Not( Aig_Obj_t * p )
+{
+    uintptr_t mask = 01;
+    return (Aig_Obj_t *)((uintptr_t)(p) ^ mask);
+}
+
+static inline Aig_Obj_t *  Aig_NotCond( Aig_Obj_t * p, int c )
+{
+    intptr_t mask = c;
+    return (Aig_Obj_t *)((intptr_t)(p) ^ (mask));
+}
+
+static inline int Aig_IsComplement( Aig_Obj_t * p )
+{
+    uintptr_t mask = 01;
+    return (int )(((uintptr_t)p) & mask);
+}
 
 static inline int          Aig_ManPiNum( Aig_Man_t * p )          { return p->nObjs[AIG_OBJ_PI];                    }
 static inline int          Aig_ManPoNum( Aig_Man_t * p )          { return p->nObjs[AIG_OBJ_PO];                    }

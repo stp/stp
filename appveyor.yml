@@ -96,7 +96,10 @@ before_build:
 
   # get flex, bison, perl
   - C:\cygwin64\setup-x86_64.exe  -qnNd -R C:/cygwin64 -s http://cygwin.mirror.constant.com -l C:/cygwin64/var/cache/setup --packages "flex,bison,perl"
-
+  # prepend cygwin to %PATH% so that Cygwin's cat.exe is used instead of Git's
+  # one. This had caused Cygwin version conflicts (probably due to the wrong
+  # Cygwin DLL being loaded for cat.exe)
+  - SET PATH=C:/cygwin64/bin;%PATH%
 
 
   # finally STP
