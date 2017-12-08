@@ -28,6 +28,11 @@ environment:
     MSBUILD_FLAGS: /maxcpucount /nologo
     PYTHON: "C:\\Python36-x64"
     APPVEYOR_SAVE_CACHE_ON_ERROR: false
+  matrix:
+  - STATICCOMPILE_SETTING: OFF
+    BOOST_OPTIONS:
+  - STATICCOMPILE_SETTING: ON
+    BOOST_OPTIONS: runtime-link=static  link=static
 
 install:
     "%PYTHON%\\python.exe -m pip install lit"
@@ -63,6 +68,16 @@ before_build:
   # - if not exist Release\bin\not.exe cmake --build . --config Release --target not
   # - set PATH=%PATH%;%cd%\Release\bin
 
+  # boost
+  - cd c:\projects\stp
+  - mkdir boost_1_59_0_install
+  - ps: . .\scripts\appveyor.ps1
+  - cd boost_1_59_0
+  - echo "Building boost.."
+  - bootstrap.bat --with-libraries=program_options
+  - cat project-config.jam
+  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release %BOOST_OPTIONS% threading=multi  install --prefix="C:\projects\stp\boost_1_59_0_install" > boost_install.out
+
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
   - cd C:\projects\stp
@@ -97,8 +112,6 @@ before_build:
   # get flex, bison, perl
   - C:\cygwin64\setup-x86_64.exe  -qnNd -R C:/cygwin64 -s http://cygwin.mirror.constant.com -l C:/cygwin64/var/cache/setup --packages "flex,bison,perl"
 
-
-
   # finally STP
   - cd c:\projects\stp
   - git submodule update --init --recursive
@@ -107,7 +120,7 @@ before_build:
   - mkdir ..\stp.build
   - cd ..\stp.build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DBoost_USE_STATIC_LIBS=ON -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
+  - cmake -G %CMAKE_GENERATOR% -DBoost_USE_STATIC_LIBS=%STATICCOMPILE_SETTING% -DENABLE_TESTING=%STATICCOMPILE_SETTING% -DPYTHON_EXECUTABLE="%PYTHON%\\python.exe" -DPYTHON_LIB_INSTALL_DIR="%PYTHON%" -DLIT_TOOL="%PYTHON%\\Scripts\\lit.exe" -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=%STATICCOMPILE_SETTING% -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
   - ls
 
 
