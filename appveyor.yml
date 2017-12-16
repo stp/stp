@@ -42,11 +42,6 @@ environment:
     # WarningLevel of 1 is ONLY SEVERE warnings, nothing else. See
     # https://stackoverflow.com/questions/1023858/how-to-suppress-specific-msbuild-warning
     MSBUILD_FLAGS: /maxcpucount /nologo /property:WarningLevel=1
-  matrix:
-  - STATICCOMPILE_SETTING: OFF
-    BOOST_OPTIONS:
-  - STATICCOMPILE_SETTING: ON
-    BOOST_OPTIONS: runtime-link=static  link=static
 
 install:
     "%PYTHON%\\python.exe -m pip install lit"
