@@ -1,3 +1,7 @@
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: ^sat
+
+
 (set-logic QF_ABV)
 (declare-fun v12625 () (_ BitVec 4))
 (declare-fun a12629 () (Array (_ BitVec 6) (_ BitVec 9)))

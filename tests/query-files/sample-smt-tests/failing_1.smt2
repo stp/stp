@@ -1,3 +1,7 @@
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: ^unsat
+
+
 (set-logic QF_ABV)
 (declare-fun v470681 () (_ BitVec 12))
 (declare-fun a470682 () (Array (_ BitVec 12) (_ BitVec 12)))
