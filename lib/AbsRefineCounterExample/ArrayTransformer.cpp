@@ -591,10 +591,9 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
           if (ASTTrue == cond)
           {
             result = it2->second;
-            break;
           }
-
-          result = simp->CreateSimplifiedTermITE(cond, it2->second, result);
+          else
+            result = simp->CreateSimplifiedTermITE(cond, it2->second, result);
         }
 
         ack_pair[arrName].push_back(make_pair(readIndex, CurrentSymbol));
