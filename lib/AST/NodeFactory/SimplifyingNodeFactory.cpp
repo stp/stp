@@ -1303,11 +1303,6 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = NodeFactory::CreateTerm(BVRIGHTSHIFT, width,
                                          bm.CreateMaxConst(width),
                                          children[1]); // 320 -> 170
-      else if (width >= 3 && children[0].GetKind() == BVUMINUS &&
-               children[1].GetKind() == BVNOT &&
-               children[1][0] == children[0][0])
-        result = NodeFactory::CreateTerm(BVDIV, width, bm.CreateOneConst(width),
-                                         children[1]); // 402 -> 76
       else if (width >= 3 && children[0].GetKind() == BVNOT &&
                children[1].GetKind() == BVUMINUS &&
                children[1][0] == children[0][0])
