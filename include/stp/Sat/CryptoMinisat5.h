@@ -73,6 +73,7 @@ public:
 
 private:
   void* temp_cl;
+  int64_t max_confl = 0;
 };
 }
 

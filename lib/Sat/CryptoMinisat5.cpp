@@ -56,10 +56,9 @@ CryptoMiniSat5::~CryptoMiniSat5()
   delete real_temp_cl;
 }
 
-void CryptoMiniSat5::setMaxConflicts(int64_t max_confl)
+void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
 {
-  if (max_confl > 0)
-    s->set_max_confl(max_confl);
+  max_confl = _max_confl;
 }
 
 bool CryptoMiniSat5::addClause(
@@ -86,6 +85,10 @@ bool CryptoMiniSat5::okay()
 
 bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
 {
+  if (max_confl > 0) {
+    s->set_max_confl(max_confl);
+  }
+
   CMSat::lbool ret = s->solve();
   if (ret == CMSat::l_Undef)
   {
