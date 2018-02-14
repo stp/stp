@@ -87,6 +87,7 @@ class Cpp_interface
   void init();
 
   bool produce_models;
+  bool changed_model_status;
 
 public:
   std::unique_ptr<LETMgr> letMgr;

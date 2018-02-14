@@ -1058,7 +1058,9 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     if (ASTTrue == orig_result)
     {
       if (bm->UserFlags.check_counterexample_flag)
+      {
         CheckCounterExample(SatSolver.okay());
+      }
 
       if (bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag)
       {

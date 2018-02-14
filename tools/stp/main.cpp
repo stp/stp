@@ -358,9 +358,8 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.timeout_max_conflicts = max_num_confl;
   }
 
-  if (vm.count("constr-check-counterex"))
+  if (vm.count("check-sanity"))
   {
-    bm->UserFlags.construct_counterexample_flag = true;
     bm->UserFlags.check_counterexample_flag = true;
   }
 

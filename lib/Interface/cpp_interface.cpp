@@ -56,6 +56,7 @@ void Cpp_interface::init()
   print_success = false;
   ignoreCheckSatRequest = false;
   produce_models = false;
+  changed_model_status = false;
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
@@ -398,6 +399,13 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
 
+  // If there are no model commands in the STMLIB2 (say) file, then the command line
+  // argument might set that asks for the model to be checked.
+  if (changed_model_status)
+  {
+    bm.UserFlags.check_counterexample_flag = produce_models;
+  }
+
   Entry& last_run = cache.back();
   if (((unsigned)last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
       (last_run.result == SOLVER_SATISFIABLE))
@@ -511,6 +519,8 @@ void Cpp_interface::setOption(std::string option, std::string value)
   }
   else if (option == "produce-models")
   {
+    changed_model_status = true;
+
     if (value == "true")
     {
       produce_models = true;
@@ -556,8 +566,14 @@ void Cpp_interface::getValue(const ASTVec& v)
 
 void Cpp_interface::getModel()
 {
-  //TODO check that produce-models is turned on.
-  //Check that check-sat was just called.
+  if (!bm.UserFlags.construct_counterexample_flag)
+  {
+    // Perhaps this is confusing and instead it whould return "()"?
+    // TODO should come in here if the last was unsat/unknown or stuff was added.
+    unsupported();
+    return;
+  }
+
   cout << "(" << std::endl;
 
   std::ostringstream os;
