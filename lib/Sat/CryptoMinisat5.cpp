@@ -86,13 +86,14 @@ bool CryptoMiniSat5::okay()
 bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
 {
   if (max_confl > 0) {
-    s->set_max_confl(max_confl);
+     s->set_max_confl(std::max(max_confl - s->get_sum_conflicts(), (uint64_t)1));
   }
 
   CMSat::lbool ret = s->solve();
   if (ret == CMSat::l_Undef)
   {
     timeout_expired = true;
+    assert(s->get_sum_conflicts() >= max_confl);
   }
   return ret == CMSat::l_True;
 }
