@@ -361,7 +361,7 @@ public:
   static bool in(const FixedBits& a, const FixedBits& b);
 };
 
-std::ostream& operator<<(std::ostream& output, const FixedBits& h);
+DLL_PUBLIC std::ostream& operator<<(std::ostream& output, const FixedBits& h);
 }
 }
 #endif /*FIXED_H_*/
