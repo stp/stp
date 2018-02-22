@@ -137,6 +137,9 @@ sub gen_cpp_file {
 
   # category bits
   print CPPFILE
+    "#if defined(__GNUC__) || defined(__clang__)\n\n",
+    "__attribute__((visibility(\"default\")))\n\n", 
+    "#endif\n\n",
     "unsigned char _kind_categories[] = {\n";
 
   #for (@cat_bits) {
