@@ -40,7 +40,7 @@ namespace stp
 {
 #if defined(__GNUC__) || defined(__clang__)
   class __attribute__((visibility("default"))) MinisatCore : public SATSolver
-#elif
+#else
   class MinisatCore : public SATSolver
 #endif
 
