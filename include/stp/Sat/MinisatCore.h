@@ -38,7 +38,13 @@ class Solver;
 
 namespace stp
 {
-class MinisatCore : public SATSolver
+#if defined(__GNUC__) || defined(__clang__)
+  class __attribute__((visibility("default"))) MinisatCore : public SATSolver
+#elif
+  class MinisatCore : public SATSolver
+#endif
+
+
 {
   Minisat::Solver* s;
 

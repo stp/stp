@@ -127,8 +127,8 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     int transferCount = a.countFixed() + b.countFixed() + output.countFixed();
     transfer += transferCount;
 
-    // cerr << initialCount << endl;
-    // cerr << clauseCount << endl;
+    cerr << initialCount << endl;
+    cerr << clauseCount << endl;
     assert(initialCount <= clauseCount);
     assert(initialCount <= transferCount);
 

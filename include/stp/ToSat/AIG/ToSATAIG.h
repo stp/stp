@@ -37,7 +37,7 @@ THE SOFTWARE.
 namespace stp
 {
 
-class ToSATAIG : public ToSATBase
+class DLL_PUBLIC ToSATAIG : public ToSATBase
 {
 private:
   ASTNodeToSATVar nodeToSATVar;
@@ -79,7 +79,7 @@ private:
 public:
   bool cbIsDestructed() { return cb == NULL; }
 
-  DLL_PUBLIC ToSATAIG(STPMgr* bm, ArrayTransformer* at)
+  ToSATAIG(STPMgr* bm, ArrayTransformer* at)
       : ToSATBase(bm), toCNF(bm->UserFlags)
   {
     cb = NULL;
@@ -96,7 +96,7 @@ public:
     arrayTransformer = at;
   }
 
-  DLL_PUBLIC ~ToSATAIG();
+  ~ToSATAIG();
 
   void ClearAllTables() { nodeToSATVar.clear(); }
 
