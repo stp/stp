@@ -57,7 +57,7 @@ DLL_PUBLIC Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output)
 DLL_PUBLIC Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output);
 DLL_PUBLIC Result bvXorBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-DLL_PUBLIC Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& DLL_PUBLIC Result);
+DLL_PUBLIC Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& Result);
 
 DLL_PUBLIC Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output);
 DLL_PUBLIC Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output);

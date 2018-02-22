@@ -88,14 +88,14 @@ public:
   bool isUnsatisfiable() { return status == CONFLICT; }
 
   // propagates.
-  ConstantBitPropagation(stp::STPMgr* mgr, stp::Simplifier* _sm,
+  DLL_PUBLIC ConstantBitPropagation(stp::STPMgr* mgr, stp::Simplifier* _sm,
                          NodeFactory* _nf, const ASTNode& top);
 
   ~ConstantBitPropagation() { clearTables(); };
 
   // Returns the node after writing in simplifications from constant Bit
   // propagation.
-  stp::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
+  DLL_PUBLIC stp::ASTNode topLevelBothWays(const ASTNode& top, bool setTopToTrue = true,
                                 bool conjoinToTop = true);
 
   void clearTables()

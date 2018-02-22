@@ -71,7 +71,7 @@ private:
   bool unsignedHolds_old(unsigned val);
 
 public:
-  FixedBits(unsigned n, bool isBoolean);
+  DLL_PUBLIC FixedBits(unsigned n, bool isBoolean);
 
   FixedBits(const FixedBits& copy)
   {
@@ -338,21 +338,21 @@ public:
 
   static FixedBits meet(const FixedBits& a, const FixedBits& b);
 
-  void join(const FixedBits& a);
+  DLL_PUBLIC void join(const FixedBits& a);
 
-  void join(unsigned int a);
+  DLL_PUBLIC void join(unsigned int a);
 
   DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
                                 MTRand& rand);
 
-  void fromUnsigned(unsigned val);
+  DLL_PUBLIC void fromUnsigned(unsigned val);
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 
   DLL_PUBLIC static FixedBits concreteToAbstract(const stp::ASTNode& n);
 
-  static bool equals(const FixedBits& a, const FixedBits& b);
+  DLL_PUBLIC static bool equals(const FixedBits& a, const FixedBits& b);
 
   static bool updateOK(const FixedBits& o, const FixedBits& n);
 

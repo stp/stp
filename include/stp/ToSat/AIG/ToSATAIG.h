@@ -79,7 +79,7 @@ private:
 public:
   bool cbIsDestructed() { return cb == NULL; }
 
-  ToSATAIG(STPMgr* bm, ArrayTransformer* at)
+  DLL_PUBLIC ToSATAIG(STPMgr* bm, ArrayTransformer* at)
       : ToSATBase(bm), toCNF(bm->UserFlags)
   {
     cb = NULL;
@@ -96,7 +96,7 @@ public:
     arrayTransformer = at;
   }
 
-  ~ToSATAIG();
+  DLL_PUBLIC ~ToSATAIG();
 
   void ClearAllTables() { nodeToSATVar.clear(); }
 

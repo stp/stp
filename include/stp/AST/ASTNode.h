@@ -166,7 +166,7 @@ public:
    * Both indexwidth and valuewidth should never be less than 0      *
    *******************************************************************/
   unsigned int GetIndexWidth() const;
-  unsigned int GetValueWidth() const;
+  DLL_PUBLIC unsigned int GetValueWidth() const;
   void SetIndexWidth(unsigned int iw) const;
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
