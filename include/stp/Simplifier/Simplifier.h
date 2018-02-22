@@ -32,8 +32,8 @@ THE SOFTWARE.
 
 namespace stp
 {
-ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const ASTNode& t);
-ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
+DLL_PUBLIC ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const ASTNode& t);
+DLL_PUBLIC ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
                                   const ASTVec& input_children,
                                   unsigned int inputwidth);
 

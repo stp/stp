@@ -247,7 +247,7 @@ public:
   ASTNode CreateTwoConst(unsigned int width);
   ASTNode CreateMaxConst(unsigned int width);
   ASTNode CreateZeroConst(unsigned int width);
-  ASTNode CreateBVConst(CBV bv, unsigned width);
+  DLL_PUBLIC ASTNode CreateBVConst(CBV bv, unsigned width);
   ASTNode CreateBVConst(const char* strval, int base);
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);

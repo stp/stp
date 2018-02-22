@@ -90,10 +90,20 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
       std::cerr << std::endl;
     }
 
-    assert(r != CONFLICT);
+    if(r == CONFLICT)
+    {
+      std::cerr << "Error - should never occur";
+      exit(1);
+    }
+
 
     const int final = a.countFixed() + b.countFixed() + output.countFixed();
-    assert(final >= rel.initial);
+    if (final < rel.initial)
+    {
+       std::cerr << "Error(2) - should never occur";
+       exit(2); 
+    }
+
     finally_fixed += final;
     initially_fixed += rel.initial;
 

@@ -64,7 +64,7 @@ private:
   unsigned width;
   bool representsBoolean;
 
-  void init(const FixedBits& copy);
+  DLL_PUBLIC void init(const FixedBits& copy);
   int uniqueId;
 
   bool unsignedHolds_new(unsigned val);
@@ -140,7 +140,7 @@ public:
   }
 
   // True if all bits are fixed (irrespective of what value they are fixed to).
-  bool isTotallyFixed() const;
+  DLL_PUBLIC bool isTotallyFixed() const;
   bool isTotallyUnfixed() const;
 
   // set value of bit "n" to the value.
@@ -316,7 +316,7 @@ public:
   }
 
   // Result needs to be explicitly deleted.
-  stp::CBV GetBVConst() const;
+  DLL_PUBLIC stp::CBV GetBVConst() const;
 
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
@@ -342,7 +342,7 @@ public:
 
   void join(unsigned int a);
 
-  static FixedBits createRandom(const unsigned length,
+  DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
                                 MTRand& rand);
 
@@ -350,7 +350,7 @@ public:
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 
-  static FixedBits concreteToAbstract(const stp::ASTNode& n);
+  DLL_PUBLIC static FixedBits concreteToAbstract(const stp::ASTNode& n);
 
   static bool equals(const FixedBits& a, const FixedBits& b);
 
