@@ -20,6 +20,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 *************/
 
 // Measures how precise the AIG encodings are compared with the propagators.
+// Runs unit propagation on the AIG encoding and measures how many bits
+// unit propagation deduces.
 
 #define __STDC_FORMAT_MACROS
 #include "minisat/core/Solver.h"
@@ -37,30 +39,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using namespace stp;
 
-int bits = 64;
+int bits = 65;
 int iterations = 100000;
 ostream& out = cout;
 STPMgr* mgr = new STPMgr;
 
-void print(MinisatCore* ss, ASTNode i0, ToSAT::ASTNodeToSATVar& m)
-{
-  const int bits = std::max(1U, i0.GetValueWidth());
-  out << "<";
-  for (int i = bits - 1; i >= 0; i--)
-  {
-    if (ss->value(m.find(i0)->second[i]) == ss->true_literal())
-    {
-      out << "1";
-    }
-    else if (ss->value(m.find(i0)->second[i]) == ss->false_literal())
-    {
-      out << "0";
-    }
-    else
-      out << "-";
-  }
-  out << ">";
-}
 
 void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 {
@@ -86,33 +69,23 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 
     bbP.fill_assumps_with(a, b, output);
 
-    // Initial.
-    // cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
-
     const int initialCount =
         a.countFixed() + b.countFixed() + output.countFixed();
     initial += initialCount;
 
-    // simplify does propagate.
+    // Initial.
+    cerr << a << _kind_names[k] << b << output << endl;
+    cerr << "Initial Fixed:" << initialCount << endl;
+
     bb.start();
     bool ok = bbP.unit_prop_with_assumps();
+    assert(ok); // should never conflict.
     bb.stop();
-    assert(ok);
 
     // After unit propagation.
-    int clauseCount = 0;
-    clauseCount = bbP.fixedCount();
-
-    clause += clauseCount;
-
-    // After unit propagation.
-    /*
-     print(ss, i0, a.SATVar_to_SymbolIndexMap());
-     cerr <<  _kind_names[k];
-     print(ss, i1, a.SATVar_to_SymbolIndexMap());
-     print(ss, r, a.SATVar_to_SymbolIndexMap());
-     cerr << "\n";
-     */
+    int unitPCount = bbP.fixedCount();
+    cerr << "Unit Propagation Fixed:" << unitPCount - initialCount << endl;
+    clause += unitPCount;
 
     // After transfer functions.
     vector<FixedBits*> ch;
@@ -120,16 +93,17 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     ch.push_back(&b);
     prop.start();
     Result rr = t_fn(ch, output);
+    assert(rr != CONFLICT);
     prop.stop();
 
-    assert(rr != CONFLICT);
-    // cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
     int transferCount = a.countFixed() + b.countFixed() + output.countFixed();
     transfer += transferCount;
 
-    cerr << initialCount << endl;
-    cerr << clauseCount << endl;
-    assert(initialCount <= clauseCount);
+    // Result from cbitp.
+    cerr << a << _kind_names[k] << b << output << endl;
+    cerr << "CBitP Fixed:" << transferCount - initialCount << endl;
+
+    assert(initialCount <= unitPCount);
     assert(initialCount <= transferCount);
 
     // delete ss;
@@ -191,10 +165,10 @@ int main()
   // mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;
-  // work(1);
-  // work(5);
+  //work(1);
+  //work(5);
   work(50);
-  // work(95);
+  //work(95);
   out << "\\end{subtables}" << endl;
 
   out << "% Iterations:" << iterations << " bit-width:" << bits << endl;

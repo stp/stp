@@ -82,7 +82,6 @@ public:
   {
     // will propagate then stop when the number of conflicts >=0.
     // That is, before searching.
-    ss->setMaxConflicts(0);
     return ss->propagateWithAssumptions(assumptions);
   }
 
