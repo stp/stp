@@ -30,7 +30,7 @@ THE SOFTWARE.
 #define BBASPROP_H_
 
 #include "stp/AST/AST.h"
-#include "stp/Sat/CryptoMiniSat5.h"
+#include "stp/Sat/CryptoMinisat5.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/ToSat/ASTNode/ToSAT.h"
@@ -73,7 +73,7 @@ public:
       eq = mgr->CreateNode(stp::IFF, p, r);
     }
 
-    ss = new stp::CryptoMiniSat5;
+    ss = new stp::CryptoMiniSat5(1);
     aig.CallSAT(*ss, eq, false);
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
   }

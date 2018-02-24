@@ -37,7 +37,12 @@ class SATSolver;
 
 namespace stp
 {
-class CryptoMiniSat5 : public SATSolver
+#if defined(__GNUC__) || defined(__clang__)
+  class __attribute__((visibility("default"))) CryptoMiniSat5 : public SATSolver
+#else
+  class CryptoMiniSat5 : public SATSolver
+#endif
+
 {
   CMSat::SATSolver* s;
 

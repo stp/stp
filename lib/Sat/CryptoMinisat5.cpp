@@ -124,11 +124,14 @@ void CryptoMiniSat5::printStats() const
   // s->printStats();
 }
 
-// 
+// Count how many literals/bits get fixed subject to the assumptions..
 uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps)
 {
-  assert(s->get_zero_assigned_lits().size() == 0);
+  std::cerr << s->get_zero_assigned_lits().size() << " assignments at start" <<std::endl;
+
+  //assert(s->get_zero_assigned_lits().size() == 0);
   const uint64_t conf = s->get_sum_conflicts();
+  assert(conf == 0);
   
   vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
   real_temp_cl.clear();
@@ -137,14 +140,18 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
     real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
   }
 
-  CMSat::lbool r = s->simplify(&real_temp_cl);
+  std::cerr << real_temp_cl.size() << " assumptions" << std::endl;
 
-  assert(CMSat::l_False != r); // always satisfiable.
+  const CMSat::lbool r = s->simplify(&real_temp_cl);
+
+  std::cerr << s->get_zero_assigned_lits().size() << " assignments at end" <<std::endl;
+
   // The assumptions are each single literals (corresponding to bits) that are true/false. 
   // so in the result they should be all be set 
   assert(s->get_zero_assigned_lits().size() >= assumps.size());
   assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
-  
+  assert(CMSat::l_False != r); // always satisfiable.
+
   return s->get_zero_assigned_lits().size();
 }
 

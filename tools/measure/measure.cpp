@@ -49,7 +49,7 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 {
 
   BBAsProp bbP(k, mgr, bits);
-  bbP.numberClauses();
+  //bbP.numberClauses();
 
   Relations relations(iterations, bits, k, mgr, prob);
 
@@ -78,12 +78,10 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     cerr << "Initial Fixed:" << initialCount << endl;
 
     bb.start();
-    bool ok = bbP.unit_prop_with_assumps();
-    assert(ok); // should never conflict.
+    int unitPCount = bbP.fixed_count_unit_prop_with_assumps();
     bb.stop();
 
     // After unit propagation.
-    int unitPCount = bbP.fixedCount();
     cerr << "Unit Propagation Fixed:" << unitPCount - initialCount << endl;
     clause += unitPCount;
 
