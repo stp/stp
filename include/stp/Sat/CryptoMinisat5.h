@@ -71,6 +71,8 @@ public:
   virtual lbool false_literal() { return ((uint8_t)-1); }
   virtual lbool undef_literal() { return ((uint8_t)0); }
 
+  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps);
+
 private:
   void* temp_cl;
   int64_t max_confl = 0;

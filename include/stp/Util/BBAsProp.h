@@ -30,7 +30,7 @@ THE SOFTWARE.
 #define BBASPROP_H_
 
 #include "stp/AST/AST.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/CryptoMiniSat5.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/ToSat/ASTNode/ToSAT.h"
@@ -43,7 +43,7 @@ class BBAsProp
 public:
   stp::SATSolver::vec_literals assumptions;
   stp::ToSATAIG aig;
-  stp::MinisatCore* ss;
+  stp::CryptoMiniSat5* ss;
 
   //input1, input2, result
   ASTNode i0, i1, r;
@@ -73,17 +73,14 @@ public:
       eq = mgr->CreateNode(stp::IFF, p, r);
     }
 
-    ss = new stp::MinisatCore;
+    ss = new stp::CryptoMiniSat5;
     aig.CallSAT(*ss, eq, false);
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
   }
 
-  bool unit_prop_with_assumps()
+  uint64_t fixed_count_unit_prop_with_assumps()
   {
-    // will propagate then stop when the number of conflicts >=0.
-    // That is, before searching.
-    ss->setMaxConflicts(0);
-    return ss->propagateWithAssumptions(assumptions);
+    return ss->getFixedCountWithAssumptions(assumptions);
   }
 
   void fill_assumps_with(FixedBits& a, FixedBits& b, FixedBits& output)
@@ -135,25 +132,6 @@ public:
     std::cerr << "Number of Clauses:" << ss->nClauses() << std::endl;
   }
 
-  int fixedCount()
-  {
-    return addToClauseCount(i0) + addToClauseCount(i1) + addToClauseCount(r);
-  }
-
-  int addToClauseCount(const ASTNode n)
-  {
-    int result = 0;
-    const int bits = std::max(1U, n.GetValueWidth());
-    for (int i = bits - 1; i >= 0; i--)
-    {
-      stp::SATSolver::lbool r =
-          ss->value(node_to_satvar_map.find(n)->second[i]);
-
-      if (r == ss->true_literal() || r == ss->false_literal())
-        result++;
-    }
-    return result;
-  }
 };
 
 #endif /* BBASPROP_H_ */

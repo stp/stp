@@ -124,4 +124,30 @@ void CryptoMiniSat5::printStats() const
   // s->printStats();
 }
 
+// 
+uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps)
+{
+  assert(s->get_zero_assigned_lits().size() == 0);
+  const uint64_t conf = s->get_sum_conflicts();
+  
+  vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
+  real_temp_cl.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
+  }
+
+  CMSat::lbool r = s->simplify(&real_temp_cl);
+
+  assert(CMSat::l_False != r); // always satisfiable.
+  // The assumptions are each single literals (corresponding to bits) that are true/false. 
+  // so in the result they should be all be set 
+  assert(s->get_zero_assigned_lits().size() >= assumps.size());
+  assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
+  
+  return s->get_zero_assigned_lits().size();
+}
+
+
+
 } //end namespace stp
