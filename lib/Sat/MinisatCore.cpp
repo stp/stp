@@ -68,7 +68,7 @@ bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-// Doesn't solve, just does a single propagate.
+// *Doesn't solve*, just does a single unit propagate.
 // returns false if UNSAT.
 bool MinisatCore::propagateWithAssumptions(
     const stp::SATSolver::vec_literals& assumps)
@@ -76,7 +76,9 @@ bool MinisatCore::propagateWithAssumptions(
   if (!s->simplify())
     return false;
 
+  setMaxConflicts(0);
   Minisat::lbool ret = s->solveLimited(assumps);
+  assert(s->conflicts ==0);
   return ret != (Minisat::lbool)l_False;
 }
 
