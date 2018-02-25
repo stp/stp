@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
+#include <unordered_set>
 
 namespace CMSat
 {
@@ -76,7 +77,7 @@ public:
   virtual lbool false_literal() { return ((uint8_t)-1); }
   virtual lbool undef_literal() { return ((uint8_t)0); }
 
-  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps);
+  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
 
 private:
   void* temp_cl;

@@ -58,11 +58,8 @@ private:
   void mark_variables_as_frozen(SATSolver& satSolver);
 
   bool runSolver(SATSolver& satSolver);
-  void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
-  Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
   void handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef);
-  void release_cnf_memory(Cnf_Dat_t* cnfData);
-
+ 
   int count;
   bool first;
 
@@ -77,6 +74,10 @@ private:
   static THREAD_LOCAL int cnf_calls;
 
 public:
+  void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
+  Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
+  void release_cnf_memory(Cnf_Dat_t* cnfData);
+
   bool cbIsDestructed() { return cb == NULL; }
 
   ToSATAIG(STPMgr* bm, ArrayTransformer* at)

@@ -40,9 +40,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 using namespace stp;
 
 int bits = 65;
-int iterations = 100000;
+int iterations = 5000;
 ostream& out = cout;
-STPMgr* mgr = new STPMgr;
+STPMgr* mgr = NULL;
+
+bool debug = false;
 
 
 void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
@@ -74,15 +76,22 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     initial += initialCount;
 
     // Initial.
-    cerr << a << _kind_names[k] << b << output << endl;
-    cerr << "Initial Fixed:" << initialCount << endl;
+    if (debug)
+    {
+      cerr << "==================" << endl;
+      cerr << a << _kind_names[k] << b << output << endl;
+      cerr << "Initial Fixed:" << initialCount << endl;
+    }
 
     bb.start();
     int unitPCount = bbP.fixed_count_unit_prop_with_assumps();
     bb.stop();
 
     // After unit propagation.
-    cerr << "Unit Propagation Fixed:" << unitPCount - initialCount << endl;
+    if (debug)
+    {
+      cerr << "Unit Propagation Fixed:" << unitPCount - initialCount << endl;
+    }
     clause += unitPCount;
 
     // After transfer functions.
@@ -98,8 +107,11 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     transfer += transferCount;
 
     // Result from cbitp.
-    cerr << a << _kind_names[k] << b << output << endl;
-    cerr << "CBitP Fixed:" << transferCount - initialCount << endl;
+    if (debug)
+    {
+      cerr << a << _kind_names[k] << b << output << endl;
+      cerr << "CBitP Fixed:" << transferCount - initialCount << endl;
+    }
 
     assert(initialCount <= unitPCount);
     assert(initialCount <= transferCount);
@@ -163,11 +175,12 @@ int main()
   // mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;
-  //work(1);
-  //work(5);
+  work(1);
+  work(5);
   work(50);
-  //work(95);
+  work(95);
   out << "\\end{subtables}" << endl;
 
   out << "% Iterations:" << iterations << " bit-width:" << bits << endl;
+  delete mgr;
 }

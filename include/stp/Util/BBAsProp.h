@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/ToSat/AIG/ToSATAIG.h"
 #include "stp/ToSat/ASTNode/ToSAT.h"
 #include "stp/ToSat/ToSATBase.h"
+#include <unordered_set>
 
 using simplifier::constantBitP::FixedBits;
 
@@ -43,13 +44,17 @@ class BBAsProp
 public:
   stp::SATSolver::vec_literals assumptions;
   stp::ToSATAIG aig;
-  stp::CryptoMiniSat5* ss;
+  std::unordered_set<unsigned> inputOutput;
 
   //input1, input2, result
   ASTNode i0, i1, r;
   stp::ToSAT::ASTNodeToSATVar node_to_satvar_map;
 
-  ~BBAsProp() { delete ss; }
+  Cnf_Dat_t* cnf;
+  ~BBAsProp() 
+  { 
+    aig.release_cnf_memory(cnf);
+  }
 
   BBAsProp(Kind k, stp::STPMgr* mgr, int bits)
       : aig(mgr, stp::GlobalSTP->arrayTransformer)
@@ -73,19 +78,33 @@ public:
       eq = mgr->CreateNode(stp::IFF, p, r);
     }
 
-    ss = new stp::CryptoMiniSat5(1);
-    aig.CallSAT(*ss, eq, false);
+    cnf = aig.bitblast(eq, false);
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
+
+    inputOutput.clear();
+    for (int i = 0; i < bits; i++)
+    {
+      inputOutput.insert(node_to_satvar_map.find(i0)->second[i]);
+      inputOutput.insert(node_to_satvar_map.find(i1)->second[i]); 
+    }
+
+    for (int i = 0; i < (stp::is_Term_kind(k)? bits: 1); i++)
+    {
+      inputOutput.insert(node_to_satvar_map.find(r)->second[i]);      
+    }
   }
 
   uint64_t fixed_count_unit_prop_with_assumps()
   {
-    return ss->getFixedCountWithAssumptions(assumptions);
+     stp::CryptoMiniSat5 ss(1);
+     aig.add_cnf_to_solver(ss, cnf);
+     return ss.getFixedCountWithAssumptions(assumptions, inputOutput);
   }
 
   void fill_assumps_with(FixedBits& a, FixedBits& b, FixedBits& output)
   {
     assumptions.clear();
+
 
     for (int i = 0; i < a.getWidth(); i++)
     {
@@ -129,7 +148,7 @@ public:
 
   void numberClauses()
   {
-    std::cerr << "Number of Clauses:" << ss->nClauses() << std::endl;
+   // std::cerr << "Number of Clauses:" << ss->nClauses() << std::endl;
   }
 
 };

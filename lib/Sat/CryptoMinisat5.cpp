@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Sat/CryptoMinisat5.h"
 #include "cryptominisat5/cryptominisat.h"
-#include <vector>
+#include <unordered_set>
 using std::vector;
 
 namespace stp
@@ -125,34 +125,45 @@ void CryptoMiniSat5::printStats() const
 }
 
 // Count how many literals/bits get fixed subject to the assumptions..
-uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps)
+uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals )
 {
-  std::cerr << s->get_zero_assigned_lits().size() << " assignments at start" <<std::endl;
-
-  //assert(s->get_zero_assigned_lits().size() == 0);
   const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
   
+ 
+  const CMSat::lbool r = s->simplify();
+
+
+  // Add the assumptions are clauses.
   vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
-  real_temp_cl.clear();
   for (int i = 0; i < assumps.size(); i++)
   {
+    real_temp_cl.clear();
     real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
+    s->add_clause(real_temp_cl);
   }
 
-  std::cerr << real_temp_cl.size() << " assumptions" << std::endl;
+  //std::cerr << assumps.size() << " assumptions" << std::endl;
 
-  const CMSat::lbool r = s->simplify(&real_temp_cl);
-
-  std::cerr << s->get_zero_assigned_lits().size() << " assignments at end" <<std::endl;
+  unsigned assigned = 0;
+  std::vector<CMSat::Lit> zero = s->get_zero_assigned_lits();
+  for (CMSat::Lit l : zero)
+  {
+      if (literals.find(l.var()) != literals.end())
+        assigned++;
+  }
+ 
+ 
+       
+  //std::cerr << assigned << " assignments at end" <<std::endl;
 
   // The assumptions are each single literals (corresponding to bits) that are true/false. 
   // so in the result they should be all be set 
-  assert(s->get_zero_assigned_lits().size() >= assumps.size());
+  assert(assigned >= assumps.size());
   assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
   assert(CMSat::l_False != r); // always satisfiable.
 
-  return s->get_zero_assigned_lits().size();
+  return assigned;
 }
 
 
