@@ -79,6 +79,8 @@ public:
     }
 
     cnf = aig.bitblast(eq, false);
+    std::cerr << "Number of clauses:" << cnf->nClauses << std::endl;
+
     node_to_satvar_map = aig.SATVar_to_SymbolIndexMap();
 
     inputOutput.clear();
@@ -92,6 +94,15 @@ public:
     {
       inputOutput.insert(node_to_satvar_map.find(r)->second[i]);      
     }
+
+
+    {
+     stp::CryptoMiniSat5 ss(1);
+     aig.add_cnf_to_solver(ss, cnf);
+     ss.solveAndDump();
+   }
+
+
   }
 
   uint64_t fixed_count_unit_prop_with_assumps()

@@ -40,7 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 using namespace stp;
 
 int bits = 65;
-int iterations = 5000;
+int iterations = 1000;
 ostream& out = cout;
 STPMgr* mgr = NULL;
 
@@ -116,7 +116,6 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     assert(initialCount <= unitPCount);
     assert(initialCount <= transferCount);
 
-    // delete ss;
     it++;
   }
 
@@ -175,8 +174,8 @@ int main()
   // mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;
-  work(1);
-  work(5);
+  //work(1);
+  //work(5);
   work(50);
   work(95);
   out << "\\end{subtables}" << endl;

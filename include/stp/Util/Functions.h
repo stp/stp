@@ -94,13 +94,14 @@ struct Functions
 
   Functions()
   {
-    l.push_back(
-        Function(stp::BVLT, "unsigned less than", &bvLessThanBothWays, &ltF));
+    l.push_back(Function(stp::BVSGE, "signed greater than equals",
+        &bvSignedGreaterThanEqualsBothWays, NULL));
+
+    //l.push_back(Function(stp::BVLT, "unsigned less than", &bvLessThanBothWays, &ltF));
   
   
     //TODO
-    /*l.push_back(Function(BVSGE, "signed greater than equals",
-        &bvSignedGreaterThanEqualsBothWays, NULL));
+    /*
     l.push_back(Function(BVSRSHIFT, "arithmetic shift",
                          &bvArithmeticRightShiftBothWays, NULL));
     l.push_back(Function(SBVDIV, "signed division", &signedDivide, NULL));

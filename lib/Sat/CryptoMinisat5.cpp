@@ -124,16 +124,25 @@ void CryptoMiniSat5::printStats() const
   // s->printStats();
 }
 
+void CryptoMiniSat5::solveAndDump()
+  {
+     bool t;
+     solve(t);
+     s->open_file_and_dump_irred_clauses("clauses.txt");
+  }
+
+
+
 // Count how many literals/bits get fixed subject to the assumptions..
 uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals )
 {
   const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
-  
- 
-  const CMSat::lbool r = s->simplify();
 
 
+  const CMSat::lbool r = s->simplify();  
+
+   
   // Add the assumptions are clauses.
   vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
   for (int i = 0; i < assumps.size(); i++)
@@ -142,6 +151,7 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
     real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
     s->add_clause(real_temp_cl);
   }
+
 
   //std::cerr << assumps.size() << " assumptions" << std::endl;
 

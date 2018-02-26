@@ -79,6 +79,10 @@ public:
 
   uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
 
+
+  void solveAndDump();
+
+
 private:
   void* temp_cl;
   int64_t max_confl = 0;
