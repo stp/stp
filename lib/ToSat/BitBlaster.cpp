@@ -2705,9 +2705,11 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBITE(const BBNode& cond,
   return result;
 }
 
-//  smt-test/transitive400.smt2
-// Minisat 2:  bbbvle_variant = true. 8 ms
-// Minisat 2:  bbbvle_variant = false. 577 ms
+// SMTLIB as of Jan'18 with cryptominisat 
+// bbbvle_variant = true.   35,373/40,043 solved in 500 seconds
+// bbbvle_variant = false.  35,365/ ... 
+// true gives a smaller encoding, with comparible propration strength, 
+// it solves slightly more problems.
 
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced

@@ -245,7 +245,7 @@ public:
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
       : uf(_uf), division_variant_1(true), division_variant_2(true),
-        division_variant_3(true), adder_variant(true), bbbvle_variant(false),
+        division_variant_3(true), adder_variant(true), bbbvle_variant(true),
         upper_multiplication_bound(false), bvplus_variant(true),
         multiplication_variant("7")
   {
