@@ -104,7 +104,7 @@ before_build:
 
   # minisat
   - cd C:\projects\stp
-  - git clone https://github.com/msoos/minisat
+  - git clone https://github.com/stp/minisat
   - cd minisat
   - echo %cd%
   - mkdir build

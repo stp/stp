@@ -180,7 +180,7 @@ Get minisat:
 
 ```
 cd C:\projects
-git clone https://github.com/msoos/minisat
+git clone https://github.com/stp/minisat
 cd minisat
 mkdir build
 mkdir myinstall
