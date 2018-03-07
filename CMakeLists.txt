@@ -414,8 +414,8 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
 endif()
 
 
-find_package(bison REQUIRED)
-find_package(flex REQUIRED)
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
 
 if (BISON_VERSION VERSION_LESS "2.6")
     message(FATAL_ERROR "STP requires Bison 2.6 or newer")
