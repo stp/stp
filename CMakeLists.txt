@@ -233,6 +233,8 @@ if (COVERAGE)
     add_cxx_flag("--coverage")
 endif()
 
+option(USE_THREAD_LOCAL "Use thread-local storage when available" ON)
+
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
   set(BISON_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")

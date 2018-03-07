@@ -25,6 +25,9 @@ THE SOFTWARE.
 #ifndef ATTRIBUTES_H_
 #define ATTRIBUTES_H_
 
+#include "stp/config.h"
+
+
 #if defined(_MSC_VER)
 #define ATTR_NORETURN __declspec(noreturn)
 #elif defined(__GNUC__) || defined(__clang__)
@@ -58,7 +61,9 @@ THE SOFTWARE.
 #endif
 
 //Defining THREAD_LOCAL
-#if __cplusplus >= 201103L
+#if !USE_THREAD_LOCAL
+#define THREAD_LOCAL
+#elif __cplusplus >= 201103L
 #define THREAD_LOCAL thread_local
 #elif defined _WIN32 && (defined _MSC_VER || defined __ICL ||                  \
                          defined __DMC__ || defined __BORLANDC__)
