@@ -501,8 +501,24 @@ static inline void Kit_TruthIthVar( unsigned * pTruth, int nVars, int iVar )
 #define Kit_GraphForEachNode( pGraph, pAnd, i )                                               \
     for ( i = (pGraph)->nLeaves; (i < (pGraph)->nSize) && (((pAnd) = Kit_GraphNode(pGraph, i)), 1); i++ )
 
+
 ////////////////////////////////////////////////////////////////////////
 ///                    FUNCTION DECLARATIONS                         ///
+////////////////////////////////////////////////////////////////////////
+
+/*=== kitTruth.c ==========================================================*/
+extern void            Kit_TruthCofactor0( unsigned * pTruth, int nVars, int iVar );
+extern void            Kit_TruthCofactor1( unsigned * pTruth, int nVars, int iVar );
+extern void            Kit_TruthShrink( unsigned * pOut, unsigned * pIn, int nVars, int nVarsAll, unsigned Phase, int fReturnIn );
+extern void            Kit_TruthStretch( unsigned * pOut, unsigned * pIn, int nVars, int nVarsAll, unsigned Phase, int fReturnIn );
+extern int             Kit_TruthVarInSupport( unsigned * pTruth, int nVars, int iVar );
+
+/*=== kitIsop.c ==========================================================*/
+extern int             Kit_TruthIsop( unsigned * puTruth, int nVars, Vec_Int_t * vMemory, int fTryBoth );
+
+
+////////////////////////////////////////////////////////////////////////
+///                 UNUSED FUNCTION DECLARATIONS                     ///
 ////////////////////////////////////////////////////////////////////////
 
 #if 0
@@ -561,8 +577,6 @@ extern int             Kit_GraphLeafDepth_rec( Kit_Graph_t * pGraph, Kit_Node_t 
 //extern Hop_Obj_t *     Kit_GraphToHop( Hop_Man_t * pMan, Kit_Graph_t * pGraph );
 //extern Hop_Obj_t *     Kit_TruthToHop( Hop_Man_t * pMan, unsigned * pTruth, int nVars, Vec_Int_t * vMemory );
 //extern Hop_Obj_t *     Kit_CoverToHop( Hop_Man_t * pMan, Vec_Int_t * vCover, int nVars, Vec_Int_t * vMemory );
-/*=== kitIsop.c ==========================================================*/
-extern int             Kit_TruthIsop( unsigned * puTruth, int nVars, Vec_Int_t * vMemory, int fTryBoth );
 /*=== kitSop.c ==========================================================*/
 extern void            Kit_SopCreate( Kit_Sop_t * cResult, Vec_Int_t * vInput, int nVars, Vec_Int_t * vMemory );
 extern void            Kit_SopCreateInverse( Kit_Sop_t * cResult, Vec_Int_t * vInput, int nVars, Vec_Int_t * vMemory );
@@ -578,13 +592,8 @@ extern int             Kit_SopDivisor( Kit_Sop_t * cResult, Kit_Sop_t * cSop, in
 extern void            Kit_SopBestLiteralCover( Kit_Sop_t * cResult, Kit_Sop_t * cSop, unsigned uCube, int nLits, Vec_Int_t * vMemory );
 /*=== kitTruth.c ==========================================================*/
 extern void            Kit_TruthSwapAdjacentVars( unsigned * pOut, unsigned * pIn, int nVars, int Start );
-extern void            Kit_TruthStretch( unsigned * pOut, unsigned * pIn, int nVars, int nVarsAll, unsigned Phase, int fReturnIn );
-extern void            Kit_TruthShrink( unsigned * pOut, unsigned * pIn, int nVars, int nVarsAll, unsigned Phase, int fReturnIn );
-extern int             Kit_TruthVarInSupport( unsigned * pTruth, int nVars, int iVar );
 extern int             Kit_TruthSupportSize( unsigned * pTruth, int nVars );
 extern unsigned        Kit_TruthSupport( unsigned * pTruth, int nVars );
-extern void            Kit_TruthCofactor0( unsigned * pTruth, int nVars, int iVar );
-extern void            Kit_TruthCofactor1( unsigned * pTruth, int nVars, int iVar );
 extern void            Kit_TruthCofactor0New( unsigned * pOut, unsigned * pIn, int nVars, int iVar );
 extern void            Kit_TruthCofactor1New( unsigned * pOut, unsigned * pIn, int nVars, int iVar );
 extern void            Kit_TruthExist( unsigned * pTruth, int nVars, int iVar );
