@@ -22,55 +22,15 @@ The Bit-vector implementation in STP supports a very large number of functions a
 Word level functions
 =========
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
-
-<tr>
-<td>Concatenation</td>
-<td>@</td>
-<td>t1@t2@...@tm</td>
-</tr>
-
-<tr>
-<td>Extraction</td>
-<td>[i:j]</td>
-<td>x[31:26]</td>
-</tr>
-
-<tr>
-<td>left shift</td>
-<td><<</td>
-<td>0bin0011 << 3 = 0bin0011000</td>
-</tr>
-
-<tr>
-<td>right shift</td>
-<td>>></td>
-<td>x[24:17] >> 5, another example: 0bin1000 >> 3 = 0bin0001</td>
-</tr>
-
-<tr>
-<td>sign extension</td>
-<td>BVSX(bv,n)</td>
-<td>BVSX(0bin100, 5) = 0bin11100</td>
-</tr>
-
-<tr>
-<td>Array READ</td>
-<td>[index]</td>
-<td>x_arr[t1]</td>
-</tr>
-
-<tr>
-<td>Array WRITE</td>
-<td>WITH</td>
-<td>x_arr WITH [index] := value</td>
-</tr>
-</table class="zab1">
+| Name           | Symbol       | Example                                                      |
+| ---            | ---          | ---                                                          |
+| Concatenation  | `@`          | `t1@t2@...@tm`                                               |
+| Extraction     | `[i:j]`      | `x[31:26]`                                                   |
+| left shift     | `<<`         | `0bin0011 << 3 = 0bin0011000`                                | 
+| right shift    | `>>`         | `x[24:17] >> 5`, another example: `0bin1000 >> 3 = 0bin0001` |
+| sign extension | `BVSX(bv,n)` | `BVSX(0bin100, 5) = 0bin11100`                               |
+| Array READ     | `[index]`    | `x_arr[t1]`                                                  |
+| Array WRITE    | `WITH`       | `x_arr WITH [index] := value`                                |
 
 Notes:
 * For extraction terms, say t[i:j], n > i >= j >= 0, where n is the length of t.0
@@ -81,115 +41,31 @@ Notes:
 Bitwise functions
 =========
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
+| Name         | Symbol   | Example              |
+| ---          | ---      | ---                  |
+| Bitwise AND  | `&`      | `t1 & t2 & ... & tm` |
+| Bitwise OR   | `|`      | `t1 | t2 | ... | tm` |
+| Bitwise NOT  | `~`      | `~t1`                |
+| Bitwise XOR  | `BVXOR`  | `BVXOR(t1,t2)`       |
+| Bitwise NAND | `BVNAND` | `BVNAND(t1,t2)`      |
+| Bitwise NOR  | `BVNOR`  | `BVNOR(t1,t2)`       |
+| Bitwise XNOR | `BVXNOR` | `BVXNOR(t1,t2)`      |
 
-<tr>
-<td>Bitwise AND</td>
-<td>&</td>
-<td>t1 & t2 & ... & tm</td>
-</tr>
-
-<tr>
-<td>Bitwise OR</td>
-<td>|</td>
-<td>t1 | t2 | t3 | ... | tm</td>
-</tr>
-
-<tr>
-<td>Bitwise NOT</td>
-<td>~</td>
-<td>~t1</td>
-</tr>
-
-<tr>
-<td>Bitwise XOR</td>
-<td>BVXOR</td>
-<td>BVXOR(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Bitwise NAND</td>
-<td>BVNAND</td>
-<td>BVNAND(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Bitwise NOR</td>
-<td>BVNOR</td>
-<td>BVNOR(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Bitwise XNOR</td>
-<td>BVXNOR</td>
-<td>BVXNOR(t1,t2)</td>
-</tr>
-</table class="zab1">
 NOTE: It is required that all the arguments of bitwise functions have the same length
 
 Arithmetic functions
 =========
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
-
-</tr>
-<td>Bitvector Add</td>
-<td>BVPLUS</td>
-<td>BVPLUS(n,t1,t2,...,tm)</td>
-</tr>
-
-</tr>
-<td>Bitvector Mult</td>
-<td>BVMULT</td>
-<td>BVMULT(n,t1,t2)</td>
-</tr>
-
-</tr>
-<td>Bitvector subtract</td>
-<td>BVSUB</td>
-<td>BVSUB(n,t1,t2)</td>
-</tr>
-
-</tr>
-<td>Bitvector Unary Minus</td>
-<td>BVUMINUS</td>
-<td>BVUMINUS(t1)</td>
-</tr>
-
-</tr>
-<td>Bitvector Div</td>
-<td>BVDIV</td>
-<td>BVDIV(n,t1,t2), where t1 is the dividend and t2 is the divisor</td>
-</tr>
-
-</tr>
-<td>Signed Bitvector Div</td>
-<td>SBVDIV</td>
-<td>SBVDIV(n,t1,t2), where t1 is the dividend and t2 is the divisor</td>
-</tr>
-
-</tr>
-<td>Bitvector Modulo</td>
-<td>BVMOD</td>
-<td>BVMOD(n,t1,t2), where t1 is the dividend and t2 is the divisor</td>
-</tr>
-
-</tr>
-<td>Signed Bitvector Modulo</td>
-<td>SBVMOD</td>
-<td>SBVMOD(n,t1,t2), where t1 is the dividend and t2 is the divisor</td>
-</tr>
-</table class="zab1">
+| Name                    | Symbol     | Example                                                               |
+| ---                     | ---        | ---                                                                   |
+| Bitvector Add           | `BVPLUS`   | `BVPLUS(n,t1,t2,...,tm)`                                              |
+| Bitvector Multiply      | `BVMULT`   | `BVMULT(n,t1,t2)`                                                     |
+| Bitvector Subtract      | `BVSUB`    | `BVSUB(n,t1,t2)`                                                      |
+| Bitvector Unary Minus   | `BVUMINUS` | `BVUMINUS(t1)`                                                        |
+| Bitvector Divide        | `BVDIV`    | `BVDIV(n,t1,t2)`, where `t1` is the dividend and `t2` is the divisor  |
+| Signed Bitvector Divide | `SBVDIV`   | `SBVDIV(n,t1,t2)`, where `t1` is the dividend and `t2` is the divisor |
+| Bitvector Modulo        | `BVMOD`    | `BVMOD(n,t1,t2)`, where `t1` is the dividend and `t2` is the divisor  |
+| Signed Bitvector Modulo | `SBVMOD`   | `SBVMOD(n,t1,t2)`, where `t1` is the dividend and `t2` is the divisor |
 
 Notes:
 * the number of output bits has to specified (except unary minus).
@@ -209,74 +85,24 @@ Predicates
 
 Following are the predicates supported by STP:
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
+| Name                            | Symbol  | Example        |
+| ---                             | ---     | ---            |
+| Equality                        | `=`     | `t1=t2`        |
+| Less Than                       | `BVLT`  | `BVLT(t1,t2)`  |
+| Greater Than                    | `BVGT`  | `BVGT(t1,t2)`  |
+| Less Than Or Equal To           | `BVLE`  | `BVLE(t1,t2)`  |
+| Greater Than Or Equal To        | `BVGE`  | `BVGE(t1,t2)`  |
+| Signed Less Than                | `SBVLT` | `SBVLT(t1,t2)` |
+| Signed Greater Than             | `SBVGT` | `SBVGT(t1,t2)` |
+| Signed Less Than Or Equal To    | `SBVLE` | `SBVLE(t1,t2)` |
+| Signed Greater Than Or Equal To | `SBVGE` | `SBVGE(t1,t2)` |
 
-<tr>
-<td>Equality</td>
-<td>=</td>
-<td>t1=t2</td>
-</tr>
-
-<tr>
-<td>Less Than</td>
-<td>BVLT</td>
-<td>BVLT(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Greater Than</td>
-<td>BVGT</td>
-<td>BVGT(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Less Than Or Equal To</td>
-<td>BVLE</td>
-<td>BVLE(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Greater Than Or Equal To</td>
-<td>BVGE</td>
-<td>BVGE(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Signed Less Than</td>
-<td>SBVLT</td>
-<td>SBVLT(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Signed Greater Than</td>
-<td>SBVGT</td>
-<td>SBVGT(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Signed Less Than Or Equal To</td>
-<td>SBVLE</td>
-<td>SBVLE(t1,t2)</td>
-</tr>
-
-<tr>
-<td>Signed Greater Than Or Equal To</td>
-<td>SBVGE</td>
-<td>SBVGE(t1,t2)</td>
-</tr>
-</table class="zab1">
-
-Note:STP requires that in atomic formulas such as x=y, x and y are expressions of the same length. STP accepts Boolean combination of atomic formulas.
+Note:STP requires that in atomic formulas such as `x=y`, `x` and `y` are expressions of the same length. STP accepts Boolean combination of atomic formulas.
 
 Comments
 =========
 
-Any line whose first character is % is a comment.
+Any line whose first character is `%` is a comment.
 
 Some Examples
 =========

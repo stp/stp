@@ -37,55 +37,15 @@ The Bit-vector implementation in STP supports a very large number of functions a
 <h3>Word level functions</h3>
 ===========
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
-
-<tr>
-<td>Concatenation</td>
-<td>concat</td>
-<td>(concat (_ bv0 16) x)</td>
-</tr>
-
-<tr>
-<td>Extraction</td>
-<td>extract</td>
-<td>((_ extract 7 0) o277135888)</td>
-</tr>
-
-<tr>
-<td>left shift</td>
-<td>bvlshl</td>
-<td>(bvlshl x y)</td>
-</tr>
-
-<tr>
-<td>right shift</td>
-<td>bvlshr</td>
-<td>(bvlshr x y)</td>
-</tr>
-
-<tr>
-<td>sign extension</td>
-<td>sign_extend</td>
-<td>((_ sign_extend 24) x)</td>
-</tr>
-
-<tr>
-<td>Array READ</td>
-<td>select</td>
-<td>(select e829 v817)</td>
-</tr>
-
-<tr>
-<td>Array WRITE</td>
-<td>store</td>
-<td>(store a x y)</td>
-</tr>
-</table>
+| Name          | Symbol        | Example                        |
+| ---           | ---           | ---                            |
+| Concatenation | `concat`      | `(concat (_ bv0 16) x)`        |
+| Extraction    | `extract`     | `((_ extract 7 0) o277135888)` |
+| Left Shift    | `bvlshl`      | `(bvlshl x y)`                 |
+| Light Shift   | `bvlshr`      | `(bvlshr x y)`                 |
+| Sign Extension| `sign_extend` | `((_ sign_extend 24) x)`       |
+| Array READ    | `select`      | `(select e829 v817)`           |
+| Array WRITE   | `store`       | `(store a x y)`                |
 
 Notes:
 * For extraction terms, say ((_extract i j) t), n > i >= j >= 0, where n is the length of t.
@@ -96,37 +56,12 @@ Notes:
 <h3>Bitwise functions</h3>
 ===========
 
-<table class="zab1">
-<tr>
-<th>Name</th>
-<th>Symbol</th>
-<th>Example</th>
-</tr>
-
-<tr>
-<td>Bitwise AND</td>
-<td>bvand</td>
-<td>(bvand o1 o6)</td>
-</tr>
-
-<tr>
-<td>Bitwise OR</td>
-<td>bvor</td>
-<td>(bvor var29 var30)</td>
-</tr>
-
-<tr>
-<td>Bitwise NOT</td>
-<td>bvnot</td>
-<td>(bvnot (_ bv0 2000))</td>
-</tr>
-
-<tr>
-<td>Bitwise XOR</td>
-<td>bvxor</td>
-<td>(bvxor e7015 e7019)</td>
-</tr>
-</table>
+| Name        | Symbol  | Example                |
+| ---         | ---     | ---                    |
+| Bitwise AND | `bvand` | `(bvand o1 o6)`        |
+| Bitwise OR  | `bvor`  | `(bvor var29 var30)`   |
+| Bitwise NOT | `bvnot` | `(bvnot (_ bv0 2000))` |
+| Bitwise XOR | `bvxor` | `(bvxor e7015 e7019)`  |
 
 The arguments of bitwise functions have the same length.
 
