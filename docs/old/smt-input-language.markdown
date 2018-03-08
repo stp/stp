@@ -1,4 +1,4 @@
-This page contains a short description for the SMTLibv2 input language that STP can parse. For a longer description please read <a href="http://www.grammatech.com/resource/smt/SMTLIBTutorial.pdf">this PDF</a>.
+This page contains a short description for the SMTLibv2 input language that STP can parse. For a longer description please read [this PDF](http://www.grammatech.com/resource/smt/SMTLIBTutorial.pdf).
 
 Header
 ===========
