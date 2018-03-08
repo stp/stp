@@ -21,12 +21,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y bison flex \
 # build minisat
 RUN mkdir -p /home/solver/
 WORKDIR /home/solver/
-RUN wget https://github.com/stp/minisat/archive/releases/2.2.1.tar.gz \
-    && tar xvf 2.2.1.tar.gz
-WORKDIR /home/solver/minisat-2.2.1/
+RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.tar.gz \
+    && mkdir minisat && tar xvf minisat.tgz --strip-components 1 -C minisat
+WORKDIR /home/solver/minisat/
 RUN mkdir build && cd build && cmake .. \
-    && make -j6 \
-    && make install \
+    && cmake --build . \
+    && cmake --build . --target install \
     && cd .. \
     && rm -rf build
 
@@ -37,8 +37,8 @@ WORKDIR /home/solver/stp
 RUN mkdir build
 WORKDIR /home/solver/stp/build
 RUN cmake .. \
-    && make -j6 \
-    && make install \
+    && cmake --build . \
+    && cmake --build . --target install \
     && rm -rf *
 
 # set up for running
