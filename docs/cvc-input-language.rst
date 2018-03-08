@@ -13,7 +13,7 @@ Declarations
 Bitvector expressions (or terms) are constructed out of bitvector
 constants, bitvector variables and the functions listed below. In STP
 all variables have to declared before the point of use. An example
-declaration of a bitvector variable of length, say 32, is as follows:
+declaration of a bitvector variable of length 32 is as follows:
 ``x : BITVECTOR(32);``. An example of an array declaration is as
 follows:
 
@@ -151,14 +151,14 @@ Notes:
 
 - ``BVSUB(n,t1,t2))`` is a short-hand for ``BVPLUS(n,t1,BVUMINUS(t2))``.
 
-STP also supports conditional terms ``(IF cond THEN t1 ELSE t2 ENDIF)``,
-where *cond* is a boolean term, and *t*1 and *t*2 can be bitvector terms. This
+STP also supports conditional terms, e.g., ``IF cond THEN t1 ELSE t2 ENDIF``,
+where *cond* is a boolean term, and *t*\ 1 and *t*\ 2 can be bitvector terms. This
 allows us to simulate multiplexors. An example is:
 
 ::
 
-    x,y : BITVECTOR(1);
-    QUERY(x = IF 0bin0=x THEN y ELSE BVUMINUS(y));
+    x, y : BITVECTOR(1);
+    QUERY(x = (IF 0bin0 = x THEN y ELSE BVUMINUS(y) ENDIF));
 
 Predicates
 ==========
@@ -187,7 +187,7 @@ Following are the predicates supported by STP:
 | Signed Greater Than Or Equal To | ``SBVGE`` | ``SBVGE(t1,t2)`` |
 +---------------------------------+-----------+------------------+
 
-Note: STP requires that in atomic formulas such as ``x=y``, ``x`` and
+Note: STP requires that in atomic formulas such as ``x = y``, ``x`` and
 ``y`` are expressions of the same length. STP accepts boolean
 combination of atomic formulas.
 
@@ -206,9 +206,10 @@ operations:
 
     x : BITVECTOR(5);
     y : BITVECTOR(4);
-    yy : BITVECTOR(3);
     QUERY(
-     BVPLUS(9, x@0bin0000, (0bin000@(~y)@0bin11))[8:4] = BVPLUS(5, x, 0bin000@~(y[3:2]))
+      BVPLUS(9, x@0bin0000, (0bin000@(~y)@0bin11))[8:4]
+      =
+      BVPLUS(5, x, 0bin000@~(y[3:2]))
     );
 
 Example 2 illustrates the use of arithmetic, word-level and multiplexor
@@ -217,11 +218,16 @@ terms:
 ::
 
     bv : BITVECTOR(10);
-    a : BOOLEAN;
+    a  : BOOLEAN;
+    
     QUERY(
-    0bin01100000[5:3]=(0bin1111001@bv[0:0])[4:2]
-    AND
-    0bin1@(IF a THEN 0bin0 ELSE 0bin1 ENDIF)=(IF a THEN 0bin110 ELSE 0bin011 ENDIF)[1:0]
+      (0bin01100000[5:3] = (0bin1111001@bv[0:0])[4:2])
+      AND
+      (
+        0bin1@(IF a THEN 0bin0 ELSE 0bin1 ENDIF)
+        =
+        (IF a THEN 0bin110 ELSE 0bin011 ENDIF)[1:0]
+      )
     );
 
 Example 3 illustrates the use of bitwise operations:
@@ -230,10 +236,10 @@ Example 3 illustrates the use of bitwise operations:
 
     x, y, z, t, q : BITVECTOR(1024);
 
-    ASSERT(x=~x);
-    ASSERT(x&y&t&z&q = x);
-    ASSERT(x|y = t);
-    ASSERT(BVXOR(x,~x)=t);
+    ASSERT(x = ~x);
+    ASSERT(x & y & t & z & q = x);
+    ASSERT(x | y = t);
+    ASSERT(BVXOR(x, ~x) = t);
     QUERY(FALSE);
 
 Example 4 illustrates the use of predicates and all the arithmetic
@@ -242,16 +248,16 @@ operations:
 ::
 
     x, y : BITVECTOR(8);
-    ASSERT(x=0hex05);
+    ASSERT(x = 0hex05);
     ASSERT(y = 0bin00000101);
     QUERY(
-    BVMULT(8,x,y)=BVMULT(8,y,x)
-    AND
-    NOT(BVLT(x,y))
-    AND
-    BVLE(BVSUB(8,x,y), BVPLUS(8, x, BVUMINUS(x)))
-    AND
-    x = BVSUB(8, BVUMINUS(x), BVPLUS(8, x,0hex01))
+      (BVMULT(8,x,y) = BVMULT(8,y,x))
+      AND
+      NOT(BVLT(x,y))
+      AND
+      BVLE(BVSUB(8,x,y), BVPLUS(8, x, BVUMINUS(x)))
+      AND
+      (x = BVSUB(8, BVUMINUS(x), BVPLUS(8, x,0hex01)))
     );
 
 Example 5 illustrates the use of shift functions
@@ -261,8 +267,8 @@ Example 5 illustrates the use of shift functions
     x, y : BITVECTOR(8);
     z, t : BITVECTOR(12);
 
-    ASSERT(x=0hexff);
-    ASSERT(z=0hexff0);
+    ASSERT(x = 0hexff);
+    ASSERT(z = 0hexff0);
     QUERY(z = x << 4);
 
 For invalid inputs, the ``COUNTEREXAMPLE`` command can be used to generate
