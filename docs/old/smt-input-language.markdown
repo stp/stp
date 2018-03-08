@@ -34,8 +34,7 @@ Bit-vector variables (or terms) of length 0 are not allowed. Bit-vector constant
 
 The Bit-vector implementation in STP supports a very large number of functions and predicates. The functions are categorized into word-level functions, bitwise functions, and arithmetic functions. Let t1,t2,...,tm denote some arbitrary bitvector terms.
 
-<h3>Word level functions</h3>
-===========
+### Word level functions
 
 | Name          | Symbol        | Example                        |
 | ---           | ---           | ---                            |
@@ -53,8 +52,7 @@ Notes:
 * For right shift terms, say t >> k, the term is equal to the bitvector obtained by k 0's followed by t[n-1:k]. The length of t >> k is n.
 
 
-<h3>Bitwise functions</h3>
-===========
+### Bitwise functions
 
 | Name        | Symbol  | Example                |
 | ---         | ---     | ---                    |
