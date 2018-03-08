@@ -1,13 +1,19 @@
+****************************
+CVC Input Language Reference
+****************************
+
+.. highlight:: lisp
+
 This page contains a description for the input language that STP expects
 by default.
 
 Declarations
 ============
 
-Bit-vector expressions (or terms) are constructed out of bit-vector
-constants, bit-vector variables and the functions listed below. In STP
+Bitvector expressions (or terms) are constructed out of bitvector
+constants, bitvector variables and the functions listed below. In STP
 all variables have to declared before the point of use. An example
-declaration of a bit-vector variable of length, say 32, is as follows:
+declaration of a bitvector variable of length, say 32, is as follows:
 ``x : BITVECTOR(32);``. An example of an array declaration is as
 follows:
 
@@ -18,25 +24,25 @@ follows:
 Functions and Terms
 ===================
 
-Bit-vector variables (or terms) of length 0 are not allowed. Bit-vector
+Bitvector variables (or terms) of length 0 are not allowed. Bitvector
 constants can be represented in binary or hexadecimal format. The
 rightmost bit is called the least significant bit (LSB), and the
-leftmost bit is the most significant bit(MSB). The index of the LSB is
-0, and the index of the MSB is n-1 for an n-bit constant. This
-convention naturally extends to all bit-vector expressions. Following
-are some examples of bit-vector constants:
+leftmost bit is the most significant bit (MSB). The index of the LSB is
+0, and the index of the MSB is *n*-1 for an *n*-bit constant. This
+convention naturally extends to all bitvector expressions. Following
+are some examples of bitvector constants in binary and hexadecimal:
 
 ::
 
-    0bin0000111101010000, and the corresponding hex representation is 0hex0f50.
+    0bin0000111101010000
+    0hex0f50
 
-The Bit-vector implementation in STP supports a very large number of
+The Bitvector implementation in STP supports a very large number of
 functions and predicates. The functions are categorized into word-level
-functions, bitwise functions, and arithmetic functions. Let t1,t2,…,tm
-denote some arbitrary bitvector terms.
+functions, bitwise functions, and arithmetic functions.
 
-Word level functions
-====================
+Word-level functions
+~~~~~~~~~~~~~~~~~~~~
 
 +-----------------------+-----------------------+-----------------------+
 | Name                  | Symbol                | Example               |
@@ -62,14 +68,20 @@ Word level functions
 |                       |                       | := value``            |
 +-----------------------+-----------------------+-----------------------+
 
-Notes: \* For extraction terms, say t[i:j], n > i >= j >= 0, where n is
-the length of t.0 \* For Left shift terms, t << k is equal to k 0’s
-appended to t. The length of t << k is n+k. \* For Right shift terms,
-say t >> k, the term is equal to the bitvector obtained by k 0’s
-followed by t[n-1:k]. The length of t >> k is n.
+Notes:
+
+- For extraction terms, say ``t[i:j]``, *n* > *i* >= *j* >= 0, where
+  *n* is the length of *t*.
+
+- For left shift terms, ``t << k`` is equal to *k* 0’s appended to *t*. The length
+  of ``t << k`` is *n*+*k*.
+
+- For right shift terms, say ``t >> k``, the term is equal to the bitvector
+  obtained by *k* 0’s followed by ``t[n-1:k]``. The length of ``t >> k`` is *n*.
+
 
 Bitwise functions
-=================
+~~~~~~~~~~~~~~~~~
 
 +--------------+------------+------------------------+
 | Name         | Symbol     | Example                |
@@ -93,7 +105,7 @@ NOTE: It is required that all the arguments of bitwise functions have
 the same length
 
 Arithmetic functions
-====================
+~~~~~~~~~~~~~~~~~~~~
 
 +-----------------------+-----------------------+-----------------------+
 | Name                  | Symbol                | Example               |
@@ -128,14 +140,19 @@ Arithmetic functions
 |                       |                       | is the divisor        |
 +-----------------------+-----------------------+-----------------------+
 
-Notes: \* the number of output bits has to specified (except unary
-minus). \* Inputs t1,t2 …,tm must be of the same length \* BVUMINUS(t)
-is a short-hand for BVPLUS(n,~t,0bin1), where n is the length of t. \*
-Bitvector subtraction (BVSUB(n,t1,t2)) is a short-hand for
-BVPLUS(n,t1,BVUMINUS(t2))
+Notes:
 
-STP also supports conditional terms (IF cond THEN t1 ELSE t2 ENDIF),
-where cond is boolean term, t1 and t2 can be bitvector terms. This
+- The number of output bits must be specified (expect for unary minus).
+
+- All inputs must be of the same length.
+
+- ``BVUMINUS(t)`` is a short-hand for ``BVPLUS(n,~t,0bin1)``, where *n* is the
+  length of *t*.
+
+- ``BVSUB(n,t1,t2))`` is a short-hand for ``BVPLUS(n,t1,BVUMINUS(t2))``.
+
+STP also supports conditional terms ``(IF cond THEN t1 ELSE t2 ENDIF)``,
+where *cond* is a boolean term, and *t*1 and *t*2 can be bitvector terms. This
 allows us to simulate multiplexors. An example is:
 
 ::
@@ -170,8 +187,8 @@ Following are the predicates supported by STP:
 | Signed Greater Than Or Equal To | ``SBVGE`` | ``SBVGE(t1,t2)`` |
 +---------------------------------+-----------+------------------+
 
-Note:STP requires that in atomic formulas such as ``x=y``, ``x`` and
-``y`` are expressions of the same length. STP accepts Boolean
+Note: STP requires that in atomic formulas such as ``x=y``, ``x`` and
+``y`` are expressions of the same length. STP accepts boolean
 combination of atomic formulas.
 
 Comments
@@ -248,6 +265,6 @@ Example 5 illustrates the use of shift functions
     ASSERT(z=0hexff0);
     QUERY(z = x << 4);
 
-For invalid inputs, the COUNTEREXAMPLE command can be used to generate
+For invalid inputs, the ``COUNTEREXAMPLE`` command can be used to generate
 appropriate counterexamples. The generated counter example is
 essentially a bitwise assignment to the variables in the input.

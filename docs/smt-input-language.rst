@@ -1,3 +1,9 @@
+**********************************
+SMT-LIBv2 Input Language Reference
+**********************************
+
+.. highlight:: lisp
+
 This page contains a short description for the SMTLibv2 input language
 that STP can parse. For a longer description please read `this
 PDF <http://www.grammatech.com/resource/smt/SMTLIBTutorial.pdf>`__.
@@ -5,7 +11,7 @@ PDF <http://www.grammatech.com/resource/smt/SMTLIBTutorial.pdf>`__.
 Header
 ======
 
-The SMT-LIB2 format uses a header to tell the solver which type of
+The SMT-LIBv2 format uses a header to tell the solver which type of
 problem is coming, the header needed is:
 
 ::
@@ -13,16 +19,16 @@ problem is coming, the header needed is:
     (set-logic QF_ABV)
     (set-info :smt-lib-version 2.0)
 
-QF_BV is for bit-vector problems, QF_ABV is for bit-vector and array
+QF_BV is for bitvector problems, QF_ABV is for bitvector and array
 problems.
 
 Declarations
 ============
 
-Bit-vector expressions (or terms) are constructed out of bit-vector
-constants, bit-vector variables and the functions listed below. In STP
+Bitvector expressions (or terms) are constructed out of bitvector
+constants, bitvector variables and the functions listed below. In STP
 all variables have to declared before the point of use. An example
-declaration of a bit-vector variable of length, say 32, is as follows:
+declaration of a bitvector variable of length, say 32, is as follows:
 
 ::
 
@@ -38,24 +44,25 @@ results is:
 Functions and Terms
 ===================
 
-Bit-vector variables (or terms) of length 0 are not allowed. Bit-vector
+Bitvector variables (or terms) of length 0 are not allowed. Bitvector
 constants can be represented in binary or hexadecimal format. The
 rightmost bit is called the least significant bit (LSB), and the
-leftmost bit is the most significant bit(MSB). The index of the LSB is
-0, and the index of the MSB is n-1 for an n-bit constant. This
-convention naturally extends to all bit-vector expressions. Following
-are some examples of bit-vector constants:
+leftmost bit is the most significant bit (MSB). The index of the LSB is
+0, and the index of the MSB is *n*-1 for an *n*-bit constant. This
+convention naturally extends to all bitvector expressions.
+
+Following are some examples of bitvector constants in binary and hexadecimal:
 
 ::
 
-    #b0000111101010000, and the corresponding hex representation is #x0f50.
+    #b0000111101010000
+    #x0f50
 
-The Bit-vector implementation in STP supports a very large number of
+The bitvector implementation in STP supports a very large number of
 functions and predicates. The functions are categorized into word-level
-functions, bitwise functions, and arithmetic functions. Let t1,t2,…,tm
-denote some arbitrary bitvector terms.
+functions, bitwise functions, and arithmetic functions.
 
-Word level functions
+Word-level functions
 ~~~~~~~~~~~~~~~~~~~~
 
 +----------------+-----------------+----------------------------------+
@@ -76,11 +83,17 @@ Word level functions
 | Array WRITE    | ``store``       | ``(store a x y)``                |
 +----------------+-----------------+----------------------------------+
 
-Notes: \* For extraction terms, say ((_extract i j) t), n > i >= j >= 0,
-where n is the length of t. \* For left shift terms, t << k is equal to
-k 0’s appended to t. The length of t << k is n. \* For right shift
-terms, say t >> k, the term is equal to the bitvector obtained by k 0’s
-followed by t[n-1:k]. The length of t >> k is n.
+Notes:
+
+- For extraction terms, say ``((_extract i j) t)``, *n* > *i* >= *j* >= 0, where
+  *n* is the length of *t*.
+
+- For left shift terms, ``t << k`` is equal to *k* 0’s appended to *t*. The length
+  of ``t << k`` is *n*.
+
+- For right shift terms, say ``t >> k``, the term is equal to the bitvector
+  obtained by *k* 0’s followed by ``t[n-1:k]``. The length of ``t >> k`` is *n*.
+
 
 Bitwise functions
 ~~~~~~~~~~~~~~~~~
@@ -113,7 +126,7 @@ check the satisfiability, then to exit:
 Examples
 ========
 
-There are many SMT-LIB2 format examples in STP’s source code repository.
+There are many SMT-LIBv2 format examples in STP’s source code repository.
 Look for files with a .smt2 extension here. Signed division of -1/-2 =
 0, should be satisfiable:
 
