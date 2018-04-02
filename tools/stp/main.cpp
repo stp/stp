@@ -85,7 +85,7 @@ void ExtraMain::try_parsing_options(
 
     if (vm.count("help"))
     {
-      cout << "USAGE: " << argv[0] << " [options] <input-file>" << endl
+      cout << "USAGE: stp [options] <input-file>" << endl
            << " where input is SMTLIB1/2 or CVC depending on options and file "
               "extension"
            << endl;

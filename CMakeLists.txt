@@ -369,6 +369,37 @@ find_package(ZLIB)
 include_directories(${ZLIB_INCLUDE_DIR})
 include_directories(${minisat_SOURCE_DIR})
 
+# ----------
+# manpage
+# ----------
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    find_program(HELP2MAN_FOUND help2man)
+    if (HELP2MAN_FOUND)
+        if (NOT ONLY_SIMPLE)
+            ADD_CUSTOM_TARGET(man_stp
+                ALL
+                DEPENDS stp
+            )
+
+            ADD_CUSTOM_COMMAND(
+                TARGET man_stp
+                COMMAND help2man
+                ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+            )
+
+            INSTALL(
+                FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+                DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+            message(STATUS "Manpage will be created and installed")
+        endif()
+    else()
+        MESSAGE(STATUS "Cannot find help2man, not creating manpage")
+    endif()
+else()
+    MESSAGE(STATUS "Not on Linux, not creating manpage")
+endif()
+
+
 # -----------------------------------------------------------------------------
 # Find Minisat
 # -----------------------------------------------------------------------------
