@@ -133,10 +133,11 @@ void outputBitVec(const ASTNode n, ostream& os)
   // Prepend with zero to convert to unsigned.
 
   os << "bv";
-  CBV zero = CONSTANTBV::BitVector_Create(1, true); // TODO need to destroy???
+  CBV zero = CONSTANTBV::BitVector_Create(1, true);
   CBV unsign = CONSTANTBV::BitVector_Concat(zero, op.GetBVConst());
   unsigned char* str = CONSTANTBV::BitVector_to_Dec(unsign);
   CONSTANTBV::BitVector_Destroy(unsign);
+  CONSTANTBV::BitVector_Destroy(zero);
   os << str << "[" << op.GetValueWidth() << "]";
   CONSTANTBV::BitVector_Dispose(str);
 }
