@@ -319,17 +319,18 @@ int Main::main(int argc, char** argv)
     if (onePrintBack)
     {
       print_back(query, asserts);
-      return 0;
     }
-
-    SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(asserts, query);
-
-    if (bm->UserFlags.quick_statistics_flag)
+    else
     {
-      bm->GetRunTimes()->print();
-    }
-    stp->tosat->PrintOutput(ret);
+      SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(asserts, query);
 
+      if (bm->UserFlags.quick_statistics_flag)
+      {
+        bm->GetRunTimes()->print();
+      }
+      stp->tosat->PrintOutput(ret);
+    }
+    
     asserts = ASTNode();
     query = ASTNode();
   }
