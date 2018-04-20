@@ -27,5 +27,9 @@ if (USE_CRYPTOMINISAT)
     set(sat_lib_to_add ${sat_lib_to_add} CryptoMinisat5.cpp)
 endif()
 
+if (USE_RISS)
+    set(sat_lib_to_add ${sat_lib_to_add} RissCore.cpp)
+endif()
+
 add_library(sat OBJECT ${sat_lib_to_add})
 
