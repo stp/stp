@@ -33,6 +33,10 @@ THE SOFTWARE.
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
 
+#ifdef USE_RISS
+#include "stp/Sat/Riss.h"
+#endif
+
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SimplifyingMinisat.h"
 
@@ -85,6 +89,15 @@ SATSolver* STP::get_new_sat_solver()
       newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
 #else
       std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
+      break;
+    case UserDefinedFlags::RISS_SOLVER:
+#ifdef USE_RISS
+      newS = new RissCore();
+#else
+      std::cerr << "Riss support was not enabled at configure time."
                 << std::endl;
       exit(-1);
 #endif

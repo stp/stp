@@ -168,11 +168,21 @@ void ExtraMain::create_options()
                          ->default_value(bm->UserFlags.num_solver_threads),
                      "Number of threads for cryptominisat")
 #endif
-          ("simplifying-minisat",
+#ifdef USE_RISS
+      ("riss",
+       "use Riss as the solver"
+#ifndef USE_CRYPTOMINISAT
+       "(default)."
+#endif
+      )
+#endif
+         ("simplifying-minisat",
            "use installed simplifying minisat version as the solver")(
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
+#ifndef USE_RISS
                          "(default)"
+#endif
 #endif
               );
 
