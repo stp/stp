@@ -159,6 +159,10 @@ enum ifaceflag_t
   //!
   CMS4,
 
+  //! Use the SAT solver Riss.
+  //!
+  RISS,
+
   //! \brief Deprecated: use `MS` instead!
   //!
   //! This used to be the array version of the minisat SAT solver.

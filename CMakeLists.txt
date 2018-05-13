@@ -333,6 +333,16 @@ if(NOT Boost_FOUND)
   message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
 endif()
 
+# -----------------------------------------------------------------------------
+# Find Riss
+# -----------------------------------------------------------------------------
+option(USE_RISS "Try to use Riss" OFF)
+
+if (USE_RISS)
+    add_definitions(-DUSE_RISS)
+    include_directories(${RISS_DIR}/)        # should point to the base directory: ~/git/riss/
+    link_directories(${RISS_DIR}/build/lib)  # should point to the base directory: ~/git/riss/build/lib
+endif()
 
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat

@@ -130,6 +130,17 @@ if (USE_CRYPTOMINISAT)
     endif()
 endif()
 
+if (USE_RISS)
+    if (STATICCOMPILE)
+        set(libstp_link_libs
+          ${libstp_link_libs} -lriss-coprocessor -lpthread)
+    else()
+      set(libstp_link_libs
+        ${libstp_link_libs}
+        -lriss -lcoprocessor)
+    endif()
+endif()
+
 target_link_libraries(libstp
     LINK_PUBLIC ${libstp_link_libs}
 )
