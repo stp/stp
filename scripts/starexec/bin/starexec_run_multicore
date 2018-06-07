@@ -13,7 +13,7 @@ rm -f output_0.cnf
 # In case a file was created, call the SAT solver
 if [ -f output_0.cnf ]
 then
-	result=`$SOLVERDIR/cryptominisat5 --verb 0 --threads $(nproc) --printsol 0 output_0.cnf`
+	result=`$SOLVERDIR/cryptominisat5 --verb 0 --threads $(nproc) --printsol 0 output_0.cnf 2>&1`
 
 	if [[ "$result" == *"s SATISFIABLE"* ]]; then
 		echo "sat"
