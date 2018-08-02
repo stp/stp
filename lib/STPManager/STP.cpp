@@ -287,8 +287,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
          << endl;
 
   // A heap object so I can easily control its lifetime.
-  std::auto_ptr<BVSolver> bvSolver(new BVSolver(bm, simp));
-  std::auto_ptr<PropagateEqualities> pe(
+  std::unique_ptr<BVSolver> bvSolver(new BVSolver(bm, simp));
+  std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
   ASTNode inputToSat = original_input;
@@ -360,7 +360,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
          << endl;
 
   // So we can delete the object and release all the hash-buckets storage.
-  std::auto_ptr<Revert_to> revert(new Revert_to());
+  std::unique_ptr<Revert_to> revert(new Revert_to());
 
   if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
@@ -574,7 +574,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   const bool maybeRefinement = arrayops && !bm->UserFlags.ackermannisation;
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
-  std::auto_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
+  std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
   if (bm->UserFlags.bitConstantProp_flag)
   {

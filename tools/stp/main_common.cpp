@@ -38,7 +38,7 @@ extern void errorHandler(const char* error_msg);
 extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
 
 using namespace stp;
-using std::auto_ptr;
+using std::unique_ptr;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -265,16 +265,16 @@ void Main::check_infile_type()
 
 int Main::main(int argc, char** argv)
 {
-  auto_ptr<SimplifyingNodeFactory> simplifyingNF(
+  unique_ptr<SimplifyingNodeFactory> simplifyingNF(
       new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
   bm->defaultNodeFactory = simplifyingNF.get();
 
-  auto_ptr<Simplifier> simp(new Simplifier(bm));
-  auto_ptr<ArrayTransformer> arrayTransformer(
+  unique_ptr<Simplifier> simp(new Simplifier(bm));
+  unique_ptr<ArrayTransformer> arrayTransformer(
       new ArrayTransformer(bm, simp.get()));
-  auto_ptr<ToSAT> tosat(new ToSAT(bm));
+  unique_ptr<ToSAT> tosat(new ToSAT(bm));
 
-  auto_ptr<AbsRefine_CounterExample> Ctr_Example(
+  unique_ptr<AbsRefine_CounterExample> Ctr_Example(
       new AbsRefine_CounterExample(bm, simp.get(), arrayTransformer.get()));
 
   int ret = create_and_parse_options(argc, argv);
@@ -337,7 +337,7 @@ int Main::main(int argc, char** argv)
   }
 
   // Previously we used fast-exit to avoid destroying lots of objects, for example in the node manager.
-  // We use auto_ptr now on lots of stuff, so there seems little difference in the time it takes to
+  // We use unique_ptr now on lots of stuff, so there seems little difference in the time it takes to
   // exit normally vs. not.
   //if (bm->UserFlags.isSet("fast-exit", "0"))
   //  exit(0);

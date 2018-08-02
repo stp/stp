@@ -30,7 +30,7 @@ using boost::lexical_cast;
 namespace po = boost::program_options;
 
 using namespace stp;
-using std::auto_ptr;
+using std::unique_ptr;
 using std::cout;
 using std::cerr;
 using std::endl;
