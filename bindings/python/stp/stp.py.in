@@ -3,6 +3,7 @@ The MIT License
 
 Copyright (c) 2008 Vijay Ganesh
               2014 Jurriaan Bremer, jurriaanbremer@gmail.com
+              2018 Andrew V. Jones, andrewvaughanj@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -26,7 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import ast
 from ctypes import cdll, POINTER, CFUNCTYPE
-from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong
+from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_ubyte
 import inspect
 import os.path
 import sys
@@ -62,6 +63,16 @@ _Type = c_void_p
 _WholeCounterExample = c_void_p
 
 _set_func('vc_createValidityChecker', _VC)
+_set_func('vc_setMinisat', c_ubyte, _VC)
+_set_func('vc_usingMinisat', c_ubyte, _VC)
+_set_func('vc_setSimplifyingMinisat', c_ubyte, _VC)
+_set_func('vc_usingSimplifyingMinisat', c_ubyte, _VC)
+_set_func('vc_supportsCryptoMinisat', c_ubyte, _VC)
+_set_func('vc_setCryptoMinisat', c_ubyte, _VC)
+_set_func('vc_usingCryptoMinisat', c_ubyte, _VC)
+_set_func('vc_supportsRiss', c_ubyte, _VC)
+_set_func('vc_setRiss', c_ubyte, _VC)
+_set_func('vc_usingRiss', c_ubyte, _VC)
 _set_func('vc_boolType', _Type, _VC)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
@@ -201,6 +212,36 @@ class Solver(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         Solver.current = None
+
+    def setMinisat(self):
+        return _lib.vc_setMinisat(self.vc)
+
+    def usingMinisat(self):
+        return _lib.vc_usingMinisat(self.vc)
+
+    def setSimplifyingMinisat(self):
+        return _lib.vc_setSimplifyingMinisat(self.vc)
+
+    def usingSimplifyingMinisat(self):
+        return _lib.vc_usingSimplifyingMinisat(self.vc)
+
+    def supportsCryptoMinisat(self):
+        return _lib.vc_supportsCryptoMinisat(self.vc)
+
+    def setCryptoMinisat(self):
+        return _lib.vc_setCryptoMinisat(self.vc)
+
+    def usingCryptoMinisat(self):
+        return _lib.vc_usingCryptoMinisat(self.vc)
+
+    def supportsRiss(self):
+        return _lib.vc_supportsRiss(self.vc)
+
+    def setRiss(self):
+        return _lib.vc_setRiss(self.vc)
+
+    def usingRiss(self):
+        return _lib.vc_usingRiss(self.vc)
 
     def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""

@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Andrew V. Jones
  *
  * BEGIN DATE: November, 2005
  *
@@ -2094,3 +2094,96 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   }
   return 1;
 }
+
+void _vc_setSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+{
+  /* Helper method to encapsulate setting a solver */
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  b->UserFlags.solver_to_use = solver;
+}
+
+unsigned char _vc_usingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+{
+  /* Helper method to encapsulate getting a solver */
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  return b->UserFlags.solver_to_use == solver;
+}
+
+unsigned char vc_setMinisat(VC vc)
+{
+  _vc_setSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+  unsigned char success = 1;
+  return success;
+}
+
+unsigned char vc_usingMinisat(VC vc)
+{
+  return _vc_usingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+}
+
+unsigned char vc_setSimplifyingMinisat(VC vc)
+{
+  _vc_setSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+  unsigned char success = 1;
+  return success;
+}
+
+unsigned char vc_usingSimplifyingMinisat(VC vc)
+{
+  return _vc_usingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+}
+
+unsigned char vc_supportsCryptoMinisat(VC /* vc */)
+{
+#ifdef USE_CRYPTOMINISAT
+  unsigned char success = 1;
+#else
+  unsigned char success = 0;
+#endif
+  return success;
+}
+
+unsigned char vc_setCryptoMinisat(VC vc)
+{
+#ifdef USE_CRYPTOMINISAT
+  _vc_setSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+  unsigned char success = 1;
+#else
+  unsigned char success = 0;
+#endif
+  return success;
+}
+
+unsigned char vc_usingCryptoMinisat(VC vc)
+{
+  return _vc_usingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+}
+
+unsigned char vc_supportsRiss(VC /* vc */)
+{
+#ifdef USE_RISS
+  unsigned char success = 1;
+#else
+  unsigned char success = 0;
+#endif
+  return success;
+}
+
+unsigned char vc_setRiss(VC vc)
+{
+#ifdef USE_RISS
+  _vc_setSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+  unsigned char success = 1;
+#else
+  unsigned char success = 0;
+#endif
+  return success;
+}
+
+unsigned char vc_usingRiss(VC vc)
+{
+  return _vc_usingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+}
+

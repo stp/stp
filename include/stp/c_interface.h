@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Apr, 2008
  *
@@ -1135,6 +1135,47 @@ DLL_PUBLIC int getExprID(Expr ex);
 //!
 DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
                                Expr* outAsserts);
+
+//! \brief Sets underlying SAT solver to minisat
+//!
+DLL_PUBLIC unsigned char vc_setMinisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is minisat
+//!
+DLL_PUBLIC unsigned char vc_usingMinisat(VC vc);
+
+//! \brief Sets underlying SAT solver to simplifying minisat
+//!
+DLL_PUBLIC unsigned char vc_setSimplifyingMinisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is simplifying minisat
+//!
+DLL_PUBLIC unsigned char vc_usingSimplifyingMinisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for cryptominisat
+//!
+DLL_PUBLIC unsigned char vc_supportsCryptoMinisat(VC vc);
+
+//! \brief Sets underlying SAT solver to cryptominisat
+//!
+DLL_PUBLIC unsigned char vc_setCryptoMinisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is cryptominisat
+//!
+DLL_PUBLIC unsigned char vc_usingCryptoMinisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for riss
+//!
+DLL_PUBLIC unsigned char vc_supportsRiss(VC vc);
+
+//! \brief Sets underlying SAT solver to riss
+//!
+DLL_PUBLIC unsigned char vc_setRiss(VC vc);
+
+//! \brief Checks if underlying SAT solver is riss
+//!
+DLL_PUBLIC unsigned char vc_usingRiss(VC vc);
+
 
 #ifdef __cplusplus
 }
