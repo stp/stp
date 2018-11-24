@@ -4,6 +4,7 @@ The MIT License
 
 Copyright (c) 2008 Vijay Ganesh
               2014 Jurriaan Bremer, jurriaanbremer@gmail.com
+              2018 Andrew V. Jones, andrewvaughanj@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -29,24 +30,24 @@ import sys
 # Make sure we can find the STP python package
 sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
 
-from stp import stp, Solver
+import stp
 import unittest
 
 
-@stp
+@stp.stp
 def test0_foo(a, b):
     assert b != 0
     return (a + 42) % b
 
 
-@stp
+@stp.stp
 def test0_bar(a, b):
     return a * b == 12345
 
 
 class TestSTP(unittest.TestCase):
     def setUp(self):
-        self.s = Solver()
+        self.s = stp.Solver()
 
     def test_simple(self):
         s = self.s
@@ -124,7 +125,7 @@ class TestSTP(unittest.TestCase):
             {'y': 489153109, 'x': 489153109},
         ]
 
-        with Solver() as s:
+        with stp.Solver() as s:
             x, y = s.bitvecs('x y')
             count = 0
             while s.check(test0_foo(x, y) == test0_foo(y, x),
@@ -263,7 +264,27 @@ class TestSTP(unittest.TestCase):
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
 
+    def test_git_version_sha(self):
+        """
+        Test verifies that the returned git sha is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_sha()), 0)
+
+    def test_git_version_tag(self):
+        """
+        Test verifies that the returned git tag is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_tag()), 0)
+
+    def test_compilation_env(self):
+        """
+        Test verifies that the returned compilation env is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_compilation_env()), 0)
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
     unittest.TextTestRunner(verbosity=2).run(suite)
+
+# EOF
