@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew
+# AUTHORS: Dan Liew, Andrew V. Jones
 #
 # BEGIN DATE: May, 2014
 #
@@ -27,6 +27,12 @@
 # a good idea.
 
 # Search paths for the stp shared library
-PATHS = [
-    '@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@'
+
+import os
+
+PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"] + [
+    os.path.join(directory, "@LIBSTP_FILENAME@")
+    for directory in os.environ["PYTHONPATH"].split(os.pathsep)
 ]
+
+# EOF
