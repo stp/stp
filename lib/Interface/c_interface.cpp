@@ -2103,7 +2103,7 @@ void _vc_useSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   b->UserFlags.solver_to_use = solver;
 }
 
-unsigned char _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 {
   /* Helper method to encapsulate getting a solver */
   stp::STP* stp_i = (stp::STP*)vc;
@@ -2111,39 +2111,39 @@ unsigned char _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   return b->UserFlags.solver_to_use == solver;
 }
 
-unsigned char vc_supportsMinisat(__attribute__((unused)) VC vc)
+bool vc_supportsMinisat(__attribute__((unused)) VC vc)
 {
   return 1;
 }
 
-unsigned char vc_useMinisat(VC vc)
+bool vc_useMinisat(VC vc)
 {
   _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
   return 1;
 }
 
-unsigned char vc_isUsingMinisat(VC vc)
+bool vc_isUsingMinisat(VC vc)
 {
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
 }
 
-unsigned char vc_supportsSimplifyingMinisat(__attribute__((unused)) VC vc)
+bool vc_supportsSimplifyingMinisat(__attribute__((unused)) VC vc)
 {
   return 1;
 }
 
-unsigned char vc_useSimplifyingMinisat(VC vc)
+bool vc_useSimplifyingMinisat(VC vc)
 {
   _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
   return 1;
 }
 
-unsigned char vc_isUsingSimplifyingMinisat(VC vc)
+bool vc_isUsingSimplifyingMinisat(VC vc)
 {
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
 }
 
-unsigned char vc_supportsCryptominisat(__attribute__((unused)) VC vc)
+bool vc_supportsCryptominisat(__attribute__((unused)) VC vc)
 {
 #ifdef USE_CRYPTOMINISAT
   return 1;
@@ -2152,7 +2152,7 @@ unsigned char vc_supportsCryptominisat(__attribute__((unused)) VC vc)
 #endif
 }
 
-unsigned char vc_useCryptominisat(
+bool vc_useCryptominisat(
 #ifndef USE_CRYPTOMINISAT
         __attribute__((unused))
 #endif
@@ -2166,7 +2166,7 @@ unsigned char vc_useCryptominisat(
 #endif
 }
 
-unsigned char vc_isUsingCryptominisat(
+bool vc_isUsingCryptominisat(
 #ifndef USE_CRYPTOMINISAT
         __attribute__((unused))
 #endif
@@ -2179,7 +2179,7 @@ unsigned char vc_isUsingCryptominisat(
 #endif
 }
 
-unsigned char vc_supportsRiss(__attribute__((unused)) VC vc)
+bool vc_supportsRiss(__attribute__((unused)) VC vc)
 {
 #ifdef USE_RISS
   return 1;
@@ -2188,7 +2188,7 @@ unsigned char vc_supportsRiss(__attribute__((unused)) VC vc)
 #endif
 }
 
-unsigned char vc_useRiss(
+bool vc_useRiss(
 #ifndef USE_RISS
         __attribute__((unused))
 #endif
@@ -2202,7 +2202,7 @@ unsigned char vc_useRiss(
 #endif
 }
 
-unsigned char vc_isUsingRiss(
+bool vc_isUsingRiss(
 #ifndef USE_RISS
         __attribute__((unused))
 #endif

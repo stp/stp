@@ -27,7 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import ast
 from ctypes import cdll, POINTER, CFUNCTYPE
-from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_ubyte
+from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
 import inspect
 import os.path
 import sys
@@ -63,18 +63,18 @@ _Type = c_void_p
 _WholeCounterExample = c_void_p
 
 _set_func('vc_createValidityChecker', _VC)
-_set_func('vc_supportsMinisat', c_ubyte, _VC)
-_set_func('vc_useMinisat', c_ubyte, _VC)
-_set_func('vc_isUsingMinisat', c_ubyte, _VC)
-_set_func('vc_supportsSimplifyingMinisat', c_ubyte, _VC)
-_set_func('vc_useSimplifyingMinisat', c_ubyte, _VC)
-_set_func('vc_isUsingSimplifyingMinisat', c_ubyte, _VC)
-_set_func('vc_supportsCryptominisat', c_ubyte, _VC)
-_set_func('vc_useCryptominisat', c_ubyte, _VC)
-_set_func('vc_isUsingCryptominisat', c_ubyte, _VC)
-_set_func('vc_supportsRiss', c_ubyte, _VC)
-_set_func('vc_useRiss', c_ubyte, _VC)
-_set_func('vc_isUsingRiss', c_ubyte, _VC)
+_set_func('vc_supportsMinisat', c_bool, _VC)
+_set_func('vc_useMinisat', c_bool, _VC)
+_set_func('vc_isUsingMinisat', c_bool, _VC)
+_set_func('vc_supportsSimplifyingMinisat', c_bool, _VC)
+_set_func('vc_useSimplifyingMinisat', c_bool, _VC)
+_set_func('vc_isUsingSimplifyingMinisat', c_bool, _VC)
+_set_func('vc_supportsCryptominisat', c_bool, _VC)
+_set_func('vc_useCryptominisat', c_bool, _VC)
+_set_func('vc_isUsingCryptominisat', c_bool, _VC)
+_set_func('vc_supportsRiss', c_bool, _VC)
+_set_func('vc_useRiss', c_bool, _VC)
+_set_func('vc_isUsingRiss', c_bool, _VC)
 _set_func('vc_boolType', _Type, _VC)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
