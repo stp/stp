@@ -2132,13 +2132,13 @@ bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 
 bool vc_supportsMinisat(__attribute__((unused)) VC vc)
 {
-  return 1;
+  return true;
 }
 
 bool vc_useMinisat(VC vc)
 {
   _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
-  return 1;
+  return true;
 }
 
 bool vc_isUsingMinisat(VC vc)
@@ -2148,13 +2148,13 @@ bool vc_isUsingMinisat(VC vc)
 
 bool vc_supportsSimplifyingMinisat(__attribute__((unused)) VC vc)
 {
-  return 1;
+  return true;
 }
 
 bool vc_useSimplifyingMinisat(VC vc)
 {
   _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
-  return 1;
+  return true;
 }
 
 bool vc_isUsingSimplifyingMinisat(VC vc)
@@ -2165,9 +2165,9 @@ bool vc_isUsingSimplifyingMinisat(VC vc)
 bool vc_supportsCryptominisat(__attribute__((unused)) VC vc)
 {
 #ifdef USE_CRYPTOMINISAT
-  return 1;
+  return true;
 #else
-  return 0;
+  return false;
 #endif
 }
 
@@ -2179,9 +2179,9 @@ bool vc_useCryptominisat(
 {
 #ifdef USE_CRYPTOMINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
-  return 1;
+  return true;
 #else
-  return 0;
+  return false;
 #endif
 }
 
@@ -2194,16 +2194,16 @@ bool vc_isUsingCryptominisat(
 #ifdef USE_CRYPTOMINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
 #else
-  return 0;
+  return false;
 #endif
 }
 
 bool vc_supportsRiss(__attribute__((unused)) VC vc)
 {
 #ifdef USE_RISS
-  return 1;
+  return true;
 #else
-  return 0;
+  return false;
 #endif
 }
 
@@ -2215,9 +2215,9 @@ bool vc_useRiss(
 {
 #ifdef USE_RISS
   _vc_useSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
-  return 1;
+  return true;
 #else
-  return 0;
+  return false;
 #endif
 }
 
@@ -2230,7 +2230,7 @@ bool vc_isUsingRiss(
 #ifdef USE_RISS
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
 #else
-  return 0;
+  return false;
 #endif
 }
 
