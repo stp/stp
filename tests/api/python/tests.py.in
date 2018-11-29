@@ -48,6 +48,9 @@ def test0_bar(a, b):
 class TestSTP(unittest.TestCase):
     def setUp(self):
         self.s = stp.Solver()
+        self.stp_solvers = set(
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss"]
+        )
 
     def test_simple(self):
         s = self.s
@@ -285,8 +288,19 @@ class TestSTP(unittest.TestCase):
         #
         # We can use that as the condition for the assertion
         #
-        self.assertTrue(use_method() == supported)
-        self.assertTrue(is_using_method() == supported)
+        self.assertEqual(use_method(), supported)
+        self.assertEqual(is_using_method(), supported)
+
+        #
+        # When we're using a supported solver, then after calling `use_method`,
+        # all other solvers should not be in use
+        #
+        if supported:
+            for other_solver in self.stp_solvers - solver:
+                other_is_using_method = getattr(
+                    self.s, "isUsing{:s}".format(other_solver)
+                )
+                self.assertFalse(other_is_using_method())
 
     def test_minisat(self):
         """
