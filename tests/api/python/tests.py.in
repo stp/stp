@@ -264,78 +264,56 @@ class TestSTP(unittest.TestCase):
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
 
+    def _test_solver(self, solver, is_default_solver=False):
+        """
+        Helper method to validate that the passed in "solver" can be set and
+        used
+        """
+        supports_method = getattr(self.s, "supports{:s}".format(solver))
+        use_method = getattr(self.s, "use{:s}".format(solver))
+        is_using_method = getattr(self.s, "isUsing{:s}".format(solver))
+
+        supported = supports_method()
+
+        if is_default_solver:
+            self.assertTrue(supported)
+
+        #
+        # If the solver is supported, the "use" and "isUsing" methods should
+        # return true -- similarly, if the solver is not supported, then they
+        # both return false.
+        #
+        # We can use that as the condition for the assertion
+        #
+        self.assertTrue(use_method() == supported)
+        self.assertTrue(is_using_method() == supported)
+
     def test_minisat(self):
         """
         Checks that the underlying solver can be set to be minisat
         """
+        self._test_solver("Minisat", is_default_solver=True)
 
-        #
-        # Setting minisat should never fail
-        #
-        self.assertTrue(self.s.setMinisat())
-
-        #
-        # After calling set, the solver should be minisat
-        #
-        self.assertTrue(self.s.usingMinisat())
-
-    def test_simplifying_minisat(self):
+    def test_simplifyingminisat(self):
         """
-        Checks that the underlying solver can be set to be simplifying minisat
+        Checks that the underlying solver can be set to be simplifyingminisat
         """
-
-        #
-        # Setting simplifying minisat should never fail
-        #
-        self.assertTrue(self.s.setSimplifyingMinisat())
-
-        #
-        # After calling set, the solver should be simplifying minisat
-        #
-        self.assertTrue(self.s.usingSimplifyingMinisat())
+        self._test_solver("SimplifyingMinisat", is_default_solver=True)
 
     def test_cryptominisat(self):
         """
         Checks that the underlying solver can be set to be cryptominisat
         """
-
-        if self.s.supportsCryptoMinisat():
-            #
-            # Setting cryptominisat should never fail, if STP is built to support it
-            #
-            self.assertTrue(self.s.setCryptoMinisat())
-
-            #
-            # After calling set, the solver should be cryptominisat
-            #
-            self.assertTrue(self.s.usingCryptoMinisat())
-        else:
-            #
-            # If STP doesn't support cryptominisat, then setting should rerturn false
-            #
-            self.assertFalse(self.s.setCryptoMinisat())
+        self._test_solver("Cryptominisat", is_default_solver=False)
 
     def test_riss(self):
         """
         Checks that the underlying solver can be set to be riss
         """
-
-        if self.s.supportsRiss():
-            #
-            # Setting riss should never fail, if STP is built to support it
-            #
-            self.assertTrue(self.s.setRiss())
-
-            #
-            # After calling set, the solver should be riss
-            #
-            self.assertTrue(self.s.usingRiss())
-        else:
-            #
-            # If STP doesn't support riss, then setting should rerturn false
-            #
-            self.assertFalse(self.s.setRiss())
+        self._test_solver("Riss", is_default_solver=False)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
     unittest.TextTestRunner(verbosity=2).run(suite)
+
+# EOF

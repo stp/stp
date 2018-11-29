@@ -2095,7 +2095,7 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   return 1;
 }
 
-void _vc_setSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+void _vc_useSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 {
   /* Helper method to encapsulate setting a solver */
   stp::STP* stp_i = (stp::STP*)vc;
@@ -2103,7 +2103,7 @@ void _vc_setSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   b->UserFlags.solver_to_use = solver;
 }
 
-unsigned char _vc_usingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+unsigned char _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 {
   /* Helper method to encapsulate getting a solver */
   stp::STP* stp_i = (stp::STP*)vc;
@@ -2111,79 +2111,107 @@ unsigned char _vc_usingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   return b->UserFlags.solver_to_use == solver;
 }
 
-unsigned char vc_setMinisat(VC vc)
+unsigned char vc_supportsMinisat(__attribute__((unused)) VC vc)
 {
-  _vc_setSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
-  unsigned char success = 1;
-  return success;
+  return 1;
 }
 
-unsigned char vc_usingMinisat(VC vc)
+unsigned char vc_useMinisat(VC vc)
 {
-  return _vc_usingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+  _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+  return 1;
 }
 
-unsigned char vc_setSimplifyingMinisat(VC vc)
+unsigned char vc_isUsingMinisat(VC vc)
 {
-  _vc_setSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
-  unsigned char success = 1;
-  return success;
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
 }
 
-unsigned char vc_usingSimplifyingMinisat(VC vc)
+unsigned char vc_supportsSimplifyingMinisat(__attribute__((unused)) VC vc)
 {
-  return _vc_usingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+  return 1;
 }
 
-unsigned char vc_supportsCryptoMinisat(VC /* vc */)
+unsigned char vc_useSimplifyingMinisat(VC vc)
+{
+  _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+  return 1;
+}
+
+unsigned char vc_isUsingSimplifyingMinisat(VC vc)
+{
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+}
+
+unsigned char vc_supportsCryptominisat(__attribute__((unused)) VC vc)
 {
 #ifdef USE_CRYPTOMINISAT
-  unsigned char success = 1;
+  return 1;
 #else
-  unsigned char success = 0;
+  return 0;
 #endif
-  return success;
 }
 
-unsigned char vc_setCryptoMinisat(VC vc)
+unsigned char vc_useCryptominisat(
+#ifndef USE_CRYPTOMINISAT
+        __attribute__((unused))
+#endif
+        VC vc)
 {
 #ifdef USE_CRYPTOMINISAT
-  _vc_setSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
-  unsigned char success = 1;
+  _vc_useSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+  return 1;
 #else
-  unsigned char success = 0;
+  return 0;
 #endif
-  return success;
 }
 
-unsigned char vc_usingCryptoMinisat(VC vc)
+unsigned char vc_isUsingCryptominisat(
+#ifndef USE_CRYPTOMINISAT
+        __attribute__((unused))
+#endif
+        VC vc)
 {
-  return _vc_usingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+#ifdef USE_CRYPTOMINISAT
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+#else
+  return 0;
+#endif
 }
 
-unsigned char vc_supportsRiss(VC /* vc */)
+unsigned char vc_supportsRiss(__attribute__((unused)) VC vc)
 {
 #ifdef USE_RISS
-  unsigned char success = 1;
+  return 1;
 #else
-  unsigned char success = 0;
+  return 0;
 #endif
-  return success;
 }
 
-unsigned char vc_setRiss(VC vc)
+unsigned char vc_useRiss(
+#ifndef USE_RISS
+        __attribute__((unused))
+#endif
+        VC vc)
 {
 #ifdef USE_RISS
-  _vc_setSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
-  unsigned char success = 1;
+  _vc_useSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+  return 1;
 #else
-  unsigned char success = 0;
+  return 0;
 #endif
-  return success;
 }
 
-unsigned char vc_usingRiss(VC vc)
+unsigned char vc_isUsingRiss(
+#ifndef USE_RISS
+        __attribute__((unused))
+#endif
+        VC vc)
 {
-  return _vc_usingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+#ifdef USE_RISS
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+#else
+  return 0;
+#endif
 }
 

@@ -1136,33 +1136,47 @@ DLL_PUBLIC int getExprID(Expr ex);
 DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
                                Expr* outAsserts);
 
+//! \brief Checks if STP was compiled with support for minisat
+//!
+//!  Note: always returns true (future support for minisat being the
+//!  non-default)
+//!
+DLL_PUBLIC unsigned char vc_supportsMinisat(VC vc);
+
 //! \brief Sets underlying SAT solver to minisat
 //!
-DLL_PUBLIC unsigned char vc_setMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_useMinisat(VC vc);
 
 //! \brief Checks if underlying SAT solver is minisat
 //!
-DLL_PUBLIC unsigned char vc_usingMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_isUsingMinisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for simplifying minisat
+//!
+//!  Note: always returns true (future support for simplifying minisat being
+//!  the non-default)
+//!
+DLL_PUBLIC unsigned char vc_supportsSimplifyingMinisat(VC vc);
 
 //! \brief Sets underlying SAT solver to simplifying minisat
 //!
-DLL_PUBLIC unsigned char vc_setSimplifyingMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_useSimplifyingMinisat(VC vc);
 
 //! \brief Checks if underlying SAT solver is simplifying minisat
 //!
-DLL_PUBLIC unsigned char vc_usingSimplifyingMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_isUsingSimplifyingMinisat(VC vc);
 
 //! \brief Checks if STP was compiled with support for cryptominisat
 //!
-DLL_PUBLIC unsigned char vc_supportsCryptoMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_supportsCryptominisat(VC vc);
 
 //! \brief Sets underlying SAT solver to cryptominisat
 //!
-DLL_PUBLIC unsigned char vc_setCryptoMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_useCryptominisat(VC vc);
 
 //! \brief Checks if underlying SAT solver is cryptominisat
 //!
-DLL_PUBLIC unsigned char vc_usingCryptoMinisat(VC vc);
+DLL_PUBLIC unsigned char vc_isUsingCryptominisat(VC vc);
 
 //! \brief Checks if STP was compiled with support for riss
 //!
@@ -1170,11 +1184,11 @@ DLL_PUBLIC unsigned char vc_supportsRiss(VC vc);
 
 //! \brief Sets underlying SAT solver to riss
 //!
-DLL_PUBLIC unsigned char vc_setRiss(VC vc);
+DLL_PUBLIC unsigned char vc_useRiss(VC vc);
 
 //! \brief Checks if underlying SAT solver is riss
 //!
-DLL_PUBLIC unsigned char vc_usingRiss(VC vc);
+DLL_PUBLIC unsigned char vc_isUsingRiss(VC vc);
 
 
 #ifdef __cplusplus

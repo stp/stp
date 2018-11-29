@@ -63,16 +63,18 @@ _Type = c_void_p
 _WholeCounterExample = c_void_p
 
 _set_func('vc_createValidityChecker', _VC)
-_set_func('vc_setMinisat', c_ubyte, _VC)
-_set_func('vc_usingMinisat', c_ubyte, _VC)
-_set_func('vc_setSimplifyingMinisat', c_ubyte, _VC)
-_set_func('vc_usingSimplifyingMinisat', c_ubyte, _VC)
-_set_func('vc_supportsCryptoMinisat', c_ubyte, _VC)
-_set_func('vc_setCryptoMinisat', c_ubyte, _VC)
-_set_func('vc_usingCryptoMinisat', c_ubyte, _VC)
+_set_func('vc_supportsMinisat', c_ubyte, _VC)
+_set_func('vc_useMinisat', c_ubyte, _VC)
+_set_func('vc_isUsingMinisat', c_ubyte, _VC)
+_set_func('vc_supportsSimplifyingMinisat', c_ubyte, _VC)
+_set_func('vc_useSimplifyingMinisat', c_ubyte, _VC)
+_set_func('vc_isUsingSimplifyingMinisat', c_ubyte, _VC)
+_set_func('vc_supportsCryptominisat', c_ubyte, _VC)
+_set_func('vc_useCryptominisat', c_ubyte, _VC)
+_set_func('vc_isUsingCryptominisat', c_ubyte, _VC)
 _set_func('vc_supportsRiss', c_ubyte, _VC)
-_set_func('vc_setRiss', c_ubyte, _VC)
-_set_func('vc_usingRiss', c_ubyte, _VC)
+_set_func('vc_useRiss', c_ubyte, _VC)
+_set_func('vc_isUsingRiss', c_ubyte, _VC)
 _set_func('vc_boolType', _Type, _VC)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
@@ -213,35 +215,41 @@ class Solver(object):
     def __exit__(self, exc_type, exc_value, traceback):
         Solver.current = None
 
-    def setMinisat(self):
-        return _lib.vc_setMinisat(self.vc)
+    def supportsMinisat(self):
+        return _lib.vc_supportsMinisat(self.vc)
 
-    def usingMinisat(self):
-        return _lib.vc_usingMinisat(self.vc)
+    def useMinisat(self):
+        return _lib.vc_useMinisat(self.vc)
 
-    def setSimplifyingMinisat(self):
-        return _lib.vc_setSimplifyingMinisat(self.vc)
+    def isUsingMinisat(self):
+        return _lib.vc_isUsingMinisat(self.vc)
 
-    def usingSimplifyingMinisat(self):
-        return _lib.vc_usingSimplifyingMinisat(self.vc)
+    def supportsSimplifyingMinisat(self):
+        return _lib.vc_supportsSimplifyingMinisat(self.vc)
 
-    def supportsCryptoMinisat(self):
-        return _lib.vc_supportsCryptoMinisat(self.vc)
+    def useSimplifyingMinisat(self):
+        return _lib.vc_useSimplifyingMinisat(self.vc)
 
-    def setCryptoMinisat(self):
-        return _lib.vc_setCryptoMinisat(self.vc)
+    def isUsingSimplifyingMinisat(self):
+        return _lib.vc_isUsingSimplifyingMinisat(self.vc)
 
-    def usingCryptoMinisat(self):
-        return _lib.vc_usingCryptoMinisat(self.vc)
+    def supportsCryptominisat(self):
+        return _lib.vc_supportsCryptominisat(self.vc)
+
+    def useCryptominisat(self):
+        return _lib.vc_useCryptominisat(self.vc)
+
+    def isUsingCryptominisat(self):
+        return _lib.vc_isUsingCryptominisat(self.vc)
 
     def supportsRiss(self):
         return _lib.vc_supportsRiss(self.vc)
 
-    def setRiss(self):
-        return _lib.vc_setRiss(self.vc)
+    def useRiss(self):
+        return _lib.vc_useRiss(self.vc)
 
-    def usingRiss(self):
-        return _lib.vc_usingRiss(self.vc)
+    def isUsingRiss(self):
+        return _lib.vc_isUsingRiss(self.vc)
 
     def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""
