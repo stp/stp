@@ -2130,7 +2130,7 @@ bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   return b->UserFlags.solver_to_use == solver;
 }
 
-bool vc_supportsMinisat(__attribute__((unused)) VC vc)
+bool vc_supportsMinisat(VC vc __attribute__((unused)))
 {
   return true;
 }
@@ -2146,7 +2146,7 @@ bool vc_isUsingMinisat(VC vc)
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
 }
 
-bool vc_supportsSimplifyingMinisat(__attribute__((unused)) VC vc)
+bool vc_supportsSimplifyingMinisat(VC vc __attribute__((unused)))
 {
   return true;
 }
@@ -2162,7 +2162,7 @@ bool vc_isUsingSimplifyingMinisat(VC vc)
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
 }
 
-bool vc_supportsCryptominisat(__attribute__((unused)) VC vc)
+bool vc_supportsCryptominisat(VC vc __attribute__((unused)))
 {
 #ifdef USE_CRYPTOMINISAT
   return true;
@@ -2171,11 +2171,11 @@ bool vc_supportsCryptominisat(__attribute__((unused)) VC vc)
 #endif
 }
 
-bool vc_useCryptominisat(
+bool vc_useCryptominisat(VC vc
 #ifndef USE_CRYPTOMINISAT
-        __attribute__((unused))
+  __attribute__((unused))
 #endif
-        VC vc)
+)
 {
 #ifdef USE_CRYPTOMINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
@@ -2185,11 +2185,11 @@ bool vc_useCryptominisat(
 #endif
 }
 
-bool vc_isUsingCryptominisat(
+bool vc_isUsingCryptominisat(VC vc
 #ifndef USE_CRYPTOMINISAT
-        __attribute__((unused))
+  __attribute__((unused))
 #endif
-        VC vc)
+)
 {
 #ifdef USE_CRYPTOMINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
@@ -2198,7 +2198,7 @@ bool vc_isUsingCryptominisat(
 #endif
 }
 
-bool vc_supportsRiss(__attribute__((unused)) VC vc)
+bool vc_supportsRiss(VC vc __attribute__((unused)))
 {
 #ifdef USE_RISS
   return true;
@@ -2207,11 +2207,11 @@ bool vc_supportsRiss(__attribute__((unused)) VC vc)
 #endif
 }
 
-bool vc_useRiss(
+bool vc_useRiss(VC vc
 #ifndef USE_RISS
-        __attribute__((unused))
+  __attribute__((unused))
 #endif
-        VC vc)
+)
 {
 #ifdef USE_RISS
   _vc_useSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
@@ -2221,11 +2221,11 @@ bool vc_useRiss(
 #endif
 }
 
-bool vc_isUsingRiss(
+bool vc_isUsingRiss(VC vc
 #ifndef USE_RISS
-        __attribute__((unused))
+  __attribute__((unused))
 #endif
-        VC vc)
+)
 {
 #ifdef USE_RISS
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
