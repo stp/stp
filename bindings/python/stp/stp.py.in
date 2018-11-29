@@ -34,6 +34,7 @@ import sys
 
 __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
+    'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env'
 ]
 
 Py3 = sys.version_info >= (3, 0, 0)
@@ -62,6 +63,9 @@ _Expr = c_void_p
 _Type = c_void_p
 _WholeCounterExample = c_void_p
 
+_set_func('get_git_version_sha', c_char_p)
+_set_func('get_git_version_tag', c_char_p)
+_set_func('get_compilation_env', c_char_p)
 _set_func('vc_createValidityChecker', _VC)
 _set_func('vc_supportsMinisat', c_bool, _VC)
 _set_func('vc_useMinisat', c_bool, _VC)
@@ -742,3 +746,14 @@ def check(*args, **kwargs):
 
 def model(*args, **kwargs):
     return Solver.current.model(*args, **kwargs)
+
+def get_git_version_sha():
+    return _lib.get_git_version_sha()
+
+def get_git_version_tag():
+    return _lib.get_git_version_tag()
+
+def get_compilation_env():
+    return _lib.get_compilation_env()
+
+# EOF

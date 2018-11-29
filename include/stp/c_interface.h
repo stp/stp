@@ -88,6 +88,18 @@ typedef void* WholeCounterExample;
 /// START API
 /////////////////////////////////////////////////////////////////////////////
 
+//! \brief Returns the C string for the git sha of STP
+//!
+DLL_PUBLIC const char* get_git_version_sha(void);
+
+//! \brief Returns the C string for the git tag of STP
+//!
+DLL_PUBLIC const char* get_git_version_tag(void);
+
+//! \brief Returns the C string for the compilation env of STP
+//!
+DLL_PUBLIC const char* get_compilation_env(void);
+
 //! \brief Processes the given flag represented as char for the given validity checker.
 //!
 //! The following flags are supported:

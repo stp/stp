@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
+#include "stp/Util/GitSHA1.h"
 // FIXME: External library
 #include "extlib-abc/cnf_short.h"
 
@@ -44,6 +45,24 @@ using std::endl;
 // GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
 extern int smtparse(void*);
+
+/* wraps get_git_version_sha in stp namespace */
+const char* get_git_version_sha(void)
+{
+  return stp::get_git_version_sha();
+}
+
+/* wraps get_git_version_tag in stp namespace */
+const char* get_git_version_tag(void)
+{
+  return stp::get_git_version_tag();
+}
+
+/* wraps get_compilation_env in stp namespace */
+const char* get_compilation_env(void)
+{
+  return stp::get_compilation_env();
+}
 
 // TODO remove this, it's really ugly
 void vc_setFlags(VC vc, char c, int /*param_value*/)

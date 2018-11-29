@@ -312,6 +312,24 @@ class TestSTP(unittest.TestCase):
         """
         self._test_solver("Riss", is_default_solver=False)
 
+    def test_git_version_sha(self):
+        """
+        Test verifies that the returned git sha is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_sha()), 0)
+
+    def test_git_version_tag(self):
+        """
+        Test verifies that the returned git tag is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_tag()), 0)
+
+    def test_compilation_env(self):
+        """
+        Test verifies that the returned compilation env is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_compilation_env()), 0)
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
     unittest.TextTestRunner(verbosity=2).run(suite)
