@@ -41,5 +41,3 @@ PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"] + [
     os.path.join(directory, "@LIBSTP_FILENAME@")
     for directory in os.environ.get(path_var, "").split(os.pathsep)
 ]
-
-# EOF
