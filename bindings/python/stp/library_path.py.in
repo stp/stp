@@ -29,10 +29,13 @@
 # Search paths for the stp shared library
 
 import os
+import sys
 
-PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"] + [
-    os.path.join(directory, "@LIBSTP_FILENAME@")
-    for directory in os.environ["PYTHONPATH"].split(os.pathsep)
+path_var = 'PATH' if sys.platform in ('win32', 'cygwin') else 'DYLD_LIBRARY_PATH' if sys.platform == 'darwin' else 'LD_LIBRARY_PATH'
+
+PATHS = ['@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@'] + [
+    os.path.join(directory, '@LIBSTP_FILENAME@')
+    for directory in os.environ.get(path_var, '').split(os.pathsep)
 ]
 
 # EOF
