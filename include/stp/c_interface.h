@@ -35,6 +35,8 @@ THE SOFTWARE.
 extern "C" {
 #endif
 
+#include <stdbool.h>
+
 /////////////////////////////////////////////////////////////////////////////
 /// STP API INTERNAL MACROS FOR LINKING
 ///
@@ -1147,6 +1149,61 @@ DLL_PUBLIC int getExprID(Expr ex);
 //!
 DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
                                Expr* outAsserts);
+
+//! \brief Checks if STP was compiled with support for minisat
+//!
+//!  Note: always returns true (future support for minisat being the
+//!  non-default)
+//!
+DLL_PUBLIC bool vc_supportsMinisat(VC vc);
+
+//! \brief Sets underlying SAT solver to minisat
+//!
+DLL_PUBLIC bool vc_useMinisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is minisat
+//!
+DLL_PUBLIC bool vc_isUsingMinisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for simplifying minisat
+//!
+//!  Note: always returns true (future support for simplifying minisat being
+//!  the non-default)
+//!
+DLL_PUBLIC bool vc_supportsSimplifyingMinisat(VC vc);
+
+//! \brief Sets underlying SAT solver to simplifying minisat
+//!
+DLL_PUBLIC bool vc_useSimplifyingMinisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is simplifying minisat
+//!
+DLL_PUBLIC bool vc_isUsingSimplifyingMinisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for cryptominisat
+//!
+DLL_PUBLIC bool vc_supportsCryptominisat(VC vc);
+
+//! \brief Sets underlying SAT solver to cryptominisat
+//!
+DLL_PUBLIC bool vc_useCryptominisat(VC vc);
+
+//! \brief Checks if underlying SAT solver is cryptominisat
+//!
+DLL_PUBLIC bool vc_isUsingCryptominisat(VC vc);
+
+//! \brief Checks if STP was compiled with support for riss
+//!
+DLL_PUBLIC bool vc_supportsRiss(VC vc);
+
+//! \brief Sets underlying SAT solver to riss
+//!
+DLL_PUBLIC bool vc_useRiss(VC vc);
+
+//! \brief Checks if underlying SAT solver is riss
+//!
+DLL_PUBLIC bool vc_isUsingRiss(VC vc);
+
 
 #ifdef __cplusplus
 }

@@ -48,6 +48,9 @@ def test0_bar(a, b):
 class TestSTP(unittest.TestCase):
     def setUp(self):
         self.s = stp.Solver()
+        self.stp_solvers = set(
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss"]
+        )
 
     def test_simple(self):
         s = self.s
@@ -264,6 +267,65 @@ class TestSTP(unittest.TestCase):
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
 
+    def _test_solver(self, solver, is_default_solver=False):
+        """
+        Helper method to validate that the passed in "solver" can be set and
+        used
+        """
+        supports_method = getattr(self.s, "supports{:s}".format(solver))
+        use_method = getattr(self.s, "use{:s}".format(solver))
+        is_using_method = getattr(self.s, "isUsing{:s}".format(solver))
+
+        supported = supports_method()
+
+        if is_default_solver:
+            self.assertTrue(supported)
+
+        #
+        # If the solver is supported, the "use" and "isUsing" methods should
+        # return true -- similarly, if the solver is not supported, then they
+        # both return false.
+        #
+        # We can use that as the condition for the assertion
+        #
+        self.assertEqual(use_method(), supported)
+        self.assertEqual(is_using_method(), supported)
+
+        #
+        # When we're using a supported solver, then after calling `use_method`,
+        # all other solvers should not be in use
+        #
+        if supported:
+            for other_solver in self.stp_solvers - solver:
+                other_is_using_method = getattr(
+                    self.s, "isUsing{:s}".format(other_solver)
+                )
+                self.assertFalse(other_is_using_method())
+
+    def test_minisat(self):
+        """
+        Checks that the underlying solver can be set to be minisat
+        """
+        self._test_solver("Minisat", is_default_solver=True)
+
+    def test_simplifyingminisat(self):
+        """
+        Checks that the underlying solver can be set to be simplifyingminisat
+        """
+        self._test_solver("SimplifyingMinisat", is_default_solver=True)
+
+    def test_cryptominisat(self):
+        """
+        Checks that the underlying solver can be set to be cryptominisat
+        """
+        self._test_solver("Cryptominisat", is_default_solver=False)
+
+    def test_riss(self):
+        """
+        Checks that the underlying solver can be set to be riss
+        """
+        self._test_solver("Riss", is_default_solver=False)
+
     def test_git_version_sha(self):
         """
         Test verifies that the returned git sha is of non-zero length
@@ -281,7 +343,6 @@ class TestSTP(unittest.TestCase):
         Test verifies that the returned compilation env is of non-zero length
         """
         self.assertNotEqual(len(stp.get_compilation_env()), 0)
-
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)

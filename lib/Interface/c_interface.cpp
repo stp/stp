@@ -2113,3 +2113,124 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   }
   return 1;
 }
+
+void _vc_useSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+{
+  /* Helper method to encapsulate setting a solver */
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  b->UserFlags.solver_to_use = solver;
+}
+
+bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
+{
+  /* Helper method to encapsulate getting a solver */
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  return b->UserFlags.solver_to_use == solver;
+}
+
+bool vc_supportsMinisat(VC vc __attribute__((unused)))
+{
+  return true;
+}
+
+bool vc_useMinisat(VC vc)
+{
+  _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+  return true;
+}
+
+bool vc_isUsingMinisat(VC vc)
+{
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+}
+
+bool vc_supportsSimplifyingMinisat(VC vc __attribute__((unused)))
+{
+  return true;
+}
+
+bool vc_useSimplifyingMinisat(VC vc)
+{
+  _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+  return true;
+}
+
+bool vc_isUsingSimplifyingMinisat(VC vc)
+{
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+}
+
+bool vc_supportsCryptominisat(VC vc __attribute__((unused)))
+{
+#ifdef USE_CRYPTOMINISAT
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useCryptominisat(VC vc
+#ifndef USE_CRYPTOMINISAT
+  __attribute__((unused))
+#endif
+)
+{
+#ifdef USE_CRYPTOMINISAT
+  _vc_useSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingCryptominisat(VC vc
+#ifndef USE_CRYPTOMINISAT
+  __attribute__((unused))
+#endif
+)
+{
+#ifdef USE_CRYPTOMINISAT
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+#else
+  return false;
+#endif
+}
+
+bool vc_supportsRiss(VC vc __attribute__((unused)))
+{
+#ifdef USE_RISS
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useRiss(VC vc
+#ifndef USE_RISS
+  __attribute__((unused))
+#endif
+)
+{
+#ifdef USE_RISS
+  _vc_useSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingRiss(VC vc
+#ifndef USE_RISS
+  __attribute__((unused))
+#endif
+)
+{
+#ifdef USE_RISS
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+#else
+  return false;
+#endif
+}
+
