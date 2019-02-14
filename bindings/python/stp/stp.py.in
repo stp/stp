@@ -275,6 +275,13 @@ class Solver(object):
         expr = _lib.vc_bvConstExprFromLL(self.vc, width, value)
         return Expr(self, width, expr)
 
+    def bitvecvalD(self, width, value):
+        """Creates a new BitVector with a constant value."""
+        value_conv = bytes(value, 'utf8') if Py3 else value
+     
+        expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
+        return Expr(self, width, expr)
+
     def true(self):
         """Creates a True boolean."""
         return Expr(self, None, _lib.vc_trueExpr(self.vc))

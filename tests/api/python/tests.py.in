@@ -52,6 +52,15 @@ class TestSTP(unittest.TestCase):
             ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss"]
         )
 
+    def test_long(self):
+        s = self.s
+        a = s.bitvec('a', 256)
+        b = s.bitvec('b', 256)
+        c = s.bitvecvalD(256, "1337")
+        d = s.bitvecvalD(256, "42")
+        self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
+        self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
+
     def test_simple(self):
         s = self.s
         a = s.bitvec('a', 32)
