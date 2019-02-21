@@ -29,6 +29,7 @@ environment:
     PYTHON_ARCH: "x86"
     PYTHON_VERSION: "2.7.13"
     BUILD_TYPE: Release
+    APPVEYOR_SAVE_CACHE_ON_ERROR: false
     BOOST_OPTIONS: link=static runtime-link=static
 
     # WarningLevel of 1 is ONLY SEVERE warnings, nothing else. See
