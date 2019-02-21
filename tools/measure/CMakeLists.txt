@@ -23,5 +23,5 @@ add_executable(measure
  Functions.cpp
 )
 target_link_libraries(measure
- libstp
+ stp
 )

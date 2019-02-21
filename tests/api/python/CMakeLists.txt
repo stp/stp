@@ -24,7 +24,7 @@ configure_file(${CMAKE_CURRENT_BINARY_DIR}/tests.py.in.g
               ${CMAKE_CURRENT_BINARY_DIR}/tests.py)
 
 add_custom_target(python-interface-tests
-                  DEPENDS libstp
+                  DEPENDS stp
                   COMMAND ${PYTHON_EXECUTABLE}
                           ${CMAKE_CURRENT_BINARY_DIR}/tests.py
                   COMMENT "Running python-interface-tests"

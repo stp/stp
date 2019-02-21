@@ -28,5 +28,5 @@
  )
 
 target_link_libraries(stp_constantbitprop
-    libstp
+    stp
 )

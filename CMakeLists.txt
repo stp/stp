@@ -630,7 +630,7 @@ set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
 set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
-export(TARGETS libstp
+export(TARGETS stp
     FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file

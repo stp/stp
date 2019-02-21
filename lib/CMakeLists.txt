@@ -69,7 +69,7 @@ foreach(target ${stp_lib_targets})
     get_target_property(TARGETS_PUBLIC_HEADERS ${target} PUBLIC_HEADER)
     if (EXISTS "${TARGETS_PUBLIC_HEADERS}")
         list(APPEND stp_public_headers "${TARGETS_PUBLIC_HEADERS}")
-        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target libstp")
+        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target stp")
     endif()
 endforeach()
 
@@ -84,12 +84,12 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
     list(APPEND stp_lib_objects ${XCODE_DUMMY_FILE})
 endif()
 
-add_library(libstp
+add_library(stp
     ${stp_lib_objects}
 )
 
 # Set the public header so it will be installed
-set_target_properties(libstp PROPERTIES
+set_target_properties(stp PROPERTIES
     OUTPUT_NAME stp
     PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
@@ -100,40 +100,40 @@ set_target_properties(libstp PROPERTIES
 # -----------------------------------------------------------------------------
 # On non-windows systems a built static library cannot have another static
 # library linked to it. So this does not cause the Boost libraries to be
-# added to ``libstp.a``. Instead what this does is tell CMake that anything
-# that we built that uses the ``libstp`` target should also link in these
+# added to ``stp.a``. Instead what this does is tell CMake that anything
+# that we built that uses the ``stp`` target should also link in these
 # Boost libraries.
 #
-# So the stp executable and any clients of libstp that use the exported CMake
+# So the stp executable and any clients of stp that use the exported CMake
 # targets (e.g. examples/simple) will know what to link in.
 #
-# Clients of libstp that don't use CMake will have to link the Boost libraries
+# Clients of stp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-set(libstp_link_libs ${Boost_LIBRARIES} ${MINISAT_LIBRARIES})
+set(stp_link_libs ${Boost_LIBRARIES} ${MINISAT_LIBRARIES})
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
-      set(libstp_link_libs
-        ${libstp_link_libs}
+      set(stp_link_libs
+        ${stp_link_libs}
         ${CRYPTOMINISAT5_STATIC_LIBRARIES}
         ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS})
     else()
-      set(libstp_link_libs
-        ${libstp_link_libs}
+      set(stp_link_libs
+        ${stp_link_libs}
         ${CRYPTOMINISAT5_LIBRARIES})
     endif()
 endif()
 
 if (USE_RISS)
-    set(libstp_link_libs
-        ${libstp_link_libs} -lriss -lcoprocessor)
+    set(stp_link_libs
+        ${stp_link_libs} -lriss -lcoprocessor)
 endif()
 
-target_link_libraries(libstp
-    LINK_PUBLIC ${libstp_link_libs}
+target_link_libraries(stp
+    LINK_PUBLIC ${stp_link_libs}
 )
 
-install(TARGETS libstp
+install(TARGETS stp
     EXPORT ${STP_EXPORT_NAME}
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"

@@ -23,5 +23,5 @@ add_executable(test_constantbitprop
  ../measure/Functions.cpp
 )
 target_link_libraries(test_constantbitprop
- libstp
+ stp
 )

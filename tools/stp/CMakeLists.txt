@@ -36,7 +36,7 @@ if (Boost_FOUND)
     )
 
     target_link_libraries(stp-bin
-        libstp
+        stp
     )
 
     install(TARGETS stp-bin

@@ -46,7 +46,7 @@ function(AddSTPGTest sourcefile)
     endif()
 
     target_link_libraries(${testname}
-        libstp ${GTEST_BOTH_LIBRARIES}
+        stp ${GTEST_BOTH_LIBRARIES}
     )
 
     # Add dependency so that building the testsuite

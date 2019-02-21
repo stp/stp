@@ -34,7 +34,7 @@ set_target_properties(stp_simple-bin PROPERTIES
 )
 
 target_link_libraries(stp_simple-bin
-    libstp
+    stp
 )
 
 install(TARGETS stp_simple-bin

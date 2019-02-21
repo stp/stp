@@ -53,4 +53,4 @@ message("Full path to STP binary is ${STP_FULL_PATH}")
 # -----------------------------------------------------------------------------
 include_directories(${STP_INCLUDE_DIRS})
 add_executable(stp-example example.c)
-target_link_libraries(stp-example libstp)
+target_link_libraries(stp-example stp)

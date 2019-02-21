@@ -25,10 +25,10 @@
 # The binary path isn't known until the build process starts
 # (e.g. when building with MSBuild), so generate the file lately.)
 
-# get_property(STP_LIB_LOCATION TARGET libstp PROPERTY LOCATION)
+# get_property(STP_LIB_LOCATION TARGET stp PROPERTY LOCATION)
 # file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
 
-get_target_property(LIBSTP_BASENAME libstp OUTPUT_NAME)
+get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
 set(LIBSTP_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}${LIBSTP_BASENAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
                ${CMAKE_CURRENT_BINARY_DIR}/library_path.py @ONLY)
