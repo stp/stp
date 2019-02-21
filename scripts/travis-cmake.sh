@@ -117,7 +117,7 @@ case $STP_CONFIG in
          mkdir -p build
          cd build
          cmake .. -DDRATPROOF=OFF -DCMAKE_BUILD_TYPE=Release
-         make riss-core riss-coprocessor-lib-static -j 2
+         make -j2 riss-core riss-coprocessor-lib-static VERBOSE=1
          popd
 
          cmake ${COMMON_CMAKE_ARGS} \
