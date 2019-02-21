@@ -56,8 +56,8 @@ RUN make install
 # set up for running
 # set up for running
 FROM alpine:latest
-COPY --from=builder /usr/local/bin/stp-2.1.2 /usr/local/bin/
-ENTRYPOINT ["/usr/local/bin/stp-2.1.2", "--SMTLIB2"]
+COPY --from=builder /usr/local/bin/stp-* /usr/local/bin/stp
+ENTRYPOINT ["/usr/local/bin/stp", "--SMTLIB2"]
 
 # --------------------
 # HOW TO USE
