@@ -26,11 +26,14 @@ set(CMAKE_CXX_STANDARD 11)
 include (GenerateExportHeader)
 include(GNUInstallDirs)
 
-if(NOT (CMAKE_MAJOR_VERSION LESS 2))
-    if(POLICY CMP0048)
-        #policy for VERSION in cmake 3.0
-        cmake_policy(SET CMP0048 NEW)
-    endif()
+if(POLICY CMP0048)
+    #policy for VERSION in cmake 3.0
+    cmake_policy(SET CMP0048 NEW)
+endif()
+
+if(POLICY CMP0074)
+    #policy for <PackageName>_ROOT variables
+    cmake_policy(SET CMP0074 NEW)
 endif()
 
 # Search paths for custom CMake modules
