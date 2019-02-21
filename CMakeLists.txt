@@ -134,8 +134,11 @@ if (STATICCOMPILE)
     set(ENABLE_PYTHON_INTERFACE OFF)
 endif()
 
-if (STATICCOMPILE)
-    set(BOOST_USE_STATIC_LIBS ON)
+if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (NOT BUILD_SHARED_LIBS))
+    set(Boost_USE_STATIC_LIBS ON)
+endif()
+
+if (NOT BUILD_SHARED_LIBS)
     if (NOT MSVC)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
