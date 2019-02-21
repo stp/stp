@@ -18,10 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# if(STATICCOMPILE)
-#   set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
-# endif()
-
 add_executable(time_constantbitprop
  time_cbitp.cpp
 )

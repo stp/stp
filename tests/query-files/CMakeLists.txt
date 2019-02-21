@@ -19,9 +19,9 @@
 # THE SOFTWARE.
 
 if (Boost_FOUND)
-    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp>")
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp-bin>")
 else()
-    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple>")
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple-bin>")
 endif()
 
 # Create llvm-lit configuration file

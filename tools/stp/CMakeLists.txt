@@ -23,26 +23,23 @@
 # -----------------------------------------------------------------------------
 if (Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIR})
-    add_executable(stp
+    add_executable(stp-bin
         main.cpp
         main_common.cpp
     )
 
-    if (STATICCOMPILE)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_START_STATIC 1)
-    endif()
-
-    set_target_properties(stp PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-      VERSION "${PROJECT_VERSION}"
+    set_target_properties(stp-bin PROPERTIES
+        OUTPUT_NAME stp
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+        VERSION "${PROJECT_VERSION}"
     )
-    if (STATICCOMPILE)
-        set_target_properties(stp PROPERTIES LINK_SEARCH_END_STATIC 1)
-    endif()
 
-    target_link_libraries(stp libstp)
-    install(TARGETS stp
-        EXPORT ${STP_EXPORT_NAME}
+    target_link_libraries(stp-bin
+        libstp
+    )
+
+    install(TARGETS stp-bin
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 endif()

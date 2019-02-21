@@ -74,7 +74,7 @@ foreach(target ${stp_lib_targets})
 endforeach()
 
 if(CMAKE_GENERATOR STREQUAL Xcode)
-    # Code has a serious bug where the XCode project produces an invalid target that will not get
+    # XCode has a serious bug where the XCode project produces an invalid target that will not get
     # linked if it consists only of objects from object libraries, it will not generate any
     # products (executables, libraries). The only work around is to add a dummy source
     # file to the library definition. This is an XCode, not a CMake bug.
@@ -84,15 +84,9 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
     list(APPEND stp_lib_objects ${XCODE_DUMMY_FILE})
 endif()
 
-if (STATICCOMPILE)
-    add_library(libstp STATIC
-        ${stp_lib_objects}
-    )
-else()
-    add_library(libstp SHARED
-        ${stp_lib_objects}
-    )
-endif()
+add_library(libstp
+    ${stp_lib_objects}
+)
 
 # Set the public header so it will be installed
 set_target_properties(libstp PROPERTIES
@@ -131,14 +125,8 @@ if (USE_CRYPTOMINISAT)
 endif()
 
 if (USE_RISS)
-    if (STATICCOMPILE)
-        set(libstp_link_libs
-          ${libstp_link_libs} -lriss-coprocessor -lpthread)
-    else()
-      set(libstp_link_libs
-        ${libstp_link_libs}
-        -lriss -lcoprocessor)
-    endif()
+    set(libstp_link_libs
+        ${libstp_link_libs} -lriss -lcoprocessor)
 endif()
 
 target_link_libraries(libstp

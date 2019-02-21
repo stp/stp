@@ -19,9 +19,11 @@
 # THE SOFTWARE.
 
 project(STP)
-cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 11)
+
+include (GenerateExportHeader)
 include(GNUInstallDirs)
 
 if(NOT (CMAKE_MAJOR_VERSION LESS 2))
@@ -122,8 +124,15 @@ endif()
 # -----------------------------------------------------------------------------
 option(STATICCOMPILE "Compile static library and executable" OFF)
 
+option(BUILD_SHARED_LIBS "Build the shared library" ON)
+option(STATICCOMPILE "Compile to static executable" OFF)
 if (STATICCOMPILE)
-    set(Boost_USE_STATIC_LIBS ON)
+    set(BUILD_SHARED_LIBS OFF)
+    set(ENABLE_PYTHON_INTERFACE OFF)
+endif()
+
+if (STATICCOMPILE)
+    set(BOOST_USE_STATIC_LIBS ON)
     if (NOT MSVC)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static ")
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
@@ -153,7 +162,6 @@ else ()
     # which point to directories outside the build tree to the install RPATH
     SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-
     # the RPATH to be used when installing, but only if it's not a system directory
     LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_LIBDIR}" isSystemDir)
     IF("${isSystemDir}" STREQUAL "-1")
@@ -168,7 +176,7 @@ else ()
 endif()
 
 if (MSVC AND NOT STATICCOMPILE)
-    add_definitions(-D STP_SHARED_LIB) # Used for symbol visibilty control
+    add_definitions(-DSTP_SHARED_LIB) # Used for symbol visibilty control
 endif()
 
 # -----------------------------------------------------------------------------
@@ -208,7 +216,7 @@ if (NOT MSVC)
     #if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         # almost working
-        add_cxx_flag_if_supported("-fvisibility=hidden")
+        # add_cxx_flag_if_supported("-fvisibility=hidden")
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
     add_cxx_flag_if_supported("-Wpointer-arith")
@@ -217,7 +225,7 @@ if (NOT MSVC)
     add_cxx_flag_if_supported("-Wparentheses")
     add_cxx_flag_if_supported("-Wunreachable-code")
     add_cxx_flag_if_supported("-ggdb3")
-    add_cxx_flag("-fPIC")
+    add_compile_options("-fPIC")
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
 endif()
 
@@ -388,13 +396,13 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         if (NOT ONLY_SIMPLE)
             ADD_CUSTOM_TARGET(man_stp
                 ALL
-                DEPENDS stp
+                DEPENDS stp-bin
             )
 
             ADD_CUSTOM_COMMAND(
                 TARGET man_stp
                 COMMAND help2man
-                ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+                ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
             )
 
             INSTALL(
@@ -570,6 +578,12 @@ if(ENABLE_TESTING AND NOT PYTHON_EXECUTABLE)
 endif()
 
 if(ENABLE_TESTING)
+    if (STATICCOMPILE)
+        set(ENABLE_TESTING OFF)
+    endif()
+endif()
+
+if(ENABLE_TESTING)
   enable_testing()
   message(STATUS "Testing is enabled")
   set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
@@ -590,11 +604,7 @@ set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
 set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
-# Export targets
-if (Boost_FOUND)
-    set(EXTRA_EXPORT_TARGETS stp)
-endif()
-export(TARGETS stp_simple libstp ${EXTRA_EXPORT_TARGETS}
+export(TARGETS libstp
     FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file

@@ -21,22 +21,22 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-add_executable(stp_simple
+add_executable(stp_simple-bin
     main_simple.cpp
     ../stp/main_common.cpp
 )
 
-if (STATICCOMPILE)
-    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_START_STATIC 1)
-endif()
-set_target_properties(stp_simple PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-if (STATICCOMPILE)
-    set_target_properties(stp_simple PROPERTIES LINK_SEARCH_END_STATIC 1)
-endif()
-target_link_libraries(stp_simple libstp)
+set_target_properties(stp_simple-bin PROPERTIES
+    OUTPUT_NAME stp_simple
+    RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+    VERSION "${PROJECT_VERSION}"
+)
 
-install(TARGETS stp_simple
-        EXPORT ${STP_EXPORT_NAME}
+target_link_libraries(stp_simple-bin
+    libstp
+)
+
+install(TARGETS stp_simple-bin
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

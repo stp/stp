@@ -37,9 +37,6 @@ function(AddSTPGTest sourcefile)
     set(testname "${testname}${UNIT_TEST_EXE_SUFFIX}")
 
     add_executable(${testname} ${sourcefile})
-    if (STATICCOMPILE)
-        SET_TARGET_PROPERTIES(${testname} PROPERTIES LINK_SEARCH_START_STATIC 1)
-    endif()
 
     # Add define flags requested by users
     list(LENGTH ARGN LEN_ARGN)
@@ -48,10 +45,9 @@ function(AddSTPGTest sourcefile)
         #message(STATUS "Added flags to test ${testname} ${ARGN}")
     endif()
 
-    target_link_libraries(${testname} libstp ${GTEST_BOTH_LIBRARIES})
-    if (STATICCOMPILE)
-        SET_TARGET_PROPERTIES(${testname} PROPERTIES LINK_SEARCH_END_STATIC 1)
-    endif()
+    target_link_libraries(${testname}
+        libstp ${GTEST_BOTH_LIBRARIES}
+    )
 
     # Add dependency so that building the testsuite
     # will cause this test (testname) to be built
