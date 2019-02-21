@@ -175,6 +175,23 @@ else ()
     endif()
 endif()
 
+if (NOT MSVC)
+    add_compile_options( -g)
+    add_compile_options( -pthread )
+
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:-O2>")
+
+    add_compile_options("$<$<CONFIG:RELEASE>:-O2>")
+    add_compile_options("$<$<CONFIG:RELEASE>:-g0>")
+
+    add_compile_options("$<$<CONFIG:DEBUG>:-O0>")
+
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -O2")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O2")
+    endif()
+endif()
+
 if (MSVC AND NOT STATICCOMPILE)
     add_definitions(-DSTP_SHARED_LIB) # Used for symbol visibilty control
 endif()
@@ -224,7 +241,6 @@ if (NOT MSVC)
     add_cxx_flag_if_supported("-Winit-self")
     add_cxx_flag_if_supported("-Wparentheses")
     add_cxx_flag_if_supported("-Wunreachable-code")
-    add_cxx_flag_if_supported("-ggdb3")
     add_compile_options("-fPIC")
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
 endif()
@@ -251,34 +267,41 @@ if(WIN32)
   set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
 
   if(MSVC)
-      # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
-      # /ZI = include debug info
-      # /Oy omit frame pointers
-      # /Wall = all warnings
-      # /GL whole program optimisation
-      SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ox /ZI")
-      SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O3 /D NDEBUG /ZI")
-      SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Od")
+    # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
+    # /Oy omit frame pointers
+    # /Wall = all warnings
+    # /GL whole program optimisation
 
-      #don't give too many warnings
-      add_compile_options(/W1)
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/O2>")
+    # /ZI = include debug info
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
 
-      # buffers security check
-      add_compile_options(/GS)
+    add_compile_options("$<$<CONFIG:RELEASE>:/O2>")
+    add_compile_options("$<$<CONFIG:RELEASE>:/D>")
+    add_compile_options("$<$<CONFIG:RELEASE>:/NDEBUG>")
 
-      set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-      set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
-      include_directories(${STP_INCL_COMM})
-      add_subdirectory(windows)
-      set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
-      set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    add_compile_options("$<$<CONFIG:DEBUG>:/Od>")
 
-      # stack size of MSVC must be specified
-      string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:512000000")
+    #don't give too many warnings
+    add_compile_options(/W1)
 
-      # inline is not a keyword in visual studios old C version, allow its redefinition
-      add_definitions("-D_ALLOW_KEYWORD_MACROS")
+    # buffers security check
+    add_compile_options(/GS)
+
+    set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
+    set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
+
+    include_directories(${STP_INCL_COMM})
+    add_subdirectory(windows)
+    set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+
+    # stack size of MSVC must be specified
+    string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:512000000")
+
+    # inline is not a keyword in visual studios old C version, allow its redefinition
+    add_definitions("-D_ALLOW_KEYWORD_MACROS")
   endif()
   add_definitions(${STP_DEFS_COMM})
 endif()
