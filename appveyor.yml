@@ -14,7 +14,7 @@ init:
   - git config --global core.autocrlf input
 
 # clone directory
-clone_folder: c:\projects\stp
+clone_folder: C:\projects\stp
 
 platform:
   - x64
@@ -29,8 +29,7 @@ environment:
     PYTHON_ARCH: "x86"
     PYTHON_VERSION: "2.7.13"
     BUILD_TYPE: Release
-    APPVEYOR_SAVE_CACHE_ON_ERROR: false
-    BOOST_OPTIONS: runtime-link=static  link=static
+    BOOST_OPTIONS: link=static runtime-link=static
 
     # WarningLevel of 1 is ONLY SEVERE warnings, nothing else. See
     # https://stackoverflow.com/questions/1023858/how-to-suppress-specific-msbuild-warning
@@ -71,7 +70,7 @@ before_build:
   # - set PATH=%PATH%;%cd%\Release\bin
 
   # boost
-  - cd c:\projects\stp
+  - cd C:\projects\stp
   - mkdir boost_1_59_0_install
   - ps: . .\scripts\appveyor.ps1
   - cd boost_1_59_0
@@ -126,17 +125,13 @@ before_build:
   - mkdir ..\stp.build
   - cd ..\stp.build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DBOOST_ROOT=%BOOST_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 ..\stp
+  - cmake -G %CMAKE_GENERATOR% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 -DBoost_DEBUG=1 -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBOOST_ROOT=%BOOST_ROOT% ..
   - ls
 
 
-build:
-  project: ..\stp.build\INSTALL.vcxproj
-  parallel: true
-  verbosity: minimal
+build_script:
+  - cmake --build . --config Release
 
-
-# scripts to run after build
 after_build:
   - call "C:\Program Files\stp\bin\stp.exe" --help
   - 7z a c:\projects\stp\stp.zip %APPVEYOR_BUILD_FOLDER%\..\stp.build -tzip
@@ -145,9 +140,5 @@ after_build:
 artifacts:
   - path: stp.zip
     name: stp.zip
-
-deploy_script:
-  #- cd c:\projects\stp
-  #- curl -T stp.zip --user %ACCOUNT% https://someplace/
 
 test: off
