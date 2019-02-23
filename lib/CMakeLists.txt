@@ -126,7 +126,7 @@ endif()
 
 if (USE_RISS)
     set(stp_link_libs
-        ${stp_link_libs} -lcoprocessor -lriss)
+        ${stp_link_libs} -lriss-coprocessor)
 endif()
 
 target_link_libraries(stp
