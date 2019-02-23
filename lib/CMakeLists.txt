@@ -110,7 +110,8 @@ set_target_properties(stp PROPERTIES
 # Clients of stp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-set(stp_link_libs ${Boost_LIBRARIES} ${MINISAT_LIBRARIES})
+set(stp_link_libs ${MINISAT_LIBRARIES})
+
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
       set(stp_link_libs

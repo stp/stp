@@ -37,6 +37,7 @@ if (Boost_FOUND)
 
     target_link_libraries(stp-bin
         stp
+        "${Boost_LIBRARIES}"
     )
 
     install(TARGETS stp-bin
