@@ -21,7 +21,7 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-if (Boost_FOUND)
+if (NOT ONLY_SIMPLE)
     include_directories(${Boost_INCLUDE_DIR})
     add_executable(stp-bin
         main.cpp

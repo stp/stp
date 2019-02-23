@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-if (Boost_FOUND)
+if (NOT ONLY_SIMPLE)
     set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp-bin>")
 else()
     set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple-bin>")
@@ -29,15 +29,7 @@ configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
 file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg
               INPUT ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.g)
 
-
-if (Boost_FOUND)
-  add_test(NAME query-files
-            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
-            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-  )
-else()
-  add_test(NAME query-files
-            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
-            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-  )
-endif()
+add_test(NAME query-files
+    COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+)
