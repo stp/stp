@@ -361,13 +361,18 @@ include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
 
-option(ONLY_SIMPLE "Don't try to use boost" OFF)
+option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
 if (NOT ONLY_SIMPLE)
   find_package( Boost 1.46 COMPONENTS program_options)
 endif()
 
 if(NOT Boost_FOUND)
-  message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
+    set(ONLY_SIMPLE ON)
+    message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
+else()
+    message(STATUS "Boost -- found at library: ${Boost_LIBRARIES}")
+    message(STATUS "Boost -- adding '${Boost_LIBRARY_DIRS}' to link directories")
+    link_directories(${Boost_LIBRARY_DIRS})
 endif()
 
 # -----------------------------------------------------------------------------
