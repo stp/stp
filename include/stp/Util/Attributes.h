@@ -37,20 +37,12 @@ THE SOFTWARE.
 #endif
 
 #if defined(_MSC_VER)
-// NOTE: for now, we need STP_SHARED_LIB for clients of the statically linked
-// STP library, for which linking fails when DLL_PUBLIC is __declspec(dllimport).
-#if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
-// This is visible when building the STP library as a DLL.
 #define DLL_PUBLIC __declspec(dllexport)
-#elif defined(STP_SHARED_LIB)
-// This is visible for STP clients.
-#define DLL_PUBLIC __declspec(dllimport)
-#else
-#define DLL_PUBLIC
-#endif
 
 // Symbols are hidden by default in MSVC.
 #define DLL_LOCAL
+#endif
+
 
 #elif defined(__GNUC__) || defined(__clang__)
 #define DLL_PUBLIC __attribute__((visibility("default")))

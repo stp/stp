@@ -196,10 +196,93 @@ if (NOT MSVC)
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -O2")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O2")
     endif()
-endif()
+else()
+    # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
+    # /ZI = include debug info
+    # /Wall = all warnings
 
-if (MSVC AND NOT STATICCOMPILE)
-    add_definitions(-DSTP_SHARED_LIB) # Used for symbol visibilty control
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/O2>")
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
+
+    add_compile_options("$<$<CONFIG:RELEASE>:/O2>")
+    add_compile_options("$<$<CONFIG:RELEASE>:/D>")
+    add_compile_options("$<$<CONFIG:RELEASE>:/NDEBUG>")
+
+    add_compile_options("$<$<CONFIG:DEBUG>:/Od>")
+
+    if (NOT BUILD_SHARED_LIBS)
+        # We statically link to reduce dependencies
+        foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+            # /MD -- Causes the application to use the multithread-specific
+            #        and DLL-specific version of the run-time library.
+            #        Defines _MT and _DLL and causes the compiler to place
+            #        the library name MSVCRT.lib into the .obj file.
+            if(${flag_var} MATCHES "/MD")
+                string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+            endif(${flag_var} MATCHES "/MD")
+
+            # /MDd	-- Defines _DEBUG, _MT, and _DLL and causes the application to use the debug multithread-specific and DLL-specific version of the run-time library.
+            #          It also causes the compiler to place the library name MSVCRTD.lib into the .obj file.
+            if(${flag_var} MATCHES "/MDd")
+                string(REGEX REPLACE "/MDd" "/MTd" ${flag_var} "${${flag_var}}")
+            endif(${flag_var} MATCHES "/MDd")
+        endforeach(flag_var)
+
+        # Creates a multithreaded executable (static) file using LIBCMT.lib.
+        add_compile_options(/MT)
+    endif()
+
+    # buffers security check
+    add_compile_options(/GS)
+
+    # Proper warning level
+    add_compile_options(/W1)
+
+    # Disable STL used in DLL-boundary warning
+    add_compile_options(/wd4251)
+    add_compile_options(/D_CRT_SECURE_NO_WARNINGS)
+
+    # Wall is MSVC's Weverything, so annoying unless used from the start
+    # and with judiciously used warning disables
+    # add_compile_options(/Wall)
+
+    # /Za = only ansi C98 & C++11
+    # /Za is not recommended for use, not tested, etc.
+    # see: http://stackoverflow.com/questions/5489326/za-compiler-directive-does-not-compile-system-headers-in-vs2010
+    # add_compile_options(/Za)
+
+    add_compile_options(/fp:precise)
+
+    # exception handling. s = The exception-handling model that catches C++ exceptions only and tells the compiler to assume that functions declared as extern "C" may throw an exception.
+    # exception handling. c = If used with s (/EHsc), catches C++ exceptions only and tells the compiler to assume that functions declared as extern "C" never throw a C++ exception.
+    add_compile_options(/EHsc)
+
+
+    # set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /INCREMENTAL:NO")
+    # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /PDBCOMPRESS")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:1572864")
+
+    #what does this do?
+    set(DEF_INSTALL_CMAKE_DIR CMake)
+
+
+    if (MSVC)
+        # Windows compatibility includes
+        set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
+        set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
+        include_directories(${STP_INCL_COMM})
+        add_subdirectory(windows)
+        set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+
+        # stack size of MSVC must be specified
+        string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:512000000")
+
+        # inline is not a keyword in visual studios old C version, allow its redefinition
+        add_definitions("-D_ALLOW_KEYWORD_MACROS")
+    endif()
+
 endif()
 
 # -----------------------------------------------------------------------------
@@ -271,44 +354,6 @@ if(WIN32)
   set(PERL_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
 
   set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
-
-  if(MSVC)
-    # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
-    # /Oy omit frame pointers
-    # /Wall = all warnings
-    # /GL whole program optimisation
-
-    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/O2>")
-    # /ZI = include debug info
-    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
-
-    add_compile_options("$<$<CONFIG:RELEASE>:/O2>")
-    add_compile_options("$<$<CONFIG:RELEASE>:/D>")
-    add_compile_options("$<$<CONFIG:RELEASE>:/NDEBUG>")
-
-    add_compile_options("$<$<CONFIG:DEBUG>:/Od>")
-
-    #don't give too many warnings
-    add_compile_options(/W1)
-
-    # buffers security check
-    add_compile_options(/GS)
-
-    set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-    set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
-
-    include_directories(${STP_INCL_COMM})
-    add_subdirectory(windows)
-    set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
-
-    # stack size of MSVC must be specified
-    string(REGEX REPLACE "/STACK:[0-9]+" "" CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:512000000")
-
-    # inline is not a keyword in visual studios old C version, allow its redefinition
-    add_definitions("-D_ALLOW_KEYWORD_MACROS")
-  endif()
   add_definitions(${STP_DEFS_COMM})
 endif()
 

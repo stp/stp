@@ -32,17 +32,11 @@ message("Using STP rooted at ${STP_DIR}")
 # -----------------------------------------------------------------------------
 
 message("STP include paths are: ${STP_INCLUDE_DIRS}")
-message("STP Library target is: ${STP_SHARED_LIBRARY}")
 message("STP executable: ${STP_EXECUTABLE}")
 message("STP version: ${STP_VERSION}")
 message("STP major version: ${STP_VERSION_MAJOR}")
 message("STP minor version: ${STP_VERSION_MINOR}")
 message("STP patch version: ${STP_VERSION_PATCH}")
-
-# -----------------------------------------------------------------------------
-# Pick which STP library to use
-# -----------------------------------------------------------------------------
-option(USE_STP_SHARED_LIBRARY "Try to build against STP's shared library" ON)
 
 # Get full path to STP executable
 get_target_property(STP_FULL_PATH ${STP_EXECUTABLE} LOCATION)
