@@ -136,6 +136,7 @@ endif()
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (NOT BUILD_SHARED_LIBS))
     set(Boost_USE_STATIC_LIBS ON)
+    set(Minisat_USE_STATIC_LIBS ON)
 endif()
 
 if (NOT BUILD_SHARED_LIBS)
