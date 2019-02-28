@@ -97,13 +97,13 @@ before_build:
 
   # minisat
   - cd C:\projects\stp
-  - git clone https://github.com/stp/minisat
+  - git clone https://github.com/msoos/minisat
   - cd minisat
   - echo %cd%
   - mkdir build
   - mkdir myinstall
   - cd build
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
+  - cmake -DSTATICCOMPILE=ON -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
   - cmake --build . --config %CONFIGURATION%
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
