@@ -30,6 +30,32 @@ cd build
 BUILD_DIR=$(pwd)
 COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
+case $STP_CONFIG in
+    STATIC_CMS|STATIC_RISS)
+        # get and install minisat
+        - mkdir minisat_git && cd minisat_git
+        - git clone --depth 1 https://github.com/msoos/minisat
+        - cd minisat
+        - mkdir build && cd build
+        - cmake -DSTATICCOMPILE=ON ..
+        - make
+        - sudo make install
+        - cd ../../..
+    ;;
+
+    *)
+        # get and install minisat
+        - mkdir minisat_git && cd minisat_git
+        - git clone --depth 1 https://github.com/msoos/minisat
+        - cd minisat
+        - mkdir build && cd build
+        - cmake ..
+        - make
+        - sudo make install
+        - cd ../../..
+    ;;
+esac
+
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
 case $STP_CONFIG in
     COVERAGE)

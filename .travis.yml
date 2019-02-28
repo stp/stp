@@ -75,15 +75,6 @@ install:
   - sudo update-alternatives --install /usr/bin/cmake cmake /usr/local/bin/cmake 1 --force
   - cmake --version
   - cd ..
-# get and install minisat
-  - mkdir minisat_git && cd minisat_git
-  - git clone --depth 1 https://github.com/msoos/minisat
-  - cd minisat
-  - mkdir build && cd build
-  - cmake ..
-  - make
-  - sudo make install
-  - cd ../../..
 #coveralls
   - sudo pip install cpp-coveralls
   - wget http://ftp.de.debian.org/debian/pool/main/l/lcov/lcov_1.11.orig.tar.gz
