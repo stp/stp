@@ -136,18 +136,9 @@ build_script:
 after_build:
   - echo "%APPVEYOR_BUILD_FOLDER%"
   - echo %APPVEYOR_BUILD_FOLDER%
-  - echo "dir /s /b"
-  - dir /s /b
-  - echo "ls %APPVEYOR_BUILD_FOLDER%"
-  - ls %APPVEYOR_BUILD_FOLDER%
-  - echo "ls %APPVEYOR_BUILD_FOLDER%\\build"
-  - ls %APPVEYOR_BUILD_FOLDER%\build
-  - echo "ls %APPVEYOR_BUILD_FOLDER%\\build\Release\ "
-  - ls %APPVEYOR_BUILD_FOLDER%\build\Release\
-  - echo "ls %APPVEYOR_BUILD_FOLDER%\\stp.build\\bin\\ "
-  - ls %APPVEYOR_BUILD_FOLDER%\stp.build\bin\
+  #- dir /s /b
 
-  - 7z a c:\projects\stp\stp.zip %APPVEYOR_BUILD_FOLDER%\build\Release\stp.exe -tzip
+  - 7z a c:\projects\stp\stp.zip C:\projects\stp.build\bin\stp.exe -tzip
   - cd c:\projects\stp
 
 artifacts:
