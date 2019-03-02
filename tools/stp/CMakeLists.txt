@@ -32,7 +32,6 @@ if (NOT ONLY_SIMPLE)
         OUTPUT_NAME stp
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
         INSTALL_RPATH_USE_LINK_PATH TRUE
-        VERSION "${PROJECT_VERSION}"
     )
 
     target_link_libraries(stp-bin

@@ -90,11 +90,20 @@ add_library(stp
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    OUTPUT_NAME stp
     PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
+
+if(WIN32)
+    set_target_properties(stp PROPERTIES
+        OUTPUT_NAME stpwin
+    )
+else()
+    set_target_properties(stp PROPERTIES
+        OUTPUT_NAME stp
+    )
+endif()
 
 
 # -----------------------------------------------------------------------------

@@ -30,7 +30,6 @@ set_target_properties(stp_simple-bin PROPERTIES
     OUTPUT_NAME stp_simple
     RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
     INSTALL_RPATH_USE_LINK_PATH TRUE
-    VERSION "${PROJECT_VERSION}"
 )
 
 target_link_libraries(stp_simple-bin
