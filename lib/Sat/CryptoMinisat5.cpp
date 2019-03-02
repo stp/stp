@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Sat/CryptoMinisat5.h"
 #include "cryptominisat5/cryptominisat.h"
 #include <unordered_set>
+#include <algorithm>
 using std::vector;
 
 namespace stp
