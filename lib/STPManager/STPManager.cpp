@@ -184,7 +184,7 @@ bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 ASTNode STPMgr::CreateBVConst(unsigned int width,
                               unsigned long long int bvconst)
 {
-  if (width > (sizeof(unsigned long long int) * 8) || width <= 0)
+  if (width == 0)
     FatalError("CreateBVConst: "
                "trying to create bvconst using "
                "unsigned long long of width: ",
