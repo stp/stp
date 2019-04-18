@@ -1223,7 +1223,7 @@ void rule_to_string(const ASTNode& n, ASTNodeString& names, string& current,
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     rule_to_string(n[i], names, s, sofar);
   }
@@ -1242,7 +1242,7 @@ string containsNode(const ASTNode& n, const ASTNode& hunting, string& current)
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     string r = containsNode(n[i], hunting, s);
     if (r != "")
