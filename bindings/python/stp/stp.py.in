@@ -358,7 +358,15 @@ class Solver(object):
         assert isinstance(b, Expr), 'Object must be an Expression'
         expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
-
+        
+    def ite(self, a, b, c):
+        assert isinstance(a, Expr), 'Object must be an Expression'
+        assert isinstance(b, Expr), 'Object must be an Expression'
+        assert isinstance(c, Expr), 'Object must be an Expression'
+        assert b.width == c.width, 'Objects must have the same width' # compound expressions have width None or 0
+        expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
+        return Expr(self, b.width, expr)   
+ 
     def not_(self, obj):
         assert isinstance(obj, Expr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
