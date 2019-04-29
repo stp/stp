@@ -288,7 +288,12 @@ class TestSTP(unittest.TestCase):
         supported = supports_method()
 
         if is_default_solver:
-            self.assertTrue(supported)
+            self.assertTrue(
+                supported,
+                "{solver:s} is a default solver, which is reporting as disabled".format(
+                    solver=solver
+                ),
+            )
 
         #
         # If the solver is supported, the "use" and "isUsing" methods should
@@ -297,8 +302,20 @@ class TestSTP(unittest.TestCase):
         #
         # We can use that as the condition for the assertion
         #
-        self.assertEqual(use_method(), supported)
-        self.assertEqual(is_using_method(), supported)
+        self.assertEqual(
+            use_method(),
+            supported,
+            "Enabling {solver:s} did not match its 'supported' status".format(
+                solver=solver
+            ),
+        )
+        self.assertEqual(
+            is_using_method(),
+            supported,
+            "Checking if {solver:s} is in use did not match its 'supported' status".format(
+                solver=solver
+            ),
+        )
 
         #
         # When we're using a supported solver, then after calling `use_method`,
@@ -309,7 +326,12 @@ class TestSTP(unittest.TestCase):
                 other_is_using_method = getattr(
                     self.s, "isUsing{:s}".format(other_solver)
                 )
-                self.assertFalse(other_is_using_method())
+                self.assertFalse(
+                    other_is_using_method(),
+                    "{other_solver:s} reported to be in use, while {solver:s} was previously selected".format(
+                        solver=solver, other_solver=other_solver
+                    ),
+                )
 
     def test_minisat(self):
         """
