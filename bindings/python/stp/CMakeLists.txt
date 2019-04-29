@@ -30,6 +30,18 @@
 
 get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
 set(LIBSTP_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}${LIBSTP_BASENAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+
+#
+# 'library_path.py.in' has some code that is conditional on being on Win32 or
+# not -- rather than have two `.in` files, we leave the non-Win32 code comment
+# out.
+#
+if(WIN32)
+  set(WIN32PYTHONCOMMENT "")
+else()
+  set(WIN32PYTHONCOMMENT "#")
+endif()
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
                ${CMAKE_CURRENT_BINARY_DIR}/library_path.py @ONLY)
 

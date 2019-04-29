@@ -37,7 +37,9 @@ path_var = (
     else "LD_LIBRARY_PATH"
 )
 
-PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"] + [
+PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"
+@WIN32PYTHONCOMMENT@        , "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"
+        ] + [
     os.path.join(directory, "@LIBSTP_FILENAME@")
     for directory in os.environ.get(path_var, "").split(os.pathsep)
 ]
