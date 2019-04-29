@@ -322,7 +322,7 @@ class TestSTP(unittest.TestCase):
         # all other solvers should not be in use
         #
         if supported:
-            for other_solver in self.stp_solvers - solver:
+            for other_solver in self.stp_solvers - set([solver]):
                 other_is_using_method = getattr(
                     self.s, "isUsing{:s}".format(other_solver)
                 )
