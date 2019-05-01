@@ -1,5 +1,8 @@
-#author: Dan Liew
-#date: Sep, 2014
+# author: Dan Liew
+# date: Sep, 2014
+#
+# author: Andrew V. Jones
+# date: Apr, 2019
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,4 +23,16 @@
 # THE SOFTWARE.
 
 
-from .stp import Expr, Solver, stp, add, bitvec, bitvecs, check, model
+from .stp import (
+    Expr,
+    Solver,
+    stp,
+    add,
+    bitvec,
+    bitvecs,
+    check,
+    model,
+    get_git_version_sha,
+    get_git_version_tag,
+    get_compilation_env,
+)
