@@ -34,7 +34,7 @@ import sys
 
 __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
-    'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env'
+    'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
 ]
 
 Py3 = sys.version_info >= (3, 0, 0)
@@ -770,5 +770,17 @@ def get_git_version_tag():
 
 def get_compilation_env():
     return _lib.get_compilation_env()
+
+def get_lib():
+    #
+    # Helper function to expose STP's CDLL object -- this allows for API-based
+    # access to STP's API without going via the `Solver` class.
+    #
+    # There are some calls (e.g., vc_bvConcatExpr) that exist inside of the
+    # `_lib` object, but which do not exist inside of `Solver`.
+    #
+    # Directly exposing `_lib_ allows for access to these routines in the API.
+    #
+    return _lib
 
 # EOF
