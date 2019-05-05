@@ -32,6 +32,7 @@ sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
 
 import stp
 import unittest
+import ctypes
 
 
 @stp.stp
@@ -374,6 +375,20 @@ class TestSTP(unittest.TestCase):
         Test verifies that the returned compilation env is of non-zero length
         """
         self.assertNotEqual(len(stp.get_compilation_env()), 0)
+
+    def test_lib(self):
+        """
+        Test verifies that the returned CDLL object is "well-formed"
+        """
+        stp_cdll = stp.get_lib()
+        self.assertIsNotNone(stp_cdll, "get_lib should never return None")
+        self.assertTrue(
+            isinstance(stp_cdll, ctypes.CDLL), "get_lib should return a CDLL type"
+        )
+        self.assertTrue(
+            callable(stp_cdll.vc_bvConcatExpr),
+            "STP's CDLL object should have a method called 'vc_bvConcatExpr'",
+        )
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)

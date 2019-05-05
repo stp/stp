@@ -35,4 +35,5 @@ from .stp import (
     get_git_version_sha,
     get_git_version_tag,
     get_compilation_env,
+    get_lib,
 )
