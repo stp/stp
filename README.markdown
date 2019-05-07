@@ -160,7 +160,7 @@ To install run `make install` and to uninstall run `make uninstall`. The root of
 
 ### Building on Windows/Visual Studio
 
-You will need to install [cmake](https://cmake.org/download/) and follow the steps that AppVeyor [follows](https://github.com/stp/stp/blob/master/appveyor.yml). In case you need the static binary, you can always access it as a binary artifact at the [AppVeyor build page](https://ci.appveyor.com/project/msoos/stp).
+You will need to install [cmake](https://cmake.org/download/) and follow the steps that AppVeyor [follows](https://github.com/stp/stp/blob/master/appveyor.yml). In case you need the static binary, you can always access it as a binary artifact at the [AppVeyor build page](https://ci.appveyor.com/project/msoos/stp). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
 
 ### Building Docker
 
