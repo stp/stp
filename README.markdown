@@ -158,57 +158,9 @@ make check
 To install run `make install` and to uninstall run `make uninstall`. The root of installation is controlled by the `CMAKE_INSTALL_PREFIX` variable at configure time. You can change this by running `make edit_cache` and editing the value of `CMAKE_INSTALL_PREFIX`.
 
 
-### Building on Visual Studio
+### Building on Windows/Visual Studio
 
-Let's assume you put STP's source into c:\projects\stp and you have cygwin and
-git installed. Get zlib:
-
-```
-cd C:\projects
-git clone https://github.com/madler/zlib
-cd zlib
-git checkout v1.2.8
-mkdir build
-mkdir myinstall
-cd build
-cmake -DCMAKE_INSTALL_PREFIX="..\myinstall" ..
-cmake --build .
-cmake --build . --target install
-```
-
-Get minisat:
-
-```
-cd C:\projects
-git clone https://github.com/stp/minisat
-cd minisat
-mkdir build
-mkdir myinstall
-cd build
-cmake -DCMAKE_INSTALL_PREFIX="..\myinstall" -DZLIB_ROOT="..\..\zlib\myinstall" ..
-cmake --build .
-cmake --build . --target install
-```
-
-
-Get flex, bison, perl:
-
-```
-C:\cygwin64\setup-x86_64.exe  -qnNd -R C:/cygwin64 -s http://cygwin.mirror.constant.com -l C:/cygwin64/var/cache/setup --packages "flex,bison,perl"
-```
-
-Finally, Build STP:
-
-```
-cd C:\projects
-git clone https://github.com/stp/stp
-git submodule update --init --recursive
-mkdir build
-cd build
-cmake -DBoost_USE_STATIC_LIBS=ON -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="C:\Program Files\Python36\\python.exe" -DLIT_TOOL="C:\Program Files\Python36\Scripts\\lit.exe" -DMINISAT_LIBDIR="..\..\minisat\myinstall\lib" -DMINISAT_INCLUDE_DIRS="..\..\minisat\myinstall\include" -DZLIB_ROOT="..\..\zlib\myinstall" -DCMAKE_PREFIX_PATH="C:\cygwin64" ..
-cmake --build .
-cmake --build . --target install
-```
+You will need to install [cmake](https://cmake.org/download/) and follow the steps that AppVeyor [follows](https://github.com/stp/stp/blob/master/appveyor.yml). In case you need the static binary, you can always access it as a binary artifact at the [AppVeyor build page](https://ci.appveyor.com/project/msoos/stp).
 
 ### Building Docker
 
