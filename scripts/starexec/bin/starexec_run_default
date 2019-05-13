@@ -6,7 +6,7 @@ SOLVERDIR="$(dirname "${BASH_SOURCE[0]}" )"
 
 # clean last call
 rm -f output_0.cnf
-"$SOLVERDIR"/stp-2.1.2  --SMTLIB2 --output-CNF --exit-after-CNF "$1"
+"$SOLVERDIR"/stp  --SMTLIB2 --output-CNF --exit-after-CNF "$1"
 
 # In case a file was created, call the SAT solver
 if [ -f output_0.cnf ]

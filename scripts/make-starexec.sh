@@ -139,7 +139,7 @@ cmake -DSTATICCOMPILE:BOOL=ON \
  ../stp
 make -j $(nproc)
 cd ..
-cp stp-build/stp-2.1.2 bin
+cp stp-build/stp bin
 
 # Cleanup solver directories
 [ -n "$NO_CLEANUP" ] || rm -rf stp-build minisat m4ri-20140914 cryptominisat riss stp mergesat ./*.tar.gz
