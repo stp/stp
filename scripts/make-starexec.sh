@@ -30,6 +30,31 @@ fi
 # shall we leave the directory behind?
 NO_CLEANUP=${NO_STP_CLEANUP:-}
 
+CMSCOMMIT=""
+MERGESATCOMMIT=""
+MINISATCOMMIT=""
+RISSCOMMIT=""
+# do we want to package Riss(for Coprocessor) or Sparrow as well?
+while getopts "c:g:m:r:" OPTION; do
+    case $OPTION in
+    c)
+        CMSCOMMIT="$OPTARG"
+        ;;
+    g)
+        MERGESATCOMMIT="$OPTARG"
+        ;;
+    m)
+        MINISATCOMMIT="$OPTARG"
+        ;;
+    r)
+        RISSCOMMIT="$OPTARG"
+        ;;
+    *)
+        echo "Unknown options provided"
+        ;;
+    esac
+done
+
 # give the package a unique name
 DESCRIPTION=$(git rev-parse --short HEAD)
 
@@ -66,6 +91,7 @@ cd ..
 
 git clone --depth 1 https://github.com/msoos/cryptominisat.git
 cd cryptominisat
+[ -z "$CMSCOMMIT" ] || git checkout -b stp-build "$CMSCOMMIT"
 echo "CryptoMinisat: $(git rev-parse --short HEAD)" >> ../COMMITS
 mkdir build
 cd build
@@ -77,6 +103,7 @@ cp cryptominisat/build/cryptominisat5 bin
 # Minisat
 git clone --depth 1 https://github.com/niklasso/minisat.git
 cd minisat
+[ -z "$MINISATCOMMIT" ] || git checkout -b stp-build "$MINISATCOMMIT"
 make r -j $(nproc)
 echo "Minisat: $(git rev-parse --short HEAD)" >> ../COMMITS
 cd ..
@@ -85,6 +112,7 @@ cp minisat/build/release/bin/minisat bin
 # Riss
 git clone --depth 1 https://github.com/conp-solutions/riss.git
 cd riss
+[ -z "$RISSCOMMIT" ] || git checkout -b stp-build "$RISSCOMMIT"
 echo "Riss: $(git rev-parse --short HEAD)" >> ../COMMITS
 mkdir -p build
 cd build
@@ -92,6 +120,15 @@ cmake .. -DDRATPROOF=OFF -DCMAKE_BUILD_TYPE=Release
 make riss-core -j $(nproc)
 cd ../..
 cp riss/build/bin/riss-core bin/riss
+
+# MergeSAT
+git clone --depth 1 https://github.com/conp-solutions/mergesat.git
+cd mergesat
+[ -z "$MERGESATCOMMIT" ] || git checkout -b stp-build "$MERGESATCOMMIT"
+echo "MergeSAT: $(git rev-parse --short HEAD)" >> ../COMMITS
+make r -j $(nproc)
+cd ..
+cp mergesat/build/release/bin/mergesat bin/mergesat
 
 # build STP
 mkdir -p stp-build
@@ -105,7 +142,7 @@ cd ..
 cp stp-build/stp-2.1.2 bin
 
 # Cleanup solver directories
-[ -n "$NO_CLEANUP" ] || rm -rf stp-build minisat m4ri-20140914 cryptominisat riss stp ./*.tar.gz
+[ -n "$NO_CLEANUP" ] || rm -rf stp-build minisat m4ri-20140914 cryptominisat riss stp mergesat ./*.tar.gz
 
 # Get rid of extra symbols in solvers
 cd bin
