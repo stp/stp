@@ -12,7 +12,7 @@ rm -f output_0.cnf
 if [ -f output_0.cnf ]
 then
 	SOLVERCODE=0
-	"$SOLVERDIR"/minisat --verb 0 output_0.cnf 1>&2 || SOLVERCODE=$?
+	"$SOLVERDIR"/minisat -verb=0 output_0.cnf 1>&2 || SOLVERCODE=$?
 
 	if [[ "$SOLVERCODE" -eq 10 ]]; then
 		echo "sat"
