@@ -27,11 +27,14 @@ then
 	exit 1
 fi
 
+# shall we leave the directory behind?
+NO_CLEANUP=${NO_STP_CLEANUP:-}
+
 # give the package a unique name
 DESCRIPTION=$(git rev-parse --short HEAD)
 
 # make sure we clean up
-trap 'rm -rf $TMPD' EXIT
+[ -n "$NO_CLEANUP" ] || trap 'rm -rf $TMPD' EXIT
 TMPD=$(mktemp -d)
 
 # create the project directory
@@ -102,7 +105,7 @@ cd ..
 cp stp-build/stp-2.1.2 bin
 
 # Cleanup solver directories
-rm -rf stp-build minisat m4ri-20140914 cryptominisat riss stp ./*.tar.gz
+[ -n "$NO_CLEANUP" ] || rm -rf stp-build minisat m4ri-20140914 cryptominisat riss stp ./*.tar.gz
 
 # Get rid of extra symbols in solvers
 cd bin
