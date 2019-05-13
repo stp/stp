@@ -86,7 +86,7 @@ cd m4ri-20140914/
 make -j $(nproc)
 echo "Before proceeding, make sure you want to install m4ri version 20140914 from source"
 sleep 5
-sudo make install
+timeout 10 sudo make install || true
 cd ..
 
 git clone --depth 1 https://github.com/msoos/cryptominisat.git
