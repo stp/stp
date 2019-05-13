@@ -21,8 +21,8 @@ def setup_solvers(threads):
 
     # Call strings for solvers
     cmsString = "cryptominisat5 --verb 0 --printsol 0 --threads "  # $(nproc)"
-    rissString = "riss -verb = 0 -quiet "
-    minisatString = "minisat -verb = 0 "
+    rissString = "riss -verb=0 -quiet "
+    minisatString = "minisat -verb=0 "
 
     # Set threads
     cmsThreads = 1
