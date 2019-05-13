@@ -10,12 +10,13 @@ SOLVERDIR="$(dirname "${BASH_SOURCE[0]}" )"
 
 # Clean last call
 rm -f output_0.cnf
-"$SOLVERDIR"/stp-2.1.2  --SMTLIB2 --output-CNF --exit-after-CNF "$1"
+"$SOLVERDIR"/stp --SMTLIB2 --output-CNF --exit-after-CNF "$1"
 
 # In case a file was created, call the SAT solver
 if [ -f output_0.cnf ]
 then
-	result="$("$SOLVERDIR"/cryptominisat5 --verb 0 --threads $(nproc) --printsol 0 output_0.cnf 2>&1)"
+	result="$("$SOLVERDIR"/multi-solver.py $(nproc) output_0.cnf 2>&1)"
+	echo "$result" | grep winner 1>&2
 
 	if [[ "$result" == *"s SATISFIABLE"* ]]; then
 		echo "sat"

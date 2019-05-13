@@ -21,21 +21,24 @@ def setup_solvers(threads):
 
     # Call strings for solvers
     cmsString = "cryptominisat5 --verb 0 --printsol 0 --threads "  # $(nproc)"
-    rissString = "riss -verb = 0 -quiet "
-    minisatString = "minisat -verb = 0 "
+    mergesatString = "mergesat -verb=0 "
+    rissString = "riss -verb=0 -quiet "
+    minisatString = "minisat -verb=0 "
 
     # Set threads
     cmsThreads = 1
-    if threads > 3:
-        cmsThreads = threads - 3
+    if threads > 4:
+        cmsThreads = threads - 4
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
     dir_path = os.path.join(dir_path, "")
 
     solvers["cms"] = dir_path+cmsString + str(cmsThreads) + " "
     if threads > 1:
-        solvers["riss"] = dir_path+rissString
+        solvers["mergesat"] = dir_path+mergesatString
     if threads > 2:
+        solvers["riss"] = dir_path+rissString
+    if threads > 3:
         solvers["minisat"] = dir_path+minisatString
 
     return solvers
