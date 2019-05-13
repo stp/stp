@@ -16,6 +16,7 @@ rm -f output_0.cnf
 if [ -f output_0.cnf ]
 then
 	result="$("$SOLVERDIR"/multi-solver.py $(nproc) output_0.cnf 2>&1)"
+	echo "$result" | grep winner 1>&2
 
 	if [[ "$result" == *"s SATISFIABLE"* ]]; then
 		echo "sat"
