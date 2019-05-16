@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Mate Soos
+ * AUTHORS: Mate Soos, Andrew V. Jones
  *
  * BEGIN DATE: November, 2013
  *
@@ -52,7 +52,9 @@ public:
 
   ~CryptoMiniSat5();
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+
+  virtual void setMaxTime(int64_t max_time); // set max solver time in millis
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
@@ -86,6 +88,7 @@ public:
 private:
   void* temp_cl;
   int64_t max_confl = 0;
+  int64_t max_time = 0; // milliseconds
 };
 }
 

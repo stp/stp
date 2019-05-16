@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Andrew V. Jones
  *
  * BEGIN DATE: November, 2005
  *
@@ -53,6 +53,8 @@ public:
   bool cinterface_exprdelete_on_flag;
 
   int64_t timeout_max_conflicts;
+
+  int64_t timeout_max_time;
 
   // print DAG nodes
   bool print_nodes_flag;
@@ -166,6 +168,7 @@ public:
     stats_flag = false;
     cinterface_exprdelete_on_flag = true;
     timeout_max_conflicts = -1;
+    timeout_max_time = -1; // milliseconds
     print_nodes_flag = false;
     optimize_flag = true;
     wordlevel_solve_flag = true;

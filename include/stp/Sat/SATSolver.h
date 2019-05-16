@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Aug, 2010
  *
@@ -68,6 +68,13 @@ public:
   {
     std::cerr
         << "Warning: Max conflict setting is not supported by this SAT solver"
+        << std::endl;
+  }
+
+  virtual void setMaxTime(int64_t /*max_time*/)
+  {
+    std::cerr
+        << "Warning: Max time setting is not supported by this SAT solver"
         << std::endl;
   }
 

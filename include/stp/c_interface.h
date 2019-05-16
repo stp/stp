@@ -474,7 +474,8 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 
 //! \brief Checks the validity of the given expression 'e' in the given context.
 //!
-//! The timeout is represented and expected in milliseconds.
+//! 'timeout_max_conflicts' is represented and expected as the number of conflicts
+//! 'timeout_max_time' is represented and expected in milliseconds.
 //! The given expression 'e' must be of type boolean.
 //!
 //! Returns ...
@@ -483,13 +484,9 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 //!   2: if errors occured
 //!   3: if the timeout was reached
 //!
-//! Note: The given timeout is a soft timeout. Use the flag '-g' for a hard timeout
-//!       that will abort automatically. Soft timeouts are only checked sparingly,
-//!       so the actual timeout may be larger.
+//! Note: Only the cryptominisat solver supports timeout_max_time
 //!
-//! Note: The cryptominisat solver does not check the timeout, yet!
-//!
-DLL_PUBLIC int vc_query_with_timeout(VC vc, Expr e, int timeout_ms);
+DLL_PUBLIC int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_max_time);
 
 //! \brief Checks the validity of the given expression 'e' in the given context
 //!        with an unlimited timeout.
