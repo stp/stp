@@ -46,7 +46,7 @@ void test_timeout(bool test_with_time, uint32_t max_value)
     // SMT_FILE is a macro that expands to a file path
     Expr c = vc_parseExpr(vc, SMT_FILE);
 
-    int limit = // time is in millis
+    int limit = // time is in seconds
         rand() %
         max_value; // FIXME: non-determinsitc behaviour in a test case is BAD!!!
     std::string timeout_type;

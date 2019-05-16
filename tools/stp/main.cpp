@@ -256,9 +256,9 @@ void ExtraMain::create_options()
       "Number of conflicts after which the SAT solver gives up. "
       "-1 means never (default)")
 
-      // max_time -- TODO: check units here! Is it is 'ms' or 's'?
+      // max_time
       ("max_time,g", po::value<int64_t>(&max_time),
-      "Number of milliseconds after which the SAT solver gives up. "
+      "Number of seconds after which the SAT solver gives up. "
       "-1 means never (default)")
 
       // check-sanity

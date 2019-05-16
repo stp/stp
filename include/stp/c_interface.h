@@ -475,7 +475,7 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 //! \brief Checks the validity of the given expression 'e' in the given context.
 //!
 //! 'timeout_max_conflicts' is represented and expected as the number of conflicts
-//! 'timeout_max_time' is represented and expected in milliseconds.
+//! 'timeout_max_time' is represented and expected in seconds.
 //! The given expression 'e' must be of type boolean.
 //!
 //! Returns ...

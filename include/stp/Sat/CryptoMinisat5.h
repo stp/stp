@@ -54,7 +54,7 @@ public:
 
   virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
 
-  virtual void setMaxTime(int64_t max_time); // set max solver time in millis
+  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
@@ -88,7 +88,7 @@ public:
 private:
   void* temp_cl;
   int64_t max_confl = 0;
-  int64_t max_time = 0; // milliseconds
+  int64_t max_time = 0; // seconds
 };
 }
 

@@ -168,7 +168,7 @@ public:
     stats_flag = false;
     cinterface_exprdelete_on_flag = true;
     timeout_max_conflicts = -1;
-    timeout_max_time = -1; // milliseconds
+    timeout_max_time = -1; // seconds
     print_nodes_flag = false;
     optimize_flag = true;
     wordlevel_solve_flag = true;

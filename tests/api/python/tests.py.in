@@ -281,13 +281,7 @@ class TestSTP(unittest.TestCase):
         solver = self.s
 
         #
-        # Time-based timeout is only supported by CMS
-        #
-        if test_with_time and not solver.supportsCryptominisat():
-            return
-
-        #
-        # If we support CMS, then we should always use it for this test
+        # If we support CMS, then we should always use it
         #
         if solver.supportsCryptominisat():
             solver.useCryptominisat()
@@ -362,7 +356,12 @@ class TestSTP(unittest.TestCase):
     def test_timeout_time(self):
         is_time_timeout = True
         max_value = 2
-        self._test_timeout(is_time_timeout, max_value)
+
+        #
+        # Time-based timeout is only supported by CMS
+        #
+        if self.s.supportsCryptominisat():
+            self._test_timeout(is_time_timeout, max_value)
 
     def _test_solver(self, solver, is_default_solver=False):
         """

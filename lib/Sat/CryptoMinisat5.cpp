@@ -95,6 +95,11 @@ bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
      s->set_max_confl(std::max(max_confl - s->get_sum_conflicts(), (uint64_t)1));
   }
 
+  /*
+   * STP uses -1 for a value of "no timeout" -- this means that we only set the
+   * timeout _in the SAT solver_ if the value is >= 0. This avoids us
+   * accidentally setting a large limit (or one in the past).
+   */
   if (max_time > 0) {
      s->set_max_time(max_time);
   }
@@ -103,7 +108,7 @@ bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
   if (ret == CMSat::l_Undef)
   {
     timeout_expired = true;
-    // TODO: do we want an assertion on the case of a timeout
+    // TODO: do we want an assertion on the case of a timeout?
   }
   return ret == CMSat::l_True;
 }
