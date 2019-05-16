@@ -4,7 +4,7 @@ The MIT License
 
 Copyright (c) 2008 Vijay Ganesh
               2014 Jurriaan Bremer, jurriaanbremer@gmail.com
-              2018 Andrew V. Jones, andrewvaughanj@gmail.com
+              2018, 2019 Andrew V. Jones, andrewvaughanj@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -276,6 +276,93 @@ class TestSTP(unittest.TestCase):
 
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
+
+    def _test_timeout(self, test_with_time, max_value):
+        solver = self.s
+
+        #
+        # Time-based timeout is only supported by CMS
+        #
+        if test_with_time and not solver.supportsCryptominisat():
+            return
+
+        #
+        # If we support CMS, then we should always use it for this test
+        #
+        if solver.supportsCryptominisat():
+            solver.useCryptominisat()
+            self.assertTrue(solver.isUsingCryptominisat())
+
+        #
+        # Calculate our maximum values
+        #
+        max_conflicts = -1
+        max_time = -1
+
+        if test_with_time:
+            max_time = max_value
+        else:
+            max_conflicts = max_value
+
+        #######################################################################
+        #                                                                     #
+        # In `tests/api/C/example.smt`, STP is validated using the 'integer   #
+        # cube root algorithm' (icbrt) -- the below is a Python implmentation #
+        # of this, using STP's API                                            #
+        #                                                                     #
+        #######################################################################
+
+        #
+        # Use a large width to make the problem "hard" -- note: a lot of time
+        # is spent bit-blasting (because of the size) rather than time spent in
+        # the SAT solver. Still, it is "good enough".
+        #
+        width = 1024
+
+        #
+        # Parameter to 'icbrt'
+        #
+        x = solver.bitvec("x", width)
+
+        #
+        # Implementation of 'icbrt'
+        #
+        s = 30
+        y = solver.bitvecval(width, 0)
+        while s >= 0:
+            y = y.mul(2)
+            b = (y.mul(3).mul(y.add(1)).add(1)).shl(s)
+            x = solver.ite(x.ge(b), x.sub(b), x)
+            y = solver.ite(x.ge(b), y.add(1), y)
+            s -= 3
+
+        #
+        # We're just choosing a random return value and asking STP to find it
+        #
+        return_val = solver.bitvec("return", width)
+        exprs = [return_val.eq(655), return_val.eq(y)]
+
+        #
+        # Check using a timeout
+        #
+        result = solver.check_with_timeout(
+            *exprs, max_conflicts=max_conflicts, max_time=max_time
+        )
+
+        #
+        # We should get an unknown result
+        #
+        self.assertEqual(result, 3, "Solver did not return 'unknown'")
+
+    def test_timeout_conflicts(self):
+        is_time_timeout = False
+        max_value = 2
+        self._test_timeout(is_time_timeout, max_value)
+
+    def test_timeout_time(self):
+        is_time_timeout = True
+        max_value = 2
+        self._test_timeout(is_time_timeout, max_value)
 
     def _test_solver(self, solver, is_default_solver=False):
         """
