@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Mate Soos
+ * AUTHORS: Mate Soos, Andrew V. Jones
  *
  * BEGIN DATE: November, 2013
  *
@@ -62,6 +62,11 @@ void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
   max_confl = _max_confl;
 }
 
+void CryptoMiniSat5::setMaxTime(int64_t _max_time)
+{
+  max_time = _max_time;
+}
+
 bool CryptoMiniSat5::addClause(
     const vec_literals& ps) // Add a clause to the solver.
 {
@@ -90,11 +95,19 @@ bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
      s->set_max_confl(std::max(max_confl - s->get_sum_conflicts(), (uint64_t)1));
   }
 
+  /*
+   * STP uses -1 for a value of "no timeout" -- this means that we only set the
+   * timeout _in the SAT solver_ if the value is >= 0. This avoids us
+   * accidentally setting a large limit (or one in the past).
+   */
+  if (max_time > 0) {
+     s->set_max_time(max_time);
+  }
+
   CMSat::lbool ret = s->solve();
   if (ret == CMSat::l_Undef)
   {
     timeout_expired = true;
-    assert(s->get_sum_conflicts() >= max_confl);
   }
   return ret == CMSat::l_True;
 }

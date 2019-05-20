@@ -495,10 +495,10 @@ void vc_assertFormula(VC vc, Expr e)
  * type. */
 int vc_query(VC vc, Expr e)
 {
-  return vc_query_with_timeout(vc, e, -1);
+  return vc_query_with_timeout(vc, e, -1, -1);
 }
 
-int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
+int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_max_time)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
@@ -518,7 +518,8 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_ms)
   const stp::ASTVec v = b->GetAsserts();
   stp::ASTNode o;
   int output;
-  stp_i->bm->UserFlags.timeout_max_conflicts = timeout_ms;
+  stp_i->bm->UserFlags.timeout_max_conflicts = timeout_max_conflicts;
+  stp_i->bm->UserFlags.timeout_max_time = timeout_max_time;
   if (!v.empty())
   {
     if (v.size() == 1)

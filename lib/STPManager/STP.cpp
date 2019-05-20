@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: November, 2005
  *
@@ -71,6 +71,12 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
 
   if (bm->UserFlags.timeout_max_conflicts >= 0)
     newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
+
+  if (bm->UserFlags.timeout_max_time >= 0)
+    newS->setMaxTime(bm->UserFlags.timeout_max_time);
+
+  // reset the timeout expired flag for the new check
+  bm->soft_timeout_expired = false;
 
   SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
   return result;

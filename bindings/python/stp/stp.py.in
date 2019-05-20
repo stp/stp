@@ -3,7 +3,7 @@ The MIT License
 
 Copyright (c) 2008 Vijay Ganesh
               2014 Jurriaan Bremer, jurriaanbremer@gmail.com
-              2018 Andrew V. Jones, andrewvaughanj@gmail.com
+              2018-2019 Andrew V. Jones, andrewvaughanj@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -116,7 +116,7 @@ _set_func('vc_printCounterExampleToBuffer', None, _VC, POINTER(c_char_p), POINTE
 _set_func('vc_printQuery', None, _VC)
 _set_func('vc_assertFormula', None, _VC, _Expr)
 _set_func('vc_simplify', _Expr, _VC, _Expr)
-_set_func('vc_query_with_timeout', c_int32, _VC, _Expr, c_int32)
+_set_func('vc_query_with_timeout', c_int32, _VC, _Expr, c_int32, c_int32)
 _set_func('vc_query', c_int32, _VC, _Expr)
 _set_func('vc_getCounterExample', _Expr, _VC, _Expr)
 _set_func('vc_getCounterExampleArray', None, _VC, _Expr, POINTER(POINTER(_Expr)), POINTER(POINTER(_Expr)), POINTER(c_int32))
@@ -315,7 +315,7 @@ class Solver(object):
         exprs = (_Expr * len(exprs))(*exprs)
         return exprs, len(exprs)
 
-    def check(self, *exprs):
+    def check_with_timeout(self, *exprs, **kwargs):
         """Check whether the various expressions are satisfiable."""
 
         _, length = self._n_exprs(*exprs)
@@ -325,10 +325,16 @@ class Solver(object):
         else:
             expr = self.false().expr
 
-        self.push()
-        ret = _lib.vc_query(self.vc, expr)
-        self.pop()
+        max_conflicts = kwargs.get("max_conflicts", -1)
+        max_time = kwargs.get("max_time", -1)
 
+        self.push()
+        ret = _lib.vc_query_with_timeout(self.vc, expr, max_conflicts, max_time)
+        self.pop()
+        return ret
+
+    def check(self, *exprs):
+        ret = self.check_with_timeout(*exprs, max_conflicts=-1, max_time=-1)
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 

@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: November, 2005
  *
@@ -245,12 +245,24 @@ void ExtraMain::create_options()
       "save in ABC's bench format to output.bench");
 
   po::options_description misc_options("Output options");
-  misc_options.add_options()("exit-after-CNF",
-                             po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
-                             "exit after the CNF has been generated")(
-      "timeout,g", po::value<int64_t>(&max_num_confl),
-      "Number of conflicts after which the SAT solver gives up. -1 means never "
-      "(default)")("check-sanity,d", "construct counterexample and check it");
+  misc_options.add_options()
+      // exit-after-CNF
+      ("exit-after-CNF",
+       po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
+       "exit after the CNF has been generated")
+
+      // max_confl
+      ("max_num_confl,g", po::value<int64_t>(&max_num_confl),
+      "Number of conflicts after which the SAT solver gives up. "
+      "-1 means never (default)")
+
+      // max_time
+      ("max_time,g", po::value<int64_t>(&max_time),
+      "Number of seconds after which the SAT solver gives up. "
+      "-1 means never (default)")
+
+      // check-sanity
+      ("check-sanity,d", "construct counterexample and check it");
 
   cmdline_options.add(general_options)
       .add(simplification_options)
@@ -363,9 +375,14 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.propagate_equalities = false;
   }
 
-  if (vm.count("timeout"))
+  if (vm.count("max_num_confl"))
   {
     bm->UserFlags.timeout_max_conflicts = max_num_confl;
+  }
+
+  if (vm.count("max_time"))
+  {
+    bm->UserFlags.timeout_max_time = max_time;
   }
 
   if (vm.count("check-sanity"))
