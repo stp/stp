@@ -60,7 +60,8 @@ public:
   void check_infile_type();
 
   // For options
-  int64_t max_num_confl;
+  int64_t max_num_confl = -1;
+  int64_t max_time = -1;
 };
 
 #endif //__MAIN_COMMON_H__

@@ -74,7 +74,6 @@ Main::Main() : onePrintBack(false)
 
   bm = new STPMgr();
   GlobalParserBM = bm;
-  max_num_confl = -1;
 }
 
 Main::~Main()
