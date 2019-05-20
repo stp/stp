@@ -108,7 +108,6 @@ bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
   if (ret == CMSat::l_Undef)
   {
     timeout_expired = true;
-    // TODO: do we want an assertion on the case of a timeout?
   }
   return ret == CMSat::l_True;
 }
