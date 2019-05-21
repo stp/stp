@@ -365,18 +365,18 @@ class TestSTP(unittest.TestCase):
         self._test_timeout_conflicts(use_cms)
 
     def test_timeout_conflicts_cms(self):
-        use_cms = True
-        self._test_timeout_conflicts(use_cms)
+        if self.s.supportsCryptominisat():
+            use_cms = True
+            self._test_timeout_conflicts(use_cms)
 
     def test_timeout_time(self):
-        is_time_timeout = True
-        max_value = 10
-        use_cms = True
-
         #
         # Time-based timeout is only supported by CMS
         #
         if self.s.supportsCryptominisat():
+            is_time_timeout = True
+            max_value = 10
+            use_cms = True
             self._test_timeout(is_time_timeout, max_value, use_cms)
 
     def _test_solver(self, solver, is_default_solver=False):
