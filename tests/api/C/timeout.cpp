@@ -106,7 +106,6 @@ TEST(timeout_conflicts_minisat, one)
 }
 
 #ifdef USE_CRYPTOMINISAT
-#if 0
 /*
  * Timeout tests only with with CMS
  */
@@ -117,8 +116,8 @@ TEST(timeout_time, one)
    * choose a value lower than it for the next time
    */
   bool is_time_timeout = true;
-  uint32_t max_value = 10;
-  test_timeout(is_time_timeout, max_value);
+  uint32_t max_value = 3; // purposefully very low to ensure we hit a timeout
+  bool use_cms = true;
+  test_timeout(is_time_timeout, max_value, use_cms);
 }
-#endif
 #endif
