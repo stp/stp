@@ -28,20 +28,25 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 
-void test_timeout(bool test_with_time, uint32_t max_value)
+void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
 {
+  srand(time(NULL)); // FIXME: We should not be introducing non-deterministic
+                     // behaviour in a test case!
+
   for (int i = 0; i < 10; i++)
   {
     // need to create VCs for every loop, otherwise the timeouts are not used
     // correctly
     VC vc = vc_createValidityChecker();
     vc_setFlags(vc, 'm');
-#ifdef USE_CRYPTOMINISAT
-    vc_useCryptominisat(vc);
-#endif
-
-    srand(time(NULL)); // FIXME: We should not be introducing non-deterministic
-                       // behaviour in a test case!
+    if (use_cms)
+    {
+      vc_useCryptominisat(vc);
+    }
+    else
+    {
+      vc_useMinisat(vc);
+    }
 
     // SMT_FILE is a macro that expands to a file path
     Expr c = vc_parseExpr(vc, SMT_FILE);
@@ -79,11 +84,25 @@ void test_timeout(bool test_with_time, uint32_t max_value)
   }
 }
 
-TEST(timeout_conflicts, one)
+void test_conflicts(bool use_cms)
 {
   bool is_time_timeout = false;
-  uint32_t max_value = 7000;
-  test_timeout(is_time_timeout, max_value);
+  uint32_t max_value = 500;
+  test_timeout(is_time_timeout, max_value, use_cms);
+}
+
+#ifdef USE_CRYPTOMINISAT
+TEST(timeout_conflicts_cms, one)
+{
+  bool use_cms = true;
+  test_conflicts(use_cms);
+}
+#endif
+
+TEST(timeout_conflicts_minisat, one)
+{
+  bool use_cms = true;
+  test_conflicts(use_cms);
 }
 
 #ifdef USE_CRYPTOMINISAT
