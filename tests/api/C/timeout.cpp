@@ -87,6 +87,7 @@ TEST(timeout_conflicts, one)
 }
 
 #ifdef USE_CRYPTOMINISAT
+#if 0
 /*
  * Timeout tests only with with CMS
  */
@@ -100,4 +101,5 @@ TEST(timeout_time, one)
   uint32_t max_value = 10;
   test_timeout(is_time_timeout, max_value);
 }
+#endif
 #endif
