@@ -101,7 +101,7 @@ TEST(timeout_conflicts_cms, one)
 
 TEST(timeout_conflicts_minisat, one)
 {
-  bool use_cms = true;
+  bool use_cms = false;
   test_conflicts(use_cms);
 }
 
