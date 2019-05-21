@@ -688,6 +688,14 @@ DLL_PUBLIC Expr vc_bvDivExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 //!
 DLL_PUBLIC Expr vc_bvModExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
 
+//! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
+//!        representing the modulo '(dividend % divisor)' of the two
+//!        given bitvector expressions.
+//!
+//! The given bitvector expressions must have the same bit-width as 'bitWidth'
+//!
+DLL_PUBLIC Expr vc_bvRemExpr(VC vc, int bitWidth, Expr dividend, Expr divisor);
+
 //! \brief Returns a (signed) bitvector expression with a bit-width of 'bitWidth'
 //!        representing the signed division '(dividend / divisor)' of the two
 //!        given bitvector expressions.

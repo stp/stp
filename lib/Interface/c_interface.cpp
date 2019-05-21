@@ -1176,6 +1176,15 @@ Expr vc_bvModExpr(VC vc, int n_bits, Expr left, Expr right)
   return createBinaryTerm(vc, n_bits, stp::BVMOD, left, right);
 }
 
+Expr vc_bvRemExpr(VC vc, int n_bits, Expr left, Expr right)
+{
+  /*
+   * bvurem gets mapped to BVMOD -- this is a wrapper to
+   * allow for API consistency
+   */
+  return createBinaryTerm(vc, n_bits, stp::BVMOD, left, right);
+}
+
 Expr vc_sbvDivExpr(VC vc, int n_bits, Expr left, Expr right)
 {
   return createBinaryTerm(vc, n_bits, stp::SBVDIV, left, right);
