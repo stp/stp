@@ -709,19 +709,9 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
   }
 }
 
-void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
+//todo does it need to be member?
+void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, ASTNode se)
 {
-  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-  // changes it. Which breaks the iterator otherwise.
-  const ASTNodeMap c(CounterExampleMap);
-
-  ASTNodeMap::const_iterator it = c.begin();
-  ASTNodeMap::const_iterator itend = c.end();
-  for (; it != itend; it++)
-  {
-    const ASTNode& f = it->first;
-    const ASTNode& se = it->second;
-
     if (ARRAY_TYPE == se.GetType())
     {
       FatalError("PrintCounterExampleSMTLIB2: "
@@ -732,7 +722,7 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
     // skip over introduced variables
     if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
     {
-      continue;
+      return;
     }
 
     if (f.GetKind() == SYMBOL)
@@ -750,6 +740,7 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
       }
       else if (f.GetType() == stp::BOOLEAN_TYPE)
       {
+        se = ComputeFormulaUsingModel(f);
         assert (se == bm->ASTTrue || se == bm->ASTFalse);
         os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
       }
@@ -783,6 +774,33 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
       printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
       os << " )" << endl;
     }
+
+}
+
+void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
+{
+  const ASTNodeSet symbols = bm->getSymbols();
+  for (ASTNode f: symbols)
+  {
+      outputLine(os, f, f);
+  }
+}
+
+// Just uses the symbols from the counter example, might not be every symbol defined in the problem.
+void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
+{
+  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+  // changes it. Which breaks the iterator otherwise.
+  const ASTNodeMap c(CounterExampleMap);
+
+  ASTNodeMap::const_iterator it = c.begin();
+  ASTNodeMap::const_iterator itend = c.end();
+  for (; it != itend; it++)
+  {
+    const ASTNode& f = it->first;
+    const ASTNode& se = it->second;
+    outputLine(os, f,se);
+
   }
   os.flush();
 }
@@ -1063,7 +1081,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         CheckCounterExample(SatSolver.okay());
       }
 
-      if (bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag)
+      if ((bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag) && (!bm->UserFlags.smtlib2_parser_flag))
       {
         PrintCounterExample(SatSolver.okay());
         PrintCounterExample_InOrder(SatSolver.okay());

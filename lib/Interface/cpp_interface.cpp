@@ -456,6 +456,14 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   (GlobalSTP->tosat)->PrintOutput(last_run.result);
+
+  // User has specified -p option to print model.
+   if (bm.UserFlags.print_counterexample_flag)
+   {
+      getModel();
+   }
+
+
   bm.GetRunTimes()->start(RunTimes::Parsing);
 }
 
@@ -582,7 +590,7 @@ void Cpp_interface::getModel()
   cout << "(model" << std::endl;
 
   std::ostringstream os;
-  GlobalSTP->Ctr_Example->PrintCounterExampleSMTLIB2(os);
+  GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
   cout << os.str();
   cout << ")" << std::endl;
 }

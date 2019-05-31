@@ -468,6 +468,21 @@ public:
                 << std::endl;
     }
   }
+
+  ASTNodeSet getSymbols()
+  {
+     ASTNodeSet symbols;
+     symbols.reserve(_symbol_unique_table.size());
+
+     for (const auto& s : _symbol_unique_table)
+      {
+          ASTNode n(s);
+          symbols.insert(n);
+      }
+
+    return symbols; //hopefully move semantics.
+  }
+
 };
 
 } // end of namespace
