@@ -470,13 +470,18 @@ cmdi:
      NOTES_TOK attribute STRING_TOK
     {
       delete $3;
+      stp::GlobalParserInterface->success();
     }
 |
      NOTES_TOK attribute DECIMAL_TOK
-    {}
+    {
+      stp::GlobalParserInterface->success();
+    }
 |
      NOTES_TOK attribute
-    {}
+    {
+      stp::GlobalParserInterface->success();
+    }
 
 ;
 
