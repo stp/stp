@@ -606,7 +606,8 @@ class Expr(object):
     @property
     def value(self):
         """Returns the value of this BitVec in the current model."""
-        return self.s.model(self.name)
+        value = _lib.vc_getCounterExample(self.s.vc, self.expr)
+        return _lib.getBVUnsignedLongLong(value)
 
 
 class ASTtoSTP(ast.NodeVisitor):

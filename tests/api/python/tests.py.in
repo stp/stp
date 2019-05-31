@@ -379,6 +379,20 @@ class TestSTP(unittest.TestCase):
             #use_cms = True
             #self._test_timeout(is_time_timeout, max_value, use_cms)
 
+    def test_get_value_for_bitvecval(self):
+        solver = self.s
+        name_for_x = "x"
+        value_for_x = 0
+        x = solver.bitvec(name_for_x)
+        self.assertEqual(x.name, name_for_x)
+        self.assertEqual(x.value, value_for_x)
+
+        name_for_bitvecval = None
+        value_for_bitvecval = 18
+        bitvecval = solver.bitvecval(32, value_for_bitvecval)
+        self.assertEqual(bitvecval.name, name_for_bitvecval)
+        self.assertEqual(bitvecval.value, value_for_bitvecval)
+
     def _test_solver(self, solver, is_default_solver=False):
         """
         Helper method to validate that the passed in "solver" can be set and
