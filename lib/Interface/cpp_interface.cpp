@@ -564,13 +564,18 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str();
 }
 
+// Note, doesn't consider that extra assertions might have been applied?
 void Cpp_interface::getModel()
 {
   if (!bm.UserFlags.construct_counterexample_flag)
   {
     // Perhaps this is confusing and instead it whould return "()"?
-    // TODO should come in here if the last was unsat/unknown or stuff was added.
     unsupported();
+    return;
+  }
+
+  if (cache.size() ==0 || (cache.back().result != SOLVER_SATISFIABLE))
+  {
     return;
   }
 
