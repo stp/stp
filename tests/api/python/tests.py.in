@@ -27,6 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
+
 # Make sure we can find the STP python package
 sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
 
@@ -55,154 +56,155 @@ class TestSTP(unittest.TestCase):
 
     def test_long(self):
         s = self.s
-        a = s.bitvec('a', 256)
-        b = s.bitvec('b', 256)
+        a = s.bitvec("a", 256)
+        b = s.bitvec("b", 256)
         c = s.bitvecvalD(256, "1337")
         d = s.bitvecvalD(256, "42")
         self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
-        self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
+        self.assertEqual(s.model(), {"a": 1337 - 42, "b": 42})
 
     def test_simple(self):
         s = self.s
-        a = s.bitvec('a', 32)
-        b = s.bitvec('b', 32)
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
         c = s.bitvecval(32, 1337)
         d = s.bitvecval(32, 42)
         self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
-        self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
+        self.assertEqual(s.model(), {"a": 1337 - 42, "b": 42})
 
     def test_equal(self):
-      s = self.s
-      a = s.bitvec('a', 32)
-      b = s.bitvec('b', 32)
-      self.assertFalse(s.check(b.eq(a), a.gt(b)))
-      self.assertTrue(s.check(b.eq(a), a.eq(a)))
+        s = self.s
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        self.assertFalse(s.check(b.eq(a), a.gt(b)))
+        self.assertTrue(s.check(b.eq(a), a.eq(a)))
 
     def test_equal2(self):
-      s = self.s
-      a = s.bitvec('a', 32)
-      b = s.bitvec('b', 32)
-      self.assertFalse(s.check(b.eq(a), a.gt(b)))
-      self.assertTrue(s.check(b.eq(a), a.eq(b)))
+        s = self.s
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        self.assertFalse(s.check(b.eq(a), a.gt(b)))
+        self.assertTrue(s.check(b.eq(a), a.eq(b)))
 
     def test_bitvecval(self):
         s = self.s
-        a = s.bitvec('a', 32)
-        b = s.bitvec('b', 32)
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
         self.assertTrue(s.check(a.add(b).eq(69)))
-        self.assertEqual(s.model()['a'] + s.model()['b'], 69)
+        self.assertEqual(s.model()["a"] + s.model()["b"], 69)
 
     def test_operator(self):
         s = self.s
-        a = s.bitvec('a', 32)
-        b = s.bitvec('b', 32)
-        c = s.bitvec('c', 32)
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        c = s.bitvec("c", 32)
         self.assertTrue(s.check(a + b + c == 123, b - c == 66))
         m = s.model()
-        self.assertEqual((m['a']+m['b']+m['c'])%2**32, 123)
-        self.assertEqual(m['b']-m['c'], 66)
+        self.assertEqual((m["a"] + m["b"] + m["c"]) % 2 ** 32, 123)
+        self.assertEqual(m["b"] - m["c"], 66)
 
-        d = s.bitvec('d', 32)
+        d = s.bitvec("d", 32)
         self.assertTrue(s.check((a << 1) - d == b))
         m = s.model()
-        self.assertEqual((m['a'] << 1) - m['d'], b)
+        self.assertEqual((m["a"] << 1) - m["d"], b)
 
     def test_quick_model(self):
         s = self.s
-        a = s.bitvec('a', 32)
-        b = s.bitvec('b', 32)
-        c = s.bitvec('c', 32)
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        c = s.bitvec("c", 32)
         self.assertTrue(s.check(a + b + c == 666, b - c == 321, c != 666))
-        self.assertEqual((s['a'] + s['b'] + s['c'])%2**32, 666)
-        self.assertEqual((s['b'] - s['c'])%2**32, 321)
+        self.assertEqual((s["a"] + s["b"] + s["c"]) % 2 ** 32, 666)
+        self.assertEqual((s["b"] - s["c"]) % 2 ** 32, 321)
 
     def test_bitvec32(self):
         s = self.s
-        a, b, c = s.bitvecs('a b c')
+        a, b, c = s.bitvecs("a b c")
         s.add(a != 0, b != 0, c != 0, a != b, b != c, a != c)
         self.assertTrue(s.check(a * 2 + b * 2 == c * 2))
-        self.assertEqual((s['a'] * 2 + s['b'] * 2)%2**32, s['c'] * 2 % 2**32)
+        self.assertEqual((s["a"] * 2 + s["b"] * 2) % 2 ** 32, s["c"] * 2 % 2 ** 32)
 
     def test_boolean_expr(self):
         s = self.s
-        a, b, c = s.bitvecs('a b c')
+        a, b, c = s.bitvecs("a b c")
         s.add(a != b, a != c, b != c)
         self.assertTrue(s.check(s.or_(a + b == 1, a + c == 1)))
-        self.assertTrue((s['a'] + s['b'])%(2**32) == 1 or (s['a'] + s['c'])%(2**32) == 1)
+        self.assertTrue(
+            (s["a"] + s["b"]) % (2 ** 32) == 1 or (s["a"] + s["c"]) % (2 ** 32) == 1
+        )
 
     def test_ast(self):
         models = [
-            {'y': 1658330539, 'x': 1658330539},
-            {'y': 3805814187, 'x': 3805814187},
-            {'y': 2636636757, 'x': 2636636757},
-            {'y': 489153109, 'x': 489153109},
+            {"y": 1658330539, "x": 1658330539},
+            {"y": 3805814187, "x": 3805814187},
+            {"y": 2636636757, "x": 2636636757},
+            {"y": 489153109, "x": 489153109},
         ]
 
         with stp.Solver() as s:
-            x, y = s.bitvecs('x y')
+            x, y = s.bitvecs("x y")
             count = 0
-            while s.check(test0_foo(x, y) == test0_foo(y, x),
-                          test0_bar(x, y)):
+            while s.check(test0_foo(x, y) == test0_foo(y, x), test0_bar(x, y)):
                 count += 1
                 assert s.model() in models
-                s.add(x != s.model('x'))
+                s.add(x != s.model("x"))
 
             assert count == 4
 
     def test_value(self):
         s = self.s
-        a = s.bitvec('a')
+        a = s.bitvec("a")
         s.check(a == 0x41414141)
         self.assertEqual(a.value, 0x41414141)
 
     def test_empty_check(self):
         s = self.s
-        a = s.bitvec('a')
+        a = s.bitvec("a")
         s.add(a == 2)
         self.assertTrue(s.check())
 
     def test_empty_check_wrong(self):
         s = self.s
-        a = s.bitvec('a')
+        a = s.bitvec("a")
         s.add(a == 2)
         s.add(a == 3)
         self.assertFalse(s.check())
 
     def test_double_assume(self):
         s = self.s
-        b = s.bitvec('b')
+        b = s.bitvec("b")
         self.assertTrue(s.check(b == 1))
         self.assertTrue(s.check(b == 2))
 
     def test_true_then_false(self):
-      s = self.s
-      a = s.bitvec('a', 32)
-      b = s.bitvec('b', 32)
-      self.assertTrue(s.check(a==b))
-      self.assertTrue(s.check(a>b))
+        s = self.s
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        self.assertTrue(s.check(a == b))
+        self.assertTrue(s.check(a > b))
 
     def test_empty_check(self):
-      s = self.s
-      a = s.bitvec('a', 32)
-      b = s.bitvec('b', 32)
-      s.add(a==b)
-      s.check()
-      s.check(a>b)
-      s.add(a>b)
-      s.add(a==b)
+        s = self.s
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        s.add(a == b)
+        s.check()
+        s.check(a > b)
+        s.add(a > b)
+        s.add(a == b)
 
     def test_non_bitvector_constant_assert_fail(self):
-      s = self.s
-      a = s.bitvec('a', 32)
-      b = s.bitvec('b', 32)
-      s.check(a==b)
-      s.check(a>=b)
-      s.check(a>b)
-      s.check(a<b)
-      a = a.add(b)
-      s.check()
-      s.check(a>b)
-      b.add(a)
+        s = self.s
+        a = s.bitvec("a", 32)
+        b = s.bitvec("b", 32)
+        s.check(a == b)
+        s.check(a >= b)
+        s.check(a > b)
+        s.check(a < b)
+        a = a.add(b)
+        s.check()
+        s.check(a > b)
+        b.add(a)
 
     def test_pushpop(self):
         s = self.s
@@ -210,10 +212,10 @@ class TestSTP(unittest.TestCase):
         s.push()
         # .add is permanent - once an expression has been added, it cannot
         # be contradicted.
-        a = s.bitvec('a')
+        a = s.bitvec("a")
         s.add(a == 2)
         self.assertTrue(s.check())
-        self.assertEqual(s.model(), {'a': 2})
+        self.assertEqual(s.model(), {"a": 2})
 
         # Contradicts the earlier .add formula.
         self.assertFalse(s.check(a == 3))
@@ -227,14 +229,14 @@ class TestSTP(unittest.TestCase):
         # .check is only used in the current query - an expression given
         # to .check is not persistent, and can contradict any earlier
         # expression that has been given to .check.
-        b = s.bitvec('b')
+        b = s.bitvec("b")
         self.assertTrue(s.check(b == 1))
         self.assertTrue(s.check(b == 2))
         s.pop()
 
     def test_operator_overloading(self):
         s = self.s
-        a, b, c = s.bitvecs('a b c')
+        a, b, c = s.bitvecs("a b c")
         A, B = 42, 52
         s.add(a == 42, b == 52)
 
@@ -244,17 +246,17 @@ class TestSTP(unittest.TestCase):
 
             # Test symbolic OP symbolic.
             s.check(c == op(a, b))
-            self.assertEqual(s.model()['c'], op(A, B) % 2**32)
+            self.assertEqual(s.model()["c"], op(A, B) % 2 ** 32)
             s.check(c == op(b, a))
-            self.assertEqual(s.model()['c'], op(B, A) % 2**32)
+            self.assertEqual(s.model()["c"], op(B, A) % 2 ** 32)
 
             # Test symbolic OP constant.
             s.check(c == op(a, B))
-            self.assertEqual(s.model()['c'], op(A, B) % 2**32)
+            self.assertEqual(s.model()["c"], op(A, B) % 2 ** 32)
 
             # Test constant OP symbolic.
             s.check(c == op(B, a))
-            self.assertEqual(s.model()['c'], op(B, A) % 2**32)
+            self.assertEqual(s.model()["c"], op(B, A) % 2 ** 32)
 
         # bv OP bv => bool
         for opname in "< > <= >= == !=".split():
@@ -275,7 +277,7 @@ class TestSTP(unittest.TestCase):
             op = eval("lambda a: %s a" % opname)
 
             s.check(c == op(a))
-            self.assertEqual(s.model()['c'], op(A) % 2**32)
+            self.assertEqual(s.model()["c"], op(A) % 2 ** 32)
 
     def test_get_value_for_bitvecval(self):
         solver = self.s
@@ -287,7 +289,7 @@ class TestSTP(unittest.TestCase):
 
         name_for_bitvecval = None
         value_for_bitvecval = 18
-        bitvecval = solver.bitvecval(32, 18)
+        bitvecval = solver.bitvecval(32, value_for_bitvecval)
         self.assertEqual(bitvecval.name, name_for_bitvecval)
         self.assertEqual(bitvecval.value, value_for_bitvecval)
 
@@ -506,7 +508,8 @@ class TestSTP(unittest.TestCase):
             "STP's CDLL object should have a method called 'vc_bvConcatExpr'",
         )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     sys.exit(not result.wasSuccessful())
