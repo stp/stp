@@ -750,7 +750,8 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
       }
       else if (f.GetType() == stp::BOOLEAN_TYPE)
       {
-        os << " () Bool ";
+        assert (se == bm->ASTTrue || se == bm->ASTFalse);
+        os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
       }
       else
       {
