@@ -377,9 +377,9 @@ cmdi:
       stp::GlobalParserInterface->unsupported();
     }
 |
-     DECLARE_CONST_TOK LPAREN_TOK an_term RPAREN_TOK
+     DECLARE_CONST_TOK const_decl
     {
-      stp::GlobalParserInterface->unsupported();
+      stp::GlobalParserInterface->success();
     }
 |
      DECLARE_FUNCTION_TOK var_decl
@@ -679,6 +679,52 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   delete $1;
 }
 ;
+
+
+const_decl:
+STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
+  //var
+  s.SetIndexWidth(0);
+  s.SetValueWidth($5);
+  delete $1;
+}
+| STRING_TOK BOOL_TOK
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+}
+| STRING_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  unsigned int index_len = $7;
+  unsigned int value_len = $12;
+  if(index_len > 0) {
+    s.SetIndexWidth($7);
+  }
+  else {
+    stp::FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+  }
+
+  if(value_len > 0) {
+    s.SetValueWidth($12);
+  }
+  else {
+    stp::FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+  }
+  delete $1;
+}
+;
+
+
+
 
 an_mixed:
 an_formula
