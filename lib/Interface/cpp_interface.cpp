@@ -574,7 +574,7 @@ void Cpp_interface::getModel()
     return;
   }
 
-  cout << "(" << std::endl;
+  cout << "(model" << std::endl;
 
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintCounterExampleSMTLIB2(os);
