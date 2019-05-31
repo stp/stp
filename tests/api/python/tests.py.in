@@ -277,107 +277,107 @@ class TestSTP(unittest.TestCase):
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
 
-    def _test_timeout(self, test_with_time, max_value, use_cms):
-        solver = self.s
+    #def _test_timeout(self, test_with_time, max_value, use_cms):
+        #solver = self.s
 
-        if use_cms:
-            self.assertTrue(solver.supportsCryptominisat())
-            solver.useCryptominisat()
-            self.assertTrue(solver.isUsingCryptominisat())
-        else:
-            self.assertTrue(solver.supportsMinisat())
-            solver.useMinisat()
-            self.assertTrue(solver.isUsingMinisat())
+        #if use_cms:
+            #self.assertTrue(solver.supportsCryptominisat())
+            #solver.useCryptominisat()
+            #self.assertTrue(solver.isUsingCryptominisat())
+        #else:
+            #self.assertTrue(solver.supportsMinisat())
+            #solver.useMinisat()
+            #self.assertTrue(solver.isUsingMinisat())
 
-        #
-        # Calculate our maximum values
-        #
-        max_conflicts = -1
-        max_time = -1
+        ##
+        ## Calculate our maximum values
+        ##
+        #max_conflicts = -1
+        #max_time = -1
 
-        if test_with_time:
-            max_time = max_value
-        else:
-            max_conflicts = max_value
+        #if test_with_time:
+            #max_time = max_value
+        #else:
+            #max_conflicts = max_value
 
-        #
-        # In `tests/api/C/example.smt`, STP is validated using the
-        # 'integer cube root algorithm' (icbrt).
-        #
-        # We take inspiration from this make an "extremely hard"
-        # instance of this problem (by chaining icbrt calls together
-        # for a desired end result.
-        #
-        # We can scale this problem in the number of bits for each
-        # variable, and the number of times we chain together icbrt.
-        #
-        # The timeout values were found experimentally to be at least
-        # 10x the values we use in the tests
-        #
+        ##
+        ## In `tests/api/C/example.smt`, STP is validated using the
+        ## 'integer cube root algorithm' (icbrt).
+        ##
+        ## We take inspiration from this make an "extremely hard"
+        ## instance of this problem (by chaining icbrt calls together
+        ## for a desired end result.
+        ##
+        ## We can scale this problem in the number of bits for each
+        ## variable, and the number of times we chain together icbrt.
+        ##
+        ## The timeout values were found experimentally to be at least
+        ## 10x the values we use in the tests
+        ##
 
-        width = 64
-        number_of_icbrt = 300
+        #width = 64
+        #number_of_icbrt = 300
 
-        total = solver.bitvecval(width, 0)
+        #total = solver.bitvecval(width, 0)
 
-        for i in range(number_of_icbrt):
-            #
-            # Parameter to 'icbrt'
-            #
-            x = solver.bitvec("x_{:d}".format(i), width)
-            solver.add(x > 10)
+        #for i in range(number_of_icbrt):
+            ##
+            ## Parameter to 'icbrt'
+            ##
+            #x = solver.bitvec("x_{:d}".format(i), width)
+            #solver.add(x > 10)
 
-            #
-            # Implementation of 'icbrt'
-            #
-            s = 30
-            y = solver.bitvecval(width, 0)
-            while s >= 0:
-                y = y.mul(2)
-                b = (y.mul(3).mul(y.add(1)).add(1)).shl(s)
-                x = solver.ite(x.ge(b), x.sub(b), x)
-                y = solver.ite(x.ge(b), y.add(1), y)
-                s -= 3
+            ##
+            ## Implementation of 'icbrt'
+            ##
+            #s = 30
+            #y = solver.bitvecval(width, 0)
+            #while s >= 0:
+                #y = y.mul(2)
+                #b = (y.mul(3).mul(y.add(1)).add(1)).shl(s)
+                #x = solver.ite(x.ge(b), x.sub(b), x)
+                #y = solver.ite(x.ge(b), y.add(1), y)
+                #s -= 3
 
-            total += y
+            #total += y
 
-        solver.add(total == 0)
+        #solver.add(total == 0)
 
-        #
-        # Check using a timeout
-        #
-        result = solver.check_with_timeout(
-            max_conflicts=max_conflicts, max_time=max_time
-        )
+        ##
+        ## Check using a timeout
+        ##
+        #result = solver.check_with_timeout(
+            #max_conflicts=max_conflicts, max_time=max_time
+        #)
 
-        #
-        # We should get an unknown result
-        #
-        self.assertEqual(result, 3, "Solver did not return 'unknown'")
+        ##
+        ## We should get an unknown result
+        ##
+        #self.assertEqual(result, 3, "Solver did not return 'unknown'")
 
-    def _test_timeout_conflicts(self, use_cms):
-        is_time_timeout = False
-        max_value = 1000
-        self._test_timeout(is_time_timeout, max_value, use_cms)
+    #def _test_timeout_conflicts(self, use_cms):
+        #is_time_timeout = False
+        #max_value = 1000
+        #self._test_timeout(is_time_timeout, max_value, use_cms)
 
-    def test_timeout_conflicts_minisat(self):
-        use_cms = False
-        self._test_timeout_conflicts(use_cms)
+    #def test_timeout_conflicts_minisat(self):
+        #use_cms = False
+        #self._test_timeout_conflicts(use_cms)
 
-    def test_timeout_conflicts_cms(self):
-        if self.s.supportsCryptominisat():
-            use_cms = True
-            self._test_timeout_conflicts(use_cms)
+    #def test_timeout_conflicts_cms(self):
+        #if self.s.supportsCryptominisat():
+            #use_cms = True
+            #self._test_timeout_conflicts(use_cms)
 
-    def test_timeout_time(self):
-        #
-        # Time-based timeout is only supported by CMS
-        #
-        if self.s.supportsCryptominisat():
-            is_time_timeout = True
-            max_value = 10
-            use_cms = True
-            self._test_timeout(is_time_timeout, max_value, use_cms)
+    #def test_timeout_time(self):
+        ##
+        ## Time-based timeout is only supported by CMS
+        ##
+        #if self.s.supportsCryptominisat():
+            #is_time_timeout = True
+            #max_value = 10
+            #use_cms = True
+            #self._test_timeout(is_time_timeout, max_value, use_cms)
 
     def _test_solver(self, solver, is_default_solver=False):
         """
