@@ -23,12 +23,12 @@ configure_file(tests.py.in tests.py.in.g @ONLY)
 configure_file(${CMAKE_CURRENT_BINARY_DIR}/tests.py.in.g
               ${CMAKE_CURRENT_BINARY_DIR}/tests.py)
 
+# this test is way too slow TODO fix
 add_custom_target(python-interface-tests
-                  DEPENDS stp
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${CMAKE_CURRENT_BINARY_DIR}/tests.py
-                  COMMENT "Running python-interface-tests"
-                 )
+    DEPENDS stp
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/tests.py
+    COMMENT "Running python-interface-tests"
+)
 
 # Make sure this test-suite runs when "check" is target
 add_test (
