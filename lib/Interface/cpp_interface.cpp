@@ -260,6 +260,12 @@ ASTNode* Cpp_interface::newNode(const Kind k, const int width,
   return newNode(nf->CreateTerm(k, width, n0, n1));
 }
 
+ASTNode* Cpp_interface::newNode(const Kind k, const int width, const ASTVec& v)
+{
+  return newNode(nf->CreateTerm(k, width, v));
+}
+
+
 ASTNode* Cpp_interface::newNode(const ASTNode& copyIn)
 {
   return new ASTNode(copyIn);

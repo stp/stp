@@ -153,6 +153,9 @@ public:
   DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTNode& n0,
                               const ASTNode& n1);
 
+  // Create the node, then "new" it.
+  DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTVec& v);
+
   // On testcase20 it took about 4.2 seconds to parse using the standard
   // allocator and the pool allocator.
   DLL_PUBLIC ASTNode* newNode(const ASTNode& copyIn);

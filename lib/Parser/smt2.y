@@ -1239,6 +1239,20 @@ TERMID_TOK
   stp::GlobalParserInterface->deleteNode( $3);
 
 }
+|  BVPLUS_TOK an_term an_term an_term
+{
+  const unsigned int width = $2->GetValueWidth();
+  ASTVec kids;
+  kids.push_back(*$2);
+  kids.push_back(*$3);
+  kids.push_back(*$4);
+  ASTNode * n = stp::GlobalParserInterface->newNode(BVPLUS, width, kids);
+  $$ = n;
+  stp::GlobalParserInterface->deleteNode( $2);
+  stp::GlobalParserInterface->deleteNode( $3);
+  stp::GlobalParserInterface->deleteNode( $4);
+
+}
 |  BVMULT_TOK an_term an_term
 {
   const unsigned int width = $2->GetValueWidth();
