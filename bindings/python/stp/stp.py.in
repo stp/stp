@@ -338,12 +338,44 @@ class Solver(object):
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
-    def model(self, key=None):
-        """Returns a model for the entire Counter Example of BitVectors."""
-        if key is not None:
-            value = _lib.vc_getCounterExample(self.vc, self.keys[key])
+    def model(self, key=None, expr=None):
+        """
+        Returns the value for an expression (or a name), or a model for the
+        entire counterexample otherwise.
+
+        Args:
+            key (str): to look up a value by name
+            expr (Expr): to look up a value by expression
+
+        Returns:
+            long (if expr or key is specified): the counterexample for the
+                                                expression or key
+
+            dict (if no expr or key): the counterexample model for all named
+                                      keys
+        """
+
+        if expr and isinstance(expr, Expr):
+            #
+            # If we have an expression, and it is a _wrapped_ expression, we
+            # need to unbox it
+            #
+            expr = expr.expr
+        elif not expr and key is not None:
+            #
+            # If have no expression, but we have a key, then look-up based on
+            # keys (values stored in `self.keys) is already unboxed
+            #
+            expr = self.keys[key]
+
+        if expr:
+            value = _lib.vc_getCounterExample(self.vc, expr)
             return _lib.getBVUnsignedLongLong(value)
 
+        #
+        # If no expression, return a model giving values to simple bitvectors
+        # (but not, e.g., arrays)
+        #
         return dict((k, self.model(k)) for k in self.keys)
 
     # Allows easy access to the Counter Example.
@@ -606,8 +638,7 @@ class Expr(object):
     @property
     def value(self):
         """Returns the value of this BitVec in the current model."""
-        value = _lib.vc_getCounterExample(self.s.vc, self.expr)
-        return _lib.getBVUnsignedLongLong(value)
+        return self.s.model(expr=self)
 
 
 class ASTtoSTP(ast.NodeVisitor):

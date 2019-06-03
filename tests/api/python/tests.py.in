@@ -393,6 +393,14 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(bitvecval.name, name_for_bitvecval)
         self.assertEqual(bitvecval.value, value_for_bitvecval)
 
+        #
+        # Build up a complex expression and check we can look it up from the
+        # model directly
+        #
+        expr_for_add = x.add(bitvecval.mul(2))
+        value_from_model = solver.model(expr=expr_for_add)
+        self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
+
     def _test_solver(self, solver, is_default_solver=False):
         """
         Helper method to validate that the passed in "solver" can be set and
