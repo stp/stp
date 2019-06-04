@@ -1,5 +1,7 @@
 (set-info :smt-lib-version 2.6)
 (set-logic QF_BV)
+; CHECK-NEXT: ^sat
+(set-info :status sat)
 
 ; Test that operations with :left-assoc, :right-assoc, and :chainable are implemented.
 
@@ -36,18 +38,8 @@
 (assert (not (=> a c)))
 
 ; Equals is chainable.
-;(assert (= (= #x1 #x1 #x1) (= #x2 #x2 #x2) (= #x3 #x3 #x3)))
-;(assert (= (= false false true) (= false false true) (= true false false) (= true true false) (= true false false) (= false true false)))
-;(assert (= (= true true true) (= false false false)))
-
-; distinct is pairwise
-
-(declare-const u (_ BitVec 2))
-(declare-const v (_ BitVec 2))
-(declare-const w (_ BitVec 2))
-(declare-const x (_ BitVec 2))
-(declare-const y (_ BitVec 2))
-
-(assert (not (distinct u v w x y)))
+(assert (= (= #x1 #x1 #x1) (= #x2 #x2 #x2) (= #x3 #x3 #x3)))
+(assert (= (= false false true) (= false false true) (= true false false) (= true true false) (= true false false) (= false true false)))
+(assert (= (= true true true) (= false false false)))
 
 (check-sat)
