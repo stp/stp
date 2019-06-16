@@ -126,7 +126,7 @@ git clone --depth 1 https://github.com/conp-solutions/mergesat.git
 cd mergesat
 [ -z "$MERGESATCOMMIT" ] || git checkout -b stp-build "$MERGESATCOMMIT"
 echo "MergeSAT: $(git rev-parse --short HEAD)" >> ../COMMITS
-make r -j $(nproc)
+make r -j $(nproc) RELEASE_LDFLAGS=-static
 cd ..
 cp mergesat/build/release/bin/mergesat bin/mergesat
 
@@ -151,6 +151,14 @@ cd ..
 
 # compress
 zip -r -9 stp.zip ./*
+
+# check binaries for being static
+
+DYNAMIC_BINARIES=$(file bin/* | grep ELF | grep dynamic || true)
+if [ -n "$DYNAMIC_BINARIES" ]
+then
+	echo "Warning, found dynamic binary: $DYNAMIC_BINARIES"
+fi
 
 # jump back and move stp.zip here, giving it a full name
 popd
