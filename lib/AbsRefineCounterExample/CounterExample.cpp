@@ -777,13 +777,33 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
 }
 
+/*
+ SMTLIB2 models are supposed to contain all variables.
+ So we can't just use the counterexample - because some might have been eliminated from the problem
+ before SAT solving.
+*/
 void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 {
   const ASTNodeSet symbols = bm->getSymbols();
   for (ASTNode f: symbols)
   {
-      outputLine(os, f, f);
+      if (ARRAY_TYPE != f.GetType())
+        outputLine(os, f, f); // Can't do arrays because we need the reads.
   }
+
+  ASTNodeMap c; // believe we need a copy because iterator gets invalidated?
+  for (const auto& e: CounterExampleMap)
+  {
+    if (READ == e.first.GetKind())
+        c.insert(e);
+  }
+
+  for (const auto& e: c)
+  {
+    outputLine(os, e.first, e.second); 
+  }
+    
+  os.flush();
 }
 
 // Just uses the symbols from the counter example, might not be every symbol defined in the problem.
