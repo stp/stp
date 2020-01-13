@@ -118,7 +118,7 @@ $ mkdir build && cd build
 $ cmake -DSTATICCOMPILE=ON ..
 $ make
 $ sudo make install
-$ sudo ldconfig```
+$ sudo ldconfig
 ```
 
 ### Configuration and build options
