@@ -1,3 +1,4 @@
+; RUN: %solver %s | %OutputCheck %s
 (set-info :smt-lib-version 2.6)
 (set-logic QF_BV)
 ; CHECK-NEXT: ^unsat
