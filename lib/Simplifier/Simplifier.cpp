@@ -2528,6 +2528,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                     BVConstEvaluator(t), BVConstEvaluator(f));
             break;
           }
+          /* FALLTHROUGH*/
         // follow on
         default:
           output = inputterm;
