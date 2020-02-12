@@ -2088,7 +2088,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::batcher(const vector<BBNode>& in)
 // assumes that the prior column is sorted.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::sortingNetworkAdd(
-    BBNodeSet& support, list<BBNode>& current, vector<BBNode>& currentSorted,
+    BBNodeSet& /*support*/, list<BBNode>& current, vector<BBNode>& currentSorted,
     vector<BBNode>& priorSorted)
 {
 

@@ -1691,7 +1691,6 @@ Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex, Expr element,
   if (!(numOfBytes > 0))
     stp::FatalError("numOfBytes must be greater than 0");
 
-  int newBitsPerElem = numOfBytes * 8;
   if (numOfBytes == 1)
     return vc_writeExpr(vc, array, byteIndex, element);
   else
@@ -2131,7 +2130,7 @@ bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
   return b->UserFlags.solver_to_use == solver;
 }
 
-bool vc_supportsMinisat(VC vc)
+bool vc_supportsMinisat(VC /*vc*/)
 {
   return true;
 }
@@ -2147,7 +2146,7 @@ bool vc_isUsingMinisat(VC vc)
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
 }
 
-bool vc_supportsSimplifyingMinisat(VC vc )
+bool vc_supportsSimplifyingMinisat(VC /*vc*/)
 {
   return true;
 }
@@ -2163,7 +2162,7 @@ bool vc_isUsingSimplifyingMinisat(VC vc)
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
 }
 
-bool vc_supportsCryptominisat(VC vc )
+bool vc_supportsCryptominisat(VC /*vc*/)
 {
 #ifdef USE_CRYPTOMINISAT
   return true;
@@ -2172,9 +2171,9 @@ bool vc_supportsCryptominisat(VC vc )
 #endif
 }
 
-bool vc_useCryptominisat(VC vc
-#ifndef USE_CRYPTOMINISAT
-
+bool vc_useCryptominisat(VC
+#ifdef USE_CRYPTOMINISAT
+vc
 #endif
 )
 {
@@ -2186,9 +2185,9 @@ bool vc_useCryptominisat(VC vc
 #endif
 }
 
-bool vc_isUsingCryptominisat(VC vc
-#ifndef USE_CRYPTOMINISAT
-
+bool vc_isUsingCryptominisat(VC
+#ifdef USE_CRYPTOMINISAT
+vc
 #endif
 )
 {
@@ -2199,7 +2198,7 @@ bool vc_isUsingCryptominisat(VC vc
 #endif
 }
 
-bool vc_supportsRiss(VC vc )
+bool vc_supportsRiss(VC /*vc*/ )
 {
 #ifdef USE_RISS
   return true;
@@ -2208,9 +2207,9 @@ bool vc_supportsRiss(VC vc )
 #endif
 }
 
-bool vc_useRiss(VC vc
-#ifndef USE_RISS
-
+bool vc_useRiss(VC
+#ifdef USE_RISS
+vc
 #endif
 )
 {
@@ -2222,9 +2221,9 @@ bool vc_useRiss(VC vc
 #endif
 }
 
-bool vc_isUsingRiss(VC vc
-#ifndef USE_RISS
-
+bool vc_isUsingRiss(VC
+#ifdef USE_RISS
+vc
 #endif
 )
 {
