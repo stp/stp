@@ -188,7 +188,7 @@ THE SOFTWARE.
 %type <vec>  Exprs 
 %type <vec>  Asserts
 %type <stringVec>  FORM_IDs reverseFORM_IDs  
-%type <node> Expr Formula ForDecl IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
+%type <node> Expr Formula IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
 %type <Index_To_UpdateValue> Updates
 
 %type <indexvaluewidth>  BvType BoolType ArrayType Type 
@@ -391,14 +391,6 @@ FORM_IDs         :     reverseFORM_IDs
   delete $1;
 }
 ;
-
-ForDecl         :      FORMID_TOK ':' Type
-{
-  $1->SetIndexWidth($3.indexwidth);
-  $1->SetValueWidth($3.valuewidth);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(*$1);
-  $$ = $1;                      
-}
 
 /* Grammar for Types */
 Type            :      BvType { $$ = $1; }
