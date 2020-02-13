@@ -1158,8 +1158,9 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
   return NOT_IMPLEMENTED;
 }
 
-Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
-                               STPMgr* bm)
+Result bvSignedModulusBothWays(vector<FixedBits*>& /*children*/,
+                               FixedBits& /*output*/,
+                               STPMgr* /*bm*/)
 {
   /*
    (bvsmod s t) abbreviates
@@ -1177,6 +1178,7 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
   // I think this implements old style (broken) semantics, so avoiding it.
   return NO_CHANGE;
 
+#if 0
   if (children[0] == children[1]) // same pointer.
   {
     return NO_CHANGE;
@@ -1184,6 +1186,7 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
 
   return bvSignedDivisionRemainderBothWays(
       children, output, bm, bvUnsignedModulusBothWays, SIGNED_MODULUS);
+#endif
 }
 
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,
