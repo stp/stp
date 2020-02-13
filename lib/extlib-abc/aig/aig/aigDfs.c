@@ -94,15 +94,20 @@ Vec_Ptr_t * Aig_ManDfs( Aig_Man_t * p )
     Aig_ManForEachPi( p, pObj, i )
         Aig_ObjSetTravIdCurrent( p, pObj );
     // if there are latches, mark them
-    if ( Aig_ManLatchNum(p) > 0 )
-        Aig_ManForEachObj( p, pObj, i )
-            if ( Aig_ObjIsLatch(pObj) )
+    if ( Aig_ManLatchNum(p) > 0 ) {
+        Aig_ManForEachObj( p, pObj, i ) {
+            if ( Aig_ObjIsLatch(pObj) ) {
                 Aig_ObjSetTravIdCurrent( p, pObj );
+            }
+        }
+    }
     // go through the nodes
     vNodes = Vec_PtrAlloc( Aig_ManNodeNum(p) );
-    Aig_ManForEachObj( p, pObj, i )
-        if ( Aig_ObjIsNode(pObj) || Aig_ObjIsBuf(pObj) )
+    Aig_ManForEachObj( p, pObj, i ) {
+        if ( Aig_ObjIsNode(pObj) || Aig_ObjIsBuf(pObj) ) {
             Aig_ManDfs_rec( p, pObj, vNodes );
+        }
+    }
     return vNodes;
 }
 
@@ -238,15 +243,20 @@ Vec_Ptr_t * Aig_ManDfsReverse( Aig_Man_t * p )
     Aig_ManForEachPo( p, pObj, i )
         Aig_ObjSetTravIdCurrent( p, pObj );
     // if there are latches, mark them
-    if ( Aig_ManLatchNum(p) > 0 )
-        Aig_ManForEachObj( p, pObj, i )
-            if ( Aig_ObjIsLatch(pObj) )
+    if ( Aig_ManLatchNum(p) > 0 ) {
+        Aig_ManForEachObj( p, pObj, i ) {
+            if ( Aig_ObjIsLatch(pObj) ) {
                 Aig_ObjSetTravIdCurrent( p, pObj );
+            }
+        }
+    }
     // go through the nodes
     vNodes = Vec_PtrAlloc( Aig_ManNodeNum(p) );
-    Aig_ManForEachObj( p, pObj, i )
-        if ( Aig_ObjIsNode(pObj) || Aig_ObjIsBuf(pObj) )
+    Aig_ManForEachObj( p, pObj, i ) {
+        if ( Aig_ObjIsNode(pObj) || Aig_ObjIsBuf(pObj) ) {
             Aig_ManDfsReverse_rec( p, pObj, vNodes );
+        }
+    }
     return vNodes;
 }
 
