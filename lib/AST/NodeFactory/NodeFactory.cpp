@@ -26,12 +26,6 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"
 
-stp::ASTNode NodeFactory::CreateTerm(stp::Kind kind, unsigned int width,
-                                     const stp::ASTVec& children)
-{
-  return CreateTerm(kind, width, children);
-}
-
 ASTNode NodeFactory::CreateTerm(Kind kind, unsigned int width,
                                 const ASTNode& child0, const ASTVec& children)
 {
