@@ -2,6 +2,7 @@
 %option bison-bridge*/
 %option always-interactive
 %option noyywrap
+%option noinput
 %option nounput
 %option noreject
 %option noyymore

@@ -1,3 +1,4 @@
+%option noinput
 %{
   /********************************************************************
    * AUTHORS: Vijay Ganesh, David L. Dill, Trevor Hansen
@@ -36,6 +37,7 @@
 #include "stp/Parser/parser.h"
 #include "parsesmt.tab.h"
 #include "stp/cpp_interface.h"
+
 
   using namespace std;
   using namespace stp;
