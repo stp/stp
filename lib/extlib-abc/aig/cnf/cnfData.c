@@ -4557,7 +4557,7 @@ void Cnf_ReadMsops( char ** ppSopSizes, char *** ppSops )
         { 0x0F0F, 0xF0F0 },
         { 0x00FF, 0xFF00 }
     };
-    signed char Map[256], * pPrev, * pMemory;
+    char Map[256], * pPrev, * pMemory;
     char * pSopSizes, ** pSops;
     int i, k, b, Size;
 
@@ -4572,7 +4572,7 @@ void Cnf_ReadMsops( char ** ppSopSizes, char *** ppSops )
     assert( Size < 100000 );
 
     // allocate memory
-    pMemory = ALLOC( signed char, Size * 75 );
+    pMemory = ALLOC( char, Size * 75 );
     // copy the array into memory
     for ( i = 0; i < Size; i++ )
         for ( k = 0; k < 75; k++ )
