@@ -432,10 +432,9 @@ static inline void Vec_StrPush( Vec_Str_t * p, char Entry )
 ******************************************************************************/
 static inline int Vec_StrBase10Log( unsigned Num )
 {
-    int Res;
-    if ( Num == 0 ) return 0;
-    if ( Num == 1 ) return 1;
-	for ( Res = 0, Num--;  Num;  Num /= 10,  Res++ );
+    int Res = 0;
+    if ( Num < 2 ) return Num;
+    for ( Num--;  Num;  Num /= 10) {  Res++; }
     return Res;
 } /* end of Extra_Base2Log */
 

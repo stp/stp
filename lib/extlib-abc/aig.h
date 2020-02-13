@@ -177,8 +177,8 @@ struct Aig_Man_t_
 #define PRT(a,t)  printf("%s = ", (a)); printf("%6.2f sec\n", (float)(t)/(float)(CLOCKS_PER_SEC))
 #endif
 
-static inline int          Aig_Base2Log( unsigned n )             { int r; if ( n < 2 ) return n; for ( r = 0, n--; n; n >>= 1, r++ ); return r; }
-static inline int          Aig_Base10Log( unsigned n )            { int r; if ( n < 2 ) return n; for ( r = 0, n--; n; n /= 10, r++ ); return r; }
+static inline int          Aig_Base2Log( unsigned n )             { int r = 0; if ( n < 2 ) return n; for ( n--; n; n >>= 1) { r++; } return r; }
+static inline int          Aig_Base10Log( unsigned n )            { int r = 0; if ( n < 2 ) return n; for ( n--; n; n /= 10) { r++; } return r; }
 static inline char *       Aig_UtilStrsav( char * s )             { return s ? strcpy(ALLOC(char, strlen(s)+1), s) : NULL; }
 static inline int          Aig_BitWordNum( int nBits )            { return (nBits>>5) + ((nBits&31) > 0);                  }
 static inline int          Aig_TruthWordNum( int nVars )          { return nVars <= 5 ? 1 : (1 << (nVars - 5));            }
