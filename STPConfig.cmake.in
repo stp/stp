@@ -13,6 +13,7 @@ set(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
 
 # Our library dependencies (contains definitions for IMPORTED targets)
 include("${STP_CMAKE_DIR}/@STP_TARGETS_FILENAME@")
+find_package(cryptominisat5 CONFIG)
 
 # These are IMPORTED targets created by @STP_TARGETS_FILENAME@
 set(STP_EXECUTABLE stp)
