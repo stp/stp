@@ -227,9 +227,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     }
     case BVXOR:
     {
-      assert(2 == number_of_children);
+      assert(1 <= number_of_children);
+
       output = CONSTANTBV::BitVector_Create(inputwidth, true);
-      CONSTANTBV::Set_ExclusiveOr(output, tmp0, tmp1);
+
+      for (ASTVec::iterator it = children.begin(), itend = children.end();
+           it != itend; it++)
+      {
+        CBV kk = (*it).GetBVConst();
+        CONSTANTBV::Set_ExclusiveOr(output, output, kk);
+      }
+
       OutputNode = _bm->CreateBVConst(output, outputwidth);
       break;
     }

@@ -86,7 +86,7 @@ cd m4ri-20140914/
 make -j $(nproc)
 echo "Before proceeding, make sure you want to install m4ri version 20140914 from source"
 sleep 5
-timeout 10 sudo make install || true
+sudo make install || true
 cd ..
 
 git clone --depth 1 https://github.com/msoos/cryptominisat.git
@@ -126,7 +126,7 @@ git clone --depth 1 https://github.com/conp-solutions/mergesat.git
 cd mergesat
 [ -z "$MERGESATCOMMIT" ] || git checkout -b stp-build "$MERGESATCOMMIT"
 echo "MergeSAT: $(git rev-parse --short HEAD)" >> ../COMMITS
-make r -j $(nproc)
+make r -j $(nproc) RELEASE_LDFLAGS=-static
 cd ..
 cp mergesat/build/release/bin/mergesat bin/mergesat
 
@@ -151,6 +151,14 @@ cd ..
 
 # compress
 zip -r -9 stp.zip ./*
+
+# check binaries for being static
+
+DYNAMIC_BINARIES=$(file bin/* | grep ELF | grep dynamic || true)
+if [ -n "$DYNAMIC_BINARIES" ]
+then
+	echo "Warning, found dynamic binary: $DYNAMIC_BINARIES"
+fi
 
 # jump back and move stp.zip here, giving it a full name
 popd

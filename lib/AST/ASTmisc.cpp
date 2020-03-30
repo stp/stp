@@ -165,7 +165,7 @@ bool isCommutative(const Kind k)
   return false;
 }
 
-void FatalError(const char* str, const ASTNode& a, int w)
+ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
 {
   if (a.GetKind() != UNDEFINED)
   {
@@ -184,7 +184,7 @@ void FatalError(const char* str, const ASTNode& a, int w)
   abort();
 }
 
-void FatalError(const char* str)
+ATTR_NORETURN void FatalError(const char* str)
 {
   cerr << "Fatal Error: " << str << endl;
   if (vc_error_hdlr)
@@ -414,6 +414,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case BVSRSHIFT:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
+      /*FALLTHROUGH*/
     // run on.
     case BVOR:
     case BVAND:
