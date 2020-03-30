@@ -298,6 +298,25 @@ class TestSTP(unittest.TestCase):
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
 
+    def test_urem(self):
+        #
+        # Validate the `urem` capability in STP -- note: `urem` == `mod`!
+        #
+        solver = self.s
+        width = 32
+        needle = 0xDEADBEEF
+        x = solver.bitvec("x", width)
+        y = solver.bitvec("y", width)
+        expr = x.rem(y)
+        solver.add(expr == needle)
+        solver.add(y != 0) # avoid divide by zero
+        self.assertTrue(solver.check(), "instance should be satisfiable")
+        model = solver.model()
+        val_for_x = model["x"]
+        val_for_y = model["y"]
+        concrete_value = val_for_x % val_for_y
+        self.assertEqual(concrete_value, needle, "Concrete value did not match expected value")
+
     def _test_solver(self, solver, is_default_solver=False):
         """
         Helper method to validate that the passed in "solver" can be set and
