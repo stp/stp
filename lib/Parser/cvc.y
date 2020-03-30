@@ -1013,13 +1013,13 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 ;
 
 /*Grammar for Array Update Expr*/
-ArrayUpdateExpr : Expr WITH_TOK Updates
+ArrayUpdateExpr : Expr Updates
 {
   ASTNode * result;
   unsigned int width = $1->GetValueWidth();
 
-  ASTNodeMap::iterator it = $3->begin();
-  ASTNodeMap::iterator itend = $3->end();
+  ASTNodeMap::iterator it = $2->begin();
+  ASTNodeMap::iterator itend = $2->end();
   result = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(WRITE,
                                             $1->GetIndexWidth(),
                                             width,
@@ -1038,20 +1038,20 @@ ArrayUpdateExpr : Expr WITH_TOK Updates
   }
   BVTypeCheck(*result);
   $$ = result;
-  delete $3;
+  delete $2;
   delete $1;
 }
 ;
 
-Updates         : '[' Expr ']' ASSIGN_TOK Expr 
+Updates         : '[' Expr ']' ASSIGN_TOK Expr
 {
   $$ = new ASTNodeMap();
-  (*$$)[*$2] = *$5;         
+  (*$$)[*$2] = *$5;
   delete $2;
-  delete $5;        
+  delete $5;
 }
-| Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr 
-{                   
+| Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr
+{
   (*$1)[*$4] = *$7;
   delete $4;
   delete $7;
