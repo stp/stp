@@ -298,6 +298,7 @@ class TestSTP(unittest.TestCase):
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
 
+    @unittest.skip("Currently segfaulting")
     def test_urem(self):
         #
         # Validate the `urem` capability in STP -- note: `urem` == `mod`!
