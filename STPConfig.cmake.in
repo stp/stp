@@ -11,8 +11,11 @@
 get_filename_component(STP_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 set(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
 
-include(CMakeFindDependencyMacro)
-find_dependency(cryptominisat5)
+
+if ("@USE_CRYPTOMINISAT@" == "ON")
+    include(CMakeFindDependencyMacro)
+    find_dependency(cryptominisat5)
+endif()
 
 # Our library dependencies (contains definitions for IMPORTED targets)
 include("${STP_CMAKE_DIR}/@STP_TARGETS_FILENAME@")
