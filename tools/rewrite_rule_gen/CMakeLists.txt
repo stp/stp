@@ -18,9 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_executable(rewrite_rule_gen
-    rewrite_rule_gen.cpp
-)
-target_link_libraries(rewrite_rule_gen
-    stp
-)
+if ( USE_CRYPTOMINISAT)
+    add_executable(rewrite_rule_gen
+        rewrite_rule_gen.cpp
+    )
+    target_link_libraries(rewrite_rule_gen
+        stp
+    )
+endif()

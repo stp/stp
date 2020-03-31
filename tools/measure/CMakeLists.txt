@@ -18,10 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_executable(measure
- measure.cpp
- Functions.cpp
-)
-target_link_libraries(measure
- stp
-)
+if ( USE_CRYPTOMINISAT )
+    add_executable(measure
+     measure.cpp
+     Functions.cpp
+    )
+    target_link_libraries(measure
+     stp
+    )
+endif()
