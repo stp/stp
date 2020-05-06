@@ -335,11 +335,11 @@ int Main::main(int argc, char** argv)
     query = ASTNode();
   }
 
-  // Previously we used fast-exit to avoid destroying lots of objects, for example in the node manager.
-  // We use unique_ptr now on lots of stuff, so there seems little difference in the time it takes to
-  // exit normally vs. not.
-  //if (bm->UserFlags.isSet("fast-exit", "0"))
-  //  exit(0);
+  // Save time by not calling the destructors.
+  #ifdef NDEBUG
+    std::fast_exit(0);
+  #endif
+
 
   //Cleanup
   AssertsQuery->clear();
