@@ -337,7 +337,7 @@ int Main::main(int argc, char** argv)
 
   // Save time by not calling the destructors.
   #ifdef NDEBUG
-    std::fast_exit(0);
+    std::quick_exit(0);
   #endif
 
 
