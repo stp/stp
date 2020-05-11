@@ -42,31 +42,74 @@ int eval(const ASTNode& b)
 {
   const Kind k = b.GetKind();
 
-  // These scores are approximately the number of AIG nodes created when
+  if (b.Degree() == 0)
+    return 0; // consts & symbols don't count.
+
+  // These scores are approximately the number of clauses created when
   // no input values are known.
   int score = 0;
-  if (k == BVMULT)
-    score = (5 * b.GetValueWidth() * b.GetValueWidth());
-  else if (k == BVMOD)
-    score = (15 * b.GetValueWidth() * b.GetValueWidth());
+  if (k == BVMULT&& b.Degree() == 2 && b[0].GetKind() == BVCONST)
+  {
+    // because it's going to be booth encoded, it's about the number of runs.
+    auto cbv = b[0].GetBVConst(); // cleanup?
+    bool last = CONSTANTBV::BitVector_bit_test(cbv,0);
+    int changes = 0;
+    for (int i =1; i < b.GetValueWidth();i++)
+    {
+        if (last != CONSTANTBV::BitVector_bit_test(cbv,i))
+          changes++;
+
+        last = CONSTANTBV::BitVector_bit_test(cbv,i);
+    }
+   //std::cerr << "C" <<changes;
+   score = (4 * b.GetValueWidth() * changes); 
+
+  }
+  else if (k == BVMULT)
+  {
+    score = (4 * b.GetValueWidth() * b.GetValueWidth() * b.Degree());
+  }
   else if (isLikeDivision(k))
-    score = (20 * b.GetValueWidth() * b.GetValueWidth());
-  else if (k == BVCONCAT || k == BVEXTRACT || k == NOT)
+    score = (16 * b.GetValueWidth() * b.GetValueWidth());
+  else if (k == BVCONCAT || k == BVEXTRACT || k == NOT || k == BVNOT)
   {
   } // no harder.
   else if (k == EQ || k == BVGE || k == BVGT || k == BVSGE || k == BVSGT)
   {
-    // without getting the width of the child it'd always be 2.
-    score = std::max(b[0].GetValueWidth(), 1u) * (b.Degree());
+    score = 6 * std::max(b[0].GetValueWidth(), 1u);
   }
   else if (k == BVSUB)
   {
     // We convert subtract to a + (-b), we want the difficulty scores to be
     // same.
-    score = std::max(b[0].GetValueWidth(), 1u) * 3;
+    score = 20 * b.GetValueWidth();
   }
-  else
+  else if (k == EQ)
   {
+    score = 5 * b[0].GetValueWidth();    
+  }
+  else if (k == BVUMINUS)
+  {
+    score = 6 * b.GetValueWidth();    
+  }  
+  else if (k == BVPLUS)
+  {
+    score = 14 * b.GetValueWidth() * (b.Degree()-1);    
+  }
+  else if (k == BVRIGHTSHIFT || k == BVLEFTSHIFT)
+  {
+    score = 29 * b.GetValueWidth();    
+  }
+  else if (k == BVSRSHIFT)
+  {
+    score = 30 * b.GetValueWidth();  
+  }  
+  else if (k == BVZX || k == BVSX)
+  {
+    score = b.GetValueWidth() - b[0].GetValueWidth();    
+  }
+  else {
+    //std::cerr << k;
     score = std::max(b.GetValueWidth(), 1u) * (b.Degree());
   }
   return score;
