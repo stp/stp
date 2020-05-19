@@ -30,7 +30,7 @@ THE SOFTWARE.
 
 namespace stp
 {
-// estimate how difficult that input is to solve based on some simple rules.
+// Estimate the number of clauses that would generated if sent to CNF.
 
 static bool isLikeDivision(const Kind& k)
 {
@@ -51,7 +51,7 @@ int eval(const ASTNode& b)
   if (k == BVMULT&& b.Degree() == 2 && b[0].GetKind() == BVCONST)
   {
     // because it's going to be booth encoded, it's about the number of runs.
-    auto cbv = b[0].GetBVConst(); // cleanup?
+    const auto cbv = b[0].GetBVConst(); // cleanup?
     bool last = CONSTANTBV::BitVector_bit_test(cbv,0);
     int changes = 0;
     for (int i =1; i < b.GetValueWidth();i++)
@@ -106,9 +106,10 @@ int eval(const ASTNode& b)
   }  
   else if (k == BVZX || k == BVSX)
   {
-    score = b.GetValueWidth() - b[0].GetValueWidth();    
+    score = 0;    
   }
-  else {
+  else 
+  {
     //std::cerr << k;
     score = std::max(b.GetValueWidth(), 1u) * (b.Degree());
   }

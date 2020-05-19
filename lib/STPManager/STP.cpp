@@ -491,7 +491,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   long final_difficulty_score = difficulty.score(inputToSat, bm);
 
   bool worse = false;
-  if (final_difficulty_score > 1.1 * initial_difficulty_score)
+  if (final_difficulty_score > .8 * initial_difficulty_score)
     worse = true;
 
   // It's of course very wasteful to do this! Later I'll make it reuse the
@@ -515,8 +515,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.stats_flag)
   {
-    cerr << "Initial Difficulty Score:" << initial_difficulty_score << endl;
-    cerr << "Final Difficulty Score:" << final_difficulty_score << endl;
+    cerr << "(3) Initial/Final Difficulty Score:" << initial_difficulty_score << " / " << final_difficulty_score <<  endl;
   }
 
   bool optimize_enabled = bm->UserFlags.optimize_flag;
