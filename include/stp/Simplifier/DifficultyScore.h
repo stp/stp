@@ -35,10 +35,10 @@ class DifficultyScore // not copyable
 {
 private:
   // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<int, int> cache;
+  std::map<int, long> cache;
 
 public:
-  int score(const ASTNode& top, STPMgr*);
+  long score(const ASTNode& top, STPMgr*);
 };
 }
 

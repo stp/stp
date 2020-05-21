@@ -151,8 +151,8 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
 ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
                               PropagateEqualities* pe,
-                              const int initial_difficulty_score,
-                              int& actualBBSize)
+                              const long initial_difficulty_score,
+                              long& actualBBSize)
 {
   while (true)
   {
@@ -340,8 +340,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
-  unsigned initial_difficulty_score = difficulty.score(inputToSat, bm);
-  int bitblasted_difficulty = -1;
+  long initial_difficulty_score = difficulty.score(inputToSat, bm);
+  long bitblasted_difficulty = -1;
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,

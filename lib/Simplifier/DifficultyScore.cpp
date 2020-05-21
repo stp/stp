@@ -38,7 +38,7 @@ static bool isLikeDivision(const Kind& k)
          k == SBVREM || k == SBVMOD;
 }
 
-int eval(const ASTNode& b)
+long eval(const ASTNode& b)
 {
   const Kind k = b.GetKind();
 
@@ -47,7 +47,7 @@ int eval(const ASTNode& b)
 
   // These scores are approximately the number of clauses created when
   // no input values are known.
-  int score = 0;
+  long score = 0;
   if (k == BVMULT&& b.Degree() == 2 && b[0].GetKind() == BVCONST)
   {
     // because it's going to be booth encoded, it's about the number of runs.
@@ -116,14 +116,14 @@ int eval(const ASTNode& b)
   return score;
 }
 
-int DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
+long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
 {
   if (cache.find(top.GetNodeNum()) != cache.end())
     return cache.find(top.GetNodeNum())->second;
 
   NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
   ASTNode current;
-  int result = 0;
+  long result = 0;
   while ((current = ni.next()) != ni.end())
     result += eval(current);
 
