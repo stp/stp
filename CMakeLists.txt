@@ -433,6 +433,34 @@ if (USE_RISS)
 endif()
 
 # -----------------------------------------------------------------------------
+# Find MergeSat
+# -----------------------------------------------------------------------------
+option(USE_MERGESAT "Try to use MergeSat" OFF)
+
+if (USE_MERGESAT)
+    add_definitions(-DUSE_MERGESAT)
+    add_definitions(-DMERGESAT_NSPACE=MergeSat)          # Make sure we do not use 'Minisat' as used by MiniSat
+    add_definitions(-DMINISAT_NSPACE=MergeSat)          # Make sure we do not use 'Minisat' as used by MiniSat
+    include_directories(${MERGESAT_DIR}/minisat)         # should point to the base directory: ~/git/mergesat/
+    include_directories(${MERGESAT_DIR})         # should point to the base directory: ~/git/mergesat/
+    link_directories(${MERGESAT_DIR}/build/release/lib)  # should point to the base directory: ~/git/mergesat/build/lib
+else()
+    # -----------------------------------------------------------------------------
+    # Find Minisat
+    # -----------------------------------------------------------------------------
+    find_package(minisat)
+    set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
+    set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
+    if (NOT MINISAT_FOUND)
+      message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+    else()
+      message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
+    endif()
+    include_directories(${MINISAT_INCLUDE_DIR})
+    set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+endif()
+
+# -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
@@ -496,21 +524,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 else()
     MESSAGE(STATUS "Not on Linux, not creating manpage")
 endif()
-
-
-# -----------------------------------------------------------------------------
-# Find Minisat
-# -----------------------------------------------------------------------------
-find_package(minisat)
-set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
-if (NOT MINISAT_FOUND)
-  message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
-else()
-  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
-endif()
-include_directories(${MINISAT_INCLUDE_DIR})
-set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
