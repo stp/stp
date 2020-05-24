@@ -31,7 +31,7 @@ BUILD_DIR=$(pwd)
 COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
 
 case $STP_CONFIG in
-    STATIC_CMS|STATIC_RISS)
+    STATIC_CMS|STATIC_RISS|STATIC_MERGESAT)
         # get and install minisat
         mkdir minisat_git && cd minisat_git
         git clone --depth 1 https://github.com/msoos/minisat
@@ -156,6 +156,27 @@ case $STP_CONFIG in
          ls
     ;;
 
+    STATIC_MERGESAT)
+         pwd
+         ls
+
+         pushd ${SOURCE_DIR}
+         rm -rf mergesat
+         git clone --depth 1 https://github.com/conp-solutions/mergesat.git
+         cd mergesat
+         git checkout 9e93ccfea8bc8b0521b70c645249cc637a0d969d
+         make lr -j2 CXXFLAGS="-DMERGESAT_NSPACE=MergeSat"
+         popd
+
+         cmake ${COMMON_CMAKE_ARGS} \
+                   -DSTATICCOMPILE:BOOL=ON \
+                   -DNOCRYPTOMINISAT=ON \
+                   -DUSE_MERGESAT=ON \
+                   -DMERGESAT_DIR=${SOURCE_DIR}/mergesat \
+                   ${SOURCE_DIR}
+         pwd
+         ls
+    ;;
 
     *)
         echo "\"${STP_CONFIG}\" configuration not recognised"
