@@ -124,7 +124,7 @@ cp riss/build/bin/riss-core bin/riss
 # MergeSAT
 git clone --depth 1 https://github.com/conp-solutions/mergesat.git
 cd mergesat
-[ -z "$MERGESATCOMMIT" ] || git checkout -b stp-build "$MERGESATCOMMIT"
+[ -z "$MERGESATCOMMIT" ] || git checkout 9e93ccfea8bc8b0521b70c645249cc637a0d969d "$MERGESATCOMMIT"
 echo "MergeSAT: $(git rev-parse --short HEAD)" >> ../COMMITS
 make r -j $(nproc) RELEASE_LDFLAGS=-static
 cd ..
