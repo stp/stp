@@ -70,7 +70,7 @@ bool RissCore::addClause(
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(ps.size());
   v.clear();
-  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(Minisat::toInt(ps[i])));
+  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(MINISAT_NSPACE::toInt(ps[i])));
 
   return s->addClause(v);
 }
@@ -94,7 +94,7 @@ bool RissCore::propagateWithAssumptions(
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(assumps.size());
   v.clear();
-  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(Minisat::toInt(assumps[i])));
+  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(MINISAT_NSPACE::toInt(assumps[i])));
 
   Riss::lbool ret = s->solveLimited(v);
   assert(s->conflicts ==0);

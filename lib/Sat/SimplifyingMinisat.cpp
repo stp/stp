@@ -38,7 +38,7 @@ using std::cout;
 
 SimplifyingMinisat::SimplifyingMinisat()
 {
-  s = new Minisat::SimpSolver();
+  s = new MINISAT_NSPACE::SimpSolver();
 }
 
 SimplifyingMinisat::~SimplifyingMinisat()
@@ -70,9 +70,9 @@ bool SimplifyingMinisat::solve(
   if (!s->simplify())
     return false;
 
-  Minisat::vec<Minisat::Lit> assumps;
-  Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef)
+  MINISAT_NSPACE::vec<MINISAT_NSPACE::Lit> assumps;
+  MINISAT_NSPACE::lbool ret = s->solveLimited(assumps);
+  if (ret == (MINISAT_NSPACE::lbool)l_Undef)
   {
     timeout_expired = true;
   }
@@ -87,7 +87,7 @@ bool SimplifyingMinisat::simplify() // Removes already satisfied clauses.
 
 uint8_t SimplifyingMinisat::modelValue(uint32_t x) const
 {
-  return Minisat::toInt(s->modelValue(x));
+  return MINISAT_NSPACE::toInt(s->modelValue(x));
 }
 
 void SimplifyingMinisat::setVerbosity(int v)

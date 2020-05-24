@@ -28,6 +28,10 @@ THE SOFTWARE.
 #include <cassert>
 #include <math.h>
 
+#ifndef MINISAT_NSPACE
+#define MINISAT_NSPACE Minisat
+#endif
+
 namespace stp
 {
 using std::pair;
@@ -70,7 +74,7 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // (which it returns).
 // Because it's used to create array axionms (a=b)-> (c=d), it can be
 // used to only add one of the two polarities.
-Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
+MINISAT_NSPACE::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
                        ToSATBase::ASTNodeToSATVar& satVar,
                        Polarity polary = BOTH)
 {
@@ -220,9 +224,9 @@ struct AxiomToBe
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
                      ToSATBase::ASTNodeToSATVar& satVar)
 {
-  Minisat::Var a =
+  MINISAT_NSPACE::Var a =
       getEquals(SatSolver, toBe.index0, toBe.index1, satVar, LEFT_ONLY);
-  Minisat::Var b =
+  MINISAT_NSPACE::Var b =
       getEquals(SatSolver, toBe.value0, toBe.value1, satVar, RIGHT_ONLY);
   SATSolver::vec_literals satSolverClause;
   satSolverClause.push(SATSolver::mkLit(a, true));

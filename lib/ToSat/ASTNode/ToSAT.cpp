@@ -178,7 +178,7 @@ bool ToSAT::fill_satsolver_with_clauses(ClauseContainer& cc,
       bool negate = (NOT == node.GetKind()) ? true : false;
       ASTNode n = negate ? node[0] : node;
       uint32_t v = LookupOrCreateSATVar(newSolver, n);
-      Minisat::Lit l = SATSolver::mkLit(v, negate);
+      MINISAT_NSPACE::Lit l = SATSolver::mkLit(v, negate);
       satSolverClause.push(l);
     }
 

@@ -29,22 +29,22 @@ THE SOFTWARE.
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
-namespace MiniSat
+namespace MINISAT_NSPACE
 {
 }
-using namespace MiniSat;
+using namespace MINISAT_NSPACE;
 
 namespace stp
 {
 
 uint8_t MinisatCore::value(uint32_t x) const
 {
-  return Minisat::toInt(s->value(x));
+  return MINISAT_NSPACE::toInt(s->value(x));
 }
 
 MinisatCore::MinisatCore()
 {
-  s = new Minisat::Solver;
+  s = new MINISAT_NSPACE::Solver;
 }
 
 MinisatCore::~MinisatCore()
@@ -77,9 +77,9 @@ bool MinisatCore::propagateWithAssumptions(
     return false;
 
   setMaxConflicts(0);
-  Minisat::lbool ret = s->solveLimited(assumps);
+  MINISAT_NSPACE::lbool ret = s->solveLimited(assumps);
   assert(s->conflicts ==0);
-  return ret != (Minisat::lbool)l_False;
+  return ret != (MINISAT_NSPACE::lbool)l_False;
 }
 
 bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
@@ -87,19 +87,19 @@ bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
   if (!s->simplify())
     return false;
 
-  Minisat::vec<Minisat::Lit> assumps;
-  Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef)
+  MINISAT_NSPACE::vec<MINISAT_NSPACE::Lit> assumps;
+  MINISAT_NSPACE::lbool ret = s->solveLimited(assumps);
+  if (ret == (MINISAT_NSPACE::lbool)l_Undef)
   {
     timeout_expired = true;
   }
 
-  return ret == (Minisat::lbool)l_True;
+  return ret == (MINISAT_NSPACE::lbool)l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const
 {
-  return Minisat::toInt(s->modelValue(x));
+  return MINISAT_NSPACE::toInt(s->modelValue(x));
 }
 
 uint32_t MinisatCore::newVar()

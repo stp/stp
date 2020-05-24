@@ -45,6 +45,10 @@ namespace stp
 ATTR_NORETURN void FatalError(const char* str);
 }
 
+#ifndef MINISAT_NSPACE
+#define MINISAT_NSPACE Minisat
+#endif
+
 long RunTimes::getCurrentTime()
 {
   timeval t;
@@ -92,8 +96,8 @@ void RunTimes::print()
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
-  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0)
+  std::cerr << "CPU Time Used   : " << MINISAT_NSPACE::cpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << MINISAT_NSPACE::memUsed() / (1024.0 * 1024.0)
             << "MB" << std::endl;
 
   std::cerr.flags(f);
@@ -107,7 +111,7 @@ std::string RunTimes::getDifference()
   s << (val - lastTime) << "ms";
   lastTime = val;
   s << ":" << std::fixed << std::setprecision(0)
-    << Minisat::memUsed() / (1024.0 * 1024.0) << "MB";
+    << MINISAT_NSPACE::memUsed() / (1024.0 * 1024.0) << "MB";
   return s.str();
 }
 

@@ -27,16 +27,20 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 
-namespace Minisat
+namespace MINISAT_NSPACE
 {
 class SimpSolver;
 }
+
+#ifndef MINISAT_NSPACE
+#define MINISAT_NSPACE Minisat
+#endif
 
 namespace stp
 {
 class SimplifyingMinisat : public SATSolver
 {
-  Minisat::SimpSolver* s;
+  MINISAT_NSPACE::SimpSolver* s;
 
 public:
   SimplifyingMinisat();

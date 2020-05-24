@@ -29,6 +29,10 @@ THE SOFTWARE.
 #include "minisat/mtl/Vec.h"
 #include <iostream>
 
+#ifndef MINISAT_NSPACE
+#define MINISAT_NSPACE Minisat
+#endif
+
 // Don't let the defines escape outside.
 
 namespace stp
@@ -44,7 +48,7 @@ public:
 
   virtual ~SATSolver() {}
 
-  class vec_literals : public Minisat::vec<Minisat::Lit>
+  class vec_literals : public MINISAT_NSPACE::vec<MINISAT_NSPACE::Lit>
   {
   };
 
@@ -57,9 +61,9 @@ public:
 
   typedef uint8_t lbool;
 
-  static inline Minisat::Lit mkLit(uint32_t var, bool sign)
+  static inline MINISAT_NSPACE::Lit mkLit(uint32_t var, bool sign)
   {
-    Minisat::Lit p;
+    MINISAT_NSPACE::Lit p;
     p.x = var + var + (int)sign;
     return p;
   }

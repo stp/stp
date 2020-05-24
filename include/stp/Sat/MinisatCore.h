@@ -31,7 +31,11 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 
-namespace Minisat
+#ifndef MINISAT_NSPACE
+#define MINISAT_NSPACE Minisat
+#endif
+
+namespace MINISAT_NSPACE
 {
 class Solver;
 }
@@ -46,7 +50,7 @@ namespace stp
 
 
 {
-  Minisat::Solver* s;
+  MINISAT_NSPACE::Solver* s;
 
 public:
   MinisatCore();
