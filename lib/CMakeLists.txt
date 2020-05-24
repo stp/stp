@@ -139,6 +139,11 @@ if (USE_RISS)
         ${stp_link_libs} -lriss-coprocessor)
 endif()
 
+if (USE_MERGESAT)
+    set(stp_link_libs
+        ${stp_link_libs} ${MERGESAT_DIR}/build/release/lib/libmergesat.a)
+endif()
+
 target_link_libraries(stp
     LINK_PUBLIC ${stp_link_libs}
 )

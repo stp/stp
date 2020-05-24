@@ -95,6 +95,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case CMS4:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
       break;
+    case MERGESAT:
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::MERGESAT_SOLVER;
+      break;
     case RISS:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::RISS_SOLVER;
       break;
@@ -2202,6 +2205,42 @@ vc
 {
 #ifdef USE_CRYPTOMINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
+#else
+  return false;
+#endif
+}
+
+bool vc_supportsMergeSat(VC /*vc*/ )
+{
+#ifdef USE_MERGESAT
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useMergeSat(VC
+#ifdef USE_MERGESAT
+vc
+#endif
+)
+{
+#ifdef USE_MERGESAT
+  _vc_useSolver(vc, stp::UserDefinedFlags::MERGESAT_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingMergeSat(VC
+#ifdef USE_MERGESAT
+vc
+#endif
+)
+{
+#ifdef USE_MERGESAT
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MERGESAT_SOLVER);
 #else
   return false;
 #endif

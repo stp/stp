@@ -173,6 +173,10 @@ enum ifaceflag_t
   //!
   CMS4,
 
+  //! Use the SAT solver MergeSat.
+  //!
+  MERGESAT,
+
   //! Use the SAT solver Riss.
   //!
   RISS,

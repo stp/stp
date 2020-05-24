@@ -33,6 +33,10 @@ THE SOFTWARE.
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
 
+#ifdef USE_MERGESAT
+#include "stp/Sat/MergeSatCore.h"
+#endif
+
 #ifdef USE_RISS
 #include "stp/Sat/Riss.h"
 #endif
@@ -95,6 +99,15 @@ SATSolver* STP::get_new_sat_solver()
       newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
 #else
       std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
+      break;
+    case UserDefinedFlags::MERGESAT_SOLVER:
+#ifdef USE_MERGESAT
+      newS = new MergeSatCore();
+#else
+      std::cerr << "MergeSat support was not enabled at configure time."
                 << std::endl;
       exit(-1);
 #endif

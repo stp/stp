@@ -137,7 +137,8 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    RISS_SOLVER
+    RISS_SOLVER,
+    MERGESAT_SOLVER
   };
 
   enum SATSolvers solver_to_use;
@@ -213,10 +214,14 @@ public:
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #else
+#ifdef USE_MERGESAT
+    solver_to_use = MERGESAT_SOLVER;
+#else
 #ifdef USE_RISS
     solver_to_use = RISS_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
+#endif
 #endif
 #endif
   }
