@@ -25,32 +25,25 @@ THE SOFTWARE.
 /* A node factory that:
  *	    * Sorts children to increases sharing,
  *	    * Performs constant evaluation,
- *	    * performs simplify boolean simplifications,
- *	    * converts less thans to greater thans.
+ *	    * Performs simplify boolean simplifications,
+ *	    * Converts less thans to greater thans.
  *
- * NOTE: CreateNode doesn't necessary return a node with the same Kind as what
+ * NOTE: CreateNode/CreateTerm doesn't necessary return a node with the same Kind as what
  * it was called with. For example: (AND TRUE FALSE) will return FALSE. Which
  * isn't an AND node.
  *
- * The intention is to never create nodes that will later be simplified by
- * single level re-write rules. So we will never create the node (NOT(NOT x))
- * This is an example of a multi-level rule that never increases the global
- * number of nodes.
+ * We will never create the node (NOT(NOT x))
+ * This is an example of a multi-level rule that won't increases the global
+ * number of nodes. That is, you request the creation of an extra node, but
+ * you are returned an (already existing) descendant node. If (NOT x) is not
+ * used anywhere else, you requested a new node, and reduced the global count of 
+ * nodes by 1. Because (NOT x) will be garbage collected if it's not used anywhere else.
  *
- * BUG: below are two different, contradictory claims.
- * 1) These rules never increase the total number of nodes.  They are complimented
- * by multi-level re-write rules that consider the global reference count when
- * simplifying.
  *
- * 2) These rules (mostly) don't increase the total number of nodes by more than
- * one.
+ * There are some exceptions to this. NOTs are cheap, so when we convert comparisons
+ * (for example), Creating BVSLT(x,y), will create NOT(BVGT(y,x)). i.e. it will 
+ * create an extra node.
  *
- * Sometimes the number of nodes is increased. e.g. creating BVSLT(x,y), will
- * create NOT(BVGT(y,x)). i.e. it will create an extra node.
- *
- * I think we've got all the two input cases that either map to a constant, or
- * to an input value. e.g.
- * (a >> a), (a xor a), (a or a), (a and a), (a + 0), (a-0)..
  */
 
 #ifndef SIMPLIFYINGNODEFACTORY_H
@@ -64,11 +57,9 @@ class DLL_PUBLIC SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  virtual ASTNode CreateNode(Kind kind, const ASTVec& children);
-  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
-                                        const ASTVec& children);
-
-  virtual std::string getName() { return "simplifying"; }
+  virtual ASTNode CreateNode(const Kind kind, const ASTVec& children) override;
+  virtual ASTNode CreateTerm(const Kind kind, const unsigned int width, const ASTVec& children) override;
+  virtual std::string getName() override { return "simplifying"; }
 
   SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
       : NodeFactory(bm_), hashing(raw_), ASTTrue(bm_.ASTTrue),
@@ -76,7 +67,9 @@ public:
   ~SimplifyingNodeFactory() {}
 
 private:
-  SimplifyingNodeFactory(const SimplifyingNodeFactory&);
+  SimplifyingNodeFactory(const SimplifyingNodeFactory&) = delete;
+  SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&) = delete;
+
   NodeFactory& hashing;
 
   const ASTNode& ASTTrue;
@@ -87,8 +80,7 @@ private:
   ASTNode CreateSimpleXor(const ASTVec& children);
 
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTVec& children);
-  ASTNode CreateSimpleAndOr(bool IsAnd, const ASTNode& form1,
-                            const ASTNode& form2);
+  ASTNode CreateSimpleAndOr(bool IsAnd, const ASTNode& form1, const ASTNode& form2);
   ASTNode handle_2_children(bool IsAnd, const ASTVec& children);
 
   ASTNode CreateSimpleNot(const ASTNode& form);
@@ -96,7 +88,6 @@ private:
 
   ASTNode CreateSimpleEQ(const ASTVec& children);
 
-  SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&);
 
   ASTNode chaseRead(const ASTVec& children, unsigned int width);
 
