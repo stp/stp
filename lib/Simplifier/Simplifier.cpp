@@ -2022,9 +2022,32 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       break;
 
     case BVMULT:
+    if (inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT)
+    {
+      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[0], inputterm[1][0]});
+      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[1][1]});
+      return SimplifyTerm(replacement, VarConstMap);
+    }
+
+    if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVLEFTSHIFT)
+    {
+      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[1], inputterm[0][0]});
+      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[0][1]});
+      return SimplifyTerm(replacement, VarConstMap);
+    }
+
+
     // follow on.
     case BVPLUS:
     {
+      if (BVPLUS == k && inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT && inputterm[0] == inputterm[1][1])
+      {
+        ASTNode replacement = nf->CreateTerm(BVOR, inputValueWidth, inputterm.GetChildren());
+        return SimplifyTerm(replacement, VarConstMap);
+      }
+
+
+
       const ASTVec c = FlattenKind(k, inputterm.GetChildren());
 
       ASTVec constkids, nonconstkids;
