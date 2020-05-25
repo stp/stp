@@ -151,8 +151,8 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
 ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
                               PropagateEqualities* pe,
-                              const int initial_difficulty_score,
-                              int& actualBBSize)
+                              const long initial_difficulty_score,
+                              long& actualBBSize)
 {
   while (true)
   {
@@ -340,8 +340,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
-  unsigned initial_difficulty_score = difficulty.score(inputToSat, bm);
-  int bitblasted_difficulty = -1;
+  long initial_difficulty_score = difficulty.score(inputToSat, bm);
+  long bitblasted_difficulty = -1;
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
@@ -491,7 +491,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   long final_difficulty_score = difficulty.score(inputToSat, bm);
 
   bool worse = false;
-  if (final_difficulty_score > 1.1 * initial_difficulty_score)
+  if (final_difficulty_score > .8 * initial_difficulty_score)
     worse = true;
 
   // It's of course very wasteful to do this! Later I'll make it reuse the
@@ -515,8 +515,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.stats_flag)
   {
-    cerr << "Initial Difficulty Score:" << initial_difficulty_score << endl;
-    cerr << "Final Difficulty Score:" << final_difficulty_score << endl;
+    cerr << "(3) Initial/Final Difficulty Score:" << initial_difficulty_score << " / " << final_difficulty_score <<  endl;
   }
 
   bool optimize_enabled = bm->UserFlags.optimize_flag;

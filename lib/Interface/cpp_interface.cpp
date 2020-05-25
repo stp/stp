@@ -102,6 +102,14 @@ void Cpp_interface::SetQuery(const ASTNode& q)
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
+  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 && !alreadyWarned)
+  {
+    cerr << "Warning: Parsing a term that uses array extensionality. "
+            "STP doesn't handle array extensionality."
+         << endl;
+    alreadyWarned = true;
+  }
+
   return nf->CreateNode(kind, children);
 }
 
