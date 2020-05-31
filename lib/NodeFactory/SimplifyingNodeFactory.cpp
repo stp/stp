@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"

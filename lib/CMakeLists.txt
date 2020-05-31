@@ -34,6 +34,8 @@ add_subdirectory(STPManager)
 add_subdirectory(ToSat)
 add_subdirectory(Sat)
 add_subdirectory(Util)
+add_subdirectory(NodeFactory)
+
 
 
 # FIXME: Do we need all these targets
@@ -56,6 +58,7 @@ set(stp_lib_targets
     parser
     printer
     util
+    nodefactories
     ${PLATFORM_COMPAT_LIBRARIES}
 )
 

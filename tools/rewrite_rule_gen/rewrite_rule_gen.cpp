@@ -43,7 +43,7 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/TypeChecker.h"
+#include "stp/NodeFactory/TypeChecker.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/MinisatCore.h"

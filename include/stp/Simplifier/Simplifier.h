@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 #include "SubstitutionMap.h"
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
 namespace stp

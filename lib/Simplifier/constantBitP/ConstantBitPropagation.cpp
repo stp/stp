@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
-#include "stp/AST/NodeFactory/NodeFactory.h"
+#include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"

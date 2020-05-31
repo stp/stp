@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include "stp/AST/ASTSymbol.h"
 
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/HashingNodeFactory.h"
+#include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"

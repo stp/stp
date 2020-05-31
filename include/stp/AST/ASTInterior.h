@@ -26,7 +26,7 @@ THE SOFTWARE.
 #define ASTINTERIOR_H
 
 #include "ASTInternal.h"
-#include "NodeFactory/HashingNodeFactory.h"
+#include "stp/NodeFactory/HashingNodeFactory.h"
 #include "UsefulDefs.h"
 
 namespace stp

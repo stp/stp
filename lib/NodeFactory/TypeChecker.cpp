@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * Vijay Ganesh, Trevor Hansen, Dan Liew, Mate Soos
  *
- * BEGIN DATE: Feb, 2010
+ * BEGIN DATE: November, 2005
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,33 +22,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-/*
-  A decorator pattern, which calls some base node factory, then type checks each
-  of the results.
- */
+#include "stp/NodeFactory/TypeChecker.h"
+#include "stp/AST/AST.h"
 
-#ifndef TYPECHECKER_H_
-#define TYPECHECKER_H_
-
-#include "stp/AST/NodeFactory/NodeFactory.h"
-
-class DLL_PUBLIC TypeChecker : public NodeFactory
+stp::ASTNode TypeChecker::CreateTerm(stp::Kind kind, unsigned int width,
+                                     const stp::ASTVec& children)
 {
-  NodeFactory& f;
+  stp::ASTNode r = f.CreateTerm(kind, width, children);
+  BVTypeCheck(r);
+  return r;
+}
 
-public:
-  TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_)
-  {
-  }
-  virtual ~TypeChecker(){};
+// virtual stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec&
+// children);
+stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
+                                     const stp::ASTVec& children)
+{
+  stp::ASTNode r = f.CreateNode(kind, children);
+  BVTypeCheck(r);
+  return r;
+}
 
-  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                          const stp::ASTVec& children);
-  stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
-  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                               unsigned int width, const ASTVec& children);
-
-  virtual std::string getName() { return "type checking"; }
-};
-
-#endif /* TYPECHECKER_H_ */
+stp::ASTNode TypeChecker::CreateArrayTerm(Kind kind, unsigned int index,
+                                          unsigned int width,
+                                          const stp::ASTVec& children)
+{
+  ASTNode r = f.CreateTerm(kind, width, children);
+  r.SetIndexWidth(index);
+  BVTypeCheck(r);
+  return r;
+}

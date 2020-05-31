@@ -26,7 +26,7 @@ THE SOFTWARE.
 #define CPP_INTERFACE_H_
 
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/NodeFactory.h"
+#include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include <memory>
 #include <string>
