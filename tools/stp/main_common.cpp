@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include <memory>
 
 
 //for srbk() function
@@ -266,17 +267,13 @@ void Main::check_infile_type()
 
 int Main::main(int argc, char** argv)
 {
-  unique_ptr<SimplifyingNodeFactory> simplifyingNF(
-      new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
+  auto simplifyingNF = std::make_unique<SimplifyingNodeFactory> (*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = simplifyingNF.get();
 
-  unique_ptr<Simplifier> simp(new Simplifier(bm));
-  unique_ptr<ArrayTransformer> arrayTransformer(
-      new ArrayTransformer(bm, simp.get()));
-  unique_ptr<ToSATAIG> tosat(new ToSATAIG(bm, arrayTransformer.get()));
-
-  unique_ptr<AbsRefine_CounterExample> Ctr_Example(
-      new AbsRefine_CounterExample(bm, simp.get(), arrayTransformer.get()));
+  auto simp = std::make_unique<Simplifier> (bm);
+  auto arrayTransformer = std::make_unique<ArrayTransformer>(bm, simp.get());
+  auto tosat = std::make_unique<ToSATAIG>(bm, arrayTransformer.get());
+  auto counterExample = std::make_unique<AbsRefine_CounterExample> (bm, simp.get(), arrayTransformer.get());
 
   int ret = create_and_parse_options(argc, argv);
   if (ret != 0)
@@ -285,7 +282,7 @@ int Main::main(int argc, char** argv)
   }
 
   STP* stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
-                     Ctr_Example.get());
+                     counterExample.get());
 
   GlobalSTP = stp;
   // If we're not reading the file from stdin.
