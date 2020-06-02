@@ -29,8 +29,8 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/AIG/ToCNFAIG.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/ToCNFAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/Util/RunTimes.h"
 

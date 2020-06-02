@@ -34,6 +34,8 @@ THE SOFTWARE.
 #include "stp/Util/GitSHA1.h"
 // FIXME: External library
 #include "extlib-abc/cnf_short.h"
+#include "stp/ToSat/ToSATAIG.h"
+
 
 using std::cout;
 using std::ostream;
@@ -130,8 +132,8 @@ VC vc_createValidityChecker(void)
 
   stp::Simplifier* simp = new stp::Simplifier(bm);
   stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
-  stp::ToSAT* tosat = new stp::ToSAT(bm);
   stp::ArrayTransformer* arrayTransformer = new stp::ArrayTransformer(bm, simp);
+  stp::ToSATAIG* tosat = new stp::ToSATAIG(bm, arrayTransformer);
   stp::AbsRefine_CounterExample* Ctr_Example =
       new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 

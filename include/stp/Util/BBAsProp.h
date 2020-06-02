@@ -32,8 +32,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/Sat/CryptoMinisat5.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/ToSat/ASTNode/ToSAT.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 #include <unordered_set>
 

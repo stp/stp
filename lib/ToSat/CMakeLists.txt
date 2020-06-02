@@ -21,12 +21,9 @@
 add_library(tosat OBJECT
     BitBlaster.cpp
     ToSATBase.cpp
-    AIG/BBNodeManagerAIG.cpp
-    AIG/ToCNFAIG.cpp
-    AIG/ToSATAIG.cpp
-    ASTNode/ClauseList.cpp
-    ASTNode/ASTtoCNF.cpp
-    ASTNode/ToSAT.cpp
+    BBNodeManagerAIG.cpp
+    ToCNFAIG.cpp
+    ToSATAIG.cpp
 )
 
 add_dependencies(tosat ASTKind_header)

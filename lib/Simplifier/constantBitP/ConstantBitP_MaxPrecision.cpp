@@ -29,9 +29,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/ToSat/ASTNode/ToSAT.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
 using namespace stp;
@@ -270,7 +269,7 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
   Simplifier simp(beev);
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
-  ToSAT tosat(beev);
+  ToSATAIG tosat(beev, &at);
   MinisatCore newS;
 
   vector<ASTNode> min_children(children.size());

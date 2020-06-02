@@ -26,6 +26,8 @@ THE SOFTWARE.
 #include "extlib-abc/cnf_short.h"
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
+#include "stp/ToSat/ToSATAIG.h"
+
 
 //for srbk() function
 #if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
@@ -271,7 +273,7 @@ int Main::main(int argc, char** argv)
   unique_ptr<Simplifier> simp(new Simplifier(bm));
   unique_ptr<ArrayTransformer> arrayTransformer(
       new ArrayTransformer(bm, simp.get()));
-  unique_ptr<ToSAT> tosat(new ToSAT(bm));
+  unique_ptr<ToSATAIG> tosat(new ToSATAIG(bm, arrayTransformer.get()));
 
   unique_ptr<AbsRefine_CounterExample> Ctr_Example(
       new AbsRefine_CounterExample(bm, simp.get(), arrayTransformer.get()));

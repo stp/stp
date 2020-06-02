@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew
  *
- * BEGIN DATE: Feb, 2010
+ * BEGIN DATE: November, 2005
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,35 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef TOCNFAIG_H_
-#define TOCNFAIG_H_
+#include "stp/ToSat/BBNodeManagerAIG.h"
 
-#include "extlib-abc/aig.h"
-#include "extlib-abc/cnf_short.h"
-#include "extlib-abc/dar.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/ToSATBase.h"
-
+// FIXME: What is the point of this??
 namespace stp
 {
-class ASTtoCNF;
-
-class ToCNFAIG // not copyable
-{
-  UserDefinedFlags& uf;
-
-  void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
-
-  void fill_node_to_var(Cnf_Dat_t* cnfData,
-                        ToSATBase::ASTNodeToSATVar& nodeToVars,
-                        BBNodeManagerAIG& mgr);
-
-public:
-  ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
-
-  void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-             ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
-             BBNodeManagerAIG& _mgr);
-};
 }
-#endif /* TOCNFAIG_H_ */
