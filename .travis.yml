@@ -59,7 +59,7 @@ addons:
     branch_pattern: coverity_scan
 
 before_install:
-  - sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
+  #- sudo add-apt-repository -y ppa:ubuntu-sdk-team/ppa
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo apt-get update
   - sudo apt-get install -y --force-yes cmake valgrind git zlib1g-dev
