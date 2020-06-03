@@ -22,35 +22,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef TOCNFAIG_H_
-#define TOCNFAIG_H_
+/*
+  A decorator pattern, which calls some base node factory, then type checks each
+  of the results.
+ */
 
-#include "extlib-abc/aig.h"
-#include "extlib-abc/cnf_short.h"
-#include "extlib-abc/dar.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/ToSATBase.h"
+#ifndef TYPECHECKER_H_
+#define TYPECHECKER_H_
 
-namespace stp
+#include "stp/NodeFactory/NodeFactory.h"
+
+class DLL_PUBLIC TypeChecker : public NodeFactory
 {
-class ASTtoCNF;
-
-class ToCNFAIG // not copyable
-{
-  UserDefinedFlags& uf;
-
-  void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
-
-  void fill_node_to_var(Cnf_Dat_t* cnfData,
-                        ToSATBase::ASTNodeToSATVar& nodeToVars,
-                        BBNodeManagerAIG& mgr);
+  NodeFactory& f;
 
 public:
-  ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
+  TypeChecker(NodeFactory& f_, STPMgr& bm_) : NodeFactory(bm_), f(f_)
+  {
+  }
+  virtual ~TypeChecker(){};
 
-  void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
-             ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
-             BBNodeManagerAIG& _mgr);
+  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                          const stp::ASTVec& children);
+  stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
+  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+                               unsigned int width, const ASTVec& children);
+
+  virtual std::string getName() { return "type checking"; }
 };
-}
-#endif /* TOCNFAIG_H_ */
+
+#endif /* TYPECHECKER_H_ */

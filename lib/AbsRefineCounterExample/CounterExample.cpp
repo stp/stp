@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Printer/printers.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 const bool debug_counterexample = false;
 
@@ -1078,11 +1078,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
 
-    ToSAT::ASTNodeToSATVar satVarToSymbol = tosat->SATVar_to_SymbolIndexMap();
+    ToSATBase::ASTNodeToSATVar satVarToSymbol = tosat->SATVar_to_SymbolIndexMap();
     ConstructCounterExample(SatSolver, satVarToSymbol);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
-      ToSAT::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
+      ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
       PrintSATModel(SatSolver, m);
     }
     // check if the counterexample is good or not

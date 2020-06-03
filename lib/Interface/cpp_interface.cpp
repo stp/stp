@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include <cassert>
 
 using std::cerr;

@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/ToSat/AIG/ToCNFAIG.h"
+#include "stp/ToSat/ToCNFAIG.h"
 
 namespace stp
 {

@@ -27,8 +27,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/ASTNode/BBNodeManagerASTNode.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 #include <cassert>
 #include <cmath>
 
@@ -2954,7 +2953,6 @@ std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
 }
 
 // This creates all the specialisations of the class that are ever needed.
-template class BitBlaster<ASTNode, BBNodeManagerASTNode>;
 template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 
 #undef BBNodeVec

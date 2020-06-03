@@ -28,7 +28,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/MinisatCore.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/parser.h"
 
@@ -51,7 +51,7 @@ int main(int argc, char** argv)
   Simplifier* simp = new Simplifier(mgr);
   ArrayTransformer* at = new ArrayTransformer(mgr, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSAT* tosat = new ToSAT(mgr);
+  ToSATAIG* tosat = new ToSATAIG(mgr, at);
 
   GlobalSTP = new STP(mgr, simp, at, tosat, abs);
 

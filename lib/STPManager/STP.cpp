@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 #include "stp/Simplifier/UpwardsCBitP.h"
 

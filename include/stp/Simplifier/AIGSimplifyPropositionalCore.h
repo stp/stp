@@ -44,7 +44,7 @@ THE SOFTWARE.
 
 // FIXME: External libraries
 #include "extlib-abc/aig.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 
 namespace stp
 {

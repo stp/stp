@@ -1,7 +1,7 @@
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
- * BEGIN DATE: Apr, 2010
+ * BEGIN DATE: November, 2010
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,36 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/ToSat/ASTNode/ClauseList.h"
-#include "stp/AST/AST.h"
+#ifndef HASHINGNODEFACTORY_H_
+#define HASHINGNODEFACTORY_H_
 
-namespace stp
+#include "stp/NodeFactory/NodeFactory.h"
+#include "stp/Util/Attributes.h"
+
+// A Node factory that only does structural hashing.
+class DLL_PUBLIC HashingNodeFactory : public NodeFactory
 {
+public:
+  HashingNodeFactory(STPMgr& bm_) : NodeFactory(bm_) {}
+  virtual ~HashingNodeFactory();
 
-// inplace PRODUCT of "this".
-void ClauseList::appendToAllClauses(const ASTNode* n)
-{
-  ClauseContainer::iterator it1 = cont.begin();
-  for (; it1 != cont.end(); it1++)
-    (*it1)->push_back(n);
-}
+  ASTNode CreateNode(const Kind kind, const ASTVec& back_children);
+  ASTNode CreateTerm(Kind kind, unsigned int width,
+                                const ASTVec& children);
 
-// expects varphi2 to be just a single clause.
-void ClauseList::INPLACE_PRODUCT(const ClauseList& varphi2)
-{
-  assert(1 == varphi2.size());
-  ClauseList& varphi1 = *this;
+  virtual std::string getName() { return "hashing"; }
+};
 
-  ClauseContainer::iterator it1 = varphi1.cont.begin();
-  ClauseContainer::iterator this_end = varphi1.cont.end();
-  const ClauseNoPtr::const_iterator& insert_end = varphi2.cont.front()->end();
-  const ClauseNoPtr::const_iterator& insert_begin =
-      varphi2.cont.front()->begin();
-
-  for (; it1 != this_end; it1++)
-  {
-    ClausePtr p = *it1;
-    p->insert(p->end(), insert_begin, insert_end);
-  }
-}
-}
+#endif /* HASHINGNODEFACTORY_H_ */

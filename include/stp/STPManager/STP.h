@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/BVSolver.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/ToSat/ASTNode/ToSAT.h"
 #include "stp/Util/Attributes.h"
 
 namespace stp
