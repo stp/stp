@@ -31,6 +31,7 @@ add_library(simplifier OBJECT
     FindPureLiterals.cpp
     StrengthReduction.cpp
     AIGSimplifyPropositionalCore.cpp
+    UnsignedIntervalAnalysis.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp
