@@ -29,6 +29,7 @@ add_library(simplifier OBJECT
     DifficultyScore.cpp
     UseITEContext.cpp
     FindPureLiterals.cpp
+    StrengthReduction.cpp
     AIGSimplifyPropositionalCore.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
