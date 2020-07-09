@@ -1638,6 +1638,45 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
   return tmp;
 }
 
+void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
+{
+  assert(buf);
+  assert(len);
+
+  // get the current value for the BV
+  stp::ASTNode* a = (stp::ASTNode*)e;
+
+  if (stp::BVCONST != a->GetKind())
+    stp::FatalError("vc_printBVToBuffer: Attempting to extract bit string"
+                    "from a NON-constant BITVECTOR: ",
+                    *a);
+  unsigned* bv = a->GetBVConst();
+
+  // Convert it to a bit string
+  char* char_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
+
+  // Ensure our bit string is allocated string
+  assert(char_bv);
+
+  // Convert the char* to a c-style string
+  string string_bv(char_bv);
+
+  // Free the char* bit string
+  CONSTANTBV::BitVector_Dispose((unsigned char*)char_bv);
+
+  // convert to a c buffer
+  const char* cstr = string_bv.c_str();
+  unsigned long size = string_bv.size() + 1; // number of chars + terminating null
+  *buf = (char*)malloc(size);
+  if (!(*buf))
+  {
+    fprintf(stderr, "malloc(%lu) failed.", size);
+    assert(*buf);
+  }
+  *len = size;
+  memcpy(*buf, cstr, size);
+}
+
 Expr vc_simplify(VC vc, Expr e)
 {
   stp::STP* stp_i = (stp::STP*)vc;

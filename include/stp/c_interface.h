@@ -551,6 +551,14 @@ DLL_PUBLIC unsigned int getBVUnsigned(Expr e);
 //!
 DLL_PUBLIC unsigned long long int getBVUnsignedLongLong(Expr e);
 
+//! \brief Prints the bit string for a a constant bitvector expression to a
+//!        buffer allocated by STP that is returned via output parameter 'buf'
+//!        alongside its length in 'len'.
+//!
+//! It is the callers responsibility to free the buffer's memory.
+//!
+DLL_PUBLIC void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len);
+
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR OPERATIONS
 /////////////////////////////////////////////////////////////////////////////
