@@ -270,8 +270,11 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     #lingeling
     git clone https://github.com/msoos/lingeling-ala lingeling
     cd lingeling
-    ./configure
+    mkdir build
+    cd build
+    cmake ..
     make
+    cp liblgl.a .. # so that Boolector can find it
     sudo cp lingeling /usr/bin/
     cd ..
 
