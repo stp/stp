@@ -277,6 +277,7 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cp liblgl.a .. # so that Boolector can find it
     sudo cp lingeling /usr/bin/
     cd ..
+    cd .. # need to leave the build folder
 
     # get boolector
     git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
