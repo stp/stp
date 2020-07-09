@@ -274,6 +274,7 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd build
     cmake ..
     make
+    cp liblgl.a .. # so that Boolector can find it
     sudo cp lingeling /usr/bin/
     cd ..
 
