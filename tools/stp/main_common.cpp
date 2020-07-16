@@ -281,6 +281,9 @@ int Main::main(int argc, char** argv)
     return ret;
   }
 
+  // ensure that all output is (at most) line buffered
+  setvbuf(stdout, NULL, _IOLBF, 0);
+
   STP* stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
                      counterExample.get());
 
