@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -72,7 +72,6 @@ class Cpp_interface
     }
   };
   vector<Entry> cache;
-  vector<vector<ASTNode>> symbols;
 
   struct Function
   {
@@ -80,8 +79,36 @@ class Cpp_interface
     ASTNode function;
     std::string name;
   };
-
   std::unordered_map<std::string, Function> functions;
+
+  // Nested helper class to encapsulate a frame (i.e., between push a pop)
+  class SolverFrame
+  {
+  public:
+    // Functions are (currently) managed at global scope; we need a pointer to
+    // the global functions to be able to remove functions when we pop
+    SolverFrame(
+        std::unordered_map<std::string, Function>* global_function_context);
+    virtual ~SolverFrame();
+
+    // Obtain the functions for the current frame
+    vector<std::string>& getFunctions();
+
+    // Obtain the symbols for the current frame
+    ASTVec& getSymbols();
+
+  private:
+    vector<std::string> _scoped_functions;
+    ASTVec _scoped_symbols;
+    std::unordered_map<std::string, Function>* _global_function_context;
+  };
+
+  // The vector of all frames that have been created by calling push
+  std::vector<SolverFrame> frames;
+
+  // Obtain the symbols/functions for the current frame
+  ASTVec& getCurrentSymbols();
+  vector<std::string>& getCurrentFunctions();
 
   void checkInvariant();
   void init();
@@ -126,7 +153,7 @@ public:
                                    unsigned long long int bvconst);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
-  void removeSymbol(ASTNode s);
+  void removeSymbol(ASTNode to_remove);
 
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
