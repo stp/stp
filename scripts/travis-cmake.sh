@@ -101,7 +101,7 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    STATIC_CMS)
+    CMS)
          pwd
          ls
 
@@ -118,12 +118,12 @@ case $STP_CONFIG in
          cd cryptominisat
          mkdir build
          cd build
-         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
+         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE:BOOL=OFF -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
          cd ../..
 
          cmake ${COMMON_CMAKE_ARGS} \
-                   -DSTATICCOMPILE:BOOL=ON \
+                   -DSTATICCOMPILE:BOOL=OFF \
                    ${SOURCE_DIR}
          pwd
          ls
