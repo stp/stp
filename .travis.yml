@@ -22,14 +22,14 @@ env:
 
   matrix:
     # These are used by .travis-cmake.sh to set a configuration
-    - STP_CONFIG=NORM
-    - STP_CONFIG=RELEASE
-    - STP_CONFIG=NO_BOOST
+    # - STP_CONFIG=NORM
+    # - STP_CONFIG=RELEASE
+    # - STP_CONFIG=NO_BOOST
     #- STP_CONFIG=KLEE
-    - STP_CONFIG=COVERAGE
+    # - STP_CONFIG=COVERAGE
     - STP_CONFIG=CMS
     # - STP_CONFIG=STATIC_CMS
-    - STP_CONFIG=INTREE_BUILD
+    # - STP_CONFIG=INTREE_BUILD
     # - STP_CONFIG=STATIC_RISS
 
 matrix:
