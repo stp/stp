@@ -655,13 +655,11 @@ Cpp_interface::SolverFrame::SolverFrame(
 Cpp_interface::SolverFrame::~SolverFrame()
 {
   // Iterate on the function names in our current scope
-  for (vector<std::string>::const_iterator scoped_function_name =
-           getFunctions().begin();
-       scoped_function_name != getFunctions().end(); ++scoped_function_name)
+  for (const auto& scoped_function_name : getFunctions())
   {
     // Find this function in the global context
-    std::unordered_map<std::string, Function>::iterator function_to_erase =
-        _global_function_context->find((*scoped_function_name));
+    const auto& function_to_erase =
+        _global_function_context->find(scoped_function_name);
 
     // Hard-error if we cannot find it!
     if (function_to_erase == _global_function_context->end())
