@@ -348,19 +348,20 @@ void ExtraMain::create_options()
 
   po::options_description misc_options("Output options");
   misc_options.add_options()
-      ("exit-after-CNF",
-       po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
+
+      // exit-after-CNF
+      ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
 
-      ("max-num-confl,max_num_confl,g", 
-      INT64_ARG(bm->UserFlags.timeout_max_conflicts),
-      "Number of conflicts after which the SAT solver gives up. "
-      "-1 means never")
+      // max_confl
+      ("max_num_confl,g", po::value<int64_t>(&max_num_confl),
+       "Number of conflicts after which the SAT solver gives up. "
+       "-1 means never (default)")
 
-      ("max-time,max_time,g", 
-      INT64_ARG(bm->UserFlags.timeout_max_time),
-      "Number of seconds after which the SAT solver gives up. "
-      "-1 means never.")
+      // max_time
+      ("max_time,k", po::value<int64_t>(&max_time),
+       "Number of seconds after which the SAT solver gives up. "
+       "-1 means never (default)")
 
       ("check-sanity,d", 
         po::bool_switch(&(bm->UserFlags.check_counterexample_flag)),
