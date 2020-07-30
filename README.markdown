@@ -84,14 +84,14 @@ make(1), Visual Studio, Xcode, etc.
 Here are a few interesting configuration variables. These apply to all
 generators.
 
-- ``CMAKE_BUILD_TYPE`` - The build type (e.g. Release)
-- ``CMAKE_INSTALL_PREFIX`` - The prefix for install (e.g. /usr/local )
-- ``ENABLE_ASSERTIONS`` - If TRUE STP will be built with asserts.
-- ``ENABLE_TESTING`` - Enable running tests
-- ``ENABLE_PYTHON_INTERFACE`` - Enable building the Python interface
-- ``PYTHON_EXECUTABLE`` - Set python executable in case you have more than one python installed
-- ``SANITIZE`` - Use Clang's sanitization checks
-- ``STATICCOMPILE`` - Build static libraries and binaries instead of dynamic
+- `CMAKE_BUILD_TYPE` - The build type (e.g. Release)
+- `CMAKE_INSTALL_PREFIX` - The prefix for install (e.g. /usr/local )
+- `ENABLE_ASSERTIONS` - If TRUE STP will be built with asserts.
+- `ENABLE_TESTING` - Enable running tests
+- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface
+- `PYTHON_EXECUTABLE` - Set python executable in case you have more than one python installed
+- `SANITIZE` - Use Clang's sanitization checks
+- `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
 
 ### Dependencies
 STP relies on : boost, flex, bison and minisat. You can install these by:
@@ -128,10 +128,10 @@ $ sudo ldconfig
 
 If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts; for example:
 
-* ``-DMINISAT_INCLUDE_DIRS:PATH=<path>`` and ``-DMINISAT_LIBDIR:PATH=<path>`` -- the paths to ``minisat/core/Solver.h`` and the ``minisat`` libraries (respectively)
-* ``-Dcryptominisat5_DIR:PATH=<path>`` -- the path to ``cryptominisat5Config.cmake``
+* `-DMINISAT_INCLUDE_DIRS:PATH=<path>` and `-DMINISAT_LIBDIR:PATH=<path>` -- the paths to `minisat/core/Solver.h` and the `minisat` libraries (respectively)
+* `-Dcryptominisat5_DIR:PATH=<path>` -- the path to `cryptominisat5Config.cmake`
 
-If you did not install these development libraries, then ``MINISAT_LIBDIR`` can be set to your ``build`` folder for minisat and ``cryptominisat5_DIR`` to your ``build`` folder for CryptoMiniSat.
+If you did not install these development libraries, then `MINISAT_LIBDIR` can be set to your `build` folder for minisat and `cryptominisat5_DIR` to your `build` folder for CryptoMiniSat.
 
 ### Building a static library and binary
 
@@ -147,14 +147,14 @@ $ sudo ldconfig
 
 To tweak the build configuration:
 
-* Run ``cmake-gui /path/to/stp/source/root`` instead of ``cmake``. This
+* Run `cmake-gui /path/to/stp/source/root` instead of `cmake`. This
   user interface lets you control the value of various configuration
   variables and lets you pick the build system generator.
 
-* Run ``ccmake`` instead of ``cmake``. This provides an ncurses terminal
+* Run `ccmake` instead of `cmake`. This provides an ncurses terminal
   interface for changing configuration variables.
 
-* Pass ``-D<VARIABLE>=<VALUE>`` options to ``cmake`` (not very user friendly).
+* Pass `-D<VARIABLE>=<VALUE>` options to `cmake` (not very user friendly).
   It is probably best if you **only** configure this way if you are writing
   scripts.
 
