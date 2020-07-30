@@ -109,7 +109,7 @@ $ mkdir build && cd build
 $ cmake ..
 $ cmake --build .
 $ sudo cmake --install .
-$ sudo ldconfig
+$ command -v ldconfig && sudo ldconfig
 ```
 
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and used:
@@ -121,7 +121,7 @@ $ mkdir build && cd build
 $ cmake ..
 $ cmake --build .
 $ sudo cmake --install .
-$ sudo ldconfig
+$ command -v ldconfig && sudo ldconfig
 ```
 
 #### Building against non-installed libraries
@@ -140,7 +140,7 @@ $ mkdir build && cd build
 $ cmake -DSTATICCOMPILE=ON ..
 $ cmake --build .
 $ sudo cmake --install .
-$ sudo ldconfig
+$ command -v ldconfig && sudo ldconfig
 ```
 
 ### Configuration and build options
