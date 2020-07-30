@@ -26,8 +26,8 @@ cd stp
 mkdir build
 cd build
 cmake ..
-make
-sudo make install
+cmake --build .
+sudo cmake --install .
 ```
 
 For more detailed instructions, see towards the end of the page.
@@ -107,8 +107,8 @@ $ git clone https://github.com/stp/minisat
 $ cd minisat
 $ mkdir build && cd build
 $ cmake ..
-$ make
-$ sudo make install
+$ cmake --build .
+$ sudo cmake --install .
 $ sudo ldconfig
 ```
 
@@ -119,8 +119,8 @@ $ git clone https://github.com/msoos/cryptominisat
 $ cd cryptominisat
 $ mkdir build && cd build
 $ cmake ..
-$ make
-$ sudo make install
+$ cmake --build .
+$ sudo cmake --install .
 $ sudo ldconfig
 ```
 
@@ -138,8 +138,8 @@ If you did not install these development libraries, then `MINISAT_LIBDIR` can be
 ```
 $ mkdir build && cd build
 $ cmake -DSTATICCOMPILE=ON ..
-$ make
-$ sudo make install
+$ cmake --build .
+$ sudo cmake --install .
 $ sudo ldconfig
 ```
 
