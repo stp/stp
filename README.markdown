@@ -100,7 +100,7 @@ STP relies on : boost, flex, bison and minisat. You can install these by:
 $ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 ```
 
-If your distribution does not come with minisat, STP maintains an updated fork; it can be built as follows:
+If your distribution does not come with minisat, STP maintains an updated fork. It can be built as follows:
 
 ```
 $ git clone https://github.com/stp/minisat
@@ -126,7 +126,7 @@ $ sudo ldconfig
 
 #### Building against non-installed libraries
 
-If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts; for example:
+If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts. For example:
 
 * `-DMINISAT_INCLUDE_DIRS:PATH=<path>` and `-DMINISAT_LIBDIR:PATH=<path>` -- the paths to `minisat/core/Solver.h` and the `minisat` libraries (respectively)
 * `-Dcryptominisat5_DIR:PATH=<path>` -- the path to `cryptominisat5Config.cmake`
