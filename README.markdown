@@ -21,6 +21,7 @@ For a quick install:
 ```
 sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 git clone https://github.com/stp/stp
+git submodule init && git submodule update
 cd stp
 mkdir build
 cd build
@@ -99,6 +100,18 @@ STP relies on : boost, flex, bison and minisat. You can install these by:
 $ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 ```
 
+If your distribution does not come with minisat, STP maintains an updated fork; it can be built as follows:
+
+```
+$ git clone https://github.com/stp/minisat
+$ cd minisat
+$ mkdir build && cd build
+$ cmake ..
+$ make
+$ sudo make install
+$ sudo ldconfig
+```
+
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and used:
 
 ```
@@ -110,6 +123,15 @@ $ make
 $ sudo make install
 $ sudo ldconfig
 ```
+
+#### Building against non-installed libraries
+
+If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts; for example:
+
+* ``-DMINISAT_INCLUDE_DIRS:PATH=<path>`` and ``-DMINISAT_LIBDIR:PATH=<path>`` -- the paths to ``minisat/core/Solver.h`` and the ``minisat`` libraries (respectively)
+* ``-Dcryptominisat5_DIR:PATH=<path>`` -- the path to ``cryptominisat5Config.cmake``
+
+If you did not install these development libraries, then ``MINISAT_LIBDIR`` can be set to your ``build`` folder for minisat and ``cryptominisat5_DIR`` to your ``build`` folder for CryptoMiniSat.
 
 ### Building a static library and binary
 
@@ -182,5 +204,6 @@ echo "(set-logic QF_BV)
 * Mate Soos
 * Dan Liew
 * Ryan Govostes
+* Andrew V. Jones
 * And many others...
 
