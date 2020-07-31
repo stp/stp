@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Util/GitSHA1.h"
 // FIXME: External library
-#include "extlib-abc/cnf_short.h"
+#include <sat/cnf/cnf.h>
 #include "stp/ToSat/ToSATAIG.h"
 
 
@@ -1958,7 +1958,7 @@ void vc_Destroy(VC vc)
     b->persist.clear();
   }
 
-  Cnf_ClearMemory();
+  Cnf_ManFree();
   vc_clearDecls(vc);
   stp_i->deleteObjects();
 

@@ -638,7 +638,7 @@ void Cpp_interface::getModel()
 
 void CNFClearMemory()
 {
-  Cnf_ClearMemory();
+  Cnf_ManFree();
 }
 
 Cpp_interface::SolverFrame::SolverFrame(

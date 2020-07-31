@@ -513,6 +513,16 @@ include_directories(${MINISAT_INCLUDE_DIR})
 set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
+# Find ABC
+# -----------------------------------------------------------------------------
+include_directories("/home/avj/clones/abc/src")
+add_definitions(-DLIN64)
+# Yuck!
+link_libraries("/home/avj/clones/abc/build/libabc.a")
+link_libraries("-ldl")
+link_libraries("-lreadline")
+
+# -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
 # -----------------------------------------------------------------------------
 
