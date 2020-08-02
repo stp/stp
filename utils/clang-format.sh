@@ -1,7 +1,6 @@
 #!/bin/bash
 
 #######################x
-# AUTHORS: Dan Liew
 #
 # BEGIN DATE: Nov, 2014
 #

@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Apr, 2008
  *

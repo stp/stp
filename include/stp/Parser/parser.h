@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Felix Kutzner
  *
  * BEGIN DATE: November, 2005
  *

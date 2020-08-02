@@ -1,5 +1,4 @@
 /***********
-AUTHORS:  Stephan Falke , Dan Liew
 
 BEGIN DATE: Feb, 2014
 

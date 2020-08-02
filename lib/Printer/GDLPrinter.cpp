@@ -5,7 +5,6 @@
 // be merged.
 
 /********************************************************************
- * AUTHORS: Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *

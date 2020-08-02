@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Michael Katelman, Trevor Hansen, Stephen McCamant, Vijay Ganesh
  *
  * BEGIN DATE: Februrary, 2010
  *

@@ -1,5 +1,4 @@
 /***********
-AUTHORS:  Trevor Hansen, Dan Liew, Andrew V. Jones
 
 BEGIN DATE: Jan, 2012
 

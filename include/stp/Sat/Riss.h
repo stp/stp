@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Norbert Manthey
  *
  * BEGIN DATE: November, 2005
  *

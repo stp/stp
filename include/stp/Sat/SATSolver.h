@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Aug, 2010
  *

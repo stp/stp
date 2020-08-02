@@ -1,7 +1,6 @@
 #!/bin/bash -x
 set -e
 
-# AUTHORS: Dan Liew
 #
 # BEGIN DATE: Jul, 2014
 #

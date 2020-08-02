@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Mate Soos
  *
  * BEGIN DATE: November, 2005
  *

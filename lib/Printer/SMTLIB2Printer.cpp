@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Vijay Ganesh
  *
  * BEGIN DATE: July, 2009
  *
