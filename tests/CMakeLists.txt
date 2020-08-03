@@ -55,9 +55,9 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # the location of GTest source code is probably error prone so using a copy in the 
 # repository seems like the easiest thing to do. This also has the added benefit that
 # everyone uses the same version of GTest.
-set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/utils/gtest)
+set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
 if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find GTest. Did you remember to add the submodules (``git submodule init && git submodule update``)?")
+    message(FATAL_ERROR "Could not find GTest. Did you run contrib/setup-gtest.sh?")
 endif()
 
 if (MSVC)

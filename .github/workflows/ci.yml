@@ -1,33 +1,71 @@
-# This is a basic workflow to help you get started with Actions
-
+on: [push, pull_request]
 name: CI
 
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        name: [gcc, clang]
+        include:
+          - name: gcc
+            env:
+              CC: gcc
+              CXX: g++
+          - name: clang
+            env:
+              CC: clang
+              CXX: clang++
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    name: ${{ matrix.name }}
+    runs-on: [ubuntu-latest]
+
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+
     - uses: actions/checkout@v2
 
-    # Runs a single command using the runners shell
-    - name: Run a one-line script
-      run: echo Hello, world!
-
-    # Runs a set of commands using the runners shell
-    - name: Run a multi-line script
+    - name: Environment
       run: |
-        echo Add other actions to build,
-        echo test, and deploy your project.
+        echo "::set-env name=CC::${{ matrix.env.CC }}"
+        echo "::set-env name=CXX::${{ matrix.env.CXX }}"
+
+    - name: Packages
+      run: |
+        sudo mkdir -p /usr/share/man/man1
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          clang \
+          cmake \
+          flex \
+          gcc \
+          git \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Dependencies
+      run: |
+        ./contrib/setup-minisat.sh
+        ./contrib/setup-cms.sh
+        ./contrib/setup-gtest.sh
+        ./contrib/setup-outputcheck.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH=$(which python3) -G Ninja ..
+
+    - name: Build
+      run: ninja -j8
+      working-directory: build
+
+    - name: Test
+      run: ctest -j8
+      working-directory: build
+
+## EOF
