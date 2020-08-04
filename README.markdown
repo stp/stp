@@ -23,6 +23,8 @@ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
+./contrib/setup-gtest.sh
+./contrib/setup-outputcheck.sh
 mkdir build
 cd build
 cmake ..
@@ -129,6 +131,8 @@ $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
 
+Alternatively, these commands are pre-configused in `contrib/setup-minisat.sh` and `contrib/setup-cms.sh` (respectively).
+
 #### Building against non-installed libraries
 
 If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts. For example:
@@ -211,4 +215,3 @@ echo "(set-logic QF_BV)
 * Ryan Govostes
 * Andrew V. Jones
 * And many others...
-
