@@ -30,7 +30,6 @@ jobs:
 
     - name: Packages
       run: |
-        sudo mkdir -p /usr/share/man/man1
         sudo apt-get update
         sudo apt-get install -y \
           bison \
@@ -40,6 +39,7 @@ jobs:
           flex \
           gcc \
           git \
+          libboost-program-options-dev \
           ninja-build \
           python3 \
           python3-pip \
@@ -58,14 +58,14 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH=$(which python3) -G Ninja ..
+        cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
-      run: ninja -j8
+      run: cmake --build . --parallel "$(nproc)"
       working-directory: build
 
     - name: Test
-      run: ctest -j8
+      run: ctest --parallel "$(nproc)"
       working-directory: build
 
 ## EOF
