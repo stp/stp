@@ -501,14 +501,20 @@ endif()
 # -----------------------------------------------------------------------------
 # Find Minisat
 # -----------------------------------------------------------------------------
-find_package(minisat)
-set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
-if (NOT MINISAT_FOUND)
-  message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+find_package(minisat CONFIG)
+if (MINISAT_FOUND)
+    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
 else()
-  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
+    find_package(minisat)
+    set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
+    set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
+    if (NOT MINISAT_FOUND)
+        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+    else()
+        message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
+    endif()
 endif()
+
 include_directories(${MINISAT_INCLUDE_DIR})
 set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
