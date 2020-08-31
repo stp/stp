@@ -55,6 +55,13 @@ jobs:
     #    uses a compiled language
 
     - run: |
+       mkdir minisat_git && cd minisat_git
+       git clone --depth 1 https://github.com/msoos/minisat
+       cd minisat
+       mkdir build && cd build
+       cmake ..
+       make
+       cd ../..
        mkdir build
        cd build
        cmake ..
