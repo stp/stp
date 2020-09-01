@@ -62,56 +62,56 @@ long eval(const ASTNode& b)
         last = CONSTANTBV::BitVector_bit_test(cbv,i);
     }
    //std::cerr << "C" <<changes;
-   score = (4 * b.GetValueWidth() * changes); 
+   score = (4L * b.GetValueWidth() * changes);
 
   }
   else if (k == BVMULT)
   {
-    score = (4 * b.GetValueWidth() * b.GetValueWidth() * b.Degree());
+    score = (4L * b.GetValueWidth() * b.GetValueWidth() * b.Degree());
   }
   else if (isLikeDivision(k))
-    score = (16 * b.GetValueWidth() * b.GetValueWidth());
+    score = (16L * b.GetValueWidth() * b.GetValueWidth());
   else if (k == BVCONCAT || k == BVEXTRACT || k == NOT || k == BVNOT)
   {
   } // no harder.
   else if (k == EQ || k == BVGE || k == BVGT || k == BVSGE || k == BVSGT)
   {
-    score = 6 * std::max(b[0].GetValueWidth(), 1u);
+    score = 6L * std::max(b[0].GetValueWidth(), 1u);
   }
   else if (k == BVSUB)
   {
     // We convert subtract to a + (-b), we want the difficulty scores to be
     // same.
-    score = 20 * b.GetValueWidth();
+    score = 20L * b.GetValueWidth();
   }
   else if (k == EQ)
   {
-    score = 5 * b[0].GetValueWidth();    
+    score = 5L * b[0].GetValueWidth();
   }
   else if (k == BVUMINUS)
   {
-    score = 6 * b.GetValueWidth();    
+    score = 6L * b.GetValueWidth();
   }  
   else if (k == BVPLUS)
   {
-    score = 14 * b.GetValueWidth() * (b.Degree()-1);    
+    score = 14L * b.GetValueWidth() * (b.Degree()-1);
   }
   else if (k == BVRIGHTSHIFT || k == BVLEFTSHIFT)
   {
-    score = 29 * b.GetValueWidth();    
+    score = 29L * b.GetValueWidth();
   }
   else if (k == BVSRSHIFT)
   {
-    score = 30 * b.GetValueWidth();  
+    score = 30L * b.GetValueWidth();
   }  
   else if (k == BVZX || k == BVSX)
   {
-    score = 0;    
+    score = 0;
   }
   else 
   {
     //std::cerr << k;
-    score = std::max(b.GetValueWidth(), 1u) * (b.Degree());
+    score = std::max<long>(b.GetValueWidth(), 1) * b.Degree();
   }
   return score;
 }
