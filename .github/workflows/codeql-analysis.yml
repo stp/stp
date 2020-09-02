@@ -56,7 +56,7 @@ jobs:
 
     - run: |
        mkdir minisat_git && cd minisat_git
-       git clone --depth 1 https://github.com/msoos/minisat
+       git clone --depth 1 https://github.com/stp/minisat
        cd minisat
        mkdir build && cd build
        cmake ..
