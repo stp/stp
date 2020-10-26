@@ -125,10 +125,9 @@ endif()
 # Let the user decide if they want to build shared or static client library.
 # STP will link against this client library
 # -----------------------------------------------------------------------------
-option(STATICCOMPILE "Compile static library and executable" OFF)
 
 option(BUILD_SHARED_LIBS "Build the shared library" ON)
-option(STATICCOMPILE "Compile to static executable" OFF)
+option(STATICCOMPILE "Compile static library and executable" OFF)
 if (STATICCOMPILE)
     set(BUILD_SHARED_LIBS OFF)
     set(ENABLE_PYTHON_INTERFACE OFF)
