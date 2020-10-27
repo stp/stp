@@ -104,7 +104,7 @@ class Cpp_interface
   };
 
   // The vector of all frames that have been created by calling push
-  std::vector<SolverFrame> frames;
+  std::vector< SolverFrame* > frames;
 
   // Obtain the symbols/functions for the current frame
   ASTVec& getCurrentSymbols();
@@ -112,6 +112,8 @@ class Cpp_interface
 
   void checkInvariant();
   void init();
+  void addFrame();
+  void removeFrame();
 
   bool produce_models;
   bool changed_model_status;

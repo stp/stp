@@ -49,8 +49,7 @@ void Cpp_interface::init()
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
 
-  // create an initial, empty frame
-  frames.push_back(SolverFrame(&functions));
+  addFrame();
 
   if (bm.getVectorOfAsserts().size() == 0)
     bm.Push();
@@ -61,6 +60,27 @@ void Cpp_interface::init()
   changed_model_status = false;
 }
 
+void Cpp_interface::addFrame()
+{
+  // create a new frame
+  SolverFrame* new_frame = new SolverFrame(&functions);
+
+  // store the new frame
+  frames.push_back(new_frame);
+}
+
+void Cpp_interface::removeFrame()
+{
+    // obtain the last frame
+    SolverFrame* last = frames.back();
+
+    // delete it
+    delete last;
+
+    // remove it from the vector of frames
+    frames.pop_back();
+}
+
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
     : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(factory)
 {
@@ -69,12 +89,12 @@ Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
 
 ASTVec& Cpp_interface::getCurrentSymbols()
 {
-  return frames.back().getSymbols();
+  return frames.back()->getSymbols();
 }
 
 vector<std::string>& Cpp_interface::getCurrentFunctions()
 {
-  return frames.back().getFunctions();
+  return frames.back()->getFunctions();
 }
 
 void Cpp_interface::startup()
@@ -352,7 +372,7 @@ void Cpp_interface::reset()
     // used just by cvc parser.
     assert(letMgr->_parser_symbol_table.size() == 0);
 
-    frames.erase(frames.end() - 1);
+    removeFrame();
   }
 
   assert(frames.size() == 0);
@@ -395,7 +415,7 @@ void Cpp_interface::pop()
 
   assert(letMgr->_parser_symbol_table.size() == 0);
 
-  frames.erase(frames.end() - 1);
+  removeFrame();
   checkInvariant();
 }
 
@@ -409,9 +429,7 @@ void Cpp_interface::push()
 
   bm.Push();
 
-  // on push, create a new solver frame
-  frames.push_back(SolverFrame(&functions));
-
+  addFrame();
   checkInvariant();
 }
 
@@ -537,7 +555,11 @@ void Cpp_interface::cleanUp()
 {
   letMgr->cleanupParserSymbolTable();
   cache.clear();
-  frames.clear();
+
+  while (frames.size() > 0)
+  {
+    removeFrame();
+  }
 }
 
 void Cpp_interface::setOption(std::string option, std::string value)
@@ -664,7 +686,7 @@ Cpp_interface::SolverFrame::~SolverFrame()
     // Hard-error if we cannot find it!
     if (function_to_erase == _global_function_context->end())
     {
-      FatalError("Trying to apply function which has not been defined.");
+      FatalError("Trying to erase function which has not been defined.");
     }
 
     // Remove our scope function from the global function context
