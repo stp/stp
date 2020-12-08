@@ -8,13 +8,9 @@ jobs:
         name: [gcc, clang]
         include:
           - name: gcc
-            env:
-              CC: gcc
-              CXX: g++
+            env: CC=gcc CXX=g++
           - name: clang
-            env:
-              CC: clang
-              CXX: clang++
+            env: CC=clang CXX=clang++
 
     name: ${{ matrix.name }}
     runs-on: [ubuntu-latest]
@@ -22,11 +18,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v2
-
-    - name: Environment
-      run: |
-        echo "::set-env name=CC::${{ matrix.env.CC }}"
-        echo "::set-env name=CXX::${{ matrix.env.CXX }}"
 
     - name: Packages
       run: |
@@ -68,4 +59,4 @@ jobs:
       run: ctest --parallel "$(nproc)"
       working-directory: build
 
-## EOF
+# EOF
