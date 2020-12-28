@@ -7,6 +7,8 @@
 %option yylineno
 %option full
 
+/* %option debug */
+
 %{
 /********************************************************************
 * AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
@@ -110,6 +112,13 @@
         if (cleaned)
           free (cleaned);
         return  BOOLEAN_FUNCTIONID_TOK;
+      }
+      else if (ft == stp::FLOATINGPOINT_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  FLOATINGPOINT_FUNCTIONID_TOK;
       }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {
@@ -238,6 +247,9 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
 "Bool"          { return BOOL_TOK;}
+
+ /* Types for QF_FP and QF_BVFP. */
+"FloatingPoint" { return FLOATINGPOINT_TOK; }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */

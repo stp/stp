@@ -1112,13 +1112,14 @@ enum exprkind_t
   NOR,  //!< Logical-not-or boolean expression (TODO: Does this still exist?)
   XOR,  //!< Logical-xor (either-or) boolean expression
   IFF,  //!< If-and-only-if boolean expression
-  IMPLIES,   //!< Implication boolean expression
-  PARAMBOOL, //!< Parameterized boolean expression
-  READ,      //!< Array read expression
-  WRITE,     //!< Array write expression
-  ARRAY,     //!< Array creation expression
-  BITVECTOR, //!< Bitvector creation expression
-  BOOLEAN    //!< Boolean creation expression
+  IMPLIES,      //!< Implication boolean expression
+  PARAMBOOL,    //!< Parameterized boolean expression
+  READ,         //!< Array read expression
+  WRITE,        //!< Array write expression
+  ARRAY,        //!< Array creation expression
+  BITVECTOR,    //!< Bitvector creation expression
+  BOOLEAN,      //!< Boolean creation expression
+  FLOATINGPOINT //!< FloatingPoint creation expression
 };
 
 //! \brief Returns the expression-kind of the given expression.
@@ -1139,6 +1140,7 @@ enum type_t
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
+  FLOATINGPOINT_TYPE,
   ARRAY_TYPE,
   UNKNOWN_TYPE
 };

@@ -301,6 +301,15 @@ types Cpp_interface::functionReturnType(const string& name)
   return found->second.function.GetType();
 }
 
+bool Cpp_interface::isFloatingPointFunction(const string& name)
+{
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return false;
+
+  return found->second.function.GetType() == FLOATINGPOINT_TYPE;
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return bm.LookupOrCreateSymbol(name.c_str());

@@ -1,7 +1,8 @@
 /* %define api.pure full */
 /*%lex-param {void *scanner}
 %parse-param {void *scanner}
-%define parse.error verbose*/
+%define parse.error verbose
+*/
 
 %{
   /********************************************************************
@@ -330,7 +331,7 @@
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -404,6 +405,9 @@
 %token BITVEC_TOK
 %token ARRAY_TOK
 %token BOOL_TOK
+
+/* Types for QF_FP and QF_BVFP. */
+%token FLOATINGPOINT_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -571,9 +575,14 @@ cmdi:
 |
      LOGIC_TOK STRING_TOK
     {
-      if (!(0 == strcmp($2->c_str(),"QF_BV") ||
+      if (!(
+            0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
-            0 == strcmp($2->c_str(),"QF_AUFBV"))) {
+            0 == strcmp($2->c_str(),"QF_AUFBV") ||
+            0 == strcmp($2->c_str(),"QF_FP") ||
+            0 == strcmp($2->c_str(),"QF_BVFP") ||
+            false
+            )) {
         yyerror("Wrong input logic");
       }
       stp::GlobalParserInterface->success();
@@ -795,6 +804,19 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
     fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
   delete $1;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK RPAREN_TOK
+{
+/*
+  // AVJ-FP
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
+  //var
+  s.SetIndexWidth(0);
+  s.SetValueWidth($7);
+  delete $1;
+*/
 }
 ;
 
@@ -1150,6 +1172,22 @@ TRUE_TOK
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
   delete $1;
+}
+| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+{
+/*
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+  delete $2;
+  delete $3;
+  */
+}
+| FLOATINGPOINT_FUNCTIONID_TOK
+{
+/*
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  delete $1;
+  */
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
