@@ -89,18 +89,28 @@ private:
   uint32_t _value_width;
   uint32_t _index_width;
 
+  uint32_t _sig_width;
+  uint32_t _exp_width;
+
   virtual void setIndexWidth(uint32_t i) { _index_width = i; }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
   virtual void setValueWidth(uint32_t v) { _value_width = v; }
   virtual uint32_t getValueWidth() const { return _value_width; }
 
+  virtual void setSigWidth(uint32_t sw) { _sig_width = sw; }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
+
+  virtual void setExpWidth(uint32_t ew) { _exp_width = ew; }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
+
 public:
   virtual ASTChildren GetChildren() const { return empty_children; }
 
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(STPMgr* mgr, const char* const name)
-      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0)
+      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0),
+        _sig_width(0), _exp_width(0)
   {
   }
 
@@ -109,7 +119,8 @@ public:
   // Copy constructor
   ASTSymbol(const ASTSymbol& sym)
       : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name),
-        _value_width(sym._value_width), _index_width(sym._index_width)
+        _value_width(sym._value_width), _index_width(sym._index_width),
+        _sig_width(sym._sig_width), _exp_width(sym._exp_width)
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }

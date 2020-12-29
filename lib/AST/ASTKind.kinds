@@ -92,4 +92,5 @@ WRITE		3	3	Term
 ARRAY           0       0
 BITVECTOR       0       0
 BOOLEAN         0       0
+FLOATINGPOINT   0       0
 

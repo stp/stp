@@ -177,6 +177,12 @@ public:
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
 
+  // AVJ-FP
+  unsigned int GetSigWidth() const;
+  unsigned int GetExpWidth() const;
+  void SetSigWidth(unsigned int sw) const;
+  void SetExpWidth(unsigned int ew) const;
+
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
 

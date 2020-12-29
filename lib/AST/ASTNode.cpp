@@ -128,13 +128,42 @@ void ASTNode::SetValueWidth(unsigned int vw) const
   _int_node_ptr->setValueWidth(vw);
 }
 
+unsigned int ASTNode::GetExpWidth() const
+{
+  return _int_node_ptr->getExpWidth();
+}
+
+void ASTNode::SetExpWidth(unsigned int _ew) const
+{
+  _int_node_ptr->setExpWidth(_ew);
+}
+
+unsigned int ASTNode::GetSigWidth() const
+{
+  return _int_node_ptr->getSigWidth();
+}
+
+void ASTNode::SetSigWidth(unsigned int _sw) const
+{
+  _int_node_ptr->setSigWidth(_sw);
+}
+
 // return the type of the ASTNode:
 //
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 types ASTNode::GetType() const
 {
   if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
-    return BOOLEAN_TYPE;
+  {
+    if (GetSigWidth() == 0 && GetExpWidth() == 0)
+    {
+      return BOOLEAN_TYPE;
+    }
+    else
+    {
+      return FLOATINGPOINT_TYPE;
+    }
+  }
 
   if ((GetIndexWidth() == 0) && (GetValueWidth() > 0))
     return BITVECTOR_TYPE;

@@ -144,6 +144,59 @@ void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
   }
 }
 
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                const ASTNode term)
+{
+  const Kind k = n.GetKind();
+  const ASTVec& c = n.GetChildren();
+  ASTNode op;
+
+  if (BVCONST != k)
+  {
+    FatalError("Expecting BV const");
+  }
+
+  if (term.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    FatalError("Expecting FP term");
+  }
+
+  unsigned int* const_bv = n.GetBVConst();
+  uint32_t underlying_size = bits_(const_bv);
+  unsigned int fp_width = term.GetSigWidth() + term.GetExpWidth();
+
+  if (fp_width != underlying_size)
+  {
+    FatalError("BV does not match size of FP");
+  }
+
+  unsigned char* str = CONSTANTBV::BitVector_to_Bin(n.GetBVConst());
+  std::string as_str(reinterpret_cast<char*>(str));
+
+  if (as_str.length() != underlying_size)
+  {
+    FatalError("String does not match size of FP");
+  }
+
+  std::string sign_bit = as_str.substr(0, 1);
+  std::string exp_bits = as_str.substr(1, term.GetExpWidth());
+  std::string sig_bits =
+      as_str.substr(1 + term.GetExpWidth(), term.GetSigWidth());
+
+  std::string rejoined = sign_bit + exp_bits + sig_bits;
+
+  if (rejoined != as_str)
+  {
+    FatalError("Rejoined string does not match original string");
+  }
+
+  os << "(fp ";
+  os << "#b" << sign_bit << " ";
+  os << "#b" << exp_bits << " ";
+  os << "#b" << sig_bits << "";
+  os << ")";
+}
+
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
   // os << spaces(indentation);

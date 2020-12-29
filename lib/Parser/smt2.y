@@ -805,18 +805,18 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   }
   delete $1;
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK RPAREN_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
-/*
   // AVJ-FP
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
+  s.SetExpWidth($7);
+  s.SetSigWidth($8);
   s.SetIndexWidth(0);
-  s.SetValueWidth($7);
+  s.SetValueWidth(0);
   delete $1;
-*/
 }
 ;
 

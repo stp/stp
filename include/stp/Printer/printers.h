@@ -56,6 +56,8 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
                                   bool definately_bv = false);
 
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                const ASTNode term);
 
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const ASTNode n,

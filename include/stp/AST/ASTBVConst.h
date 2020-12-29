@@ -101,6 +101,13 @@ private:
   void setValueWidth([[maybe_unused]] uint32_t v ) { assert(v == getValueWidth()); }
   uint32_t getValueWidth() const { return bits_(_bvconst); }
 
+  // AVJ-FP
+  virtual void setExpWidth(uint32_t) {}
+  virtual uint32_t getExpWidth() const { return 0; }
+
+  virtual void setSigWidth(uint32_t) {}
+  virtual uint32_t getSigWidth() const { return 0; }
+
 public:
   virtual ASTChildren GetChildren() const { return astbv_empty_children; }
 

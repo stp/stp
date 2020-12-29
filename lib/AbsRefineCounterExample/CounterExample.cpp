@@ -208,9 +208,16 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       {
         return term;
       }
-
-      // Has been simplified out. Can take any value.
-      output = bm->CreateZeroConst(term.GetValueWidth());
+      else if (term.GetType() == FLOATINGPOINT_TYPE)
+      {
+        unsigned int total_width = term.GetSigWidth() + term.GetExpWidth();
+        output = bm->CreateZeroConst(total_width);
+      }
+      else
+      {
+        // Has been simplified out. Can take any value.
+        output = bm->CreateZeroConst(term.GetValueWidth());
+      }
       break;
     }
     case READ:
@@ -733,7 +740,7 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
     if (f.GetKind() == SYMBOL)
     {
-      os << "( define-fun ";
+      os << "(define-fun ";
       os << "|";
       f.nodeprint(os);
       os << "|";
@@ -750,12 +757,20 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
         assert (se == bm->ASTTrue || se == bm->ASTFalse);
         os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
       }
+      else if (f.GetType() == stp::FLOATINGPOINT_TYPE)
+      {
+        os << " () (";
+        os << "_ FloatingPoint " << f.GetExpWidth() << " " << f.GetSigWidth()
+           << ") ";
+        printer::outputFloatingPointSMTLIB2(
+            TermToConstTermUsingModel(se, false), os, f);
+      }
       else
       {
         FatalError("Wrong Type");
       }
 
-      os << " )" << std::endl;
+      os << ")" << std::endl;
     }
 
     //TODO completely the wrong format.

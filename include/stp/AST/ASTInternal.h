@@ -95,6 +95,13 @@ protected:
   virtual void setValueWidth(uint32_t) = 0;
   virtual uint32_t getValueWidth() const = 0;
 
+  // AVJ-FP
+  virtual void setExpWidth(uint32_t) = 0;
+  virtual uint32_t getExpWidth() const = 0;
+
+  virtual void setSigWidth(uint32_t) = 0;
+  virtual uint32_t getSigWidth() const = 0;
+
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
    * ASTNode is of type ARRAY   <==> ((indexwidth>0)&&(valuewidth>0))*
