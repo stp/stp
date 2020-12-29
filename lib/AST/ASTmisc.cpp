@@ -556,6 +556,9 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
 
+      // AVJ-FP; FIXME
+      break;
+
       if (!(n[0].GetValueWidth() == n[1].GetValueWidth() &&
             n[0].GetIndexWidth() == n[1].GetIndexWidth()))
       {

@@ -250,6 +250,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Types for QF_FP and QF_BVFP. */
 "FloatingPoint" { return FLOATINGPOINT_TOK; }
+"fp" { return FP_TOK; }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */

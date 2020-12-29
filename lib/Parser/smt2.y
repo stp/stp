@@ -1,8 +1,9 @@
 /* %define api.pure full */
 /*%lex-param {void *scanner}
 %parse-param {void *scanner}
-%define parse.error verbose
 */
+
+/* %define parse.error verbose */
 
 %{
   /********************************************************************
@@ -320,7 +321,7 @@
 %type <vec> an_formulas an_terms function_params an_mixed
 
 
-%type <node> an_term  an_formula function_param
+%type <node> an_term  an_formula function_param an_const
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -408,6 +409,7 @@
 
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
+%token FP_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -1268,6 +1270,40 @@ an_terms an_term
 }
 ;
 
+an_const:
+| BVCONST_HEXIDECIMAL_TOK
+{
+  unsigned width = $1->length()*4;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
+  $$->SetValueWidth(width);
+  delete $1;
+}
+| BVCONST_BINARY_TOK
+{
+  unsigned width = $1->length();
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
+  $$->SetValueWidth(width);
+  delete $1;
+}
+| FP_TOK an_const an_const an_const
+{
+  unsigned int sign_bits = $2->GetValueWidth();
+  unsigned int exp_bits = $3->GetValueWidth();
+  unsigned int sig_bits = $4->GetValueWidth();
+
+  stp::ASTNode first(*stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits, *$2, *$3)));
+
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits + sig_bits, first, *$4));
+
+  $$->SetExpWidth(exp_bits);
+  $$->SetSigWidth(sig_bits);
+
+  stp::GlobalParserInterface->deleteNode($2);
+  stp::GlobalParserInterface->deleteNode($3);
+  stp::GlobalParserInterface->deleteNode($4);
+};
+
+
 an_term:
 TERMID_TOK
 {
@@ -1277,6 +1313,10 @@ TERMID_TOK
 | LPAREN_TOK an_term RPAREN_TOK
 {
   $$ = $2;
+} 
+| an_const
+{
+  $$ = $1;
 }
 | SELECT_TOK an_term an_term
 {
@@ -1516,20 +1556,6 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
   $$->SetValueWidth($3);
   delete $2;
-}
-| BVCONST_HEXIDECIMAL_TOK
-{
-  unsigned width = $1->length()*4;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
-  $$->SetValueWidth(width);
-  delete $1;
-}
-| BVCONST_BINARY_TOK
-{
-  unsigned width = $1->length();
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
-  $$->SetValueWidth(width);
-  delete $1;
 }
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {

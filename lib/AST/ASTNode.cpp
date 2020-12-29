@@ -153,17 +153,11 @@ void ASTNode::SetSigWidth(unsigned int _sw) const
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 types ASTNode::GetType() const
 {
+  if (GetSigWidth() != 0 && GetExpWidth() != 0)
+    return FLOATINGPOINT_TYPE;
+
   if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
-  {
-    if (GetSigWidth() == 0 && GetExpWidth() == 0)
-    {
-      return BOOLEAN_TYPE;
-    }
-    else
-    {
-      return FLOATINGPOINT_TYPE;
-    }
-  }
+    return BOOLEAN_TYPE;
 
   if ((GetIndexWidth() == 0) && (GetValueWidth() > 0))
     return BITVECTOR_TYPE;
