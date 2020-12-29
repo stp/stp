@@ -116,7 +116,7 @@ class ASTInterior : public ASTInternal
 public:
   ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
       : ASTInternal(mgr, kind), _children(children), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -139,7 +139,9 @@ public:
   // ASTNode, does NOT invoke this.
   ASTInterior(const ASTInterior& int_node)
       : ASTInternal(int_node), _children(int_node._children),
-        _value_width(int_node._value_width), _index_width(int_node._index_width)
+        _value_width(int_node._value_width),
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width)
   {
     is_simplified = false;
   }
