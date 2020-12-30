@@ -467,9 +467,9 @@
 
  /* generic FP token*/
 %token FP_TOK
+%token FP_TOFP_TOK
 
  /* Functions for FP */
-%token FP_EQ_TOK;
 %token FP_ABS_TOK;
 %token FP_NEG_TOK;
 %token FP_ADD_TOK;
@@ -486,6 +486,7 @@
 %token FP_LT_TOK;
 %token FP_GEQ_TOK;
 %token FP_GT_TOK;
+%token FP_EQ_TOK;
 %token FP_ISNORMAL_TOK;
 %token FP_ISSUBNORMAL_TOK;
 %token FP_ISZERO_TOK;
@@ -669,7 +670,17 @@ LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TO
   $$->SetIndexWidth(0);
   $$->SetValueWidth($6);
   delete $2;
+}
+|
+LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
+{
+  $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
+  stp::GlobalParserInterface->addSymbol(*$$);
+  $$->SetIndexWidth(0);
+  $$->SetValueWidth(0);
+  delete $2;
 };
+;
 
 /* Returns a vector of parameters.*/
 function_params:
@@ -736,10 +747,14 @@ STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 }
 |
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort an_term
 {
   ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$10);
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+}
+|
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
+{
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
@@ -834,6 +849,13 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUM
 {
 };
 
+an_fp_sort:
+  FLOAT16_TOK {}
+| FLOAT32_TOK {}
+| FLOAT64_TOK {}
+| LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK {}
+;
+
 
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
@@ -888,18 +910,22 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   }
   delete $1;
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
   // AVJ-FP
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  s.SetExpWidth($7);
-  s.SetSigWidth($8);
+  // FIXME
+  s.SetExpWidth(8);
+  s.SetSigWidth(24);
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   delete $1;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
+{
 }
 ;
 
@@ -1411,7 +1437,7 @@ an_fp_term:
 | FP_MUL_TOK an_rounding_mode an_term an_term {}
 | FP_DIV_TOK an_rounding_mode an_term an_term {}
 | FP_FMA_TOK an_rounding_mode an_term an_term an_term {}
-| FP_SQRT_TOK an_rounding_mode an_term an_term {}
+| FP_SQRT_TOK an_rounding_mode an_term {}
 | FP_REM_TOK an_term an_term {}
 | FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term {}
 | FP_MIN_TOK an_term an_term {}
@@ -1421,15 +1447,17 @@ an_fp_term:
 | FP_GEQ_TOK an_term an_term {}
 | FP_GT_TOK an_term an_term {}
 | FP_EQ_TOK an_term an_term {}
-| FP_ISNORMAL_TOK an_term an_term {}
-| FP_ISSUBNORMAL_TOK an_term an_term {}
-| FP_ISZERO_TOK an_term an_term {}
-| FP_ISINFINITE_TOK an_term an_term {}
-| FP_ISNAN_TOK an_term an_term {}
-| FP_ISNEGATIVE_TOK an_term an_term {}
-| FP_ISPOSITIVE_TOK an_term an_term {}
+| FP_ISNORMAL_TOK an_term {}
+| FP_ISSUBNORMAL_TOK an_term {}
+| FP_ISZERO_TOK an_term {}
+| FP_ISINFINITE_TOK an_term {}
+| FP_ISNAN_TOK an_term {}
+| FP_ISNEGATIVE_TOK an_term {}
+| FP_ISPOSITIVE_TOK an_term {}
 | FP_TO_UBV_TOK an_rounding_mode an_term an_term {}
 | FP_TO_SBV_TOK an_rounding_mode an_term an_term {}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term {}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term {}
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK {}
 ;
 

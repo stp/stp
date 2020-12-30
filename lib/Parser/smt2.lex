@@ -251,7 +251,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* Types for QF_FP and QF_BVFP. */
 "FloatingPoint" { return FLOATINGPOINT_TOK; }
 "RoundingMode" { return ROUNDINGMODE_TOK; }
-"Float16" { return FLOAT32_TOK; }
+"Float16" { return FLOAT16_TOK; }
 "Float32" { return FLOAT32_TOK; }
 "Float64" { return FLOAT64_TOK; }
 
@@ -328,6 +328,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* generic FP token*/
 "fp" { return FP_TOK; }
+"to_fp" { return FP_TOFP_TOK; }
 
  /* Functions for FP */
 "fp.abs" { return FP_ABS_TOK; }
