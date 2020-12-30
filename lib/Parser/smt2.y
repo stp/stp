@@ -409,7 +409,6 @@
 
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
-%token FP_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -461,6 +460,44 @@
  /* Functions for QF_ABV. */
 %token SELECT_TOK;
 %token STORE_TOK;
+
+ /* generic FP token*/
+%token FP_TOK
+
+ /* Functions for FP */
+%token FP_EQ_TOK;
+%token FP_ABS_TOK;
+%token FP_NEG_TOK;
+%token FP_ADD_TOK;
+%token FP_SUB_TOK;
+%token FP_MUL_TOK;
+%token FP_DIV_TOK;
+%token FP_FMA_TOK;
+%token FP_SQRT_TOK;
+%token FP_REM_TOK;
+%token FP_ROUNDTOINTEGRAL_TOK;
+%token FP_MIN_TOK;
+%token FP_MAX_TOK;
+%token FP_LEQ_TOK;
+%token FP_LT_TOK;
+%token FP_GEQ_TOK;
+%token FP_GT_TOK;
+%token FP_ISNORMAL_TOK;
+%token FP_ISSUBNORMAL_TOK;
+%token FP_ISZERO_TOK;
+%token FP_ISINFINITE_TOK;
+%token FP_ISNAN_TOK;
+%token FP_ISNEGATIVE_TOK;
+%token FP_ISPOSITIVE_TOK;
+%token FP_TO_UBV_TOK;
+%token FP_TO_SBV_TOK;
+
+ /* rounding modes */
+%token FP_RM_ROUNDTOWARDZERO_TOK;
+%token FP_RM_ROUNDNEARESTTIESTOEVEN_TOK;
+%token FP_RM_ROUNDNEARESTTIESTOAWAY_TOK;
+%token FP_RM_ROUNDTOWARDPOSITIVE_TOK;
+%token FP_RM_ROUNDTOWARDNEGATIVE_TOK;
 
 %token END 0 "end of file"
 
@@ -1271,7 +1308,7 @@ an_terms an_term
 ;
 
 an_const:
-| BVCONST_HEXIDECIMAL_TOK
+BVCONST_HEXIDECIMAL_TOK
 {
   unsigned width = $1->length()*4;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
@@ -1303,6 +1340,42 @@ an_const:
   stp::GlobalParserInterface->deleteNode($4);
 };
 
+an_rounding_mode:
+FP_RM_ROUNDTOWARDZERO_TOK {}
+| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK {}
+| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK {}
+| FP_RM_ROUNDTOWARDPOSITIVE_TOK {}
+| FP_RM_ROUNDTOWARDNEGATIVE_TOK {}
+;
+
+an_fp_term:
+  FP_ABS_TOK an_term {}
+| FP_NEG_TOK an_term {}
+| FP_ADD_TOK an_rounding_mode an_term an_term {}
+| FP_SUB_TOK an_rounding_mode an_term an_term {}
+| FP_MUL_TOK an_rounding_mode an_term an_term {}
+| FP_DIV_TOK an_rounding_mode an_term an_term {}
+| FP_FMA_TOK an_rounding_mode an_term an_term an_term {}
+| FP_SQRT_TOK an_rounding_mode an_term an_term {}
+| FP_REM_TOK an_term an_term {}
+| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term {}
+| FP_MIN_TOK an_term an_term {}
+| FP_MAX_TOK an_term an_term {}
+| FP_LEQ_TOK an_term an_term {}
+| FP_LT_TOK an_term an_term {}
+| FP_GEQ_TOK an_term an_term {}
+| FP_GT_TOK an_term an_term {}
+| FP_EQ_TOK an_term an_term {}
+| FP_ISNORMAL_TOK an_term an_term {}
+| FP_ISSUBNORMAL_TOK an_term an_term {}
+| FP_ISZERO_TOK an_term an_term {}
+| FP_ISINFINITE_TOK an_term an_term {}
+| FP_ISNAN_TOK an_term an_term {}
+| FP_ISNEGATIVE_TOK an_term an_term {}
+| FP_ISPOSITIVE_TOK an_term an_term {}
+| FP_TO_UBV_TOK an_rounding_mode an_term an_term {}
+| FP_TO_SBV_TOK an_rounding_mode an_term an_term {}
+;
 
 an_term:
 TERMID_TOK
@@ -1317,6 +1390,9 @@ TERMID_TOK
 | an_const
 {
   $$ = $1;
+}
+| an_fp_term
+{
 }
 | SELECT_TOK an_term an_term
 {

@@ -250,7 +250,6 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Types for QF_FP and QF_BVFP. */
 "FloatingPoint" { return FLOATINGPOINT_TOK; }
-"fp" { return FP_TOK; }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
@@ -316,6 +315,50 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }
 "store"         { return STORE_TOK; }
+
+ /*
+  * NOTE: the call to `lookup` below is *extremely* greedy -- it means we
+  * cannot search for FP DOT ADD, we have to search for the whole thing --
+  * c'est la vie
+  */
+
+ /* generic FP token*/
+"fp" { return FP_TOK; }
+
+ /* Functions for FP */
+"fp.abs" { return FP_ABS_TOK; }
+"fp.neg" { return FP_NEG_TOK; }
+"fp.add" { return FP_ADD_TOK; }
+"fp.sub" { return FP_SUB_TOK; }
+"fp.mul" { return FP_MUL_TOK; }
+"fp.div" { return FP_DIV_TOK; }
+"fp.fma" { return FP_FMA_TOK; }
+"fp.sqrt" { return FP_SQRT_TOK; }
+"fp.rem" { return FP_REM_TOK; }
+"fp.roundToIntegral" { return FP_ROUNDTOINTEGRAL_TOK; }
+"fp.min" { return FP_MIN_TOK; }
+"fp.max" { return FP_MAX_TOK; }
+"fp.leq" { return FP_LEQ_TOK; }
+"fp.lt" { return FP_LT_TOK; }
+"fp.geq" { return FP_GEQ_TOK; }
+"fp.gt" { return FP_GT_TOK; }
+"fp.eq" { return FP_EQ_TOK; }
+"fp.isNormal" { return FP_ISNORMAL_TOK; }
+"fp.isSubnormal" { return FP_ISSUBNORMAL_TOK; }
+"fp.isZero" { return FP_ISZERO_TOK; }
+"fp.isInfinite" { return FP_ISINFINITE_TOK; }
+"fp.isNaN" { return FP_ISNAN_TOK; }
+"fp.isNegative" { return FP_ISNEGATIVE_TOK; }
+"fp.isPositive" { return FP_ISPOSITIVE_TOK; }
+"fp.to_ubv" { return FP_TO_UBV_TOK; }
+"fp.to_sbv" { return FP_TO_SBV_TOK; }
+
+ /* rounding modes */
+"roundTowardZero" { return FP_RM_ROUNDTOWARDZERO_TOK; }
+"roundNearestTiesToEven" { return FP_RM_ROUNDNEARESTTIESTOEVEN_TOK; }
+"roundNearestTiesToAway" { return FP_RM_ROUNDNEARESTTIESTOAWAY_TOK; }
+"roundTowardPositive" { return FP_RM_ROUNDTOWARDPOSITIVE_TOK; }
+"roundTowardNegative" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|([^\|]|\n)*\| {return lookup(smt2text);}
