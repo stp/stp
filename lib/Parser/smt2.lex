@@ -250,6 +250,10 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Types for QF_FP and QF_BVFP. */
 "FloatingPoint" { return FLOATINGPOINT_TOK; }
+"RoundingMode" { return ROUNDINGMODE_TOK; }
+"Float16" { return FLOAT32_TOK; }
+"Float32" { return FLOAT32_TOK; }
+"Float64" { return FLOAT64_TOK; }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
@@ -359,6 +363,20 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "roundNearestTiesToAway" { return FP_RM_ROUNDNEARESTTIESTOAWAY_TOK; }
 "roundTowardPositive" { return FP_RM_ROUNDTOWARDPOSITIVE_TOK; }
 "roundTowardNegative" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
+
+"RTZ" { return FP_RM_ROUNDTOWARDZERO_TOK; }
+"RNE" { return FP_RM_ROUNDNEARESTTIESTOEVEN_TOK; }
+"RNA" { return FP_RM_ROUNDNEARESTTIESTOAWAY_TOK; }
+"RTP" { return FP_RM_ROUNDTOWARDPOSITIVE_TOK; }
+"RTN" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
+
+ /* fp constants */
+"NaN" { return FP_NAN; }
+"-oo" { return FP_NEG_INF; }
+"+oo" { return FP_POS_INF; }
+"-zero" { return FP_NEG_ZERO; }
+"+zero" { return FP_POS_ZERO; }
+
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|([^\|]|\n)*\| {return lookup(smt2text);}

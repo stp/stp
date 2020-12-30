@@ -321,7 +321,7 @@
 %type <vec> an_formulas an_terms function_params an_mixed
 
 
-%type <node> an_term  an_formula function_param an_const
+%type <node> an_term  an_formula function_param an_const an_fp_term
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -409,6 +409,10 @@
 
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
+%token ROUNDINGMODE_TOK
+%token FLOAT16_TOK
+%token FLOAT32_TOK
+%token FLOAT64_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -492,12 +496,19 @@
 %token FP_TO_UBV_TOK;
 %token FP_TO_SBV_TOK;
 
- /* rounding modes */
+ /* fp rounding modes */
 %token FP_RM_ROUNDTOWARDZERO_TOK;
 %token FP_RM_ROUNDNEARESTTIESTOEVEN_TOK;
 %token FP_RM_ROUNDNEARESTTIESTOAWAY_TOK;
 %token FP_RM_ROUNDTOWARDPOSITIVE_TOK;
 %token FP_RM_ROUNDTOWARDNEGATIVE_TOK;
+
+ /* fp constants */
+%token FP_NAN;
+%token FP_NEG_INF;
+%token FP_POS_INF;
+%token FP_NEG_ZERO;
+%token FP_POS_ZERO;
 
 %token END 0 "end of file"
 
@@ -547,6 +558,10 @@ cmdi:
     {
       stp::GlobalParserInterface->success();
     }
+|
+     DEFINE_SORT_TOK sort_decl
+     {
+     }
 |
      ECHO_TOK STRING_TOK
     {
@@ -715,6 +730,18 @@ STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
+STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
+{
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+{
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$10);
+}
+|
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
 {
   if ($9->GetValueWidth() != $7)
@@ -802,6 +829,10 @@ SOURCE_TOK
 | LICENSE_TOK
 ;
 
+sort_decl:
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+};
 
 
 var_decl:
@@ -813,6 +844,19 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   //var
   s.SetIndexWidth(0);
   s.SetValueWidth($7);
+  delete $1;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
+{
+  // AVJ-FP - FIXME
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
+  //var
+  s.SetExpWidth(8);
+  s.SetSigWidth(32);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
   delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
@@ -981,6 +1025,9 @@ TRUE_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
+}
+| LPAREN_TOK an_fp_term RPAREN_TOK
+{
 }
 | LPAREN_TOK EQ_TOK an_terms RPAREN_TOK
 {
@@ -1348,6 +1395,14 @@ FP_RM_ROUNDTOWARDZERO_TOK {}
 | FP_RM_ROUNDTOWARDNEGATIVE_TOK {}
 ;
 
+an_fp_const:
+  FP_NAN {}
+| FP_NEG_INF {}
+| FP_POS_INF {}
+| FP_NEG_ZERO {}
+| FP_POS_ZERO {}
+;
+
 an_fp_term:
   FP_ABS_TOK an_term {}
 | FP_NEG_TOK an_term {}
@@ -1375,6 +1430,7 @@ an_fp_term:
 | FP_ISPOSITIVE_TOK an_term an_term {}
 | FP_TO_UBV_TOK an_rounding_mode an_term an_term {}
 | FP_TO_SBV_TOK an_rounding_mode an_term an_term {}
+| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK {}
 ;
 
 an_term:
@@ -1393,6 +1449,10 @@ TERMID_TOK
 }
 | an_fp_term
 {
+}
+| an_rounding_mode
+{
+/* not really a term? */
 }
 | SELECT_TOK an_term an_term
 {
