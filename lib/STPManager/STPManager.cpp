@@ -248,7 +248,10 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
                                       c_val);
     if (shift_amount < (sizeof(bvconst) * 8))
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshift-count-overflow"
       bvconst >>= shift_amount;
+#pragma GCC diagnostic pop
     }
     else
     {
