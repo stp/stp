@@ -254,6 +254,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "Float16" { return FLOAT16_TOK; }
 "Float32" { return FLOAT32_TOK; }
 "Float64" { return FLOAT64_TOK; }
+"Float128" { return FLOAT128_TOK; }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */

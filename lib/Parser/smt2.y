@@ -413,6 +413,7 @@
 %token FLOAT16_TOK
 %token FLOAT32_TOK
 %token FLOAT64_TOK
+%token FLOAT128_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -845,7 +846,7 @@ SOURCE_TOK
 ;
 
 sort_decl:
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
 };
 
@@ -853,6 +854,7 @@ an_fp_sort:
   FLOAT16_TOK {}
 | FLOAT32_TOK {}
 | FLOAT64_TOK {}
+| FLOAT128_TOK {}
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK {}
 ;
 
@@ -968,6 +970,22 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   else {
     fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
+  delete $1;
+}
+| STRING_TOK an_fp_sort
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+}
+| STRING_TOK ROUNDINGMODE_TOK
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
+  stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
 ;
