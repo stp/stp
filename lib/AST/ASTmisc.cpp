@@ -556,16 +556,19 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
 
-      // AVJ-FP; FIXME
-      break;
-
-      if (!(n[0].GetValueWidth() == n[1].GetValueWidth() &&
-            n[0].GetIndexWidth() == n[1].GetIndexWidth()))
+      if (!(((n[0].GetValueWidth() == n[1].GetValueWidth() &&
+              n[0].GetIndexWidth() == n[1].GetIndexWidth()) ||
+             (n[0].GetExpWidth() == n[1].GetExpWidth() &&
+              n[0].GetSigWidth() == n[1].GetSigWidth()))))
       {
         cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
         cerr << "valuewidth of rhs of EQ: " << n[1].GetValueWidth() << endl;
         cerr << "indexwidth of lhs of EQ: " << n[0].GetIndexWidth() << endl;
         cerr << "indexwidth of rhs of EQ: " << n[1].GetIndexWidth() << endl;
+        cerr << "expwidth of lhs of EQ: " << n[0].GetExpWidth() << endl;
+        cerr << "expwidth of rhs of EQ: " << n[1].GetExpWidth() << endl;
+        cerr << "sigwidth of lhs of EQ: " << n[0].GetSigWidth() << endl;
+        cerr << "sigwidth of rhs of EQ: " << n[1].GetSigWidth() << endl;
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       }

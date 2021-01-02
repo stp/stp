@@ -1423,8 +1423,11 @@ BVCONST_HEXIDECIMAL_TOK
 
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits + sig_bits, first, *$4));
 
+  Kind k = $$->GetKind();
+  assert(k == BVCONST);
+
   $$->SetExpWidth(exp_bits);
-  $$->SetSigWidth(sig_bits);
+  $$->SetSigWidth(sig_bits + sign_bits);
 
   stp::GlobalParserInterface->deleteNode($2);
   stp::GlobalParserInterface->deleteNode($3);

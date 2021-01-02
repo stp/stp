@@ -67,7 +67,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   }
 
   if ((number_of_children == 2 || number_of_children == 1) &&
-      input_children[0].GetType() == BITVECTOR_TYPE)
+      (input_children[0].GetType() == BITVECTOR_TYPE ||
+       input_children[0].GetType() == FLOATINGPOINT_TYPE))
   {
     // saving some typing. BVPLUS does not use these variables. if the
     // input BVPLUS has two nodes, then we want to avoid setting these

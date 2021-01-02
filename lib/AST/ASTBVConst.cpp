@@ -30,7 +30,7 @@ namespace stp
 const ASTVec ASTBVConst::astbv_empty_children;
 
 ASTBVConst::ASTBVConst(const ASTBVConst& sym)
-    : ASTInternal(sym.nodeManager, sym._kind)
+    : ASTInternal(sym.nodeManager, sym._kind), _sig_width(0), _exp_width(0)
 {
   _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
   cbv_managed_outside = false;

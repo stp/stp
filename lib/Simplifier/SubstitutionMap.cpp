@@ -392,8 +392,10 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
 
   assert(e0 != e1);
   // AVJ-FP; FIXME
-  // assert(e0.GetValueWidth() == e1.GetValueWidth());
-  // assert(e0.GetIndexWidth() == e1.GetIndexWidth());
+  assert((e0.GetValueWidth() == e1.GetValueWidth() &&
+          e0.GetIndexWidth() == e1.GetIndexWidth()) ||
+         (e0.GetExpWidth() == e1.GetExpWidth() &&
+          e0.GetSigWidth() == e1.GetSigWidth()));
 
   if (e0.GetKind() == SYMBOL)
   {

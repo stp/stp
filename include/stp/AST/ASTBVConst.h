@@ -61,7 +61,7 @@ private:
   ASTBVConst(CBV bv, unsigned int width);
   ASTBVConst(STPMgr* mgr, CBV bv, unsigned int /*width*/,
              bool managed_outside = false)
-      : ASTInternal(mgr, BVCONST)
+      : ASTInternal(mgr, BVCONST), _sig_width(0), _exp_width(0)
   {
     if (managed_outside)
     {
@@ -102,11 +102,14 @@ private:
   uint32_t getValueWidth() const { return bits_(_bvconst); }
 
   // AVJ-FP
-  virtual void setExpWidth(uint32_t) {}
-  virtual uint32_t getExpWidth() const { return 0; }
+  uint32_t _sig_width;
+  uint32_t _exp_width;
 
-  virtual void setSigWidth(uint32_t) {}
-  virtual uint32_t getSigWidth() const { return 0; }
+  virtual void setSigWidth(uint32_t sw) { _sig_width = sw; }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
+
+  virtual void setExpWidth(uint32_t ew) { _exp_width = ew; }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
 
 public:
   virtual ASTChildren GetChildren() const { return astbv_empty_children; }
