@@ -1119,7 +1119,35 @@ enum exprkind_t
   ARRAY,        //!< Array creation expression
   BITVECTOR,    //!< Bitvector creation expression
   BOOLEAN,      //!< Boolean creation expression
-  FLOATINGPOINT //!< FloatingPoint creation expression
+  FLOATINGPOINT, //!< Floating point creation expression
+  FP_ABS,
+  FP_NEG,
+  FP_ADD,
+  FP_SUB,
+  FP_MUL,
+  FP_DIV,
+  FP_FMA,
+  FP_SQRT,
+  FP_REM,
+  FP_ROUNDTOINTEGRAL,
+  FP_MIN,
+  FP_MAX,
+  FP_TOFP_TOK,
+  FP_TOFP_UNSIGNED_TOK,
+  FP_TO_UBV,
+  FP_TO_SBV,
+  FP_LEQ,
+  FP_LT,
+  FP_GEQ,
+  FP_GT,
+  FP_EQ,
+  FP_ISNORMAL,
+  FP_ISSUBNORMAL,
+  FP_ISZERO,
+  FP_ISINFINITE,
+  FP_ISNAN,
+  FP_ISNEGATIVE,
+  FP_ISPOSITIVE,
 };
 
 //! \brief Returns the expression-kind of the given expression.

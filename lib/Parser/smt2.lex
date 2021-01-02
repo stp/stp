@@ -329,8 +329,12 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* generic FP token*/
 "fp" { return FP_TOK; }
+
+ /* FP conversions */
 "to_fp" { return FP_TOFP_TOK; }
 "to_fp_unsigned" { return FP_TOFP_UNSIGNED_TOK; }
+"fp.to_ubv" { return FP_TO_UBV_TOK; }
+"fp.to_sbv" { return FP_TO_SBV_TOK; }
 
  /* Functions for FP */
 "fp.abs" { return FP_ABS_TOK; }
@@ -357,8 +361,6 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "fp.isNaN" { return FP_ISNAN_TOK; }
 "fp.isNegative" { return FP_ISNEGATIVE_TOK; }
 "fp.isPositive" { return FP_ISPOSITIVE_TOK; }
-"fp.to_ubv" { return FP_TO_UBV_TOK; }
-"fp.to_sbv" { return FP_TO_SBV_TOK; }
 
  /* rounding modes */
 "roundTowardZero" { return FP_RM_ROUNDTOWARDZERO_TOK; }

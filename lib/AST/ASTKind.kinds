@@ -94,3 +94,93 @@ BITVECTOR       0       0
 BOOLEAN         0       0
 FLOATINGPOINT   0       0
 
+# Floating point _terms_ (i.e., things that produce FPs)
+
+# fp.abs: fp -> fp
+FP_ABS                      1    1    Term
+
+# fp.neg: fp -> fp
+FP_NEG                      1    1    Term
+
+# fp.add: rm, fp, fp -> fp
+FP_ADD                      3    3    Term
+
+# fp.sub: rm, fp, fp -> fp
+FP_SUB                      3    3    Term
+
+# fp.mul: rm, fp, fp -> fp
+FP_MUL                      3    3    Term
+
+# fp.div: rm, fp, fp -> fp
+FP_DIV                      3    3    Term
+
+# fp.fma: rm, fp, fp, fp -> fp
+FP_FMA                      4    4    Term
+
+# fp.sqrt: rm, fp -> fp
+FP_SQRT                     2    2    Term
+
+# fp.rem: fp, fp -> fp
+FP_REM                      2    2    Term
+
+# fp.roundToIntegral: rm, fp -> fp
+FP_ROUNDTOINTEGRAL          2    2    Term
+
+# fp.min: fp, fp -> fp
+FP_MIN                      2    2    Term
+
+# fp.max: fp, fp -> fp
+FP_MAX                      2    2    Term
+
+# to_fp: eb, sb, bv -> fp
+# to_fp: eb, sb, rm, fp -> fp
+# to_fp: eb, sb, rm, bv -> fp
+FP_TOFP_TOK                 3   4    Term
+
+# to_fp_unsigned: eb, sb, rm, bv -> fP
+FP_TOFP_UNSIGNED_TOK        4    4    Term
+
+# fp.to_ubv: bw, rm, fp -> bv
+FP_TO_UBV                   3    3    Term
+
+# fp.to_sbv: bw, rm, fp -> bv
+FP_TO_SBV                   3    3    Term
+
+# Floating point _formulae_ (i.e., things that produce Booleans)
+
+# fp.leq: fp, fp -> bool
+FP_LEQ              2    _    Form
+
+# fp.lt: fp, fp -> bool
+FP_LT               2    _    Form
+
+# fp.geq: fp, fp -> bool
+FP_GEQ              2    _    Form
+
+# fp.gt: fp, fp -> bool
+FP_GT               2    _    Form
+
+# fp.eq: fp, fp -> bool
+FP_EQ               2    _    Form
+
+# fp.isNormal: fp -> bool
+FP_ISNORMAL         1    1    Form
+
+# fp.isSubnormal: fp -> bool
+FP_ISSUBNORMAL      1    1    Form
+
+# fp.isZero: fp -> bool
+FP_ISZERO           1    1    Form
+
+# fp.isInfinite: fp -> bool
+FP_ISINFINITE       1    1    Form
+
+# fp.isNaN: fp -> bool
+FP_ISNAN            1    1    Form
+
+# fp.isNegative: fp -> bool
+FP_ISNEGATIVE       1    1    Form
+
+# fp.isPositive: fp -> bool
+FP_ISPOSITIVE       1    1    Form
+

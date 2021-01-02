@@ -468,8 +468,12 @@
 
  /* generic FP token*/
 %token FP_TOK
+
+ /* FP conversions */
 %token FP_TOFP_TOK
 %token FP_TOFP_UNSIGNED_TOK
+%token FP_TO_UBV_TOK;
+%token FP_TO_SBV_TOK;
 
  /* Functions for FP */
 %token FP_ABS_TOK;
@@ -496,8 +500,6 @@
 %token FP_ISNAN_TOK;
 %token FP_ISNEGATIVE_TOK;
 %token FP_ISPOSITIVE_TOK;
-%token FP_TO_UBV_TOK;
-%token FP_TO_SBV_TOK;
 
  /* fp rounding modes */
 %token FP_RM_ROUNDTOWARDZERO_TOK;
