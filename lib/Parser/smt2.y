@@ -469,6 +469,7 @@
  /* generic FP token*/
 %token FP_TOK
 %token FP_TOFP_TOK
+%token FP_TOFP_UNSIGNED_TOK
 
  /* Functions for FP */
 %token FP_ABS_TOK;
@@ -1435,51 +1436,53 @@ BVCONST_HEXIDECIMAL_TOK
 };
 
 an_rounding_mode:
-FP_RM_ROUNDTOWARDZERO_TOK {}
-| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK {}
-| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK {}
-| FP_RM_ROUNDTOWARDPOSITIVE_TOK {}
-| FP_RM_ROUNDTOWARDNEGATIVE_TOK {}
+  FP_RM_ROUNDTOWARDZERO_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDZERO_TOK" << std::endl; }
+| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK { std::cout << "Unsupported FP_RM_ROUNDNEARESTTIESTOEVEN_TOK" << std::endl; }
+| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK { std::cout << "Unsupported FP_RM_ROUNDNEARESTTIESTOAWAY_TOK" << std::endl; }
+| FP_RM_ROUNDTOWARDPOSITIVE_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDPOSITIVE_TOK" << std::endl; }
+| FP_RM_ROUNDTOWARDNEGATIVE_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDNEGATIVE_TOK" << std::endl; }
 ;
 
 an_fp_const:
-  FP_NAN {}
-| FP_NEG_INF {}
-| FP_POS_INF {}
-| FP_NEG_ZERO {}
-| FP_POS_ZERO {}
+  FP_NAN { std::cout << "Unsupported FP_NAN" << std::endl; }
+| FP_NEG_INF { std::cout << "Unsupported FP_NEG_INF" << std::endl; }
+| FP_POS_INF { std::cout << "Unsupported FP_POS_INF" << std::endl; }
+| FP_NEG_ZERO { std::cout << "Unsupported FP_NEG_ZERO" << std::endl; }
+| FP_POS_ZERO { std::cout << "Unsupported FP_POS_ZERO" << std::endl; }
 ;
 
 an_fp_term:
-  FP_ABS_TOK an_term {}
-| FP_NEG_TOK an_term {}
-| FP_ADD_TOK an_rounding_mode an_term an_term {}
-| FP_SUB_TOK an_rounding_mode an_term an_term {}
-| FP_MUL_TOK an_rounding_mode an_term an_term {}
-| FP_DIV_TOK an_rounding_mode an_term an_term {}
-| FP_FMA_TOK an_rounding_mode an_term an_term an_term {}
-| FP_SQRT_TOK an_rounding_mode an_term {}
-| FP_REM_TOK an_term an_term {}
-| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term {}
-| FP_MIN_TOK an_term an_term {}
-| FP_MAX_TOK an_term an_term {}
-| FP_LEQ_TOK an_term an_term {}
-| FP_LT_TOK an_term an_term {}
-| FP_GEQ_TOK an_term an_term {}
-| FP_GT_TOK an_term an_term {}
-| FP_EQ_TOK an_term an_term {}
-| FP_ISNORMAL_TOK an_term {}
-| FP_ISSUBNORMAL_TOK an_term {}
-| FP_ISZERO_TOK an_term {}
-| FP_ISINFINITE_TOK an_term {}
-| FP_ISNAN_TOK an_term {}
-| FP_ISNEGATIVE_TOK an_term {}
-| FP_ISPOSITIVE_TOK an_term {}
-| FP_TO_UBV_TOK an_rounding_mode an_term an_term {}
-| FP_TO_SBV_TOK an_rounding_mode an_term an_term {}
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term {}
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term {}
-| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK {}
+  FP_ABS_TOK an_term  { std::cout << "Unsupported FP_ABS_TOK " << std::endl; }
+| FP_NEG_TOK an_term  { std::cout << "Unsupported FP_NEG_TOK" << std::endl; }
+| FP_ADD_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_ADD_TOK" << std::endl; }
+| FP_SUB_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_SUB_TOK" << std::endl; }
+| FP_MUL_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_MUL_TOK" << std::endl; }
+| FP_DIV_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_DIV_TOK" << std::endl; }
+| FP_FMA_TOK an_rounding_mode an_term an_term an_term  { std::cout << "Unsupported FP_FMA_TOK" << std::endl; }
+| FP_SQRT_TOK an_rounding_mode an_term  { std::cout << "Unsupported FP_SQRT_TOK" << std::endl; }
+| FP_REM_TOK an_term an_term  { std::cout << "Unsupported FP_REM_TOK" << std::endl; }
+| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term  { std::cout << "Unsupported FP_ROUNDTOINTEGRAL_TOK" << std::endl; }
+| FP_MIN_TOK an_term an_term  { std::cout << "Unsupported FP_MIN_TOK" << std::endl; }
+| FP_MAX_TOK an_term an_term  { std::cout << "Unsupported FP_MAX_TOK" << std::endl; }
+| FP_LEQ_TOK an_term an_term  { std::cout << "Unsupported FP_LEQ_TOK" << std::endl; }
+| FP_LT_TOK an_term an_term  { std::cout << "Unsupported FP_LT_TOK" << std::endl; }
+| FP_GEQ_TOK an_term an_term  { std::cout << "Unsupported FP_GEQ_TOK" << std::endl; }
+| FP_GT_TOK an_term an_term  { std::cout << "Unsupported FP_GT_TOK" << std::endl; }
+| FP_EQ_TOK an_term an_term  { std::cout << "Unsupported FP_EQ_TOK" << std::endl; }
+| FP_ISNORMAL_TOK an_term  { std::cout << "Unsupported FP_ISNORMAL_TOK" << std::endl; }
+| FP_ISSUBNORMAL_TOK an_term  { std::cout << "Unsupported FP_ISSUBNORMAL_TOK" << std::endl; }
+| FP_ISZERO_TOK an_term  { std::cout << "Unsupported FP_ISZERO_TOK" << std::endl; }
+| FP_ISINFINITE_TOK an_term  { std::cout << "Unsupported FP_ISINFINITE_TOK" << std::endl; }
+| FP_ISNAN_TOK an_term  { std::cout << "Unsupported FP_ISNAN_TOK" << std::endl; }
+| FP_ISNEGATIVE_TOK an_term  { std::cout << "Unsupported FP_ISNEGATIVE_TOK" << std::endl; }
+| FP_ISPOSITIVE_TOK an_term  { std::cout << "Unsupported FP_ISPOSITIVE_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_TO_UBV_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_TO_SBV_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term { std::cout << "Unsupported FP_TOFP_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term { std::cout << "Unsupported FP_TOFP_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term { std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl; }
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term { std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl; }
+| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK { std::cout << "Unsupported an_fp_const" << std::endl; }
 ;
 
 an_term:
@@ -1498,10 +1501,11 @@ TERMID_TOK
 }
 | an_fp_term
 {
+  $$ = $1;
 }
 | an_rounding_mode
 {
-/* not really a term? */
+  /* not really a term? */
 }
 | SELECT_TOK an_term an_term
 {

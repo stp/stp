@@ -330,6 +330,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* generic FP token*/
 "fp" { return FP_TOK; }
 "to_fp" { return FP_TOFP_TOK; }
+"to_fp_unsigned" { return FP_TOFP_UNSIGNED_TOK; }
 
  /* Functions for FP */
 "fp.abs" { return FP_ABS_TOK; }
