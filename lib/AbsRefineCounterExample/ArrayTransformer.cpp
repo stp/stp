@@ -398,6 +398,12 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       }
       break;
     }
+    case FP_EQ:
+    {
+      std::cerr << "TransformFormula: Unhandled FP_EQ" << std::endl;
+      result = simpleForm;
+      break;
+    }
     default:
     {
       if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())

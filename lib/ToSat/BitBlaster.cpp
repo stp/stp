@@ -382,7 +382,8 @@ void BitBlaster<BBNode, BBNodeManagerT>::updateTerm(const ASTNode& n,
   {
     if (bbFixed)
     {
-      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : n.GetValueWidth(),
+      const unsigned int num_bits = n.GetValueWidth();
+      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : num_bits,
                         n.GetType() == BOOLEAN_TYPE);
       cb->fixedMap->map->insert(std::pair<ASTNode, FixedBits*>(n, b));
       if (debug_bitblaster)
@@ -640,6 +641,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
 
   const auto kids_end = term.end();
   const unsigned int num_bits = term.GetValueWidth();
+
   switch (k)
   {
     case BVNOT:
@@ -1008,7 +1010,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       FatalError("BBTerm: Illegal kind to BBTerm", term);
   }
 
-  assert(result.size() == term.GetValueWidth());
+  assert(result.size() == num_bits);
 
   if (debug_do_check)
     check(result, term);
@@ -1173,6 +1175,11 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     case BVSSUBO:
     {
       result = BBOverflow(form, support);
+      break;
+    }
+    case FP_EQ:
+    {
+      result = BBFPcompare(form, support);
       break;
     }
     default:
@@ -2996,6 +3003,39 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
       FatalError("", form);
       exit(-1);
   }
+}
+
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBFPcompare(const ASTNode& form,
+                                                       BBNodeSet& support)
+{
+  const BBNodeVec& left = BBTerm(form[0], support);
+  const BBNodeVec& right = BBTerm(form[1], support);
+
+  const Kind k = form.GetKind();
+  switch (k)
+  {
+    case FP_EQ:
+    {
+      return BBFPEQ(form, left, right);
+      break;
+    }
+    default:
+    {
+      FatalError("BBFPcompare: Unhandled kind: ", form);
+      break;
+    }
+  }
+}
+
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBFPEQ(const ASTNode& form,
+                                                  const BBNodeVec& left,
+                                                  const BBNodeVec& right)
+{
+  std::cerr << "Unimplemented: BBFPEQ" << std::endl;
+  BBNode resultNode = nf->getFalse();
+  return resultNode;
 }
 
 // return a vector with n copies of fillval

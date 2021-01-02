@@ -441,6 +441,12 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       output = pushNeg ? nf->CreateNode(NOT, output) : output;
       break;
     }
+    case FP_EQ:
+    {
+      std::cerr << "SimplifyAtomicFormula: Unhandled FP_EQ" << std::endl;
+      output = a;
+      break;
+    }
     default:
       FatalError("SimplifyAtomicFormula: "
                  "NO atomic formula of the kind: ",

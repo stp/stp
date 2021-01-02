@@ -519,6 +519,9 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
   // The children of bitvector terms are in turn bitvectors.
   const ASTChildren v = n.GetChildren();
 
+  std::string error_msg("");
+  bool failed(false);
+
   if (!(is_Form_kind(k) && BOOLEAN_TYPE == n.GetType()))
     FatalError("BVTypeCheck: not a formula:", n);
 
@@ -638,6 +641,42 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (3 != n.Degree())
         FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
+      break;
+
+    case FP_EQ:
+
+      if (n.Degree() != 2)
+      {
+        /* not actually true */
+        error_msg = "fp.eq should have exactly 2 args";
+        failed = true;
+      }
+      else if (n[0].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "lhs of fp.eq is not an fp";
+        failed = true;
+      }
+      else if (n[1].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "rhs of fp.eq is not an fp";
+        failed = true;
+      }
+      else if (n[0].GetSigWidth() != n[1].GetSigWidth())
+      {
+        error_msg = "arguments to fp.eq differ in sig width";
+        failed = true;
+      }
+      else if (n[0].GetExpWidth() != n[1].GetExpWidth())
+      {
+        error_msg = "arguments to fp.eq differ in exp width";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
       break;
 
     default:

@@ -1112,13 +1112,13 @@ enum exprkind_t
   NOR,  //!< Logical-not-or boolean expression (TODO: Does this still exist?)
   XOR,  //!< Logical-xor (either-or) boolean expression
   IFF,  //!< If-and-only-if boolean expression
-  IMPLIES,      //!< Implication boolean expression
-  PARAMBOOL,    //!< Parameterized boolean expression
-  READ,         //!< Array read expression
-  WRITE,        //!< Array write expression
-  ARRAY,        //!< Array creation expression
-  BITVECTOR,    //!< Bitvector creation expression
-  BOOLEAN,      //!< Boolean creation expression
+  IMPLIES,       //!< Implication boolean expression
+  PARAMBOOL,     //!< Parameterized boolean expression
+  READ,          //!< Array read expression
+  WRITE,         //!< Array write expression
+  ARRAY,         //!< Array creation expression
+  BITVECTOR,     //!< Bitvector creation expression
+  BOOLEAN,       //!< Boolean creation expression
   FLOATINGPOINT, //!< Floating point creation expression
   FP_ABS,
   FP_NEG,
@@ -1132,8 +1132,8 @@ enum exprkind_t
   FP_ROUNDTOINTEGRAL,
   FP_MIN,
   FP_MAX,
-  FP_TOFP_TOK,
-  FP_TOFP_UNSIGNED_TOK,
+  FP_TOFP,
+  FP_TOFP_UNSIGNED,
   FP_TO_UBV,
   FP_TO_SBV,
   FP_LEQ,

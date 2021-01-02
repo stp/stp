@@ -135,10 +135,10 @@ FP_MAX                      2    2    Term
 # to_fp: eb, sb, bv -> fp
 # to_fp: eb, sb, rm, fp -> fp
 # to_fp: eb, sb, rm, bv -> fp
-FP_TOFP_TOK                 3   4    Term
+FP_TOFP                     3   4    Term
 
 # to_fp_unsigned: eb, sb, rm, bv -> fP
-FP_TOFP_UNSIGNED_TOK        4    4    Term
+FP_TOFP_UNSIGNED            4    4    Term
 
 # fp.to_ubv: bw, rm, fp -> bv
 FP_TO_UBV                   3    3    Term

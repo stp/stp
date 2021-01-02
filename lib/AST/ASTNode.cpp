@@ -120,6 +120,11 @@ void ASTNode::SetIndexWidth(unsigned int _iw) const
 
 unsigned int ASTNode::GetValueWidth() const
 {
+  // TODO: FIXME: this is *horrible*
+  if (_int_node_ptr->getSigWidth() > 0)
+  {
+    return _int_node_ptr->getSigWidth() + _int_node_ptr->getExpWidth();
+  }
   return _int_node_ptr->getValueWidth();
 }
 

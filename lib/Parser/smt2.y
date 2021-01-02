@@ -3,7 +3,7 @@
 %parse-param {void *scanner}
 */
 
-/* %define parse.error verbose */
+%define parse.error verbose
 
 %{
   /********************************************************************
@@ -179,6 +179,35 @@
   using stp::BITVECTOR;    //!< Bitvector creation expression
   using stp::BOOLEAN;      //!< Boolean creation expression
 
+  using stp::FP_ABS;
+  using stp::FP_NEG;
+  using stp::FP_ADD;
+  using stp::FP_SUB;
+  using stp::FP_MUL;
+  using stp::FP_DIV;
+  using stp::FP_FMA;
+  using stp::FP_SQRT;
+  using stp::FP_REM;
+  using stp::FP_ROUNDTOINTEGRAL;
+  using stp::FP_MIN;
+  using stp::FP_MAX;
+  using stp::FP_TOFP;
+  using stp::FP_TOFP_UNSIGNED;
+  using stp::FP_TO_UBV;
+  using stp::FP_TO_SBV;
+  using stp::FP_LEQ;
+  using stp::FP_LT;
+  using stp::FP_GEQ;
+  using stp::FP_GT;
+  using stp::FP_EQ;
+  using stp::FP_ISNORMAL;
+  using stp::FP_ISSUBNORMAL;
+  using stp::FP_ISZERO;
+  using stp::FP_ISINFINITE;
+  using stp::FP_ISNAN;
+  using stp::FP_ISNEGATIVE;
+  using stp::FP_ISPOSITIVE;
+
   using stp::NOT_DECLARED;
   using stp::TO_BE_SATISFIABLE;
   using stp::TO_BE_UNSATISFIABLE;
@@ -187,6 +216,7 @@
   using stp::BOOLEAN_TYPE;
   using stp::BITVECTOR_TYPE;
   using stp::ARRAY_TYPE;
+  using stp::FLOATINGPOINT_TYPE;
   using stp::UNKNOWN_TYPE;
 
   using stp::SOLVER_INVALID;
@@ -1075,6 +1105,7 @@ TRUE_TOK
 }
 | LPAREN_TOK an_fp_term RPAREN_TOK
 {
+   $$ = $2;
 }
 | LPAREN_TOK EQ_TOK an_terms RPAREN_TOK
 {
@@ -1432,6 +1463,8 @@ BVCONST_HEXIDECIMAL_TOK
   $$->SetExpWidth(exp_bits);
   $$->SetSigWidth(sig_bits + sign_bits);
 
+  assert($$->GetType() == FLOATINGPOINT_TYPE);
+
   stp::GlobalParserInterface->deleteNode($2);
   stp::GlobalParserInterface->deleteNode($3);
   stp::GlobalParserInterface->deleteNode($4);
@@ -1454,37 +1487,150 @@ an_fp_const:
 ;
 
 an_fp_term:
-  FP_ABS_TOK an_term  { std::cout << "Unsupported FP_ABS_TOK " << std::endl; }
-| FP_NEG_TOK an_term  { std::cout << "Unsupported FP_NEG_TOK" << std::endl; }
-| FP_ADD_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_ADD_TOK" << std::endl; }
-| FP_SUB_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_SUB_TOK" << std::endl; }
-| FP_MUL_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_MUL_TOK" << std::endl; }
-| FP_DIV_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_DIV_TOK" << std::endl; }
-| FP_FMA_TOK an_rounding_mode an_term an_term an_term  { std::cout << "Unsupported FP_FMA_TOK" << std::endl; }
-| FP_SQRT_TOK an_rounding_mode an_term  { std::cout << "Unsupported FP_SQRT_TOK" << std::endl; }
-| FP_REM_TOK an_term an_term  { std::cout << "Unsupported FP_REM_TOK" << std::endl; }
-| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term  { std::cout << "Unsupported FP_ROUNDTOINTEGRAL_TOK" << std::endl; }
-| FP_MIN_TOK an_term an_term  { std::cout << "Unsupported FP_MIN_TOK" << std::endl; }
-| FP_MAX_TOK an_term an_term  { std::cout << "Unsupported FP_MAX_TOK" << std::endl; }
-| FP_LEQ_TOK an_term an_term  { std::cout << "Unsupported FP_LEQ_TOK" << std::endl; }
-| FP_LT_TOK an_term an_term  { std::cout << "Unsupported FP_LT_TOK" << std::endl; }
-| FP_GEQ_TOK an_term an_term  { std::cout << "Unsupported FP_GEQ_TOK" << std::endl; }
-| FP_GT_TOK an_term an_term  { std::cout << "Unsupported FP_GT_TOK" << std::endl; }
-| FP_EQ_TOK an_term an_term  { std::cout << "Unsupported FP_EQ_TOK" << std::endl; }
-| FP_ISNORMAL_TOK an_term  { std::cout << "Unsupported FP_ISNORMAL_TOK" << std::endl; }
-| FP_ISSUBNORMAL_TOK an_term  { std::cout << "Unsupported FP_ISSUBNORMAL_TOK" << std::endl; }
-| FP_ISZERO_TOK an_term  { std::cout << "Unsupported FP_ISZERO_TOK" << std::endl; }
-| FP_ISINFINITE_TOK an_term  { std::cout << "Unsupported FP_ISINFINITE_TOK" << std::endl; }
-| FP_ISNAN_TOK an_term  { std::cout << "Unsupported FP_ISNAN_TOK" << std::endl; }
-| FP_ISNEGATIVE_TOK an_term  { std::cout << "Unsupported FP_ISNEGATIVE_TOK" << std::endl; }
-| FP_ISPOSITIVE_TOK an_term  { std::cout << "Unsupported FP_ISPOSITIVE_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_TO_UBV_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term  { std::cout << "Unsupported FP_TO_SBV_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term { std::cout << "Unsupported FP_TOFP_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term { std::cout << "Unsupported FP_TOFP_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term { std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl; }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term { std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl; }
-| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK { std::cout << "Unsupported an_fp_const" << std::endl; }
+  FP_ABS_TOK an_term
+{
+ std::cout << "Unsupported FP_ABS_TOK " << std::endl;
+}
+| FP_NEG_TOK an_term
+{
+ std::cout << "Unsupported FP_NEG_TOK" << std::endl;
+}
+| FP_ADD_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_ADD_TOK" << std::endl;
+}
+| FP_SUB_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_SUB_TOK" << std::endl;
+}
+| FP_MUL_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_MUL_TOK" << std::endl;
+}
+| FP_DIV_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_DIV_TOK" << std::endl;
+}
+| FP_FMA_TOK an_rounding_mode an_term an_term an_term
+{
+ std::cout << "Unsupported FP_FMA_TOK" << std::endl;
+}
+| FP_SQRT_TOK an_rounding_mode an_term
+{
+ std::cout << "Unsupported FP_SQRT_TOK" << std::endl;
+}
+| FP_REM_TOK an_term an_term
+{
+ std::cout << "Unsupported FP_REM_TOK" << std::endl;
+}
+| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term
+{
+ std::cout << "Unsupported FP_ROUNDTOINTEGRAL_TOK" << std::endl;
+}
+| FP_MIN_TOK an_term an_term
+{
+ std::cout << "Unsupported FP_MIN_TOK" << std::endl;
+}
+| FP_MAX_TOK an_term an_term
+{
+ std::cout << "Unsupported FP_MAX_TOK" << std::endl;
+}
+| FP_LEQ_TOK an_terms
+{
+ std::cout << "Unsupported FP_LEQ_TOK" << std::endl;
+}
+| FP_LT_TOK an_terms
+{
+ std::cout << "Unsupported FP_LT_TOK" << std::endl;
+}
+| FP_GEQ_TOK an_terms
+{
+ std::cout << "Unsupported FP_GEQ_TOK" << std::endl;
+}
+| FP_GT_TOK an_terms
+{
+ std::cout << "Unsupported FP_GT_TOK" << std::endl;
+}
+| FP_EQ_TOK an_terms
+{
+  const ASTVec& terms = *$2;
+
+  if (terms.size() ==2)
+  {
+    $$ = createNode(FP_EQ, $2);
+  }
+  else  if (terms.size() >2)
+  {
+    ASTVec result;
+    result.reserve(terms.size()-1);
+    for (unsigned i =1; i < terms.size();i++)
+    {
+        result.push_back(stp::GlobalParserInterface->CreateNode(FP_EQ, terms[i], terms[i-1]));
+    }
+    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
+    delete $2;
+  }
+  else
+  {
+    fatal_yyerror("too few arguments to fp.eq.");
+  }
+}
+| FP_ISNORMAL_TOK an_term
+{
+ std::cout << "Unsupported FP_ISNORMAL_TOK" << std::endl;
+}
+| FP_ISSUBNORMAL_TOK an_term
+{
+ std::cout << "Unsupported FP_ISSUBNORMAL_TOK" << std::endl;
+}
+| FP_ISZERO_TOK an_term
+{
+ std::cout << "Unsupported FP_ISZERO_TOK" << std::endl;
+}
+| FP_ISINFINITE_TOK an_term
+{
+ std::cout << "Unsupported FP_ISINFINITE_TOK" << std::endl;
+}
+| FP_ISNAN_TOK an_term
+{
+ std::cout << "Unsupported FP_ISNAN_TOK" << std::endl;
+}
+| FP_ISNEGATIVE_TOK an_term
+{
+ std::cout << "Unsupported FP_ISNEGATIVE_TOK" << std::endl;
+}
+| FP_ISPOSITIVE_TOK an_term
+{
+ std::cout << "Unsupported FP_ISPOSITIVE_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_TO_UBV_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term
+{
+ std::cout << "Unsupported FP_TO_SBV_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+{
+ std::cout << "Unsupported FP_TOFP_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term
+{
+ std::cout << "Unsupported FP_TOFP_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+{
+ std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl;
+}
+| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term
+{
+ std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl;
+}
+| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
+{
+ std::cout << "Unsupported an_fp_const" << std::endl;
+}
 ;
 
 an_term:
