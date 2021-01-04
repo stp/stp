@@ -443,8 +443,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     }
     case FP_EQ:
     {
-      std::cerr << "SimplifyAtomicFormula: Unhandled FP_EQ" << std::endl;
-      output = a;
+      output = fpb->BlastTerm_TopLevel(a);
       break;
     }
     default:

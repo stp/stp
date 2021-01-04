@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "SubstitutionMap.h"
 #include "stp/AST/AST.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -51,6 +52,8 @@ private:
   ASTNodeMap* SimplifyNegMap;
   ASTNodeMap MultInverseMap;
 
+  FloatBlaster* fpb;
+
   NodeFactory* nf;
 
   SubstitutionMap& substitutionMap;
@@ -67,12 +70,15 @@ public:
     ASTTrue = nf->getTrue();
     ASTFalse = nf->getFalse();
     ASTUndefined = nf->getUndefined();
+
+    fpb = new FloatBlaster(bm);
   }
 
   ~Simplifier()
   {
     delete SimplifyMap;
     delete SimplifyNegMap;
+    delete fpb;
   }
 
   Simplifier(Simplifier const&) = delete;
