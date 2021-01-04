@@ -44,6 +44,41 @@ using std::string;
 using std::fdostream;
 using std::endl;
 
+namespace /* anonymous namespace for static */
+{
+
+/* this method is purposefully not public! */
+std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
+{
+  unsigned int indexWidth = 0;
+  unsigned int valueWidth = 0;
+
+  stp::ASTNode* a = (stp::ASTNode*)type;
+
+  switch (a->GetKind())
+  {
+    case stp::BITVECTOR:
+      indexWidth = 0;
+      valueWidth = (*a)[0].GetUnsignedConst();
+      break;
+    case stp::ARRAY:
+      indexWidth = (*a)[0].GetUnsignedConst();
+      valueWidth = (*a)[1].GetUnsignedConst();
+      break;
+    case stp::BOOLEAN:
+      indexWidth = 0;
+      valueWidth = 0;
+      break;
+    default:
+      stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
+      assert(false);
+      exit(-1);
+      break;
+  }
+  return std::make_pair(valueWidth, indexWidth);
+}
+} // namespace
+
 // GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
 extern int smtparse(void*);
@@ -719,31 +754,9 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* a = (stp::ASTNode*)type;
-
-  unsigned indexWidth;
-  unsigned valueWidth;
-
-  switch (a->GetKind())
-  {
-    case stp::BITVECTOR:
-      indexWidth = 0;
-      valueWidth = (*a)[0].GetUnsignedConst();
-      break;
-    case stp::ARRAY:
-      indexWidth = (*a)[0].GetUnsignedConst();
-      valueWidth = (*a)[1].GetUnsignedConst();
-      break;
-    case stp::BOOLEAN:
-      indexWidth = 0;
-      valueWidth = 0;
-      break;
-    default:
-      stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
-      assert(false);
-      exit(-1);
-      break;
-  }
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int valueWidth = typeSizes.first;
+  unsigned int indexWidth = typeSizes.second;
   stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
 
   stp::ASTNode* output = new stp::ASTNode(o);
@@ -1052,6 +1065,20 @@ Type vc_bvType(VC vc, int num_bits)
 Type vc_bv32Type(VC vc)
 {
   return vc_bvType(vc, 32);
+}
+
+int vc_getValueSize(VC /* vc */, Type type)
+{
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int valueWidth = typeSizes.first;
+  return valueWidth;
+}
+
+int vc_getIndexSize(VC /* vc */, Type type)
+{
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int indexWidth = typeSizes.second;
+  return indexWidth;
 }
 
 Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput)

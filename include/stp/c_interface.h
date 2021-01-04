@@ -576,6 +576,14 @@ DLL_PUBLIC Type vc_bvType(VC vc, int no_bits);
 //!
 DLL_PUBLIC Type vc_bv32Type(VC vc);
 
+//! \brief Returns the value size for the given type.
+//!
+DLL_PUBLIC int vc_getValueSize(VC /* vc */, Type type);
+
+//! \brief Returns the index size for the given type.
+//!
+DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
+
 //Const expressions for string, int, long-long, etc
 
 //! \brief Parses the given string and returns an associated bitvector expression.
