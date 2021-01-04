@@ -26,6 +26,21 @@ THE SOFTWARE.
 #include <cassert>
 #include <cmath>
 
+#include "symfpu/core/add.h"
+#include "symfpu/core/classify.h"
+#include "symfpu/core/compare.h"
+#include "symfpu/core/convert.h"
+#include "symfpu/core/divide.h"
+#include "symfpu/core/fma.h"
+#include "symfpu/core/ite.h"
+#include "symfpu/core/multiply.h"
+#include "symfpu/core/packing.h"
+#include "symfpu/core/remainder.h"
+#include "symfpu/core/sign.h"
+#include "symfpu/core/sqrt.h"
+#include "symfpu/utils/numberOfRoundingModes.h"
+#include "symfpu/utils/properties.h"
+
 namespace stp
 {
 

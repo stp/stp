@@ -656,6 +656,29 @@ endif()
 find_package(Perl REQUIRED)
 
 # -----------------------------------------------------------------------------
+# Find SymFPU
+# -----------------------------------------------------------------------------
+
+find_package(SymFPU)
+set(SYMFPU_INCLUDE_DIR "" CACHE PATH "SymFPU include directory")
+
+if (SymFPU_FOUND)
+    message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+else()
+    message(STATUS "Not found using installed SymFPU, looking for built SymFPU")
+    find_package(SymFPU CONFIG)
+
+    if (SymFPU_FOUND)
+        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR "You must install SymFPU from https://github.com/stp/SymFPU")
+    endif()
+endif()
+
+# Let's get clean builds ...
+include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+
+# -----------------------------------------------------------------------------
 # Query definitions
 # -----------------------------------------------------------------------------
 get_directory_property( DirDefs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITIONS )
