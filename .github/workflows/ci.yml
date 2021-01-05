@@ -40,10 +40,10 @@ jobs:
 
     - name: Dependencies
       run: |
-        ./contrib/setup-minisat.sh
-        ./contrib/setup-cms.sh
-        ./contrib/setup-gtest.sh
-        ./contrib/setup-outputcheck.sh
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-cms.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
 
     - name: Configure
       run: |
