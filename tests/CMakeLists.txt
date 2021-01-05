@@ -57,7 +57,7 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # everyone uses the same version of GTest.
 set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
 if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find GTest. Did you run contrib/setup-gtest.sh?")
+    message(FATAL_ERROR "Could not find GTest. Did you run scripts/deps/setup-gtest.sh?")
 endif()
 
 if (MSVC)
