@@ -32,7 +32,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 #include <memory>
 
-extern void foo(void);
+extern void foo(STPMgr*);
 
 extern void errorHandler(const char* error_msg);
 
@@ -61,6 +61,10 @@ Main::Main() : onePrintBack(false)
 
   bm = new STPMgr();
   GlobalParserBM = bm;
+
+  std::cout << "HELLO" << std::endl;
+  foo(bm);
+  std::cout << "DONE" << std::endl;
 }
 
 Main::~Main()
@@ -262,9 +266,6 @@ void Main::check_infile_type()
 
 int Main::main(int argc, char** argv)
 {
-  std::cout << "HELLO" << std::endl;
-  foo();
-  std::cout << "DONE" << std::endl;
   auto simplifyingNF = std::make_unique<SimplifyingNodeFactory> (*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = simplifyingNF.get();
 

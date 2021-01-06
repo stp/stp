@@ -182,7 +182,7 @@ template <> bitVector<false> bitVector<false>::minValue(const bitWidthType& w)
 template <bool isSigned>
 bitVector<isSigned>::bitVector(const Node n) : nodeWrapper(n)
 {
-  assert(checkNodeType(*this));
+  // assert(checkNodeType(*this));
 }
 
 template <bool isSigned> bool bitVector<isSigned>::checkNodeType(const TNode n)
@@ -643,9 +643,9 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 #undef STPSYMITEDFN
 
-void foo(void)
+extern void foo(STPMgr* bm)
 {
-  b = new STPMgr;
+  b = bm;
   int indexWidth(0);
   int valueWidth(32);
   stp::ASTNode s1 =
@@ -657,17 +657,24 @@ void foo(void)
   s2.SetExpWidth(8);
   s2.SetSigWidth(24);
 
-  roundingMode rm = traits::RNE();
-  floatingPointTypeInfo size(8, 24);
+  Node one(b->CreateBVConst(32, 1));
+  std::cout << one << std::endl;
+
+  floatingPointTypeInfo size(b->CreateBVConst(1, 1));
+  size.SetExpWidth(8);
+  size.SetExpWidth(24);
 
   uf a1(symfpu::unpack<traits>(size, s1));
   uf a2(symfpu::unpack<traits>(size, s2));
+#if 0
 
+  roundingMode rm = traits::RNE();
   uf add(symfpu::add<traits>(size, rm, a1, a2, true));
 
   stp::ASTNode* res = new stp::ASTNode(symfpu::pack<traits>(size, add));
 
   std::cout << *res << std::endl;
+#endif
 }
 
 // EOF
