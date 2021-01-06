@@ -63,6 +63,10 @@ Main::Main() : onePrintBack(false)
   GlobalParserBM = bm;
 
   std::cout << "HELLO" << std::endl;
+  TypeChecker nfTypeCheckDefault(*bm->hashingNodeFactory, *bm);
+  Cpp_interface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
+  GlobalParserInterface = &piTypeCheckDefault;
+  GlobalParserInterface->startup();
   foo(bm);
   std::cout << "DONE" << std::endl;
 }

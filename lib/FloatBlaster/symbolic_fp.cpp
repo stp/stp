@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/cpp_interface.h"
 
 #include "symfpu/core/add.h"
 #include "symfpu/core/classify.h"
@@ -207,11 +208,17 @@ template <bool isSigned>
 bitVector<isSigned>::bitVector(const bitVector<isSigned>& old)
     : nodeWrapper(old)
 {
-  assert(checkNodeType(*this));
+  // assert(checkNodeType(*this));
 }
 
 template <bool isSigned> bitWidthType bitVector<isSigned>::getWidth(void) const
 {
+  bitWidthType bw(GetValueWidth());
+  std::cout << GetKind() << std::endl;
+  if (GetType() == BOOLEAN_TYPE)
+  {
+    return 1;
+  }
   return GetValueWidth();
 }
 
@@ -497,7 +504,7 @@ bitVector<isSigned> bitVector<isSigned>::extract(bitWidthType upper,
 {
   assert(upper >= lower);
 
-  unsigned int width = upper - lower;
+  unsigned int width = upper - lower + 1;
   Node high(b->CreateBVConst(32, upper));
   Node low(b->CreateBVConst(32, lower));
   Node construct(b->CreateTerm(stp::BVEXTRACT, width, *this, high, low));
@@ -516,7 +523,7 @@ Node bitVector<isSigned>::fromProposition(Node node) const
 
 floatingPointTypeInfo::floatingPointTypeInfo(const TypeNode t) : TypeNode(t)
 {
-  assert(GetType() == stp::FLOATINGPOINT_TYPE);
+  assert(t.GetType() == stp::FLOATINGPOINT_TYPE);
 }
 
 floatingPointTypeInfo::floatingPointTypeInfo(unsigned exp, unsigned sig)
@@ -646,6 +653,7 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 extern void foo(STPMgr* bm)
 {
   b = bm;
+
   int indexWidth(0);
   int valueWidth(32);
   stp::ASTNode s1 =
@@ -657,15 +665,18 @@ extern void foo(STPMgr* bm)
   s2.SetExpWidth(8);
   s2.SetSigWidth(24);
 
-  Node one(b->CreateBVConst(32, 1));
-  std::cout << one << std::endl;
+  stp::ASTNode underlying_size = b->CreateSymbol(
+      std::string("underlying_size").c_str(), indexWidth, valueWidth);
+  underlying_size.SetExpWidth(8);
+  underlying_size.SetSigWidth(24);
 
-  floatingPointTypeInfo size(b->CreateBVConst(1, 1));
-  size.SetExpWidth(8);
-  size.SetExpWidth(24);
+  floatingPointTypeInfo size(underlying_size);
 
+  std::cout << "UNPACKING" << std::endl;
   uf a1(symfpu::unpack<traits>(size, s1));
+  std::cout << "UNPACKED" << std::endl;
   uf a2(symfpu::unpack<traits>(size, s2));
+
 #if 0
 
   roundingMode rm = traits::RNE();
