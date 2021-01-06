@@ -50,7 +50,7 @@ typedef ::symfpu::unpackedFloat<traits> uf;
 
 nodeWrapper::nodeWrapper(const Node& n) : Node(n) {}
 
-roundingMode::roundingMode(unsigned int) : nodeWrapper(b->CreateBVConst(1, 1))
+roundingMode::roundingMode(unsigned int v) : nodeWrapper(b->CreateBVConst(4, v))
 {
 }
 
@@ -643,9 +643,31 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 #undef STPSYMITEDFN
 
-void foo(roundingMode rm, uf a1, uf a2, floatingPointTypeInfo size)
+void foo(void)
 {
-  uf* moo = new uf(symfpu::add<traits>(size, rm, a1, a2, true));
+  b = new STPMgr;
+  int indexWidth(0);
+  int valueWidth(32);
+  stp::ASTNode s1 =
+      b->CreateSymbol(std::string("s1").c_str(), indexWidth, valueWidth);
+  s1.SetExpWidth(8);
+  s1.SetSigWidth(24);
+  stp::ASTNode s2 =
+      b->CreateSymbol(std::string("s2").c_str(), indexWidth, valueWidth);
+  s2.SetExpWidth(8);
+  s2.SetSigWidth(24);
+
+  roundingMode rm = traits::RNE();
+  floatingPointTypeInfo size(8, 24);
+
+  uf a1(symfpu::unpack<traits>(size, s1));
+  uf a2(symfpu::unpack<traits>(size, s2));
+
+  uf add(symfpu::add<traits>(size, rm, a1, a2, true));
+
+  stp::ASTNode* res = new stp::ASTNode(symfpu::pack<traits>(size, add));
+
+  std::cout << *res << std::endl;
 }
 
 // EOF
