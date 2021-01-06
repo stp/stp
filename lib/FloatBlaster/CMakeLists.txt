@@ -20,5 +20,6 @@
 
 add_library(floatblaster OBJECT
     FloatBlaster.cpp
+    symbolic_fp.cpp
 )
 add_dependencies(floatblaster ASTKind_header)
