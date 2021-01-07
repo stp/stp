@@ -73,7 +73,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         continue;
 
       // assemble the counterexample here
-      if (symbol.GetType() == BITVECTOR_TYPE)
+      if (symbol.GetType() == BITVECTOR_TYPE ||
+          symbol.GetType() == FLOATINGPOINT_TYPE)
       {
         // Collect the bits of 'symbol' and store in v. Store
         // in reverse order.
@@ -92,7 +93,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       }
     }
 
-    if (symbol.GetType() == BITVECTOR_TYPE)
+    if (symbol.GetType() == BITVECTOR_TYPE ||
+        symbol.GetType() == FLOATINGPOINT_TYPE)
     {
       CounterExampleMap[symbol] =
           BoolVectoBVConst(&bitVector_array, symbol.GetValueWidth());
@@ -681,7 +683,7 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
         f[1].GetKind() == BVCONST)
     {
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }
@@ -709,7 +711,8 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     n.nodeprint(os);
     os << "| ";
 
-    if (n.GetType() == stp::BITVECTOR_TYPE)
+    if (n.GetType() == stp::BITVECTOR_TYPE ||
+        n.GetType() == stp::FLOATINGPOINT_TYPE)
       printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
     else
     {
@@ -918,7 +921,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
       }
 
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }

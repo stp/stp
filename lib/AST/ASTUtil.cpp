@@ -35,8 +35,8 @@ ostream& operator<<(ostream& os, const Spacer& sp)
   // Instead of wrapping lines with hundreds of spaces, prints
   // a "+" at the beginning of the line for each wrap-around.
   // so lines print like: +14+                (XOR ...
-  int blanks = sp._spaces % 60;
-  int wraps = sp._spaces / 60;
+  int blanks = sp._spaces % 999999999;
+  int wraps = sp._spaces / 999999999;
   if (wraps > 0)
   {
     os << "+" << wraps;

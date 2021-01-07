@@ -168,9 +168,20 @@ proposition proposition::operator||(const proposition& op) const
 
 proposition proposition::operator==(const proposition& op) const
 {
+  assert(GetType() == stp::BOOLEAN_TYPE);
+  assert(op.GetType() == stp::BOOLEAN_TYPE);
+
+  void* one = vc_bvConstExprFromInt(vc, 1, 1);
+  void* zero = vc_bvConstExprFromInt(vc, 1, 0);
+
   void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
+  void* ite_this = vc_iteExpr(vc, vs_this, one, zero);
+
   void* vs_op = reinterpret_cast<void*>(const_cast<proposition*>(&op));
-  void* expr = vc_eqExpr(vc, vs_this, vs_op);
+  void* ite_op = vc_iteExpr(vc, vs_op, one, zero);
+
+  void* expr = vc_eqExpr(vc, ite_this, ite_op);
+
   Node* node = static_cast<Node*>(expr);
   return proposition(*node);
 }
@@ -877,6 +888,48 @@ extern void foo(STPMgr* bm_p)
 {
   vc = vc_createValidityChecker();
 
+#if 0
+  int indexWidth(0);
+  int valueWidth(32);
+  Expr s1_expr =
+      vc_varExpr1(vc, std::string("s1").c_str(), indexWidth, valueWidth);
+  Expr s2_expr =
+      vc_varExpr1(vc, std::string("s2").c_str(), indexWidth, valueWidth);
+  Expr bvc1 = vc_bvConstExprFromInt(vc, 32, 10);
+  Expr bvc2 = vc_bvConstExprFromInt(vc, 32, 12);
+
+  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
+  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+
+  Expr eq1 = vc_eqExpr(vc, s1_expr, bvc1);
+  Expr eq2 = vc_eqExpr(vc, s2_expr, bvc2);
+  Expr and1 = vc_andExpr(vc, eq1, eq2);
+  Expr ite1 = vc_iteExpr(vc, and1, one, zero);
+
+#if 0
+  Expr eq3 = vc_eqExpr(vc, s1_expr, bvc2);
+  Expr eq4 = vc_eqExpr(vc, s2_expr, bvc2);
+  Expr and2 = vc_andExpr(vc, eq3, eq4);
+  Expr ite2 = vc_iteExpr(vc, and2, one, zero);
+
+  Expr expr = vc_eqExpr(vc, ite1, ite2);
+#endif
+  Expr expr = vc_eqExpr(vc, ite1, one);
+
+  int res = vc_query(vc, expr);
+  std::cout << res << std::endl;
+
+  stp::ASTNode* cex;
+  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)s1_expr);
+  std::cout << *cex << std::endl;
+
+  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)s2_expr);
+  std::cout << *cex << std::endl;
+
+  exit(0);
+
+#else
+
   int indexWidth(0);
   int valueWidth(32);
   Expr s1_expr =
@@ -898,23 +951,49 @@ extern void foo(STPMgr* bm_p)
 
   roundingMode rm = traits::RNE();
 
+#if 0
   uf add(symfpu::add<traits>(size, rm, a1, a2, true));
+  stp::ASTNode* packed_add = new stp::ASTNode(symfpu::pack<traits>(size, add));
+  std::cout << *packed_add << std::endl;
 
-  stp::ASTNode* res = new stp::ASTNode(symfpu::pack<traits>(size, add));
+  // stp::ASTNode* bvc = (stp::ASTNode*)vc_bvConstExprFromInt(vc, 32, 0);
+  // stp::ASTNode* expr = (stp::ASTNode*)vc_eqExpr(vc, packed_add, bvc);
+#endif
 
-  stp::ASTNode* bvc = (stp::ASTNode*)vc_bvConstExprFromInt(vc, 32, 10);
+  proposition packed_fpeq = symfpu::smtlibEqual<traits>(size, a1, a2);
+  std::cout << packed_fpeq << std::endl;
 
-  std::cout << res->GetType() << std::endl;
-  std::cout << res->GetKind() << std::endl;
-  std::cout << bvc->GetType() << std::endl;
-  std::cout << bvc->GetKind() << std::endl;
+  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
+  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
 
-  stp::ASTNode* expr = (stp::ASTNode*)vc_eqExpr(vc, res, bvc);
+  Expr ite1 = vc_iteExpr(vc, (Expr)&packed_fpeq, one, zero);
+  Expr expr = vc_eqExpr(vc, ite1, one);
 
-  std::cout << expr->GetKind() << std::endl;
-  std::cout << expr->GetType() << std::endl;
+  int ret = vc_query(vc, &packed_fpeq);
 
-  vc_query(vc, expr);
+  std::cout << "ret: " << ret << std::endl;
+  assert(ret == 0);
+
+  // stp::ASTNode* cex;
+  Expr cex;
+  uint32_t val;
+#if 0
+  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)packed_add);
+  std::cout << *cex << std::endl;
+#endif
+
+  cex = vc_getCounterExample(vc, (void*)ite1);
+  val = getBVUnsigned(cex);
+  std::cout << val << std::endl;
+
+#if 0
+  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)expr);
+  std::cout << *cex << std::endl;
+#endif
+
+  exit(0);
+
+#endif
 }
 
 // EOF
