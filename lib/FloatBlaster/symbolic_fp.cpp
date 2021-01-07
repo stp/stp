@@ -743,14 +743,7 @@ Node bitVector<isSigned>::fromProposition(Node node) const
 #ifdef SYMFPUPROPISBOOL
   void* vs_node = reinterpret_cast<void*>(&node);
   void* zero = vc_bvConstExprFromInt(vc, 1, 0);
-  Node* n_zero = (Node*)zero;
   void* one = vc_bvConstExprFromInt(vc, 1, 1);
-  Node* n_one = (Node*)one;
-
-  std::cout << *n_zero << " " << n_zero->GetValueWidth() << std::endl;
-  std::cout << *n_one << " " << n_one->GetValueWidth() << std::endl;
-
-  assert(((Node*)zero)->GetValueWidth() == ((Node*)one)->GetValueWidth());
   void* expr = vc_iteExpr(vc, vs_node, one, zero);
   Node* result = static_cast<Node*>(expr);
   return bitVector<isSigned>(*result);
@@ -919,9 +912,7 @@ extern void foo(STPMgr* bm_p)
 
   floatingPointTypeInfo size(underlying_size);
 
-  std::cout << "UNPACKING" << std::endl;
   uf a1(symfpu::unpack<traits>(size, s1));
-  std::cout << "UNPACKED" << std::endl;
   uf a2(symfpu::unpack<traits>(size, s2));
 
   roundingMode rm = traits::RNE();
@@ -930,7 +921,19 @@ extern void foo(STPMgr* bm_p)
 
   stp::ASTNode* res = new stp::ASTNode(symfpu::pack<traits>(size, add));
 
-  std::cout << *res << std::endl;
+  stp::ASTNode* bvc = (stp::ASTNode*)vc_bvConstExprFromInt(vc, 32, 10);
+
+  std::cout << res->GetType() << std::endl;
+  std::cout << res->GetKind() << std::endl;
+  std::cout << bvc->GetType() << std::endl;
+  std::cout << bvc->GetKind() << std::endl;
+
+  stp::ASTNode* expr = (stp::ASTNode*)vc_eqExpr(vc, res, bvc);
+
+  std::cout << expr->GetKind() << std::endl;
+  std::cout << expr->GetType() << std::endl;
+
+  vc_query(vc, expr);
 }
 
 // EOF

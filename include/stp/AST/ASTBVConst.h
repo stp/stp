@@ -79,7 +79,9 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1.getValueWidth() != bvc2.getValueWidth())
+    if (bvc1.getValueWidth() != bvc2.getValueWidth() ||
+        bvc1.getSigWidth() != bvc2.getSigWidth() ||
+        bvc1.getExpWidth() != bvc2.getExpWidth())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
