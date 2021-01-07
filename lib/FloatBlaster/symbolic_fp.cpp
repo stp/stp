@@ -752,32 +752,24 @@ Node bitVector<isSigned>::fromProposition(Node node) const
 #endif
 }
 
-floatingPointTypeInfo::floatingPointTypeInfo(const TypeNode t) : TypeNode(t)
-{
-  assert(t.GetType() == stp::FLOATINGPOINT_TYPE);
-}
-
 floatingPointTypeInfo::floatingPointTypeInfo(unsigned exp, unsigned sig)
-    : TypeNode(*static_cast<Node*>(vc_bvConstExprFromInt(vc, 1, 1)))
+    : m_exp(exp), m_sig(sig)
 {
-  SetExpWidth(exp);
-  SetSigWidth(sig);
-  assert(GetType() == stp::FLOATINGPOINT_TYPE);
 }
 
 floatingPointTypeInfo::floatingPointTypeInfo(const floatingPointTypeInfo& old)
-    : TypeNode(old)
+    : m_exp(old.exponentWidth()), m_sig(old.significandWidth())
 {
 }
 
 bitWidthType floatingPointTypeInfo::exponentWidth(void) const
 {
-  return GetExpWidth();
+  return m_exp;
 }
 
 bitWidthType floatingPointTypeInfo::significandWidth(void) const
 {
-  return GetSigWidth();
+  return m_sig;
 }
 
 bitWidthType floatingPointTypeInfo::packedWidth(void) const
@@ -793,11 +785,6 @@ bitWidthType floatingPointTypeInfo::packedExponentWidth(void) const
 bitWidthType floatingPointTypeInfo::packedSignificandWidth(void) const
 {
   return significandWidth() - 1;
-}
-
-TypeNode floatingPointTypeInfo::getTypeNode(void) const
-{
-  return *this;
 }
 
 #ifdef SYMFPUPROPISBOOL
@@ -904,13 +891,7 @@ extern void foo(STPMgr* bm_p)
   s2.SetExpWidth(8);
   s2.SetSigWidth(24);
 
-  Expr underlying_size_expr = vc_varExpr1(
-      vc, std::string("underlying_size").c_str(), indexWidth, valueWidth);
-  Node underlying_size(*static_cast<Node*>(underlying_size_expr));
-  underlying_size.SetExpWidth(8);
-  underlying_size.SetSigWidth(24);
-
-  floatingPointTypeInfo size(underlying_size);
+  floatingPointTypeInfo size(8, 24);
 
   uf a1(symfpu::unpack<traits>(size, s1));
   uf a2(symfpu::unpack<traits>(size, s2));

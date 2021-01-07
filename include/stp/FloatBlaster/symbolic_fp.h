@@ -213,10 +213,9 @@ public:
   bitVector<isSigned> extract(bwt upper, bwt lower) const;
 };
 
-class floatingPointTypeInfo : public FloatingPointSize
+class floatingPointTypeInfo
 {
 public:
-  floatingPointTypeInfo(const TypeNode t);
   floatingPointTypeInfo(unsigned exp, unsigned sig);
   floatingPointTypeInfo(const floatingPointTypeInfo& old);
 
@@ -228,6 +227,10 @@ public:
   bitWidthType packedWidth(void) const;
   bitWidthType packedExponentWidth(void) const;
   bitWidthType packedSignificandWidth(void) const;
+
+private:
+  bitWidthType m_exp;
+  bitWidthType m_sig;
 };
 
 } // namespace symbolic_fp
