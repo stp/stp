@@ -177,21 +177,21 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
     cerr << "Fatal Error: " << str << endl;
     cerr << w << endl;
   }
+  assert(false);
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
   }
-  abort();
 }
 
 ATTR_NORETURN void FatalError(const char* str)
 {
   cerr << "Fatal Error: " << str << endl;
+  assert(false);
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
   }
-  abort();
 }
 
 void SortByExprNum(ASTVec& v)
@@ -262,12 +262,14 @@ void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
   for (auto it = v.begin(), itend = v.end(); it != itend;
        it++)
   {
+#if 0
     if (BITVECTOR_TYPE != it->GetType())
     {
       cerr << "The type is: " << it->GetType() << endl;
       FatalError(
           "BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n", n);
     }
+#endif
   }
 }
 
@@ -346,7 +348,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
   switch (k)
   {
     case BVCONST:
-      if (BITVECTOR_TYPE != n.GetType())
+      if (BITVECTOR_TYPE != n.GetType() && FLOATINGPOINT_TYPE != n.GetType())
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       break;
@@ -357,13 +359,16 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-      if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
+      if (BOOLEAN_TYPE !=
+          n[0].GetType() /* || (n[1].GetType() != n[2].GetType()) */)
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       if (n[1].GetValueWidth() != n[2].GetValueWidth())
+      {
         FatalError("BVTypeCheck: length of THENbranch != length of "
                    "ELSEbranch in the term t = \n",
                    n);
+      }
       if (n[1].GetIndexWidth() != n[2].GetIndexWidth())
         FatalError("BVTypeCheck: length of THENbranch != length of "
                    "ELSEbranch in the term t = \n",
@@ -599,8 +604,10 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
                    n);
       }
       if (n[0].GetValueWidth() != n[1].GetValueWidth())
+      {
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
+      }
       if (n[0].GetIndexWidth() != n[1].GetIndexWidth())
       {
         FatalError(

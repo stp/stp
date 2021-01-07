@@ -110,7 +110,9 @@ size_t ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
 bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
                                              const ASTBVConst* bvc2) const
 {
-  if (bvc1->getValueWidth() != bvc2->getValueWidth())
+  if (bvc1->getValueWidth() != bvc2->getValueWidth() ||
+      bvc1->getSigWidth() != bvc2->getSigWidth() ||
+      bvc1->getExpWidth() != bvc2->getExpWidth())
   {
     return false;
   }
