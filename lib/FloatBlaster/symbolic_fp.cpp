@@ -886,114 +886,105 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 extern void foo(STPMgr* bm_p)
 {
+  // Init our checker
   vc = vc_createValidityChecker();
 
-#if 0
-  int indexWidth(0);
-  int valueWidth(32);
-  Expr s1_expr =
-      vc_varExpr1(vc, std::string("s1").c_str(), indexWidth, valueWidth);
-  Expr s2_expr =
-      vc_varExpr1(vc, std::string("s2").c_str(), indexWidth, valueWidth);
-  Expr bvc1 = vc_bvConstExprFromInt(vc, 32, 10);
-  Expr bvc2 = vc_bvConstExprFromInt(vc, 32, 12);
+  // 32-bit BV type
+  Expr bvt = vc_bvType(vc, 32);
 
-  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
-  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+  // create our variable x
+  Expr x = vc_varExpr(vc, "x", bvt);
+  ASTNode* a_x = (ASTNode*)x;
+  a_x->SetExpWidth(8);
+  a_x->SetSigWidth(24);
 
-  Expr eq1 = vc_eqExpr(vc, s1_expr, bvc1);
-  Expr eq2 = vc_eqExpr(vc, s2_expr, bvc2);
-  Expr and1 = vc_andExpr(vc, eq1, eq2);
-  Expr ite1 = vc_iteExpr(vc, and1, one, zero);
+  // create our variable y
+  Expr y = vc_varExpr(vc, "y", bvt);
+  ASTNode* a_y = (ASTNode*)y;
+  a_y->SetExpWidth(8);
+  a_y->SetSigWidth(24);
 
-#if 0
-  Expr eq3 = vc_eqExpr(vc, s1_expr, bvc2);
-  Expr eq4 = vc_eqExpr(vc, s2_expr, bvc2);
-  Expr and2 = vc_andExpr(vc, eq3, eq4);
-  Expr ite2 = vc_iteExpr(vc, and2, one, zero);
+  // create our zero/one constants
+  Expr zero = vc_bvConstExprFromLL(vc, 32, 0);
+  Expr one = vc_bvConstExprFromLL(vc, 32, 1);
 
-  Expr expr = vc_eqExpr(vc, ite1, ite2);
-#endif
-  Expr expr = vc_eqExpr(vc, ite1, one);
-
-  int res = vc_query(vc, expr);
-  std::cout << res << std::endl;
-
-  stp::ASTNode* cex;
-  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)s1_expr);
-  std::cout << *cex << std::endl;
-
-  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)s2_expr);
-  std::cout << *cex << std::endl;
-
-  exit(0);
-
-#else
-
-  int indexWidth(0);
-  int valueWidth(32);
-  Expr s1_expr =
-      vc_varExpr1(vc, std::string("s1").c_str(), indexWidth, valueWidth);
-  Node s1(*static_cast<Node*>(s1_expr));
-  s1.SetExpWidth(8);
-  s1.SetSigWidth(24);
-
-  Expr s2_expr =
-      vc_varExpr1(vc, std::string("s2").c_str(), indexWidth, valueWidth);
-  Node s2(*static_cast<Node*>(s2_expr));
-  s2.SetExpWidth(8);
-  s2.SetSigWidth(24);
-
+  // floating point type
   floatingPointTypeInfo size(8, 24);
 
-  uf a1(symfpu::unpack<traits>(size, s1));
-  uf a2(symfpu::unpack<traits>(size, s2));
+  // unpack x and y
+  uf unpacked_x(symfpu::unpack<traits>(size, *(ASTNode*)x));
+  uf unpacked_y(symfpu::unpack<traits>(size, *(ASTNode*)y));
 
+  // what's our rounding mode?
   roundingMode rm = traits::RNE();
 
-#if 0
-  uf add(symfpu::add<traits>(size, rm, a1, a2, true));
-  stp::ASTNode* packed_add = new stp::ASTNode(symfpu::pack<traits>(size, add));
-  std::cout << *packed_add << std::endl;
+  // construct our equality between x and y
+  proposition packed_x_eq_y =
+      symfpu::smtlibEqual<traits>(size, unpacked_x, unpacked_y);
 
-  // stp::ASTNode* bvc = (stp::ASTNode*)vc_bvConstExprFromInt(vc, 32, 0);
-  // stp::ASTNode* expr = (stp::ASTNode*)vc_eqExpr(vc, packed_add, bvc);
-#endif
+  // assert equality
+  vc_assertFormula(vc, (void*)&packed_x_eq_y);
 
-  proposition packed_fpeq = symfpu::smtlibEqual<traits>(size, a1, a2);
-  std::cout << packed_fpeq << std::endl;
+  // create our expression for adding x and y
+  uf add(symfpu::add<traits>(size, rm, unpacked_x, unpacked_y, true));
+  /*
+  stp::ASTNode packed_add(symfpu::pack<traits>(size, add));
+  std::cout << packed_add << std::endl;
+  */
 
-  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
-  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+  // create our expression for x == x + y
+  proposition x_eq_add = symfpu::smtlibEqual<traits>(size, unpacked_x, add);
 
-  Expr ite1 = vc_iteExpr(vc, (Expr)&packed_fpeq, one, zero);
-  Expr expr = vc_eqExpr(vc, ite1, one);
+  // assert it
+  vc_assertFormula(vc, (void*)&x_eq_add);
 
-  int ret = vc_query(vc, &packed_fpeq);
+  // Create negative infinity, y != neg_inf, assert
+  uf neg_inf = uf::makeInf(size, false);
+  proposition y_not_neg_inf =
+      !(symfpu::smtlibEqual<traits>(size, unpacked_y, neg_inf));
+  vc_assertFormula(vc, (void*)&y_not_neg_inf);
 
-  std::cout << "ret: " << ret << std::endl;
-  assert(ret == 0);
+  // Create positive infinity, y != pos_inf, assert
+  uf pos_inf = uf::makeInf(size, true);
+  proposition y_not_pos_inf =
+      !(symfpu::smtlibEqual<traits>(size, unpacked_y, pos_inf));
+  vc_assertFormula(vc, (void*)&y_not_pos_inf);
 
-  // stp::ASTNode* cex;
-  Expr cex;
-  uint32_t val;
-#if 0
-  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)packed_add);
-  std::cout << *cex << std::endl;
-#endif
+  // Create negative zero, y != neg_zero, assert
+  uf neg_zero = uf::makeZero(size, false);
+  proposition y_not_neg_zero =
+      !(symfpu::smtlibEqual<traits>(size, unpacked_y, neg_zero));
+  vc_assertFormula(vc, (void*)&y_not_neg_zero);
 
-  cex = vc_getCounterExample(vc, (void*)ite1);
-  val = getBVUnsigned(cex);
-  std::cout << val << std::endl;
+  // Create positive zero, y != pos_zero, assert
+  uf pos_zero = uf::makeZero(size, true);
+  proposition y_not_pos_zero =
+      !(symfpu::smtlibEqual<traits>(size, unpacked_y, pos_zero));
+  vc_assertFormula(vc, (void*)&y_not_pos_zero);
 
-#if 0
-  cex = (stp::ASTNode*)vc_getCounterExample(vc, (void*)expr);
-  std::cout << *cex << std::endl;
-#endif
+  // The query we're going to check
+  Expr query = vc_falseExpr(vc);
+
+  // Check our query
+  int res = vc_query_with_timeout(vc, query, -1, -1);
+
+  // Should give zero (== SAT)
+  assert(res == 0);
+
+  // Interrogate the model
+  unsigned int val_for_x = getBVUnsignedLongLong(vc_getCounterExample(vc, x));
+  unsigned int val_for_y = getBVUnsignedLongLong(vc_getCounterExample(vc, y));
+
+  std::cout << val_for_x << " " << val_for_y << std::endl;
+
+  float float_for_x;
+  *(unsigned int*)&float_for_x = val_for_x;
+  float float_for_y;
+  *(unsigned int*)&float_for_y = val_for_y;
+
+  std::cout << float_for_x << " " << float_for_y << std::endl;
 
   exit(0);
-
-#endif
 }
 
 // EOF
