@@ -32,7 +32,6 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 #include <memory>
 
-extern void foo(STPMgr*);
 
 extern void errorHandler(const char* error_msg);
 
@@ -61,7 +60,6 @@ Main::Main() : onePrintBack(false)
 
   bm = new STPMgr();
   GlobalParserBM = bm;
-  foo(bm);
 }
 
 Main::~Main()
