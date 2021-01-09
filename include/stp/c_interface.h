@@ -209,6 +209,11 @@ DLL_PUBLIC void make_division_total(VC vc);
 //!
 DLL_PUBLIC VC vc_createValidityChecker(void);
 
+/*
+ * TODO: this is a hack -- it allows to create a VC reusing an existing STPMgr
+ */
+DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
+
 //! \brief Returns the boolean type for the given validity checker.
 //!
 DLL_PUBLIC Type vc_boolType(VC vc);

@@ -155,14 +155,23 @@ void make_division_total(VC /*vc*/)
 // Create a validity Checker.
 VC vc_createValidityChecker(void)
 {
+  stp::STPMgr* bm = new stp::STPMgr();
+  return vc_createValidityCheckerReuse(bm);
+}
+
+/*
+ * TODO: this is a hack -- it allows to create a VC reusing an existing STPMgr
+ */
+VC vc_createValidityCheckerReuse(void* _bm)
+{
+  stp::STPMgr* bm = (stp::STPMgr*)_bm;
+
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if (0 != c)
   {
     cout << CONSTANTBV::BitVector_Error(c) << endl;
     return 0;
   }
-
-  stp::STPMgr* bm = new stp::STPMgr();
 
   bm->defaultNodeFactory =
       new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);

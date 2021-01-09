@@ -884,10 +884,9 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 #undef STPSYMITEDFN
 
-extern void foo(STPMgr* bm_p)
+extern void foo(STPMgr* bm)
 {
-  // Init our checker
-  vc = vc_createValidityChecker();
+  vc = vc_createValidityCheckerReuse(bm);
 
   // 32-bit BV type
   Expr bvt = vc_bvType(vc, 32);

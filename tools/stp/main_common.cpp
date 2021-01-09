@@ -61,11 +61,6 @@ Main::Main() : onePrintBack(false)
 
   bm = new STPMgr();
   GlobalParserBM = bm;
-
-  TypeChecker nfTypeCheckDefault(*bm->hashingNodeFactory, *bm);
-  Cpp_interface piTypeCheckDefault(*bm, &nfTypeCheckDefault);
-  GlobalParserInterface = &piTypeCheckDefault;
-  GlobalParserInterface->startup();
   foo(bm);
 }
 
