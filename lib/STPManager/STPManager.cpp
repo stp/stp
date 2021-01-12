@@ -352,8 +352,9 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode bvconst)
 {
   Kind k = bvconst.GetKind();
   assert(k == BVCONST);
-  ASTFPConst fpconst(*(ASTBVConst*)bvconst._int_node_ptr);
-  ASTNode n(&fpconst);
+  ASTFPConst* fpconst = new ASTFPConst(*(ASTBVConst*)bvconst._int_node_ptr);
+  ASTNode n(fpconst);
+  assert(n.GetKind() == BVCONST);
   return n;
 }
 
