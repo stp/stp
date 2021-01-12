@@ -400,8 +400,18 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
     }
     case FP_EQ:
     {
-      std::cerr << "TransformFormula: Unhandled FP_EQ" << std::endl;
-      result = simpleForm;
+      std::cerr << "TransformFormula: Simplistic FP_EQ" << std::endl;
+      ASTVec vec;
+      vec.reserve(simpleForm.Degree());
+
+      for (ASTVec::const_iterator it = simpleForm.begin(),
+                                  itend = simpleForm.end();
+           it != itend; it++)
+      {
+        vec.push_back(TransformTerm(*it));
+      }
+
+      result = nf->CreateNode(k, vec);
       break;
     }
     default:

@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/symbolic_fp.h"
+
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include <cassert>
 #include <cmath>
@@ -43,6 +45,15 @@ THE SOFTWARE.
 
 namespace stp
 {
+FloatBlaster::FloatBlaster(STPMgr* bm) : _bm(bm)
+{
+  ASTTrue = bm->CreateNode(TRUE);
+  ASTFalse = bm->CreateNode(FALSE);
+  ASTUndefined = bm->CreateNode(UNDEFINED);
+  nf = bm->defaultNodeFactory;
+
+  symbolic_fp::init_vc(bm);
+}
 
 ASTNode FloatBlaster::BlastTerm_TopLevel(const ASTNode& b)
 {
@@ -66,8 +77,7 @@ ASTNode FloatBlaster::BlastTerm(const ASTNode& actualInputterm)
   switch (k)
   {
     case FP_EQ:
-      std::cerr << "FloatBlaster::BlastTerm: Unhandled kind: " << k
-                << std::endl;
+      output = symbolic_fp::blast_fpeq(inputterm[0], inputterm[1]);
       break;
     default:
       std::cerr << "FloatBlaster::BlastTerm: Unhandled kind: " << k

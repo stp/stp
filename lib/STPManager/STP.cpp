@@ -171,6 +171,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   }
 
   SATSolver* newS = get_new_sat_solver();
+
+  /* need this for FPs */
+  bm->UserFlags.difficulty_reversion = false;
+
   SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
   delete newS;
 

@@ -47,9 +47,7 @@ THE SOFTWARE.
 using namespace stp;
 using namespace stp::symbolic_fp;
 
-VC vc;
-
-typedef ::symfpu::unpackedFloat<traits> uf;
+static VC vc;
 
 nodeWrapper::nodeWrapper(const Node& n) : Node(n) {}
 
@@ -884,106 +882,35 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 #undef STPSYMITEDFN
 
-extern void foo(STPMgr* bm)
+namespace stp
 {
-  vc = vc_createValidityCheckerReuse(bm);
+namespace symbolic_fp
+{
 
-  // 32-bit BV type
-  Expr bvt = vc_bvType(vc, 32);
-
-  // create our variable x
-  Expr x = vc_varExpr(vc, "x", bvt);
-  ASTNode* a_x = (ASTNode*)x;
-  a_x->SetExpWidth(8);
-  a_x->SetSigWidth(24);
-
-  // create our variable y
-  Expr y = vc_varExpr(vc, "y", bvt);
-  ASTNode* a_y = (ASTNode*)y;
-  a_y->SetExpWidth(8);
-  a_y->SetSigWidth(24);
-
-  // create our zero/one constants
-  Expr zero = vc_bvConstExprFromLL(vc, 32, 0);
-  Expr one = vc_bvConstExprFromLL(vc, 32, 1);
-
-  // floating point type
-  floatingPointTypeInfo size(8, 24);
-
-  // unpack x and y
-  uf unpacked_x(symfpu::unpack<traits>(size, *(ASTNode*)x));
-  uf unpacked_y(symfpu::unpack<traits>(size, *(ASTNode*)y));
-
-  // what's our rounding mode?
-  roundingMode rm = traits::RNE();
-
-  // construct our equality between x and y
-  proposition packed_x_eq_y =
-      symfpu::smtlibEqual<traits>(size, unpacked_x, unpacked_y);
-
-  // assert equality
-  vc_assertFormula(vc, (void*)&packed_x_eq_y);
-
-  // create our expression for adding x and y
-  uf add(symfpu::add<traits>(size, rm, unpacked_x, unpacked_y, true));
-  /*
-  stp::ASTNode packed_add(symfpu::pack<traits>(size, add));
-  std::cout << packed_add << std::endl;
-  */
-
-  // create our expression for x == x + y
-  proposition x_eq_add = symfpu::smtlibEqual<traits>(size, unpacked_x, add);
-
-  // assert it
-  vc_assertFormula(vc, (void*)&x_eq_add);
-
-  // Create negative infinity, y != neg_inf, assert
-  uf neg_inf = uf::makeInf(size, false);
-  proposition y_not_neg_inf =
-      !(symfpu::smtlibEqual<traits>(size, unpacked_y, neg_inf));
-  vc_assertFormula(vc, (void*)&y_not_neg_inf);
-
-  // Create positive infinity, y != pos_inf, assert
-  uf pos_inf = uf::makeInf(size, true);
-  proposition y_not_pos_inf =
-      !(symfpu::smtlibEqual<traits>(size, unpacked_y, pos_inf));
-  vc_assertFormula(vc, (void*)&y_not_pos_inf);
-
-  // Create negative zero, y != neg_zero, assert
-  uf neg_zero = uf::makeZero(size, false);
-  proposition y_not_neg_zero =
-      !(symfpu::smtlibEqual<traits>(size, unpacked_y, neg_zero));
-  vc_assertFormula(vc, (void*)&y_not_neg_zero);
-
-  // Create positive zero, y != pos_zero, assert
-  uf pos_zero = uf::makeZero(size, true);
-  proposition y_not_pos_zero =
-      !(symfpu::smtlibEqual<traits>(size, unpacked_y, pos_zero));
-  vc_assertFormula(vc, (void*)&y_not_pos_zero);
-
-  // The query we're going to check
-  Expr query = vc_falseExpr(vc);
-
-  // Check our query
-  int res = vc_query_with_timeout(vc, query, -1, -1);
-
-  // Should give zero (== SAT)
-  assert(res == 0);
-
-  // Interrogate the model
-  unsigned int val_for_x = getBVUnsignedLongLong(vc_getCounterExample(vc, x));
-  unsigned int val_for_y = getBVUnsignedLongLong(vc_getCounterExample(vc, y));
-
-  std::cout << val_for_x << " " << val_for_y << std::endl;
-
-  float float_for_x;
-  *(unsigned int*)&float_for_x = val_for_x;
-  float float_for_y;
-  *(unsigned int*)&float_for_y = val_for_y;
-
-  std::cout << float_for_x << " " << float_for_y << std::endl;
-
-  exit(0);
+void init_vc(STPMgr* bm)
+{
+  static bool init = false;
+  if (!init)
+  {
+    init = true;
+    vc = vc_createValidityCheckerReuse(bm);
+  }
 }
+
+ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
+{
+  floatingPointTypeInfo size(8, 24);
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  proposition eq =
+      symfpu::smtlibEqual<traits>(size, unpacked_lhs, unpacked_rhs);
+
+  return eq;
+}
+
+} // namespace symbolic_fp
+
+} // namespace stp
 
 // EOF

@@ -45,15 +45,9 @@ private:
   NodeFactory* nf;
 
 public:
-  FloatBlaster(STPMgr* bm) : _bm(bm)
-  {
-    ASTTrue = bm->CreateNode(TRUE);
-    ASTFalse = bm->CreateNode(FALSE);
-    ASTUndefined = bm->CreateNode(UNDEFINED);
-    nf = bm->defaultNodeFactory;
-  }
+  FloatBlaster(STPMgr* bm);
 
-  ~FloatBlaster() {}
+  virtual ~FloatBlaster() {}
 
   ASTNode BlastTerm_TopLevel(const ASTNode& b);
 

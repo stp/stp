@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/FloatBlaster/symbolic_fp.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
 
@@ -568,6 +569,12 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       output = bm->NewParameterized_BooleanVar(form[0], form[1]);
       output = ComputeFormulaUsingModel(output);
       break;
+    case FP_EQ:
+    {
+      ASTNode blasted = symbolic_fp::blast_fpeq(form[0], form[1]);
+      output = ComputeFormulaUsingModel(blasted);
+      break;
+    }
     default:
       cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "

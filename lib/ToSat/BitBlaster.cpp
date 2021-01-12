@@ -1179,7 +1179,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     }
     case FP_EQ:
     {
-      result = BBFPcompare(form, support);
+      FatalError("BBForm: Illegal FP kind: ", form);
       break;
     }
     default:

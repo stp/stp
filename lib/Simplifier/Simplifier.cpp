@@ -444,6 +444,10 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     case FP_EQ:
     {
       output = fpb->BlastTerm_TopLevel(a);
+      if (pushNeg)
+      {
+        output = nf->CreateNode(NOT, output);
+      }
       break;
     }
     default:

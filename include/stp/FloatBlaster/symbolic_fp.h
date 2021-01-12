@@ -77,6 +77,7 @@ public:
 };
 
 typedef traits::bwt bwt;
+typedef symfpu::unpackedFloat<traits> uf;
 
 class nodeWrapper : public Node
 {
@@ -232,6 +233,10 @@ private:
   bitWidthType m_exp;
   bitWidthType m_sig;
 };
+
+void init_vc(STPMgr* bm);
+
+ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs);
 
 } // namespace symbolic_fp
 
