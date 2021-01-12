@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include <cassert>
 #include <cmath>
 
@@ -441,9 +442,20 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       output = pushNeg ? nf->CreateNode(NOT, output) : output;
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
     case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
     {
-      output = fpb->BlastTerm_TopLevel(a);
+      output = FloatBlaster::BlastNode_TopLevel(a);
       if (pushNeg)
       {
         output = nf->CreateNode(NOT, output);
@@ -2511,6 +2523,27 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           output.GetChildren()[1].GetKind() == BVSX)
         output = pullUpBVSX(output);
 
+      break;
+    }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(inputterm));
+      output = SimplifyTerm(blasted);
       break;
     }
     case WRITE:

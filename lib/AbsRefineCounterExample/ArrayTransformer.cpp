@@ -398,9 +398,19 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       }
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
     case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
     {
-      std::cerr << "TransformFormula: Simplistic FP_EQ" << std::endl;
       ASTVec vec;
       vec.reserve(simpleForm.Degree());
 

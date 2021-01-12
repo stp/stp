@@ -40,18 +40,21 @@ private:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
   // Ptr to STP Manager
-  STPMgr* _bm;
+  static FloatBlaster* _instance;
 
   NodeFactory* nf;
 
-public:
-  FloatBlaster(STPMgr* bm);
+private:
+  FloatBlaster();
 
+  ASTNode BlastNode(const ASTNode& inputterm);
+
+  static FloatBlaster* instance();
+
+public:
   virtual ~FloatBlaster() {}
 
-  ASTNode BlastTerm_TopLevel(const ASTNode& b);
-
-  ASTNode BlastTerm(const ASTNode& inputterm);
+  static ASTNode BlastNode_TopLevel(const ASTNode& b);
 };
 } // namespace stp
 #endif

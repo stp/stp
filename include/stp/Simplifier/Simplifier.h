@@ -27,7 +27,6 @@ THE SOFTWARE.
 
 #include "SubstitutionMap.h"
 #include "stp/AST/AST.h"
-#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -52,7 +51,14 @@ private:
   ASTNodeMap* SimplifyNegMap;
   ASTNodeMap MultInverseMap;
 
-  FloatBlaster* fpb;
+  // For ArrayWrite Abstraction: map from read-over-write term to
+  // newname.
+  // ASTNodeMap * ReadOverWrite_NewName_Map;
+
+  // For ArrayWrite Refinement: Map new arraynames to
+  // Read-Over-Write terms
+  // ASTNodeMap NewName_ReadOverWrite_Map;
+
 
   NodeFactory* nf;
 
@@ -70,15 +76,12 @@ public:
     ASTTrue = nf->getTrue();
     ASTFalse = nf->getFalse();
     ASTUndefined = nf->getUndefined();
-
-    fpb = new FloatBlaster(bm);
   }
 
   ~Simplifier()
   {
     delete SimplifyMap;
     delete SimplifyNegMap;
-    delete fpb;
   }
 
   Simplifier(Simplifier const&) = delete;

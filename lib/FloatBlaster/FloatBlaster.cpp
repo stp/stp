@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/symbolic_fp.h"
 
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/Globals/Globals.h"
 #include <cassert>
 #include <cmath>
 
@@ -45,23 +46,36 @@ THE SOFTWARE.
 
 namespace stp
 {
-FloatBlaster::FloatBlaster(STPMgr* bm) : _bm(bm)
-{
-  ASTTrue = bm->CreateNode(TRUE);
-  ASTFalse = bm->CreateNode(FALSE);
-  ASTUndefined = bm->CreateNode(UNDEFINED);
-  nf = bm->defaultNodeFactory;
 
-  symbolic_fp::init_vc(bm);
+FloatBlaster* FloatBlaster::_instance = nullptr;
+
+FloatBlaster* FloatBlaster::instance()
+{
+  if (_instance == nullptr)
+  {
+    assert(stp::GlobalParserBM != nullptr);
+    _instance = new FloatBlaster();
+  }
+  return _instance;
 }
 
-ASTNode FloatBlaster::BlastTerm_TopLevel(const ASTNode& b)
+FloatBlaster::FloatBlaster()
 {
-  ASTNode out = BlastTerm(b);
+  ASTTrue = stp::GlobalParserBM->CreateNode(TRUE);
+  ASTFalse = stp::GlobalParserBM->CreateNode(FALSE);
+  ASTUndefined = stp::GlobalParserBM->CreateNode(UNDEFINED);
+  nf = stp::GlobalParserBM->defaultNodeFactory;
+
+  symbolic_fp::init_vc(stp::GlobalParserBM);
+}
+
+ASTNode FloatBlaster::BlastNode_TopLevel(const ASTNode& b)
+{
+  ASTNode out = FloatBlaster::instance()->BlastNode(b);
   return out;
 }
 
-ASTNode FloatBlaster::BlastTerm(const ASTNode& actualInputterm)
+ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
 {
   ASTNode inputterm(actualInputterm);
 
@@ -80,7 +94,7 @@ ASTNode FloatBlaster::BlastTerm(const ASTNode& actualInputterm)
       output = symbolic_fp::blast_fpeq(inputterm[0], inputterm[1]);
       break;
     default:
-      std::cerr << "FloatBlaster::BlastTerm: Unhandled kind: " << k
+      std::cerr << "FloatBlaster::BlastNode: Unhandled kind: " << k
                 << std::endl;
       break;
   };
