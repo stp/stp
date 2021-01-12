@@ -911,7 +911,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   s.SetExpWidth(8);
-  s.SetSigWidth(32);
+  s.SetSigWidth(24);
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   delete $1;
@@ -1499,7 +1499,12 @@ an_fp_term:
 }
 | FP_ADD_TOK an_rounding_mode an_term an_term
 {
- std::cout << "Unsupported FP_ADD_TOK" << std::endl;
+  assert($3->GetType() == FLOATINGPOINT_TYPE);
+  assert($4->GetType() == FLOATINGPOINT_TYPE);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ADD, $3->GetValueWidth(), *$3, *$4));
+  $$->SetExpWidth($3->GetExpWidth());
+  $$->SetSigWidth($3->GetSigWidth());
+  assert($$->GetType() == FLOATINGPOINT_TYPE);
 }
 | FP_SUB_TOK an_rounding_mode an_term an_term
 {

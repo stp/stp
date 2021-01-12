@@ -237,6 +237,7 @@ private:
 void init_vc(STPMgr* bm);
 
 ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 
 } // namespace symbolic_fp
 

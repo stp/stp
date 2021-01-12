@@ -80,7 +80,7 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
   ASTNode inputterm(actualInputterm);
 
   ASTNode output = inputterm;
-  assert(BVTypeCheck(inputterm));
+  // assert(BVTypeCheck(inputterm));
 
   types t = actualInputterm.GetType();
   // comparisions are Boolean
@@ -88,14 +88,20 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
 
   Kind k = inputterm.GetKind();
 
+  symbolic_fp::roundingMode default_rm(symbolic_fp::traits::RNE());
+
   switch (k)
   {
     case FP_EQ:
       output = symbolic_fp::blast_fpeq(inputterm[0], inputterm[1]);
       break;
+    case FP_ADD:
+      output = symbolic_fp::blast_fpadd(default_rm, inputterm[0], inputterm[1]);
+      break;
     default:
       std::cerr << "FloatBlaster::BlastNode: Unhandled kind: " << k
                 << std::endl;
+      assert(false);
       break;
   };
 

@@ -899,7 +899,7 @@ void init_vc(STPMgr* bm)
 
 ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
 {
-  floatingPointTypeInfo size(8, 24);
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -907,6 +907,20 @@ ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
       symfpu::smtlibEqual<traits>(size, unpacked_lhs, unpacked_rhs);
 
   return eq;
+}
+
+ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+{
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf unpacked_add(
+      symfpu::add<traits>(size, rm, unpacked_lhs, unpacked_rhs, true));
+
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_add));
+
+  return packed;
 }
 
 } // namespace symbolic_fp

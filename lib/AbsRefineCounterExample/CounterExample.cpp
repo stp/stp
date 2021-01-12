@@ -338,6 +338,45 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       }
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      ASTNode lhs_simp(TermToConstTermUsingModel(term[0]));
+      assert(lhs_simp.GetKind() == BVCONST);
+      ASTNode lhs_fp = bm->CreateFPConst(lhs_simp);
+      lhs_fp.SetExpWidth(term[0].GetExpWidth());
+      lhs_fp.SetSigWidth(term[0].GetSigWidth());
+      ASTNode rhs_simp(TermToConstTermUsingModel(term[1]));
+      assert(rhs_simp.GetKind() == BVCONST);
+      ASTNode rhs_fp = bm->CreateFPConst(rhs_simp);
+      rhs_fp.SetExpWidth(term[1].GetExpWidth());
+      rhs_fp.SetSigWidth(term[1].GetSigWidth());
+      ASTNode temp(stp::GlobalParserBM->CreateNode(k, lhs_fp, rhs_fp));
+
+      assert(temp != term);
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+
+      assert(blasted != temp);
+      assert(blasted != term);
+
+      output = TermToConstTermUsingModel(blasted);
+      break;
+    }
     default:
     {
       const ASTChildren c = term.GetChildren();
@@ -569,22 +608,6 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       output = bm->NewParameterized_BooleanVar(form[0], form[1]);
       output = ComputeFormulaUsingModel(output);
       break;
-    case FP_ABS:
-    case FP_NEG:
-    case FP_ADD:
-    case FP_SUB:
-    case FP_MUL:
-    case FP_DIV:
-    case FP_FMA:
-    case FP_SQRT:
-    case FP_REM:
-    case FP_ROUNDTOINTEGRAL:
-    case FP_MIN:
-    case FP_MAX:
-    case FP_TOFP:
-    case FP_TOFP_UNSIGNED:
-    case FP_TO_UBV:
-    case FP_TO_SBV:
     case FP_LEQ:
     case FP_LT:
     case FP_GEQ:
@@ -598,7 +621,25 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
     {
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(form));
+      ASTNode lhs_simp(TermToConstTermUsingModel(form[0]));
+      assert(lhs_simp.GetKind() == BVCONST);
+      ASTNode lhs_fp = bm->CreateFPConst(lhs_simp);
+      lhs_fp.SetExpWidth(form[0].GetExpWidth());
+      lhs_fp.SetSigWidth(form[0].GetSigWidth());
+      ASTNode rhs_simp(TermToConstTermUsingModel(form[1]));
+      assert(rhs_simp.GetKind() == BVCONST);
+      ASTNode rhs_fp = bm->CreateFPConst(rhs_simp);
+      rhs_fp.SetExpWidth(form[1].GetExpWidth());
+      rhs_fp.SetSigWidth(form[1].GetSigWidth());
+      ASTNode temp(stp::GlobalParserBM->CreateNode(k, lhs_fp, rhs_fp));
+
+      assert(temp != form);
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+
+      assert(blasted != temp);
+      assert(blasted != form);
+
       output = ComputeFormulaUsingModel(blasted);
       break;
     }

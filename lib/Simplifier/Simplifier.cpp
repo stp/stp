@@ -455,11 +455,24 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
     {
-      output = FloatBlaster::BlastNode_TopLevel(a);
+      ASTNode lhs_simp(SimplifyTerm(a[0], VarConstMap));
+      ASTNode rhs_simp(SimplifyTerm(a[1], VarConstMap));
+      ASTNode temp(nf->CreateNode(kind, lhs_simp, rhs_simp));
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+
+      assert(blasted != temp);
+      assert(blasted != a);
+
       if (pushNeg)
       {
-        output = nf->CreateNode(NOT, output);
+        output = SimplifyTerm(nf->CreateNode(NOT, blasted), VarConstMap);
       }
+      else
+      {
+        output = blasted;
+      }
+
       break;
     }
     default:
@@ -2542,7 +2555,15 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case FP_TO_UBV:
     case FP_TO_SBV:
     {
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(inputterm));
+      ASTNode lhs_simp(SimplifyTerm(inputterm[0], VarConstMap));
+      ASTNode rhs_simp(SimplifyTerm(inputterm[1], VarConstMap));
+      ASTNode temp(nf->CreateNode(k, lhs_simp, rhs_simp));
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+
+      assert(blasted != temp);
+      assert(blasted != inputterm);
+
       output = SimplifyTerm(blasted);
       break;
     }
