@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define STPMGR_H
 
 #include "stp/AST/ASTBVConst.h"
+#include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -258,6 +259,8 @@ public:
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
   ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
+
+  DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode bvconst);
 
   /****************************************************************
    * Create Node functions                                        *

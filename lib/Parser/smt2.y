@@ -1455,10 +1455,12 @@ BVCONST_HEXIDECIMAL_TOK
 
   stp::ASTNode first(*stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits, *$2, *$3)));
 
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits + sig_bits, first, *$4));
+  stp::ASTNode second(*stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits + sig_bits, first, *$4)));
 
-  Kind k = $$->GetKind();
+  Kind k = second.GetKind();
   assert(k == BVCONST);
+
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateFPConst(second));
 
   $$->SetExpWidth(exp_bits);
   $$->SetSigWidth(sig_bits + sign_bits);

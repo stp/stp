@@ -187,3 +187,8 @@ ASTNode NodeFactory::CreateBVConst(unsigned int width,
 {
   return bm.CreateBVConst(width, bvconst);
 }
+
+ASTNode NodeFactory::CreateFPConst(const stp::ASTNode& bvconst)
+{
+  return bm.CreateFPConst(bvconst);
+}

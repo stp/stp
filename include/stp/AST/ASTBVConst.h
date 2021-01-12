@@ -36,6 +36,7 @@ class ASTBVConst : public ASTInternal
 {
   friend class STPMgr;
   friend class ASTNode;
+  friend class ASTFPConst;
   friend class ASTNodeHasher;
   friend class ASTNodeEqual;
 
@@ -61,7 +62,7 @@ private:
   ASTBVConst(CBV bv, unsigned int width);
   ASTBVConst(STPMgr* mgr, CBV bv, unsigned int /*width*/,
              bool managed_outside = false)
-      : ASTInternal(mgr, BVCONST), _sig_width(0), _exp_width(0)
+      : ASTInternal(mgr, BVCONST)
   {
     if (managed_outside)
     {
@@ -79,9 +80,7 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1.getValueWidth() != bvc2.getValueWidth() ||
-        bvc1.getSigWidth() != bvc2.getSigWidth() ||
-        bvc1.getExpWidth() != bvc2.getExpWidth())
+    if (bvc1.getValueWidth() != bvc2.getValueWidth())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
@@ -103,15 +102,11 @@ private:
   void setValueWidth([[maybe_unused]] uint32_t v ) { assert(v == getValueWidth()); }
   uint32_t getValueWidth() const { return bits_(_bvconst); }
 
-  // AVJ-FP
-  uint32_t _sig_width;
-  uint32_t _exp_width;
+  virtual void setExpWidth(uint32_t) { assert(false); }
+  virtual uint32_t getExpWidth() const { return 0; }
 
-  virtual void setSigWidth(uint32_t sw) { _sig_width = sw; }
-  virtual uint32_t getSigWidth() const { return _sig_width; }
-
-  virtual void setExpWidth(uint32_t ew) { _exp_width = ew; }
-  virtual uint32_t getExpWidth() const { return _exp_width; }
+  virtual void setSigWidth(uint32_t) { assert(false); }
+  virtual uint32_t getSigWidth() const { return 0; }
 
 public:
   virtual ASTChildren GetChildren() const { return astbv_empty_children; }

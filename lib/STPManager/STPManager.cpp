@@ -348,6 +348,15 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   return n;
 }
 
+ASTNode STPMgr::CreateFPConst(const stp::ASTNode bvconst)
+{
+  Kind k = bvconst.GetKind();
+  assert(k == BVCONST);
+  ASTFPConst fpconst(*(ASTBVConst*)bvconst._int_node_ptr);
+  ASTNode n(&fpconst);
+  return n;
+}
+
 ASTNode STPMgr::CreateZeroConst(unsigned width)
 {
   assert(width > 0);
