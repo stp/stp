@@ -81,7 +81,7 @@ roundingMode traits::RTN(void)
 
 roundingMode traits::RTZ(void)
 {
-  return roundingMode(0x10);
+  return roundingMode(0x0B);
 }
 
 proposition roundingMode::operator==(const roundingMode& op) const
@@ -203,7 +203,7 @@ template <> bitVector<true> bitVector<true>::maxValue(const bitWidthType& w)
   void* vs_base = reinterpret_cast<void*>(const_cast<bitVector<true>*>(&base));
   void* expr = vc_bvConcatExpr(vc, vs_leading, vs_base);
   Node* node = static_cast<Node*>(expr);
-  assert(node->GetValueWidth() > 0);
+  assert(node->GetValueWidth() == w);
   return bitVector<true>(*node);
 }
 
@@ -222,7 +222,7 @@ template <> bitVector<true> bitVector<true>::minValue(const bitWidthType& w)
   void* vs_base = reinterpret_cast<void*>(const_cast<bitVector<true>*>(&base));
   void* expr = vc_bvConcatExpr(vc, vs_leading, vs_base);
   Node* node = static_cast<Node*>(expr);
-  assert(node->GetValueWidth() > 0);
+  assert(node->GetValueWidth() == w);
   return bitVector<true>(*node);
 }
 
@@ -743,7 +743,10 @@ bitVector<isSigned> bitVector<isSigned>::extract(bitWidthType upper,
   void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<false>*>(this));
   void* expr = vc_bvExtract(vc, vs_this, upper, lower);
   Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  bitVector<isSigned> ret(*node);
+  unsigned int expected_width = (upper - lower) + 1;
+  assert(ret.GetValueWidth() == expected_width);
+  return ret;
 }
 
 template <bool isSigned>
@@ -899,6 +902,10 @@ void init_vc(STPMgr* bm)
 
 ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
 {
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+
   floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
@@ -911,6 +918,9 @@ ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
 
 ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 {
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
   floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
@@ -920,6 +930,14 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 
   ASTNode packed(symfpu::pack<traits>(size, unpacked_add));
 
+  return packed;
+}
+
+ASTNode round_trip(const ASTNode& expr)
+{
+  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  uf unpacked(symfpu::unpack<traits>(size, expr));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked));
   return packed;
 }
 

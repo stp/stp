@@ -101,6 +101,13 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
       case stp::BOOLEAN_TYPE:
         os << " () Bool ";
         break;
+      case stp::FLOATINGPOINT_TYPE:
+      {
+        os << " () (";
+        os << "_ FloatingPoint " << a.GetExpWidth() << " " << a.GetSigWidth()
+           << ") ";
+        break;
+      }
       default:
         stp::FatalError("printVarDeclsToStream: Unsupported type", a);
         break;

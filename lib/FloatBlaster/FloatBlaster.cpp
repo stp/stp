@@ -84,7 +84,7 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
 
   types t = actualInputterm.GetType();
   // comparisions are Boolean
-  assert(t == FLOATINGPOINT_TYPE || t == BOOLEAN_TYPE);
+  // assert(t == FLOATINGPOINT_TYPE || t == BOOLEAN_TYPE);
 
   Kind k = inputterm.GetKind();
 
