@@ -59,29 +59,38 @@ roundingMode::roundingMode(unsigned int v)
 
 roundingMode::roundingMode(const Node n) : nodeWrapper(n) {}
 
+enum rounding_modes
+{
+  ROUND_NEAREST_TIES_TO_EVEN,
+  ROUND_TOWARD_POSITIVE,
+  ROUND_TOWARD_NEGATIVE,
+  ROUND_TOWARD_ZERO,
+  ROUND_NEAREST_TIES_TO_AWAY
+};
+
 roundingMode traits::RNE(void)
 {
-  return roundingMode(0x01);
+  return roundingMode(ROUND_NEAREST_TIES_TO_EVEN);
 }
 
 roundingMode traits::RNA(void)
 {
-  return roundingMode(0x02);
+  return roundingMode(ROUND_NEAREST_TIES_TO_AWAY);
 }
 
 roundingMode traits::RTP(void)
 {
-  return roundingMode(0x04);
+  return roundingMode(ROUND_TOWARD_POSITIVE);
 }
 
 roundingMode traits::RTN(void)
 {
-  return roundingMode(0x08);
+  return roundingMode(ROUND_TOWARD_NEGATIVE);
 }
 
 roundingMode traits::RTZ(void)
 {
-  return roundingMode(0x0B);
+  return roundingMode(ROUND_TOWARD_ZERO);
 }
 
 proposition roundingMode::operator==(const roundingMode& op) const
@@ -657,10 +666,10 @@ inline bitVector<false> bitVector<false>::extend(bitWidthType extension) const
 {
   void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<false>*>(this));
   void* zero = vc_bvConstExprFromInt(vc, extension, 0);
-  void* expr = vc_bvConcatExpr(vc, vs_this, zero);
+  void* expr = vc_bvConcatExpr(vc, zero, vs_this);
   Node* node = static_cast<Node*>(expr);
   assert(node->GetValueWidth() > 0);
-  bitVector<true> ret(*node);
+  bitVector<false> ret(*node);
   assert(ret.GetValueWidth() == this->GetValueWidth() + extension);
   return ret;
 }
@@ -676,7 +685,7 @@ bitVector<isSigned> bitVector<isSigned>::contract(bitWidthType reduction) const
       reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
   void* expr = vc_bvExtract(vc, vs_this, width, 0);
   Node* node = static_cast<Node*>(expr);
-  return bitVector<false>(*node);
+  return bitVector<isSigned>(*node);
 }
 
 template <bool isSigned>
@@ -740,7 +749,8 @@ bitVector<isSigned> bitVector<isSigned>::extract(bitWidthType upper,
 {
   assert(upper >= lower);
 
-  void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<false>*>(this));
+  void* vs_this =
+      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
   void* expr = vc_bvExtract(vc, vs_this, upper, lower);
   Node* node = static_cast<Node*>(expr);
   bitVector<isSigned> ret(*node);
@@ -933,10 +943,11 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
-ASTNode round_trip(const ASTNode& expr)
+ASTNode round_trip(const ASTNode& expr, ASTNode** side)
 {
   floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
+  *side = new ASTNode(unpacked.valid(size));
   ASTNode packed(symfpu::pack<traits>(size, unpacked));
   return packed;
 }

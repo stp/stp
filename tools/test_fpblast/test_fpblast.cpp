@@ -50,12 +50,12 @@ void foo(STPMgr* bm)
 
   init_vc(bm);
 
-  const unsigned int w = 1;
+  const unsigned int w = 4;
   const unsigned int exp_width(2 * w);
   const unsigned int sig_width(3 * exp_width);
   const unsigned int bw(sig_width + exp_width);
   std::cout << bw << std::endl;
-  // assert(bw == 32);
+  assert(bw == 32);
   const unsigned int needle = 8;
 
   std::cout << bw << std::endl;
@@ -106,15 +106,27 @@ void foo(STPMgr* bm)
 
   // Expr eq = vc_eqExpr(vc, (Expr*)&blasted_add, (Expr*)&fp_const);
 
-  ASTNode round = round_trip(*a_x);
+  ASTNode* side;
+  ASTNode round = round_trip(*a_x, &side);
+  printer::SMTLIB2_PrintBack(std::cout, *(ASTNode*)&round, bm);
   Expr eq = vc_eqExpr(vc, (Expr*)&round, (Expr*)a_x);
   Expr moo = vc_notExpr(vc, eq);
+  // vc_assertFormula(vc, (Expr*)side);
+  vc_assertFormula(vc, moo);
+#if 0
 
   Expr to_check = nullptr;
+  Expr not_valid = vc_notExpr(vc, (Expr*)side);
+  vc_assertFormula(vc, not_valid);
+  std::cout << *(ASTNode*)not_valid << std::endl;
+  printer::SMTLIB2_PrintBack(std::cout, *(ASTNode*)not_valid, bm);
+#endif
+
+  // std::cout << *side << std::endl;
 
   // vc_assertFormula(vc, (Expr*)&blasted);
-  // vc_assertFormula(vc, to_check);
 
+#if 0
   std::cout << "eq" << std::endl;
   to_check = eq;
   std::cout << *(ASTNode*)to_check << std::endl;
@@ -126,6 +138,7 @@ void foo(STPMgr* bm)
   std::cout << *(ASTNode*)to_check << std::endl;
   printer::SMTLIB2_PrintBack(std::cout, *(ASTNode*)to_check, bm);
   std::cout << "!moo" << std::endl;
+#endif
 
   // vc_assertFormula(vc, vc_eqExpr(vc, y, zero));
   // vc_assertFormula(vc, vc_eqExpr(vc, x, random));
