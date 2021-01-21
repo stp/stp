@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 
@@ -883,6 +884,40 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         OutputNode = ASTTrue;
       else
         OutputNode = ASTFalse;
+      break;
+    }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      ASTNode temp(_bm->CreateNode(k, children));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
       break;
     }
 
