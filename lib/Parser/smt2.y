@@ -207,6 +207,12 @@
   using stp::FP_ISNAN;
   using stp::FP_ISNEGATIVE;
   using stp::FP_ISPOSITIVE;
+  using stp::FP_SMT_EQ;
+  using stp::FP_CONST_NAN;
+  using stp::FP_CONST_POS_INF;
+  using stp::FP_CONST_NEG_INF;
+  using stp::FP_CONST_POS_ZERO;
+  using stp::FP_CONST_NEG_ZERO;
 
   using stp::NOT_DECLARED;
   using stp::TO_BE_SATISFIABLE;
@@ -337,6 +343,7 @@
 
 %union {
   unsigned uintval; /* for numerals in types. */
+  stp::Kind kind;
 
   //ASTNode,ASTVec
   stp::ASTNode *node;
@@ -352,6 +359,7 @@
 
 
 %type <node> an_term  an_formula function_param an_const an_fp_term
+%type <kind> an_fp_const
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -539,11 +547,11 @@
 %token FP_RM_ROUNDTOWARDNEGATIVE_TOK;
 
  /* fp constants */
-%token FP_NAN;
-%token FP_NEG_INF;
-%token FP_POS_INF;
-%token FP_NEG_ZERO;
-%token FP_POS_ZERO;
+%token FP_NAN_TOK;
+%token FP_NEG_INF_TOK;
+%token FP_POS_INF_TOK;
+%token FP_NEG_ZERO_TOK;
+%token FP_POS_ZERO_TOK;
 
 %token END 0 "end of file"
 
@@ -1111,9 +1119,17 @@ TRUE_TOK
 {
   const ASTVec& terms = *$3;
 
+  bool one_float = false;
+  for (unsigned i =1; i < terms.size();i++)
+  {
+    one_float |= (terms[i].GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  Kind k = one_float ? FP_SMT_EQ : EQ;
+
   if (terms.size() ==2)
   {
-    $$ = createNode(EQ, $3);
+    $$ = createNode(k, $3);
   }
   else  if (terms.size() >2) 
   {
@@ -1121,7 +1137,7 @@ TRUE_TOK
     result.reserve(terms.size()-1);
     for (unsigned i =1; i < terms.size();i++)
     {
-        result.push_back(stp::GlobalParserInterface->CreateNode(EQ, terms[i], terms[i-1]));
+        result.push_back(stp::GlobalParserInterface->CreateNode(k, terms[i], terms[i-1]));
     }
     $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
     delete $3;
@@ -1299,9 +1315,17 @@ TRUE_TOK
 {
   const ASTVec& forms = *$3;
 
+  bool one_float = false;
+  for (unsigned i =1; i < forms.size();i++)
+  {
+    one_float |= (forms[i].GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  Kind k = one_float ? FP_SMT_EQ : IFF;
+
   if (forms.size() ==2)
   {
-    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(IFF, forms));
+    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(k, forms));
     delete $3;
   }
   else  if (forms.size() >2) 
@@ -1310,7 +1334,7 @@ TRUE_TOK
     result.reserve(forms.size()-1);
     for (unsigned i =1; i < forms.size();i++)
     {
-        result.push_back(stp::GlobalParserInterface->CreateNode(IFF, forms[i], forms[i-1]));
+        result.push_back(stp::GlobalParserInterface->CreateNode(k, forms[i], forms[i-1]));
     }
     $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
     delete $3;
@@ -1481,11 +1505,11 @@ an_rounding_mode:
 ;
 
 an_fp_const:
-  FP_NAN { std::cout << "Unsupported FP_NAN" << std::endl; }
-| FP_NEG_INF { std::cout << "Unsupported FP_NEG_INF" << std::endl; }
-| FP_POS_INF { std::cout << "Unsupported FP_POS_INF" << std::endl; }
-| FP_NEG_ZERO { std::cout << "Unsupported FP_NEG_ZERO" << std::endl; }
-| FP_POS_ZERO { std::cout << "Unsupported FP_POS_ZERO" << std::endl; }
+  FP_NAN_TOK { $$ = FP_CONST_NAN; }
+| FP_POS_INF_TOK { $$ = FP_CONST_POS_INF; }
+| FP_NEG_INF_TOK { $$ = FP_CONST_NEG_INF; }
+| FP_POS_ZERO_TOK { $$ = FP_CONST_POS_ZERO; }
+| FP_NEG_ZERO_TOK { $$ = FP_CONST_NEG_ZERO; }
 ;
 
 an_fp_term:
@@ -1636,7 +1660,13 @@ an_fp_term:
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {
- std::cout << "Unsupported an_fp_const" << std::endl;
+ uint32_t exp_width($3);
+ uint32_t sig_width($4);
+ uint32_t total_width(sig_width + exp_width);
+ ASTVec empty;
+ $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm($2, total_width, empty));
+ $$->SetExpWidth(exp_width);
+ $$->SetSigWidth(sig_width);
 }
 ;
 

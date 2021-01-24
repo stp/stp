@@ -92,11 +92,14 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
 
   switch (k)
   {
-    case FP_EQ:
-      output = symbolic_fp::blast_fpeq(inputterm[0], inputterm[1]);
-      break;
     case FP_ADD:
       output = symbolic_fp::blast_fpadd(default_rm, inputterm[0], inputterm[1]);
+      break;
+    case FP_CONST_POS_INF:
+      output = symbolic_fp::blast_pos_inf(actualInputterm);
+      break;
+    case FP_SMT_EQ:
+      output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);
       break;
     default:
       std::cerr << "FloatBlaster::BlastNode: Unhandled kind: " << k
@@ -105,6 +108,12 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       break;
   };
 
+  if (output.GetKind() == BVCONST)
+  {
+    output = stp::GlobalParserBM->CreateFPConst(output);
+  }
+  output.SetExpWidth(actualInputterm.GetExpWidth());
+  output.SetSigWidth(actualInputterm.GetSigWidth());
   return output;
 }
 

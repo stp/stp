@@ -48,6 +48,7 @@ using namespace stp;
 using namespace stp::symbolic_fp;
 
 static VC vc;
+static STPMgr* bm;
 
 nodeWrapper::nodeWrapper(const Node& n) : Node(n) {}
 
@@ -900,17 +901,18 @@ namespace stp
 namespace symbolic_fp
 {
 
-void init_vc(STPMgr* bm)
+void init_vc(STPMgr* _bm)
 {
   static bool init = false;
   if (!init)
   {
     init = true;
-    vc = vc_createValidityCheckerReuse(bm);
+    vc = vc_createValidityCheckerReuse(_bm);
+    bm = _bm;
   }
 }
 
-ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs)
 {
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
@@ -940,6 +942,14 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 
   ASTNode packed(symfpu::pack<traits>(size, unpacked_add));
 
+  return packed;
+}
+
+ASTNode blast_pos_inf(const ASTNode& orig)
+{
+  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
+  uf unpacked_inf(uf::makeInf(size, false));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_inf));
   return packed;
 }
 

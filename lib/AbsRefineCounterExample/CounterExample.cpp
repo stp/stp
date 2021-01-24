@@ -620,6 +620,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     case FP_ISNAN:
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
     {
       ASTNode lhs_simp(TermToConstTermUsingModel(form[0]));
       assert(lhs_simp.GetKind() == BVCONST);

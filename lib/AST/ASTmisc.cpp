@@ -526,6 +526,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_SMT_EQ:
     {
       std::string error_msg("");
       bool failed(false);
@@ -562,6 +563,14 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         cerr << error_msg << endl;
         FatalError(error_msg.c_str(), n);
       }
+      break;
+    }
+    case FP_CONST_NAN:
+    case FP_CONST_POS_INF:
+    case FP_CONST_NEG_INF:
+    case FP_CONST_POS_ZERO:
+    case FP_CONST_NEG_ZERO:
+    {
       break;
     }
 
@@ -706,6 +715,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case FP_GEQ:
     case FP_GT:
     case FP_EQ:
+    case FP_SMT_EQ:
     {
 
       std::string error_msg("");
@@ -730,11 +740,13 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       else if (n[0].GetSigWidth() != n[1].GetSigWidth())
       {
         error_msg = "arguments to <fp> differ in sig width";
+        cerr << n[0].GetSigWidth() << " " << n[1].GetSigWidth();
         failed = true;
       }
       else if (n[0].GetExpWidth() != n[1].GetExpWidth())
       {
         error_msg = "arguments to <fp> differ in exp width";
+        cerr << n[0].GetExpWidth() << " " << n[1].GetExpWidth();
         failed = true;
       }
 
@@ -745,8 +757,17 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       }
       break;
     }
+    case FP_CONST_NAN:
+    case FP_CONST_POS_INF:
+    case FP_CONST_NEG_INF:
+    case FP_CONST_POS_ZERO:
+    case FP_CONST_NEG_ZERO:
+    {
+      break;
+    }
 
     default:
+      cerr << _kind_names[k];
       FatalError("BVTypeCheck: Unrecognized kind: ");
       break;
   }

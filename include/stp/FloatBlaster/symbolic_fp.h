@@ -234,10 +234,11 @@ private:
   bitWidthType m_sig;
 };
 
-void init_vc(STPMgr* bm);
+void init_vc(STPMgr* _bm);
 
-ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_pos_inf(const ASTNode& orig);
 ASTNode round_trip(const ASTNode& expr, ASTNode** side);
 
 } // namespace symbolic_fp

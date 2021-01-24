@@ -184,3 +184,22 @@ FP_ISNEGATIVE       1    1    Form
 # fp.isPositive: fp -> bool
 FP_ISPOSITIVE       1    1    Form
 
+# FP `=`
+FP_SMT_EQ           2    2    Form
+
+# Floating point _constants_
+
+# NaN
+FP_CONST_NAN              0    0    Term
+
+# +oo
+FP_CONST_POS_INF          0    0    Term
+
+# -oo
+FP_CONST_NEG_INF          0    0    Term
+
+# +zero
+FP_CONST_POS_ZERO         0    0    Term
+
+# -zero
+FP_CONST_NEG_ZERO         0    0    Term

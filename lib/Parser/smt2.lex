@@ -376,11 +376,11 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "RTN" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
 
  /* fp constants */
-"NaN" { return FP_NAN; }
-"-oo" { return FP_NEG_INF; }
-"+oo" { return FP_POS_INF; }
-"-zero" { return FP_NEG_ZERO; }
-"+zero" { return FP_POS_ZERO; }
+"NaN" { return FP_NAN_TOK; }
+"-oo" { return FP_NEG_INF_TOK; }
+"+oo" { return FP_POS_INF_TOK; }
+"-zero" { return FP_NEG_ZERO_TOK; }
+"+zero" { return FP_POS_ZERO_TOK; }
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}

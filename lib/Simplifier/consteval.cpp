@@ -54,7 +54,9 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   CBV tmp1 = NULL;
 
   const size_t number_of_children = input_children.size();
-  assert(number_of_children >= 1);
+
+  // TODO: FIXME: FP constants have no children
+  assert(number_of_children >= 1 || k == FP_CONST_POS_INF);
   assert(k != BVCONST);
 
   ASTVec children;
@@ -914,6 +916,18 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_SMT_EQ:
+    {
+      ASTNode temp(_bm->CreateNode(k, children));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
+      break;
+    }
+    case FP_CONST_NAN:
+    case FP_CONST_POS_INF:
+    case FP_CONST_NEG_INF:
+    case FP_CONST_POS_ZERO:
+    case FP_CONST_NEG_ZERO:
     {
       ASTNode temp(_bm->CreateNode(k, children));
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));

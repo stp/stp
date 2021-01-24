@@ -454,6 +454,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     case FP_ISNAN:
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
     {
       ASTNode lhs_simp(SimplifyTerm(a[0], VarConstMap));
       ASTNode rhs_simp(SimplifyTerm(a[1], VarConstMap));
@@ -1475,7 +1476,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(toProcess[i]);
       }
 
-      assert(v.size() > 0);
+      assert(v.size() > 0 || k == FP_CONST_POS_INF);
       if (ASTChildren(v) != actualInputterm.GetChildren()) // short-cut.
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
@@ -2562,6 +2563,15 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 
       assert(blasted != temp);
+      assert(blasted != inputterm);
+
+      output = SimplifyTerm(blasted);
+      break;
+    }
+    case FP_CONST_POS_INF:
+    {
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(inputterm));
+
       assert(blasted != inputterm);
 
       output = SimplifyTerm(blasted);

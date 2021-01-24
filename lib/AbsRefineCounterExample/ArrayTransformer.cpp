@@ -410,6 +410,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
     case FP_ISNAN:
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
     {
       ASTVec vec;
       vec.reserve(simpleForm.Degree());
