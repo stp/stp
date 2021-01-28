@@ -914,9 +914,11 @@ void init_vc(STPMgr* _bm)
 
 ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs)
 {
+#if 0
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+#endif
 
   floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));

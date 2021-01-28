@@ -114,6 +114,9 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
   }
   output.SetExpWidth(actualInputterm.GetExpWidth());
   output.SetSigWidth(actualInputterm.GetSigWidth());
+
+  // std::cout << output.GetExpWidth() << " " << output.GetKind() << std::endl;
+
   return output;
 }
 

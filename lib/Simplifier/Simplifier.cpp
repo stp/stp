@@ -467,7 +467,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
 
       if (pushNeg)
       {
-        output = SimplifyTerm(nf->CreateNode(NOT, blasted), VarConstMap);
+        output = SimplifyFormula(nf->CreateNode(NOT, blasted), VarConstMap);
       }
       else
       {
