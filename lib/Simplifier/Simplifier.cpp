@@ -471,8 +471,15 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       }
       else
       {
-        output = blasted;
+        output = SimplifyFormula(blasted, VarConstMap);
       }
+
+      if (output.GetKind() == BVCONST)
+      {
+        output = nf->CreateFPConst(output);
+      }
+      output.SetExpWidth(a.GetExpWidth());
+      output.SetSigWidth(a.GetSigWidth());
 
       break;
     }
@@ -2566,6 +2573,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       assert(blasted != inputterm);
 
       output = SimplifyTerm(blasted);
+
+      if (output.GetKind() == BVCONST)
+      {
+        output = nf->CreateFPConst(output);
+      }
+      output.SetExpWidth(inputterm.GetExpWidth());
+      output.SetSigWidth(inputterm.GetSigWidth());
+
       break;
     }
     case FP_CONST_POS_INF:
@@ -2575,6 +2590,13 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       assert(blasted != inputterm);
 
       output = SimplifyTerm(blasted);
+
+      if (output.GetKind() == BVCONST)
+      {
+        output = nf->CreateFPConst(output);
+      }
+      output.SetExpWidth(inputterm.GetExpWidth());
+      output.SetSigWidth(inputterm.GetSigWidth());
       break;
     }
     case WRITE:
