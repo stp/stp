@@ -57,6 +57,7 @@
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
 
+
   using std::cout;
   using std::cerr;
   using std::endl;
@@ -339,11 +340,13 @@
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 
+
 %}
 
 %union {
   unsigned uintval; /* for numerals in types. */
   stp::Kind kind;
+  float_size* fp_size;
 
   //ASTNode,ASTVec
   stp::ASTNode *node;
@@ -358,8 +361,10 @@
 %type <vec> an_formulas an_terms function_params an_mixed
 
 
-%type <node> an_term  an_formula function_param an_const an_fp_term
+%type <node> an_term  an_formula function_param an_const an_fp_term an_rounding_mode
 %type <kind> an_fp_const
+
+%type <fp_size> an_fp_sort
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -889,14 +894,39 @@ SOURCE_TOK
 sort_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
+  // AVJ-FP
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
+  //var
+  // FIXME
+  s.SetExpWidth($4->exp_bits);
+  s.SetSigWidth($4->sig_bits);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(0);
 };
 
 an_fp_sort:
-  FLOAT16_TOK {}
-| FLOAT32_TOK {}
-| FLOAT64_TOK {}
-| FLOAT128_TOK {}
-| LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK {}
+  FLOAT16_TOK
+{
+    $$ = new float_size(4, 12);
+}
+| FLOAT32_TOK
+{
+    $$ = new float_size(8, 24);
+}
+| FLOAT64_TOK
+{
+    $$ = new float_size(16, 48);
+}
+| FLOAT128_TOK 
+{
+    $$ = new float_size(32, 96);
+}
+| LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+    $$ = new float_size($4, $5);
+}
 ;
 
 
@@ -911,17 +941,17 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   s.SetValueWidth($7);
   delete $1;
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK TERMID_TOK
 {
   // AVJ-FP - FIXME
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  s.SetExpWidth(8);
-  s.SetSigWidth(24);
-  s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  s.SetExpWidth($4->GetExpWidth());
+  s.SetSigWidth($4->GetSigWidth());
+  s.SetIndexWidth($4->GetIndexWidth());
+  s.SetValueWidth($4->GetValueWidth());
   delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
@@ -961,8 +991,8 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   // FIXME
-  s.SetExpWidth(8);
-  s.SetSigWidth(24);
+  s.SetExpWidth($4->exp_bits);
+  s.SetSigWidth($4->sig_bits);
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   delete $1;
@@ -1557,6 +1587,11 @@ an_fp_term:
 | FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term
 {
  std::cout << "Unsupported FP_ROUNDTOINTEGRAL_TOK" << std::endl;
+  assert($3->GetType() == FLOATINGPOINT_TYPE);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL, $3->GetValueWidth(), *$2, *$3));
+  $$->SetExpWidth($3->GetExpWidth());
+  $$->SetSigWidth($3->GetSigWidth());
+  assert($$->GetType() == FLOATINGPOINT_TYPE);
 }
 | FP_MIN_TOK an_term an_term
 {

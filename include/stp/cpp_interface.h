@@ -242,4 +242,12 @@ public:
 DLL_PUBLIC void CNFClearMemory();
 }
 
+struct float_size
+{
+public:
+  explicit float_size(int exp, int sig) : exp_bits(exp), sig_bits(sig) {}
+  int exp_bits;
+  int sig_bits;
+};
+
 #endif
