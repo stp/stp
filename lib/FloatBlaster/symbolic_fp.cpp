@@ -60,15 +60,6 @@ roundingMode::roundingMode(unsigned int v)
 
 roundingMode::roundingMode(const Node n) : nodeWrapper(n) {}
 
-enum rounding_modes
-{
-  ROUND_NEAREST_TIES_TO_EVEN,
-  ROUND_TOWARD_POSITIVE,
-  ROUND_TOWARD_NEGATIVE,
-  ROUND_TOWARD_ZERO,
-  ROUND_NEAREST_TIES_TO_AWAY
-};
-
 roundingMode traits::RNE(void)
 {
   return roundingMode(ROUND_NEAREST_TIES_TO_EVEN);

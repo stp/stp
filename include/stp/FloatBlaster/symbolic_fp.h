@@ -46,6 +46,15 @@ typedef ASTNode FloatingPointSize;
 namespace symbolic_fp
 {
 
+enum rounding_modes
+{
+  ROUND_NEAREST_TIES_TO_EVEN,
+  ROUND_TOWARD_POSITIVE,
+  ROUND_TOWARD_NEGATIVE,
+  ROUND_TOWARD_ZERO,
+  ROUND_NEAREST_TIES_TO_AWAY
+};
+
 typedef uint32_t bitWidthType;
 class roundingMode;
 class floatingPointTypeInfo;

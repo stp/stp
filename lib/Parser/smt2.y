@@ -54,6 +54,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/FloatBlaster/symbolic_fp.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
 
@@ -214,6 +215,12 @@
   using stp::FP_CONST_NEG_INF;
   using stp::FP_CONST_POS_ZERO;
   using stp::FP_CONST_NEG_ZERO;
+
+  using stp::symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_EVEN;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_POSITIVE;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_NEGATIVE;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_ZERO;
+  using stp::symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_AWAY;
 
   using stp::NOT_DECLARED;
   using stp::TO_BE_SATISFIABLE;
@@ -1527,11 +1534,31 @@ BVCONST_HEXIDECIMAL_TOK
 };
 
 an_rounding_mode:
-  FP_RM_ROUNDTOWARDZERO_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDZERO_TOK" << std::endl; }
-| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK { std::cout << "Unsupported FP_RM_ROUNDNEARESTTIESTOEVEN_TOK" << std::endl; }
-| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK { std::cout << "Unsupported FP_RM_ROUNDNEARESTTIESTOAWAY_TOK" << std::endl; }
-| FP_RM_ROUNDTOWARDPOSITIVE_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDPOSITIVE_TOK" << std::endl; }
-| FP_RM_ROUNDTOWARDNEGATIVE_TOK { std::cout << "Unsupported FP_RM_ROUNDTOWARDNEGATIVE_TOK" << std::endl; }
+  FP_RM_ROUNDTOWARDZERO_TOK
+{
+  int width = 3;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_ZERO));
+}
+| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
+{
+  int width = 3;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_EVEN));
+}
+| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
+{
+  int width = 3;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_AWAY));
+}
+| FP_RM_ROUNDTOWARDPOSITIVE_TOK
+{
+  int width = 3;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_POSITIVE));
+}
+| FP_RM_ROUNDTOWARDNEGATIVE_TOK
+{
+  int width = 3;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_NEGATIVE));
+}
 ;
 
 an_fp_const:
