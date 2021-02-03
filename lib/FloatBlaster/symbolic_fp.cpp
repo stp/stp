@@ -957,13 +957,10 @@ ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr)
 {
   floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
-#if 0
   uf unpacked_result(
       symfpu::roundToIntegral<traits>(size, rm, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, unpacked_result));
   return packed;
-#endif
-  return expr;
 }
 
 } // namespace symbolic_fp

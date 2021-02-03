@@ -950,7 +950,6 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK TERMID_TOK
 {
-  // AVJ-FP - FIXME
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
@@ -1143,7 +1142,8 @@ TRUE_TOK
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
 }
-| FORMID_TOK
+|
+FORMID_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
@@ -1536,27 +1536,27 @@ BVCONST_HEXIDECIMAL_TOK
 an_rounding_mode:
   FP_RM_ROUNDTOWARDZERO_TOK
 {
-  int width = 3;
+  int width = 5;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_ZERO));
 }
 | FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
 {
-  int width = 3;
+  int width = 5;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_EVEN));
 }
 | FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
 {
-  int width = 3;
+  int width = 5;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_AWAY));
 }
 | FP_RM_ROUNDTOWARDPOSITIVE_TOK
 {
-  int width = 3;
+  int width = 5;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_POSITIVE));
 }
 | FP_RM_ROUNDTOWARDNEGATIVE_TOK
 {
-  int width = 3;
+  int width = 5;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_NEGATIVE));
 }
 ;
