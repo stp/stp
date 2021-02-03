@@ -730,6 +730,8 @@ LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
 {
   $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
   stp::GlobalParserInterface->addSymbol(*$$);
+  $$->SetExpWidth($3->exp_bits);
+  $$->SetSigWidth($3->sig_bits);
   $$->SetIndexWidth(0);
   $$->SetValueWidth(0);
   delete $2;
