@@ -249,6 +249,7 @@ ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_pos_inf(const ASTNode& orig);
 ASTNode round_trip(const ASTNode& expr, ASTNode** side);
+ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr);
 
 } // namespace symbolic_fp
 

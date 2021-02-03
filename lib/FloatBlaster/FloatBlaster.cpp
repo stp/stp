@@ -101,6 +101,10 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
     case FP_SMT_EQ:
       output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);
       break;
+    case FP_ROUNDTOINTEGRAL:
+      output = symbolic_fp::blast_round_to_integral(/* rm */ inputterm[0],
+                                                    /* expr */ inputterm[1]);
+      break;
     default:
       std::cerr << "FloatBlaster::BlastNode: Unhandled kind: " << k
                 << std::endl;

@@ -1611,13 +1611,12 @@ an_fp_term:
 {
  std::cout << "Unsupported FP_REM_TOK" << std::endl;
 }
-| FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term
+| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_ROUNDTOINTEGRAL_TOK" << std::endl;
-  assert($3->GetType() == FLOATINGPOINT_TYPE);
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL, $3->GetValueWidth(), *$2, *$3));
-  $$->SetExpWidth($3->GetExpWidth());
-  $$->SetSigWidth($3->GetSigWidth());
+  assert($4->GetType() == FLOATINGPOINT_TYPE);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL, $4->GetValueWidth(), *$3, *$4));
+  $$->SetExpWidth($4->GetExpWidth());
+  $$->SetSigWidth($4->GetSigWidth());
   assert($$->GetType() == FLOATINGPOINT_TYPE);
 }
 | FP_MIN_TOK an_term an_term
@@ -1753,6 +1752,7 @@ TERMID_TOK
 | an_rounding_mode
 {
   /* not really a term? */
+  $$ = $1;
 }
 | SELECT_TOK an_term an_term
 {

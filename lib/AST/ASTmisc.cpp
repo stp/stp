@@ -519,7 +519,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case FP_FMA:
     case FP_SQRT:
     case FP_REM:
-    case FP_ROUNDTOINTEGRAL:
     case FP_MIN:
     case FP_MAX:
     case FP_TOFP:
@@ -570,6 +569,11 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case FP_CONST_NEG_INF:
     case FP_CONST_POS_ZERO:
     case FP_CONST_NEG_ZERO:
+    {
+      break;
+    }
+
+    case FP_ROUNDTOINTEGRAL:
     {
       break;
     }
