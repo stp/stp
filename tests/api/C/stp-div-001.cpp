@@ -36,8 +36,6 @@ TEST(stp_div, one)
   vc_setFlags(vc, 'd');
   // vc_setFlags(vc,'p');
 
-  Type bv8 = vc_bvType(vc, 8);
-
   Expr a = vc_bvCreateMemoryArray(vc, "a");
 
   Expr index_3 = vc_bvConstExprFromInt(vc, 32, 3);

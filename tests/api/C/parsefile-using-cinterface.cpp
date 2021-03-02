@@ -45,7 +45,7 @@ TEST(parsefile, CVC)
   vc_DeleteExpr(c);
   printf("\n");
   vc_Destroy(vc);
-  ASSERT_EQ(errorCount, 0);
+  ASSERT_EQ(errorCount, 0u);
 }
 
 void errorHandler(const char* err_msg)

@@ -66,7 +66,10 @@ if (MSVC)
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 endif()
 
+set(PREV_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-missing-field-initializers")
 add_subdirectory(${GTEST_PREFIX} gtest)
+set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
 include_directories(${GTEST_PREFIX}/include)

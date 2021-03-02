@@ -28,3 +28,8 @@ add_library(nodefactories OBJECT
 )
 
 add_dependencies(nodefactories ASTKind_header)
+
+if (NOT MSVC)
+  set_source_files_properties(NodeFactory.cpp
+    PROPERTIES COMPILE_FLAGS "-Wno-infinite-recursion")
+endif()
