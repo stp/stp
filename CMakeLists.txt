@@ -549,7 +549,7 @@ else()
     endif()
 endif()
 
-include_directories(${MINISAT_INCLUDE_DIRS})
+include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------

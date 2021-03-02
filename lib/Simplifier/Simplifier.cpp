@@ -2037,7 +2037,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
 
-    // follow on.
+    // fall-through
     case BVPLUS:
     {
       if (BVPLUS == k && inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT && inputterm[0] == inputterm[1][1])

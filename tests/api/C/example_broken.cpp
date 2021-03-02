@@ -14,7 +14,6 @@ TEST(examplebroken, one)
 {
   int width = 8;
   VC handle = vc_createValidityChecker();
-  VC handle2 = vc_createValidityChecker();
 
   // Create variable "x"
   Expr x = vc_varExpr(handle, "x", vc_bvType(handle, width));

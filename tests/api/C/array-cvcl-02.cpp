@@ -57,7 +57,7 @@ TEST(array_cvcl02, one)
     Expr index = vc_bvConcatExpr(vc, pre, exprj);
     index = vc_simplify(vc, index);
     Expr a_of_j = vc_readExpr(vc, cvcl_array, index);
-    Expr ce = vc_getCounterExample(vc, a_of_j);
+    (void)vc_getCounterExample(vc, a_of_j);
   }
   vc_Destroy(vc);
   // vc_printCounterExample(vc);

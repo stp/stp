@@ -80,6 +80,8 @@ struct Cnf_Dat_t_
     int *           pVarNums;        // the number of CNF variable for each node ID (-1 if unused)
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 // the cut used to represent node in the AIG
 struct Cnf_Cut_t_
 {
@@ -89,6 +91,7 @@ struct Cnf_Cut_t_
     Vec_Int_t *     vIsop[2];        // neg/pos ISOPs
     int             pFanins[0];      // the fanins (followed by the truth table)
 };
+#pragma GCC diagnostic pop
 
 // the CNF computation manager
 struct Cnf_Man_t_

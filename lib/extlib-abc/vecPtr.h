@@ -739,6 +739,10 @@ static inline void Vec_PtrReorder( Vec_Ptr_t * p, int nItems )
   SeeAlso     []
 
 ***********************************************************************/
+#pragma GCC diagnostic push
+#if !defined(__clang__) && __GNUC__ > 7
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif /* !defined(__clang__) || __GNUC__ > 7 */
 static inline void Vec_PtrSort( Vec_Ptr_t * p, int (*Vec_PtrSortCompare)() )
 {
     if ( p->nSize < 2 )
@@ -746,6 +750,7 @@ static inline void Vec_PtrSort( Vec_Ptr_t * p, int (*Vec_PtrSortCompare)() )
     qsort( (void *)p->pArray, p->nSize, sizeof(void *), 
             (int (*)(const void *, const void *)) Vec_PtrSortCompare );
 }
+#pragma GCC diagnostic pop
 
 /**Function*************************************************************
 
@@ -758,6 +763,10 @@ static inline void Vec_PtrSort( Vec_Ptr_t * p, int (*Vec_PtrSortCompare)() )
   SeeAlso     []
 
 ***********************************************************************/
+#pragma GCC diagnostic push
+#if !defined(__clang__) && __GNUC__ > 7
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif /* !defined(__clang__) || __GNUC__ > 7 */
 static inline void Vec_PtrUniqify( Vec_Ptr_t * p, int (*Vec_PtrSortCompare)() )
 {
     int i, k;
@@ -770,6 +779,7 @@ static inline void Vec_PtrUniqify( Vec_Ptr_t * p, int (*Vec_PtrSortCompare)() )
             p->pArray[k++] = p->pArray[i];
     p->nSize = k;
 }
+#pragma GCC diagnostic pop
 
 #endif
 

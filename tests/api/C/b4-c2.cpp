@@ -2550,7 +2550,8 @@ TEST(b4_c2, one)
   vc_assertFormula(vc, e5286030);
   vc_push(vc);
   Expr e5286031 = vc_falseExpr(vc);
-  if (false)
+  bool print_debug = false;
+  if (print_debug)
   {
     char* cc;
     unsigned long len;

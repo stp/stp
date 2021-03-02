@@ -24,3 +24,8 @@ add_library(stpmgr OBJECT
 )
 
 add_dependencies(stpmgr ASTKind_header)
+
+if (NOT MSVC)
+    set_source_files_properties(STPManager.cpp
+        PROPERTIES COMPILE_FLAGS "-Wno-shift-count-overflow")
+endif()
