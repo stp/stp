@@ -56,7 +56,7 @@ jobs:
       working-directory: build
 
     - name: Test
-      run: ctest --parallel "$(nproc)"
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
 # EOF
