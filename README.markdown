@@ -30,6 +30,11 @@ cmake --build .
 sudo cmake --install .
 ```
 
+Or, using [Homebrew](https://brew.sh):
+```
+brew install stp
+```
+
 For more detailed instructions, see towards the end of the page.
 
 
