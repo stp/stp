@@ -46,7 +46,7 @@ THE SOFTWARE.
   extern char* yytext;
   extern int cvclineno;
   int yyerror(const char *s) {
-    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
+    cout << "CVC syntax error: line " << cvclineno << "\n" << s << endl;
     FatalError("");
     return YY_EXIT_FAILURE;
   }
