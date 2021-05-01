@@ -5,5 +5,5 @@
 (define-fun x!3 () Bool (not x!2))
 (pop 1)
 (assert (not x!2))
-; CHECK: (error "syntax error: line 7 syntax error, unexpected STRING_TOK  token: x!2")
+; CHECK: .*error.*x!2.*
 (check-sat)
