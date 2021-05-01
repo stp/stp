@@ -1,0 +1,8 @@
+% RUN: %solver %s | %OutputCheck %s
+% CHECK: [Vv]alid
+NODE0 : ARRAY BITVECTOR(2) OF BITVECTOR(8);
+QUERY (
+LET NODE1 = (NODE0 WITH [0bin00[1:0]] := (0bin11111111[7:0])) IN (
+LET NODE2 = (NODE1[0bin00[1:0]][7:0]) IN (
+LET NODE3 = (NODE2 = 0bin11111111) IN (
+(NODE3)))));
