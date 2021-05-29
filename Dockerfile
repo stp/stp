@@ -67,6 +67,17 @@ RUN make install
 WORKDIR /stp
 
 
+# Relevant for interaction with aws (might move ths section further up!
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt install -y \
+        cmake \
+        curl \
+        iproute2 \
+        python \
+        python-pip \
+        unzip
+RUN pip install supervisor awscli
+
 # Finally run the tool
 CMD /stp/tools/container-default-command.sh
 
