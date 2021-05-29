@@ -87,6 +87,10 @@ RUN apt-get update && \
         unzip
 RUN pip install supervisor awscli
 
+# Enable transparent huge pages, always
+RUN DEBIAN_FRONTEND=noninteractive apt -y install hugepages
+RUN hugeadm --thp-always
+
 # Finally run the tool
 CMD /stp/tools/container-default-command.sh
 
