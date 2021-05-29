@@ -43,6 +43,15 @@ RUN cmake ..
 RUN make -j6
 RUN make install
 
+# get mergesat and make available
+RUN mkdir /mergesat
+WORKDIR /mergesat
+RUN wget -O mergesat-v3.0.tar.gz https://github.com/conp-solutions/mergesat/archive/refs/tags/v3.0.tar.gz
+RUN tar xfz mergesat-v3.0.tar.gz --strip-components 1
+RUN make r -j6
+RUN cp build/release/bin/mergesat /usr/local/bin/
+RUN which mergesat
+
 # build stp
 RUN mkdir /stp
 WORKDIR /stp
