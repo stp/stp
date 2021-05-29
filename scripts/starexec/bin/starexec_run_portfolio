@@ -15,7 +15,12 @@ rm -f output_0.cnf
 # In case a file was created, call the SAT solver
 if [ -f output_0.cnf ]
 then
-	result="$("$SOLVERDIR"/multi-solver.py $(nproc) output_0.cnf 2>&1)"
+	# Only use every second CPU, but at least 1
+	CPUS=$(nproc)
+	CPUS=$((CPUS/2))
+	[ "$CPUS" -eq 0 ] && CPUS=1
+
+	result="$("$SOLVERDIR"/multi-solver.py "$CPUS" output_0.cnf 2>&1)"
 	echo "$result" | grep winner 1>&2
 
 	if [[ "$result" == *"s SATISFIABLE"* ]]; then
