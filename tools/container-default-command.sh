@@ -4,10 +4,11 @@
 
 # This script is executed as default in the container
 
-set -x
-
-echo "Start container default command"
-echo "Start container default command" 1>&2
+# Make debugging more explicit
+DEBUGGING=0
+[ "$DEBUGGING" -ne 0 ] && set -x
+[ "$DEBUGGING" -ne 0 ] && echo "Start container default command"
+[ "$DEBUGGING" -ne 0 ] && echo "Start container default command" 1>&2
 
 # Default location is defined by environment variable INPUT_FILE
 INPUT_FILE=${INPUT_FILE:-}
