@@ -1868,12 +1868,13 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       ASTVec v;
       ASTVec toProcess = actualInputterm.GetChildren();
       if (actualInputterm.GetKind() == BVAND ||
-          actualInputterm.GetKind() == BVOR ||
-          actualInputterm.GetKind() == BVPLUS)
+          actualInputterm.GetKind() == BVOR 
+          )
+          // We used to do this for BVPLUS too, but it sometimes created >a million nodes.  
+          // For example with Sage2/bench_17801.smt2
+          // I haven't tested whether sometimes it wins big though.
+          
       {
-        // If we didn't flatten these, then we'd start flattening each of these
-        // from the bottom up. Potentially creating tons of the nodes along the
-        // way.
         toProcess = FlattenKind(actualInputterm.GetKind(), toProcess);
       }
 
