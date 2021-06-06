@@ -24,6 +24,7 @@ set(sat_lib_to_add
 )
 
 if (USE_CRYPTOMINISAT)
+    include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})
     set(sat_lib_to_add ${sat_lib_to_add} CryptoMinisat5.cpp)
 endif()
 
