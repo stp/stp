@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #define __STDC_FORMAT_MACROS
-#define MINISAT_CONSTANTS_AS_MACROS
 #include "stp/Sat/SimplifyingMinisat.h"
 #include "minisat/simp/SimpSolver.h"
 
@@ -72,7 +71,7 @@ bool SimplifyingMinisat::solve(
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef)
+  if (ret == (Minisat::lbool)Minisat::l_Undef)
   {
     timeout_expired = true;
   }

@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #define __STDC_FORMAT_MACROS
-#define MINISAT_CONSTANTS_AS_MACROS
 #include "stp/Sat/Riss.h"
 #include "riss/core/Solver.h"
 //#include "utils/System.h"
