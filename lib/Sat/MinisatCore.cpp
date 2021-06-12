@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #define __STDC_FORMAT_MACROS
-#define MINISAT_CONSTANTS_AS_MACROS
 #include "stp/Sat/MinisatCore.h"
 #include "minisat/core/Solver.h"
 //#include "utils/System.h"
@@ -79,7 +78,7 @@ bool MinisatCore::propagateWithAssumptions(
   setMaxConflicts(0);
   Minisat::lbool ret = s->solveLimited(assumps);
   assert(s->conflicts ==0);
-  return ret != (Minisat::lbool)l_False;
+  return ret != (Minisat::lbool)Minisat::l_False;
 }
 
 bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
@@ -89,12 +88,12 @@ bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef)
+  if (ret == (Minisat::lbool)Minisat::l_Undef)
   {
     timeout_expired = true;
   }
 
-  return ret == (Minisat::lbool)l_True;
+  return ret == (Minisat::lbool)Minisat::l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const
