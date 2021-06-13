@@ -47,6 +47,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UseITEContext.h"
+#include "stp/Simplifier/Flatten.h"
 #include <memory>
 using std::cout;
 
@@ -337,6 +338,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 #ifndef NDEBUG
   bm->UserFlags.construct_counterexample_flag = true;
 #endif
+
+  if (bm->UserFlags.enable_flatten)
+  {
+    Flatten flatten(bm,bm->defaultNodeFactory);
+    inputToSat = flatten.topLevel(inputToSat);
+    bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
+  }
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());

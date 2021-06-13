@@ -58,6 +58,10 @@ class PropagateEqualities // not copyable
 
   const bool always_true;
 
+  bool timedOut();
+  bool timeOut = false;
+  long startTime;
+
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
       : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
@@ -72,6 +76,11 @@ public:
   {
     if (!bm->UserFlags.propagate_equalities)
       return a;
+
+    if (timeOut)
+      return a;
+
+    startTime = getCurrentTime();
 
     bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
     ASTNode result = propagate(a, at);

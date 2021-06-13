@@ -1874,7 +1874,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         // If we didn't flatten these, then we'd start flattening each of these
         // from the bottom up. Potentially creating tons of the nodes along the
         // way.
-        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess);
+        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,50);
       }
 
       v.reserve(toProcess.size());
@@ -2091,8 +2091,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       else if (1 < constkids.size())
       {
         // many elements in constkids. simplify it
-        constoutput = nf->CreateTerm(k, inputterm.GetValueWidth(), constkids);
-        constoutput = BVConstEvaluator(constoutput);
+        constoutput = NonMemberBVConstEvaluator(_bm, k ,constkids, inputterm.GetValueWidth());
       }
 
       if (BVMULT == k && zero == constoutput)
@@ -3305,8 +3304,8 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     ASTNode constant;
     if (1 < ccc.size())
     {
-      constant = nf->CreateTerm(BVPLUS, ccc[0].GetValueWidth(), ccc);
-      constant = BVConstEvaluator(constant);
+
+      constant = NonMemberBVConstEvaluator(_bm, BVPLUS,ccc, ccc[0].GetValueWidth());
     }
     else
       constant = ccc[0];

@@ -30,6 +30,29 @@ THE SOFTWARE.
 namespace stp
 {
 
+/* Running propagate equalities is >10min for some benchmarks,
+ e.g. QF_BV/asp/15Puzzle/15puzzle_ins.lp.smt2
+ This hack stops processing after roughly XX seconds, and gets 19 extra SMT-LIB benchmarks to SAT solving in 120 seconds.
+ A flag is set so that calling toplevel(..) will be idempotent after the timeout.
+ I haven't measured what the cost of this is..
+ I chose the timeout at random, I haven't tuned the value.
+ This will make STP non-deterministic.
+*/ 
+bool PropagateEqualities::timedOut()
+{
+  static int counter=0;
+
+  if (timeOut)
+    return true;
+
+  if (counter++ % 100 < 1)
+    if (getCurrentTime() > 80000 + startTime) // I worry that the time syscall is slow (so only call it sometimes)
+      timeOut = true;
+
+  return timeOut;
+}
+
+
 /* The search functions look for variables that can be expressed in terms of
  * variables.
  * The most obvious case it doesn't check for is NOT (OR (.. .. )).
@@ -48,6 +71,10 @@ bool PropagateEqualities::searchXOR(const ASTNode& lhs, const ASTNode& rhs)
 
   if (lhs == rhs)
     return true;
+
+  if (timedOut())
+    return false;
+
 
   if (k == SYMBOL)
     return simp->UpdateSubstitutionMap(
@@ -110,6 +137,9 @@ bool PropagateEqualities::searchTerm(const ASTNode& lhs, const ASTNode& rhs)
   if (lhs.GetKind() == BVXOR || lhs.GetKind() == BVPLUS)
     for (size_t i = 0; i < lhs.Degree(); i++)
     {
+      if (timedOut())
+        return false;
+
       ASTVec others;
       for (size_t j = 0; j < lhs.Degree(); j++)
         if (j != i)

@@ -70,6 +70,7 @@ public:
   // AIG rewrites are turned on..
   bool enable_AIG_rewrites_flag;
   bool enable_unconstrained;
+  bool enable_flatten = true;
   bool enable_ite_context;
   bool enable_aig_core_simplify;
   bool enable_use_intervals;
@@ -161,6 +162,7 @@ public:
     enable_bitblast_simplification = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
+    enable_flatten = false;
   }
 
   UserDefinedFlags()
@@ -209,6 +211,7 @@ public:
     quick_statistics_flag = false;
     exit_after_CNF = false;
     num_solver_threads = 1;
+    enable_flatten = true;
 
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;

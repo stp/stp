@@ -58,7 +58,7 @@ bool BVTypeCheck(const ASTNode& n);
 
 long getCurrentTime();
 
-ASTVec FlattenKind(Kind k, const ASTVec& children);
+ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.
 bool BVTypeCheckRecursive(const ASTNode& n);

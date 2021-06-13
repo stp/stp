@@ -133,7 +133,7 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   vars.getSymbol(eq);
 
   // handle BVPLUS case
-  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
+  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren(),50);
   ASTVec o;
   ASTNode outmonom = ASTUndefined;
   bool chosen_symbol = false;

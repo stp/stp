@@ -1243,6 +1243,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         for (unsigned i = 0; i < children.size(); i++)
           names.push_back(children[i]);
 
+        sort(names.begin(), names.end(), stp::exprless);
+
         while (names.size() > 1)
         {
           ASTNode a = names.front();

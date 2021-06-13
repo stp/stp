@@ -58,7 +58,8 @@ public:
     UseITEContext,
     AIGSimplifyCore,
     IntervalPropagation,
-    AlwaysTrue
+    AlwaysTrue,
+    Flatten
   };
 
   std::vector<std::string> CategoryNames = {"Transforming",
@@ -80,7 +81,8 @@ public:
                                             "ITE Contexts",
                                             "AIG core simplification",
                                             "Interval Propagation",
-                                            "Always True"};
+                                            "Always True",
+                                            "Sharing-aware Flattening"};
 
   typedef std::pair<Category, long> Element;
 
