@@ -162,7 +162,7 @@ public:
     enable_bitblast_simplification = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
-    enable_flatten = false;
+    enable_flatten = true;
   }
 
   UserDefinedFlags()
