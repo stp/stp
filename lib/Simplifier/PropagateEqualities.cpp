@@ -243,98 +243,101 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
     if (updated)
       return output;
 
-// The below block should be subsumed by the searchXOR function which
-// generalises it.
-// So the below block should never do anything..
-#ifndef NDEBUG
-    if (a.Degree() != 2)
-      return output;
-
-    int to = TermOrder(a[0], a[1]);
-    if (0 == to)
+  // The below block should be subsumed by the searchXOR function which
+  // generalises it.
+  // So the below block should never do anything..
+    if (!timeOut)
     {
-      if (a[0].GetKind() == NOT && a[0][0].GetKind() == EQ &&
-          a[0][0][0].GetValueWidth() == 1 && a[0][0][1].GetKind() == SYMBOL)
-      {
-        // (XOR (NOT(= (1 v)))  ... )
-        const ASTNode& symbol = a[0][0][1];
-        const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNOT, 1, a[0][0][0]));
+      #ifndef NDEBUG
+        if (a.Degree() != 2)
+          return output;
 
-        if (simp->UpdateSolverMap(symbol, newN))
+        int to = TermOrder(a[0], a[1]);
+        if (0 == to)
         {
-          assert(false);
-          output = ASTTrue;
-        }
-      }
-      else if (a[1].GetKind() == NOT && a[1][0].GetKind() == EQ &&
-               a[1][0][0].GetValueWidth() == 1 &&
-               a[1][0][1].GetKind() == SYMBOL)
-      {
-        const ASTNode& symbol = a[1][0][1];
-        const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNOT, 1, a[1][0][0]));
+          if (a[0].GetKind() == NOT && a[0][0].GetKind() == EQ &&
+              a[0][0][0].GetValueWidth() == 1 && a[0][0][1].GetKind() == SYMBOL)
+          {
+            // (XOR (NOT(= (1 v)))  ... )
+            const ASTNode& symbol = a[0][0][1];
+            const ASTNode newN = nf->CreateTerm(
+                ITE, 1, a[1], a[0][0][0], nf->CreateTerm(BVNOT, 1, a[0][0][0]));
 
-        if (simp->UpdateSolverMap(symbol, newN))
+            if (simp->UpdateSolverMap(symbol, newN))
+            {
+              assert(false);
+              output = ASTTrue;
+            }
+          }
+          else if (a[1].GetKind() == NOT && a[1][0].GetKind() == EQ &&
+                   a[1][0][0].GetValueWidth() == 1 &&
+                   a[1][0][1].GetKind() == SYMBOL)
+          {
+            const ASTNode& symbol = a[1][0][1];
+            const ASTNode newN = nf->CreateTerm(
+                ITE, 1, a[0], a[1][0][0], nf->CreateTerm(BVNOT, 1, a[1][0][0]));
+
+            if (simp->UpdateSolverMap(symbol, newN))
+            {
+              assert(false);
+              output = ASTTrue;
+            }
+          }
+          else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() == 1 &&
+                   a[0][1].GetKind() == SYMBOL)
+          {
+            // XOR ((= 1 v) ... )
+
+            const ASTNode& symbol = a[0][1];
+            const ASTNode newN = nf->CreateTerm(
+                ITE, 1, a[1], nf->CreateTerm(BVNOT, 1, a[0][0]), a[0][0]);
+
+            if (simp->UpdateSolverMap(symbol, newN))
+            {
+              assert(false);
+              output = ASTTrue;
+            }
+          }
+          else if (a[1].GetKind() == EQ && a[1][0].GetValueWidth() == 1 &&
+                   a[1][1].GetKind() == SYMBOL)
+          {
+            const ASTNode& symbol = a[1][1];
+            const ASTNode newN = nf->CreateTerm(
+                ITE, 1, a[0], nf->CreateTerm(BVNOT, 1, a[1][0]), a[1][0]);
+
+            if (simp->UpdateSolverMap(symbol, newN))
+            {
+              assert(false);
+              output = ASTTrue;
+            }
+          }
+          else
+            return output;
+        }
+        else
         {
-          assert(false);
-          output = ASTTrue;
-        }
-      }
-      else if (a[0].GetKind() == EQ && a[0][0].GetValueWidth() == 1 &&
-               a[0][1].GetKind() == SYMBOL)
-      {
-        // XOR ((= 1 v) ... )
+          ASTNode symbol, rhs;
+          if (to == 1)
+          {
+            symbol = a[0];
+            rhs = a[1];
+          }
+          else
+          {
+            symbol = a[1];
+            rhs = a[0];
+          }
 
-        const ASTNode& symbol = a[0][1];
-        const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[1], nf->CreateTerm(BVNOT, 1, a[0][0]), a[0][0]);
+          assert(symbol.GetKind() == SYMBOL);
 
-        if (simp->UpdateSolverMap(symbol, newN))
-        {
-          assert(false);
-          output = ASTTrue;
+          if (simp->UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
+          {
+            assert(false);
+            output = ASTTrue;
+          }
         }
-      }
-      else if (a[1].GetKind() == EQ && a[1][0].GetValueWidth() == 1 &&
-               a[1][1].GetKind() == SYMBOL)
-      {
-        const ASTNode& symbol = a[1][1];
-        const ASTNode newN = nf->CreateTerm(
-            ITE, 1, a[0], nf->CreateTerm(BVNOT, 1, a[1][0]), a[1][0]);
-
-        if (simp->UpdateSolverMap(symbol, newN))
-        {
-          assert(false);
-          output = ASTTrue;
-        }
-      }
-      else
-        return output;
+      #endif
     }
-    else
-    {
-      ASTNode symbol, rhs;
-      if (to == 1)
-      {
-        symbol = a[0];
-        rhs = a[1];
-      }
-      else
-      {
-        symbol = a[1];
-        rhs = a[0];
-      }
-
-      assert(symbol.GetKind() == SYMBOL);
-
-      if (simp->UpdateSolverMap(symbol, nf->CreateNode(NOT, rhs)))
-      {
-        assert(false);
-        output = ASTTrue;
-      }
-    }
-#endif
   }
   else if (AND == k)
   {
