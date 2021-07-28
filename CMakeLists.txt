@@ -330,8 +330,8 @@ if (NOT MSVC)
     add_cxx_flag_if_supported("-Winit-self")
     add_cxx_flag_if_supported("-Wparentheses")
     add_cxx_flag_if_supported("-Wunreachable-code")
-    add_compile_options("-fPIC")
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 add_definitions("-D__STDC_LIMIT_MACROS")
