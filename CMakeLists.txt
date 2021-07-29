@@ -18,13 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-project(STP)
 cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 14)
-
-include (GenerateExportHeader)
-include(GNUInstallDirs)
 
 if(POLICY CMP0048)
     #policy for VERSION in cmake 3.0
@@ -35,6 +29,24 @@ if(POLICY CMP0074)
     #policy for <PackageName>_ROOT variables
     cmake_policy(SET CMP0074 NEW)
 endif()
+
+if(POLICY CMP0092)
+    # Disable passing /W3 by default on MSVC
+    cmake_policy(SET CMP0092 NEW)
+endif()
+
+if(POLICY CMP0077)
+    # Allow to override options via regular variables
+    cmake_policy(SET CMP0077 NEW)
+endif()
+
+project(STP)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 14)
+
+include(GenerateExportHeader)
+include(GNUInstallDirs)
 
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
@@ -181,6 +193,8 @@ else ()
     endif()
 endif()
 
+option(SUPPRESS_WARNINGS "Silence all warnings" OFF)
+
 if (NOT MSVC)
     add_compile_options( -g)
     add_compile_options( -pthread )
@@ -236,7 +250,11 @@ else()
     add_compile_options(/GS)
 
     # Proper warning level
-    add_compile_options(/W1)
+    if(SUPPRESS_WARNINGS)
+        add_compile_options(/W0)
+    else()
+        add_compile_options(/W1)
+    endif()
 
     # Disable STL used in DLL-boundary warning
     add_compile_options(/wd4251)
@@ -304,34 +322,39 @@ if(APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()
 
-if (NOT MSVC)
-    add_cxx_flag_if_supported("-Wall")
-    add_cxx_flag_if_supported("-Wextra")
-    add_cxx_flag_if_supported("-Wunused")
-    add_cxx_flag_if_supported("-pedantic")
-    add_cxx_flag_if_supported("-Wsign-compare")
+if(NOT MSVC)
+    if(SUPPRESS_WARNINGS)
+        add_cxx_flag_if_supported("-w")
+    else()
+        add_cxx_flag_if_supported("-Wall")
+        add_cxx_flag_if_supported("-Wextra")
+        add_cxx_flag_if_supported("-Wunused")
+        add_cxx_flag_if_supported("-pedantic")
+        add_cxx_flag_if_supported("-Wsign-compare")
+        add_cxx_flag_if_supported("-Wtype-limits")
+        add_cxx_flag_if_supported("-Wuninitialized")
+        add_cxx_flag_if_supported("-Wno-deprecated")
+        add_cxx_flag_if_supported("-Wstrict-aliasing")
+        add_cxx_flag_if_supported("-Wpointer-arith")
+        add_cxx_flag_if_supported("-Wheader-guard")
+        add_cxx_flag_if_supported("-Wpointer-arith")
+        add_cxx_flag_if_supported("-Wformat-nonliteral")
+        add_cxx_flag_if_supported("-Winit-self")
+        add_cxx_flag_if_supported("-Wparentheses")
+        add_cxx_flag_if_supported("-Wunreachable-code")
+    endif()
+
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
         add_cxx_flag_if_supported("-fno-omit-frame-pointer")
     endif()
-    add_cxx_flag_if_supported("-Wtype-limits")
-    add_cxx_flag_if_supported("-Wuninitialized")
-    add_cxx_flag_if_supported("-Wno-deprecated")
-    add_cxx_flag_if_supported("-Wstrict-aliasing")
-    add_cxx_flag_if_supported("-Wpointer-arith")
-    add_cxx_flag_if_supported("-Wheader-guard")
     #if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         # almost working
         # add_cxx_flag_if_supported("-fvisibility=hidden")
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
-    add_cxx_flag_if_supported("-Wpointer-arith")
-    add_cxx_flag_if_supported("-Wformat-nonliteral")
-    add_cxx_flag_if_supported("-Winit-self")
-    add_cxx_flag_if_supported("-Wparentheses")
-    add_cxx_flag_if_supported("-Wunreachable-code")
-    add_compile_options("-fPIC")
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 add_definitions("-D__STDC_LIMIT_MACROS")

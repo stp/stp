@@ -54,7 +54,7 @@ long eval(const ASTNode& b)
     const auto cbv = b[0].GetBVConst(); // cleanup?
     bool last = CONSTANTBV::BitVector_bit_test(cbv,0);
     int changes = 0;
-    for (int i =1; i < b.GetValueWidth();i++)
+    for (unsigned int i =1; i < b.GetValueWidth();i++)
     {
         if (last != CONSTANTBV::BitVector_bit_test(cbv,i))
           changes++;
