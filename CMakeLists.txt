@@ -47,6 +47,7 @@ set(CMAKE_CXX_STANDARD 14)
 
 include(GenerateExportHeader)
 include(GNUInstallDirs)
+include(FeatureSummary)
 
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
@@ -63,7 +64,7 @@ set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 set(build_types Debug Release RelWithDebInfo MinSizeRel)
 if(NOT CMAKE_BUILD_TYPE)
 
-      message(STATUS "You can choose the type of build, options are:${build_types}")
+      message(STATUS "You can choose the type of build, options are: ${build_types}")
       set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
           "Options are ${build_types}"
           FORCE
@@ -105,6 +106,7 @@ else()
     # Note this definition doesn't appear in the cache variables.
     add_definitions(-DNDEBUG)
 endif()
+add_feature_info(Assertions ENABLE_ASSERTIONS "Enables assertions")
 
 # -----------------------------------------------------------------------------
 # Enable LLVM sanitizations.
@@ -116,11 +118,11 @@ endmacro()
 
 include(MacroPushRequiredVars)
 
-option(SANITIZE "Use Clang sanitizers. This will force using clang++ as the compiler" OFF)
+option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
     SET(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
-    message("Forcing compiler:${CMAKE_CXX_COMPILER}")
+    message(STATUS "Forcing compiler: ${CMAKE_CXX_COMPILER}")
     add_cxx_flag("-fsanitize=return")
     add_cxx_flag("-fsanitize=bounds")
     add_cxx_flag("-fsanitize=integer")
@@ -132,6 +134,7 @@ if (SANITIZE)
     add_cxx_flag("-fsanitize=address")
     add_cxx_flag("-Wno-bitfield-constant-conversion")
 endif()
+add_feature_info(Sanitizers SANITIZE "Enables Clang sanitizers, will force using clang++ as the compiler")
 
 # -----------------------------------------------------------------------------
 # Let the user decide if they want to build shared or static client library.
@@ -144,6 +147,7 @@ if (STATICCOMPILE)
     set(BUILD_SHARED_LIBS OFF)
     set(ENABLE_PYTHON_INTERFACE OFF)
 endif()
+add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (NOT BUILD_SHARED_LIBS))
     set(Boost_USE_STATIC_LIBS ON)
@@ -370,6 +374,7 @@ if (COVERAGE)
 endif()
 
 option(USE_THREAD_LOCAL "Use thread-local storage when available" ON)
+add_feature_info(ThreadLocal USE_THREAD_LOCAL "Enables use of thread-local storage when available")
 
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
@@ -436,17 +441,18 @@ endif()
 
 if(NOT Boost_FOUND)
     set(ONLY_SIMPLE ON)
-    message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
 else()
     message(STATUS "Boost -- found at library: ${Boost_LIBRARIES}")
     message(STATUS "Boost -- adding '${Boost_LIBRARY_DIRS}' to link directories")
     link_directories(${Boost_LIBRARY_DIRS})
 endif()
+add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
 
 # -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
 option(USE_RISS "Try to use Riss" OFF)
+add_feature_info(Riss USE_RISS "Enables Riss solver")
 
 if (USE_RISS)
     add_definitions(-DUSE_RISS)
@@ -463,7 +469,6 @@ if (NOT NOCRYPTOMINISAT)
   set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
   find_package(cryptominisat5 CONFIG)
   if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-    message(STATUS "Found CryptoMiniSat 5.x and C++11, allowing --cryptominisat5 option")
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
@@ -471,9 +476,9 @@ if (NOT NOCRYPTOMINISAT)
     add_definitions(-DUSE_CRYPTOMINISAT)
     set(USE_CRYPTOMINISAT ON)
   else()
-    message(WARNING "CryptoMiniSat5 (5.0 or above) or C++11 support not found, not allowing --cryptominisat option")
   endif()
 endif()
+add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")
 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
 if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
@@ -638,20 +643,15 @@ option(ENABLE_TESTING "Enable testing" OFF)
 
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
-if ((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
+if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
     find_package (PythonInterp)
-    if (PYTHON_EXECUTABLE)
-        set(PYTHON_OK ON)
-        message(STATUS "OK, found python interpreter")
-    else()
-        message(WARNING "Cannot find python interpreter, cannot build python interface")
-    endif()
-
-    if (PYTHON_OK AND BUILD_SHARED_LIBS)
-        message(STATUS "Python found, enabling python interface")
+    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
+    else()
+        set(ENABLE_PYTHON_INTERFACE OFF)
     endif()
 endif()
+add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interface")
 
 # -----------------------------------------------------------------------------
 # Compile all subdirs
@@ -692,16 +692,19 @@ endif()
 
 if(ENABLE_TESTING)
   enable_testing()
-  message(STATUS "Testing is enabled")
   set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
 #   add_custom_target(check
 #     COMMENT "top level target to invoke all other tests"
 #   )
 
   add_subdirectory(tests)
-else()
-    message(WARNING "Testing is disabled")
 endif()
+add_feature_info(Tests ENABLE_TESTING "Enables tests")
+
+# -----------------------------------------------------------------------------
+# Print information about used features
+# -----------------------------------------------------------------------------
+feature_summary(WHAT ENABLED_FEATURES DISABLED_FEATURES)
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with
