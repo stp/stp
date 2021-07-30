@@ -658,9 +658,12 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 # -----------------------------------------------------------------------------
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
+
+option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
+add_feature_info(Executables BUILD_EXECUTABLES "Enables executables compilation")
 
 # -----------------------------------------------------------------------------
 # Add uninstall target for makefiles
