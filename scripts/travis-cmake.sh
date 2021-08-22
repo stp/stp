@@ -101,29 +101,29 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    STATIC_CMS)
+    CMS)
          pwd
          ls
 
          eval sudo apt-get install -y libboost-all-dev
-         wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
-         tar xzvf m4ri-20140914.tar.gz
-         cd m4ri-20140914/
-         ./configure
-         make
-         sudo make install
-         cd ..
+         # wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
+         # tar xzvf m4ri-20140914.tar.gz
+         # cd m4ri-20140914/
+         # ./configure
+         # make
+         # sudo make install
+         # cd ..
 
          git clone --depth 1 https://github.com/msoos/cryptominisat.git
          cd cryptominisat
          mkdir build
          cd build
-         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
+         cmake -DREQUIRE_M4RI:BOOL=OFF -DSTATICCOMPILE:BOOL=OFF -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
          sudo make install
          cd ../..
 
          cmake ${COMMON_CMAKE_ARGS} \
-                   -DSTATICCOMPILE:BOOL=ON \
+                   -DSTATICCOMPILE:BOOL=OFF \
                    ${SOURCE_DIR}
          pwd
          ls
