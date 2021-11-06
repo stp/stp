@@ -923,7 +923,7 @@ DLL_PUBLIC Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
 //! \brief Returns a bitvector expression representing the extraction
 //!        of the bits within the range of 'low_bit_no' and 'high_bit_no'.
 //!
-//! Note: The resulting bitvector expression has a bit-width of 'high_bit_no - low_bit_no'.
+//! Note: The resulting bitvector expression has a bit-width of 'high_bit_no - low_bit_no + 1'.
 //!
 DLL_PUBLIC Expr vc_bvExtract(VC vc, Expr child, int high_bit_no,
                              int low_bit_no);
