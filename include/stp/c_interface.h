@@ -822,7 +822,7 @@ DLL_PUBLIC Expr vc_bvNotExpr(VC vc, Expr child);
 /////////////////////////////////////////////////////////////////////////////
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
-//!        representing the left-shift operation '(left >> right)' of the
+//!        representing the left-shift operation '(left << right)' of the
 //!        given bitvector expressions.
 //!
 //! Note: This is the new API for this kind of operation!
@@ -831,7 +831,7 @@ DLL_PUBLIC Expr vc_bvLeftShiftExprExpr(VC vc, int bitWidth, Expr left,
                                        Expr right);
 
 //! \brief Returns a bitvector expression with a bit-width of 'bitWidth'
-//!        representing the right-shift operation '(left << right)' of the
+//!        representing the right-shift operation '(left >> right)' of the
 //!        given bitvector expressions.
 //!
 //! Note: This is the new API for this kind of operation!
@@ -923,7 +923,7 @@ DLL_PUBLIC Expr vc_bvVar32DivByPowOfTwoExpr(VC vc, Expr child, Expr rhs);
 //! \brief Returns a bitvector expression representing the extraction
 //!        of the bits within the range of 'low_bit_no' and 'high_bit_no'.
 //!
-//! Note: The resulting bitvector expression has a bit-width of 'high_bit_no - low_bit_no + 1'.
+//! Note: The resulting bitvector expression has a bit-width of '(high_bit_no - low_bit_no) + 1'.
 //!
 DLL_PUBLIC Expr vc_bvExtract(VC vc, Expr child, int high_bit_no,
                              int low_bit_no);
