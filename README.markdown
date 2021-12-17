@@ -21,8 +21,8 @@ For a quick install:
 ```
 sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
 git clone https://github.com/stp/stp
-git submodule init && git submodule update
 cd stp
+git submodule init && git submodule update
 mkdir build
 cd build
 cmake ..
