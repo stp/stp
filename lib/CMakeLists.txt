@@ -28,7 +28,6 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(extlib-abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -52,7 +51,6 @@ set(stp_lib_targets
     sat
     simplifier
     constantbv
-    abc
     cinterface
     cppinterface
     parser

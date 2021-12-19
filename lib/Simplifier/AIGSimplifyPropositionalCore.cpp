@@ -38,7 +38,7 @@ THE SOFTWARE.
 
 // FIXME: External libraries
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
-#include "extlib-abc/dar.h"
+#include <opt/dar/dar.h>
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BitBlaster.h"
 
@@ -124,7 +124,7 @@ ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
     return bm->ASTTrue;
   else if (obj == Aig_ManConst0(mgr.aigMgr))
     return bm->ASTFalse;
-  else if (Aig_ObjIsPo(obj))
+  else if (Aig_ObjIsCo(obj))
     return convert(mgr, Aig_ObjChild0(obj), cache);
   else
   {
@@ -152,11 +152,11 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
       &mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
   BBNodeAIG blasted = bb.BBForm(replaced);
 
-  Aig_ObjCreatePo(mgr.aigMgr, blasted.n);
+  Aig_ObjCreateCo(mgr.aigMgr, blasted.n);
   Aig_ManCleanup(mgr.aigMgr);       // remove nodes not connected to the PO.
   assert(Aig_ManCheck(mgr.aigMgr)); // check that AIG looks ok.
 
-  assert(Aig_ManPoNum(mgr.aigMgr) == 1);
+  assert(Aig_ManCoNum(mgr.aigMgr) == 1);
 
   int initial_nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
   // cerr << "Nodes before AIG rewrite:" << initial_nodeCount << endl;
@@ -174,11 +174,11 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   for (int i = 0; i < iterations; i++)
   {
     Aig_Man_t* pTemp;
-    mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+    mgr.aigMgr = Aig_ManDupSimple(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
     Dar_ManRewrite(mgr.aigMgr, pPars);
 
-    mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+    mgr.aigMgr = Aig_ManDupSimple(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
 
     // cerr << "After rewrite [" << i << "]  nodes:"
@@ -209,11 +209,11 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     assert((it->second).size() == 1); // should be a propositional variable.
     const int index =
         (it->second)[0].symbol_index; // This is the index of the pi.
-    Aig_Obj_t* pi = Aig_ManPi(mgr.aigMgr, index);
+    Aig_Obj_t* pi = Aig_ManCi(mgr.aigMgr, index);
     ptrToOrig.insert(make_pair(pi, result));
   }
 
-  Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vPos, 0);
+  Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCos, 0);
 
   ASTNode result = convert(mgr, pObj, ptrToOrig);
 
