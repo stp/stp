@@ -22,7 +22,6 @@
 # Create binary
 # -----------------------------------------------------------------------------
 if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
-    include_directories(${Boost_INCLUDE_DIR})
     add_executable(stp-bin
         main.cpp
         main_common.cpp
@@ -36,7 +35,7 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
 
     target_link_libraries(stp-bin
         stp
-        "${Boost_LIBRARIES}"
+        Boost::program_options
     )
 
     install(TARGETS stp-bin
