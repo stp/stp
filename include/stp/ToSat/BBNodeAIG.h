@@ -104,7 +104,7 @@ public:
 
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
-  bool operator<(const BBNodeAIG& other) const { return n < other.n; }
+  bool operator<(const BBNodeAIG& other) const { return n->Id < other.n->Id; }
   void print() const { print(n); }
 };
 }

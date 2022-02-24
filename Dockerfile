@@ -25,11 +25,11 @@ RUN make clean
 # build CMS
 RUN mkdir /cms
 WORKDIR /cms
-RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.6.5.tar.gz
+RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.8.0.tar.gz
 RUN tar xvf cryptominisat.tgz --strip-components 1
 RUN mkdir build
 WORKDIR /cms/build
-RUN cmake -DSTATICCOMPILE=ON ..
+RUN cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_BUILD_TYPE=Release -DSTATICCOMPILE=ON ..
 RUN make -j6
 RUN make install
 
@@ -49,7 +49,7 @@ WORKDIR /stp
 COPY . /stp
 RUN mkdir build
 WORKDIR /stp/build
-RUN cmake -DSTATICCOMPILE=ON ..
+RUN cmake -DENABLE_ASSERTIONS=OFF -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release  ..
 RUN make -j6
 RUN make install
 
