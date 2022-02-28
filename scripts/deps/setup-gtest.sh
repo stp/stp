@@ -14,7 +14,7 @@ git clone https://github.com/stp/googletest "${dep}"
 cd "${dep}"
 mkdir build && cd build
 cmake -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
-cmake --build . --parallel "$(nproc)"
+cmake --build . 
 cmake --install .
 cd ..
 
