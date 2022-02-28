@@ -181,7 +181,7 @@ mkdir build
 cd build
 cmake -DENABLE_TESTING=ON ..
 make
-make check
+make test
 ```
 
 ### Installing
