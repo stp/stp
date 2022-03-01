@@ -49,7 +49,7 @@ class BBNodeAIG
     if (c1Not)
       c1 = Aig_Not(c1);
 
-    cerr << node->Id;
+    cerr << Aig_Regular(node)->Id;
     cerr << "[" << node->Type << "]";
     cerr << ": (";
     if (c0 != 0)
@@ -104,7 +104,12 @@ public:
 
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
-  bool operator<(const BBNodeAIG& other) const { return n < other.n; }
+
+  bool operator<(const BBNodeAIG& other) const 
+  { 
+    return Aig_Regular(n)->Id < Aig_Regular(other.n)->Id; 
+  }
+
   void print() const { print(n); }
 };
 }
