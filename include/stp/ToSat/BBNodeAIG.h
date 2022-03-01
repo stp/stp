@@ -105,8 +105,18 @@ public:
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
 
+
+  /*
+  Negative AIG nodes are indicated by being odd.
+  Each AIG node has a unique id.
+  The negative, and non-negative of the same node, have the same ID.
+  We use this in a set, so we need the negative and non-negative to evaluate as different.  
+  */
   bool operator<(const BBNodeAIG& other) const 
   { 
+    if (Aig_IsComplement(n) != Aig_IsComplement(other.n))
+      return Aig_IsComplement(n);
+
     return Aig_Regular(n)->Id < Aig_Regular(other.n)->Id; 
   }
 
