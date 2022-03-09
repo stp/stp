@@ -24,12 +24,6 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
-#include <cassert>
-#include <iostream>
-#include <map>
-#include <set>
-#include <string>
-
 namespace stp
 {
 
