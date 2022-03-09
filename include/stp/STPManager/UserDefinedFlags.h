@@ -54,7 +54,7 @@ public:
   bool print_nodes_flag;
 
   // the Simplifier functions (which might increase the size).
-  bool optimize_flag;
+  bool optimize_flag = true;
   // turn on word level bitvector solver
   bool wordlevel_solve_flag;
   // Remove equalities.
@@ -62,7 +62,7 @@ public:
   // Constant bit propagation enabled.
   bool bitConstantProp_flag;
   // AIG rewrites are turned on..
-  bool enable_AIG_rewrites_flag;
+  bool enable_AIG_rewrites_flag = false;
   bool enable_unconstrained;
   bool enable_flatten;
   bool enable_ite_context;
@@ -166,11 +166,9 @@ public:
     timeout_max_conflicts = -1;
     timeout_max_time = -1; // seconds
     print_nodes_flag = false;
-    optimize_flag = true;
     wordlevel_solve_flag = true;
     propagate_equalities = true;
     bitConstantProp_flag = true;
-    enable_AIG_rewrites_flag = false;
     enable_unconstrained = true;
     enable_ite_context = true;
     enable_aig_core_simplify = false;
