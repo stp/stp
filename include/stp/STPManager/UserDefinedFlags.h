@@ -65,6 +65,8 @@ public:
   bool enable_always_true = false;
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t bitblast_simplification = 0;
+  int64_t size_reducing_fixed_point = 1000000;
+
   // given a/b = c, propagates that c<=a even if b may be zero.
   bool cBitP_propagateForDivisionByZero = true;
 
@@ -97,7 +99,6 @@ public:
   bool print_STPinput_back_GDL_flag = false;
 
   bool print_nodes_flag = false;
-
 
   // output flags
   bool output_CNF_flag = false;

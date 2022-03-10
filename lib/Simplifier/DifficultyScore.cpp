@@ -118,6 +118,7 @@ long eval(const ASTNode& b)
 
 long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
 {
+
   if (cache.find(top.GetNodeNum()) != cache.end())
     return cache.find(top.GetNodeNum())->second;
 
@@ -125,7 +126,10 @@ long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
   ASTNode current;
   long result = 0;
   while ((current = ni.next()) != ni.end())
-    result += eval(current);
+    {
+      evalCount++;
+      result += eval(current);
+    }
 
   cache.insert(std::make_pair(top.GetNodeNum(), result));
   return result;

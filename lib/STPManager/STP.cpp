@@ -151,9 +151,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 }
 
 ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
-                              PropagateEqualities* pe,
-                              const long initial_difficulty_score,
-                              long& actualBBSize)
+                              PropagateEqualities* pe)
 {
   while (true)
   {
@@ -163,44 +161,6 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
       break;
   }
 
-  actualBBSize = -1;
-
-  // Expensive, so only want to do it once.
-  if (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification)
-  {
-    BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
-    ASTNodeMap fromTo;
-    ASTNodeMap equivs;
-    bb.getConsts(inputToSat, fromTo, equivs);
-
-    if (equivs.size() > 0)
-    {
-      /* These nodes have equivalent AIG representations, so even though they
-       * have different
-       * word level expressions they are identical semantically. So we pick one
-       * of the ASTnodes
-       * and replace the others with it.
-       * TODO: I replace with the lower id node, sometimes though we replace
-       * with much more
-       * difficult looking ASTNodes.
-      */
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(
-          inputToSat, equivs, cache, bm->defaultNodeFactory, false, true);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-
-    if (fromTo.size() > 0)
-    {
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(inputToSat, fromTo, cache,
-                                            bm->defaultNodeFactory);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-    actualBBSize = bitblast_nodemgr.totalNumberOfNodes();
-  }
   return inputToSat;
 }
 
@@ -348,17 +308,58 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
   long initial_difficulty_score = difficulty.score(inputToSat, bm);
-  long bitblasted_difficulty = -1;
+
+  // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
+  const long initial_node_size = difficulty.getEvalCount();
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if ((!arrayops && initial_difficulty_score < 1000000))
+  if (!arrayops && ( -1 == bm->UserFlags.size_reducing_fixed_point || initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {
     inputToSat =
-        callSizeReducing(inputToSat, bvSolver.get(), pe.get(),
-                         initial_difficulty_score, bitblasted_difficulty);
+        callSizeReducing(inputToSat, bvSolver.get(), pe.get());
   }
+
+  long bitblasted_difficulty = -1;
+  // Expensive, so only want to do it once.
+  if (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification)
+  {
+    BBNodeManagerAIG bitblast_nodemgr;
+    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
+        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
+    ASTNodeMap fromTo;
+    ASTNodeMap equivs;
+    bb.getConsts(inputToSat, fromTo, equivs);
+
+    if (equivs.size() > 0)
+    {
+      /* These nodes have equivalent AIG representations, so even though they
+       * have different
+       * word level expressions they are identical semantically. So we pick one
+       * of the ASTnodes
+       * and replace the others with it.
+       * TODO: I replace with the lower id node, sometimes though we replace
+       * with much more
+       * difficult looking ASTNodes.
+      */
+      ASTNodeMap cache;
+      inputToSat = SubstitutionMap::replace(
+          inputToSat, equivs, cache, bm->defaultNodeFactory, false, true);
+      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
+    }
+
+    if (fromTo.size() > 0)
+    {
+      ASTNodeMap cache;
+      inputToSat = SubstitutionMap::replace(inputToSat, fromTo, cache,
+                                            bm->defaultNodeFactory);
+      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
+    }
+    
+    bitblasted_difficulty = bitblast_nodemgr.totalNumberOfNodes();
+  }
+
 
   if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {

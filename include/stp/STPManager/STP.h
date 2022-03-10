@@ -119,9 +119,7 @@ public:
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
-                           BVSolver* bvSolver, PropagateEqualities* pe,
-                           const long initial_difficulty_score,
-                           long& actualBBSize);
+                           BVSolver* bvSolver, PropagateEqualities* pe);
 
   void ClearAllTables(void)
   {
