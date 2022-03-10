@@ -59,8 +59,6 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
 void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
                                      BBNodeManagerAIG& mgr)
 {
-  const int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
-
   if (!needAbsRef && uf.AIG_rewrites_iterations)
   {
     Dar_LibStart();
@@ -77,6 +75,8 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
     // The rewriting doesn't remove as many nodes of course..
     for (int i = 0; i < uf.AIG_rewrites_iterations; i++)
     {
+      int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+
       Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
       Aig_ManStop(pTemp);
