@@ -442,11 +442,6 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
-  if (vm.count("oldstyle-refinement"))
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
-  }
-
   if (vm.count("disable-simplifications"))
   {
     bm->UserFlags.disableSimplifications();
