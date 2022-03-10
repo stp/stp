@@ -218,17 +218,6 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster // not copyable
   Simplifier* simp;
   BBNodeManagerT* nf;
 
-  // You can select these with any combination you want of true & false.
-  const bool division_variant_1;
-  const bool division_variant_2;
-  const bool division_variant_3;
-  const bool adder_variant;
-  const bool bbbvle_variant;
-  const bool upper_multiplication_bound;
-  const bool bvplus_variant;
-
-  const std::string multiplication_variant;
-
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
 public:
@@ -244,10 +233,7 @@ public:
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-      : uf(_uf), division_variant_1(true), division_variant_2(true),
-        division_variant_3(true), adder_variant(true), bbbvle_variant(true),
-        upper_multiplication_bound(false), bvplus_variant(true),
-        multiplication_variant("7")
+      : uf(_uf)
   {
     nf = bnm;
     cb = cb_;

@@ -61,8 +61,9 @@ public:
   bool propagate_equalities = true;
   // Constant bit propagation enabled.
   bool bitConstantProp_flag = true;
-  // AIG rewrites are turned on..
-  bool enable_AIG_rewrites_flag = false;
+  
+  // Number of iterations of AIG rewrites.
+  int64_t AIG_rewrites_iterations = 0;
   bool enable_unconstrained = true;
   bool enable_flatten = false;
   bool enable_ite_context = true;
@@ -70,7 +71,7 @@ public:
   bool enable_use_intervals = true;
   bool enable_pure_literals = true;
   bool enable_always_true = false;
-  bool enable_bitblast_simplification = false;
+  int64_t bitblast_simplification = 0;
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
   bool simplify_during_BB_flag = false;
@@ -126,6 +127,21 @@ public:
 
   int num_solver_threads = 1;
 
+
+  // You can select these with any combination you want of true & false.
+  bool division_variant_1 = true;
+  bool division_variant_2 = true;
+  bool division_variant_3 = true;
+  bool adder_variant = true;
+  bool bbbvle_variant =true;
+  bool upper_multiplication_bound = false;
+  bool bvplus_variant = true;
+  bool conjoin_to_top = true;
+
+  int64_t multiplication_variant = 7;
+
+
+
   // Available back-end SAT solvers.
   enum SATSolvers
   {
@@ -153,10 +169,11 @@ public:
     enable_use_intervals = false;
     enable_pure_literals = false;
     enable_always_true = false;
-    enable_bitblast_simplification = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
     enable_flatten = false;
+
+    bitblast_simplification = 0;
   }
 
   UserDefinedFlags()

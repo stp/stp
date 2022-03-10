@@ -61,7 +61,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
 {
   const int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
 
-  if (!needAbsRef && uf.enable_AIG_rewrites_flag)
+  if (!needAbsRef && uf.AIG_rewrites_iterations)
   {
     Dar_LibStart();
     Dar_RwrPar_t Pars, *pPars = &Pars;
@@ -75,9 +75,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
 
     // With nCutsMax =2, CNF generation takes 16 seconds, solving 10 seconds.
     // The rewriting doesn't remove as many nodes of course..
-    const int iterations = 3;
-
-    for (int i = 0; i < iterations; i++)
+    for (int i = 0; i < uf.AIG_rewrites_iterations; i++)
     {
       Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);

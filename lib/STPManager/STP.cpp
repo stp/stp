@@ -166,8 +166,7 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
   actualBBSize = -1;
 
   // Expensive, so only want to do it once.
-  if (bm->UserFlags.enable_bitblast_simplification &&
-      initial_difficulty_score < 250000)
+  if (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification)
   {
     BBNodeManagerAIG bitblast_nodemgr;
     BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
