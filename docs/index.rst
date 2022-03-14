@@ -29,7 +29,7 @@ Then install minisat:
 
 .. code-block:: bash
 
-    git clone https://github.com/stp/minisat.git`
+    git clone https://github.com/stp/minisat.git
     cd minisat && mkdir build && cd build
     cmake ..
     make
