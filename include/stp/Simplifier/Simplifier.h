@@ -52,38 +52,17 @@ private:
   std::unordered_set<int> AlwaysTrueHashSet;
   ASTNodeMap MultInverseMap;
 
-  // For ArrayWrite Abstraction: map from read-over-write term to
-  // newname.
-  // ASTNodeMap * ReadOverWrite_NewName_Map;
-
-  // For ArrayWrite Refinement: Map new arraynames to
-  // Read-Over-Write terms
-  // ASTNodeMap NewName_ReadOverWrite_Map;
-
-  // Ptr to STP Manager
   STPMgr* _bm;
 
   NodeFactory* nf;
 
   SubstitutionMap substitutionMap;
 
-  void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
-
-  ASTNode makeTower(const Kind k, const ASTVec& children);
-
-  ASTNode pullUpBVSX(const ASTNode output);
-
-  ASTNode simplify_term_switch(const ASTNode& actualInputterm,
-                               ASTNode& inputterm, ASTNode& output,
-                               ASTNodeMap* VarConstMap, Kind k,
-                               const unsigned int inputValueWidth);
-
 public:
   Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(this, bm)
   {
     SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
     SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    // ReadOverWrite_NewName_Map = new ASTNodeMap();
 
     ASTTrue = bm->CreateNode(TRUE);
     ASTFalse = bm->CreateNode(FALSE);
@@ -96,8 +75,10 @@ public:
   {
     delete SimplifyMap;
     delete SimplifyNegMap;
-    // delete ReadOverWrite_NewName_Map;
   }
+
+  Simplifier(Simplifier const&) = delete;
+  Simplifier& operator=(Simplifier const&) = delete;
 
   // Check the map passed to SimplifyTerm
   bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
@@ -125,8 +106,6 @@ public:
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
   DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
 
-  void ResetSimplifyMaps(void);
-
   /****************************************************************
    * Simplification functions                                     *
    ****************************************************************/
@@ -136,13 +115,84 @@ public:
 
   ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
 
+  ASTNode SimplifyTerm(const ASTNode& inputterm,
+                       ASTNodeMap* VarConstMap = NULL);
+
   ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg,
                           ASTNodeMap* VarConstMap = NULL);
 
-  bool hasBeenSimplified(const ASTNode& n);
+  ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
 
-  ASTNode SimplifyTerm(const ASTNode& inputterm,
-                       ASTNodeMap* VarConstMap = NULL);
+  ASTNode CreateSimplifiedTermITE(const ASTNode& t1, const ASTNode& t2,
+                                  const ASTNode& t3);
+
+  ASTNode BVConstEvaluator(const ASTNode& t);
+
+  // checks if the input constant is odd or not
+  bool BVConstIsOdd(const ASTNode& c);
+
+  // computes the multiplicatve inverse of the input
+  ASTNode MultiplicativeInverse(const ASTNode& c);
+
+  void printCacheStatus();
+
+  bool hasUnappliedSubstitutions()
+  {
+    return substitutionMap.hasUnappliedSubstitutions();
+  }
+
+  ASTNodeMap* Return_SolverMap() 
+  { 
+    return substitutionMap.Return_SolverMap(); 
+  }
+
+  void haveAppliedSubstitutionMap()
+  {
+    substitutionMap.haveAppliedSubstitutionMap();
+  }
+
+  void ClearAllTables()
+  {
+    SimplifyMap->clear();
+    SimplifyNegMap->clear();
+    // ReadOverWrite_NewName_Map->clear();
+    // NewName_ReadOverWrite_Map.clear();
+    AlwaysTrueHashSet.clear();
+    MultInverseMap.clear();
+    substitutionMap.clear();
+  }
+
+  // These can be cleared (to save memory) without changing the answer.
+  void ClearCaches()
+  {
+    AlwaysTrueHashSet.clear();
+    MultInverseMap.clear();
+    SimplifyMap->clear();
+    SimplifyNegMap->clear();
+    getVariablesInExpression().ClearAllTables();
+  }
+
+  VariablesInExpression& getVariablesInExpression()
+  {
+    return substitutionMap.getVariablesInExpression();
+  }
+
+private:
+
+  void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
+
+  ASTNode makeTower(const Kind k, const ASTVec& children);
+
+  ASTNode pullUpBVSX(const ASTNode output);
+
+  ASTNode simplify_term_switch(const ASTNode& actualInputterm,
+                               ASTNode& inputterm, ASTNode& output,
+                               ASTNodeMap* VarConstMap, Kind k,
+                               const unsigned int inputValueWidth);
+
+  void ResetSimplifyMaps(void);
+
+  bool hasBeenSimplified(const ASTNode& n);
 
   ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg,
                                          ASTNodeMap* VarConstMap = NULL);
@@ -150,14 +200,9 @@ public:
   ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
                                 ASTNodeMap* VarConstMap = NULL);
 
-  ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
-
   ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNodeMap* VarConstMap = NULL);
 
   ASTNode PullUpITE(const ASTNode& in);
-
-  ASTNode CreateSimplifiedTermITE(const ASTNode& t1, const ASTNode& t2,
-                                  const ASTNode& t3);
 
   ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1,
                                      const ASTNode& in2);
@@ -197,16 +242,6 @@ public:
   ASTNode DistributeMultOverPlus(const ASTNode& a,
                                  bool startdistribution = false);
 
-  // ASTNode ConvertBVSXToITE(const ASTNode& a);
-
-  ASTNode BVConstEvaluator(const ASTNode& t);
-
-  // checks if the input constant is odd or not
-  bool BVConstIsOdd(const ASTNode& c);
-
-  // computes the multiplicatve inverse of the input
-  ASTNode MultiplicativeInverse(const ASTNode& c);
-
   // Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
   ASTNode RemoveWrites_TopLevel(const ASTNode& term);
   ASTNode RemoveWrites(const ASTNode& term);
@@ -215,45 +250,6 @@ public:
 
   ASTNode SimplifyArrayTerm(const ASTNode& term, ASTNodeMap* VarConstMap);
 
-  void printCacheStatus();
-
-  bool hasUnappliedSubstitutions()
-  {
-    return substitutionMap.hasUnappliedSubstitutions();
-  }
-
-  ASTNodeMap* Return_SolverMap() { return substitutionMap.Return_SolverMap(); }
-
-  void haveAppliedSubstitutionMap()
-  {
-    substitutionMap.haveAppliedSubstitutionMap();
-  }
-
-  void ClearAllTables()
-  {
-    SimplifyMap->clear();
-    SimplifyNegMap->clear();
-    // ReadOverWrite_NewName_Map->clear();
-    // NewName_ReadOverWrite_Map.clear();
-    AlwaysTrueHashSet.clear();
-    MultInverseMap.clear();
-    substitutionMap.clear();
-  }
-
-  // These can be cleared (to save memory) without changing the answer.
-  void ClearCaches()
-  {
-    AlwaysTrueHashSet.clear();
-    MultInverseMap.clear();
-    SimplifyMap->clear();
-    SimplifyNegMap->clear();
-    getVariablesInExpression().ClearAllTables();
-  }
-
-  VariablesInExpression& getVariablesInExpression()
-  {
-    return substitutionMap.getVariablesInExpression();
-  }
 };
 } // end of namespace
 #endif

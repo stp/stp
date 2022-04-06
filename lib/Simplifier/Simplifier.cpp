@@ -23,12 +23,14 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include <cassert>
 #include <cmath>
 
 namespace stp
 {
+using std::endl;
+using std::cerr;
+
 
 // If enabled, simplifyTerm will simplify all the arguments to a function before
 // attempting
