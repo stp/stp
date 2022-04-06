@@ -79,12 +79,6 @@ private:
                                const unsigned int inputValueWidth);
 
 public:
-  static ASTNode convertArithmeticKnownShiftAmount(const Kind k,
-                                                   const ASTVec& children,
-                                                   STPMgr& bm, NodeFactory* nf);
-  static ASTNode convertKnownShiftAmount(const Kind k, const ASTVec& children,
-                                         STPMgr& bm, NodeFactory* nf);
-
   Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(this, bm)
   {
     SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);

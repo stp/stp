@@ -63,8 +63,10 @@ class StrengthReduction
 public:
 
   StrengthReduction(STPMgr& _bm);
+  
   StrengthReduction(const StrengthReduction&) = delete;
   StrengthReduction& operator=(const StrengthReduction&) = delete;
+  
   ~StrengthReduction();
 
   //TODO merge these two toplevel funtions, they do the same thing..
