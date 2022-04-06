@@ -59,7 +59,7 @@ private:
   SubstitutionMap substitutionMap;
 
 public:
-  Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(this, bm)
+  Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(bm)
   {
     SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
     SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);

@@ -38,11 +38,10 @@ class ArrayTransformer;
 
 const bool debug_substn = false;
 
-class DLL_PUBLIC SubstitutionMap // not copyable
+class DLL_PUBLIC SubstitutionMap
 {
 
   ASTNodeMap* SolverMap;
-  Simplifier* simp;
   STPMgr* bm;
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
   NodeFactory* nf;
@@ -67,9 +66,8 @@ class DLL_PUBLIC SubstitutionMap // not copyable
   VariablesInExpression vars;
 
 public:
-  SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
+  SubstitutionMap(STPMgr* _bm)
   {
-    simp = _simp;
     bm = _bm;
 
     ASTTrue = bm->CreateNode(TRUE);
