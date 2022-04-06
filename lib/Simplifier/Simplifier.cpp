@@ -1708,113 +1708,6 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   return output;
 }
 
-// If the shift is bigger than the bitwidth, replace by an extract.
-ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k,
-                                                      const ASTVec& children,
-                                                      STPMgr& bm,
-                                                      NodeFactory* nf)
-{
-  const ASTNode a = children[0];
-  const ASTNode b = children[1];
-  const unsigned width = children[0].GetValueWidth();
-  ASTNode output;
-
-  assert(b.isConstant());
-  assert(k == BVSRSHIFT);
-
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
-  {
-    ASTNode top = bm.CreateBVConst(32, width - 1);
-    return nf->CreateTerm(BVSX, width,
-                          nf->CreateTerm(BVEXTRACT, 1, children[0], top, top),
-                          bm.CreateBVConst(32, width));
-  }
-  else
-  {
-    if (b.GetUnsignedConst() >= width)
-    {
-      ASTNode top = bm.CreateBVConst(32, width - 1);
-      return nf->CreateTerm(BVSX, width,
-                            nf->CreateTerm(BVEXTRACT, 1, children[0], top, top),
-                            bm.CreateBVConst(32, width));
-    }
-    else
-    {
-      ASTNode top = bm.CreateBVConst(32, width - 1);
-      ASTNode bottom = bm.CreateBVConst(32, b.GetUnsignedConst());
-
-      return nf->CreateTerm(BVSX, width,
-                            nf->CreateTerm(BVEXTRACT,
-                                           width - b.GetUnsignedConst(),
-                                           children[0], top, bottom),
-                            bm.CreateBVConst(32, width));
-    }
-  }
-
-  return ASTNode();
-}
-
-// If the rhs of a left or right shift is known.
-ASTNode Simplifier::convertKnownShiftAmount(const Kind k,
-                                            const ASTVec& children, STPMgr& bm,
-                                            NodeFactory* nf)
-{
-  const ASTNode a = children[0];
-  const ASTNode b = children[1];
-  const unsigned width = children[0].GetValueWidth();
-  ASTNode output;
-
-  assert(b.isConstant());
-  assert(k == BVLEFTSHIFT || BVRIGHTSHIFT == k);
-
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
-  {
-    // Intended to remove shifts by very large amounts
-    // that don't fit into the unsigned.  at thhe start
-    // of the "else" branch.
-    output = bm.CreateZeroConst(width);
-  }
-  else
-  {
-    const unsigned int shift = b.GetUnsignedConst();
-    if (shift >= width)
-    {
-      output = bm.CreateZeroConst(width);
-    }
-    else if (shift == 0)
-    {
-      output = a; // unchanged.
-    }
-    else
-    {
-      if (k == BVLEFTSHIFT)
-      {
-        CBV cbv = CONSTANTBV::BitVector_Create(width, true);
-        CONSTANTBV::BitVector_Bit_On(cbv, shift);
-        ASTNode c = bm.CreateBVConst(cbv, width);
-
-        output = nf->CreateTerm(BVMULT, width, a, c);
-        BVTypeCheck(output);
-        // cout << output;
-        // cout << a << b << endl;
-      }
-      else if (k == BVRIGHTSHIFT)
-      {
-        ASTNode zero = bm.CreateZeroConst(shift);
-        ASTNode hi = bm.CreateBVConst(32, width - 1);
-        ASTNode low = bm.CreateBVConst(32, shift);
-        ASTNode extract = nf->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
-        BVTypeCheck(extract);
-        output = nf->CreateTerm(BVCONCAT, width, zero, extract);
-        BVTypeCheck(output);
-      }
-      else
-        FatalError("herasdf");
-    }
-  }
-  return output;
-}
-
 // This function simplifies terms based on their kind
 ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
                                  ASTNodeMap* VarConstMap)
@@ -2934,7 +2827,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const unsigned int width = a.GetValueWidth();
       if (BVCONST == b.GetKind()) // known shift amount.
       {
-        output = convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
+        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
       }
       else if (a == _bm->CreateZeroConst(width))
       {
