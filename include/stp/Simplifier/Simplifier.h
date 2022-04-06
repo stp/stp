@@ -155,8 +155,6 @@ public:
   {
     SimplifyMap->clear();
     SimplifyNegMap->clear();
-    // ReadOverWrite_NewName_Map->clear();
-    // NewName_ReadOverWrite_Map.clear();
     AlwaysTrueHashSet.clear();
     MultInverseMap.clear();
     substitutionMap.clear();

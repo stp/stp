@@ -86,7 +86,7 @@ namespace stp
     visit(top, visited);
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
-    StrengthReduction sr(bm);
+    StrengthReduction sr(bm.defaultNodeFactory);
     ASTNode r = sr.topLevel(top, visited);
 
     if (bm.UserFlags.stats_flag)

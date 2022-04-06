@@ -97,6 +97,8 @@ public:
 
   ASTNode CreateOneConst(unsigned width);
   ASTNode CreateZeroConst(unsigned width);
+  ASTNode CreateMaxConst(unsigned width);
+  
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
 
   virtual std::string getName() = 0;

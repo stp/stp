@@ -214,10 +214,10 @@ using simplifier::constantBitP::FixedBits;
           ASTNode concat;
           if (b->getValue(n.GetValueWidth() - 1))
             concat =
-                bm.CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
+                nf->CreateMaxConst(n.GetValueWidth() - n[0].GetValueWidth());
           else
             concat =
-                bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
+                nf->CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth());
 
           ASTNode newN =
               nf->CreateTerm(BVCONCAT, n.GetValueWidth(), concat, n[0]);
@@ -341,7 +341,7 @@ using simplifier::constantBitP::FixedBits;
               // If it's really a zero extend..
               ASTNode copyN = nf->CreateTerm(
                   BVCONCAT, n.GetValueWidth(),
-                  bm.CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth()),
+                  nf->CreateZeroConst(n.GetValueWidth() - n[0].GetValueWidth()),
                   n[0]);
               fromTo.insert(make_pair(n, copyN));
             }
@@ -355,16 +355,16 @@ using simplifier::constantBitP::FixedBits;
       if (interval->isConstant() && n.GetType() == BOOLEAN_TYPE)
       {
         if (0 == CONSTANTBV::BitVector_Lexicompare(interval->maxV, littleOne))
-          fromTo.insert(make_pair(n, bm.ASTTrue));
+          fromTo.insert(make_pair(n, nf->getTrue()));
         else
-          fromTo.insert(make_pair(n, bm.ASTFalse));
+          fromTo.insert(make_pair(n, nf->getFalse()));
 
         replaceWithConstant++;
       }
       else if (interval->isConstant() && n.GetType() == BITVECTOR_TYPE)
       {
         CBV clone = CONSTANTBV::BitVector_Clone(interval->maxV);
-        ASTNode new_const = bm.CreateBVConst(clone, n.GetValueWidth());
+        ASTNode new_const = nf->CreateConstant(clone, n.GetValueWidth());
         fromTo.insert(make_pair(n, new_const));
         replaceWithConstant++;
       }
@@ -396,12 +396,12 @@ using simplifier::constantBitP::FixedBits;
         {
           ASTNode prefix;
           if (leadingValue)
-            prefix = bm.CreateMaxConst(leadingSame);
+            prefix = nf->CreateMaxConst(leadingSame);
           else
-            prefix = bm.CreateZeroConst(leadingSame);
+            prefix = nf->CreateZeroConst(leadingSame);
 
-          ASTNode top = bm.CreateBVConst(32, width - leadingSame - 1);
-          ASTNode bottom = bm.CreateZeroConst(32);
+          ASTNode top = nf->CreateBVConst(32, width - leadingSame - 1);
+          ASTNode bottom = nf->CreateZeroConst(32);
           ASTNode remainder =
               nf->CreateTerm(BVEXTRACT, width - leadingSame, n, top, bottom);
           ASTNode replaced = nf->CreateTerm(BVCONCAT, width, prefix, remainder);
@@ -428,12 +428,12 @@ using simplifier::constantBitP::FixedBits;
     return result;
   }
 
-  StrengthReduction::StrengthReduction(STPMgr& _bm) : bm(_bm)
+  StrengthReduction::StrengthReduction(NodeFactory* _nf) 
   {
     littleOne = CONSTANTBV::BitVector_Create(1, true);
     littleZero = CONSTANTBV::BitVector_Create(1, true);
     CONSTANTBV::BitVector_Fill(littleOne);
-    nf = bm.defaultNodeFactory;
+    nf = _nf;
 
     replaceWithConstant = 0;
     replaceWithSimpler = 0;

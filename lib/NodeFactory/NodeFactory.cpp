@@ -162,6 +162,11 @@ ASTNode NodeFactory::CreateZeroConst(unsigned width)
   return bm.CreateZeroConst(width);
 }
 
+ASTNode NodeFactory::CreateMaxConst(unsigned width)
+{
+  return bm.CreateMaxConst(width);
+}
+
 ASTNode NodeFactory::CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst)
 {
