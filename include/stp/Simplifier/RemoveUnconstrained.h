@@ -55,6 +55,9 @@ class RemoveUnconstrained // not copyable
 
 public:
   RemoveUnconstrained(STPMgr& bm);
+	
+  RemoveUnconstrained(RemoveUnconstrained const&) = delete;
+  RemoveUnconstrained& operator=(RemoveUnconstrained const&) = delete;
 
   ASTNode topLevel(const ASTNode& n, Simplifier* s);
 };

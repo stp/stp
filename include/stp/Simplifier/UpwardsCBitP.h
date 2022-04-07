@@ -51,7 +51,7 @@ public:
 
     visit(top, visited);
 
-    StrengthReduction sr(bm);
+    StrengthReduction sr(bm.defaultNodeFactory);
     ASTNode result = sr.topLevel(top, visited);
 
     for (auto it : visited)
@@ -189,6 +189,9 @@ public:
   {
     emptyBoolean = new FixedBits(1, true);
   }
+
+  UpwardsCBitP(UpwardsCBitP const&) = delete;
+  UpwardsCBitP& operator=(UpwardsCBitP const&) = delete;
 
   ~UpwardsCBitP()
   {

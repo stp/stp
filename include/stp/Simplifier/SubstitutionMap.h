@@ -38,11 +38,10 @@ class ArrayTransformer;
 
 const bool debug_substn = false;
 
-class DLL_PUBLIC SubstitutionMap // not copyable
+class DLL_PUBLIC SubstitutionMap
 {
 
   ASTNodeMap* SolverMap;
-  Simplifier* simp;
   STPMgr* bm;
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
   NodeFactory* nf;
@@ -67,6 +66,31 @@ class DLL_PUBLIC SubstitutionMap // not copyable
   VariablesInExpression vars;
 
 public:
+  SubstitutionMap(STPMgr* _bm)
+  {
+    bm = _bm;
+
+    ASTTrue = bm->CreateNode(TRUE);
+    ASTFalse = bm->CreateNode(FALSE);
+    ASTUndefined = bm->CreateNode(UNDEFINED);
+
+    SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    loopCount = 0;
+    substitutionsLastApplied = 0;
+    nf = bm->defaultNodeFactory;
+  }
+
+  SubstitutionMap(const SubstitutionMap&) = delete;
+  SubstitutionMap & operator=(const SubstitutionMap&) = delete;
+
+  virtual ~SubstitutionMap();
+
+  void clear()
+  {
+    SolverMap->clear();
+    haveAppliedSubstitutionMap();
+  }
+
   VariablesInExpression& getVariablesInExpression() { return vars; }
 
   bool hasUnappliedSubstitutions()
@@ -84,29 +108,6 @@ public:
     rhsAlreadyAdded.clear();
     substitutionsLastApplied = SolverMap->size();
   }
-
-  SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
-  {
-    simp = _simp;
-    bm = _bm;
-
-    ASTTrue = bm->CreateNode(TRUE);
-    ASTFalse = bm->CreateNode(FALSE);
-    ASTUndefined = bm->CreateNode(UNDEFINED);
-
-    SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    loopCount = 0;
-    substitutionsLastApplied = 0;
-    nf = bm->defaultNodeFactory;
-  }
-
-  void clear()
-  {
-    SolverMap->clear();
-    haveAppliedSubstitutionMap();
-  }
-
-  virtual ~SubstitutionMap();
 
   // check the solver map for 'key'. If key is present, then return the
   // value by reference in the argument 'output'

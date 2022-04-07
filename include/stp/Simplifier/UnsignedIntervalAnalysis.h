@@ -41,7 +41,7 @@ namespace stp
 {
 using std::make_pair;
 
-class UnsignedIntervalAnalysis // not copyable
+class UnsignedIntervalAnalysis
 {
   vector<UnsignedInterval*> toDeleteLater;
   vector<CBV> likeAutoPtr;
@@ -63,8 +63,10 @@ class UnsignedIntervalAnalysis // not copyable
 public:
 
   UnsignedIntervalAnalysis(STPMgr& _bm);
+  
   UnsignedIntervalAnalysis(const UnsignedIntervalAnalysis&) = delete;
   UnsignedIntervalAnalysis & operator=(const UnsignedIntervalAnalysis&) = delete;
+  
   ~UnsignedIntervalAnalysis();
 
   // Replace some of the things that unsigned intervals can figure out for us.

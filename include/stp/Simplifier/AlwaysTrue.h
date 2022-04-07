@@ -34,9 +34,11 @@ THE SOFTWARE.
 
 namespace stp
 {
+using std::make_pair;
 
-class AlwaysTrue // not copyable
+class AlwaysTrue
 {
+
   Simplifier* simplifier;
   STPMgr* stpMgr;
   NodeFactory* nf;
@@ -55,6 +57,10 @@ public:
     stpMgr = stp_;
     nf = nf_;
   }
+
+  AlwaysTrue( const AlwaysTrue& ) = delete;
+  AlwaysTrue& operator=( const AlwaysTrue& ) = delete;
+
 
   ASTNode topLevel(ASTNode& n)
   {

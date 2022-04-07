@@ -33,10 +33,8 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-//#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-//#include <iostream>
 #include <map>
 #include <string>
 
@@ -51,7 +49,6 @@ class StrengthReduction
   unsigned replaceWithSimpler;
   unsigned unimplementedReduction;
 
-  STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
   NodeFactory* nf;
@@ -62,9 +59,11 @@ class StrengthReduction
 
 public:
 
-  StrengthReduction(STPMgr& _bm);
+  StrengthReduction(NodeFactory *nf);
+  
   StrengthReduction(const StrengthReduction&) = delete;
   StrengthReduction& operator=(const StrengthReduction&) = delete;
+  
   ~StrengthReduction();
 
   //TODO merge these two toplevel funtions, they do the same thing..

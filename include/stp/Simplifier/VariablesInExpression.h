@@ -32,7 +32,7 @@ THE SOFTWARE.
 namespace stp
 {
 
-class VariablesInExpression // not copyable
+class VariablesInExpression
 {
 private:
   void insert(const ASTNode& n, Symbols* s);
@@ -43,6 +43,10 @@ private:
 public:
   DLL_PUBLIC VariablesInExpression();
   DLL_PUBLIC virtual ~VariablesInExpression();
+  
+  VariablesInExpression(VariablesInExpression const&) = delete;
+  VariablesInExpression& operator=(VariablesInExpression const&) = delete;
+
 
   // When solving, we're interested in whether variables appear multiple times.
   typedef std::unordered_set<Symbols*, SymbolPtrHasher> SymbolPtrSet;

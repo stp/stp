@@ -57,6 +57,9 @@ public:
     assert(children.size() != 1);
   }
 
+  Symbols(const Symbols&) = delete;
+  Symbols & operator=(const Symbols&) = delete;
+
   bool isLeaf() { return !found.IsNull(); }
 
   bool empty() const { return (found.IsNull() && children.size() == 0); }

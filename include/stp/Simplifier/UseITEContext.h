@@ -42,7 +42,7 @@ THE SOFTWARE.
 
 namespace stp
 {
-class UseITEContext // not copyable
+class UseITEContext 
 {
   NodeFactory* nf;
   RunTimes* runtimes;
@@ -60,6 +60,9 @@ public:
   ASTNode topLevel(const ASTNode& n);
 
   UseITEContext(STPMgr* bm);
+
+  UseITEContext(UseITEContext const&) = delete;
+  UseITEContext& operator=(UseITEContext const&) = delete;
 };
 }
 

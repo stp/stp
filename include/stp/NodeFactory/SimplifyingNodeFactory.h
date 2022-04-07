@@ -66,10 +66,13 @@ public:
         ASTFalse(bm_.ASTFalse), ASTUndefined(bm_.ASTUndefined){};
   ~SimplifyingNodeFactory() {}
 
-private:
   SimplifyingNodeFactory(const SimplifyingNodeFactory&) = delete;
   SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&) = delete;
 
+  static ASTNode convertKnownShiftAmount(const Kind k,
+                                            const ASTVec& children, STPMgr& bm,
+                                            NodeFactory* nf);
+private:
   NodeFactory& hashing;
 
   const ASTNode& ASTTrue;
@@ -100,6 +103,7 @@ private:
   void handle_bvand(Kind kind, unsigned int width, const ASTVec& children,
                     ASTNode& result);
   ASTNode create_gt_node(const ASTVec& children);
+
 };
 
 #endif
