@@ -566,10 +566,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   bm->UserFlags.optimize_flag = optimize_enabled;
 
   SOLVER_RETURN_TYPE res;
-  if (!bm->UserFlags.ackermannisation)
-  {
-    bm->counterexample_checking_during_refinement = true;
-  }
 
   // We are about to solve. Clear out all the memory associated with caches
   // that we won't need again.

@@ -188,10 +188,6 @@ public:
    ****************************************************************/
   UserDefinedFlags UserFlags;
 
-  // This flag, when true, indicates that counterexample is being
-  // checked by the counterexample checker
-  bool counterexample_checking_during_refinement;
-
   // This flag indicates as to whether the input has been determined
   // to be valid or not by this tool
   bool ValidFlag;
@@ -216,7 +212,6 @@ public:
         CNFFileNameCounter(0)
   {
     ValidFlag = false;
-    counterexample_checking_during_refinement = false;
     SimplifyWrites_InPlace_Flag = false;
 
     // Need to initiate the node factories before any nodes are created.

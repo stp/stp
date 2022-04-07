@@ -551,25 +551,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
             CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
         CONSTANTBV::BitVector_Destroy(tmp0);
 
-        if (0 != e)
-        {
-          CONSTANTBV::BitVector_Destroy(quotient);
-          CONSTANTBV::BitVector_Destroy(remainder);
-          // error printing
-          if (_bm->counterexample_checking_during_refinement)
-          {
-            output = CONSTANTBV::BitVector_Create(inputwidth, true);
-            OutputNode = _bm->CreateBVConst(output, outputwidth);
-            //  CONSTANTBV::BitVector_Destroy(output);
-            break;
-          }
-          else
-          {
-            BVConstEvaluatorError(e);
-          }
-        }
+        assert (0 == e);
 
-        // FIXME Not very standard in the current scheme
         if (BVDIV == k)
         {
           OutputNode = _bm->CreateBVConst(quotient, outputwidth);
