@@ -92,6 +92,7 @@ public:
 
   ASTNode getTrue();
   ASTNode getFalse();
+  ASTNode getUndefined();
 
   ASTNode CreateConstant(stp::CBV cbv, unsigned width);
 

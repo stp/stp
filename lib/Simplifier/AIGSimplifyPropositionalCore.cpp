@@ -146,7 +146,8 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   // Replace theory nodes with new variables.
   ASTNode replaced = theoryToFresh(top, fromTo);
 
-  Simplifier simplifier(bm);
+  SubstitutionMap sm (bm);
+  Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
   BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
       &mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);

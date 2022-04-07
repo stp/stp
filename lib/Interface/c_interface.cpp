@@ -165,7 +165,8 @@ VC vc_createValidityChecker(void)
   bm->defaultNodeFactory =
       new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
-  stp::Simplifier* simp = new stp::Simplifier(bm);
+  stp::SubstitutionMap* sm = new stp::SubstitutionMap(bm);
+  stp::Simplifier* simp = new stp::Simplifier(bm,sm);
   stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
   stp::ArrayTransformer* arrayTransformer = new stp::ArrayTransformer(bm, simp);
   stp::ToSATAIG* tosat = new stp::ToSATAIG(bm, arrayTransformer);
@@ -173,7 +174,7 @@ VC vc_createValidityChecker(void)
       new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
 
   stp::STP* stpObj =
-      new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
+      new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example,sm);
 
   // created_exprs.clear();
   vc_setFlags(stpObj, 'd');
@@ -297,18 +298,18 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTVec v = b->GetAsserts();
-  stp::Simplifier* simp = new stp::Simplifier(b);
+
+  stp::SubstitutionMap sm (b);
+  stp::Simplifier simp(b, &sm );
   for (stp::ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
   {
     stp::ASTNode q =
-        (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i, false) : *i;
-    q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q, false) : q;
+        (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(*i, false) : *i;
+    q = (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(q, false) : q;
     os << "ASSERT( ";
     q.PL_Print(os, b);
     os << ");" << endl;
   }
-  delete simp;
-  simp = NULL;
 }
 
 void vc_printAsserts(VC vc, int simplify_print)
@@ -326,7 +327,8 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   assert(buf);
   assert(len);
 
-  stp::Simplifier* simp = new stp::Simplifier(b);
+  stp::SubstitutionMap sm (b);
+  stp::Simplifier simp(b, &sm );
 
   // formate the state of the query
   stringstream os;
@@ -337,13 +339,10 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   os << "QUERY( ";
   stp::ASTNode q =
       (simplify_print == 1)
-          ? simp->SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
+          ? simp.SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
           : *(stp::ASTNode*)e;
   q.PL_Print(os, b);
   os << " );" << endl;
-
-  delete simp;
-  simp = NULL;
 
   // convert to a c buffer
   string s = os.str();

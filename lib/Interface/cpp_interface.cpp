@@ -534,14 +534,15 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
   startup();
   stp::GlobalParserInterface = this;
 
-  Simplifier* simp = new Simplifier(&bm);
+  stp::SubstitutionMap* sm = new stp::SubstitutionMap(&bm);
+  Simplifier* simp = new Simplifier(&bm,sm);
   ArrayTransformer* at = new ArrayTransformer(&bm, simp);
   AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(&bm, simp, at);
   ToSATAIG* tosat = new ToSATAIG(&bm, at);
 
   stp::GlobalParserBM = &bm_;
 
-  GlobalSTP = new STP(&bm, simp, at, tosat, abs);
+  GlobalSTP = new STP(&bm, simp, at, tosat, abs,sm);
   init();
 }
 

@@ -450,7 +450,9 @@ Result useInversesToSolve(FixedBits& x, FixedBits& y, FixedBits& output,
     if (debug_multiply)
       cerr << "Value to Invert:" << *toInvertCBV << endl;
 
-    stp::Simplifier simplifier(bm);
+    SubstitutionMap sm (bm);
+    Simplifier simplifier(bm, &sm );
+
     stp::CBV inverse =
         simplifier.MultiplicativeInverse(bm->CreateBVConst(toInvertCBV, width))
             .GetBVConst();

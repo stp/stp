@@ -52,23 +52,22 @@ private:
   std::unordered_set<int> AlwaysTrueHashSet;
   ASTNodeMap MultInverseMap;
 
-  STPMgr* _bm;
-
   NodeFactory* nf;
 
-  SubstitutionMap substitutionMap;
+  SubstitutionMap& substitutionMap;
+  STPMgr *_bm;
 
 public:
-  Simplifier(STPMgr* bm) : _bm(bm), substitutionMap(bm)
+  Simplifier(STPMgr *bm, SubstitutionMap* sm) : substitutionMap(*sm), _bm(bm)
   {
+    nf = _bm->defaultNodeFactory;
+
     SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
     SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
 
-    ASTTrue = bm->CreateNode(TRUE);
-    ASTFalse = bm->CreateNode(FALSE);
-    ASTUndefined = bm->CreateNode(UNDEFINED);
-
-    nf = bm->defaultNodeFactory;
+    ASTTrue = nf->getTrue();
+    ASTFalse = nf->getFalse();
+    ASTUndefined = nf->getUndefined();
   }
 
   ~Simplifier()

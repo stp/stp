@@ -113,7 +113,8 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
 
 Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 {
-  Simplifier simp(bm);
+  stp::SubstitutionMap sm(bm);
+  Simplifier simp(bm, &sm);
 
   BBNodeManagerAIG mgr;
   BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(

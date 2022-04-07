@@ -37,7 +37,6 @@ THE SOFTWARE.
 
 namespace stp
 {
-// not copyable
 // FIXME: This needs a better name
 class STP
 {
@@ -73,19 +72,22 @@ public:
   ToSATBase* tosat;
   AbsRefine_CounterExample* Ctr_Example;
   ArrayTransformer* arrayTransformer;
+  SubstitutionMap* substitutionMap;
 
+public:
   STP(STPMgr* b, Simplifier* s, ArrayTransformer* a, ToSATBase* ts,
-      AbsRefine_CounterExample* ce)
+      AbsRefine_CounterExample* ce, SubstitutionMap* sm)
   {
     bm = b;
     simp = s;
     tosat = ts;
     arrayTransformer = a;
     Ctr_Example = ce;
+    substitutionMap=sm;
   }
 
   STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
-      ToSATBase* ts, AbsRefine_CounterExample* ce)
+      ToSATBase* ts, AbsRefine_CounterExample* ce, SubstitutionMap* sm)
   {
     bm = b;
     simp = s;
@@ -93,7 +95,11 @@ public:
     delete bsolv; // Remove from the constructor later..
     arrayTransformer = a;
     Ctr_Example = ce;
+    substitutionMap=sm;
   }
+
+  STP( const STP& ) = delete; 
+  STP& operator=( const STP& ) = delete; 
 
   ~STP() { ClearAllTables(); }
 

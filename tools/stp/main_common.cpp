@@ -270,10 +270,12 @@ int Main::main(int argc, char** argv)
   auto simplifyingNF = std::make_unique<SimplifyingNodeFactory> (*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = simplifyingNF.get();
 
-  auto simp = std::make_unique<Simplifier> (bm);
+  auto subsMap = std::make_unique<SubstitutionMap> (bm);
+  auto simp = std::make_unique<Simplifier> (bm, subsMap.get());
   auto arrayTransformer = std::make_unique<ArrayTransformer>(bm, simp.get());
   auto tosat = std::make_unique<ToSATAIG>(bm, arrayTransformer.get());
   auto counterExample = std::make_unique<AbsRefine_CounterExample> (bm, simp.get(), arrayTransformer.get());
+
 
   int ret = create_and_parse_options(argc, argv);
   if (ret != 0)
@@ -285,7 +287,7 @@ int Main::main(int argc, char** argv)
   setvbuf(stdout, NULL, _IOLBF, 0);
 
   STP* stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
-                     counterExample.get());
+                     counterExample.get(), subsMap.get());
 
   GlobalSTP = stp;
   // If we're not reading the file from stdin.

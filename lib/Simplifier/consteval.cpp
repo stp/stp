@@ -811,18 +811,4 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
                                    t.GetValueWidth());
 }
 
-ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
-{
-  if (t.isConstant())
-    return t;
-
-  ASTNode OutputNode;
-
-  if (InsideSubstitutionMap(t, OutputNode))
-    return OutputNode;
-
-  OutputNode = NonMemberBVConstEvaluator(_bm, t);
-  UpdateSolverMap(t, OutputNode);
-  return OutputNode;
-}
 } // end of namespace stp
