@@ -192,11 +192,6 @@ public:
   // to be valid or not by this tool
   bool ValidFlag;
 
-  // Flags indicates that counterexample will now be checked by the
-  // counterexample checker, and hence simplifyterm must switch off
-  // certain optimizations. In particular, array write optimizations
-  bool SimplifyWrites_InPlace_Flag;
-
   // count is used in the creation of new variables
   unsigned int _symbol_count;
 
@@ -212,7 +207,6 @@ public:
         CNFFileNameCounter(0)
   {
     ValidFlag = false;
-    SimplifyWrites_InPlace_Flag = false;
 
     // Need to initiate the node factories before any nodes are created.
     hashingNodeFactory = new HashingNodeFactory(*this);

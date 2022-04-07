@@ -389,7 +389,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // round of substitution, solving, and simplification. ensures that
   // DAG is minimized as much as possibly, and ideally should
   // garuntee that all liketerms in BVPLUSes have been combined.
-  bm->SimplifyWrites_InPlace_Flag = false;
   bm->TermsAlreadySeenMap_Clear();
 
   ASTNode tmp_inputToSAT;
@@ -494,7 +493,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   bm->TermsAlreadySeenMap_Clear();
-  bm->SimplifyWrites_InPlace_Flag = false;
 
   long final_difficulty_score = difficulty.score(inputToSat, bm);
 
