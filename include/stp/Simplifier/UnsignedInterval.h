@@ -49,6 +49,10 @@ struct UnsignedInterval
     assert(size_(minV) == size_(maxV));
   }
 
+  UnsignedInterval(UnsignedInterval const&) = delete;
+  UnsignedInterval& operator=(UnsignedInterval const&) = delete;
+
+
   void print()
   {
     unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);

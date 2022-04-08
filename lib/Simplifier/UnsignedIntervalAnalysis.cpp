@@ -187,24 +187,24 @@ namespace stp
         {
           const unsigned bitwidth = n[0].GetValueWidth();
 
-          UnsignedInterval c0 =
-              knownC0 ? *children[0] : *freshUnsignedInterval(bitwidth);
-          UnsignedInterval c1 =
-              knownC1 ? *children[1] : *freshUnsignedInterval(bitwidth);
+          UnsignedInterval *c0 =
+              knownC0 ? children[0] : freshUnsignedInterval(bitwidth);
+          UnsignedInterval *c1 =
+              knownC1 ? children[1] : freshUnsignedInterval(bitwidth);
 
-          if (CONSTANTBV::BitVector_Lexicompare(c0.minV, c1.maxV) > 0)
+          if (CONSTANTBV::BitVector_Lexicompare(c0->minV, c1->maxV) > 0)
             result = createInterval(littleOne, littleOne);
 
-          if (CONSTANTBV::BitVector_Lexicompare(c1.minV, c0.maxV) >= 0)
+          if (CONSTANTBV::BitVector_Lexicompare(c1->minV, c0->maxV) >= 0)
             result = createInterval(littleZero, littleZero);
 
           if (BVSGT == n.GetKind() && result != NULL)
           {
-            bool c0Min = CONSTANTBV::BitVector_bit_test(c0.minV, bitwidth - 1);
-            bool c0Max = CONSTANTBV::BitVector_bit_test(c0.maxV, bitwidth - 1);
+            bool c0Min = CONSTANTBV::BitVector_bit_test(c0->minV, bitwidth - 1);
+            bool c0Max = CONSTANTBV::BitVector_bit_test(c0->maxV, bitwidth - 1);
 
-            bool c1Min = CONSTANTBV::BitVector_bit_test(c1.minV, bitwidth - 1);
-            bool c1Max = CONSTANTBV::BitVector_bit_test(c1.maxV, bitwidth - 1);
+            bool c1Min = CONSTANTBV::BitVector_bit_test(c1->minV, bitwidth - 1);
+            bool c1Max = CONSTANTBV::BitVector_bit_test(c1->maxV, bitwidth - 1);
 
             // BVGT xor MSB xor MSB
             if ((c0Min == c0Max) && (c1Min == c1Max))
