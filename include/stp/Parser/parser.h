@@ -38,7 +38,7 @@ namespace stp
 
 // Symbols in generated  files used by tools/stp
 void SMTScanString(const char* yy_str);
-void SMT2ScanSctring(const char* yy_str);
+void SMT2ScanString(const char* yy_str);
 void CVCScanString(const char* yy_str);
 DLL_PUBLIC FILE* getCVCIn();
 DLL_PUBLIC FILE* getSMTIn();

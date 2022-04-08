@@ -144,3 +144,16 @@ if(TEST_GENERATED_QUERIES)
     message(FATAL_ERROR "TODO")
     add_subdirectory(generated-tests)
 endif()
+
+# -----------------------------------------------------------------------------
+# Unit tests
+# -----------------------------------------------------------------------------
+
+option(TEST_UNITS
+       "Enable unit tests"
+       ON
+      )
+
+if(TEST_UNITS)
+    add_subdirectory(unit-tests)
+endif()
