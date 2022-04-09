@@ -165,16 +165,8 @@ VC vc_createValidityChecker(void)
   bm->defaultNodeFactory =
       new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
-  stp::SubstitutionMap* sm = new stp::SubstitutionMap(bm);
-  stp::Simplifier* simp = new stp::Simplifier(bm,sm);
-  stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
-  stp::ArrayTransformer* arrayTransformer = new stp::ArrayTransformer(bm, simp);
-  stp::ToSATAIG* tosat = new stp::ToSATAIG(bm, arrayTransformer);
-  stp::AbsRefine_CounterExample* Ctr_Example =
-      new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
-
   stp::STP* stpObj =
-      new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example,sm);
+      new stp::STP(bm);
 
   // created_exprs.clear();
   vc_setFlags(stpObj, 'd');

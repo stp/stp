@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/Attributes.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 namespace stp
 {
@@ -75,34 +76,26 @@ public:
   SubstitutionMap* substitutionMap;
 
 public:
-  STP(STPMgr* b, Simplifier* s, ArrayTransformer* a, ToSATBase* ts,
-      AbsRefine_CounterExample* ce, SubstitutionMap* sm)
+  STP(STPMgr* b)
   {
     bm = b;
-    simp = s;
-    tosat = ts;
-    arrayTransformer = a;
-    Ctr_Example = ce;
-    substitutionMap=sm;
-  }
-
-  STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
-      ToSATBase* ts, AbsRefine_CounterExample* ce, SubstitutionMap* sm)
-  {
-    bm = b;
-    simp = s;
-    tosat = ts;
-    delete bsolv; // Remove from the constructor later..
-    arrayTransformer = a;
-    Ctr_Example = ce;
-    substitutionMap=sm;
+    substitutionMap = new stp::SubstitutionMap(bm);
+    simp = new Simplifier(bm,substitutionMap);
+    arrayTransformer = new ArrayTransformer(bm, simp);
+    Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+    tosat = new ToSATAIG(bm, arrayTransformer);
   }
 
   STP( const STP& ) = delete; 
   STP& operator=( const STP& ) = delete; 
 
-  ~STP() { ClearAllTables(); }
+  ~STP() 
+  { 
+    ClearAllTables(); 
+    deleteObjects();
+  }
 
+  // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
     delete Ctr_Example;
@@ -116,6 +109,9 @@ public:
 
     delete simp;
     simp = NULL;
+
+    delete substitutionMap;
+    substitutionMap = NULL;
   }
 
   // The absolute TopLevel function that invokes STP on the input
