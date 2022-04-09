@@ -48,12 +48,7 @@ int main(int argc, char** argv)
   interface.ignoreCheckSat();
   stp::GlobalParserInterface = &interface;
 
-  Simplifier* simp = new Simplifier(mgr);
-  ArrayTransformer* at = new ArrayTransformer(mgr, simp);
-  AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr, at);
-
-  GlobalSTP = new STP(mgr, simp, at, tosat, abs);
+  GlobalSTP = new STP(mgr);
 
   srand(time(NULL));
   stp::GlobalParserBM = &stp;
@@ -85,16 +80,16 @@ int main(int argc, char** argv)
 
   // Apply cbitp ----------------------------------------
   simplifier::constantBitP::ConstantBitPropagation cb(
-      mgr, simp, mgr->defaultNodeFactory, n);
+      mgr, GlobalSTP->simp, mgr->defaultNodeFactory, n);
   if (cb.isUnsatisfiable())
     n = mgr->ASTFalse;
   else
     n = cb.topLevelBothWays(n, true, true);
 
-  if (simp->hasUnappliedSubstitutions())
+  if (GlobalSTP->substitutionMap->hasUnappliedSubstitutions())
   {
-    n = simp->applySubstitutionMap(n);
-    simp->haveAppliedSubstitutionMap();
+    n = GlobalSTP->substitutionMap->applySubstitutionMap(n);
+    GlobalSTP->substitutionMap->haveAppliedSubstitutionMap();
   }
 
   // Print back out.
