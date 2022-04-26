@@ -368,3 +368,15 @@ TEST(SimplifyingNodeFactory_Test, bvxor2)
    ASTNode n = c.process(input);
    ASSERT_EQ(n, c.mgr.ASTTrue);
 }
+
+
+TEST(SimplifyingNodeFactory_Test, bvgt)
+{
+  const std::string input = R"(
+    (assert ( = (bvult v0 (_ bv1 20) )  (= v0 (_ bv0 20)))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}

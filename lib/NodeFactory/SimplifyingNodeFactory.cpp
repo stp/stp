@@ -126,6 +126,13 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     result = NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
   }
 
+  // 1 > x -> (x ==0)
+  if (children[0].isConstant() && CreateOneConst(children[0].GetValueWidth())== children[0])
+  {
+    result = NodeFactory::CreateNode(stp::EQ, NodeFactory::CreateZeroConst(children[0].GetValueWidth()), children[1] );
+  }
+
+
   //If child 1 is constant, GT == NOT EQ
   if (children[1].isConstant() &&
       CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
