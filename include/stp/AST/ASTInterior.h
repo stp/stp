@@ -98,7 +98,7 @@ class ASTInterior : public ASTInternal
   virtual uint32_t getValueWidth() const { return _value_width; }
 
 public:
-  ASTInterior(STPMgr* mgr, Kind kind, ASTVec& children)
+  ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
       : ASTInternal(mgr, kind), _children(children), _value_width(0),
         _index_width(0)
   {

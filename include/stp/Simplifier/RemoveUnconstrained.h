@@ -38,7 +38,7 @@ THE SOFTWARE.
 namespace stp
 {
 
-class RemoveUnconstrained // not copyable
+class RemoveUnconstrained
 {
   STPMgr& bm;
 

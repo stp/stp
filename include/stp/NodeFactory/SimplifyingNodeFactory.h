@@ -100,8 +100,8 @@ private:
   bool children_all_constants(const ASTVec& children) const;
   ASTNode get_smallest_number(const unsigned width);
   ASTNode get_largest_number(const unsigned width);
-  void handle_bvand(Kind kind, unsigned int width, const ASTVec& children,
-                    ASTNode& result);
+  ASTNode handle_bvxor(unsigned int width, const ASTVec& input_children);
+  ASTNode handle_bvand(unsigned int width, const ASTVec& children);
   ASTNode create_gt_node(const ASTVec& children);
 
 };
