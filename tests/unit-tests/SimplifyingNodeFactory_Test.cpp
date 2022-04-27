@@ -380,3 +380,76 @@ TEST(SimplifyingNodeFactory_Test, bvgt)
    ASTNode n = c.process(input);
    ASSERT_EQ(n, c.mgr.ASTTrue);
 }
+
+
+
+TEST(SimplifyingNodeFactory_Test, bvplus0)
+{
+  const std::string input = R"(
+    (assert ( = (bvadd v1 (bvneg v1) v1 )   v1)  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvplus1)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd v1 (bvneg v1) (bvneg v1) v1 v1 (bvnot v1) v1 )   
+                (bvsub v1 (_ bv1 20))  
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvplus2)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd v1 (_ bv1 20) (bvneg v1) (bvneg v1) (_ bv1 20) v1 v1 (bvnot v1) v1 (_ bv0 20) )   
+                 (bvadd v1 (_ bv1 20) )
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvplus3)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd v1 (_ bv0 20) (_ bv0 20) (_ bv0 20)  )   
+                 v1
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvplus4)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd v1 v2 (_ bv0 20)   )   
+                 (bvadd v1 v2 )
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}

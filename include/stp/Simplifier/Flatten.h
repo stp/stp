@@ -98,9 +98,15 @@ private:
     if (counter[n]++ > 1)
       return;
   
+    std::unordered_set<unsigned> visited;
+    
     for (const auto& c: n.GetChildren())
     {
-      occurences(c);
+      if (visited.find(c.GetNodeNum()) == visited.end() ) // Don't visit children multiple times.
+        {
+          visited.insert(c.GetNodeNum());
+          occurences(c);
+        }
     }
   }
 
@@ -121,7 +127,7 @@ private:
 
     ASTVec next;
 
-    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k || BVMULT==k);
+    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k );
 
     for (const auto& c: n.GetChildren())
     {
