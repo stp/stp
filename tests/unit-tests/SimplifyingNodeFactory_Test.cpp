@@ -245,6 +245,22 @@ TEST(SimplifyingNodeFactory_Test, bvand3)
 }
 
 
+TEST(SimplifyingNodeFactory_Test, bvand4)
+{
+  const std::string input = R"(
+    (assert 
+      (= (bvand v0 (bvnot v1) (bvneg v1) (bvneg v0) (bvneg v1) (bvnot v0) ) 
+      (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+
+
+
 
 TEST(SimplifyingNodeFactory_Test, bvor0)
 {
@@ -445,6 +461,37 @@ TEST(SimplifyingNodeFactory_Test, bvplus4)
       (assert (= 
                 (bvadd v1 v2 (_ bv0 20)   )   
                  (bvadd v1 v2 )
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+
+TEST(SimplifyingNodeFactory_Test, bvplus5)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd (bvneg (bvneg (bvneg v1) ))  v1   )   
+                 (_ bv0 20)  
+               )
+      )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvplus6)
+{
+  const std::string input = R"(
+      (assert (= 
+                (bvadd (bvnot (bvnot (bvnot v1) ))  v1   )   
+                 (bvnot (_ bv0 20)  )
                )
       )
     )";
