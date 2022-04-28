@@ -1,6 +1,5 @@
 %{
   /********************************************************************
-   * AUTHORS: Vijay Ganesh, Trevor Hansen
    *
    * BEGIN DATE: July, 2006
    *

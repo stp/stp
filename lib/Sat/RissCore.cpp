@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Dan Liew, Mate Soos, Norbert Manthey
  *
  * BEGIN DATE: November, 2005
  *

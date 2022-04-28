@@ -9,7 +9,6 @@
 
 %{
 /********************************************************************
-* AUTHORS: Trevor Hansen, Vijay Ganesh, David L. Dill
 *
 * BEGIN DATE: July, 2006
 *

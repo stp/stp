@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Mate Soos, Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *

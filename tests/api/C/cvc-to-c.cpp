@@ -1,5 +1,4 @@
 /***********
-AUTHORS:  Philip Guo, Vijay Ganesh, Mate Soos, Dan Liew
 
 BEGIN DATE: Feb, 2009
 

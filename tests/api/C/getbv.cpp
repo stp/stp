@@ -1,5 +1,4 @@
 /***********
-AUTHORS:  Dan Liew
 
 BEGIN DATE: Apr, 2014
 

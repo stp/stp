@@ -1,5 +1,4 @@
 /***********
-AUTHORS:  Trevor Hansen, Dan Liew
 
 BEGIN DATE: Oct, 2008
 

@@ -1,5 +1,4 @@
 /***********
-AUTHORS:   Michael Katelman, Vijay Ganesh, Dan Liew
 
 BEGIN DATE: Oct, 2008
 
