@@ -24,3 +24,4 @@ AddGTestSuite(unit-tests)
 # -----------------------------------------------------------------------------
 AddSTPGTest(PropagateEqualities_Test.cpp)
 AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
+AddSTPGTest(FindPureLiterals_Test.cpp)
