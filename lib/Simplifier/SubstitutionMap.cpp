@@ -74,13 +74,13 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
-  ASTNode result = replace(n, *SolverMap, cache, nf, false, false);
+  ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, false, false);
 
 // NB. This is an expensive check. Remove it after it's been idempotent
 // for a while.
 #ifndef NDEBUG
   cache.clear();
-  assert(result == replace(result, *SolverMap, cache, nf, false, false));
+  assert(result == replace(result, *SolverMap, cache, bm->defaultNodeFactory, false, false));
 #endif
 
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
@@ -92,7 +92,7 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
-  ASTNode result = replace(n, *SolverMap, cache, nf, true, false);
+  ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
   return result;
 }
