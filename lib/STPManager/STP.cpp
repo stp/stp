@@ -418,15 +418,30 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
         inputToSat = simp->applySubstitutionMap(inputToSat);
         simp->haveAppliedSubstitutionMap();
       }
-      bm->ASTNodeStats(pe_message.c_str(), inputToSat);
-      inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
-      bm->ASTNodeStats(size_inc_message.c_str(), inputToSat);
-    }
 
-    if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
-    {
-      inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
-      bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
+      bm->ASTNodeStats(pe_message.c_str(), inputToSat);
+      
+      if (bm->UserFlags.simply_to_constants_only)
+      {    
+          auto constants = simp->FindConsts_TopLevel(inputToSat, false);
+
+          if (bm->UserFlags.stats_flag)
+                cerr << "constants found:" << constants.size() << endl;
+
+
+          ASTNodeMap cache;
+          inputToSat = stp::SubstitutionMap::replace(inputToSat, constants, cache, bm->defaultNodeFactory);
+      }
+      else
+        inputToSat = simp->SimplifyFormula_TopLevel(inputToSat, false);
+      
+      bm->ASTNodeStats(size_inc_message.c_str(), inputToSat);
+
+      if (bm->UserFlags.wordlevel_solve_flag)
+      {
+        inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
+        bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
+      }
     }
   } while (tmp_inputToSAT != inputToSat);
 

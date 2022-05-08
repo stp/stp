@@ -277,6 +277,28 @@ void Simplifier::checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited)
   visited.insert(n);
 }
 
+ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNodeMap* VarConstMap)
+{
+  assert(_bm->UserFlags.optimize_flag);
+  _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
+  ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
+
+  ASTNodeMap constants;
+  
+  for (const auto e: *SimplifyMap)
+  {
+    if (e.second.isConstant())
+    {
+      constants.insert(e);
+    }
+  }
+    
+  ResetSimplifyMaps();
+  _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
+  return constants;
+}
+
+
 // The SimplifyMaps on entry to the topLevel functions may contain
 // useful entries.  E.g. The BVSolver calls SimplifyTerm()
 ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg,
@@ -1769,6 +1791,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         // If we didn't flatten these, then we'd start flattening each of these
         // from the bottom up. Potentially creating tons of the nodes along the
         // way.
+
         toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,15);
       }
 

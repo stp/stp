@@ -196,7 +196,18 @@ void ExtraMain::create_options()
 
       ("size-reducing-fixed-point-limit", 
       INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
-      "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.");
+      "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
+
+      ("simply_to_constants_only", 
+      BOOL_ARG(bm->UserFlags.simply_to_constants_only),
+      "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
+
+      ("difficulty_reversion", 
+      BOOL_ARG(bm->UserFlags.difficulty_reversion),
+      "Undo size increasing simplifications if they haven't made the problem simpler");
+
+      
+
 
 
   po::options_description solver_options("SAT Solver options");

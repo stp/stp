@@ -109,6 +109,9 @@ public:
    * Simplification functions                                     *
    ****************************************************************/
 
+  ASTNodeMap FindConsts_TopLevel(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap = nullptr);
+
+
   ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg,
                                    ASTNodeMap* VarConstMap = NULL);
 
