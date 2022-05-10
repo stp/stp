@@ -982,7 +982,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
     ASTNode constant = NonMemberBVConstEvaluator(&bm, BVPLUS, ch, width);
     result = NodeFactory::CreateTerm(BVPLUS, width, constant, n1[1]);
   }
-  else if (n1.GetKind() == BVUMINUS &&
+  else if (false && n1.GetKind() == BVUMINUS &&
            (n0.isConstant() && CONSTANTBV::BitVector_is_full(n0.GetBVConst())))
   {
     result = NodeFactory::CreateTerm(BVNOT, width, n1[0]);

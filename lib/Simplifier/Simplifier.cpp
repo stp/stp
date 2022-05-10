@@ -2471,8 +2471,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           /* FALLTHROUGH*/
         // follow on
         default:
-          output = inputterm;
-          break;
+        {
+            const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
+            output = nf->CreateTerm(BVPLUS, inputValueWidth, nf->CreateTerm(BVUMINUS, inputValueWidth, a0), max);
+          }
+        break;
       }
       break;
     }
