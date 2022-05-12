@@ -1769,7 +1769,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         // If we didn't flatten these, then we'd start flattening each of these
         // from the bottom up. Potentially creating tons of the nodes along the
         // way.
-        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,50);
+        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,15);
       }
 
       v.reserve(toProcess.size());
