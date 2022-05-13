@@ -255,12 +255,6 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
 
   bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
 
-  if (simp->hasUnappliedSubstitutions())
-  {
-    result = simp->applySubstitutionMap(result);
-    simp->haveAppliedSubstitutionMap();
-  }
-
   return result;
 }
 

@@ -305,6 +305,23 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
   }
 
+
+  if (bm->UserFlags.bitConstantProp_flag)
+  {
+    bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+    simplifier::constantBitP::ConstantBitPropagation cb(
+        bm, simp, bm->defaultNodeFactory, inputToSat);
+    inputToSat = cb.topLevelBothWays(inputToSat);
+    bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+    if (cb.isUnsatisfiable())
+    {
+      inputToSat = bm->ASTFalse;
+    }
+
+    bm->ASTNodeStats(cb_message.c_str(), inputToSat);
+  }
+
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
   long initial_difficulty_score = difficulty.score(inputToSat, bm);
