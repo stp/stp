@@ -300,7 +300,7 @@ ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNod
 
 
 // The SimplifyMaps on entry to the topLevel functions may contain
-// useful entries.  E.g. The BVSolver calls SimplifyTerm()
+// useful entries.  E.g. The BVSolver may call SimplifyTerm()
 ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg,
                                              ASTNodeMap* VarConstMap)
 {

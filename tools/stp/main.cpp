@@ -198,8 +198,8 @@ void ExtraMain::create_options()
       INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
       "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
 
-      ("simply_to_constants_only", 
-      BOOL_ARG(bm->UserFlags.simply_to_constants_only),
+      ("simplify_to_constants_only", 
+      BOOL_ARG(bm->UserFlags.simplify_to_constants_only),
       "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
 
       ("difficulty_reversion", 

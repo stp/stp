@@ -438,7 +438,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
       bm->ASTNodeStats(pe_message.c_str(), inputToSat);
       
-      if (bm->UserFlags.simply_to_constants_only)
+      if (bm->UserFlags.simplify_to_constants_only)
       {    
           auto constants = simp->FindConsts_TopLevel(inputToSat, false);
 
