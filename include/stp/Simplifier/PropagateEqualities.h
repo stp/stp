@@ -71,6 +71,10 @@ class PropagateEqualities : public NodeSimplifier
 
   MapToNodeSet buildMapOfLHStoVariablesInRHS(const IdSet&);
 
+  uint64_t todo=0;
+
+  void countToDo(ASTNode n);
+
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
  : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),

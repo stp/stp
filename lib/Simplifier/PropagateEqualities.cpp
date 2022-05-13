@@ -230,6 +230,7 @@ void PropagateEqualities::processCandidates()
 ASTNode PropagateEqualities::topLevel(const ASTNode& a)
 {
   assert (bm->UserFlags.propagate_equalities);
+  todo=0;
 
   ASTNode result = a;
 
@@ -248,8 +249,11 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
   buildCandidateList(result);
   
   if (bm->UserFlags.stats_flag)
+  {
+    std::cerr <<  "{PropagateEqualities} TODO:" << todo << std::endl;
     if (candidates.size() != 0)
       std::cerr <<  "{PropagateEqualities} Candidates:" << candidates.size() << std::endl;
+  }
 
   processCandidates();
 
@@ -410,6 +414,35 @@ ASTNode PropagateEqualities::AndPropagate(const ASTNode& input, ArrayTransformer
 }
 #endif
 
+bool isSymbol(ASTNode c)
+{
+    if (c.GetKind() == BVUMINUS || c.GetKind() == BVNOT)
+      c = c[0];
+
+    return (c.GetKind() == SYMBOL);
+}
+
+// Sent one side of an equals.
+void PropagateEqualities::countToDo(ASTNode n)
+{
+  if (n.GetKind() == BVUMINUS || n.GetKind() == BVNOT)
+    n = n[0];
+
+  if (n.GetKind() == BVMULT && n.Degree() ==2 && n[0].isConstant() && simp->BVConstIsOdd(n[0]))
+  {
+    if (isSymbol(n[1]))
+      todo++;
+  }
+
+  if ((n.GetKind() == BVPLUS || n.GetKind() == BVXOR) && n.Degree() ==2)
+  {
+    if (isSymbol(n[0]))
+      todo++;
+    if (isSymbol(n[1]))
+      todo++;
+  }
+}
+
 void PropagateEqualities::buildCandidateList(const ASTNode& a)
 {
 
@@ -418,21 +451,23 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
 
   const Kind k = a.GetKind();
 
-  if (NOT == k && SYMBOL == a[0].GetKind() && BOOLEAN_TYPE == a.GetType())
+  if (NOT == k && SYMBOL == a[0].GetKind())
   {
-       addCandidate(a[0], ASTFalse);
+    assert(BOOLEAN_TYPE == a.GetType());
+    addCandidate(a[0], ASTFalse);
   }
-  else if (SYMBOL == k && BOOLEAN_TYPE == a.GetType())
+  else if (SYMBOL == k )
   {
-       addCandidate(a, ASTTrue);
-   }
+    assert (BOOLEAN_TYPE == a.GetType());
+    addCandidate(a, ASTTrue);
+  }
   else if (NOT == k && a[0].GetKind() == XOR && a[0].Degree() == 2)
   {
-      buildXORCandidates(a[0], true);
+    buildXORCandidates(a[0], true);
   }
   else if (XOR == k && a.Degree() == 2)
   {
-      buildXORCandidates(a, false);
+    buildXORCandidates(a, false);
   }
   else if (IFF == k || EQ == k)
   {
@@ -457,6 +492,13 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
     {
       addCandidate(c[1][0], nf->CreateTerm(BVNOT, c[0].GetValueWidth(), c[0]));
     }
+
+    if (bm->UserFlags.stats_flag)
+    {
+      countToDo(c[0]);
+      countToDo(c[1]);
+    }
+
   }
   else if (AND == k)
   {
