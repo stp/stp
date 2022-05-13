@@ -169,7 +169,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
                           PropagateEqualities* pe)
 {
 
-  inputToSat = pe->topLevel(inputToSat, arrayTransformer);
+  inputToSat = pe->topLevel(inputToSat);
   if (simp->hasUnappliedSubstitutions())
   {
     inputToSat = simp->applySubstitutionMap(inputToSat);
@@ -401,7 +401,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     if (bm->UserFlags.optimize_flag)
     {
-      inputToSat = pe->topLevel(inputToSat, arrayTransformer);
+      inputToSat = pe->topLevel(inputToSat);
 
       // Imagine:
       // The simplifier simplifies (0 + T) to T

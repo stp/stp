@@ -22,71 +22,71 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef PROPAGATEEQUALITIES_H_
-#define PROPAGATEEQUALITIES_H_
+#ifndef PROPAGATEEQUALITIESOLD_H_
+#define PROPAGATEEQUALITIESOLD_H_
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/PropagateEqualities.h"
-#include "stp/Simplifier/NodeSimplifier.h"
 
-/* 
-  Finds formulae asserted at the top level, and removes the variables, e.g:
-  (= SYMBOL BVCONST), 
-  (IFF SYMBOL TRUE), 
-  (IFF SYMBOL FALSE), 
-  (IFF SYMBOL SYMBOL), 
-  (=SYMBOL SYMBOL)
-or (=SYMBOL BVCONST).  
- */
+// This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ
+// SYMBOL BVCONST)),
+// (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
+// or (=SYMBOL BVCONST).
+// It tries to remove the conjunct, storing it in the substitutionmap. It
+// replaces it in the
+// formula by true.
 
 namespace stp
 {
+class Simplifier;
+class ArrayTransformer;
 
-class PropagateEqualities : public NodeSimplifier
+class PropagateEqualitiesOld
 {
+
   Simplifier* simp;
   NodeFactory* nf;
   STPMgr* bm;
   const ASTNode ASTTrue, ASTFalse;
+
+  bool searchXOR(const ASTNode& lhs, const ASTNode& rhs);
+  bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
+
+  ASTNode propagate(const ASTNode& a, ArrayTransformer* at);
+  std::unordered_set<int> alreadyVisited;
+
   const bool always_true;
 
-  std::unordered_set<uint64_t> alreadyVisited;
-
-  typedef std::unordered_set<uint64_t> IdSet;
-  typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet > > MapToNodeSet;
-
-
-  void buildCandidateList(const ASTNode& a);
-  void replaceIfPossible(int line, ASTNode& output, const ASTNode& lhs, const ASTNode& rhs);
-  void buildXORCandidates(const ASTNode a, bool negated);
-  
-  //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
-
-  void addCandidate(const ASTNode a, const ASTNode b);
-  std::vector < std::pair<ASTNode, ASTNode> > candidates;
-
-  void processCandidates();
-
-  MapToNodeSet buildMapOfLHStoVariablesInRHS(const IdSet&);
+  bool timedOut();
+  bool timeOut = false;
+  long startTime;
 
 public:
-  PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
- : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-   always_true(bm_->UserFlags.enable_always_true)
+  PropagateEqualitiesOld(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
+      : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
+        always_true(bm_->UserFlags.enable_always_true)
   {
     simp = simp_;
     nf = nf_;
     bm = bm_;
   }
 
+  ASTNode topLevel(const ASTNode& a, ArrayTransformer* at)
+  {
+    if (!bm->UserFlags.propagate_equalities)
+      return a;
 
-  virtual ~PropagateEqualities() override 
-  {}
-  
-  virtual ASTNode topLevel(const ASTNode& a) override;
+    if (timeOut)
+      return a;
 
+    startTime = getCurrentTime();
+
+    bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
+    ASTNode result = propagate(a, at);
+    bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
+    return result;
+  }
 };
 }
 
