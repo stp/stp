@@ -136,11 +136,10 @@ if (USE_CRYPTOMINISAT)
 endif()
 
 #Where I install the abc library to on my machine..
-set(libstp_link_libs ${libstp_link_libs} /home/thansen/solvers/abc/libabc.a)
-set(libstp_link_libs ${libstp_link_libs} dl)
-set(libstp_link_libs ${libstp_link_libs} readline)
+set(stp_link_libs ${stp_link_libs} /home/thansen/solvers/abc/libabc.a)
+set(stp_link_libs ${stp_link_libs} dl)
+set(stp_link_libs ${stp_link_libs} readline)
  
-#target_link_libraries(libstp ${libstp_link_libs})
 
 if (USE_RISS)
     set(stp_link_libs
