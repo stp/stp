@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew
+# AUTHORS: Dan Liew, Andrew V. Jones
 #
 # BEGIN DATE: May, 2014
 #
@@ -27,6 +27,19 @@
 # a good idea.
 
 # Search paths for the stp shared library
-PATHS = [
-    '@LIBSTP_PATH@',
+
+import os
+import sys
+
+path_var = (
+    "PATH" if sys.platform in ("win32", "cygwin")
+    else "DYLD_LIBRARY_PATH" if sys.platform == "darwin"
+    else "LD_LIBRARY_PATH"
+)
+
+PATHS = ["@CMAKE_LIBRARY_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"
+@WIN32PYTHONCOMMENT@        , "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/@LIBSTP_FILENAME@"
+        ] + [
+    os.path.join(directory, "@LIBSTP_FILENAME@")
+    for directory in os.environ.get(path_var, "").split(os.pathsep)
 ]

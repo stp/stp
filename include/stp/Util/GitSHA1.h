@@ -22,8 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-namespace stp {
-  const char* get_git_version_sha();
-  const char* get_git_version_tag();
-  const char* get_compilation_env();
+#include "stp/Util/Attributes.h"
+
+namespace stp
+{
+DLL_PUBLIC const char* get_git_version_sha();
+DLL_PUBLIC const char* get_git_version_tag();
+DLL_PUBLIC const char* get_compilation_env();
 }

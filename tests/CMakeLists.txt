@@ -41,7 +41,7 @@ if(NOT EXISTS "${LIT_TOOL}")
     message(FATAL_ERROR "LIT_TOOL is set but the path does not seem to exist. Try deleting the LIT_TOOL cache variable and reconfiguring")
 endif()
 
-set(LIT_ARGS -v -s CACHE STRING "Arguments to pass to lit")
+set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 
 # -----------------------------------------------------------------------------
 # Find GTest library which will be used to drive tests
@@ -55,13 +55,21 @@ set(LIT_ARGS -v -s CACHE STRING "Arguments to pass to lit")
 # the location of GTest source code is probably error prone so using a copy in the 
 # repository seems like the easiest thing to do. This also has the added benefit that
 # everyone uses the same version of GTest.
-set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/utils/gtest)
+set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
 if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find GTest. Did you remember to add the submodules (``git submodule init && git submodule update``)?")
+    message(FATAL_ERROR "Could not find GTest. Did you run scripts/deps/setup-gtest.sh?")
 endif()
 
+if (MSVC)
+  # STP is built with the shared version of the CRT, gtest defaults to the
+  # static one, and they can't be mixed. Foring gtest to use the dynamic one.
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+endif()
 
+set(PREV_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-missing-field-initializers")
 add_subdirectory(${GTEST_PREFIX} gtest)
+set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
 include_directories(${GTEST_PREFIX}/include)
@@ -135,4 +143,17 @@ option(TEST_GENERATED_QUERIES
 if(TEST_GENERATED_QUERIES)
     message(FATAL_ERROR "TODO")
     add_subdirectory(generated-tests)
+endif()
+
+# -----------------------------------------------------------------------------
+# Unit tests
+# -----------------------------------------------------------------------------
+
+option(TEST_UNITS
+       "Enable unit tests"
+       ON
+      )
+
+if(TEST_UNITS)
+    add_subdirectory(unit-tests)
 endif()

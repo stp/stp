@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -26,13 +25,14 @@ THE SOFTWARE.
 #ifndef RUNTIMES_H
 #define RUNTIMES_H
 
-#include <stack>
-#include <map>
-#include <string>
-//#include "../sat/utils/System.h"
+#include "stp/Util/Attributes.h"
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
+#include <stack>
+#include <string>
+#include <vector>
 
 class RunTimes // not copyable
 {
@@ -58,10 +58,31 @@ public:
     UseITEContext,
     AIGSimplifyCore,
     IntervalPropagation,
-    AlwaysTrue
+    AlwaysTrue,
+    Flatten
   };
 
-  static std::string CategoryNames[];
+  std::vector<std::string> CategoryNames = {"Transforming",
+                                            "Simplifying",
+                                            "Parsing",
+                                            "CNF Conversion",
+                                            "Bit Blasting",
+                                            "SAT Solving",
+                                            "Bitvector Solving",
+                                            "Variable Elimination",
+                                            "Sending to SAT Solver",
+                                            "Counter Example Generation",
+                                            "SAT Simplification",
+                                            "Constant Bit Propagation",
+                                            "Array Read Refinement",
+                                            "Applying Substitutions",
+                                            "Removing Unconstrained",
+                                            "Pure Literals",
+                                            "ITE Contexts",
+                                            "AIG core simplification",
+                                            "Interval Propagation",
+                                            "Always True",
+                                            "Sharing-aware Flattening"};
 
   typedef std::pair<Category, long> Element;
 
@@ -74,16 +95,16 @@ private:
   std::stack<Element> category_stack;
 
   // millisecond precision timer.
-  long getCurrentTime();
+  DLL_PUBLIC long getCurrentTime();
   void addTime(Category c, long milliseconds);
 
   long lastTime;
 
 public:
-  void addCount(Category c);
-  void start(Category c);
-  void stop(Category c);
-  void print();
+  DLL_PUBLIC void addCount(Category c);
+  DLL_PUBLIC void start(Category c);
+  DLL_PUBLIC void stop(Category c);
+  DLL_PUBLIC void print();
 
   std::string getDifference();
 
@@ -97,7 +118,8 @@ public:
   {
     counts.clear();
     times.clear();
-    while (!category_stack.empty()) {
+    while (!category_stack.empty())
+    {
       category_stack.pop();
     }
   }

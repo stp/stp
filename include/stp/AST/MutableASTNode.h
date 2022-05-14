@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -38,7 +37,7 @@ namespace stp
 {
 class MutableASTNode
 {
-  static vector<MutableASTNode*> all;
+  static THREAD_LOCAL vector<MutableASTNode*> all;
 
 public:
   typedef std::set<MutableASTNode*> ParentsType;
@@ -150,13 +149,12 @@ public:
 
     if (n.GetType() == BOOLEAN_TYPE)
     {
-      n = stpMgr->hashingNodeFactory->CreateNode(n.GetKind(),
-                                                        newChildren);
+      n = stpMgr->hashingNodeFactory->CreateNode(n.GetKind(), newChildren);
     }
     else if (n.GetType() == BITVECTOR_TYPE)
     {
-      n = stpMgr->hashingNodeFactory->CreateTerm(
-          n.GetKind(), n.GetValueWidth(), newChildren);
+      n = stpMgr->hashingNodeFactory->CreateTerm(n.GetKind(), n.GetValueWidth(),
+                                                 newChildren);
     }
     else
     {

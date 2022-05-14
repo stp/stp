@@ -24,9 +24,9 @@ THE SOFTWARE.
 **********************/
 
 /* g++ -I$(HOME)/stp/c_interface push-no-pop.c -L$(HOME)/lib -lstp -o cc*/
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 TEST(push_no_pop, one)
 {

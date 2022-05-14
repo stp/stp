@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
 #include <cassert>
 #include <cctype>
-#include "stp/Printer/SMTLIBPrinter.h"
 
 // Outputs in the SMTLIB1 format. If you want something that can be parsed by
 // other tools call
@@ -47,7 +47,7 @@ void SMTLIB1_Print1(ostream& os, const stp::ASTNode n, int indentation,
                     bool letize);
 void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
-void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr * mgr)
+void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr)
 {
   os << "(" << endl;
   os << "benchmark blah" << endl;
@@ -133,11 +133,11 @@ void outputBitVec(const ASTNode n, ostream& os)
   // Prepend with zero to convert to unsigned.
 
   os << "bv";
-  CBV zero = CONSTANTBV::BitVector_Create(1, true); // TODO need to destroy???
-  CBV unsign = CONSTANTBV::BitVector_Concat(
-      zero, op.GetBVConst());
+  CBV zero = CONSTANTBV::BitVector_Create(1, true);
+  CBV unsign = CONSTANTBV::BitVector_Concat(zero, op.GetBVConst());
   unsigned char* str = CONSTANTBV::BitVector_to_Dec(unsign);
   CONSTANTBV::BitVector_Destroy(unsign);
+  CONSTANTBV::BitVector_Destroy(zero);
   os << str << "[" << op.GetValueWidth() << "]";
   CONSTANTBV::BitVector_Dispose(str);
 }

@@ -18,6 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+# Enable symbol exports
+add_definitions(-D STP_EXPORTS)
+
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
@@ -30,6 +33,8 @@ add_subdirectory(STPManager)
 add_subdirectory(ToSat)
 add_subdirectory(Sat)
 add_subdirectory(Util)
+add_subdirectory(NodeFactory)
+
 
 
 # FIXME: Do we need all these targets
@@ -51,6 +56,8 @@ set(stp_lib_targets
     parser
     printer
     util
+    nodefactories
+    ${PLATFORM_COMPAT_LIBRARIES}
 )
 
 # Create list of objects and gather list of
@@ -63,60 +70,67 @@ foreach(target ${stp_lib_targets})
     get_target_property(TARGETS_PUBLIC_HEADERS ${target} PUBLIC_HEADER)
     if (EXISTS "${TARGETS_PUBLIC_HEADERS}")
         list(APPEND stp_public_headers "${TARGETS_PUBLIC_HEADERS}")
-        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target libstp")
+        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target stp")
     endif()
 endforeach()
 
-add_library(libstp ${stp_lib_objects})
+if(CMAKE_GENERATOR STREQUAL Xcode)
+    # XCode has a serious bug where the XCode project produces an invalid target that will not get
+    # linked if it consists only of objects from object libraries, it will not generate any
+    # products (executables, libraries). The only work around is to add a dummy source
+    # file to the library definition. This is an XCode, not a CMake bug.
+    # see https://itk.org/Bug/view.php?id=14044
+    set(XCODE_DUMMY_FILE "${CMAKE_BINARY_DIR}/xcode_dummy.cpp")
+    file(WRITE ${XCODE_DUMMY_FILE} "")
+    list(APPEND stp_lib_objects ${XCODE_DUMMY_FILE})
+endif()
 
-set_target_properties(libstp PROPERTIES
-                        OUTPUT_NAME stp
-                        PUBLIC_HEADER "${stp_public_headers}"
-                        VERSION ${PROJECT_VERSION}
-                        SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-                     )
+add_library(stp
+    ${stp_lib_objects}
+)
 
-# -----------------------------------------------------------------------------
-# Support building both static and dynamic library
-# -----------------------------------------------------------------------------
-# if (BUILD_SHARED_LIBS AND ALSO_BUILD_STATIC_LIB)
-#   add_library(libstp_static STATIC ${stp_lib_objects})
-#
-#   set_target_properties(libstp_static PROPERTIES
-#                           OUTPUT_NAME stp
-#                           VERSION ${PROJECT_VERSION}
-#                        )
-#
-#   install(TARGETS libstp_static
-#               EXPORT ${STP_EXPORT_NAME}
-#               LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-#               ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-#          )
-# endif()
+# Set the public header so it will be installed
+set_target_properties(stp PROPERTIES
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
+    VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+)
+
+if(WIN32)
+    set_target_properties(stp PROPERTIES
+        OUTPUT_NAME stpwin
+    )
+else()
+    set_target_properties(stp PROPERTIES
+        OUTPUT_NAME stp
+    )
+endif()
+
 
 # -----------------------------------------------------------------------------
 # On non-windows systems a built static library cannot have another static
 # library linked to it. So this does not cause the Boost libraries to be
-# added to ``libstp.a``. Instead what this does is tell CMake that anything
-# that we built that uses the ``libstp`` target should also link in these
+# added to ``stp.a``. Instead what this does is tell CMake that anything
+# that we built that uses the ``stp`` target should also link in these
 # Boost libraries.
 #
-# So the stp executable and any clients of libstp that use the exported CMake
+# So the stp executable and any clients of stp that use the exported CMake
 # targets (e.g. examples/simple) will know what to link in.
 #
-# Clients of libstp that don't use CMake will have to link the Boost libraries
+# Clients of stp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-set(libstp_link_libs ${Boost_LIBRARIES} ${MINISAT_LIBRARIES})
+set(stp_link_libs ${MINISAT_LIBRARIES})
+
 if (USE_CRYPTOMINISAT)
-    if (NOT BUILD_SHARED_LIBS)
-      set(libstp_link_libs
-        ${libstp_link_libs}
-        /usr/local/lib/${CRYPTOMINISAT5_STATIC_LIBRARIES}
+    if (STATICCOMPILE)
+      set(stp_link_libs
+        ${stp_link_libs}
+        ${CRYPTOMINISAT5_STATIC_LIBRARIES}
         ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS})
     else()
-      set(libstp_link_libs
-        ${libstp_link_libs}
+      set(stp_link_libs
+        ${stp_link_libs}
         ${CRYPTOMINISAT5_LIBRARIES})
     endif()
 endif()
@@ -126,19 +140,22 @@ set(libstp_link_libs ${libstp_link_libs} /home/thansen/solvers/abc/libabc.a)
 set(libstp_link_libs ${libstp_link_libs} dl)
 set(libstp_link_libs ${libstp_link_libs} readline)
  
+#target_link_libraries(libstp ${libstp_link_libs})
 
-target_link_libraries(libstp ${libstp_link_libs})
+if (USE_RISS)
+    set(stp_link_libs
+        ${stp_link_libs} -lriss-coprocessor)
+endif()
 
-# Set the public header so it will be installed
-set_target_properties(libstp
-                      PROPERTIES
-                      VERSION ${PROJECT_VERSION}
-                      PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
-                     )
 
-install(TARGETS libstp
-            EXPORT ${STP_EXPORT_NAME}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            PUBLIC_HEADER DESTINATION include/stp
-       )
+target_link_libraries(stp
+    LINK_PUBLIC ${stp_link_libs}
+)
+
+install(TARGETS stp
+    EXPORT ${STP_EXPORT_NAME}
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_FULL_INCLUDEDIR}/stp"
+)

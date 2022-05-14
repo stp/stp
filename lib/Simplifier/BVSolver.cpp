@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/Simplifier/BVSolver.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/BVSolver.h"
 
 // This file contains the implementation of member functions of
 // bvsolver class, which represents the bitvector arithmetic linear
@@ -73,9 +73,8 @@ ASTNode BVSolver::simplifyNode(const ASTNode n)
 // value by reference in the argument 'output'
 bool BVSolver::CheckAlreadySolvedMap(const ASTNode& key, ASTNode& output)
 {
-  if (key == ASTTrue
-    || key == ASTFalse
-  ) {
+  if (key == ASTTrue || key == ASTFalse)
+  {
     output = key;
     return true;
   }
@@ -106,7 +105,7 @@ void BVSolver::SplitEven_into_Oddnum_PowerOf2(const ASTNode& in,
   // location of the least significant bit turned on.
   for (number_shifts = 0;
        number_shifts < in.GetValueWidth() &&
-           !CONSTANTBV::BitVector_bit_test(in.GetBVConst(), number_shifts);
+       !CONSTANTBV::BitVector_bit_test(in.GetBVConst(), number_shifts);
        number_shifts++)
   {
   };
@@ -134,7 +133,7 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   vars.getSymbol(eq);
 
   // handle BVPLUS case
-  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
+  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren(),50);
   ASTVec o;
   ASTNode outmonom = ASTUndefined;
   bool chosen_symbol = false;
@@ -461,7 +460,6 @@ ASTNode BVSolver::BVSolve_Odd(const ASTNode& input)
       // will return eq.
       output = substitute(eq, lhs, rhs, single);
     } while (output == eq);
-
   }
 
   else if (BVUMINUS == lhs.GetKind())
@@ -608,8 +606,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   if (evens != ASTTrue)
     output = nf->CreateNode(AND, output, evens);
 
-  // if (_bm->UserFlags.isSet("xor-solve","1"))
-  //  output = solveForAndOfXOR(output);
+  _bm->GetRunTimes()->stop(RunTimes::BVSolver);
 
   // Imagine in the last conjunct A is replaced by B. But there could
   // be variable A's in the first conjunct. This gets rid of 'em.
@@ -620,7 +617,6 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   }
 
   UpdateAlreadySolvedMap(_input, output);
-  _bm->GetRunTimes()->stop(RunTimes::BVSolver);
   return output;
 }
 
@@ -663,7 +659,8 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
     {
       // Can't decide if there are more than 1 constants
       // TODO fix logic so we can decide
-      if (savetheconst != rhs) {
+      if (savetheconst != rhs)
+      {
         evenflag = false;
         return eq;
       }

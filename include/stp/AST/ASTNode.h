@@ -24,12 +24,15 @@ THE SOFTWARE.
 #ifndef ASTNODE_H
 #define ASTNODE_H
 
-#include "stp/AST/ASTInternal.h"
-#include "stp/AST/NodeFactory/HashingNodeFactory.h"
+#include "stp/NodeFactory/HashingNodeFactory.h"
+#include "stp/Util/Attributes.h"
+#include "ASTInternal.h"
+#include "stp/Globals/Globals.h"
 
 namespace stp
 {
 using std::ostream;
+class ASTInternal;
 
 /******************************************************************
  *  A Kind of Smart pointer to actual ASTInternal datastructure.  *
@@ -43,19 +46,19 @@ class ASTNode
   friend class ASTInterior;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
-                                             const ASTVec& back_children);
+                                                const ASTVec& back_children);
   friend bool exprless(const ASTNode n1, const ASTNode n2);
   friend bool arithless(const ASTNode n1, const ASTNode n2);
 
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
 
-  explicit ASTNode(ASTInternal* in);
+  DLL_PUBLIC explicit ASTNode(ASTInternal* in);
 
   // Equal iff ASTIntNode pointers are the same.
   friend bool operator==(const ASTNode& node1, const ASTNode& node2)
   {
-    return ((size_t)node1._int_node_ptr) == ((size_t)node2._int_node_ptr);
+    return (node1.Hash() == node2.Hash());
   }
 
   friend bool operator!=(const ASTNode& node1, const ASTNode& node2)
@@ -65,24 +68,19 @@ class ASTNode
 
   friend bool operator<(const ASTNode& node1, const ASTNode& node2)
   {
-    return ((size_t)node1._int_node_ptr) < ((size_t)node2._int_node_ptr);
+    return (node1.Hash() < node2.Hash());
   }
 
-public:
-  /****************************************************************
-   * Public Member Functions                                      *
-   ****************************************************************/
+  STPMgr* GetSTPMgr() const;
 
+public:
   uint8_t getIteration() const;
   void setIteration(uint8_t v) const;
 
-  // Default constructor.
-  ASTNode() : _int_node_ptr(NULL){};
-
-  // Copy constructor
-  ASTNode(const ASTNode& n);
-
-  ~ASTNode();
+  DLL_PUBLIC ASTNode() : _int_node_ptr(NULL){};
+  DLL_PUBLIC ASTNode(const ASTNode& n);
+  DLL_PUBLIC ~ASTNode();
+  DLL_PUBLIC ASTNode(ASTNode&& other) noexcept;
 
   // Print the arguments in lisp format
   friend ostream& LispPrintVec(ostream& os, const ASTVec& v, int indentation);
@@ -102,7 +100,7 @@ public:
   bool isITE() const
   {
     Kind k = GetKind();
-    return k== ITE;
+    return k == ITE;
   }
 
   bool isAtom() const
@@ -114,15 +112,16 @@ public:
   bool isPred() const
   {
     const Kind k = GetKind();
-    return k == BVLT || k == BVLE || k == BVGT || k == BVGE ||
-            k == BVSLT || k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
+    return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
+           k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
   }
 
   // delegates to the ASTInternal node.
   void nodeprint(ostream& os, bool c_friendly = false) const;
 
   // Assignment (for ref counting)
-  ASTNode& operator=(const ASTNode& n);
+  DLL_PUBLIC ASTNode& operator=(const ASTNode& n);
+  DLL_PUBLIC ASTNode& operator=(ASTNode&& n);
 
   // Access node number
   unsigned GetNodeNum() const;
@@ -151,8 +150,7 @@ public:
   // Get back() element for child nodes
   const ASTNode back() const { return GetChildren().back(); };
 
-  // Get the name from a symbol (char *).  It's an error if kind !=
-  // SYMBOL.
+  // Get the name from a symbol (char *).  It's an error if kind != SYMBOL.
   const char* GetName() const;
 
   // Get the BVCONST value.
@@ -168,13 +166,13 @@ public:
    * Both indexwidth and valuewidth should never be less than 0      *
    *******************************************************************/
   unsigned int GetIndexWidth() const;
-  unsigned int GetValueWidth() const;
+  DLL_PUBLIC unsigned int GetValueWidth() const;
   void SetIndexWidth(unsigned int iw) const;
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
 
   // Hash using pointer value of _int_node_ptr.
-  size_t Hash() const { return (size_t)_int_node_ptr; }
+  DLL_PUBLIC size_t Hash() const;
 
   void NFASTPrint(int l, int max, int prefix) const;
 
@@ -183,7 +181,11 @@ public:
   ostream& LispPrint_indent(ostream& os, int indentation) const;
 
   // Presentation Language Printer
-  ostream& PL_Print(ostream& os , STPMgr *mgr, int indentation = 0) const;
+  ostream& PL_Print(ostream& os, STPMgr* mgr, int indentation = 0) const;
+  ostream& PL_Print(ostream& os, int /*indentation = 0*/) const
+  {
+    return PL_Print(os, GetSTPMgr(), 0);
+  }
 
   // Construct let variables for shared subterms
   void LetizeNode(STPMgr* bm) const;
@@ -203,7 +205,7 @@ public:
   bool IsDefined() const { return _int_node_ptr != NULL; }
 
   /*****************************************************************
-   * Hasher class for STL hash_maps and hash_sets that use ASTNodes*
+   * Hasher class for STL std::unordered_map-s and std::unordered_set-s that use ASTNodes*
    * as keys.  Needs to be public so people can define hash tables *
    * (and use ASTNodeMap class)                                    *
    *****************************************************************/
@@ -212,13 +214,13 @@ public:
   public:
     size_t operator()(const ASTNode& n) const
     {
-      return (size_t)n._int_node_ptr;
+      return n.Hash();
       // return (size_t)n.GetNodeNum();
     };
-  }; 
+  };
 
   /*****************************************************************
-   * Equality for ASTNode hash_set and hash_map. Returns true iff  *
+   * Equality for ASTNode std::unordered_set and std::unordered_map. Returns true iff  *
    * internal pointers are the same.  Needs to be public so people *
    * can define hash tables (and use ASTNodeSet class)             *
    *****************************************************************/
@@ -227,10 +229,9 @@ public:
   public:
     bool operator()(const ASTNode& n1, const ASTNode& n2) const
     {
-      return (n1._int_node_ptr == n2._int_node_ptr);
+      return (n1.Hash() == n2.Hash());
     }
   };
-
 };
 
 } // end of namespace

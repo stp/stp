@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
@@ -27,18 +26,18 @@ THE SOFTWARE.
 #define STP_H
 
 #include "stp/AST/AST.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/BVSolver.h"
-#include "stp/Simplifier/Simplifier.h"
-#include "stp/ToSat/ASTNode/ToSAT.h"
-#include "stp/Parser/LetMgr.h"
-#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Util/Attributes.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 namespace stp
 {
-// not copyable
 // FIXME: This needs a better name
 class STP
 {
@@ -63,45 +62,42 @@ class STP
   SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
                                     const ASTNode& modified_input);
 
-  SOLVER_RETURN_TYPE solve_by_sat_solver(
-    SATSolver* newS,
-    ASTNode original_input);
+  SOLVER_RETURN_TYPE solve_by_sat_solver(SATSolver* newS,
+                                         ASTNode original_input);
 
   SATSolver* get_new_sat_solver();
 
 public:
-
   STPMgr* bm;
   Simplifier* simp;
   ToSATBase* tosat;
   AbsRefine_CounterExample* Ctr_Example;
   ArrayTransformer* arrayTransformer;
+  SubstitutionMap* substitutionMap;
 
-  STP(STPMgr* b, Simplifier* s, ArrayTransformer* a, ToSATBase* ts,
-      AbsRefine_CounterExample* ce)
+public:
+  STP(STPMgr* b)
   {
     bm = b;
-    simp = s;
-    tosat = ts;
-    arrayTransformer = a;
-    Ctr_Example = ce;
-  } 
+    substitutionMap = new stp::SubstitutionMap(bm);
+    simp = new Simplifier(bm,substitutionMap);
+    arrayTransformer = new ArrayTransformer(bm, simp);
+    Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+    tosat = new ToSATAIG(bm, arrayTransformer);
+  }
 
-  STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
-      ToSATBase* ts, AbsRefine_CounterExample* ce)
+  STP( const STP& ) = delete; 
+  STP& operator=( const STP& ) = delete; 
+
+  ~STP() 
+  { 
+    ClearAllTables(); 
+    deleteObjects();
+  }
+
+  // NB doesn't delete the STPMgr.
+  void deleteObjects()
   {
-    bm = b;
-    simp = s;
-    tosat = ts;
-    delete bsolv; // Remove from the constructor later..
-    arrayTransformer = a;
-    Ctr_Example = ce;
-  } 
-
-  ~STP()
-  {
-    ClearAllTables();
-
     delete Ctr_Example;
     Ctr_Example = NULL;
 
@@ -113,21 +109,19 @@ public:
 
     delete simp;
     simp = NULL;
-    // delete bm;
+
+    delete substitutionMap;
+    substitutionMap = NULL;
   }
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
-  SOLVER_RETURN_TYPE TopLevelSTP(
-    const ASTNode& inputasserts,
-    const ASTNode& query
-  );
+  DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
+                                            const ASTNode& query);
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
-                           BVSolver* bvSolver, PropagateEqualities* pe,
-                           const int initial_difficulty_score,
-                           int& actualBBSize);
+                           BVSolver* bvSolver, PropagateEqualities* pe);
 
   void ClearAllTables(void)
   {
@@ -141,7 +135,6 @@ public:
       Ctr_Example->ClearAllTables();
     // bm->ClearAllTables();
   }
-
-}; 
+};
 } // end of namespace
 #endif

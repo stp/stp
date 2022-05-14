@@ -44,11 +44,6 @@ add_library(AST OBJECT
     ASTmisc.cpp
     ASTSymbol.cpp
     MutableASTNode.cpp
-
-    NodeFactory/HashingNodeFactory.cpp
-    NodeFactory/NodeFactory.cpp
-    NodeFactory/SimplifyingNodeFactory.cpp
-    NodeFactory/TypeChecker.cpp
 )
 
 add_dependencies(AST ASTKind_header)

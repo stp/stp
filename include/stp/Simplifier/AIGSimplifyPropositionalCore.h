@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -43,29 +42,28 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
-// FIXME: External libraries
 #include "aig/aig/aig.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 
 namespace stp
 {
-using std::make_pair;
 
-class AIGSimplifyPropositionalCore // not copyable
+class AIGSimplifyPropositionalCore 
 {
-
   ASTNodeMap varToNodeMap;
   STPMgr* bm;
   NodeFactory* nf;
 
 public:
   AIGSimplifyPropositionalCore(STPMgr* _bm);
- 
+  
+  AIGSimplifyPropositionalCore(const AIGSimplifyPropositionalCore&) = delete;
+  AIGSimplifyPropositionalCore & operator=(const AIGSimplifyPropositionalCore&) = delete;
 
 private:
   // Convert theory nodes to fresh variables.
   ASTNode theoryToFresh(const ASTNode& n, ASTNodeMap& fromTo);
-  
+
   typedef std::map<Aig_Obj_t*, ASTNode> cacheType;
 
   // Convert the AIG back to an ASTNode.
@@ -73,7 +71,6 @@ private:
 
 public:
   ASTNode topLevel(const ASTNode& top);
-
 };
 }
 #endif /* AIGSIMPLIFYPROPOSITIONALCORE_H_ */

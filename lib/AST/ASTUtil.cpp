@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/UsefulDefs.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/Globals/Globals.h"
+#include "stp/STPManager/STPManager.h"
 namespace stp
 {
 using std::cout;
@@ -51,7 +51,7 @@ ostream& operator<<(ostream& os, const Spacer& sp)
 // the function will then print the stats that it has collected.
 void CountersAndStats(const char* functionname, STPMgr* bm)
 {
-  static function_counters s;
+  static THREAD_LOCAL function_counters s;
   if (bm->UserFlags.stats_flag)
   {
 

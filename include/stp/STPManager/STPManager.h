@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -26,15 +25,16 @@ THE SOFTWARE.
 #ifndef STPMGR_H
 #define STPMGR_H
 
-#include "stp/AST/ASTNode.h"
-#include "stp/AST/ASTInterior.h"
-#include "stp/AST/ASTSymbol.h"
 #include "stp/AST/ASTBVConst.h"
+#include "stp/AST/ASTInterior.h"
+#include "stp/AST/ASTNode.h"
+#include "stp/AST/ASTSymbol.h"
 
-#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/HashingNodeFactory.h"
+#include "stp/NodeFactory/HashingNodeFactory.h"
+#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
@@ -47,26 +47,24 @@ class STPMgr
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTSymbol;
-  friend ASTNode
-  HashingNodeFactory::CreateNode(const Kind kind,
-                                 const ASTVec& back_children);
+  friend ASTNode HashingNodeFactory::CreateNode(const Kind kind,
+                                                const ASTVec& back_children);
 
 private:
-  /****************************************************************
-   * Private Typedefs and Data                                    *
-   ****************************************************************/
-
   // Typedef for unique Interior node table.
-  typedef hash_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
-                   ASTInterior::ASTInteriorEqual> ASTInteriorSet;
+  typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
+                             ASTInterior::ASTInteriorEqual>
+      ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
-  typedef hash_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
-                   ASTSymbol::ASTSymbolEqual> ASTSymbolSet;
+  typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
+                             ASTSymbol::ASTSymbolEqual>
+      ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
-  typedef hash_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
-                   ASTBVConst::ASTBVConstEqual> ASTBVConstSet;
+  typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
+                             ASTBVConst::ASTBVConstEqual>
+      ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing
   ASTInteriorSet _interior_unique_table;
@@ -76,9 +74,6 @@ private:
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
-
-  // Global for assigning new node numbers.
-  int _max_node_num;
 
   uint8_t last_iteration;
 
@@ -193,18 +188,9 @@ public:
    ****************************************************************/
   UserDefinedFlags UserFlags;
 
-  // This flag, when true, indicates that counterexample is being
-  // checked by the counterexample checker
-  bool counterexample_checking_during_refinement;
-
   // This flag indicates as to whether the input has been determined
   // to be valid or not by this tool
   bool ValidFlag;
-
-  // Flags indicates that counterexample will now be checked by the
-  // counterexample checker, and hence simplifyterm must switch off
-  // certain optimizations. In particular, array write optimizations
-  bool SimplifyWrites_InPlace_Flag;
 
   // count is used in the creation of new variables
   unsigned int _symbol_count;
@@ -216,13 +202,11 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-  STPMgr()
-      : _max_node_num(0), last_iteration(0), soft_timeout_expired(false),
-        _symbol_count(0), CNFFileNameCounter(0)
+  DLL_PUBLIC STPMgr()
+      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0),
+        CNFFileNameCounter(0)
   {
     ValidFlag = false;
-    counterexample_checking_during_refinement = false;
-    SimplifyWrites_InPlace_Flag = false;
 
     // Need to initiate the node factories before any nodes are created.
     hashingNodeFactory = new HashingNodeFactory(*this);
@@ -236,16 +220,8 @@ public:
     CreateBVConstVal = NULL;
   }
 
-  RunTimes* GetRunTimes(void)
-  {
-    return runTimes;
-  }
+  RunTimes* GetRunTimes(void) { return runTimes; }
 
-  int NewNodeNum()
-  {
-    _max_node_num += 2;
-    return _max_node_num;
-  }
   unsigned int NodeSize(const ASTNode& a);
 
   /****************************************************************
@@ -260,7 +236,7 @@ public:
   ASTNode CreateTwoConst(unsigned int width);
   ASTNode CreateMaxConst(unsigned int width);
   ASTNode CreateZeroConst(unsigned int width);
-  ASTNode CreateBVConst(CBV bv, unsigned width);
+  DLL_PUBLIC ASTNode CreateBVConst(CBV bv, unsigned width);
   ASTNode CreateBVConst(const char* strval, int base);
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
@@ -270,35 +246,36 @@ public:
    * Create Node functions                                        *
    ****************************************************************/
 
-  inline ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
-                              unsigned valueWidth)
+  DLL_PUBLIC inline ASTNode
+  CreateSymbol(const char* const name, unsigned indexWidth, unsigned valueWidth)
   {
     return defaultNodeFactory->CreateSymbol(name, indexWidth, valueWidth);
   }
 
   // Create and return an interior ASTNode
-  inline ASTNode CreateNode(stp::Kind kind,
-                                  const ASTVec& children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode CreateNode(stp::Kind kind,
+                                       const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0,
+             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, back_children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTNode& child1,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
+             const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, child1, back_children);
   }
 
-  inline ASTNode CreateNode(Kind kind, const ASTNode& child0,
-                            const ASTNode& child1, const ASTNode& child2,
-                            const ASTVec& back_children = _empty_ASTVec)
+  DLL_PUBLIC inline ASTNode
+  CreateNode(Kind kind, const ASTNode& child0, const ASTNode& child1,
+             const ASTNode& child2, const ASTVec& back_children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateNode(kind, child0, child1, child2,
                                           back_children);
@@ -310,14 +287,14 @@ public:
 
   // Create and return an ASTNode for a term
   inline ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                                  const ASTVec& children = _empty_ASTVec)
+                            const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateTerm(kind, width, children);
   }
 
-  inline ASTNode
-  CreateArrayTerm(stp::Kind kind, unsigned int indexWidth, unsigned int width,
-                  const ASTVec& children = _empty_ASTVec)
+  inline ASTNode CreateArrayTerm(stp::Kind kind, unsigned int indexWidth,
+                                 unsigned int width,
+                                 const ASTVec& children = _empty_ASTVec)
   {
     return defaultNodeFactory->CreateArrayTerm(kind, indexWidth, width,
                                                children);
@@ -352,13 +329,16 @@ public:
 
   void Pop(void);
   void Push(void);
-  const ASTNode PopQuery();
+
+  // Queries aren't maintained on a stack.
+  // Used by CVC & C-interface.
   const ASTNode GetQuery();
+  void SetQuery(const ASTNode& q);
+
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();
 
   // add a query/assertion to the current logical context
-  void AddQuery(const ASTNode& q);
   void AddAssert(const ASTNode& assert);
 
   /****************************************************************
@@ -366,8 +346,13 @@ public:
    ****************************************************************/
 
   // For printing purposes
-  // Not filled in by the smtlib parser.
+  // Used just by the CVC parser.
   ASTVec ListOfDeclaredVars;
+
+  // For printing purposes
+  // Used just via the C-interface.
+  // Note, not maintained properly wrt push/pops
+  vector<stp::ASTNode> decls;
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -413,7 +398,7 @@ public:
       return true;
     }
     return false;
-  } 
+  }
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
@@ -432,18 +417,61 @@ public:
     TermsAlreadySeenMap.clear();
     NodeLetVarVec.clear();
     ListOfDeclaredVars.clear();
-  } 
+  }
 
-  ~STPMgr();
+  DLL_PUBLIC ~STPMgr();
 
-  // Used just via the C-Interface.
-  // persist holds a copy of ASTNodes so that the reference count of
-  // objects we have pointers to doesn't hit zero.
+  // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
   vector<stp::ASTNode*> persist;
 
-  // Used just via the C-interface.
-  // Keeps a list of the variable that have been defined, in case you want to print them back out.
-  vector<stp::ASTNode> decls;
+  void print_stats() const
+  {
+
+    if (_interior_unique_table.size() > 0)
+    {
+      std::cerr << "Interiors:" << _interior_unique_table.size() << " of ";
+      std::cerr << sizeof(**_interior_unique_table.begin()) << " bytes each"
+                << std::endl;
+    }
+
+    std::map<Kind, int> freq;
+    for (auto it : _interior_unique_table)
+    {
+      freq[it->GetKind()]++;
+    }
+
+    for (auto it : freq)
+      std::cerr << it.first << " " << it.second << std::endl;
+
+    if (_symbol_unique_table.size() > 0)
+    {
+      std::cerr << "Symbols:" << _symbol_unique_table.size() << " of ";
+      std::cerr << sizeof(**_symbol_unique_table.begin()) << " bytes each"
+                << std::endl;
+    }
+
+    if (_bvconst_unique_table.size() > 0)
+    {
+      std::cerr << "BVConsts:" << _bvconst_unique_table.size() << " of ";
+      std::cerr << sizeof(**_bvconst_unique_table.begin()) << " bytes each"
+                << std::endl;
+    }
+  }
+
+  ASTNodeSet getSymbols()
+  {
+     ASTNodeSet symbols;
+     symbols.reserve(_symbol_unique_table.size());
+
+     for (const auto& s : _symbol_unique_table)
+      {
+          ASTNode n(s);
+          symbols.insert(n);
+      }
+
+    return symbols; //hopefully move semantics.
+  }
+
 };
 
 } // end of namespace

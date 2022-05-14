@@ -158,7 +158,6 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
     }
 
     if (ones > 0) // Atleast a single one found!
-
     {
       if (answerKnown && !answer)
         return CONFLICT;
@@ -170,9 +169,7 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
         r = CHANGED;
       }
     }
-
-    if (zeroes == numberOfChildren) // all zeroes.
-
+    else if (zeroes == numberOfChildren) // all zeroes.
     {
       if (answerKnown && answer)
         return CONFLICT;
@@ -184,15 +181,10 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
         output.setValue(i, false);
       }
     }
-
-    if (answerKnown && !answer) // known false
-
+    // ones ==0, zeroes != numberChildren.
+    else if (answerKnown && !answer)
     {
-      if (ones > 0)
-        return CONFLICT;
-
       // set all the column to false.
-
       for (int j = 0; j < numberOfChildren; j++)
       {
         if (!children[j]->isFixed(i))
@@ -203,9 +195,8 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
         }
       }
     }
-
-    if (unks == 1 && answerKnown && answer &&
-        (zeroes == (numberOfChildren - 1)))
+    else if (unks == 1 && answerKnown && answer &&
+             (zeroes == (numberOfChildren - 1)))
     {
       // A single unknown, everything else is false. The answer is true. So the
       // unknown is true.

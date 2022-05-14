@@ -38,9 +38,9 @@ THE SOFTWARE.
 
 struct CStringHash
 {
-  ::std::size_t operator()(const char* str) const
+  std::size_t operator()(const char* str) const
   {
-    ::std::size_t hash = 5381;
+    std::size_t hash = 5381;
 
     while (char c = *str++)
       hash = ((hash << 5) + hash) + (unsigned char)c;

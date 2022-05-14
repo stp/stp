@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew
+ * AUTHORS: Trevor Hansen
  *
  * BEGIN DATE: November, 2005
  *
@@ -22,139 +22,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+// Times how long running constant bit propagation takes per transfer function.
+
 #include <ctime>
+#include <iomanip>
+#include <list>
 #include <vector>
+
+#include "extlib-constbv/constantbv.h"
 #include "stp/AST/AST.h"
+#include "stp/AST/ASTKind.h"
+#include "stp/Parser/LetMgr.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
-
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
-#include "extlib-constbv/constantbv.h"
-
-#include "stp/AST/ASTKind.h"
-#include "stp/STPManager/STPManager.h"
-#include "stp/cpp_interface.h"
-#include <list>
-#include <iomanip>
-#include "stp/cpp_interface.h"
-
-#include "stp/Util/StopWatch.h"
 #include "stp/Util/Relations.h"
-#include "stp/Parser/LetMgr.h"
+#include "stp/Util/StopWatch.h"
+#include "stp/cpp_interface.h"
 
 using simplifier::constantBitP::FixedBits;
 using namespace simplifier::constantBitP;
 
-const int iterations = 500000;
-const unsigned bitWidth = 64;
+const int iterations = 50000;
+const unsigned bitWidth = 65;
 
 stp::STPMgr* beev;
-
-void run(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
-         const int probabilityOfFixing, ostream& output)
-{
-  Stopwatch s;
-
-  int unsatisfiableCount = 0;
-  int satisfiableCount = 0;
-
-  unsigned calls = 0;
-
-  MTRand rand(10U);
-
-  unsigned long totalOutputBits = 0;
-  unsigned long totalOutputOneBits = 0;
-  unsigned long totalFixedOutputBits = 0;
-
-  for (int i = 0; i < iterations; i++)
-  {
-    vector<FixedBits*> children;
-
-    FixedBits a = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
-    FixedBits b = FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
-
-    FixedBits output =
-        FixedBits::createRandom(bitWidth, probabilityOfFixing, rand);
-
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      totalOutputBits++;
-      if (output.isFixed(i))
-      {
-        totalFixedOutputBits++;
-        if (output.getValue(i))
-          totalOutputOneBits++;
-      }
-    }
-
-    children.push_back(&a);
-    children.push_back(&b);
-
-    bool done = false;
-    bool first = true;
-  top:
-    while (!done)
-    {
-      calls++;
-      Result r = transfer(children, output);
-
-      if (CONFLICT == r)
-      {
-        unsatisfiableCount++;
-        done = true;
-        if (!first)
-          throw "BAD";
-      }
-      else
-      {
-        first = false;
-        for (unsigned i = 0; i < bitWidth; i++)
-        {
-          if (!a.isFixed(i))
-          {
-            a.setFixed(i, true);
-            a.setValue(i, false);
-            goto top;
-          }
-          if (!b.isFixed(i))
-          {
-            b.setFixed(i, true);
-            b.setValue(i, false);
-            goto top;
-          }
-          if (!output.isFixed(i))
-          {
-            output.setFixed(i, true);
-            output.setValue(i, false);
-            goto top;
-          }
-        }
-        satisfiableCount++;
-        break;
-      }
-    }
-  }
-
-  output << "Iterations: " << iterations << endl;
-  output << "BitWidth: " << bitWidth << endl;
-  output << "Calls to transfer: " << calls << endl;
-  output << "Probability of fixing: " << probabilityOfFixing << endl;
-  output << "unsatisfiable count: " << unsatisfiableCount << endl;
-  output << "satisfiable count: " << satisfiableCount << endl;
-  output << "total: " << totalOutputBits << endl;
-  output << "total fixed: " << totalFixedOutputBits << endl;
-  output << "total One Bits fixed: " << totalOutputOneBits << endl;
-
-  s.stop();
-
-  return;
-}
 
 void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
                const int probabilityOfFixing, ostream& output, Kind k)
 {
-
-  int conflicts = 0;
 
   int initially_fixed = 0;
   int finally_fixed = 0;
@@ -175,12 +72,38 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
     children.push_back(&a);
     children.push_back(&b);
 
+    if (false)
+    {
+      std::cerr << a;
+      std::cerr << b;
+      std::cerr << output;
+      std::cerr << std::endl;
+    }
+
     Result r = transfer(children, output);
 
-    assert(r != CONFLICT);
+    if (false)
+    {
+      std::cerr << "after" << a;
+      std::cerr << b;
+      std::cerr << output;
+      std::cerr << std::endl;
+    }
+
+    if(r == CONFLICT)
+    {
+      std::cerr << "Error - should never occur";
+      exit(1);
+    }
+
 
     const int final = a.countFixed() + b.countFixed() + output.countFixed();
-    assert(final >= rel.initial);
+    if (final < rel.initial)
+    {
+       std::cerr << "Error(2) - should never occur";
+       exit(2); 
+    }
+
     finally_fixed += final;
     initially_fixed += rel.initial;
 
@@ -207,6 +130,12 @@ simplifier::constantBitP::Result signedRemainder(vector<FixedBits*>& children,
                                                  FixedBits& output)
 {
   return bvSignedRemainderBothWays(children, output, beev);
+}
+
+simplifier::constantBitP::Result unsignedModulus(vector<FixedBits*>& children,
+                                                 FixedBits& output)
+{
+  return bvUnsignedModulusBothWays(children, output, beev);
 }
 
 simplifier::constantBitP::Result unsignedDivision(vector<FixedBits*>& children,
@@ -247,6 +176,11 @@ int main(void)
 
   ostream& output = cerr;
 
+  output << "%"
+         << "iterations" << iterations << std::endl;
+  output << "%"
+         << "bit-width" << bitWidth << std::endl;
+
   output << "signed greater than equals" << endl;
   run_with_various_prob(&bvSignedGreaterThanEqualsBothWays, output, stp::BVSGE);
 
@@ -280,11 +214,11 @@ int main(void)
   output << "multiplication" << endl;
   run_with_various_prob(multiply, output, stp::BVMULT);
 
+  output << "unsigned remainder" << endl;
+  run_with_various_prob(unsignedModulus, output, stp::BVMOD);
+
   output << "unsigned division" << endl;
   run_with_various_prob(unsignedDivision, output, stp::BVDIV);
-
-  output << "unsigned remainder" << endl;
-  run_with_various_prob(signedRemainder, output, stp::BVMOD);
 
   output << "signed division" << endl;
   run_with_various_prob(signedDivision, output, stp::SBVDIV);
@@ -292,9 +226,8 @@ int main(void)
   output << "signed remainder" << endl;
   run_with_various_prob(signedRemainder, output, stp::SBVREM);
 
-  output << "%"
-         << "iterations" << iterations;
-  output << "%"
-         << "bit-width" << bitWidth;
+  output << "signed modulus" << endl;
+  run_with_various_prob(signedModulus, output, stp::SBVMOD);
+
   return 1;
 }

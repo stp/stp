@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -39,7 +38,6 @@ namespace constantBitP
 Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
 void setSignedMinMax(FixedBits& v, stp::CBV min, stp::CBV max);
 void setUnsignedMinMax(const FixedBits& v, stp::CBV min, stp::CBV max);
-unsigned cbvTOInt(const stp::CBV v);
 void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
                   bool toFix);
 int toInt(stp::CBV value);

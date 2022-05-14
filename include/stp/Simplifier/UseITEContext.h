@@ -42,26 +42,27 @@ THE SOFTWARE.
 
 namespace stp
 {
-class UseITEContext // not copyable
+class UseITEContext 
 {
   NodeFactory* nf;
   RunTimes* runtimes;
   ASTNode ASTTrue, ASTFalse;
 
   void addToContext(const ASTNode& n, ASTNodeSet& context);
-  
 
   // Unfortunately there can be a lot of paths through a small formula.
   // So we limit how often each node is visited.
 
   ASTNode visit(const ASTNode& n, std::map<ASTNode, int>& visited,
                 ASTNodeSet& visited_empty, ASTNodeSet& context);
-  
+
 public:
   ASTNode topLevel(const ASTNode& n);
-  
+
   UseITEContext(STPMgr* bm);
-  
+
+  UseITEContext(UseITEContext const&) = delete;
+  UseITEContext& operator=(UseITEContext const&) = delete;
 };
 }
 

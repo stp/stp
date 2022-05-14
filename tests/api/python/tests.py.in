@@ -26,26 +26,40 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@") # Make sure we can find the STP python package
+# Make sure we can find the STP python package
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
 
-from stp import stp, Solver
+import stp
 import unittest
+import ctypes
 
 
-@stp
+@stp.stp
 def test0_foo(a, b):
     assert b != 0
     return (a + 42) % b
 
 
-@stp
+@stp.stp
 def test0_bar(a, b):
     return a * b == 12345
 
 
 class TestSTP(unittest.TestCase):
     def setUp(self):
-        self.s = Solver()
+        self.s = stp.Solver()
+        self.stp_solvers = set(
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss"]
+        )
+
+    def test_long(self):
+        s = self.s
+        a = s.bitvec('a', 256)
+        b = s.bitvec('b', 256)
+        c = s.bitvecvalD(256, "1337")
+        d = s.bitvecvalD(256, "42")
+        self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
+        self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
 
     def test_simple(self):
         s = self.s
@@ -113,7 +127,7 @@ class TestSTP(unittest.TestCase):
         a, b, c = s.bitvecs('a b c')
         s.add(a != b, a != c, b != c)
         self.assertTrue(s.check(s.or_(a + b == 1, a + c == 1)))
-        self.assertTrue(s['a'] + s['b'] == 1 or s['a'] + s['c'] == 1)
+        self.assertTrue((s['a'] + s['b'])%(2**32) == 1 or (s['a'] + s['c'])%(2**32) == 1)
 
     def test_ast(self):
         models = [
@@ -123,7 +137,7 @@ class TestSTP(unittest.TestCase):
             {'y': 489153109, 'x': 489153109},
         ]
 
-        with Solver() as s:
+        with stp.Solver() as s:
             x, y = s.bitvecs('x y')
             count = 0
             while s.check(test0_foo(x, y) == test0_foo(y, x),
@@ -262,7 +276,163 @@ class TestSTP(unittest.TestCase):
             s.check(c == op(a))
             self.assertEqual(s.model()['c'], op(A) % 2**32)
 
+    def test_get_value_for_bitvecval(self):
+        solver = self.s
+        name_for_x = "x"
+        value_for_x = 0
+        x = solver.bitvec(name_for_x)
+        self.assertEqual(x.name, name_for_x)
+        self.assertEqual(x.value, value_for_x)
+
+        name_for_bitvecval = None
+        value_for_bitvecval = 18
+        bitvecval = solver.bitvecval(32, value_for_bitvecval)
+        self.assertEqual(bitvecval.name, name_for_bitvecval)
+        self.assertEqual(bitvecval.value, value_for_bitvecval)
+
+        #
+        # Build up a complex expression and check we can look it up from the
+        # model directly
+        #
+        expr_for_add = x.add(bitvecval.mul(2))
+        value_from_model = solver.model(expr=expr_for_add)
+        self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
+
+    def test_urem(self):
+        #
+        # Validate the `urem` capability in STP -- note: `urem` == `mod`!
+        #
+        solver = self.s
+        width = 32
+        needle = 0xDEADBEEF
+        x = solver.bitvec("x", width)
+        y = solver.bitvec("y", width)
+        expr = x.rem(y)
+        solver.add(expr == needle)
+        solver.add(y != 0) # avoid divide by zero
+        self.assertTrue(solver.check(), "instance should be satisfiable")
+        model = solver.model()
+        val_for_x = model["x"]
+        val_for_y = model["y"]
+        concrete_value = val_for_x % val_for_y
+        self.assertEqual(concrete_value, needle, "Concrete value did not match expected value")
+
+    def _test_solver(self, solver, is_default_solver=False):
+        """
+        Helper method to validate that the passed in "solver" can be set and
+        used
+        """
+        supports_method = getattr(self.s, "supports{:s}".format(solver))
+        use_method = getattr(self.s, "use{:s}".format(solver))
+        is_using_method = getattr(self.s, "isUsing{:s}".format(solver))
+
+        supported = supports_method()
+
+        if is_default_solver:
+            self.assertTrue(
+                supported,
+                "{solver:s} is a default solver, which is reporting as disabled".format(
+                    solver=solver
+                ),
+            )
+
+        #
+        # If the solver is supported, the "use" and "isUsing" methods should
+        # return true -- similarly, if the solver is not supported, then they
+        # both return false.
+        #
+        # We can use that as the condition for the assertion
+        #
+        self.assertEqual(
+            use_method(),
+            supported,
+            "Enabling {solver:s} did not match its 'supported' status".format(
+                solver=solver
+            ),
+        )
+        self.assertEqual(
+            is_using_method(),
+            supported,
+            "Checking if {solver:s} is in use did not match its 'supported' status".format(
+                solver=solver
+            ),
+        )
+
+        #
+        # When we're using a supported solver, then after calling `use_method`,
+        # all other solvers should not be in use
+        #
+        if supported:
+            for other_solver in self.stp_solvers - set([solver]):
+                other_is_using_method = getattr(
+                    self.s, "isUsing{:s}".format(other_solver)
+                )
+                self.assertFalse(
+                    other_is_using_method(),
+                    "{other_solver:s} reported to be in use, while {solver:s} was previously selected".format(
+                        solver=solver, other_solver=other_solver
+                    ),
+                )
+
+    def test_minisat(self):
+        """
+        Checks that the underlying solver can be set to be minisat
+        """
+        self._test_solver("Minisat", is_default_solver=True)
+
+    def test_simplifyingminisat(self):
+        """
+        Checks that the underlying solver can be set to be simplifyingminisat
+        """
+        self._test_solver("SimplifyingMinisat", is_default_solver=True)
+
+    def test_cryptominisat(self):
+        """
+        Checks that the underlying solver can be set to be cryptominisat
+        """
+        self._test_solver("Cryptominisat", is_default_solver=False)
+
+    def test_riss(self):
+        """
+        Checks that the underlying solver can be set to be riss
+        """
+        self._test_solver("Riss", is_default_solver=False)
+
+    def test_git_version_sha(self):
+        """
+        Test verifies that the returned git sha is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_sha()), 0)
+
+    def test_git_version_tag(self):
+        """
+        Test verifies that the returned git tag is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_git_version_tag()), 0)
+
+    def test_compilation_env(self):
+        """
+        Test verifies that the returned compilation env is of non-zero length
+        """
+        self.assertNotEqual(len(stp.get_compilation_env()), 0)
+
+    def test_lib(self):
+        """
+        Test verifies that the returned CDLL object is "well-formed"
+        """
+        stp_cdll = stp.get_lib()
+        self.assertIsNotNone(stp_cdll, "get_lib should never return None")
+        self.assertTrue(
+            isinstance(stp_cdll, ctypes.CDLL), "get_lib should return a CDLL type"
+        )
+        self.assertTrue(
+            callable(stp_cdll.vc_bvConcatExpr),
+            "STP's CDLL object should have a method called 'vc_bvConcatExpr'",
+        )
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    sys.exit(not result.wasSuccessful())
+
+# EOF

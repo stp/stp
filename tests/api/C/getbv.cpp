@@ -25,15 +25,15 @@ THE SOFTWARE.
 /* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp
  * -g */
 
+#include "stp/c_interface.h"
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "stp/c_interface.h"
 
 TEST(getbv, INT64)
 {
-  ASSERT_EQ(64, sizeof(uint64_t) * 8);
+  ASSERT_EQ(64ul, sizeof(uint64_t) * 8);
 
   for (uint64_t j = 1; j < UINT64_MAX; j |= (j << 1))
   {
@@ -42,7 +42,6 @@ TEST(getbv, INT64)
     vc_setFlags(vc, 'n');
     vc_setFlags(vc, 'd');
     vc_setFlags(vc, 'p');
-    vc_setFlags(vc, 'x');
 
     Type bv8 = vc_bvType(vc, 8); // Why do we need this?
     ASSERT_NE(bv8, (void*)0);
@@ -62,7 +61,7 @@ TEST(getbv, INT64)
 
 TEST(getbv, INT32)
 {
-  ASSERT_EQ(32, sizeof(int32_t) * 8);
+  ASSERT_EQ(32ul, sizeof(int32_t) * 8);
 
   for (uint32_t j = 1; j < UINT32_MAX; j |= (j << 1))
   {
@@ -71,7 +70,6 @@ TEST(getbv, INT32)
     vc_setFlags(vc, 'n');
     vc_setFlags(vc, 'd');
     vc_setFlags(vc, 'p');
-    vc_setFlags(vc, 'x');
 
     Type bv8 = vc_bvType(vc, 8);
     ASSERT_NE(bv8, (void*)0);

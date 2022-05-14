@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -40,9 +39,10 @@ using std::endl;
 class Dependencies
 {
 private:
-  typedef hash_map<stp::ASTNode, set<stp::ASTNode>*,
-                   stp::ASTNode::ASTNodeHasher,
-                   stp::ASTNode::ASTNodeEqual> NodeToDependentNodeMap;
+  typedef std::unordered_map<stp::ASTNode, set<stp::ASTNode>*,
+                             stp::ASTNode::ASTNodeHasher,
+                             stp::ASTNode::ASTNodeEqual>
+      NodeToDependentNodeMap;
   NodeToDependentNodeMap dependents;
 
   const set<ASTNode> empty;

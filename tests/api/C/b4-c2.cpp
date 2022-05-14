@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 #include <iostream>
 
 // FIXME: Find better test name
@@ -31,10 +31,11 @@ TEST(b4_c2, one)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlags(vc, 'w');
+  vc_setFlags(vc, 'd');
   // vc_setFlags(vc,'v');
   // vc_setFlags(vc,'s');
   // vc_setFlags(vc,'a');
-  vc_setFlags(vc, 'n');
+  // vc_setFlags(vc, 'n');
 
   vc_push(vc);
   Expr e5283955 = vc_varExpr(vc, "at", vc_bvType(vc, 5));
@@ -2549,11 +2550,16 @@ TEST(b4_c2, one)
   vc_assertFormula(vc, e5286030);
   vc_push(vc);
   Expr e5286031 = vc_falseExpr(vc);
-  char* cc;
-  unsigned long len;
-  vc_printQueryStateToBuffer(vc, e5286031, &cc, &len, 1);
-  std::cerr << cc;
-  vc_query(vc, e5286031);
+#if 0
+  {
+    char* cc;
+    unsigned long len;
+    vc_printQueryStateToBuffer(vc, e5286031, &cc, &len, 1);
+    std::cout << cc << std::endl;
+  }
+#endif
+  int ret = vc_query(vc, e5286031);
+  ASSERT_FALSE(ret);
   vc_pop(vc);
   vc_pop(vc);
 

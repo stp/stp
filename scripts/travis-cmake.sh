@@ -25,11 +25,36 @@ set -e
 # This file wraps CMake invocation for TravisCI
 # so we can set different configurations via environment variables.
 
-SOURCE_DIR=`pwd`
+SOURCE_DIR=$(pwd)
 cd build
-BUILD_DIR=`pwd`
-TEST=1
-COMMON_CMAKE_ARGS="-G \"Unix Makefiles\" -DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
+BUILD_DIR=$(pwd)
+COMMON_CMAKE_ARGS="-DENABLE_TESTING:BOOL=ON -DLIT_ARGS:STRING=-v"
+
+case $STP_CONFIG in
+    STATIC_CMS|STATIC_RISS)
+        # get and install minisat
+        mkdir minisat_git && cd minisat_git
+        git clone --depth 1 https://github.com/msoos/minisat
+        cd minisat
+        mkdir build && cd build
+        cmake -DSTATICCOMPILE=ON ..
+        make
+        sudo make install
+        cd ../../..
+    ;;
+
+    *)
+        # get and install minisat
+        mkdir minisat_git && cd minisat_git
+        git clone --depth 1 https://github.com/msoos/minisat
+        cd minisat
+        mkdir build && cd build
+        cmake ..
+        make
+        sudo make install
+        cd ../../..
+    ;;
+esac
 
 # Note eval is needed so COMMON_CMAKE_ARGS is expanded properly
 case $STP_CONFIG in
@@ -49,10 +74,9 @@ case $STP_CONFIG in
 
     ;;
 
-    DYNAMIC_LIB)
+    NORM)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
                    ${SOURCE_DIR}
     ;;
 
@@ -67,11 +91,9 @@ case $STP_CONFIG in
     KLEE)
         eval sudo apt-get install -y libboost-all-dev
         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_STATIC_BIN:BOOL=ON \
-                   -DBUILD_SHARED_LIBS:BOOL=OFF \
-                   -DENABLE_PYTHON_INTERFACE:BOOL=OFF \
+                   -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
-        TEST=0
+        sudo make install
     ;;
 
     NO_BOOST)
@@ -79,18 +101,61 @@ case $STP_CONFIG in
                    ${SOURCE_DIR}
     ;;
 
-    CPP11)
+    STATIC_CMS)
+         pwd
+         ls
+
          eval sudo apt-get install -y libboost-all-dev
-         export CC="gcc-4.7"
-         export CXX="g++-4.7"
-         eval sudo add-apt-repository -y ppa:george-edison55/gcc4.7-precise
-         eval sudo apt-get update
-         eval sudo apt-get install -y gcc-4.7 g++-4.7
-         eval cmake ${COMMON_CMAKE_ARGS} \
-                   -DBUILD_SHARED_LIBS:BOOL=ON \
-                   -DBUILD_STATIC_BIN:BOOL=OFF \
+         wget https://bitbucket.org/malb/m4ri/downloads/m4ri-20140914.tar.gz
+         tar xzvf m4ri-20140914.tar.gz
+         cd m4ri-20140914/
+         ./configure
+         make
+         sudo make install
+         cd ..
+
+         git clone --depth 1 https://github.com/msoos/cryptominisat.git
+         cd cryptominisat
+         mkdir build
+         cd build
+         cmake -DREQUIRE_M4RI=ON -DSTATICCOMPILE=ON -DENABLE_PYTHON_INTERFACE=OFF -DNOVALGRIND=ON -DCMAKE_BUILD_TYPE=Release ..
+         sudo make install
+         cd ../..
+
+         cmake ${COMMON_CMAKE_ARGS} \
+                   -DSTATICCOMPILE:BOOL=ON \
                    ${SOURCE_DIR}
+         pwd
+         ls
     ;;
+
+
+    STATIC_RISS)
+         pwd
+         ls
+
+         eval sudo apt-get install -y libboost-all-dev
+
+         pushd ${SOURCE_DIR}
+         rm -rf riss
+         git clone --depth 1 https://github.com/conp-solutions/riss.git
+         cd riss
+         mkdir -p build
+         cd build
+         cmake .. -DDRATPROOF=OFF -DCMAKE_BUILD_TYPE=Release
+         make -j2 riss-core riss-coprocessor-lib-static VERBOSE=1
+         popd
+
+         cmake ${COMMON_CMAKE_ARGS} \
+                   -DSTATICCOMPILE:BOOL=ON \
+                   -DNOCRYPTOMINISAT=ON \
+                   -DUSE_RISS=ON \
+                   -DRISS_DIR=${SOURCE_DIR}/riss/ \
+                   ${SOURCE_DIR}
+         pwd
+         ls
+    ;;
+
 
     *)
         echo "\"${STP_CONFIG}\" configuration not recognised"
@@ -98,8 +163,12 @@ case $STP_CONFIG in
 esac
 
 make -j2 VERBOSE=1
-if [ "$TEST" = "1" ]; then
-    make check
+ctest -V
+
+echo $(ldd ./stp_simple)
+echo $(ldd ./stp)
+if [ "$STP_CONFIG" = "STATIC_CMS" ] ; then
+     ldd ./stp | grep "not a dynamic"
 fi
 
 if [ "$STP_CONFIG" = "KLEE" ]; then
@@ -125,11 +194,11 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
 
     # Install LLVM and the LLVM bitcode compiler we require to build KLEE
     LLVM_VERSION=3.4
-    STP_VERSION=master
-    KLEE_UCLIBC=1
     DISABLE_ASSERTIONS=0
     ENABLE_OPTIMIZED=1
-    COVERAGE=0
+#     STP_VERSION=master
+#     KLEE_UCLIBC=1
+#     COVERAGE=0
     sudo apt-get install llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev
     KLEE_CC=/usr/bin/clang-${LLVM_VERSION}
     KLEE_CXX=/usr/bin/clang++-${LLVM_VERSION}
@@ -189,7 +258,9 @@ if [ "$STP_CONFIG" = "COVERAGE" ]; then
 fi
 
 if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
-    cd ../..
+    cd ${SOURCE_DIR}/..
+    pwd
+    ls
 
     #
     # get fuzzsmt
@@ -199,10 +270,14 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     #lingeling
     git clone https://github.com/msoos/lingeling-ala lingeling
     cd lingeling
-    ./configure
+    mkdir build
+    cd build
+    cmake ..
     make
+    cp liblgl.a .. # so that Boolector can find it
     sudo cp lingeling /usr/bin/
     cd ..
+    cd .. # need to leave the build folder
 
     # get boolector
     git clone --depth 1 https://github.com/msoos/boolector-1.5.118.git
@@ -213,7 +288,16 @@ if [ "$STP_CONFIG" != "NO_BOOST" ] && [ "$STP_CONFIG" != "INTREE_BUILD" ] ; then
     cd ..
 
     #fuzz
+    pwd
+    ls
     cd stp/scripts/fuzz/
+
+    pwd
+    ls
+
+    pwd
+    ls
+    ls ../../build/
     ./fuzz_test.py -n 20 --novalgrind
 
     #install

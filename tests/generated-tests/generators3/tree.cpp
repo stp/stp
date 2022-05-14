@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 
 /*
- * g++ -DEXT_HASH_MAP tree.cpp -I ../../c_interface -L ../../lib -lstp -o cc
+ * g++ tree.cpp -I ../../c_interface -L ../../lib -lstp -o cc
  */
 
 #include "/home/taking/stp/timking_expt/AST/AST.h"
@@ -63,17 +63,12 @@ Expr randconst(){
 char buf[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
 void shufflebuf(){
   unsigned N = BUF_LENGTH;
-  unsigned i;
   while(N--){
-    i = trand()%BUF_LENGTH;
+    unsigned i = trand()%BUF_LENGTH;
     char c = buf[i];
     buf[i] = buf[N]; 
     buf[N] = c;
   }
-}
-
-void nonsense(){
- gen_arrays.push_back(NULL);
 }
 
 char* rstr(unsigned len){

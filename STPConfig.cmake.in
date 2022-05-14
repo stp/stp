@@ -11,13 +11,19 @@
 get_filename_component(STP_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 set(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
 
+
+if ("@USE_CRYPTOMINISAT@" STREQUAL "ON")
+    include(CMakeFindDependencyMacro)
+    find_dependency(cryptominisat5)
+endif()
+
 # Our library dependencies (contains definitions for IMPORTED targets)
 include("${STP_CMAKE_DIR}/@STP_TARGETS_FILENAME@")
 
 # These are IMPORTED targets created by @STP_TARGETS_FILENAME@
 set(STP_EXECUTABLE stp)
 
-set(STP_STATIC_LIBRARY @STP_STATIC_LIBRARY@)
-set(STP_SHARED_LIBRARY @STP_SHARED_LIBRARY@)
+set(STP_STATIC_LIBRARY stp)
+set(STP_SHARED_LIBRARY stp)
 
 # Note version variables are implicitly set by STPConfigVersion.cmake

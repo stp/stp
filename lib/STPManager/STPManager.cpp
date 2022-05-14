@@ -23,11 +23,11 @@ THE SOFTWARE.
 ********************************************************************/
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
-#include <inttypes.h>
-#include <cmath>
 #include "stp/STPManager/STPManager.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/NodeIterator.h"
+#include <cmath>
+#include <cstdint>
 
 namespace stp
 {
@@ -47,11 +47,6 @@ ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
       // 1 to the NOT's node number, meaning we'd hit an even number,
       // which could duplicate the next newNodeNum().
       assert(n_ptr->GetChildren()[0].GetKind() != NOT);
-      n_ptr->SetNodeNum(n_ptr->GetChildren()[0].GetNodeNum() + 1);
-    }
-    else
-    {
-      n_ptr->SetNodeNum(NewNodeNum());
     }
 
     std::pair<ASTInteriorSet::const_iterator, bool> p =
@@ -118,7 +113,7 @@ ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
 // because it tries not to copy the string unless it needs to.  How
 // do I avoid copying children in ASTInterior?  Perhaps I don't!
 
-// Note: There seems to be a limitation of hash_set, in that insert
+// Note: There seems to be a limitation of std::unordered_set, in that insert
 // returns a const iterator to the value.  That prevents us from
 // modifying the name (in a hash-preserving way) after the symbol is
 // inserted.  FIXME: Is there a way to do this with insert?  Need a
@@ -140,7 +135,6 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
     ASTSymbol* s_ptr1 = new ASTSymbol(this, strdup(s_ptr->GetName()));
-    s_ptr1->SetNodeNum(NewNodeNum());
     s_ptr1->_value_width = s_ptr->_value_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
         _symbol_unique_table.insert(s_ptr1);
@@ -151,7 +145,7 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // return symbol found in table.
     return *it;
   }
-} 
+}
 
 bool STPMgr::LookupSymbol(ASTSymbol& s)
 {
@@ -190,7 +184,7 @@ bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 ASTNode STPMgr::CreateBVConst(unsigned int width,
                               unsigned long long int bvconst)
 {
-  if (width > (sizeof(unsigned long long int) * 8) || width <= 0)
+  if (width == 0)
     FatalError("CreateBVConst: "
                "trying to create bvconst using "
                "unsigned long long of width: ",
@@ -265,13 +259,9 @@ ASTNode STPMgr::charToASTNode(unsigned char* strval, int base, int bit_width)
   {
     e = CONSTANTBV::BitVector_from_Dec(CreateBVConstVal, strval);
   }
-  else if (16 == base)
+  else // (16 == base)
   {
     e = CONSTANTBV::BitVector_from_Hex(CreateBVConstVal, strval);
-  }
-  else
-  {
-    e = CONSTANTBV::ErrCode_Pars;
   }
 
   if (0 != e)
@@ -405,7 +395,6 @@ ASTBVConst* STPMgr::LookupOrCreateBVConst(ASTBVConst& s)
     // Make a new ASTBVConst with duplicated constant.
 
     ASTBVConst* s_copy = new ASTBVConst(s);
-    s_copy->SetNodeNum(NewNodeNum());
 
     std::pair<ASTBVConstSet::const_iterator, bool> p =
         _bvconst_unique_table.insert(s_copy);
@@ -474,18 +463,9 @@ void STPMgr::Pop(void)
 
 //BUG this is most probably wrongly handled. It gets propagated and messed up
 //with the state. On the next query, this mixed state then causes trouble
-void STPMgr::AddQuery(const ASTNode& q)
+void STPMgr::SetQuery(const ASTNode& q)
 {
-  //_current_query = TransformFormula(q);
-  // cerr << "\nThe current query is: " << q << endl;
   _current_query = q;
-}
-
-const ASTNode STPMgr::PopQuery()
-{
-  ASTNode q = _current_query;
-  _current_query = ASTTrue;
-  return q;
 }
 
 const ASTNode STPMgr::GetQuery()
@@ -560,18 +540,14 @@ unsigned int STPMgr::NodeSize(const ASTNode& a)
 
 bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 {
-  if (READ == term.GetKind() &&
-      WRITE ==
-          term[0].GetKind()
-          /*&& !GetRemoveWritesFlag()*/)
+  if (READ == term.GetKind() && WRITE == term[0].GetKind()
+      /*&& !GetRemoveWritesFlag()*/)
   {
     return false;
   }
 
-  if (READ == term.GetKind() &&
-      WRITE ==
-          term[0].GetKind()
-          /*&& GetRemoveWritesFlag()*/)
+  if (READ == term.GetKind() && WRITE == term[0].GetKind()
+      /*&& GetRemoveWritesFlag()*/)
   {
     return true;
   }
@@ -605,7 +581,7 @@ bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 
   TermsAlreadySeenMap[term] = var;
   return false;
-} 
+}
 
 ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
                                             const ASTNode& constant)
@@ -614,14 +590,14 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
   std::ostringstream outNum;
   // Get the name of Boolean Var
   var.PL_Print(outVar, this);
-  constant.PL_Print(outNum,this);
+  constant.PL_Print(outNum, this);
   std::string str(outVar.str());
   str += "(";
   str += outNum.str();
   str += ")";
   ASTNode CurrentSymbol = CreateSymbol(str.c_str(), 0, 0);
   return CurrentSymbol;
-} 
+}
 
 // If ASTNode remain with references (somewhere), this will segfault.
 STPMgr::~STPMgr()
@@ -631,6 +607,7 @@ STPMgr::~STPMgr()
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();
   printer::NodeLetVarMap1.clear();
+  printer::Lisp_AlreadyPrintedSet.clear();
 
   delete runTimes;
   runTimes = NULL;

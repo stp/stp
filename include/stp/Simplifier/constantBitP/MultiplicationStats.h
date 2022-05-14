@@ -26,8 +26,8 @@ THE SOFTWARE.
 #define MULTPLICATIONSTATS_H_
 
 #include "stp/AST/AST.h"
-#include <map>
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+#include <map>
 
 namespace simplifier
 {

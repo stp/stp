@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
-// -*- c++ -*-
 
 #ifndef BVSOLVER_H
 #define BVSOLVER_H
@@ -139,16 +138,16 @@ public:
     nf = bm->defaultNodeFactory;
   };
 
+  BVSolver( const BVSolver& ) = delete;
+  BVSolver& operator=( const BVSolver& ) = delete;
+
   ~BVSolver() { ClearAllTables(); }
 
   // Top Level Solver: Goes over the input DAG, identifies the
   // equation to be solved, solves them,
   ASTNode TopLevelBVSolve(const ASTNode& a, const bool enable_simplify = true);
 
-  void ClearAllTables(void)
-  {
-    FormulasAlreadySolvedMap.clear();
-  }
+  void ClearAllTables(void) { FormulasAlreadySolvedMap.clear(); }
 };
 } // end of namespace stp
 #endif

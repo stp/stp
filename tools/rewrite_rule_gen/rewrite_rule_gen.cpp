@@ -23,44 +23,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// This generates C++ code that implements automatically discovered rewrite
-// rules.
-// Expressions are generated, then pairwise checked over a range of bit-widths
-// to see if they are the same.
-// If they are the same, then C++ code is written out that implements the rule.
+/*This automatically discovers rewrite rules for us to build into STP.
+  The structure of the rules is limited, so that we can make a rewrite system
+  that doesn't cause infinite loops.
 
-#include <ctime>
-#include <vector>
+  Expressions are generated, then pairwise checked over a range of bit-widths
+  to see if they are the same.
+  
+  If they are the same, then C++ code can be written out that implements the rule.
+*/
+
 #include <algorithm>
-#include <iostream>
+#include <ctime>
 #include <fstream>
+#include <iostream>
+#include <vector>
 
 #include "stp/AST/AST.h"
 #include "stp/Printer/printers.h"
 
-#include "stp/STPManager/STPManager.h"
-//#include "stp/To-sat/AIG/ToSATAIG.h"
-#include "stp/Sat/MinisatCore.h"
-#include "stp/STPManager/STP.h"
-#include "stp/STPManager/DifficultyScore.h"
 #include "stp/AST/AST.h"
+#include "stp/NodeFactory/TypeChecker.h"
+#include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/AST/NodeFactory/TypeChecker.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/Simplifier/DifficultyScore.h"
 #include "stp/cpp_interface.h"
 
-#include "stp/Util/find_rewrites/VariableAssignment.h"
+#include "Functionlist.h"
+#include "VariableAssignment.h"
+#include "misc.h"
+#include "rewrite_rule.h"
+#include "rewrite_system.h"
 
-#include "stp/Util/find_rewrites/rewrite_rule.h"
-#include "stp/Util/find_rewrites/rewrite_system.h"
-#include "stp/Util/find_rewrites/Functionlist.h"
-#include "stp/Util/find_rewrites/misc.h"
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/AIG/ToCNFAIG.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
-#include <sstream>
 #include <fstream>
+#include <sstream>
 using std::stringstream;
 using std::make_pair;
 using std::deque;
@@ -73,10 +75,6 @@ using std::ifstream;
 using namespace stp;
 
 extern int smt2parse();
-
-
-
-
 
 // Holds the rewrite that was disproved at the largest bitwidth.
 ASTNode highestDisproved;
@@ -124,7 +122,8 @@ vector<ASTNode> getVariables(const ASTNode& n);
 bool matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo,
                const int term_variable_width);
 
-typedef hash_map<ASTNode, string, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_map<ASTNode, string, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
     ASTNodeString;
 
 stp::STPMgr* mgr;
@@ -291,7 +290,7 @@ bool checkProp(const ASTNode& n)
   vector<ASTNode> symbols;
   ASTNodeSet visited;
   getVariables(n, symbols, visited);
-  int value;
+  int value = -1;
 
   if (n.isConstant())
     return true;
@@ -300,9 +299,9 @@ bool checkProp(const ASTNode& n)
   {
     ASTNodeMap mapToVal;
     for (int j = 0; j < symbols.size(); j++)
-      mapToVal.insert(make_pair(symbols[j], (0x1 & (i >> (j * bits))) == 0
-                                                ? mgr->ASTFalse
-                                                : mgr->ASTTrue));
+      mapToVal.insert(make_pair(symbols[j],
+                                (0x1 & (i >> (j * bits))) == 0 ? mgr->ASTFalse
+                                                               : mgr->ASTTrue));
 
     if (i == 0)
     {
@@ -331,12 +330,8 @@ bool checkProp(const ASTNode& n)
 }
 
 // True if it's always true, otherwise fills the assignment.
-bool isConstant(
-  const ASTNode& n,
-  VariableAssignment& different,
-  const int bit_width
-  , const int64_t timeout_max_confl
-)
+bool isConstant(const ASTNode& n, VariableAssignment& different,
+                const int bit_width, const int64_t timeout_max_confl)
 {
   if (isConstantToSat(n, timeout_max_confl))
     return true;
@@ -662,7 +657,7 @@ int getDifficulty(const ASTNode& n_)
   for (int i = 0; i < cnfData->nClauses; i++)
   {
     satSolverClause.clear();
-    for (int* pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
          pLit < pStop; pLit++)
     {
       uint32_t var = (*pLit) >> 1;
@@ -758,14 +753,7 @@ void startup()
 
   mgr = new stp::STPMgr();
   stp::GlobalParserBM = mgr;
-
-
-  simp = new Simplifier(mgr);
-  ArrayTransformer* at = new ArrayTransformer(mgr, simp);
-  AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr, at);
-
-  GlobalSTP = new STP(mgr, simp, at, tosat, abs);
+  GlobalSTP = new STP(mgr);
 
   mgr->defaultNodeFactory =
       new SimplifyingNodeFactory(*mgr->hashingNodeFactory, *mgr);
@@ -819,7 +807,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
   ASTNode query2 = nf->CreateNode(NOT, query);
 
   assert(ss->nClauses() == 0);
-  mgr->AddQuery(mgr->ASTUndefined);
+  mgr->SetQuery(mgr->ASTUndefined);
   ss->setMaxConflicts(timeout_max_confl);
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
       *ss, query2, query2, GlobalSTP->tosat, false);
@@ -949,7 +937,8 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     return;
   }
 
-  cout << '\n' << "depth:" << depth << ", size:" << expressions.size()
+  cout << '\n'
+       << "depth:" << depth << ", size:" << expressions.size()
        << " values:" << values.size() << " found: " << rewrite_system.size()
        << " done:" << discarded << "\n";
 
@@ -964,7 +953,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     discarded += (old_size - values.size());
 
     // Put the functions in buckets based on their results on the values.
-    hash_map<uint64_t, ASTVec> map;
+    std::unordered_map<uint64_t, ASTVec> map;
     for (size_t i = 0; i < expressions.size(); i++)
     {
       if (expressions[i] == mgr->ASTUndefined)
@@ -979,7 +968,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     }
     expressions.clear();
 
-    hash_map<uint64_t, ASTVec>::iterator it2;
+    std::unordered_map<uint64_t, ASTVec>::iterator it2;
 
     cout << "Split into " << map.size() << " pieces\n";
     if (depth > 0)
@@ -1007,7 +996,7 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
       continue;
 
     // nb. I haven't rebuilt the map, it's done by writeOutRules().
-    equiv[i] == rewrite_system.rewriteNode(equiv[i]);
+    equiv[i] = rewrite_system.rewriteNode(equiv[i]);
 
     for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
     {
@@ -1117,7 +1106,8 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
         ass.push_back(different);
 
         // Discard the ones we've checked entirely.
-        ASTVec newEquiv(equiv.begin() + std::max((int)i - (int)1, 0), equiv.end());
+        ASTVec newEquiv(equiv.begin() + std::max((int)i - (int)1, 0),
+                        equiv.end());
         equiv.clear();
 
         findRewrites(newEquiv, ass, depth + 1);
@@ -1227,7 +1217,7 @@ void rule_to_string(const ASTNode& n, ASTNodeString& names, string& current,
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     rule_to_string(n[i], names, s, sofar);
   }
@@ -1246,7 +1236,7 @@ string containsNode(const ASTNode& n, const ASTNode& hunting, string& current)
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     string r = containsNode(n[i], hunting, s);
     if (r != "")
@@ -1307,16 +1297,16 @@ bool checkRule(const ASTNode& from, const ASTNode& to,
 
 template <class T> void removeDuplicates(T& big)
 {
-  cout << "Before removing duplicates:" << big.size();
+  cout << "Before removing duplicates: " << big.size();
   std::sort(big.begin(), big.end());
   typename T::iterator it = std::unique(big.begin(), big.end());
   big.erase(it, big.end());
-  cout << ".After removing duplicates:" << big.size() << endl;
+  cout << ". After removing duplicates: " << big.size() << endl;
 }
 
 // Put all the inputs containing the substring together in the same bucket.
 void bucket(string substring, vector<string>& inputs,
-            hash_map<string, vector<string>>& buckets)
+            std::unordered_map<string, vector<string>>& buckets)
 {
   for (size_t i = 0; i < inputs.size(); i++)
   {
@@ -1476,7 +1466,7 @@ void visit_all(const ASTNode& n, map<ASTNode, string>& visited, string current)
   for (size_t i = 0; i < n.Degree(); i++)
   {
     char t[1000];
-    sprintf(t, "%s[%d]", current.c_str(), i);
+    sprintf(t, "%s[%zu]", current.c_str(), i);
     string s(t);
     visit_all(n[i], visited, s);
   }
@@ -1583,7 +1573,7 @@ void writeOutRules()
 
 
   // Group functions of the same kind all together.
-  hash_map<string, vector<string> > buckets;
+  std::unordered_map<string, vector<string> > buckets;
   bucket("n.GetKind() ==", output, buckets);
 #endif
 
@@ -1595,7 +1585,7 @@ void writeOutRules()
   outputFile.open("rewrite_data_new.cpp", ios::trunc);
 
   // output the C++ code.
-  hash_map<string, vector<string>>::const_iterator it;
+  std::unordered_map<string, vector<string>>::const_iterator it;
   for (it = buckets.begin(); it != buckets.end(); it++)
   {
     outputFile << "if (" + it->first + ")" << endl;
@@ -1632,7 +1622,7 @@ void writeOutRules()
   if (v.size() > 0)
   {
     ASTNode n = mgr->CreateNode(AND, v);
-    printer::SMTLIB2_PrintBack(outputFile, n, true);
+    printer::SMTLIB2_PrintBack(outputFile, n, mgr, true);
   }
   outputFile.close();
 }
@@ -1885,7 +1875,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
       cout << "discarding rule that can't be ordered";
       cout << from << to;
       cout << "----";
-      mgr->PopQuery();
+      //mgr->PopQuery();
       GlobalParserInterface->popToFirstLevel();
       continue;
     }
@@ -1895,7 +1885,7 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
     rewrite_system.push_back(r);
 
-    mgr->PopQuery();
+    //mgr->PopQuery();
     GlobalParserInterface->popToFirstLevel();
   }
 
@@ -2011,7 +2001,7 @@ void load_old_rules(string fileName)
     rewrite_system.push_back(r);
   }
 
-  mgr->PopQuery();
+  //mgr->PopQuery();
   GlobalParserInterface->popToFirstLevel();
   GlobalParserInterface->cleanUp();
   GlobalParserInterface = NULL;
@@ -2087,7 +2077,7 @@ void unit_test()
   // commutative matching.
   ASTVec c;
   c.push_back(v);
-  ASTNode not_v = create(stp::BVNEG, c);
+  ASTNode not_v = create(stp::BVNOT, c);
   ASTNode neg_v = create(stp::BVUMINUS, c);
 
   ASTNode plus_v = create(BVPLUS, not_v, neg_v);
@@ -2095,7 +2085,7 @@ void unit_test()
   c.clear();
   c.push_back(w);
   ASTNode neg_w = create(stp::BVUMINUS, c);
-  ASTNode not_w = create(stp::BVNEG, c);
+  ASTNode not_w = create(stp::BVNOT, c);
   ASTNode plus_w = create(BVPLUS, not_w, neg_w);
 
   ASTNodeMap sub;
@@ -2112,6 +2102,7 @@ int main(int argc, const char* argv[])
 
   if (argc == 1) // Read the current rule set, find new rules.
   {
+    std::cout << "Waiting for rules, press enter to skip.";
     load_new_rules();
     createVariables();
     ////////////
@@ -2525,8 +2516,8 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
 
   if (debug_matching)
   {
-    cerr << "=======" << endl << "The result is: " << r << "for the inputs"
-         << n0 << n1 << "=-===";
+    cerr << "=======" << endl
+         << "The result is: " << r << "for the inputs" << n0 << n1 << "=-===";
   }
 
   if (!r)

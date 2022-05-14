@@ -18,28 +18,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-if (Boost_FOUND)
-    get_target_property(STP_EXECUTABLE_PATH stp LOCATION)
+if (NOT ONLY_SIMPLE)
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp-bin>")
 else()
-    get_target_property(STP_EXECUTABLE_PATH stp_simple LOCATION)
+    set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple-bin>")
 endif()
 
 # Create llvm-lit configuration file
-configure_file(lit.site.cfg.in lit.site.cfg @ONLY)
+configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
+file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg
+              INPUT ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.g)
 
-if (Boost_FOUND)
-    add_custom_target(query-file-tests
-                  DEPENDS stp
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} .
-    )
-else()
-    add_custom_target(query-file-tests
-                  DEPENDS stp_simple
-                  COMMAND ${PYTHON_EXECUTABLE}
-                          ${LIT_TOOL} ${LIT_ARGS} .
-    )
-endif()
-
-# Make sure this test-suite runs when "check" is target
-add_dependencies(check query-file-tests)
+add_test(NAME query-files
+    COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+)

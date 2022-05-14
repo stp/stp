@@ -25,14 +25,14 @@ THE SOFTWARE.
 #ifndef RELATIONS_H_
 #define RELATIONS_H_
 
-#include <ctime>
-#include <vector>
 #include "stp/AST/AST.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
+#include <ctime>
+#include <vector>
 
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "extlib-constbv/constantbv.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 
 #include "stp/AST/ASTKind.h"
 #include "stp/STPManager/STPManager.h"

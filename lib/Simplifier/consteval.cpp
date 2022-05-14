@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include <cassert>
 #include "stp/Simplifier/Simplifier.h"
+#include <cassert>
 
 namespace stp
 {
@@ -67,7 +67,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   }
 
   if ((number_of_children == 2 || number_of_children == 1) &&
-    input_children[0].GetType() == BITVECTOR_TYPE)
+      input_children[0].GetType() == BITVECTOR_TYPE)
   {
     // saving some typing. BVPLUS does not use these variables. if the
     // input BVPLUS has two nodes, then we want to avoid setting these
@@ -107,7 +107,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       }
       break;
     }
-    case BVNEG:
+    case BVNOT:
     {
       output = CONSTANTBV::BitVector_Create(inputwidth, true);
       CONSTANTBV::Set_Complement(output, tmp0);
@@ -227,9 +227,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     }
     case BVXOR:
     {
-      assert(2 == number_of_children);
+      assert(1 <= number_of_children);
+
       output = CONSTANTBV::BitVector_Create(inputwidth, true);
-      CONSTANTBV::Set_ExclusiveOr(output, tmp0, tmp1);
+
+      for (ASTVec::iterator it = children.begin(), itend = children.end();
+           it != itend; it++)
+      {
+        CBV kk = (*it).GetBVConst();
+        CONSTANTBV::Set_ExclusiveOr(output, output, kk);
+      }
+
       OutputNode = _bm->CreateBVConst(output, outputwidth);
       break;
     }
@@ -332,8 +340,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       CBV quotient = CONSTANTBV::BitVector_Create(inputwidth, true);
       CBV remainder = CONSTANTBV::BitVector_Create(inputwidth, true);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
         // Expecting a division by zero. Just return one.
         if (k == SBVREM)
@@ -341,9 +348,9 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         else
         {
           if (CONSTANTBV::BitVector_bit_test(tmp0, inputwidth - 1))
-            OutputNode = _bm->CreateMaxConst(inputwidth);
-          else
             OutputNode = _bm->CreateOneConst(inputwidth);
+          else
+            OutputNode = _bm->CreateMaxConst(inputwidth);
         }
 
         CONSTANTBV::BitVector_Destroy(remainder);
@@ -406,10 +413,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
       tmp1 = CONSTANTBV::BitVector_Clone(tmp1);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
-        // Return the top for a division be zero.
         OutputNode = children[0];
         CONSTANTBV::BitVector_Destroy(remainder);
       }
@@ -519,8 +524,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     {
       assert(2 == number_of_children);
 
-      if (_bm->UserFlags.division_by_zero_returns_one_flag &&
-          CONSTANTBV::BitVector_is_empty(tmp1))
+      if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
         // a = bq + r, where b!=0 implies r < b. q is quotient, r remainder.
         // i.e. a/b = q.
@@ -528,7 +532,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         if (k == BVMOD)
           OutputNode = children[0];
         else
-          OutputNode = _bm->CreateOneConst(outputwidth);
+          OutputNode = _bm->CreateMaxConst(outputwidth);
         // Expecting a division by zero. Just return one.
       }
       else
@@ -547,25 +551,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
             CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
         CONSTANTBV::BitVector_Destroy(tmp0);
 
-        if (0 != e)
-        {
-          CONSTANTBV::BitVector_Destroy(quotient);
-          CONSTANTBV::BitVector_Destroy(remainder);
-          // error printing
-          if (_bm->counterexample_checking_during_refinement)
-          {
-            output = CONSTANTBV::BitVector_Create(inputwidth, true);
-            OutputNode = _bm->CreateBVConst(output, outputwidth);
-            //  CONSTANTBV::BitVector_Destroy(output);
-            break;
-          }
-          else
-          {
-            BVConstEvaluatorError(e);
-          }
-        }
+        assert (0 == e);
 
-        // FIXME Not very standard in the current scheme
         if (BVDIV == k)
         {
           OutputNode = _bm->CreateBVConst(quotient, outputwidth);
@@ -812,10 +799,10 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   assert(OutputNode.isConstant());
   // UpdateSimplifyMap(t,OutputNode,false);
   return OutputNode;
-} 
+}
 
 // Const evaluator logical and arithmetic operations.
-ASTNode NonMemberBVConstEvaluator(STPMgr * mgr, const ASTNode& t)
+ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
 {
   if (t.isConstant())
     return t;
@@ -824,18 +811,4 @@ ASTNode NonMemberBVConstEvaluator(STPMgr * mgr, const ASTNode& t)
                                    t.GetValueWidth());
 }
 
-ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
-{
-  if (t.isConstant())
-    return t;
-
-  ASTNode OutputNode;
-
-  if (InsideSubstitutionMap(t, OutputNode))
-    return OutputNode;
-
-  OutputNode = NonMemberBVConstEvaluator(_bm, t);
-  UpdateSolverMap(t, OutputNode);
-  return OutputNode;
-}
 } // end of namespace stp

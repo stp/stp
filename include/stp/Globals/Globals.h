@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #ifndef GLOBALS_H
 #define GLOBALS_H
+#include "stp/Util/Attributes.h"
 #include <vector>
 
 /* FIXME: Clients who import this header file have to have
@@ -79,19 +80,18 @@ enum SOLVER_RETURN_TYPE
 };
 
 // Empty vector. Useful commonly used ASTNodes
-extern std::vector<ASTNode> _empty_ASTVec;
+DLL_PUBLIC extern std::vector<ASTNode> _empty_ASTVec;
 
-// Needed by the SMTLIB printer
-extern enum inputStatus input_status;
-
+extern THREAD_LOCAL enum inputStatus
+    input_status; // Needed by the SMTLIB printer
 
 // Useful global variables. Use for parsing only
-extern STP* GlobalSTP;
-extern STPMgr* GlobalParserBM;
-extern Cpp_interface* GlobalParserInterface;
+DLL_PUBLIC extern THREAD_LOCAL STP* GlobalSTP;
+DLL_PUBLIC extern THREAD_LOCAL STPMgr* GlobalParserBM;
+DLL_PUBLIC extern THREAD_LOCAL Cpp_interface* GlobalParserInterface;
 
 // Function that computes various kinds of statistics for the phases
 // of STP
-void CountersAndStats(const char* functionname, STPMgr* bm);
+void CountersAndStats(const char* functionname, STPMgr *bm);
 }
 #endif

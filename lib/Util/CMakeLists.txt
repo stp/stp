@@ -23,4 +23,6 @@ add_library(util OBJECT
             RunTimes.cpp
            )
 
+add_dependencies(util ASTKind_header)
+
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/GitSHA1.cpp" @ONLY)

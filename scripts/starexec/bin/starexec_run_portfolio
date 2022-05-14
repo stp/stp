@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# Use STP to create CNF from SMT input, and use multiple solvers to solve it
+# Note: Depending on the number of available cores, we spawn serveral solvers,
+#       namely CryptoMiniSat, Riss and MiniSat, in case 1, 2 or 3 cores are
+#       available, respectively. In case more cores are available, all remaining
+#       cores are assigned to CryptoMiniSat.
+
+SOLVERDIR="$(dirname "${BASH_SOURCE[0]}" )"
+
+# Clean last call
+rm -f output_0.cnf
+"$SOLVERDIR"/stp --SMTLIB2 --output-CNF --exit-after-CNF "$1"
+
+# In case a file was created, call the SAT solver
+if [ -f output_0.cnf ]
+then
+	result="$("$SOLVERDIR"/multi-solver.py $(nproc) output_0.cnf 2>&1)"
+	echo "$result" | grep winner 1>&2
+
+	if [[ "$result" == *"s SATISFIABLE"* ]]; then
+		echo "sat"
+	elif [[ "$result" == *"s UNSATISFIABLE"* ]]; then
+		echo "unsat"
+	fi
+fi

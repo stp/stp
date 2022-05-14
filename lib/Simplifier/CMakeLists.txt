@@ -29,7 +29,9 @@ add_library(simplifier OBJECT
     DifficultyScore.cpp
     UseITEContext.cpp
     FindPureLiterals.cpp
+    StrengthReduction.cpp
     AIGSimplifyPropositionalCore.cpp
+    UnsignedIntervalAnalysis.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp
@@ -44,3 +46,9 @@ add_library(simplifier OBJECT
     constantBitP/FixedBits.cpp
 )
 add_dependencies(simplifier ASTKind_header)
+if (NOT MSVC)
+    set_source_files_properties(constantBitP/ConstantBitP_Division.cpp
+        PROPERTIES COMPILE_FLAGS "-Wno-unreachable-code")
+    set_source_files_properties(StrengthReduction.cpp
+        PROPERTIES COMPILE_FLAGS "-Wno-unreachable-code")
+endif()

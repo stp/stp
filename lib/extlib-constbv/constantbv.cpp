@@ -50,6 +50,7 @@
 #include <ctype.h>                                  /*  MODULE TYPE:  (sys)  */
 #include <cassert>
 #include "constantbv.h"
+#include "stp/Util/Attributes.h"
 
 
 namespace CONSTANTBV {
@@ -66,24 +67,26 @@ namespace CONSTANTBV {
   /* global machine-dependent constants (set by "BitVector_Boot"): */
   /*****************************************************************/
 
-  static unsigned int BITS;     /* = # of bits in machine word (must be power of 2)  */
-  static unsigned int MODMASK;  /* = BITS - 1 (mask for calculating modulo BITS)     */
-  static unsigned int LOGBITS;  /* = ld(BITS) (logarithmus dualis)                   */
-  static unsigned int FACTOR;   /* = ld(BITS / 8) (ld of # of bytes)                 */
+  /* FIXME: use a thread-safe Singleton pattern instead */
 
-  static unsigned int LSB = 1;  /* = mask for least significant bit                  */
-  static unsigned int MSB;      /* = mask for most significant bit                   */
+  static THREAD_LOCAL unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
+  static THREAD_LOCAL unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
+  static THREAD_LOCAL unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
+  static THREAD_LOCAL unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
 
-  static unsigned int LONGBITS; /* = # of bits in unsigned long                      */
+  static THREAD_LOCAL unsigned int LSB = 1; /* = mask for least significant bit */
+  static THREAD_LOCAL unsigned int MSB; /* = mask for most significant bit */
 
-  static unsigned int LOG10;    /* = logarithm to base 10 of BITS - 1                */
-  static unsigned int EXP10;    /* = largest possible power of 10 in signed int      */
+  static THREAD_LOCAL unsigned int LONGBITS; /* = # of bits in unsigned long */
+
+  static THREAD_LOCAL unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
+  static THREAD_LOCAL unsigned int EXP10; /* = largest possible power of 10 in signed int */
 
   /********************************************************************/
   /* global bit mask table for fast access (set by "BitVector_Boot"): */
   /********************************************************************/
 
-  static unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
+  static THREAD_LOCAL unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
 
   /*****************************/
   /* global macro definitions: */
@@ -327,7 +330,7 @@ namespace CONSTANTBV {
     unsigned int mask;
 
     mask = bits & MODMASK;
-    if (mask) mask = (unsigned int) ~(~0L << mask); else mask = (unsigned int) ~0L;
+    if (mask) mask = (unsigned int) ~(~0UL << mask); else mask = (unsigned int) ~0UL;
     return(mask);
   }
 
@@ -682,8 +685,8 @@ namespace CONSTANTBV {
         loaddr = addr + lobase;
         hiaddr = addr + hibase;
 
-        lomask = (unsigned int)   (~0L << (lower & MODMASK));
-        himask = (unsigned int) ~((~0L << (upper & MODMASK)) << 1);
+        lomask = (unsigned int)   (~0UL << (lower & MODMASK));
+        himask = (unsigned int) ~((~0UL << (upper & MODMASK)) << 1);
 
         if (diff == 0)
           {
@@ -722,8 +725,8 @@ namespace CONSTANTBV {
         loaddr = addr + lobase;
         hiaddr = addr + hibase;
 
-        lomask = (unsigned int)   (~0L << (lower & MODMASK));
-        himask = (unsigned int) ~((~0L << (upper & MODMASK)) << 1);
+        lomask = (unsigned int)   (~0UL << (lower & MODMASK));
+        himask = (unsigned int) ~((~0UL << (upper & MODMASK)) << 1);
 
         if (diff == 0)
           {
@@ -763,8 +766,8 @@ namespace CONSTANTBV {
         loaddr = addr + lobase;
         hiaddr = addr + hibase;
 
-        lomask = (unsigned int)   (~0L << (lower & MODMASK));
-        himask = (unsigned int) ~((~0L << (upper & MODMASK)) << 1);
+        lomask = (unsigned int)   (~0UL << (lower & MODMASK));
+        himask = (unsigned int) ~((~0UL << (upper & MODMASK)) << 1);
 
         if (diff == 0)
           {
@@ -1068,22 +1071,22 @@ namespace CONSTANTBV {
                     t_lower = t_lo_bit;
                     t_upper = BITS - 1;
                     t_bits = BITS - t_lo_bit;
-                    mask = (unsigned int) (~0L << t_lower);
+                    mask = (unsigned int) (~0UL << t_lower);
                     target = *X & ~ mask;
                     break;
                   case 2:
                     t_lower = 0;
                     t_upper = t_hi_bit;
                     t_bits = t_hi_bit + 1;
-                    mask = (unsigned int) ((~0L << t_upper) << 1);
+                    mask = (unsigned int) ((~0UL << t_upper) << 1);
                     target = *X & mask;
                     break;
                   case 3:
                     t_lower = t_lo_bit;
                     t_upper = t_hi_bit;
                     t_bits = t_hi_bit - t_lo_bit + 1;
-                    mask = (unsigned int) (~0L << t_lower);
-                    mask &= (unsigned int) ~((~0L << t_upper) << 1);
+                    mask = (unsigned int) (~0UL << t_lower);
+                    mask &= (unsigned int) ~((~0UL << t_upper) << 1);
                     target = *X & ~ mask;
                     break;
                   }
@@ -1156,8 +1159,8 @@ namespace CONSTANTBV {
                 s_max = s_upper;
               }
             bits++;
-            mask = (unsigned int) (~0L << s_min);
-            mask &= (unsigned int) ~((~0L << s_max) << 1);
+            mask = (unsigned int) (~0UL << s_min);
+            mask &= (unsigned int) ~((~0UL << s_max) << 1);
             if (s_min == t_min) target |= (source & mask);
             else
               {
@@ -3126,11 +3129,11 @@ namespace CONSTANTBV {
         offset &= MODMASK;
         while (chunksize > 0)
           {
-            mask = (unsigned int) (~0L << offset);
+            mask = (unsigned int) (~0UL << offset);
             bits = offset + chunksize;
             if (bits < BITS)
               {
-                mask &= (unsigned int) ~(~0L << bits);
+                mask &= (unsigned int) ~(~0UL << bits);
                 bits = chunksize;
               }
             else bits = BITS - offset;
@@ -3164,7 +3167,7 @@ namespace CONSTANTBV {
             bits = offset + chunksize;
             if (bits < BITS)
               {
-                mask = (unsigned int) ~(~0L << bits);
+                mask = (unsigned int) ~(~0UL << bits);
                 bits = chunksize;
               }
             else

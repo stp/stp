@@ -12,6 +12,9 @@ IndentCaseLabels: true
 PointerAlignment: Left
 IndentWidth: 2
 TabWidth: 2
+ReflowComments:  false
+SpacesBeforeTrailingComments: 1
+PenaltyBreakComment: 1300
 # Although LLVM doesn't use tabs either I want to be **very** explicit about this
 UseTab: Never
 ...

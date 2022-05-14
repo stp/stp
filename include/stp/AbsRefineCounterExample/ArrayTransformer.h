@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
@@ -116,7 +115,6 @@ public:
    * Public Member Functions                                      *
    ****************************************************************/
 
-   
   ArrayTransformer(STPMgr* bm, Simplifier* s)
       : TransformMap(NULL), simp(s), bm(bm)
   {
@@ -150,7 +148,6 @@ public:
     }
     std::cerr << std::endl;
   }
-
 };
 
 } // end of namespace

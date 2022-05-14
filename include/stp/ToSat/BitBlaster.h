@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
@@ -26,12 +25,12 @@ THE SOFTWARE.
 #ifndef BITBLASTNEW_H
 #define BITBLASTNEW_H
 
-#include <cmath>
-#include <cassert>
-#include <map>
 #include "stp/STPManager/STPManager.h"
-#include <list>
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
+#include <cassert>
+#include <cmath>
+#include <list>
+#include <map>
 
 namespace simplifier
 {
@@ -219,17 +218,6 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster // not copyable
   Simplifier* simp;
   BBNodeManagerT* nf;
 
-  // You can select these with any combination you want of true & false.
-  const bool division_variant_1;
-  const bool division_variant_2;
-  const bool division_variant_3;
-  const bool adder_variant;
-  const bool bbbvle_variant;
-  const bool upper_multiplication_bound;
-  const bool bvplus_variant;
-
-  const std::string multiplication_variant;
-
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
 public:
@@ -239,19 +227,13 @@ public:
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
   const vector<BBNode> BBTerm(const ASTNode& term, set<BBNode>& support);
+  typename std::map<ASTNode, vector<BBNode>>::iterator
+  simplify_during_bb(ASTNode& term, std::set<BBNode>& support);
 
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-  : uf(_uf),
-    division_variant_1("1" == _uf->get("division_variant_1", "1")),
-    division_variant_2("1" == _uf->get("division_variant_2", "1")),
-    division_variant_3("1" == _uf->get("division_variant_3", "1")),
-    adder_variant("1" == _uf->get("adder_variant", "1")),
-    bbbvle_variant("1" == _uf->get("bbbvle_variant", "0")),
-    upper_multiplication_bound("1" ==_uf->get("upper_multiplication_bound", "0")),
-    bvplus_variant("1" == _uf->get("bvplus_variant", "1")),
-    multiplication_variant(_uf->get("multiplication_variant", "7"))
+      : uf(_uf)
   {
     nf = bnm;
     cb = cb_;

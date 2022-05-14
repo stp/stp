@@ -36,6 +36,8 @@ const char* stp::get_git_version_tag()
     return version_tag;
 }
 
+#cmakedefine STP_TIMESTAMPS 1
+
 const char* stp::get_compilation_env()
 {
     static const char compilation_env[] =
@@ -44,7 +46,7 @@ const char* stp::get_compilation_env()
     "COMPILE_DEFINES = @COMPILE_DEFINES@ | "
     "ONLY_SIMPLE = @ONLY_SIMPLE@ | "
     "Boost_FOUND = @Boost_FOUND@ | "
-    "BUILD_SHARED_LIBS = @BUILD_SHARED_LIBS@ | "
+    "STATICCOMPILE = @STATICCOMPILE@ | "
     "TUNE_NATIVE = @TUNE_NATIVE@ | "
     "COVERAGE = @COVERAGE@ | "
     "FORCE_CMS = @FORCE_CMS@ | "
@@ -54,7 +56,12 @@ const char* stp::get_compilation_env()
     "PYTHON_EXECUTABLE = @PYTHON_EXECUTABLE@ | "
     "PYTHON_LIBRARY = @PYTHON_LIBRARY@ | "
     "PYTHON_INCLUDE_DIRS = @PYTHON_INCLUDE_DIRS@ | "
-    "compilation date time = " __DATE__ " " __TIME__
+    " | compilation date time = "
+#ifdef STP_TIMESTAMPS
+    __DATE__ " " __TIME__
+#else
+    "unknown"
+#endif
     ;
     return compilation_env;
 }

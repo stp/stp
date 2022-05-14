@@ -22,19 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 TEST(stp_bool, one)
 {
-  VC vc;
-  int query_result;
-  int count = 0;
-
-  vc = vc_createValidityChecker();
-
-  Type type64 = vc_boolType(vc);
+  VC vc = vc_createValidityChecker();
+  (void)vc_boolType(vc);
 
   vc_Destroy(vc);
   // FIXME: Actually test something

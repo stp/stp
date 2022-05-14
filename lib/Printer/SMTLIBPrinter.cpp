@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Printer/printers.h"
 #include "stp/Printer/SMTLIBPrinter.h"
+#include "stp/Printer/printers.h"
 
 // Functions used by both the version1 and version2 STMLIB printers.
 
@@ -42,21 +42,21 @@ static string tolower(const char* name)
 }
 
 // Map from ASTNodes to LetVars
-stp::ASTNodeMap NodeLetVarMap;
+THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
+THREAD_LOCAL vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
-stp::ASTNodeMap NodeLetVarMap1;
+THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap1;
 
 // copied from Presentation Langauge printer.
-ostream& SMTLIB_Print(ostream& os, STPMgr *mgr, const ASTNode n, const int indentation,
-                      void (*SMTLIB1_Print1)(ostream&, const ASTNode, int,
-                                             bool),
-                      bool smtlib1)
+ostream&
+SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n, const int indentation,
+             void (*SMTLIB1_Print1)(ostream&, const ASTNode, int, bool),
+             bool smtlib1)
 {
   // Clear the maps
   NodeLetVarMap.clear();
@@ -80,8 +80,7 @@ ostream& SMTLIB_Print(ostream& os, STPMgr *mgr, const ASTNode n, const int inden
   if (0 < NodeLetVarMap.size())
   {
     vector<pair<ASTNode, ASTNode>>::iterator it = NodeLetVarVec.begin();
-    const vector<pair<ASTNode, ASTNode>>::iterator itend =
-        NodeLetVarVec.end();
+    const vector<pair<ASTNode, ASTNode>>::iterator itend = NodeLetVarVec.end();
 
     os << "(let (";
     if (!smtlib1)
@@ -130,15 +129,15 @@ ostream& SMTLIB_Print(ostream& os, STPMgr *mgr, const ASTNode n, const int inden
   return os;
 }
 
-void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1, STPMgr *stp)
+void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
+                STPMgr* stp)
 {
   if (n.isAtom())
     return;
 
   const ASTVec& c = n.GetChildren();
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end();
-    it != itend;
-    it++)
+  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+       it++)
   {
     const ASTNode& ccc = *it;
     if (ccc.isAtom())
@@ -152,7 +151,7 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1, STPM
       //
       // 2. Letize its childNodes
       PLPrintNodeSet.insert(ccc);
-      LetizeNode(ccc,  PLPrintNodeSet, smtlib1, stp);
+      LetizeNode(ccc, PLPrintNodeSet, smtlib1, stp);
     }
     else
     {
@@ -241,8 +240,8 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
       return "bvurem";
     case BVMULT:
       return "bvmul";
-    case BVNEG:
-      return "bvnot"; // CONFUSSSSINNG. (1/2)
+    case BVNOT:
+      return "bvnot";
     case BVPLUS:
       return "bvadd";
     case BVRIGHTSHIFT:
@@ -250,7 +249,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVSRSHIFT:
       return "bvashr"; // arithmetic.
     case BVUMINUS:
-      return "bvneg"; // CONFUSSSSINNG. (2/2)
+      return "bvneg";
     case EQ:
       return "=";
     case READ:

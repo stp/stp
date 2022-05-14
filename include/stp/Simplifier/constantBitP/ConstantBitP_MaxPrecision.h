@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -26,10 +25,10 @@ THE SOFTWARE.
 #ifndef CONSTANTBITPROPAGATION_MAXPRECISION_H_
 #define CONSTANTBITPROPAGATION_MAXPRECISION_H_
 
-#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
-#include <vector>
-#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
+#include <vector>
 
 namespace simplifier
 {

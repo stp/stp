@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 void go(enum ifaceflag_t f)
 {
@@ -43,9 +43,8 @@ void go(enum ifaceflag_t f)
   Expr a_eq_0 = vc_eqExpr(vc, a, ct_0);
 
   int query = vc_query(vc, a_eq_0);
+  ASSERT_FALSE(query);
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 TEST(stp_test, SMS)

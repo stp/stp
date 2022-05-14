@@ -36,7 +36,7 @@ function(AddSTPGTest sourcefile)
     # testname has suffix because lit expects this
     set(testname "${testname}${UNIT_TEST_EXE_SUFFIX}")
 
-    add_executable(${testname} EXCLUDE_FROM_ALL ${sourcefile})
+    add_executable(${testname} ${sourcefile})
 
     # Add define flags requested by users
     list(LENGTH ARGN LEN_ARGN)
@@ -45,9 +45,16 @@ function(AddSTPGTest sourcefile)
         #message(STATUS "Added flags to test ${testname} ${ARGN}")
     endif()
 
-    target_link_libraries(${testname} libstp ${GTEST_BOTH_LIBRARIES})
+    target_link_libraries(${testname}
+        stp ${GTEST_BOTH_LIBRARIES}
+    )
 
     # Add dependency so that building the testsuite
     # will cause this test (testname) to be built
-    add_dependencies(${TESTSUITE} ${testname})
+    #add_dependencies(${TESTSUITE} ${testname})
+    add_test(
+      NAME ${testname}-gtest
+      COMMAND ${testname}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
 endfunction()

@@ -22,20 +22,11 @@
 # Create binary
 # -----------------------------------------------------------------------------
 
-# add_executable(stp_constantbitprop
-#     constantbitprop.cpp
-#     ${PROJECT_BINARY_DIR}/lib/Util/GitSHA1.cpp
-# )
-#
-# if (BUILD_STATIC_BIN)
-#     set_target_properties(stp_constantbitprop PROPERTIES LINK_SEARCH_END_STATIC 1)
-#     set_target_properties(stp_constantbitprop PROPERTIES LINK_SEARCH_START_STATIC 0)
-# endif()
-#
-# set_target_properties(stp_constantbitprop PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-# target_link_libraries(stp_constantbitprop libstp)
-#
-# install(TARGETS stp_constantbitprop
-#         EXPORT ${STP_EXPORT_NAME}
-#         RUNTIME DESTINATION bin
-# )
+ add_executable(stp_constantbitprop
+     constantbitprop.cpp
+     ${PROJECT_BINARY_DIR}/lib/Util/GitSHA1.cpp
+ )
+
+target_link_libraries(stp_constantbitprop
+    stp
+)

@@ -27,6 +27,7 @@ AddSTPGTest(array-ite.cpp)
 AddSTPGTest(b4-c2.cpp)
 AddSTPGTest(b4-c.cpp)
 AddSTPGTest(getbv.cpp)
+AddSTPGTest(hoangmle.cpp)
 AddSTPGTest(if-check.cpp)
 AddSTPGTest(interface-check.cpp)
 AddSTPGTest(leaks.cpp)
@@ -49,9 +50,9 @@ AddSTPGTest(stp-div-001.cpp)
 AddSTPGTest(stp-test3.cpp
                         CVC_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/f.cvc\"
            )
-AddSTPGTest(timeout.cpp
-                        SMT_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/example.smt\"
-           )
+# AddSTPGTest(timeout.cpp
+#                         SMT_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/example.smt\"
+#            )
 AddSTPGTest(x.cpp)
 AddSTPGTest(y.cpp)
 AddSTPGTest(multi-query-bug.cpp)
@@ -61,3 +62,6 @@ AddSTPGTest(mdempsky.cpp)
 AddSTPGTest(counterexample.cpp)
 AddSTPGTest(example_broken.cpp)
 AddSTPGTest(counter-example-reading.cpp)
+AddSTPGTest(failing_solvermap.cpp)
+AddSTPGTest(bit_string.cpp)
+AddSTPGTest(check_sizes.cpp)

@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -26,8 +25,8 @@ THE SOFTWARE.
 #ifndef WORKLIST_H_
 #define WORKLIST_H_
 
-#include "stp/AST/ASTNode.h"
 #include "stp/AST/AST.h"
+#include "stp/AST/ASTNode.h"
 
 namespace simplifier
 {
@@ -95,7 +94,8 @@ public:
       return;
 
     // cerr << "WorkList Inserting:" << n.GetNodeNum() << endl;
-    if (n.GetKind() == stp::BVMULT || n.GetKind() == stp::BVPLUS || n.GetKind() == stp::BVDIV)
+    if (n.GetKind() == stp::BVMULT || n.GetKind() == stp::BVPLUS ||
+        n.GetKind() == stp::BVDIV)
       expensive_workList.insert(n);
     else
       cheap_workList.insert(n);

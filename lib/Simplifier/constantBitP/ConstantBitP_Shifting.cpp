@@ -463,11 +463,11 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   // Check all candidates have the same output values.
   for (unsigned candidate = 0; candidate < bitWidth; candidate++)
   {
-    bool first = true;
     bool setTo = false; // value that's never read. To quieten gcc.
 
     if (candidates[candidate])
     {
+      bool first = true;
       for (unsigned shiftIT = 0; shiftIT < bitWidth; shiftIT++)
       {
         // If the shift isn't possible continue.

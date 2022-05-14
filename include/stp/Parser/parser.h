@@ -1,6 +1,5 @@
-// -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Felix Kutzner
  *
  * BEGIN DATE: November, 2005
  *
@@ -27,12 +26,34 @@ THE SOFTWARE.
 #define PARSER_H
 
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/STP.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Util/Attributes.h"
+#include <cstdio>
 
 namespace stp
 {
 // external parser table for declared symbols.
 // extern ASTNodeSet _parser_symbol_table;
+
+// Symbols in generated  files used by tools/stp
+void SMTScanString(const char* yy_str);
+void SMT2ScanString(const char* yy_str);
+void CVCScanString(const char* yy_str);
+DLL_PUBLIC FILE* getCVCIn();
+DLL_PUBLIC FILE* getSMTIn();
+DLL_PUBLIC FILE* getSMT2In();
+DLL_PUBLIC void setCVCIn(FILE* file);
+DLL_PUBLIC void setSMTIn(FILE* file);
+DLL_PUBLIC void setSMT2In(FILE* file);
+
+DLL_PUBLIC int SMTParse(void* AssertsQuery);
+DLL_PUBLIC int SMT2Parse();
+DLL_PUBLIC int CVCParse(void* AssertsQuery);
 } // end of namespace
+
+DLL_PUBLIC int cvclex_destroy(void);
+DLL_PUBLIC int smtlex_destroy(void);
+DLL_PUBLIC int smt2lex_destroy(void);
+
 #endif

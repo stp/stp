@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew, Mate Soos
  *
@@ -26,9 +25,13 @@ THE SOFTWARE.
 #ifndef FIXEDBITS_H_
 #define FIXEDBITS_H_
 
-#include <vector>
-#include <iostream>
+#include "stp/Util/Attributes.h"
+#include <stp/Util/Attributes.h>
+
+#include <algorithm>
 #include <cassert>
+#include <iostream>
+#include <vector>
 
 class MTRand;
 
@@ -36,7 +39,7 @@ namespace stp
 {
 class ASTNode;
 typedef unsigned int* CBV;
-void FatalError(const char* str);
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 }
 
 namespace simplifier
@@ -49,7 +52,7 @@ namespace constantBitP
 #define CONSTANTBITP_UTILITY_XSTR(s) CONSTANTBITP_UTILITY_STR(s)
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
 
-static int staticUniqueId = 1;
+static THREAD_LOCAL int staticUniqueId = 1;
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]
@@ -61,14 +64,14 @@ private:
   unsigned width;
   bool representsBoolean;
 
-  void init(const FixedBits& copy);
+  DLL_PUBLIC void init(const FixedBits& copy);
   int uniqueId;
 
   bool unsignedHolds_new(unsigned val);
   bool unsignedHolds_old(unsigned val);
 
 public:
-  FixedBits(unsigned n, bool isBoolean);
+  DLL_PUBLIC FixedBits(unsigned n, bool isBoolean);
 
   FixedBits(const FixedBits& copy)
   {
@@ -137,7 +140,8 @@ public:
   }
 
   // True if all bits are fixed (irrespective of what value they are fixed to).
-  bool isTotallyFixed() const;
+  DLL_PUBLIC bool isTotallyFixed() const;
+  bool isTotallyUnfixed() const;
 
   // set value of bit "n" to the value.
   void setValue(unsigned n, bool value)
@@ -312,7 +316,7 @@ public:
   }
 
   // Result needs to be explicitly deleted.
-  stp::CBV GetBVConst() const;
+  DLL_PUBLIC stp::CBV GetBVConst() const;
 
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
@@ -334,21 +338,21 @@ public:
 
   static FixedBits meet(const FixedBits& a, const FixedBits& b);
 
-  void join(const FixedBits& a);
+  DLL_PUBLIC void join(const FixedBits& a);
 
-  void join(unsigned int a);
+  DLL_PUBLIC void join(unsigned int a);
 
-  static FixedBits createRandom(const unsigned length,
+  DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
                                 MTRand& rand);
 
-  void fromUnsigned(unsigned val);
+  DLL_PUBLIC void fromUnsigned(unsigned val);
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 
-  static FixedBits concreteToAbstract(const stp::ASTNode& n);
+  DLL_PUBLIC static FixedBits concreteToAbstract(const stp::ASTNode& n);
 
-  static bool equals(const FixedBits& a, const FixedBits& b);
+  DLL_PUBLIC static bool equals(const FixedBits& a, const FixedBits& b);
 
   static bool updateOK(const FixedBits& o, const FixedBits& n);
 
@@ -357,7 +361,7 @@ public:
   static bool in(const FixedBits& a, const FixedBits& b);
 };
 
-std::ostream& operator<<(std::ostream& output, const FixedBits& h);
+DLL_PUBLIC std::ostream& operator<<(std::ostream& output, const FixedBits& h);
 }
 }
 #endif /*FIXED_H_*/

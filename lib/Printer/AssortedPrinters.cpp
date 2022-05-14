@@ -22,12 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Printer/printers.h"
 #include "stp/Printer/AssortedPrinters.h"
-
-// to get the PRIu64 macro from inttypes, this needs to be defined.
-#include <inttypes.h>
-//#undef __STDC_FORMAT_MACROS
+#include "stp/Printer/printers.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -52,7 +49,7 @@ ostream& ASTNode::LispPrint_indent(ostream& os, int indentation) const
   return printer::Lisp_Print_indent(os, *this, indentation);
 }
 
-ostream& ASTNode::PL_Print(ostream& os, STPMgr *mgr, int indentation) const
+ostream& ASTNode::PL_Print(ostream& os, STPMgr* mgr, int indentation) const
 {
   return printer::PL_Print(os, *this, mgr, indentation);
 }
@@ -103,7 +100,7 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
-        a.PL_Print( os, this);
+        a.PL_Print(os, this);
         os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::ARRAY_TYPE:
@@ -113,7 +110,7 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
         os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
         break;
       case stp::BOOLEAN_TYPE:
-        a.PL_Print( os, this);
+        a.PL_Print(os, this);
         os << " : BOOLEAN;" << endl;
         break;
       default:
@@ -135,7 +132,7 @@ void STPMgr::printAssertsToStream(ostream& os)
   }
 }
 
-void print_STPInput_Back(const ASTNode& query, STPMgr *mgr)
+void print_STPInput_Back(const ASTNode& query, STPMgr* mgr)
 {
 
   // Determine the symbols in the query and asserts.
@@ -149,7 +146,7 @@ void print_STPInput_Back(const ASTNode& query, STPMgr *mgr)
   mgr->printVarDeclsToStream(cout, symbols);
   mgr->printAssertsToStream(cout);
   cout << "QUERY(";
-  query.PL_Print(cout,mgr);
+  query.PL_Print(cout, mgr);
   cout << ");\n";
 }
 } // end of namespace stp

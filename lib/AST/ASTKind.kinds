@@ -26,7 +26,7 @@ SYMBOL		0	0	Term	Form
 
 # These always produce terms
 BVCONST		0	0	Term
-BVNEG		1	1	Term
+BVNOT		1	1	Term
 BVCONCAT	2	-	Term
 BVOR		1	-	Term
 BVAND		1	-	Term
@@ -38,11 +38,9 @@ BVEXTRACT	3	3	Term
 BVLEFTSHIFT	3	3	Term
 BVRIGHTSHIFT	3	3	Term
 BVSRSHIFT	3	3	Term
-BVVARSHIFT	3	3	Term
 BVPLUS		1	-	Term
 BVSUB		2	2	Term
 BVUMINUS	1	1	Term
-BVMULTINVERSE	1	1	Term
 BVMULT		1	-	Term
 BVDIV		2	2	Term
 BVMOD		2	2	Term

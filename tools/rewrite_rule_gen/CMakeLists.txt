@@ -18,13 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-if(NOT BUILD_SHARED_LIBS)
-  set(CMAKE_EXE_LINKER_FLAGS "-pthread ${CMAKE_EXE_LINKER_FLAGS}")
+if ( USE_CRYPTOMINISAT)
+    add_executable(rewrite_rule_gen
+        rewrite_rule_gen.cpp
+    )
+    target_link_libraries(rewrite_rule_gen
+        stp
+    )
 endif()
-
-add_executable(rewrite_rule_gen
-    rewrite_rule_gen.cpp
-)
-target_link_libraries(rewrite_rule_gen
-    libstp
-)

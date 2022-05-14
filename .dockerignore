@@ -1,0 +1,27 @@
+# files and dirs to ignore
+appveyor.yml
+AUTHORS
+build
+changed
+.clang-format
+coverage.info
+.directory
+examples
+.git
+.gitignore
+.gitmodules
+INSTALL.md
+.kdev4
+LICENSE
+LICENSE_COMPONENTS
+papers
+README.markdown
+scripts
+stp.kdev4
+stuff*
+tests
+todo*
+.travis.yml
+utils
+windows
+Dockerfile

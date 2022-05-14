@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 
 TEST(array_ite, one)
 {

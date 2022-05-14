@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -23,72 +22,116 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-
+#include "stp/Simplifier/DifficultyScore.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
-#include <list>
 #include "stp/Util/NodeIterator.h"
-#include "stp/Simplifier/DifficultyScore.h"
+#include <list>
 
 namespace stp
 {
-// estimate how difficult that input is to solve based on some simple rules.
+// Estimate the number of clauses that would generated if sent to CNF.
 
-  static bool isLikeDivision(const Kind& k)
+static bool isLikeDivision(const Kind& k)
+{
+  return k == BVMULT || k == BVDIV || k == BVMOD || k == SBVDIV ||
+         k == SBVREM || k == SBVMOD;
+}
+
+long eval(const ASTNode& b)
+{
+  const Kind k = b.GetKind();
+
+  if (b.Degree() == 0)
+    return 0; // consts & symbols don't count.
+
+  // These scores are approximately the number of clauses created when
+  // no input values are known.
+  long score = 0;
+  if (k == BVMULT&& b.Degree() == 2 && b[0].GetKind() == BVCONST)
   {
-    return k == BVMULT || k == BVDIV || k == BVMOD || k == SBVDIV ||
-           k == SBVREM || k == SBVMOD;
+    // because it's going to be booth encoded, it's about the number of runs.
+    const auto cbv = b[0].GetBVConst(); // cleanup?
+    bool last = CONSTANTBV::BitVector_bit_test(cbv,0);
+    int changes = 0;
+    for (unsigned int i = 1; i < b.GetValueWidth(); i++)
+    {
+        if (last != CONSTANTBV::BitVector_bit_test(cbv,i))
+          changes++;
+
+        last = CONSTANTBV::BitVector_bit_test(cbv,i);
+    }
+   //std::cerr << "C" <<changes;
+   score = (4L * b.GetValueWidth() * changes);
+
   }
-
-  int eval(const ASTNode& b)
+  else if (k == BVMULT)
   {
-    const Kind k = b.GetKind();
-
-    // These scores are approximately the number of AIG nodes created when
-    // no input values are known.
-    int score = 0;
-    if (k == BVMULT)
-      score = (5 * b.GetValueWidth() * b.GetValueWidth());
-    else if (k == BVMOD)
-      score = (15 * b.GetValueWidth() * b.GetValueWidth());
-    else if (isLikeDivision(k))
-      score = (20 * b.GetValueWidth() * b.GetValueWidth());
-    else if (k == BVCONCAT || k == BVEXTRACT || k == NOT)
-    {
-    } // no harder.
-    else if (k == EQ || k == BVGE || k == BVGT || k == BVSGE || k == BVSGT)
-    {
-      // without getting the width of the child it'd always be 2.
-      score = std::max(b[0].GetValueWidth(), 1u) * (b.Degree());
-    }
-    else if (k == BVSUB)
-    {
-      // We convert subtract to a + (-b), we want the difficulty scores to be
-      // same.
-      score = std::max(b[0].GetValueWidth(), 1u) * 3;
-    }
-    else
-    {
-      score = std::max(b.GetValueWidth(), 1u) * (b.Degree());
-    }
-    return score;
+    score = (4L * b.GetValueWidth() * b.GetValueWidth() * b.Degree());
   }
-
-  // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<int, int> cache;
-
-  int DifficultyScore::score(const ASTNode& top, STPMgr *mgr)
+  else if (isLikeDivision(k))
+    score = (16L * b.GetValueWidth() * b.GetValueWidth());
+  else if (k == BVCONCAT || k == BVEXTRACT || k == NOT || k == BVNOT)
   {
-    if (cache.find(top.GetNodeNum()) != cache.end())
-      return cache.find(top.GetNodeNum())->second;
+  } // no harder.
+  else if (k == EQ || k == BVGE || k == BVGT || k == BVSGE || k == BVSGT)
+  {
+    score = 6L * std::max(b[0].GetValueWidth(), 1u);
+  }
+  else if (k == BVSUB)
+  {
+    // We convert subtract to a + (-b), we want the difficulty scores to be
+    // same.
+    score = 20L * b.GetValueWidth();
+  }
+  else if (k == EQ)
+  {
+    score = 5L * b[0].GetValueWidth();
+  }
+  else if (k == BVUMINUS)
+  {
+    score = 6L * b.GetValueWidth();
+  }  
+  else if (k == BVPLUS)
+  {
+    score = 14L * b.GetValueWidth() * (b.Degree()-1);
+  }
+  else if (k == BVRIGHTSHIFT || k == BVLEFTSHIFT)
+  {
+    score = 29L * b.GetValueWidth();
+  }
+  else if (k == BVSRSHIFT)
+  {
+    score = 30L * b.GetValueWidth();
+  }  
+  else if (k == BVZX || k == BVSX)
+  {
+    score = 0;
+  }
+  else 
+  {
+    //std::cerr << k;
+    score = std::max<long>(b.GetValueWidth(), 1) * b.Degree();
+  }
+  return score;
+}
 
-    NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
-    ASTNode current;
-    int result = 0;
-    while ((current = ni.next()) != ni.end())
+long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
+{
+
+  if (cache.find(top.GetNodeNum()) != cache.end())
+    return cache.find(top.GetNodeNum())->second;
+
+  NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
+  ASTNode current;
+  long result = 0;
+  while ((current = ni.next()) != ni.end())
+    {
+      evalCount++;
       result += eval(current);
+    }
 
-    cache.insert(std::make_pair(top.GetNodeNum(), result));
-    return result;
-  }
+  cache.insert(std::make_pair(top.GetNodeNum(), result));
+  return result;
+}
 }

@@ -18,10 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_executable(test_constantbitprop
- test_cbitp.cpp
- ../measure/Functions.cpp
-)
-target_link_libraries(test_constantbitprop
- libstp
-)
+if ( USE_CRYPTOMINISAT)
+    add_executable(test_constantbitprop
+     test_cbitp.cpp
+     ../measure/Functions.cpp
+    )
+    target_link_libraries(test_constantbitprop
+     stp
+    )
+endif()

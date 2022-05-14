@@ -24,10 +24,10 @@ THE SOFTWARE.
 
 /* g++ -I $HOME/stp/c_interface stp-div-001.c -L $HOME/lib -lstp -o cc */
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "stp/c_interface.h"
 
 TEST(stp_div, one)
 {
@@ -35,8 +35,6 @@ TEST(stp_div, one)
   vc_setFlags(vc, 'n');
   vc_setFlags(vc, 'd');
   // vc_setFlags(vc,'p');
-
-  Type bv8 = vc_bvType(vc, 8);
 
   Expr a = vc_bvCreateMemoryArray(vc, "a");
 

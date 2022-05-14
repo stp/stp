@@ -24,9 +24,9 @@ THE SOFTWARE.
 
 // g++ -I$(HOME)/stp/c_interface print.c -L$(HOME)/stp/lib -lstp -o hex
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 TEST(multiprint, one)
 {
@@ -60,7 +60,6 @@ TEST(multiprint, one)
   printf("\n");
 
   vc_Destroy(vc2);
-
 
   // FIXME: Actually test something
   // ASSERT_TRUE(false && "FIXME: Actually test something");

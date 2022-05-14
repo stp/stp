@@ -23,8 +23,8 @@ THE SOFTWARE.
 **********************/
 
 #include "stp/c_interface.h"
-#include <stdio.h>
 #include <gtest/gtest.h>
+#include <stdio.h>
 
 // This test needs to be run under valgrind
 // Should we have a test suite just for leaks

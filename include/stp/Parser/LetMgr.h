@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
@@ -38,7 +37,7 @@ class LETMgr
 private:
   const ASTNode ASTUndefined;
 
-  typedef hash_map<string, ASTNode> MapType;
+  typedef std::unordered_map<string, ASTNode> MapType;
 
   // MAP: This map is from bound IDs that occur in LETs to
   // expression. The map is useful in checking replacing the IDs
@@ -47,12 +46,15 @@ private:
   // a call to CleanupLetIDMap().
   MapType* _letid_expr_map;
 
+  // Need to pop/push the let nodes, they can be nested.
+  std::stack<vector<string>> stack;
+
   // Allocate LetID map
   void InitializeLetIDMap(void);
 
 public:
   // I think this keeps a reference to symbols so they don't get garbage
-  // collected.
+  // collected. Used only by the CVC parser.
   ASTNodeSet _parser_symbol_table;
 
   // A let with this name has already been declared.
@@ -87,7 +89,22 @@ public:
   // Delete Letid Map. Called when we move onto the expression after (let ... )
   void CleanupLetIDMap(void);
 
-}; 
+  void push()
+  {
+    // new frame.
+    stack.push(vector<string>());
+  }
+
+  void pop()
+  {
+    vector<string> v = stack.top();
+    for (string s : v)
+    {
+      _letid_expr_map->erase(s);
+    }
+    stack.pop();
+  }
+};
 } // end of namespace
 
 #endif

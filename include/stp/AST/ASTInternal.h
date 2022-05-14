@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, David L. Dill
  *
@@ -25,9 +24,9 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 
-#include <iostream>
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/UsefulDefs.h"
+#include <iostream>
 
 using std::ostream;
 
@@ -65,26 +64,20 @@ class ASTInternal
   friend class ASTNode;
 
 protected:
-  /****************************************************************
-   * Protected Data                                               *
-   ****************************************************************/
-
   // Pointer back to the node manager that holds this.
-  STPMgr * nodeManager;
+  STPMgr* nodeManager;
 
-  mutable uint8_t iteration;
-
-  // reference counting for garbage collection
-  unsigned int _ref_count;
-
-  // Kind. It's a type tag and the operator.
-  enumeration<Kind, unsigned char> _kind;
-
-  // Nodenum is a unique positive integer for the node.  The nodenum
+  // node_uid is a unique positive integer for the node.  The node_uid
   // of a node should always be greater than its descendents (which
   // is easily achieved by incrementing the number each time a new
-  // node is created).
-  unsigned int _node_num;
+  // node is created). NOT nodes are odd, and one more than the thing
+  // the are NOTs of.
+  //
+  uint64_t node_uid;
+  static THREAD_LOCAL uint64_t node_uid_cntr;
+
+  // reference counting for garbage collection
+  uint32_t _ref_count;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -93,7 +86,11 @@ protected:
    *                                                                 *
    * Width of the index of an array. Positive for array, 0 otherwise *
    *******************************************************************/
-  unsigned int _index_width;
+  virtual void setIndexWidth(uint32_t) = 0;
+  virtual uint32_t getIndexWidth() const = 0;
+
+  virtual void setValueWidth(uint32_t) = 0;
+  virtual uint32_t getValueWidth() const = 0;
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -102,7 +99,17 @@ protected:
    *                                                                 *
    * Number of bits of bitvector. +ve for array/bitvector,0 otherwise*
    *******************************************************************/
-  unsigned int _value_width;
+
+  // Kind. It's a type tag and the operator.
+  enumeration<Kind, unsigned char> _kind;
+
+  //Used just by ASTInterior, but storing it here saves 8-bytes in ASTInterior, sizeof this class is unchanged.
+  mutable bool is_simplified;
+
+  //Used just by ASTBVConst, but storing it here saves 8-bytes in ASTBVConst, sizeof this class is unchanged.
+  bool cbv_managed_outside;
+
+  mutable uint8_t iteration;
 
   /****************************************************************
    * Protected Member Functions                                   *
@@ -128,9 +135,9 @@ protected:
 
 public:
   // Constructor (kind only, empty children, int nodenum)
-  ASTInternal(STPMgr* mgr, Kind kind, int nodenum = 0)
-      : nodeManager(mgr), iteration(0), _ref_count(0), _kind(kind), _node_num(nodenum),
-        _index_width(0), _value_width(0)
+  ASTInternal(STPMgr* mgr, Kind kind)
+      : nodeManager(mgr), node_uid(node_uid_cntr += 2), _ref_count(0),
+        _kind(kind), iteration(0)
   {
   }
 
@@ -140,9 +147,9 @@ public:
   // temporary hash keys before uniquefication.
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
-      : nodeManager(int_node.nodeManager), iteration(0), _ref_count(0), _kind(int_node._kind),
-        _node_num(int_node._node_num), _index_width(int_node._index_width),
-        _value_width(int_node._value_width)
+      : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
+        _ref_count(0), _kind(int_node._kind), iteration(0)
+
   {
   }
 
@@ -159,7 +166,7 @@ public:
     }
   }
 
-  unsigned GetNodeNum() const { return _node_num; }
+  unsigned GetNodeNum() const { return node_uid; }
 
   virtual bool isSimplified() const { return false; }
 
@@ -167,9 +174,6 @@ public:
   {
     std::cerr << "astinternal has been";
   }
-
-  void SetNodeNum(int nn) { _node_num = nn; } 
-
-}; 
+};
 } // end of namespace
 #endif

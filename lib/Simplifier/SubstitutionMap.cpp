@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/SubstitutionMap.h"
-#include "stp/Simplifier/Simplifier.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {
@@ -33,14 +33,10 @@ using std::make_pair;
 using std::set;
 using std::cout;
 
-SubstitutionMap::~SubstitutionMap()
+DLL_PUBLIC SubstitutionMap::~SubstitutionMap()
 {
   delete SolverMap;
 }
-
-// if false. Don't simplify while creating the substitution map.
-// This makes it easier to spot how long is spent in the simplifier.
-const bool simplify_during_create_subM = false;
 
 // if a is READ(Arr,const) and b is BVCONST then return 1.
 // if a is a symbol SYMBOL, return 1.
@@ -71,20 +67,20 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
     return -1;
 
   return 0;
-} 
+}
 
 // idempotent.
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
-  ASTNode result = replace(n, *SolverMap, cache, nf, false, false);
+  ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, false, false);
 
 // NB. This is an expensive check. Remove it after it's been idempotent
 // for a while.
 #ifndef NDEBUG
   cache.clear();
-  assert(result == replace(result, *SolverMap, cache, nf, false, false));
+  assert(result == replace(result, *SolverMap, cache, bm->defaultNodeFactory, false, false));
 #endif
 
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
@@ -96,7 +92,7 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
-  ASTNode result = replace(n, *SolverMap, cache, nf, true, false);
+  ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
   return result;
 }

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/VariablesInExpression.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
@@ -37,17 +38,16 @@ class ArrayTransformer;
 
 const bool debug_substn = false;
 
-class SubstitutionMap // not copyable
+class DLL_PUBLIC SubstitutionMap
 {
 
   ASTNodeMap* SolverMap;
-  Simplifier* simp;
   STPMgr* bm;
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
-  NodeFactory* nf;
 
   // These are used to avoid substituting {x = f(y,z), z = f(x)}
-  typedef hash_map<ASTNode, Symbols*, ASTNode::ASTNodeHasher> DependsType;
+  typedef std::unordered_map<ASTNode, Symbols*, ASTNode::ASTNodeHasher>
+      DependsType;
   DependsType dependsOn; // The lhs depends on the variables in the rhs.
   ASTNodeSet rhs;        // All the rhs that have been seeen.
   std::set<ASTNodeSet*> rhsAlreadyAdded;
@@ -65,11 +65,31 @@ class SubstitutionMap // not copyable
   VariablesInExpression vars;
 
 public:
-
-  VariablesInExpression& getVariablesInExpression()
+  SubstitutionMap(STPMgr* _bm)
   {
-    return vars;
+    bm = _bm;
+
+    ASTTrue = bm->CreateNode(TRUE);
+    ASTFalse = bm->CreateNode(FALSE);
+    ASTUndefined = bm->CreateNode(UNDEFINED);
+
+    SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    loopCount = 0;
+    substitutionsLastApplied = 0;
   }
+
+  SubstitutionMap(const SubstitutionMap&) = delete;
+  SubstitutionMap & operator=(const SubstitutionMap&) = delete;
+
+  virtual ~SubstitutionMap();
+
+  void clear()
+  {
+    SolverMap->clear();
+    haveAppliedSubstitutionMap();
+  }
+
+  VariablesInExpression& getVariablesInExpression() { return vars; }
 
   bool hasUnappliedSubstitutions()
   {
@@ -86,29 +106,6 @@ public:
     rhsAlreadyAdded.clear();
     substitutionsLastApplied = SolverMap->size();
   }
-
-  SubstitutionMap(Simplifier* _simp, STPMgr* _bm)
-  {
-    simp = _simp;
-    bm = _bm;
-
-    ASTTrue = bm->CreateNode(TRUE);
-    ASTFalse = bm->CreateNode(FALSE);
-    ASTUndefined = bm->CreateNode(UNDEFINED);
-
-    SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    loopCount = 0;
-    substitutionsLastApplied = 0;
-    nf = bm->defaultNodeFactory;
-  }
-
-  void clear()
-  {
-    SolverMap->clear();
-    haveAppliedSubstitutionMap();
-  }
-
-  virtual ~SubstitutionMap();
 
   // check the solver map for 'key'. If key is present, then return the
   // value by reference in the argument 'output'
@@ -141,7 +138,7 @@ public:
     return false;
   }
 
-  ASTNodeMap* Return_SolverMap() { return SolverMap; } 
+  ASTNodeMap* Return_SolverMap() { return SolverMap; }
 
   //Returns TRUE if key is not in SolverMap
   bool InsideSubstitutionMap(const ASTNode& key)

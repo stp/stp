@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -26,26 +25,31 @@ THE SOFTWARE.
 #ifndef VARIABLESINEXPRESSION_H_
 #define VARIABLESINEXPRESSION_H_
 
-#include "stp/AST/AST.h"
 #include "Symbols.h"
+#include "stp/AST/AST.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
 
-class VariablesInExpression // not copyable
+class VariablesInExpression
 {
 private:
   void insert(const ASTNode& n, Symbols* s);
 
-  typedef hash_map<int, Symbols*> ASTNodeToNodes;
+  typedef std::unordered_map<int, Symbols*> ASTNodeToNodes;
   ASTNodeToNodes symbol_graph;
 
 public:
-  VariablesInExpression();
-  virtual ~VariablesInExpression();
+  DLL_PUBLIC VariablesInExpression();
+  DLL_PUBLIC virtual ~VariablesInExpression();
+  
+  VariablesInExpression(VariablesInExpression const&) = delete;
+  VariablesInExpression& operator=(VariablesInExpression const&) = delete;
+
 
   // When solving, we're interested in whether variables appear multiple times.
-  typedef hash_set<Symbols*, SymbolPtrHasher> SymbolPtrSet;
+  typedef std::unordered_set<Symbols*, SymbolPtrHasher> SymbolPtrSet;
 
   Symbols* getSymbol(const ASTNode& n);
 
@@ -53,7 +57,8 @@ public:
   // identifying variables in the those terms. Prevents double
   // counting.
 
-  typedef hash_map<Symbols*, ASTNodeSet*, SymbolPtrHasher> SymbolPtrToNode;
+  typedef std::unordered_map<Symbols*, ASTNodeSet*, SymbolPtrHasher>
+      SymbolPtrToNode;
   SymbolPtrToNode TermsAlreadySeenMap;
 
   // this function return true if the var occurs in term, else the
@@ -65,7 +70,6 @@ public:
                      vector<Symbols*>& av);
 
   void ClearAllTables();
-  
 };
 }
 

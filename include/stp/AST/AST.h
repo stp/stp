@@ -25,22 +25,22 @@ THE SOFTWARE.
 #ifndef AST_H
 #define AST_H
 
-#include "UsefulDefs.h"
 #include "ASTNode.h"
-
+#include "UsefulDefs.h"
+#include "stp/Util/Attributes.h"
 
 namespace stp
 {
-void FatalError(const char* str, const ASTNode& a, int w = 0)
-                __attribute__((noreturn));
-void FatalError(const char* str) __attribute__((noreturn));
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a,
+                                         int w = 0);
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool exprless(const ASTNode n1, const ASTNode n2);
 bool arithless(const ASTNode n1, const ASTNode n2);
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
-bool containsArrayOps(const ASTNode& n, STPMgr *stp);
+bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
 
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the
@@ -58,7 +58,7 @@ bool BVTypeCheck(const ASTNode& n);
 
 long getCurrentTime();
 
-ASTVec FlattenKind(Kind k, const ASTVec& children);
+ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.
 bool BVTypeCheckRecursive(const ASTNode& n);
@@ -66,19 +66,24 @@ bool BVTypeCheckRecursive(const ASTNode& n);
 // Takes a BVCONST and returns its constant value
 unsigned int GetUnsignedConst(const ASTNode n);
 
-typedef hash_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
-                 ASTNode::ASTNodeEqual> ASTNodeMap;
+typedef std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
+    ASTNodeMap;
 
-typedef hash_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
-                 ASTNode::ASTNodeEqual> ASTNodeCountMap;
+typedef std::unordered_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
+    ASTNodeCountMap;
 
-typedef hash_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_set<ASTNode, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
     ASTNodeSet;
 
-typedef hash_multiset<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_multiset<ASTNode, ASTNode::ASTNodeHasher,
+                                ASTNode::ASTNodeEqual>
     ASTNodeMultiSet;
 
-typedef hash_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+typedef std::unordered_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
     ASTNodeToVecMap;
 
 void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,

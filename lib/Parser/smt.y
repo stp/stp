@@ -36,6 +36,7 @@
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
 
   using namespace stp;
   using std::cout;
@@ -229,7 +230,6 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(assumptions);
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
-  GlobalParserInterface->letMgr->cleanupParserSymbolTable();
   query = ASTNode();
   YYACCEPT;
 }
@@ -429,7 +429,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   //var
   s.SetIndexWidth($3.indexwidth);
   s.SetValueWidth($3.valuewidth);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
+  GlobalParserInterface->addSymbol(s);
   delete $2;
 }
 | LPAREN_TOK STRING_TOK RPAREN_TOK
@@ -437,7 +437,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
+  GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   delete $2;
@@ -627,7 +627,6 @@ TRUE_TOK
   //| letexpr_mgmt an_formula annotations RPAREN_TOK
 {
   $$ = $2;
-  //Cleanup the LetIDToExprMap
   GlobalParserInterface->letMgr->CleanupLetIDMap();                      
 }
 ;
@@ -765,9 +764,9 @@ BITCONST_TOK { $$ = $1; }
 }
 |  BVNOT_TOK an_term
 {
-  //this is the BVNEG (term) in the CVCL language
+  //this is the BVNOT (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2));
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
   delete $2;
 }
@@ -813,8 +812,8 @@ BITCONST_TOK { $$ = $1; }
       GlobalParserInterface->nf->CreateTerm( BVOR, width,
      GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3),
      GlobalParserInterface->nf->CreateTerm(BVAND, width,
-	     GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2),
-     	 GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$3)
+	     GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2),
+     	 GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$3)
      )));
 
       $$ = n;
@@ -907,7 +906,7 @@ BITCONST_TOK { $$ = $1; }
 |  BVNAND_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   $$ = n;
   delete $2;
   delete $3;
@@ -915,7 +914,7 @@ BITCONST_TOK { $$ = $1; }
 |  BVNOR_TOK an_term an_term 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3))); 
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3))); 
   $$ = n;
   delete $2;
   delete $3;
@@ -1108,3 +1107,9 @@ DOLLAR_TOK FORMID_TOK
 }   
 ;
 %%
+
+namespace stp {
+  int SMTParse(void* AssertsQuery) {
+    return smtparse(AssertsQuery);
+  }
+}

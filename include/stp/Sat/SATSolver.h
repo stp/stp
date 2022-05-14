@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Aug, 2010
  *
@@ -25,8 +25,8 @@ THE SOFTWARE.
 #ifndef SATSOLVER_H_
 #define SATSOLVER_H_
 
-#include "minisat/mtl/Vec.h"
 #include "minisat/core/SolverTypes.h"
+#include "minisat/mtl/Vec.h"
 #include <iostream>
 
 // Don't let the defines escape outside.
@@ -67,8 +67,15 @@ public:
   virtual void setMaxConflicts(int64_t /*max_confl*/)
   {
     std::cerr
-    << "Warning: Max conflict setting is not supported by this SAT solver"
-    << std::endl;
+        << "Warning: Max conflict setting is not supported by this SAT solver"
+        << std::endl;
+  }
+
+  virtual void setMaxTime(int64_t /*max_time*/)
+  {
+    std::cerr
+        << "Warning: Max time setting is not supported by this SAT solver"
+        << std::endl;
   }
 
   virtual uint8_t modelValue(uint32_t x) const = 0;
@@ -88,9 +95,7 @@ public:
   // The simplifying solvers shouldn't eliminate index / value variables.
   virtual void setFrozen(uint32_t /*var*/) {}
 
-  virtual void enableRefinement(const bool /*enable*/)
-  {
-  }
+  virtual void enableRefinement(const bool /*enable*/) {}
 
   virtual int nClauses()
   {

@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
-// -*- c++ -*-
 
 // STLport debug checking, if we use STLport threads flag is to get
 // rid of link errors, since iostreams compiles with threads.  alloc

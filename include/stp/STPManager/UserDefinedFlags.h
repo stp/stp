@@ -1,6 +1,5 @@
-// -*- c++ -*-
 /********************************************************************
- * AUTHORS: Vijay Ganesh
+ * AUTHORS: Vijay Ganesh, Andrew V. Jones
  *
  * BEGIN DATE: November, 2005
  *
@@ -25,12 +24,6 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
-#include <map>
-#include <string>
-#include <assert.h>
-#include <iostream>
-#include <set>
-
 namespace stp
 {
 
@@ -43,75 +36,126 @@ namespace stp
 
 struct UserDefinedFlags // not copyable
 {
-private:
-  std::set<std::string> alreadyOutput;
+  UserDefinedFlags(UserDefinedFlags const&) = delete;
+  UserDefinedFlags& operator=(UserDefinedFlags const&) = delete;
 
 public:
-  // collect statistics on certain functions
-  bool stats_flag;
+  /* Parsing options */
+  bool smtlib1_parser_flag = false;
+  bool smtlib2_parser_flag = false;
 
-  //collect and delete objects via interface.
-  bool cinterface_exprdelete_on_flag;
+  /* collect and delete objects via interface. */
+  bool cinterface_exprdelete_on_flag = true;
 
-  int64_t timeout_max_conflicts;
+  /* Output details of how the solving went*/
+  bool stats_flag = false;
+  bool quick_statistics_flag = false;
 
-  // print DAG nodes
-  bool print_nodes_flag;
+  /* Control simplification */
+  bool optimize_flag = true; // the Simplifier functions (which might increase the size).
+  bool wordlevel_solve_flag = true;   // turn on word level bitvector solver
+  bool propagate_equalities = true; // Remove equalities.
+  bool bitConstantProp_flag = true; // Constant bit propagation enabled.
+  bool enable_unconstrained = true;
+  bool enable_flatten = false;
+  bool enable_ite_context = true;
+  bool enable_aig_core_simplify = false;
+  bool enable_use_intervals = true;
+  bool enable_pure_literals = true;
+  bool enable_always_true = false;
+  int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
+  int64_t bitblast_simplification = 0;
+  int64_t size_reducing_fixed_point = 1000000;
 
-  // run STP in optimized mode
-  bool optimize_flag;
 
-  // do sat refinement, i.e. underconstrain the problem, and feed to
-  // SAT. if this works, great. else, add a set of suitable constraints
-  // to re-constraint the problem correctly, and call SAT again, until
-  // all constraints have been added.
-  bool ackermannisation; // eagerly write through the array's function
-                         // congruence axioms.
+  bool simplify_to_constants_only = false;
+
+  // given a/b = c, propagates that c<=a even if b may be zero.
+  bool cBitP_propagateForDivisionByZero = true;
+
+  bool array_difficulty_reversion = true;
+  bool difficulty_reversion = true;
 
 
-  // check the counterexample against the original input to STP
-  bool check_counterexample_flag;
+  // eagerly write through the array's function congruence axioms.
+  bool ackermannisation = false;
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
-  bool construct_counterexample_flag;
-  bool print_counterexample_flag;
-  bool print_binary_flag;
+  bool print_counterexample_flag = false;
+  bool print_binary_flag = false;
 
   // if this option is true then print the way dawson wants using a
   // different printer. do not use this printer.
-  bool print_arrayval_declaredorder_flag;
-
-  // Flag that allows the printing of the DIMACS format of the input
-  bool print_cnf_flag;
-  char* cnf_dump_filename;
+  bool print_arrayval_declaredorder_flag = false;
 
   // flag to decide whether to print "valid/invalid" or not
-  bool print_output_flag;
-
-  // print the variable order chosen by the sat solver while it is
-  // solving.
-  bool print_sat_varorder_flag;
-
-  // turn on word level bitvector solver
-  bool wordlevel_solve_flag;
-
-  bool propagate_equalities;
-
-  // XOR flattening optimizations.
-  bool xor_flatten_flag;
-
-  // this flag indicates that the BVSolver() succeeded
-  bool toplevel_solved_flag;
+  bool print_output_flag = false;
 
   // print the input back
-  bool print_STPinput_back_flag;
-  bool print_STPinput_back_C_flag;
-  bool print_STPinput_back_SMTLIB2_flag;
-  bool print_STPinput_back_SMTLIB1_flag;
-  bool print_STPinput_back_CVC_flag;
-  bool print_STPinput_back_dot_flag;
-  bool print_STPinput_back_GDL_flag;
+  bool print_STPinput_back_flag = false;
+  bool print_STPinput_back_C_flag = false;
+  bool print_STPinput_back_SMTLIB2_flag = false;
+  bool print_STPinput_back_SMTLIB1_flag = false;
+  bool print_STPinput_back_CVC_flag = false;
+  bool print_STPinput_back_dot_flag = false;
+  bool print_STPinput_back_GDL_flag = false;
+
+  bool print_nodes_flag = false;
+
+  // output flags
+  bool output_CNF_flag = false;
+  bool output_bench_flag = false;
+
+  /* Bitblasting options */
+
+  // You can select these with any combination you want of true & false.
+  bool division_variant_1 = true;
+  bool division_variant_2 = true;
+  bool division_variant_3 = true;
+  bool adder_variant = true;
+  bool bbbvle_variant =true;
+  bool upper_multiplication_bound = false;
+  bool bvplus_variant = true;
+  bool conjoin_to_top = true;
+
+  int64_t multiplication_variant = 7;
+
+  // If the bit-blaster discovers new constants, should the term simplifier be
+  // re-run.
+  bool simplify_during_BB_flag = false;
+
+
+  /* CNF Generation options */
+  bool traditional_cnf = false;
+  bool simple_cnf = false; // don't use the good AIG based CNF conversion.
+
+  bool exit_after_CNF = false;
+
+  /* SAT solving options */
+
+  int64_t timeout_max_conflicts = -1;
+  int num_solver_threads = 1;
+  int64_t timeout_max_time = -1; // seconds
+
+  // check the counterexample against the original input to STP
+  bool check_counterexample_flag = false;
+  //This is derived from other settings.
+  bool construct_counterexample_flag = false;
+
+
+
+  // Available back-end SAT solvers.
+  enum SATSolvers
+  {
+    MINISAT_SOLVER = 0,
+    SIMPLIFYING_MINISAT_SOLVER,
+    CRYPTOMINISAT5_SOLVER,
+    RISS_SOLVER
+  };
+
+  enum SATSolvers solver_to_use;
+
   bool get_print_output_at_all() const
   {
     return print_STPinput_back_flag || print_STPinput_back_C_flag ||
@@ -120,188 +164,35 @@ public:
            print_STPinput_back_dot_flag || print_STPinput_back_GDL_flag;
   }
 
-  // output flags
-  bool output_CNF_flag;
-  bool output_bench_flag;
-
-  // Flag to switch on the smtlib parser
-  bool smtlib1_parser_flag;
-  bool smtlib2_parser_flag;
-
-  bool division_by_zero_returns_one_flag;
-
-  bool quick_statistics_flag;
-
-  bool tseitin_are_decision_variables_flag;
-
-  bool bitConstantProp_flag;
-
-  bool cBitP_propagateForDivisionByZero;
-
-  bool exit_after_CNF;
-
-  bool enable_AIG_rewrites_flag;
-
-  bool simplify_during_BB_flag;
-
-  // Available back-end SAT solvers.
-  enum SATSolvers
-  {
-    MINISAT_SOLVER = 0,
-    SIMPLIFYING_MINISAT_SOLVER,
-    CRYPTOMINISAT5_SOLVER
-  };
-
-  enum SATSolvers solver_to_use;
-  int num_solver_threads;
-
-  std::map<std::string, std::string> config_options;
-
-  void set(std::string n, std::string v)
-  {
-    assert(n.size() > 0);
-    assert(v.size() > 0);
-    assert(config_options.find(n) == config_options.end());
-    config_options[n] = v;
-  }
-
   void disableSimplifications()
   {
     optimize_flag = false;
+    enable_unconstrained = false;
     bitConstantProp_flag = false;
-    set("enable-unconstrained", "0");
-    set("use-intervals", "0");
-    set("pure-literals", "0");
-    set("simple-cnf", "1");
-    set("always_true", "0");
-    set("bitblast-simplification", "0");
-
+    enable_use_intervals = false;
+    enable_pure_literals = false;
+    enable_always_true = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
+    enable_flatten = false;
+
+    bitblast_simplification = 0;
   }
 
-  std::string get(std::string n) { return get(n, ""); }
-
-  // "1" is set.
-  bool isSet(std::string n, std::string def) { return (get(n, def) == std::string("1")); }
-
-  std::string get(std::string n, std::string def)
-  {
-    if (config_options.empty())
-      return def;
-
-    std::string result;
-    std::map<std::string, std::string>::const_iterator it = config_options.find(n);
-    if (it == config_options.end())
-      result = def;
-    else
-      result = it->second;
-
-    if (stats_flag)
-      if (alreadyOutput.insert(n).second)
-        std::cout << "--config_" << n << "=" << result << std::endl;
-    return result;
-  }
-
-  // CONSTRUCTOR
   UserDefinedFlags()
   {
-    timeout_max_conflicts = -1;
 
-    // collect statistics on certain functions
-    stats_flag = false;
-
-    cinterface_exprdelete_on_flag = true;
-
-    // print DAG nodes
-    print_nodes_flag = false;
-
-    // run STP in optimized mode
-    optimize_flag = true;
-
-    // Do sat refinement, i.e. underconstraint the problem, and feed to
-    // SAT. if this works, great. else, add a set of suitable
-    // constraints to re-constraint the problem correctly, and call SAT again,
-    // until all constraints have been added.
-    ackermannisation = false;
-
-    // flag to control write refinement
-    // arraywrite_refinement_flag = true;
-
-    // check the counterexample against the original input to STP
-    check_counterexample_flag = true;
-
-    // construct the counterexample in terms of original variable based
-    // on the counterexample returned by SAT solver
-    construct_counterexample_flag = true;
-    print_counterexample_flag = false;
-    print_binary_flag = false;
-
-    output_CNF_flag = false;
-    output_bench_flag = false;
-
-    // if this option is true then print the way dawson wants using a
-    // different printer. do not use this printer.
-    print_arrayval_declaredorder_flag = false;
-
-    // flag to decide whether to print "valid/invalid" or not
-    print_output_flag = false;
-
-    // print the variable order chosen by the sat solver while it is
-    // solving.
-    print_sat_varorder_flag = false;
-
-    // turn on word level bitvector solver
-    wordlevel_solve_flag = true;
-
-    // propagate equalities.
-    propagate_equalities = true;
-
-    // turn off XOR flattening
-    xor_flatten_flag = false;
-
-    // Flag to switch on the smtlib parser
-    smtlib1_parser_flag = false;
-    smtlib2_parser_flag = false;
-
-    // print the input back
-    print_STPinput_back_flag = false;
-    print_STPinput_back_C_flag = false;
-    print_STPinput_back_SMTLIB2_flag = false;
-    print_STPinput_back_SMTLIB1_flag = false;
-    print_STPinput_back_CVC_flag = false;
-    print_STPinput_back_GDL_flag = false;
-    print_STPinput_back_dot_flag = false;
-
-    // If enabled. division, mod and remainder by zero will evaluate to
-    // 1.
-    division_by_zero_returns_one_flag = true;
-
-    quick_statistics_flag = false;
-
-    tseitin_are_decision_variables_flag = true;
-
-    // use minisat by default.
+#ifdef USE_CRYPTOMINISAT
+    solver_to_use = CRYPTOMINISAT5_SOLVER;
+#else
+#ifdef USE_RISS
+    solver_to_use = RISS_SOLVER;
+#else
     solver_to_use = MINISAT_SOLVER;
-    num_solver_threads = 1;
-
-    // Should constant bit propagation be enabled?
-    bitConstantProp_flag = true;
-
-    // given a/b = c, propagates that c<=a even if b may be zero.
-    cBitP_propagateForDivisionByZero = true;
-
-    exit_after_CNF = false;
-
-    enable_AIG_rewrites_flag = false;
-
-    // If the bit-blaster discovers new constants, should the term simplifier be
-    // re-run.
-    simplify_during_BB_flag = false;
-
-  } 
-
-}; 
+#endif
+#endif
+  }
+};
 } // end of namespace
 
 #endif

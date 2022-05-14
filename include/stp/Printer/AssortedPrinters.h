@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh
  *
@@ -27,6 +26,8 @@ THE SOFTWARE.
 #define PRINTER_H
 
 #include "stp/AST/AST.h"
+#include "stp/Util/Attributes.h"
+
 namespace stp
 {
 
@@ -54,14 +55,14 @@ public:
   {
     return lp._node.LispPrint(os, lp._indentation);
   };
-
-}; 
+};
 
 // global function which accepts an integer and looks up the
 // corresponding ASTNode and prints a string of that ASTNode
 void Convert_MINISATVar_To_ASTNode_Print(int minisat_var, int decision,
                                          int polarity = 0);
 
-void print_STPInput_Back(const ASTNode& query, STPMgr *);
+DLL_PUBLIC void print_STPInput_Back(const ASTNode& query, STPMgr*);
+
 } // end of namespace stp
 #endif

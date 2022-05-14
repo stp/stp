@@ -22,15 +22,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-#include <gtest/gtest.h>
 #include "stp/c_interface.h"
+#include <gtest/gtest.h>
 
 TEST(b4_c, one)
 {
   VC vc = vc_createValidityChecker();
-  vc_setFlag(vc, 'v');
-  vc_setFlag(vc, 's');
-  vc_setFlag(vc, 'n');
+  //vc_setFlag(vc, 'v');
+  //vc_setFlag(vc, 's');
+  //vc_setFlag(vc, 'n');
+  vc_setFlag(vc, 'd');
 
   // vc_push(vc);
   Expr e12866 = vc_varExpr(vc, "at", vc_bvType(vc, 5));
@@ -333,7 +334,8 @@ TEST(b4_c, one)
   vc_assertFormula(vc, e13131);
   // vc_push(vc);
   Expr e13132 = vc_falseExpr(vc);
-  vc_query(vc, e13132);
+  int ret = vc_query(vc, e13132);
+  ASSERT_FALSE(ret);
   // vc_pop(vc);
   // vc_pop(vc);
   vc_Destroy(vc);

@@ -31,22 +31,23 @@ namespace printer
 {
 
 // Map from ASTNodes to LetVars
-extern stp::ASTNodeMap NodeLetVarMap;
+extern THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-extern vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
+extern THREAD_LOCAL vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
-extern stp::ASTNodeMap NodeLetVarMap1;
+extern THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap1;
 
 std::string functionToSMTLIBName(const Kind k, bool smtlib1);
 
-void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet,
-                bool smtlib1, STPMgr *);
+void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
+                STPMgr*);
 
-ostream& SMTLIB_Print(ostream& os, STPMgr *, const ASTNode n, const int indentation,
+ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
+                      const int indentation,
                       void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
                       bool smtlib1);
 

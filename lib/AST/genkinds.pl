@@ -128,6 +128,9 @@ sub gen_cpp_file {
     "// Generated automatically by genkinds.h from ASTKind.kinds$now.\n",
     "// Do not edit\n",
     "namespace stp {\n",
+    "#if defined(__GNUC__) || defined(__clang__)\n\n",
+    "__attribute__((visibility(\"default\")))\n\n", 
+    "#endif\n\n",
     "const char * _kind_names[] =  {\n";
 
   for my $i (0 .. $#kindnames) {
@@ -137,6 +140,9 @@ sub gen_cpp_file {
 
   # category bits
   print CPPFILE
+    "#if defined(__GNUC__) || defined(__clang__)\n\n",
+    "__attribute__((visibility(\"default\")))\n\n", 
+    "#endif\n\n",
     "unsigned char _kind_categories[] = {\n";
 
   #for (@cat_bits) {

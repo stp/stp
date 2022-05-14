@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
 
   using namespace stp;
   using std::cout;
@@ -45,7 +46,7 @@ THE SOFTWARE.
   extern char* yytext;
   extern int cvclineno;
   int yyerror(const char *s) {
-    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
+    cout << "CVC syntax error: line " << cvclineno << "\n" << s << endl;
     FatalError("");
     return YY_EXIT_FAILURE;
   }
@@ -187,7 +188,7 @@ THE SOFTWARE.
 %type <vec>  Exprs 
 %type <vec>  Asserts
 %type <stringVec>  FORM_IDs reverseFORM_IDs  
-%type <node> Expr Formula ForDecl IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
+%type <node> Expr Formula IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
 %type <Index_To_UpdateValue> Updates
 
 %type <indexvaluewidth>  BvType BoolType ArrayType Type 
@@ -314,7 +315,7 @@ Assert          :      ASSERT_TOK Formula ';'
  }                
 ;
 
-Query           :      QUERY_TOK Formula ';' { GlobalParserInterface->AddQuery(*$2); $$ = $2;}
+Query           :      QUERY_TOK Formula ';' { GlobalParserInterface->SetQuery(*$2); $$ = $2;}
 ; 
 
 
@@ -391,14 +392,6 @@ FORM_IDs         :     reverseFORM_IDs
 }
 ;
 
-ForDecl         :      FORMID_TOK ':' Type
-{
-  $1->SetIndexWidth($3.indexwidth);
-  $1->SetValueWidth($3.valuewidth);
-  GlobalParserInterface->letMgr->_parser_symbol_table.insert(*$1);
-  $$ = $1;                      
-}
-
 /* Grammar for Types */
 Type            :      BvType { $$ = $1; }
 |      BoolType { $$ = $1; }
@@ -435,7 +428,7 @@ IfExpr          :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
 {
   unsigned int width = $4->GetValueWidth();
   if (width != $5->GetValueWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");                   
+    yyerror("Width mismatch in IF-THEN-ELSE");
   if($4->GetIndexWidth() != $5->GetIndexWidth())
     yyerror("Width mismatch in IF-THEN-ELSE");
 
@@ -654,7 +647,7 @@ ElseRestForm    :      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol"); 
+   yyerror("bad symbol");
 }
 ;
 
@@ -734,7 +727,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
     yyerror("Negative width in extract");
                          
   if((unsigned)$3 >= $1->GetValueWidth())
-    yyerror("Parsing: Wrong width in BVEXTRACT\n");                      
+    yyerror("Parsing: Wrong width in BVEXTRACT\n");
 
   ASTNode hi  =  GlobalParserInterface->CreateBVConst(32, $3);
   ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
@@ -745,7 +738,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 |      BVNEG_TOK Expr 
 {
   unsigned int width = $2->GetValueWidth();
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNEG, width, *$2));
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
   delete $2;
 }
@@ -1015,7 +1008,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol"); 
+   yyerror("bad symbol");
 }
 ;
 
@@ -1131,3 +1124,9 @@ LetDecl         :       STRING_TOK '=' Expr
 ;
 
 %%
+
+namespace stp {
+  int CVCParse(void* AssertsQuery) {
+    return cvcparse(AssertsQuery);
+  }
+}

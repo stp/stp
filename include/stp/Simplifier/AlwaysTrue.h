@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -28,16 +27,18 @@ THE SOFTWARE.
 
 // Applies the AlwaysTrueSet to the input node.
 
-#include <map>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <map>
 
 namespace stp
 {
+using std::make_pair;
 
-class AlwaysTrue // not copyable
+class AlwaysTrue
 {
+
   Simplifier* simplifier;
   STPMgr* stpMgr;
   NodeFactory* nf;
@@ -56,6 +57,10 @@ public:
     stpMgr = stp_;
     nf = nf_;
   }
+
+  AlwaysTrue( const AlwaysTrue& ) = delete;
+  AlwaysTrue& operator=( const AlwaysTrue& ) = delete;
+
 
   ASTNode topLevel(ASTNode& n)
   {

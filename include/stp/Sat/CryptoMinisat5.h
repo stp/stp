@@ -1,6 +1,5 @@
-// -*- c++ -*-
 /********************************************************************
- * AUTHORS: Mate Soos
+ * AUTHORS: Mate Soos, Andrew V. Jones
  *
  * BEGIN DATE: November, 2013
  *
@@ -30,6 +29,7 @@ THE SOFTWARE.
 #define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
+#include <unordered_set>
 
 namespace CMSat
 {
@@ -38,7 +38,12 @@ class SATSolver;
 
 namespace stp
 {
-class CryptoMiniSat5 : public SATSolver
+#if defined(__GNUC__) || defined(__clang__)
+  class __attribute__((visibility("default"))) CryptoMiniSat5 : public SATSolver
+#else
+  class CryptoMiniSat5 : public SATSolver
+#endif
+
 {
   CMSat::SATSolver* s;
 
@@ -47,7 +52,9 @@ public:
 
   ~CryptoMiniSat5();
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+
+  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
@@ -72,8 +79,16 @@ public:
   virtual lbool false_literal() { return ((uint8_t)-1); }
   virtual lbool undef_literal() { return ((uint8_t)0); }
 
+  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
+
+
+  void solveAndDump();
+
+
 private:
   void* temp_cl;
+  int64_t max_confl = 0;
+  int64_t max_time = 0; // seconds
 };
 }
 

@@ -35,76 +35,76 @@ using std::vector;
 
 // Multiply is not yet  maximally precise.
 //!!!!!!!
-Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
+DLL_PUBLIC Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
                           stp::STPMgr* bm, MultiplicationStats* ms = NULL);
-Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
                                   FixedBits& output, stp::STPMgr* bm);
-Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
                                  FixedBits& output, stp::STPMgr* bm);
-Result bvSignedDivisionBothWays(vector<FixedBits*>& children, FixedBits& output,
+DLL_PUBLIC Result bvSignedDivisionBothWays(vector<FixedBits*>& children, FixedBits& output,
                                 stp::STPMgr* bm);
-Result bvSignedRemainderBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvSignedRemainderBothWays(vector<FixedBits*>& children,
                                  FixedBits& output, stp::STPMgr* bm);
-Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
+DLL_PUBLIC Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
                                stp::STPMgr* bm);
 //!!!!!!!
 
 // BOTH WAY FUNCTIONS..-------MAXIMALLY PRECISE..........
-Result bvEqualsBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvEqualsBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output);
+DLL_PUBLIC Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output);
 
-Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvXorBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvXorBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& result);
+DLL_PUBLIC Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& Result);
 
-Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvNotBothWays(FixedBits& a, FixedBits& output);
-Result bvNotBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvNotBothWays(FixedBits& a, FixedBits& output);
+DLL_PUBLIC Result bvNotBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvITEBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvITEBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvSignExtendBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvZeroExtendBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvSignExtendBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvZeroExtendBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
                                       FixedBits& output);
 
 // FOUR signed operations.
-Result bvSignedGreaterThanBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvSignedGreaterThanBothWays(vector<FixedBits*>& children,
                                    FixedBits& output);
 
-Result bvSignedLessThanBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvSignedLessThanBothWays(vector<FixedBits*>& children,
                                 FixedBits& output);
 
-Result bvSignedLessThanEqualsBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvSignedLessThanEqualsBothWays(vector<FixedBits*>& children,
                                       FixedBits& output);
 
-Result bvSignedGreaterThanEqualsBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvSignedGreaterThanEqualsBothWays(vector<FixedBits*>& children,
                                          FixedBits& output);
 
 // FOUR unsigned operations.
 
-Result bvLessThanBothWays(vector<FixedBits*>& children, FixedBits& output);
-Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output);
+DLL_PUBLIC Result bvLessThanBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output);
 
-Result bvLessThanEqualsBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvLessThanEqualsBothWays(vector<FixedBits*>& children,
                                 FixedBits& output);
 
-Result bvGreaterThanBothWays(vector<FixedBits*>& children, FixedBits& output);
+DLL_PUBLIC Result bvGreaterThanBothWays(vector<FixedBits*>& children, FixedBits& output);
 
-Result bvGreaterThanEqualsBothWays(vector<FixedBits*>& children,
+DLL_PUBLIC Result bvGreaterThanEqualsBothWays(vector<FixedBits*>& children,
                                    FixedBits& output);
 }
 }

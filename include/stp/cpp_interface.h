@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -26,7 +26,8 @@ THE SOFTWARE.
 #define CPP_INTERFACE_H_
 
 #include "stp/AST/AST.h"
-#include "stp/AST/NodeFactory/NodeFactory.h"
+#include "stp/NodeFactory/NodeFactory.h"
+#include "stp/Util/Attributes.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -71,7 +72,6 @@ class Cpp_interface
     }
   };
   vector<Entry> cache;
-  vector<vector<ASTNode>> symbols;
 
   struct Function
   {
@@ -79,118 +79,152 @@ class Cpp_interface
     ASTNode function;
     std::string name;
   };
+  std::unordered_map<std::string, Function> functions;
 
-  hash_map<std::string, Function> functions;
+  // Nested helper class to encapsulate a frame (i.e., between push a pop)
+  class SolverFrame
+  {
+  public:
+    // Functions are (currently) managed at global scope; we need a pointer to
+    // the global functions to be able to remove functions when we pop
+    SolverFrame(
+        std::unordered_map<std::string, Function>* global_function_context);
+    virtual ~SolverFrame();
+
+    // Obtain the functions for the current frame
+    vector<std::string>& getFunctions();
+
+    // Obtain the symbols for the current frame
+    ASTVec& getSymbols();
+
+  private:
+    vector<std::string> _scoped_functions;
+    ASTVec _scoped_symbols;
+    std::unordered_map<std::string, Function>* _global_function_context;
+  };
+
+  // The vector of all frames that have been created by calling push
+  std::vector< SolverFrame* > frames;
+
+  // Obtain the symbols/functions for the current frame
+  ASTVec& getCurrentSymbols();
+  vector<std::string>& getCurrentFunctions();
 
   void checkInvariant();
   void init();
+  void addFrame();
+  void removeFrame();
 
   bool produce_models;
+  bool changed_model_status;
 
 public:
   std::unique_ptr<LETMgr> letMgr;
   NodeFactory* nf;
 
-  Cpp_interface(STPMgr& bm_);
-  Cpp_interface(STPMgr& bm_, NodeFactory* factory);
+  DLL_PUBLIC Cpp_interface(STPMgr& bm_);
+  DLL_PUBLIC Cpp_interface(STPMgr& bm_, NodeFactory* factory);
 
-  void startup();
+  DLL_PUBLIC void startup();
 
   // FIXME: What is the difference between these two methods?
-  const ASTVec GetAsserts(void);
-  const ASTVec getAssertVector(void);
+  DLL_PUBLIC const ASTVec GetAsserts(void);
+  DLL_PUBLIC const ASTVec getAssertVector(void);
 
-  UserDefinedFlags& getUserFlags();
+  DLL_PUBLIC UserDefinedFlags& getUserFlags();
 
-  void AddAssert(const ASTNode& assert);
-  void AddQuery(const ASTNode& q);
+  DLL_PUBLIC void AddAssert(const ASTNode& assert);
+  DLL_PUBLIC void SetQuery(const ASTNode& q);
 
   // NODES//
-  ASTNode CreateNode(stp::Kind kind,
-                     const stp::ASTVec& children = _empty_ASTVec);
+  DLL_PUBLIC ASTNode CreateNode(stp::Kind kind,
+                                const stp::ASTVec& children = _empty_ASTVec);
 
-  ASTNode CreateNode(stp::Kind kind, const stp::ASTNode n0,
-                     const stp::ASTNode n1);
+  DLL_PUBLIC ASTNode CreateNode(stp::Kind kind, const stp::ASTNode n0,
+                                const stp::ASTNode n1);
 
   //	These belong in the node factory..
 
   // TERMS//
-  ASTNode CreateZeroConst(unsigned int width);
-  ASTNode CreateOneConst(unsigned int width);
-  ASTNode CreateBVConst(std::string& strval, int base, int bit_width);
-  ASTNode CreateBVConst(const char* const strval, int base);
-  ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
-  ASTNode LookupOrCreateSymbol(const char* const name);
+  DLL_PUBLIC ASTNode CreateZeroConst(unsigned int width);
+  DLL_PUBLIC ASTNode CreateOneConst(unsigned int width);
+  DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
+                                   int bit_width);
+  DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
+  DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
+                                   unsigned long long int bvconst);
+  DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
-  void removeSymbol(ASTNode s);
+  void removeSymbol(ASTNode to_remove);
 
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
-  void storeFunction(const std::string name, const ASTVec& params,
-                     const ASTNode& function);
+  DLL_PUBLIC void storeFunction(const std::string name, const ASTVec& params,
+                                const ASTNode& function);
 
-  ASTNode applyFunction(const std::string name, const ASTVec& params);
+  DLL_PUBLIC ASTNode applyFunction(const std::string name,
+                                   const ASTVec& params);
 
-  bool isBitVectorFunction(const std::string name);
-  bool isBooleanFunction(const std::string name);
+  DLL_PUBLIC bool isBitVectorFunction(const std::string name);
+  DLL_PUBLIC bool isBooleanFunction(const std::string name);
 
-  ASTNode LookupOrCreateSymbol(std::string name);
-  bool LookupSymbol(const char* const name, ASTNode& output);
-  bool isSymbolAlreadyDeclared(char* name);
-  void setPrintSuccess(bool ps);
-  bool isSymbolAlreadyDeclared(std::string name);
-
-  // Create the node, then "new" it.
-  ASTNode* newNode(const Kind k, const ASTNode& n0, const ASTNode& n1);
+  DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
+  DLL_PUBLIC bool LookupSymbol(const char* const name, ASTNode& output);
+  DLL_PUBLIC bool isSymbolAlreadyDeclared(char* name);
+  DLL_PUBLIC void setPrintSuccess(bool ps);
+  DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
   // Create the node, then "new" it.
-  ASTNode* newNode(const Kind k, const int width, const ASTNode& n0,
-                   const ASTNode& n1);
+  DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0,
+                              const ASTNode& n1);
+
+  // Create the node, then "new" it.
+  DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTNode& n0,
+                              const ASTNode& n1);
+
+  // Create the node, then "new" it.
+  DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTVec& v);
 
   // On testcase20 it took about 4.2 seconds to parse using the standard
   // allocator and the pool allocator.
-  ASTNode* newNode(const ASTNode& copyIn);
+  DLL_PUBLIC ASTNode* newNode(const ASTNode& copyIn);
 
-  void deleteNode(ASTNode* n);
-  void addSymbol(ASTNode& s);
-  
-  void success();
-  void error(std::string msg);
-  void unsupported();
+  DLL_PUBLIC void deleteNode(ASTNode* n);
+  DLL_PUBLIC void addSymbol(ASTNode& s);
 
+  DLL_PUBLIC void success();
+  DLL_PUBLIC void error(std::string msg);
+  DLL_PUBLIC void unsupported();
 
   // Resets the tables used by STP, but keeps all the nodes that have been
   // created.
-  void resetSolver();
-
-  // We can't pop off the zeroeth level.
-  void popToFirstLevel();
+  DLL_PUBLIC void resetSolver();
 
   // Reset STP back to "just started up" state.
-  void reset();
-
-  void pop();
-
-  void push();
+  DLL_PUBLIC void reset();
+  DLL_PUBLIC void pop();
+  DLL_PUBLIC void push();
+  DLL_PUBLIC void popToFirstLevel(); // We can't pop off the zeroeth level
 
   // Useful when printing back, so that you can parse, but ignore the request.
-  void ignoreCheckSat();
+  DLL_PUBLIC void ignoreCheckSat();
+  DLL_PUBLIC void printStatus();
+  DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
 
-  void printStatus();
+  DLL_PUBLIC void deleteGlobal();
+  DLL_PUBLIC void cleanUp();
 
-  void checkSat(const ASTVec& assertionsSMT2);
+  DLL_PUBLIC void setOption(std::string, std::string);
+  DLL_PUBLIC void getOption(std::string);
 
-  void deleteGlobal();
-
-  void cleanUp();
-
-  void setOption(std::string , std::string);
-  void getOption(std::string );
-
-  void getModel();
-
-  void getValue(const ASTVec &v);
+  DLL_PUBLIC void getModel();
+  DLL_PUBLIC void getValue(const ASTVec& v);
 };
+
+// Functions used by C++ clients of STP. TODO: either export abc cleanly or don't use this in clients.
+
+/// Export version of Cnf_ClearMemory.
+DLL_PUBLIC void CNFClearMemory();
 }
 
 #endif

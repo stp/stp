@@ -25,15 +25,14 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
 
-
 namespace stp
 {
 const ASTVec ASTBVConst::astbv_empty_children;
 
-ASTBVConst::ASTBVConst(const ASTBVConst& sym) : ASTInternal(sym.nodeManager, sym._kind)
+ASTBVConst::ASTBVConst(const ASTBVConst& sym)
+    : ASTInternal(sym.nodeManager, sym._kind)
 {
   _bvconst = CONSTANTBV::BitVector_Clone(sym._bvconst);
-  _value_width = sym._value_width;
   cbv_managed_outside = false;
 }
 
@@ -43,7 +42,7 @@ void ASTBVConst::CleanUp()
 {
   nodeManager->_bvconst_unique_table.erase(this);
   delete this;
-} 
+}
 
 // Print function for bvconst -- return _bvconst value in bin
 // format (c_friendly is for printing hex. numbers that C
@@ -65,7 +64,7 @@ void ASTBVConst::nodeprint(ostream& os, bool c_friendly)
       prefix = "0bin";
     }
   }
-  else if (_value_width % 4 == 0)
+  else if (getValueWidth() % 4 == 0)
   {
     res = CONSTANTBV::BitVector_to_Hex(_bvconst);
     if (c_friendly)
@@ -96,8 +95,7 @@ void ASTBVConst::nodeprint(ostream& os, bool c_friendly)
   }
   os << prefix << res;
   CONSTANTBV::BitVector_Dispose(res);
-} 
-
+}
 
 CBV ASTBVConst::GetBVConst() const
 {
@@ -107,12 +105,12 @@ CBV ASTBVConst::GetBVConst() const
 size_t ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
 {
   return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
-} 
+}
 
 bool ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
                                              const ASTBVConst* bvc2) const
 {
-  if (bvc1->_value_width != bvc2->_value_width)
+  if (bvc1->getValueWidth() != bvc2->getValueWidth())
   {
     return false;
   }

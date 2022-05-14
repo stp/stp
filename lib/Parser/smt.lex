@@ -34,7 +34,7 @@
    ********************************************************************/
 #include <iostream>
 #include "stp/Parser/parser.h"
-#include "parsesmt.hpp"
+#include "parsesmt.tab.h"
 #include "stp/cpp_interface.h"
 
   using namespace std;
@@ -44,7 +44,7 @@
   extern int smterror (const char *msg);
 
   // File-static (local to this file) variables and functions
-  static std::string _string_lit;  
+  static THREAD_LOCAL std::string _string_lit;
   static char escapeChar(char c) {
     switch(c) {
     case 'n': return '\n';
@@ -251,3 +251,17 @@ bit{DIGIT}+     {
 }
 . { smterror("Illegal input character."); }
 %%
+
+namespace stp {
+  void SMTScanString (const char *yy_str) {
+    smt_scan_string(yy_str);
+  }
+
+  FILE* getSMTIn() {
+    return smtin;
+  }
+
+  void setSMTIn(FILE* file) {
+    smtin = file;
+  }
+}

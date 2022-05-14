@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, David L. Dill
  *
@@ -26,9 +25,9 @@ THE SOFTWARE.
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
 
+#include "ASTInternal.h"
+#include "stp/NodeFactory/HashingNodeFactory.h"
 #include "UsefulDefs.h"
-#include "ASTInternalWithChildren.h"
-#include "NodeFactory/HashingNodeFactory.h"
 
 namespace stp
 {
@@ -40,7 +39,7 @@ typedef vector<ASTNode> ASTVec;
  * Internal representation of an interior ASTNode.Generally, these*
  * nodes should have at least one child                           *
  ******************************************************************/
-class ASTInterior : public ASTInternalWithChildren
+class ASTInterior : public ASTInternal
 {
 
   friend class STPMgr;
@@ -50,7 +49,9 @@ class ASTInterior : public ASTInternalWithChildren
   HashingNodeFactory::CreateNode(const Kind kind,
                                  const stp::ASTVec& back_children);
 
-private:
+  // The vector of children
+  ASTVec _children;
+
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
    ******************************************************************/
@@ -87,21 +88,44 @@ private:
   // compilers will accept)
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
+  uint32_t _value_width;
+  uint32_t _index_width;
+
+  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
+  virtual uint32_t getIndexWidth() const { return _index_width; }
+
+  virtual void setValueWidth(uint32_t v) { _value_width = v; }
+  virtual uint32_t getValueWidth() const { return _value_width; }
+
 public:
-  ASTInterior(STPMgr *mgr, Kind kind) : ASTInternalWithChildren(mgr, kind) {}
-  ASTInterior(STPMgr *mgr, Kind kind, ASTVec& children)
-      : ASTInternalWithChildren(mgr, kind, children)
+  ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
+      : ASTInternal(mgr, kind), _children(children), _value_width(0),
+        _index_width(0)
   {
+    is_simplified = false;
+    if (kind == NOT)
+      node_uid = children[0].GetNodeNum() + 1;
   }
 
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node) : ASTInternalWithChildren(int_node)
+  ASTInterior(const ASTInterior& int_node)
+      : ASTInternal(int_node), _children(int_node._children),
+        _value_width(int_node._value_width), _index_width(int_node._index_width)
   {
+    is_simplified = false;
   }
 
-  virtual ~ASTInterior() {}
+  ASTInterior& operator=(const ASTInterior& other) = delete;
+
+  virtual ~ASTInterior();
+
+  virtual ASTVec const& GetChildren() const { return _children; }
+
+  bool isSimplified() const { return is_simplified; }
+
+  void hasBeenSimplified() const { is_simplified = true; }
 };
 
 } // end of namespace stp

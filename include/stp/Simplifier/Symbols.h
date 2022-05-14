@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -26,9 +25,9 @@ THE SOFTWARE.
 #ifndef SYMBOLS_H
 #define SYMBOLS_H
 
-#include <vector>
-#include "assert.h"
+#include "cassert"
 #include "stp/AST/AST.h"
+#include <vector>
 
 using std::vector;
 
@@ -58,6 +57,9 @@ public:
     assert(children.size() != 1);
   }
 
+  Symbols(const Symbols&) = delete;
+  Symbols & operator=(const Symbols&) = delete;
+
   bool isLeaf() { return !found.IsNull(); }
 
   bool empty() const { return (found.IsNull() && children.size() == 0); }
@@ -67,6 +69,6 @@ class SymbolPtrHasher
 {
 public:
   size_t operator()(const Symbols* n) const { return (size_t)n; };
-}; 
+};
 
 #endif

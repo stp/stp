@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, Trevor Hansen
  *
@@ -25,35 +24,30 @@ THE SOFTWARE.
 #ifndef USEFULDEFS_H
 #define USEFULDEFS_H
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <vector>
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <iostream>
-#include <sstream>
-#include <string>
 #include <map>
 #include <set>
-#include <algorithm>
-#include <assert.h>
+#include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <vector>
 
-#include "stp/Globals/Globals.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/Globals/Globals.h"
 // FIXME: External library header
 #include "extlib-constbv/constantbv.h"
+#include "stp/Util/Attributes.h"
 #include "stp/Util/RunTimes.h"
 #include "stp/Util/StringHash.h"
 
 #include "stp/config.h"
 
-#include HASH_SET_H
-#include HASH_MAP_H
-#include HASH_MULTISET_H
-
-#define hash_set HASH_SET_NAMESPACE::HASH_SET_CLASS
-#define hash_map HASH_MAP_NAMESPACE::HASH_MAP_CLASS
-#define hash_multiset HASH_MULTISET_NAMESPACE::HASH_MULTISET_CLASS
-
+#include <unordered_map>
+#include <unordered_set>
 #define INITIAL_TABLE_SIZE 100
 
 namespace stp
@@ -76,15 +70,15 @@ class BVSolver;
  * Useful typedefs:                                               *
  *                                                                *
  * Vector of ASTNodes, used for child nodes among other things.   *
- * It is good to define hash_map and hash_set in case we want to  *
+ * It is good to define std::unordered_map and std::unordered_set in case we want to  *
  * use libraries other than STL.                                  *
  ******************************************************************/
 typedef vector<ASTNode> ASTVec;
 typedef unsigned int* CBV;
-extern ASTVec _empty_ASTVec;
+DLL_PUBLIC extern ASTVec _empty_ASTVec;
 
 // Error handling function
-extern void (*vc_error_hdlr)(const char* err_msg);
+DLL_PUBLIC extern void (*vc_error_hdlr)(const char* err_msg);
 
 /******************************************************************
  * Class Spacer:
@@ -99,7 +93,7 @@ public:
   int _spaces;
   Spacer(int spaces) { _spaces = spaces; }
   friend std::ostream& operator<<(std::ostream& os, const Spacer& ind);
-}; 
+};
 
 inline Spacer spaces(int width)
 {
@@ -108,7 +102,8 @@ inline Spacer spaces(int width)
 }
 
 // function_counters: Table for storing function count stats.
-typedef hash_map<const char*, int, CStringHash, CStringEqualityPredicate>
+typedef std::unordered_map<const char*, int, CStringHash,
+                           CStringEqualityPredicate>
     function_counters;
 } // end of namespace
 

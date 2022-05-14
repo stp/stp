@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/AST/AST.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include <set>
 #include <stdexcept>
-#include "stp/AST/AST.h"
-#include "stp/Simplifier/Simplifier.h"
 
 namespace simplifier
 {
@@ -212,6 +212,10 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   // need to clean up these at end.
   stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
   CONSTANTBV::BitVector_increment(one);
+
+  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  CONSTANTBV::BitVector_Fill(max);
+
   // quotient and remainder.
   stp::CBV q = CONSTANTBV::BitVector_Create(width, true);
   stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
@@ -250,11 +254,10 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       CONSTANTBV::ErrCode e;
 
       // The main loop doesn't work if there is a division by zero possible.
-      // If the minimum bottom is zero, but the minimum quotient is > 1, then in
-      // our semantics
-      // of 1/0 = 1
+      // If the minimum bottom is zero, but the minimum quotient is > 111.1111, then in
+      // our semantics of a/0 = 1..1, it can't be zero.
       if (CONSTANTBV::BitVector_is_empty(minBottom) &&
-          CONSTANTBV::BitVector_Lexicompare(minQuotient, one) > 0)
+          CONSTANTBV::BitVector_Lexicompare(maxQuotient, max) < 0)
       {
         CONSTANTBV::BitVector_increment(minBottom);
         if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
@@ -552,6 +555,7 @@ end:
   CONSTANTBV::BitVector_Destroy(q);
   CONSTANTBV::BitVector_Destroy(r);
   CONSTANTBV::BitVector_Destroy(one);
+  CONSTANTBV::BitVector_Destroy(max);
 
   if (result == CONFLICT)
     return CONFLICT;
@@ -732,9 +736,11 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
 {
   Result r0 = NO_CHANGE;
 
+  if (children[1]->containsZero())
+    return r0; // TODO fix so we learn something if we might be dividing by zero..
+
   // Enforce that the output must be less than the numerator.
-  // Make special allowance for 0/0 = 1.
-  for (int i = children[0]->getWidth() - 1; i > 0; i--)
+  for (int i = children[0]->getWidth() - 1; i >= 0; i--)
   {
     if (children[0]->isFixedToZero(i))
     {

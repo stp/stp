@@ -20,50 +20,38 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 *************/
 
 // Measures how precise the AIG encodings are compared with the propagators.
+// Runs unit propagation on the AIG encoding and measures how many bits
+// unit propagation deduces.
 
-#include "stp/cpp_interface.h"
-#include "stp/Util/Relations.h"
-#include "stp/Sat/MinisatCore.h"
+#define __STDC_FORMAT_MACROS
 #include "minisat/core/Solver.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
-#include "stp/Util/Functions.h"
 #include "stp/Printer/printers.h"
-#include "stp/Util/StopWatch.h"
+#include "stp/Sat/MinisatCore.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/Util/BBAsProp.h"
+#include "stp/Util/Functions.h"
+#include "stp/Util/Relations.h"
+#include "stp/Util/StopWatch.h"
+#include "stp/cpp_interface.h"
+#include <cstdint>
+
+#include <iostream>
 
 using namespace stp;
 
-int bits = 64;
-int iterations = 100000;
+int bits = 65;
+int iterations = 1000;
 ostream& out = cout;
-STPMgr* mgr = new STPMgr;
+STPMgr* mgr = NULL;
 
-void print(MinisatCore<Minisat::Solver>* ss, ASTNode i0,
-           ToSAT::ASTNodeToSATVar& m)
-{
-  const int bits = std::max(1U, i0.GetValueWidth());
-  out << "<";
-  for (int i = bits - 1; i >= 0; i--)
-  {
-    if (ss->value(m.find(i0)->second[i]) == ss->true_literal())
-    {
-      out << "1";
-    }
-    else if (ss->value(m.find(i0)->second[i]) == ss->false_literal())
-    {
-      out << "0";
-    }
-    else
-      out << "-";
-  }
-  out << ">";
-}
+bool debug = false;
+
 
 void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 {
 
   BBAsProp bbP(k, mgr, bits);
-  bbP.numberClauses();
+  //bbP.numberClauses();
 
   Relations relations(iterations, bits, k, mgr, prob);
 
@@ -83,33 +71,28 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
 
     bbP.fill_assumps_with(a, b, output);
 
-    // Initial.
-    // cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
-
     const int initialCount =
         a.countFixed() + b.countFixed() + output.countFixed();
     initial += initialCount;
 
-    // simplify does propagate.
+    // Initial.
+    if (debug)
+    {
+      cerr << "==================" << endl;
+      cerr << a << _kind_names[k] << b << output << endl;
+      cerr << "Initial Fixed:" << initialCount << endl;
+    }
+
     bb.start();
-    bool ok = bbP.unit_prop_with_assumps();
+    int unitPCount = bbP.fixed_count_unit_prop_with_assumps();
     bb.stop();
-    assert(ok);
 
     // After unit propagation.
-    int clauseCount = 0;
-    clauseCount = bbP.fixedCount();
-
-    clause += clauseCount;
-
-    // After unit propagation.
-    /*
-     print(ss, i0, a.SATVar_to_SymbolIndexMap());
-     cerr <<  _kind_names[k];
-     print(ss, i1, a.SATVar_to_SymbolIndexMap());
-     print(ss, r, a.SATVar_to_SymbolIndexMap());
-     cerr << "\n";
-     */
+    if (debug)
+    {
+      cerr << "Unit Propagation Fixed:" << unitPCount - initialCount << endl;
+    }
+    clause += unitPCount;
 
     // After transfer functions.
     vector<FixedBits*> ch;
@@ -117,19 +100,22 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     ch.push_back(&b);
     prop.start();
     Result rr = t_fn(ch, output);
+    assert(rr != CONFLICT);
     prop.stop();
 
-    assert(rr != CONFLICT);
-    // cerr << rel.a << _kind_names[k] << rel.b << rel.output << endl;
     int transferCount = a.countFixed() + b.countFixed() + output.countFixed();
     transfer += transferCount;
 
-    // cerr << initialCount << endl;
-    // cerr << clauseCount << endl;
-    assert(initialCount <= clauseCount);
+    // Result from cbitp.
+    if (debug)
+    {
+      cerr << a << _kind_names[k] << b << output << endl;
+      cerr << "CBitP Fixed:" << transferCount - initialCount << endl;
+    }
+
+    assert(initialCount <= unitPCount);
     assert(initialCount <= transferCount);
 
-    // delete ss;
     it++;
   }
 
@@ -138,11 +124,12 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
   if (transfer - initial == 0)
     percent = 100;
 
-  cerr.setf(ios::fixed);
-  cerr << "&" << setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC) << "s";
+  cerr.setf(std::ios::fixed);
+  cerr << "&" << std::setprecision(2) << (float(bb.elapsed) / CLOCKS_PER_SEC)
+       << "s";
 
-  cerr.setf(ios::fixed);
-  cerr << "&" << setprecision(2) << (float(prop.elapsed) / CLOCKS_PER_SEC)
+  cerr.setf(std::ios::fixed);
+  cerr << "&" << std::setprecision(2) << (float(prop.elapsed) / CLOCKS_PER_SEC)
        << "s";
 
   cerr << "&" << (clause - initial) << "&" << (transfer - initial) << "&"
@@ -187,11 +174,12 @@ int main()
   // mgr->UserFlags.set("simple-cnf","1");
 
   out << "\\begin{subtables}" << endl;
-  // work(1);
-  // work(5);
+  //work(1);
+  //work(5);
   work(50);
-  // work(95);
+  work(95);
   out << "\\end{subtables}" << endl;
 
   out << "% Iterations:" << iterations << " bit-width:" << bits << endl;
+  delete mgr;
 }

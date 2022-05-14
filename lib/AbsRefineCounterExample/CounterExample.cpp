@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Printer/printers.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 const bool debug_counterexample = false;
 
@@ -131,7 +131,7 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         CounterExampleMap[key] = value;
     }
   }
-} 
+}
 
 // FUNCTION: accepts a non-constant term, and returns the
 // corresponding constant term with respect to a model.
@@ -266,7 +266,6 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                      "cannot compute ITE conditional against model: ",
                      term);
         }
-        FatalError("bn23143 Never Here");
       }
 
       ASTNode modelentry;
@@ -341,8 +340,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
         o.push_back(ff);
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, o,
-                                         term.GetValueWidth());
+      output = NonMemberBVConstEvaluator(bm, k, o, term.GetValueWidth());
       break;
     }
   }
@@ -359,7 +357,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
   return output;
-} 
+}
 
 // Expands read-over-write by evaluating (readIndex=writeIndex) for
 // every writeindex until, either it evaluates to TRUE or all
@@ -512,9 +510,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(TermToConstTermUsingModel(*it, false));
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, children,
-                                         form.GetValueWidth());
-
+      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
     }
     break;
 
@@ -536,8 +532,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         children.push_back(ComputeFormulaUsingModel(*it));
       }
 
-      output = NonMemberBVConstEvaluator(bm, k, children,
-                                         form.GetValueWidth());
+      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
     }
     break;
 
@@ -624,7 +619,7 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
   }
 
   return TermToConstTermUsingModel(expr, false);
-} 
+}
 
 // FUNCTION: queries the counterexample, and returns the number of array
 // locations for e
@@ -687,34 +682,131 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   }
 
   return entries;
-} 
+}
 
 // TODO printing of expressions.
 // TODO move to printer file.
-void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode &n)
+void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
 {
   if (n.GetKind() == SYMBOL)
   {
     os << "( ";
 
-      os << "|";
-      n.nodeprint(os);
-      os << "| ";
-  
+    os << "|";
+    n.nodeprint(os);
+    os << "| ";
+
     if (n.GetType() == stp::BITVECTOR_TYPE)
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false),os);
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
     else
-      {
-        if (ASTTrue == ComputeFormulaUsingModel(n))
-            os << "true";
-          else 
-            os << "false";
-      }
+    {
+      if (ASTTrue == ComputeFormulaUsingModel(n))
+        os << "true";
+      else
+        os << "false";
+    }
     os << " )";
-  } 
+  }
 }
 
+//todo does it need to be member?
+void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, ASTNode se)
+{
+    if (ARRAY_TYPE == se.GetType())
+    {
+      FatalError("PrintCounterExampleSMTLIB2: "
+                 "entry in counterexample is an arraytype. bogus:",
+                 se);
+    }
 
+    // skip over introduced variables
+    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    {
+      return;
+    }
+
+    if (f.GetKind() == SYMBOL)
+    {
+      os << "( define-fun ";
+      os << "|";
+      f.nodeprint(os);
+      os << "|";
+
+      if (f.GetType() == stp::BITVECTOR_TYPE)
+      {
+        os << " () (";
+        os << "_ BitVec " << f.GetValueWidth() << ")";
+        printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
+      }
+      else if (f.GetType() == stp::BOOLEAN_TYPE)
+      {
+        se = ComputeFormulaUsingModel(f);
+        assert (se == bm->ASTTrue || se == bm->ASTFalse);
+        os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
+      }
+      else
+      {
+        FatalError("Wrong Type");
+      }
+
+      os << " )" << std::endl;
+    }
+
+    //TODO completely the wrong format.
+    if ((f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
+         f[1].GetKind() == BVCONST))
+    {
+
+      os << "( define-fun ";
+
+      os << "|";
+      f[0].nodeprint(os);
+      os << "| ";
+
+      os << " (";
+      os << "_ BitVec " << f[0].GetIndexWidth() << ")";
+
+      os << " (";
+      os << "_ BitVec " << f[0].GetValueWidth() << ")";
+
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false), os);
+
+      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
+      os << " )" << endl;
+    }
+
+}
+
+/*
+ SMTLIB2 models are supposed to contain all variables.
+ So we can't just use the counterexample - because some might have been eliminated from the problem
+ before SAT solving.
+*/
+void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
+{
+  const ASTNodeSet symbols = bm->getSymbols();
+  for (ASTNode f: symbols)
+  {
+      if (ARRAY_TYPE != f.GetType())
+        outputLine(os, f, f); // Can't do arrays because we need the reads.
+  }
+
+  ASTNodeMap c; // believe we need a copy because iterator gets invalidated?
+  for (const auto& e: CounterExampleMap)
+  {
+    if (READ == e.first.GetKind())
+        c.insert(e);
+  }
+
+  for (const auto& e: c)
+  {
+    outputLine(os, e.first, e.second); 
+  }
+    
+  os.flush();
+}
+
+// Just uses the symbols from the counter example, might not be every symbol defined in the problem.
 void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
 {
   // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
@@ -727,73 +819,11 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
   {
     const ASTNode& f = it->first;
     const ASTNode& se = it->second;
+    outputLine(os, f,se);
 
-    if (ARRAY_TYPE == se.GetType())
-    {
-      FatalError("PrintCounterExampleSMTLIB2: "
-                 "entry in counterexample is an arraytype. bogus:",
-                 se);
-    }
-
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
-    {
-      continue;
-    }
-    
-    if (f.GetKind() == SYMBOL)
-    {
-      os << "( define-fun ";
-      os << "|";
-      f.nodeprint(os);
-      os << "|";
-      
-      if (f.GetType() == stp::BITVECTOR_TYPE)
-      {
-        os << " () (";
-        os << "_ BitVec " << f.GetValueWidth() << ")";
-        printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
-      }
-      else if (f.GetType() == stp::BOOLEAN_TYPE)
-      {
-        os << " () Bool ";        
-      }
-      else
-      {
-        FatalError("Wrong Type");
-      }
-
-      os << " )" <<std::endl;  
-    }
-
-    //TODO completely the wrong format.
-    if (
-        (f.GetKind() == READ && 
-         f[0].GetKind() == SYMBOL &&
-         f[1].GetKind() == BVCONST))
-    {
-
-      os << "( define-fun ";
-      
-      os << "|";
-      f[0].nodeprint(os);
-      os << "| ";
-
-      os << " (";
-      os << "_ BitVec " << f[0].GetIndexWidth() << ")";
-
-      os << " (";
-      os << "_ BitVec " << f[0].GetValueWidth() << ")";
-
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false),os);
-
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false),os);
-      os << " )" << endl;
-    }
   }
   os.flush();
 }
-
 
 // FUNCTION: prints a counterexample for INVALID inputs.  iterate
 // through the CounterExampleMap data structure and print it to
@@ -817,7 +847,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   // false
   if (!t)
   {
-    cerr << "PrintCounterExample: No CounterExample to print: " << endl;
+    os << "PrintCounterExample: No CounterExample to print: " << endl;
     return;
   }
 
@@ -830,7 +860,6 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
   // changes it. Which breaks the iterator otherwise.
   const ASTNodeMap c(CounterExampleMap);
 
-  // os << "\nCOUNTEREXAMPLE: \n" << endl;
   ASTNodeMap::const_iterator it = c.begin();
   ASTNodeMap::const_iterator itend = c.end();
   for (; it != itend; it++)
@@ -855,10 +884,9 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
          f[1].GetKind() == BVCONST))
     {
 
-        os << "ASSERT( ";
+      os << "ASSERT( ";
 
-
-      printer::PL_Print1(os, f, 0, false,bm);
+      printer::PL_Print1(os, f, 0, false, bm);
       if (BOOLEAN_TYPE == f.GetType())
       {
         os << "<=>";
@@ -878,17 +906,12 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
         rhs = ComputeFormulaUsingModel(se);
       }
       assert(rhs.isConstant());
-      printer::PL_Print1(os, rhs, 0, false,bm);
+      printer::PL_Print1(os, rhs, 0, false, bm);
 
-
-        os << " );" << endl;
-
-
+      os << " );" << endl;
     }
   }
-  os.flush();
-  // os << "\nEND OF COUNTEREXAMPLE" << endl;
-} 
+}
 
 /* iterate through the CounterExampleMap data structure and print it
  * to stdout. this function prints only the declared array variables
@@ -949,7 +972,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
       reverse(sss.begin(), sss.end());
       int n = atoi(sss.c_str());
 
-      it->PL_Print(cout,bm, 2);
+      it->PL_Print(cout, bm, 2);
       for (int j = 0; j < n; j++)
       {
         ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);
@@ -967,7 +990,7 @@ void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
   for (unsigned int jj = 0; jj < out_int.size(); jj++)
     cout << out_int[jj] << endl;
   cout << endl;
-} 
+}
 
 // Prints Satisfying assignment directly, for debugging.
 void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
@@ -1032,12 +1055,10 @@ void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
 }
 
 SOLVER_RETURN_TYPE
-AbsRefine_CounterExample::CallSAT_ResultCheck(
-  SATSolver& SatSolver,
-  const ASTNode& modified_input,
-  const ASTNode& original_input,
-  ToSATBase* tosat,
-  bool refinement)
+AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
+                                              const ASTNode& modified_input,
+                                              const ASTNode& original_input,
+                                              ToSATBase* tosat, bool refinement)
 {
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
 
@@ -1046,20 +1067,22 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
 
   if (!sat)
   {
-    // PrintOutput(true);
     return SOLVER_VALID;
   }
   else if (SatSolver.okay())
   {
+    if (!bm->UserFlags.construct_counterexample_flag)
+      return SOLVER_INVALID;
+
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
 
-    ToSAT::ASTNodeToSATVar satVarToSymbol = tosat->SATVar_to_SymbolIndexMap();
+    ToSATBase::ASTNodeToSATVar satVarToSymbol = tosat->SATVar_to_SymbolIndexMap();
     ConstructCounterExample(SatSolver, satVarToSymbol);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
-      ToSAT::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
+      ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
       PrintSATModel(SatSolver, m);
     }
     // check if the counterexample is good or not
@@ -1067,7 +1090,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");
-
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
     // if the counterexample is indeed a good one, then return
@@ -1075,9 +1097,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
     if (ASTTrue == orig_result)
     {
       if (bm->UserFlags.check_counterexample_flag)
+      {
         CheckCounterExample(SatSolver.okay());
+      }
 
-      if (bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag)
+      if ((bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag) && (!bm->UserFlags.smtlib2_parser_flag))
       {
         PrintCounterExample(SatSolver.okay());
         PrintCounterExample_InOrder(SatSolver.okay());
@@ -1103,5 +1127,4 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(
     return SOLVER_ERROR;
   }
 }
-
 }

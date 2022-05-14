@@ -22,22 +22,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-
 #define __STDC_FORMAT_MACROS
-#define MINISAT_CONSTANTS_AS_MACROS
-#include "minisat/core/Solver.h"
 #include "stp/Sat/MinisatCore.h"
+#include "minisat/core/Solver.h"
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
-namespace MiniSat {
+namespace MiniSat
+{
 }
 using namespace MiniSat;
 
 namespace stp
 {
 
-uint8_t MinisatCore::value(uint32_t x) const {
+uint8_t MinisatCore::value(uint32_t x) const
+{
   return Minisat::toInt(s->value(x));
 }
 
@@ -56,17 +56,29 @@ void MinisatCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-
 bool MinisatCore::addClause(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
   return s->addClause(ps);
 }
 
-bool
-MinisatCore::okay() const // FALSE means solver is in a conflicting state
+bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
 {
   return s->okay();
+}
+
+// *Doesn't solve*, just does a single unit propagate.
+// returns false if UNSAT.
+bool MinisatCore::propagateWithAssumptions(
+    const stp::SATSolver::vec_literals& assumps)
+{
+  if (!s->simplify())
+    return false;
+
+  setMaxConflicts(0);
+  Minisat::lbool ret = s->solveLimited(assumps);
+  assert(s->conflicts ==0);
+  return ret != (Minisat::lbool)Minisat::l_False;
 }
 
 bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
@@ -76,11 +88,12 @@ bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)l_Undef) {
+  if (ret == (Minisat::lbool)Minisat::l_Undef)
+  {
     timeout_expired = true;
   }
 
-  return ret == (Minisat::lbool)l_True;
+  return ret == (Minisat::lbool)Minisat::l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const
@@ -117,5 +130,4 @@ bool MinisatCore::simplify()
 {
   return s->simplify();
 }
-
 }

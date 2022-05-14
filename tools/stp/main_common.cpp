@@ -24,33 +24,31 @@ THE SOFTWARE.
 
 #include "main_common.h"
 #include "sat/cnf/cnf.h"
+#include "stp/Parser/parser.h"
+#include "stp/cpp_interface.h"
+#include "stp/ToSat/ToSATAIG.h"
+#include <memory>
 
-extern int smtparse(void*);
-extern int smt2parse();
-extern int cvcparse(void*);
-extern int cvclex_destroy(void);
-extern int smtlex_destroy(void);
-extern int smt2lex_destroy(void);
+
+//for srbk() function
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
+#include <unistd.h>
+#endif
+
 extern void errorHandler(const char* error_msg);
 
 // Amount of memory to ask for at beginning of main.
 extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
-extern FILE* cvcin;
-extern FILE* smtin;
-extern FILE* smt2in;
 
-#ifdef EXT_HASH_MAP
-using namespace __gnu_cxx;
-#endif
 using namespace stp;
-using std::auto_ptr;
+using std::unique_ptr;
 using std::cout;
 using std::cerr;
 using std::endl;
 
 void errorHandler(const char* error_msg)
 {
-  cerr << prog << ": Error: " << error_msg << endl;
+  cerr << "STP Error: " << error_msg << endl;
   exit(-1);
 }
 
@@ -61,9 +59,9 @@ Main::Main() : onePrintBack(false)
 {
   bm = NULL;
   toClose = NULL;
-  cvcin = NULL;
-  smtin = NULL;
-  smt2in = NULL;
+  setCVCIn(NULL);
+  setSMTIn(NULL);
+  setSMT2In(NULL);
 
   // Register the error handler
   vc_error_hdlr = errorHandler;
@@ -88,14 +86,14 @@ Main::~Main()
 
 void Main::printVersionInfo()
 {
-    cout << "STP version " << stp::get_git_version_tag() << std::endl;
-    cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
-    cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
-    #ifdef __GNUC__
-    cout << "c compiled with gcc version " << __VERSION__ << endl;
-    #else
-    cout << "c compiled with non-gcc compiler" << endl;
-    #endif
+  cout << "STP version " << stp::get_git_version_tag() << std::endl;
+  cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
+  cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
+#ifdef __GNUC__
+  cout << "c compiled with gcc version " << __VERSION__ << endl;
+#else
+  cout << "c compiled with non-gcc compiler" << endl;
+#endif
 }
 
 void Main::parse_file(ASTVec* AssertsQuery)
@@ -131,17 +129,17 @@ void Main::parse_file(ASTVec* AssertsQuery)
 
   if (bm->UserFlags.smtlib1_parser_flag)
   {
-    smtparse((void*)AssertsQuery);
+    SMTParse((void*)AssertsQuery);
     smtlex_destroy();
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
-    smt2parse();
+    SMT2Parse();
     smt2lex_destroy();
   }
   else
   {
-    cvcparse((void*)AssertsQuery);
+    CVCParse((void*)AssertsQuery);
     cvclex_destroy();
   }
   GlobalParserInterface = NULL;
@@ -176,7 +174,7 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
   {
-    printer::SMTLIB1_PrintBack(cout, original_input,bm);
+    printer::SMTLIB1_PrintBack(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
@@ -186,7 +184,7 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
 
   if (bm->UserFlags.print_STPinput_back_C_flag)
   {
-    printer::C_Print(cout, original_input,bm);
+    printer::C_Print(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_GDL_flag)
@@ -205,27 +203,27 @@ void Main::read_file()
   bool error = false;
   if (bm->UserFlags.smtlib1_parser_flag)
   {
-    smtin = fopen(infile.c_str(), "r");
-    toClose = smtin;
-    if (smtin == NULL)
+    setSMTIn(fopen(infile.c_str(), "r"));
+    toClose = getSMTIn();
+    if (getSMTIn() == NULL)
     {
       error = true;
     }
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
-    smt2in = fopen(infile.c_str(), "r");
-    toClose = smt2in;
-    if (smt2in == NULL)
+    setSMT2In(fopen(infile.c_str(), "r"));
+    toClose = getSMT2In();
+    if (getSMT2In() == NULL)
     {
       error = true;
     }
   }
   else
   {
-    cvcin = fopen(infile.c_str(), "r");
-    toClose = cvcin;
-    if (cvcin == NULL)
+    setCVCIn(fopen(infile.c_str(), "r"));
+    toClose = getCVCIn();
+    if (getCVCIn() == NULL)
     {
       error = true;
     }
@@ -239,7 +237,7 @@ void Main::read_file()
   }
 }
 
-int Main::create_and_parse_options(int argc, char** argv)
+int Main::create_and_parse_options(int /*argc*/, char** /*argv*/)
 {
   return 0;
 }
@@ -269,16 +267,8 @@ void Main::check_infile_type()
 
 int Main::main(int argc, char** argv)
 {
-  auto_ptr<SimplifyingNodeFactory> simplifyingNF(
-      new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm));
+  auto simplifyingNF = std::make_unique<SimplifyingNodeFactory> (*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = simplifyingNF.get();
-
-  auto_ptr<Simplifier> simp(new Simplifier(bm));
-  auto_ptr<ArrayTransformer> arrayTransformer(new ArrayTransformer(bm, simp.get()));
-  auto_ptr<ToSAT> tosat(new ToSAT(bm));
-
-  auto_ptr<AbsRefine_CounterExample> Ctr_Example(
-      new AbsRefine_CounterExample(bm, simp.get(), arrayTransformer.get()));
 
   int ret = create_and_parse_options(argc, argv);
   if (ret != 0)
@@ -286,8 +276,10 @@ int Main::main(int argc, char** argv)
     return ret;
   }
 
-  STP *stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
-                      Ctr_Example.get());
+  // ensure that all output is (at most) line buffered
+  setvbuf(stdout, NULL, _IOLBF, 0);
+
+  STP* stp = new STP(bm);
 
   GlobalSTP = stp;
   // If we're not reading the file from stdin.
@@ -323,25 +315,27 @@ int Main::main(int argc, char** argv)
     if (onePrintBack)
     {
       print_back(query, asserts);
-      return 0;
     }
-
-    SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(
-      asserts, query);
-
-    if (bm->UserFlags.quick_statistics_flag)
+    else
     {
-      bm->GetRunTimes()->print();
+      SOLVER_RETURN_TYPE ret = stp->TopLevelSTP(asserts, query);
+
+      if (bm->UserFlags.quick_statistics_flag)
+      {
+        bm->GetRunTimes()->print();
+      }
+      stp->tosat->PrintOutput(ret);
     }
-    stp->tosat->PrintOutput(ret);
 
     asserts = ASTNode();
     query = ASTNode();
   }
 
-  // Without cleanup
-  if (bm->UserFlags.isSet("fast-exit", "1"))
-    exit(0);
+  // Save time by not calling the destructors.
+  #ifdef NDEBUG
+    std::exit(0);
+  #endif
+
 
   //Cleanup
   AssertsQuery->clear();

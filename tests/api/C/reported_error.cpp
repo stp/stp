@@ -25,9 +25,9 @@ THE SOFTWARE.
 //Bugreport by https://github.com/quark17
 //See https://github.com/stp/stp/issues/120
 
+#include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
-#include "stp/c_interface.h"
 
 TEST(reported_issue_120, one)
 {

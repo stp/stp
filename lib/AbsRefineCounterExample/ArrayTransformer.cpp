@@ -29,10 +29,10 @@ THE SOFTWARE.
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
-#include <cassert>
 #include "stp/Simplifier/Simplifier.h"
-#include <cstdlib>
+#include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
@@ -201,8 +201,9 @@ ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
     // absolute value).
     ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
     ASTNode neZ = nf->CreateNode(
-        NOT, nf->CreateNode(EQ, rev_node,
-                            nf->CreateZeroConst(divisor.GetValueWidth())));
+        NOT,
+        nf->CreateNode(EQ, rev_node,
+                       nf->CreateZeroConst(divisor.GetValueWidth())));
     ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
     ASTNode n = nf->CreateTerm(ITE, len, cond,
                                nf->CreateTerm(BVPLUS, len, rev_node, divisor),
@@ -276,7 +277,7 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   {
     assertTransformPostConditions(*it, visited);
   }
-} 
+}
 
 /********************************************************
  * TransformFormula()
@@ -398,9 +399,6 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       else
       {
         FatalError("TransformFormula: Illegal kind: ", ASTUndefined, k);
-        std::cerr << "The input is: " << simpleForm << std::endl;
-        std::cerr << "The valuewidth of input is : "
-                  << simpleForm.GetValueWidth() << std::endl;
       }
       break;
     }
@@ -410,7 +408,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
   if (simpleForm.Degree() > 0)
     (*TransformMap)[simpleForm] = result;
   return result;
-} 
+}
 
 ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
 {
@@ -499,7 +497,7 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
                result);
   }
   return result;
-} 
+}
 
 /* This function transforms Array Reads, Read over Writes, Read over
  * ITEs into flattened form.
@@ -572,40 +570,6 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
         // result is a variable here; it is an ite in the
         // else-branch
       }
-      else if (bm->UserFlags.isSet("old_ack", "0"))
-      {
-
-        /* oops.
-         * This version of ack. doesn't do what I thought it did. The STP 0.1
-         * version of Ack. produces simpler
-         * expressions. I've put that in the next block. Trevor's thesis
-         * measures AckITE using this implementation,
-         * rather than the next one like it should have!!!!
-         */
-
-        // Full Array transform if we're not doing read refinement.
-
-        // list of array-read indices corresponding to arrName, seen while
-        // traversing the AST tree. we need this list to construct the ITEs
-        const arrTypeMap& new_read_Indices = arrayToIndexToRead[arrName];
-
-        arrTypeMap::const_iterator it2 = new_read_Indices.begin();
-        arrTypeMap::const_iterator it2end = new_read_Indices.end();
-        for (; it2 != it2end; it2++)
-        {
-          ASTNode cond = simp->CreateSimplifiedEQ(readIndex, it2->first);
-          if (ASTFalse == cond)
-            continue;
-
-          if (ASTTrue == cond)
-          {
-            result = it2->second.ite;
-            break;
-          }
-
-          result = simp->CreateSimplifiedTermITE(cond, it2->second.ite, result);
-        }
-      }
       else
       {
         // Full Array transform if we're not doing read refinement.
@@ -627,10 +591,9 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
           if (ASTTrue == cond)
           {
             result = it2->second;
-            break;
           }
-
-          result = simp->CreateSimplifiedTermITE(cond, it2->second, result);
+          else
+            result = simp->CreateSimplifiedTermITE(cond, it2->second, result);
         }
 
         ack_pair[arrName].push_back(make_pair(readIndex, CurrentSymbol));

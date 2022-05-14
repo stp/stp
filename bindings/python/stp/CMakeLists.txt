@@ -5,7 +5,7 @@
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
+# # furnished to do so, subject to the following conditions:
 #
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
@@ -21,12 +21,36 @@
 # -----------------------------------------------------------------------------
 # Setup python module in build directory
 # -----------------------------------------------------------------------------
-get_target_property(LIBSTP_PATH libstp LOCATION)
-configure_file(library_path.py.in library_path.py @ONLY)
+
+# The binary path isn't known until the build process starts
+# (e.g. when building with MSBuild), so generate the file lately.)
+
+# get_property(STP_LIB_LOCATION TARGET stp PROPERTY LOCATION)
+# file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
+
+get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
+set(LIBSTP_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}${LIBSTP_BASENAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+
+#
+# 'library_path.py.in' has some code that is conditional on being on Win32 or
+# not -- rather than have two `.in` files, we leave the non-Win32 code comment
+# out.
+#
+if(WIN32)
+  set(WIN32PYTHONCOMMENT "")
+else()
+  set(WIN32PYTHONCOMMENT "#")
+endif()
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
+               ${CMAKE_CURRENT_BINARY_DIR}/library_path.py @ONLY)
 
 # Copy rest of files to build directory
-configure_file(stp.py stp.py COPYONLY)
-configure_file(__init__.py __init__.py COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in
+              ${CMAKE_CURRENT_BINARY_DIR}/stp.py)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in
+                ${CMAKE_CURRENT_BINARY_DIR}/__init__.py)
 
 # -----------------------------------------------------------------------------
 # Handle installation
@@ -55,14 +79,17 @@ else()
 endif()
 
 # Install main files
-install(FILES stp.py __init__.py DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
+              ${CMAKE_CURRENT_BINARY_DIR}/__init__.py
+        DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
 
 # Generate and install file describing install location of stp shared library
-get_target_property(LIBSTP_LOCATAION libstp LOCATION) # This the full path in the build directory
-get_filename_component(LIBSTP_FILENAME "${LIBSTP_LOCATAION}" NAME)
-set(LIBSTP_PATH ${CMAKE_INSTALL_PREFIX}/lib/${LIBSTP_FILENAME}) # FIXME: This is also set in libstp/CMakeLists.txt which could be fragile
+# FIXME: the concrete binary filename should be obtained via generator
+#         expressions, but they can't be used for now due to bugs in older
+#         versions of CMake
+configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
 
-configure_file(library_path.py.in "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
 install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"
         DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp"
        )

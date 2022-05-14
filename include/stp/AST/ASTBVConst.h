@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Vijay Ganesh, David L. Dill
  *
@@ -31,11 +30,8 @@ THE SOFTWARE.
 namespace stp
 {
 class STPMgr;
-void FatalError(const char* str);
 
-/******************************************************************
- *  Class to represent internals of a bitvector constant          *
- ******************************************************************/
+//Class to represent internals of a bitvector constant
 class ASTBVConst : public ASTInternal
 {
   friend class STPMgr;
@@ -48,39 +44,33 @@ private:
   // represented using an external library in extlib-bvconst.
   CBV _bvconst;
 
-  // If the CBV is managed outside of this class. Then a defensive copy isn't
-  // taken.
-  bool cbv_managed_outside;
-
-  /****************************************************************
-   * Hasher for ASTBVConst nodes                                  *
-   ****************************************************************/
+  //Hasher for ASTBVConst nodes
   class ASTBVConstHasher
   {
   public:
     size_t operator()(const ASTBVConst* bvc) const;
   };
 
-  /****************************************************************
-   * Equality for ASTBVConst nodes                                *
-   ****************************************************************/
+  //Equality for ASTBVConst nodes
   class ASTBVConstEqual
   {
   public:
     bool operator()(const ASTBVConst* bvc1, const ASTBVConst* bvc2) const;
   };
 
-
   ASTBVConst(CBV bv, unsigned int width);
-  ASTBVConst(STPMgr * mgr, CBV bv, unsigned int width, bool managed_outside = false)
+  ASTBVConst(STPMgr* mgr, CBV bv, unsigned int /*width*/,
+             bool managed_outside = false)
       : ASTInternal(mgr, BVCONST)
   {
-    if (managed_outside) {
+    if (managed_outside)
+    {
       _bvconst = (bv);
-    } else {
+    }
+    else
+    {
       _bvconst = CONSTANTBV::BitVector_Clone(bv);
     }
-    _value_width = width;
     cbv_managed_outside = managed_outside;
   }
 
@@ -89,7 +79,7 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1._value_width != bvc2._value_width)
+    if (bvc1.getValueWidth() != bvc2.getValueWidth())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
@@ -104,6 +94,12 @@ private:
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
   const static ASTVec astbv_empty_children;
+
+  void setIndexWidth(uint32_t i) { assert(i == 0); }
+  uint32_t getIndexWidth() const { return 0; }
+
+  void setValueWidth(uint32_t v) { assert(v == getValueWidth()); }
+  uint32_t getValueWidth() const { return bits_(_bvconst); }
 
 public:
   virtual ASTVec const& GetChildren() const { return astbv_empty_children; }

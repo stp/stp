@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -36,10 +35,12 @@ class DifficultyScore // not copyable
 {
 private:
   // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<int, int> cache;
+  std::map<int, long> cache;
+  long evalCount = 0;
 
 public:
-  int score(const ASTNode& top, STPMgr *);
+  long score(const ASTNode& top, STPMgr*);
+  auto getEvalCount() {return evalCount;}
 };
 }
 

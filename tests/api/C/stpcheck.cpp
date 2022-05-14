@@ -61,8 +61,7 @@ TEST(extend_adder_notexpr, one)
   // x+1!=0
   eq = vc_notExpr(vc, eq);
 
-  vc_query(vc, eq);
+  int query = vc_query(vc, eq);
+  ASSERT_TRUE(query);
   vc_printCounterExample(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

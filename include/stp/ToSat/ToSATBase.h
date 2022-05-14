@@ -30,7 +30,7 @@ THE SOFTWARE.
 
 namespace stp
 {
-class ToSATBase // not copyable
+class DLL_PUBLIC ToSATBase // not copyable
 {
 protected:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
@@ -39,10 +39,10 @@ protected:
   STPMgr* bm;
 
 public:
-  typedef hash_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
-                   ASTNode::ASTNodeEqual> ASTNodeToSATVar;
+  typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
+                             ASTNode::ASTNodeEqual>
+      ASTNodeToSATVar;
 
-   
   ToSATBase(STPMgr* bm) : bm(bm)
   {
     ASTTrue = bm->CreateNode(TRUE);

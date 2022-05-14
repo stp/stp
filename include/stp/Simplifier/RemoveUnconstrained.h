@@ -1,4 +1,3 @@
-// -*- c++ -*-
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
@@ -32,14 +31,14 @@ THE SOFTWARE.
 #ifndef REMOVEUNCONSTRAINED_H_
 #define REMOVEUNCONSTRAINED_H_
 #include "stp/AST/AST.h"
+#include "stp/AST/MutableASTNode.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/AST/MutableASTNode.h"
 
 namespace stp
 {
 
-class RemoveUnconstrained // not copyable
+class RemoveUnconstrained
 {
   STPMgr& bm;
 
@@ -56,6 +55,9 @@ class RemoveUnconstrained // not copyable
 
 public:
   RemoveUnconstrained(STPMgr& bm);
+	
+  RemoveUnconstrained(RemoveUnconstrained const&) = delete;
+  RemoveUnconstrained& operator=(RemoveUnconstrained const&) = delete;
 
   ASTNode topLevel(const ASTNode& n, Simplifier* s);
 };

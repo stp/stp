@@ -26,15 +26,15 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
+#include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Printer/printers.h"
-#include "stp/AST/NodeFactory/NodeFactory.h"
-#include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
-#include <iostream>
-#include <fstream>
-#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include <fstream>
+#include <iostream>
 
 using std::endl;
 using std::cout;
@@ -57,11 +57,7 @@ namespace simplifier
 {
 namespace constantBitP
 {
-NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
-
-Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
-                                   FixedBits& output, const ASTNode n,
-                                   MultiplicationStatsMap* msm = NULL);
+THREAD_LOCAL NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
 const bool debug_cBitProp_messages = false;
 const bool output_mult_like = false;
@@ -100,7 +96,8 @@ string toString(const ASTNode& n)
 }
 
 // If the bits are totally fixed, then return a new matching ASTNode.
-ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node, const FixedBits& bits)
+ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node,
+                                           const FixedBits& bits)
 {
   ASTNode result;
 
@@ -173,7 +170,8 @@ void ConstantBitPropagation::setNodeToTrue(const ASTNode& top)
 }
 
 // Propagates. No writing in of values. Doesn't assume the top is true.
-ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr * mgr_, stp::Simplifier* _sm,
+ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr* mgr_,
+                                               stp::Simplifier* _sm,
                                                NodeFactory* _nf,
                                                const ASTNode& top)
 {
@@ -300,36 +298,6 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
   {
     const FixedBits& bits = *it->second;
     const ASTNode& node = (it->first);
-
-    if (false && node.GetKind() == SYMBOL && !bits.isTotallyFixed() &&
-        bits.countFixed() > 0)
-    {
-      // replace partially known variables with new variables.
-      int leastFixed = bits.leastUnfixed();
-      int mostFixed = bits.mostUnfixed();
-      const int width = node.GetValueWidth();
-
-      int new_width = mostFixed - leastFixed + 1;
-      assert(new_width > 0);
-      ASTNode fresh =
-          mgr->CreateFreshVariable(0, new_width, "STP_REPLACE");
-      ASTNode a, b;
-      if (leastFixed > 0)
-        a = nf->CreateConstant(bits.GetBVConst(leastFixed - 1, 0),
-                                            leastFixed);
-      if (mostFixed != width - 1)
-        b = nf->CreateConstant(
-            bits.GetBVConst(width - 1, mostFixed + 1), width - 1 - mostFixed);
-      if (!a.IsNull())
-        fresh = nf->CreateTerm(
-            BVCONCAT, a.GetValueWidth() + fresh.GetValueWidth(), fresh, a);
-      if (!b.IsNull())
-        fresh = nf->CreateTerm(
-            BVCONCAT, b.GetValueWidth() + fresh.GetValueWidth(), b, fresh);
-      assert(fresh.GetValueWidth() == node.GetValueWidth());
-      bool r = simplifier->UpdateSubstitutionMap(node, fresh);
-      assert(r);
-    }
 
     if (!bits.isTotallyFixed())
       continue;
@@ -681,9 +649,9 @@ FixedBits* ConstantBitPropagation::getUpdatedFixedBits(const ASTNode& n)
   return output;
 }
 
-Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<FixedBits*>& children,
-                                   FixedBits& output, const ASTNode n,
-                                   MultiplicationStatsMap* msm)
+Result ConstantBitPropagation::dispatchToTransferFunctions(
+    stp::STPMgr* mgr, const Kind k, vector<FixedBits*>& children,
+    FixedBits& output, const ASTNode n, MultiplicationStatsMap* msm)
 {
   Result result = NO_CHANGE;
 
@@ -732,7 +700,7 @@ Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<Fixed
       MAPTFN(EQ, bvEqualsBothWays)
       MAPTFN(IMPLIES, bvImpliesBothWays)
       MAPTFN(NOT, bvNotBothWays)
-      MAPTFN(BVNEG, bvNotBothWays)
+      MAPTFN(BVNOT, bvNotBothWays)
 
       // OTHER
       MAPTFN(BVZX, bvZeroExtendBothWays)
@@ -805,9 +773,9 @@ Result dispatchToTransferFunctions(stp::STPMgr * mgr, const Kind k, vector<Fixed
   {
     int bits_before = output.countFixed() + children[0]->countFixed() +
                       children[1]->countFixed();
-    result = merge(result, maxPrecision(children, output, k, mgr)
-                               ? CONFLICT
-                               : NOT_IMPLEMENTED);
+    result = merge(result,
+                   maxPrecision(children, output, k, mgr) ? CONFLICT
+                                                          : NOT_IMPLEMENTED);
     int difference = (output.countFixed() + children[0]->countFixed() +
                       children[1]->countFixed()) -
                      bits_before;
