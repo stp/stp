@@ -122,7 +122,7 @@ if (USE_CRYPTOMINISAT)
 endif()
 
 #Where I install the abc library to on my machine..
-set(libstp_link_libs ${libstp_link_libs} /home/ec2-user/abc/libabc.a)
+set(libstp_link_libs ${libstp_link_libs} /home/thansen/solvers/abc/libabc.a)
 set(libstp_link_libs ${libstp_link_libs} dl)
 set(libstp_link_libs ${libstp_link_libs} readline)
  

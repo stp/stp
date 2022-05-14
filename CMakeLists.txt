@@ -52,7 +52,7 @@ endif()
 message(STATUS "Doing a ${CMAKE_BUILD_TYPE} build")
 
 # Location to find the header files we need.
-include_directories(/home/ec2-user/abc/src/)
+include_directories(/home/thansen/solvers/abc/src/)
 # ABC builds a C application that prints this out. This is what it is on my machine...
 add_definitions(-DLIN64 -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8 -DSIZEOF_INT=4)
 
