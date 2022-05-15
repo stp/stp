@@ -1471,6 +1471,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                  children[0] == bm.CreateOneConst(width))
           result = children[1];
 
+        //else if (children[0].isConstant() &&
+          //       CONSTANTBV::BitVector_is_full(children[0].GetBVConst()))
+          //result = NodeFactory::CreateTerm(BVUMINUS, width, children[1]);
+
         else if (width == 1 && children[0] == children[1])
           result = children[0];
 

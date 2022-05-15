@@ -65,6 +65,8 @@ class PropagateEqualities : public NodeSimplifier
   //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
 
   void addCandidate(const ASTNode a, const ASTNode b);
+  bool isSymbol(ASTNode c);
+
   std::vector < std::pair<ASTNode, ASTNode> > candidates;
 
   void processCandidates();
