@@ -230,6 +230,14 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
     bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
 
+  if (bm->UserFlags.enable_flatten)
+  {
+    Flatten flatten(bm,bm->defaultNodeFactory);
+    inputToSat = flatten.topLevel(inputToSat);
+    bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
+  }
+
+
   if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
   {
     inputToSat = bvSolver->TopLevelBVSolve(inputToSat, false);

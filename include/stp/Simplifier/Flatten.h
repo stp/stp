@@ -27,9 +27,6 @@ THE SOFTWARE.
 * For example, given something like ((x + y ) + z) if this is the only occurence of (x+y) anywhere, then transform it into (x + y + z)
 * Given ((x+ g) + (x+g)) it shouldn't do anything, even if this is the only reference to (x+g).
 * This isn't idempotent. Node creation time simplifications might prune nodes, reducing their count and making extra nodes eligible for flattening.
-
-* TODO - might be nice to flatten the root node if it's an AND.
-
 */
 
 #ifndef FLATTEN_H_
@@ -98,9 +95,15 @@ private:
     if (counter[n]++ > 1)
       return;
   
+    std::unordered_set<unsigned> visited;
+    
     for (const auto& c: n.GetChildren())
     {
-      occurences(c);
+      if (visited.find(c.GetNodeNum()) == visited.end() ) // Don't visit children multiple times.
+        {
+          visited.insert(c.GetNodeNum());
+          occurences(c);
+        }
     }
   }
 
@@ -121,7 +124,7 @@ private:
 
     ASTVec next;
 
-    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k || BVMULT==k);
+    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k || BVMULT == k);
 
     for (const auto& c: n.GetChildren())
     {
