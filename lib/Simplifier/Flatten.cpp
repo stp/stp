@@ -22,6 +22,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Flatten.h"
+#include <list>
 
 namespace stp
 {
@@ -30,49 +31,33 @@ namespace stp
   {
     stpMgr->GetRunTimes()->start(RunTimes::Flatten);
     
-    //unsigned initial = stpMgr->NodeSize(n);
-
-    counter.clear();
+    shareCount.clear();
     fromTo.clear();
+    removed=0;
 
-    occurences(n);
+    buildShareCount(n);
     ASTNode result = flatten(n);
     
-
-    // I suspect this can't be enabled in general (during debugging) because sometimes the simplifyingNode factor will create more nodes.
-    /*
-    if (initial < stpMgr->NodeSize(result))
+    if (stpMgr->UserFlags.stats_flag)
     {
-      std::cerr << initial << " "<<  stpMgr->NodeSize(result) << std::endl;
-      std::cerr << n;
-      std::cerr << result;
-      assert(false);
+      std::cerr << "{Flatten} Nodes Removed:" << removed << std::endl;
     }
-    */
 
     stpMgr->GetRunTimes()->stop(RunTimes::Flatten);
     return result;
   }
 
   // counter is 1 if the node has one reference in the tree.
-  void Flatten::occurences(const ASTNode& n)
+  void Flatten::buildShareCount(const ASTNode& n)
   {
     if (n.Degree() == 0)
       return;
 
-    if (counter[n]++ > 1)
+    if (shareCount[n.GetNodeNum()]++ > 0) // 0 first time, 1 second time.
       return;
   
-    std::unordered_set<unsigned> visited;
-    
     for (const auto& c: n.GetChildren())
-    {
-      if (visited.find(c.GetNodeNum()) == visited.end() ) // Don't visit children multiple times.
-        {
-          visited.insert(c.GetNodeNum());
-          occurences(c);
-        }
-    }
+        buildShareCount(c);
   }
 
   ASTNode Flatten::flatten(const ASTNode& n)
@@ -80,76 +65,75 @@ namespace stp
     if (n.Degree() == 0)
       return n;
 
-    if (fromTo.find(n) != fromTo.end())
-      return fromTo[n];
+    if (fromTo.find(n.GetNodeNum()) != fromTo.end())
+      return fromTo[n.GetNodeNum()];
 
     const Kind k = n.GetKind();
 
+    ASTNode result =n;
+
     bool changed =false;
+    
+    //TODO STP doesn't currerntly handle >2 arity BVMULT.
+    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k);
 
     ASTVec newChildren;
-    newChildren.reserve(n.Degree());
 
-    ASTVec next;
+    const ASTVec& children = n.GetChildren();
+    auto it0 = children.begin();
 
-    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k || BVMULT == k);
+    ASTVec nextChildren;
+    auto i = 0;
 
-    for (const auto& c: n.GetChildren())
+    // Copy on write.
+    auto fill = [&]
     {
-      if (flattenable   && (c.GetKind() == k && counter[c] == 1))
+      assert(0 ==i);
+
+      newChildren.reserve(children.size());
+      newChildren.insert(newChildren.end(), children.begin(), it0-1);
+      changed=true;
+    };
+
+    while (it0 != children.end() || i < nextChildren.size())
+    {
+      const ASTNode& c = (it0 != children.end())? *it0++: nextChildren[i++];
+
+      if (flattenable && c.GetKind() == k && shareCount[c.GetNodeNum()] == 1)
       {
          assert(c.Degree() > 1);
-         changed=true;
-         next.insert(next.end(), c.GetChildren().begin(), c.GetChildren().end());
+         if (!changed)
+            fill();
+
+         removed++;
+
+         for (const auto&e: c.GetChildren())
+            nextChildren.push_back(e);
       }
       else
       {
-        const auto& r = flatten(c);
-        if (r!=c)
-          changed = true;
-        newChildren.push_back(r);
+        const auto r = flatten(c);
+        if (r!=c && !changed)
+          fill();
+        if (changed)   
+          newChildren.push_back(r);
       }
     }    
 
-    //std::cerr << "sdef" << n.Degree() << " " << newChildren.size() << " " << next.size() << std::endl;
-
-    for (size_t i = 0; i < next.size(); i++)
-    {
-      assert(changed);
-
-      if (flattenable && (next[i].GetKind() == k && counter[next[i]] == 1))
-      {
-         next.insert(next.end(), next[i].GetChildren().begin(), next[i].GetChildren().end());
-      }
-      else
-      {
-        const auto& r = flatten(next[i]);
-        if (r!=next[i])
-          changed = true;
-        newChildren.push_back(r);
-      }
-    }
-
-    if (next.size() > 0)
-    {
-      assert(newChildren.size() > n.Degree());
-    }
-
     if (changed)
     {
-      ASTNode result;
-      if (n.GetType() == BOOLEAN_TYPE)
-        result = nf->CreateNode(n.GetKind(), newChildren);
-      else
-        result = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+      assert(n.Degree() <= newChildren.size());
 
-      fromTo.insert({n,result});
-      counter[result]++; // I'm guessing it's unusal, but we might make a node we already have.
-      
-      return result;
+      if (n.GetType() == BOOLEAN_TYPE)
+        result = nf->CreateNode(k, newChildren);
+      else
+        result = nf->CreateArrayTerm(k, n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+
+      shareCount[result.GetNodeNum()]++; // I'm guessing it's unusal, but we might make a node we already have.
     }
 
-    fromTo.insert({n,n});
-    return n;
+    if (shareCount[n.GetNodeNum()] > 1)
+      fromTo.insert({n.GetNodeNum(),result});
+    return result;
   }
 }

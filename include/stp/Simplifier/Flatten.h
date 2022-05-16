@@ -46,11 +46,13 @@ class Flatten
   STPMgr* stpMgr;
   NodeFactory* nf;
 
-  std::unordered_map<ASTNode, int, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> counter;
-  ASTNodeMap fromTo;
+  std::unordered_map<uint64_t, uint8_t> shareCount;
+  std::unordered_map<uint64_t, ASTNode> fromTo;
 
-  // counter is 1 if the node has one reference in the tree.
-  void occurences(const ASTNode& n);
+  int removed;
+
+  // sharecount is 1 if the node has one reference in the tree.
+  void buildShareCount(const ASTNode& n);
   ASTNode flatten(const ASTNode& n);
 
 public:

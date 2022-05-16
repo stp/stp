@@ -78,37 +78,7 @@ struct Context
     }
 };
 
-
-#if 0
-TEST(Flatten_Test, a)
-{
-  const std::string input = R"(
-    (assert (and a (and a b ) a a a) )
-    (assert (= (and a b) (and b c) ) )
-    )";
-
-  Context c;
-  ASTNode n = c.process(input);
-  ASSERT_EQ(n, c.mgr.LookupOrCreateSymbol("a"));
-}
-
-TEST(Flatten_Test, b)
-{
-  const std::string input = R"(
-    (assert (xor a (xor a b ) a a a) )
-    (assert (= (xor a b) (and b c) ) )
-    )";
-
-  Context c;
-  ASTNode n = c.process(input);
-  ASSERT_EQ(n, c.mgr.LookupOrCreateSymbol("a"));
-}
-#endif
-
-
-
-
-TEST(Flatten_Test, c)
+TEST(Flatten_Test , __LINE__)
 {
   const std::string input = R"(
     (assert (xor b (xor a b ) a a a) )
@@ -119,7 +89,7 @@ TEST(Flatten_Test, c)
   ASSERT_EQ(n, c.mgr.ASTFalse);
 }
 
-TEST(Flatten_Test, d)
+TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
         (assert (= 
@@ -134,7 +104,7 @@ TEST(Flatten_Test, d)
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
-TEST(Flatten_Test, e)
+TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
     (assert (= (bvadd v0 (bvadd v1 v0) v1 ) (bvadd v0 v1 v0 v1 )))
@@ -145,11 +115,23 @@ TEST(Flatten_Test, e)
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
-TEST(Flatten_Test, f)
+TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
-    (assert (= (bvadd v0 (bvadd v1 v0) (bvadd v1 v0) ) 
+    (assert (= (bvadd v0 (bvadd v1 v0) v1 v0 ) 
                (bvadd v0 v1 v0 v1 v0 )))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(Flatten_Test, __LINE__)
+{
+  const std::string input = R"(
+    (assert (= (bvadd v0 (bvadd v1 v0) v1 v0 ) 
+               (bvadd v0 v0 (bvadd v1 v0 v1) )))
     )";
 
   Context c;
