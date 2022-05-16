@@ -77,6 +77,9 @@ class PropagateEqualities : public NodeSimplifier
 
   void countToDo(ASTNode n);
 
+
+  bool speculative=false;
+
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
  : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
@@ -85,6 +88,14 @@ public:
     simp = simp_;
     nf = nf_;
     bm = bm_;
+  }
+
+
+  // Speculative rules might increase the number of nodes, because
+  // they add uminus nodes. Perhaps should be moved into the speculative part.
+  void setSpeculativeOn()
+  {
+    speculative = true;
   }
 
 

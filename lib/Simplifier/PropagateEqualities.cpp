@@ -478,7 +478,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
       addCandidate(c[0],c[1]);
       added = true;
     }
-    else if (c[0].GetKind() == BVUMINUS && c[0][0].GetKind() == SYMBOL)
+    else if (speculative && c[0].GetKind() == BVUMINUS && c[0][0].GetKind() == SYMBOL)
     {
       addCandidate(c[0][0], nf->CreateTerm(BVUMINUS, width, c[1]));
       added = true;
@@ -488,19 +488,19 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
       addCandidate(c[0][0], nf->CreateTerm(BVNOT, width, c[1]));
       added = true;
     }
-    else if (c[0].GetKind() == BVPLUS && c[0].Degree() == 2 && c[0][0].GetKind() == SYMBOL )
+    else if (speculative && c[0].GetKind() == BVPLUS && c[0].Degree() == 2 && c[0][0].GetKind() == SYMBOL )
     {
       ASTNode rep = nf->CreateTerm(BVPLUS, width, c[1], nf->CreateTerm(BVUMINUS, width, c[0][1]));
       addCandidate(c[0][0], rep);
       added = true;
     }
 
-    if (SYMBOL == c[1].GetKind())
+    if (SYMBOL == c[1].GetKind() && SYMBOL != c[0].GetKind()) // addCandidate swaps over arguments, so will have already been added.
     {
       addCandidate(c[1],c[0]);
       added = true;
     }
-    else if (c[1].GetKind() == BVUMINUS && c[1][0].GetKind() == SYMBOL)
+    else if (speculative && c[1].GetKind() == BVUMINUS && c[1][0].GetKind() == SYMBOL)
     {
       addCandidate(c[1][0], nf->CreateTerm(BVUMINUS, width, c[0]));
       added = true;
@@ -510,7 +510,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
       addCandidate(c[1][0], nf->CreateTerm(BVNOT, width, c[0]));
       added = true;
     }
-    else if (c[1].GetKind() == BVPLUS && c[1].Degree() == 2 && c[1][0].GetKind() == SYMBOL )
+    else if (speculative && c[1].GetKind() == BVPLUS && c[1].Degree() == 2 && c[1][0].GetKind() == SYMBOL )
     {
       ASTNode rep = nf->CreateTerm(BVPLUS, width, c[0], nf->CreateTerm(BVUMINUS, width, c[1][1]));
       addCandidate(c[1][0], rep);
