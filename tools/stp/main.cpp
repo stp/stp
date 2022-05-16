@@ -198,11 +198,11 @@ void ExtraMain::create_options()
       INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
       "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
 
-      ("simplify_to_constants_only", 
+      ("simplify-to-constants-only", 
       BOOL_ARG(bm->UserFlags.simplify_to_constants_only),
       "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
 
-      ("difficulty_reversion", 
+      ("difficulty-reversion", 
       BOOL_ARG(bm->UserFlags.difficulty_reversion),
       "Undo size increasing simplifications if they haven't made the problem simpler");
 
@@ -343,12 +343,12 @@ void ExtraMain::create_options()
        po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
 
-      ("max_num_confl,g", 
+      ("max-num-confl,max_num_confl,g", 
       INT64_ARG(bm->UserFlags.timeout_max_conflicts),
       "Number of conflicts after which the SAT solver gives up. "
       "-1 means never")
 
-      ("max_time,g", 
+      ("max-time,max_time,g", 
       INT64_ARG(bm->UserFlags.timeout_max_time),
       "Number of seconds after which the SAT solver gives up. "
       "-1 means never.")
