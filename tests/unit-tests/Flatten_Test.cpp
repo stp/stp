@@ -104,6 +104,29 @@ TEST(Flatten_Test, __LINE__)
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
+// This fails because the node count for (and a b) is updated to one after it's been added to the top-level conjunct.
+TEST(Flatten_Test, DISABLED__LINE__)
+{
+  const std::string input = R"(
+        (assert
+          (=
+            (and 
+                (and a b )
+                (and a b (and a b ) )
+                (and b (and a b ) (and a b ) (and a b ) c a a a)
+                (and a (and a b ) ) 
+            )
+            (and a b c)
+          )
+        ))";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+
+
 TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(

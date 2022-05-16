@@ -31,17 +31,23 @@ namespace stp
   {
     stpMgr->GetRunTimes()->start(RunTimes::Flatten);
     
-    shareCount.clear();
-    fromTo.clear();
     removed=0;
+    top_removed = 0;
 
     buildShareCount(n);
-    ASTNode result = flatten(n);
+    
+
+    // If the top level is an AND, we want to flatten it irrespective of sharing.
+    ASTNode result = flatten(n, (AND == n.GetKind()));
     
     if (stpMgr->UserFlags.stats_flag)
     {
-      std::cerr << "{Flatten} Nodes Removed:" << removed << std::endl;
+      std::cerr << "{Flatten} Internal nodes removed:" << removed << std::endl;
+      std::cerr << "{Flatten} Top nodes removed:" << top_removed << std::endl;
     }
+
+    shareCount.clear();
+    fromTo.clear();
 
     stpMgr->GetRunTimes()->stop(RunTimes::Flatten);
     return result;
@@ -60,7 +66,7 @@ namespace stp
         buildShareCount(c);
   }
 
-  ASTNode Flatten::flatten(const ASTNode& n)
+  ASTNode Flatten::flatten(const ASTNode& n, bool top)
   {
     if (n.Degree() == 0)
       return n;
@@ -77,13 +83,15 @@ namespace stp
     //TODO STP doesn't currerntly handle >2 arity BVMULT.
     const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k);
 
+    std::unordered_set<uint64_t> seen;
+
     ASTVec newChildren;
 
     const ASTVec& children = n.GetChildren();
     auto it0 = children.begin();
 
     ASTVec nextChildren;
-    auto i = 0;
+    unsigned i = 0;
 
     // Copy on write.
     auto fill = [&]
@@ -97,18 +105,29 @@ namespace stp
 
     while (it0 != children.end() || i < nextChildren.size())
     {
-      const ASTNode& c = (it0 != children.end())? *it0++: nextChildren[i++];
+      const ASTNode c = (it0 != children.end())? *it0++: nextChildren[i++];
 
-      if (flattenable && c.GetKind() == k && shareCount[c.GetNodeNum()] == 1)
+      if (flattenable && c.GetKind() == k && (top || shareCount[c.GetNodeNum()] == 1))
       {
          assert(c.Degree() > 1);
          if (!changed)
             fill();
 
-         removed++;
+         if (top)
+            top_removed++;
+         else
+           removed++;
 
          for (const auto&e: c.GetChildren())
+         {
+            if (BVAND == k || AND == k || BVOR == k || OR == k)
+            {
+              if (!seen.insert(e.GetNodeNum()).second)
+                continue; 
+            }
             nextChildren.push_back(e);
+         }
+        shareCount[c.GetNodeNum()]--;
       }
       else
       {

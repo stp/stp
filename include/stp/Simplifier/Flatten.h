@@ -50,10 +50,11 @@ class Flatten
   std::unordered_map<uint64_t, ASTNode> fromTo;
 
   int removed;
+  int top_removed;
 
   // sharecount is 1 if the node has one reference in the tree.
   void buildShareCount(const ASTNode& n);
-  ASTNode flatten(const ASTNode& n);
+  ASTNode flatten(const ASTNode& n, bool top=false);
 
 public:
   Flatten(const Flatten&) = delete;
