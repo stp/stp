@@ -169,7 +169,11 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
                           PropagateEqualities* pe)
 {
 
-  inputToSat = pe->topLevel(inputToSat);
+  if (bm->UserFlags.propagate_equalities)
+  {
+    inputToSat = pe->topLevel(inputToSat);
+  }
+  
   if (simp->hasUnappliedSubstitutions())
   {
     inputToSat = simp->applySubstitutionMap(inputToSat);
