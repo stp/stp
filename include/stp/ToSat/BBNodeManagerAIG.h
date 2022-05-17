@@ -31,9 +31,11 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 
 #include "aig/aig/aig.h"
+
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
 #include "stp/ToSat/ToSATBase.h"
+
 
 typedef Cnf_Dat_t_ CNFData;
 typedef Aig_Obj_t AIGNode;
@@ -59,6 +61,8 @@ public:
   {
     return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
   }
+
+  void writeAIGER();
 
 private:
   // AIGs can only take two parameters. This makes a log_2 height

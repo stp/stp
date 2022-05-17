@@ -23,8 +23,13 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "aig/ioa/ioa.h"
 
-// FIXME: What is the point of this??
 namespace stp
 {
+
+  void BBNodeManagerAIG::writeAIGER()
+  {
+    Ioa_WriteAiger(aigMgr, (char *)"output.aiger",0,0);
+  }
 }

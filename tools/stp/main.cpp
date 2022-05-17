@@ -288,13 +288,24 @@ void ExtraMain::create_options()
                                                    "use the CVC format parser");
 
   po::options_description output_options("Output options");
-  output_options.add_options()(
-      "output-CNF", po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
+  output_options.add_options()
+  (
+      "output-CNF", 
+      po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
       "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped "
       "back, and problems solved by the preprocessing simplifier alone will "
-      "not generate any CNF as the SAT solver is never invoked")(
-      "output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
-      "save in ABC's bench format to output.bench");
+      "not generate any CNF as the SAT solver is never invoked"
+  )
+  (
+      "output-bench", 
+      po::bool_switch(&(bm->UserFlags.output_bench_flag)),
+      "save in ABC's bench format to output.bench"
+      )
+      (
+        "output-aiger", 
+        po::bool_switch(&(bm->UserFlags.output_aiger_flag)),
+        "save in aiger format to output.aiger"
+      );
 
 
   po::options_description bb_options("Bit-blasting options");

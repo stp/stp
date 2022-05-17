@@ -67,8 +67,8 @@ public:
   int64_t bitblast_simplification = 0;
   int64_t size_reducing_fixed_point = 1000000;
 
-
   bool simplify_to_constants_only = false;
+
 
   // given a/b = c, propagates that c<=a even if b may be zero.
   bool cBitP_propagateForDivisionByZero = true;
@@ -106,6 +106,7 @@ public:
   // output flags
   bool output_CNF_flag = false;
   bool output_bench_flag = false;
+  bool output_aiger_flag = false;
 
   /* Bitblasting options */
 

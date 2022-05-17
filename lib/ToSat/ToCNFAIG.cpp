@@ -118,6 +118,12 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   assert(Aig_ManCoNum(mgr.aigMgr) == 1);
 
+  if (uf.output_aiger_flag)
+  {
+      mgr.writeAIGER();
+  }
+
+
   // UseZeroes gives assertion errors.
   // Rewriting is sometimes very slow. Can it be configured to be faster?
   // What about refactoring???
