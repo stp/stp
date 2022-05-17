@@ -193,16 +193,15 @@ void ExtraMain::create_options()
       ("bit-blast-simplification", 
       INT64_ARG(bm->UserFlags.bitblast_simplification),
       "Part-way through simplifying, convert to AIGs and look for bits that the AIGs figure out are true/false or the same as another node. If the difficulty is less than this number. -1 means always.")
-
       ("size-reducing-fixed-point-limit", 
       INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
       "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
 
-      ("simplify-to-constants-only", 
+      ("simplify-to-constants-only,simply_to_constants_only", 
       BOOL_ARG(bm->UserFlags.simplify_to_constants_only),
       "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
 
-      ("difficulty-reversion", 
+      ("difficulty-reversion,difficulty_reversion", 
       BOOL_ARG(bm->UserFlags.difficulty_reversion),
       "Undo size increasing simplifications if they haven't made the problem simpler");
 
