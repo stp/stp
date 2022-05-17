@@ -65,9 +65,8 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
-    // TODO check if these help
-    // pPars->fUpdateLevel =0;.
-    // pPars->fUseZeros = 1;
+    pPars->fUpdateLevel =0;.
+    pPars->fUseZeros = 1;
 
     if (uf.stats_flag)
       pPars->fVerbose=1;
