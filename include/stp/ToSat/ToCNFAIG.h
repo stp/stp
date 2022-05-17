@@ -25,7 +25,6 @@ THE SOFTWARE.
 #ifndef TOCNFAIG_H_
 #define TOCNFAIG_H_
 
-
 #include "aig/aig/aig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"

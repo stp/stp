@@ -653,8 +653,7 @@ void Cpp_interface::getModel()
 
 void CNFClearMemory()
 {
-
-  // TODO clean up memory somehow!!
+  // TODO cleanup somehow!!!
   //Cnf_ClearMemory();
 }
 

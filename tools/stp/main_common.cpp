@@ -343,6 +343,7 @@ int Main::main(int argc, char** argv)
   _empty_ASTVec.clear();
   delete stp;
   Cnf_ManFree();
+  CNFClearMemory();
 
   return 0;
 }

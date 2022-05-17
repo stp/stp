@@ -76,6 +76,7 @@ void verify(const std::string input)
   ASTNode n = mgr.CreateNode(stp::AND, values);
   
   stp::PropagateEqualities propagate(&simp, mgr.defaultNodeFactory, &mgr);
+  propagate.setSpeculativeOn();
   n = propagate.topLevel(n);
 
   if (simp.hasUnappliedSubstitutions())

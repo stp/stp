@@ -104,6 +104,8 @@ private:
   ASTNode handle_bvand(unsigned int width, const ASTVec& children);
   ASTNode create_gt_node(const ASTVec& children);
 
+  ASTNode plusRules(const ASTVec& oldChildren);
+
 };
 
 #endif

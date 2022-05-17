@@ -65,6 +65,8 @@ class PropagateEqualities : public NodeSimplifier
   //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
 
   void addCandidate(const ASTNode a, const ASTNode b);
+  bool isSymbol(ASTNode c);
+
   std::vector < std::pair<ASTNode, ASTNode> > candidates;
 
   void processCandidates();
@@ -74,6 +76,10 @@ class PropagateEqualities : public NodeSimplifier
   uint64_t todo=0;
 
   void countToDo(ASTNode n);
+
+
+  bool speculative=false;
+
 
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
@@ -85,6 +91,12 @@ public:
     bm = bm_;
   }
 
+  // Speculative rules might increase the number of nodes, because
+  // they add uminus nodes. Perhaps should be moved into the speculative part.
+  void setSpeculativeOn()
+  {
+    speculative = true;
+  }
 
   virtual ~PropagateEqualities() override 
   {}

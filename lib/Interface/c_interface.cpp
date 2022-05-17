@@ -32,8 +32,6 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
 #include "stp/Util/GitSHA1.h"
-
-
 #include "sat/cnf/cnf.h"
 #include "stp/ToSat/ToSATAIG.h"
 

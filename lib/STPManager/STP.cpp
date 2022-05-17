@@ -169,7 +169,11 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
                           PropagateEqualities* pe)
 {
 
-  inputToSat = pe->topLevel(inputToSat);
+  if (bm->UserFlags.propagate_equalities)
+  {
+    inputToSat = pe->topLevel(inputToSat);
+  }
+  
   if (simp->hasUnappliedSubstitutions())
   {
     inputToSat = simp->applySubstitutionMap(inputToSat);
@@ -229,6 +233,14 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
     inputToSat = always.topLevel(inputToSat);
     bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
+
+  if (bm->UserFlags.enable_flatten)
+  {
+    Flatten flatten(bm,bm->defaultNodeFactory);
+    inputToSat = flatten.topLevel(inputToSat);
+    bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
+  }
+
 
   if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
   {

@@ -502,6 +502,7 @@ if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
     message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requested. Exiting.")
 endif()
 
+
 # -----------------------------------------------------------------------------
 # Find ZLIB (needed for MiniSat)
 # yes, we need to include the zlib header location or STP will not build
