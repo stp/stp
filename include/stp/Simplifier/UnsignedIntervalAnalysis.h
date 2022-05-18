@@ -48,17 +48,20 @@ class UnsignedIntervalAnalysis
   STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
-  NodeFactory* nf;
 
   unsigned propagatorNotImplemented = 0;
   unsigned iterations = 0;
 
-  UnsignedInterval* freshUnsignedInterval(int width);
+  UnsignedInterval* freshUnsignedInterval(unsigned width);
+  UnsignedInterval* getEmptyInterval(const ASTNode& n);
 
   // We create all intervals through here. Handles collection
   UnsignedInterval* createInterval(CBV min, CBV max);
 
-  CBV makeCBV(int width);
+  CBV getEmptyCBV(unsigned width);
+
+  std::unordered_map<unsigned, UnsignedInterval*> emptyIntervals;
+  std::unordered_map<unsigned, CBV> emptyCBV;
 
 public:
 
@@ -72,8 +75,9 @@ public:
   ~UnsignedIntervalAnalysis();
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode topLevel_unsignedIntervals(const ASTNode& top);
-  
+  ASTNode topLevel(const ASTNode& top);
+
+  UnsignedInterval* dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& children);
   UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 

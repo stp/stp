@@ -40,6 +40,8 @@ struct UnsignedInterval
 
   CBV minV;
   CBV maxV;
+  
+  // Takes ownership of the CBVs.
   UnsignedInterval(CBV _min, CBV _max)
   {
     minV = _min;
@@ -49,28 +51,70 @@ struct UnsignedInterval
     assert(size_(minV) == size_(maxV));
   }
 
+  ~UnsignedInterval()
+  {
+   //CONSTANTBV::BitVector_Destroy(minV);
+   //CONSTANTBV::BitVector_Destroy(maxV); 
+  }
+
   UnsignedInterval(UnsignedInterval const&) = delete;
   UnsignedInterval& operator=(UnsignedInterval const&) = delete;
 
-
-  void print()
+  void print() const
   {
-    unsigned char* a = CONSTANTBV::BitVector_to_Dec(minV);
-    unsigned char* b = CONSTANTBV::BitVector_to_Dec(maxV);
+    unsigned char* a = CONSTANTBV::BitVector_to_Bin(minV);
+    unsigned char* b = CONSTANTBV::BitVector_to_Bin(maxV);
     std::cerr << a << " " << b << std::endl;
     free(a);
     free(b);
   }
 
-  bool isConstant() { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
+  bool isConstant() const
+  { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
 
-  bool isComplete()
+  bool isComplete() const
   {
     return (CONSTANTBV::BitVector_is_empty(minV) &&
             CONSTANTBV::BitVector_is_full(maxV));
   }
 
-  void checkUnsignedInvariant()
+  unsigned getWidth() const
+  {
+    return bits_(minV);
+  }
+
+  void resetToComplete()
+  {
+    CONSTANTBV::BitVector_Empty(minV);
+    CONSTANTBV::BitVector_Fill(maxV);
+  }
+
+  bool replaceMinIfTightens(CBV min)
+  {
+    if (CONSTANTBV::BitVector_Lexicompare(min, minV) > 0)
+      {
+        assert(bits_(min) == getWidth());
+        CONSTANTBV::BitVector_Copy(minV,min);
+        checkUnsignedInvariant();
+        return true;
+      }
+      return false;
+  }
+
+  bool replaceMaxIfTightens(CBV max)
+  {
+      if (CONSTANTBV::BitVector_Lexicompare(max, maxV) < 0)
+      {
+        assert(bits_(max) == getWidth());
+        CONSTANTBV::BitVector_Copy(maxV,max);
+        checkUnsignedInvariant();
+        return true;
+      }
+      return false;
+  }
+
+
+  void checkUnsignedInvariant() const
   {
     assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
 
