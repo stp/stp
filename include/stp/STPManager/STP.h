@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 
 namespace stp
 {
@@ -43,7 +44,7 @@ class STP
 {
 
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
-                       PropagateEqualities* pe);
+                       PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
   // A copy of all the state we need to restore to a prior expression.
   struct Revert_to
@@ -121,7 +122,7 @@ public:
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
-                           BVSolver* bvSolver, PropagateEqualities* pe);
+                           BVSolver* bvSolver, PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
   void ClearAllTables(void)
   {

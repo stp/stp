@@ -32,8 +32,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
-#include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/StrengthReduction.h"
 #include <iostream>
 #include <map>
 #include <cmath>
@@ -44,9 +44,6 @@ namespace stp
 {
 
   using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-  using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-
-
 
   void UnsignedIntervalAnalysis::print_stats()
   {
@@ -56,34 +53,57 @@ namespace stp
               << std::endl;
   }
 
-
   using std::make_pair;
 
-  UnsignedInterval* UnsignedIntervalAnalysis::freshUnsignedInterval(int width)
+  UnsignedInterval* UnsignedIntervalAnalysis::freshUnsignedInterval(unsigned width)
   {
-    assert(width > 0);
-    UnsignedInterval* it = createInterval(makeCBV(width), makeCBV(width));
+    width = std::max((unsigned)1, width);
+    UnsignedInterval* it = createInterval(getEmptyCBV(width), getEmptyCBV(width));
     CONSTANTBV::BitVector_Fill(it->maxV);
     return it;
   }
 
-  // We create all intervals through here. Handles collection
+  // Doesn't take ownership of the CBVs.
+  // Doesn't own the returned.
   UnsignedInterval* UnsignedIntervalAnalysis::createInterval(CBV min, CBV max)
   {
-    UnsignedInterval* it = new UnsignedInterval(min, max);
-    toDeleteLater.push_back(it);
-    return it;
+    return new UnsignedInterval(CONSTANTBV::BitVector_Clone(min), CONSTANTBV::BitVector_Clone(max));
   }
 
-  CBV UnsignedIntervalAnalysis::makeCBV(int width)
+  // readonly.
+  CBV UnsignedIntervalAnalysis::getEmptyCBV(unsigned width)
   {
-    CBV result = CONSTANTBV::BitVector_Create(width, true);
-    likeAutoPtr.push_back(result);
-    return result;
+    width = std::max(width, (unsigned)1);
+
+    if (emptyCBV.find(width) == emptyCBV.end())
+    {
+      emptyCBV[width] = CONSTANTBV::BitVector_Create(width, true);
+    }
+    
+    assert(CONSTANTBV::BitVector_is_empty(emptyCBV[width]));  
+    return emptyCBV[width];
+  }
+
+  //readonly
+  UnsignedInterval* UnsignedIntervalAnalysis::getEmptyInterval(const ASTNode& n)
+  {
+    const auto width = std::max((unsigned)1,n.GetValueWidth());
+
+    if (emptyIntervals.find(width) == emptyIntervals.end())
+    {
+      stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
+      stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
+      CONSTANTBV::BitVector_Fill(max);
+      emptyIntervals[width] = new UnsignedInterval(min,max);
+    }
+
+    UnsignedInterval* r = emptyIntervals[width];
+    assert(r->isComplete());
+    return r;
   }
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode UnsignedIntervalAnalysis::topLevel_unsignedIntervals(const ASTNode& top)
+  ASTNode UnsignedIntervalAnalysis::topLevel(const ASTNode& top)
   {
     propagatorNotImplemented = 0;
     iterations=0;
@@ -104,40 +124,27 @@ namespace stp
     return result;
   }
 
-  UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
-                          NodeToUnsignedIntervalMap& visited)
+  UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
   {
-    NodeToUnsignedIntervalMap::iterator it;
-    if ((it = visited.find(n)) != visited.end())
-      return it->second;
+    const auto number_children = n.Degree();    
+    const auto width = n.GetValueWidth();
+    const bool knownC0 = number_children < 1 ? false : (_children[0] != NULL);
+    const bool knownC1 = number_children < 2 ? false : (_children[1] != NULL);
+    const bool knownC2 = number_children < 3 ? false : (_children[2] != NULL);
 
-    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-      return NULL; // Never know anything about these.
+    assert(number_children == _children.size());
 
-    const int number_children = n.Degree();
-    vector<UnsignedInterval*> children;
-    vector<bool> known;
-
-    children.reserve(number_children);
-    known.reserve(number_children);
-
-    for (int i = 0; i < number_children; i++)
+    // Put in temporary null ones for any we're missing.
+    auto children = _children;
+    for (unsigned i =0 ; i < number_children; i++)
     {
-      UnsignedInterval* r = visit(n[i], visited);
-      if (r != NULL)
-      {
-        assert(!r->isComplete());
-      }
-      known.push_back(r != NULL);
-      children.push_back(r);
+      if (children[i] == nullptr)
+        children[i] = getEmptyInterval(n[i]);
     }
 
-    UnsignedInterval* result = NULL;
-    const unsigned int width = n.GetValueWidth();
-    const bool knownC0 = number_children < 1 ? false : (children[0] != NULL);
-    const bool knownC1 = number_children < 2 ? false : (children[1] != NULL);
-
     iterations++;
+
+    UnsignedInterval* result = nullptr;
 
     switch (n.GetKind())
     {
@@ -193,10 +200,8 @@ namespace stp
         {
           const unsigned bitwidth = n[0].GetValueWidth();
 
-          UnsignedInterval *c0 =
-              knownC0 ? children[0] : freshUnsignedInterval(bitwidth);
-          UnsignedInterval *c1 =
-              knownC1 ? children[1] : freshUnsignedInterval(bitwidth);
+          const UnsignedInterval *c0 =children[0];
+          const UnsignedInterval *c1 =children[1];
 
           if (CONSTANTBV::BitVector_Lexicompare(c0->minV, c1->maxV) > 0)
             result = createInterval(littleOne, littleOne);
@@ -233,13 +238,7 @@ namespace stp
 
       case BVDIV:
       {
-        UnsignedInterval* c1;
-        if (!knownC1)
-        {
-          c1 = freshUnsignedInterval(width);
-        }
-        else
-          c1 = children[1];
+        const UnsignedInterval* c1 =  children[1];
 
         result = freshUnsignedInterval(width);
 
@@ -260,9 +259,8 @@ namespace stp
           break; // TODO fix so that it can run-on.
         }
 
-        UnsignedInterval* top =
-            (children[0] == NULL) ? freshUnsignedInterval(width) : children[0];
-        result = freshUnsignedInterval(width);
+        const UnsignedInterval* top = children[0];
+        result->resetToComplete();
 
         CBV remainder = CONSTANTBV::BitVector_Create(width, true);
 
@@ -385,10 +383,9 @@ namespace stp
         break;
 
       case ITE:
-        if (children[0] != NULL)
+        if (knownC0)
         {
-          assert(children[0]->isConstant());
-          result = freshUnsignedInterval(width == 0 ? 1 : width);
+          result = freshUnsignedInterval(width);
           if (CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
               children[1] != NULL)
           {
@@ -402,10 +399,10 @@ namespace stp
             CONSTANTBV::BitVector_Copy(result->maxV, children[2]->maxV);
           }
         }
-        else if (children[1] != NULL && children[2] != NULL)
+        else if (knownC1 && knownC2)
         {
           // Both terms and propositions.
-          result = freshUnsignedInterval(width == 0 ? 1 : width);
+          result = freshUnsignedInterval(width);
           CBV min, max;
           if (CONSTANTBV::BitVector_Lexicompare(children[1]->minV,
                                                 children[2]->minV) > 0)
@@ -469,7 +466,10 @@ namespace stp
           CONSTANTBV::BitVector_Destroy(min);
           CONSTANTBV::BitVector_Destroy(max);
           if (bad)
-            result = NULL;
+            {
+              delete result;
+              result = NULL;
+            }
         }
         break;
 
@@ -477,8 +477,7 @@ namespace stp
       {
         // If any are definately zero then the answer is zero.
         for (unsigned i = 0; i < children.size(); i++)
-          if (children[i] != NULL &&
-              (CONSTANTBV::BitVector_is_empty(children[i]->maxV)))
+          if (CONSTANTBV::BitVector_is_empty(children[i]->maxV))
           {
             result = createInterval(littleZero, littleZero);
             break;
@@ -486,8 +485,7 @@ namespace stp
         // If all are definately one the answer is one.
         bool allok = true;
         for (unsigned i = 0; i < children.size(); i++)
-          if (children[i] == NULL ||
-              (CONSTANTBV::BitVector_is_empty(children[i]->minV)))
+          if (CONSTANTBV::BitVector_is_empty(children[i]->minV))
           {
             allok = false;
             break;
@@ -501,8 +499,7 @@ namespace stp
       {
         // If any are definately one then the answer is  one.
         for (unsigned i = 0; i < children.size(); i++)
-          if (children[i] != NULL &&
-              (CONSTANTBV::BitVector_is_full(children[i]->minV)))
+          if (CONSTANTBV::BitVector_is_full(children[i]->minV))
           {
             result = createInterval(littleOne, littleOne);
             break;
@@ -510,8 +507,7 @@ namespace stp
         // If all are definately false the answer is false.
         bool allfalse = true;
         for (unsigned i = 0; i < children.size(); i++)
-          if (children[i] == NULL ||
-              (CONSTANTBV::BitVector_is_full(children[i]->maxV)))
+          if (CONSTANTBV::BitVector_is_full(children[i]->maxV))
           {
             allfalse = false;
             break;
@@ -526,7 +522,7 @@ namespace stp
         bool allOK = true;
         unsigned count = 0;
         for (unsigned i = 0; i < children.size(); i++)
-          if (children[i] != NULL && children[i]->isConstant())
+          if (children[i]->isConstant())
           {
             if (!CONSTANTBV::BitVector_is_empty(children[i]->maxV))
               count++;
@@ -551,27 +547,28 @@ namespace stp
         {
           if (!knownC1)
           {
-            result = createInterval(makeCBV(width), children[0]->maxV);
+            result = createInterval(getEmptyCBV(width), children[0]->maxV);
           }
           else if (!knownC0)
           {
-            result = createInterval(makeCBV(width), children[1]->maxV);
+            result = createInterval(getEmptyCBV(width), children[1]->maxV);
           }
           else
           {
             if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
                                                   children[1]->maxV) > 0)
             {
-              result = createInterval(makeCBV(width), children[1]->maxV);
+              result = createInterval(getEmptyCBV(width), children[1]->maxV);
             }
             else
-              result = createInterval(makeCBV(width), children[0]->maxV);
+              result = createInterval(getEmptyCBV(width), children[0]->maxV);
           }
         }
         break;
       }
 
       case BVEXTRACT: // OVER-APPROXIMATION
+      break;
       {
         if (knownC0) // others are always known..
         {
@@ -586,12 +583,12 @@ namespace stp
           //  If the max bit of clone is greater than the width, ok to continue.
           if (CONSTANTBV::Set_Max(clone) < width)
           {
-            CBV max = makeCBV(width); // new width.
+            CBV max = getEmptyCBV(width); // new width.
             for (unsigned i = 0; i < width; i++)
               if (CONSTANTBV::BitVector_bit_test(clone, i))
                 CONSTANTBV::BitVector_Bit_On(max, i);
 
-            result = createInterval(makeCBV(width), max);
+            result = createInterval(getEmptyCBV(width), max);
           }
 
           CONSTANTBV::BitVector_Destroy(clone);
@@ -604,22 +601,20 @@ namespace stp
         {
           result = freshUnsignedInterval(width);
 
-          if (children[0] == NULL)
-            children[0] = freshUnsignedInterval(width);
-          if (children[1] == NULL)
-            children[1] = freshUnsignedInterval(width);
+          const UnsignedInterval* c0 = children[0];
+          const UnsignedInterval* c1 = children[1];
 
           // The maximum result is the maximum >> (minimum shift).
-          if (CONSTANTBV::Set_Max(children[1]->minV) > 1 + std::log2(width) ||
-              *(children[1]->minV) > width)
+          if (CONSTANTBV::Set_Max(c1->minV) > 1 + std::log2(width) ||
+              *(c1->minV) > width)
           {
             // The maximum is zero.
             CONSTANTBV::BitVector_Flip(result->maxV);
           }
           else
           {
-            unsigned shift_amount = *(children[1]->minV);
-            CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+            unsigned shift_amount = *(c1->minV);
+            CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
             while (shift_amount-- > 0)
             {
               CONSTANTBV::BitVector_shift_right(result->maxV, 0);
@@ -627,15 +622,15 @@ namespace stp
           }
 
           // The minimum result is the minimum >> (maximum shift).
-          if (CONSTANTBV::Set_Max(children[1]->maxV) > 1 + std::log2(width) ||
-              *(children[1]->maxV) > width)
+          if (CONSTANTBV::Set_Max(c1->maxV) > 1 + std::log2(width) ||
+              *(c1->maxV) > width)
           {
             // The mimimum is zero. (which it's set to by default.).
           }
           else
           {
-            unsigned shift_amount = *(children[1]->maxV);
-            CONSTANTBV::BitVector_Copy(result->minV, children[0]->minV);
+            unsigned shift_amount = *(c1->maxV);
+            CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
             while (shift_amount-- > 0)
               CONSTANTBV::BitVector_shift_right(result->minV, 0);
           }
@@ -654,9 +649,10 @@ namespace stp
 
           for (size_t i = 0; i < children.size(); i++)
           {
-            if (children[i] == NULL)
+            if (children[i]->isComplete())
             {
-              result = NULL;
+              delete result;
+              result = nullptr;
               break;
             }
 
@@ -669,7 +665,8 @@ namespace stp
                                       children[i]->minV, &min_carry);
             if (min_carry != max_carry)
             {
-              result = NULL;
+              delete result;
+              result = nullptr;
               break;
             }
           }
@@ -679,20 +676,16 @@ namespace stp
       case BVCONCAT:
         if ((knownC0 || knownC1))
         {
-          UnsignedInterval* c0 =
-              knownC0 ? children[0]
-                      : freshUnsignedInterval(n[0].GetValueWidth());
-          UnsignedInterval* c1 =
-              knownC1 ? children[1]
-                      : freshUnsignedInterval(n[1].GetValueWidth());
+          const UnsignedInterval* c0 = children[0];
+          const UnsignedInterval* c1 = children[1];
 
           CBV min = CONSTANTBV::BitVector_Concat(c0->minV, c1->minV);
           CBV max = CONSTANTBV::BitVector_Concat(c0->maxV, c1->maxV);
 
-          likeAutoPtr.push_back(min);
-          likeAutoPtr.push_back(max);
-
           result = createInterval(min, max);
+
+          CONSTANTBV::BitVector_Destroy(min);
+          CONSTANTBV::BitVector_Destroy(max);
         }
         break;
 
@@ -710,39 +703,68 @@ namespace stp
     }
 
     if (result != NULL && result->isComplete())
+    {
+      delete result;
       result = NULL;
+    }
 
     if (result != NULL)
     {
       result->checkUnsignedInvariant();
     }
 
-    // result will often be null (which we take to mean the maximum range).
-    visited.insert(make_pair(n, result));
     return result;
   }
 
+  UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
+                          NodeToUnsignedIntervalMap& visited)
+  {
+    {
+      NodeToUnsignedIntervalMap::iterator it;
+      if ((it = visited.find(n)) != visited.end())
+        return it->second;
+    }
+
+    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
+      return NULL; // Never know anything about these.
+
+    const auto number_children = n.Degree();
+    vector<const UnsignedInterval*> children;
+
+    children.reserve(number_children);
+
+    for (unsigned i = 0; i < number_children; i++)
+    {
+      UnsignedInterval* r = visit(n[i], visited);
+      if (r != NULL)
+      {
+        assert(!r->isComplete());
+      }
+      children.push_back(r);
+    }
+
+    UnsignedInterval* result = dispatchToTransferFunctions(n,children);
+
+    // result will often be null (which we take to mean the maximum range).
+    visited.insert({n, result});
+    return result;
+  }
 
   UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
   {
-    littleZero = makeCBV(1);
-    littleOne = makeCBV(1);
+    littleZero = getEmptyCBV(1);
+    littleOne = CONSTANTBV::BitVector_Create(1, true);
     CONSTANTBV::BitVector_Fill(littleOne);
-    nf = bm.defaultNodeFactory;
   }
 
   UnsignedIntervalAnalysis::~UnsignedIntervalAnalysis()
   {
-    for (size_t i = 0; i < toDeleteLater.size(); i++)
-      delete toDeleteLater[i];
+    for (auto it : emptyIntervals)
+      if (it.second != NULL)
+        delete it.second;
 
-    for (size_t i = 0; i < likeAutoPtr.size(); i++)
-      CONSTANTBV::BitVector_Destroy(likeAutoPtr[i]);
-
-    likeAutoPtr.clear();
-    toDeleteLater.clear();
+    for (auto it : emptyCBV)
+      if (it.second != NULL)
+        CONSTANTBV::BitVector_Destroy(it.second);
   }
-
 }
-
-

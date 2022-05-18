@@ -317,6 +317,8 @@ public:
 
   // Result needs to be explicitly deleted.
   DLL_PUBLIC stp::CBV GetBVConst() const;
+  DLL_PUBLIC stp::CBV GetMaxBVConst() const;
+  DLL_PUBLIC stp::CBV GetMinBVConst() const;
 
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;

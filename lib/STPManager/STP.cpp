@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
 
-#include "stp/Simplifier/UpwardsCBitP.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
@@ -45,9 +45,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
-#include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Simplifier/StrengthReduction.h"
 #include <memory>
 using std::cout;
 
@@ -62,6 +62,7 @@ const static string pl_message = "After Pure Literals. ";
 const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
+const static string domain_message = "After Domain Analysis. ";
 
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input)
@@ -150,13 +151,16 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   return result;
 }
 
-ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
-                              PropagateEqualities* pe)
+ASTNode STP::callSizeReducing(ASTNode inputToSat, 
+                              BVSolver* bvSolver,
+                              PropagateEqualities* pe,
+                              NodeDomainAnalysis* domain
+                              )
 {
   while (true)
   {
     ASTNode last = inputToSat;
-    inputToSat = sizeReducing(last, bvSolver, pe);
+    inputToSat = sizeReducing(last, bvSolver, pe, domain);
     if (last == inputToSat)
       break;
   }
@@ -165,8 +169,11 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
 }
 
 // These transformations should never increase the size of the DAG.
-ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
-                          PropagateEqualities* pe)
+ASTNode STP::sizeReducing(ASTNode inputToSat, 
+                          BVSolver* bvSolver,
+                          PropagateEqualities* pe,
+                          NodeDomainAnalysis* domain
+                          )
 {
 
   if (bm->UserFlags.propagate_equalities)
@@ -182,19 +189,18 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.enable_use_intervals)
+  if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
   {
-    UnsignedIntervalAnalysis intervals(*bm);
-    inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
-    bm->ASTNodeStats(int_message.c_str(), inputToSat);
-  }
+    domain->buildMap(inputToSat);
 
-  if (bm->UserFlags.bitConstantProp_flag)
-  {
-    UpwardsCBitP cb(bm);
-    inputToSat = cb.topLevel(inputToSat);
-    inputToSat = simp->applySubstitutionMapAtTopLevel(inputToSat);
-    bm->ASTNodeStats(cb_message.c_str(), inputToSat);
+    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
+    StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
+    
+    inputToSat = sr.topLevel(inputToSat, *domain->getFixedMap());
+    inputToSat = sr.topLevel(inputToSat, *domain->getCbitMap());
+    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
+
+    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_pure_literals)
@@ -295,7 +301,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
   }
 
-
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
@@ -312,8 +317,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
+  std::unique_ptr<NodeDomainAnalysis> domain(new NodeDomainAnalysis(bm));
+
   // Run size reducing just once.
-  inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get());
+  inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
   long initial_difficulty_score = difficulty.score(inputToSat, bm);
 
   // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
@@ -325,7 +332,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (!arrayops && ( -1 == bm->UserFlags.size_reducing_fixed_point || initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {
     inputToSat =
-        callSizeReducing(inputToSat, bvSolver.get(), pe.get());
+        callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
   }
 
   long bitblasted_difficulty = -1;
@@ -466,11 +473,18 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.enable_use_intervals)
+  if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
   {
-    UnsignedIntervalAnalysis intervals(*bm);
-    inputToSat = intervals.topLevel_unsignedIntervals(inputToSat);
-    bm->ASTNodeStats(int_message.c_str(), inputToSat);
+    domain->buildMap(inputToSat);
+
+    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
+    StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
+    
+    inputToSat = sr.topLevel(inputToSat, *domain->getFixedMap());
+    inputToSat = sr.topLevel(inputToSat, *domain->getCbitMap());
+    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
+
+    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_pure_literals)
@@ -599,6 +613,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
+  //TODO should be replaced by the upwards cbitp cache.
   if (bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
