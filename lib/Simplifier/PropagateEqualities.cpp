@@ -235,12 +235,8 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
   ASTNode result = a;
 
   // Needs there to be no unapplied substititions.
-  if (simp->hasUnappliedSubstitutions())
-  {
-    result = simp->applySubstitutionMap(result);
-    simp->haveAppliedSubstitutionMap();
-  }
-
+  result = simp->applySubstitutionMapAtTopLevel(result);
+ 
   bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
   
   //if (AND == a.GetKind())
@@ -258,6 +254,8 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
   processCandidates();
 
   bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
+
+  result = simp->applySubstitutionMapAtTopLevel(result);
 
   return result;
 }

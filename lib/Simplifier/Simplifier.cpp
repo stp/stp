@@ -161,6 +161,11 @@ ASTNode Simplifier::applySubstitutionMap(const ASTNode& n)
   return substitutionMap.applySubstitutionMap(n);
 }
 
+ASTNode Simplifier::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
+{
+  return substitutionMap.applySubstitutionMapAtTopLevel(topLevel);
+}
+
 ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n);

@@ -34,41 +34,27 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <iostream>
-#include <map>
+#include <unordered_map>
 
 namespace stp
 {
 using simplifier::constantBitP::FixedBits;
 
+using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+
 class UpwardsCBitP // not copyable
 {
+  STPMgr& bm;
+  FixedBits* emptyBoolean;
+  std::unordered_map<unsigned, FixedBits*> emptyBitVector;
 
-public:
-  // Apply an upwards constant bit propagation, and do strength reduction using the results.
-  ASTNode topLevel(const ASTNode& top)
-  {
-    std::map<ASTNode, FixedBits*> visited;
-
-    visit(top, visited);
-
-    StrengthReduction sr(bm.defaultNodeFactory);
-    ASTNode result = sr.topLevel(top, visited);
-
-    for (auto it : visited)
-      if (it.second != NULL)
-        delete it.second;
-
-    return result;
-  }
-
-private:
   FixedBits* fresh(const ASTNode& n)
   {
     return new FixedBits(n.GetValueWidth() > 0 ? n.GetValueWidth() : 1,
                          (BOOLEAN_TYPE == n.GetType()));
   }
 
-  FixedBits* visit(const ASTNode& n, std::map<ASTNode, FixedBits*>& visited)
+  FixedBits* visit(const ASTNode& n, NodeToFixedBitsMap& visited)
   {
     {
       auto it = visited.find(n);
@@ -180,11 +166,8 @@ private:
     return r;
   }
 
-  STPMgr& bm;
-  FixedBits* emptyBoolean;
-  std::unordered_map<unsigned, FixedBits*> emptyBitVector;
-
 public:
+
   UpwardsCBitP(STPMgr* _bm) : bm(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
@@ -202,6 +185,26 @@ public:
     }
     delete emptyBoolean;
   }
+
+  ASTNode topLevel(const ASTNode& top)
+  {
+    NodeToFixedBitsMap visited;
+
+    bm.GetRunTimes()->start(RunTimes::ConstantBitPropagation);
+
+    visit(top, visited);
+    StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
+    ASTNode result = sr.topLevel(top, visited);
+
+    bm.GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
+
+    for (auto it : visited)
+      if (it.second != NULL)
+        delete it.second;
+
+    return result;
+  }
+
 };
 }
 

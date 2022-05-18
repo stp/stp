@@ -180,6 +180,18 @@ public:
     bitblast_simplification = 0;
   }
 
+  void disableSizeIncreasingSimplifications()
+  {
+     simplify_to_constants_only = true;
+     enable_ite_context = false;
+
+     // Can't get bigger so we won't need to revert.
+     array_difficulty_reversion = false;
+     difficulty_reversion = false;
+  }
+
+
+
   UserDefinedFlags()
   {
 

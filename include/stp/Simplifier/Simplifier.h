@@ -104,6 +104,9 @@ public:
 
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
   DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
+  
+  DLL_PUBLIC ASTNode applySubstitutionMapAtTopLevel(const ASTNode& topLevel) __attribute__((warn_unused_result));
+
 
   /****************************************************************
    * Simplification functions                                     *
