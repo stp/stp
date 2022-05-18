@@ -172,18 +172,11 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
   if (bm->UserFlags.propagate_equalities)
   {
     inputToSat = pe->topLevel(inputToSat);
-  }
-  
-  if (simp->hasUnappliedSubstitutions())
-  {
-    inputToSat = simp->applySubstitutionMap(inputToSat);
-    simp->haveAppliedSubstitutionMap();
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
-
+  
   if (bm->UserFlags.enable_unconstrained)
   {
-    // Remove unconstrained.
     RemoveUnconstrained r1(*bm);
     inputToSat = r1.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
@@ -198,33 +191,18 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
 
   if (bm->UserFlags.bitConstantProp_flag)
   {
-    bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
-
     UpwardsCBitP cb(bm);
     inputToSat = cb.topLevel(inputToSat);
-
-    bm->GetRunTimes()->stop(RunTimes::ConstantBitPropagation);
-
-    if (simp->hasUnappliedSubstitutions())
-    {
-      inputToSat = simp->applySubstitutionMap(inputToSat);
-      simp->haveAppliedSubstitutionMap();
-    }
-
+    inputToSat = simp->applySubstitutionMapAtTopLevel(inputToSat);
     bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
-  // Find pure literals.
   if (bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;
-    bool changed = fpl.topLevel(inputToSat, simp, bm);
-    if (changed)
-    {
-      inputToSat = simp->applySubstitutionMap(inputToSat);
-      simp->haveAppliedSubstitutionMap();
-      bm->ASTNodeStats(pl_message.c_str(), inputToSat);
-    }
+    fpl.topLevel(inputToSat, simp, bm);
+    inputToSat = simp->applySubstitutionMapAtTopLevel(inputToSat);
+    bm->ASTNodeStats(pl_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_always_true)
@@ -241,8 +219,8 @@ ASTNode STP::sizeReducing(ASTNode inputToSat, BVSolver* bvSolver,
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
   }
 
-
-  if (bm->UserFlags.wordlevel_solve_flag && bm->UserFlags.optimize_flag)
+  // I suspect this could increase the size.
+  if (bm->UserFlags.wordlevel_solve_flag)
   {
     inputToSat = bvSolver->TopLevelBVSolve(inputToSat, false);
     bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
@@ -430,7 +408,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     if (bm->UserFlags.optimize_flag)
     {
-      inputToSat = pe->topLevel(inputToSat);
+      if (bm->UserFlags.propagate_equalities)
+      {
+        inputToSat = pe->topLevel(inputToSat);
+        bm->ASTNodeStats(pe_message.c_str(), inputToSat);
+      }
+
 
       // Imagine:
       // The simplifier simplifies (0 + T) to T
@@ -442,13 +425,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       // But it shouldn't be T, it should be a constant.
       // Applying the substitution map fixes this case.
       //
-      if (simp->hasUnappliedSubstitutions())
-      {
-        inputToSat = simp->applySubstitutionMap(inputToSat);
-        simp->haveAppliedSubstitutionMap();
-      }
 
-      bm->ASTNodeStats(pe_message.c_str(), inputToSat);
       
       if (bm->UserFlags.simplify_to_constants_only)
       {    
@@ -456,7 +433,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
           if (bm->UserFlags.stats_flag)
                 cerr << "constants found:" << constants.size() << endl;
-
 
           ASTNodeMap cache;
           inputToSat = stp::SubstitutionMap::replace(inputToSat, constants, cache, bm->defaultNodeFactory);
@@ -468,7 +444,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
       if (bm->UserFlags.wordlevel_solve_flag)
       {
-        inputToSat = bvSolver->TopLevelBVSolve(inputToSat);
+        inputToSat = bvSolver->TopLevelBVSolve(inputToSat, !bm->UserFlags.simplify_to_constants_only);
         bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
       }
     }
@@ -497,15 +473,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats(int_message.c_str(), inputToSat);
   }
 
-  // Find pure literals.
   if (bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;
     bool changed = fpl.topLevel(inputToSat, simp, bm);
     if (changed)
     {
-      inputToSat = simp->applySubstitutionMap(inputToSat);
-      simp->haveAppliedSubstitutionMap();
+      inputToSat = simp->applySubstitutionMapAtTopLevel(inputToSat);
       bm->ASTNodeStats(pl_message.c_str(), inputToSat);
     }
   }
@@ -513,8 +487,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;
 
-  // Simplify using Ite context
-  if (bm->UserFlags.optimize_flag && bm->UserFlags.enable_ite_context)
+  if (bm->UserFlags.enable_ite_context)
   {
     UseITEContext iteC(bm);
     inputToSat = iteC.topLevel(inputToSat);
@@ -530,7 +503,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.enable_unconstrained)
   {
-    // Remove unconstrained.
     RemoveUnconstrained r(*bm);
     inputToSat = r.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);

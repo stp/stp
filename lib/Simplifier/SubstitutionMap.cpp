@@ -76,16 +76,23 @@ ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
   ASTNodeMap cache;
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, false, false);
 
-// NB. This is an expensive check. Remove it after it's been idempotent
-// for a while.
-#ifndef NDEBUG
-  cache.clear();
-  assert(result == replace(result, *SolverMap, cache, bm->defaultNodeFactory, false, false));
-#endif
-
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
   return result;
 }
+
+// Must be called on top level other wise not rewritten through properly.
+ASTNode SubstitutionMap::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
+{
+  if (!hasUnappliedSubstitutions())
+    return topLevel;
+
+  ASTNode result = applySubstitutionMap(topLevel);
+  
+  haveAppliedSubstitutionMap();
+
+  return result;
+}
+
 
 // not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)

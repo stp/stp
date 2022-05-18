@@ -42,6 +42,12 @@ using std::map;
 
 namespace stp
 {
+
+  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+  using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+
+
+
   void UnsignedIntervalAnalysis::print_stats()
   {
     std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: "
@@ -80,28 +86,28 @@ namespace stp
   ASTNode UnsignedIntervalAnalysis::topLevel_unsignedIntervals(const ASTNode& top)
   {
     propagatorNotImplemented = 0;
+    iterations=0;
 
     bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-    map<const ASTNode, UnsignedInterval*> visited;
-    visit(top, visited);
-    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
-    StrengthReduction sr(bm.defaultNodeFactory);
-    ASTNode r = sr.topLevel(top, visited);
+    NodeToUnsignedIntervalMap visited;
+    visit(top, visited);
 
     if (bm.UserFlags.stats_flag)
-    {
       print_stats();
-      sr.stats("UnsignedIntervalAnalysis");
-    }
 
-    return r;
+    StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
+    ASTNode result = sr.topLevel(top, visited);
+
+    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
+
+    return result;
   }
 
   UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
-                          map<const ASTNode, UnsignedInterval*>& visited)
+                          NodeToUnsignedIntervalMap& visited)
   {
-    map<const ASTNode, UnsignedInterval*>::iterator it;
+    NodeToUnsignedIntervalMap::iterator it;
     if ((it = visited.find(n)) != visited.end())
       return it->second;
 

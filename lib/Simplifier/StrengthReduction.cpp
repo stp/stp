@@ -22,25 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-/*
- *  Takes the result of an analysis and uses it to simplify, for example,
- *  if both operands of a signed division have the same MSB, it can be converted
- *  to an unsigned division, instead.
- */
-
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <iostream>
-#include <map>
 
 namespace stp
 {
-using std::make_pair;
-using simplifier::constantBitP::FixedBits;
+  using std::make_pair;
+  using simplifier::constantBitP::FixedBits;
 
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
@@ -92,7 +82,7 @@ using simplifier::constantBitP::FixedBits;
 
   //TODO merge these two toplevel funtions, they do the same thing..
   ASTNode StrengthReduction::topLevel(const ASTNode& top,
-                   const std::map<ASTNode, FixedBits*>& visited)
+                   const NodeToFixedBitsMap& visited)
   {
     ASTNodeMap fromTo;
 
@@ -227,23 +217,28 @@ using simplifier::constantBitP::FixedBits;
       }
     }
 
-    //stats();
+    ASTNode result = top;
 
-    if (fromTo.size() == 0)
-      return top;
+    if (uf->stats_flag)
+      stats();
 
-    ASTNodeMap cache;
-    return SubstitutionMap::replace(top, fromTo, cache, nf);
+    if (fromTo.size() > 0)
+    {
+      ASTNodeMap cache;
+      result = SubstitutionMap::replace(result, fromTo, cache, nf);
+    }
+
+    return result;
   }
 
   // Replace some of the things that unsigned intervals can figure out for us.
   // Reduce from signed to unsigned if possible.
   ASTNode StrengthReduction::topLevel(const ASTNode& top,
-                   const std::map<const ASTNode, UnsignedInterval*>& visited)
+                   const NodeToUnsignedIntervalMap& visited)
   {
     ASTNodeMap fromTo;
     ASTNodeMap onePass;
-    for (std::map<const ASTNode, UnsignedInterval*>::const_iterator it =
+    for (std::unordered_map<const ASTNode, UnsignedInterval*>::const_iterator it =
              visited.begin();
          it != visited.end(); it++)
     {
@@ -263,9 +258,9 @@ using simplifier::constantBitP::FixedBits;
           (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT ||
            k == SBVREM || k == BVSX))
       {
-        std::map<const ASTNode, UnsignedInterval*>::const_iterator l =
+        std::unordered_map<const ASTNode, UnsignedInterval*>::const_iterator l =
             visited.find(n[0]);
-        std::map<const ASTNode, UnsignedInterval*>::const_iterator r =
+        std::unordered_map<const ASTNode, UnsignedInterval*>::const_iterator r =
             visited.find(n[1]);
 
         bool lhs, rhs; // isFalse.
@@ -419,21 +414,25 @@ using simplifier::constantBitP::FixedBits;
       result = replace(top, onePass, cache);
     }
 
+    if (uf->stats_flag)
+      stats();
+
     if (fromTo.size() > 0)
     {
       ASTNodeMap cache;
-      return SubstitutionMap::replace(result, fromTo, cache, nf);
+      result = SubstitutionMap::replace(result, fromTo, cache, nf);
     }
 
     return result;
   }
 
-  StrengthReduction::StrengthReduction(NodeFactory* _nf) 
+  StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf) 
   {
     littleOne = CONSTANTBV::BitVector_Create(1, true);
     littleZero = CONSTANTBV::BitVector_Create(1, true);
     CONSTANTBV::BitVector_Fill(littleOne);
     nf = _nf;
+    uf = _uf;
 
     replaceWithConstant = 0;
     replaceWithSimpler = 0;

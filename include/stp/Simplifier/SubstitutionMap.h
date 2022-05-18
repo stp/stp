@@ -175,6 +175,8 @@ public:
   static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo,
                          ASTNodeMap& cache, NodeFactory* nf, bool stopAtArrays,
                          bool preventInfiniteLoops);
+
+  ASTNode applySubstitutionMapAtTopLevel(const ASTNode& n)  __attribute__((warn_unused_result));
 };
 }
 

@@ -154,9 +154,10 @@ void ExtraMain::create_options()
   simplification_options.add_options()("disable-simplifications",
                                        "disable all simplifications")(
       "switch-word,w", "switch off wordlevel solver")(
-      "disable-opt-inc,a", "disable potentially size-increasing optimisations")(
-      "disable-cbitp", "disable constant bit propagation")(
-      "disable-equality", "disable equality propagation")
+      "disable-opt-inc,a", "disable rewriting simplifier")(
+      "disable-cbitp", "disable constant bit propagation")
+      ("disable-equality", "disable equality propagation")
+      ("size-reducing-only", "size reducing simplifications only")
 
       ("unconstrained-variable-elimination", 
       BOOL_ARG(bm->UserFlags.enable_unconstrained),
@@ -205,7 +206,7 @@ void ExtraMain::create_options()
       BOOL_ARG(bm->UserFlags.difficulty_reversion),
       "Undo size increasing simplifications if they haven't made the problem simpler");
 
-      
+   
 
 
 
@@ -460,6 +461,11 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("disable-simplifications"))
   {
     bm->UserFlags.disableSimplifications();
+  }
+
+  if (vm.count("size-reducing-only"))
+  {
+    bm->UserFlags.disableSizeIncreasingSimplifications();
   }
 
   if (vm.count("disable-equality"))

@@ -62,6 +62,8 @@ class UnsignedIntervalAnalysis
 
 public:
 
+  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+
   UnsignedIntervalAnalysis(STPMgr& _bm);
   
   UnsignedIntervalAnalysis(const UnsignedIntervalAnalysis&) = delete;
@@ -72,7 +74,7 @@ public:
   // Replace some of the things that unsigned intervals can figure out for us.
   ASTNode topLevel_unsignedIntervals(const ASTNode& top);
   
-  UnsignedInterval* visit(const ASTNode& n, std::map<const ASTNode, UnsignedInterval*>& visited);
+  UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 
   void print_stats();
