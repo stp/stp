@@ -52,11 +52,10 @@ class PropagateEqualities : public NodeSimplifier
   const ASTNode ASTTrue, ASTFalse;
   const bool always_true;
 
-  std::unordered_set<uint64_t> alreadyVisited;
+  using IdSet =  std::unordered_set<uint64_t>;
+  using MapToNodeSet = std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > ;
 
-  typedef std::unordered_set<uint64_t> IdSet;
-  typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet > > MapToNodeSet;
-
+  IdSet alreadyVisited;
 
   void buildCandidateList(const ASTNode& a);
   void replaceIfPossible(int line, ASTNode& output, const ASTNode& lhs, const ASTNode& rhs);
