@@ -39,7 +39,7 @@ void log(std::string s)
 typedef std::unordered_set<uint64_t> IdSet;
 typedef std::unordered_map<uint64_t, uint64_t> IdToId;
 typedef std::unordered_map<uint64_t, IdSet> IdToIdSet;
-typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet > > MapToNodeSet;
+typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > MapToNodeSet;
 
 void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, ASTNodeSet& shared)
 {
@@ -114,14 +114,17 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     }
   }
 
+  // Without the id field, which we sort the priority queue on, the order that the rules were applied
+  // was not deterministic, giving diffent CNF.
   MapToNodeSet mapped;
+  int id =0;
 
   for (const auto& e: candidates)
   {
     IdSet visited;
     IdSet variables;
     intersection(e.second, visited, variables, allLhsVariables, cache);
-    mapped.insert(std::make_pair(e.first.GetNodeNum(), std::make_tuple(e.first, e.second, variables)));
+    mapped.insert(std::make_pair(e.first.GetNodeNum(), std::make_tuple(e.first, e.second, variables, id++)));
   }
 
   return mapped;
@@ -168,9 +171,15 @@ void PropagateEqualities::processCandidates()
   MapToNodeSet mapped;
   mapped = buildMapOfLHStoVariablesInRHS(allLhsVariables);
 
-  typedef std::tuple<ASTNode, ASTNode, const IdSet*> qType;
+  typedef std::tuple<ASTNode, ASTNode, const IdSet*, int> qType;
   auto cmp = [](qType left, qType right) 
-    { return std::get<2>(left)->size() > std::get<2>(right)->size(); };  
+    { 
+      if (std::get<2>(left)->size() > std::get<2>(right)->size())
+          return true;
+      if (std::get<2>(left)->size() == std::get<2>(right)->size())
+          return std::get<3>(left) > std::get<3>(right);
+      return false;
+    };  
   std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp);
 
   for (const auto& e: mapped)
@@ -178,7 +187,8 @@ void PropagateEqualities::processCandidates()
     const ASTNode& lhs = std::get<0>(e.second);
     const ASTNode& rhs = std::get<1>(e.second);
     const IdSet* varsInRHS = &(std::get<2>(e.second));
-    auto d = std::make_tuple(lhs,rhs,varsInRHS);
+    const int id = std::get<3>(e.second);
+    auto d = std::make_tuple(lhs,rhs,varsInRHS,id);
     q.push(d);
   }
 
