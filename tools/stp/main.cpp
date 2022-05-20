@@ -171,6 +171,10 @@ void ExtraMain::create_options()
       BOOL_ARG(bm->UserFlags.enable_flatten),
       "Enable sharing-aware flattening of >2 arity nodes")
 
+      ("split-extracts",
+      BOOL_ARG(bm->UserFlags.enable_split_extracts),
+      "Create new variables for some extracts")
+
       ("ite-context-simplifications", 
       BOOL_ARG(bm->UserFlags.enable_ite_context),
       "Use what is known to be true in an if-then-else node to simplify the true or false branches")

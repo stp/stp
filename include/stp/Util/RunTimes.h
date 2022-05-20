@@ -61,7 +61,8 @@ public:
     AlwaysTrue,
     Flatten,
     NodeDomainAnalysis,
-    StrengthReduction
+    StrengthReduction,
+    SplitExtracts
   };
 
   std::vector<std::string> CategoryNames = {"Transforming",
@@ -86,7 +87,9 @@ public:
                                             "Always True",
                                             "Sharing-aware Flattening",
                                             "Node Domain Analysis",
-                                            "Strength Reduction"};
+                                            "Strength Reduction",
+                                            "Spliting Extracts"};
+
 
   typedef std::pair<Category, long> Element;
 

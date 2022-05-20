@@ -27,3 +27,5 @@ AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
 AddSTPGTest(FindPureLiterals_Test.cpp)
 AddSTPGTest(Flatten_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
+AddSTPGTest(SplitExtracts_Test.cpp)
+
