@@ -34,6 +34,7 @@ add_library(simplifier OBJECT
     UnsignedIntervalAnalysis.cpp
     Flatten.cpp
     NodeDomainAnalysis.cpp
+    SplitExtracts.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp

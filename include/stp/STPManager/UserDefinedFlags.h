@@ -63,10 +63,12 @@ public:
   bool enable_use_intervals = true;
   bool enable_pure_literals = true;
   bool enable_always_true = false;
+  bool enable_split_extracts = true;
+  
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t bitblast_simplification = 0;
   int64_t size_reducing_fixed_point = 1000000;
-
+  
 
   bool simplify_to_constants_only = false;
 

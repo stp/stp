@@ -45,6 +45,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
+#include "stp/Simplifier/UnsignedIntervalAnalysis.h"
+#include "stp/Simplifier/SplitExtracts.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
 #include "stp/Simplifier/StrengthReduction.h"
@@ -63,6 +65,7 @@ const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
+const static string se_message = "After Split Extracts. ";
 
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input)
@@ -209,6 +212,13 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     fpl.topLevel(inputToSat, simp, bm);
     inputToSat = simp->applySubstitutionMapAtTopLevel(inputToSat);
     bm->ASTNodeStats(pl_message.c_str(), inputToSat);
+  }
+
+  if (bm->UserFlags.enable_split_extracts)
+  {
+    SplitExtracts se(*bm);
+    inputToSat = se.topLevel(inputToSat);
+    bm->ASTNodeStats(se_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_always_true)
