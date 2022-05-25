@@ -66,6 +66,18 @@ struct Context
     stp::GlobalParserInterface = &interface;
    }
    
+   bool present(const Kind k, const ASTNode& n)
+   {
+      if (n.GetKind() == k)
+        return true;
+
+      for (const auto& c: n)
+        if (present(k,c))
+          return true;
+
+      return false;
+   }
+
    ASTNode process(std::string input)
    {
       stp::SMT2ScanString((start_input + input).c_str());
@@ -80,6 +92,7 @@ struct Context
     }
 };
 
+// signed comparison converted to unsigned.
 TEST(StrengthReduction_Test , __LINE__)
 {
   const std::string input = R"(
@@ -98,6 +111,7 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_EQ(n.GetKind(), stp::BVGT);
 }
 
+// signed division converted to unsigned.
 TEST(StrengthReduction_Test , __LINE__)
 {
   const std::string input = R"(
@@ -105,8 +119,8 @@ TEST(StrengthReduction_Test , __LINE__)
       assert 
             ( = 
               (bvsdiv 
-                    ((_ zero_extend 1) v0)  
-                    ((_ zero_extend 1) v1) 
+                    (bvudiv v0 (_ bv3 20))  
+                    (bvudiv v1 (_ bv3 20))  
               )
             v2
             )
@@ -116,5 +130,27 @@ TEST(StrengthReduction_Test , __LINE__)
 
   Context c;
   ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::SBVDIV, n));
 }
 
+// plus to OR.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert 
+            ( = 
+              (bvadd
+                    (concat v0 (_ bv0 20))  
+                    (concat (_ bv0 20) v1 )  
+              )
+            (concat v2 v3)
+            )
+    )
+    
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVPLUS, n));
+}
