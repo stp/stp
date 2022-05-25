@@ -35,7 +35,9 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+
 #include <unordered_map>
 #include <string>
 
@@ -46,9 +48,9 @@ using simplifier::constantBitP::FixedBits;
 
 class StrengthReduction 
 {
-  unsigned replaceWithConstant;
-  unsigned replaceWithSimpler;
-  unsigned unimplementedReduction;
+  unsigned replaceWithConstant =0;
+  unsigned replaceWithSimpler =0;
+  unsigned unimplementedReduction =0;
 
   CBV littleOne;
   CBV littleZero;
@@ -58,6 +60,11 @@ class StrengthReduction
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
   ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
+
+  ASTNode visit(const ASTNode& n, stp::NodeDomainAnalysis& nda, ASTNodeMap& fromTo);
+  
+  ASTNode strengthReduction(const ASTNode& n, const NodeToFixedBitsMap& visited);
+  ASTNode strengthReduction(const ASTNode& n, const NodeToUnsignedIntervalMap& visited);
 
 public:
 
@@ -76,6 +83,10 @@ public:
   ASTNode topLevel(const ASTNode& top, const NodeToFixedBitsMap& visited);
   ASTNode topLevel(const ASTNode& top, const NodeToUnsignedIntervalMap& visited);
 
+  // New style invocation.
+  ASTNode topLevel(const ASTNode& top, NodeDomainAnalysis& nda);
+
+ 
     
   void stats(string name = "StrengthReduction");
 };
