@@ -31,7 +31,6 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include <iostream>
@@ -92,7 +91,7 @@ public:
         delete it.second;
   }
 
-   NodeToUnsignedIntervalMap* getFixedMap()
+   NodeToUnsignedIntervalMap* getIntervalMap()
    {
       return &toIntervals;
    }

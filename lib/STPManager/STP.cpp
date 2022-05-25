@@ -194,13 +194,9 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 
   if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
   {
-    domain->buildMap(inputToSat);
-
     bm->GetRunTimes()->start(RunTimes::StrengthReduction);
     StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
-    
-    inputToSat = sr.topLevel(inputToSat, *domain->getFixedMap());
-    inputToSat = sr.topLevel(inputToSat, *domain->getCbitMap());
+    inputToSat = sr.topLevel(inputToSat, *domain);
     bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
 
     bm->ASTNodeStats(domain_message.c_str(), inputToSat);
@@ -485,13 +481,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
   {
-    domain->buildMap(inputToSat);
-
     bm->GetRunTimes()->start(RunTimes::StrengthReduction);
     StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
-    
-    inputToSat = sr.topLevel(inputToSat, *domain->getFixedMap());
-    inputToSat = sr.topLevel(inputToSat, *domain->getCbitMap());
+    inputToSat = sr.topLevel(inputToSat, *domain);
     bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
 
     bm->ASTNodeStats(domain_message.c_str(), inputToSat);
