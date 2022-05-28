@@ -489,6 +489,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats(domain_message.c_str(), inputToSat);
   }
 
+  domain.reset(nullptr);
+
   if (bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;

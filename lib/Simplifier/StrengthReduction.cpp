@@ -148,7 +148,9 @@ namespace stp
     else if (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT || k == SBVREM || k == BVSX)
     {
       // If the leading bits are false then we can reduce from signed to
-      // unsigned comparison.
+      // unsigned comparison. This is all expressed more naturally using the 
+      // bit domain. So when information is copied between the two domains, we wont
+      // require this code - the reductions will be applied by the fixed-bit code.
       const auto l = visited.find(n[0]);
       const auto r = visited.find(n[1]);
 
@@ -267,17 +269,33 @@ namespace stp
               // replace with unsigned comparison.
               newN = nf->CreateNode(BVGT, n[0], n[1]);
               replaceWithSimpler++;
-              //std::cerr << n << *l << *r << newN << std::endl;
             }
-            else if (kind == SBVDIV)
+            else if (kind == SBVDIV || kind == SBVREM)
             {
-              unimplementedReduction++;
+              // replace with unsigned division / remainder.
+              ASTNode s = n[0];
+              ASTNode t = n[1];
+              const auto width = n.GetValueWidth();
+              
+              if (l->getValue(bw - 1))
+                s = nf->CreateTerm(stp::BVUMINUS, width, s);
+              
+              if (r->getValue(bw - 1))
+                t = nf->CreateTerm(stp::BVUMINUS, width, t);
+              
+              if (kind == SBVDIV)
+                newN = nf->CreateTerm(BVDIV, width, s, t);
+              else
+                newN = nf->CreateTerm(BVMOD, width, s, t);
+              
+              if (SBVDIV == kind && (l->getValue(bw - 1) != r->getValue(bw - 1)))
+                  newN = nf->CreateTerm(stp::BVUMINUS, width, newN);
+              if (SBVREM == kind && l->getValue(bw - 1))
+                  newN = nf->CreateTerm(stp::BVUMINUS, width, newN);
+
+              replaceWithSimpler++;
             }
             else if (kind == SBVMOD)
-            {
-              unimplementedReduction++;
-            }
-            else if (kind == SBVREM)
             {
               unimplementedReduction++;
             }

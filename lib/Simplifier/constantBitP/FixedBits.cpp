@@ -573,5 +573,21 @@ bool FixedBits::equals(const FixedBits& a, const FixedBits& b)
   }
   return true;
 }
+
+// a is "IN" the fixed bits..
+bool FixedBits::in(stp::CBV a)
+{
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (!isFixed(i))
+      continue;
+
+    if (!getValue(i) != !CONSTANTBV::BitVector_bit_test(a,i))
+      return false;
+  }
+  return true;
+}
+
+
 }
 }

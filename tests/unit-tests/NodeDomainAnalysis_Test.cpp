@@ -49,6 +49,7 @@ THE SOFTWARE.
   (push 1)
   )";
 
+
 struct Context
 {
    stp::STPMgr mgr;
@@ -62,7 +63,6 @@ struct Context
    domain(&mgr)
    { 
     mgr.defaultNodeFactory = &snf;
-    interface.startup();
     stp::GlobalParserBM = &mgr;
     stp::GlobalParserInterface = &interface;
    }
@@ -77,31 +77,44 @@ struct Context
       domain.buildMap(n);
     }
 };
-
-TEST(NodeDomainAnalysis_Test , CopyConstantToInterval)
+ 
+// fixed bits are constant, internval is null
+TEST(NodeDomainAnalysis_Test, __LINE__)
 {
+  CONSTANTBV::BitVector_Boot(); // TODO hack. needs to be run once before the constructors start allocating constantbvs.
   Context c;
 
   const auto width = 10;
-
-  //stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
-  //stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
-  //stp::UnsignedInterval b(min,max);
-
   stp::FixedBits a = stp::FixedBits::fromUnsignedInt(width,3);
 
   auto a_ptr = &a;
   stp::UnsignedInterval* b_ptr = nullptr;
 
   c.domain.harmonise(a_ptr, b_ptr);
-  
-  b_ptr->print();
 
-  ASSERT_EQ(a_ptr->isTotallyFixed(), true);
-  ASSERT_EQ(b_ptr->isConstant(), true);
+  ASSERT_TRUE(a.isTotallyFixed());
+  ASSERT_TRUE(b_ptr != nullptr && b_ptr->isConstant());
 }
 
-TEST(NodeDomainAnalysis_Test, FixedBitsPartial)
+// fixed bits are null, internval is costant.
+TEST(NodeDomainAnalysis_Test, __LINE__)
+{
+  Context c;
+
+  stp::FixedBits * a_ptr = nullptr;
+
+  ASTNode constant = c.mgr.CreateBVConst("1",10, 10); // hold a reference otherwise garbage collected.
+  stp::CBV cbv  = constant.GetBVConst();
+  stp::UnsignedInterval* b_ptr = new stp::UnsignedInterval(CONSTANTBV::BitVector_Clone(cbv), CONSTANTBV::BitVector_Clone(cbv));
+
+  c.domain.harmonise(a_ptr, b_ptr);
+
+  ASSERT_TRUE(a_ptr != NULL && a_ptr->isTotallyFixed());
+  ASSERT_TRUE(b_ptr->isConstant());
+}
+
+
+TEST(NodeDomainAnalysis_Test, __LINE__)
 {
   Context c;
   MTRand rand(10U);
@@ -111,7 +124,7 @@ TEST(NodeDomainAnalysis_Test, FixedBitsPartial)
     stp::FixedBits a = stp::FixedBits::createRandom(i+1,  30, rand);
     stp::FixedBits start =a;                        
 
-    auto a_ptr = &a;
+    auto a_ptr = new stp::FixedBits(a);
     stp::UnsignedInterval* b_ptr = nullptr;
 
     c.domain.harmonise(a_ptr, b_ptr);
@@ -120,8 +133,36 @@ TEST(NodeDomainAnalysis_Test, FixedBitsPartial)
     ASSERT_TRUE(stp::FixedBits::equals(start,a)); 
 
     // Min and max should be the same
-    ASSERT_EQ(CONSTANTBV::BitVector_Compare(b_ptr->minV, a_ptr->GetMinBVConst()),0);
-    ASSERT_EQ(CONSTANTBV::BitVector_Compare(b_ptr->maxV, a_ptr->GetMaxBVConst()),0);
+    if (a_ptr != nullptr && b_ptr != nullptr)
+    {
+      ASSERT_EQ(CONSTANTBV::BitVector_Compare(b_ptr->minV, a_ptr->GetMinBVConst()),0);
+      ASSERT_EQ(CONSTANTBV::BitVector_Compare(b_ptr->maxV, a_ptr->GetMaxBVConst()),0);
+    }
+
+    delete a_ptr;
+    delete b_ptr;
   }
+}
+
+
+TEST(NodeDomainAnalysis_Test, __LINE__)
+{
+  Context c;
+
+  const auto width =2;
+
+  stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  stp::UnsignedInterval b(min,max);
+
+  stp::FixedBits a = stp::FixedBits::fromUnsignedInt(width,3);
+
+  auto a_ptr = &a;
+  stp::UnsignedInterval* b_ptr = nullptr;
+
+  c.domain.harmonise(a_ptr, b_ptr);
+  
+  ASSERT_EQ(a_ptr->isTotallyFixed(), true);
+  ASSERT_EQ(b_ptr->isConstant(), true);
 }
 

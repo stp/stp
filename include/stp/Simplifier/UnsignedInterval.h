@@ -46,15 +46,20 @@ struct UnsignedInterval
   {
     minV = _min;
     maxV = _max;
-    assert(minV != NULL);
-    assert(maxV != NULL);
-    assert(size_(minV) == size_(maxV));
+    checkUnsignedInvariant();
+  }
+
+  UnsignedInterval(unsigned width)
+  {
+    minV = CONSTANTBV::BitVector_Create(width, true);
+    maxV = CONSTANTBV::BitVector_Create(width, true);
+    CONSTANTBV::BitVector_Fill(maxV);
   }
 
   ~UnsignedInterval()
   {
-   //CONSTANTBV::BitVector_Destroy(minV);
-   //CONSTANTBV::BitVector_Destroy(maxV); 
+   CONSTANTBV::BitVector_Destroy(minV);
+   CONSTANTBV::BitVector_Destroy(maxV); 
   }
 
   UnsignedInterval(UnsignedInterval const&) = delete;
@@ -70,7 +75,9 @@ struct UnsignedInterval
   }
 
   bool isConstant() const
-  { return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); }
+  { 
+    return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); 
+  }
 
   bool isComplete() const
   {
@@ -87,6 +94,7 @@ struct UnsignedInterval
   {
     CONSTANTBV::BitVector_Empty(minV);
     CONSTANTBV::BitVector_Fill(maxV);
+    checkUnsignedInvariant();
   }
 
   bool replaceMinIfTightens(CBV min)
@@ -113,17 +121,16 @@ struct UnsignedInterval
       return false;
   }
 
-
   void checkUnsignedInvariant() const
   {
+    assert(minV != NULL);
+    assert(maxV != NULL);
+    assert(size_(minV) == size_(maxV));
     assert(CONSTANTBV::BitVector_Lexicompare(minV, maxV) <= 0);
-
-    // We use NULL to represent the complete domain.
-    assert(!isComplete());
   }
 
   // If the interval is interpreted as a clockwise interval.
-  bool crossesSignedUnsigned(int width)
+  bool crossesSignedUnsigned(int width) const
   {
     bool minMSB = CONSTANTBV::BitVector_bit_test(minV, width - 1);
     bool maxMSB = CONSTANTBV::BitVector_bit_test(maxV, width - 1);

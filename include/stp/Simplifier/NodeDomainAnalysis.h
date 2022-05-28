@@ -51,7 +51,6 @@ class NodeDomainAnalysis
   FixedBits* emptyBoolean;
   std::unordered_map<unsigned, FixedBits*> emptyBitVector;
  
-
   FixedBits* fresh(const ASTNode& n)
   {
     return new FixedBits(n.GetValueWidth() > 0 ? n.GetValueWidth() : 1,
@@ -67,6 +66,10 @@ class NodeDomainAnalysis
 
   UnsignedIntervalAnalysis intervalAnalysis;
 
+  unsigned todo = 0;
+  unsigned tighten = 0;
+
+  void stats();
 public:
 
   NodeDomainAnalysis(STPMgr* _bm) : bm(*_bm), intervalAnalysis(*_bm)
@@ -89,6 +92,8 @@ public:
     for (auto it : toFixedBits)
       if (it.second != NULL)
         delete it.second;
+
+    stats();
   }
 
    NodeToUnsignedIntervalMap* getIntervalMap()

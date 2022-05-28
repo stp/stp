@@ -81,7 +81,7 @@ public:
   UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 
-  void print_stats();
+  void stats();
 };
 }
 
