@@ -45,7 +45,7 @@ namespace stp
 
   using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
-  void UnsignedIntervalAnalysis::print_stats()
+  void UnsignedIntervalAnalysis::stats()
   {
     std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: "
               << propagatorNotImplemented << std::endl;
@@ -114,7 +114,7 @@ namespace stp
     visit(top, visited);
 
     if (bm.UserFlags.stats_flag)
-      print_stats();
+      stats();
 
     StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
     ASTNode result = sr.topLevel(top, visited);
@@ -766,5 +766,7 @@ namespace stp
     for (auto it : emptyCBV)
       if (it.second != NULL)
         CONSTANTBV::BitVector_Destroy(it.second);
+
+    CONSTANTBV::BitVector_Destroy(littleOne);
   }
 }

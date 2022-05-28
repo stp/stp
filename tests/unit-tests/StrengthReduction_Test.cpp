@@ -108,7 +108,7 @@ TEST(StrengthReduction_Test , __LINE__)
 
   Context c;
   ASTNode n = c.process(input);
-  ASSERT_EQ(n.GetKind(), stp::BVGT);
+  ASSERT_TRUE(c.present(stp::BVGT, n));
 }
 
 // signed division converted to unsigned.
@@ -131,7 +131,31 @@ TEST(StrengthReduction_Test , __LINE__)
   Context c;
   ASTNode n = c.process(input);
   ASSERT_FALSE(c.present(stp::SBVDIV, n));
+  ASSERT_TRUE(c.present(stp::BVDIV, n));
 }
+
+// Signed division is removed
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert 
+            ( = 
+              (bvsdiv
+                    (concat  (_ bv1 1 ) v0)  
+                    (concat  (_ bv1 1 ) v1)  
+              )
+            (concat  (_ bv1 1 ) v2)  
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::SBVDIV, n));
+  ASSERT_TRUE(c.present(stp::BVDIV, n));
+}
+
 
 // plus to OR.
 TEST(StrengthReduction_Test , __LINE__)
@@ -154,3 +178,25 @@ TEST(StrengthReduction_Test , __LINE__)
   ASTNode n = c.process(input);
   ASSERT_FALSE(c.present(stp::BVPLUS, n));
 }
+
+// Signed shift is converted to normal shift.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert 
+            ( = 
+              (bvashr
+                    (bvudiv v0 (_ bv3 20))  
+                    v1
+              )
+            v2
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::BVRIGHTSHIFT, n));
+}
+

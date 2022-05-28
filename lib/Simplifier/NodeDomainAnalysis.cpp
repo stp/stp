@@ -26,10 +26,18 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
+namespace simplifier
+{
+  namespace constantBitP
+  {
+    Result fix(FixedBits& b, stp::CBV low, stp::CBV high);
+  }
+}
+
 namespace stp
 {
 
-  // True if the two domains have an intersection.
+  // True if the two domains have an intersection, i.e. share >=1 value.
   bool intersects(FixedBits * bits, UnsignedInterval * interval)
   {
    if (bits == nullptr || interval == nullptr)
@@ -52,48 +60,132 @@ namespace stp
     return result;
   }
 
-  // Trim so the min/max of each domain matches. 
+  // Trim so the min/max of both domains are consistent with each other.
   void NodeDomainAnalysis::harmonise(FixedBits * &bits, UnsignedInterval * &interval)
   {
       if (bits == nullptr && interval == nullptr)
-        return; // nothing to do.
+        return; // no information, nothing can be done..
 
-      bool changed= false;
+      if (bits != nullptr && interval != nullptr)
+      {
+        assert(intersects(bits, interval));
 
+        if (bits->isTotallyFixed() && interval->isConstant())
+          return; // full information already.
+      }
+
+      bool changed=false;
+
+      // Tighten the intervals using the fixed bit information.
       if (bits != nullptr)
       {
-        // Get the minimum and maximum from the fixedbits
-        // Change the unsigned interval to them if they're tigher.
-        
+        const auto width = bits->getWidth();
+
+        if (interval == nullptr) 
+            interval = new UnsignedInterval(width);
+
+        // (1) Cheap attempt to tighten intervals.
         CBV max = bits->GetMaxBVConst();
         CBV min = bits->GetMinBVConst();
-        
-        if (interval == nullptr) 
-        {
-            interval = new UnsignedInterval(min,max);
-            changed =true;
-        }
-        else
-        {
-          changed = interval->replaceMaxIfTightens(max);
-          changed = interval->replaceMinIfTightens(min) || changed;
+        if (interval->replaceMaxIfTightens(max))
+          tighten++;
+        if (interval->replaceMinIfTightens(min))
+          tighten++;
+        CONSTANTBV::BitVector_Destroy(min);
+        CONSTANTBV::BitVector_Destroy(max);
 
-          CONSTANTBV::BitVector_Destroy(min);
+        // (2) More comprehensive is required because cheap (1) isn't enough.
+        if(!bits->in(interval->maxV))
+        {
+          const stp::CBV max = bits->GetMaxBVConst();
+          assert( width > 1 ); // i don't think can come in here otherwise.
+          
+          stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
+          bool reduced = false;
+          for (int i = width-1; i >=0 ; i--)
+          {
+            const bool bit = CONSTANTBV::BitVector_bit_test(interval->maxV, i);
+            if (bits->isFixed(i))
+            {
+              if (bits->getValue(i))
+              {
+                  CONSTANTBV::BitVector_Bit_On(result,i);
+                  if (!bit && !reduced)
+                  {
+                     // We are increasing the result. So we need to reduce above.
+                    for (int j = i+1 ; j <= width-1 ; j++)         
+                    {
+                      if (bits->isFixed(j))   
+                        continue;
+                      const bool bv = CONSTANTBV::BitVector_bit_test(interval->maxV, j);
+                      if (bv)
+                      {
+                        CONSTANTBV::BitVector_Bit_Off(result,j);
+                        reduced = true;
+                        break;
+                      }
+                      else
+                        CONSTANTBV::BitVector_Bit_On(result,j);
+                    }
+                    assert(reduced);
+                  }
+              }
+              else
+              {
+                  CONSTANTBV::BitVector_Bit_Off(result,i);
+                  if (bit)
+                    reduced=true;
+              }
+            }
+            else
+            {
+              if (reduced || bit)
+                 CONSTANTBV::BitVector_Bit_On(result,i);
+              else
+                CONSTANTBV::BitVector_Bit_Off(result,i);
+            }
+          }
+
+          // The old max must be greater or equal to the new max.
+          assert (CONSTANTBV::BitVector_Lexicompare(max, result) > 0); 
+          assert (bits->in(result)); 
+
+          interval->replaceMaxIfTightens(result);
+          CONSTANTBV::BitVector_Destroy(result);
           CONSTANTBV::BitVector_Destroy(max);
+          tighten++;
+        }
+        if(!bits->in(interval->minV))
+        {
+            //TODO - still need to do it on the minimimum.
+            todo++;
         }
       }
-      
+    
       if (interval != nullptr)
       {
-          // differently to the previous case, it's possible to have an interval with a complete fixedbits.
+        if (bits == nullptr)
+        {
+          bits = new FixedBits(interval->getWidth(),false); /// TODO do we really need to know if it's boolean??
+        }
+        const auto last = bits->countFixed();
+        simplifier::constantBitP::fix(*bits, interval->minV, interval->maxV);
+        if (bits->countFixed() != last)
+        {
+          changed = true;
+          tighten++;
+        }
+        if (bits->countFixed() == 0)
+        {
+          delete bits;
+          bits = nullptr;
+        }
       }
-
-      //if(changed)
-        //harmonise(bits,interval);
-
+    
       assert(intersects(bits, interval));
+      if (changed)
+        harmonise(bits, interval);
   }
-
 
   std::pair<FixedBits*, UnsignedInterval*> NodeDomainAnalysis::buildMap(const ASTNode& n)
   {
@@ -239,5 +331,16 @@ namespace stp
     FixedBits* r = emptyBitVector[n.GetValueWidth()];
     assert(r->isTotallyUnfixed());
     return r;
+  }
+
+  void NodeDomainAnalysis::stats()
+  {
+    if (bm.UserFlags.stats_flag)
+    {
+      std::cerr << "{NodeDomainAnalysis} TODO:" << todo << std::endl;
+      std::cerr << "{NodeDomainAnalysis} Tightened:" << tighten << std::endl;
+
+      intervalAnalysis.stats();
+    }
   }
 }
