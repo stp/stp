@@ -93,6 +93,10 @@ public:
       if (it.second != NULL)
         delete it.second;
 
+    for (auto it : toIntervals)
+      if (it.second != NULL)
+        delete it.second;
+
     stats();
   }
 

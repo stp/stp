@@ -142,6 +142,86 @@ struct UnsignedInterval
       return CONSTANTBV::BitVector_Compare(minV, maxV) > 0;
     return false;
   }
+
+  // Splits the interval at the poles, so that segments are entirely within a hemisphere.
+  static void split(const UnsignedInterval *a, std::vector<UnsignedInterval*>& a_vec)
+  {
+    const unsigned width = a->getWidth(); 
+
+    CBV zero = CONSTANTBV::BitVector_Create(width, true); 
+    
+    if (CONSTANTBV::BitVector_is_empty(a->minV) && !CONSTANTBV::BitVector_is_empty(a->maxV))
+    {
+      // Split zero into it's own segment if it's the minimum.
+       UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(zero), CONSTANTBV::BitVector_Clone(zero));
+       a_vec.push_back(split0);
+
+       CONSTANTBV::BitVector_increment(zero);
+       UnsignedInterval * split1 = new UnsignedInterval(zero, CONSTANTBV::BitVector_Clone(a->maxV));
+       split(split1,a_vec);
+       delete split1;
+       return;
+    }
+
+    if (!CONSTANTBV::BitVector_is_empty(a->minV) && CONSTANTBV::BitVector_is_empty(a->maxV))
+    {
+       // Split zero into it's own segment if it's the maximum.
+       UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(zero), CONSTANTBV::BitVector_Clone(zero));
+       a_vec.push_back(split0);
+
+       CONSTANTBV::BitVector_decrement(zero);
+       UnsignedInterval * split1 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), zero);
+       split(split1,a_vec);
+       delete split1;
+       return;
+    }
+
+    if (a->in(zero) && !CONSTANTBV::BitVector_is_empty(a->minV))
+    {
+      // Split at zero if it's in the middle somewhere.
+       CBV negativeOne = CONSTANTBV::BitVector_Create(width, true);
+       CONSTANTBV::BitVector_Fill(negativeOne);
+
+       UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), negativeOne);
+       UnsignedInterval * split1 = new UnsignedInterval(zero, CONSTANTBV::BitVector_Clone(a->maxV));
+       split(split0,a_vec);
+       split(split1,a_vec);
+       delete split0;
+       delete split1;
+       return;
+    }
+    CONSTANTBV::BitVector_Destroy(zero);
+
+    CBV signedMin = CONSTANTBV::BitVector_Create(width, true);
+    CONSTANTBV::BitVector_Bit_On(signedMin,width-1);
+    if (a->in(signedMin) && (CONSTANTBV::BitVector_Compare(a->minV,signedMin)) != 0)
+    {
+        // Split the signed minimum into it's own segment.
+        CBV unsignedMax = CONSTANTBV::BitVector_Clone(signedMin);
+        CONSTANTBV::BitVector_decrement(unsignedMax);
+
+        UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), unsignedMax);
+        UnsignedInterval * split1 = new UnsignedInterval(signedMin, CONSTANTBV::BitVector_Clone(a->maxV));     
+        split(split0,a_vec);
+        split(split1,a_vec);
+        delete split0;
+        delete split1;
+        return;
+    }   
+    CONSTANTBV::BitVector_Destroy(signedMin);
+
+    a_vec.push_back(new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), CONSTANTBV::BitVector_Clone(a->maxV)));
+  }
+
+  bool in(const CBV c) const
+  {
+    assert(bits_(c) == getWidth());
+
+    return (CONSTANTBV::BitVector_Lexicompare(c, minV) >= 0 && CONSTANTBV::BitVector_Lexicompare(c, maxV) <= 0);
+
+  }
+
+
 };
 }
 #endif
