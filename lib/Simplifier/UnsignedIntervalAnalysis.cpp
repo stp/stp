@@ -195,44 +195,52 @@ namespace stp
         break;
 
       case BVGT:
-      case BVSGT: // OVER-APPROXIMATION
-        if (knownC1 || knownC0)
         {
-          const unsigned bitwidth = n[0].GetValueWidth();
-
-          const UnsignedInterval *c0 =children[0];
-          const UnsignedInterval *c1 =children[1];
+          const UnsignedInterval *c0 = children[0];
+          const UnsignedInterval *c1 = children[1];
 
           if (CONSTANTBV::BitVector_Lexicompare(c0->minV, c1->maxV) > 0)
             result = createInterval(littleOne, littleOne);
 
           if (CONSTANTBV::BitVector_Lexicompare(c1->minV, c0->maxV) >= 0)
             result = createInterval(littleZero, littleZero);
+        }
 
-          if (BVSGT == n.GetKind() && result != NULL)
-          {
-            bool c0Min = CONSTANTBV::BitVector_bit_test(c0->minV, bitwidth - 1);
-            bool c0Max = CONSTANTBV::BitVector_bit_test(c0->maxV, bitwidth - 1);
+        break;
 
-            bool c1Min = CONSTANTBV::BitVector_bit_test(c1->minV, bitwidth - 1);
-            bool c1Max = CONSTANTBV::BitVector_bit_test(c1->maxV, bitwidth - 1);
-
-            // BVGT xor MSB xor MSB
-            if ((c0Min == c0Max) && (c1Min == c1Max))
+      case BVSGT: 
+        {
+          vector<UnsignedInterval*> a_vec, b_vec;
+          UnsignedInterval::split(children[0],a_vec); // split at the poles
+          UnsignedInterval::split(children[1],b_vec); 
+             
+          bool one = false;
+          bool zero = false;        
+          for (const auto& a : a_vec)
+            for (const auto& b : b_vec) /// compare all pairs.
             {
-              assert(result->isConstant());
-
-              if ((c0Min != c1Min) !=
-                  CONSTANTBV::BitVector_bit_test(result->minV, 0))
-                result = createInterval(littleOne, littleOne);
+              if (CONSTANTBV::BitVector_Compare(a->minV, b->maxV) > 0) // signed comparison.
+                one = true;
+              else if (CONSTANTBV::BitVector_Compare(b->minV, a->maxV) >= 0)
+                zero = true;
               else
-                result = createInterval(littleZero, littleZero);
-
-              //              std::cerr << c0Min << c1Min << CONSTANTBV::BitVector_bit_test(result->minV,0) << std::endl;
+              {
+                one = true;
+                zero = true;
+                break;
+              }
             }
-            else
-              result = freshUnsignedInterval(1);
-          }
+
+          if (one && !zero)
+            result = createInterval(littleOne, littleOne);
+
+          if (!one && zero)
+            result = createInterval(littleZero, littleZero);
+
+          for (const auto& a : a_vec)
+            delete a;
+          for (const auto& b : b_vec)
+            delete b;     
         }
         break;
 
@@ -596,7 +604,7 @@ namespace stp
         break;
       }
 
-      case BVRIGHTSHIFT: //OVER-APPROXIMATION
+      case BVRIGHTSHIFT:
         if (knownC0 || knownC1)
         {
           result = freshUnsignedInterval(width);
