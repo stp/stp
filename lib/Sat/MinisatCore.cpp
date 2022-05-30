@@ -70,7 +70,7 @@ bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
 // *Doesn't solve*, just does a single unit propagate.
 // returns false if UNSAT.
 bool MinisatCore::propagateWithAssumptions(
-    const stp::SATSolver::vec_literals& assumps)
+        const stp::SATSolver::vec_literals& assumps)
 {
   if (!s->simplify())
     return false;
@@ -78,7 +78,7 @@ bool MinisatCore::propagateWithAssumptions(
   setMaxConflicts(0);
   Minisat::lbool ret = s->solveLimited(assumps);
   assert(s->conflicts ==0);
-  return ret != (Minisat::lbool)Minisat::l_False;
+  return ret != (Minisat::lbool)l_False;
 }
 
 bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
@@ -88,12 +88,12 @@ bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)Minisat::l_Undef)
+  if (ret == (Minisat::lbool)l_Undef)
   {
     timeout_expired = true;
   }
 
-  return ret == (Minisat::lbool)Minisat::l_True;
+  return ret == (Minisat::lbool)l_True;
 }
 
 uint8_t MinisatCore::modelValue(uint32_t x) const
