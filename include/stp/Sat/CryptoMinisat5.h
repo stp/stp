@@ -75,9 +75,9 @@ public:
   virtual void enableRefinement(const bool enable);
 
   // nb CryptoMiniSat has different literal values to the other minisats.
-  virtual lbool true_literal() { return ((uint8_t)1); }
-  virtual lbool false_literal() { return ((uint8_t)-1); }
-  virtual lbool undef_literal() { return ((uint8_t)0); }
+  virtual lbool true_literal() const { return ((uint8_t)1); }
+  virtual lbool false_literal() const { return ((uint8_t)-1); }
+  virtual lbool undef_literal() const { return ((uint8_t)0); }
 
   uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
 

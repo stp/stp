@@ -472,6 +472,19 @@ if (USE_RISS)
 endif()
 
 # -----------------------------------------------------------------------------
+# Setup Cadical
+# -----------------------------------------------------------------------------
+option(USE_CADICAL "Try to use Cadical" OFF)
+add_feature_info(Riss USE_CADICAL "Enables Cadical solver")
+
+if (USE_CADICAL)
+    set(CADICAL_DIR "/home/thansen/solvers/cadical" CACHE PATH "Path to directory")
+    add_definitions(-DUSE_CADICAL)
+    include_directories(${CADICAL_DIR}/)        # should point to the base directory: ~/git/cadical/
+    link_libraries(${CADICAL_DIR}/build/libcadical.a)  
+endif()
+
+# -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)

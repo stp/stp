@@ -37,6 +37,11 @@ THE SOFTWARE.
 #include "stp/Sat/Riss.h"
 #endif
 
+#ifdef USE_CADICAL
+#include "stp/Sat/Cadical.h"
+#endif
+
+
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SimplifyingMinisat.h"
 
@@ -95,6 +100,7 @@ SATSolver* STP::get_new_sat_solver()
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
       newS = new SimplifyingMinisat;
       break;
+      
     case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
 #ifdef USE_CRYPTOMINISAT
       newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
@@ -116,6 +122,16 @@ SATSolver* STP::get_new_sat_solver()
     case UserDefinedFlags::MINISAT_SOLVER:
       newS = new MinisatCore;
       break;
+    
+    case UserDefinedFlags::CADICAL_SOLVER:
+#ifdef USE_CADICAL
+      newS = new Cadical();
+      break;
+#else
+      std::cerr << "Cadical support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
     default:
       std::cerr << "ERROR: Undefined solver to use." << endl;
       exit(-1);

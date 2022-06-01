@@ -216,13 +216,18 @@ void ExtraMain::create_options()
 
   po::options_description solver_options("SAT Solver options");
   solver_options.add_options()
+#ifdef USE_CADICAL
+      ("cadical", "use cadical as the solver")
+#endif
+
 #ifdef USE_CRYPTOMINISAT
       ("cryptominisat",
        "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above "
-       "(default).")("threads",
-                     po::value<int>(&bm->UserFlags.num_solver_threads)
-                         ->default_value(bm->UserFlags.num_solver_threads),
-                     "Number of threads for cryptominisat")
+       "(default).")
+      ("threads",
+       po::value<int>(&bm->UserFlags.num_solver_threads)
+       ->default_value(bm->UserFlags.num_solver_threads),
+      "Number of threads for cryptominisat")
 #endif
 #ifdef USE_RISS
       ("riss",
@@ -455,12 +460,16 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
 
-#ifdef USE_CRYPTOMINISAT
   if (vm.count("cryptominisat"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
   }
-#endif
+
+  if (vm.count("cadical"))
+  {
+    bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+  }
+
 
   if (vm.count("disable-simplifications"))
   {

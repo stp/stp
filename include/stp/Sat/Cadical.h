@@ -1,7 +1,6 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: May, 2022
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,35 +22,30 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
- * Wraps around CORE minisat.
+ * Wraps around Cadical
  */
 
-#ifndef MINISATCORE_H_
-#define MINISATCORE_H_
+#ifndef CADICAL_H_
+#define CADICAL_H_
 
 #include "SATSolver.h"
-
-namespace Minisat
-{
-class Solver;
-}
+#include "src/cadical.hpp"
 
 namespace stp
 {
 #if defined(__GNUC__) || defined(__clang__)
-  class __attribute__((visibility("default"))) MinisatCore : public SATSolver
+  class __attribute__((visibility("default"))) Cadical : public SATSolver
 #else
-  class MinisatCore : public SATSolver
+  class Cadical : public SATSolver
 #endif
-
-
 {
-  Minisat::Solver* s;
+  uint32_t next_variable = 0;
+  CaDiCaL::Solver * s;
 
 public:
-  MinisatCore();
+  Cadical();
 
-  ~MinisatCore();
+  ~Cadical();
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
@@ -60,8 +54,6 @@ public:
   bool solve(bool& timeout_expired); // Search without assumptions.
 
   bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
-
-  virtual void setMaxConflicts(int64_t max_confl);
 
   virtual bool simplify(); // Removes already satisfied clauses.
 
@@ -77,13 +69,10 @@ public:
 
   void printStats() const;
 
-  virtual lbool true_literal() const { return ((uint8_t)0); }
-  virtual lbool false_literal() const { return ((uint8_t)1); }
+  virtual lbool true_literal() const { return ((uint8_t)1); }
+  virtual lbool false_literal() const { return ((uint8_t)-1); }
   virtual lbool undef_literal() const { return ((uint8_t)2); }
 
-  virtual int nClauses();
-
-  //bool unitPropagate(const vec_literals& ps);
 };
 }
 

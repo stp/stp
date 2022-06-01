@@ -88,9 +88,9 @@ public:
 
   virtual void setVerbosity(int v) = 0;
 
-  virtual lbool true_literal() = 0;
-  virtual lbool false_literal() = 0;
-  virtual lbool undef_literal() = 0;
+  virtual lbool true_literal() const = 0;
+  virtual lbool false_literal() const = 0;
+  virtual lbool undef_literal() const = 0;
 
   // The simplifying solvers shouldn't eliminate index / value variables.
   virtual void setFrozen(uint32_t /*var*/) {}
