@@ -45,7 +45,6 @@ bool Cadical::simplify()
  //   20 = UNSATISFIABLE
 bool Cadical::solve(bool& timeout_expired) 
 {
-  simplify(); // Do I need to call this explicitly?
   auto ret = s->solve();
   if (ret == 0)
   {
