@@ -405,8 +405,7 @@ namespace stp
   ASTNode StrengthReduction::topLevel(const ASTNode& top,  const NodeToUnsignedIntervalMap& visited)
   {
     ASTNodeMap fromTo;
-    for (std::unordered_map<const ASTNode, UnsignedInterval*>::const_iterator it = visited.begin();
-         it != visited.end(); it++)
+    for (auto it = visited.begin(); it != visited.end(); ++it)
     {
       const ASTNode& n = it->first;
 
