@@ -55,6 +55,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
 #include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Simplifier/Rewriting.h"
 #include <memory>
 using std::cout;
 
@@ -245,6 +246,13 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     Flatten flatten(bm,bm->defaultNodeFactory);
     inputToSat = flatten.topLevel(inputToSat);
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
+  }
+
+  if (bm->UserFlags.enable_sharing_aware_rewriting)
+  {
+    Rewriting rewrite(bm,bm->defaultNodeFactory);
+    inputToSat = rewrite.topLevel(inputToSat);
+    bm->ASTNodeStats("After Sharing-aware rewriting: ", inputToSat);
   }
 
   // I suspect this could increase the size.

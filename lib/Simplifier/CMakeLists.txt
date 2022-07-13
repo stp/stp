@@ -35,6 +35,7 @@ add_library(simplifier OBJECT
     Flatten.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp
+    Rewriting.cpp
 
     constantBitP/ConstantBitP_Arithmetic.cpp
     constantBitP/ConstantBitP_Boolean.cpp
