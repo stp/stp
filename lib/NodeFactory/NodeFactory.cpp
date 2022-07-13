@@ -174,6 +174,14 @@ ASTNode NodeFactory::CreateMaxConst(unsigned width)
   return bm.CreateMaxConst(width);
 }
 
+ASTNode NodeFactory::CreateSignedMinConst(unsigned width)
+{
+    stp::CBV c = CONSTANTBV::BitVector_Create(width, true);
+    CONSTANTBV::BitVector_Bit_On(c, width-1);
+    return bm.CreateBVConst(c, width);
+}
+
+
 ASTNode NodeFactory::CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst)
 {
