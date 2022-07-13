@@ -171,6 +171,10 @@ void ExtraMain::create_options()
       BOOL_ARG(bm->UserFlags.enable_flatten),
       "Enable sharing-aware flattening of >2 arity nodes")
 
+      ("rewriting", 
+      BOOL_ARG(bm->UserFlags.enable_sharing_aware_rewriting),
+      "Enable sharing-aware rewriting")
+
       ("split-extracts",
       BOOL_ARG(bm->UserFlags.enable_split_extracts),
       "Create new variables for some extracts")
