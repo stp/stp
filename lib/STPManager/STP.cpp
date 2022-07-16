@@ -236,7 +236,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 
   if (bm->UserFlags.enable_always_true)
   {
-    AlwaysTrue always(simp, bm, bm->defaultNodeFactory);
+    AlwaysTrue always(bm, bm->defaultNodeFactory);
     inputToSat = always.topLevel(inputToSat);
     bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
