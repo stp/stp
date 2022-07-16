@@ -24,18 +24,16 @@ THE SOFTWARE.
 
 /* 
 
-If a node is asserted at the top level, this find other references (if any) to 
+If a node is asserted at the top level, this finds other references (if any) to 
 that node, and replaces those reference by true/false.
 
 The "state" tracks whether we are still at nodes that are conjoined to the
 top, only after we get out of the top part can we replace nodes that we know to
 be true or false.
 
+NB: This flattens ANDs at the top level. Which makes implementation much easier.
+
 */
-
-
-
-
 #ifndef ALWAYSTRUE_H_
 #define ALWAYSTRUE_H_
 
@@ -55,29 +53,10 @@ class AlwaysTrue
   unsigned replaced;
   ASTNodeMap fromTo;
 
-  enum State
+  ASTNode visit(const ASTNode& n, const bool match)
   {
-    AND_STATE, CHILD_AND_STATE, NOT_STATE, BOTTOM_STATE
-  };
+    if (match &&  fromTo.find(n) != fromTo.end())
 
-  void collectAsserted(const ASTNode& n)
-  {
-    assert(n.GetKind() == AND);
-    for (const auto& c: n)
-    {
-      fromTo[c] = stpMgr->ASTTrue;
-      if (c.GetKind() == AND) 
-        collectAsserted(c);
-      if (c.GetKind() == NOT) 
-      {
-        fromTo[c[0]] = stpMgr->ASTFalse;
-      }
-    }
-  }
-
-  ASTNode visit(const ASTNode& n, State state)
-  {
-    if (state == BOTTOM_STATE && fromTo.find(n) != fromTo.end())
     {
       if (fromTo[n] == stpMgr->ASTTrue || fromTo[n] == stpMgr->ASTFalse)
           replaced++;
@@ -89,21 +68,9 @@ class AlwaysTrue
 
     ASTVec newChildren;
     newChildren.reserve(n.Degree());
-    for (const auto& c: n)
+    for (auto& c: n)
     {
-      if (c.GetKind() == AND && state == AND_STATE)
-        {
-          assert(n.GetKind() == AND);
-          newChildren.push_back(visit(c, AND_STATE));
-        }
-      else if (c.GetKind() == NOT && state == AND_STATE)
-         newChildren.push_back(visit(c, NOT_STATE));
-      else if (c.GetKind() != AND && state == AND_STATE)
-        newChildren.push_back(visit(c, CHILD_AND_STATE));
-      else if (state == NOT_STATE)
-        newChildren.push_back(visit(c, CHILD_AND_STATE));
-      else 
-        newChildren.push_back(visit(c,BOTTOM_STATE));
+      newChildren.push_back(visit(c, true));
     }
 
     ASTNode result = n;
@@ -120,9 +87,30 @@ class AlwaysTrue
     return result;
   }
 
+  void visit(ASTVec& children)
+  {
+    // if we sort them then we know we'll see an asserted node before any node that it's a descendant of.
+    SortByExprNum(children);
+
+    for (auto& c: children)
+    {
+      // should have been flattened.
+      assert(c.GetKind() != AND); 
+      fromTo[c] = stpMgr->ASTTrue;
+
+      if (c.GetKind() == NOT)
+      {
+         fromTo[c[0]] = stpMgr->ASTFalse;
+         c = nf->CreateNode(NOT, visit(c[0], false));
+      }
+      else
+        c = visit(c,false);
+    }
+  }
+
 public:
 
-  AlwaysTrue(Simplifier* simplifier_, STPMgr* stp_, NodeFactory* nf_)
+  AlwaysTrue(STPMgr* stp_, NodeFactory* nf_)
   {
     stpMgr = stp_;
     nf = nf_;
@@ -139,8 +127,9 @@ public:
     ASTNode result =n;
     if (n.GetKind() == AND)
     {
-      collectAsserted(n);
-      result = visit(n, AND_STATE);
+      ASTVec children = FlattenKind(AND, n.GetChildren());
+      visit(children);
+      result = nf->CreateNode(AND, children);
     }
 
     if (stpMgr->UserFlags.stats_flag)
@@ -149,7 +138,6 @@ public:
     fromTo.clear();
     return result;
   }
-
 };
 }
 
