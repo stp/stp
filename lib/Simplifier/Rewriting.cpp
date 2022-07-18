@@ -327,13 +327,15 @@ namespace stp
         c.GetKind() == EQ
         && c[0].GetKind() == BVCONST
         && c[0].GetValueWidth() ==1
-        && c[0] == stpMgr->CreateZeroConst(1)
         && c[1].GetKind() == BVEXTRACT
         && c[1][1].GetUnsignedConst() == c[1][0].GetValueWidth() -1
        )
        {
-          // TODO  do for a 1 on the lhs.
-          c = nf->CreateNode(BVSGE, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
+          if (c[0] == stpMgr->CreateZeroConst(1))
+            c = nf->CreateNode(BVSGE, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
+          else
+            c = nf->CreateNode(BVSLT, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
+
        }
 
       /*
@@ -437,6 +439,203 @@ namespace stp
           c = nf->CreateNode(BVGT, extract, c[1][1]);
           }
        }
+
+/*
+        1146098:(BVAND 
+          1021514:0xFFFF80861DA6915D
+          1146090:(ITE 
+            [1136200]
+            35090:0xFFFFFFFFFFFFFFFE
+            7186:0xFFFFFFFFFFFFFFFF))))))
+            */
+      if ( 
+        c.GetKind() == BVAND
+        && c[0].GetKind() == BVCONST
+        && c[1].GetKind() == ITE
+        && c[1][1].GetKind() == BVCONST
+        && c[1][2].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          const auto width  =  c.GetValueWidth();
+          const auto and1 =  nf->CreateTerm(BVAND, width, c[0], c[1][1]);
+          const auto and2 =  nf->CreateTerm(BVAND, width, c[0], c[1][2]);
+          c = nf->CreateTerm(ITE, width, c[1][0], and1, and2);
+       }
+
+/*
+        1047428:(BVCONCAT 
+          6652:0x00000000
+          1047426:(ITE 
+            [788876]
+            6652:0x00000000
+            7390:0x00000001)))
+*/
+      if ( 
+        c.GetKind() == BVCONCAT
+        && c[0].GetKind() == BVCONST
+        && c[1].GetKind() == ITE
+        && c[1][1].GetKind() == BVCONST
+        && c[1][2].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          const auto width  =  c.GetValueWidth();
+          const auto concat1 =  nf->CreateTerm(BVCONCAT, width, c[0], c[1][1]);
+          const auto concat2 =  nf->CreateTerm(BVCONCAT, width, c[0], c[1][2]);
+          c = nf->CreateTerm(ITE, width, c[1][0], concat1, concat2);
+       }
+
+        /*
+        1148183:(NOT 1148182:(EQ 
+            6780:0x0000000000000000
+            1148180:(BVPLUS 
+              1138136:(BVUMINUS 
+                [1138134])
+              1148176:(ITE 
+                [1138038]
+                89066:0x00007F79E2596EA3
+                34042:0x00007F79E2596EA2))))
+        */
+      if ( 
+        c.GetKind() == EQ
+        && c[0].GetKind() == BVCONST
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][0].GetKind() == BVUMINUS
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+        c = nf->CreateNode(EQ, c[1][0][0], c[1][1]);
+       }
+      
+      if ( 
+        c.GetKind() == EQ
+        && c[0].GetKind() == BVCONST
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][1].GetKind() == BVUMINUS
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+        c = nf->CreateNode(EQ, c[1][1][0], c[1][0]);
+       }
+
+/*
+1085202:(EQ 
+    6528:0b0
+    1085200:(BVAND 
+    */
+      if ( 
+        c.GetKind() == EQ
+        && c[0].GetKind() == BVCONST
+        && c[0].GetValueWidth() ==1
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
+        && c[1].GetKind() == BVAND
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          ASTVec children;
+          for (const auto& node : c[1])
+            children.push_back(nf->CreateNode(EQ, c[0],node));
+          c = nf->CreateNode(OR, children);
+       }
+/*
+  1149196:(EQ 
+    6780:0x0000000000000000
+    1149194:(BVPLUS 
+      1149154:(ITE 
+        1149092:(EQ 
+          3678:file_file_smt2_1287
+          1090576:0x2B)
+        118964:0x00007F79E2596EA5
+        118918:0x00007F79E2596EA4)
+      1149190:(ITE 
+        [1149092]
+        1024228:0xFFFF80861DA6915B
+        1145390:0xFFFF80861DA6915C)))
+*/
+      if ( 
+        c.GetKind() == EQ
+        && c[0].GetKind()  == BVCONST
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
+
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][0].GetKind() == ITE
+        && c[1][0][1].GetKind() == BVCONST
+        && c[1][0][2].GetKind() == BVCONST
+        && shareCount[c[0].GetNodeNum()] <= 1
+       )
+       {
+          const auto uminus = nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
+          c = nf->CreateNode(EQ, uminus, c[1][1]);
+
+       }
+
+   /*
+        10160120:(EQ 
+        8577822:0x1
+        10160116:(BVPLUS 
+          2774038:w_49432
+          10160114:(BVUMINUS 
+            2774032:w_49431)))
+            */
+      if ( 
+        c.GetKind() == EQ
+        && c[0].GetKind() == BVCONST
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][1].GetKind() == BVUMINUS
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          c = nf->CreateNode(EQ, c[1][0], nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], c[1][1][0]));
+       }
+
+
+    /*
+    (BVSGT 
+    9086:0x00
+    71160:(ITE 
+      [51070]
+      9492:0xFF
+      9086:0x00))
+      */
+      if ( 
+        (c.GetKind() == BVSGT || c.GetKind() == BVGT)
+        && c[0].GetKind() == BVCONST
+        && c[1].GetKind() == ITE
+        && c[1][1].GetKind() == BVCONST
+        && c[1][2].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          const auto ite1 = nf->CreateNode(c.GetKind(), c[0], c[1][1]);
+          const auto ite2 = nf->CreateNode(c.GetKind(), c[0], c[1][2]);
+          c = nf->CreateNode(ITE, c[1][0], ite1, ite2);
+       }
+      
+      /*
+  2180186:(XOR 
+    363814:var_5736
+    (OR 
+          363815:(NOT 363814:var_5736)
+          378221:(NOT 378220:var_8137))))
+      */
+      if ( 
+        c.GetKind() == XOR
+        && c.Degree() ==2
+        && c[1].GetKind() == OR
+        && c[1].Degree() ==2
+        && c[1][0].GetKind() == NOT
+        && c[1][0][0] == c[0]
+        )
+        {
+          c = nf->CreateNode(OR, nf->CreateNode(NOT, c[1][1]), c[1][0]);
+        }
 
        if (start != c)
        {
