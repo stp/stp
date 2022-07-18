@@ -65,6 +65,7 @@ public:
   bool enable_always_true = false;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = false;
+  bool enable_merge_same = true;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t bitblast_simplification = 0;

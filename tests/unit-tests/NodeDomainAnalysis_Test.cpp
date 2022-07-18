@@ -79,7 +79,7 @@ struct Context
 };
  
 // fixed bits are constant, internval is null
-TEST(NodeDomainAnalysis_Test, __LINE__)
+TEST(NodeDomainAnalysis_Test, 0)
 {
   CONSTANTBV::BitVector_Boot(); // TODO hack. needs to be run once before the constructors start allocating constantbvs.
   Context c;
@@ -97,7 +97,7 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 }
 
 // fixed bits are null, internval is costant.
-TEST(NodeDomainAnalysis_Test, __LINE__)
+TEST(NodeDomainAnalysis_Test, DISABLED_1)
 {
   Context c;
 
@@ -114,7 +114,7 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 }
 
 
-TEST(NodeDomainAnalysis_Test, __LINE__)
+TEST(NodeDomainAnalysis_Test, DISABLED_2)
 {
   Context c;
   MTRand rand(10U);
@@ -145,7 +145,7 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 }
 
 
-TEST(NodeDomainAnalysis_Test, __LINE__)
+TEST(NodeDomainAnalysis_Test, DISABLED_3)
 {
   Context c;
 

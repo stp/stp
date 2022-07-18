@@ -198,6 +198,11 @@ void ExtraMain::create_options()
       ("always-true", 
       BOOL_ARG(bm->UserFlags.enable_always_true),
       "Nodes that are always true (e.g. asserted) are replaced through out the problem by true")
+
+      ("merge-same", 
+      BOOL_ARG(bm->UserFlags.enable_merge_same),
+      "Uses simple boolean algebra rules to combine conjuncts at the top level")
+
   
       ("bit-blast-simplification", 
       INT64_ARG(bm->UserFlags.bitblast_simplification),

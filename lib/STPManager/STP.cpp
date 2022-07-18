@@ -51,6 +51,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Flatten.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
+#include "stp/Simplifier/MergeSame.h"
 #include <memory>
 using std::cout;
 
@@ -224,6 +225,14 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     inputToSat = always.topLevel(inputToSat);
     bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
+
+  if (bm->UserFlags.enable_merge_same)
+  {
+    MergeSame ms(bm, bm->defaultNodeFactory);
+    inputToSat = ms.topLevel(inputToSat);
+    bm->ASTNodeStats("After Merge Same: ", inputToSat);
+  }
+
 
   if (bm->UserFlags.enable_flatten)
   {
