@@ -56,7 +56,6 @@ class AlwaysTrue
   ASTNode visit(const ASTNode& n, const bool match)
   {
     if (match &&  fromTo.find(n) != fromTo.end())
-
     {
       if (fromTo[n] == stpMgr->ASTTrue || fromTo[n] == stpMgr->ASTFalse)
           replaced++;

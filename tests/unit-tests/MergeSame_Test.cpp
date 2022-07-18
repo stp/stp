@@ -20,7 +20,7 @@ THE SOFTWARE.
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/parser.h"
-#include "stp/Simplifier/AlwaysTrue.h"
+#include "stp/Simplifier/MergeSame.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
 
@@ -51,12 +51,12 @@ struct Context
    stp::STPMgr mgr;
    SimplifyingNodeFactory snf;
    stp::Cpp_interface interface;
-   stp::AlwaysTrue at;
+   stp::MergeSame ms;
 
    Context() :
    snf (*(mgr.hashingNodeFactory), mgr),
    interface(mgr, &snf),
-   at(&mgr, &snf)
+   ms(&mgr, &snf)
    { 
     mgr.defaultNodeFactory = &snf;
     interface.startup();
@@ -72,7 +72,7 @@ struct Context
       smt2lex_destroy();
       ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
       std::cerr << "Pre merge " << n;
-      n = at.topLevel(n);
+      n = ms.topLevel(n);
       std::cerr << "Post merge "<< n;
       return n;
     }
@@ -81,47 +81,37 @@ struct Context
 TEST(MergeSame_Test , __LINE__)
 {
     const std::string input = R"(
-    (assert a )
+    (assert (or a b) )
     (assert (or a c) )
     )";
 
+
   Context c;
   ASTNode n = c.process(input);
-  ASSERT_EQ(n, c.mgr.LookupOrCreateSymbol("a"));
+  ASSERT_EQ(n, c.snf.CreateNode(stp::OR, {c.mgr.LookupOrCreateSymbol("a"), c.snf.CreateNode(stp::AND, {c.mgr.LookupOrCreateSymbol("b"), c.mgr.LookupOrCreateSymbol("c")} )}));
 }
 
 TEST(MergeSame_Test , __LINE__)
 {
     const std::string input = R"(
-    (assert (not (or a b) ) )
-    (assert (b) )
+    (assert (or (not a)  (not b)) )
+    (assert (or a b) )
     )";
 
   Context c;
   ASTNode n = c.process(input);
-  ASSERT_EQ(n, c.mgr.ASTFalse);
+  ASSERT_EQ(n, c.snf.CreateNode(stp::XOR, {c.mgr.LookupOrCreateSymbol("a"), c.mgr.LookupOrCreateSymbol("b") }));
 }
 
 TEST(MergeSame_Test , __LINE__)
 {
     const std::string input = R"(
-    (assert (not a ) )
-    (assert (and (not a ) b ) )
+    (assert (or  a  (not b)) )
+    (assert (or (not a) b) )
     )";
 
   Context c;
   ASTNode n = c.process(input);
- ASSERT_EQ(n, c.snf.CreateNode(stp::AND, {c.mgr.LookupOrCreateSymbol("b"), c.snf.CreateNode(stp::NOT, {c.mgr.LookupOrCreateSymbol("a")} )}));
+  ASSERT_EQ(n, c.snf.CreateNode(stp::NOT, {c.snf.CreateNode(stp::XOR, {c.mgr.LookupOrCreateSymbol("a"), c.mgr.LookupOrCreateSymbol("b") })}));
 }
 
-TEST(MergeSame_Test , __LINE__)
-{
-    const std::string input = R"(
-    (assert (and (not a ) b ) )
-    (assert (not a ) )
-    )";
-
-  Context c;
-  ASTNode n = c.process(input);
- ASSERT_EQ(n, c.snf.CreateNode(stp::AND, {c.mgr.LookupOrCreateSymbol("b"), c.snf.CreateNode(stp::NOT, {c.mgr.LookupOrCreateSymbol("a")} )}));
-}

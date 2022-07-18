@@ -30,4 +30,5 @@ AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
 AddSTPGTest(StrengthReduction_Test.cpp)
 AddSTPGTest(AlwaysTrue_Test.cpp)
+AddSTPGTest(MergeSame_Test.cpp)
 
