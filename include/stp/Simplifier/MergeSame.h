@@ -113,14 +113,15 @@ public:
 
 
           // Convert AND to OR.
-          if (c.GetKind() == NOT
+          if (
+            c.GetKind() == NOT
             && c[0].GetKind() == AND
-            && c[0].Degree() ==2
-            && c[0][0].GetKind() == NOT
-            && c[0][1].GetKind() == NOT
-            )
+           )
           {
-            c = nf->CreateNode(OR, c[0][0][0], c[0][1][0]);
+            ASTVec children;
+            for (const auto& child : c[0].GetChildren())
+              children.push_back(nf->CreateNode(NOT, child));
+            c = nf->CreateNode(OR, children);
             replaced++;
           }
 
