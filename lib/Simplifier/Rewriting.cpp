@@ -381,9 +381,7 @@ namespace stp
               71834:0x00007F73786CE05A
               96864:(BVPLUS 
                 37566:0x00007F73786CE020
-                96860:(BVCONCAT 
-                  428:0x00000000000000
-                  54:file_file_smt2_101))))
+                96860:(...))))
           */
        if (
           c.GetKind() == BVGT
@@ -407,6 +405,37 @@ namespace stp
     
             c = nf->CreateNode(k, replacement, replacement2);
           }       
+
+/*
+  134790:(BVGT 
+    134788:(BVPLUS 
+      5894:0xFFFFFFFC
+      [...])
+    9490:0x00000004)
+*/
+       if (
+          c.GetKind() == BVGT
+          && c[0].GetKind() == BVPLUS 
+          && c[0].Degree() == 2
+          && c[0][0].isConstant() 
+          && c[1].isConstant()
+          )
+          {
+            auto replacement = nf->CreateTerm(BVPLUS, c[1].GetValueWidth(), c[1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
+            replacement = nf->CreateNode(BVGT, c[0][1], replacement);
+            auto replacement2 =  nf->CreateNode(BVLT,  c[0][1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
+
+            Kind k;
+            if (CONSTANTBV::BitVector_Lexicompare(c[1].GetBVConst(), c[0][0].GetBVConst()) >= 0)
+            {
+                k = stp::AND;
+            }
+            else
+                k = stp::OR;
+    
+            c = nf->CreateNode(k, replacement, replacement2);
+          }    
+
 
 
       /*
@@ -636,6 +665,136 @@ namespace stp
         {
           c = nf->CreateNode(OR, nf->CreateNode(NOT, c[1][1]), c[1][0]);
         }
+
+/*
+            5254:(BVMULT 
+              1970:0x0100
+              5242:(BVCONCAT 
+                1402:0x00
+                1296:T1@2147)))))
+*/
+    if (c.GetKind() == BVMULT
+        && c[0].GetKind() == BVCONST 
+        && singleOne(c[0])
+        && c[1].GetKind() == BVCONCAT
+        && c[1][0].GetKind() == BVCONST
+        )
+       {
+         // Position of the single one.
+          unsigned position = 0;
+          while (!CONSTANTBV::BitVector_bit_test(c[0].GetBVConst(),position))
+            position++;
+
+          if (position == c[1][0].GetValueWidth())
+            c = nf->CreateTerm(BVCONCAT, c.GetValueWidth(), c[1][1], nf->CreateZeroConst(c[1][0].GetValueWidth()));
+       }
+
+/*
+117334:(BVOR 
+      1434:0x0000
+      2594:(BVCONCAT 
+        1402:0x00
+        384:T1@362))))
+*/
+    if (c.GetKind() == BVOR
+        && c[0].GetKind() == BVCONST 
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())        
+        )
+          c = c[1];
+  
+/*
+126402:(BVGT 
+      126400:0x00000017
+      126384:(BVUMINUS 
+        [126340]))
+        */
+    if (c.GetKind() == BVGT
+        && c[0].GetKind() == BVCONST 
+        && c[1].GetKind() == BVUMINUS
+        && shareCount[c[1].GetNodeNum()] <= 1
+        )
+        {
+          const auto width = c[1].GetValueWidth();
+          const auto eq = nf->CreateNode(EQ, c[1][0], nf->CreateZeroConst(width));
+          c = nf->CreateNode(OR, eq, nf->CreateNode(BVLT, nf->CreateTerm(BVUMINUS, width, c[0]), c[1][0]));
+        }
+
+/*
+        136180:(BVPLUS 
+          136158:(BVPLUS 
+            120364:0x00000036
+            [126288])
+          136178:(BVPLUS 
+            108086:0x00000096
+        */
+    if (c.GetKind() == BVPLUS
+        && c[0].GetKind() == BVPLUS
+        && c[0].Degree() == 2
+        && c[0][0].GetKind() == BVCONST
+        
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][0].GetKind() == BVCONST
+        
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
+       
+        )
+        {
+          const auto width = c[0].GetValueWidth();
+          const auto consts = nf->CreateTerm(BVPLUS, width, c[0][0], c[1][0]);
+          c = nf->CreateTerm(BVPLUS, width, nf->CreateTerm(BVPLUS, width, consts, c[0][1]), c[1][1]);
+        }
+/*
+  126266:(EQ 
+    120632:(BVPLUS 
+      102336:0xFFFFFFDA
+      [5110])
+    126264:(BVPLUS 
+      6494:0x00000002
+      126234:(BVCONCAT 
+      */
+    if (c.GetKind() == EQ
+        && c[0].GetKind() == BVPLUS
+        && c[0].Degree() == 2
+        && c[0][0].GetKind() == BVCONST
+        
+        && c[1].GetKind() == BVPLUS
+        && c[1].Degree() == 2
+        && c[1][0].GetKind() == BVCONST
+        
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
+       
+        )
+        {
+          const auto width = c[0].GetValueWidth();
+          //todo maybe move it so it has the least zeroes or ones?
+          const auto consts = nf->CreateTerm(BVPLUS, width, c[0][0], nf->CreateTerm(BVUMINUS, width, c[1][0]));
+          c = nf->CreateNode(EQ, nf->CreateTerm(BVPLUS, width, consts, c[0][1]), c[1][1]);
+        }
+
+/*
+  136896:(OR 
+    [127666]
+    127713:(NOT 127712:(OR 
+      [127666]
+      ...)))
+        */
+    if (c.GetKind() == OR
+        && c[0].Degree() == 2
+        && c[1].GetKind() == NOT
+        && c[1][0].GetKind() == OR
+        && c[1][0].Degree() == 2
+        && c[0] == c[1][0][0]
+        )
+        {
+          c = nf->CreateNode(OR, c[0], nf->CreateNode(NOT, c[1][0][1] ));
+        }
+
+
+
+
 
        if (start != c)
        {
