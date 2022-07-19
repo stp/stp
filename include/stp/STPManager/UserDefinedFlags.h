@@ -34,7 +34,7 @@ namespace stp
  * options.
  ******************************************************************/
 
-struct UserDefinedFlags // not copyable
+struct UserDefinedFlags
 {
   UserDefinedFlags(UserDefinedFlags const&) = delete;
   UserDefinedFlags& operator=(UserDefinedFlags const&) = delete;
@@ -179,6 +179,10 @@ public:
     wordlevel_solve_flag = false;
     propagate_equalities = false;
     enable_flatten = false;
+    enable_split_extracts = false;
+    enable_sharing_aware_rewriting = false;
+    enable_merge_same = false;
+    enable_ite_context = false;
 
     bitblast_simplification = 0;
   }
@@ -192,8 +196,6 @@ public:
      array_difficulty_reversion = false;
      difficulty_reversion = false;
   }
-
-
 
   UserDefinedFlags()
   {
