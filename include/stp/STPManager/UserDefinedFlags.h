@@ -64,7 +64,7 @@ public:
   bool enable_pure_literals = true;
   bool enable_always_true = false;
   bool enable_split_extracts = true;
-  bool enable_sharing_aware_rewriting = false;
+  bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = true;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
