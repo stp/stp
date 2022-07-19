@@ -371,9 +371,7 @@ namespace stp
           else
               k = stp::AND;
 
-          //std::cerr << "before" << c;
           c = nf->CreateNode(k, part1, part2);
-          //std::cerr << "after" << c;
        }
 
           /*
@@ -792,6 +790,43 @@ namespace stp
           c = nf->CreateNode(OR, c[0], nf->CreateNode(NOT, c[1][0][1] ));
         }
 
+/*
+(EQ 
+  62:(BVMULT 
+    48:t
+    60:(BVPLUS 
+      42:s
+      58:...)
+  76:(BVMULT 
+    42:s
+    74:(BVPLUS 
+      48:t
+      72:...))
+  */
+    if (c.GetKind() == EQ
+        && c[0].GetKind() == BVMULT
+        && c[0].Degree() ==2
+        && c[0][1].GetKind() == BVPLUS
+        && c[0][1].Degree() ==2
+
+        && c[1].GetKind() == BVMULT
+        && c[1].Degree() ==2
+        && c[1][1].GetKind() == BVPLUS
+        && c[1][1].Degree() ==2
+
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
+
+        && c[0][0] == c[1][1][0]
+        && c[1][0] == c[0][1][0]
+
+        )
+        {
+          const auto width = c[0].GetValueWidth();
+          const auto left = nf->CreateTerm(BVMULT, width, c[0][0], c[0][1][1]);
+          const auto right = nf->CreateTerm(BVMULT, width, c[1][0], c[1][1][1]);
+          c = nf->CreateNode(EQ, left,right);
+        }
 
 
 
