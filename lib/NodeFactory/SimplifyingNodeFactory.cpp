@@ -1735,7 +1735,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     case stp::BVOR:
     {
-  /*
+
      ASTVec new_children;
      new_children.reserve(children.size());
      for (size_t i = 0; i < children.size(); i++)
@@ -1743,7 +1743,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
          new_children.push_back(NodeFactory::CreateTerm(BVNOT, width, children[i]));
      }
      result = NodeFactory::CreateTerm(BVNOT, width, NodeFactory::CreateTerm(stp::BVAND,width,new_children));
-     */
+
     }
     break;
 
