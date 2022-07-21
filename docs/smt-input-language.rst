@@ -4,8 +4,8 @@ SMT-LIBv2 Input Language Reference
 
 .. highlight:: lisp
 
-This page contains a short description for the SMTLibv2 input language
-that STP can parse. For more information related to SMTLIB, please refer to `this
+This page contains a short description for the SMT-LIB v2 input language
+that STP can parse. For more information related to SMT-LIB, please refer to `this
 page <https://smtlib.cs.uiowa.edu/>`__.
 
 Header
