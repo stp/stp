@@ -623,9 +623,9 @@ void Cpp_interface::getValue(const ASTVec& v)
     GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
     os << std::endl;
   }
-  os << ")" << std::endl;
+  os << ")";
 
-  cout << os.str();
+  cout << os.str() << std::endl;
 }
 
 // Note, doesn't consider that extra assertions might have been applied?
