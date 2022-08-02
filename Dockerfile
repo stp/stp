@@ -43,10 +43,21 @@ RUN cmake ..
 RUN make -j6
 RUN make install
 
+# get mergesat and make available
+RUN mkdir /mergesat
+WORKDIR /mergesat
+RUN wget -O mergesat-v3.0.tar.gz https://github.com/conp-solutions/mergesat/archive/refs/tags/v3.0.tar.gz
+RUN tar xfz mergesat-v3.0.tar.gz --strip-components 1
+RUN make r -j6
+RUN cp build/release/bin/mergesat /usr/local/bin/
+RUN which mergesat
+
 # build stp
 RUN mkdir /stp
 WORKDIR /stp
 COPY . /stp
+# make all starexec tools available
+COPY scripts/starexec/bin/* /usr/local/bin/
 RUN mkdir build
 WORKDIR /stp/build
 RUN cmake -DENABLE_ASSERTIONS=OFF -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release  ..
@@ -55,14 +66,52 @@ RUN make install
 
 # set up for running
 # set up for running
-FROM alpine:latest
-COPY --from=builder /usr/local/bin/stp /usr/local/bin/stp
-ENTRYPOINT ["/usr/local/bin/stp", "--SMTLIB2"]
+# FROM alpine:latest
+# COPY --from=builder /usr/local/bin/stp /usr/local/bin/stp
 
+# Run the solver from a script
+# COPY --from=builder /stp/tools/container-default-command.sh \
+#     /usr/local/bin/container-default-command.sh
+
+WORKDIR /stp
+
+
+# Relevant for interaction with aws (might move ths section further up!
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt install -y \
+        cmake \
+        curl \
+        iproute2 \
+        python \
+        python-pip \
+        unzip
+RUN pip install supervisor awscli
+
+# Enable transparent huge pages, always
+RUN DEBIAN_FRONTEND=noninteractive apt -y install hugepages
+RUN hugeadm --thp-always
+
+# Finally run the tool
+CMD /stp/tools/container-default-command.sh
+
+# --------------------
+# Example call for solving a local file
+# --------------------
+#
+# docker build -f Dockerfile . && STP_CONTAINER=$(docker build -q -f Dockerfile .) && echo "Container: $STP_CONTAINER"
+# export FILE_DIR=$PWD/tests/query-files/unit_test
+# export INPUT_FILE=bvsgt.smt2;
+# docker run --rm -i -v $FILE_DIR:$FILE_DIR:ro -e INPUT_FILE=$FILE_DIR/$INPUT_FILE "$STP_CONTAINER"
+#
 # --------------------
 # HOW TO USE
 # --------------------
 # on file through STDIN:
 #    cat myfile.smt | docker run --rm -i -a stdin -a stdout stp
-
+#
+# on file $INPUT_FILE with path $FILE_DIR, e.g.: FILE_DIR=$PWD/tests/query-files/unit_test; export INPUT_FILE=bvsgt.smt2
+#    docker run --rm -i -v $FILE_DIR:$FILE_DIR:ro -e INPUT_FILE=$FILE_DIR/myfile.smt -a stdin -a stdout stp
+#
+# on file in S3 located in "${S3_BKT}"/"${COMP_S3_PROBLEM_PATH}"
+#    docker run --rm -i -v -e S3_BKT=${S3_BKT} -e COMP_S3_PROBLEM_PATH=${COMP_S3_PROBLEM_PATH} -a stdin -a stdout stp
 

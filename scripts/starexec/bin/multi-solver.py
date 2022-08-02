@@ -22,7 +22,7 @@ def setup_solvers(threads):
     # Call strings for solvers
     cmsString = "cryptominisat5 --verb 0 --printsol 0 --threads "  # $(nproc)"
     mergesatString = "mergesat -verb=0 "
-    rissString = "riss -verb=0 -quiet "
+    mergesatUnsatString = "mergesat -verb=0 --no-use-ccnr -no-use-rephasing "
     minisatString = "minisat -verb=0 "
 
     # Set threads
@@ -37,7 +37,7 @@ def setup_solvers(threads):
     if threads > 1:
         solvers["mergesat"] = dir_path+mergesatString
     if threads > 2:
-        solvers["riss"] = dir_path+rissString
+        solvers["mergesatUnsat"] = dir_path+mergesatUnsatString
     if threads > 3:
         solvers["minisat"] = dir_path+minisatString
 
