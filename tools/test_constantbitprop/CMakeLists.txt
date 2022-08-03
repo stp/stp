@@ -21,7 +21,7 @@
 if ( USE_CRYPTOMINISAT)
     add_executable(test_constantbitprop
      test_cbitp.cpp
-     ../measure/Functions.cpp
+     ../measure_constantbitprop/Functions.cpp
     )
     target_link_libraries(test_constantbitprop
      stp

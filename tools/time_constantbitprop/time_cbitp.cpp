@@ -22,7 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// Times how long running constant bit propagation takes per transfer function.
+/*
+ Measures how long running constant bit propagation takes per transfer function, 
+ and report the number of extra bits deduced.
+
+ A satisfying assignment is found (e.g.  2 + 2 = 4) for each specified transfer
+ function then bits are set to unknown with probabilities of 1, 5 then 50% in 3
+ separate runs. 
+
+ The time to run the transfer functions *iterations* times at the *bitWidth* is
+ reported.
+*/
+
 
 #include <ctime>
 #include <iomanip>
@@ -95,7 +106,6 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
       std::cerr << "Error - should never occur";
       exit(1);
     }
-
 
     const int final = a.countFixed() + b.countFixed() + output.countFixed();
     if (final < rel.initial)
