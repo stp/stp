@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -158,7 +158,7 @@ if (STATICCOMPILE)
 endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
-if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (NOT BUILD_SHARED_LIBS))
+if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
     set(Boost_USE_STATIC_LIBS ON)
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
