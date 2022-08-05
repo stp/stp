@@ -154,16 +154,15 @@ Awards
 ======
 
 -  STP won the incremental competition in the QF_BV category 
-   in the `SMTCOMP 2021<https://smt-comp.github.io/2021/results/qf-bitvec-incremental>`.
+   in the `SMTCOMP 2021 <https://smt-comp.github.io/2021/results/qf-bitvec-incremental>`__
 -  STP placed `2nd in the bitvector
    category <http://www.msoos.org/2014/06/smt-competition14-and-stp/>`__
    in the SMTCOMP 2014, just after the
    `Boolector <http://fmv.jku.at/boolector/>`__ system
 -  STP placed 2nd in the bitvector category in the SMTCOMP 2011
--  STP won the bitvector category at `SMTCOMP
-   2010 <http://www.smtcomp.org/2010/>`__
+-  STP won the bitvector category at SMTCOMP 2010
 -  STP won the `SMTCOMP
-   2006 <https://www.cs.upc.edu/~oliveras/espai/papers/JAR-smtcomp.pdf>`__
+   2006 <http://smtcomp.sourceforge.net/2006/results-QF_UFBV32.shtml>`__
    competition (Bitvector category) in 2006
 
 Use cases
@@ -237,9 +236,9 @@ History and authors
 ===================
 
 The initial versions of STP were written primarily by Vijay Ganesh as
-part of his PhD thesis, and the project was later maintained by Trevor
-Hansen. The current primary maintainers are Mate Soos, Dan Liew, and
-Ryan Govostes who have improved it in many ways. STP is based on the
+part of his PhD thesis. STP was subsequently developed by Trevor
+Hansen during his PhD. The current authors are Trevor Hansen, Mate Soos, 
+Ryan Govostes and Andrew V. Teylu. STP is based on the
 following papers:
 
 -  `A Decision Procedure for Bit-Vectors and
@@ -255,10 +254,7 @@ following papers:
    Communications Security 2006 (CCS 2006), Alexandria, Virginia,
    October, 2006
 
-Past contributors: Khoo Yit Phang, Ed Schwartz, Mike Katelman (PhD
-Student, University of Illinois, Urbana-Champaign, IL, USA), Philip Guo
-(Student, Stanford University, Stanford, CA, USA), David L. Dill
-(Professor, Stanford University, Stanford, CA, USA), Tim King (Student,
-Stanford University and NYU). Please note that everyone working on the
-project is doing so out of hobby or as a way to help them in their
-work/study projects.
+Contributors are listed on the `contributions page <https://github.com/stp/stp/graphs/contributors>`__.
+
+In addition we thank Ed Schwartz, Mike Katelman, Philip Guo, David L. Dill, and Tim King. Please note that everyone working on the
+project is doing so out of hobby or as a way to help them in their work/study projects.
