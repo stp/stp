@@ -122,6 +122,11 @@ public:
   std::unique_ptr<LETMgr> letMgr;
   NodeFactory* nf;
 
+  ~Cpp_interface()
+  {
+    cleanUp();
+  }
+
   DLL_PUBLIC Cpp_interface(STPMgr& bm_);
   DLL_PUBLIC Cpp_interface(STPMgr& bm_, NodeFactory* factory);
 
