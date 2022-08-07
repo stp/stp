@@ -131,21 +131,6 @@ if(TEST_APIS)
 endif()
 
 # -----------------------------------------------------------------------------
-# Generated tests
-# -----------------------------------------------------------------------------
-
-# FIXME: Enable by default
-option(TEST_GENERATED_QUERIES
-       "Enable tests that are driven by automatically generated queries"
-       OFF
-      )
-
-if(TEST_GENERATED_QUERIES)
-    message(FATAL_ERROR "TODO")
-    add_subdirectory(generated-tests)
-endif()
-
-# -----------------------------------------------------------------------------
 # Unit tests
 # -----------------------------------------------------------------------------
 
