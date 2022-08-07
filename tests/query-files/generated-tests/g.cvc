@@ -1,3 +1,4 @@
+% RUN: %solver %s | %OutputCheck %s
 %% Regression level = 0
 %% Result = Valid
 %% Runtime = 1
@@ -24,4 +25,5 @@ ASSERT (BVPLUS(4,BVMULT(4,x0, 0hex5), BVMULT(4,x1, 0hex4), BVMULT(4,x2, 0hex3), 
 ASSERT (BVPLUS(4,0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, BVMULT(4,x6, 0hex2), BVMULT(4,x7, 0hex0), 0hex0, 0hex0,0hex0) = 0hex0);
 ASSERT (BVPLUS(4,0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, 0hex0, BVMULT(4,x7, 0hex2), BVMULT(4,x8, 0hex4), BVMULT(4,x9, 0hex8),0hex0) = 0hex6);
 
-QUERY FALSE;
+% CHECK: ^Valid
+ QUERY FALSE;
