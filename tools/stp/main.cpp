@@ -277,7 +277,7 @@ void ExtraMain::create_options()
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_dot_flag)),
       "print dotty/neato's graph format, then exit")(
       "print-counterex,p",
-      po::bool_switch(&(bm->UserFlags.print_counterexample_flag)),
+      po::bool_switch(&(bm->UserFlags.print_counterexample_flag)), 
       "print counterexample")(
       "print-counterexbin,y",
       po::bool_switch(&(bm->UserFlags.print_binary_flag)),
@@ -361,7 +361,7 @@ void ExtraMain::create_options()
       "Number of conflicts after which the SAT solver gives up. "
       "-1 means never")
 
-      ("max-time,max_time,g", 
+      ("max-time,max_time,k", 
       INT64_ARG(bm->UserFlags.timeout_max_time),
       "Number of seconds after which the SAT solver gives up. "
       "-1 means never.")
@@ -369,6 +369,7 @@ void ExtraMain::create_options()
       ("check-sanity,d", 
         po::bool_switch(&(bm->UserFlags.check_counterexample_flag)),
         "construct counterexample and check it");
+
 
 #undef BOOL_ARG
 #undef INT64_ARG
