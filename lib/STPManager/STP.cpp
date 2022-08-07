@@ -203,7 +203,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
   
-  if (bm->UserFlags.enable_unconstrained)
+  if (false && bm->UserFlags.enable_unconstrained)
   {
     RemoveUnconstrained r1(*bm);
     inputToSat = r1.topLevel(inputToSat, simp);
@@ -551,6 +551,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     inputToSat = aigRR.topLevel(inputToSat);
     bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
+
+  if (simp->hasUnappliedSubstitutions())
+    inputToSat = simp->applySubstitutionMap(inputToSat);
 
   if (bm->UserFlags.enable_unconstrained)
   {
