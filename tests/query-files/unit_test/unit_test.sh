@@ -9,6 +9,7 @@ rm -f output_*.cnf
 
 files=$(ls -1 -S *.smt2 *.smt)
 for f in $files; do
+	echo $f
 	stp --output-CNF $f
 	if [ -e output_0.cnf ] ; then
 		echo --fail $f

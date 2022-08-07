@@ -1,3 +1,6 @@
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: ^unsat
+
 (benchmark smt
  :status unsat
   :logic QF_BV
