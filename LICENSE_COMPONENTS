@@ -16,22 +16,21 @@ Individual licenses are listed below
 ================================================================================
 
 Bit::Vector
-	This library is free software; you can redistribute it and/or    
-	modify it under the terms of the GNU Library General Public      
-	License as published by the Free Software Foundation; either     
-	version 2 of the License, || (at your option) any later version. 
-	                                                                 
-	This library is distributed in the hope that it will be useful,  
-	but WITHOUT ANY WARRANTY; without even the implied warranty of   
-	MERCHANTABILITY || FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
-	Library General Public License for more details.                 
-	                                                                 
-	You should have received a copy of the GNU Library General Public
-	License along with this library; if not, write to the            
-	Free Software Foundation, Inc.,                                  
-	59 Temple Place, Suite 330, Boston, MA 02111-1307 USA            
-	                                                                 
-	|| download a copy from ftp://ftp.gnu.org/pub/gnu/COPYING.LIB-2.0
+	This package with all its parts is
+
+	Copyright (c) 1995 - 2004 by Steffen Beyer.
+	All rights reserved.
+
+	This package is free software; you can use, modify and redistribute
+	it under the same terms as Perl itself, i.e., under the terms of
+	the "Artistic License" or the "GNU General Public License".
+
+	The C library at the core of this Perl module can additionally
+	be used, modified and redistributed under the terms of the
+	"GNU Library General Public License".
+
+	Please refer to the files "Artistic.txt", "GNU_GPL.txt" and
+	"GNU_LGPL.txt" in this distribution, respectively, for details!
 
 CVC's SMT-LIB Parser
 	\file smtlib.y
