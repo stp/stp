@@ -53,9 +53,8 @@ Studio.
 Languages parsed
 ================
 
-The file based input formats that STP reads are the: CVC, SMT-LIB1, and
-SMT-LIB2 formats. The SMT-LIB2 format is the recommended file format,
-because it is parsed by all modern bitvector solvers. STP implements a
+The SMT-LIB2 format is the recommended file format for use with STP, in 
+part because it is parsed by all modern bitvector solvers. STP implements a
 subset of the SMT-LIB2 language; not all SMT-LIB2 features are
 implemented.
 
@@ -63,7 +62,6 @@ implemented.
    :maxdepth: 1
 
    smt-input-language
-   cvc-input-language
 
 
 Python usage
@@ -84,7 +82,7 @@ Python usage
     s.model()
     >>> {'a': 5L, 'b': 6L, 'c': 11L}
 
-SMT-LIBv2 Usage
+SMT-LIB2 Usage
 ===============
 
 Signed division of -1/-2 = 0, should be satisfiable.
