@@ -11,7 +11,10 @@ Research bibtex reference can be found
 
 .. raw:: html
 
-   <!--The input to STP are formulas over the theory of bitvectors and arrays. This theory captures most expressions from languages like C,C++,Java, Verilog etc. STP can tell if the input formula is satisfiable or not and if is, then it can also generate a variable assignment to satisfy the input formula.-->
+   <!--The input to STP are formulas over the theory of bitvectors and arrays. 
+   This theory captures most expressions from languages like C,C++,Java, Verilog etc. 
+   STP can tell if the input formula is satisfiable or not and if is, then it can also
+   generate a variable assignment to satisfy the input formula.-->
 
 Install instructions
 ====================
@@ -254,7 +257,9 @@ following papers:
    Communications Security 2006 (CCS 2006), Alexandria, Virginia,
    October, 2006
 
-Contributors are listed on the `contributions page <https://github.com/stp/stp/graphs/contributors>`__.
+Contributors are listed on the 
+`contributions page <https://github.com/stp/stp/graphs/contributors>`__.
 
-In addition we thank Ed Schwartz, Mike Katelman, Philip Guo, David L. Dill, and Tim King. Please note that everyone working on the
+In addition we thank Ed Schwartz, Mike Katelman, Philip Guo, David L. Dill, and Tim King. 
+Please note that everyone working on the
 project is doing so out of hobby or as a way to help them in their work/study projects.
