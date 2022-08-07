@@ -155,7 +155,23 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     return ASTFalse;
   }
 
+  // Issue #381. It's a yucky fix because it only handles a specific instance 
+  // (not equality or the operands swapped).
+  if (children[0].GetKind() == BVMOD && children[0][1] == children[1])
+  {
+    const auto width = children[0].GetValueWidth();
+    const auto zero =NodeFactory::CreateZeroConst(width);
+
+    result = NodeFactory::CreateNode
+    (
+        stp::AND, 
+        NodeFactory::CreateNode(EQ, children[1], zero ),
+        NodeFactory::CreateNode(stp::BVGT, children[0][0], zero)
+    );
+  }  
+
   return result;
+  
 }
 
 ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
