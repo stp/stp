@@ -1,7 +1,0 @@
-%% Regression level = 3
-%% Result = Valid
-%% Language = presentation
-
-X : BITVECTOR(2);
-
-QUERY BVSLT(BVSX(X, 3), 0b000) <=> BVSLT(X, 0b00);
