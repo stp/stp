@@ -203,7 +203,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
   
-  if (false && bm->UserFlags.enable_unconstrained)
+  if (bm->UserFlags.enable_unconstrained)
   {
     RemoveUnconstrained r1(*bm);
     inputToSat = r1.topLevel(inputToSat, simp);
