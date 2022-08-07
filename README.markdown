@@ -42,16 +42,16 @@ For more detailed instructions, see towards the end of the page.
 
 ## Input format
 
-The file based input formats that STP reads are the: CVC, SMT-LIB1, and SMT-LIB2 formats. The SMT-LIB2 format is the recommended file format, because it is parsed by all modern bitvector solvers. Only quantifier-free bitvectors and arrays are implemented from the SMTLibv2 format.
+The [SMT-LIB2](https://smtlib.cs.uiowa.edu/language.shtml) format is the recommended file format, because it is parsed by all modern bitvector solvers. Only quantifier-free bitvectors and arrays are implemented from the SMT-LIB2 format.
 
 ### Usage
 
-Run with an SMTLibv2 file:
+Run with an SMT-LIB2 file:
 ```
-stp myproblem.smt
+stp myproblem.smt2
 ```
 
-Overflowing a 32b integer using the python interface:
+Overflowing a 32-bit integer using the python interface:
 ```
 import stp
 In [1]: import stp
