@@ -22,10 +22,7 @@
 
 ; bvxnor is the complement of bvxor. 
 
-(assert (= (bvxnor #b0 #b0 #b0) (bvnot (bvxor #b0 #b0 #b0))))
 (assert (= (bvxnor #b0011 #b0101 ) (bvnot (bvxor #b0011 #b0101))))
-(assert (= (bvxnor #b00001111 #b00110011 #b01010101) (bvnot (bvxor #b00001111 #b00110011 #b01010101))))
-(assert (= (bvxnor #b00001111 #b00110011 #b01010101)  #b10010110 ))
 
 ; Implies is special because it's marked as :right-assoc,
 ; but isn't associative. 
