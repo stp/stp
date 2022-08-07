@@ -3,7 +3,7 @@ Introduction
 
 STP currently supports the following types of tests
 
--  Tests that use query files (i.e. ``smt``, ``smt2`` and ``cvc`` files)
+-  Tests that use query files (e.g. ``smt2`` files)
    to drive the ``stp`` binary and check the tool’s output. These are
    driven using the `lit <https://pypi.python.org/pypi/lit>`__ and
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer

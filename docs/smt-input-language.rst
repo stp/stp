@@ -1,17 +1,17 @@
 **********************************
-SMT-LIBv2 Input Language Reference
+SMT-LIB2 Input Language Reference
 **********************************
 
 .. highlight:: lisp
 
-This page contains a short description for the SMT-LIB v2 input language
+This page contains a short description for the SMT-LIB version 2 input language
 that STP can parse. For more information related to SMT-LIB, please refer to `this
 page <https://smtlib.cs.uiowa.edu/>`__.
 
 Header
 ======
 
-The SMT-LIBv2 format uses a header to tell the solver which type of
+The SMT-LIB2 format uses a header to tell the solver which type of
 problem is coming, the header needed is:
 
 ::
@@ -126,7 +126,7 @@ check the satisfiability, then to exit:
 Examples
 ========
 
-There are many SMT-LIBv2 format examples in STP’s source code repository.
+There are many SMT-LIB2 format examples in STP’s source code repository.
 Look for files with a .smt2 extension here. Signed division of -1/-2 =
 0, should be satisfiable:
 
