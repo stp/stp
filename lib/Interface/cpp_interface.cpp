@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Trevor Hansen, Andrew V. Jones
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -39,7 +39,7 @@ namespace stp
 void Cpp_interface::checkInvariant()
 {
   assert(bm.getAssertLevel() == cache.size());
-  assert(bm.getAssertLevel() == symbols.size());
+  assert(bm.getAssertLevel() == frames.size());
 }
 
 void Cpp_interface::init()
@@ -48,7 +48,8 @@ void Cpp_interface::init()
   alreadyWarned = false;
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
-  symbols.push_back(ASTVec());
+
+  addFrame();
 
   if (bm.getVectorOfAsserts().size() == 0)
     bm.Push();
@@ -59,10 +60,41 @@ void Cpp_interface::init()
   changed_model_status = false;
 }
 
+void Cpp_interface::addFrame()
+{
+  // create a new frame
+  SolverFrame* new_frame = new SolverFrame(&functions);
+
+  // store the new frame
+  frames.push_back(new_frame);
+}
+
+void Cpp_interface::removeFrame()
+{
+    // obtain the last frame
+    SolverFrame* last = frames.back();
+
+    // delete it
+    delete last;
+
+    // remove it from the vector of frames
+    frames.pop_back();
+}
+
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
     : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
+}
+
+ASTVec& Cpp_interface::getCurrentSymbols()
+{
+  return frames.back()->getSymbols();
+}
+
+vector<std::string>& Cpp_interface::getCurrentFunctions()
+{
+  return frames.back()->getFunctions();
 }
 
 void Cpp_interface::startup()
@@ -158,16 +190,23 @@ ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
   return bm.LookupOrCreateSymbol(name);
 }
 
-void Cpp_interface::removeSymbol(ASTNode s)
+void Cpp_interface::removeSymbol(ASTNode to_remove)
 {
   bool removed = false;
 
-  for (size_t i = 0; i < symbols.back().size(); i++)
-    if (symbols.back()[i] == s)
+  // Get the symbols for the current frame
+  ASTVec& curr_symbols = getCurrentSymbols();
+
+  for (ASTVec::iterator iter = curr_symbols.begin(); iter != curr_symbols.end();
+       ++iter)
+  {
+    if ((*iter) == to_remove)
     {
-      symbols.back().erase(symbols.back().begin() + i);
+      curr_symbols.erase(iter);
       removed = true;
+      break;
     }
+  }
 
   if (!removed)
     FatalError("Should have been removed...");
@@ -191,7 +230,13 @@ void Cpp_interface::storeFunction(const string name, const ASTVec& params,
 
   ASTNodeMap cache;
   f.function = SubstitutionMap::replace(function, fromTo, cache, nf);
+
+  // store the function in the global function store
   functions.insert(std::make_pair(f.name, f));
+
+  // record which frame this function was created in, such that it can be
+  // removed later (e.g., via pop)
+  getCurrentFunctions().push_back(f.name);
 }
 
 ASTNode Cpp_interface::applyFunction(const string name, const ASTVec& params)
@@ -286,7 +331,7 @@ void Cpp_interface::deleteNode(ASTNode* n)
 
 void Cpp_interface::addSymbol(ASTNode& s)
 {
-  symbols.back().push_back(s);
+  getCurrentSymbols().push_back(s);
 }
 
 void Cpp_interface::success()
@@ -322,15 +367,15 @@ void Cpp_interface::reset()
 {
   popToFirstLevel();
 
-  if (symbols.size() > 0)
+  if (frames.size() > 0)
   {
     // used just by cvc parser.
     assert(letMgr->_parser_symbol_table.size() == 0);
 
-    symbols.erase(symbols.end() - 1);
+    removeFrame();
   }
 
-  assert(symbols.size() == 0);
+  assert(frames.size() == 0);
 
   // These tables might hold references to symbols that have been
   // removed.
@@ -345,7 +390,7 @@ void Cpp_interface::reset()
 
 void Cpp_interface::popToFirstLevel()
 {
-  while (symbols.size() > 1)
+  while (frames.size() > 1)
     pop();
 
   // I don't understand why this is required.
@@ -355,9 +400,9 @@ void Cpp_interface::popToFirstLevel()
 
 void Cpp_interface::pop()
 {
-  if (symbols.size() == 0)
+  if (frames.size() == 0)
     FatalError("Popping from an empty stack.");
-  if (symbols.size() == 1)
+  if (frames.size() == 1)
     FatalError("Can't pop away the default base element.");
 
   bm.Pop();
@@ -370,7 +415,7 @@ void Cpp_interface::pop()
 
   assert(letMgr->_parser_symbol_table.size() == 0);
 
-  symbols.erase(symbols.end() - 1);
+  removeFrame();
   checkInvariant();
 }
 
@@ -383,8 +428,8 @@ void Cpp_interface::push()
     cache.push_back(Entry(SOLVER_UNDECIDED));
 
   bm.Push();
-  symbols.push_back(ASTVec());
 
+  addFrame();
   checkInvariant();
 }
 
@@ -488,15 +533,8 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
   nf = bm.defaultNodeFactory;
   startup();
   stp::GlobalParserInterface = this;
-
-  Simplifier* simp = new Simplifier(&bm);
-  ArrayTransformer* at = new ArrayTransformer(&bm, simp);
-  AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(&bm, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(&bm, at);
-
   stp::GlobalParserBM = &bm_;
-
-  GlobalSTP = new STP(&bm, simp, at, tosat, abs);
+  GlobalSTP = new STP(&bm);
   init();
 }
 
@@ -510,7 +548,11 @@ void Cpp_interface::cleanUp()
 {
   letMgr->cleanupParserSymbolTable();
   cache.clear();
-  symbols.clear();
+
+  while (frames.size() > 0)
+  {
+    removeFrame();
+  }
 }
 
 void Cpp_interface::setOption(std::string option, std::string value)
@@ -581,9 +623,9 @@ void Cpp_interface::getValue(const ASTVec& v)
     GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
     os << std::endl;
   }
-  os << ")" << std::endl;
+  os << ")";
 
-  cout << os.str();
+  cout << os.str() << std::endl;
 }
 
 // Note, doesn't consider that extra assertions might have been applied?
@@ -612,5 +654,46 @@ void Cpp_interface::getModel()
 void CNFClearMemory()
 {
   Cnf_ClearMemory();
+}
+
+Cpp_interface::SolverFrame::SolverFrame(
+    std::unordered_map<std::string, Function>* global_function_context)
+    : _global_function_context(global_function_context)
+{
+}
+
+// When we destroy a solver frame, we need to make sure that all of the scoped
+// functions in the global function context are also correctly removed.
+//
+// This ensures that the reference counting for any symbols used in the
+// function declarations are correctly decremented.
+Cpp_interface::SolverFrame::~SolverFrame()
+{
+  // Iterate on the function names in our current scope
+  for (const auto& scoped_function_name : getFunctions())
+  {
+    // Find this function in the global context
+    const auto& function_to_erase =
+        _global_function_context->find(scoped_function_name);
+
+    // Hard-error if we cannot find it!
+    if (function_to_erase == _global_function_context->end())
+    {
+      FatalError("Trying to erase function which has not been defined.");
+    }
+
+    // Remove our scope function from the global function context
+    _global_function_context->erase(function_to_erase);
+  }
+}
+
+vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
+{
+  return _scoped_functions;
+}
+
+ASTVec& Cpp_interface::SolverFrame::getSymbols()
+{
+  return _scoped_symbols;
 }
 }

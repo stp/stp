@@ -188,18 +188,9 @@ public:
    ****************************************************************/
   UserDefinedFlags UserFlags;
 
-  // This flag, when true, indicates that counterexample is being
-  // checked by the counterexample checker
-  bool counterexample_checking_during_refinement;
-
   // This flag indicates as to whether the input has been determined
   // to be valid or not by this tool
   bool ValidFlag;
-
-  // Flags indicates that counterexample will now be checked by the
-  // counterexample checker, and hence simplifyterm must switch off
-  // certain optimizations. In particular, array write optimizations
-  bool SimplifyWrites_InPlace_Flag;
 
   // count is used in the creation of new variables
   unsigned int _symbol_count;
@@ -216,8 +207,6 @@ public:
         CNFFileNameCounter(0)
   {
     ValidFlag = false;
-    counterexample_checking_during_refinement = false;
-    SimplifyWrites_InPlace_Flag = false;
 
     // Need to initiate the node factories before any nodes are created.
     hashingNodeFactory = new HashingNodeFactory(*this);

@@ -138,6 +138,9 @@ public:
     nf = bm->defaultNodeFactory;
   };
 
+  BVSolver( const BVSolver& ) = delete;
+  BVSolver& operator=( const BVSolver& ) = delete;
+
   ~BVSolver() { ClearAllTables(); }
 
   // Top Level Solver: Goes over the input DAG, identifies the

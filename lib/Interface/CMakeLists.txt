@@ -34,13 +34,22 @@ add_dependencies(cppinterface ASTKind_header)
 # FIXME: Remove this
 # For legacy reasons make the interface header files available in include/stp/ in the build directory
 if (NOT ("${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}"))
-    add_custom_target(CopyPublicHeaders ALL)
     set(HEADER_DEST "${PROJECT_BINARY_DIR}/include/stp")
     foreach(public_header c_interface.h cpp_interface.h)
-        add_custom_command(TARGET CopyPublicHeaders PRE_BUILD
+        # Name of the current legacy header
+        set(LEGACY_HEADER "${HEADER_DEST}/${public_header}")
+
+        # List of all legacy headers
+        list(APPEND LEGACY_HEADERS ${LEGACY_HEADER})
+
+        # Custom command to generate this one legacy header
+        add_custom_command(OUTPUT ${LEGACY_HEADER} PRE_BUILD
                            COMMAND ${CMAKE_COMMAND} -E make_directory ${HEADER_DEST}
                            COMMAND ${CMAKE_COMMAND} -E echo "LEGACY: Copying ${public_header} to ${HEADER_DEST}"
-                           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/include/stp/${public_header}" "${HEADER_DEST}/${public_header}"
+                           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/include/stp/${public_header}" ${LEGACY_HEADER}
                           )
     endforeach()
+
+    # Target needs to depend on all legacy headers
+    add_custom_target(CopyPublicHeaders ALL DEPENDS ${LEGACY_HEADERS})
 endif()

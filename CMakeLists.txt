@@ -18,13 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-project(STP)
-cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 14)
-
-include (GenerateExportHeader)
-include(GNUInstallDirs)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 if(POLICY CMP0048)
     #policy for VERSION in cmake 3.0
@@ -36,8 +30,30 @@ if(POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
 endif()
 
+if(POLICY CMP0092)
+    # Disable passing /W3 by default on MSVC
+    cmake_policy(SET CMP0092 NEW)
+endif()
+
+if(POLICY CMP0077)
+    # Allow to override options via regular variables
+    cmake_policy(SET CMP0077 NEW)
+endif()
+
+project(STP)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 14)
+
+include(GenerateExportHeader)
+include(GNUInstallDirs)
+include(FeatureSummary)
+
 # Search paths for custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
+
+# Search for packages in the deps directory
+list(APPEND CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/deps/install")
 
 # generate JSON file of compile commands -- useful for code extension
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
@@ -51,7 +67,7 @@ set(STP_TIMESTAMPS ON CACHE BOOL "Enable build with timestamps")
 set(build_types Debug Release RelWithDebInfo MinSizeRel)
 if(NOT CMAKE_BUILD_TYPE)
 
-      message(STATUS "You can choose the type of build, options are:${build_types}")
+      message(STATUS "You can choose the type of build, options are: ${build_types}")
       set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
           "Options are ${build_types}"
           FORCE
@@ -93,6 +109,7 @@ else()
     # Note this definition doesn't appear in the cache variables.
     add_definitions(-DNDEBUG)
 endif()
+add_feature_info(Assertions ENABLE_ASSERTIONS "Enables assertions")
 
 # -----------------------------------------------------------------------------
 # Enable LLVM sanitizations.
@@ -104,11 +121,11 @@ endmacro()
 
 include(MacroPushRequiredVars)
 
-option(SANITIZE "Use Clang sanitizers. This will force using clang++ as the compiler" OFF)
+option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
     SET(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
-    message("Forcing compiler:${CMAKE_CXX_COMPILER}")
+    message(STATUS "Forcing compiler: ${CMAKE_CXX_COMPILER}")
     add_cxx_flag("-fsanitize=return")
     add_cxx_flag("-fsanitize=bounds")
     add_cxx_flag("-fsanitize=integer")
@@ -120,19 +137,20 @@ if (SANITIZE)
     add_cxx_flag("-fsanitize=address")
     add_cxx_flag("-Wno-bitfield-constant-conversion")
 endif()
+add_feature_info(Sanitizers SANITIZE "Enables Clang sanitizers, will force using clang++ as the compiler")
 
 # -----------------------------------------------------------------------------
 # Let the user decide if they want to build shared or static client library.
 # STP will link against this client library
 # -----------------------------------------------------------------------------
-option(STATICCOMPILE "Compile static library and executable" OFF)
 
 option(BUILD_SHARED_LIBS "Build the shared library" ON)
-option(STATICCOMPILE "Compile to static executable" OFF)
+option(STATICCOMPILE "Compile static library and executable" OFF)
 if (STATICCOMPILE)
     set(BUILD_SHARED_LIBS OFF)
     set(ENABLE_PYTHON_INTERFACE OFF)
 endif()
+add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (NOT BUILD_SHARED_LIBS))
     set(Boost_USE_STATIC_LIBS ON)
@@ -181,6 +199,8 @@ else ()
       message(STATUS "Using RPATH for dynamic linking")
     endif()
 endif()
+
+option(SUPPRESS_WARNINGS "Silence all warnings" OFF)
 
 if (NOT MSVC)
     add_compile_options( -g)
@@ -237,7 +257,11 @@ else()
     add_compile_options(/GS)
 
     # Proper warning level
-    add_compile_options(/W1)
+    if(SUPPRESS_WARNINGS)
+        add_compile_options(/W0)
+    else()
+        add_compile_options(/W1)
+    endif()
 
     # Disable STL used in DLL-boundary warning
     add_compile_options(/wd4251)
@@ -305,34 +329,39 @@ if(APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()
 
-if (NOT MSVC)
-    add_cxx_flag_if_supported("-Wall")
-    add_cxx_flag_if_supported("-Wextra")
-    add_cxx_flag_if_supported("-Wunused")
-    add_cxx_flag_if_supported("-pedantic")
-    add_cxx_flag_if_supported("-Wsign-compare")
+if(NOT MSVC)
+    if(SUPPRESS_WARNINGS)
+        add_cxx_flag_if_supported("-w")
+    else()
+        add_cxx_flag_if_supported("-Wall")
+        add_cxx_flag_if_supported("-Wextra")
+        add_cxx_flag_if_supported("-Wunused")
+        add_cxx_flag_if_supported("-pedantic")
+        add_cxx_flag_if_supported("-Wsign-compare")
+        add_cxx_flag_if_supported("-Wtype-limits")
+        add_cxx_flag_if_supported("-Wuninitialized")
+        add_cxx_flag_if_supported("-Wno-deprecated")
+        add_cxx_flag_if_supported("-Wstrict-aliasing")
+        add_cxx_flag_if_supported("-Wpointer-arith")
+        add_cxx_flag_if_supported("-Wheader-guard")
+        add_cxx_flag_if_supported("-Wpointer-arith")
+        add_cxx_flag_if_supported("-Wformat-nonliteral")
+        add_cxx_flag_if_supported("-Winit-self")
+        add_cxx_flag_if_supported("-Wparentheses")
+        add_cxx_flag_if_supported("-Wunreachable-code")
+    endif()
+
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
         add_cxx_flag_if_supported("-fno-omit-frame-pointer")
     endif()
-    add_cxx_flag_if_supported("-Wtype-limits")
-    add_cxx_flag_if_supported("-Wuninitialized")
-    add_cxx_flag_if_supported("-Wno-deprecated")
-    add_cxx_flag_if_supported("-Wstrict-aliasing")
-    add_cxx_flag_if_supported("-Wpointer-arith")
-    add_cxx_flag_if_supported("-Wheader-guard")
     #if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         # almost working
         # add_cxx_flag_if_supported("-fvisibility=hidden")
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
-    add_cxx_flag_if_supported("-Wpointer-arith")
-    add_cxx_flag_if_supported("-Wformat-nonliteral")
-    add_cxx_flag_if_supported("-Winit-self")
-    add_cxx_flag_if_supported("-Wparentheses")
-    add_cxx_flag_if_supported("-Wunreachable-code")
-    add_compile_options("-fPIC")
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 add_definitions("-D__STDC_LIMIT_MACROS")
@@ -347,7 +376,20 @@ if (COVERAGE)
     add_cxx_flag("--coverage")
 endif()
 
+option(WERROR "Build with warnings as errors" OFF)
+if (WERROR)
+    if (NOT MSVC)
+        message(STATUS "Enabling treating warnings as errors")
+        # Let's make things be errors -- we can't test for this
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+    else()
+        message(STATUS "Warnings as errors is not enabled under MSVC")
+    endif()
+endif()
+
 option(USE_THREAD_LOCAL "Use thread-local storage when available" ON)
+add_feature_info(ThreadLocal USE_THREAD_LOCAL "Enables use of thread-local storage when available")
 
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
@@ -414,17 +456,14 @@ endif()
 
 if(NOT Boost_FOUND)
     set(ONLY_SIMPLE ON)
-    message(STATUS "Only building executable with few command-line options because the boost program_options library were not available")
-else()
-    message(STATUS "Boost -- found at library: ${Boost_LIBRARIES}")
-    message(STATUS "Boost -- adding '${Boost_LIBRARY_DIRS}' to link directories")
-    link_directories(${Boost_LIBRARY_DIRS})
 endif()
+add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
 
 # -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
 option(USE_RISS "Try to use Riss" OFF)
+add_feature_info(Riss USE_RISS "Enables Riss solver")
 
 if (USE_RISS)
     add_definitions(-DUSE_RISS)
@@ -441,17 +480,16 @@ if (NOT NOCRYPTOMINISAT)
   set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
   find_package(cryptominisat5 CONFIG)
   if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-    message(STATUS "Found CryptoMiniSat 5.x and C++11, allowing --cryptominisat5 option")
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
+    message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
     add_definitions(-DUSE_CRYPTOMINISAT)
-    include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})
     set(USE_CRYPTOMINISAT ON)
   else()
-    message(WARNING "CryptoMiniSat5 (5.0 or above) or C++11 support not found, not allowing --cryptominisat option")
   endif()
 endif()
+add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")
 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
 if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
@@ -501,15 +539,25 @@ endif()
 # -----------------------------------------------------------------------------
 # Find Minisat
 # -----------------------------------------------------------------------------
+
 find_package(minisat)
-set(MINISAT_INCLUDE_DIRS "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBDIR "" CACHE PATH "MiniSat library directory")
-if (NOT MINISAT_FOUND)
-  message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
+set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
+
+if (minisat_FOUND)
+    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
 else()
-  message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIR}")
+    message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
+    find_package(minisat CONFIG)
+
+    if (minisat_FOUND)
+        message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+    endif()
 endif()
-include_directories(${MINISAT_INCLUDE_DIR})
+
+include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 
 # -----------------------------------------------------------------------------
@@ -606,29 +654,27 @@ option(ENABLE_TESTING "Enable testing" OFF)
 
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
-if ((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
+if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
     find_package (PythonInterp)
-    if (PYTHON_EXECUTABLE)
-        set(PYTHON_OK ON)
-        message(STATUS "OK, found python interpreter")
-    else()
-        message(WARNING "Cannot find python interpreter, cannot build python interface")
-    endif()
-
-    if (PYTHON_OK AND BUILD_SHARED_LIBS)
-        message(STATUS "Python found, enabling python interface")
+    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
+    else()
+        set(ENABLE_PYTHON_INTERFACE OFF)
     endif()
 endif()
+add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interface")
 
 # -----------------------------------------------------------------------------
 # Compile all subdirs
 # -----------------------------------------------------------------------------
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
+
+option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
+add_feature_info(Executables BUILD_EXECUTABLES "Enables executables compilation")
 
 # -----------------------------------------------------------------------------
 # Add uninstall target for makefiles
@@ -660,16 +706,19 @@ endif()
 
 if(ENABLE_TESTING)
   enable_testing()
-  message(STATUS "Testing is enabled")
   set(UNIT_TEST_EXE_SUFFIX "Tests" CACHE STRING "Suffix for Unit test executable")
 #   add_custom_target(check
 #     COMMENT "top level target to invoke all other tests"
 #   )
 
   add_subdirectory(tests)
-else()
-    message(WARNING "Testing is disabled")
 endif()
+add_feature_info(Tests ENABLE_TESTING "Enables tests")
+
+# -----------------------------------------------------------------------------
+# Print information about used features
+# -----------------------------------------------------------------------------
+feature_summary(WHAT ENABLED_FEATURES DISABLED_FEATURES)
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with

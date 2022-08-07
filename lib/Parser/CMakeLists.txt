@@ -51,6 +51,11 @@ foreach(_file ${TOLEX})
         ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
     )
+    if (NOT MSVC)
+        set_source_files_properties(lex${_file}.cpp
+            PROPERTIES COMPILE_FLAGS
+            "-Wno-unneeded-internal-declaration -Wno-unreachable-code")
+    endif()
 endforeach()
 
 add_library(parser OBJECT

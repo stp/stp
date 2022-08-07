@@ -92,6 +92,6 @@ DLL_PUBLIC extern THREAD_LOCAL Cpp_interface* GlobalParserInterface;
 
 // Function that computes various kinds of statistics for the phases
 // of STP
-void CountersAndStats(const char* functionname, STPMgr* bm);
+void CountersAndStats(const char* functionname, STPMgr *bm);
 }
 #endif

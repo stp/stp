@@ -36,9 +36,11 @@ class DifficultyScore // not copyable
 private:
   // maps from nodeNumber to the previously calculated difficulty score..
   std::map<int, long> cache;
+  long evalCount = 0;
 
 public:
   long score(const ASTNode& top, STPMgr*);
+  auto getEvalCount() {return evalCount;}
 };
 }
 

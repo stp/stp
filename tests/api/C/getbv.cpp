@@ -33,7 +33,7 @@ THE SOFTWARE.
 
 TEST(getbv, INT64)
 {
-  ASSERT_EQ(64, sizeof(uint64_t) * 8);
+  ASSERT_EQ(64ul, sizeof(uint64_t) * 8);
 
   for (uint64_t j = 1; j < UINT64_MAX; j |= (j << 1))
   {
@@ -61,7 +61,7 @@ TEST(getbv, INT64)
 
 TEST(getbv, INT32)
 {
-  ASSERT_EQ(32, sizeof(int32_t) * 8);
+  ASSERT_EQ(32ul, sizeof(int32_t) * 8);
 
   for (uint32_t j = 1; j < UINT32_MAX; j |= (j << 1))
   {

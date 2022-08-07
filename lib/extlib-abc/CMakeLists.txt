@@ -86,3 +86,10 @@ add_library(abc OBJECT
     aig/kit/kitSop.c
     aig/kit/kitTruth.c
 )
+
+if (NOT MSVC)
+    set_source_files_properties(aig/aig/aigDfs.c
+        PROPERTIES COMPILE_FLAGS "-Wno-dangling-else")
+    set_source_files_properties(aig/cnf/cnfData.c
+        PROPERTIES COMPILE_FLAGS "-Wno-pointer-sign")
+endif()

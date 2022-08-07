@@ -133,7 +133,7 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   vars.getSymbol(eq);
 
   // handle BVPLUS case
-  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren());
+  ASTVec c = FlattenKind(BVPLUS, lhs.GetChildren(),50);
   ASTVec o;
   ASTNode outmonom = ASTUndefined;
   bool chosen_symbol = false;
@@ -606,6 +606,8 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   if (evens != ASTTrue)
     output = nf->CreateNode(AND, output, evens);
 
+  _bm->GetRunTimes()->stop(RunTimes::BVSolver);
+
   // Imagine in the last conjunct A is replaced by B. But there could
   // be variable A's in the first conjunct. This gets rid of 'em.
   if (_simp->hasUnappliedSubstitutions())
@@ -615,7 +617,6 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   }
 
   UpdateAlreadySolvedMap(_input, output);
-  _bm->GetRunTimes()->stop(RunTimes::BVSolver);
   return output;
 }
 

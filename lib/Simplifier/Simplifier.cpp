@@ -23,12 +23,14 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include <cassert>
 #include <cmath>
 
 namespace stp
 {
+using std::endl;
+using std::cerr;
+
 
 // If enabled, simplifyTerm will simplify all the arguments to a function before
 // attempting
@@ -159,6 +161,11 @@ ASTNode Simplifier::applySubstitutionMap(const ASTNode& n)
   return substitutionMap.applySubstitutionMap(n);
 }
 
+ASTNode Simplifier::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
+{
+  return substitutionMap.applySubstitutionMapAtTopLevel(topLevel);
+}
+
 ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n);
@@ -239,7 +246,7 @@ void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& /*key*/)
   // suspect
   // it's not a big loss.
 
-  /*if (false)//(!_bm->UserFlags.isSet("bb-equiv", "1"))
+  /*if (false)//(!nf->UserFlags.isSet("bb-equiv", "1"))
     AlwaysTrueHashSet.insert(key.GetNodeNum());*/
 }
 
@@ -275,8 +282,30 @@ void Simplifier::checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited)
   visited.insert(n);
 }
 
+ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNodeMap* VarConstMap)
+{
+  assert(_bm->UserFlags.optimize_flag);
+  _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
+  ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
+
+  ASTNodeMap constants;
+  
+  for (const auto e: *SimplifyMap)
+  {
+    if (e.second.isConstant())
+    {
+      constants.insert(e);
+    }
+  }
+    
+  ResetSimplifyMaps();
+  _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
+  return constants;
+}
+
+
 // The SimplifyMaps on entry to the topLevel functions may contain
-// useful entries.  E.g. The BVSolver calls SimplifyTerm()
+// useful entries.  E.g. The BVSolver may call SimplifyTerm()
 ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg,
                                              ASTNodeMap* VarConstMap)
 {
@@ -427,8 +456,8 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     {
       ASTNode term = SimplifyTerm(a[0], VarConstMap);
       ASTNode thebit = a[1];
-      ASTNode zero = _bm->CreateZeroConst(1);
-      ASTNode one = _bm->CreateOneConst(1);
+      ASTNode zero = nf->CreateZeroConst(1);
+      ASTNode one = nf->CreateOneConst(1);
       ASTNode getthebit = SimplifyTerm(
           nf->CreateTerm(BVEXTRACT, 1, term, thebit, thebit), VarConstMap);
       if (getthebit == zero)
@@ -717,9 +746,9 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
     }
   }
 
-  const ASTNode unsigned_min = _bm->CreateZeroConst(len);
-  const ASTNode one = _bm->CreateOneConst(len);
-  const ASTNode unsigned_max = _bm->CreateMaxConst(len);
+  const ASTNode unsigned_min = nf->CreateZeroConst(len);
+  const ASTNode one = nf->CreateOneConst(len);
+  const ASTNode unsigned_max = nf->CreateMaxConst(len);
 
   switch (k)
   {
@@ -954,12 +983,12 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   if (constStart > 0)
   {
     int newWidth = in1.GetValueWidth() - constStart;
-    ASTNode zero = _bm->CreateZeroConst(32);
+    ASTNode zero = nf->CreateZeroConst(32);
 
     ASTNode lhs = nf->CreateTerm(BVEXTRACT, newWidth, in1,
-                                 _bm->CreateBVConst(32, newWidth - 1), zero);
+                                 nf->CreateBVConst(32, newWidth - 1), zero);
     ASTNode rhs = nf->CreateTerm(BVEXTRACT, newWidth, in2,
-                                 _bm->CreateBVConst(32, newWidth - 1), zero);
+                                 nf->CreateBVConst(32, newWidth - 1), zero);
     ASTNode r = nf->CreateNode(EQ, lhs, rhs);
     assert(BVTypeCheck(r));
     return r;
@@ -981,14 +1010,14 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   {
     int width = in1.GetValueWidth();
     int bottomW = in2[1].GetValueWidth();
-    ASTNode zero = _bm->CreateZeroConst(32);
+    ASTNode zero = nf->CreateZeroConst(32);
 
     // split the constant.
     ASTNode top = nf->CreateTerm(BVEXTRACT, width - bottomW, in1,
-                                 _bm->CreateBVConst(32, width - 1),
-                                 _bm->CreateBVConst(32, bottomW));
+                                 nf->CreateBVConst(32, width - 1),
+                                 nf->CreateBVConst(32, bottomW));
     ASTNode bottom = nf->CreateTerm(BVEXTRACT, bottomW, in1,
-                                    _bm->CreateBVConst(32, bottomW - 1), zero);
+                                    nf->CreateBVConst(32, bottomW - 1), zero);
     assert(BVTypeCheck(top));
     assert(BVTypeCheck(bottom));
 
@@ -1693,124 +1722,17 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   if (maxLength < output.GetValueWidth())
   {
     ASTNode newA = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[0],
-                                  _bm->CreateBVConst(32, maxLength - 1),
-                                  _bm->CreateZeroConst(32));
+                                  nf->CreateBVConst(32, maxLength - 1),
+                                  nf->CreateZeroConst(32));
     newA = SimplifyTerm(newA);
     ASTNode newB = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[1],
-                                  _bm->CreateBVConst(32, maxLength - 1),
-                                  _bm->CreateZeroConst(32));
+                                  nf->CreateBVConst(32, maxLength - 1),
+                                  nf->CreateZeroConst(32));
     newB = SimplifyTerm(newB);
 
     ASTNode mult = nf->CreateTerm(output.GetKind(), maxLength, newA, newB);
     output = nf->CreateTerm(BVSX, inputValueWidth, mult,
-                            _bm->CreateBVConst(32, inputValueWidth));
-  }
-  return output;
-}
-
-// If the shift is bigger than the bitwidth, replace by an extract.
-ASTNode Simplifier::convertArithmeticKnownShiftAmount(const Kind k,
-                                                      const ASTVec& children,
-                                                      STPMgr& bm,
-                                                      NodeFactory* nf)
-{
-  const ASTNode a = children[0];
-  const ASTNode b = children[1];
-  const unsigned width = children[0].GetValueWidth();
-  ASTNode output;
-
-  assert(b.isConstant());
-  assert(k == BVSRSHIFT);
-
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
-  {
-    ASTNode top = bm.CreateBVConst(32, width - 1);
-    return nf->CreateTerm(BVSX, width,
-                          nf->CreateTerm(BVEXTRACT, 1, children[0], top, top),
-                          bm.CreateBVConst(32, width));
-  }
-  else
-  {
-    if (b.GetUnsignedConst() >= width)
-    {
-      ASTNode top = bm.CreateBVConst(32, width - 1);
-      return nf->CreateTerm(BVSX, width,
-                            nf->CreateTerm(BVEXTRACT, 1, children[0], top, top),
-                            bm.CreateBVConst(32, width));
-    }
-    else
-    {
-      ASTNode top = bm.CreateBVConst(32, width - 1);
-      ASTNode bottom = bm.CreateBVConst(32, b.GetUnsignedConst());
-
-      return nf->CreateTerm(BVSX, width,
-                            nf->CreateTerm(BVEXTRACT,
-                                           width - b.GetUnsignedConst(),
-                                           children[0], top, bottom),
-                            bm.CreateBVConst(32, width));
-    }
-  }
-
-  return ASTNode();
-}
-
-// If the rhs of a left or right shift is known.
-ASTNode Simplifier::convertKnownShiftAmount(const Kind k,
-                                            const ASTVec& children, STPMgr& bm,
-                                            NodeFactory* nf)
-{
-  const ASTNode a = children[0];
-  const ASTNode b = children[1];
-  const unsigned width = children[0].GetValueWidth();
-  ASTNode output;
-
-  assert(b.isConstant());
-  assert(k == BVLEFTSHIFT || BVRIGHTSHIFT == k);
-
-  if (CONSTANTBV::Set_Max(b.GetBVConst()) > 1 + std::log2(width))
-  {
-    // Intended to remove shifts by very large amounts
-    // that don't fit into the unsigned.  at thhe start
-    // of the "else" branch.
-    output = bm.CreateZeroConst(width);
-  }
-  else
-  {
-    const unsigned int shift = b.GetUnsignedConst();
-    if (shift >= width)
-    {
-      output = bm.CreateZeroConst(width);
-    }
-    else if (shift == 0)
-    {
-      output = a; // unchanged.
-    }
-    else
-    {
-      if (k == BVLEFTSHIFT)
-      {
-        CBV cbv = CONSTANTBV::BitVector_Create(width, true);
-        CONSTANTBV::BitVector_Bit_On(cbv, shift);
-        ASTNode c = bm.CreateBVConst(cbv, width);
-
-        output = nf->CreateTerm(BVMULT, width, a, c);
-        BVTypeCheck(output);
-        // cout << output;
-        // cout << a << b << endl;
-      }
-      else if (k == BVRIGHTSHIFT)
-      {
-        ASTNode zero = bm.CreateZeroConst(shift);
-        ASTNode hi = bm.CreateBVConst(32, width - 1);
-        ASTNode low = bm.CreateBVConst(32, shift);
-        ASTNode extract = nf->CreateTerm(BVEXTRACT, width - shift, a, hi, low);
-        BVTypeCheck(extract);
-        output = nf->CreateTerm(BVCONCAT, width, zero, extract);
-        BVTypeCheck(output);
-      }
-      else
-        FatalError("herasdf");
-    }
+                            nf->CreateBVConst(32, inputValueWidth));
   }
   return output;
 }
@@ -1874,7 +1796,8 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
         // If we didn't flatten these, then we'd start flattening each of these
         // from the bottom up. Potentially creating tons of the nodes along the
         // way.
-        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess);
+
+        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,15);
       }
 
       v.reserve(toProcess.size());
@@ -2037,7 +1960,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
 
-    // follow on.
+    // fall-through
     case BVPLUS:
     {
       if (BVPLUS == k && inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT && inputterm[0] == inputterm[1][1])
@@ -2075,9 +1998,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         }
       }
 
-      const ASTNode one = _bm->CreateOneConst(inputValueWidth);
-      const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
-      const ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
+      const ASTNode one = nf->CreateOneConst(inputValueWidth);
+      const ASTNode max = nf->CreateMaxConst(inputValueWidth);
+      const ASTNode zero = nf->CreateZeroConst(inputValueWidth);
 
       // initialize constoutput to zero, in case there are no elements
       // in constkids
@@ -2091,8 +2014,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       else if (1 < constkids.size())
       {
         // many elements in constkids. simplify it
-        constoutput = nf->CreateTerm(k, inputterm.GetValueWidth(), constkids);
-        constoutput = BVConstEvaluator(constoutput);
+        constoutput = NonMemberBVConstEvaluator(_bm, k ,constkids, inputterm.GetValueWidth());
       }
 
       if (BVMULT == k && zero == constoutput)
@@ -2205,7 +2127,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const ASTNode& a1 = inputterm[1];
 
       if (a0 == a1)
-        output = _bm->CreateZeroConst(inputValueWidth);
+        output = nf->CreateZeroConst(inputValueWidth);
       else
       {
         // covert x-y into x+(-y) and simplify. this transformation
@@ -2227,7 +2149,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       const ASTNode& a0 = inputterm[0];
       const Kind k1 = a0.GetKind();
-      const ASTNode one = _bm->CreateOneConst(inputValueWidth);
+      const ASTNode one = nf->CreateOneConst(inputValueWidth);
       assert(k1 != BVCONST);
       switch (k1)
       {
@@ -2347,7 +2269,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       // indices for BVEXTRACT
       ASTNode i = inputterm[1];
       ASTNode j = inputterm[2];
-      const ASTNode zero = _bm->CreateZeroConst(32);
+      const ASTNode zero = nf->CreateZeroConst(32);
 
       // recall that the indices of BVEXTRACT are always 32 bits
       // long. therefore doing a GetBVUnsigned is ok.
@@ -2372,8 +2294,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           // const unsigned innerHigh = a0[1].GetUnsignedConst();
 
           output = nf->CreateTerm(BVEXTRACT, inputValueWidth, a0[0],
-                                  _bm->CreateBVConst(32, i_val + innerLow),
-                                  _bm->CreateBVConst(32, j_val + innerLow));
+                                  nf->CreateBVConst(32, i_val + innerLow),
+                                  nf->CreateBVConst(32, j_val + innerLow));
           assert(BVTypeCheck(output));
           break;
         }
@@ -2402,16 +2324,16 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
             // Apply the rule: (t@u)[i:j] <==>
             // t[i-len_u:j-len_u], if len(t@u) > i >= j >=
             // len(u)
-            i = _bm->CreateBVConst(32, i_val - len_u);
-            j = _bm->CreateBVConst(32, j_val - len_u);
+            i = nf->CreateBVConst(32, i_val - len_u);
+            j = nf->CreateBVConst(32, j_val - len_u);
             output = nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j);
           }
           else
           {
             // Apply the rule:
             // (t@u)[i:j] <==> t[i-len_u:0] @ u[len_u-1:j]
-            i = _bm->CreateBVConst(32, i_val - len_u);
-            ASTNode m = _bm->CreateBVConst(32, len_u - 1);
+            i = nf->CreateBVConst(32, i_val - len_u);
+            ASTNode m = nf->CreateBVConst(32, len_u - 1);
             t = SimplifyTerm(
                 nf->CreateTerm(BVEXTRACT, i_val - len_u + 1, t, i, zero),
                 VarConstMap);
@@ -2497,7 +2419,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         //        nf->CreateTerm(BVEXTRACT,a_len,a0,i,j); }
         //        else { output =
         //        nf->CreateTerm(BVSX,a_len,t,
-        //                        _bm->CreateBVConst(32,a_len));
+        //                        nf->CreateBVConst(32,a_len));
         //        } break; }
 
         /*
@@ -2554,8 +2476,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           /* FALLTHROUGH*/
         // follow on
         default:
-          output = inputterm;
-          break;
+        {
+            const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
+            output = nf->CreateTerm(BVPLUS, inputValueWidth, nf->CreateTerm(BVUMINUS, inputValueWidth, a0), max);
+          }
+        break;
       }
       break;
     }
@@ -2581,11 +2506,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         if (getConstantBit(a0, 0) == 0)
           output = nf->CreateTerm(
               BVCONCAT, inputValueWidth,
-              _bm->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
+              nf->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
         else
           output = nf->CreateTerm(
               BVCONCAT, inputValueWidth,
-              _bm->CreateMaxConst(inputValueWidth - a0.GetValueWidth()), a0);
+              nf->CreateMaxConst(inputValueWidth - a0.GetValueWidth()), a0);
         break;
       }
 
@@ -2700,8 +2625,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         break;
       }
 
-      const ASTNode max = _bm->CreateMaxConst(inputValueWidth);
-      const ASTNode zero = _bm->CreateZeroConst(inputValueWidth);
+      const ASTNode max = nf->CreateMaxConst(inputValueWidth);
+      const ASTNode zero = nf->CreateZeroConst(inputValueWidth);
 
       const ASTNode identity = (BVAND == k) ? max : zero;
       const ASTNode annihilator = (BVAND == k) ? zero : max;
@@ -2795,7 +2720,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         }
         if (allconv)
         {
-          const ASTNode zero = _bm->CreateZeroConst(1);
+          const ASTNode zero = nf->CreateZeroConst(1);
           ASTVec children;
           for (ASTVec::const_iterator it = output.begin(), itend = output.end();
                it != itend; it++)
@@ -2808,7 +2733,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
               children.push_back(n[0]);
           }
           output = nf->CreateTerm(ITE, 1, nf->CreateNode(AND, children),
-                                  _bm->CreateOneConst(1), zero);
+                                  nf->CreateOneConst(1), zero);
           assert(BVTypeCheck(output));
         }
 
@@ -2822,17 +2747,17 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           // i contains the number of leading zeroes.
           if (i < output.GetValueWidth())
             output = nf->CreateTerm(
-                BVCONCAT, output.GetValueWidth(), _bm->CreateZeroConst(i),
+                BVCONCAT, output.GetValueWidth(), nf->CreateZeroConst(i),
                 nf->CreateTerm(
                     BVAND, output.GetValueWidth() - i,
                     nf->CreateTerm(
                         BVEXTRACT, output.GetValueWidth() - i, output[0],
-                        _bm->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        _bm->CreateBVConst(32, 0)),
+                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
+                        nf->CreateBVConst(32, 0)),
                     nf->CreateTerm(
                         BVEXTRACT, output.GetValueWidth() - i, output[1],
-                        _bm->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        _bm->CreateBVConst(32, 0))));
+                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
+                        nf->CreateBVConst(32, 0))));
 
           assert(BVTypeCheck(output));
         }
@@ -2856,17 +2781,17 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         if (trailingZeroes > 0)
         {
           if (trailingZeroes == output.GetValueWidth())
-            output = _bm->CreateZeroConst(trailingZeroes);
+            output = nf->CreateZeroConst(trailingZeroes);
           else
           {
             // cerr << "old" << output;
-            ASTNode zeroes = _bm->CreateZeroConst(trailingZeroes);
+            ASTNode zeroes = nf->CreateZeroConst(trailingZeroes);
             ASTVec newChildren;
             for (size_t i = 0; i < output.Degree(); i++)
               newChildren.push_back(nf->CreateTerm(
                   BVEXTRACT, output.GetValueWidth() - trailingZeroes, output[i],
-                  _bm->CreateBVConst(32, output.GetValueWidth() - 1),
-                  _bm->CreateBVConst(32, trailingZeroes)));
+                  nf->CreateBVConst(32, output.GetValueWidth() - 1),
+                  nf->CreateBVConst(32, trailingZeroes)));
 
             ASTNode newAnd = nf->CreateTerm(
                 BVAND, output.GetValueWidth() - trailingZeroes, newChildren);
@@ -2898,7 +2823,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         const ASTNode& u_hi = u[1];
         const ASTNode& u_low = u[2];
         ASTNode c = BVConstEvaluator(
-            nf->CreateTerm(BVPLUS, 32, u_hi, _bm->CreateOneConst(32)));
+            nf->CreateTerm(BVPLUS, 32, u_hi, nf->CreateOneConst(32)));
         if (t_low == c)
         {
           output =
@@ -2935,11 +2860,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const unsigned int width = a.GetValueWidth();
       if (BVCONST == b.GetKind()) // known shift amount.
       {
-        output = convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
+        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
       }
-      else if (a == _bm->CreateZeroConst(width))
+      else if (a == nf->CreateZeroConst(width))
       {
-        output = _bm->CreateZeroConst(width);
+        output = nf->CreateZeroConst(width);
       }
       else
       {
@@ -2950,7 +2875,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
     case BVDIV:
     {
-      if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
+      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
       {
         output = inputterm[0];
         break;
@@ -2960,30 +2885,30 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       // We can't do this if the second operand might be zero.
       ASTNode eq = nf->CreateNode(EQ, inputterm[1],
-                                  _bm->CreateZeroConst(inputValueWidth));
+                                  nf->CreateZeroConst(inputValueWidth));
       if (nlz > 0 && eq == ASTFalse)
       {
         int rest = inputValueWidth - nlz;
-        ASTNode low = _bm->CreateBVConst(32, rest);
-        ASTNode high = _bm->CreateBVConst(32, inputValueWidth - 1);
+        ASTNode low = nf->CreateBVConst(32, rest);
+        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
 
         ASTNode cond = nf->CreateNode(
-            EQ, _bm->CreateZeroConst(nlz),
+            EQ, nf->CreateZeroConst(nlz),
             nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
 
         ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     _bm->CreateBVConst(32, rest - 1),
-                                     _bm->CreateZeroConst(32));
+                                     nf->CreateBVConst(32, rest - 1),
+                                     nf->CreateZeroConst(32));
         ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        _bm->CreateBVConst(32, rest - 1),
-                                        _bm->CreateZeroConst(32));
+                                        nf->CreateBVConst(32, rest - 1),
+                                        nf->CreateZeroConst(32));
 
         ASTNode div = nf->CreateTerm(BVDIV, rest, top, bottom);
         div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             _bm->CreateZeroConst(inputValueWidth - rest), div);
+                             nf->CreateZeroConst(inputValueWidth - rest), div);
 
         output = nf->CreateTerm(ITE, inputValueWidth, cond, div,
-                                _bm->CreateZeroConst(inputValueWidth));
+                                nf->CreateZeroConst(inputValueWidth));
         break;
       }
 
@@ -2991,7 +2916,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
       if (lessThan == ASTTrue)
       {
-        output = _bm->CreateZeroConst(inputValueWidth);
+        output = nf->CreateZeroConst(inputValueWidth);
       }
       else
       {
@@ -3004,12 +2929,12 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     {
       if (inputterm[0] == inputterm[1])
       {
-        output = _bm->CreateZeroConst(inputValueWidth);
+        output = nf->CreateZeroConst(inputValueWidth);
         break;
       }
-      if (inputterm[1] == _bm->CreateOneConst(inputValueWidth))
+      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
       {
-        output = _bm->CreateZeroConst(inputValueWidth);
+        output = nf->CreateZeroConst(inputValueWidth);
         break;
       }
 
@@ -3018,24 +2943,24 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         nlz = std::min(inputValueWidth - 1, nlz);
         int rest = inputValueWidth - nlz;
-        ASTNode low = _bm->CreateBVConst(32, rest);
-        ASTNode high = _bm->CreateBVConst(32, inputValueWidth - 1);
+        ASTNode low = nf->CreateBVConst(32, rest);
+        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
 
         ASTNode cond = nf->CreateNode(
-            EQ, _bm->CreateZeroConst(nlz),
+            EQ, nf->CreateZeroConst(nlz),
             nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
 
         ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     _bm->CreateBVConst(32, rest - 1),
-                                     _bm->CreateZeroConst(32));
+                                     nf->CreateBVConst(32, rest - 1),
+                                     nf->CreateZeroConst(32));
         ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        _bm->CreateBVConst(32, rest - 1),
-                                        _bm->CreateZeroConst(32));
+                                        nf->CreateBVConst(32, rest - 1),
+                                        nf->CreateZeroConst(32));
 
         // nb. This differs from the bvdiv case.
         ASTNode div = nf->CreateTerm(BVMOD, rest, top, bottom);
         div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             _bm->CreateZeroConst(inputValueWidth - rest), div);
+                             nf->CreateZeroConst(inputValueWidth - rest), div);
 
         // nb. This differs from the bvdiv case.
         output = nf->CreateTerm(ITE, inputValueWidth, cond, div, inputterm[0]);
@@ -3060,7 +2985,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     {
       if (inputterm.Degree() == 2 && inputterm[0] == inputterm[1])
       {
-        output = _bm->CreateZeroConst(inputterm.GetValueWidth());
+        output = nf->CreateZeroConst(inputterm.GetValueWidth());
         break;
       }
       if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVCONCAT &&
@@ -3076,7 +3001,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         break;
       }
       if (inputterm.Degree() == 2 &&
-          inputterm[0] == _bm->CreateZeroConst(inputterm.GetValueWidth()))
+          inputterm[0] == nf->CreateZeroConst(inputterm.GetValueWidth()))
       {
         output = inputterm[1];
         break;
@@ -3228,9 +3153,9 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
 
   // useful constants
   unsigned int len = c[0].GetValueWidth();
-  ASTNode one = _bm->CreateOneConst(len);
-  ASTNode zero = _bm->CreateZeroConst(len);
-  ASTNode max = _bm->CreateMaxConst(len);
+  ASTNode one = nf->CreateOneConst(len);
+  ASTNode zero = nf->CreateZeroConst(len);
+  ASTNode max = nf->CreateMaxConst(len);
 
   // go over the childnodes of the input bvplus, and collect like
   // terms in a map. the key of the map are the variables, and the
@@ -3305,8 +3230,8 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     ASTNode constant;
     if (1 < ccc.size())
     {
-      constant = nf->CreateTerm(BVPLUS, ccc[0].GetValueWidth(), ccc);
-      constant = BVConstEvaluator(constant);
+
+      constant = NonMemberBVConstEvaluator(_bm, BVPLUS,ccc, ccc[0].GetValueWidth());
     }
     else
       constant = ccc[0];
@@ -3401,7 +3326,7 @@ ASTNode Simplifier::LhsMinusRhs(const ASTNode& eq)
   }
 
   unsigned int len = lhs.GetValueWidth();
-  ASTNode zero = _bm->CreateZeroConst(len);
+  ASTNode zero = nf->CreateZeroConst(len);
   // right is -1*(rhs): Simplify(-1*rhs)
   rhs = SimplifyTerm(nf->CreateTerm(BVUMINUS, len, rhs));
 
@@ -3522,8 +3447,8 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   ASTVec rightnodes = right.GetChildren();
   ASTVec outputvec;
   unsigned len = a.GetValueWidth();
-  ASTNode zero = _bm->CreateZeroConst(len);
-  ASTNode one = _bm->CreateOneConst(len);
+  ASTNode zero = nf->CreateZeroConst(len);
+  ASTNode one = nf->CreateOneConst(len);
   if (BVPLUS != left_kind)
   {
     // if the multiplier is not a BVPLUS then we have a special case
@@ -3655,7 +3580,7 @@ ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
   // euclidian algorithm
   //
   // create a '0' which is 1 bit long
-  ASTNode onebit_zero = _bm->CreateZeroConst(1);
+  ASTNode onebit_zero = nf->CreateZeroConst(1);
   // zero pad t0, i.e. 0 @ t0
   c = BVConstEvaluator(
       nf->CreateTerm(BVCONCAT, inputwidth + 1, onebit_zero, c));
@@ -3664,16 +3589,16 @@ ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
   //'inputwidth+1', which is max(inputwidth)+1
   //
   // all 1's
-  ASTNode max = _bm->CreateMaxConst(inputwidth);
+  ASTNode max = nf->CreateMaxConst(inputwidth);
   // zero pad max
   max = BVConstEvaluator(
       nf->CreateTerm(BVCONCAT, inputwidth + 1, onebit_zero, max));
-  //_bm->Create a '1' which has leading zeros of length 'inputwidth'
-  ASTNode inputwidthplusone_one = _bm->CreateOneConst(inputwidth + 1);
+  //nf->Create a '1' which has leading zeros of length 'inputwidth'
+  ASTNode inputwidthplusone_one = nf->CreateOneConst(inputwidth + 1);
   // add 1 to max
   max = nf->CreateTerm(BVPLUS, inputwidth + 1, max, inputwidthplusone_one);
   max = BVConstEvaluator(max);
-  ASTNode zero = _bm->CreateZeroConst(inputwidth + 1);
+  ASTNode zero = nf->CreateZeroConst(inputwidth + 1);
   ASTNode max_bvgt_0 = nf->CreateNode(BVGT, max, zero);
   ASTNode quotient, remainder;
   ASTNode x, x1, x2;
@@ -3681,7 +3606,7 @@ ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
   // x1 initialized to zero
   x1 = zero;
   // x2 initialized to one
-  x2 = _bm->CreateOneConst(inputwidth + 1);
+  x2 = nf->CreateOneConst(inputwidth + 1);
   while (ASTTrue == BVConstEvaluator(max_bvgt_0))
   {
     // quotient = (c divided by max)
@@ -3704,8 +3629,8 @@ ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
     x1 = x;
   }
 
-  ASTNode hi = _bm->CreateBVConst(32, inputwidth - 1);
-  ASTNode low = _bm->CreateZeroConst(32);
+  ASTNode hi = nf->CreateBVConst(32, inputwidth - 1);
+  ASTNode low = nf->CreateZeroConst(32);
   inverse = nf->CreateTerm(BVEXTRACT, inputwidth, x2, hi, low);
   inverse = BVConstEvaluator(inverse);
 
@@ -3722,8 +3647,8 @@ bool Simplifier::BVConstIsOdd(const ASTNode& c)
     FatalError("Input must be a constant", c);
   }
 
-  ASTNode zero = _bm->CreateZeroConst(1);
-  ASTNode hi = _bm->CreateZeroConst(32);
+  ASTNode zero = nf->CreateZeroConst(1);
+  ASTNode hi = nf->CreateZeroConst(32);
   ASTNode low = hi;
   ASTNode lowestbit = nf->CreateTerm(BVEXTRACT, 1, c, hi, low);
   lowestbit = BVConstEvaluator(lowestbit);
@@ -3779,5 +3704,21 @@ void Simplifier::printCacheStatus()
   cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
        << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 }
+
+ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
+{
+  if (t.isConstant())
+    return t;
+
+  ASTNode OutputNode;
+
+  if (InsideSubstitutionMap(t, OutputNode))
+    return OutputNode;
+
+  OutputNode = NonMemberBVConstEvaluator(_bm, t);
+  UpdateSolverMap(t, OutputNode);
+  return OutputNode;
+}
+
 
 } // end of namespace

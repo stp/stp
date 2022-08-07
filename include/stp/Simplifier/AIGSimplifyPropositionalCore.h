@@ -48,17 +48,18 @@ THE SOFTWARE.
 
 namespace stp
 {
-using std::make_pair;
 
-class AIGSimplifyPropositionalCore // not copyable
+class AIGSimplifyPropositionalCore 
 {
-
   ASTNodeMap varToNodeMap;
   STPMgr* bm;
   NodeFactory* nf;
 
 public:
   AIGSimplifyPropositionalCore(STPMgr* _bm);
+  
+  AIGSimplifyPropositionalCore(const AIGSimplifyPropositionalCore&) = delete;
+  AIGSimplifyPropositionalCore & operator=(const AIGSimplifyPropositionalCore&) = delete;
 
 private:
   // Convert theory nodes to fresh variables.

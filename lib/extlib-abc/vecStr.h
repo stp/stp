@@ -430,6 +430,8 @@ static inline void Vec_StrPush( Vec_Str_t * p, char Entry )
   SeeAlso     []
 
 ******************************************************************************/
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wempty-body"
 static inline int Vec_StrBase10Log( unsigned Num )
 {
     int Res;
@@ -438,6 +440,7 @@ static inline int Vec_StrBase10Log( unsigned Num )
 	for ( Res = 0, Num--;  Num;  Num /= 10,  Res++ );
     return Res;
 } /* end of Extra_Base2Log */
+#pragma GCC diagnostic pop
 
 /**Function*************************************************************
 

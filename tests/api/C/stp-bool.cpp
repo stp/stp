@@ -29,7 +29,7 @@ THE SOFTWARE.
 TEST(stp_bool, one)
 {
   VC vc = vc_createValidityChecker();
-  Type type64 = vc_boolType(vc);
+  (void)vc_boolType(vc);
 
   vc_Destroy(vc);
   // FIXME: Actually test something

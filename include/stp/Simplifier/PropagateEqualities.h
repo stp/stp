@@ -28,56 +28,81 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Simplifier/NodeSimplifier.h"
 
-// This finds conjuncts which are one of: (= SYMBOL BVCONST), (= BVCONST (READ
-// SYMBOL BVCONST)),
-// (IFF SYMBOL TRUE), (IFF SYMBOL FALSE), (IFF SYMBOL SYMBOL), (=SYMBOL SYMBOL)
-// or (=SYMBOL BVCONST).
-// It tries to remove the conjunct, storing it in the substitutionmap. It
-// replaces it in the
-// formula by true.
+/* 
+  Finds formulae asserted at the top level, and removes the variables, e.g:
+  (= SYMBOL BVCONST), 
+  (IFF SYMBOL TRUE), 
+  (IFF SYMBOL FALSE), 
+  (IFF SYMBOL SYMBOL), 
+  (=SYMBOL SYMBOL)
+or (=SYMBOL BVCONST).  
+ */
 
 namespace stp
 {
-class Simplifier;
-class ArrayTransformer;
 
-class PropagateEqualities // not copyable
+class PropagateEqualities : public NodeSimplifier
 {
-
   Simplifier* simp;
   NodeFactory* nf;
   STPMgr* bm;
   const ASTNode ASTTrue, ASTFalse;
-
-  bool searchXOR(const ASTNode& lhs, const ASTNode& rhs);
-  bool searchTerm(const ASTNode& lhs, const ASTNode& rhs);
-
-  ASTNode propagate(const ASTNode& a, ArrayTransformer* at);
-  std::unordered_set<int> alreadyVisited;
-
   const bool always_true;
+
+  using IdSet =  std::unordered_set<uint64_t>;
+  using MapToNodeSet = std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > ;
+
+  IdSet alreadyVisited;
+
+  void buildCandidateList(const ASTNode& a);
+  void replaceIfPossible(int line, ASTNode& output, const ASTNode& lhs, const ASTNode& rhs);
+  void buildXORCandidates(const ASTNode a, bool negated);
+  
+  //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
+
+  void addCandidate(const ASTNode a, const ASTNode b);
+  bool isSymbol(ASTNode c);
+
+  std::vector < std::pair<ASTNode, ASTNode> > candidates;
+
+  void processCandidates();
+
+  MapToNodeSet buildMapOfLHStoVariablesInRHS(const IdSet&);
+
+  uint64_t todo=0;
+
+  void countToDo(ASTNode n);
+
+
+  bool speculative=false;
 
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
-      : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-        always_true(bm_->UserFlags.enable_always_true)
+ : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
+   always_true(bm_->UserFlags.enable_always_true)
   {
     simp = simp_;
     nf = nf_;
     bm = bm_;
   }
 
-  ASTNode topLevel(const ASTNode& a, ArrayTransformer* at)
-  {
-    if (!bm->UserFlags.propagate_equalities)
-      return a;
 
-    bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
-    ASTNode result = propagate(a, at);
-    bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
-    return result;
+  // Speculative rules might increase the number of nodes, because
+  // they add uminus nodes. Perhaps should be moved into the speculative part.
+  void setSpeculativeOn()
+  {
+    speculative = true;
   }
+
+
+  virtual ~PropagateEqualities() override 
+  {}
+  
+  virtual ASTNode topLevel(const ASTNode& a) override;
+
 };
 }
 

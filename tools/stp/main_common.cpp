@@ -270,11 +270,6 @@ int Main::main(int argc, char** argv)
   auto simplifyingNF = std::make_unique<SimplifyingNodeFactory> (*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = simplifyingNF.get();
 
-  auto simp = std::make_unique<Simplifier> (bm);
-  auto arrayTransformer = std::make_unique<ArrayTransformer>(bm, simp.get());
-  auto tosat = std::make_unique<ToSATAIG>(bm, arrayTransformer.get());
-  auto counterExample = std::make_unique<AbsRefine_CounterExample> (bm, simp.get(), arrayTransformer.get());
-
   int ret = create_and_parse_options(argc, argv);
   if (ret != 0)
   {
@@ -284,8 +279,7 @@ int Main::main(int argc, char** argv)
   // ensure that all output is (at most) line buffered
   setvbuf(stdout, NULL, _IOLBF, 0);
 
-  STP* stp = new STP(bm, simp.get(), arrayTransformer.get(), tosat.get(),
-                     counterExample.get());
+  STP* stp = new STP(bm);
 
   GlobalSTP = stp;
   // If we're not reading the file from stdin.
@@ -339,7 +333,7 @@ int Main::main(int argc, char** argv)
 
   // Save time by not calling the destructors.
   #ifdef NDEBUG
-    std::quick_exit(0);
+    std::exit(0);
   #endif
 
 

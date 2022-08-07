@@ -297,15 +297,15 @@ void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,
   }
 }
 
-void FlattenKind(const Kind k, const ASTVec& children, ASTVec& flat_children)
+void FlattenKind(const Kind k, const ASTVec& children, ASTVec& flat_children, int depth)
 {
   ASTVec::const_iterator ch_end = children.end();
   for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
   {
-    Kind ck = it->GetKind();
-    if (k == ck)
+    const Kind ck = it->GetKind();
+    if (k == ck && depth >= 0 )
     {
-      FlattenKind(k, it->GetChildren(), flat_children);
+      FlattenKind(k, it->GetChildren(), flat_children, depth-1);
     }
     else
     {
@@ -315,7 +315,7 @@ void FlattenKind(const Kind k, const ASTVec& children, ASTVec& flat_children)
 }
 
 // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
-ASTVec FlattenKind(Kind k, const ASTVec& children)
+ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth)
 {
   ASTVec flat_children;
   if (k == OR || k == BVOR || k == BVAND || k == AND)
@@ -325,7 +325,7 @@ ASTVec FlattenKind(Kind k, const ASTVec& children)
   }
   else
   {
-    FlattenKind(k, children, flat_children);
+    FlattenKind(k, children, flat_children, maxDepth);
   }
 
   return flat_children;

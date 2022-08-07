@@ -44,6 +44,41 @@ using std::string;
 using std::fdostream;
 using std::endl;
 
+namespace /* anonymous namespace for static */
+{
+
+/* this method is purposefully not public! */
+std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
+{
+  unsigned int indexWidth = 0;
+  unsigned int valueWidth = 0;
+
+  stp::ASTNode* a = (stp::ASTNode*)type;
+
+  switch (a->GetKind())
+  {
+    case stp::BITVECTOR:
+      indexWidth = 0;
+      valueWidth = (*a)[0].GetUnsignedConst();
+      break;
+    case stp::ARRAY:
+      indexWidth = (*a)[0].GetUnsignedConst();
+      valueWidth = (*a)[1].GetUnsignedConst();
+      break;
+    case stp::BOOLEAN:
+      indexWidth = 0;
+      valueWidth = 0;
+      break;
+    default:
+      stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
+      assert(false);
+      exit(-1);
+      break;
+  }
+  return std::make_pair(valueWidth, indexWidth);
+}
+} // namespace
+
 // GLOBAL FUNCTION: parser
 extern int cvcparse(void*);
 extern int smtparse(void*);
@@ -130,15 +165,8 @@ VC vc_createValidityChecker(void)
   bm->defaultNodeFactory =
       new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
-  stp::Simplifier* simp = new stp::Simplifier(bm);
-  stp::BVSolver* bvsolver = new stp::BVSolver(bm, simp);
-  stp::ArrayTransformer* arrayTransformer = new stp::ArrayTransformer(bm, simp);
-  stp::ToSATAIG* tosat = new stp::ToSATAIG(bm, arrayTransformer);
-  stp::AbsRefine_CounterExample* Ctr_Example =
-      new stp::AbsRefine_CounterExample(bm, simp, arrayTransformer);
-
   stp::STP* stpObj =
-      new stp::STP(bm, simp, bvsolver, arrayTransformer, tosat, Ctr_Example);
+      new stp::STP(bm);
 
   // created_exprs.clear();
   vc_setFlags(stpObj, 'd');
@@ -262,18 +290,18 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTVec v = b->GetAsserts();
-  stp::Simplifier* simp = new stp::Simplifier(b);
+
+  stp::SubstitutionMap sm (b);
+  stp::Simplifier simp(b, &sm );
   for (stp::ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
   {
     stp::ASTNode q =
-        (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(*i, false) : *i;
-    q = (simplify_print == 1) ? simp->SimplifyFormula_TopLevel(q, false) : q;
+        (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(*i, false) : *i;
+    q = (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(q, false) : q;
     os << "ASSERT( ";
     q.PL_Print(os, b);
     os << ");" << endl;
   }
-  delete simp;
-  simp = NULL;
 }
 
 void vc_printAsserts(VC vc, int simplify_print)
@@ -291,7 +319,8 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   assert(buf);
   assert(len);
 
-  stp::Simplifier* simp = new stp::Simplifier(b);
+  stp::SubstitutionMap sm (b);
+  stp::Simplifier simp(b, &sm );
 
   // formate the state of the query
   stringstream os;
@@ -302,13 +331,10 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   os << "QUERY( ";
   stp::ASTNode q =
       (simplify_print == 1)
-          ? simp->SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
+          ? simp.SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
           : *(stp::ASTNode*)e;
   q.PL_Print(os, b);
   os << " );" << endl;
-
-  delete simp;
-  simp = NULL;
 
   // convert to a c buffer
   string s = os.str();
@@ -719,31 +745,9 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* a = (stp::ASTNode*)type;
-
-  unsigned indexWidth;
-  unsigned valueWidth;
-
-  switch (a->GetKind())
-  {
-    case stp::BITVECTOR:
-      indexWidth = 0;
-      valueWidth = (*a)[0].GetUnsignedConst();
-      break;
-    case stp::ARRAY:
-      indexWidth = (*a)[0].GetUnsignedConst();
-      valueWidth = (*a)[1].GetUnsignedConst();
-      break;
-    case stp::BOOLEAN:
-      indexWidth = 0;
-      valueWidth = 0;
-      break;
-    default:
-      stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
-      assert(false);
-      exit(-1);
-      break;
-  }
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int valueWidth = typeSizes.first;
+  unsigned int indexWidth = typeSizes.second;
   stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
 
   stp::ASTNode* output = new stp::ASTNode(o);
@@ -1052,6 +1056,20 @@ Type vc_bvType(VC vc, int num_bits)
 Type vc_bv32Type(VC vc)
 {
   return vc_bvType(vc, 32);
+}
+
+int vc_getValueSize(VC /* vc */, Type type)
+{
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int valueWidth = typeSizes.first;
+  return valueWidth;
+}
+
+int vc_getIndexSize(VC /* vc */, Type type)
+{
+  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
+  unsigned int indexWidth = typeSizes.second;
+  return indexWidth;
 }
 
 Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput)

@@ -22,10 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+/* 
+
+If a node is asserted at the top level, this finds other references (if any) to 
+that node, and replaces those reference by true/false.
+
+The "state" tracks whether we are still at nodes that are conjoined to the
+top, only after we get out of the top part can we replace nodes that we know to
+be true or false.
+
+NB: This flattens ANDs at the top level. Which makes implementation much easier.
+
+*/
 #ifndef ALWAYSTRUE_H_
 #define ALWAYSTRUE_H_
-
-// Applies the AlwaysTrueSet to the input node.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
@@ -34,90 +44,32 @@ THE SOFTWARE.
 
 namespace stp
 {
+using std::make_pair;
 
-class AlwaysTrue // not copyable
+class AlwaysTrue
 {
-  Simplifier* simplifier;
   STPMgr* stpMgr;
   NodeFactory* nf;
+  unsigned replaced;
+  ASTNodeMap fromTo;
 
-  enum State
+  ASTNode visit(const ASTNode& n, const bool match)
   {
-    AND_STATE,
-    NOT_STATE,
-    BOTTOM_STATE
-  };
-
-public:
-  AlwaysTrue(Simplifier* simplifier_, STPMgr* stp_, NodeFactory* nf_)
-  {
-    simplifier = simplifier_;
-    stpMgr = stp_;
-    nf = nf_;
-  }
-
-  ASTNode topLevel(ASTNode& n)
-  {
-    stpMgr->GetRunTimes()->start(RunTimes::AlwaysTrue);
-    ASTNodeMap fromTo;
-    ASTNode result = visit(n, AND_STATE, fromTo);
-    stpMgr->GetRunTimes()->stop(RunTimes::AlwaysTrue);
-    return result;
-  }
-
-  // Replace nodes that aren't conjoined to the top with TRUE/FALSE,
-  // if that node is conjoined..
-  // The "state" tracks whether we are still at nodes that are conjoined to the
-  // top,
-  // only after we get out of the top part can we replace nodes that we know to
-  // be
-  // true or false.
-  ASTNode visit(const ASTNode& n, State state, ASTNodeMap& fromTo)
-  {
-    if (n.isConstant())
-      return n;
-
-    if (fromTo.find(n) != fromTo.end())
+    if (match &&  fromTo.find(n) != fromTo.end())
     {
-      // It has been visited as BOTTOM_STATE once before.
+      if (fromTo[n] == stpMgr->ASTTrue || fromTo[n] == stpMgr->ASTFalse)
+          replaced++;
       return fromTo.find(n)->second;
     }
 
-    ASTVec newChildren;
-    newChildren.reserve(n.Degree());
-    State new_state;
-
-    if (state == BOTTOM_STATE)
-    {
-      bool result;
-      if (simplifier->CheckAlwaysTrueFormSet(n, result))
-      {
-        cerr << "+";
-        if (result)
-          return stpMgr->ASTTrue;
-        else
-          return stpMgr->ASTFalse;
-      }
-    }
-
-    if (n.GetKind() == SYMBOL)
+    if (n.GetKind() == SYMBOL || n.isConstant())
       return n;
 
-    if (n.GetKind() != AND && state == AND_STATE)
+    ASTVec newChildren;
+    newChildren.reserve(n.Degree());
+    for (auto& c: n)
     {
-      if (n.GetKind() == NOT)
-        new_state = NOT_STATE;
-      else
-        new_state = BOTTOM_STATE;
-    }
-    else if (state == NOT_STATE)
-      new_state = BOTTOM_STATE;
-    else
-      new_state = state;
-
-    for (size_t i = 0; i < n.Degree(); i++)
-    {
-      newChildren.push_back(visit(n[i], new_state, fromTo));
+      newChildren.push_back(visit(c, true));
     }
 
     ASTNode result = n;
@@ -130,10 +82,59 @@ public:
                                      n.GetValueWidth(), newChildren);
     }
 
-    if (state == BOTTOM_STATE)
+    fromTo.insert(make_pair(n, result));
+    return result;
+  }
+
+  void visit(ASTVec& children)
+  {
+    // if we sort them then we know we'll see an asserted node before any node that it's a descendant of.
+    SortByExprNum(children);
+
+    for (auto& c: children)
     {
-      fromTo.insert(make_pair(n, result));
+      // should have been flattened.
+      assert(c.GetKind() != AND); 
+      fromTo[c] = stpMgr->ASTTrue;
+
+      if (c.GetKind() == NOT)
+      {
+         fromTo[c[0]] = stpMgr->ASTFalse;
+         c = nf->CreateNode(NOT, visit(c[0], false));
+      }
+      else
+        c = visit(c,false);
     }
+  }
+
+public:
+
+  AlwaysTrue(STPMgr* stp_, NodeFactory* nf_)
+  {
+    stpMgr = stp_;
+    nf = nf_;
+  }
+
+  AlwaysTrue( const AlwaysTrue& ) = delete;
+  AlwaysTrue& operator=( const AlwaysTrue& ) = delete;
+
+  ASTNode topLevel(const ASTNode& n)
+  {
+    stpMgr->GetRunTimes()->start(RunTimes::AlwaysTrue);
+    replaced = 0;
+
+    ASTNode result =n;
+    if (n.GetKind() == AND)
+    {
+      ASTVec children = FlattenKind(AND, n.GetChildren());
+      visit(children);
+      result = nf->CreateNode(AND, children);
+    }
+
+    if (stpMgr->UserFlags.stats_flag)
+        std::cerr << "{AlwaysTrue} replaced:" << replaced <<std::endl;
+    stpMgr->GetRunTimes()->stop(RunTimes::AlwaysTrue);
+    fromTo.clear();
     return result;
   }
 };

@@ -113,7 +113,8 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
 
 Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 {
-  Simplifier simp(bm);
+  stp::SubstitutionMap sm(bm);
+  Simplifier simp(bm, &sm);
 
   BBNodeManagerAIG mgr;
   BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
@@ -202,13 +203,13 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->GetRunTimes()->start(RunTimes::Solving);
-  satSolver.solve(bm->soft_timeout_expired);
+  bool result = satSolver.solve(bm->soft_timeout_expired);
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
   if (bm->UserFlags.stats_flag)
     satSolver.printStats();
 
-  return satSolver.okay();
+  return result;
 }
 
 ToSATAIG::~ToSATAIG()

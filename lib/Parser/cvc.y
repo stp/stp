@@ -46,7 +46,7 @@ THE SOFTWARE.
   extern char* yytext;
   extern int cvclineno;
   int yyerror(const char *s) {
-    cout << "syntax error: line " << cvclineno << "\n" << s << endl;    
+    cout << "CVC syntax error: line " << cvclineno << "\n" << s << endl;
     FatalError("");
     return YY_EXIT_FAILURE;
   }
@@ -1013,13 +1013,13 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 ;
 
 /*Grammar for Array Update Expr*/
-ArrayUpdateExpr : Expr Updates
+ArrayUpdateExpr : Expr WITH_TOK Updates
 {
   ASTNode * result;
   unsigned int width = $1->GetValueWidth();
 
-  ASTNodeMap::iterator it = $2->begin();
-  ASTNodeMap::iterator itend = $2->end();
+  ASTNodeMap::iterator it = $3->begin();
+  ASTNodeMap::iterator itend = $3->end();
   result = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(WRITE,
                                             $1->GetIndexWidth(),
                                             width,
@@ -1038,20 +1038,20 @@ ArrayUpdateExpr : Expr Updates
   }
   BVTypeCheck(*result);
   $$ = result;
-  delete $2;
+  delete $3;
   delete $1;
 }
 ;
 
-Updates         : '[' Expr ']' ASSIGN_TOK Expr
+Updates         : '[' Expr ']' ASSIGN_TOK Expr 
 {
   $$ = new ASTNodeMap();
-  (*$$)[*$2] = *$5;
+  (*$$)[*$2] = *$5;         
   delete $2;
-  delete $5;
+  delete $5;        
 }
-| Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr
-{
+| Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr 
+{                   
   (*$1)[*$4] = *$7;
   delete $4;
   delete $7;

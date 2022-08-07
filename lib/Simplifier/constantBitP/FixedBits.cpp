@@ -1,5 +1,4 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Dan Liew
  *
  * BEGIN DATE: November, 2005
  *
@@ -64,6 +63,33 @@ void FixedBits::fixToZero()
     setValue(i, false);
   }
 }
+
+stp::CBV FixedBits::GetMinBVConst() const
+{
+  stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
+
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (fixed[i] && values[i])
+      CONSTANTBV::BitVector_Bit_On(result, i);
+  }
+
+  return result;
+}
+
+stp::CBV FixedBits::GetMaxBVConst() const
+{
+  stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
+
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (!fixed[i] || values[i])
+      CONSTANTBV::BitVector_Bit_On(result, i);
+  }
+
+  return result;
+}
+
 
 stp::CBV FixedBits::GetBVConst() const
 {
@@ -547,5 +573,21 @@ bool FixedBits::equals(const FixedBits& a, const FixedBits& b)
   }
   return true;
 }
+
+// a is "IN" the fixed bits..
+bool FixedBits::in(stp::CBV a)
+{
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (!isFixed(i))
+      continue;
+
+    if (!getValue(i) != !CONSTANTBV::BitVector_bit_test(a,i))
+      return false;
+  }
+  return true;
+}
+
+
 }
 }

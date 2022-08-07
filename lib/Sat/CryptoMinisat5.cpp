@@ -169,7 +169,7 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
 
   //std::cerr << assumps.size() << " assumptions" << std::endl;
 
-  unsigned assigned = 0;
+  uint32_t assigned = 0;
   std::vector<CMSat::Lit> zero = s->get_zero_assigned_lits();
   for (CMSat::Lit l : zero)
   {
@@ -182,8 +182,9 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
   //std::cerr << assigned << " assignments at end" <<std::endl;
 
   // The assumptions are each single literals (corresponding to bits) that are true/false. 
-  // so in the result they should be all be set 
-  assert(assigned >= assumps.size());
+  // so in the result they should be all be set
+  assert(assumps.size() >= 0);
+  assert(assigned >= static_cast<uint32_t>(assumps.size()));
   assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
   assert(CMSat::l_False != r); // always satisfiable.
 

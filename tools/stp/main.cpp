@@ -24,13 +24,10 @@ THE SOFTWARE.
 
 #include "main_common.h"
 
-#include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
-using boost::lexical_cast;
 namespace po = boost::program_options;
 
 using namespace stp;
-using std::unique_ptr;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -41,7 +38,10 @@ using std::endl;
  * step 0. Parse the input into an ASTVec.
  * step 1. Do BV Rewrites
  * step 2. Bitblasts the ASTNode.
- * step 3. Convert to CNF
+ 
+ Transfer issue
+ Convert to discussion
+ Delete issue * step 3. Convert to CNF
  * step 4. Convert to SAT
  * step 5. Call SAT to determine if input is SAT or UNSAT
 ********************************************************************/
@@ -150,13 +150,81 @@ void ExtraMain::create_options()
   general_options.add_options()("help,h", "print this help")(
       "version", "print version number");
 
+#define BOOL_ARG(b0) po::value<bool>(&(b0))->default_value(b0)
+#define INT64_ARG(i0) po::value<int64_t>(&(i0))->default_value(i0)
+
   po::options_description simplification_options("Simplifications");
   simplification_options.add_options()("disable-simplifications",
                                        "disable all simplifications")(
       "switch-word,w", "switch off wordlevel solver")(
-      "disable-opt-inc,a", "disable potentially size-increasing optimisations")(
-      "disable-cbitp", "disable constant bit propagation")(
-      "disable-equality", "disable equality propagation");
+      "disable-opt-inc,a", "disable rewriting simplifier")(
+      "disable-cbitp", "disable constant bit propagation")
+      ("disable-equality", "disable equality propagation")
+      ("size-reducing-only", "size reducing simplifications only")
+
+      ("unconstrained-variable-elimination", 
+      BOOL_ARG(bm->UserFlags.enable_unconstrained),
+      "Unconstrained variables are eliminated.")
+
+      ("aig-rewrite-passes", 
+      INT64_ARG(bm->UserFlags.AIG_rewrites_iterations),
+      "Iterations of AIG rewriting to perform")
+
+      ("flattening", 
+      BOOL_ARG(bm->UserFlags.enable_flatten),
+      "Enable sharing-aware flattening of >2 arity nodes")
+
+      ("rewriting", 
+      BOOL_ARG(bm->UserFlags.enable_sharing_aware_rewriting),
+      "Enable sharing-aware rewriting")
+
+      ("split-extracts",
+      BOOL_ARG(bm->UserFlags.enable_split_extracts),
+      "Create new variables for some extracts")
+
+      ("ite-context-simplifications", 
+      BOOL_ARG(bm->UserFlags.enable_ite_context),
+      "Use what is known to be true in an if-then-else node to simplify the true or false branches")
+
+      ("aig-core-simplification", 
+      BOOL_ARG(bm->UserFlags.enable_aig_core_simplify),
+      "Simplify the propositional core with AIGs")
+
+      ("use-intervals", 
+      BOOL_ARG(bm->UserFlags.enable_use_intervals),
+      "Simplify with interval analysis")
+
+      ("pure-literals", 
+      BOOL_ARG(bm->UserFlags.enable_pure_literals),
+      "Pure literals are replaced.")
+
+      ("always-true", 
+      BOOL_ARG(bm->UserFlags.enable_always_true),
+      "Nodes that are always true (e.g. asserted) are replaced through out the problem by true")
+
+      ("merge-same", 
+      BOOL_ARG(bm->UserFlags.enable_merge_same),
+      "Uses simple boolean algebra rules to combine conjuncts at the top level")
+
+  
+      ("bit-blast-simplification", 
+      INT64_ARG(bm->UserFlags.bitblast_simplification),
+      "Part-way through simplifying, convert to AIGs and look for bits that the AIGs figure out are true/false or the same as another node. If the difficulty is less than this number. -1 means always.")
+      ("size-reducing-fixed-point-limit", 
+      INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
+      "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
+
+      ("simplify-to-constants-only,simply_to_constants_only", 
+      BOOL_ARG(bm->UserFlags.simplify_to_constants_only),
+      "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
+
+      ("difficulty-reversion,difficulty_reversion", 
+      BOOL_ARG(bm->UserFlags.difficulty_reversion),
+      "Undo size increasing simplifications if they haven't made the problem simpler");
+
+   
+
+
 
   po::options_description solver_options("SAT Solver options");
   solver_options.add_options()
@@ -212,7 +280,10 @@ void ExtraMain::create_options()
       po::bool_switch(&(bm->UserFlags.print_STPinput_back_dot_flag)),
       "print dotty/neato's graph format, then exit")(
       "print-counterex,p",
-      po::bool_switch(&(bm->UserFlags.print_counterexample_flag)),
+      po::bool_switch(&(bm->UserFlags.print_counterexample_flag)), 
+ Transfer issue
+ Convert to discussion
+ Delete issue
       "print counterexample")(
       "print-counterexbin,y",
       po::bool_switch(&(bm->UserFlags.print_binary_flag)),
@@ -244,29 +315,76 @@ void ExtraMain::create_options()
       "output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
       "save in ABC's bench format to output.bench");
 
+
+  po::options_description bb_options("Bit-blasting options");
+  bb_options.add_options()
+    ("bb.div-v1", 
+      BOOL_ARG(bm->UserFlags.division_variant_1),
+      "unsigned division encoding variant 1")
+
+    ("bb.div-v2", 
+      BOOL_ARG(bm->UserFlags.division_variant_2),
+      "unsigned division encoding variant 2")
+
+    ("bb.div-v3", 
+      BOOL_ARG(bm->UserFlags.division_variant_3),
+      "unsigned division encoding variant 3")
+
+    ("bb.add-v1", 
+      BOOL_ARG(bm->UserFlags.adder_variant),
+      "addition encoding variant 1")
+
+    ("bb.add-v2", 
+      BOOL_ARG(bm->UserFlags.bvplus_variant),
+      "addition encoding variant 2")
+
+    ("bb.vle-v1", 
+      BOOL_ARG(bm->UserFlags.bbbvle_variant),
+      "comparison encoding variant 1")
+
+    ("bb.mult-variant", 
+     INT64_ARG(bm->UserFlags.multiplication_variant),
+    "unsigned multiplication variant")
+
+    ("bb.mult-v2", 
+      BOOL_ARG(bm->UserFlags.upper_multiplication_bound),
+      "unsigned multiplication variant 2")
+
+    ("bb.conjoin-constant", 
+      BOOL_ARG(bm->UserFlags.conjoin_to_top),
+      "When constant-bit propagation detects a constant bit during AIG construction, assert the AIG node and replace it, in the AIG, by the constant bit"
+      );
+
+
   po::options_description misc_options("Output options");
   misc_options.add_options()
-      // exit-after-CNF
-      ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
+      ("exit-after-CNF",
+       po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
 
-      // max_confl
-      ("max_num_confl,g", po::value<int64_t>(&max_num_confl),
-       "Number of conflicts after which the SAT solver gives up. "
-       "-1 means never (default)")
+      ("max-num-confl,max_num_confl,g", 
+      INT64_ARG(bm->UserFlags.timeout_max_conflicts),
+      "Number of conflicts after which the SAT solver gives up. "
+      "-1 means never")
 
-      // max_time
-      ("max_time,k", po::value<int64_t>(&max_time),
-       "Number of seconds after which the SAT solver gives up. "
-       "-1 means never (default)")
+      ("max-time,max_time,k", 
+      INT64_ARG(bm->UserFlags.timeout_max_time),
+      "Number of seconds after which the SAT solver gives up. "
+      "-1 means never.")
 
-      // check-sanity
-      ("check-sanity,d", "construct counterexample and check it");
+      ("check-sanity,d", 
+        po::bool_switch(&(bm->UserFlags.check_counterexample_flag)),
+        "construct counterexample and check it");
+
+
+#undef BOOL_ARG
+#undef INT64_ARG
 
   cmdline_options.add(general_options)
       .add(simplification_options)
       .add(solver_options)
       .add(refinement_options)
+      .add(bb_options)
       .add(print_options)
       .add(input_options)
       .add(output_options)
@@ -278,6 +396,7 @@ void ExtraMain::create_options()
       .add(simplification_options)
       .add(solver_options)
       .add(refinement_options)
+      .add(bb_options)
       .add(print_options)
       .add(input_options)
       .add(output_options)
@@ -359,34 +478,19 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
-  if (vm.count("oldstyle-refinement"))
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
-  }
-
   if (vm.count("disable-simplifications"))
   {
     bm->UserFlags.disableSimplifications();
   }
 
+  if (vm.count("size-reducing-only"))
+  {
+    bm->UserFlags.disableSizeIncreasingSimplifications();
+  }
+
   if (vm.count("disable-equality"))
   {
     bm->UserFlags.propagate_equalities = false;
-  }
-
-  if (vm.count("max_num_confl"))
-  {
-    bm->UserFlags.timeout_max_conflicts = max_num_confl;
-  }
-
-  if (vm.count("max_time"))
-  {
-    bm->UserFlags.timeout_max_time = max_time;
-  }
-
-  if (vm.count("check-sanity"))
-  {
-    bm->UserFlags.check_counterexample_flag = true;
   }
 
   if (selected_type == 0)

@@ -2550,13 +2550,14 @@ TEST(b4_c2, one)
   vc_assertFormula(vc, e5286030);
   vc_push(vc);
   Expr e5286031 = vc_falseExpr(vc);
-  if (false)
+#if 0
   {
     char* cc;
     unsigned long len;
     vc_printQueryStateToBuffer(vc, e5286031, &cc, &len, 1);
     std::cout << cc << std::endl;
   }
+#endif
   int ret = vc_query(vc, e5286031);
   ASSERT_FALSE(ret);
   vc_pop(vc);

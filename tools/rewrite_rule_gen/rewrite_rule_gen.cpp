@@ -56,9 +56,9 @@ THE SOFTWARE.
 #include "rewrite_rule.h"
 #include "rewrite_system.h"
 
-#include "stp/ToSat/AIG/BBNodeManagerAIG.h"
-#include "stp/ToSat/AIG/ToCNFAIG.h"
-#include "stp/ToSat/AIG/ToSATAIG.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
 #include <fstream>
@@ -753,13 +753,7 @@ void startup()
 
   mgr = new stp::STPMgr();
   stp::GlobalParserBM = mgr;
-
-  simp = new Simplifier(mgr);
-  ArrayTransformer* at = new ArrayTransformer(mgr, simp);
-  AbsRefine_CounterExample* abs = new AbsRefine_CounterExample(mgr, simp, at);
-  ToSATAIG* tosat = new ToSATAIG(mgr, at);
-
-  GlobalSTP = new STP(mgr, simp, at, tosat, abs);
+  GlobalSTP = new STP(mgr);
 
   mgr->defaultNodeFactory =
       new SimplifyingNodeFactory(*mgr->hashingNodeFactory, *mgr);

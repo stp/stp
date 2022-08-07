@@ -133,10 +133,17 @@ stp::ASTNode NodeFactory::getTrue()
 {
   return bm.ASTTrue;
 }
+
 stp::ASTNode NodeFactory::getFalse()
 {
   return bm.ASTFalse;
 }
+
+stp::ASTNode NodeFactory::getUndefined()
+{
+  return bm.ASTUndefined;
+}
+
 
 ASTNode NodeFactory::CreateSymbol(const char* const name, unsigned indexWidth,
                                   unsigned valueWidth)
@@ -161,6 +168,19 @@ ASTNode NodeFactory::CreateZeroConst(unsigned width)
 {
   return bm.CreateZeroConst(width);
 }
+
+ASTNode NodeFactory::CreateMaxConst(unsigned width)
+{
+  return bm.CreateMaxConst(width);
+}
+
+ASTNode NodeFactory::CreateSignedMinConst(unsigned width)
+{
+    stp::CBV c = CONSTANTBV::BitVector_Create(width, true);
+    CONSTANTBV::BitVector_Bit_On(c, width-1);
+    return bm.CreateBVConst(c, width);
+}
+
 
 ASTNode NodeFactory::CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst)

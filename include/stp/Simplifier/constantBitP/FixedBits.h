@@ -317,6 +317,8 @@ public:
 
   // Result needs to be explicitly deleted.
   DLL_PUBLIC stp::CBV GetBVConst() const;
+  DLL_PUBLIC stp::CBV GetMaxBVConst() const;
+  DLL_PUBLIC stp::CBV GetMinBVConst() const;
 
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
@@ -359,6 +361,9 @@ public:
   static bool updateOK(const FixedBits& o, const FixedBits& n, const int upTo);
 
   static bool in(const FixedBits& a, const FixedBits& b);
+
+  bool in(stp::CBV a);
+  
 };
 
 DLL_PUBLIC std::ostream& operator<<(std::ostream& output, const FixedBits& h);

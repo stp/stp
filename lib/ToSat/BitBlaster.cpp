@@ -69,8 +69,6 @@ vector<BBNodeAIG> _empty_BBNodeAIGVec;
 const bool debug_do_check = false;
 const bool debug_bitblaster = false;
 
-const bool conjoin_to_top = true;
-
 //"Hash" (=add) first 5 node IDs together
 //TODO pretty bad hash
 template <class BBNode> class BBVecHasher
@@ -321,7 +319,7 @@ bool BitBlaster<BBNode, BBNodeManagerT>::update(
   {
     // We have a fixed bit, but the bitblasted values aren't constant true or
     // false.
-    if (conjoin_to_top && (fixedFromBottom.find(n) == fixedFromBottom.end()))
+    if (uf->conjoin_to_top && (fixedFromBottom.find(n) == fixedFromBottom.end()))
     {
       if (b->getValue(i))
         support.insert(bb);
@@ -816,7 +814,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case BVPLUS:
     {
       assert(term.Degree() >= 1);
-      if (bvplus_variant)
+      if (uf->bvplus_variant)
       {
         // Add children pairwise and accumulate in BBsum
 
@@ -1021,7 +1019,7 @@ template <class BBNode, class BBNodeManagerT>
 const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
 {
 
-  if (conjoin_to_top && cb != NULL)
+  if (uf->conjoin_to_top && cb != NULL)
   {
     ASTNodeMap n = cb->getAllFixed();
     for (ASTNodeMap::const_iterator it = n.begin(); it != n.end(); it++)
@@ -1039,7 +1037,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   v.insert(v.end(), support.begin(), support.end());
   v.push_back(r);
 
-  if (!conjoin_to_top)
+  if (!uf->conjoin_to_top)
   {
     assert(support.size() == 0);
   }
@@ -1395,19 +1393,6 @@ void pushP(vector<vector<BBNode>>& products, const int start,
 
 const bool debug_multiply = false;
 
-/* Cryptominisat2. 5641x5693.smt.   SAT Solving time only!
- * adder_variant1 = true.    Solving: 12.3s, 12.1s
- * adder_variant1 = false.   Solving: 26.5s, 26.0s
- *
- * Cryptominisat2. mult63bit.smt2.
- * adder_variant1 = true.    Solving: 8.1s, 8.2s
- * adder_variant1 = false.   Solving: 11.1s, 11.0s
- *
- * Cryptominisat2. conscram2.smt2.
- * adder_variant1 = true.   Solving:115s, 103s, 303s
- * adder_variant1 = false.  Solving:181s, 471s, 215s
- * */
-
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
     vector<list<BBNode>>& products, set<BBNode>& support, const ASTNode& n)
@@ -1417,7 +1402,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
   // If we have details of the partial products which can be true,
   int ignore = -1;
   simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   BBNodeVec results;
@@ -1465,7 +1450,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
     from.pop_back();
 
     // Nothing can be true. All must be false.
-    if (conjoin_to_top && all_false)
+    if (uf->conjoin_to_top && all_false)
     {
       if (BBFalse != a)
         support.insert(nf->CreateNode(NOT, a));
@@ -1478,7 +1463,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
 
     BBNode carry, sum;
 
-    if (adder_variant)
+    if (uf->adder_variant)
     {
       carry = Majority(a, b, c);
       sum = nf->CreateNode(XOR, a, b, c);
@@ -1541,13 +1526,13 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(
   const int bitWidth = n.GetValueWidth();
 
   int ignored = 0;
-  assert(upper_multiplication_bound);
+  assert(uf->upper_multiplication_bound);
   simplifier::constantBitP::MultiplicationStats& ms = *getMS(n, ignored);
 
   // If all of the partial products in the column must be zero, then replace
   for (int i = 0; i < bitWidth; i++)
   {
-    if (conjoin_to_top && ms.columnH[i] == 0)
+    if (uf->conjoin_to_top && ms.columnH[i] == 0)
     {
       while (products[i].size() > 0)
       {
@@ -1672,9 +1657,6 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
   }
 }
 
-// Uses addition networks explicitly.
-// I've copied this in from my the "trevor" branch r482.
-// I've not measured if this is better than the current variant.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::mult_allPairs(
     const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
@@ -1749,7 +1731,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::mult_normal(const BBNodeVec& x,
   int highestZero = -1;
   const simplifier::constantBitP::MultiplicationStats* ms =
       getMS(n, highestZero);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   BBNodeVec ycopy(y);
@@ -1834,7 +1816,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_BubbleSorterWithBounds(
   for (int k = 0; k < height; k++)
     assert(!currentSorted[k].IsNull());
 
-  if (conjoin_to_top)
+  if (uf->conjoin_to_top)
   {
     for (int j = 0; j < minTrue; j++)
     {
@@ -1923,7 +1905,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::setColumnsToZero(
   // If we have details of the partial products which can be true,
   int highestZero = -1;
   simplifier::constantBitP::MultiplicationStats* ms = getMS(n, highestZero);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   if (ms == NULL)
@@ -1975,81 +1957,93 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
   vector<list<BBNode>> products(bitWidth +
                                 1); // Create one extra to avoid special cases.
 
-  if (multiplication_variant == "1")
+  switch (uf->multiplication_variant)
   {
-    return mult_normal(x, y, support, n);
-  }
+    case 1: 
+    {
+      return mult_normal(x, y, support, n);
+      break;
+    }
   // else if (multiplication_variant == "2")
   // V2 used to be V3 with normal rather than booth recoding.
   // To recreate V2, use V3 and turn off Booth recoding.
-  else if (multiplication_variant == "3")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return buildAdditionNetworkResult(products, support, n);
-  }
-  else if (multiplication_variant == "4")
-  {
-    // cerr << "v4";
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    vector<BBNode> prior;
 
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      vector<BBNode> output;
-      mult_BubbleSorterWithBounds(support, products[i], output, prior);
-      prior = output;
-      assert(products[i].size() == 1);
-    }
-    return buildAdditionNetworkResult(products, support, n);
-  }
-  else if (multiplication_variant == "5")
-  {
-    if (!statsFound(n) || !upper_multiplication_bound)
+    case 3: 
     {
       mult_Booth(_x, _y, support, n[0], n[1], products, n);
       setColumnsToZero(products, support, n);
       return buildAdditionNetworkResult(products, support, n);
     }
+  
+    case 4:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      vector<BBNode> prior;
 
-    mult_allPairs(x, y, support, products);
-    setColumnsToZero(products, support, n);
-    return multWithBounds(n, products, support);
-  }
-  else if (multiplication_variant == "6")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return v6(products, support, n);
-  }
-  else if (multiplication_variant == "7")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return v7(products, support, n);
-  }
-  else if (multiplication_variant == "8")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return v8(products, support, n);
-  }
-  else if (multiplication_variant == "9")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return v9(products, support, n);
-  }
-  else if (multiplication_variant == "13")
-  {
-    mult_Booth(_x, _y, support, n[0], n[1], products, n);
-    setColumnsToZero(products, support, n);
-    return v13(products, support, n);
-  }
-  else
-  {
-    cerr << "Unk variant" << multiplication_variant;
-    FatalError("sda44f");
+      for (unsigned i = 0; i < bitWidth; i++)
+      {
+        vector<BBNode> output;
+        mult_BubbleSorterWithBounds(support, products[i], output, prior);
+        prior = output;
+        assert(products[i].size() == 1);
+      }
+      return buildAdditionNetworkResult(products, support, n);
+    }
+
+    case 5: 
+    {
+      if (!statsFound(n) || !uf->upper_multiplication_bound)
+      {
+        mult_Booth(_x, _y, support, n[0], n[1], products, n);
+        setColumnsToZero(products, support, n);
+        return buildAdditionNetworkResult(products, support, n);
+      }
+
+      mult_allPairs(x, y, support, products);
+      setColumnsToZero(products, support, n);
+      return multWithBounds(n, products, support);
+    }
+  
+    case 6:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return v6(products, support, n);
+    }
+
+    case 7: 
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return v7(products, support, n);
+    }
+
+    case 8:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return v8(products, support, n);
+    }
+
+    case 9:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return v9(products, support, n);
+    }
+
+    case 13:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return v13(products, support, n);
+    }
+
+    default:
+    {
+      cerr << "Unk variant" << uf->multiplication_variant;
+      FatalError("sda44f");
+    }
   }
 }
 
@@ -2172,7 +2166,7 @@ BitBlaster<BBNode, BBNodeManagerT>::v13(vector<list<BBNode>>& products,
 
   int ignore = -1;
   simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   bool done = false;
@@ -2326,7 +2320,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode>>& products,
   // If we have details of the partial products which can be true,
   int ignore = -1;
   simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   vector<list<BBNode>> later(bitWidth + 1);
@@ -2396,7 +2390,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v8(vector<list<BBNode>>& products,
   // If we have details of the partial products which can be true,
   int ignore = -1;
   simplifier::constantBitP::MultiplicationStats* ms = getMS(n, ignore);
-  if (!upper_multiplication_bound)
+  if (!uf->upper_multiplication_bound)
     ms = NULL;
 
   vector<list<BBNode>> later(bitWidth + 1); // +1 then ignore the topmost.
@@ -2537,18 +2531,6 @@ BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1,
   return result;
 }
 
-// All combinations of division_variant_1, _2, _3
-/* on factoring12bitsx12.cvc with MINISAT2.
- 000:    0m2.764s
- 001:    0m4.060s
- 010:    0m2.750s
- 011:    0m4.173s
- 100:    0m3.064s
- 101:    0m3.217s
- 110:    0m3.064s
- 111:    0m3.230s
- */
-
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
 // recursion depth.
@@ -2635,7 +2617,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
      So q and r are already set correctly when we get here.
      */
 
-    if (division_variant_1)
+    if (uf->division_variant_1)
     {
       notylessxqval = q1lshift1;
       notylessxrval = ygtrxrval;
@@ -2651,7 +2633,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
 
     /****************/
     BBNode ylessx;
-    if (division_variant_2)
+    if (uf->division_variant_2)
     {
       ylessx = BBBVLE(y, x, false, true);
     }
@@ -2661,7 +2643,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
       ylessx = nf->CreateNode(NOT, BBBVLE(x, y, false));
     }
 
-    if (division_variant_3)
+    if (uf->division_variant_3)
     {
       q = notylessxqval;
       r = notylessxrval;
@@ -2704,12 +2686,6 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBITE(const BBNode& cond,
   return result;
 }
 
-// SMTLIB as of Jan'18 with cryptominisat 
-// bbbvle_variant = true.   35,373/40,043 solved in 500 seconds
-// bbbvle_variant = false.  35,365/ ... 
-// true gives a smaller encoding, with comparible propration strength, 
-// it solves slightly more problems.
-
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
 // to this by swapping args or complementing the result bit.
@@ -2718,7 +2694,7 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBBVLE(const BBNodeVec& left,
                                                   const BBNodeVec& right,
                                                   bool is_signed, bool is_bvlt)
 {
-  if (bbbvle_variant)
+  if (uf->bbbvle_variant)
     return BBBVLE_variant1(left, right, is_signed, is_bvlt);
   else
     return BBBVLE_variant2(left, right, is_signed, is_bvlt);

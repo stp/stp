@@ -34,16 +34,17 @@ THE SOFTWARE.
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/Attributes.h"
+#include "stp/ToSat/ToSATAIG.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 
 namespace stp
 {
-// not copyable
 // FIXME: This needs a better name
 class STP
 {
 
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
-                       PropagateEqualities* pe);
+                       PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
   // A copy of all the state we need to restore to a prior expression.
   struct Revert_to
@@ -73,30 +74,29 @@ public:
   ToSATBase* tosat;
   AbsRefine_CounterExample* Ctr_Example;
   ArrayTransformer* arrayTransformer;
+  SubstitutionMap* substitutionMap;
 
-  STP(STPMgr* b, Simplifier* s, ArrayTransformer* a, ToSATBase* ts,
-      AbsRefine_CounterExample* ce)
+public:
+  STP(STPMgr* b)
   {
     bm = b;
-    simp = s;
-    tosat = ts;
-    arrayTransformer = a;
-    Ctr_Example = ce;
+    substitutionMap = new stp::SubstitutionMap(bm);
+    simp = new Simplifier(bm,substitutionMap);
+    arrayTransformer = new ArrayTransformer(bm, simp);
+    Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+    tosat = new ToSATAIG(bm, arrayTransformer);
   }
 
-  STP(STPMgr* b, Simplifier* s, BVSolver* bsolv, ArrayTransformer* a,
-      ToSATBase* ts, AbsRefine_CounterExample* ce)
-  {
-    bm = b;
-    simp = s;
-    tosat = ts;
-    delete bsolv; // Remove from the constructor later..
-    arrayTransformer = a;
-    Ctr_Example = ce;
+  STP( const STP& ) = delete; 
+  STP& operator=( const STP& ) = delete; 
+
+  ~STP() 
+  { 
+    ClearAllTables(); 
+    deleteObjects();
   }
 
-  ~STP() { ClearAllTables(); }
-
+  // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
     delete Ctr_Example;
@@ -110,6 +110,9 @@ public:
 
     delete simp;
     simp = NULL;
+
+    delete substitutionMap;
+    substitutionMap = NULL;
   }
 
   // The absolute TopLevel function that invokes STP on the input
@@ -119,9 +122,7 @@ public:
 
   // calls sizeReducing and the bitblasting simplification.
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
-                           BVSolver* bvSolver, PropagateEqualities* pe,
-                           const long initial_difficulty_score,
-                           long& actualBBSize);
+                           BVSolver* bvSolver, PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
   void ClearAllTables(void)
   {

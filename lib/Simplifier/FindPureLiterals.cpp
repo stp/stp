@@ -115,6 +115,13 @@ void FindPureLiterals::build(const ASTNode& n, polarity_type polarity)
       build(n[0], polarity);
       break;
 
+    case ITE:
+      build(n[0], bothPolarity);
+      build(n[1], polarity);
+      build(n[2], polarity);
+      break;
+
+
     default:
       polarity = bothPolarity; // both
       for (size_t i = 0; i < n.Degree(); i++)

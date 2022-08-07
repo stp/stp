@@ -24,17 +24,15 @@ THE SOFTWARE.
 
 #include "stp/c_interface.h"
 #include <gtest/gtest.h>
+#include <string>
 
-void test(void)
+TEST(even_eqn_assert, one)
 {
   VC vc = vc_createValidityChecker();
   vc_setInterfaceFlags(vc, (ifaceflag_t)0, 0);
   vc_push(vc);
-  Type ty_bv8 = vc_bvType(vc, 8);
   Type ty_bv16 = vc_bvType(vc, 16);
   Type ty_bv32 = vc_bvType(vc, 32);
-
-  Expr var_i00 = vc_varExpr(vc, "i00", ty_bv8);
 
   Expr var_is4a = vc_varExpr(vc, "is4a", ty_bv16);
   Expr var_is48 = vc_varExpr(vc, "is48", ty_bv16);
@@ -42,7 +40,6 @@ void test(void)
 
   Expr var_t343 = vc_varExpr(vc, "t343", ty_bv32);
 
-  Expr const_0_8 = vc_bvConstExprFromInt(vc, 8, 0);
   Expr const_0_16 = vc_bvConstExprFromInt(vc, 16, 0);
   Expr const_0_32 = vc_bvConstExprFromInt(vc, 32, 0);
 
@@ -96,8 +93,3 @@ void test(void)
   ASSERT_TRUE(ret);
 }
 
-int main(int argc, char** argv)
-{
-  test();
-  return 0;
-}

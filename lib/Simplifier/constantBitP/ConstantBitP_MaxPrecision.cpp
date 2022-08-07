@@ -266,7 +266,9 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
   bool first = true;
   ASTVec ors;
   ASTNode total = beev->ASTTrue;
-  Simplifier simp(beev);
+
+  SubstitutionMap sm (beev);
+  Simplifier simp(beev, &sm );
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
   ToSATAIG tosat(beev, &at);
@@ -464,7 +466,9 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   }
 
   bool first = true;
-  Simplifier simp(beev);
+
+  SubstitutionMap sm (beev);
+  Simplifier simp(beev, &sm );
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
   MinisatCore newS;

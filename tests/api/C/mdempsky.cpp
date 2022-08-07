@@ -28,7 +28,6 @@ THE SOFTWARE.
 TEST(mdempsky, one)
 {
   VC vc = vc_createValidityChecker();
-  Expr trueExpr = vc_trueExpr(vc);
 
   Expr A = vc_varExpr(vc, "A", vc_bv32Type(vc));
   Expr B = vc_varExpr(vc, "B", vc_bv32Type(vc));
