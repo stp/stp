@@ -1246,9 +1246,9 @@ TERMID_TOK
 {
   $$ = createTerm(BVXOR, $3);
 }
-| LPAREN_TOK BVXNOR_TOK an_terms RPAREN_TOK
+| LPAREN_TOK BVXNOR_TOK an_term an_term RPAREN_TOK
 {
-  ASTNode *temp = createTerm(BVXOR, $3);
+  ASTNode *temp = createTerm(BVXOR, $3, $4);
   const unsigned int width = temp->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *temp));
   stp::GlobalParserInterface->deleteNode( temp);
