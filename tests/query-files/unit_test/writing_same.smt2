@@ -1,4 +1,4 @@
-; RUN: %solver %s | %OutputCheck %s
+; RUN: %solver --exit-after-CNF %s | %OutputCheck %s
 (set-info :source | fuzzsmt 0.3 |)
 (set-logic  QF_ABV)
 (set-info :status sat)
