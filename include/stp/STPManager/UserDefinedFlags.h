@@ -58,10 +58,10 @@ public:
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
   bool enable_flatten = false;
-  bool enable_ite_context = true;
+  bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
-  bool enable_pure_literals = true;
+  bool enable_pure_literals = false;
   bool enable_always_true = false;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
@@ -125,7 +125,7 @@ public:
   bool bvplus_variant = true;
   bool conjoin_to_top = true;
 
-  int64_t multiplication_variant = 7;
+  int64_t multiplication_variant = 13;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
