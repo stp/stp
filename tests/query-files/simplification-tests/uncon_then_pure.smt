@@ -1,4 +1,4 @@
-; RUN: %solver --exit-after-CNF %s | %OutputCheck %s
+; RUN: %solver --pure-literals=1 --exit-after-CNF %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 (benchmark r
   :status sat
