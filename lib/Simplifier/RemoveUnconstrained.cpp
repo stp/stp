@@ -759,6 +759,12 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   ASTNode result = topMutable->toASTNode(&bm);
   topMutable->cleanup();
   // cout << result;
+  if (result.GetKind() == SYMBOL)
+  {
+    replace(result, bm.ASTTrue);
+    result = bm.ASTTrue;
+  }
+
   return result;
 }
 }
