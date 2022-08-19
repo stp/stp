@@ -61,7 +61,7 @@ public:
   bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
-  bool enable_pure_literals = false;
+  bool enable_pure_literals = true;
   bool enable_always_true = false;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
@@ -116,7 +116,7 @@ public:
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
-  bool division_variant_3 = true;
+  bool division_variant_3 = false;
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
