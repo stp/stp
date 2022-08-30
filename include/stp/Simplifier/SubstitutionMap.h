@@ -167,6 +167,7 @@ public:
   ASTNode applySubstitutionMap(const ASTNode& n);
 
   ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache);
 
   // Replace any nodes in "n" that exist in the fromTo map.
   // NB the fromTo map is changed.

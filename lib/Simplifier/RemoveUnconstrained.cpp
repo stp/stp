@@ -427,10 +427,10 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           muteOther->getAllVariablesRecursively(vars, visited);
           visited.clear();
 
-          std::map<ASTNode, MutableASTNode*> create;
+          std::unordered_map<uint64_t, MutableASTNode*> create;
           for (vector<MutableASTNode*>::iterator it = vars.begin();
                it != vars.end(); it++)
-            create.insert(std::make_pair((*it)->n, *it));
+            create.insert(std::make_pair((*it)->n.GetNodeNum(), *it));
           vars.clear();
 
           ASTNode v = bm.CreateFreshVariable(0, 0, "STP_INTERNAL_comparison");
