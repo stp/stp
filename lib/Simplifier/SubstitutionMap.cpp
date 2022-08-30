@@ -97,12 +97,19 @@ ASTNode SubstitutionMap::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
 // not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
-  bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
+  return applySubstitutionMapUntilArrays(n, cache);
+}
+
+// not always idempotent.
+ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+{
+  bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
   return result;
 }
+
 
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
                                  ASTNodeMap& cache, NodeFactory* nf)
