@@ -31,37 +31,38 @@ namespace simplifier
 namespace constantBitP
 {
 
-using std::set;
 using std::cout;
 using std::endl;
+using stp::ASTNodeSet;
 
 // From a child, get the parents of that node.
 class Dependencies
 {
 private:
-  typedef std::unordered_map<stp::ASTNode, set<stp::ASTNode>*,
-                             stp::ASTNode::ASTNodeHasher,
-                             stp::ASTNode::ASTNodeEqual>
-      NodeToDependentNodeMap;
+  typedef std::unordered_map<uint64_t, ASTNodeSet*>  NodeToDependentNodeMap;
   NodeToDependentNodeMap dependents;
 
-  const set<ASTNode> empty;
+  const ASTNodeSet empty;
 
-public:
+  bool checkInvariant() const
+  {
+    // TODO only one node with a single dependent.
+    return true;
+  }
+
   // All the nodes that depend on the value of a particular node.
   void build(const ASTNode& current, const ASTNode& prior)
   {
     if (current.isConstant()) // don't care about what depends on constants.
       return;
 
-    set<ASTNode>* vec;
-    const NodeToDependentNodeMap::iterator it = dependents.find(current);
+    ASTNodeSet* vec;
+    const auto it = dependents.find(current.GetNodeNum());
     if (dependents.end() == it)
     {
       // add it in with a reference to the vector.
-      vec = new set<ASTNode>();
-
-      dependents.insert(std::pair<ASTNode, set<ASTNode>*>(current, vec));
+      vec = new ASTNodeSet();
+      dependents.insert({current.GetNodeNum(), vec});
     }
     else
     {
@@ -76,98 +77,34 @@ public:
         return; // already been added in.
     }
 
-    for (unsigned int i = 0; i < current.GetChildren().size(); i++)
+    for (const auto child: current)
     {
-      build(current.GetChildren()[i], current);
+      build(child, current);
     }
   }
 
-  Dependencies(const Dependencies&); // Shouldn't needed to copy or assign.
-  Dependencies& operator=(const Dependencies&);
-
 public:
+
+  Dependencies(const Dependencies&) = delete;
+  Dependencies& operator=(const Dependencies&) = delete;
+
   Dependencies(const ASTNode& top)
   {
     build(top, top);
-    checkInvariant();
+    assert(checkInvariant());
   }
 
   ~Dependencies()
   {
-    NodeToDependentNodeMap::iterator it = dependents.begin();
-    for (/**/; it != dependents.end(); it++)
-    {
-      // set<stp::ASTNode>*
-      delete it->second;
-    }
+    for (const auto it : dependents)
+      delete it.second;
   }
 
-  void replaceFresh(const ASTNode& old, const ASTNode& newN,
-                    set<ASTNode>* newNDepends, ASTVec& variables)
-  {
-    NodeToDependentNodeMap::const_iterator it = dependents.find(old);
-    if (it == dependents.end())
-      return;
-
-    it->second->erase(old);
-    dependents.insert(make_pair(newN, newNDepends));
-    variables.push_back(newN);
-  }
-
-  // The "toRemove" node is being removed. Used by unconstrained elimination.
-  void removeNode(const ASTNode& toRemove, ASTVec& variables)
-  {
-    for (unsigned i = 0; i < toRemove.GetChildren().size(); i++)
-    {
-      const ASTNode child = toRemove.GetChildren()[i];
-
-      NodeToDependentNodeMap::const_iterator it = dependents.find(child);
-      if (it == dependents.end())
-        continue;
-
-      it->second->erase(toRemove);
-      if (it->second->size() == 0)
-      {
-        removeNode(child, variables);
-        continue;
-      }
-
-      if (child.GetKind() == stp::SYMBOL && it->second->size() == 1)
-      {
-        variables.push_back(child);
-      }
-    }
-  }
-
-  void print() const
-  {
-    NodeToDependentNodeMap::const_iterator it = dependents.begin();
-    for (/**/; it != dependents.end(); it++)
-    {
-      cout << (it->first).GetNodeNum();
-
-      const set<ASTNode>* dep = it->second;
-
-      set<ASTNode>::iterator it = dep->begin();
-      while (it != dep->end())
-      {
-        cout << " " << (*it).GetNodeNum();
-        it++;
-      }
-      cout << endl;
-    }
-  }
-
-  void checkInvariant() const
-  {
-    // only one node with a single dependent.
-  }
-
-  const set<ASTNode>* getDependents(const ASTNode n) const
+  const ASTNodeSet* getDependents(const ASTNode& n) const
   {
     if (n.isConstant())
       return &empty;
-    const NodeToDependentNodeMap::const_iterator it = dependents.find(n);
+    const auto it = dependents.find(n.GetNodeNum());
     if (it == dependents.end())
       return &empty;
 
@@ -178,31 +115,8 @@ public:
   // The value produces by the lower node is read by the higher node.
   bool nodeDependsOn(const ASTNode& higher, const ASTNode& lower) const
   {
-    const set<ASTNode>* s = getDependents(lower);
-    return s->count(higher) > 0;
+    return getDependents(lower)->count(higher) > 0;
   }
-
-  bool isUnconstrained(const ASTNode& n)
-  {
-    if (n.GetKind() != stp::SYMBOL)
-      return false;
-
-    NodeToDependentNodeMap::const_iterator it = dependents.find(n);
-    assert(it != dependents.end());
-    return it->second->size() == 1;
-  }
-
-#if 0
-      void
-      getAllVariables(ASTVec& v)
-      {
-        for (NodeToDependentNodeMap::const_iterator it = dependents.begin(); it != dependents. end(); it++)
-          {
-            if (it->first.GetKind() == SYMBOL)
-              v.push_back(it->first);
-          }
-      }
-#endif
 };
 }
 }
