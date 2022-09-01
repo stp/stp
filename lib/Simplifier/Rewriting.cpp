@@ -99,12 +99,23 @@ namespace stp
 
     const ASTVec& children = n.GetChildren();
     ASTVec newChildren;
-    newChildren.reserve(children.size());
 
-    //TODO should use the copy-on-write code.
+    // Copy on write.
+    bool changed =false;
+    auto fill = [&](const ASTNode& find)
+    {
+      newChildren.reserve(children.size());
+      const auto findIt = std::find(children.begin(), children.end(), find);
+      assert(findIt != children.end());
+      newChildren.insert(newChildren.end(), children.begin(), findIt);
+      changed=true;
+    };
+
 
     for (auto c: children)
     {
+     const ASTNode begin = c;
+     
      c = rewrite(c);
 
      const ASTNode start = c;
@@ -828,23 +839,29 @@ namespace stp
           c = nf->CreateNode(EQ, left,right);
         }
 
-
-
-
        if (start != c)
        {
           c = rewrite(c);
           removed++;
        }
-       // todo should probably update the sharecount.
-       newChildren.push_back(c);
+       // TODO should probably update the sharecount.
+       if (begin!=c && !changed)
+          fill(begin);
+        if (changed)   
+          newChildren.push_back(c);
     }    
 
-    if (n.GetType() == BOOLEAN_TYPE)
-      result = nf->CreateNode(n.GetKind(), newChildren);
-    else
-      result = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+    if (newChildren.size() > 0)
+    {
+      assert(newChildren.size() == children.size());
 
+      if (n.GetType() == BOOLEAN_TYPE)
+        result = nf->CreateNode(n.GetKind(), newChildren);
+      else
+        result = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+    }
+
+    //TODO is this right? We've replaced the children, but never this node?
     fromTo.insert({n.GetNodeNum(),result});
     return result;
   }
