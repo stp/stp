@@ -45,8 +45,8 @@ class WorkList
 
 private:
   // select nodes from the cheap_worklist first.
-  std::set<stp::ASTNode> cheap_workList;     // Nodes to work on.
-  std::set<stp::ASTNode> expensive_workList; // Nodes to work on.
+  std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> cheap_workList;    
+  std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> expensive_workList; 
 
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
@@ -127,7 +127,7 @@ public:
   void print()
   {
     cerr << "+Worklist" << endl;
-    std::set<stp::ASTNode>::const_iterator it = cheap_workList.begin();
+    std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::const_iterator it = cheap_workList.begin();
     while (it != cheap_workList.end())
     {
       cerr << *it << " ";

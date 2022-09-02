@@ -42,7 +42,6 @@ THE SOFTWARE.
 
 namespace stp
 {
-using std::map;
 
 class FindPureLiterals // not copyable
 {
@@ -51,7 +50,7 @@ class FindPureLiterals // not copyable
   const static polarity_type falsePolarity = 2;
   const static polarity_type bothPolarity = 3;
 
-  map<ASTNode, polarity_type> nodeToPolarity;
+  std::unordered_map<ASTNode, polarity_type, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> nodeToPolarity;
 
   int swap(polarity_type polarity);
 
