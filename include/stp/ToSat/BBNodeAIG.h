@@ -124,4 +124,15 @@ public:
 };
 }
 
+namespace std {
+    template <>
+        class hash<stp::BBNodeAIG>{
+        public :
+            size_t operator()(const stp::BBNodeAIG & node ) const
+            {
+                return Aig_Regular(node.n)->Id ;
+            }
+    };
+}
+
 #endif

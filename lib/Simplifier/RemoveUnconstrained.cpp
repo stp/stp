@@ -423,7 +423,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           // All the ASTNode vars need to map to their existing MutableASTNodes.
           // So we collect all the variables
           vector<MutableASTNode*> vars;
-          std::set<MutableASTNode*> visited;
+          std::unordered_set<MutableASTNode*> visited;
           muteOther->getAllVariablesRecursively(vars, visited);
           visited.clear();
 

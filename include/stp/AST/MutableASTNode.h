@@ -321,7 +321,7 @@ public:
   }
 
   void getAllVariablesRecursively(vector<MutableASTNode*>& result,
-                                  std::set<MutableASTNode*>& visited)
+                                  std::unordered_set<MutableASTNode*>& visited)
   {
     if (!visited.insert(this).second)
       return;
