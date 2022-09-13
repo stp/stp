@@ -1006,6 +1006,11 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
   if (debug_do_check)
     check(result, term);
 
+  if (!uf->conjoin_to_top)
+  {
+    assert(support.size() == 0);
+  }
+
   updateTerm(term, result, support);
   return (BBTermMemo[term] = result);
 }
@@ -1163,6 +1168,11 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     check(result, form);
 
   updateForm(form, result, support);
+
+  if (!uf->conjoin_to_top)
+  {
+    assert(support.size() == 0);
+  }
 
   return (BBFormMemo[form] = result);
 }
@@ -1752,7 +1762,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 
     // Iterate through from the current location upwards, setting anything to
     // zero that can be..
-    if (ms != NULL && highestZero >= i)
+    if (ms != NULL && highestZero >= i && uf->conjoin_to_top)
     {
       for (int column = i; column <= highestZero; column++)
       {
@@ -1766,6 +1776,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 
     BBPlus2(prod, pprod, nf->getFalse());
   }
+  
   return prod;
 }
 
