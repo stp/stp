@@ -473,7 +473,7 @@ ASTNode BitBlaster<BBNode, BBNodeManagerT>::getConstant(const BBNodeVec& v,
 // simplification.
 // Then the term that we bitblast will by "y".
 template <class BBNode, class BBNodeManagerT>
-typename std::unordered_map<ASTNode, vector<BBNode>>::iterator
+typename std::unordered_map<ASTNode, vector<BBNode>, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
 BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
                                                        BBNodeSet& support)
 {

@@ -230,7 +230,7 @@ public:
   // representing the boolean formula.
   const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support);
   
-  typename std::unordered_map<ASTNode, BBNodeVec>::iterator
+  typename std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
   BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
