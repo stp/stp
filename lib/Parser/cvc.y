@@ -1127,6 +1127,7 @@ LetDecl         :       STRING_TOK '=' Expr
 
 namespace stp {
   int CVCParse(void* AssertsQuery) {
+    GlobalParserInterface->letMgr->frameMode = false;
     return cvcparse(AssertsQuery);
   }
 }

@@ -643,7 +643,8 @@ LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK STRING_TOK an_term RPAREN_TOK
   //2. Ensure that LET variables are not
   //2. defined more than once
   GlobalParserInterface->letMgr->LetExprMgr(*$5,*$6);
-  
+  GlobalParserInterface->letMgr->commit();
+
   delete $5;
   delete $6;      
 }
@@ -651,6 +652,7 @@ LPAREN_TOK LET_TOK LPAREN_TOK QUESTION_TOK STRING_TOK an_term RPAREN_TOK
 {
   //Do LET-expr management
   GlobalParserInterface->letMgr->LetExprMgr(*$5,*$6);
+  GlobalParserInterface->letMgr->commit();
   delete $5;
   delete $6;     
 }

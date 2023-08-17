@@ -82,7 +82,7 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(factory)
+    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
 }
@@ -528,7 +528,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 
 // This method sets up some of the globally required data.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
+    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
   startup();
