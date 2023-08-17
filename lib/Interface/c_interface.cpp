@@ -1843,6 +1843,7 @@ Expr vc_parseExpr(VC vc, const char* infile)
   {
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
+    stp::GlobalParserInterface->letMgr->frameMode = false;
     cvcparse((void*)AssertsQuery);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
