@@ -52,6 +52,7 @@ public:
   LetMgr(ASTNode undefined) : ASTUndefined(undefined)
   {
     assert(!undefined.IsNull());
+    push(); // CVC format has a global let scope.
   }
 
   ~LetMgr() 

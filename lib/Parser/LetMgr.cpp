@@ -104,6 +104,7 @@ void LetMgr::cleanupParserSymbolTable()
 void LetMgr::CleanupLetIDMap(void)
 {
   stack.clear();
+  push();
 }
 
 }
