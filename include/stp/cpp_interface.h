@@ -40,7 +40,7 @@ namespace stp
 // Foward declarations
 struct UserDefinedFlags;
 class STPMgr;
-class LETMgr;
+class LetMgr;
 
 class Cpp_interface
 {
@@ -119,7 +119,7 @@ class Cpp_interface
   bool changed_model_status;
 
 public:
-  std::unique_ptr<LETMgr> letMgr;
+  std::unique_ptr<LetMgr> letMgr;
   NodeFactory* nf;
 
   ~Cpp_interface()
