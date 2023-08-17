@@ -32,78 +32,52 @@ namespace stp
 using std::string;
 
 // LET Management
-class LETMgr
+class LetMgr
 {
 private:
   const ASTNode ASTUndefined;
 
   typedef std::unordered_map<string, ASTNode> MapType;
 
-  // MAP: This map is from bound IDs that occur in LETs to
-  // expression. The map is useful in checking replacing the IDs
-  // with the corresponding expressions. As soon as the brackets
-  // that close a let expression is reached, it is emptied by
-  // a call to CleanupLetIDMap().
-  MapType* _letid_expr_map;
-
-  // Need to pop/push the let nodes, they can be nested.
-  std::stack<vector<string>> stack;
-
-  // Allocate LetID map
-  void InitializeLetIDMap(void);
+  // This maps from bound IDs that occur in LETs to
+  // expressions. It's used to replace the IDs
+  // with the corresponding expressions.
+  // It's complicated because bindings can be shadowed by later bindings.
+  // As soon as the brackets that close a let expression is reached it should be popped.
+  
+  // Initally empty because we expect push() to be called before any bindings are added.
+  std::vector<MapType> stack;
 
 public:
+  LetMgr(ASTNode undefined) : ASTUndefined(undefined)
+  {
+    assert(!undefined.IsNull());
+  }
+
+  ~LetMgr() 
+  {  
+  }
+
   // I think this keeps a reference to symbols so they don't get garbage
   // collected. Used only by the CVC parser.
   ASTNodeSet _parser_symbol_table;
+  void cleanupParserSymbolTable();
 
-  // A let with this name has already been declared.
-  bool isLetDeclared(string s)
-  {
-    return _letid_expr_map->find(s) != _letid_expr_map->end();
-  }
+  void CleanupLetIDMap(void);
 
-  void cleanupParserSymbolTable() { _parser_symbol_table.clear(); }
+  // Has a let with this name has already been declared.
+  bool isLetDeclared(string s);
 
-  LETMgr(ASTNode undefined) : ASTUndefined(undefined)
-  {
-    assert(!undefined.IsNull());
-    InitializeLetIDMap();
-  }
-
-  ~LETMgr() { delete _letid_expr_map; }
-
-  // We know for sure that it's a let.
-  ASTNode resolveLet(const string s)
-  {
-    assert(isLetDeclared(s));
-    return _letid_expr_map->find(s)->second;
-  }
-
+  ASTNode resolveLet(const string s);
   ASTNode ResolveID(const ASTNode& var);
 
-  // Functions that are used to manage LET expressions
+  // Functions that are used to create LET expressions
   void LetExprMgr(const ASTNode& var, const ASTNode& letExpr);
   void LetExprMgr(string name, const ASTNode& letExpr);
 
-  // Delete Letid Map. Called when we move onto the expression after (let ... )
-  void CleanupLetIDMap(void);
-
-  void push()
-  {
-    // new frame.
-    stack.push(vector<string>());
-  }
-
-  void pop()
-  {
-    vector<string> v = stack.top();
-    for (string s : v)
-    {
-      _letid_expr_map->erase(s);
-    }
-    stack.pop();
-  }
+  void push();
+  void pop();
+  
 };
 } // end of namespace
 
