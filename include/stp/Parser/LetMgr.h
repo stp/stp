@@ -47,8 +47,12 @@ private:
   
   // Initally empty because we expect push() to be called before any bindings are added.
   std::vector<MapType> stack;
+  MapType interim;
 
 public:
+  
+  bool frameMode = true;
+
   LetMgr(ASTNode undefined) : ASTUndefined(undefined)
   {
     assert(!undefined.IsNull());
@@ -76,6 +80,7 @@ public:
   void LetExprMgr(const ASTNode& var, const ASTNode& letExpr);
   void LetExprMgr(string name, const ASTNode& letExpr);
 
+  void commit();
   void push();
   void pop();
   

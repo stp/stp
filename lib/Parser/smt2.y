@@ -185,6 +185,7 @@
 
   extern char* smt2text;
   extern int smt2lineno;
+  extern bool stringOnly;
 
   int yyerror(const char *s) {
     cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << endl;
@@ -1041,11 +1042,16 @@ TRUE_TOK
 }
 | LPAREN_TOK LET_TOK LPAREN_TOK
   {
-    stp::GlobalParserInterface->letMgr->push();  // TODO this isn't going to clear properly if it's an_term later.
+    stp::GlobalParserInterface->letMgr->push();
   }
-  lets RPAREN_TOK an_formula RPAREN_TOK
+  lets RPAREN_TOK
   {
-    $$ = $7;
+    // We don't want any of the lets we've just created to intefer with each other, so keep them out of resolution until now.
+    stp::GlobalParserInterface->letMgr->commit();
+  }
+   an_formula RPAREN_TOK
+  {
+    $$ = $8;
     stp::GlobalParserInterface->letMgr->pop();
   }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
@@ -1088,34 +1094,21 @@ lets: let lets
 | let
 {};
 
-let: LPAREN_TOK STRING_TOK an_formula RPAREN_TOK
+let: LPAREN_TOK
 {
-  //populate the hashtable from LET-var -->
-  //LET-exprs and then process them:
-  //
-  //1. ensure that LET variables do not clash
-  //1. with declared variables.
-  //
-  //2. Ensure that LET variables are not
-  //2. defined more than once
-  stp::GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
-  delete $2;
-  stp::GlobalParserInterface->deleteNode( $3);
+  // Set lexer to only return symbols.
+  stringOnly = true;
+} 
+  STRING_TOK 
+{
+  // Set it back to normal.
+  stringOnly = false;
 }
-| LPAREN_TOK STRING_TOK an_term RPAREN_TOK
+  an_mixed RPAREN_TOK
 {
-  //populate the hashtable from LET-var -->
-  //LET-exprs and then process them:
-  //
-  //1. ensure that LET variables do not clash
-  //1. with declared variables.
-  //
-  //2. Ensure that LET variables are not
-  //2. defined more than once
-  stp::GlobalParserInterface->letMgr->LetExprMgr(*$2,*$3);
-  delete $2;
-  stp::GlobalParserInterface->deleteNode( $3);
-
+  stp::GlobalParserInterface->letMgr->LetExprMgr(*$3,($5->back()));
+  delete $3;
+  delete $5;
 }
 ;
 

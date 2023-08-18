@@ -43,11 +43,29 @@ void LetMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr)
 void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(stack.size() > 0);
-  stack.back().insert(make_pair(name,letExpr));
+
+  // In CVC they're available to use immediately. In SMTLIB2 it's only when the list of them is done.
+  if (frameMode)
+    interim.insert(make_pair(name,letExpr));
+  else
+    stack.back().insert(make_pair(name,letExpr));
 }
+
+// We're ready for these bindings to participate. 
+void LetMgr::commit()
+{
+  if (interim.size() == 0)
+    return;
+
+  for (const auto& k : interim)
+    stack.back().insert(k);
+  interim.clear();
+}
+
 
 void LetMgr::push()
 {
+  commit();
   stack.push_back(MapType());
 }
 
@@ -92,7 +110,9 @@ bool LetMgr::isLetDeclared(const string s)
   for (auto frame : stack )
     if (frame.find(s) != frame.end())
       return true;
+
   return false;
+
 }
 
 void LetMgr::cleanupParserSymbolTable() 
@@ -103,6 +123,7 @@ void LetMgr::cleanupParserSymbolTable()
 // Used only by the SMT1 & CVC parsers.
 void LetMgr::CleanupLetIDMap(void)
 {
+  interim.clear();
   stack.clear();
   push();
 }

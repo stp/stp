@@ -43,6 +43,7 @@
 
   extern char *smt2text;
   extern int smt2error (const char *msg);
+  bool stringOnly = false;
 
 #ifdef _MSC_VER
   #include <io.h>
@@ -71,16 +72,24 @@
       }
     }
 
+    if (stringOnly)
+    {
+      smt2lval.str = new std::string(s);
+      if (cleaned)
+        free (cleaned);
+      return STRING_TOK;
+    }
+
     stp::ASTNode nptr;
     bool found = false;
 
-    if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
-    {
-      found = true;
-    }
-    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(s)) // a let.
+    if (stp::GlobalParserInterface->letMgr->isLetDeclared(s)) // Lets shadow everything else.
     {
       nptr = stp::GlobalParserInterface->letMgr->resolveLet(s);
+      found = true;
+    }
+    else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+    {
       found = true;
     }
     else if (stp::GlobalParserInterface->isBitVectorFunction(s))
