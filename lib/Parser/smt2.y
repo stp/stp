@@ -1438,12 +1438,16 @@ TERMID_TOK
   {
     stp::GlobalParserInterface->letMgr->push();
   }
-  lets RPAREN_TOK an_term RPAREN_TOK
+  lets RPAREN_TOK
   {
-    $$ = $7;
+    // We don't want any of the lets we've just created to intefere with each other, so keep them out of resolution until now.
+    stp::GlobalParserInterface->letMgr->commit();
+  }
+   an_term RPAREN_TOK
+  {
+    $$ = $8;
     stp::GlobalParserInterface->letMgr->pop();
   }
-
 ;
 
 %%
