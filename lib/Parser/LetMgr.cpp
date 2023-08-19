@@ -44,7 +44,7 @@ void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(stack.size() > 0);
 
-  // In CVC they're available to use immediately. In SMTLIB2 it's only when the list of them is done.
+  // In CVC lets are available immediately. In SMTLIB2 it's only when the list of them has all been done.
   if (frameMode)
     interim.insert(make_pair(name,letExpr));
   else

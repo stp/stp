@@ -1450,6 +1450,7 @@ TERMID_TOK
 
 namespace stp {
   int SMT2Parse() {
+    GlobalParserInterface->letMgr->frameMode = true;
     return smt2parse();
   }
 }
