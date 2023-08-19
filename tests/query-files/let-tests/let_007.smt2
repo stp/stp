@@ -18,5 +18,5 @@
 		)
 	)
 )
-
+; CHECK-NEXT: ^sat
 (check-sat)
