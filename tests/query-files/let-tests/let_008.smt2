@@ -5,18 +5,32 @@
 (set-info :category "crafted")
 (set-info :status sat)
 
-; Let in the binding part of another let with shadowing.
-(assert 
-	(let
-		(
-			(x (_ bv7 5))
-		)
-		(let
-			(
-				(x (bvadd x (_ bv10 5)))
+; Try with distinct.
+(assert
+	(distinct
+		(distinct
+			(let
+				((x true))
+				x
 			)
-			(= (_ bv17 5) x)
+
+			(let
+				((x false))
+				x
+			)
 		)
+
+		(let
+			((x (_ bv7 5)))
+			(let
+				(
+					(y (bvnot x))
+					(x (= x (_ bv4 5)))
+				)
+				x
+			)
+		)
+
 	)
 )
 ; CHECK-NEXT: ^sat
