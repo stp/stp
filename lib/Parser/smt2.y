@@ -1040,18 +1040,9 @@ TRUE_TOK
     fatal_yyerror("too few arguments to formula eq."); 
   }
 }
-| LPAREN_TOK LET_TOK LPAREN_TOK
+| LPAREN_TOK LET_TOK lets an_formula RPAREN_TOK
   {
-    stp::GlobalParserInterface->letMgr->push();
-  }
-  lets RPAREN_TOK
-  {
-    // We don't want any of the lets we've just created to intefer with each other, so keep them out of resolution until now.
-    stp::GlobalParserInterface->letMgr->commit();
-  }
-   an_formula RPAREN_TOK
-  {
-    $$ = $8;
+    $$ = $4;
     stp::GlobalParserInterface->letMgr->pop();
   }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
@@ -1090,7 +1081,19 @@ TRUE_TOK
 }
 ;
 
-lets: let lets
+lets: LPAREN_TOK
+{
+    stp::GlobalParserInterface->letMgr->push();
+}
+inside-lets
+RPAREN_TOK
+{
+  // We don't want any of the lets we've just created to intefere with each other, so keep them out of resolution until now.
+
+  stp::GlobalParserInterface->letMgr->commit();
+};
+
+inside-lets: let inside-lets
 | let
 {};
 
@@ -1434,18 +1437,9 @@ TERMID_TOK
 
   $$ = $3;
 }
-| LPAREN_TOK LET_TOK LPAREN_TOK
+| LPAREN_TOK LET_TOK lets an_term RPAREN_TOK
   {
-    stp::GlobalParserInterface->letMgr->push();
-  }
-  lets RPAREN_TOK
-  {
-    // We don't want any of the lets we've just created to intefere with each other, so keep them out of resolution until now.
-    stp::GlobalParserInterface->letMgr->commit();
-  }
-   an_term RPAREN_TOK
-  {
-    $$ = $8;
+    $$ = $4;
     stp::GlobalParserInterface->letMgr->pop();
   }
 ;
