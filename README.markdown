@@ -19,12 +19,14 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
+sudo apt-get install cmake bison flex libboost-all-dev python2 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
 ./scripts/deps/setup-gtest.sh
 ./scripts/deps/setup-outputcheck.sh
+./scripts/deps/setup-cms.sh
+./scripts/deps/setup-minisat.sh
 mkdir build
 cd build
 cmake ..
