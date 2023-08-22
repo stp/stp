@@ -113,7 +113,7 @@ namespace stp
                   if (!bit && !reduced)
                   {
                      // We are increasing the result. So we need to reduce above.
-                    for (int j = i+1 ; j <= width-1 ; j++)         
+                    for (unsigned j = i+1 ; j <= width-1 ; j++)
                     {
                       if (bits->isFixed(j))   
                         continue;
