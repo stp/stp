@@ -77,7 +77,7 @@ private:
         return; // already been added in.
     }
 
-    for (const auto child: current)
+    for (const auto &child: current)
     {
       build(child, current);
     }
