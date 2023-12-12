@@ -33,7 +33,15 @@ THE SOFTWARE.
 #include <cstdint>
 #endif
 
+//for srbk() function
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
+#include <unistd.h>
+#endif
+
 extern void errorHandler(const char* error_msg);
+
+// Amount of memory to ask for at beginning of main.
+extern const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE;
 
 using namespace stp;
 using std::unique_ptr;
@@ -47,6 +55,9 @@ void errorHandler(const char* error_msg)
   exit(-1);
 }
 
+// Amount of memory to ask for at beginning of main.
+const intptr_t INITIAL_MEMORY_PREALLOCATION_SIZE = 4000000;
+
 Main::Main() : onePrintBack(false)
 {
   bm = NULL;
@@ -57,6 +68,15 @@ Main::Main() : onePrintBack(false)
 
   // Register the error handler
   vc_error_hdlr = errorHandler;
+
+#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
+  // Grab some memory from the OS upfront to reduce system time when
+  // individual hash tables are being allocated
+  if (sbrk(INITIAL_MEMORY_PREALLOCATION_SIZE) == ((void*)-1))
+  {
+    FatalError("Initial allocation of memory failed.");
+  }
+#endif
 
   bm = new STPMgr();
   GlobalParserBM = bm;
