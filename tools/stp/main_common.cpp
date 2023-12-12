@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include <memory>
 
 #if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
-#include <unistd.h>
+#include <cstdint>
 #endif
 
 extern void errorHandler(const char* error_msg);
