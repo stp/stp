@@ -133,6 +133,8 @@ before_build:
 
   # finally STP
   - cd c:\projects\stp
+  #Fixes:  fatal: detected dubious ownership in repository at '/cygdrive/c/projects/stp'
+  - git config --global --add safe.directory /cygdrive/c/projects/stp
   - git submodule update --init --recursive
   # Building in c:\projects\stp\build fails with cmake --build since ASTKind.h
   # cannot be found, so build it in ..\stp.build
