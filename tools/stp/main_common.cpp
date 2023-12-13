@@ -29,10 +29,6 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 #include <memory>
 
-#if !defined(__MINGW32__) && !defined(__MINGW64__) && !defined(_MSC_VER)
-#include <cstdint>
-#endif
-
 extern void errorHandler(const char* error_msg);
 
 using namespace stp;

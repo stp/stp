@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stp/c_interface.h>
+#include <cstdint>
 
 TEST(counter_example_reading, one)
 {
