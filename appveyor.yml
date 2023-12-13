@@ -46,8 +46,7 @@ configuration:
   #- C:\projects\stp\llvm.build -> appveyor.yml
 
 before_build:
-  - IF "%PLATFORM%" == "x86" ( SET CMAKE_GENERATOR="Visual Studio 17 2022")
-  - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 17 2022 Win64")
+  - SET CMAKE_GENERATOR="Visual Studio 17 2022"
 
   - echo %PLATFORM%
   - echo %CMAKE_GENERATOR%
@@ -65,7 +64,7 @@ before_build:
   # - if not exist llvm git clone --depth=1 --branch release_40 https://github.com/llvm-mirror/llvm
   # - if not exist llvm.build mkdir llvm.build
   # - cd llvm.build
-  # - if not exist Release\bin\not.exe cmake -G %CMAKE_GENERATOR% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
+  # - if not exist Release\bin\not.exe cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
   # - if not exist Release\bin\not.exe cmake --build . --config Release --target not
   # - set PATH=%PATH%;%cd%\Release\bin
 
@@ -89,7 +88,7 @@ before_build:
   - mkdir build
   - mkdir myinstall
   - cd build
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
   - cmake --build . --config %CONFIGURATION%
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
@@ -102,7 +101,7 @@ before_build:
   - mkdir build
   - mkdir myinstall
   - cd build
-  - cmake -DSTATICCOMPILE=ON -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
+  - cmake -DSTATICCOMPILE=ON -G %CMAKE_GENERATOR% -A %PLATFORM% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
   - cmake --build . --config %CONFIGURATION%
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
@@ -119,7 +118,7 @@ before_build:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DSTATICCOMPILE=ON -DNOZLIB=ON -DENABLE_PYTHON_INTERFACE=OFF -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DONLY_SIMPLE=ON -DENABLE_TESTING=OFF ..
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DSTATICCOMPILE=ON -DNOZLIB=ON -DENABLE_PYTHON_INTERFACE=OFF -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DONLY_SIMPLE=ON -DENABLE_TESTING=OFF ..
   - cmake --build . --config Release
   - cmake --build . --config Release --target install
   - cd ../..
@@ -140,7 +139,7 @@ before_build:
   - mkdir ..\stp.build
   - cd ..\stp.build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 -DBOOST_LIBRARYDIR=%BOOST_ROOT%/lib -DBoost_DEBUG=1 -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBOOST_ROOT=%BOOST_ROOT% ../stp
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 -DBOOST_LIBRARYDIR=%BOOST_ROOT%/lib -DBoost_DEBUG=1 -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBOOST_ROOT=%BOOST_ROOT% ../stp
   - ls
 
 
