@@ -25,7 +25,7 @@ environment:
     BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
-    PYTHON: "C:\Python33"
+    PYTHON: "C:\\Python33"
     PYTHON_ARCH: "x86"
     PYTHON_VERSION: "3.3.5"
     BUILD_TYPE: Release
