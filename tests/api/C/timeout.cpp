@@ -27,6 +27,8 @@ THE SOFTWARE.
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdint>
+
 
 void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
 {
