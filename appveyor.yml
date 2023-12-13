@@ -6,8 +6,8 @@ branches:
     - appveyor_debug
 
 image:
-  - Visual Studio 2015
-  - Visual Studio 2017
+  - Visual Studio 2019
+  - Visual Studio 2022
 
 # scripts that are called at very beginning, before repo cloning
 init:
@@ -25,9 +25,9 @@ environment:
     BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
-    PYTHON: "C:\\Python38"
+    PYTHON: "C:\\Python39"
     PYTHON_ARCH: "x86"
-    PYTHON_VERSION: "3.8.0"
+    PYTHON_VERSION: "3.9.13"
     BUILD_TYPE: Release
     APPVEYOR_SAVE_CACHE_ON_ERROR: false
     BOOST_OPTIONS: link=static runtime-link=static
