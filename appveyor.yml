@@ -25,9 +25,9 @@ environment:
     BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
-    PYTHON: "C:\Python38-x64"
-    PYTHON_ARCH: "x64"
-    PYTHON_VERSION: "3.8.10"
+    PYTHON: "C:\Python312"
+    PYTHON_ARCH: "x86"
+    PYTHON_VERSION: "3.12.0"
     BUILD_TYPE: Release
     APPVEYOR_SAVE_CACHE_ON_ERROR: false
     BOOST_OPTIONS: link=static runtime-link=static
