@@ -95,10 +95,8 @@ before_build:
 
   # minisat
   - cd C:\projects\stp
-  - git clone https://github.com/msoos/minisat
+  - git clone https://github.com/stp/minisat
   - cd minisat
-  # Trying to get it before the "fix" to dynamic/static linking.
-  - git checkout 55d7e7613b94f0369476a0a8ff35969485ed324f
   - echo %cd%
   - mkdir build
   - mkdir myinstall
