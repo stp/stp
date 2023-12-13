@@ -81,7 +81,7 @@ before_build:
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
   - cd C:\projects\stp
-  - git clone https://github.com/madler/zlib
+  - git clone https://github.com/madler/zlib 
   - cd zlib
   - git checkout v1.2.8
   - echo %cd%
@@ -97,6 +97,8 @@ before_build:
   - cd C:\projects\stp
   - git clone https://github.com/msoos/minisat
   - cd minisat
+  # Trying to get it before the "fix" to dynamic/static linking.
+  - git checkout 55d7e7613b94f0369476a0a8ff35969485ed324f
   - echo %cd%
   - mkdir build
   - mkdir myinstall
