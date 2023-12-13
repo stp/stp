@@ -35,8 +35,8 @@ environment:
     # https://stackoverflow.com/questions/1023858/how-to-suppress-specific-msbuild-warning
     MSBUILD_FLAGS: /maxcpucount /nologo /property:WarningLevel=1
 
-install:
-    "%PYTHON%\\python.exe -m pip install lit"
+#install:
+    #"%PYTHON%\\python.exe -m pip install lit"
 
 configuration:
   - Release
