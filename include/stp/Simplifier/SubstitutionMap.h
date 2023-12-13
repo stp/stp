@@ -177,7 +177,16 @@ public:
                          ASTNodeMap& cache, NodeFactory* nf, bool stopAtArrays,
                          bool preventInfiniteLoops);
 
-  ASTNode applySubstitutionMapAtTopLevel(const ASTNode& n)  __attribute__((warn_unused_result));
+  #ifdef _MSC_VER
+  #include <sal.h>
+  #define WARN_UNUSED_RESULT _Check_return_
+  #else
+  #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+  #endif
+
+  ASTNode applySubstitutionMapAtTopLevel(const ASTNode& n) WARN_UNUSED_RESULT;
+
+  #undef WARN_UNUSED_RESULT
 };
 }
 
