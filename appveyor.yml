@@ -106,6 +106,8 @@ before_build:
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
   - dir ..\myinstall\lib\
+  # To check it's really static.
+  - lib /list ..\myinstall\lib\minisat.lib
   - dir ..\myinstall\bin\
   - dir ..\myinstall\include\
 
