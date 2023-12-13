@@ -6,7 +6,6 @@ branches:
     - appveyor_debug
 
 image:
-  - Visual Studio 2019
   - Visual Studio 2022
 
 # scripts that are called at very beginning, before repo cloning
@@ -22,7 +21,7 @@ platform:
 
 environment:
   global:
-    BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
+    BOOST_ROOT: C:\Libraries\boost_1_83_0
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
     PYTHON: "C:\\Python39"
@@ -71,14 +70,14 @@ before_build:
   # - set PATH=%PATH%;%cd%\Release\bin
 
   # boost
-  - cd C:\projects\stp
-  - mkdir boost_1_59_0_install
-  - ps: . .\scripts\appveyor.ps1
-  - cd boost_1_59_0
-  - echo "Building boost.."
-  - bootstrap.bat --with-libraries=program_options
-  - cat project-config.jam
-  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release %BOOST_OPTIONS% threading=multi  install --prefix=%BOOST_ROOT% > boost_install.out
+  #- cd C:\projects\stp
+  #- mkdir boost_1_59_0_install
+  #- ps: . .\scripts\appveyor.ps1
+  #- cd boost_1_59_0
+  #- echo "Building boost.."
+  #- bootstrap.bat --with-libraries=program_options
+  #- cat project-config.jam
+  #- b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release %BOOST_OPTIONS% threading=multi  install --prefix=%BOOST_ROOT% > boost_install.out
 
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
