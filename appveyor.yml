@@ -6,8 +6,7 @@ branches:
     - appveyor_debug
 
 image:
-  - Visual Studio 2015
-  - Visual Studio 2017
+  - Visual Studio 2022
 
 # scripts that are called at very beginning, before repo cloning
 init:
@@ -22,12 +21,12 @@ platform:
 
 environment:
   global:
-    BOOST_ROOT: C:\projects\stp\boost_1_59_0_install
+    BOOST_ROOT: C:\Libraries\boost_1_83_0
     MINISAT_ROOT: C:\projects\stp\minisat\myinstall
     ZLIB_ROOT: C:\projects\stp\zlib\myinstall
-    PYTHON: "C:\\Python27"
+    PYTHON: "C:\\Python39"
     PYTHON_ARCH: "x86"
-    PYTHON_VERSION: "2.7.13"
+    PYTHON_VERSION: "3.9.13"
     BUILD_TYPE: Release
     APPVEYOR_SAVE_CACHE_ON_ERROR: false
     BOOST_OPTIONS: link=static runtime-link=static
@@ -36,8 +35,8 @@ environment:
     # https://stackoverflow.com/questions/1023858/how-to-suppress-specific-msbuild-warning
     MSBUILD_FLAGS: /maxcpucount /nologo /property:WarningLevel=1
 
-install:
-    "%PYTHON%\\python.exe -m pip install lit"
+#install:
+    #"%PYTHON%\\python.exe -m pip install lit"
 
 configuration:
   - Release
@@ -47,8 +46,7 @@ configuration:
   #- C:\projects\stp\llvm.build -> appveyor.yml
 
 before_build:
-  - IF "%PLATFORM%" == "x86" ( SET CMAKE_GENERATOR="Visual Studio 14 2015")
-  - IF "%PLATFORM%" == "x64" ( SET CMAKE_GENERATOR="Visual Studio 14 2015 Win64")
+  - SET CMAKE_GENERATOR="Visual Studio 17 2022"
 
   - echo %PLATFORM%
   - echo %CMAKE_GENERATOR%
@@ -66,48 +64,50 @@ before_build:
   # - if not exist llvm git clone --depth=1 --branch release_40 https://github.com/llvm-mirror/llvm
   # - if not exist llvm.build mkdir llvm.build
   # - cd llvm.build
-  # - if not exist Release\bin\not.exe cmake -G %CMAKE_GENERATOR% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
+  # - if not exist Release\bin\not.exe cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DPYTHON_EXECUTABLE=%PYTHON%\python.exe ..\llvm
   # - if not exist Release\bin\not.exe cmake --build . --config Release --target not
   # - set PATH=%PATH%;%cd%\Release\bin
 
   # boost
-  - cd C:\projects\stp
-  - mkdir boost_1_59_0_install
-  - ps: . .\scripts\appveyor.ps1
-  - cd boost_1_59_0
-  - echo "Building boost.."
-  - bootstrap.bat --with-libraries=program_options
-  - cat project-config.jam
-  - b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release %BOOST_OPTIONS% threading=multi  install --prefix=%BOOST_ROOT% > boost_install.out
+  #- cd C:\projects\stp
+  #- mkdir boost_1_59_0_install
+  #- ps: . .\scripts\appveyor.ps1
+  #- cd boost_1_59_0
+  #- echo "Building boost.."
+  #- bootstrap.bat --with-libraries=program_options
+  #- cat project-config.jam
+  #- b2 --with-program_options address-model=64 toolset=msvc-14.0 variant=release %BOOST_OPTIONS% threading=multi  install --prefix=%BOOST_ROOT% > boost_install.out
 
   # zlib
   # TODO check out http://stackoverflow.com/questions/10507893/libzip-with-visual-studio-2010
   - cd C:\projects\stp
-  - git clone https://github.com/madler/zlib
+  - git clone https://github.com/madler/zlib 
   - cd zlib
   - git checkout v1.2.8
   - echo %cd%
   - mkdir build
   - mkdir myinstall
   - cd build
-  - cmake -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DCMAKE_INSTALL_PREFIX=%ZLIB_ROOT% ..
   - cmake --build . --config %CONFIGURATION%
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
 
   # minisat
   - cd C:\projects\stp
-  - git clone https://github.com/msoos/minisat
+  - git clone https://github.com/stp/minisat
   - cd minisat
   - echo %cd%
   - mkdir build
   - mkdir myinstall
   - cd build
-  - cmake -DSTATICCOMPILE=ON -G %CMAKE_GENERATOR% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
+  - cmake -DSTATICCOMPILE=ON -G %CMAKE_GENERATOR% -A %PLATFORM% -DCMAKE_INSTALL_PREFIX=%MINISAT_ROOT% -DZLIB_ROOT=%ZLIB_ROOT% ..
   - cmake --build . --config %CONFIGURATION%
   - cmake --build . --config %CONFIGURATION% --target install
   - dir ..\myinstall\
   - dir ..\myinstall\lib\
+  # To check it's really static.
+  - C:\"Program Files"\"Microsoft Visual Studio"\2022\Community\VC\Tools\MSVC\14.38.33130\bin\Hostx64\x64\dumpbin /DIRECTIVES  ..\myinstall\lib\minisat.lib
   - dir ..\myinstall\bin\
   - dir ..\myinstall\include\
 
@@ -120,7 +120,7 @@ before_build:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DSTATICCOMPILE=ON -DNOZLIB=ON -DENABLE_PYTHON_INTERFACE=OFF -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DONLY_SIMPLE=ON -DENABLE_TESTING=OFF ..
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DSTATICCOMPILE=ON -DNOZLIB=ON -DENABLE_PYTHON_INTERFACE=OFF -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DONLY_SIMPLE=ON -DENABLE_TESTING=OFF ..
   - cmake --build . --config Release
   - cmake --build . --config Release --target install
   - cd ../..
@@ -135,13 +135,15 @@ before_build:
 
   # finally STP
   - cd c:\projects\stp
+  #Fixes:  fatal: detected dubious ownership in repository at '/cygdrive/c/projects/stp'
+  - git config --global --add safe.directory /cygdrive/c/projects/stp
   - git submodule update --init --recursive
   # Building in c:\projects\stp\build fails with cmake --build since ASTKind.h
   # cannot be found, so build it in ..\stp.build
   - mkdir ..\stp.build
   - cd ..\stp.build
   - cmake --version
-  - cmake -G %CMAKE_GENERATOR% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 -DBOOST_LIBRARYDIR=%BOOST_ROOT%/lib -DBoost_DEBUG=1 -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBOOST_ROOT=%BOOST_ROOT% ../stp
+  - cmake -G %CMAKE_GENERATOR% -A %PLATFORM% -DENABLE_TESTING=NO -DENABLE_PYTHON_INTERFACE=OFF -DMINISAT_LIBDIR=%MINISAT_ROOT% -DMINISAT_INCLUDE_DIRS=%MINISAT_ROOT%\include -DSTATICCOMPILE=ON -DZLIB_ROOT=%ZLIB_ROOT% -DCMAKE_PREFIX_PATH=C:\cygwin64 -DBOOST_LIBRARYDIR=%BOOST_ROOT%/lib -DBoost_DEBUG=1 -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBOOST_ROOT=%BOOST_ROOT% ../stp
   - ls
 
 
