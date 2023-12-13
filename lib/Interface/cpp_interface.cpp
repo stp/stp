@@ -475,11 +475,11 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   // We might have run this query before, or it might already be shown to be
-  // unsat. If it was sat,
-  // we've stored the result (but not the model), so we can shortcut and return
-  // what we know.
-  if (!((last_run.result == SOLVER_SATISFIABLE) ||
-        last_run.result == SOLVER_UNSATISFIABLE))
+  // unsat. If it was sat, we've stored the result (but not the model), so we 
+  // can shortcut and return what we know - if we don't need the model.
+  if ( (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE)) ||
+        (last_run.result == SOLVER_SATISFIABLE && bm.UserFlags.construct_counterexample_flag)
+     )
   {
     resetSolver();
 
