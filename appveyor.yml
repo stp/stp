@@ -108,9 +108,9 @@ before_build:
   - dir ..\myinstall\lib\
   # To check it's really static.
   - C:\"Program Files"\"Microsoft Visual Studio"\2022\Community\VC\Tools\MSVC\14.38.33130\bin\Hostx64\x64\dumpbin /DIRECTIVES  ..\myinstall\lib\minisat.lib
+  - C:\"Program Files"\"Microsoft Visual Studio"\2022\Community\VC\Tools\MSVC\14.38.33130\bin\Hostx64\x64\dumpbin /DIRECTIVES "C:\Libraries\boost_1_83_0\lib64-msvc-14.3\libboost_program_options-vc143-mt-x64-1_83.lib"
   - dir ..\myinstall\bin\
   - dir ..\myinstall\include\
-
 
   # cryptominisat
   - cd C:\projects\stp
