@@ -31,6 +31,7 @@ from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_b
 import inspect
 import os.path
 import sys
+from stp.library_path import PATHS
 
 __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
@@ -41,8 +42,6 @@ Py3 = sys.version_info >= (3, 0, 0)
 
 if Py3:
     long = int
-
-from library_path import PATHS
 
 for path in PATHS:
     if not os.path.exists(path):
