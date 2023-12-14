@@ -59,7 +59,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in
 # Try to guess the right place by asking the current python interpreter for its
 # Python library directory
 execute_process(COMMAND ${PYTHON_EXECUTABLE} -c
-                        "from distutils.sysconfig import get_python_lib; print(get_python_lib())"
+                        "import sys; import sysconfig; print(sysconfig.get_path('purelib', vars={'base': sys.base_prefix}))"
                  RESULT_VARIABLE RETURN_CODE
                  OUTPUT_VARIABLE PYTHON_LIB_DIR_DETECTED
                  OUTPUT_STRIP_TRAILING_WHITESPACE
