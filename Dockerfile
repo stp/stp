@@ -16,6 +16,7 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
+        libgmp-dev \
         libboost-program-options-dev \
         libm4ri-dev \
         make \
