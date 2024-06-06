@@ -23,8 +23,8 @@ cd ..
 
 git clone https://github.com/meelgroup/cadiback
 cd cadiback
-# branch: "mate" on 2024-04-22.
-git checkout 34236f1 
+# branch: "mate" on 2024-06-06.
+git checkout 12dac17
 ./configure 
 make -j"$(nproc)"
 cd ..
