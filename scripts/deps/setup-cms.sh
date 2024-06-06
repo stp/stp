@@ -31,8 +31,10 @@ cd ..
 
 git clone https://github.com/msoos/cryptominisat "${dep}"
 cd "${dep}"
+# We specify the commits for the other repositories, so do for this too
+git checkout b253b66
 mkdir build && cd build
-cmake -DNOSQLITE=ON -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..
