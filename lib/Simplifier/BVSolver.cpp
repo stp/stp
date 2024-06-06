@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen
+ * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
  *
@@ -531,6 +531,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
 
   ASTVec eveneqns;
   bool any_solved = false;
+  ASTNodeMap cache;
   for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
   {
     /*
@@ -558,7 +559,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
 
     ASTNode aaa =
         (any_solved && EQ == it->GetKind())
-            ? simplifyNode(_simp->applySubstitutionMapUntilArrays(*it))
+            ? simplifyNode(_simp->applySubstitutionMapUntilArrays(*it,cache))
             : *it;
 
     if (ASTFalse == aaa)
@@ -584,6 +585,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
     if (ASTTrue == aaa)
     {
       any_solved = true;
+      cache.clear();
     }
   }
 

@@ -95,10 +95,10 @@ private:
 
   const static ASTVec astbv_empty_children;
 
-  void setIndexWidth(uint32_t i __attribute__((unused))) { assert(i == 0); }
+  void setIndexWidth( [[maybe_unused]] uint32_t i ) { assert(i == 0); }
   uint32_t getIndexWidth() const { return 0; }
 
-  void setValueWidth(uint32_t v __attribute__((unused))) { assert(v == getValueWidth()); }
+  void setValueWidth([[maybe_unused]] uint32_t v ) { assert(v == getValueWidth()); }
   uint32_t getValueWidth() const { return bits_(_bvconst); }
 
 public:

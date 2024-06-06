@@ -1,0 +1,26 @@
+# This Dockerfile builds a statically-compiled instance of STP with MiniSat and
+# CryptoMiniSat.
+#
+#     docker build --tag stp/stp --file Docker.ubuntu20 .
+#     docker run -i -t stp/stp /bin/bash  
+
+FROM ubuntu:20.04 as builder
+
+RUN apt-get update
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+RUN apt-get install -y cmake bison flex libboost-all-dev python2 perl
+RUN apt-get install -y git
+RUN apt-get install -y g++ gcc 
+RUN git clone https://github.com/stp/stp
+WORKDIR stp
+RUN git submodule init && git submodule update
+RUN ./scripts/deps/setup-gtest.sh
+RUN ./scripts/deps/setup-outputcheck.sh
+RUN ./scripts/deps/setup-cms.sh
+RUN ./scripts/deps/setup-minisat.sh
+RUN  mkdir build
+WORKDIR build
+RUN cmake ..
+RUN cmake --build .
+RUN cmake --install .
+WORKDIR /stp/build

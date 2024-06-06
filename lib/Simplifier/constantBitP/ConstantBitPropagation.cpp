@@ -428,19 +428,14 @@ void notHandled(const Kind& k)
 // add to the work list any nodes that take the result of the "n" node.
 void ConstantBitPropagation::scheduleUp(const ASTNode& n)
 {
-  const set<ASTNode>* toAdd = dependents->getDependents(n);
-  set<ASTNode>::iterator it = toAdd->begin();
-  while (it != toAdd->end())
-  {
-    workList->push(*it);
-    it++;
-  }
+  for (const auto &it : *dependents->getDependents(n))
+    workList->push(it);
 }
 
 void ConstantBitPropagation::scheduleDown(const ASTNode& n)
 {
-  for (size_t i = 0; i < n.Degree(); i++)
-    workList->push(n[i]);
+  for (const auto& c : n.GetChildren())
+    workList->push(c);
 }
 
 void ConstantBitPropagation::scheduleNode(const ASTNode& n)

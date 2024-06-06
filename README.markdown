@@ -1,9 +1,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Linux build](https://travis-ci.org/stp/stp.svg?branch=master)](https://travis-ci.org/stp/stp)
 [![Windows build](https://ci.appveyor.com/api/projects/status/35983b7cnrg37whk?svg=true)](https://ci.appveyor.com/project/msoos/stp)
 [![Documentation](https://readthedocs.org/projects/stp/badge/?version=latest)](https://stp.readthedocs.io/en/latest/?badge=latest)
 [![Coverity](https://scan.coverity.com/projects/861/badge.svg)](https://scan.coverity.com/projects/861)
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/f043efa22ea64e9ba44fde0f3a4fb09f)](https://www.codacy.com/app/soos.mate/cryptominisat?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=msoos/cryptominisat&amp;utm_campaign=Badge_Grade)
 
 # STP
 
@@ -19,12 +17,14 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
+sudo apt-get install git cmake bison flex libboost-all-dev python2 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
 ./scripts/deps/setup-gtest.sh
 ./scripts/deps/setup-outputcheck.sh
+./scripts/deps/setup-cms.sh
+./scripts/deps/setup-minisat.sh
 mkdir build
 cd build
 cmake ..

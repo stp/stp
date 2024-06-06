@@ -54,7 +54,6 @@ using std::make_pair;
 
 #define BBNodeVec vector<BBNode>
 #define BBNodeVecMap std::map<ASTNode, vector<BBNode>>
-#define BBNodeSet std::set<BBNode>
 
 vector<BBNodeAIG> _empty_BBNodeAIGVec;
 
@@ -117,8 +116,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
   assert(support.size() == 0);
 
   {
-    typename std::map<ASTNode, BBNode>::iterator it;
-    for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+    for (auto it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
     {
       const ASTNode& n = it->first;
       const BBNode& x = it->second;
@@ -143,8 +141,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
     }
   }
 
-  typename BBNodeVecMap::iterator it;
-  for (it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+  for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
   {
     const ASTNode& n = it->first;
     assert(n.GetType() == BITVECTOR_TYPE);
@@ -184,8 +181,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
   if (true) //(uf->isSet("bb-equiv", "1"))
   {
     std::unordered_map<intptr_t, ASTNode> nodeToFn;
-    typename std::map<ASTNode, BBNode>::iterator it;
-    for (it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+    for (auto it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
     {
       const ASTNode& n = it->first;
       if (n.isConstant())
@@ -223,8 +219,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
                                BBVecEquals<BBNode>>
         M;
     M lookup;
-    typename std::map<ASTNode, vector<BBNode>>::iterator it;
-    for (it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+    for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
     {
       const ASTNode& n = it->first;
       if (n.isConstant())
@@ -478,7 +473,7 @@ ASTNode BitBlaster<BBNode, BBNodeManagerT>::getConstant(const BBNodeVec& v,
 // simplification.
 // Then the term that we bitblast will by "y".
 template <class BBNode, class BBNodeManagerT>
-typename std::map<ASTNode, vector<BBNode>>::iterator
+typename std::unordered_map<ASTNode, vector<BBNode>, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
 BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
                                                        BBNodeSet& support)
 {
@@ -537,7 +532,7 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
     ASTNode n_term = simp->SimplifyTerm(
         ASTNF->CreateTerm(term.GetKind(), term.GetValueWidth(), new_ch));
     assert(BVTypeCheck(n_term));
-    // n_term is the potentially simplified version of term.
+    // n_term is the potentially simplified version of term      return it;.
 
     if (cb != NULL)
     {
@@ -1011,6 +1006,11 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
   if (debug_do_check)
     check(result, term);
 
+  if (!uf->conjoin_to_top)
+  {
+    assert(support.size() == 0);
+  }
+
   updateTerm(term, result, support);
   return (BBTermMemo[term] = result);
 }
@@ -1168,6 +1168,11 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     check(result, form);
 
   updateForm(form, result, support);
+
+  if (!uf->conjoin_to_top)
+  {
+    assert(support.size() == 0);
+  }
 
   return (BBFormMemo[form] = result);
 }
@@ -1395,7 +1400,7 @@ const bool debug_multiply = false;
 
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
-    vector<list<BBNode>>& products, set<BBNode>& support, const ASTNode& n)
+    vector<list<BBNode>>& products, BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -1428,7 +1433,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
 
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
-    list<BBNode>& from, list<BBNode>& to, set<BBNode>& support,
+    list<BBNode>& from, list<BBNode>& to, BBNodeSet& support,
     const bool at_end, const bool all_false)
 {
 
@@ -1757,7 +1762,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 
     // Iterate through from the current location upwards, setting anything to
     // zero that can be..
-    if (ms != NULL && highestZero >= i)
+    if (ms != NULL && highestZero >= i && uf->conjoin_to_top)
     {
       for (int column = i; column <= highestZero; column++)
       {
@@ -1771,6 +1776,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::mult_normal(const BBNodeVec& x,
 
     BBPlus2(prod, pprod, nf->getFalse());
   }
+  
   return prod;
 }
 
@@ -1898,7 +1904,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::checkFixed(const BBNodeVec& v,
 // turned on, and upper_multiplication_bound must be set.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::setColumnsToZero(
-    vector<list<BBNode>>& products, set<BBNode>& support, const ASTNode& n)
+    vector<list<BBNode>>& products, BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -2138,7 +2144,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::sortingNetworkAdd(
 
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v6(vector<list<BBNode>>& products,
-                                                 set<BBNode>& support,
+                                                 BBNodeSet& support,
                                                  const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
@@ -2160,7 +2166,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v6(vector<list<BBNode>>& products,
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec
 BitBlaster<BBNode, BBNodeManagerT>::v13(vector<list<BBNode>>& products,
-                                        set<BBNode>& support, const ASTNode& n)
+                                        BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -2236,7 +2242,7 @@ BitBlaster<BBNode, BBNodeManagerT>::v13(vector<list<BBNode>>& products,
 // column+1, and column+2.
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
-                                                 set<BBNode>& support,
+                                                 BBNodeSet& support,
                                                  const ASTNode& n)
 {
   const unsigned bitWidth = n.GetValueWidth();
@@ -2312,7 +2318,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
 
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode>>& products,
-                                                 set<BBNode>& support,
+                                                 BBNodeSet& support,
                                                  const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
@@ -2382,7 +2388,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode>>& products,
 
 template <class BBNode, class BBNodeManagerT>
 BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v8(vector<list<BBNode>>& products,
-                                                 set<BBNode>& support,
+                                                 BBNodeSet& support,
                                                  const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
@@ -2933,6 +2939,5 @@ template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 
 #undef BBNodeVec
 #undef BBNodeVecMap
-#undef BBNodeSet
 
 } // stp namespace

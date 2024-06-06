@@ -82,7 +82,7 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(factory)
+    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
 }
@@ -475,11 +475,11 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   // We might have run this query before, or it might already be shown to be
-  // unsat. If it was sat,
-  // we've stored the result (but not the model), so we can shortcut and return
-  // what we know.
-  if (!((last_run.result == SOLVER_SATISFIABLE) ||
-        last_run.result == SOLVER_UNSATISFIABLE))
+  // unsat. If it was sat, we've stored the result (but not the model), so we 
+  // can shortcut and return what we know - if we don't need the model.
+  if ( (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE)) ||
+        (last_run.result == SOLVER_SATISFIABLE && bm.UserFlags.construct_counterexample_flag)
+     )
   {
     resetSolver();
 
@@ -528,7 +528,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 
 // This method sets up some of the globally required data.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), letMgr(new LETMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
+    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
   startup();

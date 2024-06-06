@@ -40,12 +40,13 @@ class MutableASTNode
   static THREAD_LOCAL vector<MutableASTNode*> all;
 
 public:
-  typedef std::set<MutableASTNode*> ParentsType;
+  typedef std::unordered_set<MutableASTNode*> ParentsType;
   ParentsType parents;
 
+  MutableASTNode(const MutableASTNode&) = delete;  
+  MutableASTNode& operator=(const MutableASTNode&) = delete;
+
 private:
-  MutableASTNode(const MutableASTNode&);            // No definition
-  MutableASTNode& operator=(const MutableASTNode&); // No definition
 
   MutableASTNode(const ASTNode& n_) : n(n_) { dirty = false; }
 
@@ -56,11 +57,11 @@ private:
 
 public:
   static MutableASTNode* build(const ASTNode& n,
-                               std::map<ASTNode, MutableASTNode*>& visited)
+                               std::unordered_map<uint64_t, MutableASTNode*>& visited)
   {
-    if (visited.find(n) != visited.end())
+    if (visited.find(n.GetNodeNum()) != visited.end())
     {
-      return visited.find(n)->second;
+      return visited.find(n.GetNodeNum())->second;
     }
 
     vector<MutableASTNode*> tempChildren;
@@ -80,7 +81,7 @@ public:
 
     mut->children.insert(mut->children.end(), tempChildren.begin(),
                          tempChildren.end());
-    visited.insert(std::make_pair(n, mut));
+    visited.insert(std::make_pair(n.GetNodeNum(), mut));
     return mut;
   }
 
@@ -188,7 +189,7 @@ public:
 
   static MutableASTNode* build(ASTNode n)
   {
-    std::map<ASTNode, MutableASTNode*> visited;
+    std::unordered_map<uint64_t, MutableASTNode*> visited;
     return build(n, visited);
   }
 
@@ -320,7 +321,7 @@ public:
   }
 
   void getAllVariablesRecursively(vector<MutableASTNode*>& result,
-                                  std::set<MutableASTNode*>& visited)
+                                  std::unordered_set<MutableASTNode*>& visited)
   {
     if (!visited.insert(this).second)
       return;

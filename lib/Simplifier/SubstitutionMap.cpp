@@ -97,12 +97,19 @@ ASTNode SubstitutionMap::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
 // not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
-  bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNodeMap cache;
+  return applySubstitutionMapUntilArrays(n, cache);
+}
+
+// not always idempotent.
+ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+{
+  bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
   return result;
 }
+
 
 ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
                                  ASTNodeMap& cache, NodeFactory* nf)
@@ -172,16 +179,23 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
   assert(children.size() > 0);
   // Should have no leaves left here.
 
-  ASTVec new_children;
-  new_children.reserve(children.size());
+  ASTVec newChildren;
+  bool changed = false;
 
   for (ASTVec::const_iterator it = children.begin(); it != children.end(); it++)
   {
-    new_children.push_back(
-        replace(*it, fromTo, cache, nf, stopAtArrays, preventInfinite));
+    ASTNode newNode = replace(*it, fromTo, cache, nf, stopAtArrays, preventInfinite);
+    if (!changed && newNode!=*it)
+    {
+        newChildren.reserve(children.size());
+        newChildren.insert(newChildren.end(), children.begin(), it);
+        changed=true;
+    }
+    if (changed)   
+      newChildren.push_back(newNode);
   }
 
-  assert(new_children.size() == children.size());
+  assert(newChildren.size() == 0 || (newChildren.size() == children.size()));
 
   // This code short-cuts if the children are the same. Nodes with the same
   // children,
@@ -189,7 +203,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
   // enabled
   // now, but wasn't enabled when the node was created. Shortcutting saves lots
   // of time.
-  if (new_children == children)
+  if (newChildren.size() ==0)
   {
     cache.insert(make_pair(n, n));
     return n;
@@ -200,12 +214,12 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 
   if (valueWidth == 0) // n.GetType() == BOOLEAN_TYPE
   {
-    result = nf->CreateNode(k, new_children);
+    result = nf->CreateNode(k, newChildren);
   }
   else
   {
     // If the index and value width aren't saved, they are reset sometimes (??)
-    result = nf->CreateArrayTerm(k, indexWidth, valueWidth, new_children);
+    result = nf->CreateArrayTerm(k, indexWidth, valueWidth, newChildren);
   }
 
   // We may have created something that should be mapped. For instance,

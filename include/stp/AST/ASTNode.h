@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef ASTNODE_H
 #define ASTNODE_H
 
+#include <cstdint>
+
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "ASTInternal.h"

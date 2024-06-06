@@ -101,7 +101,7 @@ public:
 
 
     // Node number to index in the children vector.
-    std::unordered_map<int,int> seen;
+    std::unordered_map<unsigned,unsigned> seen;
 
     ASTNode result =n;
     if (n.GetKind() == AND)
