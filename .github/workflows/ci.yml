@@ -5,10 +5,11 @@ jobs:
   build:
     strategy:
       matrix:
-        name: [gcc, clang]
+        name: [gcc]
+        #name: [gcc, clang]
         include:
-          - name: gcc
-            env: CC=gcc CXX=g++
+          #- name: gcc
+          #  env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
 
