@@ -5,7 +5,7 @@ jobs:
   build:
     strategy:
       matrix:
-        name: [gcc]
+        name: [clang]
         #name: [gcc, clang]
         include:
           #- name: gcc
