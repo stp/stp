@@ -372,9 +372,20 @@ class Solver(object):
             expr = self.keys[key]
 
         if expr:
-            value = _lib.vc_getCounterExample(self.vc, expr)
-            return _lib.getBVUnsignedLongLong(value)
-
+            width = _lib.getVWidth(expr)
+            
+            #What if it's compiled for 32-bit?
+            if width > 64:
+                extract = 0
+                for i in range(( width - 1 ) // 64 + 1):
+                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
+                    #maybe extractExpr leaks?
+                    bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
+                    extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+                return extract
+            else:
+                value = _lib.vc_getCounterExample(self.vc, expr)
+                return _lib.getBVUnsignedLongLong(value)
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)
