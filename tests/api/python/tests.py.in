@@ -456,6 +456,15 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(a.eq(b)))
         self.assertEqual(s.model(), {'a' : v})
 
+    def test_wide3(self):
+        s = self.s
+        a = s.bitvec('a', 142)
+        v = 0x2FFFFFFFFFFFFFFF5FFFFFFFFFFFFFFFFFF1
+        # Using the integer function to create a bitvector.
+        b = s.bitvecval(142, v)
+        self.assertTrue(s.check(a.eq(b)))
+        self.assertEqual(s.model(), {'a' : v})
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSTP)
