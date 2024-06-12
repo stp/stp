@@ -71,7 +71,7 @@ bool SimplifyingMinisat::solve(
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
-  if (ret == (Minisat::lbool)Minisat::l_Undef)
+  if (ret == (Minisat::lbool)l_Undef)
   {
     timeout_expired = true;
   }
