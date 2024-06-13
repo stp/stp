@@ -420,7 +420,7 @@ if (GIT_EXECUTABLE)
 else()
   set(GIT_SHA "GIT-hash-notfound")
 endif()
-set(STP_FULL_VERSION "2.3.3")
+set(STP_FULL_VERSION "2.3.4")
 
 string(REPLACE "." ";" STP_FULL_VERSION_LIST ${STP_FULL_VERSION})
 SetVersionNumber("PROJECT" ${STP_FULL_VERSION_LIST})
@@ -474,8 +474,8 @@ endif()
 # -----------------------------------------------------------------------------
 # Setup Cadical
 # -----------------------------------------------------------------------------
-option(USE_CADICAL "Try to use Cadical" OFF)
-add_feature_info(Riss USE_CADICAL "Enables Cadical solver")
+option(USE_CADICAL "Try to use Cadical" ON)
+add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
 if (USE_CADICAL)
     set(CADICAL_DIR "/home/thansen/solvers/cadical" CACHE PATH "Path to directory")
@@ -487,7 +487,7 @@ endif()
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
-option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
+option(NOCRYPTOMINISAT "Don't try to use cryptominisat" ON)
 
 if (NOT NOCRYPTOMINISAT)
   set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")

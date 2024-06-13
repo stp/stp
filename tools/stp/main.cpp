@@ -231,8 +231,7 @@ void ExtraMain::create_options()
 
 #ifdef USE_CRYPTOMINISAT
       ("cryptominisat",
-       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above "
-       "(default).")
+       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above ")
       ("threads",
        po::value<int>(&bm->UserFlags.num_solver_threads)
        ->default_value(bm->UserFlags.num_solver_threads),
@@ -241,18 +240,12 @@ void ExtraMain::create_options()
 #ifdef USE_RISS
       ("riss",
        "use Riss as the solver"
-#ifndef USE_CRYPTOMINISAT
-       "(default)."
-#endif
       )
 #endif
          ("simplifying-minisat",
            "use installed simplifying minisat version as the solver")(
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
-#ifndef USE_RISS
-                         "(default)"
-#endif
 #endif
               );
 

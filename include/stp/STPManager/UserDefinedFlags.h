@@ -200,7 +200,9 @@ public:
 
   UserDefinedFlags()
   {
-
+#ifdef USE_CADICAL
+    solver_to_use = CADICAL_SOLVER;
+#else
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #else
@@ -208,6 +210,7 @@ public:
     solver_to_use = RISS_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
+#endif
 #endif
 #endif
   }
