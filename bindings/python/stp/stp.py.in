@@ -275,8 +275,11 @@ class Solver(object):
 
     def bitvecval(self, width, value):
         """Creates a new BitVector with a constant value."""
-        expr = _lib.vc_bvConstExprFromLL(self.vc, width, value)
-        return Expr(self, width, expr)
+        if value > 64: #32-bit?
+            return self.bitvecvalD(width, str(value));
+        else:
+            expr = _lib.vc_bvConstExprFromLL(self.vc, width, value)
+            return Expr(self, width, expr)
 
     def bitvecvalD(self, width, value):
         """Creates a new BitVector with a constant value."""
@@ -372,9 +375,20 @@ class Solver(object):
             expr = self.keys[key]
 
         if expr:
-            value = _lib.vc_getCounterExample(self.vc, expr)
-            return _lib.getBVUnsignedLongLong(value)
-
+            width = _lib.getVWidth(expr)
+            
+            #What if it's compiled for 32-bit?
+            if width > 64:
+                extract = 0
+                for i in range(( width - 1 ) // 64 + 1):
+                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
+                    #maybe extractExpr leaks?
+                    bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
+                    extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+                return extract
+            else:
+                value = _lib.vc_getCounterExample(self.vc, expr)
+                return _lib.getBVUnsignedLongLong(value)
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)

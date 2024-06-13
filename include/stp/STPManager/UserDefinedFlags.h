@@ -185,6 +185,7 @@ public:
     enable_ite_context = false;
 
     bitblast_simplification = 0;
+    simple_cnf=true;
   }
 
   void disableSizeIncreasingSimplifications()

@@ -16,6 +16,7 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
+        libgmp-dev \
         libboost-program-options-dev \
         libm4ri-dev \
         make \
@@ -25,7 +26,7 @@ RUN apt-get update \
 
 # Build CMS
 WORKDIR /cms
-RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.8.0.tar.gz \
+RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.11.21.tar.gz \
  && tar xvf cryptominisat.tgz --strip-components 1 \
  && mkdir build && cd build \
  && cmake .. \

@@ -10,10 +10,31 @@ install_dir=$(readlink -fm "${dep_dir}"/install)
 dep="cms"
 
 cd "${dep_dir}"
+
+# Install cadical/cadiback first.
+
+git clone https://github.com/meelgroup/cadical
+cd cadical
+# branch: "mate-only-libraries-1.8.0" on 2024-04-22.
+git checkout c90592e
+./configure 
+make -j"$(nproc)"
+cd ..
+
+git clone https://github.com/meelgroup/cadiback
+cd cadiback
+# branch: "mate" on 2024-06-06.
+git checkout 12dac17
+./configure 
+make -j"$(nproc)"
+cd ..
+
 git clone https://github.com/msoos/cryptominisat "${dep}"
 cd "${dep}"
+# We specify the commits for the other repositories, so do for this too
+git checkout b253b66
 mkdir build && cd build
-cmake -DNOSQLITE=ON -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..
