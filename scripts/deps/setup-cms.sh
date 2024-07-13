@@ -31,8 +31,8 @@ cd ..
 
 git clone https://github.com/msoos/cryptominisat "${dep}"
 cd "${dep}"
-# We specify the commits for the other repositories, so do for this too
-git checkout ffcf4e0
+# We specify the tags/commits for the other repositories, so do for this too
+git checkout 5.11.22
 mkdir build && cd build
 cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
