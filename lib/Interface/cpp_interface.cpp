@@ -598,6 +598,13 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       unsupported();
   }
+  else if (option == "diagnostic-output-channel")
+  {
+    if (value == "stdout")
+      success();
+    else
+      unsupported();
+  }	  
   else
     unsupported();
 }
