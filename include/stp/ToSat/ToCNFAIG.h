@@ -25,9 +25,9 @@ THE SOFTWARE.
 #ifndef TOCNFAIG_H_
 #define TOCNFAIG_H_
 
-#include "extlib-abc/aig.h"
-#include "extlib-abc/cnf_short.h"
-#include "extlib-abc/dar.h"
+#include "aig/aig/aig.h"
+#include "sat/cnf/cnf.h"
+#include "opt/dar/dar.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 

@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.26 FATAL_ERROR)
 
 if(POLICY CMP0048)
     #policy for VERSION in cmake 3.0
@@ -447,7 +447,9 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 # FIXME: External library includes
 include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
+                    ${PROJECT_SOURCE_DIR}/lib/abc/src
                    )
+add_definitions(-DLIN64 -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8 -DSIZEOF_INT=4)
 
 option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
 if (NOT ONLY_SIMPLE)

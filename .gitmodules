@@ -1,0 +1,3 @@
+[submodule "lib/abc"]
+	path = lib/abc
+	url = https://github.com/berkeley-abc/abc.git

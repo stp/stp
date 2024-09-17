@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "main_common.h"
-#include "extlib-abc/cnf_short.h"
+#include "sat/cnf/cnf.h"
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/ToSat/ToSATAIG.h"

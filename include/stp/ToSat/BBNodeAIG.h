@@ -25,7 +25,7 @@ THE SOFTWARE.
 #ifndef BBNODEAIG_H_
 #define BBNODEAIG_H_
 
-#include "extlib-abc/aig.h"
+#include "aig/aig/aig.h"
 #include <iostream>
 
 namespace stp

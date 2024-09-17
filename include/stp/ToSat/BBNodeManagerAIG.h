@@ -30,9 +30,9 @@ THE SOFTWARE.
 #include "BBNodeAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 
-#include "extlib-abc/aig.h"
-#include "extlib-abc/cnf_short.h"
-#include "extlib-abc/dar.h"
+#include "aig/aig/aig.h"
+#include "sat/cnf/cnf.h"
+#include "opt/dar/dar.h"
 
 typedef Cnf_Dat_t_ CNFData;
 typedef Aig_Obj_t AIGNode;
@@ -142,8 +142,8 @@ public:
     if (!it->second[i].IsNull())
       return it->second[i];
 
-    it->second[i] = BBNodeAIG(Aig_ObjCreatePi(aigMgr));
-    it->second[i].symbol_index = aigMgr->vPis->nSize - 1;
+    it->second[i] = BBNodeAIG(Aig_ObjCreateCi(aigMgr));
+    it->second[i].symbol_index = aigMgr->vCis->nSize - 1;
     return it->second[i];
   }
 
