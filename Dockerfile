@@ -22,6 +22,8 @@ RUN apt-get update \
         make \
         wget \
         zlib1g-dev \
+        libreadline-dev \
+        libtinfo5 \
  && rm -rf /var/lib/apt/lists/*
 
 # Build CMS

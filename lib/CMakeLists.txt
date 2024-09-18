@@ -28,7 +28,6 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -123,7 +122,15 @@ endif()
 # in manually.
 # -----------------------------------------------------------------------------
 # https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
-set(stp_link_libs ${MINISAT_LIBRARIES} $<BUILD_LOCAL_INTERFACE:libabc>)
+
+file(COPY abc DESTINATION .)
+ADD_CUSTOM_COMMAND(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a
+    COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/abc && make libabc.a ABC_USE_PIC=ON -j
+)
+add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a)
+add_dependencies(stp abc_target)
+set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a readline tinfo)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
