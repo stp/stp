@@ -32,7 +32,8 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
 #include "stp/Util/GitSHA1.h"
-// FIXME: External library
+
+// From ABC
 #include "sat/cnf/cnf.h"
 #include "stp/ToSat/ToSATAIG.h"
 

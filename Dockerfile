@@ -16,14 +16,13 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
-        libgmp-dev \
         libboost-program-options-dev \
+        libgmp-dev \
         libm4ri-dev \
+        libtinfo5 \
         make \
         wget \
         zlib1g-dev \
-        libreadline-dev \
-        libtinfo5 \
  && rm -rf /var/lib/apt/lists/*
 
 # Build CMS

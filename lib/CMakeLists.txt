@@ -122,14 +122,14 @@ endif()
 # -----------------------------------------------------------------------------
 # https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
 
-file(COPY abc DESTINATION .)
+file(COPY extlib-abc DESTINATION .)
 ADD_CUSTOM_COMMAND(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a
-    COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/abc && make libabc.a ABC_USE_PIC=ON -j
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/libabc.a
+    COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc && make libabc.a ABC_USE_PIC=1 ABC_USE_NO_READLINE=1 -j
 )
-add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a)
+add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/libabc.a)
 add_dependencies(stp abc_target)
-set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/abc/libabc.a readline tinfo)
+set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/libabc.a tinfo)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)

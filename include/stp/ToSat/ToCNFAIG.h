@@ -25,9 +25,11 @@ THE SOFTWARE.
 #ifndef TOCNFAIG_H_
 #define TOCNFAIG_H_
 
+// From ABC
 #include "aig/aig/aig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
+
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 

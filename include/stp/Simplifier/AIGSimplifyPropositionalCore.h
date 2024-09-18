@@ -42,8 +42,9 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
-// FIXME: External libraries
+// From ABC
 #include "aig/aig/aig.h"
+
 #include "stp/ToSat/BBNodeManagerAIG.h"
 
 namespace stp

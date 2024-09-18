@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "BBNodeAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 
+// From ABC
 #include "aig/aig/aig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"

@@ -38,7 +38,10 @@ THE SOFTWARE.
 
 // FIXME: External libraries
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
+
+// From ABC
 #include "opt/dar/dar.h"
+
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BitBlaster.h"
 
