@@ -35,6 +35,7 @@ THE SOFTWARE.
 
 // From ABC
 #include "sat/cnf/cnf.h"
+
 #include "stp/ToSat/ToSATAIG.h"
 
 
