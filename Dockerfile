@@ -19,7 +19,7 @@ RUN apt-get update \
         libboost-program-options-dev \
         libgmp-dev \
         libm4ri-dev \
-        libtinfo5 \
+        libtinfo-dev \
         make \
         wget \
         zlib1g-dev \
