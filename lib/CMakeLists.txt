@@ -86,7 +86,6 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
 endif()
 
 add_library(stp
-    STATIC
     ${stp_lib_objects}
 )
 
