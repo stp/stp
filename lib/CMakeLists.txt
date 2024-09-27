@@ -28,7 +28,6 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(extlib-abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -52,7 +51,6 @@ set(stp_lib_targets
     sat
     simplifier
     constantbv
-    abc
     cinterface
     cppinterface
     parser
@@ -122,7 +120,18 @@ endif()
 # Clients of stp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-set(stp_link_libs ${MINISAT_LIBRARIES})
+# https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
+
+file(COPY extlib-abc DESTINATION .)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc
+    COMMAND cmake -B build -DREADLINE_FOUND=FALSE
+    COMMAND cmake --build build --target libabc-pic -j
+)
+add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a)
+add_dependencies(stp abc_target)
+set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a tinfo)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)

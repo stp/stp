@@ -5,7 +5,7 @@
 #     cat example.smt2 | docker run --rm -i stp/stp
 
 
-FROM ubuntu:22.04 as builder
+FROM ubuntu:22.04 AS builder
 
 # Install dependencies
 RUN apt-get update \
@@ -16,9 +16,10 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
-        libgmp-dev \
         libboost-program-options-dev \
+        libgmp-dev \
         libm4ri-dev \
+        libtinfo-dev \
         make \
         wget \
         zlib1g-dev \

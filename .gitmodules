@@ -1,0 +1,3 @@
+[submodule "lib/extlib-abc"]
+	path = lib/extlib-abc
+	url = https://github.com/berkeley-abc/abc.git
