@@ -126,7 +126,8 @@ file(COPY extlib-abc DESTINATION .)
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc
-    COMMAND cmake -B build -DREADLINE_FOUND=FALSE&& cmake --build build --target libabc-pic -j
+    COMMAND cmake -B build -DREADLINE_FOUND=FALSE
+    COMMAND cmake --build build --target libabc-pic -j
 )
 add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a)
 add_dependencies(stp abc_target)
