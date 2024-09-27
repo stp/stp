@@ -124,13 +124,13 @@ endif()
 
 file(COPY extlib-abc DESTINATION .)
 add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc.a
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc
-    COMMAND cmake -B build -DREADLINE_FOUND=FALSE&& cmake --build build -j
+    COMMAND cmake -B build -DREADLINE_FOUND=FALSE&& cmake --build build --target libabc-pic -j
 )
-add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc.a)
+add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a)
 add_dependencies(stp abc_target)
-set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc.a tinfo)
+set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a tinfo)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
