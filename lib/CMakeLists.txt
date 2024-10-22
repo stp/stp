@@ -151,6 +151,11 @@ if (USE_RISS)
         ${stp_link_libs} -lriss-coprocessor)
 endif()
 
+if (USE_KISSAT)
+    set(stp_link_libs
+        ${stp_link_libs} -lkissat)
+endif()
+
 target_link_libraries(stp
     LINK_PUBLIC ${stp_link_libs}
 )

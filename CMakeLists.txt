@@ -523,6 +523,18 @@ if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
 endif()
 
 # -----------------------------------------------------------------------------
+# Find Kissat
+# -----------------------------------------------------------------------------
+option(USE_KISSAT "Try to use Kissat" OFF)
+add_feature_info(Kissat USE_KISSAT "Enables Kissat solver")
+
+if (USE_KISSAT)
+    add_definitions(-DUSE_KISSAT)
+    include_directories(${PROJECT_SOURCE_DIR}/scripts/deps/)
+    link_directories(${PROJECT_SOURCE_DIR}/scripts/deps/kissat/build)
+endif()
+
+# -----------------------------------------------------------------------------
 # Find ZLIB (needed for MiniSat)
 # yes, we need to include the zlib header location or STP will not build
 # thanks to MiniSat include-ing it n the header

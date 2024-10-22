@@ -16,6 +16,7 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
+        git \
         libboost-program-options-dev \
         libgmp-dev \
         libm4ri-dev \
@@ -48,8 +49,10 @@ RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.ta
  && cmake --install .
 
 # Build STP
-WORKDIR /stp/build
 COPY . /stp
+WORKDIR /stp
+RUN ./scripts/deps/setup-kissat.sh
+WORKDIR /stp/build
 RUN cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
