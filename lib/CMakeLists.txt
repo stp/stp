@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -122,16 +122,17 @@ endif()
 # -----------------------------------------------------------------------------
 # https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
 
-file(COPY extlib-abc DESTINATION .)
-add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc
-    COMMAND cmake -B build -DREADLINE_FOUND=FALSE
-    COMMAND cmake --build build --target libabc-pic -j
-)
-add_custom_target(abc_target DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a)
-add_dependencies(stp abc_target)
-set(stp_link_libs ${MINISAT_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/extlib-abc/build/libabc-pic.a)
+# Configure ABC library build options
+set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
+set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
+
+# Add ABC as a subdirectory
+add_subdirectory(extlib-abc)
+
+# Link to the ABC library target
+add_dependencies(stp libabc-pic)
+# Use the full path to the library instead of the target name for export compatibility
+set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
