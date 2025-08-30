@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -132,7 +132,7 @@ add_subdirectory(extlib-abc)
 # Link to the ABC library target
 add_dependencies(stp libabc-pic)
 # Use the full path to the library instead of the target name for export compatibility
-set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic> tinfo)
+set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
