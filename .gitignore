@@ -9,3 +9,4 @@ docs/_build
 .DS_Store
 .direnv
 build
+scripts/deps/kissat

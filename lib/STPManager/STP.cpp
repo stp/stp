@@ -37,6 +37,10 @@ THE SOFTWARE.
 #include "stp/Sat/Riss.h"
 #endif
 
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
+
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SimplifyingMinisat.h"
 
@@ -111,6 +115,15 @@ SATSolver* STP::get_new_sat_solver()
       newS = new RissCore();
 #else
       std::cerr << "Riss support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
+      break;
+    case UserDefinedFlags::KISSAT_SOLVER:
+#ifdef USE_KISSAT
+      newS = new Kissat();
+#else
+      std::cerr << "Kissat support was not enabled at configure time."
                 << std::endl;
       exit(-1);
 #endif

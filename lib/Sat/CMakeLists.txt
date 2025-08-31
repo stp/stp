@@ -32,5 +32,9 @@ if (USE_RISS)
     set(sat_lib_to_add ${sat_lib_to_add} RissCore.cpp)
 endif()
 
+if (USE_KISSAT)
+    set(sat_lib_to_add ${sat_lib_to_add} Kissat.cpp)
+endif()
+
 add_library(sat OBJECT ${sat_lib_to_add})
 
