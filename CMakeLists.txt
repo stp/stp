@@ -801,6 +801,12 @@ install(FILES
   DESTINATION "${STP_INSTALL_CMAKE_DIR}"
 )
 
+# Install libabc-pic.so from the build/lib directory
+install(
+    FILES "${CMAKE_BINARY_DIR}/lib/libabc-pic.so"
+    DESTINATION lib
+)
+
 # Install the export set for use with the install-tree
 install(EXPORT ${STP_EXPORT_NAME} DESTINATION
   "${STP_INSTALL_CMAKE_DIR}"
