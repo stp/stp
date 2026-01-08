@@ -177,6 +177,10 @@ enum ifaceflag_t
   //!
   RISS,
 
+  //! Use the SAT solver Kissat.
+  //!
+  KISSAT,
+
   //! \brief Deprecated: use `MS` instead!
   //!
   //! This used to be the array version of the minisat SAT solver.
@@ -1225,6 +1229,17 @@ DLL_PUBLIC bool vc_useRiss(VC vc);
 //!
 DLL_PUBLIC bool vc_isUsingRiss(VC vc);
 
+//! \brief Checks if STP was compiled with support for Kissat
+//!
+DLL_PUBLIC bool vc_supportsKissat(VC vc);
+
+//! \brief Sets underlying SAT solver to Kissat
+//!
+DLL_PUBLIC bool vc_useKissat(VC vc);
+
+//! \brief Checks if underlying SAT solver is Kissat
+//!
+DLL_PUBLIC bool vc_isUsingKissat(VC vc);
 
 #ifdef __cplusplus
 }

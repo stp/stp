@@ -25,3 +25,4 @@ todo*
 utils
 windows
 Dockerfile
+!scripts/deps/setup-kissat.sh

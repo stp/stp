@@ -241,12 +241,24 @@ void ExtraMain::create_options()
 #endif
       )
 #endif
+#ifdef USE_KISSAT
+      ("kissat",
+        "use kissat as the solver"
+#ifndef USE_CRYPTOMINISAT
+#ifndef USE_RISS
+        "(default)."
+#endif
+#endif
+      )
+#endif
          ("simplifying-minisat",
            "use installed simplifying minisat version as the solver")(
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
 #ifndef USE_RISS
+#ifndef USE_KISSAT
                          "(default)"
+#endif
 #endif
 #endif
               );
@@ -469,6 +481,13 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("cryptominisat"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
+  }
+#endif
+
+#ifdef USE_KISSAT
+  if (vm.count("kissat"))
+  {
+    bm->UserFlags.solver_to_use = UserDefinedFlags::KISSAT_SOLVER;
   }
 #endif
 

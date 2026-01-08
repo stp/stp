@@ -141,6 +141,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
       break;
+    case KISSAT:
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::KISSAT_SOLVER;
+      break;
     default:
       stp::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
       break;
@@ -2305,3 +2308,38 @@ vc
 #endif
 }
 
+bool vc_supportsKissat(VC /*vc*/ )
+{
+#ifdef USE_KISSAT
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useKissat(VC
+#ifdef USE_KISSAT
+vc
+#endif
+)
+{
+#ifdef USE_KISSAT
+  _vc_useSolver(vc, stp::UserDefinedFlags::KISSAT_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingKissat(VC
+#ifdef USE_KISSAT
+vc
+#endif
+)
+{
+#ifdef USE_KISSAT
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::KISSAT_SOLVER);
+#else
+  return false;
+#endif
+}
