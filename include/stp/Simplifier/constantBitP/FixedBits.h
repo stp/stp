@@ -133,7 +133,7 @@ public:
     for (unsigned i = 0; i < width; i++)
     {
       if (getValue(i))
-        result += (1 << i);
+        result += (1u << i);
     }
 
     return result;
