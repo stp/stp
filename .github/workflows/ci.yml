@@ -91,7 +91,7 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/stp/minisat
         cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
         cmake --build build --config Release --target install
 
     - name: Configure
