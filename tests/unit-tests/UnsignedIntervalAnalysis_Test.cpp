@@ -25,7 +25,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
-#include <stdio.h>
 
 
   const std::string start_input = R"(

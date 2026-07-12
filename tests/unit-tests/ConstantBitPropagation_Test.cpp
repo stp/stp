@@ -22,7 +22,6 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include <gtest/gtest.h>
-#include <stdio.h>
 
 
   const std::string start_input = R"(
