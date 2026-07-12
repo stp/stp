@@ -259,7 +259,9 @@ int Main::main(int argc, char** argv)
   }
 
   // ensure that all output is (at most) line buffered
-  setvbuf(stdout, NULL, _IOLBF, 0);
+  // A size of 0 is rejected by MSVC's CRT (fatal invalid-parameter error);
+  // it requires 2 <= size <= INT_MAX.
+  setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
 
   STP* stp = new STP(bm);
 
