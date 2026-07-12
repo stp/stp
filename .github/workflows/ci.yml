@@ -73,6 +73,10 @@ jobs:
 
     env:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
+      # Build ABC single-threaded: its pthread/atomics code paths don't
+      # compile with MSVC. ABC's Makefile (run during CMake configure to
+      # extract flags) reads this from the environment.
+      ABC_USE_NO_PTHREADS: 1
       # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
       # pass the include dir and library explicitly instead.
       # ZLIB_LIBRARY is located after the vcpkg install (see below).
