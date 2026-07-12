@@ -63,8 +63,9 @@ jobs:
       working-directory: build
       env:
         # gcc-built binaries use DT_RUNPATH, which is not searched when
-        # resolving libcryptominisat5's own dependency on libcadiback.so.
-        LD_LIBRARY_PATH: ${{ github.workspace }}/deps/cadiback
+        # resolving libcryptominisat5's own dependencies on libcadiback.so
+        # and libcadical.so.
+        LD_LIBRARY_PATH: ${{ github.workspace }}/deps/cadiback:${{ github.workspace }}/deps/cadical/build
 
   build-windows:
     name: windows
@@ -90,7 +91,7 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/stp/minisat
         cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
         cmake --build build --config Release --target install
 
     - name: Configure
