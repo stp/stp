@@ -320,6 +320,93 @@ TEST(UnsignedIntervalPropagators, BvorMinimumWithUnknownChild)
   cleanup(children, result);
 }
 
+// [1,3] << [1,2]: no set bit can be shifted out, so the bounds shift too.
+TEST(UnsignedIntervalPropagators, LeftShiftBounds)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVLEFTSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 1, 3), makeInterval(width, 1, 2)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 2, 12);
+  cleanup(children, result);
+}
+
+// Shifting an unknown value left by at least the width gives zero.
+TEST(UnsignedIntervalPropagators, LeftShiftByWidthOrMoreIsZero)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVLEFTSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      nullptr, makeInterval(width, 8, 255)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0, 0);
+  cleanup(children, result);
+}
+
+// [0x10,0x30] >>s [1,2]: the sign bit is clear, so it behaves like a
+// logical shift: [0x10 >> 2, 0x30 >> 1].
+TEST(UnsignedIntervalPropagators, SignedRightShiftOfNonNegative)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVSRSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0x10, 0x30), makeInterval(width, 1, 2)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 4, 24);
+  cleanup(children, result);
+}
+
+// [0x80,0xF0] >>s 1: the sign bit is set, so ones are shifted in.
+TEST(UnsignedIntervalPropagators, SignedRightShiftOfNegative)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVSRSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0x80, 0xF0), makeInterval(width, 1, 1)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0xC0, 0xF8);
+  cleanup(children, result);
+}
+
+// [0x70,0x90] >>s 4 crosses the sign boundary: the minimum comes from the
+// non-negative end, the maximum from the negative end.
+TEST(UnsignedIntervalPropagators, SignedRightShiftCrossingSign)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVSRSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0x70, 0x90), makeInterval(width, 4, 4)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0x07, 0xF9);
+  cleanup(children, result);
+}
+
 // [0,5] ^ [0,3]: neither operand has a bit above bit 2, so the XOR is at
 // most 7.
 TEST(UnsignedIntervalPropagators, BvxorUpperBound)

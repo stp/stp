@@ -36,7 +36,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include <iostream>
 #include <map>
-#include <cmath>
 
 using std::map;
 
@@ -54,6 +53,22 @@ namespace stp
   }
 
   using std::make_pair;
+
+  namespace
+  {
+    // Reads a shift amount, capped at the width. Shifting by the width or
+    // more discards (or sign-fills) everything, so larger amounts behave the
+    // same as shifting by the width.
+    unsigned cappedShiftAmount(const CBV shift, unsigned width)
+    {
+      // Set_Max is the index of the highest set bit (negative if none).
+      if (CONSTANTBV::Set_Max(shift) >= (signed long)(8 * sizeof(unsigned)))
+        return width; // Too big to read out, so certainly >= the width.
+
+      const unsigned amount = *shift; // The value fits into the first word.
+      return std::min(amount, width);
+    }
+  }
 
   UnsignedInterval* UnsignedIntervalAnalysis::freshUnsignedInterval(unsigned width)
   {
@@ -636,36 +651,86 @@ namespace stp
           const UnsignedInterval* c0 = children[0];
           const UnsignedInterval* c1 = children[1];
 
+          const unsigned minShift = cappedShiftAmount(c1->minV, width);
+          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
           // The maximum result is the maximum >> (minimum shift).
-          if (CONSTANTBV::Set_Max(c1->minV) > 1 + std::log2(width) ||
-              *(c1->minV) > width)
-          {
-            // The maximum is zero.
-            CONSTANTBV::BitVector_Flip(result->maxV);
-          }
-          else
-          {
-            unsigned shift_amount = *(c1->minV);
-            CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
-            while (shift_amount-- > 0)
-            {
-              CONSTANTBV::BitVector_shift_right(result->maxV, 0);
-            }
-          }
+          CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
+          for (unsigned i = 0; i < minShift; i++)
+            CONSTANTBV::BitVector_shift_right(result->maxV, 0);
 
           // The minimum result is the minimum >> (maximum shift).
-          if (CONSTANTBV::Set_Max(c1->maxV) > 1 + std::log2(width) ||
-              *(c1->maxV) > width)
+          CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
+          for (unsigned i = 0; i < maxShift; i++)
+            CONSTANTBV::BitVector_shift_right(result->minV, 0);
+        }
+        break;
+
+      case BVLEFTSHIFT:
+        if (knownC0 || knownC1)
+        {
+          const UnsignedInterval* c0 = children[0];
+          const UnsignedInterval* c1 = children[1];
+
+          const unsigned minShift = cappedShiftAmount(c1->minV, width);
+          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+          // The index of the highest bit that could be set in the result.
+          const signed long highestBit = CONSTANTBV::Set_Max(c0->maxV);
+
+          if (highestBit < 0 || minShift >= width)
           {
-            // The mimimum is zero. (which it's set to by default.).
+            // The value is zero, or every set bit is discarded.
+            result = createInterval(getEmptyCBV(width), getEmptyCBV(width));
           }
-          else
+          else if (highestBit + (signed long)maxShift < (signed long)width)
           {
-            unsigned shift_amount = *(c1->maxV);
+            // No shift can discard a set bit, so shifting further only
+            // makes the value bigger.
+            result = freshUnsignedInterval(width);
+
             CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
-            while (shift_amount-- > 0)
-              CONSTANTBV::BitVector_shift_right(result->minV, 0);
+            for (unsigned i = 0; i < minShift; i++)
+              CONSTANTBV::BitVector_shift_left(result->minV, 0);
+
+            CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
+            for (unsigned i = 0; i < maxShift; i++)
+              CONSTANTBV::BitVector_shift_left(result->maxV, 0);
           }
+          // Otherwise bits may be shifted out and the value can wrap.
+        }
+        break;
+
+      case BVSRSHIFT:
+        if (knownC0 || knownC1)
+        {
+          const UnsignedInterval* c0 = children[0];
+          const UnsignedInterval* c1 = children[1];
+
+          const unsigned minShift = cappedShiftAmount(c1->minV, width);
+          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+          // An arithmetic shift keeps the sign, and is monotone in the
+          // value, so the result's extremes come from shifting the bounds.
+          // Shifting moves values towards zero if the sign bit is clear
+          // (bigger shift, smaller result), and towards all ones if it is
+          // set (bigger shift, bigger result).
+          const bool minNegative =
+              CONSTANTBV::BitVector_bit_test(c0->minV, width - 1);
+          const bool maxNegative =
+              CONSTANTBV::BitVector_bit_test(c0->maxV, width - 1);
+
+          result = freshUnsignedInterval(width);
+
+          CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
+          const unsigned minShifts = minNegative ? minShift : maxShift;
+          for (unsigned i = 0; i < minShifts; i++)
+            CONSTANTBV::BitVector_shift_right(result->minV, minNegative);
+
+          CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
+          const unsigned maxShifts = maxNegative ? maxShift : minShift;
+          for (unsigned i = 0; i < maxShifts; i++)
+            CONSTANTBV::BitVector_shift_right(result->maxV, maxNegative);
         }
         break;
 
@@ -770,8 +835,6 @@ namespace stp
       // TODO
       case SBVDIV:
       case SBVREM:
-      case BVLEFTSHIFT:
-      case BVSRSHIFT:
       case SBVMOD:
       default:
         propagatorNotImplemented++;
