@@ -1,6 +1,0 @@
----
-# Codacy's analysis containers don't have GoogleTest installed, so cppcheck's
-# missingIncludeSystem check reports a false positive for <gtest/gtest.h> in
-# every new unit test. Exclude the unit tests from analysis.
-exclude_paths:
-  - "tests/unit-tests/**"
