@@ -94,6 +94,8 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 
   ASSERT_TRUE(a.isTotallyFixed());
   ASSERT_TRUE(b_ptr != nullptr && b_ptr->isConstant());
+
+  delete b_ptr;
 }
 
 // fixed bits are null, internval is costant.
@@ -111,6 +113,9 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 
   ASSERT_TRUE(a_ptr != NULL && a_ptr->isTotallyFixed());
   ASSERT_TRUE(b_ptr->isConstant());
+
+  delete a_ptr;
+  delete b_ptr;
 }
 
 
@@ -151,18 +156,16 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 
   const auto width =2;
 
-  stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
-  stp::UnsignedInterval b(min,max);
-
   stp::FixedBits a = stp::FixedBits::fromUnsignedInt(width,3);
 
   auto a_ptr = &a;
   stp::UnsignedInterval* b_ptr = nullptr;
 
   c.domain.harmonise(a_ptr, b_ptr);
-  
+
   ASSERT_EQ(a_ptr->isTotallyFixed(), true);
   ASSERT_EQ(b_ptr->isConstant(), true);
+
+  delete b_ptr;
 }
 
