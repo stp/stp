@@ -324,7 +324,14 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       CONSTANTBV::BitVector_sub(copy, maxBottom, one, &carry);
       CONSTANTBV::BitVector_add(copy2, multR, copy, &carry);
       CONSTANTBV::BitVector_Copy(multR, copy2);
-      // involved. eek.
+      // The add discards the carry. That is safe: the strict multiply
+      // reports an error once the product reaches bit (width - 1), so when
+      // e is ok and maxBottom >= 1,
+      //   maxQuotient * maxBottom + (maxBottom - 1) <= 2^width - 2,
+      // and nothing wraps. If maxBottom is 0 the subtract borrows and the
+      // sum is wrong, but then the range of the bottom is empty (minBottom
+      // is at least one here), so no solutions exist and the resulting
+      // clamping is vacuous.
 
       if (e == CONSTANTBV::ErrCode_Ok &&
           CONSTANTBV::BitVector_Lexicompare(maxTop, multR) > 0)
@@ -725,10 +732,10 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
     // assert(output.isTotallyFixed());
   }
 
-  if (r == CONFLICT || r == CHANGED)
-    return r;
-
-  return r1;
+  // bvUnsignedQuotientAndRemainder can fix bits yet report NOT_IMPLEMENTED,
+  // so never let a NO_CHANGE from the comparison above win over it: the
+  // propagation loop trusts NO_CHANGE and would skip rescheduling.
+  return merge(r, r1);
 }
 
 Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,

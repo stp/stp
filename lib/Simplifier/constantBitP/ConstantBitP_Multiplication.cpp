@@ -280,7 +280,12 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
       else
       {
         if (output.getValue(j))
+        {
+          CONSTANTBV::BitVector_Destroy(x_c);
+          CONSTANTBV::BitVector_Destroy(y_c);
+          CONSTANTBV::BitVector_Destroy(result);
           return CONFLICT;
+        }
       }
     }
   }
@@ -332,7 +337,12 @@ Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output)
     r = CHANGED;
   }
 
-  assert(trailingOneReasoning_OLD(x, y, output) == NO_CHANGE);
+#ifndef NDEBUG
+  // Check that the old implementation is subsumed. On copies, because it
+  // fixes bits when it fires, and nothing should mutate inside assert().
+  FixedBits x_c(x), y_c(y), o_c(output);
+  assert(trailingOneReasoning_OLD(x_c, y_c, o_c) == NO_CHANGE);
+#endif
   return r;
 }
 
