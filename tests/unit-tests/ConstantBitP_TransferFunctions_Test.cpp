@@ -18,11 +18,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-// Tests of the constant bit propagation transfer functions for
-// multiplication, division and modulus. These check three properties:
+// Exhaustive tests of the constant bit propagation transfer functions.
+// Every function is checked, at small widths, over every combination of
+// fixed/unfixed bits for three properties:
 //
-// 1) Soundness: propagation must never exclude a concrete (a, b, output)
-//    triple that was consistent with the bits before propagation ran.
+// 1) Soundness: propagation must never exclude a concrete assignment of the
+//    children and output that was consistent with the bits before
+//    propagation ran, and CONFLICT is only reported when no assignment
+//    remains.
 // 2) The NO_CHANGE contract: ConstantBitPropagation::propagate() trusts a
 //    NO_CHANGE result and skips rescheduling, so a transfer function that
 //    returns NO_CHANGE must not have altered any bits.
@@ -76,9 +79,9 @@ FixedBits fromString(const std::string& s)
 }
 
 // Build FixedBits from a base-3 code: trit 0 = unfixed, 1 = zero, 2 = one.
-FixedBits fromTernary(unsigned width, unsigned code)
+FixedBits fromTernary(unsigned width, unsigned code, bool isBoolean = false)
 {
-  FixedBits result(width, false);
+  FixedBits result(width, isBoolean);
   for (unsigned i = 0; i < width; i++)
   {
     const unsigned trit = code % 3;
@@ -112,66 +115,109 @@ std::string str(const FixedBits& bits)
 }
 
 typedef std::function<Result(std::vector<FixedBits*>&, FixedBits&)> Propagator;
-// Concrete semantics of the operation being propagated.
-typedef std::function<unsigned(unsigned, unsigned)> Semantics;
+// Concrete semantics: takes one value per child, returns the output value.
+typedef std::function<unsigned(const std::vector<unsigned>&)> Semantics;
 
-// Run the propagator on one triple and check soundness, the NO_CHANGE
+// The width and boolean-ness of one operand position.
+struct Slot
+{
+  unsigned width;
+  bool isBoolean;
+};
+
+// Run the propagator on one case and check soundness, the NO_CHANGE
 // contract, and the lattice rules. Returns a description of the first
 // problem found, or the empty string.
-std::string checkTriple(const Propagator& propagate, const Semantics& op,
-                        const FixedBits& a0, const FixedBits& b0,
-                        const FixedBits& out0)
+std::string checkCase(const std::string& opName, const Propagator& propagate,
+                      const Semantics& op, const std::vector<FixedBits>& in0,
+                      const FixedBits& out0)
 {
-  FixedBits a(a0), b(b0), out(out0);
+  std::vector<FixedBits> in(in0);
+  FixedBits out(out0);
   std::vector<FixedBits*> children;
-  children.push_back(&a);
-  children.push_back(&b);
+  for (auto& c : in)
+    children.push_back(&c);
 
   const Result result = propagate(children, out);
 
   std::ostringstream error;
-  error << str(a0) << " op " << str(b0) << " = " << str(out0) << " became "
-        << str(a) << " op " << str(b) << " = " << str(out) << ": ";
+  error << opName << "(";
+  for (unsigned i = 0; i < in0.size(); i++)
+    error << (i ? ", " : "") << str(in0[i]);
+  error << ") = " << str(out0) << " became (";
+  for (unsigned i = 0; i < in.size(); i++)
+    error << (i ? ", " : "") << str(in[i]);
+  error << ") = " << str(out) << ": ";
 
-  const unsigned width = a0.getWidth();
-  for (unsigned av = 0; av < (1u << width); av++)
+  // Enumerate every concrete assignment of the children.
+  const unsigned slots = in0.size();
+  std::vector<unsigned> limit(slots);
+  unsigned total = 1;
+  for (unsigned i = 0; i < slots; i++)
   {
-    if (!admits(a0, av))
-      continue;
-    for (unsigned bv = 0; bv < (1u << width); bv++)
-    {
-      if (!admits(b0, bv))
-        continue;
-      const unsigned ov = op(av, bv);
-      if (!admits(out0, ov))
-        continue;
+    limit[i] = 1u << in0[i].getWidth();
+    total *= limit[i];
+  }
 
-      // (av, bv, ov) was consistent before propagation ran.
-      if (result == CONFLICT)
+  std::vector<unsigned> val(slots);
+  for (unsigned code = 0; code < total; code++)
+  {
+    unsigned c = code;
+    bool consistent = true;
+    for (unsigned i = 0; i < slots; i++)
+    {
+      val[i] = c % limit[i];
+      c /= limit[i];
+      if (!admits(in0[i], val[i]))
       {
-        error << "CONFLICT reported, but " << av << " op " << bv << " = " << ov
-              << " is a solution";
-        return error.str();
+        consistent = false;
+        break;
       }
-      if (!admits(a, av) || !admits(b, bv) || !admits(out, ov))
-      {
-        error << "unsoundly excluded the solution " << av << " op " << bv
-              << " = " << ov;
-        return error.str();
-      }
+    }
+    if (!consistent)
+      continue;
+    const unsigned ov = op(val);
+    if (!admits(out0, ov))
+      continue;
+
+    // This assignment was consistent before propagation ran.
+    if (result == CONFLICT)
+    {
+      error << "CONFLICT reported, but (";
+      for (unsigned i = 0; i < slots; i++)
+        error << (i ? ", " : "") << val[i];
+      error << ") -> " << ov << " is a solution";
+      return error.str();
+    }
+    bool excluded = !admits(out, ov);
+    for (unsigned i = 0; i < slots && !excluded; i++)
+      excluded = !admits(in[i], val[i]);
+    if (excluded)
+    {
+      error << "unsoundly excluded the solution (";
+      for (unsigned i = 0; i < slots; i++)
+        error << (i ? ", " : "") << val[i];
+      error << ") -> " << ov;
+      return error.str();
     }
   }
 
-  if (result == NO_CHANGE &&
-      !(FixedBits::equals(a, a0) && FixedBits::equals(b, b0) &&
-        FixedBits::equals(out, out0)))
+  if (result == NO_CHANGE)
   {
-    error << "returned NO_CHANGE but altered bits";
-    return error.str();
+    bool changed = !FixedBits::equals(out, out0);
+    for (unsigned i = 0; i < slots && !changed; i++)
+      changed = !FixedBits::equals(in[i], in0[i]);
+    if (changed)
+    {
+      error << "returned NO_CHANGE but altered bits";
+      return error.str();
+    }
   }
 
-  if (!FixedBits::updateOK(a0, a) || !FixedBits::updateOK(b0, b) ||
-      !FixedBits::updateOK(out0, out))
+  bool latticeOK = FixedBits::updateOK(out0, out);
+  for (unsigned i = 0; i < slots && latticeOK; i++)
+    latticeOK = FixedBits::updateOK(in0[i], in[i]);
+  if (!latticeOK)
   {
     error << "unfixed or flipped already-fixed bits";
     return error.str();
@@ -180,25 +226,44 @@ std::string checkTriple(const Propagator& propagate, const Semantics& op,
   return "";
 }
 
-// Check every combination of fixed/zero/one bits at the given width.
-void exhaustiveCheck(const Propagator& propagate, const Semantics& op,
-                     unsigned width)
+// Check every combination of fixed/zero/one bits over the given operand
+// shape. Reports at most the first five problems.
+void exhaustiveCheck(const std::string& opName, const Propagator& propagate,
+                     const Semantics& op, const std::vector<Slot>& ins,
+                     const Slot& outSlot)
 {
-  unsigned combinations = 1;
-  for (unsigned i = 0; i < width; i++)
-    combinations *= 3;
+  const unsigned slots = ins.size();
+  std::vector<unsigned> patterns(slots);
+  unsigned total = 1;
+  for (unsigned i = 0; i < slots; i++)
+  {
+    patterns[i] = 1;
+    for (unsigned j = 0; j < ins[i].width; j++)
+      patterns[i] *= 3;
+    total *= patterns[i];
+  }
+  unsigned outPatterns = 1;
+  for (unsigned j = 0; j < outSlot.width; j++)
+    outPatterns *= 3;
+  total *= outPatterns;
 
   std::vector<std::string> errors;
-  for (unsigned i = 0; i < combinations && errors.size() < 5; i++)
-    for (unsigned j = 0; j < combinations && errors.size() < 5; j++)
-      for (unsigned k = 0; k < combinations && errors.size() < 5; k++)
-      {
-        const std::string e =
-            checkTriple(propagate, op, fromTernary(width, i),
-                        fromTernary(width, j), fromTernary(width, k));
-        if (!e.empty())
-          errors.push_back(e);
-      }
+  for (unsigned code = 0; code < total && errors.size() < 5; code++)
+  {
+    unsigned c = code;
+    std::vector<FixedBits> in;
+    in.reserve(slots);
+    for (unsigned i = 0; i < slots; i++)
+    {
+      in.push_back(fromTernary(ins[i].width, c % patterns[i], ins[i].isBoolean));
+      c /= patterns[i];
+    }
+    const FixedBits out = fromTernary(outSlot.width, c, outSlot.isBoolean);
+
+    const std::string e = checkCase(opName, propagate, op, in, out);
+    if (!e.empty())
+      errors.push_back(e);
+  }
 
   std::ostringstream all;
   for (const auto& e : errors)
@@ -206,18 +271,33 @@ void exhaustiveCheck(const Propagator& propagate, const Semantics& op,
   EXPECT_TRUE(errors.empty()) << all.str();
 }
 
+// Interpret an unsigned value of the given width as two's complement.
+int asSigned(unsigned value, unsigned width)
+{
+  return value >= (1u << (width - 1)) ? (int)value - (1 << width) : (int)value;
+}
+
 class ConstantBitP_TransferFunctions : public ::testing::Test
 {
 protected:
   ConstantBitP_TransferFunctions() { CONSTANTBV::BitVector_Boot(); }
   stp::STPMgr mgr;
+
+  // Common shapes: N bitvector children of width 3 and a width-3 output.
+  static std::vector<Slot> bv3(unsigned n)
+  {
+    return std::vector<Slot>(n, Slot{3, false});
+  }
+  static Slot out3() { return Slot{3, false}; }
+  static Slot boolSlot() { return Slot{1, true}; }
 };
 
 // The interval reasoning in bvUnsignedDivisionBothWays computes
 // maxQuotient * maxBottom + (maxBottom - 1) to tighten the maximum of the
 // numerator. At width 4 with maxQuotient = 5 and maxBottom = 3 that is
-// 5 * 3 + 2 = 17, which wraps to 1. The wrapped bound used to clamp the
-// numerator's maximum to 1, excluding the valid solution 15 / 3 = 5.
+// 5 * 3 + 2 = 17, which wraps to 1. This is safe only because the strict
+// multiply errors once the product reaches bit (width - 1); the test pins
+// that invariant. 15 / 3 = 5 must stay admitted.
 TEST_F(ConstantBitP_TransferFunctions, divisionIntervalRule3DoesNotWrap)
 {
   FixedBits a = fromString("****");
@@ -239,37 +319,349 @@ TEST_F(ConstantBitP_TransferFunctions, divisionIntervalRule3DoesNotWrap)
 
 TEST_F(ConstantBitP_TransferFunctions, unsignedDivisionExhaustiveWidth3)
 {
-  const unsigned width = 3;
-  const unsigned mask = (1u << width) - 1;
+  const unsigned mask = 7;
   exhaustiveCheck(
+      "bvudiv",
       [this](std::vector<FixedBits*>& children, FixedBits& out) {
         return bvUnsignedDivisionBothWays(children, out, &mgr);
       },
       // SMT-LIB semantics: bvudiv by zero gives all ones.
-      [mask](unsigned av, unsigned bv) { return bv == 0 ? mask : av / bv; },
-      width);
+      [mask](const std::vector<unsigned>& v) {
+        return v[1] == 0 ? mask : v[0] / v[1];
+      },
+      bv3(2), out3());
 }
 
 TEST_F(ConstantBitP_TransferFunctions, unsignedModulusExhaustiveWidth3)
 {
-  const unsigned width = 3;
   exhaustiveCheck(
+      "bvurem",
       [this](std::vector<FixedBits*>& children, FixedBits& out) {
         return bvUnsignedModulusBothWays(children, out, &mgr);
       },
       // SMT-LIB semantics: bvurem by zero gives the numerator.
-      [](unsigned av, unsigned bv) { return bv == 0 ? av : av % bv; }, width);
+      [](const std::vector<unsigned>& v) {
+        return v[1] == 0 ? v[0] : v[0] % v[1];
+      },
+      bv3(2), out3());
 }
 
 TEST_F(ConstantBitP_TransferFunctions, multiplicationExhaustiveWidth3)
 {
-  const unsigned width = 3;
-  const unsigned mask = (1u << width) - 1;
   exhaustiveCheck(
+      "bvmul",
       [this](std::vector<FixedBits*>& children, FixedBits& out) {
         return bvMultiplyBothWays(children, out, &mgr, NULL);
       },
-      [mask](unsigned av, unsigned bv) { return (av * bv) & mask; }, width);
+      [](const std::vector<unsigned>& v) { return (v[0] * v[1]) & 7; },
+      bv3(2), out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, additionExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "bvadd", bvAddBothWays,
+      [](const std::vector<unsigned>& v) { return (v[0] + v[1]) & 7; },
+      bv3(2), out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, additionThreeChildrenExhaustiveWidth2)
+{
+  exhaustiveCheck(
+      "bvadd3",
+      bvAddBothWays,
+      [](const std::vector<unsigned>& v) { return (v[0] + v[1] + v[2]) & 3; },
+      std::vector<Slot>(3, Slot{2, false}), Slot{2, false});
+}
+
+TEST_F(ConstantBitP_TransferFunctions, subtractionExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "bvsub", bvSubtractBothWays,
+      [](const std::vector<unsigned>& v) { return (v[0] - v[1]) & 7; },
+      bv3(2), out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, unaryMinusExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "bvneg", bvUnaryMinusBothWays,
+      [](const std::vector<unsigned>& v) { return (0u - v[0]) & 7; }, bv3(1),
+      out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, shiftsExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "bvshl", bvLeftShiftBothWays,
+      [](const std::vector<unsigned>& v) {
+        return v[1] >= 3 ? 0 : (v[0] << v[1]) & 7;
+      },
+      bv3(2), out3());
+
+  exhaustiveCheck(
+      "bvlshr", bvRightShiftBothWays,
+      [](const std::vector<unsigned>& v) {
+        return v[1] >= 3 ? 0 : v[0] >> v[1];
+      },
+      bv3(2), out3());
+
+  exhaustiveCheck(
+      "bvashr", bvArithmeticRightShiftBothWays,
+      [](const std::vector<unsigned>& v) {
+        const unsigned sign = (v[0] >> 2) & 1;
+        if (v[1] >= 3)
+          return sign ? 7u : 0u;
+        const unsigned shifted = v[0] >> v[1];
+        return sign ? (shifted | (7u & ~(7u >> v[1]))) : shifted;
+      },
+      bv3(2), out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, unsignedComparisonsExhaustiveWidth3)
+{
+  const struct
+  {
+    const char* name;
+    Propagator prop;
+    std::function<bool(unsigned, unsigned)> cmp;
+  } ops[] = {
+      {"bvult",
+       [](std::vector<FixedBits*>& c, FixedBits& o) {
+         return bvLessThanBothWays(c, o);
+       },
+       [](unsigned a, unsigned b) { return a < b; }},
+      {"bvule", bvLessThanEqualsBothWays,
+       [](unsigned a, unsigned b) { return a <= b; }},
+      {"bvugt", bvGreaterThanBothWays,
+       [](unsigned a, unsigned b) { return a > b; }},
+      {"bvuge", bvGreaterThanEqualsBothWays,
+       [](unsigned a, unsigned b) { return a >= b; }},
+  };
+  for (const auto& o : ops)
+  {
+    const auto cmp = o.cmp;
+    exhaustiveCheck(o.name, o.prop,
+                    [cmp](const std::vector<unsigned>& v) {
+                      return cmp(v[0], v[1]) ? 1u : 0u;
+                    },
+                    bv3(2), boolSlot());
+  }
+}
+
+TEST_F(ConstantBitP_TransferFunctions, signedComparisonsExhaustiveWidth3)
+{
+  const struct
+  {
+    const char* name;
+    Propagator prop;
+    std::function<bool(int, int)> cmp;
+  } ops[] = {
+      {"bvslt", bvSignedLessThanBothWays, [](int a, int b) { return a < b; }},
+      {"bvsle", bvSignedLessThanEqualsBothWays,
+       [](int a, int b) { return a <= b; }},
+      {"bvsgt", bvSignedGreaterThanBothWays,
+       [](int a, int b) { return a > b; }},
+      {"bvsge", bvSignedGreaterThanEqualsBothWays,
+       [](int a, int b) { return a >= b; }},
+  };
+  for (const auto& o : ops)
+  {
+    const auto cmp = o.cmp;
+    exhaustiveCheck(o.name, o.prop,
+                    [cmp](const std::vector<unsigned>& v) {
+                      return cmp(asSigned(v[0], 3), asSigned(v[1], 3)) ? 1u
+                                                                       : 0u;
+                    },
+                    bv3(2), boolSlot());
+  }
+}
+
+TEST_F(ConstantBitP_TransferFunctions, bitwiseExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "bvand", bvAndBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] & v[1]; }, bv3(2),
+      out3());
+  exhaustiveCheck(
+      "bvor", bvOrBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] | v[1]; }, bv3(2),
+      out3());
+  exhaustiveCheck(
+      "bvxor", bvXorBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] ^ v[1]; }, bv3(2),
+      out3());
+  exhaustiveCheck(
+      "bvnot",
+      [](std::vector<FixedBits*>& c, FixedBits& o) {
+        return bvNotBothWays(c, o);
+      },
+      [](const std::vector<unsigned>& v) { return ~v[0] & 7; }, bv3(1),
+      out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, booleanLogicExhaustive)
+{
+  const std::vector<Slot> two(2, boolSlot());
+  const std::vector<Slot> three(3, boolSlot());
+
+  exhaustiveCheck("and", bvAndBothWays,
+                  [](const std::vector<unsigned>& v) { return v[0] & v[1]; },
+                  two, boolSlot());
+  exhaustiveCheck(
+      "and3", bvAndBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] & v[1] & v[2]; }, three,
+      boolSlot());
+  exhaustiveCheck("or", bvOrBothWays,
+                  [](const std::vector<unsigned>& v) { return v[0] | v[1]; },
+                  two, boolSlot());
+  exhaustiveCheck(
+      "or3", bvOrBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] | v[1] | v[2]; }, three,
+      boolSlot());
+  exhaustiveCheck("xor", bvXorBothWays,
+                  [](const std::vector<unsigned>& v) { return v[0] ^ v[1]; },
+                  two, boolSlot());
+  exhaustiveCheck(
+      "xor3", bvXorBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] ^ v[1] ^ v[2]; }, three,
+      boolSlot());
+  exhaustiveCheck(
+      "implies", bvImpliesBothWays,
+      [](const std::vector<unsigned>& v) { return (v[0] == 0 || v[1]) ? 1u : 0u; },
+      two, boolSlot());
+  exhaustiveCheck(
+      "iff", bvEqualsBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] == v[1] ? 1u : 0u; },
+      two, boolSlot());
+  exhaustiveCheck("not",
+                  [](std::vector<FixedBits*>& c, FixedBits& o) {
+                    return bvNotBothWays(c, o);
+                  },
+                  [](const std::vector<unsigned>& v) { return v[0] ^ 1u; },
+                  std::vector<Slot>(1, boolSlot()), boolSlot());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, equalsExhaustiveWidth3)
+{
+  exhaustiveCheck(
+      "=", bvEqualsBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] == v[1] ? 1u : 0u; },
+      bv3(2), boolSlot());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, iteExhaustiveWidth3)
+{
+  std::vector<Slot> ins;
+  ins.push_back(boolSlot());
+  ins.push_back(Slot{3, false});
+  ins.push_back(Slot{3, false});
+  exhaustiveCheck(
+      "ite", bvITEBothWays,
+      [](const std::vector<unsigned>& v) { return v[0] ? v[1] : v[2]; }, ins,
+      out3());
+}
+
+TEST_F(ConstantBitP_TransferFunctions, concatExhaustive)
+{
+  // Children are most significant first; widths 2 + 1 = 3.
+  std::vector<Slot> ins;
+  ins.push_back(Slot{2, false});
+  ins.push_back(Slot{1, false});
+  exhaustiveCheck(
+      "concat", bvConcatBothWays,
+      [](const std::vector<unsigned>& v) { return (v[0] << 1) | v[1]; }, ins,
+      out3());
+
+  exhaustiveCheck(
+      "concat3", bvConcatBothWays,
+      [](const std::vector<unsigned>& v) {
+        return (v[0] << 2) | (v[1] << 1) | v[2];
+      },
+      std::vector<Slot>(3, Slot{1, false}), out3());
+}
+
+// Zero and sign extension take a second child (the amount node) that the
+// transfer functions ignore; pass a fixed constant for it.
+TEST_F(ConstantBitP_TransferFunctions, zeroExtendExhaustiveWidth3To5)
+{
+  std::vector<std::string> errors;
+  for (unsigned ip = 0; ip < 27 && errors.size() < 5; ip++)
+    for (unsigned op = 0; op < 243 && errors.size() < 5; op++)
+    {
+      std::vector<FixedBits> in;
+      in.push_back(fromTernary(3, ip));
+      in.push_back(FixedBits::fromUnsignedInt(3, 2)); // ignored size argument.
+      const std::string e =
+          checkCase("zero_extend", bvZeroExtendBothWays,
+                    [](const std::vector<unsigned>& v) { return v[0]; }, in,
+                    fromTernary(5, op));
+      if (!e.empty())
+        errors.push_back(e);
+    }
+  std::ostringstream all;
+  for (const auto& e : errors)
+    all << e << "\n";
+  EXPECT_TRUE(errors.empty()) << all.str();
+}
+
+TEST_F(ConstantBitP_TransferFunctions, signExtendExhaustiveWidth3To5)
+{
+  std::vector<std::string> errors;
+  for (unsigned ip = 0; ip < 27 && errors.size() < 5; ip++)
+    for (unsigned op = 0; op < 243 && errors.size() < 5; op++)
+    {
+      std::vector<FixedBits> in;
+      in.push_back(fromTernary(3, ip));
+      in.push_back(FixedBits::fromUnsignedInt(3, 2)); // ignored size argument.
+      const std::string e = checkCase(
+          "sign_extend", bvSignExtendBothWays,
+          [](const std::vector<unsigned>& v) {
+            return ((v[0] >> 2) & 1) ? (v[0] | 0x18u) : v[0];
+          },
+          in, fromTernary(5, op));
+      if (!e.empty())
+        errors.push_back(e);
+    }
+  std::ostringstream all;
+  for (const auto& e : errors)
+    all << e << "\n";
+  EXPECT_TRUE(errors.empty()) << all.str();
+}
+
+// Extract takes the top and bottom indices as fully-fixed constant children.
+TEST_F(ConstantBitP_TransferFunctions, extractExhaustiveWidth3)
+{
+  std::vector<std::string> errors;
+  for (unsigned top = 0; top < 3; top++)
+    for (unsigned bottom = 0; bottom <= top; bottom++)
+    {
+      const unsigned outWidth = top - bottom + 1;
+      unsigned outPatterns = 1;
+      for (unsigned j = 0; j < outWidth; j++)
+        outPatterns *= 3;
+
+      for (unsigned ip = 0; ip < 27 && errors.size() < 5; ip++)
+        for (unsigned op = 0; op < outPatterns && errors.size() < 5; op++)
+        {
+          std::vector<FixedBits> in;
+          in.push_back(fromTernary(3, ip));
+          in.push_back(FixedBits::fromUnsignedInt(3, top));
+          in.push_back(FixedBits::fromUnsignedInt(3, bottom));
+          const std::string e = checkCase(
+              "extract", bvExtractBothWays,
+              [bottom, outWidth](const std::vector<unsigned>& v) {
+                return (v[0] >> bottom) & ((1u << outWidth) - 1);
+              },
+              in, fromTernary(outWidth, op));
+          if (!e.empty())
+            errors.push_back(e);
+        }
+    }
+  std::ostringstream all;
+  for (const auto& e : errors)
+    all << e << "\n";
+  EXPECT_TRUE(errors.empty()) << all.str();
 }
 
 // useLeadingZeroesToFix allocates three bitvectors and, before this was
@@ -285,10 +677,10 @@ TEST_F(ConstantBitP_TransferFunctions, leadingZeroesConflictDoesNotLeak)
   EXPECT_EQ(CONFLICT, useLeadingZeroesToFix(x, y, out));
 }
 
-// trailingOneReasoning asserts that trailingOneReasoning_OLD finds nothing
-// further, calling it on the live operands inside assert(). That is only
-// safe if the old reasoning is subsumed by the new and never mutates its
-// arguments afterwards. Verify both, exhaustively, at width 3.
+// trailingOneReasoning checks in debug builds that trailingOneReasoning_OLD
+// finds nothing further. That is only safe if the old reasoning is subsumed
+// by the new and never mutates its arguments afterwards. Verify both,
+// exhaustively, at width 3.
 TEST_F(ConstantBitP_TransferFunctions, trailingOneReasoningSubsumesOld)
 {
   const unsigned width = 3;
