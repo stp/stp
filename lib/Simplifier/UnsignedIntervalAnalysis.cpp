@@ -119,6 +119,10 @@ namespace stp
     StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
     ASTNode result = sr.topLevel(top, visited);
 
+    // The intervals are only read during strength reduction, delete them now.
+    for (const auto& pair : visited)
+      delete pair.second;
+
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
     return result;
@@ -126,13 +130,14 @@ namespace stp
 
   UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
   {
-    const auto number_children = n.Degree();    
+    const auto number_children = n.Degree();
     const auto width = n.GetValueWidth();
+
+    assert(number_children == _children.size());
+
     const bool knownC0 = number_children < 1 ? false : (_children[0] != NULL);
     const bool knownC1 = number_children < 2 ? false : (_children[1] != NULL);
     const bool knownC2 = number_children < 3 ? false : (_children[2] != NULL);
-
-    assert(number_children == _children.size());
 
     // Put in temporary null ones for any we're missing.
     auto children = _children;
@@ -246,60 +251,41 @@ namespace stp
 
       case BVDIV:
       {
-        const UnsignedInterval* c1 =  children[1];
+        const UnsignedInterval* top = children[0];
+        const UnsignedInterval* c1 = children[1];
 
         result = freshUnsignedInterval(width);
 
-        CBV c1Min = CONSTANTBV::BitVector_Clone(c1->minV);
-        bool bottomChanged = false;
-        if (CONSTANTBV::BitVector_is_empty(c1->minV))
+        if (CONSTANTBV::BitVector_is_empty(c1->maxV))
         {
-          if (CONSTANTBV::BitVector_is_empty(c1->maxV))
-          {
-            CONSTANTBV::BitVector_Fill(result->minV);
-            CONSTANTBV::BitVector_Fill(result->maxV);
-            CONSTANTBV::BitVector_Destroy(c1Min);
-            break; // result is [1111..111, 11...11111]
-          }
-
-          bottomChanged = true;
-          CONSTANTBV::BitVector_Destroy(c1Min);
-          break; // TODO fix so that it can run-on.
+          // Dividing by the constant zero gives all ones.
+          CONSTANTBV::BitVector_Fill(result->minV);
+          break; // result is [1111..111, 11...11111]
         }
-
-        const UnsignedInterval* top = children[0];
-        result->resetToComplete();
 
         CBV remainder = CONSTANTBV::BitVector_Create(width, true);
 
-        CBV tmp0 = CONSTANTBV::BitVector_Clone(top->minV);
+        // The minimum is the smallest dividend divided by the largest
+        // divisor. Division by zero gives all ones, so this lower bound
+        // holds even if the divisor might be zero.
+        CBV dividend = CONSTANTBV::BitVector_Clone(top->minV);
         CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-            result->minV, tmp0, c1->maxV, remainder);
+            result->minV, dividend, c1->maxV, remainder);
         assert(0 == e);
-        CONSTANTBV::BitVector_Destroy(tmp0);
+        CONSTANTBV::BitVector_Destroy(dividend);
 
-        tmp0 = CONSTANTBV::BitVector_Clone(top->maxV);
-        e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0, c1Min, remainder);
-        assert(0 == e);
-
-        CONSTANTBV::BitVector_Destroy(tmp0);
-        CONSTANTBV::BitVector_Destroy(remainder);
-
-        if (bottomChanged) // might have been zero.
+        if (!CONSTANTBV::BitVector_is_empty(c1->minV))
         {
-          if (CONSTANTBV::BitVector_Lexicompare(result->minV, c1Min) > 0)
-          {
-            CONSTANTBV::BitVector_Copy(result->minV,
-                                       c1Min); //c1 should still be 1
-          }
-
-          if (CONSTANTBV::BitVector_Lexicompare(result->maxV, c1Min) < 0)
-          {
-            CONSTANTBV::BitVector_Copy(result->maxV,
-                                       c1Min); //c1 should still be 1
-          }
+          // The divisor can't be zero, so the maximum is the largest
+          // dividend divided by the smallest divisor.
+          dividend = CONSTANTBV::BitVector_Clone(top->maxV);
+          e = CONSTANTBV::BitVector_Div_Pos(result->maxV, dividend, c1->minV,
+                                            remainder);
+          assert(0 == e);
+          CONSTANTBV::BitVector_Destroy(dividend);
         }
-        CONSTANTBV::BitVector_Destroy(c1Min);
+
+        CONSTANTBV::BitVector_Destroy(remainder);
 
         break;
       }
@@ -307,17 +293,48 @@ namespace stp
       case BVMOD: //OVER-APPROXIMATION
         if (knownC1)
         {
-          // When we're dividing by zero, we know nothing.
-          if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
+          if (CONSTANTBV::BitVector_is_empty(children[1]->maxV))
           {
-            result = freshUnsignedInterval(n.GetValueWidth());
+            // Remainder by the constant zero is the identity.
+            if (knownC0)
+              result = createInterval(children[0]->minV, children[0]->maxV);
+          }
+          else if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
+          {
+            // The divisor can't be zero.
+            if (knownC0 &&
+                CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
+                                                  children[1]->minV) < 0)
+            {
+              // The dividend is always below the divisor, so the remainder
+              // is the dividend.
+              result = createInterval(children[0]->minV, children[0]->maxV);
+            }
+            else
+            {
+              // The remainder is less than the largest divisor.
+              result = freshUnsignedInterval(width);
+              CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
+              CONSTANTBV::BitVector_decrement(result->maxV);
+
+              // If the top is known, and it's maximum is less, use that.
+              if (knownC0 &&
+                  CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
+                                                    result->maxV) < 0)
+                CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+            }
+          }
+          else if (knownC0)
+          {
+            // The divisor might be zero. If it is, the remainder is the
+            // dividend; if it isn't, the remainder is below the divisor's
+            // maximum. Take the larger of the two upper bounds.
+            result = freshUnsignedInterval(width);
             CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
             CONSTANTBV::BitVector_decrement(result->maxV);
 
-            // If the top is known, and it's maximum is less, use that.
-            if (knownC0 &&
-                CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
-                                                  result->maxV) < 0)
+            if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
+                                                  result->maxV) > 0)
               CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
           }
         }
@@ -395,13 +412,13 @@ namespace stp
         {
           result = freshUnsignedInterval(width);
           if (CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
-              children[1] != NULL)
+              knownC1)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[1]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
           }
           else if (!CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
-                   children[2] != NULL)
+                   knownC2)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[2]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[2]->maxV);
@@ -446,11 +463,6 @@ namespace stp
           bool bad = false;
           for (size_t i = 0; i < children.size(); i++)
           {
-            if (children[i] == NULL)
-            {
-              bad = true;
-              break;
-            }
             CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(
                 min, result->minV, children[i]->minV);
             assert(0 == e);
@@ -576,30 +588,42 @@ namespace stp
       }
 
       case BVEXTRACT: // OVER-APPROXIMATION
-      break;
       {
-        if (knownC0) // others are always known..
+        // The index children are always constants, so they're always known.
+        if (knownC0 && knownC2)
         {
+          // The lowest bit of the extract is how far the child shifts right.
           unsigned shift_amount = *(children[2]->minV);
 
-          CBV clone = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+          CBV min = CONSTANTBV::BitVector_Clone(children[0]->minV);
+          CBV max = CONSTANTBV::BitVector_Clone(children[0]->maxV);
           while (shift_amount-- > 0)
           {
-            CONSTANTBV::BitVector_shift_right(clone, 0);
+            CONSTANTBV::BitVector_shift_right(min, 0);
+            CONSTANTBV::BitVector_shift_right(max, 0);
           }
 
-          //  If the max bit of clone is greater than the width, ok to continue.
-          if (CONSTANTBV::Set_Max(clone) < width)
+          // Sound only if the extract discards no set bits from the top of
+          // the maximum, i.e. the shifted maximum fits into the new width.
+          if (CONSTANTBV::Set_Max(max) < (signed long)width)
           {
-            CBV max = getEmptyCBV(width); // new width.
+            CBV newMin = CONSTANTBV::BitVector_Create(width, true);
+            CBV newMax = CONSTANTBV::BitVector_Create(width, true);
             for (unsigned i = 0; i < width; i++)
-              if (CONSTANTBV::BitVector_bit_test(clone, i))
-                CONSTANTBV::BitVector_Bit_On(max, i);
+            {
+              if (CONSTANTBV::BitVector_bit_test(min, i))
+                CONSTANTBV::BitVector_Bit_On(newMin, i);
+              if (CONSTANTBV::BitVector_bit_test(max, i))
+                CONSTANTBV::BitVector_Bit_On(newMax, i);
+            }
 
-            result = createInterval(getEmptyCBV(width), max);
+            result = createInterval(newMin, newMax);
+            CONSTANTBV::BitVector_Destroy(newMin);
+            CONSTANTBV::BitVector_Destroy(newMax);
           }
 
-          CONSTANTBV::BitVector_Destroy(clone);
+          CONSTANTBV::BitVector_Destroy(min);
+          CONSTANTBV::BitVector_Destroy(max);
         }
         break;
       }
@@ -697,9 +721,53 @@ namespace stp
         }
         break;
 
+      case BVOR: // OVER-APPROXIMATION
+      {
+        // OR is at least as big as each operand, so the minimum is the
+        // largest of the children's minimums. No bit of the result can be
+        // higher than the highest possible bit of any child.
+        result = freshUnsignedInterval(width);
+
+        signed long highestBit = -1;
+        for (unsigned i = 0; i < children.size(); i++)
+        {
+          if (CONSTANTBV::BitVector_Lexicompare(children[i]->minV,
+                                                result->minV) > 0)
+            CONSTANTBV::BitVector_Copy(result->minV, children[i]->minV);
+
+          highestBit =
+              std::max(highestBit, CONSTANTBV::Set_Max(children[i]->maxV));
+        }
+
+        if (highestBit + 1 < (signed long)width)
+        {
+          CONSTANTBV::BitVector_Empty(result->maxV);
+          for (signed long i = 0; i <= highestBit; i++)
+            CONSTANTBV::BitVector_Bit_On(result->maxV, i);
+        }
+        break;
+      }
+
+      case BVXOR: // OVER-APPROXIMATION
+      {
+        // No bit of the result can be higher than the highest possible bit
+        // of any child.
+        signed long highestBit = -1;
+        for (unsigned i = 0; i < children.size(); i++)
+          highestBit =
+              std::max(highestBit, CONSTANTBV::Set_Max(children[i]->maxV));
+
+        if (highestBit + 1 < (signed long)width)
+        {
+          result = freshUnsignedInterval(width);
+          CONSTANTBV::BitVector_Empty(result->maxV);
+          for (signed long i = 0; i <= highestBit; i++)
+            CONSTANTBV::BitVector_Bit_On(result->maxV, i);
+        }
+        break;
+      }
+
       // TODO
-      case BVXOR:
-      case BVOR:
       case SBVDIV:
       case SBVREM:
       case BVLEFTSHIFT:
@@ -734,7 +802,11 @@ namespace stp
     }
 
     if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-      return NULL; // Never know anything about these.
+    {
+      // Never know anything about these.
+      visited.insert({n, NULL});
+      return NULL;
+    }
 
     const auto number_children = n.Degree();
     vector<const UnsignedInterval*> children;
