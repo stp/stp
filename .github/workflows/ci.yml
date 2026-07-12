@@ -73,7 +73,10 @@ jobs:
 
     env:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
-      ZLIB_ROOT: C:\vcpkg\installed\x64-windows-static
+      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
+      # pass the include dir and library explicitly instead.
+      ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
+      ZLIB_LIBRARY: C:\vcpkg\installed\x64-windows-static\lib\zlib.lib
 
     steps:
 
@@ -91,11 +94,11 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/stp/minisat
         cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
     - name: Configure
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
