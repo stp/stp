@@ -61,4 +61,44 @@ jobs:
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
+  build-windows:
+    name: windows
+    runs-on: windows-2025
+
+    env:
+      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
+      ZLIB_ROOT: C:\vcpkg\installed\x64-windows-static
+
+    steps:
+
+    - uses: actions/checkout@v4
+      with:
+          submodules: 'true'
+
+    - name: Install flex and bison
+      run: choco install winflexbison3 --no-progress
+
+    - name: Install zlib
+      run: vcpkg install zlib:x64-windows-static
+
+    - name: Build minisat
+      run: |
+        git clone --depth 1 https://github.com/stp/minisat
+        cd minisat
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+        cmake --build build --config Release --target install
+
+    - name: Configure
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Smoke test
+      run: |
+        dir build\bin
+        $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
+        "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
+        & $stp test.smt2
+
 # EOF
