@@ -4,6 +4,7 @@ name: CI
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         name: [gcc, clang]
         include:
@@ -60,6 +61,10 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
+      env:
+        # gcc-built binaries use DT_RUNPATH, which is not searched when
+        # resolving libcryptominisat5's own dependency on libcadiback.so.
+        LD_LIBRARY_PATH: ${{ github.workspace }}/deps/cadiback
 
   build-windows:
     name: windows
@@ -85,7 +90,7 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/stp/minisat
         cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
+        cmake -B build -A x64 -DSTATICCOMPILE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_ROOT=$env:ZLIB_ROOT" .
         cmake --build build --config Release --target install
 
     - name: Configure
