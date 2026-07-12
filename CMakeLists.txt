@@ -461,6 +461,10 @@ if(NOT WIN32)
     else()
         add_definitions(-DLIN)
     endif()
+else()
+    # ABC is linked statically; without this its headers declare the
+    # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
+    add_definitions(-DWIN32_NO_DLL)
 endif()
 add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
 
