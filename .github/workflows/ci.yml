@@ -117,6 +117,11 @@ jobs:
         dir build\bin
         $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
         "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
-        & $stp test.smt2
+        $out = & $stp test.smt2 2>&1 | Out-String
+        "solver output: '$($out.Trim())'"
+        # pwsh -Command collapses nonzero exit codes to 1, so log the real
+        # one (crash statuses like 0xC0000005 show up as large negatives).
+        "solver exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
 
 # EOF
