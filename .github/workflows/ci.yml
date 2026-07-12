@@ -75,8 +75,8 @@ jobs:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
       # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
       # pass the include dir and library explicitly instead.
+      # ZLIB_LIBRARY is located after the vcpkg install (see below).
       ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
-      ZLIB_LIBRARY: C:\vcpkg\installed\x64-windows-static\lib\zlib.lib
 
     steps:
 
@@ -88,7 +88,12 @@ jobs:
       run: choco install winflexbison3 --no-progress
 
     - name: Install zlib
-      run: vcpkg install zlib:x64-windows-static
+      run: |
+        vcpkg install zlib:x64-windows-static
+        dir C:\vcpkg\installed\x64-windows-static\lib
+        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *.lib | Select-Object -First 1).FullName
+        if (-not $lib) { throw "no zlib .lib found" }
+        "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
     - name: Build minisat
       run: |
