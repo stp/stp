@@ -97,7 +97,7 @@ TEST(NodeDomainAnalysis_Test, 0)
 }
 
 // fixed bits are null, internval is costant.
-TEST(NodeDomainAnalysis_Test, DISABLED_1)
+TEST(NodeDomainAnalysis_Test, 1)
 {
   Context c;
 
@@ -114,7 +114,7 @@ TEST(NodeDomainAnalysis_Test, DISABLED_1)
 }
 
 
-TEST(NodeDomainAnalysis_Test, DISABLED_2)
+TEST(NodeDomainAnalysis_Test, 2)
 {
   Context c;
   MTRand rand(10U);
@@ -145,7 +145,7 @@ TEST(NodeDomainAnalysis_Test, DISABLED_2)
 }
 
 
-TEST(NodeDomainAnalysis_Test, DISABLED_3)
+TEST(NodeDomainAnalysis_Test, 3)
 {
   Context c;
 
@@ -436,14 +436,9 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_interval_only)
 }
 
 // Checks harmonise produces the tightest possible domains: the interval
-// exactly [min, max] of the shared values, and every bit that agrees
-// across all shared values fixed.
-// Disabled because harmonise is deliberately approximate: the interval
-// minimum isn't comprehensively tightened from the fixed bits (a TODO in
-// NodeDomainAnalysis::harmonise), and fix() only fixes the leading bits
-// that min/max agree on. Roughly 6% of width<=5 cases are not optimally
-// tight. Harmonise is idempotent regardless (tested above).
-TEST(NodeDomainAnalysis_Test, DISABLED_harmonise_perfectly_tight)
+// exactly [min, max] of the shared values, and a bit fixed if and only
+// if all the shared values agree on it.
+TEST(NodeDomainAnalysis_Test, harmonise_perfectly_tight)
 {
   boot();
   Context c;
@@ -493,8 +488,9 @@ TEST(NodeDomainAnalysis_Test, DISABLED_harmonise_perfectly_tight)
             tight = false;
           CONSTANTBV::BitVector_Destroy(best);
 
-          // A bit the shared values all agree on should be fixed.
-          for (unsigned i = 0; i < width && bits != nullptr; i++)
+          // A bit should be fixed exactly when the shared values all
+          // agree on it, and to the value they agree on.
+          for (unsigned i = 0; i < width; i++)
           {
             bool agree = true;
             for (unsigned v : sharedValues)
@@ -503,7 +499,11 @@ TEST(NodeDomainAnalysis_Test, DISABLED_harmonise_perfectly_tight)
                 agree = false;
                 break;
               }
-            if (agree != bits->isFixed(i))
+            const bool isFixed = (bits != nullptr) && bits->isFixed(i);
+            if (agree != isFixed)
+              tight = false;
+            else if (isFixed &&
+                     bits->getValue(i) != (((sharedValues.front() >> i) & 1) != 0))
               tight = false;
           }
 
