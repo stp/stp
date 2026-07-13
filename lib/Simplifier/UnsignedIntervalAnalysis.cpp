@@ -68,6 +68,288 @@ namespace stp
       const unsigned amount = *shift; // The value fits into the first word.
       return std::min(amount, width);
     }
+
+    // Sets bit i and clears the bits below it: (x | 2^i) & -(2^i).
+    void setBitClearBelow(CBV x, unsigned i)
+    {
+      CONSTANTBV::BitVector_Bit_On(x, i);
+      for (unsigned j = 0; j < i; j++)
+        CONSTANTBV::BitVector_Bit_Off(x, j);
+    }
+
+    // Clears bit i and sets the bits below it: (x - 2^i) | (2^i - 1).
+    void clearBitSetBelow(CBV x, unsigned i)
+    {
+      CONSTANTBV::BitVector_Bit_Off(x, i);
+      for (unsigned j = 0; j < i; j++)
+        CONSTANTBV::BitVector_Bit_On(x, j);
+    }
+
+    // The six functions below are from section 4-3 of Hacker's Delight.
+    // Each gives the exact bound of a bitwise operation over the intervals
+    // x in [a, b] and y in [c, d]. The caller owns the returned bitvector.
+
+    // The smallest x | y.
+    CBV minOR(const CBV a0, const CBV b, const CBV c0, const CBV d)
+    {
+      CBV a = CONSTANTBV::BitVector_Clone(a0);
+      CBV c = CONSTANTBV::BitVector_Clone(c0);
+
+      for (unsigned i = bits_(a); i-- > 0;)
+      {
+        const bool aBit = CONSTANTBV::BitVector_bit_test(a, i);
+        const bool cBit = CONSTANTBV::BitVector_bit_test(c, i);
+
+        if (!aBit && cBit)
+        {
+          // Raising a to supply this bit lets everything below it be zero.
+          CBV temp = CONSTANTBV::BitVector_Clone(a);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, b) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(a);
+            a = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+        else if (aBit && !cBit)
+        {
+          CBV temp = CONSTANTBV::BitVector_Clone(c);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, d) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(c);
+            c = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(a), true);
+      CONSTANTBV::Set_Union(result, a, c);
+      CONSTANTBV::BitVector_Destroy(a);
+      CONSTANTBV::BitVector_Destroy(c);
+      return result;
+    }
+
+    // The biggest x | y.
+    CBV maxOR(const CBV a, const CBV b0, const CBV c, const CBV d0)
+    {
+      CBV b = CONSTANTBV::BitVector_Clone(b0);
+      CBV d = CONSTANTBV::BitVector_Clone(d0);
+
+      for (unsigned i = bits_(b); i-- > 0;)
+      {
+        if (CONSTANTBV::BitVector_bit_test(b, i) &&
+            CONSTANTBV::BitVector_bit_test(d, i))
+        {
+          // One operand can donate this bit; lowering the other one sets
+          // every bit below it.
+          CBV temp = CONSTANTBV::BitVector_Clone(b);
+          clearBitSetBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, a) >= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(b);
+            b = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+
+          temp = CONSTANTBV::BitVector_Clone(d);
+          clearBitSetBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, c) >= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(d);
+            d = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(b), true);
+      CONSTANTBV::Set_Union(result, b, d);
+      CONSTANTBV::BitVector_Destroy(b);
+      CONSTANTBV::BitVector_Destroy(d);
+      return result;
+    }
+
+    // The smallest x & y.
+    CBV minAND(const CBV a0, const CBV b, const CBV c0, const CBV d)
+    {
+      CBV a = CONSTANTBV::BitVector_Clone(a0);
+      CBV c = CONSTANTBV::BitVector_Clone(c0);
+
+      for (unsigned i = bits_(a); i-- > 0;)
+      {
+        if (!CONSTANTBV::BitVector_bit_test(a, i) &&
+            !CONSTANTBV::BitVector_bit_test(c, i))
+        {
+          // The bit is zero in both minimums, so it is zero in the result;
+          // raising one minimum past it lets everything below be zero.
+          CBV temp = CONSTANTBV::BitVector_Clone(a);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, b) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(a);
+            a = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+
+          temp = CONSTANTBV::BitVector_Clone(c);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, d) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(c);
+            c = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(a), true);
+      CONSTANTBV::Set_Intersection(result, a, c);
+      CONSTANTBV::BitVector_Destroy(a);
+      CONSTANTBV::BitVector_Destroy(c);
+      return result;
+    }
+
+    // The biggest x & y.
+    CBV maxAND(const CBV a, const CBV b0, const CBV c, const CBV d0)
+    {
+      CBV b = CONSTANTBV::BitVector_Clone(b0);
+      CBV d = CONSTANTBV::BitVector_Clone(d0);
+
+      for (unsigned i = bits_(b); i-- > 0;)
+      {
+        const bool bBit = CONSTANTBV::BitVector_bit_test(b, i);
+        const bool dBit = CONSTANTBV::BitVector_bit_test(d, i);
+
+        if (bBit && !dBit)
+        {
+          // The bit can't survive the AND; giving it up sets every bit
+          // below it.
+          CBV temp = CONSTANTBV::BitVector_Clone(b);
+          clearBitSetBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, a) >= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(b);
+            b = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+        else if (!bBit && dBit)
+        {
+          CBV temp = CONSTANTBV::BitVector_Clone(d);
+          clearBitSetBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, c) >= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(d);
+            d = temp;
+            break;
+          }
+          CONSTANTBV::BitVector_Destroy(temp);
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(b), true);
+      CONSTANTBV::Set_Intersection(result, b, d);
+      CONSTANTBV::BitVector_Destroy(b);
+      CONSTANTBV::BitVector_Destroy(d);
+      return result;
+    }
+
+    // The smallest x ^ y. Like minOR, but a bit supplied to cancel one in
+    // the other operand keeps helping at the lower bits, so keep scanning.
+    CBV minXOR(const CBV a0, const CBV b, const CBV c0, const CBV d)
+    {
+      CBV a = CONSTANTBV::BitVector_Clone(a0);
+      CBV c = CONSTANTBV::BitVector_Clone(c0);
+
+      for (unsigned i = bits_(a); i-- > 0;)
+      {
+        const bool aBit = CONSTANTBV::BitVector_bit_test(a, i);
+        const bool cBit = CONSTANTBV::BitVector_bit_test(c, i);
+
+        if (!aBit && cBit)
+        {
+          CBV temp = CONSTANTBV::BitVector_Clone(a);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, b) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(a);
+            a = temp;
+          }
+          else
+            CONSTANTBV::BitVector_Destroy(temp);
+        }
+        else if (aBit && !cBit)
+        {
+          CBV temp = CONSTANTBV::BitVector_Clone(c);
+          setBitClearBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, d) <= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(c);
+            c = temp;
+          }
+          else
+            CONSTANTBV::BitVector_Destroy(temp);
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(a), true);
+      CONSTANTBV::Set_ExclusiveOr(result, a, c);
+      CONSTANTBV::BitVector_Destroy(a);
+      CONSTANTBV::BitVector_Destroy(c);
+      return result;
+    }
+
+    // The biggest x ^ y. Like maxOR, but a shared bit cancels out, so
+    // giving it up in one operand keeps helping at the lower bits.
+    CBV maxXOR(const CBV a, const CBV b0, const CBV c, const CBV d0)
+    {
+      CBV b = CONSTANTBV::BitVector_Clone(b0);
+      CBV d = CONSTANTBV::BitVector_Clone(d0);
+
+      for (unsigned i = bits_(b); i-- > 0;)
+      {
+        if (CONSTANTBV::BitVector_bit_test(b, i) &&
+            CONSTANTBV::BitVector_bit_test(d, i))
+        {
+          CBV temp = CONSTANTBV::BitVector_Clone(b);
+          clearBitSetBelow(temp, i);
+          if (CONSTANTBV::BitVector_Lexicompare(temp, a) >= 0)
+          {
+            CONSTANTBV::BitVector_Destroy(b);
+            b = temp;
+          }
+          else
+          {
+            CONSTANTBV::BitVector_Destroy(temp);
+            temp = CONSTANTBV::BitVector_Clone(d);
+            clearBitSetBelow(temp, i);
+            if (CONSTANTBV::BitVector_Lexicompare(temp, c) >= 0)
+            {
+              CONSTANTBV::BitVector_Destroy(d);
+              d = temp;
+            }
+            else
+              CONSTANTBV::BitVector_Destroy(temp);
+          }
+        }
+      }
+
+      CBV result = CONSTANTBV::BitVector_Create(bits_(b), true);
+      CONSTANTBV::Set_ExclusiveOr(result, b, d);
+      CONSTANTBV::BitVector_Destroy(b);
+      CONSTANTBV::BitVector_Destroy(d);
+      return result;
+    }
   }
 
   UnsignedInterval* UnsignedIntervalAnalysis::freshUnsignedInterval(unsigned width)
@@ -576,29 +858,44 @@ namespace stp
         break;
       }
 
-      case BVAND: // OVER-APPROXIMATION
+      case BVAND:
+      case BVOR:
+      case BVXOR:
       {
-        if (knownC0 || knownC1)
+        // Hacker's Delight gives the exact bounds of the bitwise operations
+        // over intervals. Exact for two children; more children are folded
+        // in pairwise, which is sound but may over-approximate.
+        CBV min = CONSTANTBV::BitVector_Clone(children[0]->minV);
+        CBV max = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+
+        for (unsigned i = 1; i < children.size(); i++)
         {
-          if (!knownC1)
+          CBV newMin, newMax;
+          if (n.GetKind() == BVAND)
           {
-            result = createInterval(getEmptyCBV(width), children[0]->maxV);
+            newMin = minAND(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxAND(min, max, children[i]->minV, children[i]->maxV);
           }
-          else if (!knownC0)
+          else if (n.GetKind() == BVOR)
           {
-            result = createInterval(getEmptyCBV(width), children[1]->maxV);
+            newMin = minOR(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxOR(min, max, children[i]->minV, children[i]->maxV);
           }
           else
           {
-            if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
-                                                  children[1]->maxV) > 0)
-            {
-              result = createInterval(getEmptyCBV(width), children[1]->maxV);
-            }
-            else
-              result = createInterval(getEmptyCBV(width), children[0]->maxV);
+            newMin = minXOR(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxXOR(min, max, children[i]->minV, children[i]->maxV);
           }
+
+          CONSTANTBV::BitVector_Destroy(min);
+          CONSTANTBV::BitVector_Destroy(max);
+          min = newMin;
+          max = newMax;
         }
+
+        result = createInterval(min, max);
+        CONSTANTBV::BitVector_Destroy(min);
+        CONSTANTBV::BitVector_Destroy(max);
         break;
       }
 
@@ -785,52 +1082,6 @@ namespace stp
           CONSTANTBV::BitVector_Destroy(max);
         }
         break;
-
-      case BVOR: // OVER-APPROXIMATION
-      {
-        // OR is at least as big as each operand, so the minimum is the
-        // largest of the children's minimums. No bit of the result can be
-        // higher than the highest possible bit of any child.
-        result = freshUnsignedInterval(width);
-
-        signed long highestBit = -1;
-        for (unsigned i = 0; i < children.size(); i++)
-        {
-          if (CONSTANTBV::BitVector_Lexicompare(children[i]->minV,
-                                                result->minV) > 0)
-            CONSTANTBV::BitVector_Copy(result->minV, children[i]->minV);
-
-          highestBit =
-              std::max(highestBit, CONSTANTBV::Set_Max(children[i]->maxV));
-        }
-
-        if (highestBit + 1 < (signed long)width)
-        {
-          CONSTANTBV::BitVector_Empty(result->maxV);
-          for (signed long i = 0; i <= highestBit; i++)
-            CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-        }
-        break;
-      }
-
-      case BVXOR: // OVER-APPROXIMATION
-      {
-        // No bit of the result can be higher than the highest possible bit
-        // of any child.
-        signed long highestBit = -1;
-        for (unsigned i = 0; i < children.size(); i++)
-          highestBit =
-              std::max(highestBit, CONSTANTBV::Set_Max(children[i]->maxV));
-
-        if (highestBit + 1 < (signed long)width)
-        {
-          result = freshUnsignedInterval(width);
-          CONSTANTBV::BitVector_Empty(result->maxV);
-          for (signed long i = 0; i <= highestBit; i++)
-            CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-        }
-        break;
-      }
 
       // TODO
       case SBVDIV:

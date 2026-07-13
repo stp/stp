@@ -34,12 +34,13 @@ THE SOFTWARE.
 // The perfect transfer functions are:
 //
 //   NOT, AND, OR, XOR (boolean), EQ, BVGT, BVSGT, ITE, BVNOT, BVUMINUS,
-//   BVSX, BVCONCAT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT
+//   BVSX, BVCONCAT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT,
+//   BVAND, BVOR, BVXOR (exact for two children; folded pairwise beyond)
 //
 // The over-approximating ones (marked OVER-APPROXIMATION in the source) are
 // only checked for soundness:
 //
-//   BVMOD, BVMULT, BVAND, BVOR, BVXOR, BVEXTRACT, BVLEFTSHIFT
+//   BVMOD, BVMULT, BVEXTRACT, BVLEFTSHIFT
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -344,19 +345,19 @@ TEST(UnsignedIntervalExhaustive, Mult)
 TEST(UnsignedIntervalExhaustive, Bvand)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVAND, w, OVERAPPROXIMATES);
+    checkBinary(stp::BVAND, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvor)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVOR, w, OVERAPPROXIMATES);
+    checkBinary(stp::BVOR, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvxor)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVXOR, w, OVERAPPROXIMATES);
+    checkBinary(stp::BVXOR, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, RightShift)
