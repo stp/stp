@@ -147,8 +147,8 @@ Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
 {
   const unsigned bitWidth = x.getWidth();
 
-  bool* yFixedFalse = (bool*)alloca(sizeof(bool) * bitWidth);
-  bool* xFixedFalse = (bool*)alloca(sizeof(bool) * bitWidth);
+  std::vector<bool> yFixedFalse(bitWidth);
+  std::vector<bool> xFixedFalse(bitWidth);
   for (unsigned i = 0; i < bitWidth; i++)
   {
     yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
@@ -604,16 +604,22 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
   if (CONFLICT == r)
     return r;
 
+  // On the heap: bitWidth is unbounded, and this used to alloca inside the
+  // loop, which only returns the stack space when the function exits. The
+  // ColumnCounts constructor re-initialises the arrays each iteration.
+  std::vector<signed> columnH_store(bitWidth); // max. no of true partial products.
+  std::vector<signed> columnL_store(bitWidth); // minimum ""  ""
+  std::vector<signed> sumH_store(bitWidth);
+  std::vector<signed> sumL_store(bitWidth);
+
   bool changed = true;
   while (changed)
   {
     changed = false;
-    signed* columnH = (signed*)alloca(
-        sizeof(signed) * bitWidth); // maximum number of true partial products.
-    signed* columnL =
-        (signed*)alloca(sizeof(signed) * bitWidth); // minimum  ""            ""
-    signed* sumH = (signed*)alloca(sizeof(signed) * bitWidth);
-    signed* sumL = (signed*)alloca(sizeof(signed) * bitWidth);
+    signed* columnH = columnH_store.data();
+    signed* columnL = columnL_store.data();
+    signed* sumH = sumH_store.data();
+    signed* sumL = sumL_store.data();
     ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output);
 
     // Use the number of zeroes and ones in a column to update the possible

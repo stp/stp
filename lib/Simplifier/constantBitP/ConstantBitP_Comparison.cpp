@@ -174,6 +174,18 @@ bool fast_exit(FixedBits& c0, FixedBits& c1)
   return false;
 }
 
+// Convert the before/after count of fixed bits into a Result. Transfer
+// functions only ever fix extra bits, so an unchanged count means nothing
+// was altered. The propagation loop trusts NO_CHANGE and skips rescheduling,
+// so it must only be returned when that is really so.
+Result fixedCountToResult(const unsigned before, const FixedBits& c0,
+                          const FixedBits& c1, const FixedBits& output)
+{
+  const unsigned now = c0.countFixed() + c1.countFixed() + output.countFixed();
+  assert(now >= before);
+  return (now == before) ? NO_CHANGE : CHANGED;
+}
+
 ///////// Signed operations.
 
 Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
@@ -182,6 +194,9 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  const unsigned initialFixedCount =
+      c0.countFixed() + c1.countFixed() + output.countFixed();
 
   CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
   CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -230,7 +245,8 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
     t.setFixed(0, true);
     t.setValue(0, true);
     destroy(c0_min, c0_max, c1_min, c1_max);
-    return bvSignedGreaterThanEqualsBothWays(c0, c1, t);
+    return merge(bvSignedGreaterThanEqualsBothWays(c0, c1, t),
+                 fixedCountToResult(initialFixedCount, c0, c1, output));
   }
 
   const int msb = c0.getWidth() - 1;
@@ -317,7 +333,7 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
     }
   }
   destroy(c0_min, c0_max, c1_min, c1_max);
-  return NOT_IMPLEMENTED;
+  return fixedCountToResult(initialFixedCount, c0, c1, output);
 }
 
 Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
@@ -327,6 +343,9 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  const unsigned initialFixedCount =
+      c0.countFixed() + c1.countFixed() + output.countFixed();
 
   CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
   CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -373,7 +392,8 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
     t.setFixed(0, true);
     t.setValue(0, true);
     destroy(c0_min, c0_max, c1_min, c1_max);
-    return bvSignedGreaterThanBothWays(c0, c1, t);
+    return merge(bvSignedGreaterThanBothWays(c0, c1, t),
+                 fixedCountToResult(initialFixedCount, c0, c1, output));
   }
 
   const int msb = c0.getWidth() - 1;
@@ -463,7 +483,7 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
   }
 
   destroy(c0_min, c0_max, c1_min, c1_max);
-  return NOT_IMPLEMENTED;
+  return fixedCountToResult(initialFixedCount, c0, c1, output);
 }
 
 ///////////////////////// UNSIGNED.
@@ -475,6 +495,9 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  const unsigned initialFixedCount =
+      c0.countFixed() + c1.countFixed() + output.countFixed();
 
   CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
   CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -524,7 +547,8 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
     t.setFixed(0, true);
     t.setValue(0, true);
     destroy(c0_min, c0_max, c1_min, c1_max);
-    return bvGreaterThanEqualsBothWays(c0, c1, t);
+    return merge(bvGreaterThanEqualsBothWays(c0, c1, t),
+                 fixedCountToResult(initialFixedCount, c0, c1, output));
   }
 
   if (output.isFixed(0) && output.getValue(0))
@@ -573,7 +597,7 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
   }
 
   destroy(c0_min, c0_max, c1_min, c1_max);
-  return NOT_IMPLEMENTED;
+  return fixedCountToResult(initialFixedCount, c0, c1, output);
 }
 
 Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
@@ -582,6 +606,9 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  const unsigned initialFixedCount =
+      c0.countFixed() + c1.countFixed() + output.countFixed();
 
   CBV c0_min = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
   CBV c0_max = CONSTANTBV::BitVector_Create(c0.getWidth(), true);
@@ -630,7 +657,8 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
     t.setFixed(0, true);
     t.setValue(0, true);
     destroy(c0_min, c0_max, c1_min, c1_max);
-    return bvGreaterThanBothWays(c0, c1, t);
+    return merge(bvGreaterThanBothWays(c0, c1, t),
+                 fixedCountToResult(initialFixedCount, c0, c1, output));
   }
 
   // We only deal with the true case in this function.
@@ -684,7 +712,7 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
     }
   }
   destroy(c0_min, c0_max, c1_min, c1_max);
-  return NOT_IMPLEMENTED;
+  return fixedCountToResult(initialFixedCount, c0, c1, output);
 }
 }
 }

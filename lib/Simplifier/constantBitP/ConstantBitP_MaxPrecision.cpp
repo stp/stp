@@ -50,7 +50,7 @@ ASTNode createConstant(int bitWidth, int val, STPMgr* beev)
   CBV cbv = CONSTANTBV::BitVector_Create(bitWidth, true);
   int max = bitWidth > ((int)sizeof(int) * 8) ? sizeof(int) * 8 : bitWidth;
   for (int i = 0; i < max; i++)
-    if (val & (1 << i))
+    if (val & (1u << i))
       CONSTANTBV::BitVector_Bit_On(cbv, i);
   return beev->CreateBVConst(cbv, bitWidth);
 }

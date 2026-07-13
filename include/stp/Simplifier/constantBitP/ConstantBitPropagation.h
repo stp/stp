@@ -91,6 +91,10 @@ public:
   DLL_PUBLIC ConstantBitPropagation(stp::STPMgr* mgr, stp::Simplifier* _sm,
                          NodeFactory* _nf, const ASTNode& top);
 
+  // The destructor deletes the owned tables, so copying would double-delete.
+  ConstantBitPropagation(const ConstantBitPropagation&) = delete;
+  ConstantBitPropagation& operator=(const ConstantBitPropagation&) = delete;
+
   ~ConstantBitPropagation() { clearTables(); };
 
   // Returns the node after writing in simplifications from constant Bit

@@ -45,6 +45,9 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 
   const int bitWidth = a.getWidth();
 
+  const unsigned initialFixedCount =
+      a.countFixed() + b.countFixed() + output.countFixed();
+
   FixedBits one(bitWidth, false);
   one.fixToZero();
   one.setFixed(0, true);
@@ -77,7 +80,10 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
       break;
   }
 
-  return NOT_IMPLEMENTED;
+  return (a.countFixed() + b.countFixed() + output.countFixed() ==
+          initialFixedCount)
+             ? NO_CHANGE
+             : CHANGED;
 }
 
 /////////////// ADDITION>
@@ -255,6 +261,10 @@ void setValue(FixedBits& a, const int i, bool v)
 Result bvAddBothWays(FixedBits& x, FixedBits& y, FixedBits& output)
 {
   const int bitWidth = output.getWidth();
+
+  const unsigned initialFixedCount =
+      x.countFixed() + y.countFixed() + output.countFixed();
+
   FixedBits carry(bitWidth + 1, false);
   carry.setFixed(0, true);
   carry.setValue(0, false);
@@ -336,7 +346,10 @@ Result bvAddBothWays(FixedBits& x, FixedBits& y, FixedBits& output)
     // cerr << i << "[" << ub << ":" << lb << "]" << endl;
   }
 
-  return NOT_IMPLEMENTED;
+  return (x.countFixed() + y.countFixed() + output.countFixed() ==
+          initialFixedCount)
+             ? NO_CHANGE
+             : CHANGED;
 }
 
 Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
@@ -354,15 +367,24 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
     assert(children[i]->getWidth() == bitWidth);
   }
 
-  int* columnL = (int*)alloca(sizeof(int) * bitWidth); // minimum  "" ""
-  int* columnH = (int*)alloca(
-      sizeof(int) * bitWidth); // maximum number of true partial products.
+  unsigned initialFixedCount = output.countFixed();
+  for (size_t i = 0; i < numberOfChildren; i++)
+    initialFixedCount += children[i]->countFixed();
+
+  // On the heap: bitWidth is unbounded, so these don't belong on the stack.
+  std::vector<int> columnL_store(bitWidth); // minimum  "" ""
+  std::vector<int> columnH_store(
+      bitWidth); // maximum number of true partial products.
+  int* columnL = columnL_store.data();
+  int* columnH = columnH_store.data();
 
   initialiseColumnCounts(columnL, columnH, bitWidth, numberOfChildren,
                          children);
 
-  int* sumH = (int*)alloca(sizeof(int) * bitWidth);
-  int* sumL = (int*)alloca(sizeof(int) * bitWidth);
+  std::vector<int> sumH_store(bitWidth);
+  std::vector<int> sumL_store(bitWidth);
+  int* sumH = sumH_store.data();
+  int* sumL = sumL_store.data();
   sumL[0] = columnL[0];
   sumH[0] = columnH[0];
 
@@ -518,7 +540,11 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
       }
     }
   }
-  return NOT_IMPLEMENTED;
+
+  unsigned finalFixedCount = output.countFixed();
+  for (size_t i = 0; i < numberOfChildren; i++)
+    finalFixedCount += children[i]->countFixed();
+  return (finalFixedCount == initialFixedCount) ? NO_CHANGE : CHANGED;
 }
 }
 }
