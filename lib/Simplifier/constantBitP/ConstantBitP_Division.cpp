@@ -51,8 +51,7 @@ enum WhatIsOutput
 enum Operation
 {
   SIGNED_DIVISION,
-  SIGNED_REMAINDER,
-  SIGNED_MODULUS
+  SIGNED_REMAINDER
 };
 
 // For unsigned 3-bit exhaustive, there are 1119 differences for unsigned
@@ -931,18 +930,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       // cerr << negA << " " << tempA << endl;
       assert(r != CONFLICT);
 
-      // modulus: (bvadd (bvneg (bvurem (bvneg s) t)) t)
-      FixedBits wO(inputWidth, false);
-      if (op == SIGNED_MODULUS)
-      {
-        vector<FixedBits*> ch;
-        ch.push_back(&wO);
-        ch.push_back(&tempB);
-        r = bvAddBothWays(ch, tempOutput);
-        assert(r != CONFLICT);
-      }
-      else
-        wO = tempOutput;
+      FixedBits wO(tempOutput);
 
       FixedBits negOutput(inputWidth, false);
       negChildren.clear();
@@ -963,15 +951,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
 
         if (r != CONFLICT)
         {
-          if (op == SIGNED_MODULUS)
-          {
-            vector<FixedBits*> ch;
-            ch.push_back(&wO);
-            ch.push_back(&tempB);
-            r = bvAddBothWays(ch, tempOutput);
-          }
-          else
-            tempOutput = wO;
+          tempOutput = wO;
 
           if (r != CONFLICT)
           {
@@ -1007,28 +987,16 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       r = bvUnaryMinusBothWays(negChildren, tempB); // get NegB
       assert(r != CONFLICT);
 
-      // Create a negated version of the output if necessary. Modulus and
-      // remainder aren't both negated. Division is.
+      // Create a negated version of the output if necessary. The remainder
+      // isn't negated. The division is.
       FixedBits wO(inputWidth, false);
       if (op == SIGNED_DIVISION)
       {
         r = negate(tempOutput, wO);
         assert(r != CONFLICT);
       }
-      else if (op == SIGNED_REMAINDER || op == SIGNED_MODULUS)
+      else if (op == SIGNED_REMAINDER)
         wO = tempOutput;
-
-      // (bvadd (bvurem s (bvneg t)) t)
-      if (op == SIGNED_MODULUS)
-      {
-        FixedBits wTemp(inputWidth, false);
-        vector<FixedBits*> ch;
-        ch.push_back(&wTemp);
-        ch.push_back(&tempB);
-        r = bvAddBothWays(ch, tempOutput);
-        assert(r != CONFLICT);
-        wO = wTemp;
-      }
 
       negChildren.clear();
       negChildren.push_back(&tempA);
@@ -1037,17 +1005,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       r = tf(negChildren, wO, bm);
       if (r != CONFLICT)
       {
-        FixedBits t(wO.getWidth(), false);
-        if (op == SIGNED_MODULUS)
-        {
-          vector<FixedBits*> ch;
-          ch.push_back(&wO);
-          ch.push_back(&tempB);
-          r = bvAddBothWays(ch, tempOutput);
-          t = tempOutput;
-        }
-        else
-          t = wO;
+        FixedBits t(wO);
 
         if (r != CONFLICT)
         {
@@ -1055,7 +1013,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
           {
             r = negate(tempOutput, t);
           }
-          else if (op == SIGNED_REMAINDER || op == SIGNED_MODULUS)
+          else if (op == SIGNED_REMAINDER)
           {
             tempOutput = t;
           }
@@ -1101,7 +1059,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       negChildren.push_back(&negB);
 
       FixedBits wO(inputWidth, false);
-      if (op == SIGNED_REMAINDER || op == SIGNED_MODULUS)
+      if (op == SIGNED_REMAINDER)
       {
         r = negate(tempOutput, wO);
         assert(r != CONFLICT);
@@ -1124,7 +1082,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
           // data.print();
           if (r != CONFLICT)
           {
-            if (op == SIGNED_REMAINDER || op == SIGNED_MODULUS)
+            if (op == SIGNED_REMAINDER)
             {
               r = negate(tempOutput, wO);
             }
@@ -1165,32 +1123,427 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
   return NOT_IMPLEMENTED;
 }
 
+// --- Signed modulus ---------------------------------------------------
+//
+// bvsmod, per the current SMT-LIB definition:
+//
+//   (bvsmod s t) abbreviates
+//     (let ((?msb_s ((_ extract |m-1| |m-1|) s))
+//           (?msb_t ((_ extract |m-1| |m-1|) t)))
+//       (let ((abs_s (ite (= ?msb_s #b0) s (bvneg s)))
+//             (abs_t (ite (= ?msb_t #b0) t (bvneg t))))
+//         (let ((u (bvurem abs_s abs_t)))
+//           (ite (= u (_ bv0 m)) u
+//           (ite (and (= ?msb_s #b0) (= ?msb_t #b0)) u
+//           (ite (and (= ?msb_s #b1) (= ?msb_t #b0)) (bvadd (bvneg u) t)
+//           (ite (and (= ?msb_s #b0) (= ?msb_t #b1)) (bvadd u t)
+//           (bvneg u))))))))
+//
+// Note the (= u 0) guard. The earlier SMT-LIB definition lacked it, giving
+// the wrong answer whenever the remainder is zero, and the previous
+// implementation here modelled that earlier definition; it was unsound
+// against the constant evaluator, quite apart from being slow.
+//
+// So: bvsmod s 0 = s, and otherwise the result is either zero or takes the
+// sign of the divisor, with |result| < |divisor|.
+
+// Fix bit i of x to v. Returns false if that contradicts an existing fixing.
+static bool fixBitTo(FixedBits& x, unsigned i, bool v)
+{
+  if (x.isFixed(i))
+    return x.getValue(i) == v;
+  x.setFixed(i, true);
+  x.setValue(i, v);
+  return true;
+}
+
+static bool canBeAllZero(const FixedBits& x)
+{
+  for (unsigned i = 0; i < x.getWidth(); i++)
+    if (x.isFixedToOne(i))
+      return false;
+  return true;
+}
+
+// O(width) structural rules; these run even when the divisor may be zero.
+static Result bvSignedModulusStructural(vector<FixedBits*>& children,
+                                        FixedBits& output, STPMgr* bm)
+{
+  FixedBits& a = *children[0];
+  FixedBits& b = *children[1];
+  const unsigned width = output.getWidth();
+  const unsigned sign = width - 1;
+
+  const unsigned before =
+      a.countFixed() + b.countFixed() + output.countFixed();
+
+  // Both inputs known: evaluate.
+  if (a.isTotallyFixed() && b.isTotallyFixed())
+  {
+    stp::ASTVec c;
+    c.push_back(bm->CreateBVConst(a.GetBVConst(), width));
+    c.push_back(bm->CreateBVConst(b.GetBVConst(), width));
+    const FixedBits result = FixedBits::concreteToAbstract(
+        NonMemberBVConstEvaluator(bm, stp::SBVMOD, c, width));
+    for (unsigned i = 0; i < width; i++)
+      if (!fixBitTo(output, i, result.getValue(i)))
+        return CONFLICT;
+    return output.countFixed() + a.countFixed() + b.countFixed() == before
+               ? NO_CHANGE
+               : CHANGED;
+  }
+
+  // Divisor fixed to 1 or -1: the result is zero.
+  if (b.isTotallyFixed())
+  {
+    bool isOne = b.getValue(0);
+    bool isMinusOne = b.getValue(0);
+    for (unsigned i = 1; i < width; i++)
+    {
+      isOne = isOne && !b.getValue(i);
+      isMinusOne = isMinusOne && b.getValue(i);
+    }
+    if (isOne || isMinusOne)
+      for (unsigned i = 0; i < width; i++)
+        if (!fixBitTo(output, i, false))
+          return CONFLICT;
+  }
+
+  // Divisor positive: 0 <= result < divisor.
+  if (b.isFixedToZero(sign) && !b.containsZero())
+  {
+    if (!fixBitTo(output, sign, false))
+      return CONFLICT;
+    int highest = -1; // highest divisor bit that might be one.
+    for (int i = (int)sign - 1; i >= 0; i--)
+      if (!b.isFixedToZero(i))
+      {
+        highest = i;
+        break;
+      }
+    assert(highest >= 0); // b is non-zero with a zero sign bit.
+    // divisor <= 2^(highest+1)-1, so result <= 2^(highest+1)-2: the bits
+    // above `highest` are zero.
+    for (unsigned i = highest + 1; i < sign; i++)
+      if (!fixBitTo(output, i, false))
+        return CONFLICT;
+  }
+
+  // Divisor's sign is zero but it may be zero. If the numerator is also
+  // non-negative, the result is non-negative in both cases
+  // (bvsmod s 0 = s).
+  if (b.isFixedToZero(sign) && b.containsZero() && a.isFixedToZero(sign))
+    if (!fixBitTo(output, sign, false))
+      return CONFLICT;
+
+  // Divisor negative: the result is in (divisor, 0], so zero or negative.
+  if (b.isFixedToOne(sign))
+  {
+    if (output.isFixedToZero(sign))
+    {
+      // A non-negative result must be zero.
+      for (unsigned i = 0; i < width; i++)
+        if (!fixBitTo(output, i, false))
+          return CONFLICT;
+    }
+    else
+    {
+      bool nonZero = false;
+      for (unsigned i = 0; i < sign; i++)
+        if (output.isFixedToOne(i))
+          nonZero = true;
+      if (nonZero && !fixBitTo(output, sign, true))
+        return CONFLICT;
+    }
+  }
+
+  // Result negative: the divisor is negative, or zero with a negative
+  // numerator.
+  if (output.isFixedToOne(sign))
+  {
+    if (!b.containsZero())
+    {
+      if (!fixBitTo(b, sign, true))
+        return CONFLICT;
+    }
+    else if (b.isFixedToZero(sign))
+    {
+      // The divisor must be zero, and then result == numerator.
+      for (unsigned i = 0; i < width; i++)
+        if (!fixBitTo(b, i, false))
+          return CONFLICT;
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (a.isFixed(i) && !fixBitTo(output, i, a.getValue(i)))
+          return CONFLICT;
+        if (output.isFixed(i) && !fixBitTo(a, i, output.getValue(i)))
+          return CONFLICT;
+      }
+    }
+  }
+
+  const unsigned after =
+      a.countFixed() + b.countFixed() + output.countFixed();
+  return after == before ? NO_CHANGE : CHANGED;
+}
+
+// The union, across the sign cases, of the propagated values.
+namespace
+{
+struct SmodUnion
+{
+  bool any;
+  FixedBits a, b, o;
+  SmodUnion(unsigned w) : any(false), a(w, false), b(w, false), o(w, false) {}
+  void add(const FixedBits& a_, const FixedBits& b_, const FixedBits& o_)
+  {
+    if (!any)
+    {
+      a = a_;
+      b = b_;
+      o = o_;
+    }
+    else
+    {
+      a = FixedBits::meet(a, a_);
+      b = FixedBits::meet(b, b_);
+      o = FixedBits::meet(o, o_);
+    }
+    any = true;
+  }
+};
+}
+
+static Result uremProp(FixedBits& x, FixedBits& y, FixedBits& out, STPMgr* bm)
+{
+  vector<FixedBits*> ch;
+  ch.push_back(&x);
+  ch.push_back(&y);
+  return bvUnsignedModulusBothWays(ch, out, bm);
+}
+
+static Result addProp(FixedBits& x, FixedBits& y, FixedBits& out)
+{
+  vector<FixedBits*> ch;
+  ch.push_back(&x);
+  ch.push_back(&y);
+  return bvAddBothWays(ch, out);
+}
+
+// One pass over the four sign cases of the SMT-LIB definition. Each
+// feasible case is propagated through its bvurem/bvneg/bvadd pipeline, and
+// the union of the surviving cases refines the operands. The (= u 0)
+// branch of the definition is a separate sub-case where it matters.
+// A zero divisor is handled correctly (bvurem x 0 = x makes the two
+// t >= 0 pipelines evaluate to s when t == 0), so the caller's
+// containsZero() early-out is purely on cost grounds.
+static Result bvSignedModulusDecompose(vector<FixedBits*>& children,
+                                       FixedBits& output, STPMgr* bm)
+{
+  FixedBits& a = *children[0];
+  FixedBits& b = *children[1];
+  const unsigned width = output.getWidth();
+  const unsigned sign = width - 1;
+
+  const unsigned before =
+      a.countFixed() + b.countFixed() + output.countFixed();
+
+  SmodUnion un(width);
+
+  // Case (s >= 0, t >= 0): result = bvurem(s, t), non-negative.
+  if (canBe(a, sign, false) && canBe(b, sign, false) &&
+      canBe(output, sign, false))
+  {
+    FixedBits A(a), B(b), O(output);
+    A.setFixed(sign, true);
+    A.setValue(sign, false);
+    B.setFixed(sign, true);
+    B.setValue(sign, false);
+    O.setFixed(sign, true);
+    O.setValue(sign, false);
+    if (CONFLICT != uremProp(A, B, O, bm))
+      un.add(A, B, O);
+  }
+
+  // Case (s < 0, t < 0): u = bvurem(-s, -t); result = -u.
+  // (-0 == 0, so the u == 0 guard changes nothing.) u < |t| <= 2^(w-1),
+  // so u's sign bit is zero.
+  if (canBe(a, sign, true) && canBe(b, sign, true))
+  {
+    FixedBits A(a), B(b), O(output);
+    A.setFixed(sign, true);
+    A.setValue(sign, true);
+    B.setFixed(sign, true);
+    B.setValue(sign, true);
+    FixedBits negA(width, false), negB(width, false), u(width, false);
+    u.setFixed(sign, true);
+    u.setValue(sign, false);
+    const bool ok = CONFLICT != negate(A, negA) &&
+                    CONFLICT != negate(B, negB) &&
+                    CONFLICT != negate(O, u) && // u = -O <=> O = -u
+                    CONFLICT != uremProp(negA, negB, u, bm) &&
+                    CONFLICT != negate(O, u) && // push refinements back out
+                    CONFLICT != negate(A, negA) && CONFLICT != negate(B, negB);
+    if (ok)
+      un.add(A, B, O);
+  }
+
+  // Case (s < 0, t >= 0): u = bvurem(-s, t); result = 0 if u == 0
+  // else t - u.
+  if (canBe(a, sign, true) && canBe(b, sign, false))
+  {
+    // Sub-case u == 0: the result is zero.
+    if (canBeAllZero(output))
+    {
+      FixedBits A(a), B(b);
+      A.setFixed(sign, true);
+      A.setValue(sign, true);
+      B.setFixed(sign, true);
+      B.setValue(sign, false);
+      FixedBits negA(width, false);
+      FixedBits zero(width, false);
+      zero.fixToZero();
+      const bool ok = CONFLICT != negate(A, negA) &&
+                      CONFLICT != uremProp(negA, B, zero, bm) &&
+                      CONFLICT != negate(A, negA);
+      if (ok)
+      {
+        FixedBits O(output);
+        O.fixToZero();
+        un.add(A, B, O);
+      }
+    }
+    // Sub-case u != 0: result = t - u. Leaving u unconstrained is a sound
+    // over-approximation. If t cannot be zero the result here is
+    // non-negative (u != 0, t > 0 gives a result in (0, t)).
+    {
+      FixedBits A(a), B(b), O(output);
+      A.setFixed(sign, true);
+      A.setValue(sign, true);
+      B.setFixed(sign, true);
+      B.setValue(sign, false);
+      bool feasible = true;
+      if (!B.containsZero())
+        feasible = fixBitTo(O, sign, false);
+      if (feasible)
+      {
+        FixedBits negA(width, false), u(width, false), negU(width, false);
+        const bool ok = CONFLICT != negate(A, negA) &&
+                        CONFLICT != addProp(negU, B, O) && // backward
+                        CONFLICT != negate(u, negU) &&     // negU = -u
+                        CONFLICT != uremProp(negA, B, u, bm) &&
+                        CONFLICT != negate(u, negU) &&
+                        CONFLICT != addProp(negU, B, O) &&
+                        CONFLICT != negate(A, negA);
+        if (ok)
+          un.add(A, B, O);
+      }
+    }
+  }
+
+  // Case (s >= 0, t < 0): u = bvurem(s, -t); result = 0 if u == 0
+  // else u + t.
+  if (canBe(a, sign, false) && canBe(b, sign, true))
+  {
+    // Sub-case u == 0: the result is zero.
+    if (canBeAllZero(output))
+    {
+      FixedBits A(a), B(b);
+      A.setFixed(sign, true);
+      A.setValue(sign, false);
+      B.setFixed(sign, true);
+      B.setValue(sign, true);
+      FixedBits negB(width, false);
+      FixedBits zero(width, false);
+      zero.fixToZero();
+      const bool ok = CONFLICT != negate(B, negB) &&
+                      CONFLICT != uremProp(A, negB, zero, bm) &&
+                      CONFLICT != negate(B, negB);
+      if (ok)
+      {
+        FixedBits O(output);
+        O.fixToZero();
+        un.add(A, B, O);
+      }
+    }
+    // Sub-case u != 0: result = u + t, strictly negative
+    // (u in (0, -t) gives a result in (t, 0)).
+    {
+      FixedBits A(a), B(b), O(output);
+      A.setFixed(sign, true);
+      A.setValue(sign, false);
+      B.setFixed(sign, true);
+      B.setValue(sign, true);
+      if (fixBitTo(O, sign, true))
+      {
+        FixedBits negB(width, false), u(width, false);
+        u.setFixed(sign, true);
+        u.setValue(sign, false); // u < |t| <= 2^(w-1)
+        const bool ok = CONFLICT != negate(B, negB) &&
+                        CONFLICT != addProp(u, B, O) && // backward into u
+                        CONFLICT != uremProp(A, negB, u, bm) &&
+                        CONFLICT != addProp(u, B, O) &&
+                        CONFLICT != negate(B, negB);
+        if (ok)
+          un.add(A, B, O);
+      }
+    }
+  }
+
+  if (!un.any)
+    return CONFLICT;
+
+  // The union must be a refinement of the inputs.
+  assert(FixedBits::in(un.a, a));
+  assert(FixedBits::in(un.b, b));
+  assert(FixedBits::in(un.o, output));
+
+  a = un.a;
+  b = un.b;
+  output = un.o;
+
+  const unsigned after =
+      a.countFixed() + b.countFixed() + output.countFixed();
+  return after == before ? NO_CHANGE : CHANGED;
+}
+
 Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
                                STPMgr* bm)
 {
-  /*
-   (bvsmod s t) abbreviates
-   (let (?msb_s (extract[|m-1|:|m-1|] s))
-   (let (?msb_t (extract[|m-1|:|m-1|] t))
-   (ite (and (= ?msb_s bit0) (= ?msb_t bit0))
-   (bvurem s t)
-   (ite (and (= ?msb_s bit1) (= ?msb_t bit0))
-   (bvadd (bvneg (bvurem (bvneg s) t)) t)
-   (ite (and (= ?msb_s bit0) (= ?msb_t bit1))
-   (bvadd (bvurem s (bvneg t)) t)
-   (bvneg (bvurem (bvneg s) (bvneg t)))))))
-   */
+  assert(children.size() == 2);
+  assert(output.getWidth() == children[0]->getWidth());
+  assert(output.getWidth() == children[1]->getWidth());
 
-  // I think this implements old style (broken) semantics, so avoiding it.
-  return NO_CHANGE;
-
-  if (children[0] == children[1]) // same pointer.
+  if (children[0] == children[1]) // same pointer: x smod x = 0.
   {
-    return NO_CHANGE;
+    Result r = NO_CHANGE;
+    for (unsigned i = 0; i < output.getWidth(); i++)
+    {
+      if (output.isFixedToOne(i))
+        return CONFLICT;
+      if (!output.isFixed(i))
+      {
+        output.setFixed(i, true);
+        output.setValue(i, false);
+        r = CHANGED;
+      }
+    }
+    return r;
   }
 
-  return bvSignedDivisionRemainderBothWays(
-      children, output, bm, bvUnsignedModulusBothWays, SIGNED_MODULUS);
+  const Result r0 = bvSignedModulusStructural(children, output, bm);
+  if (CONFLICT == r0)
+    return CONFLICT;
+
+  // The sign-case decomposition is expensive and deduces little when the
+  // divisor may be zero; bail out early like the other signed operations.
+  if (children[1]->containsZero())
+    return r0;
+
+  const Result r1 = bvSignedModulusDecompose(children, output, bm);
+  if (CONFLICT == r1)
+    return CONFLICT;
+  return merge(r0, r1);
 }
 
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,
