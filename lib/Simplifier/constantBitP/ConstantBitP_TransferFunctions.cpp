@@ -312,6 +312,9 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   assert(children.size() == 1);
   const int bitWidth = children[0]->getWidth();
 
+  const unsigned initialFixedCount =
+      children[0]->countFixed() + output.countFixed();
+
   // If it's only one bit. This will be negative one.
   FixedBits one(bitWidth, false);
   one.fixToZero();
@@ -345,7 +348,10 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
       break;
   }
 
-  return NOT_IMPLEMENTED; // don't set the status properly yet..
+  return (children[0]->countFixed() + output.countFixed() ==
+          initialFixedCount)
+             ? NO_CHANGE
+             : CHANGED;
 }
 
 Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)

@@ -117,7 +117,7 @@ FixedBits getPossible(unsigned bitWidth, bool possibleShift[],
         {
           v.setFixed(j, true);
           if (j < sizeof(unsigned) * 8)
-            v.setValue(j, 0 != (i & (1 << j)));
+            v.setValue(j, 0 != (i & (1u << j)));
           else
             v.setValue(j, false);
         }
@@ -131,7 +131,7 @@ FixedBits getPossible(unsigned bitWidth, bool possibleShift[],
           if (v.isFixed(j))
           {
             // union.
-            if (v.getValue(j) != (0 != (i & (1 << j))))
+            if (v.getValue(j) != (0 != (i & (1u << j))))
               v.setFixed(j, false);
           }
         }
@@ -717,7 +717,7 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
         {
           v.setFixed(j, true);
           if (j < sizeof(unsigned) * 8)
-            v.setValue(j, 0 != (i & (1 << j)));
+            v.setValue(j, 0 != (i & (1u << j)));
           else
             v.setValue(j, false);
         }
@@ -731,7 +731,7 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
           if (v.isFixed(j))
           {
             // union.
-            if (v.getValue(j) != (0 != (i & (1 << j))))
+            if (v.getValue(j) != (0 != (i & (1u << j))))
               v.setFixed(j, false);
           }
         }
