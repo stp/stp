@@ -43,8 +43,6 @@ using std::make_pair;
 
 class UnsignedIntervalAnalysis
 {
-  vector<UnsignedInterval*> toDeleteLater;
-  vector<CBV> likeAutoPtr;
   STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
@@ -55,7 +53,7 @@ class UnsignedIntervalAnalysis
   UnsignedInterval* freshUnsignedInterval(unsigned width);
   UnsignedInterval* getEmptyInterval(const ASTNode& n);
 
-  // We create all intervals through here. Handles collection
+  // The caller owns the returned interval.
   UnsignedInterval* createInterval(CBV min, CBV max);
 
   CBV getEmptyCBV(unsigned width);
