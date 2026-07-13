@@ -109,7 +109,11 @@ jobs:
       run: |
         git clone --depth 1 --branch release/v5.14.7 https://github.com/msoos/cryptominisat
         cd cryptominisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
+        # CaDiCaL uses GCC extensions (__attribute__, __builtin_unreachable)
+        # that MSVC rejects; clang-cl accepts them and is MSVC-ABI
+        # compatible, so the resulting static libs link into the MSVC-built
+        # STP below.
+        cmake -B build -A x64 -T ClangCL -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
         cmake --build build --config Release --target install
 
     - name: Configure
