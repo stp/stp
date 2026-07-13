@@ -281,7 +281,7 @@ bool FixedBits::unsignedHolds_old(unsigned val)
   {
     if (i < (unsigned)width && i < sizeof(unsigned) * 8)
     {
-      if (isFixed(i) && (getValue(i) != (((val & (1 << i))) != 0)))
+      if (isFixed(i) && (getValue(i) != (((val & (1u << i))) != 0)))
         return false;
     }
     else if (i < (unsigned)width)
@@ -291,7 +291,7 @@ bool FixedBits::unsignedHolds_old(unsigned val)
     }
     else // The unsigned value is bigger than the bitwidth of this.
     {
-      if (val & (1 << i))
+      if (val & (1u << i))
         return false;
     }
   }
@@ -406,7 +406,7 @@ FixedBits FixedBits::fromUnsignedInt(unsigned width, unsigned val)
     if (i < width && i < sizeof(unsigned) * 8)
     {
       output.setFixed(i, true);
-      output.setValue(i, (val & (1 << i)));
+      output.setValue(i, (val & (1u << i)));
     }
     else if (i < width)
     {
@@ -415,7 +415,7 @@ FixedBits FixedBits::fromUnsignedInt(unsigned width, unsigned val)
     }
     else // The unsigned value is bigger than the bitwidth of this.
     {    // so it can't be represented.
-      if (val & (1 << i))
+      if (val & (1u << i))
       {
         stp::FatalError(LOCATION "Cant be represented.");
       }
@@ -431,7 +431,7 @@ void FixedBits::fromUnsigned(unsigned val)
     if (i < width && i < sizeof(unsigned) * 8)
     {
       setFixed(i, true);
-      setValue(i, (val & (1 << i)));
+      setValue(i, (val & (1u << i)));
     }
     else if (i < width)
     {
@@ -440,7 +440,7 @@ void FixedBits::fromUnsigned(unsigned val)
     }
     else // The unsigned value is bigger than the bitwidth of this.
     {    // so it can't be represented.
-      if (val & (1 << i))
+      if (val & (1u << i))
       {
         stp::FatalError(LOCATION "Cant be represented.");
       }
@@ -540,12 +540,12 @@ void FixedBits::getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const
   {
     if ((*this)[i] == '1')
     {
-      minShift |= (1 << i);
-      maxShift |= (1 << i);
+      minShift |= (1u << i);
+      maxShift |= (1u << i);
     }
     else if ((*this)[i] == '*')
     {
-      maxShift |= (1 << i);
+      maxShift |= (1u << i);
     }
   }
 
