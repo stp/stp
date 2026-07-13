@@ -267,8 +267,8 @@ TEST(UnsignedIntervalPropagators, ExtractBothBounds)
   cleanup(children, result);
 }
 
-// Extracting [3:0] from a value that is at most 0xF0 discards set bits from
-// the top, so nothing is known about the result.
+// Extracting [3:0] from [0x00, 0xF0] wraps through the extract's width
+// several times, so every result is reachable and nothing is known.
 TEST(UnsignedIntervalPropagators, ExtractGivesNothingWhenTopBitsTruncated)
 {
   Context c;
@@ -317,6 +317,25 @@ TEST(UnsignedIntervalPropagators, BvorMinimumWithUnknownChild)
       c.analysis.dispatchToTransferFunctions(n, children);
 
   expectInterval(result, width, 4, 255);
+  cleanup(children, result);
+}
+
+// Extracting [2:0] from [0x44, 0x46]: the values agree above bit 2, so the
+// low bits run from the minimum's to the maximum's without wrapping, even
+// though set bits are discarded from the top.
+TEST(UnsignedIntervalPropagators, ExtractExactWhenHighBitsAgree)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode n = makeExtract(c, x, 2, 0);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0x44, 0x46), makeInterval(32, 2, 2),
+      makeInterval(32, 0, 0)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, 3, 4, 6);
   cleanup(children, result);
 }
 

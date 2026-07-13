@@ -899,10 +899,12 @@ namespace stp
         break;
       }
 
-      case BVEXTRACT: // OVER-APPROXIMATION
+      case BVEXTRACT:
       {
-        // The index children are always constants, so they're always known.
-        if (knownC0 && knownC2)
+        // The value is (child >> low) mod 2^width. This transfer function
+        // is exact. The index children are always constants; the guard
+        // matters because the shift amount must be the real one.
+        if (knownC2)
         {
           // The lowest bit of the extract is how far the child shifts right.
           unsigned shift_amount = *(children[2]->minV);
@@ -915,9 +917,18 @@ namespace stp
             CONSTANTBV::BitVector_shift_right(max, 0);
           }
 
-          // Sound only if the extract discards no set bits from the top of
-          // the maximum, i.e. the shifted maximum fits into the new width.
-          if (CONSTANTBV::Set_Max(max) < (signed long)width)
+          // The shifted child takes every value between the shifted bounds,
+          // so if the bounds agree above the extract's width, the low bits
+          // run from the minimum's to the maximum's without wrapping.
+          // Otherwise the result wraps: it reaches both zero and all ones,
+          // and only the complete interval contains it.
+          bool sameBlock = true;
+          for (unsigned i = width; i < n[0].GetValueWidth() && sameBlock; i++)
+            if (CONSTANTBV::BitVector_bit_test(min, i) !=
+                CONSTANTBV::BitVector_bit_test(max, i))
+              sameBlock = false;
+
+          if (sameBlock)
           {
             CBV newMin = CONSTANTBV::BitVector_Create(width, true);
             CBV newMax = CONSTANTBV::BitVector_Create(width, true);

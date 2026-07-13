@@ -34,13 +34,13 @@ THE SOFTWARE.
 // The perfect transfer functions are:
 //
 //   NOT, AND, OR, XOR (boolean), EQ, BVGT, BVSGT, ITE, BVNOT, BVUMINUS,
-//   BVSX, BVCONCAT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT,
+//   BVSX, BVCONCAT, BVEXTRACT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT,
 //   BVAND, BVOR, BVXOR (exact for two children; folded pairwise beyond)
 //
 // The over-approximating ones (marked OVER-APPROXIMATION in the source) are
 // only checked for soundness:
 //
-//   BVMOD, BVMULT, BVEXTRACT, BVLEFTSHIFT
+//   BVMOD, BVMULT, BVLEFTSHIFT
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -513,9 +513,9 @@ TEST(UnsignedIntervalExhaustive, Extract)
             stp::UnsignedInterval* result =
                 c.analysis.dispatchToTransferFunctions(n, children);
 
-            const bool good =
-                checkAgainstHull(stp::BVEXTRACT, w, result, wOut, bruteMin,
-                                 bruteMax, OVERAPPROXIMATES);
+            const bool good = checkAgainstHull(stp::BVEXTRACT, w, result,
+                                               wOut, bruteMin, bruteMax,
+                                               EXACT);
             cleanup(children, result);
             if (!good)
             {
