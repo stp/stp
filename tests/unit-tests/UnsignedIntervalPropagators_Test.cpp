@@ -374,6 +374,64 @@ TEST(UnsignedIntervalPropagators, BvorMinimumWithUnknownChild)
   cleanup(children, result);
 }
 
+// [0,1] * [0,8]: no wrap is possible, so the bounds multiply. (This used
+// to propagate nothing: the bounds were multiplied as signed values, and 8
+// has the top bit of its nibble... any bound reaching the upper half of
+// the range looked like an overflow.)
+TEST(UnsignedIntervalPropagators, MultKeepsBoundsWithUpperHalfOperand)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0, 129), makeInterval(width, 0, 1)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0, 129);
+  cleanup(children, result);
+}
+
+// [32,33] * 8: the products 256 and 264 wrap, but they land in the same
+// 2^8 block, so the result is exactly [0, 8].
+TEST(UnsignedIntervalPropagators, MultExactAcrossWrapInSameBlock)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 32, 33), makeInterval(width, 8, 8)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0, 8);
+  cleanup(children, result);
+}
+
+// [3,200] * 3: the products cross several 2^8 blocks. They form the
+// arithmetic progression 9, 12, ... mod 256; the largest value below the
+// first wrap is 255 (x = 85) and the smallest reachable value is 1
+// (x = 171 gives 513 = 2*256 + 1).
+TEST(UnsignedIntervalPropagators, MultExactForWrappingConstantMultiplier)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 3, 200), makeInterval(width, 3, 3)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 1, 255);
+  cleanup(children, result);
+}
+
 // Extracting [2:0] from [0x44, 0x46]: the values agree above bit 2, so the
 // low bits run from the minimum's to the maximum's without wrapping, even
 // though set bits are discarded from the top.

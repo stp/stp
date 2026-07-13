@@ -48,6 +48,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
+#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -341,6 +342,58 @@ TEST(UnsignedIntervalExhaustive, Mult)
 {
   for (unsigned w = 1; w <= 4; w++)
     checkBinary(stp::BVMULT, w, OVERAPPROXIMATES);
+}
+
+// The constant-multiplier multiplication path finds the extremes of an
+// arithmetic progression mod 2^width by a binary search over a Euclidean
+// counting function. The exhaustive widths only reach shallow recursions,
+// so this stresses it with random wide intervals at width 16, where the
+// hull is still brute-forceable.
+TEST(UnsignedIntervalExhaustive, MultConstantOperandRandomised)
+{
+  Context c;
+  MTRand rand(12345U);
+
+  const unsigned w = 16;
+  const uint64_t N = 1ull << w;
+
+  stp::ASTVec symbols;
+  symbols.push_back(c.mgr.CreateSymbol("x", 0, w));
+  symbols.push_back(c.mgr.CreateSymbol("y", 0, w));
+  const stp::ASTNode n =
+      c.mgr.hashingNodeFactory->CreateTerm(stp::BVMULT, w, symbols);
+
+  for (unsigned iteration = 0; iteration < 300; iteration++)
+  {
+    uint64_t lo = rand.randInt() % N;
+    uint64_t hi = rand.randInt() % N;
+    if (lo > hi)
+      std::swap(lo, hi);
+    const uint64_t multiplier = rand.randInt() % N;
+
+    uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+    for (uint64_t x = lo; x <= hi; x++)
+    {
+      const uint64_t v = (x * multiplier) & (N - 1);
+      bruteMin = std::min(bruteMin, v);
+      bruteMax = std::max(bruteMax, v);
+    }
+
+    std::vector<const stp::UnsignedInterval*> children = {
+        makeInterval(w, lo, hi), makeInterval(w, multiplier, multiplier)};
+    stp::UnsignedInterval* result =
+        c.analysis.dispatchToTransferFunctions(n, children);
+
+    const bool good =
+        checkAgainstHull(stp::BVMULT, w, result, w, bruteMin, bruteMax,
+                         EXACT);
+    cleanup(children, result);
+    if (!good)
+    {
+      ADD_FAILURE() << "[" << lo << ", " << hi << "] * " << multiplier;
+      return;
+    }
+  }
 }
 
 TEST(UnsignedIntervalExhaustive, Bvand)
