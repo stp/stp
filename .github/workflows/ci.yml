@@ -68,10 +68,6 @@ jobs:
 
     env:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
-      CMS_ROOT: ${{ github.workspace }}\cryptominisat\install
-      VCPKG_ROOT_DIR: C:\vcpkg\installed\x64-windows-static
-      # CryptoMiniSat locates GMP through pkg-config.
-      PKG_CONFIG_PATH: C:\vcpkg\installed\x64-windows-static\lib\pkgconfig
       # Build ABC single-threaded: its pthread/atomics code paths don't
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
@@ -87,12 +83,12 @@ jobs:
       with:
           submodules: 'true'
 
-    - name: Install flex, bison and pkg-config
-      run: choco install winflexbison3 pkgconfiglite --no-progress
+    - name: Install flex and bison
+      run: choco install winflexbison3 --no-progress
 
-    - name: Install zlib and gmp
+    - name: Install zlib
       run: |
-        vcpkg install zlib:x64-windows-static gmp:x64-windows-static
+        vcpkg install zlib:x64-windows-static
         dir C:\vcpkg\installed\x64-windows-static\lib
         $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *z*.lib | Select-Object -First 1).FullName
         if (-not $lib) { throw "no zlib .lib found" }
@@ -105,19 +101,11 @@ jobs:
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
-    - name: Build cryptominisat
-      run: |
-        git clone --depth 1 --branch release/v5.14.7 https://github.com/msoos/cryptominisat
-        cd cryptominisat
-        # CaDiCaL uses GCC extensions (__attribute__, __builtin_unreachable)
-        # that MSVC rejects; clang-cl accepts them and is MSVC-ABI
-        # compatible, so the resulting static libs link into the MSVC-built
-        # STP below.
-        cmake -B build -A x64 -T ClangCL -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
-        cmake --build build --config Release --target install
-
     - name: Configure
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DFORCE_CMS=ON -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-Dcryptominisat5_DIR=$env:CMS_ROOT\lib\cmake\cryptominisat5" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
+      # and CMS's oracle use POSIX-only code); upstream CMS only supports
+      # MinGW on Windows.
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
