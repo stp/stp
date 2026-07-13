@@ -34,13 +34,14 @@ THE SOFTWARE.
 // The perfect transfer functions are:
 //
 //   NOT, AND, OR, XOR (boolean), EQ, BVGT, BVSGT, ITE, BVNOT, BVUMINUS,
-//   BVSX, BVCONCAT, BVEXTRACT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT,
-//   BVAND, BVOR, BVXOR (exact for two children; folded pairwise beyond)
+//   BVSX, BVCONCAT, BVEXTRACT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVLEFTSHIFT,
+//   BVSRSHIFT, BVAND, BVOR, BVXOR (bitwise ones exact for two children;
+//   folded pairwise beyond)
 //
 // The over-approximating ones (marked OVER-APPROXIMATION in the source) are
 // only checked for soundness:
 //
-//   BVMOD, BVMULT, BVLEFTSHIFT
+//   BVMOD, BVMULT
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -369,7 +370,7 @@ TEST(UnsignedIntervalExhaustive, RightShift)
 TEST(UnsignedIntervalExhaustive, LeftShift)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVLEFTSHIFT, w, OVERAPPROXIMATES);
+    checkBinary(stp::BVLEFTSHIFT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, SignedRightShift)

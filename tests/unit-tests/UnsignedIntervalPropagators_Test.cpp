@@ -339,6 +339,24 @@ TEST(UnsignedIntervalPropagators, ExtractExactWhenHighBitsAgree)
   cleanup(children, result);
 }
 
+// [0x81,0x82] << 1: the top bit is discarded from both bounds, but the
+// bounds agree above the surviving bits, so the result is still exact.
+TEST(UnsignedIntervalPropagators, LeftShiftExactWhenHighBitsAgree)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVLEFTSHIFT, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0x81, 0x82), makeInterval(width, 1, 1)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 2, 4);
+  cleanup(children, result);
+}
+
 // [1,3] << [1,2]: no set bit can be shifted out, so the bounds shift too.
 TEST(UnsignedIntervalPropagators, LeftShiftBounds)
 {

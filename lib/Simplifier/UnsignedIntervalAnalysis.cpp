@@ -974,40 +974,91 @@ namespace stp
         }
         break;
 
-      case BVLEFTSHIFT: // OVER-APPROXIMATION
-        if (knownC0 || knownC1)
+      case BVLEFTSHIFT:
+      {
+        // The value is (x << s) mod 2^width, which keeps the low
+        // (width - s) bits of x and shifts them up. This transfer function
+        // is exact: for each of the at most width+1 effective shift
+        // amounts, x's surviving low bits run contiguously (the same
+        // reasoning as BVEXTRACT), giving an exact hull per shift, and the
+        // result is the union over the reachable shifts.
+        const UnsignedInterval* c0 = children[0];
+        const UnsignedInterval* c1 = children[1];
+
+        const unsigned minShift = cappedShiftAmount(c1->minV, width);
+        const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+        CBV bestMin = nullptr;
+        CBV bestMax = nullptr;
+
+        for (unsigned s = minShift; s <= maxShift; s++)
         {
-          const UnsignedInterval* c0 = children[0];
-          const UnsignedInterval* c1 = children[1];
+          // The hull for this shift amount. Shifting by the width or more
+          // gives zero, so the capped amount stands in for all of those.
+          CBV sMin = CONSTANTBV::BitVector_Create(width, true);
+          CBV sMax = CONSTANTBV::BitVector_Create(width, true);
 
-          const unsigned minShift = cappedShiftAmount(c1->minV, width);
-          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
-
-          // The index of the highest bit that could be set in the result.
-          const signed long highestBit = CONSTANTBV::Set_Max(c0->maxV);
-
-          if (highestBit < 0 || minShift >= width)
+          if (s < width)
           {
-            // The value is zero, or every set bit is discarded.
-            result = createInterval(getEmptyCBV(width), getEmptyCBV(width));
+            const unsigned surviving = width - s;
+
+            // If the bounds agree above the surviving bits, the low bits
+            // run from the minimum's to the maximum's without wrapping.
+            bool sameBlock = true;
+            for (unsigned i = surviving; i < width && sameBlock; i++)
+              if (CONSTANTBV::BitVector_bit_test(c0->minV, i) !=
+                  CONSTANTBV::BitVector_bit_test(c0->maxV, i))
+                sameBlock = false;
+
+            if (sameBlock)
+            {
+              for (unsigned i = 0; i < surviving; i++)
+              {
+                if (CONSTANTBV::BitVector_bit_test(c0->minV, i))
+                  CONSTANTBV::BitVector_Bit_On(sMin, i + s);
+                if (CONSTANTBV::BitVector_bit_test(c0->maxV, i))
+                  CONSTANTBV::BitVector_Bit_On(sMax, i + s);
+              }
+            }
+            else
+            {
+              // The surviving bits wrap: they reach both zero and all
+              // ones, so this shift contributes [0, 11..1 << s].
+              for (unsigned i = s; i < width; i++)
+                CONSTANTBV::BitVector_Bit_On(sMax, i);
+            }
           }
-          else if (highestBit + (signed long)maxShift < (signed long)width)
+
+          if (bestMin == nullptr)
           {
-            // No shift can discard a set bit, so shifting further only
-            // makes the value bigger.
-            result = freshUnsignedInterval(width);
-
-            CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
-            for (unsigned i = 0; i < minShift; i++)
-              CONSTANTBV::BitVector_shift_left(result->minV, 0);
-
-            CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
-            for (unsigned i = 0; i < maxShift; i++)
-              CONSTANTBV::BitVector_shift_left(result->maxV, 0);
+            bestMin = sMin;
+            bestMax = sMax;
           }
-          // Otherwise bits may be shifted out and the value can wrap.
+          else
+          {
+            if (CONSTANTBV::BitVector_Lexicompare(sMin, bestMin) < 0)
+            {
+              CONSTANTBV::BitVector_Destroy(bestMin);
+              bestMin = sMin;
+            }
+            else
+              CONSTANTBV::BitVector_Destroy(sMin);
+
+            if (CONSTANTBV::BitVector_Lexicompare(sMax, bestMax) > 0)
+            {
+              CONSTANTBV::BitVector_Destroy(bestMax);
+              bestMax = sMax;
+            }
+            else
+              CONSTANTBV::BitVector_Destroy(sMax);
+          }
         }
+
+        result = createInterval(bestMin, bestMax);
+        CONSTANTBV::BitVector_Destroy(bestMin);
+        CONSTANTBV::BitVector_Destroy(bestMax);
         break;
+      }
 
       case BVSRSHIFT:
         if (knownC0 || knownC1)
