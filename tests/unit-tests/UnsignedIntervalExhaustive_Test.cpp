@@ -18,15 +18,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-// Exhaustively checks that the interval transfer functions in
-// UnsignedIntervalAnalysis are sound at low bitwidths. For every interval
-// (or pair of intervals) of each width, the interval computed for the node
-// must contain the operation's result for every concrete value the children
-// can take. STP's constant evaluator provides the reference semantics, so
+// Exhaustively checks the interval transfer functions in
+// UnsignedIntervalAnalysis at low bitwidths. For every interval (or pair of
+// intervals) of each width, the brute-force hull -- the smallest interval
+// containing the operation's result for every concrete value the children
+// can take -- is compared against the interval the transfer function
+// computes. STP's constant evaluator provides the reference semantics, so
 // the tests can't drift from the solver's.
 //
-// A null result claims nothing, so it is always sound; these tests don't
-// check precision.
+// Every transfer function must be sound: the computed interval must contain
+// the hull (a null result claims nothing, so it is always sound).
+//
+// The perfect transfer functions must also be exact: the computed interval
+// must equal the hull, and must only be null when the hull is complete.
+// The perfect transfer functions are:
+//
+//   NOT, AND, OR, XOR (boolean), EQ, BVGT, BVSGT, ITE, BVNOT, BVUMINUS,
+//   BVSX, BVCONCAT, BVPLUS, BVDIV, BVRIGHTSHIFT, BVSRSHIFT
+//
+// The over-approximating ones (marked OVER-APPROXIMATION in the source) are
+// only checked for soundness:
+//
+//   BVMOD, BVMULT, BVAND, BVOR, BVXOR, BVEXTRACT, BVLEFTSHIFT
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -38,6 +51,9 @@ THE SOFTWARE.
 
 namespace
 {
+
+const bool EXACT = true;
+const bool OVERAPPROXIMATES = false;
 
 // BitVector_Boot must run before anything allocates constant bitvectors.
 struct Boot
@@ -95,29 +111,55 @@ void cleanup(std::vector<const stp::UnsignedInterval*>& children,
   delete result;
 }
 
-// Checks that every value in [rmin, rmax] claimed for the node covers the
-// reference result. Reports and returns false on the first violation.
-bool covered(stp::Kind k, unsigned width, const stp::UnsignedInterval* result,
-             unsigned resultWidth, uint64_t reference, uint64_t a, uint64_t b)
+// Compares the computed interval against the brute-force hull
+// [bruteMin, bruteMax]. Containment of every reachable value is equivalent
+// to containment of the hull, because the hull's ends are reachable.
+// Reports and returns false on a problem.
+bool checkAgainstHull(stp::Kind k, unsigned width,
+                      const stp::UnsignedInterval* result,
+                      unsigned resultWidth, uint64_t bruteMin,
+                      uint64_t bruteMax, bool exact)
 {
+  const uint64_t fullMax = (1ull << resultWidth) - 1;
+
+  if (result == nullptr)
+  {
+    if (exact && !(bruteMin == 0 && bruteMax == fullMax))
+    {
+      ADD_FAILURE() << "kind " << k << " at width " << width
+                    << ": nothing was computed, but the exact result is ["
+                    << bruteMin << ", " << bruteMax << "]";
+      return false;
+    }
+    return true;
+  }
+
   const uint64_t rmin = cbvValue(result->minV, resultWidth);
   const uint64_t rmax = cbvValue(result->maxV, resultWidth);
 
-  if (reference < rmin || reference > rmax)
+  if (bruteMin < rmin || bruteMax > rmax)
   {
-    ADD_FAILURE() << "kind " << k << " at width " << width << ": operands ("
-                  << a << ", " << b << ") give " << reference
-                  << ", outside the computed interval [" << rmin << ", "
-                  << rmax << "]";
+    ADD_FAILURE() << "kind " << k << " at width " << width << ": UNSOUND: ["
+                  << rmin << ", " << rmax << "] was computed, but ["
+                  << bruteMin << ", " << bruteMax << "] is reachable";
     return false;
   }
+
+  if (exact && (bruteMin != rmin || bruteMax != rmax))
+  {
+    ADD_FAILURE() << "kind " << k << " at width " << width << ": [" << rmin
+                  << ", " << rmax << "] was computed, but the exact result is"
+                  << " [" << bruteMin << ", " << bruteMax << "]";
+    return false;
+  }
+
   return true;
 }
 
 // Exhaustively checks a two-child operation: child widths w0 and w1, result
 // width wOut. Propositions (BVGT and friends) have a one-bit result.
 void checkBinary(stp::Kind k, unsigned w0, unsigned w1, unsigned wOut,
-                 bool isPredicate)
+                 bool isPredicate, bool exact)
 {
   Context c;
   const uint64_t N0 = 1ull << w0;
@@ -146,41 +188,67 @@ void checkBinary(stp::Kind k, unsigned w0, unsigned w1, unsigned wOut,
 
   const unsigned resultWidth = isPredicate ? 1 : wOut;
 
-  for (uint64_t lo0 = 0; lo0 < N0; lo0++)
-    for (uint64_t hi0 = lo0; hi0 < N0; hi0++)
-      for (uint64_t lo1 = 0; lo1 < N1; lo1++)
-        for (uint64_t hi1 = lo1; hi1 < N1; hi1++)
+  // Every interval of the width, plus "unknown" (a null child). The
+  // transfer functions treat unknown children specially, so it exercises
+  // different paths than the complete interval does.
+  struct Choice
+  {
+    bool isNull;
+    uint64_t lo, hi;
+  };
+  const auto choicesFor = [](uint64_t N) {
+    std::vector<Choice> choices;
+    choices.push_back({true, 0, N - 1});
+    for (uint64_t lo = 0; lo < N; lo++)
+      for (uint64_t hi = lo; hi < N; hi++)
+        choices.push_back({false, lo, hi});
+    return choices;
+  };
+
+  for (const Choice& c0 : choicesFor(N0))
+    for (const Choice& c1 : choicesFor(N1))
+    {
+      uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+      for (uint64_t a = c0.lo; a <= c0.hi; a++)
+        for (uint64_t b = c1.lo; b <= c1.hi; b++)
         {
-          std::vector<const stp::UnsignedInterval*> children = {
-              makeInterval(w0, lo0, hi0), makeInterval(w1, lo1, hi1)};
-          stp::UnsignedInterval* result =
-              c.analysis.dispatchToTransferFunctions(n, children);
-
-          if (result != nullptr)
-            for (uint64_t a = lo0; a <= hi0; a++)
-              for (uint64_t b = lo1; b <= hi1; b++)
-                if (!covered(k, w0, result, resultWidth, table[a * N1 + b], a,
-                             b))
-                {
-                  cleanup(children, result);
-                  return;
-                }
-
-          cleanup(children, result);
+          const uint64_t v = table[a * N1 + b];
+          bruteMin = std::min(bruteMin, v);
+          bruteMax = std::max(bruteMax, v);
         }
+
+      std::vector<const stp::UnsignedInterval*> children = {
+          c0.isNull ? nullptr : makeInterval(w0, c0.lo, c0.hi),
+          c1.isNull ? nullptr : makeInterval(w1, c1.lo, c1.hi)};
+      stp::UnsignedInterval* result =
+          c.analysis.dispatchToTransferFunctions(n, children);
+
+      const bool good = checkAgainstHull(k, w0, result, resultWidth, bruteMin,
+                                         bruteMax, exact);
+      cleanup(children, result);
+      if (!good)
+      {
+        ADD_FAILURE() << "children were "
+                      << (c0.isNull ? "unknown" : "known") << " [" << c0.lo
+                      << ", " << c0.hi << "] and "
+                      << (c1.isNull ? "unknown" : "known") << " [" << c1.lo
+                      << ", " << c1.hi << "]";
+        return;
+      }
+    }
 }
 
-void checkBinary(stp::Kind k, unsigned width)
+void checkBinary(stp::Kind k, unsigned width, bool exact)
 {
-  checkBinary(k, width, width, width, false);
+  checkBinary(k, width, width, width, false, exact);
 }
 
-void checkPredicate(stp::Kind k, unsigned width)
+void checkPredicate(stp::Kind k, unsigned width, bool exact)
 {
-  checkBinary(k, width, width, 1, true);
+  checkBinary(k, width, width, 1, true, exact);
 }
 
-void checkUnary(stp::Kind k, unsigned width)
+void checkUnary(stp::Kind k, unsigned width, bool exact)
 {
   Context c;
   const uint64_t N = 1ull << width;
@@ -200,36 +268,54 @@ void checkUnary(stp::Kind k, unsigned width)
     table[a] = constantValue(NonMemberBVConstEvaluator(&c.mgr, op));
   }
 
+  // Every interval of the width, plus "unknown" (a null child).
+  struct Choice
+  {
+    bool isNull;
+    uint64_t lo, hi;
+  };
+  std::vector<Choice> choices;
+  choices.push_back({true, 0, N - 1});
   for (uint64_t lo = 0; lo < N; lo++)
     for (uint64_t hi = lo; hi < N; hi++)
+      choices.push_back({false, lo, hi});
+
+  for (const Choice& c0 : choices)
+  {
+    uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+    for (uint64_t a = c0.lo; a <= c0.hi; a++)
     {
-      std::vector<const stp::UnsignedInterval*> children = {
-          makeInterval(width, lo, hi)};
-      stp::UnsignedInterval* result =
-          c.analysis.dispatchToTransferFunctions(n, children);
-
-      if (result != nullptr)
-        for (uint64_t a = lo; a <= hi; a++)
-          if (!covered(k, width, result, width, table[a], a, 0))
-          {
-            cleanup(children, result);
-            return;
-          }
-
-      cleanup(children, result);
+      bruteMin = std::min(bruteMin, table[a]);
+      bruteMax = std::max(bruteMax, table[a]);
     }
+
+    std::vector<const stp::UnsignedInterval*> children = {
+        c0.isNull ? nullptr : makeInterval(width, c0.lo, c0.hi)};
+    stp::UnsignedInterval* result =
+        c.analysis.dispatchToTransferFunctions(n, children);
+
+    const bool good =
+        checkAgainstHull(k, width, result, width, bruteMin, bruteMax, exact);
+    cleanup(children, result);
+    if (!good)
+    {
+      ADD_FAILURE() << "child was " << (c0.isNull ? "unknown" : "known")
+                    << " [" << c0.lo << ", " << c0.hi << "]";
+      return;
+    }
+  }
 }
 
 TEST(UnsignedIntervalExhaustive, Udiv)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVDIV, w);
+    checkBinary(stp::BVDIV, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Urem)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVMOD, w);
+    checkBinary(stp::BVMOD, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, SignedDivRemMod)
@@ -237,95 +323,95 @@ TEST(UnsignedIntervalExhaustive, SignedDivRemMod)
   // Not implemented yet (always null), but keeps them covered if they are.
   for (unsigned w = 1; w <= 4; w++)
   {
-    checkBinary(stp::SBVDIV, w);
-    checkBinary(stp::SBVREM, w);
-    checkBinary(stp::SBVMOD, w);
+    checkBinary(stp::SBVDIV, w, OVERAPPROXIMATES);
+    checkBinary(stp::SBVREM, w, OVERAPPROXIMATES);
+    checkBinary(stp::SBVMOD, w, OVERAPPROXIMATES);
   }
 }
 
 TEST(UnsignedIntervalExhaustive, Plus)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVPLUS, w);
+    checkBinary(stp::BVPLUS, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Mult)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVMULT, w);
+    checkBinary(stp::BVMULT, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvand)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVAND, w);
+    checkBinary(stp::BVAND, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvor)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVOR, w);
+    checkBinary(stp::BVOR, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvxor)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVXOR, w);
+    checkBinary(stp::BVXOR, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, RightShift)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVRIGHTSHIFT, w);
+    checkBinary(stp::BVRIGHTSHIFT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, LeftShift)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVLEFTSHIFT, w);
+    checkBinary(stp::BVLEFTSHIFT, w, OVERAPPROXIMATES);
 }
 
 TEST(UnsignedIntervalExhaustive, SignedRightShift)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkBinary(stp::BVSRSHIFT, w);
+    checkBinary(stp::BVSRSHIFT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Concat)
 {
   for (unsigned w0 = 1; w0 <= 3; w0++)
     for (unsigned w1 = 1; w1 <= 3; w1++)
-      checkBinary(stp::BVCONCAT, w0, w1, w0 + w1, false);
+      checkBinary(stp::BVCONCAT, w0, w1, w0 + w1, false, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvgt)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::BVGT, w);
+    checkPredicate(stp::BVGT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvsgt)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::BVSGT, w);
+    checkPredicate(stp::BVSGT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Eq)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::EQ, w);
+    checkPredicate(stp::EQ, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvnot)
 {
   for (unsigned w = 1; w <= 5; w++)
-    checkUnary(stp::BVNOT, w);
+    checkUnary(stp::BVNOT, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvuminus)
 {
   for (unsigned w = 1; w <= 5; w++)
-    checkUnary(stp::BVUMINUS, w);
+    checkUnary(stp::BVUMINUS, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvsx)
@@ -356,20 +442,27 @@ TEST(UnsignedIntervalExhaustive, Bvsx)
       for (uint64_t lo = 0; lo < N; lo++)
         for (uint64_t hi = lo; hi < N; hi++)
         {
+          uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+          for (uint64_t a = lo; a <= hi; a++)
+          {
+            bruteMin = std::min(bruteMin, table[a]);
+            bruteMax = std::max(bruteMax, table[a]);
+          }
+
           std::vector<const stp::UnsignedInterval*> children = {
               makeInterval(wIn, lo, hi), nullptr};
           stp::UnsignedInterval* result =
               c.analysis.dispatchToTransferFunctions(n, children);
 
-          if (result != nullptr)
-            for (uint64_t a = lo; a <= hi; a++)
-              if (!covered(stp::BVSX, wIn, result, wOut, table[a], a, wOut))
-              {
-                cleanup(children, result);
-                return;
-              }
-
+          const bool good = checkAgainstHull(stp::BVSX, wIn, result, wOut,
+                                             bruteMin, bruteMax, EXACT);
           cleanup(children, result);
+          if (!good)
+          {
+            ADD_FAILURE() << "child was [" << lo << ", " << hi
+                          << "], extended to width " << wOut;
+            return;
+          }
         }
     }
 }
@@ -388,9 +481,8 @@ TEST(UnsignedIntervalExhaustive, Extract)
         symbols.push_back(c.mgr.CreateSymbol("x", 0, w));
         symbols.push_back(c.mgr.CreateBVConst(32, hi));
         symbols.push_back(c.mgr.CreateBVConst(32, lo));
-        const stp::ASTNode n =
-            c.mgr.hashingNodeFactory->CreateTerm(stp::BVEXTRACT, wOut,
-                                                 symbols);
+        const stp::ASTNode n = c.mgr.hashingNodeFactory->CreateTerm(
+            stp::BVEXTRACT, wOut, symbols);
 
         std::vector<uint64_t> table(N);
         for (uint64_t a = 0; a < N; a++)
@@ -407,22 +499,29 @@ TEST(UnsignedIntervalExhaustive, Extract)
         for (uint64_t lo0 = 0; lo0 < N; lo0++)
           for (uint64_t hi0 = lo0; hi0 < N; hi0++)
           {
+            uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+            for (uint64_t a = lo0; a <= hi0; a++)
+            {
+              bruteMin = std::min(bruteMin, table[a]);
+              bruteMax = std::max(bruteMax, table[a]);
+            }
+
             std::vector<const stp::UnsignedInterval*> children = {
                 makeInterval(w, lo0, hi0), makeInterval(32, hi, hi),
                 makeInterval(32, lo, lo)};
             stp::UnsignedInterval* result =
                 c.analysis.dispatchToTransferFunctions(n, children);
 
-            if (result != nullptr)
-              for (uint64_t a = lo0; a <= hi0; a++)
-                if (!covered(stp::BVEXTRACT, w, result, wOut, table[a], a,
-                             lo))
-                {
-                  cleanup(children, result);
-                  return;
-                }
-
+            const bool good =
+                checkAgainstHull(stp::BVEXTRACT, w, result, wOut, bruteMin,
+                                 bruteMax, OVERAPPROXIMATES);
             cleanup(children, result);
+            if (!good)
+            {
+              ADD_FAILURE() << "child was [" << lo0 << ", " << hi0
+                            << "], extracting [" << hi << ":" << lo << "]";
+              return;
+            }
           }
       }
 }
@@ -451,6 +550,15 @@ TEST(UnsignedIntervalExhaustive, Ite)
           for (uint64_t lo2 = 0; lo2 < N; lo2++)
             for (uint64_t hi2 = lo2; hi2 < N; hi2++)
             {
+              uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+              for (const uint64_t condV : condValues[condChoice])
+              {
+                const uint64_t lo = condV ? lo1 : lo2;
+                const uint64_t hi = condV ? hi1 : hi2;
+                bruteMin = std::min(bruteMin, lo);
+                bruteMax = std::max(bruteMax, hi);
+              }
+
               const stp::UnsignedInterval* cond = nullptr;
               if (condChoice == 1)
                 cond = makeInterval(1, 0, 0);
@@ -462,20 +570,16 @@ TEST(UnsignedIntervalExhaustive, Ite)
               stp::UnsignedInterval* result =
                   c.analysis.dispatchToTransferFunctions(n, children);
 
-              if (result != nullptr)
-                for (const uint64_t condV : condValues[condChoice])
-                  for (uint64_t a = lo1; a <= hi1; a++)
-                    for (uint64_t b = lo2; b <= hi2; b++)
-                    {
-                      const uint64_t v = condV ? a : b;
-                      if (!covered(stp::ITE, w, result, w, v, a, b))
-                      {
-                        cleanup(children, result);
-                        return;
-                      }
-                    }
-
+              const bool good = checkAgainstHull(stp::ITE, w, result, w,
+                                                 bruteMin, bruteMax, EXACT);
               cleanup(children, result);
+              if (!good)
+              {
+                ADD_FAILURE() << "condition choice " << condChoice
+                              << ", branches [" << lo1 << ", " << hi1
+                              << "] and [" << lo2 << ", " << hi2 << "]";
+                return;
+              }
             }
   }
 }
@@ -511,6 +615,15 @@ TEST(UnsignedIntervalExhaustive, BooleanOps)
     for (unsigned choice0 = 0; choice0 < 3; choice0++)
       for (unsigned choice1 = 0; choice1 < 3; choice1++)
       {
+        uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+        for (const uint64_t a : boolValues[choice0])
+          for (const uint64_t b : boolValues[choice1])
+          {
+            const uint64_t v = op.eval(a, b);
+            bruteMin = std::min(bruteMin, v);
+            bruteMax = std::max(bruteMax, v);
+          }
+
         const stp::UnsignedInterval* i0 =
             choice0 == 0 ? nullptr : makeInterval(1, choice0 - 1, choice0 - 1);
         const stp::UnsignedInterval* i1 =
@@ -520,16 +633,14 @@ TEST(UnsignedIntervalExhaustive, BooleanOps)
         stp::UnsignedInterval* result =
             c.analysis.dispatchToTransferFunctions(n, children);
 
-        if (result != nullptr)
-          for (const uint64_t a : boolValues[choice0])
-            for (const uint64_t b : boolValues[choice1])
-              if (!covered(op.kind, 1, result, 1, op.eval(a, b), a, b))
-              {
-                cleanup(children, result);
-                return;
-              }
-
+        const bool good =
+            checkAgainstHull(op.kind, 1, result, 1, bruteMin, bruteMax, EXACT);
         cleanup(children, result);
+        if (!good)
+        {
+          ADD_FAILURE() << "choices were " << choice0 << " and " << choice1;
+          return;
+        }
       }
   }
 
@@ -542,6 +653,13 @@ TEST(UnsignedIntervalExhaustive, BooleanOps)
 
     for (unsigned choice = 0; choice < 3; choice++)
     {
+      uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+      for (const uint64_t a : boolValues[choice])
+      {
+        bruteMin = std::min(bruteMin, a ^ 1);
+        bruteMax = std::max(bruteMax, a ^ 1);
+      }
+
       const stp::UnsignedInterval* i0 =
           choice == 0 ? nullptr : makeInterval(1, choice - 1, choice - 1);
 
@@ -549,15 +667,14 @@ TEST(UnsignedIntervalExhaustive, BooleanOps)
       stp::UnsignedInterval* result =
           c.analysis.dispatchToTransferFunctions(n, children);
 
-      if (result != nullptr)
-        for (const uint64_t a : boolValues[choice])
-          if (!covered(stp::NOT, 1, result, 1, a ^ 1, a, 0))
-          {
-            cleanup(children, result);
-            return;
-          }
-
+      const bool good =
+          checkAgainstHull(stp::NOT, 1, result, 1, bruteMin, bruteMax, EXACT);
       cleanup(children, result);
+      if (!good)
+      {
+        ADD_FAILURE() << "choice was " << choice;
+        return;
+      }
     }
   }
 }

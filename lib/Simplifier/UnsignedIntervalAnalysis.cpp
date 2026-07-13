@@ -666,7 +666,7 @@ namespace stp
         }
         break;
 
-      case BVLEFTSHIFT:
+      case BVLEFTSHIFT: // OVER-APPROXIMATION
         if (knownC0 || knownC1)
         {
           const UnsignedInterval* c0 = children[0];
