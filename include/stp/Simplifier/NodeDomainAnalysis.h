@@ -66,7 +66,6 @@ class NodeDomainAnalysis
 
   UnsignedIntervalAnalysis intervalAnalysis;
 
-  unsigned todo = 0;
   unsigned tighten = 0;
 
   void stats();
