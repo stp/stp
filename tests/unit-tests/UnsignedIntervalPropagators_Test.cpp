@@ -204,6 +204,60 @@ TEST(UnsignedIntervalPropagators, UremIsIdentityWhenDividendBelowDivisor)
   cleanup(children, result);
 }
 
+// [8,9] mod 5: both bounds have quotient 1, so the remainders run from
+// 8 mod 5 to 9 mod 5 exactly.
+TEST(UnsignedIntervalPropagators, UremExactForConstantDivisor)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMOD, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 8, 9), makeInterval(width, 5, 5)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 3, 4);
+  cleanup(children, result);
+}
+
+// [4,7] mod 3 crosses a multiple of the divisor, so every remainder is
+// reachable: [0, 2].
+TEST(UnsignedIntervalPropagators, UremConstantDivisorCrossingMultiple)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMOD, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 4, 7), makeInterval(width, 3, 3)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0, 2);
+  cleanup(children, result);
+}
+
+// [0,0] mod [0,5]: zero mod anything is zero. The remainder never exceeds
+// the dividend, even when the divisor might be zero.
+TEST(UnsignedIntervalPropagators, UremCappedByDividendWithMaybeZeroDivisor)
+{
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, width);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, width);
+  stp::ASTNode n = makeTerm(c, stp::BVMOD, width, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(width, 0, 0), makeInterval(width, 0, 5)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, width, 0, 0);
+  cleanup(children, result);
+}
+
 // [0,5] mod [0,3]: if the divisor is zero the result is the dividend (<= 5),
 // otherwise it is below the divisor (<= 2). So the result is at most 5.
 TEST(UnsignedIntervalPropagators, UremWhenDivisorMightBeZero)

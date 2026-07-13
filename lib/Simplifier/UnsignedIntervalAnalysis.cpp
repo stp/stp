@@ -596,6 +596,49 @@ namespace stp
             if (knownC0)
               result = createInterval(children[0]->minV, children[0]->maxV);
           }
+          else if (children[1]->isConstant())
+          {
+            // A constant non-zero divisor is exact: the dividend runs over
+            // every value between its bounds, so if the bounds have the
+            // same quotient the remainders run from one bound's to the
+            // other's, and otherwise a multiple of the divisor is crossed
+            // and every remainder is reachable.
+            const CBV divisor = children[1]->minV;
+            CBV remainderMin = CONSTANTBV::BitVector_Create(width, true);
+            CBV remainderMax = CONSTANTBV::BitVector_Create(width, true);
+            CBV quotientMin = CONSTANTBV::BitVector_Create(width, true);
+            CBV quotientMax = CONSTANTBV::BitVector_Create(width, true);
+
+            CBV dividend = CONSTANTBV::BitVector_Clone(children[0]->minV);
+            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+                quotientMin, dividend, divisor, remainderMin);
+            assert(0 == e);
+            CONSTANTBV::BitVector_Destroy(dividend);
+
+            dividend = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+            e = CONSTANTBV::BitVector_Div_Pos(quotientMax, dividend, divisor,
+                                              remainderMax);
+            assert(0 == e);
+            CONSTANTBV::BitVector_Destroy(dividend);
+
+            if (CONSTANTBV::BitVector_Lexicompare(quotientMin, quotientMax) ==
+                0)
+            {
+              result = createInterval(remainderMin, remainderMax);
+            }
+            else
+            {
+              CBV divisorLess1 = CONSTANTBV::BitVector_Clone(divisor);
+              CONSTANTBV::BitVector_decrement(divisorLess1);
+              result = createInterval(getEmptyCBV(width), divisorLess1);
+              CONSTANTBV::BitVector_Destroy(divisorLess1);
+            }
+
+            CONSTANTBV::BitVector_Destroy(remainderMin);
+            CONSTANTBV::BitVector_Destroy(remainderMax);
+            CONSTANTBV::BitVector_Destroy(quotientMin);
+            CONSTANTBV::BitVector_Destroy(quotientMax);
+          }
           else if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
           {
             // The divisor can't be zero.
@@ -614,7 +657,7 @@ namespace stp
               CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
               CONSTANTBV::BitVector_decrement(result->maxV);
 
-              // If the top is known, and it's maximum is less, use that.
+              // The remainder never exceeds the dividend.
               if (knownC0 &&
                   CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
                                                     result->maxV) < 0)
@@ -623,16 +666,11 @@ namespace stp
           }
           else if (knownC0)
           {
-            // The divisor might be zero. If it is, the remainder is the
-            // dividend; if it isn't, the remainder is below the divisor's
-            // maximum. Take the larger of the two upper bounds.
+            // The divisor might be zero. The remainder never exceeds the
+            // dividend, and dividing the biggest dividend by zero reaches
+            // that bound, so the maximum is the dividend's maximum.
             result = freshUnsignedInterval(width);
-            CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
-            CONSTANTBV::BitVector_decrement(result->maxV);
-
-            if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
-                                                  result->maxV) > 0)
-              CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+            CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
           }
         }
         break;
