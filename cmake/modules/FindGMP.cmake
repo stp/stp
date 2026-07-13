@@ -1,5 +1,8 @@
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PC_GMP "gmp")
+# pkg-config is only used for hints; it is typically absent on Windows.
+find_package(PkgConfig QUIET)
+if (PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_GMP "gmp")
+endif()
 
 set(GMP_DEFINITIONS ${PC_GMP_CFLAGS_OTHER})
 

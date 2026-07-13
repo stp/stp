@@ -61,11 +61,6 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
-      env:
-        # gcc-built binaries use DT_RUNPATH, which is not searched when
-        # resolving libcryptominisat5's own dependencies on libcadiback.so
-        # and libcadical.so.
-        LD_LIBRARY_PATH: ${{ github.workspace }}/deps/cadiback:${{ github.workspace }}/deps/cadical/build
 
   build-windows:
     name: windows
@@ -116,7 +111,7 @@ jobs:
         cmake --build build --config Release --target install
 
     - name: Configure
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DFORCE_CMS=ON -DENABLE_PYTHON_INTERFACE=OFF "-Dcryptominisat5_DIR=$env:CMS_ROOT\lib\cmake\cryptominisat5" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DFORCE_CMS=ON -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-Dcryptominisat5_DIR=$env:CMS_ROOT\lib\cmake\cryptominisat5" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
