@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
+# AUTHORS: Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,20 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-#AddGTestSuite(unit-tests)
-# -----------------------------------------------------------------------------
-# C API tests (these should be .cpp or .cxx files because GTest needs C++)
-# -----------------------------------------------------------------------------
-AddSTPGTest(PropagateEqualities_Test.cpp)
-AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
-AddSTPGTest(FindPureLiterals_Test.cpp)
-AddSTPGTest(Flatten_Test.cpp)
-AddSTPGTest(NodeDomainAnalysis_Test.cpp)
-AddSTPGTest(SplitExtracts_Test.cpp)
-AddSTPGTest(StrengthReduction_Test.cpp)
-AddSTPGTest(AlwaysTrue_Test.cpp)
-AddSTPGTest(MergeSame_Test.cpp)
-AddSTPGTest(ConstantBitP_TransferFunctions_Test.cpp)
-AddSTPGTest(UnsignedIntervalAnalysis_Test.cpp)
-AddSTPGTest(ConstantBitPropagation_Test.cpp)
 
+add_executable(cvc_to_c
+ cvc-to-c.cpp
+)
+target_link_libraries(cvc_to_c
+ stp
+)
