@@ -31,6 +31,7 @@ AddSTPGTest(SplitExtracts_Test.cpp)
 AddSTPGTest(StrengthReduction_Test.cpp)
 AddSTPGTest(UnsignedIntervalPropagators_Test.cpp)
 AddSTPGTest(UnsignedIntervalExhaustive_Test.cpp)
+AddSTPGTest(UnsignedIntervalWide_Test.cpp)
 AddSTPGTest(AlwaysTrue_Test.cpp)
 AddSTPGTest(MergeSame_Test.cpp)
 
