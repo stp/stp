@@ -70,6 +70,8 @@ jobs:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
       CMS_ROOT: ${{ github.workspace }}\cryptominisat\install
       VCPKG_ROOT_DIR: C:\vcpkg\installed\x64-windows-static
+      # CryptoMiniSat locates GMP through pkg-config.
+      PKG_CONFIG_PATH: C:\vcpkg\installed\x64-windows-static\lib\pkgconfig
       # Build ABC single-threaded: its pthread/atomics code paths don't
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
@@ -85,8 +87,8 @@ jobs:
       with:
           submodules: 'true'
 
-    - name: Install flex and bison
-      run: choco install winflexbison3 --no-progress
+    - name: Install flex, bison and pkg-config
+      run: choco install winflexbison3 pkgconfiglite --no-progress
 
     - name: Install zlib and gmp
       run: |
@@ -107,7 +109,7 @@ jobs:
       run: |
         git clone --depth 1 --branch release/v5.14.7 https://github.com/msoos/cryptominisat
         cd cryptominisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
+        cmake -B build -A x64 -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
         cmake --build build --config Release --target install
 
     - name: Configure
