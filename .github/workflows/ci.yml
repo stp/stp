@@ -73,6 +73,8 @@ jobs:
 
     env:
       MINISAT_ROOT: ${{ github.workspace }}\minisat\install
+      CMS_ROOT: ${{ github.workspace }}\cryptominisat\install
+      VCPKG_ROOT_DIR: C:\vcpkg\installed\x64-windows-static
       # Build ABC single-threaded: its pthread/atomics code paths don't
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
@@ -91,11 +93,11 @@ jobs:
     - name: Install flex and bison
       run: choco install winflexbison3 --no-progress
 
-    - name: Install zlib
+    - name: Install zlib and gmp
       run: |
-        vcpkg install zlib:x64-windows-static
+        vcpkg install zlib:x64-windows-static gmp:x64-windows-static
         dir C:\vcpkg\installed\x64-windows-static\lib
-        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *.lib | Select-Object -First 1).FullName
+        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *z*.lib | Select-Object -First 1).FullName
         if (-not $lib) { throw "no zlib .lib found" }
         "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -106,8 +108,15 @@ jobs:
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
+    - name: Build cryptominisat
+      run: |
+        git clone --depth 1 --branch release/v5.14.7 https://github.com/msoos/cryptominisat
+        cd cryptominisat
+        cmake -B build -A x64 -DSTATICCOMPILE=ON -DENABLE_TESTING=OFF -DENABLE_PYTHON_INTERFACE=OFF "-DCMAKE_PREFIX_PATH=$env:VCPKG_ROOT_DIR" "-DCMAKE_INSTALL_PREFIX=$env:CMS_ROOT" .
+        cmake --build build --config Release --target install
+
     - name: Configure
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DFORCE_CMS=ON -DENABLE_PYTHON_INTERFACE=OFF "-Dcryptominisat5_DIR=$env:CMS_ROOT\lib\cmake\cryptominisat5" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
