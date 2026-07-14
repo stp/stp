@@ -1549,35 +1549,65 @@ namespace stp
       case BVPLUS:
         if (knownC0 && knownC1)
         {
-          //  >=2 arity.
-          result = freshUnsignedInterval(width);
-          CONSTANTBV::BitVector_Flip(result->maxV); // make the max zero too.
+          //  >=2 arity. The sum of intervals takes every value between
+          // the total of the minimums and the total of the maximums, so
+          // when the totals lie in the same 2^width block the exact hull
+          // is their low bits, and otherwise the sums cross a block
+          // boundary and reach both zero and all ones. Comparing the
+          // totals (rather than the carries of each partial addition)
+          // keeps cases where a prefix crosses a boundary but the
+          // remaining children pull the bounds back into one block.
+          bool anyComplete = false;
+          for (unsigned i = 0; i < children.size() && !anyComplete; i++)
+            anyComplete = children[i]->isComplete();
+          if (anyComplete)
+            break; // the sums cover a whole block's worth of values
 
-          bool min_carry;
-          bool max_carry;
-
-          for (size_t i = 0; i < children.size(); i++)
+          const unsigned K = chunksOf(width);
+          uint64_t stackBuf[32];
+          std::vector<uint64_t> heapBuf;
+          uint64_t* buf = stackBuf;
+          if (2 * K > 32)
           {
-            if (children[i]->isComplete())
-            {
-              delete result;
-              result = nullptr;
-              break;
-            }
+            heapBuf.resize(2 * K);
+            buf = heapBuf.data();
+          }
+          uint64_t* mnSum = buf;
+          uint64_t* mxSum = buf + K;
 
-            max_carry = false;
-            min_carry = false;
-
-            CONSTANTBV::BitVector_add(result->maxV, result->maxV,
-                                      children[i]->maxV, &max_carry);
-            CONSTANTBV::BitVector_add(result->minV, result->minV,
-                                      children[i]->minV, &min_carry);
-            if (min_carry != max_carry)
+          uint128 mnCarry = 0, mxCarry = 0;
+          for (unsigned k = 0; k < K; k++)
+          {
+            uint128 mns = mnCarry, mxs = mxCarry;
+            for (unsigned i = 0; i < children.size(); i++)
             {
-              delete result;
-              result = nullptr;
-              break;
+              mns += chunk64(children[i]->minV, k);
+              mxs += chunk64(children[i]->maxV, k);
             }
+            mnSum[k] = (uint64_t)mns;
+            mxSum[k] = (uint64_t)mxs;
+            mnCarry = mns >> 64;
+            mxCarry = mxs >> 64;
+          }
+
+          // The totals share a block exactly when they agree above the
+          // width: in the carry out of the top chunk and in the top
+          // chunk's bits at and above the width.
+          const unsigned topBits = width - 64 * (K - 1);
+          const uint64_t excessMask =
+              (topBits >= 64) ? 0 : ~(((uint64_t)1 << topBits) - 1);
+          if (mnCarry == mxCarry &&
+              (mnSum[K - 1] & excessMask) == (mxSum[K - 1] & excessMask))
+          {
+            CBV mn = CONSTANTBV::BitVector_Create(width, true);
+            CBV mx = CONSTANTBV::BitVector_Create(width, true);
+            for (unsigned k = 0; k < K; k++)
+            {
+              setChunk64(mn, k, mnSum[k]);
+              setChunk64(mx, k, mxSum[k]);
+            }
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(mn, mx);
           }
         }
         break;
