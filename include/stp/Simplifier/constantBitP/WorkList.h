@@ -94,11 +94,26 @@ public:
       return;
 
     // cerr << "WorkList Inserting:" << n.GetNodeNum() << endl;
-    if (n.GetKind() == stp::BVMULT || n.GetKind() == stp::BVPLUS ||
-        n.GetKind() == stp::BVDIV)
-      expensive_workList.insert(n);
-    else
-      cheap_workList.insert(n);
+    // The division family costs hundreds of microseconds per visit at wide
+    // bit-widths, one to three orders of magnitude more than the other
+    // transfer functions, so process those only once the cheap worklist has
+    // quietened down. BVPLUS is kept here for its n-ary forms: the column
+    // algorithm's cost grows with the number of children.
+    switch (n.GetKind())
+    {
+      case stp::BVMULT:
+      case stp::BVPLUS:
+      case stp::BVDIV:
+      case stp::BVMOD:
+      case stp::SBVDIV:
+      case stp::SBVREM:
+      case stp::SBVMOD:
+        expensive_workList.insert(n);
+        break;
+      default:
+        cheap_workList.insert(n);
+        break;
+    }
   }
 
   stp::ASTNode pop()
