@@ -61,9 +61,10 @@ class StrengthReduction
   ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
 
   ASTNode visit(const ASTNode& n, stp::NodeDomainAnalysis& nda, ASTNodeMap& fromTo);
-  
+
   ASTNode strengthReduction(const ASTNode& n, const NodeToFixedBitsMap& visited);
   ASTNode strengthReduction(const ASTNode& n, const NodeToUnsignedIntervalMap& visited);
+  ASTNode strengthReduction(const ASTNode& n, const NodeToValueSetMap& visited);
 
 public:
 
@@ -77,10 +78,11 @@ public:
   
   ~StrengthReduction();
 
-  //TODO merge these two toplevel funtions, they do the same thing..
+  //TODO merge these toplevel funtions, they do the same thing..
   //Replace nodes with simpler nodes.
   ASTNode topLevel(const ASTNode& top, const NodeToFixedBitsMap& visited);
   ASTNode topLevel(const ASTNode& top, const NodeToUnsignedIntervalMap& visited);
+  ASTNode topLevel(const ASTNode& top, const NodeToValueSetMap& visited);
 
   // New style invocation.
   ASTNode topLevel(const ASTNode& top, NodeDomainAnalysis& nda);
