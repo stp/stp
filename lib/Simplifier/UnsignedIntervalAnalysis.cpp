@@ -82,30 +82,26 @@ namespace stp
     // untouched and its chunks below are all-zero against an upper
     // bound or all-one against a lower bound. ----
 
-    // Bits [64k, 64k+63] of x as a machine word, read straight from the
-    // storage words. The library keeps the bits above the width zero.
+    // Bits [64k, 64k+63] of x as a machine word. Chunk_Read clamps at
+    // the vector's width and reads zero past it, so no guards are
+    // needed. Two 32-bit reads because Chunk_Read is capped at the bits
+    // of an unsigned long, which isn't 64 everywhere.
     uint64_t chunk64(const CBV x, unsigned k)
     {
-      const unsigned wordBits = 8 * sizeof(*x);
-      const unsigned wordsPerChunk = 64 / wordBits;
-      const unsigned nbits = bits_(x);
-      uint64_t r = 0;
-      for (unsigned w = k * wordsPerChunk;
-           w < (k + 1) * wordsPerChunk && w * wordBits < nbits; w++)
-        r |= (uint64_t)x[w] << ((w % wordsPerChunk) * wordBits);
+      const unsigned offset = 64 * k;
+      uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
+      r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
+           << 32;
       return r;
     }
 
-    // The inverse of chunk64, writing straight into the storage words.
-    // The value's bits above the vector's width must be zero.
+    // The inverse of chunk64. The value's bits above the vector's width
+    // must be zero.
     void setChunk64(CBV x, unsigned k, uint64_t value)
     {
-      const unsigned wordBits = 8 * sizeof(*x);
-      const unsigned wordsPerChunk = 64 / wordBits;
-      const unsigned nbits = bits_(x);
-      for (unsigned w = k * wordsPerChunk;
-           w < (k + 1) * wordsPerChunk && w * wordBits < nbits; w++)
-        x[w] = value >> ((w % wordsPerChunk) * wordBits);
+      const unsigned offset = 64 * k;
+      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset, value);
+      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset + 32, value >> 32);
     }
 
     // Which operand a chunk kernel changed.
