@@ -1666,21 +1666,13 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
   assert(output.getWidth() == children[0]->getWidth());
   assert(output.getWidth() == children[1]->getWidth());
 
-  if (children[0] == children[1]) // same pointer: x smod x = 0.
+  // Same pointer. This doesn't imply the operands are the same node:
+  // NodeDomainAnalysis hands every unknown operand of a width the same
+  // placeholder object. So nothing can be concluded (not even
+  // x smod x = 0); skip rather than propagate through aliased operands.
+  if (children[0] == children[1])
   {
-    Result r = NO_CHANGE;
-    for (unsigned i = 0; i < output.getWidth(); i++)
-    {
-      if (output.isFixedToOne(i))
-        return CONFLICT;
-      if (!output.isFixed(i))
-      {
-        output.setFixed(i, true);
-        output.setValue(i, false);
-        r = CHANGED;
-      }
-    }
-    return r;
+    return NO_CHANGE;
   }
 
   const Result r0 = bvSignedModulusStructural(children, output, bm);
