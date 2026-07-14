@@ -470,45 +470,70 @@ static Result ashrCore(const unsigned bitWidth, PackedBits& packedOp,
 
     if (shiftOutPossible)
     {
-      // Refine a copy of the shift with (shift >= bitWidth), and union it in.
-      FixedBits bitWidthFB = FixedBits::fromUnsignedInt(bitWidth, bitWidth);
-      FixedBits truth(1, true);
-      truth.setFixed(0, true);
-      truth.setValue(0, true);
-      FixedBits working(bitWidth, false);
-      for (unsigned i = 0; i < bitWidth; i++)
-        if (packedShift.isFixedBit(i))
-        {
-          working.setFixed(i, true);
-          working.setValue(i, packedShift.valueBit(i));
-        }
-
-      vector<FixedBits*> args;
-      args.push_back(&working);
-      args.push_back(&bitWidthFB);
-      Result r = bvGreaterThanEqualsBothWays(args, truth);
-      assert(CONFLICT != r);
-      (void)r;
-
-      for (unsigned i = 0; i < bitWidth; i++)
+      // What "shift >= bitWidth" forces, exactly as the maximally precise
+      // comparison propagator would: possibleShift[bitWidth] was only set
+      // when the maximum admitted shift value is >= bitWidth, so for every
+      // unfixed bit an admitted value >= bitWidth with that bit one exists
+      // (the maximum itself). An unfixed bit is therefore only ever forced
+      // to one, precisely when clearing it drops the maximum admitted
+      // value below bitWidth.
+      uint64_t* wFixed = (uint64_t*)alloca(sizeof(uint64_t) * words);
+      uint64_t* wValue = (uint64_t*)alloca(sizeof(uint64_t) * words);
+      uint64_t* maxAdm = (uint64_t*)alloca(sizeof(uint64_t) * words);
+      unsigned nonZeroHighWords = 0;
+      for (unsigned j = 0; j < words; j++)
       {
-        const unsigned j = i >> 6;
-        const uint64_t bit = (uint64_t)1 << (i & 63);
-        if (nPossible > 0)
+        wFixed[j] = packedShift.fixed[j];
+        wValue[j] = packedShift.value[j];
+        maxAdm[j] = (packedShift.value[j] | ~packedShift.fixed[j]) &
+                    PackedBits::widthMask(j, bitWidth);
+        if (j > 0 && maxAdm[j] != 0)
+          nonZeroHighWords++;
+      }
+
+      for (unsigned j = 0; j < words; j++)
+      {
+        uint64_t pending = ~packedShift.fixed[j] &
+                           PackedBits::widthMask(j, bitWidth);
+        while (pending)
         {
-          // Union: drop bits "working" leaves open or disagrees on.
-          if (!working.isFixed(i) ||
-              ((vFixed[j] & bit) && working.getValue(i) != ((vValue[j] & bit) != 0)))
-            vFixed[j] &= ~bit;
-        }
-        else if (working.isFixed(i))
-        {
-          // Only shifts >= bitWidth are possible.
-          vFixed[j] |= bit;
-          if (working.getValue(i))
-            vValue[j] |= bit;
+          const unsigned b = __builtin_ctzll(pending);
+          pending &= pending - 1;
+          const uint64_t bit = (uint64_t)1 << b;
+
+          // Is (maxAdm with this bit cleared) < bitWidth?
+          bool less;
+          if (j == 0)
+            less = (nonZeroHighWords == 0) &&
+                   ((maxAdm[0] & ~bit) < (uint64_t)bitWidth);
           else
-            vValue[j] &= ~bit;
+            less = (nonZeroHighWords == (maxAdm[j] == bit ? 1u : 0u)) &&
+                   (maxAdm[0] < (uint64_t)bitWidth) &&
+                   ((maxAdm[j] & ~bit) == 0);
+          if (less)
+          {
+            wFixed[j] |= bit;
+            wValue[j] |= bit;
+          }
+        }
+      }
+
+      if (nPossible > 0)
+      {
+        // Union: drop bits the >= case leaves open or disagrees on.
+        for (unsigned j = 0; j < words; j++)
+        {
+          vFixed[j] &= wFixed[j] & ~(vValue[j] ^ wValue[j]);
+          vValue[j] &= vFixed[j];
+        }
+      }
+      else
+      {
+        // Only shifts >= bitWidth are possible.
+        for (unsigned j = 0; j < words; j++)
+        {
+          vFixed[j] = wFixed[j];
+          vValue[j] = wValue[j];
         }
       }
     }
