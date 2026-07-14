@@ -99,60 +99,182 @@ FixedBits cbvToFixedBits(stp::CBV low, unsigned width)
   return lowBits;
 }
 
+namespace
+{
+typedef unsigned long long u64;
+
+// Bits of word w with global index below `bound`.
+inline u64 rangeBelow(unsigned w, unsigned bound)
+{
+  const u64 base = (u64)w * 64;
+  if (base + 64 <= bound)
+    return ~(u64)0;
+  if (base >= bound)
+    return 0;
+  return ((u64)1 << (bound - base)) - 1;
+}
+}
+
 // The value "b" is in the range [low,high] inclusive.
-// Unfortunately it's not idempotent, <....1> [5,6], doesn't completely set it.
+// This computes directly what the two maximally precise comparison
+// propagations (b <= high, then low <= b) and the shared-prefix rule
+// deduce. An unfixed bit is forced to zero exactly when raising it pushes
+// the minimum admitted value past high (2^i > high - minAdmitted), and
+// forced to one exactly when clearing it drops the maximum admitted value
+// below low (2^i > maxAdmitted - low); the leading bits where low and
+// high agree are then fixed outright.
+// Like its predecessor it's not idempotent: <....1> [5,6] doesn't
+// completely set it.
 Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
 {
-  FixedBits init = b;
-  const int width = b.getWidth();
+  static_assert(sizeof(unsigned int) == 4, "CBV units are 32-bit");
+  const unsigned width = b.getWidth();
+  const unsigned words = (width + 63) / 64;
+  const unsigned units = (width + 31) / 32;
 
-  FixedBits highBits = cbvToFixedBits(high, width);
-  FixedBits lowBits = cbvToFixedBits(low, width);
+  u64* buf = (u64*)alloca(sizeof(u64) * 5 * words);
+  u64* bF = buf;             // fixedness.
+  u64* bV = buf + words;     // fixed ones = the minimum admitted value.
+  u64* maxAdm = buf + 2 * words;
+  u64* lowW = buf + 3 * words;
+  u64* highW = buf + 4 * words;
+  b.fillPackedWords(bF, bV);
 
-  vector<FixedBits*> c;
-  c.push_back(&b);
-  c.push_back(&highBits);
-
-  FixedBits t(1, true);
-  t.setFixed(0, true);
-  t.setValue(0, true);
-  Result result1 = bvLessThanEqualsBothWays(c, t);
-
-  c.clear();
-  c.push_back(&lowBits);
-  c.push_back(&b);
-  Result result2 = bvLessThanEqualsBothWays(c, t);
-
-  Result result = merge(result1, result2);
-  if (result == CONFLICT)
-    return CONFLICT;
-
-  for (int i = width - 1; i >= 0; i--)
+  for (unsigned w = 0; w < words; w++)
   {
-    if ((CONSTANTBV::BitVector_bit_test(low, i) ==
-         CONSTANTBV::BitVector_bit_test(high, i)))
+    u64 lo = low[2 * w], hi = high[2 * w];
+    if (2 * w + 1 < units)
     {
-      bool toFix = CONSTANTBV::BitVector_bit_test(low, i);
-      if (b.isFixed(i))
-      {
-        if (b.getValue(i) != toFix)
-        {
-          return CONFLICT;
-        }
-      }
-      else
-      {
-        b.setFixed(i, true);
-        b.setValue(i, toFix);
-      }
+      lo |= (u64)low[2 * w + 1] << 32;
+      hi |= (u64)high[2 * w + 1] << 32;
     }
-    else
-      break;
+    lowW[w] = lo;
+    highW[w] = hi;
+    maxAdm[w] = (bV[w] | ~bF[w]) & rangeBelow(w, width);
   }
 
-  if (!FixedBits::equals(init, b))
-    return CHANGED;
-  return NO_CHANGE;
+  // Lexicographic multiword comparisons, top word first.
+  int minVsHigh = 0, maxVsLow = 0;
+  for (int w = (int)words - 1; w >= 0; w--)
+  {
+    if (minVsHigh == 0 && bV[w] != highW[w])
+      minVsHigh = bV[w] < highW[w] ? -1 : 1;
+    if (maxVsLow == 0 && maxAdm[w] != lowW[w])
+      maxVsLow = maxAdm[w] < lowW[w] ? -1 : 1;
+  }
+  if (minVsHigh > 0 || maxVsLow < 0)
+    return CONFLICT; // no admitted value lies in the range.
+
+  bool changed = false;
+
+  // b <= high: bits that cannot be one. diff = high - minAdmitted; any
+  // unfixed bit at or above diff's bit-length would overshoot.
+  {
+    unsigned bitLen = 0;
+    u64 borrow = 0;
+    for (unsigned w = 0; w < words; w++)
+    {
+      const u64 hw = highW[w], sub = bV[w];
+      const u64 d1 = hw - sub;
+      const bool under1 = hw < sub;
+      const u64 d = d1 - borrow;
+      const bool under2 = d1 < borrow;
+      borrow = (under1 || under2) ? 1 : 0;
+      if (d != 0)
+        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+    }
+    for (unsigned w = 0; w < words; w++)
+    {
+      u64 forced0 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
+      if (forced0 == 0)
+        continue;
+      changed = true;
+      bF[w] |= forced0;
+      maxAdm[w] &= ~forced0;
+      while (forced0)
+      {
+        const unsigned bit = __builtin_ctzll(forced0);
+        forced0 &= forced0 - 1;
+        b.setFixed(w * 64 + bit, true);
+        b.setValue(w * 64 + bit, false);
+      }
+    }
+  }
+
+  // low <= b, on the updated maximum: bits that cannot be zero.
+  {
+    // Re-check: forcing zeros can only lower the maximum.
+    int cmp = 0;
+    for (int w = (int)words - 1; w >= 0 && cmp == 0; w--)
+      if (maxAdm[w] != lowW[w])
+        cmp = maxAdm[w] < lowW[w] ? -1 : 1;
+    if (cmp < 0)
+      return CONFLICT;
+
+    unsigned bitLen = 0;
+    u64 borrow = 0;
+    for (unsigned w = 0; w < words; w++)
+    {
+      const u64 mw = maxAdm[w], sub = lowW[w];
+      const u64 d1 = mw - sub;
+      const bool under1 = mw < sub;
+      const u64 d = d1 - borrow;
+      const bool under2 = d1 < borrow;
+      borrow = (under1 || under2) ? 1 : 0;
+      if (d != 0)
+        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+    }
+    for (unsigned w = 0; w < words; w++)
+    {
+      u64 forced1 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
+      if (forced1 == 0)
+        continue;
+      changed = true;
+      bF[w] |= forced1;
+      bV[w] |= forced1;
+      while (forced1)
+      {
+        const unsigned bit = __builtin_ctzll(forced1);
+        forced1 &= forced1 - 1;
+        b.setFixed(w * 64 + bit, true);
+        b.setValue(w * 64 + bit, true);
+      }
+    }
+  }
+
+  // The leading bits where low and high agree are the value's bits.
+  {
+    unsigned firstDiffer = 0; // the prefix covers bits above this.
+    for (int w = (int)words - 1; w >= 0; w--)
+    {
+      const u64 d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
+      if (d != 0)
+      {
+        firstDiffer = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        break;
+      }
+    }
+    for (unsigned w = 0; w < words; w++)
+    {
+      const u64 prefix =
+          ~rangeBelow(w, firstDiffer) & rangeBelow(w, width);
+      if (prefix == 0)
+        continue;
+      if (prefix & bF[w] & (bV[w] ^ lowW[w]))
+        return CONFLICT; // fixed to the other value.
+      u64 newFix = prefix & ~bF[w];
+      changed |= newFix != 0;
+      while (newFix)
+      {
+        const unsigned bit = __builtin_ctzll(newFix);
+        newFix &= newFix - 1;
+        b.setFixed(w * 64 + bit, true);
+        b.setValue(w * 64 + bit, (lowW[w] >> bit) & 1);
+      }
+    }
+  }
+
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
