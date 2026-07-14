@@ -32,6 +32,7 @@ add_library(simplifier OBJECT
     StrengthReduction.cpp
     AIGSimplifyPropositionalCore.cpp
     UnsignedIntervalAnalysis.cpp
+    ValueSetAnalysis.cpp
     Flatten.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp

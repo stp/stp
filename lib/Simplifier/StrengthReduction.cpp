@@ -106,7 +106,10 @@ namespace stp
 
     nda.buildMap(newN);
     newN = strengthReduction(newN, *nda.getIntervalMap());
-    
+
+    nda.buildMap(newN);
+    newN = strengthReduction(newN, *nda.getValueSetMap());
+
     cache.insert({n,newN});
     return newN;
   }
@@ -410,6 +413,115 @@ namespace stp
     return newN;
   }
 
+  // Whether every node of the term is an ITE or a constant, so it takes
+  // one of the constants' values. Bounded so huge trees aren't walked.
+  bool StrengthReduction::isIteConstTree(const ASTNode& n)
+  {
+    ASTNodeSet visited;
+    vector<ASTNode> toVisit = {n};
+
+    while (!toVisit.empty())
+    {
+      const ASTNode current = toVisit.back();
+      toVisit.pop_back();
+
+      if (!visited.insert(current).second)
+        continue;
+
+      if (visited.size() > 64)
+        return false;
+
+      if (current.GetKind() == BVCONST)
+        continue;
+
+      if (current.GetKind() != ITE)
+        return false;
+
+      toVisit.push_back(current[1]);
+      toVisit.push_back(current[2]);
+    }
+    return true;
+  }
+
+  // Replaces each constant leaf of an ITE tree with a test that the
+  // leaf equals the given value, keeping the ITE structure. The cache
+  // stops shared subtrees being rebuilt repeatedly.
+  ASTNode StrengthReduction::replaceIteConst(const ASTNode& n,
+                                             const ASTNode& newVal,
+                                             ASTNodeMap& cache)
+  {
+    const auto it = cache.find(n);
+    if (it != cache.end())
+      return it->second;
+
+    ASTNode result;
+    if (n.GetKind() == BVCONST)
+      result = nf->CreateNode(EQ, newVal, n);
+    else
+    {
+      assert(n.GetKind() == ITE);
+      result = nf->CreateNode(ITE, n[0], replaceIteConst(n[1], newVal, cache),
+                              replaceIteConst(n[2], newVal, cache));
+    }
+
+    cache.insert({n, result});
+    return result;
+  }
+
+  ASTNode StrengthReduction::strengthReduction(const ASTNode& n, const NodeToValueSetMap& visited)
+  {
+    // An equality where each side is an ITE tree over constants, and
+    // exactly one constant is shared: the equality holds just when both
+    // sides select the shared value. Disjoint sides don't need handling
+    // here; the equality's own domain is then a constant false, which
+    // the other passes replace.
+    if (n.GetKind() != EQ)
+      return n;
+
+    const auto l = visited.find(n[0]);
+    const auto r = visited.find(n[1]);
+    if (l == visited.end() || r == visited.end() || l->second == nullptr ||
+        r->second == nullptr)
+      return n;
+
+    const std::vector<CBV>& left = l->second->values;
+    const std::vector<CBV>& right = r->second->values;
+
+    // Both are sorted, so the intersection is a merge walk.
+    CBV common = nullptr;
+    size_t commonCount = 0;
+    for (size_t i = 0, j = 0; i < left.size() && j < right.size();)
+    {
+      const int compare = CONSTANTBV::BitVector_Lexicompare(left[i], right[j]);
+      if (compare < 0)
+        i++;
+      else if (compare > 0)
+        j++;
+      else
+      {
+        common = left[i];
+        commonCount++;
+        i++;
+        j++;
+      }
+    }
+
+    if (commonCount != 1)
+      return n;
+
+    if (!isIteConstTree(n[0]) || !isIteConstTree(n[1]))
+      return n;
+
+    const ASTNode commonNode = nf->CreateConstant(
+        CONSTANTBV::BitVector_Clone(common), n[0].GetValueWidth());
+
+    ASTNodeMap cacheL, cacheR;
+    ASTNode newN = nf->CreateNode(AND, replaceIteConst(n[0], commonNode, cacheL),
+                                  replaceIteConst(n[1], commonNode, cacheR));
+    replaceWithSimpler++;
+    return newN;
+  }
+
   //TODO merge these two toplevel funtions, they do the same thing..
   ASTNode StrengthReduction::topLevel(const ASTNode& top,   const NodeToFixedBitsMap& visited)
   {
@@ -471,7 +583,36 @@ namespace stp
     return result;
   }
 
-  StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf) 
+  ASTNode StrengthReduction::topLevel(const ASTNode& top,  const NodeToValueSetMap& visited)
+  {
+    ASTNodeMap fromTo;
+    for (auto it = visited.begin(); it != visited.end(); ++it)
+    {
+      const ASTNode& n = it->first;
+
+      if (n.isConstant())
+        continue;
+
+      ASTNode newN = strengthReduction(n,visited);
+      if (n != newN)
+        fromTo.insert({n,newN});
+    }
+
+    ASTNode result = top;
+
+    if (uf->stats_flag)
+      stats();
+
+    if (fromTo.size() > 0)
+    {
+      ASTNodeMap cache;
+      result = SubstitutionMap::replace(result, fromTo, cache, nf);
+    }
+
+    return result;
+  }
+
+  StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf)
   {
     littleOne = CONSTANTBV::BitVector_Create(1, true);
     littleZero = CONSTANTBV::BitVector_Create(1, true);
