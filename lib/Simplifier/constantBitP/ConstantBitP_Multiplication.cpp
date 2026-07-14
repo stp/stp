@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnCounts.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"
+#include <cstdint>
 #include <set>
 #include <stdexcept>
 // Multiply.
@@ -141,52 +142,126 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   return result;
 }
 
-// Uses the zeroes / ones present adjust the column counts.
+static inline int popcount64(uint64_t v)
+{
+#ifdef _MSC_VER
+  return (int)__popcnt64(v);
+#else
+  return __builtin_popcountll(v);
+#endif
+}
+
+// Word `j` of (m >> s), for a `words`-long array.
+static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
+                                        unsigned s, unsigned j)
+{
+  const unsigned word = j + (s >> 6);
+  const unsigned bit = s & 63;
+  if (word >= words)
+    return 0;
+  uint64_t r = m[word] >> bit;
+  if (bit != 0 && word + 1 < words)
+    r |= m[word + 1] << (64 - bit);
+  return r;
+}
+
+// The number of pairs i + k == j with a[i] and revB[width-1-k] both set,
+// i.e. the boolean convolution of a and (un-reversed) b at column j.
+static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
+                                unsigned words, unsigned width, unsigned j)
+{
+  int count = 0;
+  const unsigned s = width - 1 - j;
+  for (unsigned t = 0; t < words; t++)
+  {
+    const uint64_t aw = a[t];
+    if (aw != 0)
+      count += popcount64(aw & rightShiftedWord(revB, words, s, t));
+  }
+  return count;
+}
+
+// Uses the zeroes / ones present adjust the column counts:
+//   columnH[j] -= #{i <= j : y[i] fixed to zero}
+//              +  #{i <= j : x[i] fixed to zero and y[j-i] not fixed to zero}
+//   columnL[j] += #{i + k == j : x[i] and y[k] both fixed to one}
+// The counts come from running prefix sums and two boolean convolutions
+// evaluated as shifted-window popcounts over packed words.
 Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
                      int* columnH)
 {
   const unsigned bitWidth = x.getWidth();
+  const unsigned words = (bitWidth + 63) / 64;
 
-  std::vector<bool> yFixedFalse(bitWidth);
-  std::vector<bool> xFixedFalse(bitWidth);
+  const unsigned INLINE_WORDS = 8; // up to 512 bits on the stack.
+  uint64_t stackBuf[4 * INLINE_WORDS];
+  std::vector<uint64_t> heapBuf;
+  uint64_t* buf = stackBuf;
+  if (words > INLINE_WORDS)
+  {
+    heapBuf.resize(4 * words);
+    buf = heapBuf.data();
+  }
+  uint64_t* xFF = buf;                // x fixed to zero.
+  uint64_t* xOne = buf + words;       // x fixed to one.
+  uint64_t* revYFF = buf + 2 * words; // y fixed to zero, bit-reversed.
+  uint64_t* revYOne = buf + 3 * words;
+  for (unsigned t = 0; t < 4 * words; t++)
+    buf[t] = 0;
+
   for (unsigned i = 0; i < bitWidth; i++)
   {
-    yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
-    xFixedFalse[i] = x.isFixed(i) && !x.getValue(i);
+    if (x.isFixed(i))
+    {
+      if (x.getValue(i))
+        xOne[i >> 6] |= (uint64_t)1 << (i & 63);
+      else
+        xFF[i >> 6] |= (uint64_t)1 << (i & 63);
+    }
+    if (y.isFixed(i))
+    {
+      const unsigned r = bitWidth - 1 - i;
+      if (y.getValue(i))
+        revYOne[r >> 6] |= (uint64_t)1 << (r & 63);
+      else
+        revYFF[r >> 6] |= (uint64_t)1 << (r & 63);
+    }
   }
 
-  for (unsigned i = 0; i < bitWidth; i++)
+  bool anyXFF = false, anyYFF = false, anyXOne = false, anyYOne = false;
+  for (unsigned t = 0; t < words; t++)
   {
-    // decrease using zeroes.
-    if (yFixedFalse[i])
-    {
-      for (unsigned j = i; j < bitWidth; j++)
-      {
-        columnH[j]--;
-      }
-    }
+    anyXFF |= xFF[t] != 0;
+    anyXOne |= xOne[t] != 0;
+    anyYFF |= revYFF[t] != 0;
+    anyYOne |= revYOne[t] != 0;
+  }
+  const bool ffPairsPossible = anyXFF && anyYFF;
+  const bool onePairsPossible = anyXOne && anyYOne;
+  if (!anyXFF && !anyYFF && !onePairsPossible)
+    return NO_CHANGE; // nothing fixed that could adjust any count.
 
-    if (xFixedFalse[i])
-    {
-      for (unsigned j = i; j < bitWidth; j++)
-      {
-        // if the row hasn't already been zeroed out.
-        if (!yFixedFalse[j - i])
-          columnH[j]--;
-      }
-    }
+  int xZeroes = 0, yZeroes = 0;
+  for (unsigned j = 0; j < bitWidth; j++)
+  {
+    // Running prefix counts of the fixed-to-zero bits at or below j.
+    const unsigned r = bitWidth - 1 - j;
+    if ((revYFF[r >> 6] >> (r & 63)) & 1)
+      yZeroes++;
+    if ((xFF[j >> 6] >> (j & 63)) & 1)
+      xZeroes++;
 
-    // check if there are any pairs of ones.
-    if (x.isFixed(i) && x.getValue(i))
-      for (unsigned j = 0; j < (bitWidth - i); j++)
-      {
-        assert(i + j < bitWidth);
-        if (y.isFixed(j) && y.getValue(j))
-        {
-          // a pair of ones. Increase the lower bound.
-          columnL[i + j]++;
-        }
-      }
+    int decrement = yZeroes + xZeroes;
+    if (ffPairsPossible)
+      decrement -= convolutionAt(xFF, revYFF, words, bitWidth, j);
+    if (decrement != 0)
+      columnH[j] -= decrement;
+    if (onePairsPossible)
+    {
+      const int onePairs = convolutionAt(xOne, revYOne, words, bitWidth, j);
+      if (onePairs != 0)
+        columnL[j] += onePairs;
+    }
   }
   return NO_CHANGE;
 }
