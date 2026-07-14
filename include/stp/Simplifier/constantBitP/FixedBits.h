@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef FIXEDBITS_H_
 #define FIXEDBITS_H_
 
+#include <cstring>
 #include "stp/Util/Attributes.h"
 #include <stp/Util/Attributes.h>
 
@@ -324,6 +325,32 @@ public:
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
 
   void getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const;
+
+  // Writes ceil(width/8) bytes into each buffer: bit i of minBuf is set
+  // for a fixed one, and maxBuf additionally has every unfixed bit. Bits
+  // beyond the width (in the final byte) may be set in maxBuf; the
+  // caller's BitVector_Block_Store masks them off.
+  void fillUnsignedMinMaxBuffers(unsigned char* minBuf,
+                                 unsigned char* maxBuf) const
+  {
+    static_assert(sizeof(bool) == 1, "bools are loaded eight at a time");
+    const unsigned bytes = (width + 7) / 8;
+    for (unsigned byte = 0; byte < bytes; byte++)
+    {
+      const unsigned base = byte * 8;
+      const unsigned n = width - base >= 8 ? 8 : width - base;
+      unsigned long long f = 0, v = 0;
+      memcpy(&f, fixed + base, n);
+      memcpy(&v, values + base, n);
+      // The bools are 0x00/0x01 bytes; gather each byte's low bit.
+      const unsigned long long ones = 0x0101010101010101ULL;
+      const unsigned long long gather = 0x0102040810204080ULL;
+      const unsigned long long mn = f & v;
+      const unsigned long long mx = (f ^ ones) | mn; // unfixed or fixed one.
+      minBuf[byte] = (unsigned char)((mn * gather) >> 56);
+      maxBuf[byte] = (unsigned char)((mx * gather) >> 56);
+    }
+  }
 
   void mergeIn(const FixedBits& a)
   {

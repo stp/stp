@@ -190,26 +190,7 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
     maxBuf = heapBuf.data() + bytes;
   }
 
-  unsigned i = 0;
-  for (unsigned byte = 0; byte < bytes; byte++)
-  {
-    unsigned char mn = 0, mx = 0;
-    for (unsigned b = 0; b < 8 && i < width; b++, i++)
-    {
-      if (v.isFixed(i))
-      {
-        if (v.getValue(i))
-        {
-          mn |= 1 << b;
-          mx |= 1 << b;
-        }
-      }
-      else
-        mx |= 1 << b;
-    }
-    minBuf[byte] = mn;
-    maxBuf[byte] = mx;
-  }
+  v.fillUnsignedMinMaxBuffers(minBuf, maxBuf);
 
   CONSTANTBV::BitVector_Block_Store(min, minBuf, bytes);
   CONSTANTBV::BitVector_Block_Store(max, maxBuf, bytes);
