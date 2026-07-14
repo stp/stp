@@ -357,6 +357,217 @@ namespace stp
       return 0;
     }
 
+    // Signed comparison of two width-bit vectors: flip the sign bit and
+    // compare unsigned, chunk-wise from the top.
+    int signedCompareCBV(const CBV x, const CBV y, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = K; k-- > 0;)
+      {
+        uint64_t xk = chunk64(x, k), yk = chunk64(y, k);
+        if (k == K - 1)
+        {
+          xk ^= signBit;
+          yk ^= signBit;
+        }
+        if (xk != yk)
+          return xk < yk ? -1 : 1;
+      }
+      return 0;
+    }
+
+    // Is x the most negative (100..0) / most positive (011..1) value?
+    bool isTypeMin(const CBV x, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = 0; k < K; k++)
+        if (chunk64(x, k) != (k == K - 1 ? signBit : 0))
+          return false;
+      return true;
+    }
+
+    bool isTypeMax(const CBV x, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const unsigned topBits = width - 64 * (K - 1);
+      const uint64_t topMask =
+          (topBits >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << topBits) - 1);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = 0; k < K; k++)
+        if (chunk64(x, k) !=
+            (k == K - 1 ? (topMask ^ signBit) : ~(uint64_t)0))
+          return false;
+      return true;
+    }
+
+    // ---- Bounds of the signed division family at widths up to 64.
+    // The operands split at the sign boundary into sign-consistent
+    // boxes, described by their magnitude ranges; within a box the
+    // quotient's magnitude is monotone in each argument, so its corners
+    // give exact per-box bounds, and the remainders are bounded by the
+    // divisor's and dividend's magnitudes. A possibly-zero divisor
+    // contributes the division-by-zero values. The result is the
+    // unsigned hull of all the pieces. ----
+
+    // Grows an unsigned hull piece by piece.
+    struct PieceHull
+    {
+      bool any = false;
+      uint64_t lo = 0, hi = 0;
+      void add(uint64_t l, uint64_t h)
+      {
+        if (!any)
+        {
+          lo = l;
+          hi = h;
+          any = true;
+          return;
+        }
+        if (l < lo)
+          lo = l;
+        if (h > hi)
+          hi = h;
+      }
+    };
+
+    // A sign-consistent part of an interval, as a magnitude range.
+    struct SignBox
+    {
+      bool negative;
+      uint64_t magLo, magHi;
+    };
+
+    // The value set {sign * m : m in [magLo, magHi]} as unsigned pieces.
+    void addSignedRange(PieceHull& out, bool negative, uint64_t magLo,
+                        uint64_t magHi, uint64_t mask)
+    {
+      if (!negative)
+      {
+        out.add(magLo, magHi);
+        return;
+      }
+      if (magLo == 0)
+      {
+        out.add(0, 0);
+        if (magHi == 0)
+          return;
+        magLo = 1;
+      }
+      out.add((~magHi + 1) & mask, (~magLo + 1) & mask);
+    }
+
+    // Splits the unsigned interval [lo, hi] at the sign boundary.
+    unsigned signBoxesOf(uint64_t lo, uint64_t hi, unsigned width,
+                         SignBox* boxes)
+    {
+      const uint64_t mask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+      const uint64_t signB = (uint64_t)1 << (width - 1);
+      unsigned count = 0;
+      if (lo < signB)
+        boxes[count++] = {false, lo, std::min(hi, signB - 1)};
+      if (hi >= signB)
+      {
+        const uint64_t nlo = std::max(lo, signB);
+        // Magnitudes flip the order: the biggest magnitude is the
+        // smallest unsigned value.
+        boxes[count++] = {true, (~hi + 1) & mask, (~nlo + 1) & mask};
+      }
+      return count;
+    }
+
+    // The unsigned hull of kind(x, y) over x in [av, bv], y in [cv, dv].
+    bool signedDivOpHull(Kind kind, uint64_t av, uint64_t bv, uint64_t cv,
+                         uint64_t dv, unsigned width, uint64_t& outLo,
+                         uint64_t& outHi)
+    {
+      const uint64_t mask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+
+      SignBox xs[2], ys[2];
+      const unsigned nx = signBoxesOf(av, bv, width, xs);
+      unsigned ny = signBoxesOf(cv, dv, width, ys);
+
+      // Zero is its own divisor case; drop it from the boxes.
+      const bool zeroDivisor = (cv == 0);
+      for (unsigned j = 0; j < ny; j++)
+        if (!ys[j].negative && ys[j].magLo == 0)
+        {
+          if (ys[j].magHi == 0)
+            ys[j] = ys[--ny]; // the box was only zero
+          else
+            ys[j].magLo = 1;
+        }
+
+      PieceHull out;
+
+      if (kind == SBVMOD)
+      {
+        // The sign and magnitude bound follow the divisor: the value
+        // lies in [0, y-1] for positive y and (y, 0] for negative y.
+        for (unsigned j = 0; j < ny; j++)
+          addSignedRange(out, ys[j].negative, 0, ys[j].magHi - 1, mask);
+      }
+
+      for (unsigned i = 0; i < nx; i++)
+      {
+        if (zeroDivisor)
+        {
+          if (kind == SBVDIV)
+          {
+            // Division by zero: all ones for a non-negative dividend,
+            // one for a negative one.
+            if (xs[i].negative)
+              out.add(1, 1);
+            else
+              out.add(mask, mask);
+          }
+          else // remainder and modulus by zero are the dividend
+            addSignedRange(out, xs[i].negative, xs[i].magLo, xs[i].magHi,
+                           mask);
+        }
+
+        if (kind == SBVMOD)
+          continue; // handled per divisor box above
+
+        for (unsigned j = 0; j < ny; j++)
+        {
+          if (kind == SBVDIV)
+          {
+            // The quotient magnitude is monotone in both magnitudes.
+            const uint64_t qLo = xs[i].magLo / ys[j].magHi;
+            const uint64_t qHi = xs[i].magHi / ys[j].magLo;
+            addSignedRange(out, xs[i].negative != ys[j].negative, qLo, qHi,
+                           mask);
+          }
+          else // SBVREM: the sign follows the dividend
+          {
+            uint64_t rLo = 0;
+            uint64_t rHi = std::min(ys[j].magHi - 1, xs[i].magHi);
+            if (ys[j].magLo == ys[j].magHi)
+            {
+              // A constant magnitude divisor: if the dividend magnitudes
+              // share a quotient the remainders run between theirs.
+              const uint64_t q1 = xs[i].magLo / ys[j].magLo;
+              const uint64_t q2 = xs[i].magHi / ys[j].magLo;
+              if (q1 == q2)
+              {
+                rLo = xs[i].magLo % ys[j].magLo;
+                rHi = xs[i].magHi % ys[j].magLo;
+              }
+            }
+            addSignedRange(out, xs[i].negative, rLo, rHi, mask);
+          }
+        }
+      }
+
+      outLo = out.lo;
+      outHi = out.hi;
+      return out.any;
+    }
+
     // The smallest x | y. The caller owns the returned bitvector, as
     // with all six drivers.
     CBV minOR(const CBV a, const CBV b, const CBV c, const CBV d)
@@ -930,39 +1141,44 @@ namespace stp
 
         break;
 
-      case BVSGT: 
+      case BVSGT:
         {
-          vector<UnsignedInterval*> a_vec, b_vec;
-          UnsignedInterval::split(children[0],a_vec); // split at the poles
-          UnsignedInterval::split(children[1],b_vec); 
-             
-          bool one = false;
-          bool zero = false;        
-          for (const auto& a : a_vec)
-            for (const auto& b : b_vec) /// compare all pairs.
-            {
-              if (CONSTANTBV::BitVector_Compare(a->minV, b->maxV) > 0) // signed comparison.
-                one = true;
-              else if (CONSTANTBV::BitVector_Compare(b->minV, a->maxV) >= 0)
-                zero = true;
-              else
-              {
-                one = true;
-                zero = true;
-                break;
-              }
-            }
+          // The attained signed extremes decide the comparison: always
+          // greater needs min_s(a) > max_s(b), never greater needs
+          // max_s(a) <= min_s(b). An interval crossing the sign boundary
+          // attains both of its width's most negative and most positive
+          // values.
+          const UnsignedInterval* A = children[0];
+          const UnsignedInterval* B = children[1];
+          const unsigned w = A->getWidth();
 
-          if (one && !zero)
+          const bool aCross =
+              !CONSTANTBV::BitVector_bit_test(A->minV, w - 1) &&
+              CONSTANTBV::BitVector_bit_test(A->maxV, w - 1);
+          const bool bCross =
+              !CONSTANTBV::BitVector_bit_test(B->minV, w - 1) &&
+              CONSTANTBV::BitVector_bit_test(B->maxV, w - 1);
+
+          // A crossing operand attains the type minimum (killing
+          // "always") and the type maximum (killing "never", unless the
+          // other operand is pinned to the matching extreme).
+          const bool one = !aCross && !bCross &&
+                           signedCompareCBV(A->minV, B->maxV, w) > 0;
+
+          bool zero;
+          if (aCross)
+            // max_s(A) is the type maximum: B's minimum must equal it.
+            zero = !bCross && isTypeMax(B->minV, w);
+          else if (bCross)
+            // min_s(B) is the type minimum: A's maximum must equal it.
+            zero = isTypeMin(A->maxV, w);
+          else
+            zero = signedCompareCBV(B->minV, A->maxV, w) >= 0;
+
+          if (one)
             result = createInterval(littleOne, littleOne);
-
-          if (!one && zero)
+          else if (zero)
             result = createInterval(littleZero, littleZero);
-
-          for (const auto& a : a_vec)
-            delete a;
-          for (const auto& b : b_vec)
-            delete b;     
         }
         break;
 
@@ -970,6 +1186,30 @@ namespace stp
       {
         const UnsignedInterval* top = children[0];
         const UnsignedInterval* c1 = children[1];
+
+        if (width <= 64)
+        {
+          const uint64_t av = low64(top->minV), bv = low64(top->maxV);
+          const uint64_t cv = low64(c1->minV), dv = low64(c1->maxV);
+          const uint64_t full =
+              (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+          uint64_t mn, mx;
+          if (dv == 0)
+            mn = mx = full; // dividing by the constant zero gives all ones
+          else
+          {
+            // The minimum is the smallest dividend over the largest
+            // divisor; division by zero gives all ones, so it holds even
+            // if the divisor might be zero. The maximum needs a divisor
+            // that can't be zero.
+            mn = av / dv;
+            mx = (cv != 0) ? bv / cv : full;
+          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(cbvFromU64(width, mn),
+                                        cbvFromU64(width, mx));
+          break;
+        }
 
         result = freshUnsignedInterval(width);
 
@@ -1008,7 +1248,70 @@ namespace stp
       }
 
       case BVMOD: //OVER-APPROXIMATION
-        if (knownC1)
+        if (knownC1 && width <= 64)
+        {
+          const uint64_t av = low64(children[0]->minV);
+          const uint64_t bv = low64(children[0]->maxV);
+          const uint64_t cv = low64(children[1]->minV);
+          const uint64_t dv = low64(children[1]->maxV);
+          uint64_t mn = 0, mx = 0;
+          bool got = false;
+          if (dv == 0)
+          {
+            // Remainder by the constant zero is the identity.
+            if (knownC0)
+            {
+              mn = av;
+              mx = bv;
+              got = true;
+            }
+          }
+          else if (cv == dv)
+          {
+            // A constant non-zero divisor is exact: if the dividend's
+            // bounds share a quotient the remainders run between theirs,
+            // and otherwise a multiple of the divisor is crossed and
+            // every remainder is reachable.
+            got = true;
+            if (av / cv == bv / cv)
+            {
+              mn = av % cv;
+              mx = bv % cv;
+            }
+            else
+              mx = cv - 1;
+          }
+          else if (cv != 0)
+          {
+            // The divisor can't be zero.
+            got = true;
+            if (knownC0 && bv < cv)
+            {
+              // The dividend is always below the divisor.
+              mn = av;
+              mx = bv;
+            }
+            else
+            {
+              // Less than the largest divisor, never above the dividend.
+              mx = dv - 1;
+              if (knownC0 && bv < mx)
+                mx = bv;
+            }
+          }
+          else if (knownC0)
+          {
+            // The divisor might be zero; the remainder never exceeds the
+            // dividend, and division by zero reaches it.
+            got = true;
+            mx = bv;
+          }
+          if (got)
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(cbvFromU64(width, mn),
+                                          cbvFromU64(width, mx));
+        }
+        else if (knownC1)
         {
           if (CONSTANTBV::BitVector_is_empty(children[1]->maxV))
           {
@@ -1628,10 +1931,24 @@ namespace stp
         }
         break;
 
-      // TODO
       case SBVDIV:
       case SBVREM:
       case SBVMOD:
+        if (knownC0 && knownC1 && width <= 64)
+        {
+          uint64_t lo, hi;
+          if (signedDivOpHull(n.GetKind(), low64(children[0]->minV),
+                              low64(children[0]->maxV),
+                              low64(children[1]->minV),
+                              low64(children[1]->maxV), width, lo, hi))
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(cbvFromU64(width, lo),
+                                          cbvFromU64(width, hi));
+        }
+        else
+          propagatorNotImplemented++;
+        break;
+
       default:
         propagatorNotImplemented++;
         break;
