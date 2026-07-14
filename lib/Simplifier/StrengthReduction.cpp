@@ -235,6 +235,44 @@ namespace stp
           FatalError("Never here");
       }
     }
+    else if (k == EQ)
+    {
+      // An equality whose sides' intervals meet at exactly one point
+      // holds just when both sides take that value, so it splits into a
+      // conjunction of equalities against a constant. This catches
+      // sides with too many values for the set domain to track;
+      // disjoint intervals don't need handling here, the equality's own
+      // domain is then a constant false, which is replaced above.
+      const auto l = visited.find(n[0]);
+      const auto r = visited.find(n[1]);
+
+      // With a constant on either side the equality already is a
+      // comparison against a constant; the split would rebuild it.
+      if (l != visited.end() && r != visited.end() && l->second != nullptr &&
+          r->second != nullptr && !n[0].isConstant() && !n[1].isConstant())
+      {
+        const UnsignedInterval* a = l->second;
+        const UnsignedInterval* b = r->second;
+
+        const CBV lo =
+            (CONSTANTBV::BitVector_Lexicompare(a->minV, b->minV) >= 0)
+                ? a->minV
+                : b->minV;
+        const CBV hi =
+            (CONSTANTBV::BitVector_Lexicompare(a->maxV, b->maxV) <= 0)
+                ? a->maxV
+                : b->maxV;
+
+        if (CONSTANTBV::BitVector_Lexicompare(lo, hi) == 0)
+        {
+          const ASTNode touch = nf->CreateConstant(
+              CONSTANTBV::BitVector_Clone(lo), n[0].GetValueWidth());
+          newN = nf->CreateNode(AND, nf->CreateNode(EQ, touch, n[0]),
+                                nf->CreateNode(EQ, touch, n[1]));
+          replaceWithSimpler++;
+        }
+      }
+    }
     return newN;
   }
 
