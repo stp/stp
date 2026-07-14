@@ -82,17 +82,22 @@ namespace stp
     // untouched and its chunks below are all-zero against an upper
     // bound or all-one against a lower bound. ----
 
-    // Bits [64k, 64k+63] of x as a machine word. Chunk_Read clamps at
-    // the vector's width and reads zero past it, so no guards are
-    // needed. Two 32-bit reads because Chunk_Read is capped at the bits
-    // of an unsigned long, which isn't 64 everywhere.
-    uint64_t chunk64(const CBV x, unsigned k)
+    // The 64 bits of x starting at any bit offset, as a machine word.
+    // Chunk_Read clamps at the vector's width and reads zero past it, so
+    // no guards are needed. Two 32-bit reads because Chunk_Read is
+    // capped at the bits of an unsigned long, which isn't 64 everywhere.
+    uint64_t chunkAt(const CBV x, unsigned offset)
     {
-      const unsigned offset = 64 * k;
       uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
       r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
            << 32;
       return r;
+    }
+
+    // Bits [64k, 64k+63] of x as a machine word.
+    uint64_t chunk64(const CBV x, unsigned k)
+    {
+      return chunkAt(x, 64 * k);
     }
 
     // The inverse of chunk64. The value's bits above the vector's width
@@ -308,6 +313,48 @@ namespace stp
     unsigned chunksOf(unsigned width)
     {
       return (width + 63) / 64;
+    }
+
+    // Chunk k of x << s, before any masking at the width: the target
+    // bits [64k, 64k+63] come from the source bits 64k-s upward, which
+    // is an offset read, a zero, or a partial low read shifted up.
+    uint64_t shlChunk(const CBV x, unsigned s, unsigned k)
+    {
+      const unsigned off = 64 * k;
+      if (off + 64 <= s)
+        return 0;
+      if (off >= s)
+        return chunkAt(x, off - s);
+      return chunkAt(x, 0) << (s - off);
+    }
+
+    // Chunk k of x >> s at the given width, filling the vacated top
+    // bits with ones when the value is negative (the stores clamp at
+    // the width, so bits set past it are harmless).
+    uint64_t shrChunk(const CBV x, unsigned s, unsigned k, unsigned width,
+                      bool negative)
+    {
+      uint64_t v = chunkAt(x, 64 * k + s);
+      if (negative)
+      {
+        const unsigned off = 64 * k;
+        const unsigned fillStart = width - s; // s is capped at the width
+        if (off >= fillStart)
+          v = ~(uint64_t)0;
+        else if (off + 64 > fillStart)
+          v |= ~(uint64_t)0 << (fillStart - off);
+      }
+      return v;
+    }
+
+    // Lexicographic comparison of two equal-length chunk arrays, most
+    // significant chunk first.
+    int compareChunks(const uint64_t* x, const uint64_t* y, unsigned K)
+    {
+      for (unsigned k = K; k-- > 0;)
+        if (x[k] != y[k])
+          return x[k] < y[k] ? -1 : 1;
+      return 0;
     }
 
     // The smallest x | y. The caller owns the returned bitvector, as
@@ -1051,28 +1098,28 @@ namespace stp
       case BVSX:
         if (knownC0)
         {
-          result = freshUnsignedInterval(n.GetValueWidth());
-          CONSTANTBV::BitVector_Empty(result->maxV);
+          // Copy the child's chunks and fill everything from its top bit
+          // up with its sign: an arithmetic shift by zero seen at the
+          // child's width, stored into the wider vector.
+          const unsigned childWidth = n[0].GetValueWidth();
+          const CBV childMin = children[0]->minV;
+          const CBV childMax = children[0]->maxV;
+          const bool minNegative =
+              CONSTANTBV::BitVector_bit_test(childMin, childWidth - 1);
+          const bool maxNegative =
+              CONSTANTBV::BitVector_bit_test(childMax, childWidth - 1);
 
-          // Copy the max/min into the new bigger answer.
-          for (unsigned i = 0; i < n[0].GetValueWidth(); i++)
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
           {
-            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, i))
-              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-
-            if (CONSTANTBV::BitVector_bit_test(children[0]->minV, i))
-              CONSTANTBV::BitVector_Bit_On(result->minV, i);
+            setChunk64(mn, k,
+                       shrChunk(childMin, 0, k, childWidth, minNegative));
+            setChunk64(mx, k,
+                       shrChunk(childMax, 0, k, childWidth, maxNegative));
           }
-          for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth(); i++)
-          {
-            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                               n[0].GetValueWidth() - 1))
-              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-
-            if (CONSTANTBV::BitVector_bit_test(children[0]->minV,
-                                               n[0].GetValueWidth() - 1))
-              CONSTANTBV::BitVector_Bit_On(result->minV, i);
-          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
         }
         break;
 
@@ -1307,15 +1354,10 @@ namespace stp
         if (knownC2)
         {
           // The lowest bit of the extract is how far the child shifts right.
-          unsigned shift_amount = *(children[2]->minV);
-
-          CBV min = CONSTANTBV::BitVector_Clone(children[0]->minV);
-          CBV max = CONSTANTBV::BitVector_Clone(children[0]->maxV);
-          while (shift_amount-- > 0)
-          {
-            CONSTANTBV::BitVector_shift_right(min, 0);
-            CONSTANTBV::BitVector_shift_right(max, 0);
-          }
+          const unsigned shift = *(children[2]->minV);
+          const unsigned childWidth = n[0].GetValueWidth();
+          const CBV childMin = children[0]->minV;
+          const CBV childMax = children[0]->maxV;
 
           // The shifted child takes every value between the shifted bounds,
           // so if the bounds agree above the extract's width, the low bits
@@ -1323,30 +1365,24 @@ namespace stp
           // Otherwise the result wraps: it reaches both zero and all ones,
           // and only the complete interval contains it.
           bool sameBlock = true;
-          for (unsigned i = width; i < n[0].GetValueWidth() && sameBlock; i++)
-            if (CONSTANTBV::BitVector_bit_test(min, i) !=
-                CONSTANTBV::BitVector_bit_test(max, i))
+          for (unsigned off = width; shift + off < childWidth && sameBlock;
+               off += 64)
+            if (chunkAt(childMin, shift + off) !=
+                chunkAt(childMax, shift + off))
               sameBlock = false;
 
           if (sameBlock)
           {
-            CBV newMin = CONSTANTBV::BitVector_Create(width, true);
-            CBV newMax = CONSTANTBV::BitVector_Create(width, true);
-            for (unsigned i = 0; i < width; i++)
+            CBV mn = CONSTANTBV::BitVector_Create(width, true);
+            CBV mx = CONSTANTBV::BitVector_Create(width, true);
+            for (unsigned k = 0; k < chunksOf(width); k++)
             {
-              if (CONSTANTBV::BitVector_bit_test(min, i))
-                CONSTANTBV::BitVector_Bit_On(newMin, i);
-              if (CONSTANTBV::BitVector_bit_test(max, i))
-                CONSTANTBV::BitVector_Bit_On(newMax, i);
+              setChunk64(mn, k, chunkAt(childMin, shift + 64 * k));
+              setChunk64(mx, k, chunkAt(childMax, shift + 64 * k));
             }
-
-            result = createInterval(newMin, newMax);
-            CONSTANTBV::BitVector_Destroy(newMin);
-            CONSTANTBV::BitVector_Destroy(newMax);
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(mn, mx);
           }
-
-          CONSTANTBV::BitVector_Destroy(min);
-          CONSTANTBV::BitVector_Destroy(max);
         }
         break;
       }
@@ -1354,23 +1390,24 @@ namespace stp
       case BVRIGHTSHIFT:
         if (knownC0 || knownC1)
         {
-          result = freshUnsignedInterval(width);
-
           const UnsignedInterval* c0 = children[0];
           const UnsignedInterval* c1 = children[1];
 
           const unsigned minShift = cappedShiftAmount(c1->minV, width);
           const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
 
-          // The maximum result is the maximum >> (minimum shift).
-          CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
-          for (unsigned i = 0; i < minShift; i++)
-            CONSTANTBV::BitVector_shift_right(result->maxV, 0);
-
-          // The minimum result is the minimum >> (maximum shift).
-          CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
-          for (unsigned i = 0; i < maxShift; i++)
-            CONSTANTBV::BitVector_shift_right(result->minV, 0);
+          // The maximum result is the maximum >> (minimum shift), and
+          // the minimum result the minimum >> (maximum shift): the
+          // shifted chunks are offset reads.
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
+          {
+            setChunk64(mn, k, shrChunk(c0->minV, maxShift, k, width, false));
+            setChunk64(mx, k, shrChunk(c0->maxV, minShift, k, width, false));
+          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
         }
         break;
 
@@ -1388,75 +1425,88 @@ namespace stp
         const unsigned minShift = cappedShiftAmount(c1->minV, width);
         const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
 
-        CBV bestMin = nullptr;
-        CBV bestMax = nullptr;
+        const unsigned K = chunksOf(width);
+        const unsigned topBits = width - 64 * (K - 1);
+        const uint64_t topMask =
+            (topBits >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << topBits) - 1);
+
+        // The highest bit where the child's bounds differ decides every
+        // shift's block test at once: the bounds agree on the bits that
+        // survive the shift exactly when this bit doesn't survive.
+        int highestDiff = -1;
+        for (unsigned k = K; k-- > 0 && highestDiff < 0;)
+        {
+          const uint64_t diff = chunk64(c0->minV, k) ^ chunk64(c0->maxV, k);
+          if (diff != 0)
+            highestDiff = 64 * k + 63 - __builtin_clzll(diff);
+        }
+
+        // Four chunk buffers; on the stack for widths up to 1024.
+        uint64_t stackBuf[64];
+        std::vector<uint64_t> heapBuf;
+        uint64_t* buf = stackBuf;
+        if (4 * K > 64)
+        {
+          heapBuf.resize(4 * K);
+          buf = heapBuf.data();
+        }
+        uint64_t* bestMin = buf;
+        uint64_t* bestMax = buf + K;
+        uint64_t* sMin = buf + 2 * K;
+        uint64_t* sMax = buf + 3 * K;
 
         for (unsigned s = minShift; s <= maxShift; s++)
         {
           // The hull for this shift amount. Shifting by the width or more
           // gives zero, so the capped amount stands in for all of those.
-          CBV sMin = CONSTANTBV::BitVector_Create(width, true);
-          CBV sMax = CONSTANTBV::BitVector_Create(width, true);
-
-          if (s < width)
+          if (s >= width)
           {
-            const unsigned surviving = width - s;
-
-            // If the bounds agree above the surviving bits, the low bits
-            // run from the minimum's to the maximum's without wrapping.
-            bool sameBlock = true;
-            for (unsigned i = surviving; i < width && sameBlock; i++)
-              if (CONSTANTBV::BitVector_bit_test(c0->minV, i) !=
-                  CONSTANTBV::BitVector_bit_test(c0->maxV, i))
-                sameBlock = false;
-
-            if (sameBlock)
-            {
-              for (unsigned i = 0; i < surviving; i++)
-              {
-                if (CONSTANTBV::BitVector_bit_test(c0->minV, i))
-                  CONSTANTBV::BitVector_Bit_On(sMin, i + s);
-                if (CONSTANTBV::BitVector_bit_test(c0->maxV, i))
-                  CONSTANTBV::BitVector_Bit_On(sMax, i + s);
-              }
-            }
-            else
-            {
-              // The surviving bits wrap: they reach both zero and all
-              // ones, so this shift contributes [0, 11..1 << s].
-              for (unsigned i = s; i < width; i++)
-                CONSTANTBV::BitVector_Bit_On(sMax, i);
-            }
+            for (unsigned k = 0; k < K; k++)
+              sMin[k] = sMax[k] = 0;
           }
-
-          if (bestMin == nullptr)
+          else if (highestDiff < (int)(width - s))
           {
-            bestMin = sMin;
-            bestMax = sMax;
+            // The bounds agree above the surviving bits, so the low bits
+            // run from the minimum's to the maximum's without wrapping.
+            for (unsigned k = 0; k < K; k++)
+            {
+              sMin[k] = shlChunk(c0->minV, s, k);
+              sMax[k] = shlChunk(c0->maxV, s, k);
+            }
+            sMin[K - 1] &= topMask;
+            sMax[K - 1] &= topMask;
           }
           else
           {
-            if (CONSTANTBV::BitVector_Lexicompare(sMin, bestMin) < 0)
+            // The surviving bits wrap: they reach both zero and all
+            // ones, so this shift contributes [0, 11..1 << s].
+            for (unsigned k = 0; k < K; k++)
             {
-              CONSTANTBV::BitVector_Destroy(bestMin);
-              bestMin = sMin;
+              const unsigned off = 64 * k;
+              sMin[k] = 0;
+              sMax[k] = (off + 64 <= s)
+                            ? 0
+                            : (off >= s) ? ~(uint64_t)0
+                                         : (~(uint64_t)0 << (s - off));
             }
-            else
-              CONSTANTBV::BitVector_Destroy(sMin);
-
-            if (CONSTANTBV::BitVector_Lexicompare(sMax, bestMax) > 0)
-            {
-              CONSTANTBV::BitVector_Destroy(bestMax);
-              bestMax = sMax;
-            }
-            else
-              CONSTANTBV::BitVector_Destroy(sMax);
+            sMax[K - 1] &= topMask;
           }
+
+          if (s == minShift || compareChunks(sMin, bestMin, K) < 0)
+            std::swap(bestMin, sMin);
+          if (s == minShift || compareChunks(sMax, bestMax, K) > 0)
+            std::swap(bestMax, sMax);
         }
 
-        result = createInterval(bestMin, bestMax);
-        CONSTANTBV::BitVector_Destroy(bestMin);
-        CONSTANTBV::BitVector_Destroy(bestMax);
+        CBV mn = CONSTANTBV::BitVector_Create(width, true);
+        CBV mx = CONSTANTBV::BitVector_Create(width, true);
+        for (unsigned k = 0; k < K; k++)
+        {
+          setChunk64(mn, k, bestMin[k]);
+          setChunk64(mx, k, bestMax[k]);
+        }
+        // The interval takes ownership of the fresh bitvectors.
+        result = new UnsignedInterval(mn, mx);
         break;
       }
 
@@ -1479,17 +1529,20 @@ namespace stp
           const bool maxNegative =
               CONSTANTBV::BitVector_bit_test(c0->maxV, width - 1);
 
-          result = freshUnsignedInterval(width);
-
-          CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
           const unsigned minShifts = minNegative ? minShift : maxShift;
-          for (unsigned i = 0; i < minShifts; i++)
-            CONSTANTBV::BitVector_shift_right(result->minV, minNegative);
-
-          CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
           const unsigned maxShifts = maxNegative ? maxShift : minShift;
-          for (unsigned i = 0; i < maxShifts; i++)
-            CONSTANTBV::BitVector_shift_right(result->maxV, maxNegative);
+
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
+          {
+            setChunk64(mn, k,
+                       shrChunk(c0->minV, minShifts, k, width, minNegative));
+            setChunk64(mx, k,
+                       shrChunk(c0->maxV, maxShifts, k, width, maxNegative));
+          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
         }
         break;
 
