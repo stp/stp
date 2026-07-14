@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include <cstdint>
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 
 namespace simplifier
@@ -307,51 +308,251 @@ Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 }
 
 // UMINUS, is NEG followed by +1
+// The relation y == -x is characterised entirely by the position t of the
+// lowest one bit: bits below t are zero in both x and y, bit t is one in
+// both, and above t the two are complements (with t == width standing for
+// x == y == 0). Rather than looping a bitwise-not and a full addition
+// propagation to a fixed point, compute the feasible set of t directly and
+// take the union of the deductions each feasible t makes. That is
+// maximally precise in one O(width) pass: the feasible-t structures are
+// exactly the solutions, so the agreement over them is the ideal result.
+namespace
+{
+// Bits of word w with global index below `bound`.
+inline uint64_t bitsBelowWord(unsigned w, unsigned bound)
+{
+  const uint64_t base = (uint64_t)w * 64;
+  if (base + 64 <= bound)
+    return ~0ULL;
+  if (base >= bound)
+    return 0;
+  return (1ULL << (bound - base)) - 1;
+}
+}
+
 Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   assert(children.size() == 1);
-  const int bitWidth = children[0]->getWidth();
+  FixedBits& x = *children[0];
+  FixedBits& y = output;
+  const unsigned width = x.getWidth();
+  assert(y.getWidth() == width);
 
-  const unsigned initialFixedCount =
-      children[0]->countFixed() + output.countFixed();
+  const unsigned words = (width + 63) / 64;
+  uint64_t* buf = (uint64_t*)alloca(sizeof(uint64_t) * 4 * words);
+  uint64_t* xF = buf;             // fixedness.
+  uint64_t* xV = buf + words;     // fixed ones.
+  uint64_t* yF = buf + 2 * words;
+  uint64_t* yV = buf + 3 * words;
+  x.fillPackedWords(xF, xV);
+  y.fillPackedWords(yF, yV);
 
-  // If it's only one bit. This will be negative one.
-  FixedBits one(bitWidth, false);
-  one.fixToZero();
-  one.setFixed(0, true);
-  one.setValue(0, true);
-
-  FixedBits notted(bitWidth, false);
-
-  vector<FixedBits*> args;
-  args.push_back(&notted);
-  args.push_back(&one);
-
-  Result result = NO_CHANGE;
-  while (true) // until it fixed points
+  // Nothing fixed anywhere: nothing can be deduced.
   {
-    FixedBits initialNot(notted);
-    FixedBits initialIn(*children[0]);
-    FixedBits initialOut(output);
-
-    result = bvNotBothWays(*children[0], notted);
-    if (CONFLICT == result)
-      return CONFLICT;
-
-    result = bvAddBothWays(args, output);
-    if (CONFLICT == result)
-      return CONFLICT;
-
-    if (FixedBits::equals(initialNot, notted) &&
-        FixedBits::equals(initialIn, *children[0]) &&
-        FixedBits::equals(initialOut, output))
-      break;
+    uint64_t any = 0;
+    for (unsigned w = 0; w < words; w++)
+      any |= xF[w] | yF[w];
+    if (any == 0)
+      return NO_CHANGE;
   }
 
-  return (children[0]->countFixed() + output.countFixed() ==
-          initialFixedCount)
-             ? NO_CHANGE
-             : CHANGED;
+  // The feasible t form an interval [lo, hi] with holes (t == width means
+  // x == 0). A known one bounds t above; positions where both operands
+  // are fixed pin t: equal-one means t is exactly there, equal-zero
+  // pushes t above, complementary values push t below.
+  unsigned lo = 0;
+  unsigned hi = width;
+
+  for (unsigned w = 0; w < words; w++)
+  {
+    const uint64_t knownOne = xV[w] | yV[w];
+    const uint64_t both = xF[w] & yF[w];
+    const uint64_t diff = both & (xV[w] ^ yV[w]);
+    const uint64_t ones2 = xV[w] & yV[w];
+    const uint64_t zeros2 = both & ~xV[w] & ~yV[w];
+    const unsigned base = w * 64;
+
+    if (knownOne)
+      hi = std::min(hi, base + (unsigned)__builtin_ctzll(knownOne));
+    if (diff)
+    {
+      const unsigned i = base + (unsigned)__builtin_ctzll(diff);
+      if (i == 0)
+        return CONFLICT; // bit zero is always shared.
+      hi = std::min(hi, i - 1);
+    }
+    if (ones2)
+    {
+      lo = std::max(lo, base + 63 - (unsigned)__builtin_clzll(ones2));
+      hi = std::min(hi, base + (unsigned)__builtin_ctzll(ones2));
+    }
+    if (zeros2)
+      lo = std::max(lo, base + 64 - (unsigned)__builtin_clzll(zeros2));
+  }
+
+  if (lo > hi)
+    return CONFLICT;
+
+  // Feasible finite t: within [lo, min(hi, width-1)], and not a hole
+  // (a position fixed to zero on either side).
+  const unsigned none = width + 1;
+  unsigned L = none, H = none;
+  for (unsigned w = 0; w < words; w++)
+  {
+    const uint64_t hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
+    uint64_t feas = ~hole;
+    feas &= ~bitsBelowWord(w, lo);
+    feas &= bitsBelowWord(w, hi == width ? width : hi + 1);
+    // Mask to the width (the top word may have slack bits).
+    feas &= bitsBelowWord(w, width);
+    if (feas)
+    {
+      const unsigned first = w * 64 + (unsigned)__builtin_ctzll(feas);
+      if (L == none)
+        L = first;
+      H = w * 64 + 63 - (unsigned)__builtin_clzll(feas);
+    }
+  }
+  const bool widthFeasible = hi == width;
+
+  if (L == none && !widthFeasible)
+    return CONFLICT; // no position for the lowest one remains.
+
+  bool changed = false;
+
+  // Below every feasible t both operands are zero. (No conflicting fixed
+  // one can exist here: it would have lowered hi below this region.)
+  const unsigned zeroBelow = (L == none) ? width : L;
+  for (unsigned w = 0; w < words && w * 64 < zeroBelow; w++)
+  {
+    const uint64_t region = bitsBelowWord(w, zeroBelow);
+    uint64_t newX = region & ~xF[w];
+    uint64_t newY = region & ~yF[w];
+    changed |= (newX | newY) != 0;
+    while (newX)
+    {
+      const unsigned b = __builtin_ctzll(newX);
+      newX &= newX - 1;
+      x.setFixed(w * 64 + b, true);
+      x.setValue(w * 64 + b, false);
+    }
+    while (newY)
+    {
+      const unsigned b = __builtin_ctzll(newY);
+      newY &= newY - 1;
+      y.setFixed(w * 64 + b, true);
+      y.setValue(w * 64 + b, false);
+    }
+  }
+
+  if (L == none)
+    return changed ? CHANGED : NO_CHANGE; // only x == 0 remains.
+
+  // Between L and H inclusive, reason per bit over the categories
+  // t < i / t == i / t > i, exactly as the solutions allow.
+  bool anyFeasibleBelow = false;
+  for (unsigned i = L; i <= H; i++)
+  {
+    const uint64_t bit = 1ULL << (i & 63);
+    const unsigned w = i >> 6;
+    const uint64_t hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
+    const bool eqHere = i >= lo && i <= hi && !(hole & bit);
+    const bool gtHere = i < H || widthFeasible;
+    const bool ltHere = anyFeasibleBelow;
+
+    const bool xIsF = (xF[w] & bit) != 0, xVal = (xV[w] & bit) != 0;
+    const bool yIsF = (yF[w] & bit) != 0, yVal = (yV[w] & bit) != 0;
+
+    bool xCan0 = false, xCan1 = false, yCan0 = false, yCan1 = false;
+    if (gtHere)
+    {
+      xCan0 = true;
+      yCan0 = true;
+    }
+    if (eqHere)
+    {
+      xCan1 = true;
+      yCan1 = true;
+    }
+    if (ltHere)
+    {
+      if (xIsF)
+      {
+        (xVal ? xCan1 : xCan0) = true;
+        (xVal ? yCan0 : yCan1) = true; // y_i = !x_i.
+      }
+      else if (yIsF)
+      {
+        (yVal ? yCan1 : yCan0) = true;
+        (yVal ? xCan0 : xCan1) = true;
+      }
+      else
+      {
+        xCan0 = xCan1 = yCan0 = yCan1 = true;
+      }
+    }
+
+    // Respect existing fixings (a fixed bit only admits its own value).
+    if (xIsF)
+    {
+      xCan0 = xCan0 && !xVal;
+      xCan1 = xCan1 && xVal;
+    }
+    if (yIsF)
+    {
+      yCan0 = yCan0 && !yVal;
+      yCan1 = yCan1 && yVal;
+    }
+
+    if ((!xCan0 && !xCan1) || (!yCan0 && !yCan1))
+      return CONFLICT;
+
+    if (!xIsF && (xCan0 ^ xCan1))
+    {
+      x.setFixed(i, true);
+      x.setValue(i, xCan1);
+      changed = true;
+    }
+    if (!yIsF && (yCan0 ^ yCan1))
+    {
+      y.setFixed(i, true);
+      y.setValue(i, yCan1);
+      changed = true;
+    }
+
+    if (eqHere)
+      anyFeasibleBelow = true;
+  }
+
+  // Above the highest feasible finite t the operands are complements,
+  // unless a shift past every one (x == 0) is also possible, in which
+  // case nothing is deducible there (no ones can be fixed above H then).
+  if (!widthFeasible)
+  {
+    for (unsigned w = H / 64; w < words; w++)
+    {
+      const uint64_t region = ~bitsBelowWord(w, H + 1) & bitsBelowWord(w, width);
+      uint64_t fromX = region & xF[w] & ~yF[w]; // y := !x.
+      uint64_t fromY = region & yF[w] & ~xF[w]; // x := !y.
+      changed |= (fromX | fromY) != 0;
+      while (fromX)
+      {
+        const unsigned b = __builtin_ctzll(fromX);
+        fromX &= fromX - 1;
+        y.setFixed(w * 64 + b, true);
+        y.setValue(w * 64 + b, !((xV[w] >> b) & 1));
+      }
+      while (fromY)
+      {
+        const unsigned b = __builtin_ctzll(fromY);
+        fromY &= fromY - 1;
+        x.setFixed(w * 64 + b, true);
+        x.setValue(w * 64 + b, !((yV[w] >> b) & 1));
+      }
+    }
+  }
+
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
