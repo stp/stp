@@ -715,6 +715,47 @@ TEST(ValueSet_Test, single_common_value_rewrites_to_selection)
     }
 }
 
+// The split doesn't need the sides to be ITE trees over constants: any
+// term with a known value set qualifies. Here the right side is an
+// addition, which only the sets pin down to two values.
+TEST(ValueSet_Test, single_common_value_splits_non_ite_terms)
+{
+  boot();
+  Context c;
+  stp::NodeDomainAnalysis domain(&c.mgr);
+
+  const unsigned width = 8;
+  ASTNode p = c.boolSymbol("p");
+  ASTNode q = c.boolSymbol("q");
+  ASTNode left = c.hashing()->CreateTerm(stp::ITE, width, p,
+                                         c.constant(width, 8),
+                                         c.constant(width, 9));
+  // ite(q, 8, 9) + 1, so {9, 10}: shares just 9 with the left side.
+  ASTNode right = c.hashing()->CreateTerm(
+      stp::BVPLUS, width,
+      c.hashing()->CreateTerm(stp::ITE, width, q, c.constant(width, 8),
+                              c.constant(width, 9)),
+      c.constant(width, 1));
+  ASTNode eq = c.hashing()->CreateNode(stp::EQ, left, right);
+
+  stp::StrengthReduction sr(&c.snf, &c.mgr.UserFlags);
+  ASTNode result = sr.topLevel(eq, domain);
+
+  ASSERT_NE(result, eq);
+  ASSERT_NE(result.GetKind(), stp::EQ);
+
+  // Equivalent under all four assignments.
+  for (unsigned pv = 0; pv <= 1; pv++)
+    for (unsigned qv = 0; qv <= 1; qv++)
+    {
+      stp::ASTNodeMap assignment;
+      assignment.insert({p, pv ? c.mgr.ASTTrue : c.mgr.ASTFalse});
+      assignment.insert({q, qv ? c.mgr.ASTTrue : c.mgr.ASTFalse});
+      ASSERT_EQ(c.eval(eq, assignment), c.eval(result, assignment))
+          << "differ on p=" << pv << " q=" << qv;
+    }
+}
+
 // A node whose interval spans more values than a set can hold gets no
 // set, while the interval information is kept.
 TEST(ValueSet_Test, widens_when_the_interval_is_too_big)

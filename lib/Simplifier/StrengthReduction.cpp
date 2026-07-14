@@ -413,69 +413,21 @@ namespace stp
     return newN;
   }
 
-  // Whether every node of the term is an ITE or a constant, so it takes
-  // one of the constants' values. Bounded so huge trees aren't walked.
-  bool StrengthReduction::isIteConstTree(const ASTNode& n)
-  {
-    ASTNodeSet visited;
-    vector<ASTNode> toVisit = {n};
-
-    while (!toVisit.empty())
-    {
-      const ASTNode current = toVisit.back();
-      toVisit.pop_back();
-
-      if (!visited.insert(current).second)
-        continue;
-
-      if (visited.size() > 64)
-        return false;
-
-      if (current.GetKind() == BVCONST)
-        continue;
-
-      if (current.GetKind() != ITE)
-        return false;
-
-      toVisit.push_back(current[1]);
-      toVisit.push_back(current[2]);
-    }
-    return true;
-  }
-
-  // Replaces each constant leaf of an ITE tree with a test that the
-  // leaf equals the given value, keeping the ITE structure. The cache
-  // stops shared subtrees being rebuilt repeatedly.
-  ASTNode StrengthReduction::replaceIteConst(const ASTNode& n,
-                                             const ASTNode& newVal,
-                                             ASTNodeMap& cache)
-  {
-    const auto it = cache.find(n);
-    if (it != cache.end())
-      return it->second;
-
-    ASTNode result;
-    if (n.GetKind() == BVCONST)
-      result = nf->CreateNode(EQ, newVal, n);
-    else
-    {
-      assert(n.GetKind() == ITE);
-      result = nf->CreateNode(ITE, n[0], replaceIteConst(n[1], newVal, cache),
-                              replaceIteConst(n[2], newVal, cache));
-    }
-
-    cache.insert({n, result});
-    return result;
-  }
-
   ASTNode StrengthReduction::strengthReduction(const ASTNode& n, const NodeToValueSetMap& visited)
   {
-    // An equality where each side is an ITE tree over constants, and
-    // exactly one constant is shared: the equality holds just when both
-    // sides select the shared value. Disjoint sides don't need handling
-    // here; the equality's own domain is then a constant false, which
-    // the other passes replace.
+    // An equality whose sides share exactly one possible value holds
+    // just when both sides take that value, so it splits into a
+    // conjunction of equalities against a constant - which simplify
+    // further (an ITE over constants folds towards its condition, for
+    // instance). Disjoint sides don't need handling here; the
+    // equality's own domain is then a constant false, which the other
+    // passes replace.
     if (n.GetKind() != EQ)
+      return n;
+
+    // With a constant on either side the equality already is a
+    // comparison against a constant; the split would rebuild it.
+    if (n[0].isConstant() || n[1].isConstant())
       return n;
 
     const auto l = visited.find(n[0]);
@@ -509,15 +461,12 @@ namespace stp
     if (commonCount != 1)
       return n;
 
-    if (!isIteConstTree(n[0]) || !isIteConstTree(n[1]))
-      return n;
-
     const ASTNode commonNode = nf->CreateConstant(
         CONSTANTBV::BitVector_Clone(common), n[0].GetValueWidth());
 
-    ASTNodeMap cacheL, cacheR;
-    ASTNode newN = nf->CreateNode(AND, replaceIteConst(n[0], commonNode, cacheL),
-                                  replaceIteConst(n[1], commonNode, cacheR));
+    ASTNode newN =
+        nf->CreateNode(AND, nf->CreateNode(EQ, commonNode, n[0]),
+                       nf->CreateNode(EQ, commonNode, n[1]));
     replaceWithSimpler++;
     return newN;
   }

@@ -66,10 +66,6 @@ class StrengthReduction
   ASTNode strengthReduction(const ASTNode& n, const NodeToUnsignedIntervalMap& visited);
   ASTNode strengthReduction(const ASTNode& n, const NodeToValueSetMap& visited);
 
-  static bool isIteConstTree(const ASTNode& n);
-  ASTNode replaceIteConst(const ASTNode& n, const ASTNode& newVal,
-                          ASTNodeMap& cache);
-
 public:
 
   using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
