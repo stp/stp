@@ -281,31 +281,6 @@ namespace stp
       return r;
     }
 
-    void replaceCBV(CBV& x, CBV fresh)
-    {
-      CONSTANTBV::BitVector_Destroy(x);
-      x = fresh;
-    }
-
-    CBV addFresh(const CBV x, const CBV y)
-    {
-      CBV r = zeroOf(bits_(x));
-      bool carry = false;
-      CONSTANTBV::BitVector_add(r, x, y, &carry);
-      assert(!carry);
-      return r;
-    }
-
-    // x - y, requiring x >= y.
-    CBV subFresh(const CBV x, const CBV y)
-    {
-      assert(CONSTANTBV::BitVector_Lexicompare(x, y) >= 0);
-      CBV r = zeroOf(bits_(x));
-      bool carry = false;
-      CONSTANTBV::BitVector_sub(r, x, y, &carry);
-      return r;
-    }
-
     CBV mulFresh(const CBV x, const CBV y)
     {
       CBV r = zeroOf(bits_(x));
@@ -316,170 +291,169 @@ namespace stp
       return r;
     }
 
-    // Fresh quotient and remainder of x / y; y >= 1.
-    void divmodFresh(const CBV x, const CBV y, CBV& quotient, CBV& remainder)
+    typedef unsigned __int128 uint128;
+
+    // The low (up to 64) bits of x as a machine word, read straight from
+    // the storage words. The library keeps the bits above the width zero.
+    uint64_t low64(const CBV x)
     {
-      quotient = zeroOf(bits_(x));
-      remainder = zeroOf(bits_(x));
-      CBV tmp = CONSTANTBV::BitVector_Clone(x); // Div_Pos destroys this one.
-      CONSTANTBV::ErrCode e =
-          CONSTANTBV::BitVector_Div_Pos(quotient, tmp, y, remainder);
-      assert(0 == e);
-      CONSTANTBV::BitVector_Destroy(tmp);
+      const unsigned nbits = std::min(bits_(x), 64u);
+      uint64_t r = 0;
+      for (unsigned w = 0; w * 8 * sizeof(*x) < nbits; w++)
+        r |= (uint64_t)x[w] << (w * 8 * sizeof(*x));
+      return r;
     }
 
-    // The sum over 0 <= i < n of floor((a*i + b) / m); m >= 1. This is the
-    // AtCoder Library's floor_sum. The shared width must be big enough
-    // that a*n + b and the sum can't overflow.
-    CBV floorSum(const CBV n0, const CBV m0, const CBV a0, const CBV b0)
+    // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
+    // a < m and b < m, with m <= 2^64 so nothing here can overflow.
+    // Between wraps the values only grow, so the minimum is b or a
+    // post-wrap residue; the residues just after each wrap follow the
+    // progression b1 + j*((-m) mod a) inside [0, a), which the loop
+    // chases Euclid-style: O(log m) iterations.
+    uint128 minlin(uint128 n, uint128 m, uint128 a, uint128 b)
     {
-      const unsigned width = bits_(n0);
-      CBV n = CONSTANTBV::BitVector_Clone(n0);
-      CBV m = CONSTANTBV::BitVector_Clone(m0);
-      CBV a = CONSTANTBV::BitVector_Clone(a0);
-      CBV b = CONSTANTBV::BitVector_Clone(b0);
-      CBV ans = zeroOf(width);
-      CBV one = zeroOf(width);
-      CONSTANTBV::BitVector_increment(one);
-
+      uint128 best = b;
       while (true)
       {
-        if (CONSTANTBV::BitVector_Lexicompare(a, m) >= 0)
-        {
-          CBV q, r;
-          divmodFresh(a, m, q, r);
-          // ans += n * (n - 1) / 2 * q
-          CBV t = subFresh(n, one);
-          replaceCBV(t, mulFresh(n, t));
-          CONSTANTBV::BitVector_shift_right(t, 0); // n*(n-1) is even.
-          replaceCBV(t, mulFresh(t, q));
-          replaceCBV(ans, addFresh(ans, t));
-          CONSTANTBV::BitVector_Destroy(t);
-          CONSTANTBV::BitVector_Destroy(q);
-          replaceCBV(a, r);
-        }
-
-        if (CONSTANTBV::BitVector_Lexicompare(b, m) >= 0)
-        {
-          CBV q, r;
-          divmodFresh(b, m, q, r);
-          CBV t = mulFresh(n, q);
-          replaceCBV(ans, addFresh(ans, t));
-          CONSTANTBV::BitVector_Destroy(t);
-          CONSTANTBV::BitVector_Destroy(q);
-          replaceCBV(b, r);
-        }
-
-        CBV y = mulFresh(a, n);
-        replaceCBV(y, addFresh(y, b));
-        if (CONSTANTBV::BitVector_Lexicompare(y, m) < 0)
-        {
-          CONSTANTBV::BitVector_Destroy(y);
-          break;
-        }
-
-        CBV q, r;
-        divmodFresh(y, m, q, r);
-        CONSTANTBV::BitVector_Destroy(y);
-        replaceCBV(n, q);
-        replaceCBV(b, r);
-        std::swap(m, a);
+        if (b < best)
+          best = b; // the value at i = 0 of this level
+        if (a == 0 || n == 1)
+          return best;
+        const uint128 firstWrap = (m - b + a - 1) / a;
+        if (firstWrap >= n)
+          return best; // never wraps, so the values only grow from b
+        const uint128 wraps = (b + (n - 1) * a) / m;
+        const uint128 afterWrap = b + firstWrap * a - m; // in [0, a)
+        n = wraps;
+        b = afterWrap;
+        const uint128 step = (a - m % a) % a;
+        m = a;
+        a = step;
       }
-
-      CONSTANTBV::BitVector_Destroy(n);
-      CONSTANTBV::BitVector_Destroy(m);
-      CONSTANTBV::BitVector_Destroy(a);
-      CONSTANTBV::BitVector_Destroy(b);
-      CONSTANTBV::BitVector_Destroy(one);
-      return ans;
     }
 
-    // How many i in [0, n) have (a*i + b) mod m <= x. floor(t/m) minus
-    // floor((t - x - 1)/m) is one exactly when t mod m <= x; when the
-    // shifted offset would be negative, a multiple of m is added and the
-    // total corrected by n. 'total' is floorSum(n, m, a, b), precomputed
-    // because it doesn't change across a binary search.
-    CBV countAtMost(const CBV x, const CBV total, const CBV n, const CBV m,
-                    const CBV a, const CBV b)
+    // The maximum, by reflection: max(v) = m-1 - min(m-1-v), and
+    // m-1-(a*i+b) mod m is the progression ((m-a)*i + (m-1-b)) mod m.
+    uint128 maxlin(uint128 n, uint128 m, uint128 a, uint128 b)
     {
-      CBV count = CONSTANTBV::BitVector_Clone(total);
+      return m - 1 - minlin(n, m, (m - a) % m, m - 1 - b);
+    }
 
-      CBV xPlus1 = CONSTANTBV::BitVector_Clone(x);
-      CONSTANTBV::BitVector_increment(xPlus1);
-
-      CBV shifted;
-      if (CONSTANTBV::BitVector_Lexicompare(b, xPlus1) >= 0)
-        shifted = subFresh(b, xPlus1);
+    // The exact bounds of the progression start, start + step, ...
+    // (count terms, mod m), where m is a power of two, step < m and
+    // start < m.
+    void progressionHull(uint128 start, uint128 step, uint128 count,
+                         uint128 m, uint128& mn, uint128& mx)
+    {
+      if (step == 0)
+      {
+        mn = mx = start;
+        return;
+      }
+      // The progression repeats with period m / gcd; a count covering a
+      // full period hits exactly the residues congruent to start modulo
+      // the gcd.
+      const uint128 gcd = (uint128)1 << __builtin_ctzll((uint64_t)step);
+      if (count >= m / gcd)
+      {
+        mn = start & (gcd - 1);
+        mx = m - gcd + mn;
+      }
       else
       {
-        shifted = addFresh(b, m);
-        replaceCBV(shifted, subFresh(shifted, xPlus1));
-        replaceCBV(count, addFresh(count, n));
+        mn = minlin(count, m, step, start);
+        mx = maxlin(count, m, step, start);
       }
-
-      CBV fewer = floorSum(n, m, a, shifted);
-      replaceCBV(count, subFresh(count, fewer));
-
-      CONSTANTBV::BitVector_Destroy(fewer);
-      CONSTANTBV::BitVector_Destroy(shifted);
-      CONSTANTBV::BitVector_Destroy(xPlus1);
-      return count;
     }
 
-    // The minimum (or maximum) of (a*i + b) mod m over 0 <= i < n: the
-    // smallest x whose count reaches one (or reaches n), found by binary
-    // search on the counting function.
-    CBV progressionBound(bool wantMaximum, const CBV n, const CBV m,
-                         const CBV a, const CBV b)
-    {
-      const unsigned width = bits_(n);
-      CBV total = floorSum(n, m, a, b);
-
-      CBV lo = zeroOf(width);
-      CBV hi = CONSTANTBV::BitVector_Clone(m);
-      CONSTANTBV::BitVector_decrement(hi);
-
-      while (CONSTANTBV::BitVector_Lexicompare(lo, hi) < 0)
-      {
-        CBV mid = addFresh(lo, hi);
-        CONSTANTBV::BitVector_shift_right(mid, 0);
-
-        CBV count = countAtMost(mid, total, n, m, a, b);
-        const bool enough =
-            wantMaximum ? (CONSTANTBV::BitVector_Lexicompare(count, n) >= 0)
-                        : !CONSTANTBV::BitVector_is_empty(count);
-        CONSTANTBV::BitVector_Destroy(count);
-
-        if (enough)
-          replaceCBV(hi, mid);
-        else
-        {
-          CONSTANTBV::BitVector_increment(mid);
-          replaceCBV(lo, mid);
-        }
-      }
-
-      CONSTANTBV::BitVector_Destroy(hi);
-      CONSTANTBV::BitVector_Destroy(total);
-      return lo;
-    }
-
-    // The progression search runs a binary search full of divisions, so
-    // it's only worth it at the widths solvers commonly use.
-    const unsigned progressionWidthLimit = 64;
+    // Enumerating one operand's values is exact but linear in how many
+    // it has, so only do it when that side is small.
+    const uint64_t smallSideLimit = 16;
 
     // The bounds of x*y (mod 2^width) with x in [a, b] and y in [c, d],
     // written into resultMin/resultMax; both stay null if nothing is
     // known. Exact when the bound products land in the same 2^width block,
-    // and when one operand is constant (below the width limit).
+    // and when either operand has at most smallSideLimit values (at
+    // widths up to 64).
     void multiplyPair(const CBV a, const CBV b, const CBV c, const CBV d,
                       unsigned width, CBV& resultMin, CBV& resultMax)
     {
       resultMin = nullptr;
       resultMax = nullptr;
 
-      // Wide enough for the products and everything inside floorSum.
-      const unsigned wide = 3 * width + 4;
+      if (width <= 64)
+      {
+        const uint64_t aV = low64(a), bV = low64(b);
+        const uint64_t cV = low64(c), dV = low64(d);
+        const uint128 m = (uint128)1 << width;
+
+        const uint128 lowProduct = (uint128)aV * cV;
+        const uint128 highProduct = (uint128)bV * dV;
+
+        uint128 apMin, apMax;
+        bool known = false;
+
+        if ((lowProduct >> width) == (highProduct >> width))
+        {
+          // Every product sits between the bound products, which agree
+          // above the width, so the low bits run between the bounds' low
+          // bits without wrapping: exact.
+          apMin = lowProduct & (m - 1);
+          apMax = highProduct & (m - 1);
+          known = true;
+        }
+        else
+        {
+          // For each value of one operand the products form an arithmetic
+          // progression, so when either operand has few enough values the
+          // merge of their progressions' hulls is the exact hull of the
+          // product set. A constant operand is the one-progression case.
+          const bool xSmall = (bV - aV) <= (dV - cV);
+          const uint64_t fixedLo = xSmall ? aV : cV;
+          const uint64_t fixedHi = xSmall ? bV : dV;
+          const uint64_t movingLo = xSmall ? cV : aV;
+          const uint128 movingCount =
+              (uint128)(xSmall ? dV - cV : bV - aV) + 1;
+
+          if (fixedHi - fixedLo < smallSideLimit)
+          {
+            apMin = m - 1;
+            apMax = 0;
+            for (uint64_t v = fixedLo;; v++)
+            {
+              uint128 pmn, pmx;
+              progressionHull(((uint128)v * movingLo) & (m - 1), v,
+                              movingCount, m, pmn, pmx);
+              if (pmn < apMin)
+                apMin = pmn;
+              if (pmx > apMax)
+                apMax = pmx;
+              if (v == fixedHi)
+                break; // tested after the body: fixedHi may be the top value
+            }
+            known = true;
+          }
+          // Otherwise the products can wrap in ways intervals can't follow.
+        }
+
+        if (known)
+        {
+          resultMin = zeroOf(width);
+          resultMax = zeroOf(width);
+          for (unsigned i = 0; i < width; i++)
+          {
+            if ((apMin >> i) & 1)
+              CONSTANTBV::BitVector_Bit_On(resultMin, i);
+            if ((apMax >> i) & 1)
+              CONSTANTBV::BitVector_Bit_On(resultMax, i);
+          }
+        }
+        return;
+      }
+
+      // Bignum fallback for widths over 64: the same-block case only.
+      // Wide enough for the bound products.
+      const unsigned wide = 2 * width + 2;
 
       CBV aW = widenTo(a, wide);
       CBV bW = widenTo(b, wide);
@@ -509,46 +483,6 @@ namespace stp
           if (CONSTANTBV::BitVector_bit_test(highProduct, i))
             CONSTANTBV::BitVector_Bit_On(resultMax, i);
         }
-      }
-      else
-      {
-        const bool constantY = (CONSTANTBV::BitVector_Lexicompare(c, d) == 0);
-        const bool constantX = (CONSTANTBV::BitVector_Lexicompare(a, b) == 0);
-
-        if ((constantX || constantY) && width <= progressionWidthLimit)
-        {
-          // With one operand constant the products are the arithmetic
-          // progression a*c, a*c + step, ... mod 2^width, whose extremes
-          // the progression search finds: exact.
-          CBV modulus = zeroOf(wide);
-          CONSTANTBV::BitVector_Bit_On(modulus, width);
-
-          CBV count = constantY ? subFresh(bW, aW) : subFresh(dW, cW);
-          CONSTANTBV::BitVector_increment(count);
-
-          const CBV step = constantY ? cW : aW;
-
-          CBV apMin = progressionBound(false, count, modulus, step,
-                                       lowProduct);
-          CBV apMax = progressionBound(true, count, modulus, step,
-                                       lowProduct);
-
-          resultMin = zeroOf(width);
-          resultMax = zeroOf(width);
-          for (unsigned i = 0; i < width; i++)
-          {
-            if (CONSTANTBV::BitVector_bit_test(apMin, i))
-              CONSTANTBV::BitVector_Bit_On(resultMin, i);
-            if (CONSTANTBV::BitVector_bit_test(apMax, i))
-              CONSTANTBV::BitVector_Bit_On(resultMax, i);
-          }
-
-          CONSTANTBV::BitVector_Destroy(apMin);
-          CONSTANTBV::BitVector_Destroy(apMax);
-          CONSTANTBV::BitVector_Destroy(count);
-          CONSTANTBV::BitVector_Destroy(modulus);
-        }
-        // Otherwise the products can wrap in ways intervals can't follow.
       }
 
       CONSTANTBV::BitVector_Destroy(aW);
