@@ -62,17 +62,7 @@ struct PackedBits
 
   explicit PackedBits(const FixedBits& b) : words((b.getWidth() + 63) / 64)
   {
-    if (words <= INLINE_WORDS)
-    {
-      fixed = inlineStore;
-      value = inlineStore + words;
-    }
-    else
-    {
-      heapStore.resize(2 * words);
-      fixed = heapStore.data();
-      value = heapStore.data() + words;
-    }
+    allocate();
     for (unsigned j = 0; j < 2 * words; j++)
       fixed[j] = 0; // zeroes both halves; value follows fixed.
 
@@ -84,6 +74,32 @@ struct PackedBits
         if (b.getValue(i))
           value[i >> 6] |= (uint64_t)1 << (i & 63);
       }
+  }
+
+  PackedBits(const PackedBits& o) : words(o.words)
+  {
+    allocate();
+    copyFrom(o);
+  }
+
+  void copyFrom(const PackedBits& o)
+  {
+    assert(words == o.words);
+    for (unsigned j = 0; j < words; j++)
+    {
+      fixed[j] = o.fixed[j];
+      value[j] = o.value[j];
+    }
+  }
+
+  bool isFixedBit(unsigned i) const
+  {
+    return (fixed[i >> 6] >> (i & 63)) & 1;
+  }
+
+  bool valueBit(unsigned i) const
+  {
+    return (value[i >> 6] >> (i & 63)) & 1;
   }
 
   // Word j of (m >> s). Bits above the width are zero because only bits
@@ -131,9 +147,33 @@ struct PackedBits
   }
 
 private:
-  PackedBits(const PackedBits&);
-  PackedBits& operator=(const PackedBits&);
+  void allocate()
+  {
+    if (words <= INLINE_WORDS)
+    {
+      fixed = inlineStore;
+      value = inlineStore + words;
+    }
+    else
+    {
+      heapStore.resize(2 * words);
+      fixed = heapStore.data();
+      value = heapStore.data() + words;
+    }
+  }
+
+  PackedBits& operator=(const PackedBits&); // use copyFrom.
 };
+
+// Meet (the union of what the two states admit), written into a.
+void meetInto(PackedBits& a, const PackedBits& b)
+{
+  for (unsigned j = 0; j < a.words; j++)
+  {
+    a.fixed[j] &= b.fixed[j] & ~(a.value[j] ^ b.value[j]);
+    a.value[j] &= a.fixed[j];
+  }
+}
 
 // Whether the concrete shift amount i is admitted by the fixed bits of the
 // shift operand. Equivalent to FixedBits::unsignedHolds(i) for i < 2^64,
@@ -241,31 +281,33 @@ Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   return result;
 }
 
-unsigned getMaxShiftFromValueViaAlternation(const unsigned bitWidth,
-                                            const FixedBits& output)
+// The shift must be less than the position of the first alternation in the
+// (fixed bits of the) output.
+static unsigned getMaxShiftFromValueViaAlternation(const unsigned bitWidth,
+                                                   const PackedBits& output)
 {
   unsigned maxShiftFromValue = UINT_MAX;
 
-  // The shift must be less than the position of the first alternation.
   bool foundTrue = false;
   bool foundFalse = false;
   for (int i = bitWidth - 1; i >= 0; i--)
   {
-    if (output.isFixed(i))
+    if (output.isFixedBit(i))
     {
-      if (output.getValue(i) && foundFalse)
+      const bool v = output.valueBit(i);
+      if (v && foundFalse)
       {
         maxShiftFromValue = i;
         break;
       }
-      if (!output.getValue(i) && foundTrue)
+      if (!v && foundTrue)
       {
         maxShiftFromValue = i;
         break;
       }
-      if (output.getValue(i))
+      if (v)
         foundTrue = true;
-      else if (!output.getValue(i))
+      else
         foundFalse = true;
     }
   }
@@ -276,86 +318,37 @@ unsigned getMaxShiftFromValueViaAlternation(const unsigned bitWidth,
   return maxShiftFromValue;
 }
 
-Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
-                                      FixedBits& output)
+// The range of the values the fixed bits admit, clamped as the original
+// FixedBits::getUnsignedMinMax: anything reaching past the low 32 bits
+// saturates to UINT_MAX.
+static void packedUnsignedMinMax(const PackedBits& b, unsigned bitWidth,
+                                 unsigned& min, unsigned& max)
 {
-  const unsigned bitWidth = output.getWidth();
-  assert(2 == children.size());
-  assert(bitWidth > 0);
-  assert(children[0]->getWidth() == children[1]->getWidth());
+  bool bigMin = false, bigMax = false;
+  for (unsigned j = 0; j < b.words; j++)
+  {
+    const uint64_t high = bitsAtOrAbove(j, 32) & PackedBits::widthMask(j, bitWidth);
+    if (b.fixed[j] & b.value[j] & high)
+      bigMin = true;
+    if ((b.value[j] | ~b.fixed[j]) & high)
+      bigMax = true;
+  }
+  const uint64_t low = ~bitsAtOrAbove(0, 32) & PackedBits::widthMask(0, bitWidth);
+  min = bigMin ? UINT_MAX : (unsigned)(b.fixed[0] & b.value[0] & low);
+  max = bigMax ? UINT_MAX : (unsigned)((b.value[0] | ~b.fixed[0]) & low);
+}
+
+// The core of the arithmetic right-shift transfer, on packed state. The
+// operand's MSB must be fixed on entry. Deductions are written into the
+// packed arguments; the wrapper transfers them back to the FixedBits.
+static Result ashrCore(const unsigned bitWidth, PackedBits& packedOp,
+                       PackedBits& packedShift, PackedBits& packedOut)
+{
   const unsigned MSBIndex = bitWidth - 1;
+  const unsigned msbWord = MSBIndex >> 6;
+  const uint64_t msbBit = (uint64_t)1 << (MSBIndex & 63);
 
-  FixedBits& op = *children[0];
-  FixedBits& shift = *children[1];
-
-  // The output's MSB always equals the operand's (whatever the shift is),
-  // so copy it over before considering the case split below: the branch
-  // with the opposite MSB would only conflict.
-  if (!op.isFixed(MSBIndex) && output.isFixed(MSBIndex))
-  {
-    op.setFixed(MSBIndex, true);
-    op.setValue(MSBIndex, output.getValue(MSBIndex));
-  }
-
-  // If the MSB isn't set, create a copy with it set each way and take the meet.
-  if (!op.isFixed(MSBIndex))
-  {
-    vector<FixedBits*> children1;
-    vector<FixedBits*> children2;
-    FixedBits op1(op);
-    FixedBits op2(op);
-    FixedBits shift1(shift);
-    FixedBits shift2(shift);
-    FixedBits output1(output);
-    FixedBits output2(output);
-
-    children1.push_back(&op1);
-    children1.push_back(&shift1);
-    op1.setFixed(MSBIndex, true);
-    op1.setValue(MSBIndex, true);
-
-    children2.push_back(&op2);
-    children2.push_back(&shift2);
-    op2.setFixed(MSBIndex, true);
-    op2.setValue(MSBIndex, false);
-
-    Result r1 = bvArithmeticRightShiftBothWays(children1, output1);
-    Result r2 = bvArithmeticRightShiftBothWays(children2, output2);
-
-    if (r1 == CONFLICT && r2 == CONFLICT)
-      return CONFLICT;
-
-    if (r1 == CONFLICT)
-    {
-      op = op2;
-      shift = shift2;
-      output = output2;
-      return r2;
-    }
-
-    if (r2 == CONFLICT)
-    {
-      op = op1;
-      shift = shift1;
-      output = output1;
-      return r1;
-    }
-
-    op = FixedBits::meet(op1, op2);
-    shift = FixedBits::meet(shift1, shift2);
-    output = FixedBits::meet(output1, output2);
-    return r1;
-  }
-
-  assert(op.isFixed(MSBIndex));
-
-  if (debug_shift)
-  {
-    cerr << "=========" << endl;
-    cerr << op << " >a> ";
-    cerr << shift;
-    cerr << " = " << output << endl;
-  }
+  assert(packedOp.fixed[msbWord] & msbBit);
 
   // The topmost number of possible shifts corresponds to all
   // the values of shift that shift out everything.
@@ -366,48 +359,24 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   for (unsigned i = 0; i < numberOfPossibleShifts; i++)
     possibleShift[i] = false;
 
-  // If either of the top two bits are fixed they should be equal.
-  if (op.isFixed(MSBIndex) ^ output.isFixed(MSBIndex))
-  {
-    if (op.isFixed(MSBIndex))
-    {
-      output.setFixed(MSBIndex, true);
-      output.setValue(MSBIndex, op.getValue(MSBIndex));
-    }
-
-    if (output.isFixed(MSBIndex))
-    {
-      op.setFixed(MSBIndex, true);
-      op.setValue(MSBIndex, output.getValue(MSBIndex));
-    }
-  }
-
-  // Both the MSB of the operand and the output should be fixed now..
-  assert(output.isFixed(MSBIndex));
+  // The output's MSB always equals the operand's.
+  if (!(packedOut.fixed[msbWord] & msbBit))
+    packedOut.fixBits(msbWord, msbBit, packedOp.value[msbWord]);
 
   unsigned minShiftFromShift,
       maxShiftFromShift; // The range of the "shift" value.
-  shift.getUnsignedMinMax(minShiftFromShift, maxShiftFromShift);
+  packedUnsignedMinMax(packedShift, bitWidth, minShiftFromShift,
+                       maxShiftFromShift);
 
   // The shift can't be any bigger than the topmost alternation in the output.
   // For example if the output is 0.01000, then the shift can not be bigger than
   // 3.
   unsigned maxShiftFromOutput =
-      getMaxShiftFromValueViaAlternation(bitWidth, output);
+      getMaxShiftFromValueViaAlternation(bitWidth, packedOut);
 
   maxShiftFromShift = std::min(maxShiftFromShift, (unsigned)maxShiftFromOutput);
 
-  if (debug_shift)
   {
-    cerr << "minshift:" << minShiftFromShift << endl;
-    cerr << "maxshift:" << maxShiftFromShift << endl;
-    cerr << "total:" << maxShiftFromShift << endl;
-  }
-
-  PackedBits packedOp(op);
-  PackedBits packedOut(output);
-  {
-    const PackedBits packedShift(shift);
     const bool highFixedOne = anyFixedOneAboveWordZero(packedShift);
 
     for (unsigned i = minShiftFromShift;
@@ -506,7 +475,13 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
       FixedBits truth(1, true);
       truth.setFixed(0, true);
       truth.setValue(0, true);
-      FixedBits working(shift);
+      FixedBits working(bitWidth, false);
+      for (unsigned i = 0; i < bitWidth; i++)
+        if (packedShift.isFixedBit(i))
+        {
+          working.setFixed(i, true);
+          working.setValue(i, packedShift.valueBit(i));
+        }
 
       vector<FixedBits*> args;
       args.push_back(&working);
@@ -541,21 +516,9 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
     // Write the union into the shift.
     for (unsigned j = 0; j < words; j++)
     {
-      uint64_t pending = vFixed[j];
-      while (pending)
-      {
-        const unsigned b = __builtin_ctzll(pending);
-        pending &= pending - 1;
-        const unsigned i = j * 64 + b;
-        const bool value = (vValue[j] >> b) & 1;
-        if (!shift.isFixed(i))
-        {
-          shift.setFixed(i, true);
-          shift.setValue(i, value);
-        }
-        else if (shift.getValue(i) != value)
-          return CONFLICT;
-      }
+      if (vFixed[j] & packedShift.fixed[j] & (packedShift.value[j] ^ vValue[j]))
+        return CONFLICT;
+      packedShift.fixBits(j, vFixed[j], vValue[j]);
     }
   }
 
@@ -596,24 +559,10 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
     {
       const uint64_t fixable = agree[j] & ~packedOp.fixed[j] &
                                bitsAtOrAbove(j, maxS) &
-                               packedOut.widthMask(j, bitWidth);
-      if (fixable == 0)
-        continue;
-      for (unsigned b = 0; b < 64; b++)
-        if ((fixable >> b) & 1)
-        {
-          op.setFixed(j * 64 + b, true);
-          op.setValue(j * 64 + b, (ref[j] >> b) & 1);
-        }
-      packedOp.fixBits(j, fixable, ref[j]);
+                               PackedBits::widthMask(j, bitWidth);
+      if (fixable != 0)
+        packedOp.fixBits(j, fixable, ref[j]);
     }
-  }
-
-  if (debug_shift)
-  {
-    cerr << op << " >a> ";
-    cerr << shift;
-    cerr << " = " << output << endl;
   }
 
   // Go through each of the possible shifts. If the same value is fixed
@@ -621,7 +570,7 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   // of shift s at column c is op[c+s] for c <= bitWidth-1-s, and the
   // (fixed) MSB for higher columns; a shift of >= bitWidth contributes the
   // MSB everywhere.
-  const bool MSBValue = op.getValue(MSBIndex);
+  const bool MSBValue = (packedOp.value[msbWord] & msbBit) != 0;
   if (nPossible > 0 || shiftOutPossible)
   {
     uint64_t* agree = (uint64_t*)alloca(sizeof(uint64_t) * words);
@@ -662,21 +611,122 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
 
     for (unsigned j = 0; j < words; j++)
     {
-      const uint64_t agreed = agree[j] & packedOut.widthMask(j, bitWidth);
+      const uint64_t agreed = agree[j] & PackedBits::widthMask(j, bitWidth);
       if (agreed & packedOut.fixed[j] & (packedOut.value[j] ^ ref[j]))
         return CONFLICT;
       const uint64_t newFix = agreed & ~packedOut.fixed[j];
-      if (newFix == 0)
-        continue;
-      for (unsigned b = 0; b < 64; b++)
-        if ((newFix >> b) & 1)
-        {
-          output.setFixed(j * 64 + b, true);
-          output.setValue(j * 64 + b, (ref[j] >> b) & 1);
-        }
+      if (newFix != 0)
+        packedOut.fixBits(j, newFix, ref[j]);
     }
   }
   return NOT_IMPLEMENTED;
+}
+
+// Transfer newly fixed bits from the packed state back into the FixedBits.
+static void writeBack(FixedBits& to, const PackedBits& from,
+                      const uint64_t* originalFixed)
+{
+  for (unsigned j = 0; j < from.words; j++)
+  {
+    uint64_t pending = from.fixed[j] & ~originalFixed[j];
+    while (pending)
+    {
+      const unsigned b = __builtin_ctzll(pending);
+      pending &= pending - 1;
+      to.setFixed(j * 64 + b, true);
+      to.setValue(j * 64 + b, (from.value[j] >> b) & 1);
+    }
+  }
+}
+
+Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
+                                      FixedBits& output)
+{
+  const unsigned bitWidth = output.getWidth();
+  assert(2 == children.size());
+  assert(bitWidth > 0);
+  assert(children[0]->getWidth() == children[1]->getWidth());
+  const unsigned MSBIndex = bitWidth - 1;
+  const unsigned msbWord = MSBIndex >> 6;
+  const uint64_t msbBit = (uint64_t)1 << (MSBIndex & 63);
+
+  FixedBits& op = *children[0];
+  FixedBits& shift = *children[1];
+
+  PackedBits packedOp(op);
+  PackedBits packedShift(shift);
+  PackedBits packedOut(output);
+  const unsigned words = packedOp.words;
+
+  // Snapshot what was fixed on entry, for the write-back.
+  uint64_t* origOp = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* origShift = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* origOut = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  for (unsigned j = 0; j < words; j++)
+  {
+    origOp[j] = packedOp.fixed[j];
+    origShift[j] = packedShift.fixed[j];
+    origOut[j] = packedOut.fixed[j];
+  }
+
+  // The output's MSB always equals the operand's (whatever the shift is),
+  // so copy it over before considering the case split below: the branch
+  // with the opposite MSB would only conflict.
+  if (!(packedOp.fixed[msbWord] & msbBit) && (packedOut.fixed[msbWord] & msbBit))
+    packedOp.fixBits(msbWord, msbBit, packedOut.value[msbWord]);
+
+  Result result;
+  if (!(packedOp.fixed[msbWord] & msbBit))
+  {
+    // The MSB isn't fixed: run the core with it set each way and take the
+    // union (meet in the fixed-bits lattice) of the survivors.
+    PackedBits op1(packedOp), shift1(packedShift), out1(packedOut);
+    PackedBits op2(packedOp), shift2(packedShift), out2(packedOut);
+    op1.fixBits(msbWord, msbBit, msbBit);
+    op2.fixBits(msbWord, msbBit, 0);
+
+    const Result r1 = ashrCore(bitWidth, op1, shift1, out1);
+    const Result r2 = ashrCore(bitWidth, op2, shift2, out2);
+
+    if (r1 == CONFLICT && r2 == CONFLICT)
+      return CONFLICT;
+
+    if (r1 == CONFLICT)
+    {
+      packedOp.copyFrom(op2);
+      packedShift.copyFrom(shift2);
+      packedOut.copyFrom(out2);
+      result = r2;
+    }
+    else if (r2 == CONFLICT)
+    {
+      packedOp.copyFrom(op1);
+      packedShift.copyFrom(shift1);
+      packedOut.copyFrom(out1);
+      result = r1;
+    }
+    else
+    {
+      meetInto(op1, op2);
+      meetInto(shift1, shift2);
+      meetInto(out1, out2);
+      packedOp.copyFrom(op1);
+      packedShift.copyFrom(shift1);
+      packedOut.copyFrom(out1);
+      result = r1;
+    }
+  }
+  else
+  {
+    result = ashrCore(bitWidth, packedOp, packedShift, packedOut);
+    if (result == CONFLICT)
+      return CONFLICT;
+  }
+
+  writeBack(op, packedOp, origOp);
+  writeBack(shift, packedShift, origShift);
+  writeBack(output, packedOut, origOut);
+  return result;
 }
 
 Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
