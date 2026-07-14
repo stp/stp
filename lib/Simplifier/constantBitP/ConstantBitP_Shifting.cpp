@@ -27,6 +27,9 @@ THE SOFTWARE.
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 
+#include <cstdint>
+#include <vector>
+
 // Left shift, right shift.
 // Trevor Hansen. BSD License.
 
@@ -42,6 +45,103 @@ namespace constantBitP
 {
 
 const bool debug_shift = false;
+
+namespace
+{
+// The fixed/value bits packed into words, so the possible-shift set can be
+// computed with word operations rather than bit-at-a-time probing. Widths
+// up to 256 bits (the overwhelmingly common case) live on the stack.
+struct PackedBits
+{
+  static const unsigned INLINE_WORDS = 4;
+  uint64_t inlineStore[2 * INLINE_WORDS];
+  uint64_t* fixed;
+  uint64_t* value; // only meaningful where fixed.
+  unsigned words;
+  std::vector<uint64_t> heapStore;
+
+  explicit PackedBits(const FixedBits& b) : words((b.getWidth() + 63) / 64)
+  {
+    if (words <= INLINE_WORDS)
+    {
+      fixed = inlineStore;
+      value = inlineStore + words;
+    }
+    else
+    {
+      heapStore.resize(2 * words);
+      fixed = heapStore.data();
+      value = heapStore.data() + words;
+    }
+    for (unsigned j = 0; j < 2 * words; j++)
+      fixed[j] = 0; // zeroes both halves; value follows fixed.
+
+    const unsigned width = b.getWidth();
+    for (unsigned i = 0; i < width; i++)
+      if (b.isFixed(i))
+      {
+        fixed[i >> 6] |= (uint64_t)1 << (i & 63);
+        if (b.getValue(i))
+          value[i >> 6] |= (uint64_t)1 << (i & 63);
+      }
+  }
+
+  // Word j of (m >> s). Bits above the width are zero because only bits
+  // below the width are ever set.
+  uint64_t shiftedWord(const uint64_t* m, unsigned s, unsigned j) const
+  {
+    const unsigned word = j + (s >> 6);
+    const unsigned bit = s & 63;
+    if (word >= words)
+      return 0;
+    uint64_t r = m[word] >> bit;
+    if (bit != 0 && word + 1 < words)
+      r |= m[word + 1] << (64 - bit);
+    return r;
+  }
+
+private:
+  PackedBits(const PackedBits&);
+  PackedBits& operator=(const PackedBits&);
+};
+
+// Whether the concrete shift amount i is admitted by the fixed bits of the
+// shift operand. Equivalent to FixedBits::unsignedHolds(i) for i < 2^64,
+// given anyHighFixedOne = "some bit above word zero is fixed to one".
+inline bool shiftHolds(const PackedBits& shift, bool anyHighFixedOne,
+                       uint64_t i)
+{
+  if (anyHighFixedOne)
+    return false;
+  return (i & shift.fixed[0]) == (shift.value[0] & shift.fixed[0]);
+}
+
+bool anyFixedOneAboveWordZero(const PackedBits& shift)
+{
+  for (unsigned j = 1; j < shift.words; j++)
+    if (shift.fixed[j] & shift.value[j])
+      return true;
+  return false;
+}
+
+// Whether shifting the operand right by s contradicts the fixed output
+// bits: some column c <= width-1-s has both output[c] and op[c+s] fixed,
+// to different values.
+inline bool rightShiftDisagrees(const PackedBits& op, const PackedBits& out,
+                                unsigned s)
+{
+  for (unsigned j = 0; j < out.words; j++)
+  {
+    const uint64_t opF = op.shiftedWord(op.fixed, s, j);
+    if (opF == 0)
+      continue;
+    const uint64_t opV = op.shiftedWord(op.value, s, j);
+    if (opF & out.fixed[j] & (opV ^ out.value[j]))
+      return true;
+  }
+  return false;
+}
+}
 
 Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
@@ -237,6 +337,15 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   FixedBits& op = *children[0];
   FixedBits& shift = *children[1];
 
+  // The output's MSB always equals the operand's (whatever the shift is),
+  // so copy it over before considering the case split below: the branch
+  // with the opposite MSB would only conflict.
+  if (!op.isFixed(MSBIndex) && output.isFixed(MSBIndex))
+  {
+    op.setFixed(MSBIndex, true);
+    op.setValue(MSBIndex, output.getValue(MSBIndex));
+  }
+
   // If the MSB isn't set, create a copy with it set each way and take the meet.
   if (!op.isFixed(MSBIndex))
   {
@@ -344,44 +453,37 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
     cerr << "total:" << maxShiftFromShift << endl;
   }
 
-  for (unsigned i = minShiftFromShift;
-       i <= std::min(bitWidth, maxShiftFromShift); i++)
   {
-    // if the bit-pattern of 'i' is in the set represented by the 'shift'.
-    if (shift.unsignedHolds(i))
-      possibleShift[i] = true;
-  }
+    const PackedBits packedOp(op);
+    const PackedBits packedShift(shift);
+    const PackedBits packedOut(output);
+    const bool highFixedOne = anyFixedOneAboveWordZero(packedShift);
 
-  // Complication. Given a shift like [.1] possibleShift[2] is now false.
-  // A shift of 2 isn't possible. But one of three is.
-  // possibleShift[2] means any shift >=2 is possible. So it needs to be set
-  // to true.
-  {
+    for (unsigned i = minShiftFromShift;
+         i <= std::min(bitWidth, maxShiftFromShift); i++)
+    {
+      // if the bit-pattern of 'i' is in the set represented by the 'shift'.
+      if (shiftHolds(packedShift, highFixedOne, i))
+        possibleShift[i] = true;
+    }
+
+    // Complication. Given a shift like [.1] possibleShift[2] is now false.
+    // A shift of 2 isn't possible. But one of three is.
+    // possibleShift[2] means any shift >=2 is possible. So it needs to be set
+    // to true.
     if (maxShiftFromShift >= bitWidth)
       possibleShift[bitWidth] = true;
-  }
 
-  // Now check one-by-one each shifting.
-  // If we are shifting a zero to where a one is (say), then that shifting isn't
-  // possible.
-  for (unsigned shiftIt = minShiftFromShift; shiftIt < numberOfPossibleShifts;
-       shiftIt++)
-  {
-    if (possibleShift[shiftIt])
+    // Now check one-by-one each shifting.
+    // If we are shifting a zero to where a one is (say), then that shifting
+    // isn't possible. (A shift of bitWidth has no overlapping columns, so
+    // it is never filtered here, as before.)
+    for (unsigned shiftIt = minShiftFromShift; shiftIt < numberOfPossibleShifts;
+         shiftIt++)
     {
-      for (unsigned column = 0; column < bitWidth; column++)
-      {
-        // if they are fixed to different values. That's wrong.
-        if (column + shiftIt <= bitWidth - 1)
-        {
-          if (output.isFixed(column) && op.isFixed(column + shiftIt) &&
-              (output.getValue(column) != op.getValue(column + shiftIt)))
-          {
-            possibleShift[shiftIt] = false;
-            break;
-          }
-        }
-      }
+      if (possibleShift[shiftIt] && shiftIt < bitWidth &&
+          rightShiftDisagrees(packedOp, packedOut, shiftIt))
+        possibleShift[shiftIt] = false;
     }
   }
 
