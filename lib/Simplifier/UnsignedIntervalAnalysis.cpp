@@ -304,6 +304,16 @@ namespace stp
       return r;
     }
 
+    // The inverse of low64: a fresh CBV holding a machine word, written
+    // straight into the storage words. Needs value < 2^width.
+    CBV cbvFromU64(unsigned width, uint64_t value)
+    {
+      CBV r = CONSTANTBV::BitVector_Create(width, true);
+      for (unsigned w = 0; w * 8 * sizeof(*r) < width; w++)
+        r[w] = value >> (w * 8 * sizeof(*r));
+      return r;
+    }
+
     // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
     // a < m and b < m, with m <= 2^64 so nothing here can overflow.
     // Between wraps the values only grow, so the minimum is b or a
@@ -578,6 +588,178 @@ namespace stp
       CONSTANTBV::BitVector_Destroy(b);
       CONSTANTBV::BitVector_Destroy(d);
       return result;
+    }
+
+    // ---- Word versions of the six bounds above, for widths up to 64.
+    // Faithful ports: the same scan order and the same accept tests, so
+    // they return exactly the same values, just on machine words. ----
+
+    uint64_t minOR64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                     unsigned width)
+    {
+      for (unsigned i = width; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if (!(a & m) && (c & m))
+        {
+          const uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= b)
+          {
+            a = raised;
+            break;
+          }
+        }
+        else if ((a & m) && !(c & m))
+        {
+          const uint64_t raised = (c | m) & ~(m - 1);
+          if (raised <= d)
+          {
+            c = raised;
+            break;
+          }
+        }
+      }
+      return a | c;
+    }
+
+    uint64_t maxOR64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                     unsigned width)
+    {
+      for (unsigned i = width; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if ((b & m) && (d & m))
+        {
+          uint64_t lowered = (b & ~m) | (m - 1);
+          if (lowered >= a)
+          {
+            b = lowered;
+            break;
+          }
+          lowered = (d & ~m) | (m - 1);
+          if (lowered >= c)
+          {
+            d = lowered;
+            break;
+          }
+        }
+      }
+      return b | d;
+    }
+
+    uint64_t minAND64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                      unsigned width)
+    {
+      for (unsigned i = width; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if (!(a & m) && !(c & m))
+        {
+          uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= b)
+          {
+            a = raised;
+            break;
+          }
+          raised = (c | m) & ~(m - 1);
+          if (raised <= d)
+          {
+            c = raised;
+            break;
+          }
+        }
+      }
+      return a & c;
+    }
+
+    uint64_t maxAND64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                      unsigned width)
+    {
+      for (unsigned i = width; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if ((b & m) && !(d & m))
+        {
+          const uint64_t lowered = (b & ~m) | (m - 1);
+          if (lowered >= a)
+          {
+            b = lowered;
+            break;
+          }
+        }
+        else if (!(b & m) && (d & m))
+        {
+          const uint64_t lowered = (d & ~m) | (m - 1);
+          if (lowered >= c)
+          {
+            d = lowered;
+            break;
+          }
+        }
+      }
+      return b & d;
+    }
+
+    // The scan only acts at positions where a and c differ, so jump
+    // between those with count-leading-zeros instead of visiting every
+    // bit. Identical results to the plain scan.
+    uint64_t minXOR64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                      unsigned width)
+    {
+      const uint64_t widthMask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+      uint64_t candidates = (a ^ c) & widthMask;
+      while (candidates != 0)
+      {
+        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        if (c & m) // and not a: raising a can cancel c's bit
+        {
+          const uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= b)
+          {
+            a = raised;
+            candidates = (a ^ c) & (m - 1);
+            continue;
+          }
+        }
+        else // a has the bit, c doesn't
+        {
+          const uint64_t raised = (c | m) & ~(m - 1);
+          if (raised <= d)
+          {
+            c = raised;
+            candidates = (a ^ c) & (m - 1);
+            continue;
+          }
+        }
+        candidates &= m - 1;
+      }
+      return a ^ c;
+    }
+
+    // Only positions where both maximums have the bit do anything, so
+    // jump between those. Identical results to the plain scan.
+    uint64_t maxXOR64(uint64_t a, uint64_t b, uint64_t c, uint64_t d,
+                      unsigned width)
+    {
+      const uint64_t widthMask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+      uint64_t candidates = b & d & widthMask;
+      while (candidates != 0)
+      {
+        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        uint64_t lowered = (b & ~m) | (m - 1);
+        if (lowered >= a)
+          b = lowered;
+        else
+        {
+          lowered = (d & ~m) | (m - 1);
+          if (lowered >= c)
+            d = lowered;
+        }
+        candidates = b & d & (m - 1);
+      }
+      return b ^ d;
     }
   }
 
@@ -1111,6 +1293,41 @@ namespace stp
         // Hacker's Delight gives the exact bounds of the bitwise operations
         // over intervals. Exact for two children; more children are folded
         // in pairwise, which is sound but may over-approximate.
+        if (width <= 64)
+        {
+          uint64_t mn = low64(children[0]->minV);
+          uint64_t mx = low64(children[0]->maxV);
+
+          for (unsigned i = 1; i < children.size(); i++)
+          {
+            const uint64_t lo = low64(children[i]->minV);
+            const uint64_t hi = low64(children[i]->maxV);
+            uint64_t newMin, newMax;
+            if (n.GetKind() == BVAND)
+            {
+              newMin = minAND64(mn, mx, lo, hi, width);
+              newMax = maxAND64(mn, mx, lo, hi, width);
+            }
+            else if (n.GetKind() == BVOR)
+            {
+              newMin = minOR64(mn, mx, lo, hi, width);
+              newMax = maxOR64(mn, mx, lo, hi, width);
+            }
+            else
+            {
+              newMin = minXOR64(mn, mx, lo, hi, width);
+              newMax = maxXOR64(mn, mx, lo, hi, width);
+            }
+            mn = newMin;
+            mx = newMax;
+          }
+
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(cbvFromU64(width, mn),
+                                        cbvFromU64(width, mx));
+          break;
+        }
+
         CBV min = CONSTANTBV::BitVector_Clone(children[0]->minV);
         CBV max = CONSTANTBV::BitVector_Clone(children[0]->maxV);
 
