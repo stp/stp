@@ -581,6 +581,13 @@ void printColumns(signed* sumL, signed* sumH, int bitWidth)
 Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
                           stp::STPMgr* bm, MultiplicationStats* ms)
 {
+  // BVTypeCheck allows BVMULT nodes with more than two children, and the
+  // hashing node factory builds them (the simplifying factory binarises).
+  // The reasoning below is about exactly two operands; running it on the
+  // first two children of a wider multiply fixes bits unsoundly.
+  if (children.size() != 2)
+    return NO_CHANGE;
+
   FixedBits& x = *children[0];
   FixedBits& y = *children[1];
 
