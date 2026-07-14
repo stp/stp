@@ -100,6 +100,36 @@ struct PackedBits
     return r;
   }
 
+  // Word j of (m << s). May carry set bits above the width; callers mask.
+  uint64_t leftShiftedWord(const uint64_t* m, unsigned s, unsigned j) const
+  {
+    const int word = (int)j - (int)(s >> 6);
+    const unsigned bit = s & 63;
+    if (word < 0)
+      return 0;
+    uint64_t r = m[word] << bit;
+    if (bit != 0 && word >= 1)
+      r |= m[word - 1] >> (64 - bit);
+    return r;
+  }
+
+  void fixBits(unsigned j, uint64_t mask, uint64_t values)
+  {
+    fixed[j] |= mask;
+    value[j] = (value[j] & ~mask) | (values & mask);
+  }
+
+  // Bits of word j that lie below the width.
+  static uint64_t widthMask(unsigned j, unsigned width)
+  {
+    const uint64_t base = (uint64_t)j * 64;
+    if (base + 64 <= width)
+      return ~(uint64_t)0;
+    if (base >= width)
+      return 0;
+    return (((uint64_t)1 << (width - base)) - 1);
+  }
+
 private:
   PackedBits(const PackedBits&);
   PackedBits& operator=(const PackedBits&);
@@ -122,6 +152,17 @@ bool anyFixedOneAboveWordZero(const PackedBits& shift)
     if (shift.fixed[j] & shift.value[j])
       return true;
   return false;
+}
+
+// Bits of word j whose global index is >= threshold.
+inline uint64_t bitsAtOrAbove(unsigned j, unsigned threshold)
+{
+  const uint64_t base = (uint64_t)j * 64;
+  if (base >= threshold)
+    return ~(uint64_t)0;
+  if (base + 64 <= threshold)
+    return 0;
+  return ~(((uint64_t)1 << (threshold - base)) - 1);
 }
 
 // Whether shifting the operand right by s contradicts the fixed output
@@ -453,10 +494,10 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
     cerr << "total:" << maxShiftFromShift << endl;
   }
 
+  PackedBits packedOp(op);
+  PackedBits packedOut(output);
   {
-    const PackedBits packedOp(op);
     const PackedBits packedShift(shift);
-    const PackedBits packedOut(output);
     const bool highFixedOne = anyFixedOneAboveWordZero(packedShift);
 
     for (unsigned i = minShiftFromShift;
@@ -535,81 +576,62 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
     }
   }
 
+  // Collect the possible finite shift amounts once.
+  const unsigned words = packedOut.words;
+  unsigned* possibleList = (unsigned*)alloca(sizeof(unsigned) * bitWidth);
+  unsigned nPossible = 0;
+  for (unsigned s = 0; s < bitWidth; s++)
+    if (possibleShift[s])
+      possibleList[nPossible++] = s;
+  const bool shiftOutPossible = possibleShift[bitWidth];
+
   // If a particular input bit appears in every possible shifting,
   // and if that bit is unfixed,
-  // and if the result it is fixed to the same value in every position.
-  // Then, that bit must be fixed.
-  // E.g.  [--] << [0-] == [00]
-
-  bool* candidates = (bool*)alloca(sizeof(bool) * bitWidth);
-  for (unsigned i = 0; i < bitWidth; i++)
+  // and if the result is fixed to the same value in every position,
+  // then that bit must be fixed. E.g.  [--] << [0-] == [00]
+  //
+  // A bit below the largest possible shift amount is shifted out in some
+  // scenario (and everything is if a shift of >= bitWidth is possible), so
+  // the candidates are the unfixed operand bits at or above every possible
+  // shift amount. For those, every possible shift contributes the output
+  // bit that is `shift` positions lower, i.e. word-wise, (output << s).
+  if (!shiftOutPossible && nPossible > 0)
   {
-    candidates[i] = !op.isFixed(i);
-  }
+    const unsigned maxS = possibleList[nPossible - 1];
+    const unsigned s0 = possibleList[0];
+    uint64_t* agree = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* ref = (uint64_t*)alloca(sizeof(uint64_t) * words);
 
-  // candidates: So far: the bits that are unfixed in the operand.
-
-  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
-  {
-    if (possibleShift[i])
+    for (unsigned j = 0; j < words; j++)
     {
-      // If this shift is possible, then some bits will be shifted out.
-      for (unsigned j = 0; j < i; j++)
-        candidates[j] = false;
+      agree[j] = packedOut.leftShiftedWord(packedOut.fixed, s0, j);
+      ref[j] = packedOut.leftShiftedWord(packedOut.value, s0, j);
     }
-  }
-
-  // candidates: So far: + the input bits that are unfixed.
-  //                     + the input bits that are in every possible fixing.
-
-  // Check all candidates have the same output values.
-  for (unsigned candidate = 0; candidate < bitWidth; candidate++)
-  {
-    bool setTo = false; // value that's never read. To quieten gcc.
-
-    if (candidates[candidate])
+    for (unsigned k = 1; k < nPossible; k++)
     {
-      bool first = true;
-      for (unsigned shiftIT = 0; shiftIT < bitWidth; shiftIT++)
+      const unsigned s = possibleList[k];
+      for (unsigned j = 0; j < words; j++)
       {
-        // If the shift isn't possible continue.
-        if (!possibleShift[shiftIT])
-          continue;
-
-        if (shiftIT > candidate)
-          continue;
-
-        unsigned idx = candidate - shiftIT;
-
-        if (!output.isFixed(idx))
-        {
-          candidates[candidate] = false;
-          break;
-        }
-        else
-        {
-          if (first)
-          {
-            first = false;
-            setTo = output.getValue(idx);
-          }
-          else
-          {
-            if (setTo != output.getValue(idx))
-            {
-              candidates[candidate] = false;
-              break;
-            }
-          }
-        }
+        const uint64_t f = packedOut.leftShiftedWord(packedOut.fixed, s, j);
+        const uint64_t v = packedOut.leftShiftedWord(packedOut.value, s, j);
+        agree[j] &= f & ~(v ^ ref[j]);
       }
     }
 
-    if (candidates[candidate])
+    for (unsigned j = 0; j < words; j++)
     {
-      assert(!op.isFixed(candidate));
-      op.setFixed(candidate, true);
-      op.setValue(candidate, setTo);
+      const uint64_t fixable = agree[j] & ~packedOp.fixed[j] &
+                               bitsAtOrAbove(j, maxS) &
+                               packedOut.widthMask(j, bitWidth);
+      if (fixable == 0)
+        continue;
+      for (unsigned b = 0; b < 64; b++)
+        if ((fixable >> b) & 1)
+        {
+          op.setFixed(j * 64 + b, true);
+          op.setValue(j * 64 + b, (ref[j] >> b) & 1);
+        }
+      packedOp.fixBits(j, fixable, ref[j]);
     }
   }
 
@@ -621,65 +643,63 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   }
 
   // Go through each of the possible shifts. If the same value is fixed
-  // at every location. Then it's fixed too in the result.
-  // Looping over the output columns.
-  bool MSBValue = op.getValue(MSBIndex);
-
-  for (unsigned column = 0; column < bitWidth; column++)
+  // at every location, then it's fixed too in the result. The contribution
+  // of shift s at column c is op[c+s] for c <= bitWidth-1-s, and the
+  // (fixed) MSB for higher columns; a shift of >= bitWidth contributes the
+  // MSB everywhere.
+  const bool MSBValue = op.getValue(MSBIndex);
+  if (nPossible > 0 || shiftOutPossible)
   {
-    bool allFixedToSame = true;
-    bool allFixedTo = false; // value that's never read. To quieten gcc.
+    uint64_t* agree = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* ref = (uint64_t*)alloca(sizeof(uint64_t) * words);
     bool first = true;
 
-    for (unsigned shiftIt = 0;
-         (shiftIt < numberOfPossibleShifts) && allFixedToSame; shiftIt++)
+    for (unsigned k = 0; k <= nPossible; k++)
     {
-      if (possibleShift[shiftIt])
+      unsigned boundary; // columns at or above read the MSB.
+      unsigned s = 0;
+      if (k < nPossible)
       {
-        // Will have shifted in something..
-        if (shiftIt > (bitWidth - 1 - column))
+        s = possibleList[k];
+        boundary = bitWidth - s;
+      }
+      else if (shiftOutPossible)
+        boundary = 0;
+      else
+        break;
+
+      for (unsigned j = 0; j < words; j++)
+      {
+        const uint64_t hi = bitsAtOrAbove(j, boundary);
+        const uint64_t f = packedOp.shiftedWord(packedOp.fixed, s, j) | hi;
+        const uint64_t v =
+            (packedOp.shiftedWord(packedOp.value, s, j) & ~hi) |
+            (MSBValue ? hi : 0);
+        if (first)
         {
-          if (first)
-          {
-            allFixedTo = MSBValue;
-            first = false;
-          }
-          else
-          {
-            if (allFixedTo != MSBValue)
-            {
-              allFixedToSame = false;
-            }
-          }
+          agree[j] = f;
+          ref[j] = v;
         }
         else
-        {
-          unsigned index = column + shiftIt;
-          if (!op.isFixed(index))
-            allFixedToSame = false;
-          else if (first && op.isFixed(index))
-          {
-            first = false;
-            allFixedTo = op.getValue(index);
-          }
-          if (op.isFixed(index) && allFixedTo != op.getValue(index))
-            allFixedToSame = false;
-        }
+          agree[j] &= f & ~(v ^ ref[j]);
       }
+      first = false;
     }
 
-    // If it can be just one possible value. Then we can fix 'em.
-    if (allFixedToSame)
+    for (unsigned j = 0; j < words; j++)
     {
-      if (output.isFixed(column) && (output.getValue(column) != allFixedTo))
-      {
+      const uint64_t agreed = agree[j] & packedOut.widthMask(j, bitWidth);
+      if (agreed & packedOut.fixed[j] & (packedOut.value[j] ^ ref[j]))
         return CONFLICT;
-      }
-      if (!output.isFixed(column))
-      {
-        output.setFixed(column, true);
-        output.setValue(column, allFixedTo);
-      }
+      const uint64_t newFix = agreed & ~packedOut.fixed[j];
+      if (newFix == 0)
+        continue;
+      for (unsigned b = 0; b < 64; b++)
+        if ((newFix >> b) & 1)
+        {
+          output.setFixed(j * 64 + b, true);
+          output.setValue(j * 64 + b, (ref[j] >> b) & 1);
+        }
     }
   }
   return NOT_IMPLEMENTED;
