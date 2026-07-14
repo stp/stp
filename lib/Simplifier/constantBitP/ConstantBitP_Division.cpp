@@ -605,10 +605,9 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   else
     throw std::runtime_error("sdjjfas");
 
-  FixedBits aCopy(newWidth, false);
-  FixedBits bCopy(newWidth, false);
-  FixedBits rCopy(newWidth, false);
-  FixedBits qCopy(newWidth, false);
+  // Bits are only ever fixed, so a changed count means changed bits: cheap
+  // change detection for the dependency-driven loop below.
+  unsigned bCount, rCount, timesCount;
 
   // Times and plus must not overflow.
   for (unsigned i = (unsigned)output.getWidth(); i < newWidth; i++)
@@ -645,32 +644,64 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   multiplicationChildren.push_back(&q);
   multiplicationChildren.push_back(&b);
 
-  do
+  // Run the three transfer functions to a joint fixed point, but only
+  // re-run one when an operand it reads has changed since it last ran:
+  // each is deterministic and reaches its own fixed point, so re-running
+  // it on unchanged inputs cannot add anything, and the loop still ends
+  // at the same joint fixed point as re-running everything every time.
+  // The multiplication at double width dominates the cost, so the skipped
+  // runs (including the final all-quiet confirmation pass) matter.
+  bool ltDirty = true, multDirty = true, addDirty = true;
+  while (ltDirty || multDirty || addDirty)
   {
-    aCopy = a;
-    bCopy = b;
-    rCopy = r;
-    qCopy = q;
-
     if (debug_division)
     {
       log << "p1:" << a << "/" << b << "=" << q << "rem(" << r << ")" << endl;
       log << "times" << times << endl;
     }
 
-    result = bvLessThanBothWays(r, b, trueBit); // (r < b)
-    if (result == CONFLICT)
-      return CONFLICT;
+    if (ltDirty)
+    {
+      ltDirty = false;
+      rCount = r.countFixed();
+      bCount = b.countFixed();
+      result = bvLessThanBothWays(r, b, trueBit); // (r < b)
+      if (result == CONFLICT)
+        return CONFLICT;
+      if (r.countFixed() != rCount)
+        addDirty = true; // r feeds the addition.
+      if (b.countFixed() != bCount)
+        multDirty = true; // b feeds the multiplication.
+    }
 
-    result = bvMultiplyBothWays(multiplicationChildren, times, bm);
-    if (result == CONFLICT)
-      return CONFLICT;
+    if (multDirty)
+    {
+      multDirty = false;
+      bCount = b.countFixed();
+      timesCount = times.countFixed();
+      result = bvMultiplyBothWays(multiplicationChildren, times, bm); // q*b
+      if (result == CONFLICT)
+        return CONFLICT;
+      if (b.countFixed() != bCount)
+        ltDirty = true; // b feeds the less-than.
+      if (times.countFixed() != timesCount)
+        addDirty = true; // times feeds the addition.
+    }
 
-    result = bvAddBothWays(addChildren, a);
-    if (result == CONFLICT)
-      return CONFLICT;
-  } while (!(FixedBits::equals(aCopy, a) && FixedBits::equals(bCopy, b) &&
-             FixedBits::equals(rCopy, r) && FixedBits::equals(qCopy, q)));
+    if (addDirty)
+    {
+      addDirty = false;
+      rCount = r.countFixed();
+      timesCount = times.countFixed();
+      result = bvAddBothWays(addChildren, a); // times + r = a
+      if (result == CONFLICT)
+        return CONFLICT;
+      if (r.countFixed() != rCount)
+        ltDirty = true; // r feeds the less-than.
+      if (times.countFixed() != timesCount)
+        multDirty = true; // times feeds the multiplication.
+    }
+  }
 
   bool conflict = false;
   for (unsigned i = 0; i < output.getWidth(); i++)
