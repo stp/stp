@@ -147,7 +147,11 @@ struct ColumnCounts
     // Make sure each column's sum is consistent with the output.
     for (unsigned i = 0; i < bitWidth; i++)
     {
-      r = merge(r, snapTo(i));
+      const Result ri = snapTo(i);
+      if (ri == CONFLICT)
+        return CONFLICT;
+      if (ri == CHANGED)
+        r = CHANGED;
     }
     return r;
   }
