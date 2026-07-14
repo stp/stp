@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include "extlib-constbv/constantbv.h"
 #include "stp/Util/Attributes.h"
+#include <vector>
 
 // Utility functions used by the transfer functions.
 
@@ -147,7 +148,10 @@ void setSignedMinMax(FixedBits& v, CBV min, CBV max)
   assert(CONSTANTBV::BitVector_Compare(min, max) <= 0);
 }
 
-void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
+#ifndef NDEBUG
+// The original per-bit implementation, kept as the reference that the
+// block-store version is checked against in debug builds.
+static void setUnsignedMinMax_reference(const FixedBits& v, CBV min, CBV max)
 {
   CONSTANTBV::BitVector_Fill(max);
   CONSTANTBV::BitVector_Empty(min);
@@ -156,24 +160,69 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
   {
     if (v.isFixed(i))
     {
-      if (v.getValue(i)) // if it's on. It's on.
-
-      {
-        // CONSTANTBV::BitVector_Bit_On(max, i);
+      if (v.getValue(i))
         CONSTANTBV::BitVector_Bit_On(min, i);
+      else
+        CONSTANTBV::BitVector_Bit_Off(max, i);
+    }
+  }
+}
+#endif
+
+void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
+{
+  // The minimum admitted value has just the fixed ones; the maximum also
+  // has every unfixed bit. Build byte buffers and block-store them: one
+  // CONSTANTBV call per bitvector instead of one per bit. This runs in
+  // the inner loops of the division and comparison propagators.
+  const unsigned width = v.getWidth();
+  const unsigned bytes = (width + 7) / 8;
+
+  const unsigned STACK_BYTES = 128; // up to 1024 bits on the stack.
+  unsigned char stackBuf[2 * STACK_BYTES];
+  std::vector<unsigned char> heapBuf;
+  unsigned char* minBuf = stackBuf;
+  unsigned char* maxBuf = stackBuf + STACK_BYTES;
+  if (bytes > STACK_BYTES)
+  {
+    heapBuf.resize(2 * bytes);
+    minBuf = heapBuf.data();
+    maxBuf = heapBuf.data() + bytes;
+  }
+
+  unsigned i = 0;
+  for (unsigned byte = 0; byte < bytes; byte++)
+  {
+    unsigned char mn = 0, mx = 0;
+    for (unsigned b = 0; b < 8 && i < width; b++, i++)
+    {
+      if (v.isFixed(i))
+      {
+        if (v.getValue(i))
+        {
+          mn |= 1 << b;
+          mx |= 1 << b;
+        }
       }
       else
-      {
-        CONSTANTBV::BitVector_Bit_Off(max, i);
-        // CONSTANTBV::BitVector_Bit_Off(min, i);
-      }
+        mx |= 1 << b;
     }
-    // else // not fixed. Just set the max.
-    //{
-    //	CONSTANTBV::BitVector_Bit_On(max, i);
-    //	CONSTANTBV::BitVector_Bit_Off(min, i);
-    //}
+    minBuf[byte] = mn;
+    maxBuf[byte] = mx;
   }
+
+  CONSTANTBV::BitVector_Block_Store(min, minBuf, bytes);
+  CONSTANTBV::BitVector_Block_Store(max, maxBuf, bytes);
+
+#ifndef NDEBUG
+  CBV refMin = CONSTANTBV::BitVector_Create(width, true);
+  CBV refMax = CONSTANTBV::BitVector_Create(width, true);
+  setUnsignedMinMax_reference(v, refMin, refMax);
+  assert(CONSTANTBV::BitVector_equal(min, refMin));
+  assert(CONSTANTBV::BitVector_equal(max, refMax));
+  CONSTANTBV::BitVector_Destroy(refMin);
+  CONSTANTBV::BitVector_Destroy(refMax);
+#endif
   assert(CONSTANTBV::BitVector_Lexicompare(min, max) <= 0);
 }
 
