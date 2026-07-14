@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef FIXEDBITS_H_
 #define FIXEDBITS_H_
 
+#include <cstdint>
 #include <cstring>
 #include "stp/Util/Attributes.h"
 #include <stp/Util/Attributes.h>
@@ -339,14 +340,14 @@ public:
     {
       const unsigned base = byte * 8;
       const unsigned n = width - base >= 8 ? 8 : width - base;
-      unsigned long long f = 0, v = 0;
+      uint64_t f = 0, v = 0;
       memcpy(&f, fixed + base, n);
       memcpy(&v, values + base, n);
       // The bools are 0x00/0x01 bytes; gather each byte's low bit.
-      const unsigned long long ones = 0x0101010101010101ULL;
-      const unsigned long long gather = 0x0102040810204080ULL;
-      const unsigned long long mn = f & v;
-      const unsigned long long mx = (f ^ ones) | mn; // unfixed or fixed one.
+      const uint64_t ones = 0x0101010101010101ULL;
+      const uint64_t gather = 0x0102040810204080ULL;
+      const uint64_t mn = f & v;
+      const uint64_t mx = (f ^ ones) | mn; // unfixed or fixed one.
       minBuf[byte] = (unsigned char)((mn * gather) >> 56);
       maxBuf[byte] = (unsigned char)((mx * gather) >> 56);
     }
@@ -355,21 +356,21 @@ public:
   // Packs the fixedness flags and the fixed-one values into words,
   // LSB-first: bit i of fixedW[i/64] is isFixed(i), bit i of valueW is a
   // fixed one. Each array needs ceil(width/64) words.
-  void fillPackedWords(unsigned long long* fixedW,
-                       unsigned long long* valueW) const
+  void fillPackedWords(uint64_t* fixedW,
+                       uint64_t* valueW) const
   {
     static_assert(sizeof(bool) == 1, "bools are loaded eight at a time");
-    const unsigned long long gather = 0x0102040810204080ULL;
+    const uint64_t gather = 0x0102040810204080ULL;
     const unsigned words = (width + 63) / 64;
     for (unsigned w = 0; w < words; w++)
     {
-      unsigned long long fw = 0, vw = 0;
+      uint64_t fw = 0, vw = 0;
       const unsigned base = w * 64;
       const unsigned limit = width - base >= 64 ? 64 : width - base;
       for (unsigned b = 0; b < limit; b += 8)
       {
         const unsigned n = limit - b >= 8 ? 8 : limit - b;
-        unsigned long long f = 0, v = 0;
+        uint64_t f = 0, v = 0;
         memcpy(&f, fixed + base + b, n);
         memcpy(&v, values + base + b, n);
         fw |= ((f * gather) >> 56) << b;

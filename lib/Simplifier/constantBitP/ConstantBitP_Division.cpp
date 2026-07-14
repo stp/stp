@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include <cstdint>
 #include <set>
 #include <stdexcept>
 
@@ -101,17 +102,15 @@ FixedBits cbvToFixedBits(stp::CBV low, unsigned width)
 
 namespace
 {
-typedef unsigned long long u64;
-
 // Bits of word w with global index below `bound`.
-inline u64 rangeBelow(unsigned w, unsigned bound)
+inline uint64_t rangeBelow(unsigned w, unsigned bound)
 {
-  const u64 base = (u64)w * 64;
+  const uint64_t base = (uint64_t)w * 64;
   if (base + 64 <= bound)
-    return ~(u64)0;
+    return ~(uint64_t)0;
   if (base >= bound)
     return 0;
-  return ((u64)1 << (bound - base)) - 1;
+  return ((uint64_t)1 << (bound - base)) - 1;
 }
 }
 
@@ -132,21 +131,21 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
   const unsigned words = (width + 63) / 64;
   const unsigned units = (width + 31) / 32;
 
-  u64* buf = (u64*)alloca(sizeof(u64) * 5 * words);
-  u64* bF = buf;             // fixedness.
-  u64* bV = buf + words;     // fixed ones = the minimum admitted value.
-  u64* maxAdm = buf + 2 * words;
-  u64* lowW = buf + 3 * words;
-  u64* highW = buf + 4 * words;
+  uint64_t* buf = (uint64_t*)alloca(sizeof(uint64_t) * 5 * words);
+  uint64_t* bF = buf;             // fixedness.
+  uint64_t* bV = buf + words;     // fixed ones = the minimum admitted value.
+  uint64_t* maxAdm = buf + 2 * words;
+  uint64_t* lowW = buf + 3 * words;
+  uint64_t* highW = buf + 4 * words;
   b.fillPackedWords(bF, bV);
 
   for (unsigned w = 0; w < words; w++)
   {
-    u64 lo = low[2 * w], hi = high[2 * w];
+    uint64_t lo = low[2 * w], hi = high[2 * w];
     if (2 * w + 1 < units)
     {
-      lo |= (u64)low[2 * w + 1] << 32;
-      hi |= (u64)high[2 * w + 1] << 32;
+      lo |= (uint64_t)low[2 * w + 1] << 32;
+      hi |= (uint64_t)high[2 * w + 1] << 32;
     }
     lowW[w] = lo;
     highW[w] = hi;
@@ -171,13 +170,13 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
   // unfixed bit at or above diff's bit-length would overshoot.
   {
     unsigned bitLen = 0;
-    u64 borrow = 0;
+    uint64_t borrow = 0;
     for (unsigned w = 0; w < words; w++)
     {
-      const u64 hw = highW[w], sub = bV[w];
-      const u64 d1 = hw - sub;
+      const uint64_t hw = highW[w], sub = bV[w];
+      const uint64_t d1 = hw - sub;
       const bool under1 = hw < sub;
-      const u64 d = d1 - borrow;
+      const uint64_t d = d1 - borrow;
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
@@ -185,7 +184,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
     }
     for (unsigned w = 0; w < words; w++)
     {
-      u64 forced0 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
+      uint64_t forced0 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
       if (forced0 == 0)
         continue;
       changed = true;
@@ -212,13 +211,13 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       return CONFLICT;
 
     unsigned bitLen = 0;
-    u64 borrow = 0;
+    uint64_t borrow = 0;
     for (unsigned w = 0; w < words; w++)
     {
-      const u64 mw = maxAdm[w], sub = lowW[w];
-      const u64 d1 = mw - sub;
+      const uint64_t mw = maxAdm[w], sub = lowW[w];
+      const uint64_t d1 = mw - sub;
       const bool under1 = mw < sub;
-      const u64 d = d1 - borrow;
+      const uint64_t d = d1 - borrow;
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
@@ -226,7 +225,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
     }
     for (unsigned w = 0; w < words; w++)
     {
-      u64 forced1 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
+      uint64_t forced1 = ~bF[w] & ~rangeBelow(w, bitLen) & rangeBelow(w, width);
       if (forced1 == 0)
         continue;
       changed = true;
@@ -247,7 +246,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
     unsigned firstDiffer = 0; // the prefix covers bits above this.
     for (int w = (int)words - 1; w >= 0; w--)
     {
-      const u64 d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
+      const uint64_t d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
       if (d != 0)
       {
         firstDiffer = w * 64 + 64 - (unsigned)__builtin_clzll(d);
@@ -256,13 +255,13 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
     }
     for (unsigned w = 0; w < words; w++)
     {
-      const u64 prefix =
+      const uint64_t prefix =
           ~rangeBelow(w, firstDiffer) & rangeBelow(w, width);
       if (prefix == 0)
         continue;
       if (prefix & bF[w] & (bV[w] ^ lowW[w]))
         return CONFLICT; // fixed to the other value.
-      u64 newFix = prefix & ~bF[w];
+      uint64_t newFix = prefix & ~bF[w];
       changed |= newFix != 0;
       while (newFix)
       {

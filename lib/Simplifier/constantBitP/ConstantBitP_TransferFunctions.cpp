@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include <cstdint>
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 
 namespace simplifier
@@ -318,9 +319,9 @@ Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 namespace
 {
 // Bits of word w with global index below `bound`.
-inline unsigned long long bitsBelowWord(unsigned w, unsigned bound)
+inline uint64_t bitsBelowWord(unsigned w, unsigned bound)
 {
-  const unsigned long long base = (unsigned long long)w * 64;
+  const uint64_t base = (uint64_t)w * 64;
   if (base + 64 <= bound)
     return ~0ULL;
   if (base >= bound)
@@ -337,19 +338,18 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   const unsigned width = x.getWidth();
   assert(y.getWidth() == width);
 
-  typedef unsigned long long u64;
   const unsigned words = (width + 63) / 64;
-  u64* buf = (u64*)alloca(sizeof(u64) * 4 * words);
-  u64* xF = buf;             // fixedness.
-  u64* xV = buf + words;     // fixed ones.
-  u64* yF = buf + 2 * words;
-  u64* yV = buf + 3 * words;
+  uint64_t* buf = (uint64_t*)alloca(sizeof(uint64_t) * 4 * words);
+  uint64_t* xF = buf;             // fixedness.
+  uint64_t* xV = buf + words;     // fixed ones.
+  uint64_t* yF = buf + 2 * words;
+  uint64_t* yV = buf + 3 * words;
   x.fillPackedWords(xF, xV);
   y.fillPackedWords(yF, yV);
 
   // Nothing fixed anywhere: nothing can be deduced.
   {
-    u64 any = 0;
+    uint64_t any = 0;
     for (unsigned w = 0; w < words; w++)
       any |= xF[w] | yF[w];
     if (any == 0)
@@ -365,11 +365,11 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
 
   for (unsigned w = 0; w < words; w++)
   {
-    const u64 knownOne = xV[w] | yV[w];
-    const u64 both = xF[w] & yF[w];
-    const u64 diff = both & (xV[w] ^ yV[w]);
-    const u64 ones2 = xV[w] & yV[w];
-    const u64 zeros2 = both & ~xV[w] & ~yV[w];
+    const uint64_t knownOne = xV[w] | yV[w];
+    const uint64_t both = xF[w] & yF[w];
+    const uint64_t diff = both & (xV[w] ^ yV[w]);
+    const uint64_t ones2 = xV[w] & yV[w];
+    const uint64_t zeros2 = both & ~xV[w] & ~yV[w];
     const unsigned base = w * 64;
 
     if (knownOne)
@@ -399,8 +399,8 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   unsigned L = none, H = none;
   for (unsigned w = 0; w < words; w++)
   {
-    const u64 hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
-    u64 feas = ~hole;
+    const uint64_t hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
+    uint64_t feas = ~hole;
     feas &= ~bitsBelowWord(w, lo);
     feas &= bitsBelowWord(w, hi == width ? width : hi + 1);
     // Mask to the width (the top word may have slack bits).
@@ -425,9 +425,9 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   const unsigned zeroBelow = (L == none) ? width : L;
   for (unsigned w = 0; w < words && w * 64 < zeroBelow; w++)
   {
-    const u64 region = bitsBelowWord(w, zeroBelow);
-    u64 newX = region & ~xF[w];
-    u64 newY = region & ~yF[w];
+    const uint64_t region = bitsBelowWord(w, zeroBelow);
+    uint64_t newX = region & ~xF[w];
+    uint64_t newY = region & ~yF[w];
     changed |= (newX | newY) != 0;
     while (newX)
     {
@@ -453,9 +453,9 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   bool anyFeasibleBelow = false;
   for (unsigned i = L; i <= H; i++)
   {
-    const u64 bit = 1ULL << (i & 63);
+    const uint64_t bit = 1ULL << (i & 63);
     const unsigned w = i >> 6;
-    const u64 hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
+    const uint64_t hole = (xF[w] & ~xV[w]) | (yF[w] & ~yV[w]);
     const bool eqHere = i >= lo && i <= hi && !(hole & bit);
     const bool gtHere = i < H || widthFeasible;
     const bool ltHere = anyFeasibleBelow;
@@ -531,9 +531,9 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   {
     for (unsigned w = H / 64; w < words; w++)
     {
-      const u64 region = ~bitsBelowWord(w, H + 1) & bitsBelowWord(w, width);
-      u64 fromX = region & xF[w] & ~yF[w]; // y := !x.
-      u64 fromY = region & yF[w] & ~xF[w]; // x := !y.
+      const uint64_t region = ~bitsBelowWord(w, H + 1) & bitsBelowWord(w, width);
+      uint64_t fromX = region & xF[w] & ~yF[w]; // y := !x.
+      uint64_t fromY = region & yF[w] & ~xF[w]; // x := !y.
       changed |= (fromX | fromY) != 0;
       while (fromX)
       {
