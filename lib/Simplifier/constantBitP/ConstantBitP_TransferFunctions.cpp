@@ -307,51 +307,139 @@ Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 }
 
 // UMINUS, is NEG followed by +1
+// The relation y == -x is characterised entirely by the position t of the
+// lowest one bit: bits below t are zero in both x and y, bit t is one in
+// both, and above t the two are complements (with t == width standing for
+// x == y == 0). Rather than looping a bitwise-not and a full addition
+// propagation to a fixed point, compute the feasible set of t directly and
+// take the union of the deductions each feasible t makes. That is
+// maximally precise in one O(width) pass: the feasible-t structures are
+// exactly the solutions, so the agreement over them is the ideal result.
 Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   assert(children.size() == 1);
-  const int bitWidth = children[0]->getWidth();
+  FixedBits& x = *children[0];
+  FixedBits& y = output;
+  const unsigned width = x.getWidth();
+  assert(y.getWidth() == width);
 
-  const unsigned initialFixedCount =
-      children[0]->countFixed() + output.countFixed();
+  const unsigned initialFixedCount = x.countFixed() + y.countFixed();
 
-  // If it's only one bit. This will be negative one.
-  FixedBits one(bitWidth, false);
-  one.fixToZero();
-  one.setFixed(0, true);
-  one.setValue(0, true);
+  // The feasible t form an interval [lo, hi] with holes.
+  unsigned lo = 0;
+  unsigned hi = width; // t == width means x == 0.
 
-  FixedBits notted(bitWidth, false);
-
-  vector<FixedBits*> args;
-  args.push_back(&notted);
-  args.push_back(&one);
-
-  Result result = NO_CHANGE;
-  while (true) // until it fixed points
+  for (unsigned i = 0; i < width; i++)
   {
-    FixedBits initialNot(notted);
-    FixedBits initialIn(*children[0]);
-    FixedBits initialOut(output);
+    // A known one at i (in either operand) means the lowest one is at or
+    // below i.
+    if (x.isFixedToOne(i) || y.isFixedToOne(i))
+      hi = std::min(hi, i);
 
-    result = bvNotBothWays(*children[0], notted);
-    if (CONFLICT == result)
-      return CONFLICT;
-
-    result = bvAddBothWays(args, output);
-    if (CONFLICT == result)
-      return CONFLICT;
-
-    if (FixedBits::equals(initialNot, notted) &&
-        FixedBits::equals(initialIn, *children[0]) &&
-        FixedBits::equals(initialOut, output))
-      break;
+    if (x.isFixed(i) && y.isFixed(i))
+    {
+      if (x.getValue(i) != y.getValue(i))
+        hi = std::min(hi, i == 0 ? 0 : i - 1); // complements: t < i.
+      else if (x.getValue(i))
+        lo = std::max(lo, i); // both one: t == i (with hi <= i from above).
+      else
+        lo = std::max(lo, i + 1); // both zero: t > i.
+      if (x.getValue(i) != y.getValue(i) && i == 0)
+        return CONFLICT; // bit zero is always shared.
+    }
   }
 
-  return (children[0]->countFixed() + output.countFixed() ==
-          initialFixedCount)
-             ? NO_CHANGE
-             : CHANGED;
+  // Holes: t == i needs both bits able to be one.
+  // nextFeasible[i]: the smallest feasible t >= i (width + 1 if none).
+  const unsigned none = width + 1;
+  unsigned* nextFeasible = (unsigned*)alloca(sizeof(unsigned) * (width + 2));
+  nextFeasible[width + 1] = none;
+  for (int t = (int)width; t >= 0; t--)
+  {
+    const bool hole =
+        t < (int)width && (x.isFixedToZero(t) || y.isFixedToZero(t));
+    const bool inRange = (unsigned)t >= lo && (unsigned)t <= hi;
+    nextFeasible[t] =
+        (!hole && inRange) ? (unsigned)t : nextFeasible[t + 1];
+  }
+
+  if (nextFeasible[0] == none)
+    return CONFLICT; // no position for the lowest one remains.
+
+  // prevFeasible: is there a feasible t strictly below i? Tracked while
+  // sweeping upwards.
+  bool anyFeasibleBelow = false;
+
+  for (unsigned i = 0; i < width; i++)
+  {
+    const bool eqHere = nextFeasible[i] == i;         // t == i possible.
+    const bool gtHere = nextFeasible[i + 1] != none;  // t > i possible.
+    const bool ltHere = anyFeasibleBelow;             // t < i possible.
+
+    // Possible values for (x_i, y_i): t > i contributes (0,0); t == i
+    // contributes (1,1); t < i contributes complementary pairs filtered
+    // by whatever is already fixed.
+    bool xCan0 = false, xCan1 = false, yCan0 = false, yCan1 = false;
+    if (gtHere)
+    {
+      xCan0 = true;
+      yCan0 = true;
+    }
+    if (eqHere)
+    {
+      xCan1 = true;
+      yCan1 = true;
+    }
+    if (ltHere)
+    {
+      if (x.isFixed(i))
+      {
+        (x.getValue(i) ? xCan1 : xCan0) = true;
+        (x.getValue(i) ? yCan0 : yCan1) = true; // y_i = !x_i.
+      }
+      else if (y.isFixed(i))
+      {
+        (y.getValue(i) ? yCan1 : yCan0) = true;
+        (y.getValue(i) ? xCan0 : xCan1) = true;
+      }
+      else
+      {
+        xCan0 = xCan1 = yCan0 = yCan1 = true;
+      }
+    }
+
+    // Respect existing fixings (a fixed bit only admits its own value).
+    if (x.isFixed(i))
+    {
+      xCan0 = xCan0 && !x.getValue(i);
+      xCan1 = xCan1 && x.getValue(i);
+    }
+    if (y.isFixed(i))
+    {
+      yCan0 = yCan0 && !y.getValue(i);
+      yCan1 = yCan1 && y.getValue(i);
+    }
+
+    if ((!xCan0 && !xCan1) || (!yCan0 && !yCan1))
+      return CONFLICT;
+
+    if (!x.isFixed(i) && (xCan0 ^ xCan1))
+    {
+      x.setFixed(i, true);
+      x.setValue(i, xCan1);
+    }
+    if (!y.isFixed(i) && (yCan0 ^ yCan1))
+    {
+      y.setFixed(i, true);
+      y.setValue(i, yCan1);
+    }
+
+    if (eqHere)
+      anyFeasibleBelow = true;
+  }
+
+  return (x.countFixed() + y.countFixed() == initialFixedCount) ? NO_CHANGE
+                                                                : CHANGED;
 }
 
 Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
