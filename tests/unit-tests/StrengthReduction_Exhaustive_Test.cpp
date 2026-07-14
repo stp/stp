@@ -393,6 +393,112 @@ TEST(StrengthReduction_Exhaustive_Test, srem_to_urem_via_fixedbits)
     }
 }
 
+// bvsge reduces to bvuge when the fixed bits give both operands the same
+// sign. The node is built with the hashing factory because the
+// simplifying factory rewrites bvsge on creation.
+TEST(StrengthReduction_Exhaustive_Test, sge_to_uge_via_fixedbits)
+{
+  const unsigned width = 3;
+
+  for (unsigned sign = 0; sign <= 1; sign++)
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n =
+        c.mgr.hashingNodeFactory->CreateNode(stp::BVSGE, stp::ASTVec{x, y});
+    ASSERT_EQ(n.GetKind(), stp::BVSGE);
+
+    FixedBits xBits = msbFixed(width, sign == 1);
+    FixedBits yBits = msbFixed(width, sign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    // The created BVGE is rewritten to NOT(BVGT ...) by the simplifying
+    // factory, so check for the BVGT.
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_FALSE(c.present(stp::BVSGE, result));
+    ASSERT_FALSE(c.present(stp::BVSGT, result));
+    ASSERT_TRUE(c.present(stp::BVGT, result));
+
+    auto consistent = [sign, width](unsigned v) {
+      return ((v >> (width - 1)) & 1) == sign;
+    };
+    c.checkEquivalent(n, result, x, y, width, consistent, consistent);
+  }
+}
+
+// bvsmod reduces to bvurem (with negations, and an adjustment when the
+// signs differ) once both sign bits are fixed. Equivalent for every
+// consistent assignment, including remainder by zero.
+TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_fixedbits)
+{
+  const unsigned width = 3;
+
+  for (unsigned xSign = 0; xSign <= 1; xSign++)
+    for (unsigned ySign = 0; ySign <= 1; ySign++)
+    {
+      Context c;
+      ASTNode x = c.symbol("x", width);
+      ASTNode y = c.symbol("y", width);
+      ASTNode n = c.nf->CreateTerm(stp::SBVMOD, width, x, y);
+      ASSERT_EQ(n.GetKind(), stp::SBVMOD);
+
+      FixedBits xBits = msbFixed(width, xSign == 1);
+      FixedBits yBits = msbFixed(width, ySign == 1);
+
+      stp::NodeToFixedBitsMap map;
+      map.insert({n, nullptr});
+      map.insert({x, &xBits});
+      map.insert({y, &yBits});
+
+      ASTNode result = c.sr.topLevel(n, map);
+      ASSERT_FALSE(c.present(stp::SBVMOD, result));
+      ASSERT_TRUE(c.present(stp::BVMOD, result));
+
+      c.checkEquivalent(
+          n, result, x, y, width,
+          [xSign, width](unsigned v) {
+            return ((v >> (width - 1)) & 1) == xSign;
+          },
+          [ySign, width](unsigned v) {
+            return ((v >> (width - 1)) & 1) == ySign;
+          });
+    }
+}
+
+// bvsmod reduces to bvurem when both intervals exclude the top bit.
+TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_intervals)
+{
+  const unsigned width = 3;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::SBVMOD, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::SBVMOD);
+
+  // y's interval includes zero, checking remainder by zero as well.
+  stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+  stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+  stp::NodeToUnsignedIntervalMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xInterval});
+  map.insert({y, &yInterval});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_FALSE(c.present(stp::SBVMOD, result));
+  ASSERT_TRUE(c.present(stp::BVMOD, result));
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v <= 3; },
+      [](unsigned v) { return v <= 3; });
+}
+
 // bvadd reduces to bvor when the fixed bits show the operands can't both
 // have a one in any position (no carries are possible).
 TEST(StrengthReduction_Exhaustive_Test, plus_to_or_via_fixedbits)

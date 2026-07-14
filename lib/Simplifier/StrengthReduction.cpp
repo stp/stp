@@ -145,7 +145,7 @@ namespace stp
         newN = nf->CreateConstant(clone, n.GetValueWidth());
       }
     }
-    else if (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT || k == SBVREM || k == BVSX)
+    else if (k == BVSGT || k == BVSGE || k == SBVDIV || k == BVSRSHIFT || k == SBVREM || k == SBVMOD || k == BVSX)
     {
       // If the leading bits are false then we can reduce from signed to
       // unsigned comparison. This is all expressed more naturally using the 
@@ -201,8 +201,12 @@ namespace stp
           break;
 
         case SBVREM:
+        case SBVMOD:
           if (lhs && rhs)
           {
+            // With both operands non-negative these agree with the
+            // unsigned remainder, including remainder by zero, which all
+            // three define as the dividend.
             newN = nf->CreateTerm(BVMOD, n.GetValueWidth(), n[0], n[1]);
           }
           break;
@@ -251,8 +255,8 @@ namespace stp
 
       replaceWithConstant++;
     }
-    else if (kind == BVSGT || kind == SBVDIV || kind == SBVMOD ||
-             kind == SBVREM)
+    else if (kind == BVSGT || kind == BVSGE || kind == SBVDIV ||
+             kind == SBVMOD || kind == SBVREM)
     {
       if (visited.find(n[0]) != visited.end() &&
           visited.find(n[1]) != visited.end())
@@ -264,10 +268,11 @@ namespace stp
           const unsigned bw = n[0].GetValueWidth();
           if (l->isFixed(bw - 1) && r->isFixed(bw - 1))
           {
-            if (kind == BVSGT && (l->getValue(bw - 1) == r->getValue(bw - 1)))
+            if ((kind == BVSGT || kind == BVSGE) &&
+                (l->getValue(bw - 1) == r->getValue(bw - 1)))
             {
               // replace with unsigned comparison.
-              newN = nf->CreateNode(BVGT, n[0], n[1]);
+              newN = nf->CreateNode(kind == BVSGT ? BVGT : BVGE, n[0], n[1]);
               replaceWithSimpler++;
             }
             else if (kind == SBVDIV || kind == SBVREM)
@@ -297,7 +302,42 @@ namespace stp
             }
             else if (kind == SBVMOD)
             {
-              unimplementedReduction++;
+              // The result of bvsmod takes the divisor's sign, so with
+              // both signs fixed it's the unsigned remainder of the
+              // magnitudes, moved onto the divisor's side of zero.
+              const auto width = n.GetValueWidth();
+              const bool sNegative = l->getValue(bw - 1);
+              const bool tNegative = r->getValue(bw - 1);
+
+              ASTNode absS = n[0];
+              ASTNode absT = n[1];
+
+              if (sNegative)
+                absS = nf->CreateTerm(BVUMINUS, width, absS);
+              if (tNegative)
+                absT = nf->CreateTerm(BVUMINUS, width, absT);
+
+              ASTNode u = nf->CreateTerm(BVMOD, width, absS, absT);
+
+              if (sNegative == tNegative)
+              {
+                // Same signs: already on the divisor's side. This also
+                // covers remainder by zero (only possible with both
+                // non-negative), where both operations give the dividend.
+                newN = sNegative ? nf->CreateTerm(BVUMINUS, width, u) : u;
+              }
+              else
+              {
+                // Different signs: a non-zero remainder is off the
+                // divisor's side by exactly one divisor.
+                const ASTNode zero = nf->CreateZeroConst(width);
+                ASTNode shifted = nf->CreateTerm(
+                    BVPLUS, width,
+                    sNegative ? nf->CreateTerm(BVUMINUS, width, u) : u, n[1]);
+                newN = nf->CreateTerm(ITE, width, nf->CreateNode(EQ, u, zero),
+                                      zero, shifted);
+              }
+              replaceWithSimpler++;
             }
           }
         }
@@ -441,7 +481,6 @@ namespace stp
 
     replaceWithConstant = 0;
     replaceWithSimpler = 0;
-    unimplementedReduction = 0;
   }
 
   StrengthReduction::~StrengthReduction()
@@ -458,7 +497,5 @@ namespace stp
     std::cerr << "{" << name
               << "} replace with simpler operation: " << replaceWithSimpler
               << std::endl;
-    std::cerr << "{" << name << "} TODO replace with simpler operation: "
-              << unimplementedReduction << std::endl;
   }
 }

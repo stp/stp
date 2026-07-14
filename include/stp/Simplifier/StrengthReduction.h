@@ -50,7 +50,6 @@ class StrengthReduction
 {
   unsigned replaceWithConstant =0;
   unsigned replaceWithSimpler =0;
-  unsigned unimplementedReduction =0;
 
   CBV littleOne;
   CBV littleZero;
