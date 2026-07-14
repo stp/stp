@@ -175,6 +175,120 @@ void meetInto(PackedBits& a, const PackedBits& b)
   }
 }
 
+// The shift operand must lie in the union of the possible shift amounts:
+// the bit patterns of the possible finite shifts, unioned with whatever
+// "shift >= bitWidth" allows when shifting everything out is possible.
+// Fixes shift bits the union agrees on; CONFLICT if one contradicts a
+// fixed bit.
+Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
+                       const unsigned* possibleList, const unsigned nPossible,
+                       const bool shiftOutPossible)
+{
+  const unsigned words = packedShift.words;
+
+  // The union of the finite patterns: bits where they all agree are
+  // fixed. (Patterns are < bitWidth, so any bits above word zero of the
+  // union are fixed to zero.)
+  uint64_t* vFixed = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* vValue = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  if (nPossible > 0)
+  {
+    const uint64_t ref = possibleList[0];
+    uint64_t diff = 0;
+    for (unsigned k = 1; k < nPossible; k++)
+      diff |= ref ^ (uint64_t)possibleList[k];
+    vFixed[0] = ~diff & PackedBits::widthMask(0, bitWidth);
+    vValue[0] = ref & vFixed[0];
+    for (unsigned j = 1; j < words; j++)
+    {
+      vFixed[j] = PackedBits::widthMask(j, bitWidth);
+      vValue[j] = 0;
+    }
+  }
+  else
+    for (unsigned j = 0; j < words; j++)
+      vFixed[j] = vValue[j] = 0;
+
+  if (shiftOutPossible)
+  {
+    // What "shift >= bitWidth" forces, exactly as the maximally precise
+    // comparison propagator would: possibleShift[bitWidth] was only set
+    // when the maximum admitted shift value is >= bitWidth, so for every
+    // unfixed bit an admitted value >= bitWidth with that bit one exists
+    // (the maximum itself). An unfixed bit is therefore only ever forced
+    // to one, precisely when clearing it drops the maximum admitted
+    // value below bitWidth.
+    uint64_t* wFixed = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* wValue = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* maxAdm = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    unsigned nonZeroHighWords = 0;
+    for (unsigned j = 0; j < words; j++)
+    {
+      wFixed[j] = packedShift.fixed[j];
+      wValue[j] = packedShift.value[j];
+      maxAdm[j] = (packedShift.value[j] | ~packedShift.fixed[j]) &
+                  PackedBits::widthMask(j, bitWidth);
+      if (j > 0 && maxAdm[j] != 0)
+        nonZeroHighWords++;
+    }
+
+    for (unsigned j = 0; j < words; j++)
+    {
+      uint64_t pending = ~packedShift.fixed[j] &
+                         PackedBits::widthMask(j, bitWidth);
+      while (pending)
+      {
+        const unsigned b = __builtin_ctzll(pending);
+        pending &= pending - 1;
+        const uint64_t bit = (uint64_t)1 << b;
+
+        // Is (maxAdm with this bit cleared) < bitWidth?
+        bool less;
+        if (j == 0)
+          less = (nonZeroHighWords == 0) &&
+                 ((maxAdm[0] & ~bit) < (uint64_t)bitWidth);
+        else
+          less = (nonZeroHighWords == (maxAdm[j] == bit ? 1u : 0u)) &&
+                 (maxAdm[0] < (uint64_t)bitWidth) &&
+                 ((maxAdm[j] & ~bit) == 0);
+        if (less)
+        {
+          wFixed[j] |= bit;
+          wValue[j] |= bit;
+        }
+      }
+    }
+
+    if (nPossible > 0)
+    {
+      // Union: drop bits the >= case leaves open or disagrees on.
+      for (unsigned j = 0; j < words; j++)
+      {
+        vFixed[j] &= wFixed[j] & ~(vValue[j] ^ wValue[j]);
+        vValue[j] &= vFixed[j];
+      }
+    }
+    else
+    {
+      // Only shifts >= bitWidth are possible.
+      for (unsigned j = 0; j < words; j++)
+      {
+        vFixed[j] = wFixed[j];
+        vValue[j] = wValue[j];
+      }
+    }
+  }
+
+  // Write the union into the shift.
+  for (unsigned j = 0; j < words; j++)
+  {
+    if (vFixed[j] & packedShift.fixed[j] & (packedShift.value[j] ^ vValue[j]))
+      return CONFLICT;
+    packedShift.fixBits(j, vFixed[j], vValue[j]);
+  }
+  return NOT_IMPLEMENTED;
+}
+
 // Whether the concrete shift amount i is admitted by the fixed bits of the
 // shift operand. Equivalent to FixedBits::unsignedHolds(i) for i < 2^64,
 // given anyHighFixedOne = "some bit above word zero is fixed to one".
@@ -435,117 +549,16 @@ static Result ashrCore(const unsigned bitWidth, PackedBits& packedOp,
   // Collect the possible finite shift amounts once.
   const unsigned words = packedOut.words;
   unsigned* possibleList = (unsigned*)alloca(sizeof(unsigned) * bitWidth);
+  possibleList[0] = 0; // quieten -Wmaybe-uninitialized; only read when nPossible > 0.
   unsigned nPossible = 0;
   for (unsigned s = 0; s < bitWidth; s++)
     if (possibleShift[s])
       possibleList[nPossible++] = s;
   const bool shiftOutPossible = possibleShift[bitWidth];
 
-  // The shift operand must lie in the union of the possible shift amounts:
-  // the bit patterns of the possible finite shifts, unioned with whatever
-  // "shift >= bitWidth" allows when shifting everything out is possible.
-  {
-    // The union of the finite patterns: bits where they all agree are
-    // fixed. (Patterns are < bitWidth, so any bits above word zero of the
-    // union are fixed to zero.)
-    uint64_t* vFixed = (uint64_t*)alloca(sizeof(uint64_t) * words);
-    uint64_t* vValue = (uint64_t*)alloca(sizeof(uint64_t) * words);
-    if (nPossible > 0)
-    {
-      const uint64_t ref = possibleList[0];
-      uint64_t diff = 0;
-      for (unsigned k = 1; k < nPossible; k++)
-        diff |= ref ^ (uint64_t)possibleList[k];
-      vFixed[0] = ~diff & PackedBits::widthMask(0, bitWidth);
-      vValue[0] = ref & vFixed[0];
-      for (unsigned j = 1; j < words; j++)
-      {
-        vFixed[j] = PackedBits::widthMask(j, bitWidth);
-        vValue[j] = 0;
-      }
-    }
-    else
-      for (unsigned j = 0; j < words; j++)
-        vFixed[j] = vValue[j] = 0;
-
-    if (shiftOutPossible)
-    {
-      // What "shift >= bitWidth" forces, exactly as the maximally precise
-      // comparison propagator would: possibleShift[bitWidth] was only set
-      // when the maximum admitted shift value is >= bitWidth, so for every
-      // unfixed bit an admitted value >= bitWidth with that bit one exists
-      // (the maximum itself). An unfixed bit is therefore only ever forced
-      // to one, precisely when clearing it drops the maximum admitted
-      // value below bitWidth.
-      uint64_t* wFixed = (uint64_t*)alloca(sizeof(uint64_t) * words);
-      uint64_t* wValue = (uint64_t*)alloca(sizeof(uint64_t) * words);
-      uint64_t* maxAdm = (uint64_t*)alloca(sizeof(uint64_t) * words);
-      unsigned nonZeroHighWords = 0;
-      for (unsigned j = 0; j < words; j++)
-      {
-        wFixed[j] = packedShift.fixed[j];
-        wValue[j] = packedShift.value[j];
-        maxAdm[j] = (packedShift.value[j] | ~packedShift.fixed[j]) &
-                    PackedBits::widthMask(j, bitWidth);
-        if (j > 0 && maxAdm[j] != 0)
-          nonZeroHighWords++;
-      }
-
-      for (unsigned j = 0; j < words; j++)
-      {
-        uint64_t pending = ~packedShift.fixed[j] &
-                           PackedBits::widthMask(j, bitWidth);
-        while (pending)
-        {
-          const unsigned b = __builtin_ctzll(pending);
-          pending &= pending - 1;
-          const uint64_t bit = (uint64_t)1 << b;
-
-          // Is (maxAdm with this bit cleared) < bitWidth?
-          bool less;
-          if (j == 0)
-            less = (nonZeroHighWords == 0) &&
-                   ((maxAdm[0] & ~bit) < (uint64_t)bitWidth);
-          else
-            less = (nonZeroHighWords == (maxAdm[j] == bit ? 1u : 0u)) &&
-                   (maxAdm[0] < (uint64_t)bitWidth) &&
-                   ((maxAdm[j] & ~bit) == 0);
-          if (less)
-          {
-            wFixed[j] |= bit;
-            wValue[j] |= bit;
-          }
-        }
-      }
-
-      if (nPossible > 0)
-      {
-        // Union: drop bits the >= case leaves open or disagrees on.
-        for (unsigned j = 0; j < words; j++)
-        {
-          vFixed[j] &= wFixed[j] & ~(vValue[j] ^ wValue[j]);
-          vValue[j] &= vFixed[j];
-        }
-      }
-      else
-      {
-        // Only shifts >= bitWidth are possible.
-        for (unsigned j = 0; j < words; j++)
-        {
-          vFixed[j] = wFixed[j];
-          vValue[j] = wValue[j];
-        }
-      }
-    }
-
-    // Write the union into the shift.
-    for (unsigned j = 0; j < words; j++)
-    {
-      if (vFixed[j] & packedShift.fixed[j] & (packedShift.value[j] ^ vValue[j]))
-        return CONFLICT;
-      packedShift.fixBits(j, vFixed[j], vValue[j]);
-    }
-  }
+  if (CONFLICT == applyShiftUnion(bitWidth, packedShift, possibleList,
+                                  nPossible, shiftOutPossible))
+    return CONFLICT;
 
   // If a particular input bit appears in every possible shifting,
   // and if that bit is unfixed,
@@ -754,6 +767,216 @@ Result bvArithmeticRightShiftBothWays(vector<FixedBits*>& children,
   return result;
 }
 
+
+// The core of the left-shift transfer, on packed state. Deductions are
+// written into the packed arguments; the wrapper transfers them back to
+// the FixedBits.
+static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
+                      PackedBits& packedShift, PackedBits& packedOut)
+{
+  const unsigned words = packedOp.words;
+
+  // The topmost entry of possibleShift is the set of all the values of
+  // shift that shift out everything (>= bitWidth), making the output zero.
+  const unsigned numberOfPossibleShifts = bitWidth + 1;
+  bool* possibleShift = (bool*)alloca(sizeof(bool) * numberOfPossibleShifts);
+  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
+    possibleShift[i] = false;
+
+  unsigned minShift, maxShift;
+  packedUnsignedMinMax(packedShift, bitWidth, minShift, maxShift);
+
+  // The shift must be at most the position of the lowest one in the
+  // output: zeroes are shifted in below it.
+  int positionOfFirstOne = -1;
+  for (unsigned j = 0; j < words && positionOfFirstOne < 0; j++)
+  {
+    const uint64_t ones = packedOut.fixed[j] & packedOut.value[j];
+    if (ones != 0)
+      positionOfFirstOne = j * 64 + __builtin_ctzll(ones);
+  }
+
+  if (positionOfFirstOne >= 0)
+  {
+    if ((unsigned)positionOfFirstOne < minShift)
+      return CONFLICT;
+    maxShift = std::min(maxShift, (unsigned)positionOfFirstOne);
+  }
+
+  {
+    const bool highFixedOne = anyFixedOneAboveWordZero(packedShift);
+    for (unsigned i = minShift; i <= std::min(bitWidth, maxShift); i++)
+    {
+      // if the bit-pattern of 'i' is in the set represented by the 'shift'.
+      if (shiftHolds(packedShift, highFixedOne, i))
+        possibleShift[i] = true;
+    }
+  }
+
+  // Given a shift like [-1], possibleShift[2] is false, but a shift of
+  // three is possible: possibleShift[bitWidth] stands for every shift
+  // >= bitWidth.
+  if (maxShift >= bitWidth)
+    possibleShift[bitWidth] = true;
+
+  // Filter the shifts that contradict the fixed bits: a one in the output
+  // below the shift amount, or a disagreement between output[c] and
+  // op[c - shift].
+  for (unsigned s = 0; s < bitWidth; s++)
+  {
+    if (!possibleShift[s])
+      continue;
+    bool disagrees = false;
+    for (unsigned j = 0; j < words && !disagrees; j++)
+    {
+      if (packedOut.fixed[j] & packedOut.value[j] & ~bitsAtOrAbove(j, s))
+        disagrees = true; // a one below the shift amount.
+      else
+      {
+        const uint64_t opF = packedOp.leftShiftedWord(packedOp.fixed, s, j);
+        const uint64_t opV = packedOp.leftShiftedWord(packedOp.value, s, j);
+        if (opF & packedOut.fixed[j] & (opV ^ packedOut.value[j]))
+          disagrees = true;
+      }
+    }
+    if (disagrees)
+      possibleShift[s] = false;
+  }
+  // A shift of >= bitWidth makes the output entirely zero.
+  if (possibleShift[bitWidth])
+    for (unsigned j = 0; j < words; j++)
+      if (packedOut.fixed[j] & packedOut.value[j])
+      {
+        possibleShift[bitWidth] = false;
+        break;
+      }
+
+  int nOfPossibleShifts = 0;
+  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
+    if (possibleShift[i])
+      nOfPossibleShifts++;
+
+  // If it's empty. It's a conflict.
+  if (0 == nOfPossibleShifts)
+    return CONFLICT;
+
+  // Collect the possible finite shift amounts once.
+  unsigned* possibleList = (unsigned*)alloca(sizeof(unsigned) * bitWidth);
+  possibleList[0] = 0; // quieten -Wmaybe-uninitialized; only read when nPossible > 0.
+  unsigned nPossible = 0;
+  for (unsigned s = 0; s < bitWidth; s++)
+    if (possibleShift[s])
+      possibleList[nPossible++] = s;
+  const bool shiftOutPossible = possibleShift[bitWidth];
+
+  if (CONFLICT == applyShiftUnion(bitWidth, packedShift, possibleList,
+                                  nPossible, shiftOutPossible))
+    return CONFLICT;
+
+  // If a particular input bit appears in every possible shifting,
+  // and if that bit is unfixed,
+  // and if the result is fixed to the same value in every position,
+  // then that bit must be fixed. E.g.  [--] << [0-] == [00]
+  //
+  // The top bits are shifted out by the largest possible shift (all of
+  // them, if shifting everything out is possible), so the candidates are
+  // the unfixed operand bits below bitWidth - maxShift. For those, every
+  // possible shift contributes the output bit `shift` positions higher,
+  // i.e. word-wise, (output >> s).
+  if (!shiftOutPossible && nPossible > 0)
+  {
+    const unsigned maxS = possibleList[nPossible - 1];
+    const unsigned s0 = possibleList[0];
+    uint64_t* agree = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* ref = (uint64_t*)alloca(sizeof(uint64_t) * words);
+
+    for (unsigned j = 0; j < words; j++)
+    {
+      agree[j] = packedOut.shiftedWord(packedOut.fixed, s0, j);
+      ref[j] = packedOut.shiftedWord(packedOut.value, s0, j);
+    }
+    for (unsigned k = 1; k < nPossible; k++)
+    {
+      const unsigned s = possibleList[k];
+      for (unsigned j = 0; j < words; j++)
+      {
+        const uint64_t f = packedOut.shiftedWord(packedOut.fixed, s, j);
+        const uint64_t v = packedOut.shiftedWord(packedOut.value, s, j);
+        agree[j] &= f & ~(v ^ ref[j]);
+      }
+    }
+
+    for (unsigned j = 0; j < words; j++)
+    {
+      const uint64_t fixable = agree[j] & ~packedOp.fixed[j] &
+                               ~bitsAtOrAbove(j, bitWidth - maxS) &
+                               PackedBits::widthMask(j, bitWidth);
+      if (fixable != 0)
+        packedOp.fixBits(j, fixable, ref[j]);
+    }
+  }
+
+  // Go through each of the possible shifts. If the same value is fixed
+  // at every location, then it's fixed too in the result. The contribution
+  // of shift s at column c is op[c-s] for c >= s and a shifted-in zero
+  // below; a shift of >= bitWidth contributes zero everywhere.
+  if (nPossible > 0 || shiftOutPossible)
+  {
+    uint64_t* agree = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    uint64_t* ref = (uint64_t*)alloca(sizeof(uint64_t) * words);
+    bool first = true;
+
+    for (unsigned k = 0; k <= nPossible; k++)
+    {
+      unsigned s = 0;
+      bool everythingOut = false;
+      if (k < nPossible)
+        s = possibleList[k];
+      else if (shiftOutPossible)
+        everythingOut = true;
+      else
+        break;
+
+      for (unsigned j = 0; j < words; j++)
+      {
+        uint64_t f, v;
+        if (everythingOut)
+        {
+          f = ~(uint64_t)0;
+          v = 0;
+        }
+        else
+        {
+          // Bits below the shift amount are (fixed) shifted-in zeroes;
+          // leftShiftedWord already leaves the value zero there.
+          f = packedOp.leftShiftedWord(packedOp.fixed, s, j) |
+              ~bitsAtOrAbove(j, s);
+          v = packedOp.leftShiftedWord(packedOp.value, s, j);
+        }
+        if (first)
+        {
+          agree[j] = f;
+          ref[j] = v;
+        }
+        else
+          agree[j] &= f & ~(v ^ ref[j]);
+      }
+      first = false;
+    }
+
+    for (unsigned j = 0; j < words; j++)
+    {
+      const uint64_t agreed = agree[j] & PackedBits::widthMask(j, bitWidth);
+      if (agreed & packedOut.fixed[j] & (packedOut.value[j] ^ ref[j]))
+        return CONFLICT;
+      const uint64_t newFix = agreed & ~packedOut.fixed[j];
+      if (newFix != 0)
+        packedOut.fixBits(j, newFix, ref[j]);
+    }
+  }
+  return NOT_IMPLEMENTED;
+}
+
 Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   const unsigned bitWidth = output.getWidth();
@@ -763,365 +986,30 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   FixedBits& op = *children[0];
   FixedBits& shift = *children[1];
 
-  if (debug_shift)
+  PackedBits packedOp(op);
+  PackedBits packedShift(shift);
+  PackedBits packedOut(output);
+  const unsigned words = packedOp.words;
+
+  // Snapshot what was fixed on entry, for the write-back.
+  uint64_t* origOp = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* origShift = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* origOut = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  for (unsigned j = 0; j < words; j++)
   {
-    cerr << "op:" << op << endl;
-    cerr << "shift:" << shift << endl;
-    cerr << "output:" << output << endl;
+    origOp[j] = packedOp.fixed[j];
+    origShift[j] = packedShift.fixed[j];
+    origOut[j] = packedOut.fixed[j];
   }
 
-  // The topmost number of possible shifts corresponds to all
-  // the values of shift that shift out everything.
-  // i.e. possibleShift[bitWidth+1] is the SET of all operations that shift past
-  // the end.
-  const unsigned numberOfPossibleShifts = bitWidth + 1;
-  bool* possibleShift = (bool*)alloca(sizeof(bool) * numberOfPossibleShifts);
-  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
-    possibleShift[i] = false;
-
-  unsigned minShift, maxShift;
-  shift.getUnsignedMinMax(minShift, maxShift);
-
-  // The shift must be less than the position of the first one in the output
-  int positionOfFirstOne = -1;
-  for (unsigned i = 0; i < bitWidth; i++)
-  {
-    if (output.isFixed(i) && output.getValue(i))
-    {
-      positionOfFirstOne = i;
-      break;
-    }
-  }
-
-  if (positionOfFirstOne >= 0)
-  {
-    if ((unsigned)positionOfFirstOne < minShift)
-      return CONFLICT;
-
-    maxShift = std::min(maxShift, (unsigned)positionOfFirstOne);
-  }
-
-  for (unsigned i = minShift; i <= std::min(bitWidth, maxShift); i++)
-  {
-    // if the bit-pattern of 'i' is in the set represented by the 'shift'.
-    if (shift.unsignedHolds(i))
-      possibleShift[i] = true;
-  }
-
-  // Complication. Given a shift like [-1]. possibleShift[2] is now false.
-  // A shift of 2 isn't possible. But one of three is.
-  // possibleShift[2] means any shift >=2 is possible. So it needs to be set
-  // to true.
-  {
-    if (maxShift >= bitWidth)
-      possibleShift[bitWidth] = true;
-  }
-
-  // Now check one-by-one each shifting.
-  // If we are shifting a zero to where a one is (say), then that shifting isn't
-  // possible.
-  for (unsigned shiftIt = 0; shiftIt < numberOfPossibleShifts; shiftIt++)
-  {
-    if (possibleShift[shiftIt])
-    {
-      for (unsigned column = 0; column < bitWidth; column++)
-      {
-        if (column < shiftIt)
-        {
-          if (output.isFixed(column) &&
-              output.getValue(
-                  column)) // output is one in the column. That's wrong.
-          {
-            possibleShift[shiftIt] = false;
-            break;
-          }
-        }
-        else
-        {
-          // if they are fixed to different values. That's wrong.
-          if (output.isFixed(column) && op.isFixed(column - shiftIt) &&
-              (output.getValue(column) != op.getValue(column - shiftIt)))
-          {
-            possibleShift[shiftIt] = false;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  int nOfPossibleShifts = 0;
-  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
-  {
-    if (possibleShift[i])
-    {
-      nOfPossibleShifts++;
-      if (debug_shift)
-      {
-        std::cerr << "Possible:" << i << std::endl;
-      }
-    }
-  }
-
-  if (debug_shift)
-  {
-    std::cerr << "Number of possible shifts:" << nOfPossibleShifts << endl;
-  }
-
-  // If it's empty. It's a conflict.
-  if (0 == nOfPossibleShifts)
+  const Result result = shlCore(bitWidth, packedOp, packedShift, packedOut);
+  if (result == CONFLICT)
     return CONFLICT;
 
-  // We have a list of all the possible shift amounts.
-  // We take the union of all the bits that are possible.
-
-  FixedBits v(bitWidth, false);
-  bool first = true;
-  for (unsigned i = 0; i < numberOfPossibleShifts - 1; i++)
-  {
-    if (possibleShift[i])
-    {
-      if (first)
-      {
-        first = false;
-        for (unsigned j = 0; j < (unsigned)v.getWidth(); j++)
-        {
-          v.setFixed(j, true);
-          if (j < sizeof(unsigned) * 8)
-            v.setValue(j, 0 != (i & (1u << j)));
-          else
-            v.setValue(j, false);
-        }
-      }
-      else
-      {
-        // join.
-        for (unsigned j = 0;
-             j < (unsigned)v.getWidth() && j < sizeof(unsigned) * 8; j++)
-        {
-          if (v.isFixed(j))
-          {
-            // union.
-            if (v.getValue(j) != (0 != (i & (1u << j))))
-              v.setFixed(j, false);
-          }
-        }
-      }
-    }
-  }
-
-  // The top most entry of the shift table is special. It means all values of
-  // shift
-  // that fill it completely with zeroes. We take the union of all of the values
-  // >bitWidth
-  // in this function.
-  if (possibleShift[numberOfPossibleShifts - 1])
-  {
-    FixedBits bitWidthFB = FixedBits::fromUnsignedInt(bitWidth, bitWidth);
-    FixedBits output(1, true);
-    output.setFixed(0, true);
-    output.setValue(0, true);
-    FixedBits working(shift);
-
-    vector<FixedBits*> args;
-    args.push_back(&working);
-    args.push_back(&bitWidthFB);
-
-    // Write into working anything that can be determined given it's >=bitWidth.
-    Result r = bvGreaterThanEqualsBothWays(args, output);
-    assert(CONFLICT != r);
-
-    // Get the union of "working" with the prior union.
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      if (!working.isFixed(i) && v.isFixed(i))
-        v.setFixed(i, false);
-      if (working.isFixed(i) && v.isFixed(i) &&
-          (working.getValue(i) != v.getValue(i)))
-        v.setFixed(i, false);
-      if (first) // no less shifts possible.
-      {
-        if (working.isFixed(i))
-        {
-          v.setFixed(i, true);
-          v.setValue(i, working.getValue(i));
-        }
-      }
-    }
-  }
-
-  if (debug_shift)
-  {
-    std::cerr << "Shift Amount:" << v << std::endl;
-  }
-
-  for (unsigned i = 0; i < bitWidth; i++)
-  {
-    if (v.isFixed(i))
-    {
-      if (!shift.isFixed(i))
-      {
-        shift.setFixed(i, true);
-        shift.setValue(i, v.getValue(i));
-      }
-      else if (shift.isFixed(i) && shift.getValue(i) != v.getValue(i))
-        return CONFLICT;
-    }
-  }
-
-  // If a particular input bit appears in every possible shifting,
-  // and if that bit is unfixed,
-  // and if the result it is fixed to the same value in every position.
-  // Then, that bit must be fixed.
-  // E.g.  [--] << [0-] == [00]
-
-  bool* candidates = (bool*)alloca(sizeof(bool) * bitWidth);
-  for (unsigned i = 0; i < bitWidth; i++)
-  {
-    candidates[i] = !op.isFixed(i);
-  }
-
-  // candidates: So far: the bits that are unfixed.
-
-  for (unsigned i = 0; i < numberOfPossibleShifts; i++)
-  {
-    if (possibleShift[i])
-    {
-      // If this shift is possible, then some bits will be shifted out.
-      for (unsigned j = 0; j < i; j++)
-        candidates[bitWidth - 1 - j] = false;
-    }
-  }
-
-  // candidates: So far: + the input bits that are unfixed.
-  //                     + the input bits that are in every possible fixing.
-
-  // Check all candidates have the same output values.
-  for (unsigned candidate = 0; candidate < bitWidth; candidate++)
-  {
-    bool first = true;
-    bool setTo = false; // value that's never read. To quieten gcc.
-
-    if (candidates[candidate])
-    {
-      for (unsigned shiftIT = 0; shiftIT < bitWidth; shiftIT++)
-      {
-        // If the shift isn't possible continue.
-        if (!possibleShift[shiftIT])
-          continue;
-
-        unsigned idx = candidate + shiftIT;
-
-        if (!output.isFixed(idx))
-        {
-          candidates[candidate] = false;
-          break;
-        }
-        else
-        {
-          if (first)
-          {
-            first = false;
-            setTo = output.getValue(idx);
-          }
-          else
-          {
-            if (setTo != output.getValue(idx))
-            {
-              candidates[candidate] = false;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    if (candidates[candidate])
-    {
-      assert(!op.isFixed(candidate));
-      op.setFixed(candidate, true);
-      op.setValue(candidate, setTo);
-    }
-  }
-
-  // done.
-
-  // Go through each of the possible shifts. If the same value is fixed
-  // at every location. Then it's fixed too in the result.
-  for (unsigned column = 0; column < bitWidth; column++)
-  {
-    bool allFixedToSame = true;
-    bool allFixedTo = false; // value that's never read. To quieten gcc.
-    bool first = true;
-
-    for (unsigned shiftIt = minShift;
-         (shiftIt < numberOfPossibleShifts) && allFixedToSame; shiftIt++)
-    {
-      if (possibleShift[shiftIt])
-      {
-        // Will have shifted in zeroes.
-        if (shiftIt > column)
-        {
-          if (first)
-          {
-            allFixedTo = false;
-            first = false;
-          }
-          else
-          {
-            if (allFixedTo)
-            {
-              allFixedToSame = false;
-            }
-          }
-        }
-        else
-        {
-          unsigned index = column - shiftIt;
-          if (!op.isFixed(index))
-            allFixedToSame = false;
-          else if (first && op.isFixed(index))
-          {
-            first = false;
-            allFixedTo = op.getValue(index);
-          }
-          if (op.isFixed(index) && allFixedTo != op.getValue(index))
-            allFixedToSame = false;
-        }
-      }
-    }
-
-    // If it can be just one possible value. Then we can fix 'em.
-    if (allFixedToSame)
-    {
-      if (output.isFixed(column) && (output.getValue(column) != allFixedTo))
-        return CONFLICT;
-      if (!output.isFixed(column))
-      {
-        output.setFixed(column, true);
-        output.setValue(column, allFixedTo);
-      }
-    }
-  }
-
-  /*
-  // If there is only one possible shift value. Then, we can push from the
-  output back.
-  if (1 == nOfPossibleShifts)
-  {
-    for (unsigned i = shiftIndex; i < bitWidth; i++)
-    {
-      if (!op.isFixed(i - shiftIndex) && output.isFixed(i))
-      {
-        op.setFixed(i - shiftIndex, true);
-        op.setValue(i - shiftIndex, output.getValue(i));
-        result = CHANGED;
-      }
-    }
-  }
-*/
-
-  return NOT_IMPLEMENTED;
+  writeBack(op, packedOp, origOp);
+  writeBack(shift, packedShift, origShift);
+  writeBack(output, packedOut, origOut);
+  return result;
 }
 }
 }
