@@ -484,6 +484,29 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationExhaustiveWidth3)
       bv3(2), out3(), OVERAPPROXIMATES);
 }
 
+// BVTypeCheck accepts BVMULT with more than two children, and the hashing
+// node factory builds such nodes (only the simplifying factory binarises
+// them). The multiply transfer function reasons about exactly two operands,
+// so on a wider multiply it must do nothing: propagating on the first two
+// children fixed the output's low bit to one for <-1> * <-1> * <-->,
+// excluding solutions like 1 * 1 * 2 = 2.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenDoesNothing)
+{
+  FixedBits a = fromString("**1");
+  FixedBits b = fromString("**1");
+  FixedBits c = fromString("***");
+  FixedBits out = fromString("***");
+
+  std::vector<FixedBits*> children;
+  children.push_back(&a);
+  children.push_back(&b);
+  children.push_back(&c);
+
+  EXPECT_EQ(NO_CHANGE, bvMultiplyBothWays(children, out, &mgr, NULL));
+  EXPECT_TRUE(FixedBits::equals(out, fromString("***")));
+  EXPECT_TRUE(FixedBits::equals(a, fromString("**1")));
+}
+
 TEST_F(ConstantBitP_TransferFunctions, additionExhaustiveWidth3)
 {
   exhaustiveCheck(
