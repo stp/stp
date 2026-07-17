@@ -279,8 +279,8 @@ namespace stp
     vector<FixedBits*> children_bits;
     children_bits.reserve(number_children);
 
-    vector<const UnsignedInterval*> children_intervals;
-    children_intervals.reserve(number_children);
+    vector<const UnsignedIntervalSet*> children_sets;
+    children_sets.reserve(number_children);
 
     bool nothingKnown = true;
 
@@ -292,12 +292,17 @@ namespace stp
 
       if (op0 != nullptr || op1 != nullptr)
         nothingKnown = false;
-      
+
       children_bits.push_back(op0);
-      children_intervals.push_back(op1);
+
+      const UnsignedIntervalSet* childSet = nullptr;
+      auto sit = toIntervalSets.find(n[i]);
+      if (sit != toIntervalSets.end())
+        childSet = sit->second;
+      children_sets.push_back(childSet);
     }
 
-    const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_intervals[0] == nullptr);
+    const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_sets[0] == nullptr);
 
     // We need to know something about the children if we want to know something about the parent.
     // extract, bvsx, and bvzx all have constants as children.
@@ -311,6 +316,7 @@ namespace stp
     {
       toFixedBits.insert({n, nullptr});
       toIntervals.insert({n, nullptr});
+      toIntervalSets.insert({n, nullptr});
 
       return {nullptr, nullptr};
     }
@@ -369,20 +375,25 @@ namespace stp
       result_bits = nullptr;
     }
 
-    UnsignedInterval* result_interval = intervalAnalysis.dispatchToTransferFunctions(n, children_intervals);
+    // The interval-set transfer runs the single-interval transfer functions
+    // over the cross-product of the children's disjoint pieces; the node's
+    // interval is the set's hull, which refines (never loosens) the plain
+    // single-interval result.
+    UnsignedIntervalSet* result_set = setAnalysis.transfer(n, children_sets);
 
-    if (result_interval != nullptr && result_interval->isComplete())
-    {
-      delete result_interval;
-      result_interval = nullptr;
-    }
+    UnsignedInterval* result_interval = result_set->hull(); // null if complete
 
     assert(intersects(result_bits, result_interval));
 
     harmonise(result_bits, result_interval);
 
+    // Keep the stored set within the harmonised interval so the two agree.
+    if (result_interval != nullptr)
+      result_set->intersectInterval(result_interval->minV, result_interval->maxV);
+
     toFixedBits.insert({n, result_bits});
     toIntervals.insert({n, result_interval});
+    toIntervalSets.insert({n, result_set});
 
     if (n.isConstant())
     {

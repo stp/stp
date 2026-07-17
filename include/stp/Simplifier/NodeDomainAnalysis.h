@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
+#include "stp/Simplifier/UnsignedIntervalSet.h"
+#include "stp/Simplifier/UnsignedIntervalSetAnalysis.h"
 #include <iostream>
 #include <unordered_map>
 
@@ -42,6 +44,7 @@ using simplifier::constantBitP::FixedBits;
 
 using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+using NodeToUnsignedIntervalSetMap = std::unordered_map<const ASTNode, UnsignedIntervalSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
 class NodeDomainAnalysis
 {
@@ -63,15 +66,18 @@ class NodeDomainAnalysis
   using AnalysisPair = std::pair<FixedBits*, UnsignedInterval*>;
   NodeToFixedBitsMap toFixedBits;
   NodeToUnsignedIntervalMap toIntervals;
+  NodeToUnsignedIntervalSetMap toIntervalSets;
 
   UnsignedIntervalAnalysis intervalAnalysis;
+  UnsignedIntervalSetAnalysis setAnalysis;
 
   unsigned tighten = 0;
 
   void stats();
 public:
 
-  NodeDomainAnalysis(STPMgr* _bm) : bm(*_bm), intervalAnalysis(*_bm)
+  NodeDomainAnalysis(STPMgr* _bm)
+      : bm(*_bm), intervalAnalysis(*_bm), setAnalysis(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
   }
@@ -96,12 +102,21 @@ public:
       if (it.second != NULL)
         delete it.second;
 
+    for (auto it : toIntervalSets)
+      if (it.second != NULL)
+        delete it.second;
+
     stats();
   }
 
    NodeToUnsignedIntervalMap* getIntervalMap()
    {
       return &toIntervals;
+   }
+
+   NodeToUnsignedIntervalSetMap* getIntervalSetMap()
+   {
+      return &toIntervalSets;
    }
 
    NodeToFixedBitsMap* getCbitMap()
