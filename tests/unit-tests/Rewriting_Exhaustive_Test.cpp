@@ -296,6 +296,46 @@ TEST(Rewriting_Exhaustive, eq_zero_plus_ite)
   c.checkEquivalent(top, result);
 }
 
+/* The comparison-vs-plus splits: k <> (k' + t) becomes two comparisons whose
+   plus has been eliminated. Guarded on the plus being single-use. */
+TEST(Rewriting_Exhaustive, comparison_plus_split_fires)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, c.konst(3, 3), x);
+
+  for (const Kind k : {stp::BVSGT, stp::BVGT})
+  {
+    ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(k, c.konst(2, 3), plus));
+    ASTNode result = c.run(top);
+    EXPECT_NE(result, top); // the split fired.
+    c.checkEquivalent(top, result);
+  }
+
+  // The plus-on-the-left variant.
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(stp::BVGT, plus, c.konst(4, 3)));
+  ASTNode result = c.run(top);
+  EXPECT_NE(result, top);
+  c.checkEquivalent(top, result);
+}
+
+TEST(Rewriting_Exhaustive, comparison_plus_split_respects_sharing)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, c.konst(3, 3), x);
+  // The plus is shared with the equality, so the split must not fire:
+  // it would leave the plus alive and the extra comparison would be a
+  // pure loss.
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(NOT, c.hf->CreateNode(stp::BVGT, c.konst(2, 3), plus)),
+      c.hf->CreateNode(EQ, y, plus));
+  ASTNode result = c.run(top);
+  EXPECT_EQ(result, top); // nothing fired.
+  c.checkEquivalent(top, result);
+}
+
 /* The original fuzzer shape: EQ(x, BVNOT(BVAND(const, BVNOT(ITE-of-consts),
    BVNOT(x)))), i.e. x == (const | ite | x). Rewriting the inner concat/bvnot
    manufactures the BVAND(const, ITE, rest) shape mid-pass. */

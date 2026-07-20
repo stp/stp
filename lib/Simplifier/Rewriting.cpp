@@ -32,9 +32,12 @@ THE SOFTWARE.
 
   Rules that are both sharing-independent and size-neutral belong in the
   SimplifyingNodeFactory instead, where they apply on every node creation.
-  The sharing-independent rules that remain here (the comparison-vs-plus
-  splits) increase the node count, so they are better applied once, where
-  difficulty reversion can undo them.
+
+  Every rule here should leave the node count the same or smaller, using the
+  share count to prove that the nodes it replaces really die. The one
+  deliberate exception is the comparison-vs-plus splitting rules, which add
+  a single node in exchange for eliminating a plus from under a comparison --
+  a large win on the difficulty score.
 */
 
 
@@ -156,7 +159,7 @@ namespace stp
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c.GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
         // Push the addition through the ITE.
@@ -250,11 +253,13 @@ namespace stp
             7820:0xFFFFFFD7
             [457708])))
 
-         These three comparison-splitting rules are sharing-independent, but
-         they trade one comparison for two plus a connective, so they stay
-         here rather than moving into the SimplifyingNodeFactory, which
-         applies its rules eagerly on every node creation and has no
-         difficulty reversion to undo a bad trade.
+         These three comparison-splitting rules are the pass's one deliberate
+         exception to never increasing the node count: they add one node (two
+         comparisons and a connective replace one comparison), but eliminate
+         a plus from under the comparison, which is a large win on the
+         difficulty score (a comparison costs 6*width, a plus 14*width). The
+         single-use guard on the plus is what secures that win: if the plus
+         survived for another use, the extra comparison would be a pure loss.
       */
       if (
         c.GetKind() == BVSGT
@@ -262,6 +267,7 @@ namespace stp
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() ==2
         && c[1][0].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
           const auto width = c[0].GetValueWidth();
@@ -294,10 +300,11 @@ namespace stp
           */
        if (
           c.GetKind() == BVGT
-          && c[1].GetKind() == BVPLUS 
+          && c[1].GetKind() == BVPLUS
           && c[1].Degree() == 2
-          && c[0].isConstant() 
+          && c[0].isConstant()
           && c[1][0].isConstant()
+          && shareCount[c[1].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]));
@@ -324,10 +331,11 @@ namespace stp
 */
        if (
           c.GetKind() == BVGT
-          && c[0].GetKind() == BVPLUS 
+          && c[0].GetKind() == BVPLUS
           && c[0].Degree() == 2
-          && c[0][0].isConstant() 
+          && c[0][0].isConstant()
           && c[1].isConstant()
+          && shareCount[c[0].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[1].GetValueWidth(), c[1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
@@ -442,25 +450,6 @@ namespace stp
         c = nf->CreateNode(EQ, uminus, c[1][1]);
        }
 
-/*
-1085202:(EQ 
-    6528:0b0
-    1085200:(BVAND 
-    */
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0].GetValueWidth() ==1
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVAND
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-          ASTVec children;
-          for (const auto& node : c[1])
-            children.push_back(nf->CreateNode(EQ, c[0],node));
-          c = nf->CreateNode(OR, children);
-       }
    /*
         10160120:(EQ 
         8577822:0x1
@@ -504,23 +493,6 @@ namespace stp
           c = nf->CreateNode(ITE, c[1][0], ite1, ite2);
        }
       
-/*
-126402:(BVGT 
-      126400:0x00000017
-      126384:(BVUMINUS 
-        [126340]))
-        */
-    if (c.GetKind() == BVGT
-        && c[0].GetKind() == BVCONST 
-        && c[1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-        )
-        {
-          const auto width = c[1].GetValueWidth();
-          const auto eq = nf->CreateNode(EQ, c[1][0], nf->CreateZeroConst(width));
-          c = nf->CreateNode(OR, eq, nf->CreateNode(BVLT, nf->CreateTerm(BVUMINUS, width, c[0]), c[1][0]));
-        }
-
 /*
         136180:(BVPLUS 
           136158:(BVPLUS 
