@@ -641,118 +641,120 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
           replace(var, rhs);
         }
-
-        break;
-        case IFF:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs =
-              nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
-                             nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
-          replace(var, rhs);
-        }
-        break;
-        case EQ:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          width = var.GetValueWidth();
-          ASTNode rhs = nf->CreateTerm(
-              ITE, width, v, muteOther->toASTNode(&bm),
-              nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
-                             bm.CreateOneConst(width)));
-
-          replace(var, rhs);
-        }
-        break;
-        case BVSUB:
-        {
-          assert(numberOfChildren == 2);
-
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs;
-
-          if (children[0] == var)
-            rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
-          if (children[1] == var)
-            rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
-
-          replace(var, rhs);
-        }
-        break;
-
-        case BVPLUS:
-        {
-          ASTVec other;
-          for (size_t i = 0; i < children.size(); i++)
-            if (children[i] != var)
-              other.push_back(mutable_children[i]->toASTNode(&bm));
-
-          assert(other.size() == children.size() - 1);
-          assert(other.size() >= 1);
-
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs;
-          if (other.size() > 1)
-            rhs = nf->CreateTerm(BVSUB, width, v,
-                                 nf->CreateTerm(BVPLUS, width, other));
-          else
-            rhs = nf->CreateTerm(BVSUB, width, v, other[0]);
-
-          replace(var, rhs);
-        }
-        break;
-        case BVEXTRACT:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          const unsigned operandWidth = var.GetValueWidth();
-          assert(children[0] == var); // It can't be anywhere else.
-
-          // Create Fresh variables to pad the LHS and RHS.
-          const unsigned high = children[1].GetUnsignedConst();
-          const unsigned low = children[2].GetUnsignedConst();
-          assert(high >= low);
-
-          const int rhsSize = low;
-          const int lhsSize = operandWidth - high - 1;
-
-          ASTNode current = v;
-          int newWidth = v.GetValueWidth();
-
-          if (lhsSize > 0)
-          {
-            ASTNode lhsFresh =
-                bm.CreateFreshVariable(0, lhsSize, "lhs_padding");
-            current =
-                nf->CreateTerm(BVCONCAT, newWidth + lhsSize, lhsFresh, current);
-            newWidth += lhsSize;
-          }
-
-          if (rhsSize > 0)
-          {
-            ASTNode rhsFresh =
-                bm.CreateFreshVariable(0, rhsSize, "rhs_padding");
-            current =
-                nf->CreateTerm(BVCONCAT, newWidth + rhsSize, current, rhsFresh);
-            newWidth += rhsSize;
-          }
-
-          assert(newWidth == (long int)operandWidth);
-          replace(var, current);
-        }
-        break;
-        default:
-        {
-          // cerr << "!!!!" << kind << endl;
-        }
-
-          //        cerr << var;
-          //      cerr << parent;
       }
+      break;
+
+      case IFF:
+      {
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs =
+            nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
+                           nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
+        replace(var, rhs);
+      }
+      break;
+
+      case EQ:
+      {
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        width = var.GetValueWidth();
+        ASTNode rhs = nf->CreateTerm(
+            ITE, width, v, muteOther->toASTNode(&bm),
+            nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
+                           bm.CreateOneConst(width)));
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVSUB:
+      {
+        assert(numberOfChildren == 2);
+
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs;
+
+        if (children[0] == var)
+          rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
+        if (children[1] == var)
+          rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVPLUS:
+      {
+        ASTVec other;
+        for (size_t i = 0; i < children.size(); i++)
+          if (children[i] != var)
+            other.push_back(mutable_children[i]->toASTNode(&bm));
+
+        assert(other.size() == children.size() - 1);
+        assert(other.size() >= 1);
+
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs;
+        if (other.size() > 1)
+          rhs = nf->CreateTerm(BVSUB, width, v,
+                               nf->CreateTerm(BVPLUS, width, other));
+        else
+          rhs = nf->CreateTerm(BVSUB, width, v, other[0]);
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVEXTRACT:
+      {
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        const unsigned operandWidth = var.GetValueWidth();
+        assert(children[0] == var); // It can't be anywhere else.
+
+        // Create Fresh variables to pad the LHS and RHS.
+        const unsigned high = children[1].GetUnsignedConst();
+        const unsigned low = children[2].GetUnsignedConst();
+        assert(high >= low);
+
+        const int rhsSize = low;
+        const int lhsSize = operandWidth - high - 1;
+
+        ASTNode current = v;
+        int newWidth = v.GetValueWidth();
+
+        if (lhsSize > 0)
+        {
+          ASTNode lhsFresh = bm.CreateFreshVariable(0, lhsSize, "lhs_padding");
+          current =
+              nf->CreateTerm(BVCONCAT, newWidth + lhsSize, lhsFresh, current);
+          newWidth += lhsSize;
+        }
+
+        if (rhsSize > 0)
+        {
+          ASTNode rhsFresh = bm.CreateFreshVariable(0, rhsSize, "rhs_padding");
+          current =
+              nf->CreateTerm(BVCONCAT, newWidth + rhsSize, current, rhsFresh);
+          newWidth += rhsSize;
+        }
+
+        assert(newWidth == (long int)operandWidth);
+        replace(var, current);
+      }
+      break;
+
+      default:
+      {
+        // cerr << "!!!!" << kind << endl;
+      }
+
+        //        cerr << var;
+        //      cerr << parent;
     }
   }
 
