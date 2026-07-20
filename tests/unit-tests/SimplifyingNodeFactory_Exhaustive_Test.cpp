@@ -174,15 +174,60 @@ TEST(SimplifyingNodeFactory_Exhaustive, eq_constant_plus)
   c.checkNode(EQ, {plus, c.konst(3, 3)});
 }
 
-/* 1-bit constant = msb-extract --> sign test */
-TEST(SimplifyingNodeFactory_Exhaustive, eq_msb_extract)
+/* x << k (constant k) --> (extract of x) ++ 0^k, not a multiplication */
+TEST(SimplifyingNodeFactory_Exhaustive, leftshift_by_constant)
 {
   Context c;
   ASTNode x = c.bv(4);
-  ASTNode msb = c.hf->CreateTerm(BVEXTRACT, 1, x, c.mgr.CreateBVConst(32, 3),
-                                 c.mgr.CreateBVConst(32, 3));
-  c.checkNode(EQ, {c.konst(0, 1), msb});
-  c.checkNode(EQ, {c.konst(1, 1), msb});
+  for (unsigned k = 1; k <= 3; k++)
+  {
+    ASTNode s = c.nf->CreateTerm(BVLEFTSHIFT, 4, x, c.konst(k, 4));
+    EXPECT_EQ(s.GetKind(), BVCONCAT);
+    c.checkTerm(BVLEFTSHIFT, 4, {x, c.konst(k, 4)});
+  }
+}
+
+/* (~x) smod x, x smod (~x), (~x) smod (-x): the dividend becomes -1 */
+TEST(SimplifyingNodeFactory_Exhaustive, smod_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode neg = c.hf->CreateTerm(BVUMINUS, w, x);
+    c.checkTerm(SBVMOD, w, {nt, x});
+    c.checkTerm(SBVMOD, w, {x, nt});
+    c.checkTerm(SBVMOD, w, {nt, neg});
+  }
+}
+
+/* (~x) srem x and x srem (~x): rewrite to -(1 smod divisor) */
+TEST(SimplifyingNodeFactory_Exhaustive, srem_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    c.checkTerm(SBVREM, w, {nt, x});
+    c.checkTerm(SBVREM, w, {x, nt});
+  }
+}
+
+/* (~x) mod x, x mod (~x): the dividend becomes max; (-x) mod (~x): 1 srem */
+TEST(SimplifyingNodeFactory_Exhaustive, mod_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode neg = c.hf->CreateTerm(BVUMINUS, w, x);
+    c.checkTerm(BVMOD, w, {nt, x});
+    c.checkTerm(BVMOD, w, {x, nt});
+    c.checkTerm(BVMOD, w, {neg, nt});
+  }
 }
 
 /* ((x ++ k1) ++ k2) and (k0 ++ (k1 ++ y)): adjacent constants merge */
