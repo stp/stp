@@ -448,6 +448,28 @@ TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_with_gap)
   c.checkEquivalent(back, result);
 }
 
+// The extracts cover the low bits but leave the top uncovered ([2:1] and
+// [0:0], bit 3 free), exercising the trailing fresh-padding branch of
+// splitExtractOnly() (padding appended after the last extracted piece).
+TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_top_gap)
+{
+  Context c;
+  const unsigned w = 4;
+  ASTNode x = c.bv(w);
+  ASTNode lo =
+      c.hf->CreateTerm(BVEXTRACT, 1, x, c.konst(0, 32), c.konst(0, 32));
+  ASTNode mid =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(2, 32), c.konst(1, 32));
+  ASTNode top = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVCONCAT, 3, mid, lo), c.konst(5, 3));
+
+  ASTNode result = c.run(top);
+  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
+      << "splitExtractOnly did not eliminate x";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
 TEST(RemoveUnconstrained_Exhaustive, eq_term)
 {
   Context c;
