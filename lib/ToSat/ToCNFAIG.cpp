@@ -48,7 +48,7 @@ void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
       if (!b[i].IsNull())
       {
         Aig_Obj_t* pObj;
-        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vPis, b[i].symbol_index);
+        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, b[i].symbol_index);
         v[i] = cnfData->pVarNums[pObj->Id];
       }
     }
@@ -78,11 +78,11 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
       int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
 
       Aig_Man_t* pTemp;
-      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+      mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
       Aig_ManStop(pTemp);
       Dar_ManRewrite(mgr.aigMgr, pPars);
 
-      mgr.aigMgr = Aig_ManDup(pTemp = mgr.aigMgr, 0);
+      mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
       Aig_ManStop(pTemp);
 
       if (uf.stats_flag)
@@ -102,14 +102,14 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 {
   assert(cnfData == NULL);
 
-  Aig_ObjCreatePo(mgr.aigMgr, top.n);
+  Aig_ObjCreateCo(mgr.aigMgr, top.n);
   if (!needAbsRef)
   {
     Aig_ManCleanup(mgr.aigMgr); // remove nodes not connected to the PO.
   }
   assert(Aig_ManCheck(mgr.aigMgr)); // check that AIG looks ok.
 
-  assert(Aig_ManPoNum(mgr.aigMgr) == 1);
+  assert(Aig_ManCoNum(mgr.aigMgr) == 1);
 
   // UseZeroes gives assertion errors.
   // Rewriting is sometimes very slow. Can it be configured to be faster?
@@ -165,7 +165,7 @@ void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
       if (!b[i].IsNull())
       {
         Aig_Obj_t* pObj;
-        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vPis, b[i].symbol_index);
+        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, b[i].symbol_index);
         v[i] = cnfData->pVarNums[pObj->Id];
       }
     }

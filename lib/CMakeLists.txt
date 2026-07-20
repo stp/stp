@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,6 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
-add_subdirectory(extlib-abc)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -52,7 +51,6 @@ set(stp_lib_targets
     sat
     simplifier
     constantbv
-    abc
     cinterface
     cppinterface
     parser
@@ -122,7 +120,19 @@ endif()
 # Clients of stp that don't use CMake will have to link the Boost libraries
 # in manually.
 # -----------------------------------------------------------------------------
-set(stp_link_libs ${MINISAT_LIBRARIES})
+# https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
+
+# Configure ABC library build options
+set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
+set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
+
+# Add ABC as a subdirectory
+add_subdirectory(extlib-abc)
+
+# Link to the ABC library target
+add_dependencies(stp libabc-pic)
+# Use the full path to the library instead of the target name for export compatibility
+set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)

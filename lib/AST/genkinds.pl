@@ -38,7 +38,7 @@ $maxkids = 0;
 %cat_index = ();
 
 if ($timestamp) {
-  $now = " " . localtime time;
+  $now = " " . localtime ($ENV{SOURCE_DATE_EPOCH} || time)
 } else {
   $now = "";
 }
@@ -125,7 +125,7 @@ sub gen_cpp_file {
   open(CPPFILE, "> ASTKind.cpp") || die "Cannot open .h file: $!\n";
 
   print CPPFILE
-    "// Generated automatically by genkinds.h from ASTKind.kinds$now.\n",
+    "// Generated automatically by genkinds.pl from ASTKind.kinds$now.\n",
     "// Do not edit\n",
     "namespace stp {\n",
     "#if defined(__GNUC__) || defined(__clang__)\n\n",

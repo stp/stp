@@ -757,8 +757,7 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(
   }
   else if (k == SBVMOD)
   {
-    // This propagator is very slow. It needs to be reimplemented.
-    // result = bvSignedModulusBothWays(children, output, n.GetSTPMgr());
+    result = bvSignedModulusBothWays(children, output, mgr);
     mult_like = true;
   }
   else

@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnCounts.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"
+#include <cstdint>
 #include <set>
 #include <stdexcept>
 // Multiply.
@@ -64,20 +65,112 @@ std::ostream& log = std::cerr;
       }
 #endif
 
+static inline int popcount64(uint64_t v);
+static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
+                                        unsigned s, unsigned j);
+static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
+                                unsigned words, unsigned width, unsigned j);
+
+// The fixed-to-one and unfixed masks of both operands, packed into words so
+// a column's pair-category counts are shifted-window popcounts rather than
+// a per-column scan. Rebuild after either operand changes.
+struct PairMasks
+{
+  static const unsigned INLINE_WORDS = 8; // up to 512 bits on the stack.
+  uint64_t stackBuf[4 * INLINE_WORDS];
+  std::vector<uint64_t> heapBuf;
+  uint64_t* xOne;
+  uint64_t* xUnfixed;
+  uint64_t* revYOne; // y, bit-reversed.
+  uint64_t* revYUnfixed;
+  unsigned words;
+
+  void build(const FixedBits& x, const FixedBits& y)
+  {
+    const unsigned width = x.getWidth();
+    words = (width + 63) / 64;
+    uint64_t* buf = stackBuf;
+    if (words > INLINE_WORDS)
+    {
+      heapBuf.assign(4 * words, 0);
+      buf = heapBuf.data();
+    }
+    else
+      for (unsigned t = 0; t < 4 * words; t++)
+        buf[t] = 0;
+    xOne = buf;
+    xUnfixed = buf + words;
+    revYOne = buf + 2 * words;
+    revYUnfixed = buf + 3 * words;
+
+    widthCached = width;
+    for (unsigned i = 0; i < width; i++)
+    {
+      if (!x.isFixed(i))
+        xUnfixed[i >> 6] |= (uint64_t)1 << (i & 63);
+      else if (x.getValue(i))
+        xOne[i >> 6] |= (uint64_t)1 << (i & 63);
+
+      const unsigned r = width - 1 - i;
+      if (!y.isFixed(i))
+        revYUnfixed[r >> 6] |= (uint64_t)1 << (r & 63);
+      else if (y.getValue(i))
+        revYOne[r >> 6] |= (uint64_t)1 << (r & 63);
+    }
+  }
+
+  // Bit i of x was just fixed: leave the unfixed set, join the ones if set.
+  void xFixed(unsigned i, bool value)
+  {
+    xUnfixed[i >> 6] &= ~((uint64_t)1 << (i & 63));
+    if (value)
+      xOne[i >> 6] |= (uint64_t)1 << (i & 63);
+  }
+
+  void yFixed(unsigned i, bool value)
+  {
+    const unsigned r = widthCached - 1 - i;
+    revYUnfixed[r >> 6] &= ~((uint64_t)1 << (r & 63));
+    if (value)
+      revYOne[r >> 6] |= (uint64_t)1 << (r & 63);
+  }
+
+  unsigned widthCached;
+};
+
 Result fixIfCanForMultiplication(vector<FixedBits*>& children,
                                  const unsigned index,
-                                 const int aspirationalSum)
+                                 const int aspirationalSum, PairMasks* pm)
 {
   assert(index < children[0]->getWidth());
 
   FixedBits& x = *children[0];
   FixedBits& y = *children[1];
 
-  ColumnStats cs(x, y, index);
-
-  int columnUnfixed = cs.columnUnfixed;   // both unfixed.
-  int columnOneFixed = cs.columnOneFixed; // one of the values is fixed to one.
-  int columnOnes = cs.columnOnes;         // both are ones.
+  // The counts ColumnStats(x, y, index) walks the column for, but from the
+  // packed masks: a pair contributes "ones" when both operands are fixed
+  // to one, "one fixed" when one is fixed to one and the other unfixed,
+  // and "unfixed" when both are unfixed. (Pairs with a fixed zero are the
+  // remainder, and aren't needed here.) Short columns are cheaper to scan
+  // directly.
+  const unsigned width = x.getWidth();
+  int columnOnes, columnUnfixed, columnOneFixed;
+  if (pm == NULL || index < 16)
+  {
+    ColumnStats cs(x, y, index);
+    columnOnes = cs.columnOnes;
+    columnUnfixed = cs.columnUnfixed;
+    columnOneFixed = cs.columnOneFixed;
+  }
+  else
+  {
+    columnOnes = convolutionAt(pm->xOne, pm->revYOne, pm->words, width, index);
+    columnUnfixed =
+        convolutionAt(pm->xUnfixed, pm->revYUnfixed, pm->words, width, index);
+    columnOneFixed =
+        convolutionAt(pm->xOne, pm->revYUnfixed, pm->words, width, index) +
+        convolutionAt(pm->xUnfixed, pm->revYOne, pm->words, width, index);
+  }
 
   Result result = NO_CHANGE;
 
@@ -95,6 +188,8 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
       {
         y.setFixed(i, true);
         y.setValue(i, true);
+        if (pm)
+          pm->yFixed(i, true);
         result = CHANGED;
       }
 
@@ -102,6 +197,8 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
       {
         x.setFixed(index - i, true);
         x.setValue(index - i, true);
+        if (pm)
+          pm->xFixed(index - i, true);
         result = CHANGED;
       }
     }
@@ -123,6 +220,8 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
       {
         y.setFixed(i, true);
         y.setValue(i, false);
+        if (pm)
+          pm->yFixed(i, false);
         result = CHANGED;
       }
 
@@ -131,6 +230,8 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
       {
         x.setFixed(index - i, true);
         x.setValue(index - i, false);
+        if (pm)
+          pm->xFixed(index - i, false);
         result = CHANGED;
       }
     }
@@ -141,52 +242,126 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   return result;
 }
 
-// Uses the zeroes / ones present adjust the column counts.
+static inline int popcount64(uint64_t v)
+{
+#ifdef _MSC_VER
+  return (int)__popcnt64(v);
+#else
+  return __builtin_popcountll(v);
+#endif
+}
+
+// Word `j` of (m >> s), for a `words`-long array.
+static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
+                                        unsigned s, unsigned j)
+{
+  const unsigned word = j + (s >> 6);
+  const unsigned bit = s & 63;
+  if (word >= words)
+    return 0;
+  uint64_t r = m[word] >> bit;
+  if (bit != 0 && word + 1 < words)
+    r |= m[word + 1] << (64 - bit);
+  return r;
+}
+
+// The number of pairs i + k == j with a[i] and revB[width-1-k] both set,
+// i.e. the boolean convolution of a and (un-reversed) b at column j.
+static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
+                                unsigned words, unsigned width, unsigned j)
+{
+  int count = 0;
+  const unsigned s = width - 1 - j;
+  for (unsigned t = 0; t < words; t++)
+  {
+    const uint64_t aw = a[t];
+    if (aw != 0)
+      count += popcount64(aw & rightShiftedWord(revB, words, s, t));
+  }
+  return count;
+}
+
+// Uses the zeroes / ones present adjust the column counts:
+//   columnH[j] -= #{i <= j : y[i] fixed to zero}
+//              +  #{i <= j : x[i] fixed to zero and y[j-i] not fixed to zero}
+//   columnL[j] += #{i + k == j : x[i] and y[k] both fixed to one}
+// The counts come from running prefix sums and two boolean convolutions
+// evaluated as shifted-window popcounts over packed words.
 Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
                      int* columnH)
 {
   const unsigned bitWidth = x.getWidth();
+  const unsigned words = (bitWidth + 63) / 64;
 
-  bool* yFixedFalse = (bool*)alloca(sizeof(bool) * bitWidth);
-  bool* xFixedFalse = (bool*)alloca(sizeof(bool) * bitWidth);
+  const unsigned INLINE_WORDS = 8; // up to 512 bits on the stack.
+  uint64_t stackBuf[4 * INLINE_WORDS];
+  std::vector<uint64_t> heapBuf;
+  uint64_t* buf = stackBuf;
+  if (words > INLINE_WORDS)
+  {
+    heapBuf.resize(4 * words);
+    buf = heapBuf.data();
+  }
+  uint64_t* xFF = buf;                // x fixed to zero.
+  uint64_t* xOne = buf + words;       // x fixed to one.
+  uint64_t* revYFF = buf + 2 * words; // y fixed to zero, bit-reversed.
+  uint64_t* revYOne = buf + 3 * words;
+  for (unsigned t = 0; t < 4 * words; t++)
+    buf[t] = 0;
+
   for (unsigned i = 0; i < bitWidth; i++)
   {
-    yFixedFalse[i] = y.isFixed(i) && !y.getValue(i);
-    xFixedFalse[i] = x.isFixed(i) && !x.getValue(i);
+    if (x.isFixed(i))
+    {
+      if (x.getValue(i))
+        xOne[i >> 6] |= (uint64_t)1 << (i & 63);
+      else
+        xFF[i >> 6] |= (uint64_t)1 << (i & 63);
+    }
+    if (y.isFixed(i))
+    {
+      const unsigned r = bitWidth - 1 - i;
+      if (y.getValue(i))
+        revYOne[r >> 6] |= (uint64_t)1 << (r & 63);
+      else
+        revYFF[r >> 6] |= (uint64_t)1 << (r & 63);
+    }
   }
 
-  for (unsigned i = 0; i < bitWidth; i++)
+  bool anyXFF = false, anyYFF = false, anyXOne = false, anyYOne = false;
+  for (unsigned t = 0; t < words; t++)
   {
-    // decrease using zeroes.
-    if (yFixedFalse[i])
-    {
-      for (unsigned j = i; j < bitWidth; j++)
-      {
-        columnH[j]--;
-      }
-    }
+    anyXFF |= xFF[t] != 0;
+    anyXOne |= xOne[t] != 0;
+    anyYFF |= revYFF[t] != 0;
+    anyYOne |= revYOne[t] != 0;
+  }
+  const bool ffPairsPossible = anyXFF && anyYFF;
+  const bool onePairsPossible = anyXOne && anyYOne;
+  if (!anyXFF && !anyYFF && !onePairsPossible)
+    return NO_CHANGE; // nothing fixed that could adjust any count.
 
-    if (xFixedFalse[i])
-    {
-      for (unsigned j = i; j < bitWidth; j++)
-      {
-        // if the row hasn't already been zeroed out.
-        if (!yFixedFalse[j - i])
-          columnH[j]--;
-      }
-    }
+  int xZeroes = 0, yZeroes = 0;
+  for (unsigned j = 0; j < bitWidth; j++)
+  {
+    // Running prefix counts of the fixed-to-zero bits at or below j.
+    const unsigned r = bitWidth - 1 - j;
+    if ((revYFF[r >> 6] >> (r & 63)) & 1)
+      yZeroes++;
+    if ((xFF[j >> 6] >> (j & 63)) & 1)
+      xZeroes++;
 
-    // check if there are any pairs of ones.
-    if (x.isFixed(i) && x.getValue(i))
-      for (unsigned j = 0; j < (bitWidth - i); j++)
-      {
-        assert(i + j < bitWidth);
-        if (y.isFixed(j) && y.getValue(j))
-        {
-          // a pair of ones. Increase the lower bound.
-          columnL[i + j]++;
-        }
-      }
+    int decrement = yZeroes + xZeroes;
+    if (ffPairsPossible)
+      decrement -= convolutionAt(xFF, revYFF, words, bitWidth, j);
+    if (decrement != 0)
+      columnH[j] -= decrement;
+    if (onePairsPossible)
+    {
+      const int onePairs = convolutionAt(xOne, revYOne, words, bitWidth, j);
+      if (onePairs != 0)
+        columnL[j] += onePairs;
+    }
   }
   return NO_CHANGE;
 }
@@ -280,7 +455,12 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
       else
       {
         if (output.getValue(j))
+        {
+          CONSTANTBV::BitVector_Destroy(x_c);
+          CONSTANTBV::BitVector_Destroy(y_c);
+          CONSTANTBV::BitVector_Destroy(result);
           return CONFLICT;
+        }
       }
     }
   }
@@ -332,7 +512,12 @@ Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output)
     r = CHANGED;
   }
 
-  assert(trailingOneReasoning_OLD(x, y, output) == NO_CHANGE);
+#ifndef NDEBUG
+  // Check that the old implementation is subsumed. On copies, because it
+  // fixes bits when it fires, and nothing should mutate inside assert().
+  FixedBits x_c(x), y_c(y), o_c(output);
+  assert(trailingOneReasoning_OLD(x_c, y_c, o_c) == NO_CHANGE);
+#endif
   return r;
 }
 
@@ -571,6 +756,13 @@ void printColumns(signed* sumL, signed* sumH, int bitWidth)
 Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
                           stp::STPMgr* bm, MultiplicationStats* ms)
 {
+  // BVTypeCheck allows BVMULT nodes with more than two children, and the
+  // hashing node factory builds them (the simplifying factory binarises).
+  // The reasoning below is about exactly two operands; running it on the
+  // first two children of a wider multiply fixes bits unsoundly.
+  if (children.size() != 2)
+    return NO_CHANGE;
+
   FixedBits& x = *children[0];
   FixedBits& y = *children[1];
 
@@ -594,16 +786,22 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
   if (CONFLICT == r)
     return r;
 
+  // On the heap: bitWidth is unbounded, and this used to alloca inside the
+  // loop, which only returns the stack space when the function exits. The
+  // ColumnCounts constructor re-initialises the arrays each iteration.
+  std::vector<signed> columnH_store(bitWidth); // max. no of true partial products.
+  std::vector<signed> columnL_store(bitWidth); // minimum ""  ""
+  std::vector<signed> sumH_store(bitWidth);
+  std::vector<signed> sumL_store(bitWidth);
+
   bool changed = true;
   while (changed)
   {
     changed = false;
-    signed* columnH = (signed*)alloca(
-        sizeof(signed) * bitWidth); // maximum number of true partial products.
-    signed* columnL =
-        (signed*)alloca(sizeof(signed) * bitWidth); // minimum  ""            ""
-    signed* sumH = (signed*)alloca(sizeof(signed) * bitWidth);
-    signed* sumL = (signed*)alloca(sizeof(signed) * bitWidth);
+    signed* columnH = columnH_store.data();
+    signed* columnL = columnL_store.data();
+    signed* sumH = sumH_store.data();
+    signed* sumL = sumL_store.data();
     ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output);
 
     // Use the number of zeroes and ones in a column to update the possible
@@ -639,19 +837,32 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
     if (CHANGED == r)
       changed = true;
 
+    // The packed column stats only pay off past one word; at 64 bits and
+    // below the direct scan is cheaper, so bvmul at common widths keeps
+    // the original path while the division machinery (double width)
+    // benefits.
+    PairMasks pm;
+    bool masksValid = false; // built lazily: many passes trigger no column.
+    const bool usePacked = bitWidth > 64;
     for (unsigned column = 0; column < bitWidth; column++)
     {
       if (cc.columnL[column] == cc.columnH[column])
       {
+        if (usePacked && !masksValid)
+        {
+          pm.build(x, y);
+          masksValid = true;
+        }
+
         //(2) Knowledge of the sum may fix the operands.
-        Result tempResult =
-            fixIfCanForMultiplication(children, column, cc.columnH[column]);
+        Result tempResult = fixIfCanForMultiplication(
+            children, column, cc.columnH[column], usePacked ? &pm : NULL);
 
         if (CONFLICT == tempResult)
           return CONFLICT;
 
         if (CHANGED == tempResult)
-          r = CHANGED;
+          r = CHANGED; // the masks were updated incrementally.
       }
     }
 

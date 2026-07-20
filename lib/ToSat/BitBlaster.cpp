@@ -1157,6 +1157,17 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
       result = BBcompare(form, support);
       break;
     }
+
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
+    {
+      result = BBOverflow(form, support);
+      break;
+    }
     default:
       FatalError("BBForm: Illegal kind: ", form);
       break;
@@ -2882,6 +2893,99 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBcompare(const ASTNode& form,
     }
     default:
       cerr << "BBCompare: Illegal kind" << form << endl;
+      FatalError("", form);
+      exit(-1);
+  }
+}
+
+// Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
+// BVUMULO, BVSMULO. Each returns a single boolean.
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
+                                                      BBNodeSet& support)
+{
+  const Kind k = form.GetKind();
+  const unsigned w = form[0].GetValueWidth();
+  assert(w > 0);
+
+  switch (k)
+  {
+    case BVUADDO:
+    {
+      // Overflow == carry-out of the unsigned addition. Zero-extend both
+      // operands by one bit, add, and return the top bit of the sum.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(nf->getFalse());
+      r.push_back(nf->getFalse());
+      BBPlus2(l, r, nf->getFalse());
+      return l[w];
+    }
+    case BVSADDO:
+    {
+      // Sign-extend both operands by one bit, add, and check whether the two
+      // top bits of the (w+1)-bit sum disagree.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(l[w - 1]);
+      r.push_back(r[w - 1]);
+      BBPlus2(l, r, nf->getFalse());
+      return nf->CreateNode(XOR, l[w], l[w - 1]);
+    }
+    case BVUSUBO:
+    {
+      // Overflow (borrow) of the unsigned subtraction. Zero-extend both
+      // operands by one bit, subtract, and return the top bit: it is set iff
+      // the true difference is negative, i.e. iff form[0] <u form[1].
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(nf->getFalse());
+      r.push_back(nf->getFalse());
+      BBSub(l, r, support);
+      return l[w];
+    }
+    case BVSSUBO:
+    {
+      // Sign-extend both operands by one bit, subtract, and check whether the
+      // two top bits of the (w+1)-bit difference disagree.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(l[w - 1]);
+      r.push_back(r[w - 1]);
+      BBSub(l, r, support);
+      return nf->CreateNode(XOR, l[w], l[w - 1]);
+    }
+    case BVUMULO:
+    case BVSMULO:
+    {
+      // Build the exact 2w-bit product (via zero/sign-extended operands) and
+      // reuse the existing multiplier, then inspect the high bits.
+      const Kind ext = (k == BVUMULO) ? BVZX : BVSX;
+      const ASTNode widthConst = ASTNF->CreateBVConst(32, 2 * w);
+      const ASTNode xE = ASTNF->CreateTerm(ext, 2 * w, form[0], widthConst);
+      const ASTNode yE = ASTNF->CreateTerm(ext, 2 * w, form[1], widthConst);
+      const ASTNode prod = ASTNF->CreateTerm(BVMULT, 2 * w, xE, yE);
+      const BBNodeVec p = BBTerm(prod, support);
+
+      if (k == BVUMULO)
+      {
+        // Overflow iff any high bit is set.
+        BBNodeVec high(p.begin() + w, p.end());
+        return nf->CreateNode(OR, high);
+      }
+      else
+      {
+        // Overflow iff the product is not the sign-extension of its low w bits,
+        // i.e. some bit above w-1 differs from the sign bit p[w-1].
+        BBNodeVec diffs;
+        diffs.reserve(w);
+        for (unsigned i = w; i < 2 * w; i++)
+          diffs.push_back(nf->CreateNode(XOR, p[i], p[w - 1]));
+        return nf->CreateNode(OR, diffs);
+      }
+    }
+    default:
+      cerr << "BBOverflow: Illegal kind" << form << endl;
       FatalError("", form);
       exit(-1);
   }

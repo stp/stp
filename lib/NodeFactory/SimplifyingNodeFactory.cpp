@@ -55,6 +55,27 @@ using std::endl;
 
 static bool debug_simplifyingNodeFactory = false;
 
+// True if the constant has exactly one bit set.
+static bool hasSingleOneBit(const stp::ASTNode& n)
+{
+  assert(n.GetKind() == stp::BVCONST);
+  unsigned found = 0;
+  for (unsigned i = 0; i < n.GetValueWidth(); i++)
+    if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(), i))
+      found++;
+  return (found == 1);
+}
+
+// Position of the lowest set bit; the constant must not be zero.
+static unsigned lowestOneBit(const stp::ASTNode& n)
+{
+  assert(n.GetKind() == stp::BVCONST);
+  unsigned position = 0;
+  while (!CONSTANTBV::BitVector_bit_test(n.GetBVConst(), position))
+    position++;
+  return position;
+}
+
 bool SimplifyingNodeFactory::children_all_constants(
     const ASTVec& children) const
 {
@@ -155,7 +176,32 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     return ASTFalse;
   }
 
-  // Issue #381. It's a yucky fix because it only handles a specific instance 
+  // constant > (constant-top ++ y): if the constant's top bits equal the
+  // concat's constant top, only the bottom parts matter. e.g.
+  //   1352830:(BVGT
+  //     1280904:0x00000055
+  //     8816:(BVCONCAT
+  //       7538:0x000000
+  //       1252:x7169))
+  if (children[0].GetKind() == stp::BVCONST &&
+      children[1].GetKind() == BVCONCAT &&
+      children[1][0].GetKind() == stp::BVCONST)
+  {
+    const ASTNode top = NodeFactory::CreateTerm(
+        BVEXTRACT, children[1][0].GetValueWidth(), children[0],
+        bm.CreateBVConst(32, children[0].GetValueWidth() - 1),
+        bm.CreateBVConst(32, children[1][1].GetValueWidth()));
+    if (top == children[1][0])
+    {
+      const ASTNode bottom = NodeFactory::CreateTerm(
+          BVEXTRACT, children[1][1].GetValueWidth(), children[0],
+          bm.CreateBVConst(32, children[1][1].GetValueWidth() - 1),
+          bm.CreateBVConst(32, 0));
+      result = NodeFactory::CreateNode(stp::BVGT, bottom, children[1][1]);
+    }
+  }
+
+  // Issue #381. It's a yucky fix because it only handles a specific instance
   // (not equality or the operands swapped).
   if (children[0].GetKind() == BVMOD && children[0][1] == children[1])
   {
@@ -407,6 +453,26 @@ ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
         return ASTTrue;
       if (c1.GetKind() == stp::NOT && c1[0] == c0)
         return ASTTrue;
+
+      // A OR NOT(A OR B) == A OR NOT B, for either operand order and either
+      // position of A in the inner OR. e.g.
+      //   136896:(OR
+      //     [127666]
+      //     127713:(NOT 127712:(OR
+      //       [127666]
+      //       ...)))
+      for (int i = 0; i < 2; i++)
+      {
+        const ASTNode& a = children[i];
+        const ASTNode& other = children[1 - i];
+        if (other.GetKind() == stp::NOT && other[0].GetKind() == stp::OR &&
+            other[0].Degree() == 2)
+        {
+          for (int j = 0; j < 2; j++)
+            if (other[0][j] == a)
+              return CreateSimpleAndOr(0, a, CreateSimpleNot(other[0][1 - j]));
+        }
+      }
     }
     else
     {
@@ -711,6 +777,37 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   if (k1 == BVUMINUS && k2 == BVNOT && in1[0] == in2[0])
     return ASTFalse;
 
+  // constant = constant + t  -->  (constant - constant) = t.
+  if (k1 == stp::BVCONST && k2 == BVPLUS && in2.Degree() == 2 &&
+      in2[0].GetKind() == stp::BVCONST)
+  {
+    ASTNode lhs = NodeFactory::CreateTerm(
+        BVPLUS, width, NodeFactory::CreateTerm(BVUMINUS, width, in2[0]), in1);
+    assert(lhs.isConstant());
+    return NodeFactory::CreateNode(EQ, lhs, in2[1]);
+  }
+
+  // A 1-bit constant = the top bit of x is a sign test on x. e.g.
+  //   (EQ
+  //     7446:0b0
+  //     14748:(BVEXTRACT
+  //       14712:(BVPLUS
+  //         14710:0xFFFFFFAB
+  //         8816:(BVCONCAT
+  //           7538:0x000000
+  //           1252:x7169))
+  //       8110:0x0000001F
+  //       8110:0x0000001F))
+  if (k1 == stp::BVCONST && width == 1 && k2 == BVEXTRACT &&
+      in2[1].GetUnsignedConst() == in2[0].GetValueWidth() - 1)
+  {
+    const ASTNode zero = bm.CreateZeroConst(in2[0].GetValueWidth());
+    if (in1 == bm.CreateZeroConst(1))
+      return NodeFactory::CreateNode(stp::BVSGE, in2[0], zero);
+    else
+      return NodeFactory::CreateNode(stp::BVSLT, in2[0], zero);
+  }
+
   // last resort is to CreateNode
   return hashing.CreateNode(EQ, children);
 }
@@ -724,6 +821,31 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
 
     lpvec(children);
     cout << endl;
+  }
+
+  // a XOR (NOT a OR b) == (NOT a) OR (NOT b), for either operand order and
+  // either position of (NOT a) in the OR. e.g.
+  //   2180186:(XOR
+  //     363814:var_5736
+  //     (OR
+  //       363815:(NOT 363814:var_5736)
+  //       378221:(NOT 378220:var_8137)))
+  if (children.size() == 2)
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      const ASTNode& a = children[i];
+      const ASTNode& other = children[1 - i];
+      if (other.GetKind() == stp::OR && other.Degree() == 2)
+      {
+        for (int j = 0; j < 2; j++)
+        {
+          if (other[j].GetKind() == stp::NOT && other[j][0] == a)
+            return CreateSimpleAndOr(0, other[j],
+                                     CreateSimpleNot(other[1 - j]));
+        }
+      }
+    }
   }
 
   ASTVec flat_children; // empty vector
@@ -1586,6 +1708,31 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                            children[0]);
           result = NodeFactory::CreateTerm(BVUMINUS, width, result);
         }
+        else
+        {
+          // (2^p * (k ++ y)) is a left shift by p; when p is the width of k,
+          // the shift pushes k out entirely: the result is (y ++ 0^p). e.g.
+          //   5254:(BVMULT
+          //     1970:0x0100
+          //     5242:(BVCONCAT
+          //       1402:0x00
+          //       1296:T1@2147))
+          for (int i = 0; i < 2; i++)
+          {
+            const ASTNode& constant = children[i];
+            const ASTNode& other = children[1 - i];
+            if (constant.GetKind() == stp::BVCONST &&
+                hasSingleOneBit(constant) && other.GetKind() == BVCONCAT &&
+                other[0].GetKind() == stp::BVCONST &&
+                lowestOneBit(constant) == other[0].GetValueWidth())
+            {
+              result = NodeFactory::CreateTerm(
+                  BVCONCAT, width, other[1],
+                  bm.CreateZeroConst(other[0].GetValueWidth()));
+              break;
+            }
+          }
+        }
       }
       else if (children.size() > 2)
       {
@@ -1867,6 +2014,61 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       {
         result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
                                          children[1], children[2]);
+      }
+      else if (stp::BVNOT == children[0].GetKind())
+      {
+        // pull the bvnot above the extract.
+        result = NodeFactory::CreateTerm(
+            stp::BVNOT, width,
+            NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
+                                    children[1], children[2]));
+      }
+      else if (stp::BVMULT == children[0].GetKind() &&
+               children[0].Degree() == 2 &&
+               (children[0][0].GetKind() == stp::BVCONST ||
+                children[0][1].GetKind() == stp::BVCONST))
+      {
+        // A multiplication by 2^p is a left shift by p; push the extract
+        // through it, over a concat with p zeroes.
+        const bool constFirst = children[0][0].GetKind() == stp::BVCONST;
+        const ASTNode& constant = constFirst ? children[0][0] : children[0][1];
+        const ASTNode& other = constFirst ? children[0][1] : children[0][0];
+        if (hasSingleOneBit(constant) && lowestOneBit(constant) > 0)
+        {
+          const unsigned position = lowestOneBit(constant);
+          const ASTNode concat = NodeFactory::CreateTerm(
+              BVCONCAT, children[0].GetValueWidth() + position, other,
+              bm.CreateZeroConst(position));
+          result = NodeFactory::CreateTerm(BVEXTRACT, width, concat,
+                                           children[1], children[2]);
+        }
+      }
+      break;
+
+    case BVCONCAT:
+      // ((x ++ k1) ++ k2) --> (x ++ (k1 ++ k2)): merge adjacent constants.
+      if (children[0].GetKind() == BVCONCAT &&
+          children[1].GetKind() == stp::BVCONST &&
+          children[0][1].GetKind() == stp::BVCONST)
+      {
+        const ASTNode constants = NodeFactory::CreateTerm(
+            BVCONCAT,
+            children[0][1].GetValueWidth() + children[1].GetValueWidth(),
+            children[0][1], children[1]);
+        result =
+            NodeFactory::CreateTerm(BVCONCAT, width, children[0][0], constants);
+      }
+      // (k0 ++ (k1 ++ y)) --> ((k0 ++ k1) ++ y): merge adjacent constants.
+      else if (children[1].GetKind() == BVCONCAT &&
+               children[0].GetKind() == stp::BVCONST &&
+               children[1][0].GetKind() == stp::BVCONST)
+      {
+        const ASTNode constants = NodeFactory::CreateTerm(
+            BVCONCAT,
+            children[0].GetValueWidth() + children[1][0].GetValueWidth(),
+            children[0], children[1][0]);
+        result =
+            NodeFactory::CreateTerm(BVCONCAT, width, constants, children[1][1]);
       }
       break;
 

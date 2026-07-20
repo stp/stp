@@ -501,6 +501,20 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       output = CreateSimplifiedINEQ(kind, left, right, pushNeg);
       break;
     }
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
+    {
+      // Overflow predicates are not inequalities; just rebuild with the
+      // simplified children (constant children are folded by the node
+      // factory) and honour pushNeg.
+      output = nf->CreateNode(kind, left, right);
+      output = pushNeg ? nf->CreateNode(NOT, output) : output;
+      break;
+    }
     default:
       FatalError("SimplifyAtomicFormula: "
                  "NO atomic formula of the kind: ",
@@ -540,55 +554,6 @@ unsigned getConstantBit(const ASTNode& n, const int i)
   abort();
 }
 
-ASTNode replaceIteConst(const ASTNode& n, const ASTNode& newVal,
-                        NodeFactory* nf)
-{
-  assert(!n.IsNull());
-  assert(!newVal.IsNull());
-  if (n.GetKind() == BVCONST)
-  {
-    return nf->CreateNode(EQ, newVal, n);
-  }
-  else if (n.GetKind() == ITE)
-  {
-    return nf->CreateNode(ITE, n[0], replaceIteConst(n[1], newVal, nf),
-                          replaceIteConst(n[2], newVal, nf));
-  }
-  FatalError("never here", n);
-}
-
-bool getPossibleValues(const ASTNode& n, ASTNodeSet& visited,
-                       vector<ASTNode>& found, int maxCount = 5)
-{
-  if (maxCount <= 0)
-    return false;
-
-  ASTNodeSet::iterator it = visited.find(n);
-  if (it != visited.end())
-    return true;
-  visited.insert(n);
-
-  if (n.GetKind() == BVCONST)
-  {
-    found.push_back(n);
-    return true;
-  }
-
-  if (n.GetKind() == ITE)
-  {
-    bool a = getPossibleValues(n[1], visited, found, maxCount - 1);
-    if (!a)
-      return a;
-
-    bool b = getPossibleValues(n[2], visited, found, maxCount - 1);
-    if (!b)
-      return b;
-    return true;
-  }
-
-  return false;
-}
-
 unsigned numberOfLeadingZeroes(const ASTNode& n)
 {
   unsigned c = mostSignificantConstants(n);
@@ -599,27 +564,6 @@ unsigned numberOfLeadingZeroes(const ASTNode& n)
     if (getConstantBit(n, i) != 0)
       return i;
   return c;
-}
-
-bool unsignedGreaterThan(const ASTNode& n1, const ASTNode& n2)
-{
-  assert(n1.isConstant());
-  assert(n2.isConstant());
-  assert(n1.GetValueWidth() == n2.GetValueWidth());
-
-  int comp =
-      CONSTANTBV::BitVector_Lexicompare(n1.GetBVConst(), n2.GetBVConst());
-  return comp == 1;
-}
-
-bool signedGreaterThan(const ASTNode& n1, const ASTNode& n2)
-{
-  assert(n1.isConstant());
-  assert(n2.isConstant());
-  assert(n1.GetValueWidth() == n2.GetValueWidth());
-
-  int comp = CONSTANTBV::BitVector_Compare(n1.GetBVConst(), n2.GetBVConst());
-  return comp == 1;
 }
 
 ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
@@ -718,37 +662,6 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
       return pushNeg ? nf->CreateNode(NOT, status) : status;
     }
 
-    {
-      ASTNodeSet visited0, visited1;
-      vector<ASTNode> l0, l1;
-
-      // Sound overapproximation. Doesn't consider the equalities.
-      if (getPossibleValues(left, visited0, l0) &&
-          getPossibleValues(right, visited1, l1))
-      {
-        {
-          bool (*comp)(const ASTNode&, const ASTNode&);
-          if (k == BVSGT || k == BVSGE)
-            comp = signedGreaterThan;
-          else
-            comp = unsignedGreaterThan;
-          {
-            ASTNode minLHS = *max_element(l0.begin(), l0.end(), comp);
-            ASTNode maxRHS = *min_element(l1.begin(), l1.end(), comp);
-
-            if (comp(minLHS, maxRHS))
-              return pushNeg ? ASTFalse : ASTTrue;
-          }
-          {
-            ASTNode maxLHS = *min_element(l0.begin(), l0.end(), comp);
-            ASTNode minRHS = *max_element(l1.begin(), l1.end(), comp);
-
-            if (comp(minRHS, maxLHS))
-              return pushNeg ? ASTTrue : ASTFalse;
-          }
-        }
-      }
-    }
   }
 
   const ASTNode unsigned_min = nf->CreateZeroConst(len);
@@ -1032,37 +945,6 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     return r;
   }
 
-  if ((k1 == ITE || k1 == BVCONST) && (k2 == ITE || k2 == BVCONST))
-  {
-    // If it can only evaluate to constants on the LHS and the RHS, and those
-    // constants are never equal,
-    // then it must be false. e.g.   ite( f, 10 , 20 ) = ite (g, 30 ,12)
-    ASTNodeSet visited0, visited1;
-    vector<ASTNode> l0, l1;
-
-    if (getPossibleValues(in1, visited0, l0) &&
-        getPossibleValues(in2, visited1, l1))
-    {
-      sort(l0.begin(), l0.end());
-      sort(l1.begin(), l1.end());
-      vector<ASTNode> result(l0.size() + l1.size());
-      vector<ASTNode>::iterator it = set_intersection(
-          l0.begin(), l0.end(), l1.begin(), l1.end(), result.begin());
-      if (it == result.begin())
-        return ASTFalse;
-
-      if (it == result.begin() + 1)
-      {
-        // If there is just one value in common, then, set it to true whenever
-        // it equals that value.
-        ASTNode lhs = replaceIteConst(in1, *result.begin(), nf);
-        ASTNode rhs = replaceIteConst(in2, *result.begin(), nf);
-
-        ASTNode result = nf->CreateNode(AND, lhs, rhs);
-        return result;
-      }
-    }
-  }
   if (k2 == ITE && (in2[1] == in1) && in1.GetType() == BITVECTOR_TYPE)
   {
     ASTNode eq = nf->CreateNode(EQ, in1, in2[2]);

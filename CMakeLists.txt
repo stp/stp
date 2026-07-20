@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 if(POLICY CMP0048)
     #policy for VERSION in cmake 3.0
@@ -447,7 +447,28 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 # FIXME: External library includes
 include_directories(# For extlib-abc and extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
+                    ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src
                    )
+# abc related word size check
+include(CheckTypeSize)
+# Check size of void pointer (void*)
+CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
+if(SIZEOF_VOID_P EQUAL 8)
+    add_definitions(-DLIN64)
+else()
+    add_definitions(-DLIN)
+endif()
+add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
+
+# Check size of long
+CHECK_TYPE_SIZE("long" SIZEOF_LONG)
+add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
+
+# Check size of int
+CHECK_TYPE_SIZE("int" SIZEOF_INT)
+add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
+
+
 
 option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
 if (NOT ONLY_SIMPLE)

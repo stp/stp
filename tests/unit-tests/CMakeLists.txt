@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Gvostes, Mate Soos
+# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,18 @@ AddSTPGTest(Flatten_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
 AddSTPGTest(StrengthReduction_Test.cpp)
+AddSTPGTest(StrengthReduction_Exhaustive_Test.cpp)
+AddSTPGTest(RemoveUnconstrained_Exhaustive_Test.cpp)
+AddSTPGTest(Rewriting_Exhaustive_Test.cpp)
+AddSTPGTest(SimplifyingNodeFactory_Exhaustive_Test.cpp)
+AddSTPGTest(UnsignedIntervalPropagators_Test.cpp)
+AddSTPGTest(UnsignedIntervalExhaustive_Test.cpp)
+AddSTPGTest(UnsignedIntervalWide_Test.cpp)
 AddSTPGTest(AlwaysTrue_Test.cpp)
 AddSTPGTest(MergeSame_Test.cpp)
+AddSTPGTest(ConstantBitP_TransferFunctions_Test.cpp)
+AddSTPGTest(ConstantBitP_Wide_Test.cpp)
+AddSTPGTest(UnsignedIntervalAnalysis_Test.cpp)
+AddSTPGTest(ConstantBitPropagation_Test.cpp)
+AddSTPGTest(ValueSet_Test.cpp)
 

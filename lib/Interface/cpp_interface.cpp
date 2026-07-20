@@ -598,6 +598,13 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       unsupported();
   }
+  else if (option == "diagnostic-output-channel")
+  {
+    if (value == "stdout")
+      success();
+    else
+      unsupported();
+  }	  
   else
     unsupported();
 }
@@ -653,7 +660,7 @@ void Cpp_interface::getModel()
 
 void CNFClearMemory()
 {
-  Cnf_ClearMemory();
+  Cnf_ManFree();
 }
 
 Cpp_interface::SolverFrame::SolverFrame(
