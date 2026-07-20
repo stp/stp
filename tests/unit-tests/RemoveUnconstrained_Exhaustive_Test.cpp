@@ -402,6 +402,52 @@ TEST(RemoveUnconstrained_Exhaustive, ite_then_branch)
   c.checkSound(c.hf->CreateTerm(ITE, W, c.boolean(), c.bv(), c.bv()));
 }
 
+// A variable all of whose uses are disjoint extracts goes through the separate
+// splitExtractOnly() path (getDisjointExtractVariables), not the ordinary
+// BVEXTRACT case. Build such a variable and check the whole rewrite is sound.
+TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_full_cover)
+{
+  Context c;
+  const unsigned w = 4;
+  ASTNode x = c.bv(w);
+  // Two disjoint extracts that together cover all of x: [1:0] and [3:2].
+  ASTNode lo =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(1, 32), c.konst(0, 32));
+  ASTNode hi =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(3, 32), c.konst(2, 32));
+  ASTNode top = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVCONCAT, 4, hi, lo), c.konst(5, 4));
+
+  ASTNode result = c.run(top);
+  // Confirm the split actually fired: splitExtractOnly defines x := concat(...).
+  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
+      << "splitExtractOnly did not eliminate x";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+// As above but the extracts leave a gap (bit 2), exercising the fresh-padding
+// branch of splitExtractOnly().
+TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_with_gap)
+{
+  Context c;
+  const unsigned w = 4;
+  ASTNode x = c.bv(w);
+  // [1:0] and [3:3]; bit 2 is never referenced.
+  ASTNode lo =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(1, 32), c.konst(0, 32));
+  ASTNode hi =
+      c.hf->CreateTerm(BVEXTRACT, 1, x, c.konst(3, 32), c.konst(3, 32));
+  ASTNode top = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVCONCAT, 3, hi, lo), c.konst(5, 3));
+
+  ASTNode result = c.run(top);
+  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
+      << "splitExtractOnly did not eliminate x";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
 TEST(RemoveUnconstrained_Exhaustive, eq_term)
 {
   Context c;
