@@ -41,6 +41,7 @@ using simplifier::constantBitP::Dependencies;
 RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
 {
   nf = _bm.defaultNodeFactory;
+  simplifier = NULL;
 }
 
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
@@ -83,9 +84,6 @@ bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
   return true;
 }
 
-//Global variable TODO!! This is really bad.
-THREAD_LOCAL Simplifier* simplifier_convenient;
-
 ASTNode
 RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
                                             vector<MutableASTNode*>& variables)
@@ -103,7 +101,7 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
-  simplifier_convenient->UpdateSubstitutionMapFewChecks(from, to);
+  simplifier->UpdateSubstitutionMapFewChecks(from, to);
 }
 
 /* The most complicated handling is for EXTRACTS. If a variable has parents that
@@ -198,7 +196,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   if (n.GetKind() == SYMBOL)
     return n; // top level is an unconstrained symbol/.
 
-  simplifier_convenient = simplifier;
+  this->simplifier = simplifier;
 
   MutableASTNode* topMutable = MutableASTNode::build(n);
 
@@ -655,6 +653,10 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case IFF:
       {
+        // Normally unreachable: the SimplifyingNodeFactory rewrites IFF(a,b)
+        // to NOT(XOR(a,b)) on creation, so the standard pipeline never feeds
+        // an IFF node to this pass (it's handled by the NOT and XOR cases
+        // instead). Kept as a defensive fallback for non-simplifying factories.
         ASTNode v = replaceParentWithFresh(muteParent, variable_array);
 
         ASTNode rhs =

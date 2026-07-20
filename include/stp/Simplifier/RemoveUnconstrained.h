@@ -53,6 +53,10 @@ class RemoveUnconstrained
 
   NodeFactory* nf;
 
+  // Set for the duration of a topLevel() call; the substitution map that
+  // replace() writes definitions into.
+  Simplifier* simplifier;
+
 public:
   RemoveUnconstrained(STPMgr& bm);
 	
