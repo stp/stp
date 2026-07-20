@@ -187,6 +187,49 @@ TEST(SimplifyingNodeFactory_Exhaustive, leftshift_by_constant)
   }
 }
 
+/* (~x) smod x, x smod (~x), (~x) smod (-x): the dividend becomes -1 */
+TEST(SimplifyingNodeFactory_Exhaustive, smod_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode neg = c.hf->CreateTerm(BVUMINUS, w, x);
+    c.checkTerm(SBVMOD, w, {nt, x});
+    c.checkTerm(SBVMOD, w, {x, nt});
+    c.checkTerm(SBVMOD, w, {nt, neg});
+  }
+}
+
+/* (~x) srem x and x srem (~x): rewrite to -(1 smod divisor) */
+TEST(SimplifyingNodeFactory_Exhaustive, srem_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    c.checkTerm(SBVREM, w, {nt, x});
+    c.checkTerm(SBVREM, w, {x, nt});
+  }
+}
+
+/* (~x) mod x, x mod (~x): the dividend becomes max; (-x) mod (~x): 1 srem */
+TEST(SimplifyingNodeFactory_Exhaustive, mod_of_bvnot)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode neg = c.hf->CreateTerm(BVUMINUS, w, x);
+    c.checkTerm(BVMOD, w, {nt, x});
+    c.checkTerm(BVMOD, w, {x, nt});
+    c.checkTerm(BVMOD, w, {neg, nt});
+  }
+}
+
 /* ((x ++ k1) ++ k2) and (k0 ++ (k1 ++ y)): adjacent constants merge */
 TEST(SimplifyingNodeFactory_Exhaustive, concat_constant_merge)
 {
