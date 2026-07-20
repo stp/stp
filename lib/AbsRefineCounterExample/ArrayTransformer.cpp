@@ -338,6 +338,8 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
     case BVSADDO:
     case BVUMULO:
     case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     {
       ASTVec c;
       c.push_back(TransformTerm(simpleForm[0]));

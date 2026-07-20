@@ -68,6 +68,8 @@ BVUADDO		2	2	Form
 BVSADDO		2	2	Form
 BVUMULO		2	2	Form
 BVSMULO		2	2	Form
+BVUSUBO		2	2	Form
+BVSSUBO		2	2	Form
 EQ		2	2	Form
 FALSE		0	0	Form
 TRUE		0	0	Form

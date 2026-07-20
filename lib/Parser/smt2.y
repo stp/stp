@@ -97,6 +97,8 @@
   using stp::BVSADDO;      //!< Signed addition overflow predicate
   using stp::BVUMULO;      //!< Unsigned multiplication overflow predicate
   using stp::BVSMULO;      //!< Signed multiplication overflow predicate
+  using stp::BVUSUBO;      //!< Unsigned subtraction overflow predicate
+  using stp::BVSSUBO;      //!< Signed subtraction overflow predicate
   using stp::EQ;           //!< Equality comparator
   using stp::FALSE;        //!< Constant false boolean expression
   using stp::TRUE;         //!< Constant true boolean expression
@@ -155,6 +157,8 @@
   using stp::BVSADDO;      //!< Signed addition overflow predicate
   using stp::BVUMULO;      //!< Unsigned multiplication overflow predicate
   using stp::BVSMULO;      //!< Signed multiplication overflow predicate
+  using stp::BVUSUBO;      //!< Unsigned subtraction overflow predicate
+  using stp::BVSSUBO;      //!< Signed subtraction overflow predicate
   using stp::EQ;           //!< Equality comparator
   using stp::FALSE;        //!< Constant false boolean expression
   using stp::TRUE;         //!< Constant true boolean expression
@@ -268,6 +272,30 @@
     return n;
   }
 
+  // (bvsdivo s t) is true iff the signed division s/t overflows. This happens
+  // only for INT_MIN / -1, so desugar it to (and (= s INT_MIN) (= t -1)).
+  ASTNode* createSDivOverflow(ASTNode* c0, ASTNode* c1)
+  {
+    auto gi = stp::GlobalParserInterface;
+    const unsigned int width = c0->GetValueWidth();
+    ASTNode intMin;
+    if (width == 1)
+      intMin = gi->CreateOneConst(1);
+    else
+      intMin = gi->nf->CreateTerm(BVCONCAT, width, gi->CreateOneConst(1),
+                                  gi->CreateZeroConst(width - 1));
+    // -1 is the all-ones divisor; the node factory folds BVUMINUS of a
+    // constant to that constant.
+    const ASTNode minusOne =
+        gi->nf->CreateTerm(BVUMINUS, width, gi->CreateOneConst(width));
+    const ASTNode lhs = gi->nf->CreateNode(EQ, *c0, intMin);
+    const ASTNode rhs = gi->nf->CreateNode(EQ, *c1, minusOne);
+    ASTNode* n = gi->newNode(gi->nf->CreateNode(AND, lhs, rhs));
+    delete c0;
+    delete c1;
+    return n;
+  }
+
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
@@ -368,6 +396,9 @@
 %token BVSADDO_TOK
 %token BVUMULO_TOK
 %token BVSMULO_TOK
+%token BVUSUBO_TOK
+%token BVSSUBO_TOK
+%token BVSDIVO_TOK
 
  /* Types for QF_BV and QF_AUFBV. */
 %token BITVEC_TOK
@@ -1012,6 +1043,18 @@ TRUE_TOK
 | LPAREN_TOK BVSMULO_TOK an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSMULO, $3, $4);
+}
+| LPAREN_TOK BVUSUBO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVUSUBO, $3, $4);
+}
+| LPAREN_TOK BVSSUBO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVSSUBO, $3, $4);
+}
+| LPAREN_TOK BVSDIVO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createSDivOverflow($3, $4);
 }
 | LPAREN_TOK BVNEGO_TOK an_term RPAREN_TOK
 {
