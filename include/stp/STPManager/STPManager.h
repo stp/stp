@@ -382,8 +382,11 @@ public:
   ASTNode CreateFreshVariable(int indexWidth, int valueWidth,
                               std::string prefix)
   {
+    // The '@' prefix puts the name in the namespace SMT-LIB 2 reserves for
+    // solver use: symbols beginning with '@' (or '.') may not be declared by
+    // the user, so an introduced variable can never collide with an input one.
     char* d = (char*)alloca(sizeof(char) * (32 + prefix.length()));
-    sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
+    sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
     ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);

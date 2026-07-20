@@ -277,6 +277,14 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "repeat"        { return BVREPEAT_TOK;}
 "rotate_left"   { return BVROTATE_LEFT_TOK;}
 "rotate_right"  { return BVROTATE_RIGHT_TOK;}
+"bvnego"        { return BVNEGO_TOK;}
+"bvuaddo"       { return BVUADDO_TOK;}
+"bvsaddo"       { return BVSADDO_TOK;}
+"bvumulo"       { return BVUMULO_TOK;}
+"bvsmulo"       { return BVSMULO_TOK;}
+"bvusubo"       { return BVUSUBO_TOK;}
+"bvssubo"       { return BVSSUBO_TOK;}
+"bvsdivo"       { return BVSDIVO_TOK;}
 
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }

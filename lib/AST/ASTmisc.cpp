@@ -208,7 +208,9 @@ bool isAtomic(Kind kind)
 {
   if (TRUE == kind || FALSE == kind || EQ == kind || BVLT == kind ||
       BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind ||
-      BVSLE == kind || BVSGT == kind || BVSGE == kind || SYMBOL == kind ||
+      BVSLE == kind || BVSGT == kind || BVSGE == kind || BVUADDO == kind ||
+      BVSADDO == kind || BVUMULO == kind || BVSMULO == kind ||
+      BVUSUBO == kind || BVSSUBO == kind || SYMBOL == kind ||
       BOOLEXTRACT == kind)
     return true;
   return false;
@@ -569,6 +571,12 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case BVSLE:
     case BVSGT:
     case BVSGE:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
       if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())

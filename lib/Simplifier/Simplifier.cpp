@@ -501,6 +501,20 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       output = CreateSimplifiedINEQ(kind, left, right, pushNeg);
       break;
     }
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
+    {
+      // Overflow predicates are not inequalities; just rebuild with the
+      // simplified children (constant children are folded by the node
+      // factory) and honour pushNeg.
+      output = nf->CreateNode(kind, left, right);
+      output = pushNeg ? nf->CreateNode(NOT, output) : output;
+      break;
+    }
     default:
       FatalError("SimplifyAtomicFormula: "
                  "NO atomic formula of the kind: ",

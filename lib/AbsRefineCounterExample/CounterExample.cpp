@@ -500,6 +500,12 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     case BVSLE:
     case BVSGT:
     case BVSGE:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     {
       ASTVec children;
       children.reserve(form.Degree());
