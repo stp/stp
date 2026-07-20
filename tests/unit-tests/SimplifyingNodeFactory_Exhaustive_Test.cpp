@@ -174,15 +174,17 @@ TEST(SimplifyingNodeFactory_Exhaustive, eq_constant_plus)
   c.checkNode(EQ, {plus, c.konst(3, 3)});
 }
 
-/* 1-bit constant = msb-extract --> sign test */
-TEST(SimplifyingNodeFactory_Exhaustive, eq_msb_extract)
+/* x << k (constant k) --> (extract of x) ++ 0^k, not a multiplication */
+TEST(SimplifyingNodeFactory_Exhaustive, leftshift_by_constant)
 {
   Context c;
   ASTNode x = c.bv(4);
-  ASTNode msb = c.hf->CreateTerm(BVEXTRACT, 1, x, c.mgr.CreateBVConst(32, 3),
-                                 c.mgr.CreateBVConst(32, 3));
-  c.checkNode(EQ, {c.konst(0, 1), msb});
-  c.checkNode(EQ, {c.konst(1, 1), msb});
+  for (unsigned k = 1; k <= 3; k++)
+  {
+    ASTNode s = c.nf->CreateTerm(BVLEFTSHIFT, 4, x, c.konst(k, 4));
+    EXPECT_EQ(s.GetKind(), BVCONCAT);
+    c.checkTerm(BVLEFTSHIFT, 4, {x, c.konst(k, 4)});
+  }
 }
 
 /* ((x ++ k1) ++ k2) and (k0 ++ (k1 ++ y)): adjacent constants merge */
