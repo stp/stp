@@ -208,7 +208,9 @@ bool isAtomic(Kind kind)
 {
   if (TRUE == kind || FALSE == kind || EQ == kind || BVLT == kind ||
       BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind ||
-      BVSLE == kind || BVSGT == kind || BVSGE == kind || SYMBOL == kind ||
+      BVSLE == kind || BVSGT == kind || BVSGE == kind || BVUADDO == kind ||
+      BVSADDO == kind || BVUMULO == kind || BVSMULO == kind ||
+      BVUSUBO == kind || BVSSUBO == kind || SYMBOL == kind ||
       BOOLEXTRACT == kind)
     return true;
   return false;
