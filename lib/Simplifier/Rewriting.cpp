@@ -486,8 +486,9 @@ namespace stp
             35090:0xFFFFFFFFFFFFFFFE
             7186:0xFFFFFFFFFFFFFFFF))))))
             */
-      if ( 
+      if (
         c.GetKind() == BVAND
+        && c.Degree() == 2
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
@@ -683,7 +684,8 @@ namespace stp
                 1296:T1@2147)))))
 */
     if (c.GetKind() == BVMULT
-        && c[0].GetKind() == BVCONST 
+        && c.Degree() == 2
+        && c[0].GetKind() == BVCONST
         && singleOne(c[0])
         && c[1].GetKind() == BVCONCAT
         && c[1][0].GetKind() == BVCONST
@@ -706,8 +708,9 @@ namespace stp
         384:T1@362))))
 */
     if (c.GetKind() == BVOR
-        && c[0].GetKind() == BVCONST 
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())        
+        && c.Degree() == 2
+        && c[0].GetKind() == BVCONST
+        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
         )
           c = c[1];
   
@@ -737,17 +740,18 @@ namespace stp
             108086:0x00000096
         */
     if (c.GetKind() == BVPLUS
+        && c.Degree() == 2
         && c[0].GetKind() == BVPLUS
         && c[0].Degree() == 2
         && c[0][0].GetKind() == BVCONST
-        
+
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
         && c[1][0].GetKind() == BVCONST
-        
+
         && shareCount[c[0].GetNodeNum()] <= 1
         && shareCount[c[1].GetNodeNum()] <= 1
-       
+
         )
         {
           const auto width = c[0].GetValueWidth();
@@ -791,7 +795,7 @@ namespace stp
       ...)))
         */
     if (c.GetKind() == OR
-        && c[0].Degree() == 2
+        && c.Degree() == 2
         && c[1].GetKind() == NOT
         && c[1][0].GetKind() == OR
         && c[1][0].Degree() == 2
