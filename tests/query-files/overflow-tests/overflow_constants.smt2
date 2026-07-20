@@ -1,0 +1,15 @@
+; RUN: %solver %s | %OutputCheck %s
+(set-logic QF_BV)
+(assert (bvuaddo #xFF #x01))
+(assert (not (bvuaddo #x7F #x01)))
+(assert (bvsaddo #x7F #x01))
+(assert (not (bvsaddo #xFF #x01)))
+(assert (bvumulo #x10 #x10))
+(assert (not (bvumulo #x0F #x10)))
+(assert (bvsmulo #x40 #x02))
+(assert (not (bvsmulo #xFF #x02)))
+(assert (bvnego #x80))
+(assert (not (bvnego #x7F)))
+; CHECK-NEXT: ^sat
+(check-sat)
+(exit)
