@@ -333,6 +333,30 @@ TEST(RemoveUnconstrained_Exhaustive, udiv_both_unconstrained)
   c.checkSound(c.hf->CreateTerm(BVDIV, W, c.bv(), c.bv()));
 }
 
+TEST(RemoveUnconstrained_Exhaustive, urem_both_unconstrained)
+{
+  Context c;
+  c.checkSound(c.hf->CreateTerm(BVMOD, W, c.bv(), c.bv()));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, sdiv_both_unconstrained)
+{
+  Context c;
+  c.checkSound(c.hf->CreateTerm(SBVDIV, W, c.bv(), c.bv()));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, srem_both_unconstrained)
+{
+  Context c;
+  c.checkSound(c.hf->CreateTerm(SBVREM, W, c.bv(), c.bv()));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, smod_both_unconstrained)
+{
+  Context c;
+  c.checkSound(c.hf->CreateTerm(SBVMOD, W, c.bv(), c.bv()));
+}
+
 TEST(RemoveUnconstrained_Exhaustive, shift_left)
 {
   Context c;
@@ -529,38 +553,53 @@ TEST(RemoveUnconstrained_Collapse, ite)
   });
 }
 
-// --- Missing rules: these currently do NOT collapse. Enabling a rule for any
-//     of them (see the TODO in RemoveUnconstrained.cpp for bvurem) will flip
-//     the corresponding test and prompt moving it up to the handled list. ---
+// --- Division / remainder, unsigned and signed. All handled: both-operand
+//     unconstrained collapses to true. Remove a rule and the matching test
+//     turns into a non-collapse. ---
 
-TEST(RemoveUnconstrained_Collapse, urem_MISSING)
+TEST(RemoveUnconstrained_Collapse, urem)
 {
-  expectNoCollapse([](Context& c) {
+  expectCollapse([](Context& c) {
     return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.bv()),
                             c.konst(1));
   });
 }
 
-TEST(RemoveUnconstrained_Collapse, sdiv_MISSING)
+TEST(RemoveUnconstrained_Collapse, sdiv)
 {
-  expectNoCollapse([](Context& c) {
+  expectCollapse([](Context& c) {
     return c.hf->CreateNode(EQ, c.hf->CreateTerm(SBVDIV, W, c.bv(), c.bv()),
                             c.konst(1));
   });
 }
 
-TEST(RemoveUnconstrained_Collapse, srem_MISSING)
+TEST(RemoveUnconstrained_Collapse, srem)
 {
-  expectNoCollapse([](Context& c) {
+  expectCollapse([](Context& c) {
     return c.hf->CreateNode(EQ, c.hf->CreateTerm(SBVREM, W, c.bv(), c.bv()),
                             c.konst(1));
   });
 }
 
-TEST(RemoveUnconstrained_Collapse, smod_MISSING)
+TEST(RemoveUnconstrained_Collapse, smod)
 {
-  expectNoCollapse([](Context& c) {
+  expectCollapse([](Context& c) {
     return c.hf->CreateNode(EQ, c.hf->CreateTerm(SBVMOD, W, c.bv(), c.bv()),
                             c.konst(1));
+  });
+}
+
+// --- Known gaps: operators with no elimination rule. Sign-/zero-extension of
+//     an unconstrained variable is NOT itself unconstrained (the extended bits
+//     are determined), so there is deliberately no rule and the formula does
+//     not collapse. If a rule is ever added, this test flips and is the
+//     reminder to reclassify it. ---
+
+TEST(RemoveUnconstrained_Collapse, sign_extend_gap)
+{
+  expectNoCollapse([](Context& c) {
+    ASTNode x = c.bv();
+    ASTNode sx = c.hf->CreateTerm(BVSX, 2 * W, x, c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, sx, c.konst(1, 2 * W));
   });
 }

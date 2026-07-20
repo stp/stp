@@ -595,13 +595,18 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
 
       case BVMOD:
+      case SBVREM:
+      case SBVMOD:
       {
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained() &&
-            false) // TODO why don't we do it for bvmod??
+            mutable_children[1]->isUnconstrained())
         {
           assert(children[0] != children[1]);
+          // STP defines remainder-by-zero as the dividend: bvurem, bvsrem and
+          // bvsmod all return x when the divisor is 0 (see consteval.cpp). So
+          // (v rem 0) == v, and a fresh dividend with divisor 0 reproduces
+          // every value.
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           replace(children[1], bm.CreateZeroConst(width));
           replace(children[0], v);
@@ -610,12 +615,16 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
 
       case BVDIV:
+      case SBVDIV:
       {
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained())
         {
           assert(children[0] != children[1]);
+          // (v / 1) == v for both signed and unsigned division (and 1 avoids
+          // the divide-by-zero result), so a fresh dividend with divisor 1
+          // reproduces every value.
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           replace(children[1], bm.CreateOneConst(width));
           replace(children[0], v);
