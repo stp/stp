@@ -405,30 +405,41 @@ namespace stp
                 89066:0x00007F79E2596EA3
                 34042:0x00007F79E2596EA2))))
         */
-      if ( 
+      /*
+        0 = (a + b)  -->  (bvuminus a) = b.
+
+        The single-use guard on the plus keeps this non-increasing: the plus
+        dies and one bvuminus is born. The node factory then often folds the
+        bvuminus away: a bvuminus operand cancels, two bvuminuses cancel
+        across the equality, and a single-use ITE of constants absorbs it (the
+        rule above), which is what the examples show. e.g.
+
+        1149196:(EQ
+          6780:0x0000000000000000
+          1149194:(BVPLUS
+            1149154:(ITE
+              1149092:(EQ
+                3678:file_file_smt2_1287
+                1090576:0x2B)
+              118964:0x00007F79E2596EA5
+              118918:0x00007F79E2596EA4)
+            1149190:(ITE
+              [1149092]
+              1024228:0xFFFF80861DA6915B
+              1145390:0xFFFF80861DA6915C)))
+      */
+      if (
         c.GetKind() == EQ
         && c[0].GetKind() == BVCONST
         && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
-        && c[1][0].GetKind() == BVUMINUS
         && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
-        c = nf->CreateNode(EQ, c[1][0][0], c[1][1]);
-       }
-      
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-        c = nf->CreateNode(EQ, c[1][1][0], c[1][0]);
+        const auto uminus =
+            nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
+        c = nf->CreateNode(EQ, uminus, c[1][1]);
        }
 
 /*
@@ -450,39 +461,6 @@ namespace stp
             children.push_back(nf->CreateNode(EQ, c[0],node));
           c = nf->CreateNode(OR, children);
        }
-/*
-  1149196:(EQ 
-    6780:0x0000000000000000
-    1149194:(BVPLUS 
-      1149154:(ITE 
-        1149092:(EQ 
-          3678:file_file_smt2_1287
-          1090576:0x2B)
-        118964:0x00007F79E2596EA5
-        118918:0x00007F79E2596EA4)
-      1149190:(ITE 
-        [1149092]
-        1024228:0xFFFF80861DA6915B
-        1145390:0xFFFF80861DA6915C)))
-*/
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind()  == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][0].GetKind() == ITE
-        && c[1][0][1].GetKind() == BVCONST
-        && c[1][0][2].GetKind() == BVCONST
-        && shareCount[c[0].GetNodeNum()] <= 1
-       )
-       {
-          const auto uminus = nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
-          c = nf->CreateNode(EQ, uminus, c[1][1]);
-
-       }
-
    /*
         10160120:(EQ 
         8577822:0x1
