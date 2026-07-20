@@ -213,62 +213,9 @@ TEST(Rewriting_Exhaustive, bvand_ite_arity3)
   c.checkSoundTerm(band);
 }
 
-/* BVMULT by a one-bit constant (a shift) over a BVCONCAT with a matching
-   constant top is turned into a concat. The 3-arity BVMULT used to drop the
-   third factor. */
-TEST(Rewriting_Exhaustive, bvmult_concat_arity2)
-{
-  Context c;
-  ASTNode k = c.konst(4, 4); // single one bit, at position 2.
-  ASTNode ktop = c.konst(1, 2);
-  ASTNode y = c.bv(2);
-  ASTNode concat = c.hf->CreateTerm(BVCONCAT, 4, ktop, y);
-  ASTNode mult = c.hf->CreateTerm(BVMULT, 4, k, concat);
-  ASSERT_EQ(mult.Degree(), 2u);
-  c.checkSoundTerm(mult);
-}
-
-TEST(Rewriting_Exhaustive, bvmult_concat_arity3)
-{
-  Context c;
-  ASTNode k = c.konst(4, 4);
-  ASTNode ktop = c.konst(1, 2);
-  ASTNode y = c.bv(2);
-  ASTNode concat = c.hf->CreateTerm(BVCONCAT, 4, ktop, y);
-  ASTNode z = c.hf->CreateTerm(BVNOT, 4, c.bv(4)); // non-symbol: sorts last.
-  ASTNode mult = c.hf->CreateTerm(BVMULT, 4, k, concat, z);
-  ASSERT_EQ(mult.Degree(), 3u);
-  ASSERT_EQ(mult[0], k);
-  ASSERT_EQ(mult[1], concat);
-  c.checkSoundTerm(mult);
-}
-
-/* BVOR with a zero first operand is replaced by its second operand. The
-   3-arity BVOR used to drop the operands after the second. (BVOR rarely
-   reaches the pass -- the simplifying factory rewrites it into NOT/BVAND --
-   but the hashing factory keeps it, as would any caller that doesn't
-   pre-simplify.) */
-TEST(Rewriting_Exhaustive, bvor_zero_arity2)
-{
-  Context c;
-  ASTNode zero = c.konst(0, 4);
-  ASTNode x = c.bv(4);
-  ASTNode bvor = c.hf->CreateTerm(BVOR, 4, zero, x);
-  ASSERT_EQ(bvor.Degree(), 2u);
-  c.checkSoundTerm(bvor);
-}
-
-TEST(Rewriting_Exhaustive, bvor_zero_arity3)
-{
-  Context c;
-  ASTNode zero = c.konst(0, 4);
-  ASTNode x = c.bv(4);
-  ASTNode y = c.bv(4);
-  ASTNode bvor = c.hf->CreateTerm(BVOR, 4, zero, x, y);
-  ASSERT_EQ(bvor.Degree(), 3u);
-  ASSERT_EQ(bvor[0], zero);
-  c.checkSoundTerm(bvor);
-}
+/* The BVMULT-of-concat and BVOR-of-zero rules moved into the
+   SimplifyingNodeFactory (see SimplifyingNodeFactory_Exhaustive_Test.cpp);
+   their n-ary shapes remain covered there. */
 
 /* Two constant-headed binary BVPLUS children have their constants combined.
    The rule checked the arity of both children but not of the node itself, so
@@ -300,39 +247,8 @@ TEST(Rewriting_Exhaustive, bvplus_bvplus_arity3)
   c.checkSoundTerm(plus);
 }
 
-/* OR(A, NOT(OR(A, B))) is simplified to OR(A, NOT B). The rule tested
-   c[0].Degree() == 2 where it meant the node's own arity: it only ever fired
-   when A itself had two children, and when the outer OR was n-ary it dropped
-   the remaining disjuncts. A is built as a conjunction so the (mis)guard is
-   actually exercised. */
-TEST(Rewriting_Exhaustive, or_not_or_arity2)
-{
-  Context c;
-  ASTNode a = c.hf->CreateNode(AND, c.boolean(), c.boolean());
-  ASTNode b = c.boolean();
-  ASTNode inner = c.hf->CreateNode(OR, a, b);
-  ASTNode nt = c.hf->CreateNode(NOT, inner);
-  ASTNode f = c.hf->CreateNode(OR, a, nt);
-  ASSERT_EQ(f.Degree(), 2u);
-  ASSERT_EQ(f[0], a);
-  ASSERT_EQ(f[1], nt);
-  c.checkSoundFormula(f);
-}
-
-TEST(Rewriting_Exhaustive, or_not_or_arity3)
-{
-  Context c;
-  ASTNode a = c.hf->CreateNode(AND, c.boolean(), c.boolean());
-  ASTNode b = c.boolean();
-  ASTNode inner = c.hf->CreateNode(OR, a, b);
-  ASTNode nt = c.hf->CreateNode(NOT, inner);
-  ASTNode d = c.boolean();
-  ASTNode f = c.hf->CreateNode(OR, a, nt, d);
-  ASSERT_EQ(f.Degree(), 3u);
-  ASSERT_EQ(f[0], a);
-  ASSERT_EQ(f[1], nt);
-  c.checkSoundFormula(f);
-}
+/* The OR(A, NOT(OR(A, B))) rule also moved into the factory; see
+   SimplifyingNodeFactory_Exhaustive_Test.cpp. */
 
 /* The original fuzzer shape: EQ(x, BVNOT(BVAND(const, BVNOT(ITE-of-consts),
    BVNOT(x)))), i.e. x == (const | ite | x). Rewriting the inner concat/bvnot
