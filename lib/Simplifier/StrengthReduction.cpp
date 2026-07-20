@@ -106,7 +106,10 @@ namespace stp
 
     nda.buildMap(newN);
     newN = strengthReduction(newN, *nda.getIntervalMap());
-    
+
+    nda.buildMap(newN);
+    newN = strengthReduction(newN, *nda.getValueSetMap());
+
     cache.insert({n,newN});
     return newN;
   }
@@ -230,6 +233,44 @@ namespace stp
           break;
         default:
           FatalError("Never here");
+      }
+    }
+    else if (k == EQ)
+    {
+      // An equality whose sides' intervals meet at exactly one point
+      // holds just when both sides take that value, so it splits into a
+      // conjunction of equalities against a constant. This catches
+      // sides with too many values for the set domain to track;
+      // disjoint intervals don't need handling here, the equality's own
+      // domain is then a constant false, which is replaced above.
+      const auto l = visited.find(n[0]);
+      const auto r = visited.find(n[1]);
+
+      // With a constant on either side the equality already is a
+      // comparison against a constant; the split would rebuild it.
+      if (l != visited.end() && r != visited.end() && l->second != nullptr &&
+          r->second != nullptr && !n[0].isConstant() && !n[1].isConstant())
+      {
+        const UnsignedInterval* a = l->second;
+        const UnsignedInterval* b = r->second;
+
+        const CBV lo =
+            (CONSTANTBV::BitVector_Lexicompare(a->minV, b->minV) >= 0)
+                ? a->minV
+                : b->minV;
+        const CBV hi =
+            (CONSTANTBV::BitVector_Lexicompare(a->maxV, b->maxV) <= 0)
+                ? a->maxV
+                : b->maxV;
+
+        if (CONSTANTBV::BitVector_Lexicompare(lo, hi) == 0)
+        {
+          const ASTNode touch = nf->CreateConstant(
+              CONSTANTBV::BitVector_Clone(lo), n[0].GetValueWidth());
+          newN = nf->CreateNode(AND, nf->CreateNode(EQ, touch, n[0]),
+                                nf->CreateNode(EQ, touch, n[1]));
+          replaceWithSimpler++;
+        }
       }
     }
     return newN;
@@ -410,6 +451,64 @@ namespace stp
     return newN;
   }
 
+  ASTNode StrengthReduction::strengthReduction(const ASTNode& n, const NodeToValueSetMap& visited)
+  {
+    // An equality whose sides share exactly one possible value holds
+    // just when both sides take that value, so it splits into a
+    // conjunction of equalities against a constant - which simplify
+    // further (an ITE over constants folds towards its condition, for
+    // instance). Disjoint sides don't need handling here; the
+    // equality's own domain is then a constant false, which the other
+    // passes replace.
+    if (n.GetKind() != EQ)
+      return n;
+
+    // With a constant on either side the equality already is a
+    // comparison against a constant; the split would rebuild it.
+    if (n[0].isConstant() || n[1].isConstant())
+      return n;
+
+    const auto l = visited.find(n[0]);
+    const auto r = visited.find(n[1]);
+    if (l == visited.end() || r == visited.end() || l->second == nullptr ||
+        r->second == nullptr)
+      return n;
+
+    const std::vector<CBV>& left = l->second->values;
+    const std::vector<CBV>& right = r->second->values;
+
+    // Both are sorted, so the intersection is a merge walk.
+    CBV common = nullptr;
+    size_t commonCount = 0;
+    for (size_t i = 0, j = 0; i < left.size() && j < right.size();)
+    {
+      const int compare = CONSTANTBV::BitVector_Lexicompare(left[i], right[j]);
+      if (compare < 0)
+        i++;
+      else if (compare > 0)
+        j++;
+      else
+      {
+        common = left[i];
+        commonCount++;
+        i++;
+        j++;
+      }
+    }
+
+    if (commonCount != 1)
+      return n;
+
+    const ASTNode commonNode = nf->CreateConstant(
+        CONSTANTBV::BitVector_Clone(common), n[0].GetValueWidth());
+
+    ASTNode newN =
+        nf->CreateNode(AND, nf->CreateNode(EQ, commonNode, n[0]),
+                       nf->CreateNode(EQ, commonNode, n[1]));
+    replaceWithSimpler++;
+    return newN;
+  }
+
   //TODO merge these two toplevel funtions, they do the same thing..
   ASTNode StrengthReduction::topLevel(const ASTNode& top,   const NodeToFixedBitsMap& visited)
   {
@@ -471,7 +570,36 @@ namespace stp
     return result;
   }
 
-  StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf) 
+  ASTNode StrengthReduction::topLevel(const ASTNode& top,  const NodeToValueSetMap& visited)
+  {
+    ASTNodeMap fromTo;
+    for (auto it = visited.begin(); it != visited.end(); ++it)
+    {
+      const ASTNode& n = it->first;
+
+      if (n.isConstant())
+        continue;
+
+      ASTNode newN = strengthReduction(n,visited);
+      if (n != newN)
+        fromTo.insert({n,newN});
+    }
+
+    ASTNode result = top;
+
+    if (uf->stats_flag)
+      stats();
+
+    if (fromTo.size() > 0)
+    {
+      ASTNodeMap cache;
+      result = SubstitutionMap::replace(result, fromTo, cache, nf);
+    }
+
+    return result;
+  }
+
+  StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf)
   {
     littleOne = CONSTANTBV::BitVector_Create(1, true);
     littleZero = CONSTANTBV::BitVector_Create(1, true);

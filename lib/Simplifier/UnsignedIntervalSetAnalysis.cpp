@@ -95,12 +95,11 @@ void collectPieceRefs(const ASTNode& childNode, const UnsignedIntervalSet* set,
 
   if (set == nullptr || set->isComplete())
   {
-    CBV mn = CONSTANTBV::BitVector_Create(w, true);
-    CBV mx = CONSTANTBV::BitVector_Create(w, true);
-    CONSTANTBV::BitVector_Fill(mx);
-    UnsignedInterval* iv = new UnsignedInterval(mn, mx);
-    owned.push_back(iv);
-    refs.push_back(iv);
+    // Match dispatchToTransferFunctions' contract: an unknown/complete child
+    // is passed as NULL (not a complete interval), so transfer functions that
+    // are only defined for a known child -- e.g. NOT asserting its operand is
+    // constant -- see "no information" instead of a non-constant full range.
+    refs.push_back(nullptr);
     return;
   }
 

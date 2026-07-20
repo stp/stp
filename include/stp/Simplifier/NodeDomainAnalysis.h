@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedIntervalSet.h"
 #include "stp/Simplifier/UnsignedIntervalSetAnalysis.h"
+#include "stp/Simplifier/ValueSetAnalysis.h"
 #include <iostream>
 #include <unordered_map>
 
@@ -45,6 +46,7 @@ using simplifier::constantBitP::FixedBits;
 using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToUnsignedIntervalSetMap = std::unordered_map<const ASTNode, UnsignedIntervalSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+using NodeToValueSetMap = std::unordered_map<const ASTNode, ValueSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
 class NodeDomainAnalysis
 {
@@ -63,21 +65,33 @@ class NodeDomainAnalysis
   // When we call the transfer functions, we can't send nulls, send unfixed instead.
   FixedBits* getEmptyFixedBits(const ASTNode& n);
   
-  using AnalysisPair = std::pair<FixedBits*, UnsignedInterval*>;
   NodeToFixedBitsMap toFixedBits;
   NodeToUnsignedIntervalMap toIntervals;
   NodeToUnsignedIntervalSetMap toIntervalSets;
+  NodeToValueSetMap toValueSets;
 
   UnsignedIntervalAnalysis intervalAnalysis;
   UnsignedIntervalSetAnalysis setAnalysis;
+  ValueSetAnalysis valueSetAnalysis;
 
   unsigned tighten = 0;
+  unsigned setTightened = 0;
+  unsigned setEnumerated = 0;
 
   void stats();
 public:
 
+  struct DomainInfo
+  {
+    FixedBits* bits;
+    UnsignedInterval* interval;
+    UnsignedIntervalSet* intervalSet;
+    ValueSet* set;
+  };
+
   NodeDomainAnalysis(STPMgr* _bm)
-      : bm(*_bm), intervalAnalysis(*_bm), setAnalysis(*_bm)
+      : bm(*_bm), intervalAnalysis(*_bm), setAnalysis(*_bm),
+        valueSetAnalysis(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
   }
@@ -106,6 +120,10 @@ public:
       if (it.second != NULL)
         delete it.second;
 
+    for (auto it : toValueSets)
+      if (it.second != NULL)
+        delete it.second;
+
     stats();
   }
 
@@ -124,7 +142,12 @@ public:
       return &toFixedBits;
    }
 
-  AnalysisPair buildMap(const ASTNode& n);
+   NodeToValueSetMap* getValueSetMap()
+   {
+      return &toValueSets;
+   }
+
+  DomainInfo buildMap(const ASTNode& n);
 
   void topLevel(const ASTNode& top)
   {
@@ -132,9 +155,13 @@ public:
     buildMap(top);
     bm.GetRunTimes()->stop(RunTimes::NodeDomainAnalysis);
     assert(toIntervals.size() == toFixedBits.size());
+    assert(toIntervalSets.size() == toFixedBits.size());
+    assert(toValueSets.size() == toFixedBits.size());
   }
 
   void harmonise(FixedBits * &bits, UnsignedInterval * &interval);
+  void harmonise(FixedBits * &bits, UnsignedInterval * &interval,
+                 ValueSet * &set, unsigned width, bool isBoolean);
 
 };
 }

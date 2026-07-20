@@ -33,6 +33,7 @@ add_library(simplifier OBJECT
     AIGSimplifyPropositionalCore.cpp
     UnsignedIntervalAnalysis.cpp
     UnsignedIntervalSetAnalysis.cpp
+    ValueSetAnalysis.cpp
     Flatten.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp

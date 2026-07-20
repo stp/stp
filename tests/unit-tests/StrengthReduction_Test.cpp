@@ -200,3 +200,37 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_TRUE(c.present(stp::BVRIGHTSHIFT, n));
 }
 
+// Every equality in "n" compares against a constant.
+static bool eqsAgainstConstants(const ASTNode& n)
+{
+  if (n.GetKind() == stp::EQ && !n[0].isConstant() && !n[1].isConstant())
+    return false;
+
+  for (const auto& c : n)
+    if (!eqsAgainstConstants(c))
+      return false;
+
+  return true;
+}
+
+// The sides' intervals, [0,99] and [99,148], meet at exactly one
+// point, so the equality splits into equalities against that point.
+// Both sides have too many values for the set domain to track.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( =
+              (bvurem v0 (_ bv100 20))
+              (bvadd (bvurem v1 (_ bv50 20)) (_ bv99 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::EQ, n));
+  ASSERT_TRUE(eqsAgainstConstants(n));
+}
+

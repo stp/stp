@@ -52,6 +52,32 @@ namespace stp
     return result;
   }
 
+  // True if some member of the set matches the fixed bits.
+  bool intersects(FixedBits * bits, const ValueSet * set)
+  {
+    if (bits == nullptr || set == nullptr)
+      return true; // nothing to do.
+
+    assert(((unsigned)bits->getWidth()) == set->getWidth());
+    for (const CBV m : set->values)
+      if (bits->in(m))
+        return true;
+    return false;
+  }
+
+  // True if some member of the set is inside the interval.
+  bool intersects(const UnsignedInterval * interval, const ValueSet * set)
+  {
+    if (interval == nullptr || set == nullptr)
+      return true; // nothing to do.
+
+    assert(interval->getWidth() == set->getWidth());
+    for (const CBV m : set->values)
+      if (interval->in(m))
+        return true;
+    return false;
+  }
+
   // The largest value that matches the fixed bits and is <= bound,
   // or nullptr if there is no such value. Caller destroys the result.
   static CBV maxBelow(const FixedBits& bits, const CBV bound)
@@ -263,14 +289,150 @@ namespace stp
       assert(intersects(bits, interval));
   }
 
-  std::pair<FixedBits*, UnsignedInterval*> NodeDomainAnalysis::buildMap(const ASTNode& n)
+  // Trim all three domains to exactly the values they share. When the
+  // set is missing but the other domains admit few enough values, the
+  // set is created by enumerating them. Idempotent.
+  void NodeDomainAnalysis::harmonise(FixedBits * &bits, UnsignedInterval * &interval,
+                                     ValueSet * &set, unsigned width, bool isBoolean)
+  {
+    harmonise(bits, interval);
+
+    if (set != nullptr)
+    {
+      // Drop the members the other domains exclude.
+      auto& values = set->values;
+      for (size_t i = 0; i < values.size();)
+      {
+        if ((bits != nullptr && !bits->in(values[i])) ||
+            (interval != nullptr && !interval->in(values[i])))
+        {
+          CONSTANTBV::BitVector_Destroy(values[i]);
+          values.erase(values.begin() + i);
+          setTightened++;
+        }
+        else
+          i++;
+      }
+
+      // The domains all contain the node's real values.
+      assert(set->size() > 0);
+
+      if (interval == nullptr)
+        interval = new UnsignedInterval(width);
+      if (interval->replaceMinIfTightens(set->smallest()))
+        tighten++;
+      if (interval->replaceMaxIfTightens(set->largest()))
+        tighten++;
+
+      if (bits == nullptr)
+        bits = new FixedBits(width, isBoolean);
+
+      // Fix each bit that all the members agree on.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (bits->isFixed(i))
+          continue;
+
+        const bool value = CONSTANTBV::BitVector_bit_test(set->smallest(), i);
+        bool agree = true;
+        for (const CBV m : set->values)
+          if (CONSTANTBV::BitVector_bit_test(m, i) != value)
+          {
+            agree = false;
+            break;
+          }
+
+        if (agree)
+        {
+          bits->setFixed(i, true);
+          bits->setValue(i, value);
+          tighten++;
+        }
+      }
+
+      // Make the bits and interval mutually exact again.
+      harmonise(bits, interval);
+    }
+    else if (interval != nullptr)
+    {
+      // Enumerate the values the bits and interval share, smallest
+      // first, giving up once there are too many for a set.
+      ValueSet* candidate = new ValueSet(width, isBoolean);
+
+      CBV v = (bits != nullptr) ? minAbove(*bits, interval->minV)
+                                : CONSTANTBV::BitVector_Clone(interval->minV);
+      while (v != nullptr)
+      {
+        if (CONSTANTBV::BitVector_Lexicompare(v, interval->maxV) > 0)
+        {
+          CONSTANTBV::BitVector_Destroy(v);
+          break;
+        }
+
+        const bool last =
+            CONSTANTBV::BitVector_Lexicompare(v, interval->maxV) == 0;
+
+        if (!candidate->insert(CONSTANTBV::BitVector_Clone(v)))
+        {
+          CONSTANTBV::BitVector_Destroy(v);
+          delete candidate;
+          candidate = nullptr;
+          break;
+        }
+
+        if (last) // stepping past the maximum could wrap around.
+        {
+          CONSTANTBV::BitVector_Destroy(v);
+          break;
+        }
+
+        CONSTANTBV::BitVector_increment(v);
+        if (bits != nullptr)
+        {
+          CBV next = minAbove(*bits, v);
+          CONSTANTBV::BitVector_Destroy(v);
+          v = next;
+        }
+      }
+
+      if (candidate != nullptr)
+      {
+        // The domains share a value, so the enumeration found >=1.
+        assert(candidate->size() > 0);
+        set = candidate;
+        setEnumerated++;
+      }
+    }
+
+    // Domains that admit every value carry no information; the rest of
+    // the analysis relies on those being null (e.g. a known boolean
+    // interval is always constant).
+    if (set != nullptr && set->isComplete())
+    {
+      delete set;
+      set = nullptr;
+    }
+    if (interval != nullptr && interval->isComplete())
+    {
+      delete interval;
+      interval = nullptr;
+    }
+
+    assert(intersects(bits, interval));
+    assert(intersects(bits, set));
+    assert(intersects(interval, set));
+  }
+
+  NodeDomainAnalysis::DomainInfo NodeDomainAnalysis::buildMap(const ASTNode& n)
   {
     {
       auto it = toFixedBits.find(n);
       if (it != toFixedBits.end())
       {
         auto it0 = toIntervals.find(n);
-        return {it->second, it0->second};
+        auto itIS = toIntervalSets.find(n);
+        auto it1 = toValueSets.find(n);
+        return {it->second, it0->second, itIS->second, it1->second};
       }
     }
 
@@ -279,7 +441,13 @@ namespace stp
     vector<FixedBits*> children_bits;
     children_bits.reserve(number_children);
 
-    vector<const UnsignedIntervalSet*> children_sets;
+    vector<const UnsignedInterval*> children_intervals;
+    children_intervals.reserve(number_children);
+
+    vector<const UnsignedIntervalSet*> children_intervalSets;
+    children_intervalSets.reserve(number_children);
+
+    vector<const ValueSet*> children_sets;
     children_sets.reserve(number_children);
 
     bool nothingKnown = true;
@@ -287,22 +455,18 @@ namespace stp
     for (unsigned i = 0; i < number_children; i++)
     {
       auto ret = buildMap(n[i]);
-      auto op0 = ret.first;
-      auto op1 = ret.second;
 
-      if (op0 != nullptr || op1 != nullptr)
+      if (ret.bits != nullptr || ret.interval != nullptr ||
+          ret.intervalSet != nullptr || ret.set != nullptr)
         nothingKnown = false;
 
-      children_bits.push_back(op0);
-
-      const UnsignedIntervalSet* childSet = nullptr;
-      auto sit = toIntervalSets.find(n[i]);
-      if (sit != toIntervalSets.end())
-        childSet = sit->second;
-      children_sets.push_back(childSet);
+      children_bits.push_back(ret.bits);
+      children_intervals.push_back(ret.interval);
+      children_intervalSets.push_back(ret.intervalSet);
+      children_sets.push_back(ret.set);
     }
 
-    const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_sets[0] == nullptr);
+    const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_intervals[0] == nullptr);
 
     // We need to know something about the children if we want to know something about the parent.
     // extract, bvsx, and bvzx all have constants as children.
@@ -317,8 +481,9 @@ namespace stp
       toFixedBits.insert({n, nullptr});
       toIntervals.insert({n, nullptr});
       toIntervalSets.insert({n, nullptr});
+      toValueSets.insert({n, nullptr});
 
-      return {nullptr, nullptr};
+      return {nullptr, nullptr, nullptr, nullptr};
     }
 
     FixedBits* result_bits = fresh(n);
@@ -375,33 +540,65 @@ namespace stp
       result_bits = nullptr;
     }
 
-    // The interval-set transfer runs the single-interval transfer functions
-    // over the cross-product of the children's disjoint pieces; the node's
-    // interval is the set's hull, which refines (never loosens) the plain
-    // single-interval result.
-    UnsignedIntervalSet* result_set = setAnalysis.transfer(n, children_sets);
+    UnsignedInterval* result_interval = intervalAnalysis.dispatchToTransferFunctions(n, children_intervals);
 
-    UnsignedInterval* result_interval = result_set->hull(); // null if complete
+    if (result_interval != nullptr && result_interval->isComplete())
+    {
+      delete result_interval;
+      result_interval = nullptr;
+    }
+
+    // The interval-set transfer runs the single-interval transfer functions
+    // over the cross-product of the children's disjoint pieces. Its hull
+    // refines (never loosens) the plain single-interval result, so fold it
+    // into the interval before the domains are harmonised together.
+    UnsignedIntervalSet* result_intervalSet =
+        setAnalysis.transfer(n, children_intervalSets);
+    {
+      UnsignedInterval* hull = result_intervalSet->hull(); // null if complete
+      if (hull != nullptr)
+      {
+        if (result_interval == nullptr)
+          result_interval = hull; // take ownership
+        else
+        {
+          result_interval->replaceMinIfTightens(hull->minV);
+          result_interval->replaceMaxIfTightens(hull->maxV);
+          delete hull;
+        }
+      }
+    }
+
+    ValueSet* result_set =
+        valueSetAnalysis.dispatchToTransferFunctions(n, children_sets);
 
     assert(intersects(result_bits, result_interval));
+    assert(intersects(result_bits, result_set));
+    assert(intersects(result_interval, result_set));
 
-    harmonise(result_bits, result_interval);
+    harmonise(result_bits, result_interval, result_set,
+              n.GetValueWidth() > 0 ? n.GetValueWidth() : 1,
+              BOOLEAN_TYPE == n.GetType());
 
-    // Keep the stored set within the harmonised interval so the two agree.
+    // Keep the stored interval-set within the harmonised interval so the two
+    // agree.
     if (result_interval != nullptr)
-      result_set->intersectInterval(result_interval->minV, result_interval->maxV);
+      result_intervalSet->intersectInterval(result_interval->minV,
+                                            result_interval->maxV);
 
     toFixedBits.insert({n, result_bits});
     toIntervals.insert({n, result_interval});
-    toIntervalSets.insert({n, result_set});
+    toIntervalSets.insert({n, result_intervalSet});
+    toValueSets.insert({n, result_set});
 
     if (n.isConstant())
     {
       assert(result_bits->isTotallyFixed());
       assert(result_interval->isConstant());
+      assert(result_set != nullptr && result_set->isConstant());
     }
 
-    return {result_bits, result_interval};
+    return {result_bits, result_interval, result_intervalSet, result_set};
   }
 
   // When we call the transfer functions, we can't send nulls, send unfixed instead.
@@ -425,8 +622,13 @@ namespace stp
     if (bm.UserFlags.stats_flag)
     {
       std::cerr << "{NodeDomainAnalysis} Tightened:" << tighten << std::endl;
+      std::cerr << "{NodeDomainAnalysis} Set members removed:" << setTightened
+                << std::endl;
+      std::cerr << "{NodeDomainAnalysis} Sets enumerated:" << setEnumerated
+                << std::endl;
 
       intervalAnalysis.stats();
+      valueSetAnalysis.stats();
     }
   }
 }
