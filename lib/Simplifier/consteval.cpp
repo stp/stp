@@ -661,6 +661,79 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       break;
     }
 
+    // Overflow predicates. These are Form nodes, so 'inputwidth' is 0; the
+    // operand width comes from the children.
+    case BVUADDO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV sum = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      CONSTANTBV::BitVector_add(sum, tmp0, tmp1, &carry);
+      CONSTANTBV::BitVector_Destroy(sum);
+      OutputNode = carry ? ASTTrue : ASTFalse;
+      break;
+    }
+    case BVSADDO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV sum = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      CONSTANTBV::BitVector_add(sum, tmp0, tmp1, &carry);
+      // Signed add overflows iff both operands share a sign that differs
+      // from the sign of the result.
+      const bool s0 = CONSTANTBV::BitVector_msb_(tmp0);
+      const bool s1 = CONSTANTBV::BitVector_msb_(tmp1);
+      const bool ss = CONSTANTBV::BitVector_msb_(sum);
+      CONSTANTBV::BitVector_Destroy(sum);
+      OutputNode = ((s0 == s1) && (s0 != ss)) ? ASTTrue : ASTFalse;
+      break;
+    }
+    case BVUMULO:
+    case BVSMULO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      const bool isSigned = (k == BVSMULO);
+      // Extend both operands to 2w (zero- or sign-extend), multiply exactly,
+      // then inspect the high bits. The 2w product always fits, so the signed
+      // BitVector_Multiply never reports a spurious overflow.
+      CBV y2 = CONSTANTBV::BitVector_Create(2 * w, true);
+      CBV z2 = CONSTANTBV::BitVector_Create(2 * w, true);
+      CBV prod = CONSTANTBV::BitVector_Create(2 * w, true);
+      if (isSigned && CONSTANTBV::BitVector_Sign(tmp0) < 0)
+        CONSTANTBV::BitVector_Fill(y2);
+      if (isSigned && CONSTANTBV::BitVector_Sign(tmp1) < 0)
+        CONSTANTBV::BitVector_Fill(z2);
+      CONSTANTBV::BitVector_Interval_Copy(y2, tmp0, 0, 0, w);
+      CONSTANTBV::BitVector_Interval_Copy(z2, tmp1, 0, 0, w);
+      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(prod, y2, z2);
+      if (0 != e)
+        BVConstEvaluatorError(e);
+      bool overflow = false;
+      if (isSigned)
+      {
+        // Overflow iff the product is not the sign-extension of its low w bits.
+        const bool sign = CONSTANTBV::BitVector_bit_test(prod, w - 1);
+        for (unsigned i = w; i < 2 * w; i++)
+          if (CONSTANTBV::BitVector_bit_test(prod, i) != sign)
+            overflow = true;
+      }
+      else
+      {
+        // Overflow iff any high bit is set.
+        for (unsigned i = w; i < 2 * w; i++)
+          if (CONSTANTBV::BitVector_bit_test(prod, i))
+            overflow = true;
+      }
+      CONSTANTBV::BitVector_Destroy(y2);
+      CONSTANTBV::BitVector_Destroy(z2);
+      CONSTANTBV::BitVector_Destroy(prod);
+      OutputNode = overflow ? ASTTrue : ASTFalse;
+      break;
+    }
+
     case TRUE:
       OutputNode = ASTTrue;
       break;

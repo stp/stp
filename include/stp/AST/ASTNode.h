@@ -115,7 +115,8 @@ public:
   {
     const Kind k = GetKind();
     return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
-           k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
+           k == BVSLE || k == BVSGT || k == BVSGE || k == BVUADDO ||
+           k == BVSADDO || k == BVUMULO || k == BVSMULO || k == EQ;
   }
 
   // delegates to the ASTInternal node.

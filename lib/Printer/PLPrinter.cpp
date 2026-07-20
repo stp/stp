@@ -59,6 +59,10 @@ string functionToCVCName(const Kind k)
     case SBVMOD:
     case BVDIV:
     case BVMOD:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
       return _kind_names[k];
       break;
     case BVSLT:
@@ -281,6 +285,10 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     case BVSLE:
     case BVSGT:
     case BVSGE:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
       assert(2 == c.size());
       os << functionToCVCName(kind) << "(";
       PL_Print1(os, c[0], indentation, letize, bm);

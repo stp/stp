@@ -569,6 +569,10 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case BVSLE:
     case BVSGT:
     case BVSGE:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
       if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())

@@ -93,6 +93,10 @@
   using stp::BVSLE;        //!< Signed bitvector less-equals
   using stp::BVSGT;        //!< Signed bitvector greater-than
   using stp::BVSGE;        //!< Signed bitvector greater-equals
+  using stp::BVUADDO;      //!< Unsigned addition overflow predicate
+  using stp::BVSADDO;      //!< Signed addition overflow predicate
+  using stp::BVUMULO;      //!< Unsigned multiplication overflow predicate
+  using stp::BVSMULO;      //!< Signed multiplication overflow predicate
   using stp::EQ;           //!< Equality comparator
   using stp::FALSE;        //!< Constant false boolean expression
   using stp::TRUE;         //!< Constant true boolean expression
@@ -147,6 +151,10 @@
   using stp::BVSLE;        //!< Signed bitvector less-equals
   using stp::BVSGT;        //!< Signed bitvector greater-than
   using stp::BVSGE;        //!< Signed bitvector greater-equals
+  using stp::BVUADDO;      //!< Unsigned addition overflow predicate
+  using stp::BVSADDO;      //!< Signed addition overflow predicate
+  using stp::BVUMULO;      //!< Unsigned multiplication overflow predicate
+  using stp::BVSMULO;      //!< Signed multiplication overflow predicate
   using stp::EQ;           //!< Equality comparator
   using stp::FALSE;        //!< Constant false boolean expression
   using stp::TRUE;         //!< Constant true boolean expression
@@ -240,6 +248,23 @@
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width, *c0, *c1));
     delete c0;
     delete c1;
+    return n;
+  }
+
+  // (bvnego s) is true iff negating s overflows, i.e. iff s is the signed
+  // minimum value INT_MIN (100...0). Desugar it to (= s INT_MIN).
+  ASTNode* createNegOverflow(ASTNode* c0)
+  {
+    auto gi = stp::GlobalParserInterface;
+    const unsigned int width = c0->GetValueWidth();
+    ASTNode intMin;
+    if (width == 1)
+      intMin = gi->CreateOneConst(1);
+    else
+      intMin = gi->nf->CreateTerm(BVCONCAT, width, gi->CreateOneConst(1),
+                                  gi->CreateZeroConst(width - 1));
+    ASTNode* n = gi->newNode(gi->nf->CreateNode(EQ, *c0, intMin));
+    delete c0;
     return n;
   }
 
@@ -337,6 +362,12 @@
 %token BVROTATE_LEFT_TOK
 %token BVREPEAT_TOK
 %token BVCOMP_TOK
+
+%token BVNEGO_TOK
+%token BVUADDO_TOK
+%token BVSADDO_TOK
+%token BVUMULO_TOK
+%token BVSMULO_TOK
 
  /* Types for QF_BV and QF_AUFBV. */
 %token BITVEC_TOK
@@ -965,6 +996,26 @@ TRUE_TOK
 | LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVGE, $3, $4);
+}
+| LPAREN_TOK BVUADDO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVUADDO, $3, $4);
+}
+| LPAREN_TOK BVSADDO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVSADDO, $3, $4);
+}
+| LPAREN_TOK BVUMULO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVUMULO, $3, $4);
+}
+| LPAREN_TOK BVSMULO_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createNode(BVSMULO, $3, $4);
+}
+| LPAREN_TOK BVNEGO_TOK an_term RPAREN_TOK
+{
+  $$ = createNegOverflow($3);
 }
 | LPAREN_TOK an_formula RPAREN_TOK
 {
