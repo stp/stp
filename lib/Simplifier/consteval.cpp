@@ -733,6 +733,32 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       OutputNode = overflow ? ASTTrue : ASTFalse;
       break;
     }
+    case BVUSUBO:
+    {
+      assert(2 == number_of_children);
+      // Unsigned subtraction overflows (borrows) iff tmp0 <u tmp1.
+      OutputNode =
+          (CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1) < 0) ? ASTTrue
+                                                              : ASTFalse;
+      break;
+    }
+    case BVSSUBO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV diff = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      // diff = tmp0 - tmp1
+      CONSTANTBV::BitVector_sub(diff, tmp0, tmp1, &carry);
+      // Signed subtraction overflows iff the operands differ in sign and the
+      // result's sign differs from the minuend's sign.
+      const bool s0 = CONSTANTBV::BitVector_msb_(tmp0);
+      const bool s1 = CONSTANTBV::BitVector_msb_(tmp1);
+      const bool sd = CONSTANTBV::BitVector_msb_(diff);
+      CONSTANTBV::BitVector_Destroy(diff);
+      OutputNode = ((s0 != s1) && (s0 != sd)) ? ASTTrue : ASTFalse;
+      break;
+    }
 
     case TRUE:
       OutputNode = ASTTrue;

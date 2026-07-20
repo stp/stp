@@ -1162,6 +1162,8 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     case BVSADDO:
     case BVUMULO:
     case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     {
       result = BBOverflow(form, support);
       break;
@@ -2928,6 +2930,29 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
       l.push_back(l[w - 1]);
       r.push_back(r[w - 1]);
       BBPlus2(l, r, nf->getFalse());
+      return nf->CreateNode(XOR, l[w], l[w - 1]);
+    }
+    case BVUSUBO:
+    {
+      // Overflow (borrow) of the unsigned subtraction. Zero-extend both
+      // operands by one bit, subtract, and return the top bit: it is set iff
+      // the true difference is negative, i.e. iff form[0] <u form[1].
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(nf->getFalse());
+      r.push_back(nf->getFalse());
+      BBSub(l, r, support);
+      return l[w];
+    }
+    case BVSSUBO:
+    {
+      // Sign-extend both operands by one bit, subtract, and check whether the
+      // two top bits of the (w+1)-bit difference disagree.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(l[w - 1]);
+      r.push_back(r[w - 1]);
+      BBSub(l, r, support);
       return nf->CreateNode(XOR, l[w], l[w - 1]);
     }
     case BVUMULO:

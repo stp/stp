@@ -215,6 +215,8 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVSADDO:
     case BVUMULO:
     case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     case BVXOR:
     case ITE:
     case NAND:

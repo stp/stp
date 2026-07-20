@@ -505,6 +505,8 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     case BVSADDO:
     case BVUMULO:
     case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     {
       // Overflow predicates are not inequalities; just rebuild with the
       // simplified children (constant children are folded by the node
