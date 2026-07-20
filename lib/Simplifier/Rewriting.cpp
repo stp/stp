@@ -30,7 +30,14 @@ THE SOFTWARE.
   This implements sharing aware rewrites. It's different to other simplifiers in STP, which apply
   the rewrites then check later if it's better, and revert if not. This one is like hill climbing.
 
-  Some rules in here don't need to be sharing aware and can be moved into the node factory
+  Rules that are both sharing-independent and size-neutral belong in the
+  SimplifyingNodeFactory instead, where they apply on every node creation.
+
+  Every rule here should leave the node count the same or smaller, using the
+  share count to prove that the nodes it replaces really die. The one
+  deliberate exception is the comparison-vs-plus splitting rules, which add
+  a single node in exchange for eliminating a plus from under a comparison --
+  a large win on the difficulty score.
 */
 
 
@@ -75,18 +82,6 @@ namespace stp
         buildShareCount(c);
   }
 
-  // true if popCount == 1.
-  bool singleOne(const ASTNode& n)
-  {
-      unsigned found = 0;
-      assert(n.GetKind() == BVCONST);
-      for (unsigned i = 0; i < n.GetValueWidth(); i++)
-        if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(),i))
-          found++;
-      return (found == 1);
-  }
-
-
   ASTNode Rewriting::rewrite(const ASTNode& n)
   {
     if (n.Degree() == 0)
@@ -119,21 +114,6 @@ namespace stp
      c = rewrite(c);
 
      const ASTNode start = c;
-
-     if (
-        c.GetKind() == EQ 
-        && c[0].GetKind() == BVCONST 
-        && c[1].GetKind() == BVPLUS  
-        && c[1].Degree() == 2
-        && c[1][0].GetKind() == BVCONST  
-        )
-     {
-          // combine constants on the lhs. Note because the plus is two arity, we don't consider sharing.
-          const auto width  =  c[0].GetValueWidth();
-          auto lhs = nf->CreateTerm(BVUMINUS, width, c[1][0]);
-          lhs = nf->CreateTerm(BVPLUS, width, lhs, c[0]);
-          c = nf->CreateNode(EQ, lhs, c[1][1]);             
-     }
 
      if (
         c.GetKind() == EQ 
@@ -173,58 +153,13 @@ namespace stp
           c = nf->CreateTerm(ITE, width, c[0][0], first, second);
      }
 
-     if (c.GetKind() == stp::BVCONCAT 
-         && c[0].GetKind() == BVCONCAT
-         && c[1].GetKind() == BVCONST 
-         && c[0][1].GetKind() == BVCONST 
-         )
-     {
-        // combine the concats with constants
-
-          const auto width  =  c.GetValueWidth();
-          const auto constants  =  nf->CreateTerm(BVCONCAT, c[0][1].GetValueWidth() + c[1].GetValueWidth() , c[0][1], c[1]);
-          c = nf->CreateTerm(BVCONCAT, width, c[0][0], constants);
-     }
-
-     if (c.GetKind() == stp::BVCONCAT 
-         && c[1].GetKind() == BVCONCAT
-         && c[0].GetKind() == BVCONST 
-         && c[1][0].GetKind() == BVCONST 
-         )
-     {
-        // combine the concats with constants
-
-          const auto width  =  c.GetValueWidth();
-          const auto constants  =  nf->CreateTerm(BVCONCAT, c[0].GetValueWidth() + c[1][0].GetValueWidth() , c[0], c[1][0]);
-          c = nf->CreateTerm(BVCONCAT, width, constants, c[1][1]);
-     }
-
-    if (c.GetKind() == BVEXTRACT
-        && c[0].GetKind() == BVMULT
-        && c[0].Degree() == 2
-        && c[0][0].GetKind() == BVCONST 
-        && singleOne(c[0][0])
-         )
-       {
-        // Push the extract through the multiplcation when the multiplication is the same as a left shift
-       
-         // Position of the single one.
-          unsigned position = 0;
-          while (!CONSTANTBV::BitVector_bit_test(c[0][0].GetBVConst(),position))
-            position++;
-
-          const auto zero = stpMgr->CreateZeroConst(position);
-          const auto concat =  nf->CreateTerm(BVCONCAT, c[0].GetValueWidth() + position, c[0][1], zero );
-          c = nf->CreateTerm(BVEXTRACT, c.GetValueWidth(), concat, c[1], c[2] );
-       }
-
       if (c.GetKind() == BVPLUS
         && c.Degree() == 2
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c.GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
         // Push the addition through the ITE.
@@ -252,18 +187,7 @@ namespace stp
           c = nf->CreateTerm(ITE, width, c[0][0], first, second);
        }
 
-      if ( 
-        c.GetKind() == BVEXTRACT
-        && c[0].GetKind() == BVNOT
-       )
-       {
-          // pull up bvnot
-           const auto width = c.GetValueWidth();
-           const auto extract = nf->CreateTerm(BVEXTRACT, width, c[0][0], c[1], c[2]);
-           c = nf->CreateTerm(BVNOT, width, extract);
-       }
-
-      if ( 
+      if (
         c.GetKind() == BVEXTRACT
         && c[0].GetKind() == BVXOR
         && c[0][0].GetKind() == BVCONST
@@ -323,45 +247,27 @@ namespace stp
         }
 
       /*
-      (EQ 
-          7446:0b0
-          14748:(BVEXTRACT 
-            14712:(BVPLUS 
-              14710:0xFFFFFFAB
-              8816:(BVCONCAT 
-                7538:0x000000
-                1252:x7169))
-            8110:0x0000001F
-            8110:0x0000001F)))
-      */
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0].GetValueWidth() ==1
-        && c[1].GetKind() == BVEXTRACT
-        && c[1][1].GetUnsignedConst() == c[1][0].GetValueWidth() -1
-       )
-       {
-          if (c[0] == stpMgr->CreateZeroConst(1))
-            c = nf->CreateNode(BVSGE, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-          else
-            c = nf->CreateNode(BVSLT, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-
-       }
-
-      /*
-         (BVSGT 
+         (BVSGT
           7570:0x00000000
-          457798:(BVPLUS 
+          457798:(BVPLUS
             7820:0xFFFFFFD7
             [457708])))
+
+         These three comparison-splitting rules are the pass's one deliberate
+         exception to never increasing the node count: they add one node (two
+         comparisons and a connective replace one comparison), but eliminate
+         a plus from under the comparison, which is a large win on the
+         difficulty score (a comparison costs 6*width, a plus 14*width). The
+         single-use guard on the plus is what secures that win: if the plus
+         survived for another use, the extra comparison would be a pure loss.
       */
-      if ( 
+      if (
         c.GetKind() == BVSGT
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() ==2
         && c[1][0].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
           const auto width = c[0].GetValueWidth();
@@ -394,10 +300,11 @@ namespace stp
           */
        if (
           c.GetKind() == BVGT
-          && c[1].GetKind() == BVPLUS 
+          && c[1].GetKind() == BVPLUS
           && c[1].Degree() == 2
-          && c[0].isConstant() 
+          && c[0].isConstant()
           && c[1][0].isConstant()
+          && shareCount[c[1].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]));
@@ -424,10 +331,11 @@ namespace stp
 */
        if (
           c.GetKind() == BVGT
-          && c[0].GetKind() == BVPLUS 
+          && c[0].GetKind() == BVPLUS
           && c[0].Degree() == 2
-          && c[0][0].isConstant() 
+          && c[0][0].isConstant()
           && c[1].isConstant()
+          && shareCount[c[0].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[1].GetValueWidth(), c[1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
@@ -446,37 +354,6 @@ namespace stp
           }    
 
 
-
-      /*
-        1352830:(BVGT 
-          1280904:0x00000055
-          8816:(BVCONCAT 
-            7538:0x000000
-            1252:x7169))
-      */
-      if ( 
-        c.GetKind() == BVGT
-        && c[0].GetKind() == BVCONST
-        && c[1].GetKind() == BVCONCAT
-        && c[1][0].GetKind() == BVCONST
-       )
-       {
-           auto extract = nf->CreateTerm(BVEXTRACT, 
-                                              c[1][0].GetValueWidth(), 
-                                              c[0], 
-                                              stpMgr->CreateBVConst(32, c[0].GetValueWidth() -1), 
-                                              stpMgr->CreateBVConst(32, c[1][1].GetValueWidth()));
-          const auto eq = nf->CreateNode(EQ, extract, c[1][0]);
-          if (eq == stpMgr->ASTTrue)
-          {
-           auto extract = nf->CreateTerm(BVEXTRACT, 
-                                              c[1][1].GetValueWidth(), 
-                                              c[0], 
-                                              stpMgr->CreateBVConst(32, c[1][1].GetValueWidth() -1), 
-                                              stpMgr->CreateBVConst(32, 0) );
-          c = nf->CreateNode(BVGT, extract, c[1][1]);
-          }
-       }
 
 /*
         1146098:(BVAND 
@@ -536,82 +413,41 @@ namespace stp
                 89066:0x00007F79E2596EA3
                 34042:0x00007F79E2596EA2))))
         */
-      if ( 
+      /*
+        0 = (a + b)  -->  (bvuminus a) = b.
+
+        The single-use guard on the plus keeps this non-increasing: the plus
+        dies and one bvuminus is born. The node factory then often folds the
+        bvuminus away: a bvuminus operand cancels, two bvuminuses cancel
+        across the equality, and a single-use ITE of constants absorbs it (the
+        rule above), which is what the examples show. e.g.
+
+        1149196:(EQ
+          6780:0x0000000000000000
+          1149194:(BVPLUS
+            1149154:(ITE
+              1149092:(EQ
+                3678:file_file_smt2_1287
+                1090576:0x2B)
+              118964:0x00007F79E2596EA5
+              118918:0x00007F79E2596EA4)
+            1149190:(ITE
+              [1149092]
+              1024228:0xFFFF80861DA6915B
+              1145390:0xFFFF80861DA6915C)))
+      */
+      if (
         c.GetKind() == EQ
         && c[0].GetKind() == BVCONST
         && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
-        && c[1][0].GetKind() == BVUMINUS
         && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
-        c = nf->CreateNode(EQ, c[1][0][0], c[1][1]);
-       }
-      
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-        c = nf->CreateNode(EQ, c[1][1][0], c[1][0]);
-       }
-
-/*
-1085202:(EQ 
-    6528:0b0
-    1085200:(BVAND 
-    */
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0].GetValueWidth() ==1
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVAND
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-          ASTVec children;
-          for (const auto& node : c[1])
-            children.push_back(nf->CreateNode(EQ, c[0],node));
-          c = nf->CreateNode(OR, children);
-       }
-/*
-  1149196:(EQ 
-    6780:0x0000000000000000
-    1149194:(BVPLUS 
-      1149154:(ITE 
-        1149092:(EQ 
-          3678:file_file_smt2_1287
-          1090576:0x2B)
-        118964:0x00007F79E2596EA5
-        118918:0x00007F79E2596EA4)
-      1149190:(ITE 
-        [1149092]
-        1024228:0xFFFF80861DA6915B
-        1145390:0xFFFF80861DA6915C)))
-*/
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind()  == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][0].GetKind() == ITE
-        && c[1][0][1].GetKind() == BVCONST
-        && c[1][0][2].GetKind() == BVCONST
-        && shareCount[c[0].GetNodeNum()] <= 1
-       )
-       {
-          const auto uminus = nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
-          c = nf->CreateNode(EQ, uminus, c[1][1]);
-
+        const auto uminus =
+            nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
+        c = nf->CreateNode(EQ, uminus, c[1][1]);
        }
 
    /*
@@ -657,80 +493,6 @@ namespace stp
           c = nf->CreateNode(ITE, c[1][0], ite1, ite2);
        }
       
-      /*
-  2180186:(XOR 
-    363814:var_5736
-    (OR 
-          363815:(NOT 363814:var_5736)
-          378221:(NOT 378220:var_8137))))
-      */
-      if ( 
-        c.GetKind() == XOR
-        && c.Degree() ==2
-        && c[1].GetKind() == OR
-        && c[1].Degree() ==2
-        && c[1][0].GetKind() == NOT
-        && c[1][0][0] == c[0]
-        )
-        {
-          c = nf->CreateNode(OR, nf->CreateNode(NOT, c[1][1]), c[1][0]);
-        }
-
-/*
-            5254:(BVMULT 
-              1970:0x0100
-              5242:(BVCONCAT 
-                1402:0x00
-                1296:T1@2147)))))
-*/
-    if (c.GetKind() == BVMULT
-        && c.Degree() == 2
-        && c[0].GetKind() == BVCONST
-        && singleOne(c[0])
-        && c[1].GetKind() == BVCONCAT
-        && c[1][0].GetKind() == BVCONST
-        )
-       {
-         // Position of the single one.
-          unsigned position = 0;
-          while (!CONSTANTBV::BitVector_bit_test(c[0].GetBVConst(),position))
-            position++;
-
-          if (position == c[1][0].GetValueWidth())
-            c = nf->CreateTerm(BVCONCAT, c.GetValueWidth(), c[1][1], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-       }
-
-/*
-117334:(BVOR 
-      1434:0x0000
-      2594:(BVCONCAT 
-        1402:0x00
-        384:T1@362))))
-*/
-    if (c.GetKind() == BVOR
-        && c.Degree() == 2
-        && c[0].GetKind() == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        )
-          c = c[1];
-  
-/*
-126402:(BVGT 
-      126400:0x00000017
-      126384:(BVUMINUS 
-        [126340]))
-        */
-    if (c.GetKind() == BVGT
-        && c[0].GetKind() == BVCONST 
-        && c[1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-        )
-        {
-          const auto width = c[1].GetValueWidth();
-          const auto eq = nf->CreateNode(EQ, c[1][0], nf->CreateZeroConst(width));
-          c = nf->CreateNode(OR, eq, nf->CreateNode(BVLT, nf->CreateTerm(BVUMINUS, width, c[0]), c[1][0]));
-        }
-
 /*
         136180:(BVPLUS 
           136158:(BVPLUS 
@@ -785,24 +547,6 @@ namespace stp
           //todo maybe move it so it has the least zeroes or ones?
           const auto consts = nf->CreateTerm(BVPLUS, width, c[0][0], nf->CreateTerm(BVUMINUS, width, c[1][0]));
           c = nf->CreateNode(EQ, nf->CreateTerm(BVPLUS, width, consts, c[0][1]), c[1][1]);
-        }
-
-/*
-  136896:(OR 
-    [127666]
-    127713:(NOT 127712:(OR 
-      [127666]
-      ...)))
-        */
-    if (c.GetKind() == OR
-        && c.Degree() == 2
-        && c[1].GetKind() == NOT
-        && c[1][0].GetKind() == OR
-        && c[1][0].Degree() == 2
-        && c[0] == c[1][0][0]
-        )
-        {
-          c = nf->CreateNode(OR, c[0], nf->CreateNode(NOT, c[1][0][1] ));
         }
 
 /*

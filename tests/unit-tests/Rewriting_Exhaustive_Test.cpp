@@ -213,62 +213,9 @@ TEST(Rewriting_Exhaustive, bvand_ite_arity3)
   c.checkSoundTerm(band);
 }
 
-/* BVMULT by a one-bit constant (a shift) over a BVCONCAT with a matching
-   constant top is turned into a concat. The 3-arity BVMULT used to drop the
-   third factor. */
-TEST(Rewriting_Exhaustive, bvmult_concat_arity2)
-{
-  Context c;
-  ASTNode k = c.konst(4, 4); // single one bit, at position 2.
-  ASTNode ktop = c.konst(1, 2);
-  ASTNode y = c.bv(2);
-  ASTNode concat = c.hf->CreateTerm(BVCONCAT, 4, ktop, y);
-  ASTNode mult = c.hf->CreateTerm(BVMULT, 4, k, concat);
-  ASSERT_EQ(mult.Degree(), 2u);
-  c.checkSoundTerm(mult);
-}
-
-TEST(Rewriting_Exhaustive, bvmult_concat_arity3)
-{
-  Context c;
-  ASTNode k = c.konst(4, 4);
-  ASTNode ktop = c.konst(1, 2);
-  ASTNode y = c.bv(2);
-  ASTNode concat = c.hf->CreateTerm(BVCONCAT, 4, ktop, y);
-  ASTNode z = c.hf->CreateTerm(BVNOT, 4, c.bv(4)); // non-symbol: sorts last.
-  ASTNode mult = c.hf->CreateTerm(BVMULT, 4, k, concat, z);
-  ASSERT_EQ(mult.Degree(), 3u);
-  ASSERT_EQ(mult[0], k);
-  ASSERT_EQ(mult[1], concat);
-  c.checkSoundTerm(mult);
-}
-
-/* BVOR with a zero first operand is replaced by its second operand. The
-   3-arity BVOR used to drop the operands after the second. (BVOR rarely
-   reaches the pass -- the simplifying factory rewrites it into NOT/BVAND --
-   but the hashing factory keeps it, as would any caller that doesn't
-   pre-simplify.) */
-TEST(Rewriting_Exhaustive, bvor_zero_arity2)
-{
-  Context c;
-  ASTNode zero = c.konst(0, 4);
-  ASTNode x = c.bv(4);
-  ASTNode bvor = c.hf->CreateTerm(BVOR, 4, zero, x);
-  ASSERT_EQ(bvor.Degree(), 2u);
-  c.checkSoundTerm(bvor);
-}
-
-TEST(Rewriting_Exhaustive, bvor_zero_arity3)
-{
-  Context c;
-  ASTNode zero = c.konst(0, 4);
-  ASTNode x = c.bv(4);
-  ASTNode y = c.bv(4);
-  ASTNode bvor = c.hf->CreateTerm(BVOR, 4, zero, x, y);
-  ASSERT_EQ(bvor.Degree(), 3u);
-  ASSERT_EQ(bvor[0], zero);
-  c.checkSoundTerm(bvor);
-}
+/* The BVMULT-of-concat and BVOR-of-zero rules moved into the
+   SimplifyingNodeFactory (see SimplifyingNodeFactory_Exhaustive_Test.cpp);
+   their n-ary shapes remain covered there. */
 
 /* Two constant-headed binary BVPLUS children have their constants combined.
    The rule checked the arity of both children but not of the node itself, so
@@ -300,38 +247,93 @@ TEST(Rewriting_Exhaustive, bvplus_bvplus_arity3)
   c.checkSoundTerm(plus);
 }
 
-/* OR(A, NOT(OR(A, B))) is simplified to OR(A, NOT B). The rule tested
-   c[0].Degree() == 2 where it meant the node's own arity: it only ever fired
-   when A itself had two children, and when the outer OR was n-ary it dropped
-   the remaining disjuncts. A is built as a conjunction so the (mis)guard is
-   actually exercised. */
-TEST(Rewriting_Exhaustive, or_not_or_arity2)
+/* The OR(A, NOT(OR(A, B))) rule also moved into the factory; see
+   SimplifyingNodeFactory_Exhaustive_Test.cpp. */
+
+/* 0 = (a + b) --> (bvuminus a) = b. One general rule; the factory then folds
+   the bvuminus into a bvuminus operand, across the equality, or into a
+   single-use ITE of constants. Each shape below exercises one of those. */
+TEST(Rewriting_Exhaustive, eq_zero_plus_symbols)
 {
   Context c;
-  ASTNode a = c.hf->CreateNode(AND, c.boolean(), c.boolean());
-  ASTNode b = c.boolean();
-  ASTNode inner = c.hf->CreateNode(OR, a, b);
-  ASTNode nt = c.hf->CreateNode(NOT, inner);
-  ASTNode f = c.hf->CreateNode(OR, a, nt);
-  ASSERT_EQ(f.Degree(), 2u);
-  ASSERT_EQ(f[0], a);
-  ASSERT_EQ(f[1], nt);
-  c.checkSoundFormula(f);
+  ASTNode zero = c.konst(0, 3);
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, x, y);
+  ASTNode f = c.hf->CreateNode(EQ, zero, plus);
+  ASTNode top = c.hf->CreateNode(NOT, f);
+  ASTNode result = c.run(top);
+  EXPECT_NE(result, top); // the rule fired.
+  c.checkEquivalent(top, result);
 }
 
-TEST(Rewriting_Exhaustive, or_not_or_arity3)
+TEST(Rewriting_Exhaustive, eq_zero_plus_uminus_operand)
 {
   Context c;
-  ASTNode a = c.hf->CreateNode(AND, c.boolean(), c.boolean());
-  ASTNode b = c.boolean();
-  ASTNode inner = c.hf->CreateNode(OR, a, b);
-  ASTNode nt = c.hf->CreateNode(NOT, inner);
-  ASTNode d = c.boolean();
-  ASTNode f = c.hf->CreateNode(OR, a, nt, d);
-  ASSERT_EQ(f.Degree(), 3u);
-  ASSERT_EQ(f[0], a);
-  ASSERT_EQ(f[1], nt);
-  c.checkSoundFormula(f);
+  ASTNode zero = c.konst(0, 3);
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode plusA =
+      c.hf->CreateTerm(BVPLUS, 3, c.hf->CreateTerm(BVUMINUS, 3, x), y);
+  ASTNode topA = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, zero, plusA));
+  c.checkEquivalent(topA, c.run(topA));
+
+  ASTNode plusB =
+      c.hf->CreateTerm(BVPLUS, 3, x, c.hf->CreateTerm(BVUMINUS, 3, y));
+  ASTNode topB = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, zero, plusB));
+  c.checkEquivalent(topB, c.run(topB));
+}
+
+TEST(Rewriting_Exhaustive, eq_zero_plus_ite)
+{
+  Context c;
+  ASTNode zero = c.konst(0, 3);
+  ASTNode p = c.boolean();
+  ASTNode ite = c.hf->CreateTerm(ITE, 3, p, c.konst(5, 3), c.konst(2, 3));
+  ASTNode t = c.hf->CreateTerm(BVNOT, 3, c.bv(3)); // non-symbol: sorts last.
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, ite, t);
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, zero, plus));
+  ASTNode result = c.run(top);
+  EXPECT_NE(result, top);
+  c.checkEquivalent(top, result);
+}
+
+/* The comparison-vs-plus splits: k <> (k' + t) becomes two comparisons whose
+   plus has been eliminated. Guarded on the plus being single-use. */
+TEST(Rewriting_Exhaustive, comparison_plus_split_fires)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, c.konst(3, 3), x);
+
+  for (const Kind k : {stp::BVSGT, stp::BVGT})
+  {
+    ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(k, c.konst(2, 3), plus));
+    ASTNode result = c.run(top);
+    EXPECT_NE(result, top); // the split fired.
+    c.checkEquivalent(top, result);
+  }
+
+  // The plus-on-the-left variant.
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(stp::BVGT, plus, c.konst(4, 3)));
+  ASTNode result = c.run(top);
+  EXPECT_NE(result, top);
+  c.checkEquivalent(top, result);
+}
+
+TEST(Rewriting_Exhaustive, comparison_plus_split_respects_sharing)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, c.konst(3, 3), x);
+  // The plus is shared with the equality, so the split must not fire:
+  // it would leave the plus alive and the extra comparison would be a
+  // pure loss.
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(NOT, c.hf->CreateNode(stp::BVGT, c.konst(2, 3), plus)),
+      c.hf->CreateNode(EQ, y, plus));
+  ASTNode result = c.run(top);
+  EXPECT_EQ(result, top); // nothing fired.
+  c.checkEquivalent(top, result);
 }
 
 /* The original fuzzer shape: EQ(x, BVNOT(BVAND(const, BVNOT(ITE-of-consts),
