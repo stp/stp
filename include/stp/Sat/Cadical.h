@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 #include "src/cadical.hpp"
+#include <chrono>
 
 namespace stp
 {
@@ -42,6 +43,23 @@ namespace stp
   uint32_t next_variable = 0;
   CaDiCaL::Solver * s;
 
+  // Cadical has no wall-clock limit of its own; it polls a Terminator
+  // during search, so a deadline check gives us setMaxTime().
+  class TimeLimit : public CaDiCaL::Terminator
+  {
+  public:
+    std::chrono::steady_clock::time_point deadline;
+    bool armed = false;
+    bool terminate() override
+    {
+      return armed && std::chrono::steady_clock::now() >= deadline;
+    }
+  };
+  TimeLimit time_limit;
+
+  int64_t max_confl = -1;
+  int64_t max_time = -1; // seconds
+
 public:
   Cadical();
 
@@ -52,6 +70,10 @@ public:
   bool okay() const; // FALSE means solver is in a conflicting state
 
   bool solve(bool& timeout_expired); // Search without assumptions.
+
+  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+
+  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
 
   bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 

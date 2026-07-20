@@ -24,6 +24,7 @@ THE SOFTWARE.
 #include "stp/Sat/Cadical.h"
 #include <unordered_set>
 #include <algorithm>
+#include <limits>
 using std::vector;
 
 namespace stp
@@ -40,11 +41,38 @@ bool Cadical::simplify()
   return false;
 }
 
+void Cadical::setMaxConflicts(int64_t _max_confl)
+{
+  max_confl = _max_confl;
+}
+
+void Cadical::setMaxTime(int64_t _max_time)
+{
+  max_time = _max_time;
+}
+
  //    0 = UNSOLVED     (limit reached or interrupted through 'terminate')
  //   10 = SATISFIABLE
  //   20 = UNSATISFIABLE
-bool Cadical::solve(bool& timeout_expired) 
+bool Cadical::solve(bool& timeout_expired)
 {
+  // Cadical's limits only apply to the next solve() call, so re-arm on
+  // every call. Each call gets the full budget.
+  if (max_confl >= 0)
+  {
+    const int budget =
+        (int)std::min(max_confl, (int64_t)std::numeric_limits<int>::max());
+    s->limit("conflicts", budget);
+  }
+
+  if (max_time >= 0)
+  {
+    time_limit.deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(max_time);
+    time_limit.armed = true;
+    s->connect_terminator(&time_limit);
+  }
+
   auto ret = s->solve();
   if (ret == 0)
   {
