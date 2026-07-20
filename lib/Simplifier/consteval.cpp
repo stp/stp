@@ -696,12 +696,16 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       assert(2 == number_of_children);
       const unsigned w = children[0].GetValueWidth();
       const bool isSigned = (k == BVSMULO);
-      // Extend both operands to 2w (zero- or sign-extend), multiply exactly,
-      // then inspect the high bits. The 2w product always fits, so the signed
-      // BitVector_Multiply never reports a spurious overflow.
-      CBV y2 = CONSTANTBV::BitVector_Create(2 * w, true);
-      CBV z2 = CONSTANTBV::BitVector_Create(2 * w, true);
-      CBV prod = CONSTANTBV::BitVector_Create(2 * w, true);
+      // Extend both operands (zero- or sign-extend), multiply exactly, then
+      // inspect the high bits. BitVector_Multiply is a signed multiply that
+      // reports overflow once the product's magnitude reaches the
+      // destination's sign bit, so the intermediates need 2w+1 bits: an
+      // unsigned product can be up to (2^w-1)^2, which exceeds the signed
+      // 2w-bit maximum but fits in 2w+1 bits.
+      const unsigned ew = 2 * w + 1;
+      CBV y2 = CONSTANTBV::BitVector_Create(ew, true);
+      CBV z2 = CONSTANTBV::BitVector_Create(ew, true);
+      CBV prod = CONSTANTBV::BitVector_Create(ew, true);
       if (isSigned && CONSTANTBV::BitVector_Sign(tmp0) < 0)
         CONSTANTBV::BitVector_Fill(y2);
       if (isSigned && CONSTANTBV::BitVector_Sign(tmp1) < 0)
@@ -716,14 +720,14 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       {
         // Overflow iff the product is not the sign-extension of its low w bits.
         const bool sign = CONSTANTBV::BitVector_bit_test(prod, w - 1);
-        for (unsigned i = w; i < 2 * w; i++)
+        for (unsigned i = w; i < ew; i++)
           if (CONSTANTBV::BitVector_bit_test(prod, i) != sign)
             overflow = true;
       }
       else
       {
         // Overflow iff any high bit is set.
-        for (unsigned i = w; i < 2 * w; i++)
+        for (unsigned i = w; i < ew; i++)
           if (CONSTANTBV::BitVector_bit_test(prod, i))
             overflow = true;
       }
