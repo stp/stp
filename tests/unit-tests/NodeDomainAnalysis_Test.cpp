@@ -672,3 +672,152 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
     }
 }
 
+
+// ---------------------------------------------------------------------
+// Fixed-point tests: after buildMap, re-running the (both-ways) bit
+// transfer function of every node in the formula, starting from the
+// cached results, must change nothing - neither the node's own bits nor
+// its children's. A single children-first pass computes everything the
+// transfer functions can deduce bottom-up: with no assumption on the
+// top node, an operator's output carries no information beyond its
+// children, so nothing can flow back down. These tests guard the
+// skip-list in buildMap: zero-extension must run even when its
+// expression child is unknown, while extract and sign-extension really
+// derive nothing there.
+
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Simplifier/constantBitP/MultiplicationStats.h"
+
+// The cached bits, copied into a mutable FixedBits; totally unfixed
+// bits of the right shape when the analysis cached nothing.
+static stp::FixedBits* materialise(Context& c, const ASTNode& n)
+{
+  const auto& map = *c.domain.getCbitMap();
+  const auto it = map.find(n);
+  const stp::FixedBits* cached = (it == map.end()) ? nullptr : it->second;
+
+  const unsigned width = (n.GetValueWidth() > 0) ? n.GetValueWidth() : 1;
+  stp::FixedBits* result =
+      new stp::FixedBits(width, n.GetType() == stp::BOOLEAN_TYPE);
+  if (cached != nullptr)
+    *result = *cached;
+  return result;
+}
+
+static void checkNodeAtFixedPoint(Context& c, const ASTNode& n,
+                                  stp::ASTNodeSet& visited)
+{
+  if (!visited.insert(n).second)
+    return;
+
+  for (const auto& child : n)
+    checkNodeAtFixedPoint(c, child, visited);
+  if (::testing::Test::HasFatalFailure())
+    return;
+
+  const stp::Kind k = n.GetKind();
+  if (k == stp::SYMBOL || k == stp::READ || k == stp::WRITE)
+    return;
+
+  if (n.isConstant())
+  {
+    stp::FixedBits* bits = materialise(c, n);
+    EXPECT_TRUE(bits->isTotallyFixed()) << "constant not fixed: " << n;
+    delete bits;
+    return;
+  }
+
+  // Working copies of the cached state, and snapshots to compare against.
+  stp::FixedBits* output = materialise(c, n);
+  const stp::FixedBits before_output(*output);
+
+  std::vector<stp::FixedBits*> children;
+  std::vector<stp::FixedBits*> before_children;
+  for (const auto& child : n)
+  {
+    children.push_back(materialise(c, child));
+    before_children.push_back(new stp::FixedBits(*children.back()));
+  }
+
+  simplifier::constantBitP::MultiplicationStatsMap msm;
+  const simplifier::constantBitP::Result result =
+      simplifier::constantBitP::ConstantBitPropagation::
+          dispatchToTransferFunctions(&c.mgr, k, children, *output, n, &msm);
+
+  EXPECT_NE(simplifier::constantBitP::CONFLICT, result)
+      << "conflict bottom-up: " << n;
+
+  EXPECT_TRUE(stp::FixedBits::equals(before_output, *output))
+      << "not at fixed point, output of node " << n.GetNodeNum() << " ("
+      << k << ") improved from " << before_output << " to " << *output;
+
+  for (size_t i = 0; i < children.size(); i++)
+    EXPECT_TRUE(stp::FixedBits::equals(*before_children[i], *children[i]))
+        << "not at fixed point, child " << i << " of node "
+        << n.GetNodeNum() << " (" << k << ") improved from "
+        << *before_children[i] << " to " << *children[i];
+
+  delete output;
+  for (size_t i = 0; i < children.size(); i++)
+  {
+    delete children[i];
+    delete before_children[i];
+  }
+}
+
+// Zero-extension must fix its high bits even though the child is
+// unknown. It was previously skipped along with extract and bvsx, so
+// the high zeros were missing from the domain. Note the nodes are built
+// with the hashing node factory: the simplifying factory rewrites
+// zero_extend into a concat with a zero constant, which was why the
+// skip went unnoticed.
+TEST(NodeDomainAnalysis_FixedPoint, zero_extend_raw_node)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  NodeFactory* hf = c.mgr.hashingNodeFactory;
+
+  const ASTNode x = c.mgr.CreateSymbol("zx_input", 0, 8);
+  const ASTNode zx =
+      hf->CreateTerm(stp::BVZX, 20, x, c.mgr.CreateBVConst(32, 20));
+  const ASTNode out = c.mgr.CreateSymbol("zx_output", 0, 20);
+  const ASTNode top = hf->CreateNode(stp::EQ, zx, out);
+
+  c.domain.topLevel(top);
+  stp::ASTNodeSet visited;
+  checkNodeAtFixedPoint(c, top, visited);
+
+  // The forced facts must actually be present: everything above the
+  // extended-from width is zero.
+  const auto it = c.domain.getCbitMap()->find(zx);
+  ASSERT_TRUE(it != c.domain.getCbitMap()->end());
+  ASSERT_TRUE(it->second != nullptr) << "zero-extension derived nothing";
+  for (unsigned i = 8; i < 20; i++)
+    EXPECT_TRUE(it->second->isFixedToZero(i)) << "bit " << i;
+}
+
+// Sign-extension and extract of an unknown child really can derive
+// nothing (the remaining skips in buildMap): the checker proves
+// re-running their transfer functions fixes no bits.
+TEST(NodeDomainAnalysis_FixedPoint, sign_extend_and_extract_raw_nodes)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  NodeFactory* hf = c.mgr.hashingNodeFactory;
+
+  const ASTNode x = c.mgr.CreateSymbol("sx_input", 0, 8);
+  const ASTNode sx =
+      hf->CreateTerm(stp::BVSX, 20, x, c.mgr.CreateBVConst(32, 20));
+  const ASTNode ex = hf->CreateTerm(stp::BVEXTRACT, 4, x,
+                                    c.mgr.CreateBVConst(32, 6),
+                                    c.mgr.CreateBVConst(32, 3));
+  const ASTNode out = c.mgr.CreateSymbol("sx_output", 0, 20);
+  const ASTNode out4 = c.mgr.CreateSymbol("ex_output", 0, 4);
+  const ASTNode top = hf->CreateNode(
+      stp::AND, hf->CreateNode(stp::EQ, sx, out),
+      hf->CreateNode(stp::EQ, ex, out4));
+
+  c.domain.topLevel(top);
+  stp::ASTNodeSet visited;
+  checkNodeAtFixedPoint(c, top, visited);
+}
