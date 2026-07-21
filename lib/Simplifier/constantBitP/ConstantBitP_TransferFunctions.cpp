@@ -45,10 +45,108 @@ typedef unsigned int* CBV;
 
 // if a==b then fix the result to true.
 // if a!=b then fix the result to false.
+// Word-level fast path: the four bit-loops of the general version become
+// bitwise operations on the packed fixedness/value words.
+static Result bvEqualsBothWaysScalar(FixedBits& a, FixedBits& b,
+                                     FixedBits& output)
+{
+  const unsigned width = a.getWidth();
+  assert(width <= 64);
+
+  const uint64_t mask = (width == 64) ? ~0ULL : ((1ULL << width) - 1);
+
+  uint64_t fa, va, fb, vb;
+  a.fillPackedWords(&fa, &va);
+  b.fillPackedWords(&fb, &vb);
+
+  // Bits fixed on both sides but to different values.
+  const uint64_t disagree = fa & fb & (va ^ vb);
+
+  bool changed = false;
+
+  if (disagree != 0)
+  {
+    if (output.isFixed(0) && output.getValue(0))
+      return CONFLICT;
+    if (!output.isFixed(0))
+    {
+      output.setFixed(0, true);
+      output.setValue(0, false);
+      changed = true;
+    }
+  }
+  else if ((fa & fb) == mask) // Everything fixed, and no disagreement.
+  {
+    if (output.isFixed(0) && !output.getValue(0))
+      return CONFLICT;
+    if (!output.isFixed(0))
+    {
+      output.setFixed(0, true);
+      output.setValue(0, true);
+      changed = true;
+    }
+  }
+
+  if (output.isFixed(0) && output.getValue(0)) // all should be the same.
+  {
+    // A disagreement with the output fixed to true returned CONFLICT above.
+    assert(disagree == 0);
+
+    uint64_t onlyA = fa & ~fb & mask;
+    while (onlyA != 0)
+    {
+      const unsigned i = __builtin_ctzll(onlyA);
+      b.setFixed(i, true);
+      b.setValue(i, (va >> i) & 1);
+      changed = true;
+      onlyA &= onlyA - 1;
+    }
+
+    uint64_t onlyB = fb & ~fa & mask;
+    while (onlyB != 0)
+    {
+      const unsigned i = __builtin_ctzll(onlyB);
+      a.setFixed(i, true);
+      a.setValue(i, (vb >> i) & 1);
+      changed = true;
+      onlyB &= onlyB - 1;
+    }
+  }
+
+  // If the result is fixed to false, there is a single unspecified value, and
+  // all the rest are the same, fix it to the opposite.
+  if (output.isFixed(0) && !output.getValue(0) && disagree == 0)
+  {
+    const uint64_t unknownA = ~fa & mask;
+    const uint64_t unknownB = ~fb & mask;
+    if (__builtin_popcountll(unknownA) + __builtin_popcountll(unknownB) == 1)
+    {
+      if (unknownA != 0)
+      {
+        const unsigned i = __builtin_ctzll(unknownA);
+        a.setFixed(i, true);
+        a.setValue(i, !((vb >> i) & 1));
+      }
+      else
+      {
+        const unsigned i = __builtin_ctzll(unknownB);
+        b.setFixed(i, true);
+        b.setValue(i, !((va >> i) & 1));
+      }
+      changed = true;
+    }
+  }
+
+  return changed ? CHANGED : NO_CHANGE;
+}
+
 Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 {
   assert(a.getWidth() == b.getWidth());
   assert(1 == output.getWidth());
+
+  if (a.getWidth() <= 64)
+    return bvEqualsBothWaysScalar(a, b, output);
 
   const int childWidth = a.getWidth();
 
