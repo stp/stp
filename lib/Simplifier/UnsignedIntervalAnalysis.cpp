@@ -797,7 +797,9 @@ namespace stp
     // Between wraps the values only grow, so the minimum is b or a
     // post-wrap residue; the residues just after each wrap follow the
     // progression b1 + j*((-m) mod a) inside [0, a), which the loop
-    // chases Euclid-style: O(log m) iterations.
+    // chases Euclid-style. A step above m/2 first flips to the same
+    // progression walked backwards, so the modulus at least halves
+    // every level: O(log m) iterations.
     uint128 minlin(uint128 n, uint128 m, uint128 a, uint128 b)
     {
       uint128 best = b;
@@ -807,6 +809,14 @@ namespace stp
           best = b; // the value at i = 0 of this level
         if (a == 0 || n == 1)
           return best;
+        if (a > m / 2)
+        {
+          // The same value set, traversed from its last element with
+          // the complementary step.
+          b = (b + (n - 1) * a) % m;
+          a = m - a;
+          continue;
+        }
         const uint128 firstWrap = (m - b + a - 1) / a;
         if (firstWrap >= n)
           return best; // never wraps, so the values only grow from b
