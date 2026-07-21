@@ -355,6 +355,9 @@ void ExtraMain::create_options()
       ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
 
+      ("parse-only", po::bool_switch(&(bm->UserFlags.parse_only)),
+       "exit after parsing the input, without solving")
+
       ("max-num-confl,max_num_confl,g", 
       INT64_ARG(bm->UserFlags.timeout_max_conflicts),
       "Number of conflicts after which the SAT solver gives up. "
