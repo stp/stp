@@ -435,7 +435,123 @@ namespace stp
           newN =
               nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
           replaceWithSimpler++;
+
+          // When the disjointness is a contiguous split, the OR is just
+          // wiring: the high part concatenated onto the low part.
+          if (n.Degree() == 2)
+          {
+            const unsigned width = n.GetValueWidth();
+            for (unsigned i = 0; i < 2; i++)
+            {
+              const FixedBits* high = children[i];
+              const FixedBits* low = children[1 - i];
+
+              // The lowest bit of "high" that might be one.
+              unsigned k = 0;
+              while (k < width && high->isFixed(k) && !high->getValue(k))
+                k++;
+
+              // All of "low"'s possibly-one bits must sit below k.
+              bool lowFits = true;
+              for (unsigned j = k; j < width && lowFits; j++)
+                if (!(low->isFixed(j) && !low->getValue(j)))
+                  lowFits = false;
+
+              if (lowFits && k > 0 && k < width)
+              {
+                newN = nf->CreateTerm(
+                    BVCONCAT, width,
+                    nf->CreateTerm(BVEXTRACT, width - k, n[i],
+                                   nf->CreateBVConst(32, width - 1),
+                                   nf->CreateBVConst(32, k)),
+                    nf->CreateTerm(BVEXTRACT, k, n[1 - i],
+                                   nf->CreateBVConst(32, k - 1),
+                                   nf->CreateBVConst(32, 0)));
+                break;
+              }
+            }
+          }
         }
+        else if (kind == BVPLUS)
+        {
+          // Leading zeros on every operand bound the sum, so the
+          // addition narrows to the width that can carry.
+          const unsigned width = n.GetValueWidth();
+
+          unsigned maxEffective = 0;
+          for (unsigned i = 0; i < children.size(); i++)
+          {
+            unsigned nlz = 0;
+            while (nlz < width && children[i]->isFixed(width - 1 - nlz) &&
+                   !children[i]->getValue(width - 1 - nlz))
+              nlz++;
+            if (width - nlz > maxEffective)
+              maxEffective = width - nlz;
+          }
+
+          // Adding m terms can carry ceil(log2(m)) bits upwards.
+          unsigned carry = 0;
+          while ((1u << carry) < children.size())
+            carry++;
+
+          const unsigned rest = maxEffective + carry;
+          if (maxEffective > 0 && rest < width)
+          {
+            ASTVec narrowed;
+            narrowed.reserve(n.Degree());
+            for (const auto& c : n.GetChildren())
+              narrowed.push_back(
+                  nf->CreateTerm(BVEXTRACT, rest, c,
+                                 nf->CreateBVConst(32, rest - 1),
+                                 nf->CreateBVConst(32, 0)));
+
+            newN = nf->CreateTerm(
+                BVCONCAT, width, nf->CreateZeroConst(width - rest),
+                nf->CreateTerm(BVPLUS, rest, narrowed));
+            replaceWithSimpler++;
+          }
+        }
+      }
+    }
+    else if (kind == BVMULT)
+    {
+      // Leading zeros on the operands bound the product, so the
+      // multiplication narrows to the width the product can occupy.
+      const unsigned width = n.GetValueWidth();
+
+      bool bad = false;
+      unsigned totalEffective = 0;
+      for (const auto& c : n.GetChildren())
+      {
+        const auto it = visited.find(c);
+        if (it == visited.end() || it->second == nullptr)
+        {
+          bad = true;
+          break;
+        }
+
+        unsigned nlz = 0;
+        while (nlz < width - 1 && it->second->isFixed(width - 1 - nlz) &&
+               !it->second->getValue(width - 1 - nlz))
+          nlz++;
+        totalEffective += width - nlz;
+      }
+
+      if (!bad && totalEffective < width)
+      {
+        const unsigned rest = totalEffective;
+
+        ASTVec narrowed;
+        narrowed.reserve(n.Degree());
+        for (const auto& c : n.GetChildren())
+          narrowed.push_back(nf->CreateTerm(BVEXTRACT, rest, c,
+                                            nf->CreateBVConst(32, rest - 1),
+                                            nf->CreateBVConst(32, 0)));
+
+        newN = nf->CreateTerm(
+            BVCONCAT, width, nf->CreateZeroConst(width - rest),
+            nf->CreateTerm(BVMULT, rest, narrowed));
+        replaceWithSimpler++;
       }
     }
     else if (kind == BVDIV || kind == BVMOD)

@@ -815,3 +815,109 @@ TEST(StrengthReduction_Exhaustive_Test, mod_below_divisor_via_intervals)
       n, result, x, y, width, [](unsigned v) { return v <= 4; },
       [](unsigned v) { return v >= 5; });
 }
+
+// Fix the bit range [from, to] of "bits" to zero.
+static void fixZero(FixedBits& bits, unsigned from, unsigned to)
+{
+  for (unsigned i = from; i <= to; i++)
+  {
+    bits.setFixed(i, true);
+    bits.setValue(i, false);
+  }
+}
+
+// A multiplication whose operands have fixed leading zeros narrows to
+// the width the product can occupy.
+TEST(StrengthReduction_Exhaustive_Test, mult_narrowed_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMULT, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMULT);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 2, 5); // x < 4
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_EQ(result[1].GetKind(), stp::BVMULT);
+  ASSERT_EQ(result[1].GetValueWidth(), 5u);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned v) { return v < 8; });
+}
+
+// An addition whose operands have fixed leading zeros narrows to the
+// width the sum can occupy.
+TEST(StrengthReduction_Exhaustive_Test, plus_narrowed_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVPLUS, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVPLUS);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 3, 5); // x < 8
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_EQ(result[1].GetKind(), stp::BVPLUS);
+  ASSERT_EQ(result[1].GetValueWidth(), 4u);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 8; },
+      [](unsigned v) { return v < 8; });
+}
+
+// When an addition's operands split at a bit boundary, the adder is
+// just wiring: the high part concatenated onto the low part.
+TEST(StrengthReduction_Exhaustive_Test, plus_to_concat_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVPLUS, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVPLUS);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 0, 2); // x's low three bits are zero.
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_FALSE(c.present(stp::BVPLUS, result));
+  ASSERT_FALSE(c.present(stp::BVNOT, result));
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return (v & 7) == 0; },
+      [](unsigned v) { return v < 8; });
+}
