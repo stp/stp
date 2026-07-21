@@ -27,7 +27,6 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Simplifier/Simplifier.h"
-#include <algorithm>
 #include <cassert>
 #include <cmath>
 
@@ -75,52 +74,6 @@ static unsigned lowestOneBit(const stp::ASTNode& n)
   while (!CONSTANTBV::BitVector_bit_test(n.GetBVConst(), position))
     position++;
   return position;
-}
-
-unsigned SimplifyingNodeFactory::mostSignificantConstants(const stp::ASTNode& n)
-{
-  if (n.isConstant())
-    return n.GetValueWidth();
-  if (n.GetKind() == BVCONCAT)
-    return mostSignificantConstants(n[0]);
-  return 0;
-}
-
-unsigned SimplifyingNodeFactory::getConstantBit(const stp::ASTNode& n,
-                                                const int i)
-{
-  if (n.GetKind() == stp::BVCONST)
-  {
-    assert((int)n.GetValueWidth() >= i + 1);
-    return CONSTANTBV::BitVector_bit_test(n.GetBVConst(),
-                                          n.GetValueWidth() - 1 - i)
-               ? 1
-               : 0;
-  }
-  if (n.GetKind() == BVCONCAT)
-    return getConstantBit(n[0], i);
-
-  assert(false);
-  abort();
-}
-
-int SimplifyingNodeFactory::compareLeadingConstants(const stp::ASTNode& a,
-                                                    const stp::ASTNode& b)
-{
-  const unsigned constStart =
-      std::min(mostSignificantConstants(a), mostSignificantConstants(b));
-
-  for (unsigned i = 0; i < constStart; i++)
-  {
-    const unsigned bit_a = getConstantBit(a, i);
-    const unsigned bit_b = getConstantBit(b, i);
-
-    if (bit_a > bit_b)
-      return 1;
-    if (bit_a < bit_b)
-      return -1;
-  }
-  return 0;
 }
 
 bool SimplifyingNodeFactory::children_all_constants(
@@ -171,13 +124,6 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
       CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
   {
     return ASTFalse;
-  }
-
-  // If the leading constant bits differ, the first differing bit decides.
-  {
-    const int comparator = compareLeadingConstants(children[0], children[1]);
-    if (comparator != 0)
-      return (comparator == 1) ? ASTTrue : ASTFalse;
   }
 
   if (children[0].GetKind() == BVRIGHTSHIFT && children[0][0] == children[1])
@@ -338,21 +284,6 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       {
         result =
             NodeFactory::CreateNode(stp::BVSGT, children[0][0], children[1][0]);
-      }
-
-      // If the leading constant bits differ, the unsigned order decides,
-      // flipped when the sign bits differ.
-      if (result.IsNull())
-      {
-        int comparator = compareLeadingConstants(children[0], children[1]);
-        if (comparator != 0)
-        {
-          const unsigned sign_a = getConstantBit(children[0], 0);
-          const unsigned sign_b = getConstantBit(children[1], 0);
-          if (sign_a != sign_b)
-            comparator = (sign_a > sign_b) ? -1 : 1;
-          result = (comparator == 1) ? ASTTrue : ASTFalse;
-        }
       }
 
       break;
@@ -649,10 +580,6 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   // here the terms are definitely not syntactically equal but may be
   // semantically equal.
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
-    return ASTFalse;
-
-  // If any of the shared leading constant bits differ, they can't be equal.
-  if (compareLeadingConstants(in1, in2) != 0)
     return ASTFalse;
 
   if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))

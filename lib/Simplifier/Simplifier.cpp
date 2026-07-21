@@ -527,14 +527,41 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
   return output;
 }
 
+// number of constant bits in the most significant places.
+unsigned mostSignificantConstants(const ASTNode& n)
+{
+  if (n.isConstant())
+    return n.GetValueWidth();
+  if (n.GetKind() == BVCONCAT)
+    return mostSignificantConstants(n[0]);
+  return 0;
+}
+
+unsigned getConstantBit(const ASTNode& n, const int i)
+{
+  if (n.GetKind() == BVCONST)
+  {
+    assert((int)n.GetValueWidth() >= i + 1);
+    return CONSTANTBV::BitVector_bit_test(n.GetBVConst(),
+                                          n.GetValueWidth() - 1 - i)
+               ? 1
+               : 0;
+  }
+  if (n.GetKind() == BVCONCAT)
+    return getConstantBit(n[0], i);
+
+  assert(false);
+  abort();
+}
+
 unsigned numberOfLeadingZeroes(const ASTNode& n)
 {
-  unsigned c = SimplifyingNodeFactory::mostSignificantConstants(n);
+  unsigned c = mostSignificantConstants(n);
   if (c == 0)
     return 0;
 
   for (unsigned i = 0; i < c; i++)
-    if (SimplifyingNodeFactory::getConstantBit(n, i) != 0)
+    if (getConstantBit(n, i) != 0)
       return i;
   return c;
 }
@@ -585,8 +612,9 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
       return pushNeg ? ASTFalse : ASTTrue;
   }
 
-  // NB. Deciding these comparisons from differing leading constant bits
-  // is done by the simplifying node factory.
+  // NB. Comparisons that differing leading constant bits decide are
+  // resolved by strength reduction: the fixed-bit transfer functions for
+  // concat and the comparisons subsume that reasoning.
 
   const unsigned len = left.GetValueWidth();
 
@@ -810,13 +838,12 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   // would check
   // each bit, not just the leading bits.
   const int constStart =
-      std::min(SimplifyingNodeFactory::mostSignificantConstants(in1),
-               SimplifyingNodeFactory::mostSignificantConstants(in2));
+      std::min(mostSignificantConstants(in1), mostSignificantConstants(in2));
 
   for (int i = 0; i < constStart; i++)
   {
-    const int a = SimplifyingNodeFactory::getConstantBit(in1, i);
-    const int b = SimplifyingNodeFactory::getConstantBit(in2, i);
+    const int a = getConstantBit(in1, i);
+    const int b = getConstantBit(in2, i);
     assert(a == 1 || a == 0);
     assert(b == 1 || b == 0);
 
@@ -2315,9 +2342,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
 
       // If the msb is known. Then puts 0's or the 1's infront.
-      if (SimplifyingNodeFactory::mostSignificantConstants(a0) > 0)
+      if (mostSignificantConstants(a0) > 0)
       {
-        if (SimplifyingNodeFactory::getConstantBit(a0, 0) == 0)
+        if (getConstantBit(a0, 0) == 0)
           output = nf->CreateTerm(
               BVCONCAT, inputValueWidth,
               nf->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
