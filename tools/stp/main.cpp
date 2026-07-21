@@ -358,6 +358,12 @@ void ExtraMain::create_options()
       ("parse-only", po::bool_switch(&(bm->UserFlags.parse_only)),
        "exit after parsing the input, without solving")
 
+      ("interactive", po::value<bool>(),
+       "read the input a character at a time, as needed when driving stp "
+       "interactively over a pipe. Off reads in blocks, which is faster. "
+       "Default: on when reading from stdin, off when reading from a file. "
+       "SMT-LIB2 only.")
+
       ("max-num-confl,max_num_confl,g", 
       INT64_ARG(bm->UserFlags.timeout_max_conflicts),
       "Number of conflicts after which the SAT solver gives up. "
@@ -420,6 +426,11 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("disable-cbitp"))
   {
     bm->UserFlags.bitConstantProp_flag = false;
+  }
+
+  if (vm.count("interactive"))
+  {
+    bm->UserFlags.interactive_read = vm["interactive"].as<bool>() ? 1 : 0;
   }
 
   int selected_type = 0;
