@@ -44,13 +44,21 @@ private:
   // with the corresponding expressions.
   // It's complicated because bindings can be shadowed by later bindings.
   // As soon as the brackets that close a let expression is reached it should be popped.
-  
+
+  // Each name maps to the stack of bindings that shadow each other,
+  // innermost last, tagged with the index of the frame they belong to.
+  // A single hash lookup resolves a name however deeply lets are nested.
+  std::unordered_map<string, std::vector<std::pair<size_t, ASTNode>>> bindings;
+
+  // The names bound in each open frame, so pop() can undo them.
   // Initally empty because we expect push() to be called before any bindings are added.
-  std::vector<MapType> stack;
+  std::vector<std::vector<string>> frames;
+
   MapType interim;
 
-  // The expression the innermost binding of s maps to, or nullptr.
-  const ASTNode* lookupLet(const string& s) const;
+  // Adds to the current frame. Returns false if the name is already
+  // bound in the current frame (leaving the existing binding in place).
+  bool insertIntoFrame(const string& name, const ASTNode& letExpr);
 
 public:
   
@@ -75,6 +83,10 @@ public:
 
   // Has a let with this name has already been declared.
   bool isLetDeclared(const string& s) const;
+
+  // The expression the innermost binding of s maps to, or nullptr.
+  // The pointer is invalidated by any change to the bindings.
+  const ASTNode* lookupLet(const string& s) const;
 
   ASTNode resolveLet(const string& s) const;
   ASTNode ResolveID(const ASTNode& var);
