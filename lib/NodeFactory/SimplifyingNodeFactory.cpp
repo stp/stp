@@ -2123,6 +2123,52 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
             bm.CreateMaxConst(width), bm.CreateZeroConst(width));
 
+      // ((s & t) mod t) / s  and  (t & (s mod t)) / s  both equal
+      // ite(s = 0, max, ite((s & t) = s AND s < t, 1, 0)):
+      // each numerator is at most s, so the quotient is 0 or 1, and it is 1
+      // exactly when the numerator equals a non-zero s, which for both forms
+      // requires s's bits to be a subset of t's and s < t. Replaces a
+      // division and a modulus with comparisons.
+      if (result.IsNull())
+      {
+        const ASTNode& s = children[1];
+        ASTNode t;
+        const ASTNode& n = children[0];
+        if (n.GetKind() == BVMOD && n[0].GetKind() == stp::BVAND &&
+            n[0].Degree() == 2 &&
+            ((n[0][0] == s && n[0][1] == n[1]) ||
+             (n[0][1] == s && n[0][0] == n[1])))
+        {
+          // ((s & t) mod t) / s
+          t = n[1];
+        }
+        else if (n.GetKind() == stp::BVAND && n.Degree() == 2)
+        {
+          // (t & (s mod t)) / s, with the BVAND's children in either order.
+          for (unsigned i = 0; i < 2; i++)
+            if (n[i].GetKind() == BVMOD && n[i][0] == s && n[i][1] == n[1 - i])
+            {
+              t = n[1 - i];
+              break;
+            }
+        }
+        if (!t.IsNull())
+        {
+          const ASTNode cond = NodeFactory::CreateNode(
+              stp::AND,
+              NodeFactory::CreateNode(
+                  EQ, NodeFactory::CreateTerm(stp::BVAND, width, s, t), s),
+              NodeFactory::CreateNode(stp::BVLT, s, t));
+          result = NodeFactory::CreateTerm(
+              ITE, width,
+              NodeFactory::CreateNode(EQ, s, bm.CreateZeroConst(width)),
+              bm.CreateMaxConst(width),
+              NodeFactory::CreateTerm(ITE, width, cond,
+                                      bm.CreateOneConst(width),
+                                      bm.CreateZeroConst(width)));
+        }
+      }
+
       break;
 
     case SBVDIV:
