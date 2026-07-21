@@ -52,6 +52,12 @@ class ASTInterior : public ASTInternal
   // The vector of children
   ASTVec _children;
 
+  // The hash of (_kind, _children), computed on first use. The children
+  // are appended before the node reaches the unique table and never
+  // change afterwards, so the value is stable. Zero means "not yet
+  // computed"; a genuine zero hash is recomputed each time, harmlessly.
+  mutable size_t _cached_hash = 0;
+
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
    ******************************************************************/

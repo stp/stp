@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace stp
 {
@@ -52,18 +53,21 @@ class STPMgr
 
 private:
   // Typedef for unique Interior node table.
-  typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
-                             ASTInterior::ASTInteriorEqual>
+  typedef ankerl::unordered_dense::set<ASTInterior*,
+                                       ASTInterior::ASTInteriorHasher,
+                                       ASTInterior::ASTInteriorEqual>
       ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
-  typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
-                             ASTSymbol::ASTSymbolEqual>
+  typedef ankerl::unordered_dense::set<ASTSymbol*,
+                                       ASTSymbol::ASTSymbolHasher,
+                                       ASTSymbol::ASTSymbolEqual>
       ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
-  typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
-                             ASTBVConst::ASTBVConstEqual>
+  typedef ankerl::unordered_dense::set<ASTBVConst*,
+                                       ASTBVConst::ASTBVConstHasher,
+                                       ASTBVConst::ASTBVConstEqual>
       ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing

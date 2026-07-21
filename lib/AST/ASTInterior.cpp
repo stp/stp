@@ -54,6 +54,9 @@ void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
 size_t ASTInterior::ASTInteriorHasher::
 operator()(const ASTInterior* int_node_ptr) const
 {
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
+
   size_t hashval = ((size_t)int_node_ptr->GetKind());
   const ASTVec& ch = int_node_ptr->GetChildren();
   ASTVec::const_iterator iend = ch.end();
@@ -67,6 +70,7 @@ operator()(const ASTInterior* int_node_ptr) const
   hashval += (hashval << 3);
   hashval ^= (hashval >> 11);
   hashval += (hashval << 15);
+  int_node_ptr->_cached_hash = hashval;
   return hashval;
 }
 
