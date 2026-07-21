@@ -408,4 +408,126 @@ TEST(SimplifyingNodeFactory_Exhaustive, sx_of_sx)
   EXPECT_EQ(collapsed[0], a);
 }
 
+/* x / 2^n --> 0^n ++ x[w-1:n] */
+TEST(SimplifyingNodeFactory_Exhaustive, div_by_power_of_two)
+{
+  Context c;
+  ASTNode x = c.bv(4);
+  for (unsigned d : {2u, 4u, 8u})
+  {
+    c.checkTerm(BVDIV, 4, {x, c.konst(d, 4)});
+    EXPECT_EQ(c.nf->CreateTerm(BVDIV, 4, x, c.konst(d, 4)).GetKind(),
+              BVCONCAT);
+  }
+}
+
+/* x mod 2^n --> 0^(w-n) ++ x[n-1:0] */
+TEST(SimplifyingNodeFactory_Exhaustive, mod_by_power_of_two)
+{
+  Context c;
+  ASTNode x = c.bv(4);
+  for (unsigned d : {2u, 4u, 8u})
+  {
+    c.checkTerm(BVMOD, 4, {x, c.konst(d, 4)});
+    EXPECT_EQ(c.nf->CreateTerm(BVMOD, 4, x, c.konst(d, 4)).GetKind(),
+              BVCONCAT);
+  }
+}
+
+/* (a ++ b) = (a ++ c) --> b = c, and the shared-tail variant */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_concat_shared_half)
+{
+  Context c;
+  ASTNode a = c.bv(2);
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+
+  ASTNode sharedHead1 = c.hf->CreateTerm(BVCONCAT, 5, a, x);
+  ASTNode sharedHead2 = c.hf->CreateTerm(BVCONCAT, 5, a, y);
+  c.checkNode(EQ, {sharedHead1, sharedHead2});
+  EXPECT_EQ(c.nf->CreateNode(EQ, sharedHead1, sharedHead2),
+            c.nf->CreateNode(EQ, x, y));
+
+  ASTNode sharedTail1 = c.hf->CreateTerm(BVCONCAT, 5, x, a);
+  ASTNode sharedTail2 = c.hf->CreateTerm(BVCONCAT, 5, y, a);
+  c.checkNode(EQ, {sharedTail1, sharedTail2});
+  EXPECT_EQ(c.nf->CreateNode(EQ, sharedTail1, sharedTail2),
+            c.nf->CreateNode(EQ, x, y));
+}
+
+/* equality and signed comparison of two sign extensions from the same
+   width reduce to the originals */
+TEST(SimplifyingNodeFactory_Exhaustive, sx_pairs)
+{
+  Context c;
+  ASTNode a = c.bv(3);
+  ASTNode b = c.bv(3);
+  ASTNode len = c.mgr.CreateBVConst(32, 6);
+  ASTNode sxa = c.hf->CreateTerm(BVSX, 6, a, len);
+  ASTNode sxb = c.hf->CreateTerm(BVSX, 6, b, len);
+
+  c.checkNode(EQ, {sxa, sxb});
+  EXPECT_EQ(c.nf->CreateNode(EQ, sxa, sxb), c.nf->CreateNode(EQ, a, b));
+
+  c.checkNode(BVSGT, {sxa, sxb});
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, sxa, sxb),
+            c.nf->CreateNode(BVSGT, a, b));
+
+  // Different source widths: the wider side's extension goes away, and
+  // the narrower side extends just up to the wider side's width.
+  ASTNode n = c.bv(2);
+  ASTNode sxn = c.hf->CreateTerm(BVSX, 6, n, len);
+  ASTNode nTo3 = c.nf->CreateTerm(BVSX, 3, n, c.mgr.CreateBVConst(32, 3));
+
+  c.checkNode(EQ, {sxn, sxb});
+  EXPECT_EQ(c.nf->CreateNode(EQ, sxn, sxb), c.nf->CreateNode(EQ, nTo3, b));
+
+  c.checkNode(BVSGT, {sxb, sxn});
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, sxb, sxn),
+            c.nf->CreateNode(BVSGT, b, nTo3));
+}
+
+/* (a ++ b) sgt (a ++ c): the shared head decides the sign, so the tails
+   compare unsigned */
+TEST(SimplifyingNodeFactory_Exhaustive, sgt_concat_shared_head)
+{
+  Context c;
+  ASTNode a = c.bv(2);
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode l = c.hf->CreateTerm(BVCONCAT, 5, a, x);
+  ASTNode r = c.hf->CreateTerm(BVCONCAT, 5, a, y);
+  c.checkNode(BVSGT, {l, r});
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, l, r), c.nf->CreateNode(BVGT, x, y));
+}
+
+/* a 1-bit ITE choosing between 0 and 1 on a 1-bit equality collapses to
+   the tested term or its complement */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_width1_boolean_to_term)
+{
+  Context c;
+  ASTNode t = c.bv(1);
+  ASTNode one = c.konst(1, 1);
+  ASTNode zero = c.konst(0, 1);
+
+  for (int constFirst = 0; constFirst < 2; constFirst++)
+  {
+    ASTNode eqOne = constFirst ? c.hf->CreateNode(EQ, one, t)
+                               : c.hf->CreateNode(EQ, t, one);
+    ASTNode eqZero = constFirst ? c.hf->CreateNode(EQ, zero, t)
+                                : c.hf->CreateNode(EQ, t, zero);
+
+    c.checkTerm(ITE, 1, {eqOne, one, zero});
+    EXPECT_EQ(c.nf->CreateTerm(ITE, 1, eqOne, one, zero), t);
+
+    c.checkTerm(ITE, 1, {eqZero, zero, one});
+    EXPECT_EQ(c.nf->CreateTerm(ITE, 1, eqZero, zero, one), t);
+
+    c.checkTerm(ITE, 1, {eqOne, zero, one});
+    c.checkTerm(ITE, 1, {eqZero, one, zero});
+    EXPECT_EQ(c.nf->CreateTerm(ITE, 1, eqOne, zero, one),
+              c.nf->CreateTerm(ITE, 1, eqZero, one, zero));
+  }
+}
+
 } // namespace

@@ -286,6 +286,35 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
             NodeFactory::CreateNode(stp::BVSGT, children[0][0], children[1][0]);
       }
 
+      //1st part is the same -> it decides the sign, so the 2nd parts
+      // compare unsigned.
+      if (result.IsNull() && children[0].GetKind() == BVCONCAT &&
+          children[1].GetKind() == BVCONCAT && children[0][0] == children[1][0])
+      {
+        result =
+            NodeFactory::CreateNode(stp::BVGT, children[0][1], children[1][1]);
+      }
+
+      // Sign extension keeps the signed value, so the comparison only
+      // needs the wider of the two originals' widths: drop the extension
+      // of the wider side, and extend the narrower side just up to it.
+      // At least one BVSX always goes away.
+      if (result.IsNull() && children[0].GetKind() == stp::BVSX &&
+          children[1].GetKind() == stp::BVSX)
+      {
+        const unsigned w0 = children[0][0].GetValueWidth();
+        const unsigned w1 = children[1][0].GetValueWidth();
+        ASTNode a = children[0][0];
+        ASTNode b = children[1][0];
+        if (w0 < w1)
+          a = NodeFactory::CreateTerm(stp::BVSX, w1, a,
+                                      bm.CreateBVConst(32, w1));
+        else if (w1 < w0)
+          b = NodeFactory::CreateTerm(stp::BVSX, w0, b,
+                                      bm.CreateBVConst(32, w0));
+        result = NodeFactory::CreateNode(stp::BVSGT, a, b);
+      }
+
       break;
 
     case stp::BVGT:
@@ -624,6 +653,31 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
     ASTNode a = NodeFactory::CreateNode(EQ, in2[1], c0);
     ASTNode b = NodeFactory::CreateNode(EQ, in2[0], c1);
     return NodeFactory::CreateNode(stp::AND, a, b);
+  }
+
+  // (a ++ b) = (a ++ c) <=> b = c, and (a ++ c) = (b ++ c) <=> a = b.
+  // Sharing a side pins the widths of the other sides to match.
+  if (BVCONCAT == k1 && BVCONCAT == k2 && in1[0] == in2[0])
+    return NodeFactory::CreateNode(EQ, in1[1], in2[1]);
+
+  if (BVCONCAT == k1 && BVCONCAT == k2 && in1[1] == in2[1])
+    return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
+
+  // Sign extension keeps the value, so the equality only needs the wider
+  // of the two originals' widths: drop the extension of the wider side,
+  // and extend the narrower side just up to it. At least one BVSX always
+  // goes away.
+  if (stp::BVSX == k1 && stp::BVSX == k2)
+  {
+    const unsigned w1 = in1[0].GetValueWidth();
+    const unsigned w2 = in2[0].GetValueWidth();
+    ASTNode a = in1[0];
+    ASTNode b = in2[0];
+    if (w1 < w2)
+      a = NodeFactory::CreateTerm(stp::BVSX, w2, a, bm.CreateBVConst(32, w2));
+    else if (w2 < w1)
+      b = NodeFactory::CreateTerm(stp::BVSX, w1, b, bm.CreateBVConst(32, w1));
+    return NodeFactory::CreateNode(EQ, a, b);
   }
 
   // This increases the number of nodes. So disable for now.
@@ -1638,6 +1692,32 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                children[0][0].GetKind() != stp::BVCONST)
         result = NodeFactory::CreateTerm(ITE, width, children[0],
                                          children[0][1], children[2]);
+      else if (width == 1 && children[0].GetKind() == EQ &&
+               children[0][0].GetValueWidth() == 1 &&
+               children[1].isConstant() && children[2].isConstant() &&
+               children[1] != children[2])
+      {
+        // A 1-bit ITE choosing between 0 and 1 on a 1-bit equality is the
+        // tested term or its complement, e.g. ITE(t = 1, 1, 0) --> t.
+        ASTNode t;
+        bool condOne = false;
+        if (children[0][0].isConstant())
+        {
+          t = children[0][1];
+          condOne = (children[0][0] == bm.CreateOneConst(1));
+        }
+        else if (children[0][1].isConstant())
+        {
+          t = children[0][0];
+          condOne = (children[0][1] == bm.CreateOneConst(1));
+        }
+        if (!t.IsNull())
+        {
+          const bool thenOne = (children[1] == bm.CreateOneConst(1));
+          result = (thenOne == condOne) ? t
+                                        : NodeFactory::CreateTerm(BVNOT, 1, t);
+        }
+      }
       break;
     }
 
@@ -2121,8 +2201,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     case stp::BVDIV:
       if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
         result = children[0];
-      if (children[1].isConstant() &&
-          CONSTANTBV::BitVector_bit_test(children[1].GetBVConst(), width - 1))
+      else if (children[1].isConstant() && hasSingleOneBit(children[1]) &&
+               lowestOneBit(children[1]) > 0)
+      {
+        // (x / 2^n) --> (0^n ++ x[width-1:n]): a division by a power of
+        // two just discards the low bits.
+        const unsigned n = lowestOneBit(children[1]);
+        result = NodeFactory::CreateTerm(
+            BVCONCAT, width, bm.CreateZeroConst(n),
+            NodeFactory::CreateTerm(BVEXTRACT, width - n, children[0],
+                                    bm.CreateBVConst(32, width - 1),
+                                    bm.CreateBVConst(32, n)));
+      }
+      else if (children[1].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[1].GetBVConst(),
+                                              width - 1))
       {
         // We are dividing by something that has a one in the MSB. It's either 1
         // or zero.
@@ -2262,6 +2355,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
       if (children[1].isConstant() && children[1] == one)
         result = bm.CreateZeroConst(width);
+
+      if (children[1].isConstant() && hasSingleOneBit(children[1]) &&
+          lowestOneBit(children[1]) > 0)
+      {
+        // (x mod 2^n) --> (0^(width-n) ++ x[n-1:0]): a remainder by a
+        // power of two just keeps the low bits.
+        const unsigned n = lowestOneBit(children[1]);
+        result = NodeFactory::CreateTerm(
+            BVCONCAT, width, bm.CreateZeroConst(width - n),
+            NodeFactory::CreateTerm(BVEXTRACT, n, children[0],
+                                    bm.CreateBVConst(32, n - 1),
+                                    bm.CreateBVConst(32, 0)));
+      }
 
       if (children[0].isConstant() && children[0] == one)
         result = NodeFactory::CreateTerm(
