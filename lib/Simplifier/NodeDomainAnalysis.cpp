@@ -449,14 +449,19 @@ namespace stp
 
     const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_intervals[0] == nullptr);
 
-    // We need to know something about the children if we want to know something about the parent.
-    // extract, bvsx, and bvzx all have constants as children.
-    if ((n.GetKind() == READ) 
-      ||(n.GetKind() == WRITE) 
-      ||(number_children > 0 && nothingKnown) 
-      ||(n.GetKind() == BVEXTRACT && nullChildZero) 
-      ||(n.GetKind() == BVSX && nullChildZero) 
-      ||(n.GetKind() == BVZX && nullChildZero) 
+    // We need to know something about the children if we want to know
+    // something about the parent. Extract, bvsx and bvzx have constant
+    // index/width children, so they never hit the nothing-known case and
+    // are skipped separately - except bvzx, the only one of them whose
+    // output has forced bits when the expression child is unknown (the
+    // zero-extension's high bits are always zero). For bvsx the high
+    // bits merely equal the child's unknown top bit, which none of the
+    // domains can represent.
+    if ((n.GetKind() == READ)
+      ||(n.GetKind() == WRITE)
+      ||(number_children > 0 && nothingKnown)
+      ||(n.GetKind() == BVEXTRACT && nullChildZero)
+      ||(n.GetKind() == BVSX && nullChildZero)
       ||(n.GetKind() == SYMBOL))
     {
       toFixedBits.insert({n, nullptr});
