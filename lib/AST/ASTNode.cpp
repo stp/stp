@@ -28,6 +28,30 @@ THE SOFTWARE.
 
 namespace stp
 {
+
+// Freed single-ASTNode blocks, linked through their own storage. Blocks
+// are only returned to the general allocator at process exit.
+static THREAD_LOCAL void* astnode_free_list = NULL;
+
+void* ASTNode::operator new(size_t size)
+{
+  if (size != sizeof(ASTNode) || astnode_free_list == NULL)
+    return ::operator new(size);
+
+  void* p = astnode_free_list;
+  astnode_free_list = *static_cast<void**>(p);
+  return p;
+}
+
+void ASTNode::operator delete(void* p)
+{
+  if (p == NULL)
+    return;
+
+  *static_cast<void**>(p) = astnode_free_list;
+  astnode_free_list = p;
+}
+
 uint8_t ASTNode::getIteration() const
 {
   return _int_node_ptr->iteration;
