@@ -2220,19 +2220,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         break;
       }
 
-      // If the msb is known. Then puts 0's or the 1's infront.
-      if (mostSignificantConstants(a0) > 0)
-      {
-        if (getConstantBit(a0, 0) == 0)
-          output = nf->CreateTerm(
-              BVCONCAT, inputValueWidth,
-              nf->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
-        else
-          output = nf->CreateTerm(
-              BVCONCAT, inputValueWidth,
-              nf->CreateMaxConst(inputValueWidth - a0.GetValueWidth()), a0);
-        break;
-      }
+      // nb. A BVSX whose argument's most significant bit is known is
+      // replaced by a concat by strength reduction.
 
       assert(a0.GetKind() != BVCONST);
 
@@ -2565,114 +2554,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       break;
     }
 
-    case BVDIV:
-    {
-      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
-      {
-        output = inputterm[0];
-        break;
-      }
-      unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
-      nlz = std::min(inputValueWidth - 1, nlz);
-
-      // We can't do this if the second operand might be zero.
-      ASTNode eq = nf->CreateNode(EQ, inputterm[1],
-                                  nf->CreateZeroConst(inputValueWidth));
-      if (nlz > 0 && eq == ASTFalse)
-      {
-        int rest = inputValueWidth - nlz;
-        ASTNode low = nf->CreateBVConst(32, rest);
-        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
-
-        ASTNode cond = nf->CreateNode(
-            EQ, nf->CreateZeroConst(nlz),
-            nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
-
-        ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     nf->CreateBVConst(32, rest - 1),
-                                     nf->CreateZeroConst(32));
-        ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        nf->CreateBVConst(32, rest - 1),
-                                        nf->CreateZeroConst(32));
-
-        ASTNode div = nf->CreateTerm(BVDIV, rest, top, bottom);
-        div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             nf->CreateZeroConst(inputValueWidth - rest), div);
-
-        output = nf->CreateTerm(ITE, inputValueWidth, cond, div,
-                                nf->CreateZeroConst(inputValueWidth));
-        break;
-      }
-
-      ASTNode lessThan = SimplifyFormula(
-          nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-      if (lessThan == ASTTrue)
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-      }
-      else
-      {
-        output = inputterm;
-      }
-      break;
-    }
-
-    case BVMOD:
-    {
-      if (inputterm[0] == inputterm[1])
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-        break;
-      }
-      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-        break;
-      }
-
-      unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
-      if (nlz > 0)
-      {
-        nlz = std::min(inputValueWidth - 1, nlz);
-        int rest = inputValueWidth - nlz;
-        ASTNode low = nf->CreateBVConst(32, rest);
-        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
-
-        ASTNode cond = nf->CreateNode(
-            EQ, nf->CreateZeroConst(nlz),
-            nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
-
-        ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     nf->CreateBVConst(32, rest - 1),
-                                     nf->CreateZeroConst(32));
-        ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        nf->CreateBVConst(32, rest - 1),
-                                        nf->CreateZeroConst(32));
-
-        // nb. This differs from the bvdiv case.
-        ASTNode div = nf->CreateTerm(BVMOD, rest, top, bottom);
-        div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             nf->CreateZeroConst(inputValueWidth - rest), div);
-
-        // nb. This differs from the bvdiv case.
-        output = nf->CreateTerm(ITE, inputValueWidth, cond, div, inputterm[0]);
-        break;
-      }
-
-      ASTNode lessThan = SimplifyFormula(
-          nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-
-      if (lessThan == ASTTrue)
-      {
-        output = inputterm[0];
-      }
-      else
-      {
-        output = inputterm;
-      }
-      break;
-    }
-
     case BVXOR:
     {
       if (inputterm.Degree() == 2 && inputterm[0] == inputterm[1])
@@ -2707,6 +2588,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case BVNAND:
     case BVNOR:
     case BVSRSHIFT:
+    // nb. Divisions and remainders with leading-zero dividends are
+    // narrowed, and those whose dividend is below the divisor are
+    // resolved, by strength reduction.
+    case BVDIV:
+    case BVMOD:
     {
       output = inputterm;
       break;
