@@ -558,6 +558,12 @@ void Cpp_interface::cleanUp()
   letMgr->cleanupParserSymbolTable();
   cache.clear();
 
+  // Every frame is going away, so don't erase the functions from the
+  // map one at a time (files can define millions of functions).
+  functions.clear();
+  for (SolverFrame* frame : frames)
+    frame->getFunctions().clear();
+
   while (frames.size() > 0)
   {
     removeFrame();

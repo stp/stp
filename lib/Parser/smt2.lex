@@ -87,23 +87,28 @@
       nptr = *let;
       found = true;
     }
-    else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
-    {
-      found = true;
-    }
-    else if (stp::GlobalParserInterface->isBitVectorFunction(s))
+    // Checking the functions before the symbols saves a symbol-table
+    // probe in files built almost entirely from define-funs. A name can't
+    // legally be both, so the order isn't observable on valid input.
+    else if (stp::GlobalParserInterface->hasFunctions() &&
+             stp::GlobalParserInterface->isBitVectorFunction(s))
     {
       smt2lval.str = new std::string(s);
       if (cleaned)
         free (cleaned);
       return  BITVECTOR_FUNCTIONID_TOK;
     }
-    else if (stp::GlobalParserInterface->isBooleanFunction(s))
+    else if (stp::GlobalParserInterface->hasFunctions() &&
+             stp::GlobalParserInterface->isBooleanFunction(s))
     {
        smt2lval.str = new std::string(s);
        if (cleaned)
          free (cleaned);
        return  BOOLEAN_FUNCTIONID_TOK;
+    }
+    else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+    {
+      found = true;
     }
 
     if (found)

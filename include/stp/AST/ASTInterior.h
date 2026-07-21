@@ -52,11 +52,12 @@ class ASTInterior : public ASTInternal
   // The vector of children
   ASTVec _children;
 
-  // The hash of (_kind, _children), computed on first use. The children
-  // are appended before the node reaches the unique table and never
-  // change afterwards, so the value is stable. Zero means "not yet
-  // computed"; a genuine zero hash is recomputed each time, harmlessly.
-  mutable size_t _cached_hash = 0;
+  // The hash of (_kind, _children), computed on first use by
+  // ASTInteriorHasher. The children are appended before the node
+  // reaches the unique table and never change afterwards, so the value
+  // is stable. Zero means "not yet computed"; the hasher remaps a
+  // genuine zero hash to one so it still caches.
+  mutable size_t _hash_cache = 0;
 
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
@@ -119,6 +120,16 @@ public:
   ASTInterior(const ASTInterior& int_node)
       : ASTInternal(int_node), _children(int_node._children),
         _value_width(int_node._value_width), _index_width(int_node._index_width)
+  {
+    is_simplified = false;
+  }
+
+  // Steals the children of a probe node that was built on the stack to
+  // search the unique table, keeping its node number and cached hash.
+  ASTInterior(ASTInterior&& int_node)
+      : ASTInternal(int_node), _children(std::move(int_node._children)),
+        _hash_cache(int_node._hash_cache), _value_width(int_node._value_width),
+        _index_width(int_node._index_width)
   {
     is_simplified = false;
   }
