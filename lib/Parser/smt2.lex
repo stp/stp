@@ -307,4 +307,10 @@ namespace stp {
   void setSMT2In(FILE* file) {
     smt2in = file;
   }
+
+  void setSMT2Interactive(bool enable) {
+    if (smt2in == NULL)
+      smt2in = stdin;
+    yy_set_interactive(enable ? 1 : 0);
+  }
 }

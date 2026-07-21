@@ -47,6 +47,10 @@ DLL_PUBLIC void setCVCIn(FILE* file);
 DLL_PUBLIC void setSMTIn(FILE* file);
 DLL_PUBLIC void setSMT2In(FILE* file);
 
+// Whether the SMT-LIB2 lexer reads a character at a time. Needed when stp
+// is driven interactively over a pipe, where block reads would deadlock.
+DLL_PUBLIC void setSMT2Interactive(bool enable);
+
 DLL_PUBLIC int SMTParse(void* AssertsQuery);
 DLL_PUBLIC int SMT2Parse();
 DLL_PUBLIC int CVCParse(void* AssertsQuery);
