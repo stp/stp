@@ -208,53 +208,6 @@ void Simplifier::UpdateMultInverseMap(const ASTNode& key, const ASTNode& value)
   MultInverseMap[key] = value;
 }
 
-// Check if key, or NOT(key) is found in the alwaysTrueSet.
-bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
-{
-  std::unordered_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
-  std::unordered_set<int>::const_iterator it2 =
-      AlwaysTrueHashSet.find(key.GetNodeNum());
-
-  if (it2 != it_end_2)
-  {
-    result = true; // The key should be replaced by TRUE.
-    return true;
-  }
-
-  int toSearch;
-  if (key.GetKind() == NOT)
-    toSearch = key.GetNodeNum() - 1;
-  else
-    toSearch = key.GetNodeNum() + 1;
-
-  it2 = AlwaysTrueHashSet.find(toSearch);
-  if (it2 != it_end_2)
-  {
-    result = false;
-    return true;
-  }
-
-  return false;
-}
-
-void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& /*key*/)
-{
-  // The always true/ always false relies on the top level constraint not being
-  // removed.
-  // however with bb equivalence checking, AIGs can figure out that the outer
-  // constraint
-  // is unncessary because it's enforced by the implicit constraint---removing
-  // it. That
-  // leaves just one instance of the constraint, so it we replace it with
-  // true/false
-  // the constraint is lost. This is subsumed by constant bit propagation, so I
-  // suspect
-  // it's not a big loss.
-
-  /*if (false)//(!nf->UserFlags.isSet("bb-equiv", "1"))
-    AlwaysTrueHashSet.insert(key.GetNodeNum());*/
-}
-
 ASTNode Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b,
                                                    bool pushNeg,
                                                    ASTNodeMap* VarConstMap)
@@ -952,15 +905,6 @@ ASTNode Simplifier::CreateSimplifiedTermITE(const ASTNode& in0,
   if (t1 == t2)
     return t1;
 
-  bool result;
-  if (CheckAlwaysTrueFormSet(t0, result))
-  {
-    if (result)
-      return t1;
-    else
-      return t2;
-  }
-
   return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(), t1.GetValueWidth(), t0,
                              t1, t2);
 }
@@ -982,15 +926,6 @@ ASTNode Simplifier::CreateSimplifiedFormulaITE(const ASTNode& in0,
       return t2;
     if (t1 == t2)
       return t1;
-
-    bool result;
-    if (CheckAlwaysTrueFormSet(t0, result))
-    {
-      if (result)
-        return t1;
-      else
-        return t2;
-    }
   }
   ASTNode result = nf->CreateNode(ITE, t0, t1, t2);
   assert(BVTypeCheck(result));
@@ -1115,16 +1050,6 @@ ASTNode Simplifier::SimplifyNotFormula(const ASTNode& a, bool pushNeg,
 
   // pushnegation if there are odd number of NOTs
   bool pn = (NotCount % 2 == 0) ? false : true;
-
-  bool alwaysTrue = false;
-  if (CheckAlwaysTrueFormSet(o, alwaysTrue))
-  {
-    if (alwaysTrue)
-      return (pn ? ASTFalse : ASTTrue);
-
-    // We don't do the false case because it is sometimes
-    // called at the top level.
-  }
 
   if (CheckSimplifyMap(o, output, pn))
   {
@@ -1270,7 +1195,6 @@ ASTNode Simplifier::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg,
   {
     c0 = SimplifyFormula(a[0], false, VarConstMap);
     c1 = SimplifyFormula(a[1], false, VarConstMap);
-    bool atResult;
     if (ASTFalse == c0)
     {
       output = ASTTrue;
@@ -1282,26 +1206,6 @@ ASTNode Simplifier::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg,
     else if (c0 == c1)
     {
       output = ASTTrue;
-    }
-    else if (CheckAlwaysTrueFormSet(c0, atResult))
-    {
-      // c0 AND (~c0 OR c1) <==> c1
-      //(~c0 AND (~c0 OR c1)) <==> TRUE
-      //(c0 AND ~c0->c1) <==> TRUE
-      //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
-      //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
-
-      if (atResult)
-        output = c1;
-      else
-        output = ASTTrue;
-    }
-    else if (CheckAlwaysTrueFormSet(c1, atResult))
-    {
-      if (atResult)
-        output = ASTTrue;
-      else
-        output = nf->CreateNode(NOT, c0);
     }
     else
     {
@@ -1340,8 +1244,6 @@ ASTNode Simplifier::SimplifyIffFormula(const ASTNode& a, bool pushNeg,
   else
     c0 = SimplifyFormula(c0, false, VarConstMap);
 
-  bool alwaysResult;
-
   if (ASTTrue == c0)
   {
     output = c1;
@@ -1366,20 +1268,6 @@ ASTNode Simplifier::SimplifyIffFormula(const ASTNode& a, bool pushNeg,
            (NOT == c1.GetKind() && c0 == c1[0]))
   {
     output = ASTFalse;
-  }
-  else if (CheckAlwaysTrueFormSet(c0, alwaysResult))
-  {
-    if (alwaysResult)
-      output = c1;
-    else
-      output = nf->CreateNode(NOT, c1);
-  }
-  else if (CheckAlwaysTrueFormSet(c1, alwaysResult))
-  {
-    if (alwaysResult)
-      output = c0;
-    else
-      output = nf->CreateNode(NOT, c0);
   }
   else
   {
@@ -1419,8 +1307,6 @@ ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
     t2 = SimplifyFormula(a[2], false, VarConstMap);
   }
 
-  bool alwaysTrue;
-
   if (ASTTrue == t0)
   {
     output = t1;
@@ -1456,13 +1342,6 @@ ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
   else if (ASTFalse == t2)
   {
     output = nf->CreateNode(AND, t0, t1);
-  }
-  else if (CheckAlwaysTrueFormSet(t0, alwaysTrue))
-  {
-    if (alwaysTrue)
-      output = t1;
-    else
-      output = t2;
   }
   else
   {
@@ -3503,8 +3382,6 @@ void Simplifier::printCacheStatus()
        << SimplifyMap->bucket_count() << endl;
   cerr << "SimplifyNegMap:" << SimplifyNegMap->size() << ":"
        << SimplifyNegMap->bucket_count() << endl;
-  cerr << "AlwaysTrueFormSet" << AlwaysTrueHashSet.size() << ":"
-       << AlwaysTrueHashSet.bucket_count() << endl;
   cerr << "MultInverseMap" << MultInverseMap.size() << ":"
        << MultInverseMap.bucket_count() << endl;
 

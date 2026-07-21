@@ -56,16 +56,13 @@ class PropagateEqualitiesOld
   ASTNode propagate(const ASTNode& a, ArrayTransformer* at);
   std::unordered_set<int> alreadyVisited;
 
-  const bool always_true;
-
   bool timedOut();
   bool timeOut = false;
   long startTime;
 
 public:
   PropagateEqualitiesOld(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
-      : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-        always_true(bm_->UserFlags.enable_always_true)
+      : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse)
   {
     simp = simp_;
     nf = nf_;
