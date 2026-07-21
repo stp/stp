@@ -481,12 +481,13 @@ namespace stp
           unsigned maxEffective = 0;
           for (unsigned i = 0; i < children.size(); i++)
           {
-            unsigned nlz = 0;
-            while (nlz < width && children[i]->isFixed(width - 1 - nlz) &&
-                   !children[i]->getValue(width - 1 - nlz))
-              nlz++;
-            if (width - nlz > maxEffective)
-              maxEffective = width - nlz;
+            // One past the highest bit of child i that might be one.
+            unsigned effective = width;
+            while (effective > 0 && children[i]->isFixed(effective - 1) &&
+                   !children[i]->getValue(effective - 1))
+              effective--;
+            if (effective > maxEffective)
+              maxEffective = effective;
           }
 
           // Adding m terms can carry ceil(log2(m)) bits upwards.
