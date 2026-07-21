@@ -234,3 +234,81 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_TRUE(eqsAgainstConstants(n));
 }
 
+
+// The following pin down that differing leading constant bits decide
+// comparisons here (via the fixed-bit transfer functions for concat and
+// the comparisons), so neither the simplifying node factory nor the
+// Simplifier needs a leading-constant rule.
+
+// Equality with differing leading constant bits folds to false.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( =
+              (concat (_ bv1 1) v0)
+              (concat (_ bv0 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Unsigned comparison decided by differing leading constant bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvugt
+              (concat (_ bv0 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Signed comparison with differing sign bits: positive > negative.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsgt
+              (concat (_ bv0 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// Signed comparison, same sign bit: the unsigned order of the leading
+// constant bits decides.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsgt
+              (concat (_ bv3 2) v0)
+              (concat (_ bv2 2) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}

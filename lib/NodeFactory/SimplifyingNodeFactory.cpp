@@ -1904,6 +1904,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       {
         result = children[0];
       }
+      // BVSX(m, BVSX(n, a)) --> BVSX(m, a): the inner sign-extension is
+      // subsumed by the outer one.
+      else if (children[0].GetKind() == stp::BVSX)
+      {
+        result = NodeFactory::CreateTerm(stp::BVSX, width, children[0][0],
+                                         children[1]);
+      }
       break;
     }
 
@@ -2022,8 +2029,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       break;
 
     case BVCONCAT:
+      // (x[i:j] ++ x[j-1:k]) --> x[i:k]: merge adjacent extracts of the
+      // same term.
+      if (children[0].GetKind() == BVEXTRACT &&
+          children[1].GetKind() == BVEXTRACT &&
+          children[0][0] == children[1][0] &&
+          children[0][2].GetUnsignedConst() ==
+              children[1][1].GetUnsignedConst() + 1)
+      {
+        result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
+                                         children[0][1], children[1][2]);
+      }
       // ((x ++ k1) ++ k2) --> (x ++ (k1 ++ k2)): merge adjacent constants.
-      if (children[0].GetKind() == BVCONCAT &&
+      else if (children[0].GetKind() == BVCONCAT &&
           children[1].GetKind() == stp::BVCONST &&
           children[0][1].GetKind() == stp::BVCONST)
       {

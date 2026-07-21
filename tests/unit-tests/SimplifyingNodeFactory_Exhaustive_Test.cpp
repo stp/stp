@@ -370,4 +370,42 @@ TEST(SimplifyingNodeFactory_Exhaustive, div_of_mod_of_and)
   }
 }
 
+/* (x[i:j] ++ x[j-1:k]) --> x[i:k]: adjacent extracts of the same term */
+TEST(SimplifyingNodeFactory_Exhaustive, concat_adjacent_extracts)
+{
+  Context c;
+  ASTNode x = c.bv(8);
+  auto idx = [&c](unsigned v) { return c.mgr.CreateBVConst(32, v); };
+
+  // Full width: collapses all the way back to x.
+  ASTNode top = c.hf->CreateTerm(BVEXTRACT, 4, x, idx(7), idx(4));
+  ASTNode bottom = c.hf->CreateTerm(BVEXTRACT, 4, x, idx(3), idx(0));
+  c.checkTerm(BVCONCAT, 8, {top, bottom});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 8, top, bottom), x);
+
+  // Partial: x[6:4] ++ x[3:1] --> x[6:1].
+  ASTNode top2 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(6), idx(4));
+  ASTNode bottom2 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(3), idx(1));
+  c.checkTerm(BVCONCAT, 6, {top2, bottom2});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 6, top2, bottom2).GetKind(), BVEXTRACT);
+
+  // Not adjacent: x[7:5] ++ x[3:0] must be left alone.
+  ASTNode top3 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(7), idx(5));
+  c.checkTerm(BVCONCAT, 7, {top3, bottom}, false);
+}
+
+/* BVSX(m, BVSX(n, a)) --> BVSX(m, a) */
+TEST(SimplifyingNodeFactory_Exhaustive, sx_of_sx)
+{
+  Context c;
+  ASTNode a = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(BVSX, 5, a, c.mgr.CreateBVConst(32, 5));
+  c.checkTerm(BVSX, 8, {inner, c.mgr.CreateBVConst(32, 8)});
+
+  ASTNode collapsed =
+      c.nf->CreateTerm(BVSX, 8, inner, c.mgr.CreateBVConst(32, 8));
+  EXPECT_EQ(collapsed.GetKind(), BVSX);
+  EXPECT_EQ(collapsed[0], a);
+}
+
 } // namespace
