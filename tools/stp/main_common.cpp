@@ -122,6 +122,11 @@ void Main::parse_file(ASTVec* AssertsQuery)
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
+    bool interactive = infile.empty(); // reading from stdin.
+    if (bm->UserFlags.interactive_read != -1)
+      interactive = bm->UserFlags.interactive_read != 0;
+    setSMT2Interactive(interactive);
+
     SMT2Parse();
     smt2lex_destroy();
   }

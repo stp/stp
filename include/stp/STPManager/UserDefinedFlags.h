@@ -139,6 +139,12 @@ public:
   // Stop after parsing the input, skipping any check-sat commands.
   bool parse_only = false;
 
+  // Whether the SMT-LIB2 lexer reads a character at a time, as needed when
+  // stp is driven interactively over a pipe, rather than in blocks.
+  // -1: character at a time for stdin, blocks for files. 0: blocks. 1:
+  // character at a time.
+  int64_t interactive_read = -1;
+
   /* SAT solving options */
 
   int64_t timeout_max_conflicts = -1;
