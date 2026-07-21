@@ -186,18 +186,6 @@ namespace stp
     return result;
   }
 
-  // Whether some value matches the fixed bits and lies within [min, max].
-  static bool hasMemberInRange(const FixedBits& bits, const CBV min,
-                               const CBV max)
-  {
-    CBV smallest = minAbove(bits, min);
-    if (smallest == nullptr)
-      return false;
-    const bool result = CONSTANTBV::BitVector_Lexicompare(smallest, max) <= 0;
-    CONSTANTBV::BitVector_Destroy(smallest);
-    return result;
-  }
-
   // Trim each domain to exactly the values the two domains share: the
   // interval becomes [min, max] of the shared values, and a bit is fixed
   // whenever every shared value agrees on it. Assumes the domains share
@@ -250,33 +238,32 @@ namespace stp
           bits = new FixedBits(interval->getWidth(),false); /// TODO do we really need to know if it's boolean??
         }
 
-        // Fix each bit that all the shared values agree on. The interval
-        // is already exactly the range of the shared values, so a bit
-        // can take a polarity iff fixing it that way leaves a value
-        // matching the fixed bits inside the interval.
-        const unsigned width = bits->getWidth();
-        for (unsigned i = 0; i < width; i++)
+        // Fix each bit that all the shared values agree on. The bounds
+        // are now the least and greatest shared values, so above their
+        // highest differing bit every shared value matches their common
+        // prefix. At that bit the bounds themselves witness both
+        // polarities, and below it nothing is forced: the prefix
+        // followed by a zero there and ones at every unfixed bit stays
+        // between the bounds, as does the prefix followed by a one
+        // there and zeroes at every unfixed bit.
+        const int width = bits->getWidth();
+        int split = -1;
+        for (int i = width - 1; i >= 0; i--)
+          if (CONSTANTBV::BitVector_bit_test(interval->minV, i) !=
+              CONSTANTBV::BitVector_bit_test(interval->maxV, i))
+          {
+            split = i;
+            break;
+          }
+
+        for (int i = width - 1; i > split; i--)
         {
           if (bits->isFixed(i))
             continue;
-
           bits->setFixed(i, true);
-          bits->setValue(i, false);
-          const bool canBeZero =
-              hasMemberInRange(*bits, interval->minV, interval->maxV);
-          bits->setValue(i, true);
-          const bool canBeOne =
-              hasMemberInRange(*bits, interval->minV, interval->maxV);
-
-          assert(canBeZero || canBeOne); // the domains share a value.
-
-          if (canBeZero == canBeOne)
-            bits->setFixed(i, false);
-          else
-          {
-            bits->setValue(i, canBeOne);
-            tighten++;
-          }
+          bits->setValue(i,
+                         CONSTANTBV::BitVector_bit_test(interval->minV, i));
+          tighten++;
         }
       }
 

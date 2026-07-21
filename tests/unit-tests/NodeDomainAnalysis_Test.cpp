@@ -356,6 +356,95 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_exhaustive)
   }
 }
 
+// Every fixed-bits pattern crossed with every interval that shares at
+// least one value with it. Checks that harmonise tightens fully: the
+// interval's bounds become the least and greatest shared values, and a
+// bit ends up fixed exactly when every shared value agrees on it.
+TEST(NodeDomainAnalysis_Test, harmonise_tightens_maximally_exhaustive)
+{
+  boot();
+  Context c;
+
+  for (unsigned width = 1; width <= 5; width++)
+  {
+    unsigned configs = 1;
+    for (unsigned i = 0; i < width; i++)
+      configs *= 3;
+    const unsigned values = 1u << width;
+
+    for (unsigned config = 0; config < configs; config++)
+    {
+      const stp::FixedBits pattern = bitsFromTernary(width, config);
+
+      for (unsigned lo = 0; lo < values; lo++)
+        for (unsigned hi = lo; hi < values; hi++)
+        {
+          // The shared values, and per bit whether they all agree.
+          unsigned smallest = 0, largest = 0;
+          bool any = false;
+          std::vector<bool> agree(width), agreedValue(width);
+          for (unsigned v = lo; v <= hi; v++)
+          {
+            if (!bitsContain(pattern, v))
+              continue;
+            if (!any)
+            {
+              smallest = v;
+              for (unsigned i = 0; i < width; i++)
+              {
+                agree[i] = true;
+                agreedValue[i] = ((v >> i) & 1) != 0;
+              }
+            }
+            else
+              for (unsigned i = 0; i < width; i++)
+                if (agree[i] && agreedValue[i] != (((v >> i) & 1) != 0))
+                  agree[i] = false;
+            largest = v;
+            any = true;
+          }
+          if (!any)
+            continue; // harmonise requires the domains to intersect.
+
+          stp::FixedBits* bits = new stp::FixedBits(pattern);
+          stp::UnsignedInterval* interval = new stp::UnsignedInterval(
+              cbvFromUnsigned(width, lo), cbvFromUnsigned(width, hi));
+
+          const std::string input = describe(bits, interval);
+
+          c.domain.harmonise(bits, interval);
+
+          const std::string msg =
+              "input: " + input + ", output: " + describe(bits, interval);
+
+          ASSERT_NE(interval, nullptr) << msg;
+          stp::CBV expectedMin = cbvFromUnsigned(width, smallest);
+          stp::CBV expectedMax = cbvFromUnsigned(width, largest);
+          ASSERT_EQ(
+              0, CONSTANTBV::BitVector_Lexicompare(interval->minV, expectedMin))
+              << msg;
+          ASSERT_EQ(
+              0, CONSTANTBV::BitVector_Lexicompare(interval->maxV, expectedMax))
+              << msg;
+          CONSTANTBV::BitVector_Destroy(expectedMin);
+          CONSTANTBV::BitVector_Destroy(expectedMax);
+
+          for (unsigned i = 0; i < width; i++)
+          {
+            const bool fixed = bits != nullptr && bits->isFixed(i);
+            ASSERT_EQ(agree[i], fixed) << "bit " << i << " " << msg;
+            if (fixed)
+              ASSERT_EQ(agreedValue[i], bits->getValue(i))
+                  << "bit " << i << " " << msg;
+          }
+
+          delete bits;
+          delete interval;
+        }
+    }
+  }
+}
+
 // Fixed bits with no interval: harmonise builds the interval, and must
 // still be idempotent.
 TEST(NodeDomainAnalysis_Test, harmonise_idempotent_bits_only)
