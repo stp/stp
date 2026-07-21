@@ -527,41 +527,14 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
   return output;
 }
 
-// number of constant bits in the most significant places.
-unsigned mostSignificantConstants(const ASTNode& n)
-{
-  if (n.isConstant())
-    return n.GetValueWidth();
-  if (n.GetKind() == BVCONCAT)
-    return mostSignificantConstants(n[0]);
-  return 0;
-}
-
-unsigned getConstantBit(const ASTNode& n, const int i)
-{
-  if (n.GetKind() == BVCONST)
-  {
-    assert((int)n.GetValueWidth() >= i + 1);
-    return CONSTANTBV::BitVector_bit_test(n.GetBVConst(),
-                                          n.GetValueWidth() - 1 - i)
-               ? 1
-               : 0;
-  }
-  if (n.GetKind() == BVCONCAT)
-    return getConstantBit(n[0], i);
-
-  assert(false);
-  abort();
-}
-
 unsigned numberOfLeadingZeroes(const ASTNode& n)
 {
-  unsigned c = mostSignificantConstants(n);
+  unsigned c = SimplifyingNodeFactory::mostSignificantConstants(n);
   if (c == 0)
     return 0;
 
   for (unsigned i = 0; i < c; i++)
-    if (getConstantBit(n, i) != 0)
+    if (SimplifyingNodeFactory::getConstantBit(n, i) != 0)
       return i;
   return c;
 }
@@ -612,57 +585,10 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
       return pushNeg ? ASTFalse : ASTTrue;
   }
 
+  // NB. Deciding these comparisons from differing leading constant bits
+  // is done by the simplifying node factory.
+
   const unsigned len = left.GetValueWidth();
-
-  if (true)
-  {
-
-    const int constStart = std::min(mostSignificantConstants(left),
-                                    mostSignificantConstants(right));
-    int comparator = 0;
-
-    for (int i = 0; i < constStart; i++)
-    {
-      const int a = getConstantBit(left, i);
-      const int b = getConstantBit(right, i);
-      assert(a == 1 || a == 0);
-      assert(b == 1 || b == 0);
-
-      if (a < b)
-      {
-        comparator = -1;
-        break;
-      }
-      else if (a > b)
-      {
-        comparator = +1;
-        break;
-      }
-    }
-
-    if (comparator != 0 && (k == BVGT || k == BVGE))
-    {
-      ASTNode status = (comparator == 1) ? ASTTrue : ASTFalse;
-      return pushNeg ? nf->CreateNode(NOT, status) : status;
-    }
-
-    if (comparator != 0 && (k == BVSGT || k == BVSGE))
-    {
-      // one is bigger than the other.
-      int sign_a = getConstantBit(left, 0);
-      int sign_b = getConstantBit(right, 0);
-      if (sign_a < sign_b)
-      {
-        comparator = 1; // a > b.
-      }
-      if (sign_a > sign_b)
-        comparator = -1;
-
-      ASTNode status = (comparator == 1) ? ASTTrue : ASTFalse;
-      return pushNeg ? nf->CreateNode(NOT, status) : status;
-    }
-
-  }
 
   const ASTNode unsigned_min = nf->CreateZeroConst(len);
   const ASTNode one = nf->CreateOneConst(len);
@@ -884,12 +810,13 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   // would check
   // each bit, not just the leading bits.
   const int constStart =
-      std::min(mostSignificantConstants(in1), mostSignificantConstants(in2));
+      std::min(SimplifyingNodeFactory::mostSignificantConstants(in1),
+               SimplifyingNodeFactory::mostSignificantConstants(in2));
 
   for (int i = 0; i < constStart; i++)
   {
-    const int a = getConstantBit(in1, i);
-    const int b = getConstantBit(in2, i);
+    const int a = SimplifyingNodeFactory::getConstantBit(in1, i);
+    const int b = SimplifyingNodeFactory::getConstantBit(in2, i);
     assert(a == 1 || a == 0);
     assert(b == 1 || b == 0);
 
@@ -2388,9 +2315,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
 
       // If the msb is known. Then puts 0's or the 1's infront.
-      if (mostSignificantConstants(a0) > 0)
+      if (SimplifyingNodeFactory::mostSignificantConstants(a0) > 0)
       {
-        if (getConstantBit(a0, 0) == 0)
+        if (SimplifyingNodeFactory::getConstantBit(a0, 0) == 0)
           output = nf->CreateTerm(
               BVCONCAT, inputValueWidth,
               nf->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
@@ -2455,16 +2382,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           }
           break;
         }
-        case BVSX:
-        {
-          // if you have BVSX(m,BVSX(n,a)) then you can drop the inner
-          // BVSX provided m is greater than n.
-          a0 = a0[0];
-          assert(hasBeenSimplified(a0));
-
-          output = nf->CreateTerm(BVSX, inputValueWidth, a0, a1);
-          break;
-        }
+        // BVSX(m,BVSX(n,a)) is collapsed to BVSX(m,a) by the
+        // simplifying node factory.
         case ITE:
         {
           const ASTNode& cond = a0[0];
@@ -2697,31 +2616,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const ASTNode& t = inputterm[0];
       const ASTNode& u = inputterm[1];
 
-      const Kind tkind = t.GetKind();
-      const Kind ukind = u.GetKind();
+      assert(BVCONST != t.GetKind() || BVCONST != u.GetKind());
 
-      assert(BVCONST != tkind || BVCONST != ukind);
-
-      if (BVEXTRACT == tkind && BVEXTRACT == ukind && t[0] == u[0])
-      {
-        // to handle the case x[m:n]@x[n-1:k] <==> x[m:k]
-        const ASTNode& t_hi = t[1];
-        const ASTNode& t_low = t[2];
-        const ASTNode& u_hi = u[1];
-        const ASTNode& u_low = u[2];
-        ASTNode c = BVConstEvaluator(
-            nf->CreateTerm(BVPLUS, 32, u_hi, nf->CreateOneConst(32)));
-        if (t_low == c)
-        {
-          output =
-              nf->CreateTerm(BVEXTRACT, inputValueWidth, t[0], t_hi, u_low);
-        }
-        else
-        {
-          output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
-        }
-      }
-      else if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT)
+      // nb. x[m:n]@x[n-1:k] <==> x[m:k] is done by the simplifying node
+      // factory.
+      if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT)
       {
 
         /// This makes the left hand child of every concat not a concat.

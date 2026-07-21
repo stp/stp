@@ -72,6 +72,14 @@ public:
   static ASTNode convertKnownShiftAmount(const Kind k,
                                             const ASTVec& children, STPMgr& bm,
                                             NodeFactory* nf);
+
+  // Number of constant bits in the most significant positions, looking
+  // through the left spine of concats.
+  static unsigned mostSignificantConstants(const ASTNode& n);
+
+  // The i'th most significant bit of n's leading constants.
+  static unsigned getConstantBit(const ASTNode& n, const int i);
+
 private:
   NodeFactory& hashing;
 
@@ -105,6 +113,11 @@ private:
   ASTNode create_gt_node(const ASTVec& children);
 
   ASTNode plusRules(const ASTVec& oldChildren);
+
+  // Compares the shared leading constant bits of a and b, unsigned.
+  // Returns +1 if a's first differing bit is set (a > b), -1 if b's is
+  // (a < b), and 0 if no differing constant bit was found.
+  static int compareLeadingConstants(const ASTNode& a, const ASTNode& b);
 
 };
 

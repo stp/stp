@@ -370,4 +370,98 @@ TEST(SimplifyingNodeFactory_Exhaustive, div_of_mod_of_and)
   }
 }
 
+/* (x[i:j] ++ x[j-1:k]) --> x[i:k]: adjacent extracts of the same term */
+TEST(SimplifyingNodeFactory_Exhaustive, concat_adjacent_extracts)
+{
+  Context c;
+  ASTNode x = c.bv(8);
+  auto idx = [&c](unsigned v) { return c.mgr.CreateBVConst(32, v); };
+
+  // Full width: collapses all the way back to x.
+  ASTNode top = c.hf->CreateTerm(BVEXTRACT, 4, x, idx(7), idx(4));
+  ASTNode bottom = c.hf->CreateTerm(BVEXTRACT, 4, x, idx(3), idx(0));
+  c.checkTerm(BVCONCAT, 8, {top, bottom});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 8, top, bottom), x);
+
+  // Partial: x[6:4] ++ x[3:1] --> x[6:1].
+  ASTNode top2 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(6), idx(4));
+  ASTNode bottom2 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(3), idx(1));
+  c.checkTerm(BVCONCAT, 6, {top2, bottom2});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 6, top2, bottom2).GetKind(), BVEXTRACT);
+
+  // Not adjacent: x[7:5] ++ x[3:0] must be left alone.
+  ASTNode top3 = c.hf->CreateTerm(BVEXTRACT, 3, x, idx(7), idx(5));
+  c.checkTerm(BVCONCAT, 7, {top3, bottom}, false);
+}
+
+/* BVSX(m, BVSX(n, a)) --> BVSX(m, a) */
+TEST(SimplifyingNodeFactory_Exhaustive, sx_of_sx)
+{
+  Context c;
+  ASTNode a = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(BVSX, 5, a, c.mgr.CreateBVConst(32, 5));
+  c.checkTerm(BVSX, 8, {inner, c.mgr.CreateBVConst(32, 8)});
+
+  ASTNode collapsed =
+      c.nf->CreateTerm(BVSX, 8, inner, c.mgr.CreateBVConst(32, 8));
+  EXPECT_EQ(collapsed.GetKind(), BVSX);
+  EXPECT_EQ(collapsed[0], a);
+}
+
+/* equality decided by differing leading constant bits */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_differing_leading_constants)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode oneTop = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), x); // 10 ++ x
+  ASTNode zeroTop = c.hf->CreateTerm(BVCONCAT, 5, c.konst(1, 2), y); // 01 ++ y
+
+  c.checkNode(EQ, {oneTop, zeroTop});
+  EXPECT_EQ(c.nf->CreateNode(EQ, oneTop, zeroTop), c.mgr.ASTFalse);
+
+  // Same leading constants: must not fold to a constant.
+  ASTNode oneTop2 = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), y);
+  c.checkNode(EQ, {oneTop, oneTop2}, false);
+}
+
+/* unsigned comparisons decided by differing leading constant bits */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_differing_leading_constants)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode hi = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), x); // 10 ++ x
+  ASTNode lo = c.hf->CreateTerm(BVCONCAT, 5, c.konst(1, 2), y); // 01 ++ y
+
+  c.checkNode(BVGT, {hi, lo});
+  c.checkNode(BVGT, {lo, hi});
+  c.checkNode(BVLT, {hi, lo});
+  c.checkNode(BVGE, {lo, hi});
+  EXPECT_EQ(c.nf->CreateNode(BVGT, hi, lo), c.mgr.ASTTrue);
+  EXPECT_EQ(c.nf->CreateNode(BVGT, lo, hi), c.mgr.ASTFalse);
+}
+
+/* signed comparisons decided by leading constant bits, honouring the sign */
+TEST(SimplifyingNodeFactory_Exhaustive, sgt_differing_leading_constants)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode y = c.bv(3);
+  ASTNode neg = c.hf->CreateTerm(BVCONCAT, 5, c.konst(3, 2), x); // 11 ++ x
+  ASTNode pos = c.hf->CreateTerm(BVCONCAT, 5, c.konst(1, 2), y); // 01 ++ y
+  ASTNode neg2 = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), y); // 10 ++ y
+
+  // Differing sign bits: the positive side is bigger.
+  c.checkNode(BVSGT, {pos, neg});
+  c.checkNode(BVSGT, {neg, pos});
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, pos, neg), c.mgr.ASTTrue);
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, neg, pos), c.mgr.ASTFalse);
+
+  // Same sign bit: the unsigned order of the leading bits decides.
+  c.checkNode(BVSGT, {neg, neg2});
+  c.checkNode(BVSLT, {neg2, neg});
+  EXPECT_EQ(c.nf->CreateNode(BVSGT, neg, neg2), c.mgr.ASTTrue);
+}
+
 } // namespace
