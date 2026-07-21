@@ -312,3 +312,91 @@ TEST(StrengthReduction_Test , __LINE__)
   ASTNode n = c.process(input);
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
+
+static bool presentWithWidth(const stp::Kind k, const ASTNode& n,
+                             const unsigned width)
+{
+  if (n.GetKind() == k && n.GetValueWidth() == width)
+    return true;
+
+  for (const auto& c : n)
+    if (presentWithWidth(k, c, width))
+      return true;
+
+  return false;
+}
+
+// A division whose dividend has fixed leading zero bits (here via a
+// mask) narrows to the width that can be non-zero. With a constant
+// divisor that fits, the guard folds away and only the narrow division
+// remains.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvudiv (bvand v0 (_ bv1023 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVDIV, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVDIV, n, 10));
+}
+
+// When the constant divisor doesn't fit into the narrowed width it
+// exceeds the dividend, so the quotient folds to zero outright.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvudiv (bvand v0 (_ bv15 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVDIV, n));
+}
+
+// The remainder version: a dividend below the divisor is returned
+// unchanged, so the remainder disappears.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvurem (bvand v0 (_ bv15 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVMOD, n));
+  ASSERT_TRUE(c.present(stp::BVAND, n));
+}
+
+// A sign extension whose argument's top bit is fixed becomes a concat.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              ((_ sign_extend 4) (bvand ((_ extract 15 0) v0) (_ bv1023 16)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVSX, n));
+}

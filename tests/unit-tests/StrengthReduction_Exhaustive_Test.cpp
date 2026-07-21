@@ -693,3 +693,125 @@ TEST(StrengthReduction_Exhaustive_Test, bvsx_to_ones_concat_via_fixedbits)
     ASSERT_EQ(c.eval(n, assignment), c.eval(result, copy));
   }
 }
+
+// A division whose dividend has fixed leading zero bits narrows to the
+// remaining width, guarded on the divisor's leading bits. The divisor
+// must be provably non-zero.
+TEST(StrengthReduction_Exhaustive_Test, div_narrowed_via_fixedbits)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVDIV, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVDIV);
+
+  // x: the top two bits are fixed zero. y: the lowest bit is fixed one.
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  xBits.setFixed(2, true);
+  xBits.setValue(2, false);
+  FixedBits yBits(width, false);
+  yBits.setFixed(0, true);
+  yBits.setValue(0, true);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::ITE);
+  ASSERT_FALSE(c.present(stp::BVDIV, result[2]));
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned v) { return (v & 1) == 1; });
+}
+
+// The remainder version narrows without needing a non-zero divisor: a
+// remainder by zero is the dividend, which the untaken branch recreates.
+TEST(StrengthReduction_Exhaustive_Test, mod_narrowed_via_fixedbits)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMOD, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMOD);
+
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  xBits.setFixed(2, true);
+  xBits.setValue(2, false);
+  FixedBits yBits(width, false);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::ITE);
+  ASSERT_EQ(result[2], x);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned) { return true; });
+}
+
+// Division is left alone when the divisor might be zero.
+TEST(StrengthReduction_Exhaustive_Test, div_not_narrowed_when_divisor_may_be_zero)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVDIV, width, x, y);
+
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  FixedBits yBits(width, false);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result, n);
+}
+
+// A remainder whose dividend's interval sits below the divisor's is the
+// dividend.
+TEST(StrengthReduction_Exhaustive_Test, mod_below_divisor_via_intervals)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMOD, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMOD);
+
+  stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 4));
+  stp::UnsignedInterval yInterval(makeCBV(width, 5), makeCBV(width, 15));
+
+  stp::NodeToUnsignedIntervalMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xInterval});
+  map.insert({y, &yInterval});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result, x);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v <= 4; },
+      [](unsigned v) { return v >= 5; });
+}
