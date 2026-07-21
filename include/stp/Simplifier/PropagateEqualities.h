@@ -50,7 +50,6 @@ class PropagateEqualities : public NodeSimplifier
   NodeFactory* nf;
   STPMgr* bm;
   const ASTNode ASTTrue, ASTFalse;
-  const bool always_true;
 
   using IdSet =  std::unordered_set<uint64_t>;
   using MapToNodeSet = std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > ;
@@ -81,8 +80,7 @@ class PropagateEqualities : public NodeSimplifier
 
 public:
   PropagateEqualities(Simplifier* simp_, NodeFactory* nf_, STPMgr* bm_)
- : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse),
-   always_true(bm_->UserFlags.enable_always_true)
+ : ASTTrue(bm_->ASTTrue), ASTFalse(bm_->ASTFalse)
   {
     simp = simp_;
     nf = nf_;
