@@ -103,31 +103,36 @@ ASTNode LetMgr::ResolveID(const ASTNode& v)
   }
 
   //Lets shadow other symbols, so check them first.
-  if (isLetDeclared(v.GetName()))
-    return resolveLet(v.GetName());
-  
+  const ASTNode* found = lookupLet(v.GetName());
+  if (found != nullptr)
+    return *found;
+
   return v;
 }
 
-ASTNode LetMgr::resolveLet(const string s)
+const ASTNode* LetMgr::lookupLet(const string& s) const
 {
-  assert(isLetDeclared(s));
-
   // Searches backwards because they could be shadowed.
-  for (auto i = stack.rbegin(); i != stack.rend(); ++i ) 
-      if ((*i).find(s) != (*i).end())
-        return (*i).find(s)->second;
-  FatalError("never here...");
+  for (auto i = stack.rbegin(); i != stack.rend(); ++i)
+  {
+    const auto found = i->find(s);
+    if (found != i->end())
+      return &found->second;
+  }
+  return nullptr;
 }
 
-bool LetMgr::isLetDeclared(const string s)
+ASTNode LetMgr::resolveLet(const string& s) const
 {
-  for (auto frame : stack )
-    if (frame.find(s) != frame.end())
-      return true;
+  const ASTNode* found = lookupLet(s);
+  if (found == nullptr)
+    FatalError("never here...");
+  return *found;
+}
 
-  return false;
-
+bool LetMgr::isLetDeclared(const string& s) const
+{
+  return lookupLet(s) != nullptr;
 }
 
 void LetMgr::cleanupParserSymbolTable() 
