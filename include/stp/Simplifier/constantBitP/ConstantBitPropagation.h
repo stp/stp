@@ -70,8 +70,9 @@ class ConstantBitPropagation
 
   bool topFixed;
 
-  // A vector that's reused.
+  // Vectors that are reused.
   vector<unsigned> previousChildrenFixedCount;
+  vector<FixedBits*> childrenBits;
 
   void printNodeWithFixings();
 

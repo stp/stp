@@ -503,21 +503,34 @@ void ConstantBitPropagation::propagate()
            << endl;
     }
 
-    // get a copy of the current fixing from the cache.
-    int previousTop = getCurrentFixedBits(n)->countFixed();
+    // Fetch each FixedBits from the map once per visit; the map lookups
+    // dominate the cost of propagation on large problems.
+    FixedBits* nBits = getCurrentFixedBits(n);
+    int previousTop = nBits->countFixed();
 
-    // get the current for the children.
+    const unsigned degree = n.GetChildren().size();
+    childrenBits.clear();
     previousChildrenFixedCount.clear();
 
     // get a copy of the current fixing from the cache.
-    for (unsigned i = 0; i < n.GetChildren().size(); i++)
+    for (unsigned i = 0; i < degree; i++)
     {
-      previousChildrenFixedCount.push_back(
-          getCurrentFixedBits(n[i])->countFixed());
+      FixedBits* cb = getCurrentFixedBits(n[i]);
+      childrenBits.push_back(cb);
+      previousChildrenFixedCount.push_back(cb->countFixed());
     }
 
-    // derive the new ones.
-    int newCount = getUpdatedFixedBits(n)->countFixed();
+    // derive the new ones. (As getUpdatedFixedBits, but reusing the
+    // already-fetched FixedBits.)
+    if (SYMBOL != n.GetKind())
+    {
+      assert(status != CONFLICT);
+      status = dispatchToTransferFunctions(mgr, n.GetKind(), childrenBits,
+                                           *nBits, n, msm);
+      assert(((unsigned)nBits->getWidth()) == n.GetValueWidth() ||
+             nBits->getWidth() == 1);
+    }
+    int newCount = nBits->countFixed();
 
     if (CONFLICT == status)
       return;
@@ -532,16 +545,15 @@ void ConstantBitPropagation::propagate()
         scheduleUp(n); // schedule everything that depends on n.
       }
 
-      for (unsigned i = 0; i < n.GetChildren().size(); i++)
+      for (unsigned i = 0; i < degree; i++)
       {
-        if (getCurrentFixedBits(n[i])->countFixed() !=
-            previousChildrenFixedCount[i])
+        if (childrenBits[i]->countFixed() != previousChildrenFixedCount[i])
         {
           if (debug_cBitProp_messages)
           {
             cerr << "Changed: " << n[i].GetNodeNum()
                  << " from:" << previousChildrenFixedCount[i]
-                 << "to:" << *getCurrentFixedBits(n[i]) << endl;
+                 << "to:" << *childrenBits[i] << endl;
           }
 
           assert(!n[i].isConstant());
