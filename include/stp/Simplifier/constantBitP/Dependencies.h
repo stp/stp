@@ -57,25 +57,32 @@ private:
       return;
 
     ASTNodeSet* vec;
+    bool firstVisit;
     const auto it = dependents.find(current.GetNodeNum());
     if (dependents.end() == it)
     {
       // add it in with a reference to the vector.
       vec = new ASTNodeSet();
       dependents.insert({current.GetNodeNum(), vec});
+      firstVisit = true;
     }
     else
     {
       vec = it->second;
+      firstVisit = false;
     }
 
     if (prior != current) // initially called with both the same.
     {
-      if (vec->count(prior) == 0)
-        vec->insert(prior);
-      else
+      if (!vec->insert(prior).second)
         return; // already been added in.
     }
+
+    // On a repeat visit through a new parent, the edges to the children
+    // are already recorded; descending again would redo a hash find per
+    // child for every extra parent.
+    if (!firstVisit)
+      return;
 
     for (const auto &child: current)
     {
