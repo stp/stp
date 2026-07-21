@@ -39,10 +39,10 @@ void LetMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr)
   LetExprMgr(var.GetName(), letExpr);
 }
 
-//Creates a new binding.  
+//Creates a new binding.
 void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
-  assert(stack.size() > 0);
+  assert(frames.size() > 0);
 
   // In CVC lets are available immediately. In SMTLIB2 it's only when the list of them has all been done.
   if (frameMode)
@@ -56,24 +56,33 @@ void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
   }
   else
   {
-    if (stack.back().find(name) != stack.back().end())
+    if (!insertIntoFrame(name, letExpr))
       {
         string msg = "Let already created:" + name;
         FatalError(msg.c_str());
       }
-
-    stack.back().insert(make_pair(name,letExpr));
   }
 }
 
-// We're ready for these bindings to participate. 
+bool LetMgr::insertIntoFrame(const string& name, const ASTNode& letExpr)
+{
+  auto& shadows = bindings[name];
+  if (!shadows.empty() && shadows.back().first == frames.size() - 1)
+    return false;
+
+  shadows.emplace_back(frames.size() - 1, letExpr);
+  frames.back().push_back(name);
+  return true;
+}
+
+// We're ready for these bindings to participate.
 void LetMgr::commit()
 {
   if (interim.size() == 0)
     return;
 
   for (const auto& k : interim)
-    stack.back().insert(k);
+    insertIntoFrame(k.first, k.second);
   interim.clear();
 }
 
@@ -81,15 +90,23 @@ void LetMgr::commit()
 void LetMgr::push()
 {
   commit();
-  stack.push_back(MapType());
+  frames.push_back(std::vector<string>());
 }
 
 void LetMgr::pop()
 {
-  if (stack.size() == 0)
+  if (frames.size() == 0)
     FatalError("Popping from empty let stack");
 
-  stack.erase(stack.end() - 1);
+  for (const string& name : frames.back())
+  {
+    auto it = bindings.find(name);
+    assert(it != bindings.end());
+    it->second.pop_back();
+    if (it->second.empty())
+      bindings.erase(it);
+  }
+  frames.erase(frames.end() - 1);
 }
 
 // this function looks up the symbols let-binding and returns the
@@ -112,14 +129,12 @@ ASTNode LetMgr::ResolveID(const ASTNode& v)
 
 const ASTNode* LetMgr::lookupLet(const string& s) const
 {
-  // Searches backwards because they could be shadowed.
-  for (auto i = stack.rbegin(); i != stack.rend(); ++i)
-  {
-    const auto found = i->find(s);
-    if (found != i->end())
-      return &found->second;
-  }
-  return nullptr;
+  const auto found = bindings.find(s);
+  if (found == bindings.end())
+    return nullptr;
+
+  // The innermost binding shadows the others.
+  return &found->second.back().second;
 }
 
 ASTNode LetMgr::resolveLet(const string& s) const
@@ -144,7 +159,8 @@ void LetMgr::cleanupParserSymbolTable()
 void LetMgr::CleanupLetIDMap(void)
 {
   interim.clear();
-  stack.clear();
+  bindings.clear();
+  frames.clear();
   push();
 }
 

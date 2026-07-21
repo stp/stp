@@ -229,9 +229,9 @@ bit{DIGIT}+     {
     	nptr= stp::GlobalParserInterface->LookupOrCreateSymbol(str);
     	found = true;
     }
-    else if (stp::GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
+    else if (const stp::ASTNode* let = stp::GlobalParserInterface->letMgr->lookupLet(str)) // a let.
     {
-    	nptr= stp::GlobalParserInterface->letMgr->resolveLet(str);
+    	nptr= *let;
     	found = true;
     }
 

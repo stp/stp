@@ -83,9 +83,9 @@
     stp::ASTNode nptr;
     bool found = false;
 
-    if (stp::GlobalParserInterface->letMgr->isLetDeclared(s)) // Lets shadow everything else.
+    if (const stp::ASTNode* let = stp::GlobalParserInterface->letMgr->lookupLet(s)) // Lets shadow everything else.
     {
-      nptr = stp::GlobalParserInterface->letMgr->resolveLet(s);
+      nptr = *let;
       found = true;
     }
     else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
