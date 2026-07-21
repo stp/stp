@@ -1676,8 +1676,87 @@ namespace CONSTANTBV {
     return(result);
   }
 
+  /* Fast path for BitVector_from_Dec: Horner evaluation with a word-level
+     multiply-accumulate. The digits are processed most-significant-first in
+     chunks of up to LOG10 digits: value = value * 10^chunklen + chunk. Each
+     step costs one pass over the words, instead of the shift-and-add
+     multiplies of the general path. Requires word * chunkbase + carry to fit
+     into an unsigned long long, i.e. 2 * BITS bits (the caller checks).
+     Reports ErrCode_Ovfl as soon as the accumulated value no longer fits in
+     the vector, and ErrCode_Pars on the first non-digit. */
+  static ErrCode BitVector_from_Dec_wordwise(unsigned int *  addr,
+                                             unsigned char * string)
+  {
+    unsigned int  bits = bits_(addr);
+    unsigned int  mask = mask_(addr);
+    unsigned int  size = size_(addr);
+    unsigned int  length;
+    unsigned int  chunk;
+    unsigned int  chunkbase;
+    unsigned int  count;
+    unsigned int  i;
+    unsigned long long product;
+    unsigned long long carry;
+    boolean minus;
+    int     digit;
+
+    if (bits == 0) return(ErrCode_Ok);
+    length = strlen((char *) string);
+    if (length == 0) return(ErrCode_Pars);
+    digit = (int) *string;
+    if ((minus = (digit == (int) '-')) ||
+        (digit == (int) '+'))
+      {
+        string++;
+        if (--length == 0) return(ErrCode_Pars);
+      }
+    BitVector_Empty(addr);
+    while (length > 0)
+      {
+        count = length % LOG10;
+        if (count == 0) count = LOG10;
+        chunk = 0;
+        chunkbase = 1;
+        while (count-- > 0)
+          {
+            digit = (int) *string++; length--;
+            /* separate because isdigit() is likely a macro! */
+            if (isdigit(digit) != 0)
+              {
+                chunk = (chunk * 10) +
+                        ((unsigned int) digit - (unsigned int) '0');
+                chunkbase *= 10;
+              }
+            else return(ErrCode_Pars);
+          }
+        /* addr = addr * chunkbase + chunk; carry stays below chunkbase,
+           so product < 2^BITS * chunkbase + chunkbase <= 2^(2*BITS). */
+        carry = (unsigned long long) chunk;
+        for ( i = 0; i < size; i++ )
+          {
+            product = ((unsigned long long) *(addr+i)) * chunkbase + carry;
+            *(addr+i) = (unsigned int) product;
+            carry = product >> BITS;
+          }
+        if ((carry != 0) || ((*(addr+size-1) & ~ mask) != 0))
+          return(ErrCode_Ovfl);
+      }
+    if (minus)
+      {
+        BitVector_Negate(addr,addr);
+        if ((*(addr + size - 1) & mask & ~ (mask >> 1)) == 0)
+          return(ErrCode_Ovfl);
+      }
+    return(ErrCode_Ok);
+  }
+
   ErrCode BitVector_from_Dec(unsigned int *  addr, unsigned char * string)
   {
+    if ((BITS << 1) <= (unsigned int) (sizeof(unsigned long long) << 3))
+      {
+        return(BitVector_from_Dec_wordwise(addr,string));
+      }
+
     ErrCode error = ErrCode_Ok;
     unsigned int  bits = bits_(addr);
     unsigned int  mask = mask_(addr);
