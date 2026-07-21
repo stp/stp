@@ -400,3 +400,61 @@ TEST(StrengthReduction_Test , __LINE__)
   ASTNode n = c.process(input);
   ASSERT_FALSE(c.present(stp::BVSX, n));
 }
+
+// A multiplication whose operands are masked down narrows to the width
+// the product can occupy: here 2 + 3 bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvmul (bvand v0 (_ bv3 20)) (bvand v1 (_ bv7 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVMULT, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVMULT, n, 5));
+}
+
+// An addition of two masked operands narrows to the width the sum can
+// occupy: here 4 + 1 carry bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvadd (bvand v0 (_ bv15 20)) (bvand v1 (_ bv15 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVPLUS, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVPLUS, n, 5));
+}
+
+// An addition whose operands split at a bit boundary becomes a concat:
+// no adder, no bitwise operation at all.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvadd (bvand v0 (_ bv240 20)) (bvand v1 (_ bv15 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVPLUS, n));
+  ASSERT_FALSE(c.present(stp::BVNOT, n));
+  ASSERT_TRUE(c.present(stp::BVCONCAT, n));
+}
