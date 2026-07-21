@@ -81,6 +81,13 @@ class Cpp_interface
   };
   std::unordered_map<std::string, Function> functions;
 
+  // The function most recently found by isBitVectorFunction or
+  // isBooleanFunction, letting applyFunction skip a second hash probe when
+  // the parser applies the function the lexer just identified. Pointers
+  // into the map are stable except across erase, so this is cleared
+  // whenever a frame is removed.
+  const Function* last_found_function = nullptr;
+
   // Nested helper class to encapsulate a frame (i.e., between push a pop)
   class SolverFrame
   {
@@ -164,14 +171,14 @@ public:
 
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
-  DLL_PUBLIC void storeFunction(const std::string name, const ASTVec& params,
+  DLL_PUBLIC void storeFunction(const std::string& name, const ASTVec& params,
                                 const ASTNode& function);
 
-  DLL_PUBLIC ASTNode applyFunction(const std::string name,
+  DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
 
-  DLL_PUBLIC bool isBitVectorFunction(const std::string name);
-  DLL_PUBLIC bool isBooleanFunction(const std::string name);
+  DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
+  DLL_PUBLIC bool isBooleanFunction(const std::string& name);
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
   DLL_PUBLIC bool LookupSymbol(const char* const name, ASTNode& output);

@@ -1,6 +1,5 @@
 /*%option reentrant
 %option bison-bridge*/
-%option always-interactive
 %option noyywrap
 %option nounput
 %option noreject
