@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTNode.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace simplifier
 {
@@ -37,16 +38,14 @@ using std::endl;
 
 class WorkList
 {
-  /* Rough worklist. Constraint Programming people have lovely structures to do
-   * this
-   * The set (on my machine), is implemented by red-black trees. Deleting just
-   * from one end may unbalance the tree??
-   */
-
 private:
+  typedef ankerl::unordered_dense::set<stp::ASTNode, ASTNode::ASTNodeHasher,
+                                       ASTNode::ASTNodeEqual>
+      WorkListSetType;
+
   // select nodes from the cheap_worklist first.
-  std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> cheap_workList;    
-  std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual> expensive_workList; 
+  WorkListSetType cheap_workList;
+  WorkListSetType expensive_workList;
 
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
@@ -142,20 +141,10 @@ public:
   void print()
   {
     cerr << "+Worklist" << endl;
-    std::unordered_set<stp::ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::const_iterator it = cheap_workList.begin();
-    while (it != cheap_workList.end())
-    {
-      cerr << *it << " ";
-      it++;
-    }
-
-    it = expensive_workList.begin();
-    while (it != expensive_workList.end())
-    {
-      cerr << *it << " ";
-      it++;
-    }
-
+    for (const auto& n : cheap_workList)
+      cerr << n << " ";
+    for (const auto& n : expensive_workList)
+      cerr << n << " ";
     cerr << "-Worklist" << endl;
   }
 };
