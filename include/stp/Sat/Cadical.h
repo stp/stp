@@ -1,7 +1,6 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: May, 2022
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,35 +22,48 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
- * Wraps around CORE minisat.
+ * Wraps around Cadical
  */
 
-#ifndef MINISATCORE_H_
-#define MINISATCORE_H_
+#ifndef CADICAL_H_
+#define CADICAL_H_
 
 #include "SATSolver.h"
-
-namespace Minisat
-{
-class Solver;
-}
+#include "src/cadical.hpp"
+#include <chrono>
 
 namespace stp
 {
 #if defined(__GNUC__) || defined(__clang__)
-  class __attribute__((visibility("default"))) MinisatCore : public SATSolver
+  class __attribute__((visibility("default"))) Cadical : public SATSolver
 #else
-  class MinisatCore : public SATSolver
+  class Cadical : public SATSolver
 #endif
-
-
 {
-  Minisat::Solver* s;
+  uint32_t next_variable = 0;
+  CaDiCaL::Solver * s;
+
+  // Cadical has no wall-clock limit of its own; it polls a Terminator
+  // during search, so a deadline check gives us setMaxTime().
+  class TimeLimit : public CaDiCaL::Terminator
+  {
+  public:
+    std::chrono::steady_clock::time_point deadline;
+    bool armed = false;
+    bool terminate() override
+    {
+      return armed && std::chrono::steady_clock::now() >= deadline;
+    }
+  };
+  TimeLimit time_limit;
+
+  int64_t max_confl = -1;
+  int64_t max_time = -1; // seconds
 
 public:
-  MinisatCore();
+  Cadical();
 
-  ~MinisatCore();
+  ~Cadical();
 
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
@@ -59,9 +71,11 @@ public:
 
   bool solve(bool& timeout_expired); // Search without assumptions.
 
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
+  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
+
+  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 
   virtual bool simplify(); // Removes already satisfied clauses.
 
@@ -77,13 +91,10 @@ public:
 
   void printStats() const;
 
-  virtual lbool true_literal() const { return ((uint8_t)0); }
-  virtual lbool false_literal() const { return ((uint8_t)1); }
+  virtual lbool true_literal() const { return ((uint8_t)1); }
+  virtual lbool false_literal() const { return ((uint8_t)-1); }
   virtual lbool undef_literal() const { return ((uint8_t)2); }
 
-  virtual int nClauses();
-
-  //bool unitPropagate(const vec_literals& ps);
 };
 }
 
