@@ -71,6 +71,9 @@ void Cpp_interface::addFrame()
 
 void Cpp_interface::removeFrame()
 {
+    // Deleting the frame erases its functions from the map.
+    last_found_function = nullptr;
+
     // obtain the last frame
     SolverFrame* last = frames.back();
 
@@ -212,7 +215,7 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
     FatalError("Should have been removed...");
 }
 
-void Cpp_interface::storeFunction(const string name, const ASTVec& params,
+void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                                   const ASTNode& function)
 {
   Function f;
@@ -239,13 +242,21 @@ void Cpp_interface::storeFunction(const string name, const ASTVec& params,
   getCurrentFunctions().push_back(f.name);
 }
 
-ASTNode Cpp_interface::applyFunction(const string name, const ASTVec& params)
+ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
 {
-  if (functions.find(name) == functions.end())
-    FatalError("Trying to apply function which has not been defined.");
+  const Function* fp = last_found_function;
+  if (fp == NULL || fp->name != name)
+  {
+    const auto found = functions.find(name);
+    if (found == functions.end())
+      FatalError("Trying to apply function which has not been defined.");
+    fp = &found->second;
+  }
 
-  Function f;
-  f = functions[string(name)];
+  const Function& f = *fp;
+
+  if (f.params.size() != params.size())
+    FatalError("Actual parameters differ in number from formal");
 
   ASTNodeMap fromTo;
   for (size_t i = 0, size = f.params.size(); i < size; ++i)
@@ -263,16 +274,28 @@ ASTNode Cpp_interface::applyFunction(const string name, const ASTVec& params)
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
 }
 
-bool Cpp_interface::isBitVectorFunction(const string name)
+bool Cpp_interface::isBitVectorFunction(const string& name)
 {
-  return ((functions.find(name) != functions.end()) &&
-          functions.find(name)->second.function.GetType() == BITVECTOR_TYPE);
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return false;
+
+  last_found_function = &found->second;
+  return found->second.function.GetType() == BITVECTOR_TYPE;
 }
 
-bool Cpp_interface::isBooleanFunction(const string name)
+bool Cpp_interface::isBooleanFunction(const string& name)
 {
-  return ((functions.find(name) != functions.end()) &&
-          functions.find(name)->second.function.GetType() == BOOLEAN_TYPE);
+  // Usually called straight after isBitVectorFunction on the same name.
+  if (last_found_function != NULL && last_found_function->name == name)
+    return last_found_function->function.GetType() == BOOLEAN_TYPE;
+
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return false;
+
+  last_found_function = &found->second;
+  return found->second.function.GetType() == BOOLEAN_TYPE;
 }
 
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
