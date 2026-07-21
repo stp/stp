@@ -136,6 +136,9 @@ public:
 
   bool exit_after_CNF = false;
 
+  // Stop after parsing the input, skipping any check-sat commands.
+  bool parse_only = false;
+
   /* SAT solving options */
 
   int64_t timeout_max_conflicts = -1;
