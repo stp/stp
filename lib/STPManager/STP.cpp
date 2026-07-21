@@ -604,6 +604,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     if (bm->UserFlags.stats_flag)
       cerr << "simplification made the problem harder, reverting." << endl;
+
+    // Variable-to-constant assignments discovered during the discarded
+    // simplification can't make the problem harder, so they are re-applied
+    // to the reverted formula.
+    ASTNodeMap keptConstants;
+    for (const auto& e : *simp->Return_SolverMap())
+      if (e.first.GetKind() == SYMBOL && e.second.isConstant() &&
+          revert->initialSolverMap.find(e.first) ==
+              revert->initialSolverMap.end())
+        keptConstants.insert(e);
+
     inputToSat = revert->toRevertTo;
 
     // I do this to clear the substitution/solver map.
@@ -614,6 +625,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     simp->Return_SolverMap()->insert(revert->initialSolverMap.begin(),
                                      revert->initialSolverMap.end());
     revert->initialSolverMap.clear();
+
+    if (keptConstants.size() > 0)
+    {
+      if (bm->UserFlags.stats_flag)
+        cerr << "Re-applying " << keptConstants.size()
+             << " discovered constants." << endl;
+      ASTNodeMap cache;
+      inputToSat = SubstitutionMap::replace(inputToSat, keptConstants, cache,
+                                            bm->defaultNodeFactory);
+      simp->Return_SolverMap()->insert(keptConstants.begin(),
+                                       keptConstants.end());
+      bm->ASTNodeStats("after reverting: ", inputToSat);
+    }
 
     // Copy back what we knew about arrays at the start..
     arrayTransformer->arrayToIndexToRead.clear();
