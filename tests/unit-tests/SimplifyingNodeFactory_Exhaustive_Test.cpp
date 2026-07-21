@@ -331,4 +331,43 @@ TEST(SimplifyingNodeFactory_Exhaustive, bvor_zero)
   c.checkTerm(stp::BVOR, 3, {c.konst(0, 3), x, y});
 }
 
+/* ((s & t) mod t) / s and (t & (s mod t)) / s: both become
+   ite(s = 0, max, ite((s & t) = s AND s < t, 1, 0)), removing the
+   division and the modulus. The original expressions:
+     873:(NOT 872:(EQ
+       842:(BVDIV
+         838:(BVMOD
+           576:(BVAND 42:s 48:t)
+           48:t)
+         42:s)
+       870:(BVDIV
+         866:(BVAND
+           48:t
+           854:(BVMOD 42:s 48:t))
+         42:s)))  */
+TEST(SimplifyingNodeFactory_Exhaustive, div_of_mod_of_and)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode s = c.bv(w);
+    ASTNode t = c.bv(w);
+
+    ASTNode modOfAnd =
+        c.hf->CreateTerm(BVMOD, w, c.hf->CreateTerm(stp::BVAND, w, s, t), t);
+    c.checkTerm(BVDIV, w, {modOfAnd, s});
+
+    ASTNode andOfMod =
+        c.hf->CreateTerm(stp::BVAND, w, t, c.hf->CreateTerm(BVMOD, w, s, t));
+    c.checkTerm(BVDIV, w, {andOfMod, s});
+
+    // Both forms must produce the identical node, so an equality between
+    // them folds to true.
+    ASTNode lhs = c.nf->CreateTerm(BVDIV, w, modOfAnd, s);
+    ASTNode rhs = c.nf->CreateTerm(BVDIV, w, andOfMod, s);
+    EXPECT_EQ(lhs, rhs);
+    EXPECT_EQ(lhs.GetKind(), ITE);
+  }
+}
+
 } // namespace
