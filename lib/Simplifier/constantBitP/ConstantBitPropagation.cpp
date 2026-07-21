@@ -558,9 +558,13 @@ void ConstantBitPropagation::propagate()
 
           assert(!n[i].isConstant());
 
-          // All the immediate parents of this child need to be rescheduled.
-          // Shouldn't reschuedule 'n' but it does.
-          scheduleUp(n[i]);
+          // All the immediate parents of this child need to be
+          // rescheduled - except 'n' itself: the transfer function that
+          // just ran left 'n' at its fixed point for exactly these child
+          // values, so an immediate revisit derives nothing.
+          for (const auto& parent : *dependents->getDependents(n[i]))
+            if (!(parent == n))
+              workList->push(parent);
 
           // Scheduling the child updates all the values that feed into it.
           workList->push(n[i]);
