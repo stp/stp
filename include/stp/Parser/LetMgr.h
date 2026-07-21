@@ -49,6 +49,9 @@ private:
   std::vector<MapType> stack;
   MapType interim;
 
+  // The expression the innermost binding of s maps to, or nullptr.
+  const ASTNode* lookupLet(const string& s) const;
+
 public:
   
   bool frameMode = true;
@@ -71,9 +74,9 @@ public:
   void CleanupLetIDMap(void);
 
   // Has a let with this name has already been declared.
-  bool isLetDeclared(string s);
+  bool isLetDeclared(const string& s) const;
 
-  ASTNode resolveLet(const string s);
+  ASTNode resolveLet(const string& s) const;
   ASTNode ResolveID(const ASTNode& var);
 
   // Functions that are used to create LET expressions
