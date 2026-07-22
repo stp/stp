@@ -354,13 +354,30 @@ public:
   }
 
   // True if some bit is fixed in both, but to different values. Reads the
-  // bool arrays eight bytes at a time; no packing, so an early hit is
-  // nearly free.
+  // bool arrays as 64-bit lanes; no packing, so an early hit is nearly
+  // free. Branching once per 64 bools rather than per lane lets the
+  // compiler vectorise the block.
   bool disagrees(const FixedBits& other) const
   {
     static_assert(sizeof(bool) == 1, "bools are loaded eight at a time");
     assert(other.width == width);
     unsigned i = 0;
+    for (; i + 64 <= width; i += 64)
+    {
+      uint64_t acc = 0;
+      for (unsigned b = 0; b < 64; b += 8)
+      {
+        uint64_t f0, v0, f1, v1;
+        memcpy(&f0, fixed + i + b, 8);
+        memcpy(&v0, values + i + b, 8);
+        memcpy(&f1, other.fixed + i + b, 8);
+        memcpy(&v1, other.values + i + b, 8);
+        // The bools are 0x00/0x01 bytes.
+        acc |= f0 & f1 & (v0 ^ v1);
+      }
+      if (acc != 0)
+        return true;
+    }
     for (; i + 8 <= width; i += 8)
     {
       uint64_t f0, v0, f1, v1;
@@ -368,7 +385,6 @@ public:
       memcpy(&v0, values + i, 8);
       memcpy(&f1, other.fixed + i, 8);
       memcpy(&v1, other.values + i, 8);
-      // The bools are 0x00/0x01 bytes.
       if ((f0 & f1 & (v0 ^ v1)) != 0)
         return true;
     }
