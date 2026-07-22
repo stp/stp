@@ -57,10 +57,10 @@ std::ostream& operator<<(std::ostream& output, const FixedBits& h)
 
 void FixedBits::fixToZero()
 {
-  for (unsigned i = 0; i < getWidth(); i++)
+  for (unsigned w = 0; w < numWords(); w++)
   {
-    setFixed(i, true);
-    setValue(i, false);
+    fixedW_[w] = (w == numWords() - 1) ? topMask() : ~0ULL;
+    valueW_[w] = 0;
   }
 }
 
@@ -70,7 +70,7 @@ stp::CBV FixedBits::GetMinBVConst() const
 
   for (unsigned i = 0; i < width; i++)
   {
-    if (fixed[i] && values[i])
+    if (isFixedToOne(i))
       CONSTANTBV::BitVector_Bit_On(result, i);
   }
 
@@ -83,7 +83,7 @@ stp::CBV FixedBits::GetMaxBVConst() const
 
   for (unsigned i = 0; i < width; i++)
   {
-    if (!fixed[i] || values[i])
+    if (!isFixed(i) || getValue(i))
       CONSTANTBV::BitVector_Bit_On(result, i);
   }
 
@@ -99,7 +99,7 @@ stp::CBV FixedBits::GetBVConst() const
 
   for (unsigned i = 0; i < width; i++)
   {
-    if (values[i])
+    if (getValue(i))
       CONSTANTBV::BitVector_Bit_On(result, i);
   }
 
@@ -126,19 +126,19 @@ stp::CBV FixedBits::GetBVConst(unsigned to, unsigned from) const
 void FixedBits::init(const FixedBits& copy)
 {
   width = copy.width;
-  fixed = new bool[width];
-  values = new bool[width];
   representsBoolean = copy.representsBoolean;
+  allocate();
 
-  memcpy(fixed, copy.fixed, width * sizeof(bool));
-  memcpy(values, copy.values, width * sizeof(bool));
+  memcpy(fixedW_, copy.fixedW_, numWords() * sizeof(uint64_t));
+  memcpy(valueW_, copy.valueW_, numWords() * sizeof(uint64_t));
 }
 
 bool FixedBits::isTotallyFixed() const
 {
-  for (unsigned i = 0; i < width; i++)
+  for (unsigned w = 0; w < numWords(); w++)
   {
-    if (!fixed[i])
+    const uint64_t mask = (w == numWords() - 1) ? topMask() : ~0ULL;
+    if (fixedW_[w] != mask)
       return false;
   }
 
@@ -147,9 +147,9 @@ bool FixedBits::isTotallyFixed() const
 
 bool FixedBits::isTotallyUnfixed() const
 {
-  for (unsigned i = 0; i < width; i++)
+  for (unsigned w = 0; w < numWords(); w++)
   {
-    if (fixed[i])
+    if (fixedW_[w] != 0)
       return false;
   }
 
@@ -160,14 +160,13 @@ FixedBits::FixedBits(unsigned n, bool isbool)
 {
   assert(n > 0);
 
-  fixed = new bool[n];
-  values = new bool[n];
   width = n;
+  allocate();
 
-  for (unsigned i = 0; i < width; i++)
+  for (unsigned w = 0; w < numWords(); w++)
   {
-    fixed[i] = false;  // I don't know if there's a default value??
-    values[i] = false; // stops it printing out junk.
+    fixedW_[w] = 0;
+    valueW_[w] = 0; // stops it printing out junk.
   }
 
   representsBoolean = isbool;

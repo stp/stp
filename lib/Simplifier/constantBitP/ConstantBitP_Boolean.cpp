@@ -311,32 +311,45 @@ Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& result)
 Result bvNotBothWays(FixedBits& a, FixedBits& output)
 {
   assert(a.getWidth() == output.getWidth());
-  const int bitWidth = a.getWidth();
+  const unsigned width = a.getWidth();
+  const unsigned words = (width + 63) / 64;
 
   Result result = NO_CHANGE;
 
-  for (int i = 0; i < bitWidth; i++)
+  for (unsigned w = 0; w < words; w++)
   {
-    // error if they are the same.
-    if (a.isFixed(i) && output.isFixed(i) &&
-        (a.getValue(i) == output.getValue(i)))
+    uint64_t fa, va, fo, vo;
+    a.fillPackedWord(w, fa, va);
+    output.fillPackedWord(w, fo, vo);
+
+    // Error where both are fixed to the same value.
+    const uint64_t conflict = fa & fo & ~(va ^ vo);
+
+    uint64_t addOut = fa & ~fo;
+    uint64_t addA = fo & ~fa;
+
+    if (conflict != 0)
     {
+      // Match the bit-at-a-time original: bits below the first conflicting
+      // one are still fixed before the conflict is reported.
+      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      addOut &= below;
+      addA &= below;
+    }
+
+    if (addOut != 0)
+    {
+      output.fixWordBits(w, addOut, ~va);
+      result = CHANGED;
+    }
+    if (addA != 0)
+    {
+      a.fixWordBits(w, addA, ~vo);
+      result = CHANGED;
+    }
+
+    if (conflict != 0)
       return CONFLICT;
-    }
-
-    if (a.isFixed(i) && !output.isFixed(i))
-    {
-      output.setFixed(i, true);
-      output.setValue(i, !a.getValue(i));
-      result = CHANGED;
-    }
-
-    if (output.isFixed(i) && !a.isFixed(i))
-    {
-      a.setFixed(i, true);
-      a.setValue(i, !output.getValue(i));
-      result = CHANGED;
-    }
   }
   return result;
 }
