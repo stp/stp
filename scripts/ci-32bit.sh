@@ -40,6 +40,7 @@ cd build-32bit
 cmake \
   -DNOCRYPTOMINISAT:BOOL=ON \
   -DENABLE_TESTING:BOOL=ON \
+  -DLIT_ARGS:STRING=-v \
   -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
   -G Ninja ..
 cmake --build . --parallel "$(nproc)"
