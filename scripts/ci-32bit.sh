@@ -45,16 +45,29 @@ cmake \
   -G Ninja ..
 cmake --build . --parallel "$(nproc)"
 
-# Temporary diagnostic: replicate the lit pipeline for the test that
-# fails only on i386, keeping the intermediate output visible.
-{ ./stp ../tests/query-files/let-tests/let_009.smt2 2>&1 \
-    || echo "let_009 exit code: $?"; } | tee /tmp/let009.out \
-  | python3 ../deps/OutputCheck/bin/OutputCheck \
-      ../tests/query-files/let-tests/let_009.smt2 \
-  || echo "manual OutputCheck exit code: $?"
-echo "--- captured let_009 output:"
-cat -A /tmp/let009.out
-echo "--- end"
+# Temporary diagnostic: the manual pipeline passes on i386 but the same
+# test fails under lit, so run lit itself on just that test -- once
+# plain, once with the solver wrapped to capture what it prints when
+# lit spawns it.
+(
+  cd tests/query-files
+  LIT_BIN=$(sed -n 's/^add_test(query-files "\([^"]*\)".*/\1/p' CTestTestfile.cmake)
+  PREFIX=$(sed -n 's/.*--config-prefix=\([^" ]*\).*/\1/p' CTestTestfile.cmake)
+  cat > /tmp/stp-tee <<'EOF'
+#!/bin/bash
+/stp/build-32bit/stp "$@" 2>&1 | tee -a /tmp/lit-solver.out
+exit "${PIPESTATUS[0]}"
+EOF
+  chmod +x /tmp/stp-tee
+  echo "--- plain lit run:"
+  "$LIT_BIN" -a ${PREFIX:+--config-prefix=$PREFIX} --filter let_009 . || true
+  echo "--- lit run with tee-wrapped solver:"
+  "$LIT_BIN" -a ${PREFIX:+--config-prefix=$PREFIX} --param solver=/tmp/stp-tee \
+    --filter let_009 . || true
+  echo "--- solver output captured under lit:"
+  cat -A /tmp/lit-solver.out || true
+  echo "--- end"
+)
 
 ctest --parallel "$(nproc)" -VV --output-on-failure
 
