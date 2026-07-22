@@ -47,8 +47,8 @@ typedef unsigned int* CBV;
 // if a==b then fix the result to true.
 // if a!=b then fix the result to false.
 // The four bit-loops of the general version become bitwise operations on
-// the packed fixedness/value words, read in 64-bit chunks so every width
-// takes the same path.
+// the packed fixedness/value words. Each branch reads just the words it
+// needs straight from the children — no staging buffers.
 Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 {
   assert(a.getWidth() == b.getWidth());
@@ -56,7 +56,6 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 
   // A bit fixed on both sides but to different values fully determines the
   // propagation: the children are unequal, and no child bit can be derived.
-  // Test that with the cheap byte scan before paying for any packing.
   if (a.disagrees(b))
   {
     if (output.isFixed(0) && output.getValue(0))
@@ -77,37 +76,20 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
   const uint64_t topMask =
       (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
 
-  // As in setUnsignedMinMax: common widths on the stack, huge ones on the
-  // heap.
-  const unsigned STACK_WORDS = 16; // up to 1024 bits on the stack.
-  uint64_t stackBuf[4 * STACK_WORDS];
-  std::vector<uint64_t> heapBuf;
-  uint64_t* buf = stackBuf;
-  if (words > STACK_WORDS)
-  {
-    heapBuf.resize(4 * words);
-    buf = heapBuf.data();
-  }
-  uint64_t* const fa = buf;
-  uint64_t* const va = buf + words;
-  uint64_t* const fb = buf + 2 * words;
-  uint64_t* const vb = buf + 3 * words;
-
-  a.fillPackedWords(fa, va);
-  b.fillPackedWords(fb, vb);
-
-  // Whether every bit of both children is fixed (and hence, with no
-  // disagreement, the children are equal).
-  bool allFixed = true;
-  for (unsigned w = 0; w < words; w++)
-  {
-    const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
-    allFixed &= (fa[w] & fb[w] & mask) == mask;
-  }
-
   bool changed = false;
 
-  if (allFixed) // Everything fixed, and no disagreement.
+  // With no disagreement, the children are equal iff everything is fixed.
+  bool allFixed = true;
+  for (unsigned w = 0; w < words && allFixed; w++)
+  {
+    const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
+    uint64_t fa, va, fb, vb;
+    a.fillPackedWord(w, fa, va);
+    b.fillPackedWord(w, fb, vb);
+    allFixed = (fa & fb & mask) == mask;
+  }
+
+  if (allFixed)
   {
     if (output.isFixed(0) && !output.getValue(0))
       return CONFLICT;
@@ -119,30 +101,26 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
     }
   }
 
-  // No disagreement from here on: it returned inside the packing loop.
-
   if (output.isFixed(0) && output.getValue(0)) // all should be the same.
   {
     for (unsigned w = 0; w < words; w++)
     {
-      uint64_t onlyA = fa[w] & ~fb[w];
-      while (onlyA != 0)
+      uint64_t fa, va, fb, vb;
+      a.fillPackedWord(w, fa, va);
+      b.fillPackedWord(w, fb, vb);
+
+      const uint64_t onlyA = fa & ~fb;
+      if (onlyA != 0)
       {
-        const unsigned bit = __builtin_ctzll(onlyA);
-        b.setFixed(w * 64 + bit, true);
-        b.setValue(w * 64 + bit, (va[w] >> bit) & 1);
+        b.fixWordBits(w, onlyA, va);
         changed = true;
-        onlyA &= onlyA - 1;
       }
 
-      uint64_t onlyB = fb[w] & ~fa[w];
-      while (onlyB != 0)
+      const uint64_t onlyB = fb & ~fa;
+      if (onlyB != 0)
       {
-        const unsigned bit = __builtin_ctzll(onlyB);
-        a.setFixed(w * 64 + bit, true);
-        a.setValue(w * 64 + bit, (vb[w] >> bit) & 1);
+        a.fixWordBits(w, onlyB, vb);
         changed = true;
-        onlyB &= onlyB - 1;
       }
     }
   }
@@ -155,8 +133,11 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
     for (unsigned w = 0; w < words && unknowns < 2; w++)
     {
       const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
-      unknowns += __builtin_popcountll(~fa[w] & mask) +
-                  __builtin_popcountll(~fb[w] & mask);
+      uint64_t fa, va, fb, vb;
+      a.fillPackedWord(w, fa, va);
+      b.fillPackedWord(w, fb, vb);
+      unknowns += __builtin_popcountll(~fa & mask) +
+                  __builtin_popcountll(~fb & mask);
     }
 
     if (unknowns == 1)
@@ -164,13 +145,16 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
       for (unsigned w = 0; w < words; w++)
       {
         const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
-        const uint64_t unknownA = ~fa[w] & mask;
-        const uint64_t unknownB = ~fb[w] & mask;
+        uint64_t fa, va, fb, vb;
+        a.fillPackedWord(w, fa, va);
+        b.fillPackedWord(w, fb, vb);
+        const uint64_t unknownA = ~fa & mask;
+        const uint64_t unknownB = ~fb & mask;
         if (unknownA != 0)
         {
           const unsigned bit = __builtin_ctzll(unknownA);
           a.setFixed(w * 64 + bit, true);
-          a.setValue(w * 64 + bit, !((vb[w] >> bit) & 1));
+          a.setValue(w * 64 + bit, !((vb >> bit) & 1));
           changed = true;
           break;
         }
@@ -178,7 +162,7 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
         {
           const unsigned bit = __builtin_ctzll(unknownB);
           b.setFixed(w * 64 + bit, true);
-          b.setValue(w * 64 + bit, !((va[w] >> bit) & 1));
+          b.setValue(w * 64 + bit, !((va >> bit) & 1));
           changed = true;
           break;
         }
