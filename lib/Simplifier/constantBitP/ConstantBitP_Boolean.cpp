@@ -33,41 +33,93 @@ namespace simplifier
 namespace constantBitP
 {
 
+// A word at a time: one pass over the children computes the parity of the
+// fixed ones and classifies each bit (all children fixed, exactly one
+// unfixed); a second pass runs only when child bits need fixing.
 Result bvXorBothWays(vector<FixedBits*>& operands, FixedBits& output)
 {
   Result result = NO_CHANGE;
-  const int bitWidth = output.getWidth();
+  const unsigned width = output.getWidth();
+  const unsigned words = (width + 63) / 64;
+  const unsigned n = operands.size();
+#ifndef NDEBUG
+  for (unsigned j = 0; j < n; j++)
+    assert(operands[j]->getWidth() == width);
+#endif
 
-  for (int i = 0; i < bitWidth; i++)
+  const uint64_t top =
+      (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
+
+  for (unsigned w = 0; w < words; w++)
   {
-    const stats status = getStats(operands, i);
+    const uint64_t mask = (w == words - 1) ? top : ~0ULL;
 
-    if (status.unfixed == 0) // if they are all fixed. We know the answer.
+    uint64_t fo, vo;
+    output.fillPackedWord(w, fo, vo);
+
+    uint64_t parity = 0;   // XOR of the children's fixed ones
+    uint64_t unfixed1 = 0; // at least one child unfixed
+    uint64_t unfixed2 = 0; // at least two children unfixed
+    for (unsigned j = 0; j < n; j++)
     {
-      bool answer = (status.fixedToOne % 2) != 0;
+      uint64_t f, v;
+      operands[j]->fillPackedWord(w, f, v);
+      parity ^= v;
+      const uint64_t unf = ~f & mask;
+      unfixed2 |= unfixed1 & unf;
+      unfixed1 |= unf;
 
-      if (!output.isFixed(i))
-      {
-        output.setFixed(i, true);
-        output.setValue(i, answer);
-        result = CHANGED;
-      }
-      else if (output.getValue(i) != answer)
-        return CONFLICT;
+      // Two or more unfixed children everywhere: no bit can be derived
+      // in either direction, and no conflict is possible.
+      if (unfixed2 == mask)
+        break;
     }
-    else if (status.unfixed == 1 && output.isFixed(i))
+
+    if (unfixed2 == mask)
+      continue;
+
+    const uint64_t allFixed = ~unfixed1 & mask;
+
+    // All children fixed and the output disagrees with their parity.
+    const uint64_t conflict = allFixed & fo & (vo ^ parity);
+
+    uint64_t outFix = allFixed & ~fo;
+    // Exactly one unfixed child, output known: that child's bit is the
+    // parity of everything else XORed with the output.
+    uint64_t childFix = unfixed1 & ~unfixed2 & fo;
+
+    if (conflict != 0)
     {
-      // If there is just one unfixed, and we have the answer --> We know the
-      // value.
-      bool soFar = ((status.fixedToOne % 2) != 0);
-      if (soFar != output.getValue(i))
-      { // result needs to be flipped.
-        fixUnfixedTo(operands, i, true);
-      }
-      else
-        fixUnfixedTo(operands, i, false);
+      // The bit-at-a-time original still applies fixes below the first
+      // conflicting bit before reporting the conflict.
+      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      outFix &= below;
+      childFix &= below;
+    }
+
+    if (outFix != 0)
+    {
+      output.fixWordBits(w, outFix, parity);
       result = CHANGED;
     }
+
+    if (childFix != 0)
+    {
+      for (unsigned j = 0; j < n; j++)
+      {
+        uint64_t f, v;
+        operands[j]->fillPackedWord(w, f, v);
+        const uint64_t fix = ~f & childFix;
+        if (fix != 0)
+        {
+          operands[j]->fixWordBits(w, fix, parity ^ vo);
+          result = CHANGED;
+        }
+      }
+    }
+
+    if (conflict != 0)
+      return CONFLICT;
   }
   return result;
 }
@@ -175,89 +227,101 @@ Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output)
   return result;
 }
 
+// The dual of bvAndBothWays: a word at a time, with the same second-pass
+// and early-exit structure.
 Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   Result r = NO_CHANGE;
-  const int numberOfChildren = children.size();
-  const int bitWidth = output.getWidth();
+  const unsigned width = output.getWidth();
+  const unsigned words = (width + 63) / 64;
+  const unsigned n = children.size();
+#ifndef NDEBUG
+  for (unsigned j = 0; j < n; j++)
+    assert(children[j]->getWidth() == width);
+#endif
 
-  for (int i = 0; i < bitWidth; i++)
+  const uint64_t top =
+      (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
+
+  for (unsigned w = 0; w < words; w++)
   {
-    bool answerKnown = output.isFixed(i);
-    bool answer = false;
-    if (answerKnown)
-      answer = output.getValue(i);
+    const uint64_t mask = (w == words - 1) ? top : ~0ULL;
 
-    int unks = 0;
-    int ones = 0;
-    int zeroes = 0;
+    uint64_t fo, vo;
+    output.fillPackedWord(w, fo, vo);
 
-    for (int j = 0; j < numberOfChildren; j++)
+    uint64_t anyOne = 0;     // some child fixed to one
+    uint64_t allZero = mask; // every child fixed to zero
+    uint64_t unfixed1 = 0;   // at least one child unfixed
+    uint64_t unfixed2 = 0;   // at least two children unfixed
+    for (unsigned j = 0; j < n; j++)
     {
-      assert(output.getWidth() == children[j]->getWidth());
+      uint64_t f, v;
+      children[j]->fillPackedWord(w, f, v);
+      anyOne |= v;
+      allZero &= f & ~v;
+      const uint64_t unf = ~f & mask;
+      unfixed2 |= unfixed1 & unf;
+      unfixed1 |= unf;
 
-      if (!children[j]->isFixed(i))
-        unks++;
-      else if (children[j]->getValue(i))
-        ones++;
-      else
-        zeroes++;
+      // Once every bit has a one-entailing child and no output bit is
+      // fixed to zero, nothing further can change: anyOne and allZero are
+      // disjoint (the child that sets a bit also drops it from allZero),
+      // so the all-zeroes cases are dead, child fixes need output zeros,
+      // and the output can only become one, which is already entailed
+      // everywhere. This makes the boolean OR (width one, huge arity)
+      // stop at its first true disjunct instead of scanning them all.
+      if ((fo & ~vo) == 0 && anyOne == mask)
+        break;
     }
 
-    if (ones > 0) // Atleast a single one found!
-    {
-      if (answerKnown && !answer)
-        return CONFLICT;
+    // Output fixed to zero against a child fixed to one; output fixed to
+    // one with every child fixed to zero.
+    const uint64_t conflict = ((fo & ~vo) & anyOne) | (vo & allZero);
 
-      if (!answerKnown)
-      {
-        output.setFixed(i, true);
-        output.setValue(i, true);
-        r = CHANGED;
-      }
-    }
-    else if (zeroes == numberOfChildren) // all zeroes.
-    {
-      if (answerKnown && answer)
-        return CONFLICT;
+    // Output zero: all children become zero. Output one, no fixed one and
+    // a single unfixed child: it becomes one.
+    uint64_t childTo0 = (fo & ~vo) & unfixed1;
+    uint64_t childTo1 = vo & ~anyOne & unfixed1 & ~unfixed2;
+    uint64_t outTo1 = ~fo & anyOne & mask;
+    uint64_t outTo0 = ~fo & allZero;
 
-      if (!answerKnown)
-      {
-        r = CHANGED;
-        output.setFixed(i, true);
-        output.setValue(i, false);
-      }
-    }
-    // ones ==0, zeroes != numberChildren.
-    else if (answerKnown && !answer)
+    if (conflict != 0)
     {
-      // set all the column to false.
-      for (int j = 0; j < numberOfChildren; j++)
+      // The bit-at-a-time original still applies fixes below the first
+      // conflicting bit before reporting the conflict.
+      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      childTo0 &= below;
+      childTo1 &= below;
+      outTo1 &= below;
+      outTo0 &= below;
+    }
+
+    if ((childTo0 | childTo1) != 0)
+    {
+      for (unsigned j = 0; j < n; j++)
       {
-        if (!children[j]->isFixed(i))
+        uint64_t f, v;
+        children[j]->fillPackedWord(w, f, v);
+        const uint64_t unf = ~f & mask;
+        const uint64_t to0 = childTo0 & unf;
+        const uint64_t to1 = childTo1 & unf;
+        if ((to0 | to1) != 0)
         {
+          children[j]->fixWordBits(w, to0 | to1, to1);
           r = CHANGED;
-          children[j]->setFixed(i, true);
-          children[j]->setValue(i, false);
         }
       }
     }
-    else if (unks == 1 && answerKnown && answer &&
-             (zeroes == (numberOfChildren - 1)))
-    {
-      // A single unknown, everything else is false. The answer is true. So the
-      // unknown is true.
 
-      for (int j = 0; j < numberOfChildren; j++)
-      {
-        if (!children[j]->isFixed(i))
-        {
-          r = CHANGED;
-          children[j]->setFixed(i, true);
-          children[j]->setValue(i, true);
-        }
-      }
+    if ((outTo1 | outTo0) != 0)
+    {
+      output.fixWordBits(w, outTo1 | outTo0, outTo1);
+      r = CHANGED;
     }
+
+    if (conflict != 0)
+      return CONFLICT;
   }
   return r;
 }
