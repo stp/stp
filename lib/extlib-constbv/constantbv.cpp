@@ -317,6 +317,12 @@ namespace CONSTANTBV {
     return(ErrCode_Ok);
   }
 
+  /* Creating a bit vector before "BitVector_Boot" has set the constants
+     above computes an undersized allocation and corrupts the heap, so
+     run it when the library is loaded rather than trusting every caller
+     to get there first. */
+  [[maybe_unused]] static const ErrCode boot_at_load = BitVector_Boot();
+
   unsigned int BitVector_Size(unsigned int bits) {          /* bit vector size (# of words)  */
     unsigned int size;
 

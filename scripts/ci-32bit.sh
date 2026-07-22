@@ -44,6 +44,11 @@ cmake \
   -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
   -G Ninja ..
 cmake --build . --parallel "$(nproc)"
+
+# Temporary diagnostic: show exactly what the solver prints for the
+# lit test that fails only on i386.
+./stp ../tests/query-files/let-tests/let_009.smt2 2>&1 || echo "let_009 exit code: $?"
+
 ctest --parallel "$(nproc)" -VV --output-on-failure
 
 # EOF
