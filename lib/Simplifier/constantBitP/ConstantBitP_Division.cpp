@@ -61,45 +61,6 @@ enum Operation
 // a/b and a%b. a=bq +r. Where b!=0 implies r<b. Multiplication and addition
 // don't overflow.
 
-// returning true = conflict.
-// Fix value of a to b.
-bool fix(FixedBits& a, const FixedBits& b, const int i)
-{
-  if (!b.isFixed(i))
-    return false;
-
-  if (a.isFixed(i) && b.isFixed(i) && (a.getValue(i) ^ b.getValue(i)))
-    return true;
-
-  if (!a.isFixed(i) && b.isFixed(i))
-  {
-    a.setFixed(i, true);
-    a.setValue(i, b.getValue(i));
-    return false;
-  }
-
-  return false;
-}
-
-FixedBits cbvToFixedBits(stp::CBV low, unsigned width)
-{
-  FixedBits lowBits(width, false);
-  for (int i = width - 1; i >= 0; i--)
-  {
-    if (CONSTANTBV::BitVector_bit_test(low, i))
-    {
-      lowBits.setFixed(i, true);
-      lowBits.setValue(i, true);
-    }
-    else
-    {
-      lowBits.setFixed(i, true);
-      lowBits.setValue(i, false);
-    }
-  }
-  return lowBits;
-}
-
 namespace
 {
 // Bits of word w with global index below `bound`.
@@ -111,6 +72,28 @@ inline uint64_t rangeBelow(unsigned w, unsigned bound)
   if (base >= bound)
     return 0;
   return ((uint64_t)1 << (bound - base)) - 1;
+}
+
+// Fix into `a` the fixed low bits of the (at least as wide) `b` that `a`
+// lacks. True if a bit is fixed to different values in the two.
+bool fixFromLow(FixedBits& a, const FixedBits& b)
+{
+  assert(b.getWidth() >= a.getWidth());
+  const unsigned width = a.getWidth();
+  bool conflict = false;
+  for (unsigned w = 0; w * 64 < width; w++)
+  {
+    const uint64_t mask = rangeBelow(w, width);
+    uint64_t fa, va, fb, vb;
+    a.fillPackedWord(w, fa, va);
+    b.fillPackedWord(w, fb, vb);
+    if (fa & fb & (va ^ vb) & mask)
+      conflict = true;
+    const uint64_t add = fb & ~fa & mask;
+    if (add != 0)
+      a.fixWordBits(w, add, vb);
+  }
+  return conflict;
 }
 }
 
@@ -298,51 +281,46 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
   const unsigned width = a.getWidth();
 
-  stp::CBV minTop = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxTop = CONSTANTBV::BitVector_Create(width, true);
+  // One allocation for all fifteen scratch vectors.
+  stp::CBV* pool = CONSTANTBV::BitVector_Create_List(width, true, 15);
 
+  stp::CBV minTop = pool[0];
+  stp::CBV maxTop = pool[1];
   setUnsignedMinMax(a, minTop, maxTop);
 
-  stp::CBV minBottom = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxBottom = CONSTANTBV::BitVector_Create(width, true);
-
+  stp::CBV minBottom = pool[2];
+  stp::CBV maxBottom = pool[3];
   setUnsignedMinMax(b, minBottom, maxBottom);
 
-  stp::CBV minQuotient = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxQuotient = CONSTANTBV::BitVector_Create(width, true);
-
-  stp::CBV minRemainder = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxRemainder = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minQuotient = pool[4];
+  stp::CBV maxQuotient = pool[5];
+  stp::CBV minRemainder = pool[6];
+  stp::CBV maxRemainder = pool[7];
 
   if (whatIs == QUOTIENT_IS_OUTPUT)
   {
     setUnsignedMinMax(output, minQuotient, maxQuotient);
-
-    for (unsigned i = 0; i < width; i++)
-      CONSTANTBV::BitVector_Bit_On(maxRemainder, i);
+    CONSTANTBV::BitVector_Fill(maxRemainder);
   }
   else
   {
     setUnsignedMinMax(output, minRemainder, maxRemainder);
-
-    for (unsigned i = 0; i < width; i++)
-      CONSTANTBV::BitVector_Bit_On(maxQuotient, i);
+    CONSTANTBV::BitVector_Fill(maxQuotient);
   }
 
-  // need to clean up these at end.
-  stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV one = pool[8];
   CONSTANTBV::BitVector_increment(one);
 
-  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV max = pool[9];
   CONSTANTBV::BitVector_Fill(max);
 
   // quotient and remainder.
-  stp::CBV q = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV q = pool[10];
+  stp::CBV r = pool[11];
   // misc.
-  stp::CBV copy = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV copy2 = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV multR = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV copy = pool[12];
+  stp::CBV copy2 = pool[13];
+  stp::CBV multR = pool[14];
 
   if (debug_division)
   {
@@ -665,24 +643,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   }
 
 end:
-  // Destroy range variables.
-  CONSTANTBV::BitVector_Destroy(minTop);
-  CONSTANTBV::BitVector_Destroy(maxTop);
-  CONSTANTBV::BitVector_Destroy(minBottom);
-  CONSTANTBV::BitVector_Destroy(maxBottom);
-  CONSTANTBV::BitVector_Destroy(minQuotient);
-  CONSTANTBV::BitVector_Destroy(maxQuotient);
-  CONSTANTBV::BitVector_Destroy(minRemainder);
-  CONSTANTBV::BitVector_Destroy(maxRemainder);
-
-  // Destroy helpers.
-  CONSTANTBV::BitVector_Destroy(copy);
-  CONSTANTBV::BitVector_Destroy(copy2);
-  CONSTANTBV::BitVector_Destroy(multR);
-  CONSTANTBV::BitVector_Destroy(q);
-  CONSTANTBV::BitVector_Destroy(r);
-  CONSTANTBV::BitVector_Destroy(one);
-  CONSTANTBV::BitVector_Destroy(max);
+  CONSTANTBV::BitVector_Destroy_List(pool, 15);
 
   if (result == CONFLICT)
     return CONFLICT;
@@ -729,24 +690,21 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   // change detection for the dependency-driven loop below.
   unsigned bCount, rCount, timesCount;
 
-  // Times and plus must not overflow.
-  for (unsigned i = (unsigned)output.getWidth(); i < newWidth; i++)
+  // Times and plus must not overflow: everything is zero extended, so the
+  // top halves are all fixed zeroes.
   {
-    // No overflow.
-    times.setFixed(i, true);
-    times.setValue(i, false);
-
-    // Everything is zero extended.
-    a.setFixed(i, true);
-    a.setValue(i, false);
-    b.setFixed(i, true);
-    b.setValue(i, false);
-
-    // Multiplication must not overflow.
-    r.setFixed(i, true);
-    r.setValue(i, false);
-    q.setFixed(i, true);
-    q.setValue(i, false);
+    const unsigned from = (unsigned)output.getWidth();
+    const unsigned words = (newWidth + 63) / 64;
+    FixedBits* widened[] = {&times, &a, &b, &r, &q};
+    for (unsigned w = from / 64; w < words; w++)
+    {
+      const uint64_t high =
+          rangeBelow(w, newWidth) & ~rangeBelow(w, from);
+      if (high == 0)
+        continue;
+      for (FixedBits* x : widened)
+        x->fixWordBits(w, high, 0);
+    }
   }
 
   // True bit.
@@ -824,18 +782,9 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   }
 
   bool conflict = false;
-  for (unsigned i = 0; i < output.getWidth(); i++)
-  {
-    if (whatIs == QUOTIENT_IS_OUTPUT)
-      conflict |= fix(output, q, i);
-    else if (whatIs == REMAINDER_IS_OUTPUT)
-      conflict |= fix(output, r, i);
-    else
-      throw std::runtime_error("sdjjfas");
-
-    conflict |= fix(*children[0], a, i);
-    conflict |= fix(*children[1], b, i);
-  }
+  conflict |= fixFromLow(output, (whatIs == QUOTIENT_IS_OUTPUT) ? q : r);
+  conflict |= fixFromLow(*children[0], a);
+  conflict |= fixFromLow(*children[1], b);
 
   if (debug_division)
     cerr << endl;
@@ -897,24 +846,39 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
   if (children[1]->containsZero())
     return r0; // TODO fix so we learn something if we might be dividing by zero..
 
-  // Enforce that the output must be less than the numerator.
-  for (int i = children[0]->getWidth() - 1; i >= 0; i--)
+  // Enforce that the output must be less than the numerator: the
+  // numerator's leading fixed zeroes are the quotient's too.
   {
-    if (children[0]->isFixedToZero(i))
+    const unsigned width = children[0]->getWidth();
+    const unsigned from = children[0]->topmostPossibleLeadingOne() + 1;
+    const unsigned words = (width + 63) / 64;
+    // The bit-at-a-time original fixed from the top down and reported a
+    // conflict at the first output bit fixed to one, leaving the bits
+    // above it fixed.
+    unsigned conflictAt = width;
+    for (int w = (int)words - 1; w >= (int)(from / 64) && w >= 0; w--)
     {
-      if (output.isFixedToOne(i))
-        return CONFLICT;
-      else if (!output.isFixed(i))
+      const uint64_t range = rangeBelow(w, width) & ~rangeBelow(w, from);
+      uint64_t fo, vo;
+      output.fillPackedWord(w, fo, vo);
+      const uint64_t ones = vo & range;
+      const uint64_t add =
+          ~fo & range &
+          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - __builtin_clzll(ones))
+                     : ~(uint64_t)0);
+      if (add != 0)
       {
-        output.setFixed(i, true);
-        output.setValue(i, false);
+        output.fixWordBits(w, add, 0);
         r0 = CHANGED;
       }
+      if (ones != 0)
+      {
+        conflictAt = w * 64 + 63 - __builtin_clzll(ones);
+        break;
+      }
     }
-    else
-    {
-      break;
-    }
+    if (conflictAt != width)
+      return CONFLICT;
   }
 
   Result r =
