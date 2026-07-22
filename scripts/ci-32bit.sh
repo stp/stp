@@ -45,9 +45,16 @@ cmake \
   -G Ninja ..
 cmake --build . --parallel "$(nproc)"
 
-# Temporary diagnostic: show exactly what the solver prints for the
-# lit test that fails only on i386.
-./stp ../tests/query-files/let-tests/let_009.smt2 2>&1 || echo "let_009 exit code: $?"
+# Temporary diagnostic: replicate the lit pipeline for the test that
+# fails only on i386, keeping the intermediate output visible.
+{ ./stp ../tests/query-files/let-tests/let_009.smt2 2>&1 \
+    || echo "let_009 exit code: $?"; } | tee /tmp/let009.out \
+  | python3 ../deps/OutputCheck/bin/OutputCheck \
+      ../tests/query-files/let-tests/let_009.smt2 \
+  || echo "manual OutputCheck exit code: $?"
+echo "--- captured let_009 output:"
+cat -A /tmp/let009.out
+echo "--- end"
 
 ctest --parallel "$(nproc)" -VV --output-on-failure
 
