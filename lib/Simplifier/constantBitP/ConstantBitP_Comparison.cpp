@@ -129,6 +129,132 @@ Result bvLessThanEqualsBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 typedef unsigned int* CBV;
 
+// Scalar fast path for widths that fit in a machine word. Signed
+// comparisons are mapped onto unsigned ones by XORing the sign bit
+// ("biasing"): x <=s y iff (x ^ msb) <=u (y ^ msb). In the biased domain
+// the MSB behaves like every other bit, so the special sign-bit handling
+// of the general-width code disappears.
+namespace
+{
+
+// Fix bit i of `bits` to the biased value `biasedValue`.
+void fixBit(FixedBits& bits, unsigned i, bool biasedValue, uint64_t bias)
+{
+  const bool real = ((bias >> i) & 1) ? !biasedValue : biasedValue;
+  bits.setFixed(i, true);
+  bits.setValue(i, real);
+}
+
+// Given that lhs <= rhs (or lhs < rhs when strict) holds, fix child bits.
+// lhsMin is the biased minimum of lhs, rhsMax the biased maximum of rhs;
+// neither changes as bits are fixed (fixing a lhs bit to zero keeps its
+// minimum, fixing a rhs bit to one keeps its maximum).
+bool fixTrueCase(FixedBits& lhs, uint64_t lhsFixed, uint64_t lhsMin,
+                 FixedBits& rhs, uint64_t rhsFixed, uint64_t rhsMax,
+                 bool strict, uint64_t bias, uint64_t mask)
+{
+  bool changed = false;
+
+  // Highest unfixed bit first: if turning it on in the minimum overshoots
+  // the other side's maximum, it must be zero. Once one bit can stay on,
+  // no lower bit can overshoot either.
+  uint64_t unfixed = ~lhsFixed & mask;
+  while (unfixed != 0)
+  {
+    const unsigned i = 63 - __builtin_clzll(unfixed);
+    const uint64_t bit = 1ULL << i;
+    const uint64_t trial = lhsMin | bit;
+    if (strict ? trial >= rhsMax : trial > rhsMax)
+    {
+      fixBit(lhs, i, false, bias);
+      changed = true;
+      unfixed &= ~bit;
+    }
+    else
+      break;
+  }
+
+  // Mirrored for rhs: if turning the bit off in the maximum undershoots
+  // the other side's minimum, it must be one.
+  unfixed = ~rhsFixed & mask;
+  while (unfixed != 0)
+  {
+    const unsigned i = 63 - __builtin_clzll(unfixed);
+    const uint64_t bit = 1ULL << i;
+    const uint64_t trial = rhsMax & ~bit;
+    if (strict ? trial <= lhsMin : trial < lhsMin)
+    {
+      fixBit(rhs, i, true, bias);
+      changed = true;
+      unfixed &= ~bit;
+    }
+    else
+      break;
+  }
+
+  return changed;
+}
+
+// c0 < c1 (strict) or c0 <= c1; signed comparisons set a sign-flipping bias.
+Result scalarCompare(FixedBits& c0, FixedBits& c1, FixedBits& output,
+                     bool strict, bool isSigned)
+{
+  const unsigned width = c0.getWidth();
+  assert(width <= 64 && c1.getWidth() == width);
+
+  const uint64_t mask = (width == 64) ? ~0ULL : ((1ULL << width) - 1);
+  const uint64_t bias = isSigned ? (1ULL << (width - 1)) : 0;
+
+  uint64_t f0, v0, f1, v1;
+  c0.fillPackedWords(&f0, &v0);
+  c1.fillPackedWords(&f1, &v1);
+  v0 ^= f0 & bias;
+  v1 ^= f1 & bias;
+
+  const uint64_t min0 = v0, max0 = v0 | (~f0 & mask);
+  const uint64_t min1 = v1, max1 = v1 | (~f1 & mask);
+
+  bool changed = false;
+
+  // Entailed true: every value of c0 is below every value of c1.
+  if (strict ? max0 < min1 : max0 <= min1)
+  {
+    if (output.isFixed(0) && !output.getValue(0))
+      return CONFLICT;
+    if (!output.isFixed(0))
+    {
+      output.setFixed(0, true);
+      output.setValue(0, true);
+      changed = true;
+    }
+  }
+
+  // Entailed false: no value of c0 is below any value of c1.
+  if (strict ? min0 >= max1 : min0 > max1)
+  {
+    if (output.isFixed(0) && output.getValue(0))
+      return CONFLICT;
+    if (!output.isFixed(0))
+    {
+      output.setFixed(0, true);
+      output.setValue(0, false);
+      changed = true;
+    }
+  }
+
+  if (output.isFixed(0))
+  {
+    if (output.getValue(0))
+      changed |= fixTrueCase(c0, f0, min0, c1, f1, max1, strict, bias, mask);
+    else
+      // !(c0 < c1) is c1 <= c0, and !(c0 <= c1) is c1 < c0.
+      changed |= fixTrueCase(c1, f1, min1, c0, f0, max0, !strict, bias, mask);
+  }
+
+  return changed ? CHANGED : NO_CHANGE;
+}
+}
+
 void destroy(CBV a, CBV b, CBV c, CBV d)
 {
   CONSTANTBV::BitVector_Destroy(a);
@@ -194,6 +320,9 @@ Result bvSignedLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  if (c0.getWidth() <= 64)
+    return scalarCompare(c0, c1, output, true, true);
 
   const unsigned initialFixedCount =
       c0.countFixed() + c1.countFixed() + output.countFixed();
@@ -343,6 +472,9 @@ Result bvSignedLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  if (c0.getWidth() <= 64)
+    return scalarCompare(c0, c1, output, false, true);
 
   const unsigned initialFixedCount =
       c0.countFixed() + c1.countFixed() + output.countFixed();
@@ -496,6 +628,9 @@ Result bvLessThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
 
+  if (c0.getWidth() <= 64)
+    return scalarCompare(c0, c1, output, true, false);
+
   const unsigned initialFixedCount =
       c0.countFixed() + c1.countFixed() + output.countFixed();
 
@@ -606,6 +741,9 @@ Result bvLessThanEqualsBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
 
   if (!output.isFixed(0) && fast_exit(c0, c1))
     return NO_CHANGE;
+
+  if (c0.getWidth() <= 64)
+    return scalarCompare(c0, c1, output, false, false);
 
   const unsigned initialFixedCount =
       c0.countFixed() + c1.countFixed() + output.countFixed();
