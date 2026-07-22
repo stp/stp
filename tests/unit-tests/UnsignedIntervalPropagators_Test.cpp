@@ -452,6 +452,33 @@ TEST(UnsignedIntervalPropagators, MultByAllOnesConstantTerminates)
   stp::UnsignedInterval* result =
       c.analysis.dispatchToTransferFunctions(n, children);
 
+#ifdef __SIZEOF_INT128__
+  expectInterval(result, w, 3, allOnes);
+#else
+  // Without a 128-bit type width 64 takes the bignum fallback, which
+  // gives up on wrapping products; termination is still checked.
+  if (result != nullptr)
+    expectInterval(result, w, 3, allOnes);
+#endif
+  cleanup(children, result);
+}
+
+// The same shape at width 32 stays on the word-level path on every
+// target: the products are the negations -1*x, exactly [3, 2^32-1].
+TEST(UnsignedIntervalPropagators, MultByAllOnesConstantWord)
+{
+  const unsigned w = 32;
+  const uint64_t allOnes = 0xffffffffu;
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, w);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, w);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, w, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(w, allOnes, allOnes), makeInterval(w, 1, allOnes - 2)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
   expectInterval(result, w, 3, allOnes);
   cleanup(children, result);
 }

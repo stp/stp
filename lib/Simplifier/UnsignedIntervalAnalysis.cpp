@@ -776,7 +776,17 @@ namespace stp
       return r;
     }
 
-    typedef unsigned __int128 uint128;
+#ifdef __SIZEOF_INT128__
+    // A type wide enough to hold the product of two word-path values.
+    typedef unsigned __int128 uwide;
+    static const unsigned wordPathMaxWidth = 64;
+#else
+    // No 128-bit type (e.g. 32-bit targets), so the word-level path
+    // runs at half scale; wider multiplications use the bignum
+    // fallback instead.
+    typedef uint64_t uwide;
+    static const unsigned wordPathMaxWidth = 32;
+#endif
 
     // The low (up to 64) bits of x as a machine word.
     uint64_t low64(const CBV x)
@@ -793,16 +803,17 @@ namespace stp
     }
 
     // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
-    // a < m and b < m, with m <= 2^64 so nothing here can overflow.
+    // a < m and b < m, with m <= 2^wordPathMaxWidth so nothing here can
+    // overflow.
     // Between wraps the values only grow, so the minimum is b or a
     // post-wrap residue; the residues just after each wrap follow the
     // progression b1 + j*((-m) mod a) inside [0, a), which the loop
     // chases Euclid-style. A step above m/2 first flips to the same
     // progression walked backwards, so the modulus at least halves
     // every level: O(log m) iterations.
-    uint128 minlin(uint128 n, uint128 m, uint128 a, uint128 b)
+    uwide minlin(uwide n, uwide m, uwide a, uwide b)
     {
-      uint128 best = b;
+      uwide best = b;
       while (true)
       {
         if (b < best)
@@ -817,14 +828,14 @@ namespace stp
           a = m - a;
           continue;
         }
-        const uint128 firstWrap = (m - b + a - 1) / a;
+        const uwide firstWrap = (m - b + a - 1) / a;
         if (firstWrap >= n)
           return best; // never wraps, so the values only grow from b
-        const uint128 wraps = (b + (n - 1) * a) / m;
-        const uint128 afterWrap = b + firstWrap * a - m; // in [0, a)
+        const uwide wraps = (b + (n - 1) * a) / m;
+        const uwide afterWrap = b + firstWrap * a - m; // in [0, a)
         n = wraps;
         b = afterWrap;
-        const uint128 step = (a - m % a) % a;
+        const uwide step = (a - m % a) % a;
         m = a;
         a = step;
       }
@@ -832,7 +843,7 @@ namespace stp
 
     // The maximum, by reflection: max(v) = m-1 - min(m-1-v), and
     // m-1-(a*i+b) mod m is the progression ((m-a)*i + (m-1-b)) mod m.
-    uint128 maxlin(uint128 n, uint128 m, uint128 a, uint128 b)
+    uwide maxlin(uwide n, uwide m, uwide a, uwide b)
     {
       return m - 1 - minlin(n, m, (m - a) % m, m - 1 - b);
     }
@@ -840,8 +851,8 @@ namespace stp
     // The exact bounds of the progression start, start + step, ...
     // (count terms, mod m), where m is a power of two, step < m and
     // start < m.
-    void progressionHull(uint128 start, uint128 step, uint128 count,
-                         uint128 m, uint128& mn, uint128& mx)
+    void progressionHull(uwide start, uwide step, uwide count,
+                         uwide m, uwide& mn, uwide& mx)
     {
       if (step == 0)
       {
@@ -851,7 +862,7 @@ namespace stp
       // The progression repeats with period m / gcd; a count covering a
       // full period hits exactly the residues congruent to start modulo
       // the gcd.
-      const uint128 gcd = (uint128)1 << __builtin_ctzll((uint64_t)step);
+      const uwide gcd = (uwide)1 << __builtin_ctzll((uint64_t)step);
       if (count >= m / gcd)
       {
         mn = start & (gcd - 1);
@@ -872,23 +883,23 @@ namespace stp
     // written into resultMin/resultMax; both stay null if nothing is
     // known. Exact when the bound products land in the same 2^width block,
     // and when either operand has at most smallSideLimit values (at
-    // widths up to 64).
+    // widths up to wordPathMaxWidth).
     void multiplyPair(const CBV a, const CBV b, const CBV c, const CBV d,
                       unsigned width, CBV& resultMin, CBV& resultMax)
     {
       resultMin = nullptr;
       resultMax = nullptr;
 
-      if (width <= 64)
+      if (width <= wordPathMaxWidth)
       {
         const uint64_t aV = low64(a), bV = low64(b);
         const uint64_t cV = low64(c), dV = low64(d);
-        const uint128 m = (uint128)1 << width;
+        const uwide m = (uwide)1 << width;
 
-        const uint128 lowProduct = (uint128)aV * cV;
-        const uint128 highProduct = (uint128)bV * dV;
+        const uwide lowProduct = (uwide)aV * cV;
+        const uwide highProduct = (uwide)bV * dV;
 
-        uint128 apMin, apMax;
+        uwide apMin, apMax;
         bool known = false;
 
         if ((lowProduct >> width) == (highProduct >> width))
@@ -910,8 +921,8 @@ namespace stp
           const uint64_t fixedLo = xSmall ? aV : cV;
           const uint64_t fixedHi = xSmall ? bV : dV;
           const uint64_t movingLo = xSmall ? cV : aV;
-          const uint128 movingCount =
-              (uint128)(xSmall ? dV - cV : bV - aV) + 1;
+          const uwide movingCount =
+              (uwide)(xSmall ? dV - cV : bV - aV) + 1;
 
           if (fixedHi - fixedLo < smallSideLimit)
           {
@@ -919,8 +930,8 @@ namespace stp
             apMax = 0;
             for (uint64_t v = fixedLo;; v++)
             {
-              uint128 pmn, pmx;
-              progressionHull(((uint128)v * movingLo) & (m - 1), v,
+              uwide pmn, pmx;
+              progressionHull(((uwide)v * movingLo) & (m - 1), v,
                               movingCount, m, pmn, pmx);
               if (pmn < apMin)
                 apMin = pmn;
@@ -949,7 +960,7 @@ namespace stp
         return;
       }
 
-      // Bignum fallback for widths over 64: the same-block case only.
+      // Bignum fallback for wider values: the same-block case only.
       // Wide enough for the bound products.
       const unsigned wide = 2 * width + 2;
 
@@ -1888,19 +1899,28 @@ namespace stp
           uint64_t* mnSum = buf;
           uint64_t* mxSum = buf + K;
 
-          uint128 mnCarry = 0, mxCarry = 0;
+          // The carry out of a chunk is the number of times its 64-bit
+          // sum wrapped; counting the wraps keeps the totals exact
+          // without needing an integer type wider than the chunks.
+          uint64_t mnCarry = 0, mxCarry = 0;
           for (unsigned k = 0; k < K; k++)
           {
-            uint128 mns = mnCarry, mxs = mxCarry;
+            uint64_t mns = mnCarry, mxs = mxCarry;
+            mnCarry = 0;
+            mxCarry = 0;
             for (unsigned i = 0; i < children.size(); i++)
             {
-              mns += chunk64(children[i]->minV, k);
-              mxs += chunk64(children[i]->maxV, k);
+              const uint64_t mnc = chunk64(children[i]->minV, k);
+              const uint64_t mxc = chunk64(children[i]->maxV, k);
+              mns += mnc;
+              if (mns < mnc)
+                mnCarry++;
+              mxs += mxc;
+              if (mxs < mxc)
+                mxCarry++;
             }
-            mnSum[k] = (uint64_t)mns;
-            mxSum[k] = (uint64_t)mxs;
-            mnCarry = mns >> 64;
-            mxCarry = mxs >> 64;
+            mnSum[k] = mns;
+            mxSum[k] = mxs;
           }
 
           // The totals share a block exactly when they agree above the
