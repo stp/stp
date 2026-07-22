@@ -82,7 +82,7 @@ struct ColumnStats
   }
 };
 
-std::ostream& operator<<(std::ostream& o, const ColumnStats& cs)
+inline std::ostream& operator<<(std::ostream& o, const ColumnStats& cs)
 {
   o << "cUnfixed:" << cs.columnUnfixed << endl; // both unfixed.
   o << "cOneFixed:" << cs.columnOneFixed
