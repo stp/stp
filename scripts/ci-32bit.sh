@@ -24,6 +24,7 @@ apt-get install -y --no-install-recommends \
   python3 \
   python3-pip \
   python3-setuptools \
+  strace \
   zlib1g-dev
 pip3 install --break-system-packages -U lit
 
@@ -45,27 +46,26 @@ cmake \
   -G Ninja ..
 cmake --build . --parallel "$(nproc)"
 
-# Temporary diagnostic: the manual pipeline passes on i386 but the same
-# test fails under lit, so run lit itself on just that test -- once
-# plain, once with the solver wrapped to capture what it prints when
-# lit spawns it.
+# Temporary diagnostic: under lit the solver appears to never run for
+# let_009 (a tee wrapper left no trace). Strace the lit run to see the
+# exec and writes, and try a variant of the test without 'not'.
 (
   cd tests/query-files
   LIT_BIN=$(sed -n 's/^add_test(query-files "\([^"]*\)".*/\1/p' CTestTestfile.cmake)
   PREFIX=$(sed -n 's/.*--config-prefix=\([^" ]*\).*/\1/p' CTestTestfile.cmake)
-  cat > /tmp/stp-tee <<'EOF'
-#!/bin/bash
-/stp/build-32bit/stp "$@" 2>&1 | tee -a /tmp/lit-solver.out
-exit "${PIPESTATUS[0]}"
-EOF
-  chmod +x /tmp/stp-tee
-  echo "--- plain lit run:"
-  "$LIT_BIN" -a ${PREFIX:+--config-prefix=$PREFIX} --filter let_009 . || true
-  echo "--- lit run with tee-wrapped solver:"
-  "$LIT_BIN" -a ${PREFIX:+--config-prefix=$PREFIX} --param solver=/tmp/stp-tee \
-    --filter let_009 . || true
-  echo "--- solver output captured under lit:"
-  cat -A /tmp/lit-solver.out || true
+
+  sed 's/^; RUN: not %solver/; RUN: %solver/' \
+    ../../tests/query-files/let-tests/let_009.smt2 \
+    > ../../tests/query-files/let-tests/let_009_no_not.smt2
+
+  echo "--- strace'd lit run:"
+  strace -ff -e trace=process -s 300 -o /tmp/lit-strace \
+    "$LIT_BIN" -a ${PREFIX:+--config-prefix=$PREFIX} --filter 'let_009' . || true
+  echo "--- execve calls mentioning stp or OutputCheck or not:"
+  grep -h "execve" /tmp/lit-strace* | grep -E "stp|OutputCheck|/not|bin/not" || true
+  echo "--- exits and signals:"
+  grep -hE "exited with|killed by" /tmp/lit-strace* | sort | uniq -c | sort -rn | head
+  rm -f ../../tests/query-files/let-tests/let_009_no_not.smt2
   echo "--- end"
 )
 
