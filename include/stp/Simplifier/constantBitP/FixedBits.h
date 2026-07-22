@@ -311,15 +311,17 @@ public:
 
   void copyIn(const FixedBits& a)
   {
-    unsigned to = std::min(getWidth(), a.getWidth());
-    for (unsigned i = 0; i < to; i++)
+    const unsigned to = std::min(getWidth(), a.getWidth());
+    for (unsigned w = 0; w * 64 < to; w++)
     {
-      assert(!isFixed(i));
-      if (a.isFixed(i))
-      {
-        setFixed(i, true);
-        setValue(i, a.getValue(i));
-      }
+      const uint64_t mask =
+          (to - w * 64 >= 64) ? ~0ULL : ((1ULL << (to - w * 64)) - 1);
+      uint64_t af, av;
+      a.fillPackedWord(w, af, av);
+      assert((fixedW_[w] & mask) == 0);
+      const uint64_t add = af & mask;
+      if (add != 0)
+        fixWordBits(w, add, av);
     }
   }
 
