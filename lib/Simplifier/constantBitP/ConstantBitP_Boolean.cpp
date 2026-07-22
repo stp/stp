@@ -75,55 +75,102 @@ Result bvXorBothWays(vector<FixedBits*>& operands, FixedBits& output)
 // if output bit is true. Fix all the operands.
 // if all the operands are fixed. Fix the output.
 // given 1,1,1,- == 0, fix - to 0.
+// A word at a time: one pass over the children classifies every bit of the
+// word (any child fixed zero, all children fixed one, exactly one child
+// unfixed); a second pass runs only when child bits need fixing.
 Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output)
 {
   Result result = NO_CHANGE;
-  const int bitWidth = output.getWidth();
+  const unsigned width = output.getWidth();
+  const unsigned words = (width + 63) / 64;
+  const unsigned n = operands.size();
+#ifndef NDEBUG
+  for (unsigned j = 0; j < n; j++)
+    assert(operands[j]->getWidth() == width);
+#endif
 
-  for (int i = 0; i < bitWidth; i++)
+  const uint64_t top =
+      (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
+
+  for (unsigned w = 0; w < words; w++)
   {
-    const stats status = getStats(operands, i);
+    const uint64_t mask = (w == words - 1) ? top : ~0ULL;
 
-    // output is fixed to one. But an input value is false!
-    if (output.isFixed(i) && output.getValue(i) && status.fixedToZero > 0)
+    uint64_t fo, vo;
+    output.fillPackedWord(w, fo, vo);
+
+    uint64_t anyZero = 0;    // some child fixed to zero
+    uint64_t allOne = mask;  // every child fixed to one
+    uint64_t unfixed1 = 0;   // at least one child unfixed
+    uint64_t unfixed2 = 0;   // at least two children unfixed
+    for (unsigned j = 0; j < n; j++)
+    {
+      uint64_t f, v;
+      operands[j]->fillPackedWord(w, f, v);
+      anyZero |= f & ~v;
+      allOne &= v;
+      const uint64_t unf = ~f & mask;
+      unfixed2 |= unfixed1 & unf;
+      unfixed1 |= unf;
+
+      // Once every bit has a zero-entailing child and no output bit is
+      // fixed to one, nothing further can change: allOne and anyZero are
+      // disjoint (the child that zeroes a bit also drops it from allOne),
+      // so the all-ones cases are dead, child fixes need output ones, and
+      // the output can only become zero, which is already entailed
+      // everywhere. This makes the boolean AND (width one, huge arity)
+      // stop at its first false conjunct instead of scanning them all.
+      if (vo == 0 && anyZero == mask)
+        break;
+    }
+
+    // Output fixed to one against a child fixed to zero; output fixed to
+    // zero with every child fixed to one.
+    const uint64_t conflict = (vo & anyZero) | ((fo & ~vo) & allOne);
+
+    // Output one: all children become one. Output zero, no fixed zero and a
+    // single unfixed child: it becomes zero.
+    uint64_t childTo1 = vo & unfixed1;
+    uint64_t childTo0 = (fo & ~vo) & ~anyZero & unfixed1 & ~unfixed2;
+    uint64_t outTo0 = ~fo & anyZero & mask;
+    uint64_t outTo1 = ~fo & allOne;
+
+    if (conflict != 0)
+    {
+      // The bit-at-a-time original still applies fixes below the first
+      // conflicting bit before reporting the conflict.
+      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      childTo1 &= below;
+      childTo0 &= below;
+      outTo0 &= below;
+      outTo1 &= below;
+    }
+
+    if ((childTo1 | childTo0) != 0)
+    {
+      for (unsigned j = 0; j < n; j++)
+      {
+        uint64_t f, v;
+        operands[j]->fillPackedWord(w, f, v);
+        const uint64_t unf = ~f & mask;
+        const uint64_t to1 = childTo1 & unf;
+        const uint64_t to0 = childTo0 & unf;
+        if ((to1 | to0) != 0)
+        {
+          operands[j]->fixWordBits(w, to1 | to0, to1);
+          result = CHANGED;
+        }
+      }
+    }
+
+    if ((outTo0 | outTo1) != 0)
+    {
+      output.fixWordBits(w, outTo0 | outTo1, outTo1);
+      result = CHANGED;
+    }
+
+    if (conflict != 0)
       return CONFLICT;
-
-    // output is fixed to one. But an input value is false!
-    if (output.isFixed(i) && !output.getValue(i) && status.fixedToZero == 0 &&
-        status.unfixed == 0)
-      return CONFLICT;
-
-    // output is fixed to one. So all should be one.
-    if (output.isFixed(i) && output.getValue(i) && status.unfixed > 0)
-    {
-      fixUnfixedTo(operands, i, true);
-      result = CHANGED;
-    }
-
-    // The output is unfixed. At least one input is false.
-    if (!output.isFixed(i) && status.fixedToZero > 0)
-    {
-      output.setFixed(i, true);
-      output.setValue(i, false);
-      result = CHANGED;
-    }
-
-    // Everything is fixed to one!
-    if (!output.isFixed(i) && status.fixedToZero == 0 && status.unfixed == 0)
-    {
-      output.setFixed(i, true);
-      output.setValue(i, true);
-      result = CHANGED;
-    }
-
-    // If the output is false, and there is a single unfixed value with
-    // everything else true..
-    if (output.isFixed(i) && !output.getValue(i) && status.fixedToZero == 0 &&
-        status.unfixed == 1)
-    {
-      fixUnfixedTo(operands, i, false);
-      result = CHANGED;
-    }
   }
   return result;
 }
