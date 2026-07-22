@@ -18,7 +18,7 @@ jobs:
 
     steps:
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
       with:
           submodules: 'true'
 
@@ -68,7 +68,7 @@ jobs:
 
     steps:
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
           submodules: 'true'
 
