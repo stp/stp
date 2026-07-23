@@ -100,6 +100,9 @@ jobs:
     name: gcc (cadical)
     runs-on: ubuntu-latest
 
+    env:
+      CCACHE_MAXSIZE: 800M
+
     steps:
 
     - uses: actions/checkout@v7
@@ -112,6 +115,7 @@ jobs:
         sudo apt-get install -y \
           bison \
           build-essential \
+          ccache \
           cmake \
           flex \
           gcc \
@@ -124,23 +128,53 @@ jobs:
           zlib1g-dev
         sudo pip3 install -U lit
 
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A different set of dependencies to the job above, so a different key
+    # prefix: the key describes their revisions, not which of them are in
+    # the tree, and restoring the wrong set would skip the step that builds
+    # what is missing.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/cadical
+          deps/gtest
+          deps/OutputCheck
+        key: deps-x86_64-cadical-${{ steps.deps-key.outputs.key }}
+
     # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
     # solver, so building CMS as well would only add build time.
     - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
         ./scripts/deps/setup-minisat.sh
         ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-cadical-${{ github.run_id }}
+        restore-keys: ccache-cadical-
+
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
-      run: cmake --build . --parallel "$(nproc)"
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
       working-directory: build
 
     - name: Test

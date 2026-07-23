@@ -6,8 +6,8 @@
 # hashing the scripts alone would keep serving a cache built from whatever
 # those repositories happened to contain the first time. Fold in the commit
 # their default branches currently point at, so upstream movement produces a
-# new key. CryptoMiniSat is pinned to a tag inside its script, which the
-# script hash already covers.
+# new key. CryptoMiniSat and CaDiCaL are pinned to tags inside their
+# scripts, which the script hash already covers.
 
 set -e -u -o pipefail
 
