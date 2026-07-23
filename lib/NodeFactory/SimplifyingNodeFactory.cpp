@@ -406,6 +406,54 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       break;
     }
 
+    // ----- Cheap floating-point rewrites, applied before bit-blasting. -----
+    // These fire on the word-level node, so they shrink the circuit symfpu
+    // would otherwise build. Structural only -- constant folding is left to
+    // the blaster, which is why the FP kinds bypass the constant-fold path
+    // above.
+
+    // Classification ignores the sign, so a wrapping abs or neg can be peeled
+    // off. isPositive and isNegative are deliberately excluded: they are the
+    // two predicates that do depend on the sign.
+    case stp::FP_ISNORMAL:
+    case stp::FP_ISSUBNORMAL:
+    case stp::FP_ISZERO:
+    case stp::FP_ISINFINITE:
+    case stp::FP_ISNAN:
+      if (children[0].GetKind() == stp::FP_ABS ||
+          children[0].GetKind() == stp::FP_NEG)
+        result = NodeFactory::CreateNode(kind, children[0][0]);
+      break;
+
+    // x < x and x > x are false, NaN included.
+    case stp::FP_LT:
+    case stp::FP_GT:
+      if (children.size() == 2 && children[0] == children[1])
+        result = ASTFalse;
+      break;
+
+    // x <= x and x >= x hold exactly when x is not NaN.
+    case stp::FP_LEQ:
+    case stp::FP_GEQ:
+      if (children.size() == 2 && children[0] == children[1])
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+      break;
+
+    // Both float equalities are symmetric. Order the operands so that x ~ y
+    // and y ~ x become the same node and share their blasted circuit.
+    case stp::FP_EQ:
+    case stp::FP_SMT_EQ:
+      if (children.size() == 2 &&
+          children[0].GetNodeNum() > children[1].GetNodeNum())
+      {
+        ASTVec swapped;
+        swapped.push_back(children[1]);
+        swapped.push_back(children[0]);
+        result = hashing.CreateNode(kind, swapped);
+      }
+      break;
+
     default:
       result = hashing.CreateNode(kind, children);
   }
@@ -2507,6 +2555,46 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       if (children[0].GetKind() == stp::WRITE)
       {
         result = chaseRead(children, width);
+      }
+      break;
+
+    // ----- Cheap floating-point rewrites, applied before bit-blasting. -----
+    // See the matching block in CreateNode.
+
+    // min(x, x) = max(x, x) = x. The two float operands are children 0 and 1;
+    // the totalising pass may append a choice-of-zero child, but it runs after
+    // this, and the identity holds whether or not it is present.
+    case stp::FP_MIN:
+    case stp::FP_MAX:
+      if (children.size() >= 2 && children[0] == children[1])
+        result = children[0];
+      break;
+
+    // abs(abs x) = abs(neg x) = abs x.
+    case stp::FP_ABS:
+      if (children[0].GetKind() == stp::FP_ABS ||
+          children[0].GetKind() == stp::FP_NEG)
+        result = NodeFactory::CreateTerm(stp::FP_ABS, width, children[0][0]);
+      break;
+
+    // neg(neg x) = x.
+    case stp::FP_NEG:
+      if (children[0].GetKind() == stp::FP_NEG)
+        result = children[0][0];
+      break;
+
+    // fp.add and fp.mul are commutative in their two float operands (child 0
+    // is the rounding mode). Order them so x + y and y + x share a node.
+    case stp::FP_ADD:
+    case stp::FP_MUL:
+      if (children.size() == 3 &&
+          children[1].GetNodeNum() > children[2].GetNodeNum())
+      {
+        ASTVec reordered;
+        reordered.push_back(children[0]);
+        reordered.push_back(children[2]);
+        reordered.push_back(children[1]);
+        result = hashing.CreateTerm(kind, width, reordered);
       }
       break;
 
