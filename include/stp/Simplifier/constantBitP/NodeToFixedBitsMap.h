@@ -31,6 +31,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace simplifier
 {
@@ -40,9 +41,12 @@ namespace constantBitP
 class NodeToFixedBitsMap
 {
 public:
-  typedef std::unordered_map<stp::ASTNode, FixedBits*,
-                             stp::ASTNode::ASTNodeHasher,
-                             stp::ASTNode::ASTNodeEqual>
+  // A flat hash map: propagation performs several lookups per node
+  // visit, and they dominate its cost on large problems. Note inserting
+  // invalidates iterators (but not the pointed-to FixedBits).
+  typedef ankerl::unordered_dense::map<stp::ASTNode, FixedBits*,
+                                       stp::ASTNode::ASTNodeHasher,
+                                       stp::ASTNode::ASTNodeEqual>
       NodeToFixedBitsMapType;
 
   NodeToFixedBitsMapType* map;

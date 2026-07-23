@@ -234,3 +234,227 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_TRUE(eqsAgainstConstants(n));
 }
 
+
+// The following pin down that differing leading constant bits decide
+// comparisons here (via the fixed-bit transfer functions for concat and
+// the comparisons), so neither the simplifying node factory nor the
+// Simplifier needs a leading-constant rule.
+
+// Equality with differing leading constant bits folds to false.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( =
+              (concat (_ bv1 1) v0)
+              (concat (_ bv0 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Unsigned comparison decided by differing leading constant bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvugt
+              (concat (_ bv0 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Signed comparison with differing sign bits: positive > negative.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsgt
+              (concat (_ bv0 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// Signed comparison, same sign bit: the unsigned order of the leading
+// constant bits decides.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsgt
+              (concat (_ bv3 2) v0)
+              (concat (_ bv2 2) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+static bool presentWithWidth(const stp::Kind k, const ASTNode& n,
+                             const unsigned width)
+{
+  if (n.GetKind() == k && n.GetValueWidth() == width)
+    return true;
+
+  for (const auto& c : n)
+    if (presentWithWidth(k, c, width))
+      return true;
+
+  return false;
+}
+
+// A division whose dividend has fixed leading zero bits (here via a
+// mask) narrows to the width that can be non-zero. With a constant
+// divisor that fits, the guard folds away and only the narrow division
+// remains.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvudiv (bvand v0 (_ bv1023 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVDIV, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVDIV, n, 10));
+}
+
+// When the constant divisor doesn't fit into the narrowed width it
+// exceeds the dividend, so the quotient folds to zero outright.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvudiv (bvand v0 (_ bv15 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVDIV, n));
+}
+
+// The remainder version: a dividend below the divisor is returned
+// unchanged, so the remainder disappears.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvurem (bvand v0 (_ bv15 20)) (_ bv100 20))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVMOD, n));
+  ASSERT_TRUE(c.present(stp::BVAND, n));
+}
+
+// A sign extension whose argument's top bit is fixed becomes a concat.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              ((_ sign_extend 4) (bvand ((_ extract 15 0) v0) (_ bv1023 16)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVSX, n));
+}
+
+// A multiplication whose operands are masked down narrows to the width
+// the product can occupy: here 2 + 3 bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvmul (bvand v0 (_ bv3 20)) (bvand v1 (_ bv7 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVMULT, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVMULT, n, 5));
+}
+
+// An addition of two masked operands narrows to the width the sum can
+// occupy: here 4 + 1 carry bits.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvadd (bvand v0 (_ bv15 20)) (bvand v1 (_ bv15 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVPLUS, n, 20));
+  ASSERT_TRUE(presentWithWidth(stp::BVPLUS, n, 5));
+}
+
+// An addition whose operands split at a bit boundary becomes a concat:
+// no adder, no bitwise operation at all.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            ( = v2
+              (bvadd (bvand v0 (_ bv240 20)) (bvand v1 (_ bv15 20)))
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(c.present(stp::BVPLUS, n));
+  ASSERT_FALSE(c.present(stp::BVNOT, n));
+  ASSERT_TRUE(c.present(stp::BVCONCAT, n));
+}

@@ -46,14 +46,14 @@ THREAD_LOCAL uint64_t ASTInternal::node_uid_cntr = 0;
  ****************************************************************/
 
 // Sort ASTNodes by expression numbers
-bool exprless(const ASTNode n1, const ASTNode n2)
+bool exprless(const ASTNode& n1, const ASTNode& n2)
 {
   return (n1.GetNodeNum() < n2.GetNodeNum());
 }
 
 // This is for sorting by arithmetic expressions (for
 // combining like terms, etc.)
-bool arithless(const ASTNode n1, const ASTNode n2)
+bool arithless(const ASTNode& n1, const ASTNode& n2)
 {
   Kind k1 = n1.GetKind();
   Kind k2 = n2.GetKind();

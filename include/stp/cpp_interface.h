@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -79,14 +80,7 @@ class Cpp_interface
     ASTNode function;
     std::string name;
   };
-  std::unordered_map<std::string, Function> functions;
-
-  // The function most recently found by isBitVectorFunction or
-  // isBooleanFunction, letting applyFunction skip a second hash probe when
-  // the parser applies the function the lexer just identified. Pointers
-  // into the map are stable except across erase, so this is cleared
-  // whenever a frame is removed.
-  const Function* last_found_function = nullptr;
+  ankerl::unordered_dense::map<std::string, Function> functions;
 
   // Nested helper class to encapsulate a frame (i.e., between push a pop)
   class SolverFrame
@@ -94,8 +88,8 @@ class Cpp_interface
   public:
     // Functions are (currently) managed at global scope; we need a pointer to
     // the global functions to be able to remove functions when we pop
-    SolverFrame(
-        std::unordered_map<std::string, Function>* global_function_context);
+    SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
+                    global_function_context);
     virtual ~SolverFrame();
 
     // Obtain the functions for the current frame
@@ -107,7 +101,8 @@ class Cpp_interface
   private:
     vector<std::string> _scoped_functions;
     ASTVec _scoped_symbols;
-    std::unordered_map<std::string, Function>* _global_function_context;
+    ankerl::unordered_dense::map<std::string, Function>*
+        _global_function_context;
   };
 
   // The vector of all frames that have been created by calling push

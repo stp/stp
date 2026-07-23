@@ -538,12 +538,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
   else if (AND == k)
   {
     for (const auto& it : a)
-    {
-      if (always_true)
-        simp->UpdateAlwaysTrueFormSet(it);
-      
       buildCandidateList(it);
-    }
   }
 }
 

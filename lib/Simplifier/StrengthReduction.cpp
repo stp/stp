@@ -235,6 +235,23 @@ namespace stp
           FatalError("Never here");
       }
     }
+    else if (k == BVMOD)
+    {
+      // A remainder whose dividend is always below the divisor is the
+      // dividend. (The quotient analogue needs no rule here: the
+      // interval transfer for BVDIV computes a constant zero interval,
+      // which is replaced above.)
+      const auto l = visited.find(n[0]);
+      const auto r = visited.find(n[1]);
+      if (l != visited.end() && r != visited.end() && l->second != nullptr &&
+          r->second != nullptr &&
+          CONSTANTBV::BitVector_Lexicompare(l->second->maxV,
+                                            r->second->minV) < 0)
+      {
+        newN = n[0];
+        replaceWithSimpler++;
+      }
+    }
     else if (k == EQ)
     {
       // An equality whose sides' intervals meet at exactly one point
@@ -417,6 +434,182 @@ namespace stp
         {
           newN =
               nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
+          replaceWithSimpler++;
+
+          // When the disjointness is a contiguous split, the OR is just
+          // wiring: the high part concatenated onto the low part.
+          if (n.Degree() == 2)
+          {
+            const unsigned width = n.GetValueWidth();
+            for (unsigned i = 0; i < 2; i++)
+            {
+              const FixedBits* high = children[i];
+              const FixedBits* low = children[1 - i];
+
+              // The lowest bit of "high" that might be one.
+              unsigned k = 0;
+              while (k < width && high->isFixed(k) && !high->getValue(k))
+                k++;
+
+              // All of "low"'s possibly-one bits must sit below k.
+              bool lowFits = true;
+              for (unsigned j = k; j < width && lowFits; j++)
+                if (!(low->isFixed(j) && !low->getValue(j)))
+                  lowFits = false;
+
+              if (lowFits && k > 0 && k < width)
+              {
+                newN = nf->CreateTerm(
+                    BVCONCAT, width,
+                    nf->CreateTerm(BVEXTRACT, width - k, n[i],
+                                   nf->CreateBVConst(32, width - 1),
+                                   nf->CreateBVConst(32, k)),
+                    nf->CreateTerm(BVEXTRACT, k, n[1 - i],
+                                   nf->CreateBVConst(32, k - 1),
+                                   nf->CreateBVConst(32, 0)));
+                break;
+              }
+            }
+          }
+        }
+        else if (kind == BVPLUS)
+        {
+          // Leading zeros on every operand bound the sum, so the
+          // addition narrows to the width that can carry.
+          const unsigned width = n.GetValueWidth();
+
+          unsigned maxEffective = 0;
+          for (unsigned i = 0; i < children.size(); i++)
+          {
+            unsigned nlz = 0;
+            while (nlz < width && children[i]->isFixed(width - 1 - nlz) &&
+                   !children[i]->getValue(width - 1 - nlz))
+              nlz++;
+            if (width - nlz > maxEffective)
+              maxEffective = width - nlz;
+          }
+
+          // Adding m terms can carry ceil(log2(m)) bits upwards.
+          unsigned carry = 0;
+          while ((1u << carry) < children.size())
+            carry++;
+
+          const unsigned rest = maxEffective + carry;
+          if (maxEffective > 0 && rest < width)
+          {
+            ASTVec narrowed;
+            narrowed.reserve(n.Degree());
+            for (const auto& c : n.GetChildren())
+              narrowed.push_back(
+                  nf->CreateTerm(BVEXTRACT, rest, c,
+                                 nf->CreateBVConst(32, rest - 1),
+                                 nf->CreateBVConst(32, 0)));
+
+            newN = nf->CreateTerm(
+                BVCONCAT, width, nf->CreateZeroConst(width - rest),
+                nf->CreateTerm(BVPLUS, rest, narrowed));
+            replaceWithSimpler++;
+          }
+        }
+      }
+    }
+    else if (kind == BVMULT)
+    {
+      // Leading zeros on the operands bound the product, so the
+      // multiplication narrows to the width the product can occupy.
+      const unsigned width = n.GetValueWidth();
+
+      bool bad = false;
+      unsigned totalEffective = 0;
+      for (const auto& c : n.GetChildren())
+      {
+        const auto it = visited.find(c);
+        if (it == visited.end() || it->second == nullptr)
+        {
+          bad = true;
+          break;
+        }
+
+        unsigned nlz = 0;
+        while (nlz < width - 1 && it->second->isFixed(width - 1 - nlz) &&
+               !it->second->getValue(width - 1 - nlz))
+          nlz++;
+        totalEffective += width - nlz;
+      }
+
+      if (!bad && totalEffective < width)
+      {
+        const unsigned rest = totalEffective;
+
+        ASTVec narrowed;
+        narrowed.reserve(n.Degree());
+        for (const auto& c : n.GetChildren())
+          narrowed.push_back(nf->CreateTerm(BVEXTRACT, rest, c,
+                                            nf->CreateBVConst(32, rest - 1),
+                                            nf->CreateBVConst(32, 0)));
+
+        newN = nf->CreateTerm(
+            BVCONCAT, width, nf->CreateZeroConst(width - rest),
+            nf->CreateTerm(BVMULT, rest, narrowed));
+        replaceWithSimpler++;
+      }
+    }
+    else if (kind == BVDIV || kind == BVMOD)
+    {
+      // If the dividend's leading bits are zero, the interesting part
+      // fits into the remaining width, so narrow the operation, guarded
+      // on the divisor's leading bits being zero too. When they aren't,
+      // the divisor exceeds the dividend, making the quotient zero and
+      // the remainder the dividend. Division additionally needs the
+      // divisor to be provably non-zero, because the narrowed form
+      // wouldn't recreate the all-ones result at full width.
+      const auto l = visited.find(n[0]);
+      const auto r = visited.find(n[1]);
+      if (l != visited.end() && r != visited.end() && l->second != nullptr &&
+          r->second != nullptr)
+      {
+        const FixedBits* dividend = l->second;
+        const FixedBits* divisor = r->second;
+        const unsigned width = n.GetValueWidth();
+
+        unsigned nlz = 0;
+        while (nlz < width - 1 && dividend->isFixed(width - 1 - nlz) &&
+               !dividend->getValue(width - 1 - nlz))
+          nlz++;
+
+        bool divisorNonZero = false;
+        for (unsigned i = 0; i < width; i++)
+          if (divisor->isFixed(i) && divisor->getValue(i))
+          {
+            divisorNonZero = true;
+            break;
+          }
+
+        if (nlz > 0 && (kind == BVMOD || divisorNonZero))
+        {
+          const unsigned rest = width - nlz;
+
+          const ASTNode cond = nf->CreateNode(
+              EQ, nf->CreateZeroConst(nlz),
+              nf->CreateTerm(BVEXTRACT, nlz, n[1],
+                             nf->CreateBVConst(32, width - 1),
+                             nf->CreateBVConst(32, rest)));
+
+          const ASTNode narrowed = nf->CreateTerm(
+              BVCONCAT, width, nf->CreateZeroConst(nlz),
+              nf->CreateTerm(
+                  kind, rest,
+                  nf->CreateTerm(BVEXTRACT, rest, n[0],
+                                 nf->CreateBVConst(32, rest - 1),
+                                 nf->CreateBVConst(32, 0)),
+                  nf->CreateTerm(BVEXTRACT, rest, n[1],
+                                 nf->CreateBVConst(32, rest - 1),
+                                 nf->CreateBVConst(32, 0))));
+
+          const ASTNode otherwise =
+              (kind == BVDIV) ? nf->CreateZeroConst(width) : n[0];
+
+          newN = nf->CreateTerm(ITE, width, cond, narrowed, otherwise);
           replaceWithSimpler++;
         }
       }

@@ -18,7 +18,7 @@ jobs:
 
     steps:
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
       with:
           submodules: 'true'
 
@@ -61,5 +61,20 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
+
+  build-32bit:
+    name: gcc (i386)
+    runs-on: [ubuntu-latest]
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Build and test in a 32-bit container
+      run: |
+        docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
+          i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
 
 # EOF

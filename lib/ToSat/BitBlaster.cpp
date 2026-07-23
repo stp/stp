@@ -539,9 +539,10 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
       // Add all the nodes to the worklist that have a constant as a child.
       cb->initWorkList(n_term);
 
-      simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::
-          iterator it;
-      it = cb->fixedMap->map->find(n_term);
+      // The FixedBits are held by pointer rather than map iterator:
+      // propagate() inserts into the map, which invalidates iterators,
+      // while the pointed-to FixedBits are stable.
+      auto it = cb->fixedMap->map->find(n_term);
       FixedBits* nBits;
       if (it == cb->fixedMap->map->end())
       {
@@ -561,25 +562,31 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
         *nBits = FixedBits::concreteToAbstract(n_term);
       }
 
-      it = cb->fixedMap->map->find(term);
-      if (it != cb->fixedMap->map->end())
+      FixedBits* termBits = nullptr;
+      {
+        const auto term_it = cb->fixedMap->map->find(term);
+        if (term_it != cb->fixedMap->map->end())
+          termBits = term_it->second;
+      }
+
+      if (termBits != nullptr)
       {
         // Copy over to the (potentially) new node. Everything we know about
         // the old node.
-        nBits->mergeIn(*(it->second));
+        nBits->mergeIn(*termBits);
       }
 
       cb->scheduleUp(n_term);
       cb->scheduleNode(n_term);
       cb->propagate();
 
-      if (it != cb->fixedMap->map->end())
+      if (termBits != nullptr)
       {
         // Copy to the old node, all we know about the new node. This means
         // that
         // all the parents of the old node get the (potentially) updated
         // fixings.
-        it->second->mergeIn(*nBits);
+        termBits->mergeIn(*nBits);
       }
       // Propagate through all the parents of term.
       cb->scheduleUp(term);

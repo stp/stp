@@ -348,8 +348,6 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
     for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
          it++)
     {
-      if (always_true)
-        simp->UpdateAlwaysTrueFormSet(*it);
       ASTNode aaa = propagate(*it, at);
 
       if (ASTTrue != aaa)
