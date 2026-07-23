@@ -79,6 +79,9 @@ _set_func('vc_isUsingCryptominisat', c_bool, _VC)
 _set_func('vc_supportsRiss', c_bool, _VC)
 _set_func('vc_useRiss', c_bool, _VC)
 _set_func('vc_isUsingRiss', c_bool, _VC)
+_set_func('vc_supportsCadical', c_bool, _VC)
+_set_func('vc_useCadical', c_bool, _VC)
+_set_func('vc_isUsingCadical', c_bool, _VC)
 _set_func('vc_boolType', _Type, _VC)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
@@ -258,6 +261,15 @@ class Solver(object):
     def isUsingRiss(self):
         return _lib.vc_isUsingRiss(self.vc)
 
+    def supportsCadical(self):
+        return _lib.vc_supportsCadical(self.vc)
+
+    def useCadical(self):
+        return _lib.vc_useCadical(self.vc)
+
+    def isUsingCadical(self):
+        return _lib.vc_isUsingCadical(self.vc)
+
     def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
@@ -322,7 +334,23 @@ class Solver(object):
         return exprs, len(exprs)
 
     def check_with_timeout(self, *exprs, **kwargs):
-        """Check whether the various expressions are satisfiable."""
+        """Check whether the various expressions are satisfiable.
+
+        Accepts two keyword budgets, max_conflicts and max_time (seconds).
+        For both, -1 means no limit and 0 means give up without searching;
+        any other negative value is rejected. max_time is a budget for the
+        whole query, not for each call into the SAT solver.
+
+        Returns 3 if the budget ran out before an answer was found.
+        """
+
+        for name in ('max_conflicts', 'max_time'):
+            value = kwargs.get(name, -1)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError('%s should be an integer' % name)
+            if value < -1:
+                raise ValueError(
+                    '%s should be -1 (no limit) or greater' % name)
 
         _, length = self._n_exprs(*exprs)
         if (length > 0):

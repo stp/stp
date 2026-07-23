@@ -478,13 +478,23 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 //! 'timeout_max_time' is represented and expected in seconds.
 //! The given expression 'e' must be of type boolean.
 //!
+//! For both budgets, -1 means "no limit" and is the only negative value
+//! accepted; 0 means a budget of zero, i.e. give up without searching. Any
+//! other negative value is rejected as an error.
+//!
+//! 'timeout_max_time' is a budget for the whole query rather than for each
+//! call into the SAT solver, of which a query makes several.
+//!
 //! Returns ...
 //!   0: if 'e' is INVALID
 //!   1: if 'e' is VALID
 //!   2: if errors occured
 //!   3: if the timeout was reached
 //!
-//! Note: Only the cryptominisat solver supports timeout_max_time
+//! Note: only the cryptominisat and cadical solvers can abandon a search that
+//!       is already running. With the other solvers 'timeout_max_time' is
+//!       still honoured, but only between calls into the SAT solver, so a
+//!       query may overrun the budget by however long a single call takes.
 //!
 DLL_PUBLIC int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_max_time);
 
@@ -1230,6 +1240,18 @@ DLL_PUBLIC bool vc_useRiss(VC vc);
 //! \brief Checks if underlying SAT solver is riss
 //!
 DLL_PUBLIC bool vc_isUsingRiss(VC vc);
+
+//! \brief Checks if STP was compiled with support for cadical
+//!
+DLL_PUBLIC bool vc_supportsCadical(VC vc);
+
+//! \brief Sets underlying SAT solver to cadical
+//!
+DLL_PUBLIC bool vc_useCadical(VC vc);
+
+//! \brief Checks if underlying SAT solver is cadical
+//!
+DLL_PUBLIC bool vc_isUsingCadical(VC vc);
 
 
 #ifdef __cplusplus

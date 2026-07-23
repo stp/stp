@@ -27,6 +27,9 @@ THE SOFTWARE.
 
 #include "minisat/core/SolverTypes.h"
 #include "minisat/mtl/Vec.h"
+#include <cassert>
+#include <chrono>
+#include <cstdint>
 #include <iostream>
 
 // Don't let the defines escape outside.
@@ -53,7 +56,26 @@ public:
 
   virtual bool okay() const = 0; // FALSE means solver is in a conflicting state
 
-  virtual bool solve(bool& timeout_expired) = 0; // Search without assumptions.
+  // Search without assumptions.
+  //
+  // Not virtual: this enforces the parts of the resource budget that do not
+  // depend on the backend, then delegates to solveInternal(). Backends
+  // override solveInternal(), not this.
+  bool solve(bool& timeout_expired)
+  {
+    // The budget can already be spent before we ever reach the solver, either
+    // because the caller asked for a zero budget or because an earlier
+    // refinement iteration used it all up. Don't rely on the backend noticing:
+    // a solver that cannot be interrupted mid-search would run to completion,
+    // and even one that can only notices when it next polls.
+    if (timeLimitExpired())
+    {
+      timeout_expired = true;
+      return false;
+    }
+
+    return solveInternal(timeout_expired);
+  }
 
   typedef uint8_t lbool;
 
@@ -64,6 +86,15 @@ public:
     return p;
   }
 
+  // ---------------------------------------------------------------------
+  // Resource budgets.
+  //
+  // STP spells "no limit" as -1, and that case is filtered out by the
+  // caller, so these are only ever called with a value >= 0. A value of 0
+  // therefore means what it says: a budget of zero, i.e. give up without
+  // searching. It does not mean "unlimited".
+  // ---------------------------------------------------------------------
+
   virtual void setMaxConflicts(int64_t /*max_confl*/)
   {
     std::cerr
@@ -71,11 +102,54 @@ public:
         << std::endl;
   }
 
-  virtual void setMaxTime(int64_t /*max_time*/)
+  // The time budget belongs to the whole query, not to one solve() call.
+  // STP calls solve() once per abstraction-refinement iteration, so a budget
+  // re-armed per call would let a query run for an unbounded multiple of it.
+  // The deadline is computed once, here, and every backend measures against
+  // it; that also makes a budget of 0 fall out for free, as a deadline in the
+  // past.
+  //
+  // Backends that can be interrupted mid-search should override
+  // canInterruptSearch() and consult secondsRemaining() / timeLimitExpired().
+  // For the rest, solve() still enforces the deadline between calls.
+  virtual void setMaxTime(int64_t max_time) // seconds
   {
-    std::cerr
-        << "Warning: Max time setting is not supported by this SAT solver"
-        << std::endl;
+    assert(max_time >= 0);
+
+    deadline = std::chrono::steady_clock::now() +
+               std::chrono::seconds(max_time);
+    deadline_set = true;
+
+    if (!canInterruptSearch())
+    {
+      std::cerr << "Warning: this SAT solver cannot be interrupted during "
+                   "search; the time limit is only enforced between solver "
+                   "calls"
+                << std::endl;
+    }
+  }
+
+  bool hasTimeLimit() const { return deadline_set; }
+
+  // TRUE once the query's time budget is gone. Always FALSE when no time
+  // limit has been set.
+  bool timeLimitExpired() const
+  {
+    return deadline_set && std::chrono::steady_clock::now() >= deadline;
+  }
+
+  // Time left on the query's budget, in seconds; never negative. Only
+  // meaningful when hasTimeLimit(). Backends that take a duration rather
+  // than a deadline should pass this on each solve, so that what remains
+  // shrinks across refinement iterations instead of being re-armed.
+  double secondsRemaining() const
+  {
+    assert(deadline_set);
+
+    const std::chrono::duration<double> remaining =
+        deadline - std::chrono::steady_clock::now();
+
+    return remaining.count() > 0.0 ? remaining.count() : 0.0;
   }
 
   virtual uint8_t modelValue(uint32_t x) const = 0;
@@ -108,6 +182,20 @@ public:
     std::cerr << "Not yet implemented.";
     exit(1);
   }
+
+protected:
+  // Search without assumptions, having already been given a non-empty share
+  // of whatever budget was configured. Implemented by each backend.
+  virtual bool solveInternal(bool& timeout_expired) = 0;
+
+  // TRUE if the backend can abandon a search that is already running, either
+  // through a callback or through a limit of its own. Backends that cannot
+  // get a time limit enforced only between solve() calls.
+  virtual bool canInterruptSearch() const { return false; }
+
+private:
+  std::chrono::steady_clock::time_point deadline;
+  bool deadline_set = false;
 };
 }
 #endif

@@ -59,12 +59,8 @@ CryptoMiniSat5::~CryptoMiniSat5()
 
 void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
 {
+  assert(_max_confl >= 0);
   max_confl = _max_confl;
-}
-
-void CryptoMiniSat5::setMaxTime(int64_t _max_time)
-{
-  max_time = _max_time;
 }
 
 bool CryptoMiniSat5::addClause(
@@ -89,19 +85,32 @@ bool CryptoMiniSat5::okay()
   return s->okay();
 }
 
-bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
+bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
 {
-  if (max_confl > 0) {
-     s->set_max_confl(std::max(max_confl - s->get_sum_conflicts(), (uint64_t)1));
+  /*
+   * The conflict budget is for the query, so what is handed over is what is
+   * left of it. Once it is gone we give up here rather than passing a budget
+   * of zero down and relying on how CryptoMiniSat reads it.
+   */
+  if (max_confl >= 0) {
+     const int64_t remaining =
+         max_confl - static_cast<int64_t>(s->get_sum_conflicts());
+
+     if (remaining <= 0) {
+        timeout_expired = true;
+        return false;
+     }
+
+     s->set_max_confl(static_cast<uint64_t>(remaining));
   }
 
   /*
-   * STP uses -1 for a value of "no timeout" -- this means that we only set the
-   * timeout _in the SAT solver_ if the value is >= 0. This avoids us
-   * accidentally setting a large limit (or one in the past).
+   * The budget belongs to the query rather than to this call, so hand over
+   * what is left of it rather than the original figure. A budget of zero is
+   * already dealt with by SATSolver::solve(), so what remains here is > 0.
    */
-  if (max_time > 0) {
-     s->set_max_time(max_time);
+  if (hasTimeLimit()) {
+     s->set_max_time(secondsRemaining());
   }
 
   CMSat::lbool ret = s->solve();

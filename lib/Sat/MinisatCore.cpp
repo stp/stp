@@ -53,6 +53,7 @@ MinisatCore::~MinisatCore()
 
 void MinisatCore::setMaxConflicts(int64_t max_confl)
 {
+  assert(max_confl >= 0);
   s->setConfBudget(max_confl);
 }
 
@@ -81,7 +82,7 @@ bool MinisatCore::propagateWithAssumptions(
   return ret != (Minisat::lbool)Minisat::l_False;
 }
 
-bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
+bool MinisatCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
     return false;

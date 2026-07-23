@@ -54,13 +54,9 @@ public:
 
   virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
 
-  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
-
   bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
   bool okay() const; // FALSE means solver is in a conflicting state
-
-  bool solve(bool& timeout_expired); // Search without assumptions.
 
   virtual uint8_t modelValue(uint32_t x) const;
 
@@ -85,10 +81,17 @@ public:
   void solveAndDump();
 
 
+protected:
+  bool solveInternal(bool& timeout_expired) override;
+
+  // CryptoMiniSat polls its own wall-clock limit during search.
+  bool canInterruptSearch() const override { return true; }
+
 private:
   void* temp_cl;
-  int64_t max_confl = 0;
-  int64_t max_time = 0; // seconds
+  // Negative means no budget was configured. This cannot default to 0,
+  // which is now a budget of zero rather than the absence of one.
+  int64_t max_confl = -1;
 };
 }
 

@@ -534,6 +534,26 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   stp::ASTNode* a = (stp::ASTNode*)e;
   stp::STPMgr* b = stp_i->bm;
 
+  /*
+   * -1 is the only negative value that means anything ("no limit"). Reject
+   * the rest rather than silently running unlimited, which is the dangerous
+   * direction for a caller that computed a budget and got the sign wrong.
+   */
+  if (timeout_max_conflicts < -1)
+  {
+    std::cerr << "CInterface: timeout_max_conflicts must be -1 (no limit) or "
+                 "greater"
+              << std::endl;
+    return 2;
+  }
+
+  if (timeout_max_time < -1)
+  {
+    std::cerr << "CInterface: timeout_max_time must be -1 (no limit) or greater"
+              << std::endl;
+    return 2;
+  }
+
   if (!stp::is_Form_kind(a->GetKind()))
   {
     stp::FatalError("CInterface: Trying to QUERY a NON formula: ", *a);
@@ -2300,6 +2320,42 @@ vc
 {
 #ifdef USE_RISS
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
+#else
+  return false;
+#endif
+}
+
+bool vc_supportsCadical(VC /*vc*/)
+{
+#ifdef USE_CADICAL
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useCadical(VC
+#ifdef USE_CADICAL
+vc
+#endif
+)
+{
+#ifdef USE_CADICAL
+  _vc_useSolver(vc, stp::UserDefinedFlags::CADICAL_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingCadical(VC
+#ifdef USE_CADICAL
+vc
+#endif
+)
+{
+#ifdef USE_CADICAL
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CADICAL_SOLVER);
 #else
   return false;
 #endif

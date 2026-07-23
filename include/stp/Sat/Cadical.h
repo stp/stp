@@ -44,21 +44,21 @@ namespace stp
   CaDiCaL::Solver * s;
 
   // Cadical has no wall-clock limit of its own; it polls a Terminator
-  // during search, so a deadline check gives us setMaxTime().
+  // during search, so asking the base class whether the query's deadline
+  // has passed is what gives us setMaxTime(). The deadline lives in
+  // SATSolver and spans the whole query, so this is not re-armed per solve.
   class TimeLimit : public CaDiCaL::Terminator
   {
   public:
-    std::chrono::steady_clock::time_point deadline;
-    bool armed = false;
-    bool terminate() override
-    {
-      return armed && std::chrono::steady_clock::now() >= deadline;
-    }
+    TimeLimit(const SATSolver& owner) : owner(owner) {}
+    bool terminate() override { return owner.timeLimitExpired(); }
+
+  private:
+    const SATSolver& owner;
   };
   TimeLimit time_limit;
 
   int64_t max_confl = -1;
-  int64_t max_time = -1; // seconds
 
 public:
   Cadical();
@@ -69,19 +69,11 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
-
   virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
-
-  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
-
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 
   virtual bool simplify(); // Removes already satisfied clauses.
 
   virtual uint8_t modelValue(uint32_t x) const;
-
-  uint8_t value(uint32_t x) const;
 
   virtual uint32_t newVar();
 
@@ -95,6 +87,11 @@ public:
   virtual lbool false_literal() const { return ((uint8_t)-1); }
   virtual lbool undef_literal() const { return ((uint8_t)2); }
 
+protected:
+  bool solveInternal(bool& timeout_expired) override;
+
+  // Cadical polls the Terminator we connect during search.
+  bool canInterruptSearch() const override { return true; }
 };
 }
 
