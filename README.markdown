@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Windows build](https://ci.appveyor.com/api/projects/status/35983b7cnrg37whk?svg=true)](https://ci.appveyor.com/project/msoos/stp)
+[![CI](https://github.com/stp/stp/actions/workflows/ci.yml/badge.svg)](https://github.com/stp/stp/actions/workflows/ci.yml)
 [![Documentation](https://readthedocs.org/projects/stp/badge/?version=latest)](https://stp.readthedocs.io/en/latest/?badge=latest)
 [![Coverity](https://scan.coverity.com/projects/861/badge.svg)](https://scan.coverity.com/projects/861)
 
@@ -212,7 +212,7 @@ To install run `make install` and to uninstall run `make uninstall`. The root of
 
 ### Building on Windows/Visual Studio
 
-You will need to install [cmake](https://cmake.org/download/) and follow the steps that AppVeyor [follows](https://github.com/stp/stp/blob/master/appveyor.yml). In case you need the static binary, you can always access it as a binary artifact at the [AppVeyor build page](https://ci.appveyor.com/project/msoos/stp). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
+You will need to install [cmake](https://cmake.org/download/) and follow the steps that the `windows` job in [`.github/workflows/ci.yml`](https://github.com/stp/stp/blob/master/.github/workflows/ci.yml) runs: install flex and bison, build minisat, then configure STP against it with `-DNOCRYPTOMINISAT=ON` (CryptoMiniSat does not build with MSVC). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
 
 ### Building Docker
 
