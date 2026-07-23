@@ -32,7 +32,9 @@ THE SOFTWARE.
 #include <cstdint>
 
 #ifdef _MSC_VER
+// intrin.h for the bit scans, stdlib.h for the byte swap.
 #include <intrin.h>
+#include <stdlib.h>
 #endif
 
 namespace stp
@@ -78,6 +80,16 @@ inline unsigned popCount64(uint64_t v)
   return static_cast<unsigned>((v * 0x0101010101010101ULL) >> 56);
 #else
   return static_cast<unsigned>(__builtin_popcountll(v));
+#endif
+}
+
+// Reverse the byte order of a 64-bit word.
+inline uint64_t byteSwap64(uint64_t v)
+{
+#ifdef _MSC_VER
+  return _byteswap_uint64(v);
+#else
+  return __builtin_bswap64(v);
 #endif
 }
 

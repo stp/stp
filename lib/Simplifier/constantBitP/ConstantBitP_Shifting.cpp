@@ -333,7 +333,7 @@ namespace
 {
 inline uint64_t bitReverse64(uint64_t x)
 {
-  x = __builtin_bswap64(x);
+  x = ::stp::byteSwap64(x);
   x = ((x & 0x0F0F0F0F0F0F0F0FULL) << 4) | ((x >> 4) & 0x0F0F0F0F0F0F0F0FULL);
   x = ((x & 0x3333333333333333ULL) << 2) | ((x >> 2) & 0x3333333333333333ULL);
   x = ((x & 0x5555555555555555ULL) << 1) | ((x >> 1) & 0x5555555555555555ULL);
