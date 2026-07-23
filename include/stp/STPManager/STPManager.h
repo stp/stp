@@ -167,6 +167,15 @@ private:
   // is heap-allocated when an equivalent node already exists.
   ASTInterior* LookupOrCreateInterior(Kind kind, const ASTVec& children);
 
+  // As above, but moves an owned children vector into the probe (and, on a
+  // miss, into the heap node), avoiding a copy when the caller has a
+  // temporary to give up — e.g. a freshly sorted vector.
+  ASTInterior* LookupOrCreateInterior(Kind kind, ASTVec&& children);
+
+  // Shared tail of the two overloads above: look the probe up, or move it
+  // onto the heap and insert it.
+  ASTInterior* insertOrReuseProbe(ASTInterior&& probe);
+
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
 

@@ -114,6 +114,17 @@ public:
       node_uid = children[0].GetNodeNum() + 1;
   }
 
+  // As above, but takes ownership of an already-owned children vector,
+  // avoiding a copy when the caller has a temporary to give up.
+  ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
+      : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
+        _index_width(0)
+  {
+    is_simplified = false;
+    if (kind == NOT)
+      node_uid = _children[0].GetNodeNum() + 1;
+  }
+
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
