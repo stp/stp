@@ -285,6 +285,12 @@ ASTNode blast_is_positive(const ASTNode& expr);
 ASTNode blast_reinterpret(const ASTNode& bits, bitWidthType exp_width,
                           bitWidthType sig_width);
 
+// ((_ to_fp e s) rm bv) / ((_ to_fp_unsigned e s) rm bv) -- convert an
+// integer held in a bitvector to the nearest float under a rounding mode.
+ASTNode blast_convert_bv_to_float(const ASTNode& rm, const ASTNode& bits,
+                                  bitWidthType exp_width,
+                                  bitWidthType sig_width, bool is_signed);
+
 // ((_ to_fp e s) rm f) -- reformat an existing float under a rounding mode.
 ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
                                      bitWidthType target_exp,

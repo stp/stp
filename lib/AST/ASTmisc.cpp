@@ -653,9 +653,12 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         error_msg = "to_fp's second argument is not a rounding mode";
         failed = true;
       }
-      else if (n[3].GetType() != FLOATINGPOINT_TYPE)
+      // With a rounding mode the source is either a float to reformat or a
+      // bitvector holding a signed integer to convert.
+      else if (n[3].GetType() != FLOATINGPOINT_TYPE &&
+               n[3].GetType() != BITVECTOR_TYPE)
       {
-        error_msg = "to_fp's argument is not an fp";
+        error_msg = "to_fp's argument is not an fp or a bitvector";
         failed = true;
       }
 
@@ -667,7 +670,41 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       break;
     }
 
+    // ((_ to_fp_unsigned e s) rm bv): (e, s, rm, bits).
     case FP_TOFP_UNSIGNED:
+    {
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 4)
+      {
+        error_msg = "to_fp_unsigned should have 4 args";
+        failed = true;
+      }
+      else if (!n[0].isConstant() || !n[1].isConstant())
+      {
+        error_msg = "to_fp_unsigned's format arguments must be constants";
+        failed = true;
+      }
+      else if (!isRoundingMode(n[2]))
+      {
+        error_msg = "to_fp_unsigned's second argument is not a rounding mode";
+        failed = true;
+      }
+      else if (n[3].GetType() != BITVECTOR_TYPE)
+      {
+        error_msg = "to_fp_unsigned's argument is not a bitvector";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
     case FP_TO_UBV:
     case FP_TO_SBV:
       // Not yet produced by the parser; nothing to check.

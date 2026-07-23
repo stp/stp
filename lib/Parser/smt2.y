@@ -464,6 +464,34 @@
     return n;
   }
 
+  // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
+  // bitvector to the nearest float.
+  ASTNode* createFPFromUnsignedBV(unsigned int exp_width,
+                                  unsigned int sig_width, ASTNode* rm,
+                                  ASTNode* bits)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (bits->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("to_fp_unsigned's argument must be a bitvector.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP_UNSIGNED, exp_width + sig_width,
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
+            ASTVec(1, *bits)));
+    setFPFormat(n, exp_width, sig_width);
+    delete rm;
+    delete bits;
+    return n;
+  }
+
   // fp.abs/fp.neg: a float in, a float of the same format out.
   ASTNode* createFPUnary(Kind k, ASTNode* expr)
   {
@@ -531,13 +559,15 @@
       fatal_yyerror("expected a rounding mode.");
     }
 
-    // The rm-taking form of to_fp also covers signed-bitvector and real
-    // sources. Those are genuinely different operations (and the real case
-    // cannot be represented exactly), so reject them rather than silently
-    // treating the argument as a float.
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    // The rm-taking form of to_fp covers three different operations,
+    // distinguished by the source's sort: reformatting a float, converting a
+    // signed integer held in a bitvector, and converting a real. The first
+    // two are handled; a real cannot be represented here, and STP has no
+    // real sort to reach this rule with anyway.
+    if (expr->GetType() != FLOATINGPOINT_TYPE &&
+        expr->GetType() != BITVECTOR_TYPE)
     {
-      fatal_yyerror("only the float-to-float form of to_fp is supported.");
+      fatal_yyerror("to_fp's argument must be a float or a bitvector.");
     }
 
     ASTNode* n = stp::GlobalParserInterface->newNode(
@@ -1284,6 +1314,15 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
 {
+  // A rounding mode is carried as a 5-bit one-hot bitvector, so a variable of
+  // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
+  // before, not declaring it at all -- leaves every use of the name
+  // unresolved, and the lexer hands it back as a bare string.
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(5);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
 }
 ;
 
@@ -1338,9 +1377,10 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 }
 | STRING_TOK ROUNDINGMODE_TOK
 {
+  // As above: 5 bits, not 0. A zero-width symbol would be a Boolean.
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  s.SetValueWidth(5);
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
@@ -1989,13 +2029,9 @@ an_fp_term:
   // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
   $$ = createFPToFP($5, $6, $8, $9);
 }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl;
-}
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term
-{
- std::cout << "Unsupported FP_TOFP_UNSIGNED_TOK" << std::endl;
+  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {

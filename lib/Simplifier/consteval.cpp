@@ -952,8 +952,22 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       ASTVec formatted;
       formatted.reserve(children.size());
 
+      // to_fp's operands are not floats to be re-formatted: children 0 and 1
+      // are the target format, and the source is either a float that already
+      // carries its own format or a bitvector that must stay one. Stamping a
+      // format onto that source would make a 32-bit integer argument look
+      // like a Float32 and take the reformat path instead of the convert one.
+      const bool format_children =
+          (k != FP_TOFP && k != FP_TOFP_UNSIGNED);
+
       for (size_t i = 0; i < children.size(); i++)
       {
+        if (!format_children)
+        {
+          formatted.push_back(children[i]);
+          continue;
+        }
+
         // Rounding modes and to_fp's format arguments are bitvectors that
         // are not floats; leave them alone. A float operand is as wide as
         // the format it is packed in.

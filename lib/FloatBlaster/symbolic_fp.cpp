@@ -663,6 +663,12 @@ inline bitVector<true> bitVector<true>::extend(bitWidthType extension) const
 template <>
 inline bitVector<false> bitVector<false>::extend(bitWidthType extension) const
 {
+  // Extending by nothing is the identity. Falling through would ask for a
+  // zero-width constant to concatenate, which STP rejects. symfpu's
+  // conversion path does call this with an extension of zero.
+  if (extension == 0)
+    return *this;
+
   void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<false>*>(this));
   void* zero = vc_bvConstExprFromInt(vc, extension, 0);
   void* expr = vc_bvConcatExpr(vc, zero, vs_this);
@@ -1199,6 +1205,26 @@ ASTNode blast_reinterpret(const ASTNode& bits, bitWidthType exp_width,
   floatingPointTypeInfo size(exp_width, sig_width);
   uf unpacked(symfpu::unpack<traits>(size, bits));
   ASTNode packed(symfpu::pack<traits>(size, unpacked));
+  return packed;
+}
+
+// ((_ to_fp e s) rm bv) reads the bitvector as a two's-complement integer,
+// ((_ to_fp_unsigned e s) rm bv) as an unsigned one, and rounds it into the
+// target format. Distinct from the one-argument form, which reinterprets the
+// bits rather than converting the value they denote.
+ASTNode blast_convert_bv_to_float(const ASTNode& rm, const ASTNode& bits,
+                                  bitWidthType exp_width,
+                                  bitWidthType sig_width, bool is_signed)
+{
+  floatingPointTypeInfo target(exp_width, sig_width);
+
+  uf converted(is_signed ? symfpu::convertSBVToFloat<traits>(
+                               target, rm, traits::sbv(bits))
+                         : symfpu::convertUBVToFloat<traits>(
+                               target, rm, traits::ubv(bits)));
+
+  ASTNode packed(symfpu::pack<traits>(target, converted));
+
   return packed;
 }
 

@@ -219,8 +219,16 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       else
       {
         assert(inputterm.Degree() == 4);
-        output = symbolic_fp::blast_convert_float_to_float(
-            /* rm */ inputterm[2], /* expr */ inputterm[3], to_exp, to_sig);
+
+        // With a rounding mode, the source may be another float (reformat) or
+        // a bitvector holding a signed integer (convert).
+        if (inputterm[3].GetType() == FLOATINGPOINT_TYPE)
+          output = symbolic_fp::blast_convert_float_to_float(
+              /* rm */ inputterm[2], /* expr */ inputterm[3], to_exp, to_sig);
+        else
+          output = symbolic_fp::blast_convert_bv_to_float(
+              /* rm */ inputterm[2], /* bits */ inputterm[3], to_exp, to_sig,
+              /* is_signed */ true);
       }
 
       // The node may have arrived without its format for the same reason,
@@ -244,6 +252,18 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
     case FP_CONST_NEG_ZERO:
       output = symbolic_fp::blast_zero(actualInputterm, true);
       break;
+    // ((_ to_fp_unsigned e s) rm bv): the source is always an unsigned
+    // integer in a bitvector.
+    case FP_TOFP_UNSIGNED:
+    {
+      const unsigned int to_exp = inputterm[0].GetUnsignedConst();
+      const unsigned int to_sig = inputterm[1].GetUnsignedConst();
+      output = symbolic_fp::blast_convert_bv_to_float(
+          /* rm */ inputterm[2], /* bits */ inputterm[3], to_exp, to_sig,
+          /* is_signed */ false);
+      return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
+                                      to_sig);
+    }
     case FP_SMT_EQ:
       output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);
       break;
