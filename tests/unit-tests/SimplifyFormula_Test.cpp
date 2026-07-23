@@ -471,4 +471,90 @@ TEST(SimplifyAndOr, fuzz_sound_and_idempotent)
   }
 }
 
+
+// A deeply nested all-AND DAG with billions of root->leaf paths but only a
+// handful of distinct nodes. Each level has one AND per node of the previous
+// level, omitting that node, so every node is heavily shared. Built with the
+// hashing factory (no flattening), this is a compact DAG whose tree expansion
+// is enormous -- it checks that SimplifyAndOrFormula flattens DAG-aware (once
+// per distinct node) rather than tree-expanding (which would never finish).
+// Logically the whole thing is just the conjunction of all the variables.
+TEST(SimplifyAndOr, deep_omit_one_and_dag)
+{
+  Context c;
+  const int numVars = 20;
+  const int numLevels = 7; // ~ 20 * 19^7 ~= 1.8e10 root->leaf paths
+
+  std::vector<ASTNode> vars;
+  for (int i = 0; i < numVars; i++)
+    vars.push_back(c.boolean());
+
+  std::vector<ASTNode> level = vars;
+  for (int L = 0; L < numLevels; L++)
+  {
+    std::vector<ASTNode> next;
+    for (size_t omit = 0; omit < level.size(); omit++)
+    {
+      ASTVec children;
+      for (size_t j = 0; j < level.size(); j++)
+        if (j != omit)
+          children.push_back(level[j]);
+      next.push_back(c.hf->CreateNode(AND, children));
+    }
+    level = next;
+  }
+  ASTNode top = c.hf->CreateNode(AND, ASTVec(level.begin(), level.end()));
+
+  ASTNode out = c.run(top);
+  // Flattening + dedup collapses the whole structure to AND(all variables).
+  ASSERT_EQ(out.GetKind(), AND);
+  EXPECT_EQ(out.Degree(), static_cast<size_t>(numVars));
+}
+
+
+// As above, but every conjunction is expressed as NOT(OR(negated children)),
+// so simplification must apply De Morgan (and eliminate double negations) at
+// every one of the shared nodes to recover it. A billions-of-paths DAG that
+// hammers the pushNeg path -- it must stay DAG-aware there too. Logically it
+// is still just AND(all variables).
+TEST(SimplifyAndOr, deep_omit_one_demorgan)
+{
+  Context c;
+  const int numVars = 20;
+  const int numLevels = 7; // ~ 20 * 19^7 ~= 1.8e10 root->leaf paths
+
+  // AND(children) written as NOT(OR(!children)).
+  auto andAsNotOr = [&](const ASTVec& children) {
+    ASTVec negs;
+    negs.reserve(children.size());
+    for (const auto& ch : children)
+      negs.push_back(c.hf->CreateNode(NOT, ch));
+    return c.hf->CreateNode(NOT, c.hf->CreateNode(OR, negs));
+  };
+
+  std::vector<ASTNode> vars;
+  for (int i = 0; i < numVars; i++)
+    vars.push_back(c.boolean());
+
+  std::vector<ASTNode> level = vars;
+  for (int L = 0; L < numLevels; L++)
+  {
+    std::vector<ASTNode> next;
+    for (size_t omit = 0; omit < level.size(); omit++)
+    {
+      ASTVec children;
+      for (size_t j = 0; j < level.size(); j++)
+        if (j != omit)
+          children.push_back(level[j]);
+      next.push_back(andAsNotOr(children));
+    }
+    level = next;
+  }
+  ASTNode top = andAsNotOr(ASTVec(level.begin(), level.end()));
+
+  ASTNode out = c.run(top);
+  ASSERT_EQ(out.GetKind(), AND);
+  EXPECT_EQ(out.Degree(), static_cast<size_t>(numVars));
+}
+
 } // namespace
