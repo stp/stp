@@ -200,22 +200,35 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       break;
     // ((_ to_fp e s) [rm] f). Children are (e, s, bits) for the bitvector
     // reinterpretation, or (e, s, rm, expr) for a float-to-float conversion.
-    // The target format is already recorded on the node itself.
+    //
+    // Take the target format from the e/s children rather than from the
+    // node's own exponent/significand widths. Those are mutable per-node
+    // state that a rebuild can drop, and blasting against a format of
+    // (0, 0) underflows a width rather than failing; the children always
+    // say what the format is.
     case FP_TOFP:
+    {
+      const unsigned int to_exp = inputterm[0].GetUnsignedConst();
+      const unsigned int to_sig = inputterm[1].GetUnsignedConst();
+
       if (inputterm.Degree() == 3)
       {
-        output = symbolic_fp::blast_reinterpret(
-            /* bits */ inputterm[2], actualInputterm.GetExpWidth(),
-            actualInputterm.GetSigWidth());
+        output = symbolic_fp::blast_reinterpret(/* bits */ inputterm[2],
+                                                to_exp, to_sig);
       }
       else
       {
         assert(inputterm.Degree() == 4);
         output = symbolic_fp::blast_convert_float_to_float(
-            /* rm */ inputterm[2], /* expr */ inputterm[3],
-            actualInputterm.GetExpWidth(), actualInputterm.GetSigWidth());
+            /* rm */ inputterm[2], /* expr */ inputterm[3], to_exp, to_sig);
       }
-      break;
+
+      // The node may have arrived without its format for the same reason,
+      // so hand the derived one back rather than the (possibly zero) stored
+      // one that the tail below would otherwise apply.
+      return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
+                                      to_sig);
+    }
     case FP_CONST_POS_INF:
       output = symbolic_fp::blast_pos_inf(actualInputterm);
       break;
