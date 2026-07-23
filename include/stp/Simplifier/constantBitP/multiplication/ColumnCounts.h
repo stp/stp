@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef COLUMNCOUNTS_H_
 #define COLUMNCOUNTS_H_
 
+#include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <iostream>
 
@@ -181,7 +182,7 @@ struct ColumnCounts
       output.fillPackedWord(w, fixed, value);
       while (fixed != 0)
       {
-        const unsigned b = ctz64(fixed);
+        const unsigned b = ::stp::countTrailingZeroes64(fixed);
         fixed &= fixed - 1;
         const unsigned i = w * 64 + b;
 
@@ -201,12 +202,6 @@ struct ColumnCounts
       }
     }
     return r;
-  }
-
-  static unsigned ctz64(uint64_t v)
-  {
-    assert(v != 0);
-    return (unsigned)__builtin_ctzll(v);
   }
 
   bool inConflict()

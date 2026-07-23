@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include <cstdint>
 #include <vector>
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 
 namespace simplifier
 {
@@ -136,8 +137,8 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
       uint64_t fa, va, fb, vb;
       a.fillPackedWord(w, fa, va);
       b.fillPackedWord(w, fb, vb);
-      unknowns += __builtin_popcountll(~fa & mask) +
-                  __builtin_popcountll(~fb & mask);
+      unknowns += ::stp::popCount64(~fa & mask) +
+                  ::stp::popCount64(~fb & mask);
     }
 
     if (unknowns == 1)
@@ -152,7 +153,7 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
         const uint64_t unknownB = ~fb & mask;
         if (unknownA != 0)
         {
-          const unsigned bit = __builtin_ctzll(unknownA);
+          const unsigned bit = ::stp::countTrailingZeroes64(unknownA);
           a.setFixed(w * 64 + bit, true);
           a.setValue(w * 64 + bit, !((vb >> bit) & 1));
           changed = true;
@@ -160,7 +161,7 @@ Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
         }
         if (unknownB != 0)
         {
-          const unsigned bit = __builtin_ctzll(unknownB);
+          const unsigned bit = ::stp::countTrailingZeroes64(unknownB);
           b.setFixed(w * 64 + bit, true);
           b.setValue(w * 64 + bit, !((va >> bit) & 1));
           changed = true;
@@ -372,21 +373,21 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     const unsigned base = w * 64;
 
     if (knownOne)
-      hi = std::min(hi, base + (unsigned)__builtin_ctzll(knownOne));
+      hi = std::min(hi, base + (unsigned)::stp::countTrailingZeroes64(knownOne));
     if (diff)
     {
-      const unsigned i = base + (unsigned)__builtin_ctzll(diff);
+      const unsigned i = base + (unsigned)::stp::countTrailingZeroes64(diff);
       if (i == 0)
         return CONFLICT; // bit zero is always shared.
       hi = std::min(hi, i - 1);
     }
     if (ones2)
     {
-      lo = std::max(lo, base + 63 - (unsigned)__builtin_clzll(ones2));
-      hi = std::min(hi, base + (unsigned)__builtin_ctzll(ones2));
+      lo = std::max(lo, base + 63 - (unsigned)::stp::countLeadingZeroes64(ones2));
+      hi = std::min(hi, base + (unsigned)::stp::countTrailingZeroes64(ones2));
     }
     if (zeros2)
-      lo = std::max(lo, base + 64 - (unsigned)__builtin_clzll(zeros2));
+      lo = std::max(lo, base + 64 - (unsigned)::stp::countLeadingZeroes64(zeros2));
   }
 
   if (lo > hi)
@@ -406,10 +407,10 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     feas &= bitsBelowWord(w, width);
     if (feas)
     {
-      const unsigned first = w * 64 + (unsigned)__builtin_ctzll(feas);
+      const unsigned first = w * 64 + (unsigned)::stp::countTrailingZeroes64(feas);
       if (L == none)
         L = first;
-      H = w * 64 + 63 - (unsigned)__builtin_clzll(feas);
+      H = w * 64 + 63 - (unsigned)::stp::countLeadingZeroes64(feas);
     }
   }
   const bool widthFeasible = hi == width;
@@ -430,14 +431,14 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     changed |= (newX | newY) != 0;
     while (newX)
     {
-      const unsigned b = __builtin_ctzll(newX);
+      const unsigned b = ::stp::countTrailingZeroes64(newX);
       newX &= newX - 1;
       x.setFixed(w * 64 + b, true);
       x.setValue(w * 64 + b, false);
     }
     while (newY)
     {
-      const unsigned b = __builtin_ctzll(newY);
+      const unsigned b = ::stp::countTrailingZeroes64(newY);
       newY &= newY - 1;
       y.setFixed(w * 64 + b, true);
       y.setValue(w * 64 + b, false);
@@ -536,14 +537,14 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
       changed |= (fromX | fromY) != 0;
       while (fromX)
       {
-        const unsigned b = __builtin_ctzll(fromX);
+        const unsigned b = ::stp::countTrailingZeroes64(fromX);
         fromX &= fromX - 1;
         y.setFixed(w * 64 + b, true);
         y.setValue(w * 64 + b, !((xV[w] >> b) & 1));
       }
       while (fromY)
       {
-        const unsigned b = __builtin_ctzll(fromY);
+        const unsigned b = ::stp::countTrailingZeroes64(fromY);
         fromY &= fromY - 1;
         x.setFixed(w * 64 + b, true);
         x.setValue(w * 64 + b, !((yV[w] >> b) & 1));

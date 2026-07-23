@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 
@@ -228,7 +229,7 @@ Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
                          PackedBits::widthMask(j, bitWidth);
       while (pending)
       {
-        const unsigned b = __builtin_ctzll(pending);
+        const unsigned b = ::stp::countTrailingZeroes64(pending);
         pending &= pending - 1;
         const uint64_t bit = (uint64_t)1 << b;
 
@@ -823,7 +824,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   {
     const uint64_t ones = packedOut.fixed[j] & packedOut.value[j];
     if (ones != 0)
-      positionOfFirstOne = j * 64 + __builtin_ctzll(ones);
+      positionOfFirstOne = j * 64 + ::stp::countTrailingZeroes64(ones);
   }
 
   if (positionOfFirstOne >= 0)
