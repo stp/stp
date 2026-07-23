@@ -614,13 +614,13 @@ function_param
 {
   $$ = new ASTVec;
   $$->push_back(*$1);
-  delete $1;
+  stp::GlobalParserInterface->deleteNode($1);
 }
 | function_params function_param
 {
   $$ = $1;
   $$->push_back(*$2);
-  delete $2;
+  stp::GlobalParserInterface->deleteNode($2);
 };
 
 
@@ -642,7 +642,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVE
 
   delete $1;
   delete $3;
-  delete $10;
+  stp::GlobalParserInterface->deleteNode($10);
 }
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
@@ -655,7 +655,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
 
   delete $1;
   delete $3;
-  delete $6;
+  stp::GlobalParserInterface->deleteNode($6);
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
@@ -664,7 +664,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
   delete $1;
-  delete $5;
+  stp::GlobalParserInterface->deleteNode($5);
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
@@ -680,21 +680,21 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   stp::GlobalParserInterface->storeFunction(*$1,empty, *$9);
 
   delete $1;
-  delete $9;
+  stp::GlobalParserInterface->deleteNode($9);
 }
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
   stp::GlobalParserInterface->unsupported();
   delete $1;
-  delete $18;
+  stp::GlobalParserInterface->deleteNode($18);
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
   stp::GlobalParserInterface->unsupported();
   delete $1;
-  delete $17;
+  stp::GlobalParserInterface->deleteNode($17);
 
 #if 0
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
