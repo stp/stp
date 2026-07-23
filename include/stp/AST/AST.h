@@ -36,8 +36,8 @@ DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a,
 DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
-bool exprless(const ASTNode n1, const ASTNode n2);
-bool arithless(const ASTNode n1, const ASTNode n2);
+bool exprless(const ASTNode& n1, const ASTNode& n2);
+bool arithless(const ASTNode& n1, const ASTNode& n2);
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
