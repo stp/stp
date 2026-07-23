@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 namespace stp
 {
+
 uint8_t ASTNode::getIteration() const
 {
   return _int_node_ptr->iteration;

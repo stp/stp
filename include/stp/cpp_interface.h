@@ -174,6 +174,7 @@ public:
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
+  bool hasFunctions() const { return !functions.empty(); }
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
   DLL_PUBLIC bool LookupSymbol(const char* const name, ASTNode& output);

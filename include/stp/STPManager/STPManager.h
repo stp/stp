@@ -163,6 +163,10 @@ private:
   // Create unique ASTInterior node.
   ASTInterior* LookupOrCreateInterior(ASTInterior* n);
 
+  // As above, but probes the unique table with a stack node, so nothing
+  // is heap-allocated when an equivalent node already exists.
+  ASTInterior* LookupOrCreateInterior(Kind kind, const ASTVec& children);
+
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
 

@@ -59,6 +59,28 @@ ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
   return *it;
 }
 
+ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, const ASTVec& children)
+{
+  ASTInterior probe(this, kind, children);
+
+  const ASTInteriorSet::iterator it = _interior_unique_table.find(&probe);
+  if (it != _interior_unique_table.end())
+    return *it;
+
+  if (kind == NOT)
+  {
+    // The internal node can't be a NOT, because then we'd add
+    // 1 to the NOT's node number, meaning we'd hit an even number,
+    // which could duplicate the next newNodeNum().
+    assert(children[0].GetKind() != NOT);
+  }
+
+  // The heap node steals the probe's children, node number and hash.
+  ASTInterior* n_ptr = new ASTInterior(std::move(probe));
+  _interior_unique_table.insert(n_ptr);
+  return n_ptr;
+}
+
 ASTInterior* STPMgr::CreateInteriorNode(Kind /*kind*/,
                                         // children array of this
                                         // node will be modified.

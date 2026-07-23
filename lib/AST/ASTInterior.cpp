@@ -70,6 +70,9 @@ operator()(const ASTInterior* int_node_ptr) const
   hashval += (hashval << 3);
   hashval ^= (hashval >> 11);
   hashval += (hashval << 15);
+
+  if (hashval == 0)
+    hashval = 1; // 0 marks the hash as not yet computed.
   int_node_ptr->_cached_hash = hashval;
   return hashval;
 }
