@@ -595,6 +595,14 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
           bm->CreateFreshVariable(term.GetIndexWidth(), term.GetValueWidth(),
                                   "array_" + std::string(arrName.GetName()));
 
+      // Reading an array of floats yields a float. The read node derived its
+      // format from the array, but this fresh variable stands in for the read
+      // from here on and is a leaf, so it has to carry the format itself --
+      // otherwise the element arrives at the blaster as a formatless
+      // bitvector.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
+
       result = CurrentSymbol;
 
       if (!bm->UserFlags.ackermannisation)

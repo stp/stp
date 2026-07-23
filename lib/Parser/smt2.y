@@ -1324,6 +1324,29 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   }
   delete $1;
 }
+| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK
+{
+  // An array of floats. The element's format lives on the array node, in the
+  // same exponent/significand widths a float uses; a read off it inherits
+  // them (see deriveFPFormat). The value width is the element's packed width,
+  // so the array is laid out exactly like an array of bitvectors.
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+
+  if ($9 == 0)
+    fatal_yyerror("array index must be of positive length.");
+
+  s.SetIndexWidth($9);
+  s.SetValueWidth($11->exp_bits + $11->sig_bits);
+  s.SetExpWidth($11->exp_bits);
+  s.SetSigWidth($11->sig_bits);
+
+  if (s.GetType() != ARRAY_TYPE)
+    fatal_yyerror("failed to declare an array of floats.");
+
+  delete $1;
+  delete $11;
+}
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
   // AVJ-FP

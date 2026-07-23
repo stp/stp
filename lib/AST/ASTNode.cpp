@@ -164,6 +164,18 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
       return e != 0 && s != 0;
     }
 
+    // A read from an array of floats yields a float in the element's format,
+    // which the array node carries.
+    case READ:
+    {
+      if (n.Degree() < 1)
+        return false;
+
+      e = n[0].GetExpWidth();
+      s = n[0].GetSigWidth();
+      return e != 0 && s != 0;
+    }
+
     // The rest produce a float in the format of their float operand. Which
     // child that is varies -- the arithmetic operations lead with a rounding
     // mode -- and an operand that was folded to a constant may have lost its
@@ -253,6 +265,12 @@ void ASTNode::SetSigWidth(unsigned int _sw) const
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 types ASTNode::GetType() const
 {
+  // Arrays first. An array of floats carries its *element's* format in the
+  // exponent and significand widths, so testing those first would call the
+  // array itself a float.
+  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0))
+    return ARRAY_TYPE;
+
   if (GetSigWidth() != 0 && GetExpWidth() != 0)
     return FLOATINGPOINT_TYPE;
 

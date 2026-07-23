@@ -1133,14 +1133,24 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   stp::STPMgr* b = stp_i->bm;
 
   unsigned long long int v = (unsigned long long int)value;
-  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
-  // printf("%ull", max_n_bits);
-  if (v > max_n_bits)
+
+  // Only check that the value fits when the width is narrow enough for the
+  // question to be interesting. At 64 bits and above every unsigned int fits,
+  // and the shift below would be by a negative amount -- which is undefined,
+  // and in practice wraps to a small max, rejecting perfectly good constants.
+  // Widths above 64 are reachable: symfpu works internally at widths derived
+  // from the format, and the x87 extended format (15, 64) takes it past 64.
+  if (n_bits < 64)
   {
-    printf("CInterface: vc_bvConstExprFromInt: "
-           "Cannot construct a constant %llu >= %llu,\n",
-           v, max_n_bits);
-    stp::FatalError("FatalError");
+    const unsigned long long int max_n_bits =
+        0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
+    if (v > max_n_bits)
+    {
+      printf("CInterface: vc_bvConstExprFromInt: "
+             "Cannot construct a constant %llu >= %llu,\n",
+             v, max_n_bits);
+      stp::FatalError("FatalError");
+    }
   }
   stp::ASTNode n = b->CreateBVConst(n_bits, v);
   assert(BVTypeCheck(n));

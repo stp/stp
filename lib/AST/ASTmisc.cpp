@@ -430,8 +430,13 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("First parameter to read should be an array", n[0]);
       if (BITVECTOR_TYPE != n[1].GetType())
         FatalError("Second parameter to read should be a bitvector", n[1]);
-      if (BITVECTOR_TYPE != n[2].GetType())
-        FatalError("Third parameter to read should be a bitvector", n[2]);
+      // The element of an array of floats is a float. It is laid out exactly
+      // like a bitvector of the same width -- the array carries the format --
+      // so everything below this point treats the two alike.
+      if (BITVECTOR_TYPE != n[2].GetType() &&
+          FLOATINGPOINT_TYPE != n[2].GetType())
+        FatalError("Third parameter to write should be a bitvector or a float",
+                   n[2]);
       break;
 
     case BVDIV:
