@@ -837,6 +837,14 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 
   const unsigned bitWidth = x.getWidth();
 
+  // For a square (bvmul t t) both operands are the *same* FixedBits object, so
+  // fixing a bit through one view silently changes the other. The packed pm
+  // masks below cache each operand separately and update only the side they
+  // were told about, so they desync under aliasing. The always-live
+  // ColumnStats path (pm == NULL) re-reads x and y each call and is immune, so
+  // fall back to it here.
+  const bool aliased = (children[0] == children[1]);
+
   if (debug_multiply)
     cerr << "======================" << endl;
 
@@ -941,7 +949,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
     {
       if (cc.columnL[column] == cc.columnH[column])
       {
-        if (!masksValid)
+        if (!aliased && !masksValid)
         {
           pm.build(x, y);
           masksValid = true;
@@ -949,7 +957,7 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
 
         //(2) Knowledge of the sum may fix the operands.
         Result tempResult = fixIfCanForMultiplication(
-            children, column, cc.columnH[column], &pm);
+            children, column, cc.columnH[column], aliased ? NULL : &pm);
 
         if (CONFLICT == tempResult)
           return CONFLICT;
